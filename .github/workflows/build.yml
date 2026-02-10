@@ -43,6 +43,7 @@ jobs:
           path: |
             release/*.dmg
             release/*.zip
+            release/*.yml
           if-no-files-found: error
 
   release:

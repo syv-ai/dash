@@ -67,6 +67,16 @@ app.whenReady().then(async () => {
   const { createWindow } = await import('./window');
   mainWindow = createWindow();
 
+  // Check for updates after a short delay
+  setTimeout(async () => {
+    try {
+      const { checkForUpdates } = await import('./services/UpdateService');
+      checkForUpdates();
+    } catch {
+      // Best effort
+    }
+  }, 30_000);
+
   // Cleanup orphaned reserve worktrees (background, non-blocking)
   setTimeout(async () => {
     try {

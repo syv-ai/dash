@@ -32,6 +32,47 @@ contextBridge.exposeInMainWorld('electronAPI', {
   worktreeEnsureReserve: (args: unknown) => ipcRenderer.invoke('worktree:ensureReserve', args),
   worktreeHasReserve: (projectId: string) => ipcRenderer.invoke('worktree:hasReserve', projectId),
 
+  // Updates
+  checkForUpdates: () => ipcRenderer.invoke('app:checkForUpdates'),
+  downloadUpdate: () => ipcRenderer.invoke('app:downloadUpdate'),
+  installUpdate: () => ipcRenderer.invoke('app:installUpdate'),
+  onUpdateAvailable: (callback: (info: { version: string; releaseNotes?: string }) => void) => {
+    const handler = (_event: unknown, info: { version: string; releaseNotes?: string }) =>
+      callback(info);
+    ipcRenderer.on('update:available', handler);
+    return () => {
+      ipcRenderer.removeListener('update:available', handler);
+    };
+  },
+  onUpdateNotAvailable: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on('update:not-available', handler);
+    return () => {
+      ipcRenderer.removeListener('update:not-available', handler);
+    };
+  },
+  onUpdateDownloadProgress: (callback: (progress: { percent: number }) => void) => {
+    const handler = (_event: unknown, progress: { percent: number }) => callback(progress);
+    ipcRenderer.on('update:download-progress', handler);
+    return () => {
+      ipcRenderer.removeListener('update:download-progress', handler);
+    };
+  },
+  onUpdateDownloaded: (callback: (info: { version: string }) => void) => {
+    const handler = (_event: unknown, info: { version: string }) => callback(info);
+    ipcRenderer.on('update:downloaded', handler);
+    return () => {
+      ipcRenderer.removeListener('update:downloaded', handler);
+    };
+  },
+  onUpdateError: (callback: (error: { message: string }) => void) => {
+    const handler = (_event: unknown, error: { message: string }) => callback(error);
+    ipcRenderer.on('update:error', handler);
+    return () => {
+      ipcRenderer.removeListener('update:error', handler);
+    };
+  },
+
   // PTY
   ptyStartDirect: (args: unknown) => ipcRenderer.invoke('pty:startDirect', args),
   ptyStart: (args: unknown) => ipcRenderer.invoke('pty:start', args),

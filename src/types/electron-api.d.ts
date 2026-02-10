@@ -5,6 +5,16 @@ export interface ElectronAPI {
   getAppVersion: () => Promise<string>;
   getPlatform: () => string;
 
+  // Updates
+  checkForUpdates: () => Promise<void>;
+  downloadUpdate: () => Promise<void>;
+  installUpdate: () => Promise<void>;
+  onUpdateAvailable: (callback: (info: { version: string; releaseNotes?: string }) => void) => () => void;
+  onUpdateNotAvailable: (callback: () => void) => () => void;
+  onUpdateDownloadProgress: (callback: (progress: { percent: number }) => void) => () => void;
+  onUpdateDownloaded: (callback: (info: { version: string }) => void) => () => void;
+  onUpdateError: (callback: (error: { message: string }) => void) => () => void;
+
   // Dialogs
   showOpenDialog: () => Promise<IpcResponse<string[]>>;
 

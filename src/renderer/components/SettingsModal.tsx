@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Check, AlertCircle, Sun, Moon, Terminal, RotateCcw } from 'lucide-react';
+import { X, Check, AlertCircle, Sun, Moon, Terminal, RotateCcw, RefreshCw, Download, RotateCw } from 'lucide-react';
 import type { KeyBindingMap, KeyBinding } from '../keybindings';
 import { getBindingKeys, bindingFromEvent, DEFAULT_KEYBINDINGS, groupByCategory } from '../keybindings';
 
@@ -108,11 +108,42 @@ export function SettingsModal({
   } | null>(null);
   const [appVersion, setAppVersion] = useState('');
 
+  // Update state
+  const [updateStatus, setUpdateStatus] = useState<
+    'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
+  >('idle');
+  const [updateVersion, setUpdateVersion] = useState('');
+  const [downloadPercent, setDownloadPercent] = useState(0);
+  const [updateError, setUpdateError] = useState('');
+
   useEffect(() => {
     window.electronAPI.detectClaude().then((resp) => {
       if (resp.success) setClaudeInfo(resp.data ?? null);
     });
     window.electronAPI.getAppVersion().then((v) => setAppVersion(v));
+
+    const cleanups = [
+      window.electronAPI.onUpdateAvailable((info) => {
+        setUpdateVersion(info.version);
+        setUpdateStatus('available');
+      }),
+      window.electronAPI.onUpdateNotAvailable(() => {
+        setUpdateStatus('not-available');
+      }),
+      window.electronAPI.onUpdateDownloadProgress((progress) => {
+        setDownloadPercent(progress.percent);
+        setUpdateStatus('downloading');
+      }),
+      window.electronAPI.onUpdateDownloaded((info) => {
+        setUpdateVersion(info.version);
+        setUpdateStatus('downloaded');
+      }),
+      window.electronAPI.onUpdateError((err) => {
+        setUpdateError(err.message);
+        setUpdateStatus('error');
+      }),
+    ];
+    return () => cleanups.forEach((fn) => fn());
   }, []);
 
   function handleBindingChange(id: string, updated: KeyBinding) {
@@ -238,12 +269,97 @@ export function SettingsModal({
                 </p>
               </div>
 
-              {/* Version */}
+              {/* Version & Updates */}
               <div>
-                <label className="block text-[12px] font-medium text-muted-foreground/70 mb-1.5">
+                <label className="block text-[12px] font-medium text-muted-foreground/70 mb-3">
                   Version
                 </label>
-                <p className="text-[13px] text-muted-foreground/50 font-mono">{appVersion || '...'}</p>
+                <div className="rounded-xl border border-border/40 p-4" style={{ background: 'hsl(var(--surface-2))' }}>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[13px] text-foreground/80 font-mono">{appVersion || '...'}</p>
+                    {updateStatus === 'idle' && (
+                      <button
+                        onClick={() => {
+                          setUpdateStatus('checking');
+                          window.electronAPI.checkForUpdates();
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium text-muted-foreground/60 hover:text-foreground hover:bg-accent/60 border border-border/40 transition-all duration-150"
+                      >
+                        <RefreshCw size={12} strokeWidth={2} />
+                        Check for updates
+                      </button>
+                    )}
+                    {updateStatus === 'checking' && (
+                      <span className="flex items-center gap-1.5 text-[12px] text-muted-foreground/50">
+                        <RefreshCw size={12} strokeWidth={2} className="animate-spin" />
+                        Checking...
+                      </span>
+                    )}
+                    {updateStatus === 'not-available' && (
+                      <span className="flex items-center gap-1.5 text-[12px] text-[hsl(var(--git-added))]">
+                        <Check size={12} strokeWidth={2.5} />
+                        You're up to date
+                      </span>
+                    )}
+                    {updateStatus === 'available' && (
+                      <button
+                        onClick={() => {
+                          setUpdateStatus('downloading');
+                          setDownloadPercent(0);
+                          window.electronAPI.downloadUpdate();
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium text-primary hover:bg-primary/10 border border-primary/30 transition-all duration-150"
+                      >
+                        <Download size={12} strokeWidth={2} />
+                        Download v{updateVersion}
+                      </button>
+                    )}
+                    {updateStatus === 'downloaded' && (
+                      <button
+                        onClick={() => window.electronAPI.installUpdate()}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-150"
+                      >
+                        <RotateCw size={12} strokeWidth={2} />
+                        Restart to update
+                      </button>
+                    )}
+                    {updateStatus === 'error' && (
+                      <button
+                        onClick={() => {
+                          setUpdateStatus('checking');
+                          setUpdateError('');
+                          window.electronAPI.checkForUpdates();
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium text-muted-foreground/60 hover:text-foreground hover:bg-accent/60 border border-border/40 transition-all duration-150"
+                      >
+                        <RefreshCw size={12} strokeWidth={2} />
+                        Retry
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Download progress bar */}
+                  {updateStatus === 'downloading' && (
+                    <div className="mt-3">
+                      <div className="h-1.5 rounded-full bg-accent/60 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-primary transition-all duration-300"
+                          style={{ width: `${Math.round(downloadPercent)}%` }}
+                        />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground/40 mt-1.5">
+                        Downloading update... {Math.round(downloadPercent)}%
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Error message */}
+                  {updateStatus === 'error' && (
+                    <p className="text-[11px] text-[hsl(var(--git-removed))] mt-2">
+                      Update failed: {updateError}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           )}
