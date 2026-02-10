@@ -6,6 +6,12 @@ import { promisify } from 'util';
 
 const execFileAsync = promisify(execFile);
 
+// ── Stderr EPIPE Guard ───────────────────────────────────────
+process.stderr.on('error', (err) => {
+  if ((err as NodeJS.ErrnoException).code === 'EPIPE') return;
+  throw err;
+});
+
 // ── PATH Fix ──────────────────────────────────────────────────
 function fixPath(): void {
   const currentPath = process.env.PATH || '';

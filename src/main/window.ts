@@ -26,7 +26,7 @@ export function createWindow(): BrowserWindow {
 
   // Open external links in default browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    shell.openExternal(url).catch(() => {});
     return { action: 'deny' };
   });
 
