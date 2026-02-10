@@ -14,6 +14,18 @@ The main idea: you open a project, create tasks, and each task gets an isolated 
 - **Customizable keybindings** — Remap any shortcut from Settings.
 - **Dark/light theme**
 
+## Install
+
+Download the latest `.dmg` from [Releases](https://github.com/syv-ai/dash/releases).
+
+The app isn't code-signed yet, so macOS will block it on first launch. After dragging Dash to Applications, run:
+
+```bash
+xattr -cr /Applications/Dash.app
+```
+
+Then open normally.
+
 ## Prerequisites
 
 - Node.js 22+
