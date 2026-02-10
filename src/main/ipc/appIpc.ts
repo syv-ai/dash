@@ -6,8 +6,6 @@ import * as path from 'path';
 
 const execFileAsync = promisify(execFile);
 
-import { checkForUpdates, downloadUpdate, installUpdate } from '../services/UpdateService';
-
 export function registerAppIpc(): void {
   ipcMain.handle('app:getVersion', () => {
     return app.getVersion();
@@ -63,15 +61,18 @@ export function registerAppIpc(): void {
     }
   });
 
-  ipcMain.handle('app:checkForUpdates', () => {
+  ipcMain.handle('app:checkForUpdates', async () => {
+    const { checkForUpdates } = await import('../services/UpdateService');
     checkForUpdates();
   });
 
-  ipcMain.handle('app:downloadUpdate', () => {
+  ipcMain.handle('app:downloadUpdate', async () => {
+    const { downloadUpdate } = await import('../services/UpdateService');
     downloadUpdate();
   });
 
-  ipcMain.handle('app:installUpdate', () => {
+  ipcMain.handle('app:installUpdate', async () => {
+    const { installUpdate } = await import('../services/UpdateService');
     installUpdate();
   });
 

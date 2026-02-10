@@ -146,6 +146,23 @@ export function SettingsModal({
     return () => cleanups.forEach((fn) => fn());
   }, []);
 
+  // Timeout for checking state — reset to idle after 30s if no response
+  useEffect(() => {
+    if (updateStatus !== 'checking') return;
+    const timer = setTimeout(() => {
+      setUpdateStatus('error');
+      setUpdateError('Update check timed out');
+    }, 30_000);
+    return () => clearTimeout(timer);
+  }, [updateStatus]);
+
+  // Auto-reset "up to date" back to idle after 5 seconds
+  useEffect(() => {
+    if (updateStatus !== 'not-available') return;
+    const timer = setTimeout(() => setUpdateStatus('idle'), 5_000);
+    return () => clearTimeout(timer);
+  }, [updateStatus]);
+
   function handleBindingChange(id: string, updated: KeyBinding) {
     onKeybindingsChange({ ...keybindings, [id]: updated });
   }

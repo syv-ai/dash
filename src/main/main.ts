@@ -67,15 +67,20 @@ app.whenReady().then(async () => {
   const { createWindow } = await import('./window');
   mainWindow = createWindow();
 
-  // Check for updates after a short delay
-  setTimeout(async () => {
-    try {
-      const { checkForUpdates } = await import('./services/UpdateService');
-      checkForUpdates();
-    } catch {
-      // Best effort
-    }
-  }, 30_000);
+  // Wire up the main window reference for the update service
+  const { setMainWindow, checkForUpdates: checkUpdates } = await import('./services/UpdateService');
+  setMainWindow(mainWindow);
+
+  // Check for updates after a short delay (only in packaged builds)
+  if (app.isPackaged) {
+    setTimeout(() => {
+      try {
+        checkUpdates();
+      } catch {
+        // Best effort
+      }
+    }, 30_000);
+  }
 
   // Cleanup orphaned reserve worktrees (background, non-blocking)
   setTimeout(async () => {
@@ -131,6 +136,8 @@ app.on('activate', async () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     const { createWindow } = await import('./window');
     mainWindow = createWindow();
+    const { setMainWindow } = await import('./services/UpdateService');
+    setMainWindow(mainWindow);
   }
 });
 
