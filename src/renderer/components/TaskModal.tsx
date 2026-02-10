@@ -9,7 +9,7 @@ interface TaskModalProps {
 export function TaskModal({ onClose, onCreate }: TaskModalProps) {
   const [name, setName] = useState('');
   const [useWorktree, setUseWorktree] = useState(true);
-  const [autoApprove, setAutoApprove] = useState(false);
+  const [autoApprove, setAutoApprove] = useState(() => localStorage.getItem('yoloMode') === 'true');
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -83,7 +83,10 @@ export function TaskModal({ onClose, onCreate }: TaskModalProps) {
                 <input
                   type="checkbox"
                   checked={autoApprove}
-                  onChange={(e) => setAutoApprove(e.target.checked)}
+                  onChange={(e) => {
+                    setAutoApprove(e.target.checked);
+                    localStorage.setItem('yoloMode', String(e.target.checked));
+                  }}
                   className="sr-only peer"
                 />
                 <div className="w-8 h-[18px] rounded-full bg-accent peer-checked:bg-primary/80 transition-colors duration-200" />
