@@ -497,7 +497,7 @@ export function App() {
             onToggleCollapse={toggleSidebar}
           />
         </Panel>
-        <PanelResizeHandle className="w-[1px] bg-border/40" />
+        <PanelResizeHandle disabled={sidebarCollapsed} className="w-[1px] bg-border/40" />
 
         <Panel minSize={35}>
           <MainContent activeTask={activeTask} activeProject={activeProject} />
