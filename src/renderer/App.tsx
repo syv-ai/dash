@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
+import { PanelGroup, Panel, PanelResizeHandle, type ImperativePanelHandle } from 'react-resizable-panels';
 import { LeftSidebar } from './components/LeftSidebar';
 import { MainContent } from './components/MainContent';
 import { FileChangesPanel } from './components/FileChangesPanel';
@@ -35,6 +35,11 @@ export function App() {
   const [diffLoading, setDiffLoading] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
 
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    return localStorage.getItem('sidebarCollapsed') === 'true';
+  });
+
+  const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
   const fileWatcherCleanup = useRef<(() => void) | null>(null);
   const gitPollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -198,6 +203,16 @@ export function App() {
     },
     [activeProjectTasks, activeTaskId],
   );
+
+  const toggleSidebar = useCallback(() => {
+    const panel = sidebarPanelRef.current;
+    if (!panel) return;
+    if (sidebarCollapsed) {
+      panel.expand();
+    } else {
+      panel.collapse();
+    }
+  }, [sidebarCollapsed]);
 
   // ── Data Loading ─────────────────────────────────────────
 
@@ -448,7 +463,22 @@ export function App() {
       <div className="titlebar-drag h-[38px] flex-shrink-0 border-b border-border/40" style={{ background: 'hsl(var(--surface-1))' }} />
 
       <PanelGroup direction="horizontal" className="flex-1">
-        <Panel defaultSize={18} minSize={12} maxSize={28}>
+        <Panel
+          ref={sidebarPanelRef}
+          defaultSize={sidebarCollapsed ? 3 : 18}
+          minSize={12}
+          maxSize={28}
+          collapsible
+          collapsedSize={3}
+          onCollapse={() => {
+            setSidebarCollapsed(true);
+            localStorage.setItem('sidebarCollapsed', 'true');
+          }}
+          onExpand={() => {
+            setSidebarCollapsed(false);
+            localStorage.setItem('sidebarCollapsed', 'false');
+          }}
+        >
           <LeftSidebar
             projects={projects}
             activeProjectId={activeProjectId}
@@ -462,6 +492,8 @@ export function App() {
             onDeleteTask={handleDeleteTask}
             onArchiveTask={handleArchiveTask}
             onOpenSettings={() => setShowSettings(true)}
+            collapsed={sidebarCollapsed}
+            onToggleCollapse={toggleSidebar}
           />
         </Panel>
         <PanelResizeHandle className="w-[1px] bg-border/40" />

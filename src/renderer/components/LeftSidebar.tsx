@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FolderOpen, Plus, Trash2, Archive, Settings, GitBranch, ChevronRight, ChevronDown } from 'lucide-react';
+import { FolderOpen, Plus, Trash2, Archive, Settings, GitBranch, ChevronRight, ChevronDown, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import type { Project, Task } from '../../shared/types';
 
 interface LeftSidebarProps {
@@ -15,6 +15,8 @@ interface LeftSidebarProps {
   onDeleteTask: (id: string) => void;
   onArchiveTask: (id: string) => void;
   onOpenSettings: () => void;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
 }
 
 export function LeftSidebar({
@@ -30,6 +32,8 @@ export function LeftSidebar({
   onDeleteTask,
   onArchiveTask,
   onOpenSettings,
+  collapsed,
+  onToggleCollapse,
 }: LeftSidebarProps) {
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
 
@@ -45,6 +49,69 @@ export function LeftSidebar({
     });
   }
 
+  if (collapsed) {
+    return (
+      <div className="h-full flex flex-col items-center" style={{ background: 'hsl(var(--surface-1))' }}>
+        {/* Expand button */}
+        <div className="pt-3 pb-1">
+          <button
+            onClick={onToggleCollapse}
+            className="p-1.5 rounded-md hover:bg-accent/80 text-muted-foreground hover:text-foreground transition-all duration-150 titlebar-no-drag"
+            title="Expand sidebar"
+          >
+            <PanelLeftOpen size={14} strokeWidth={1.8} />
+          </button>
+        </div>
+
+        {/* Open folder */}
+        <div className="pb-1">
+          <button
+            onClick={onOpenFolder}
+            className="p-1.5 rounded-md hover:bg-accent/80 text-muted-foreground hover:text-foreground transition-all duration-150 titlebar-no-drag"
+            title="Open folder"
+          >
+            <FolderOpen size={14} strokeWidth={1.8} />
+          </button>
+        </div>
+
+        {/* Divider */}
+        <div className="w-5 border-t border-border/40 my-1" />
+
+        {/* Project avatars */}
+        <div className="flex-1 overflow-y-auto flex flex-col items-center gap-1 py-1 w-full px-1.5">
+          {projects.map((project) => {
+            const isActive = project.id === activeProjectId;
+            return (
+              <button
+                key={project.id}
+                onClick={() => onSelectProject(project.id)}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-[11px] font-bold transition-all duration-150 titlebar-no-drag ${
+                  isActive
+                    ? 'bg-primary/20 text-primary'
+                    : 'bg-accent/60 text-muted-foreground hover:bg-accent hover:text-foreground'
+                }`}
+                title={project.name}
+              >
+                {project.name.charAt(0).toUpperCase()}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Settings */}
+        <div className="py-2 border-t border-border/40 w-full flex justify-center">
+          <button
+            onClick={onOpenSettings}
+            className="p-1.5 rounded-md hover:bg-accent/80 text-muted-foreground/70 hover:text-foreground transition-all duration-150 titlebar-no-drag"
+            title="Settings"
+          >
+            <Settings size={14} strokeWidth={1.8} />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full flex flex-col" style={{ background: 'hsl(var(--surface-1))' }}>
       {/* Header */}
@@ -52,13 +119,22 @@ export function LeftSidebar({
         <span className="text-[10px] font-semibold uppercase text-muted-foreground/70 tracking-[0.08em]">
           Projects
         </span>
-        <button
-          onClick={onOpenFolder}
-          className="p-1 rounded-md hover:bg-accent/80 text-muted-foreground hover:text-foreground transition-all duration-150 titlebar-no-drag"
-          title="Open folder"
-        >
-          <FolderOpen size={13} strokeWidth={1.8} />
-        </button>
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={onOpenFolder}
+            className="p-1 rounded-md hover:bg-accent/80 text-muted-foreground hover:text-foreground transition-all duration-150 titlebar-no-drag"
+            title="Open folder"
+          >
+            <FolderOpen size={13} strokeWidth={1.8} />
+          </button>
+          <button
+            onClick={onToggleCollapse}
+            className="p-1 rounded-md hover:bg-accent/80 text-muted-foreground hover:text-foreground transition-all duration-150 titlebar-no-drag"
+            title="Collapse sidebar"
+          >
+            <PanelLeftClose size={13} strokeWidth={1.8} />
+          </button>
+        </div>
       </div>
 
       {/* Project list with nested tasks */}
