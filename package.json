@@ -26,6 +26,7 @@
     "files": [
       "dist/**/*"
     ],
+    "npmRebuild": false,
     "mac": {
       "target": [
         { "target": "dmg", "arch": ["x64", "arm64"] },

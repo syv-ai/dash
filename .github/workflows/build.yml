@@ -12,9 +12,9 @@ jobs:
       matrix:
         include:
           - arch: x64
-            runner: macos-13      # Intel runner
+            runner: macos-13
           - arch: arm64
-            runner: macos-latest  # Apple Silicon runner
+            runner: macos-latest
 
     runs-on: ${{ matrix.runner }}
 
@@ -32,6 +32,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install
+
+      - name: Rebuild native modules for Electron
+        run: pnpm exec electron-rebuild -f -w node-pty,better-sqlite3
 
       - name: Build
         run: pnpm build
