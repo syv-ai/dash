@@ -78,12 +78,11 @@ export function registerPtyIpc(): void {
     }
   });
 
-  ipcMain.handle('pty:snapshot:save', async (_event, id: string, payload: unknown) => {
+  ipcMain.on('pty:snapshot:save', (_event, id: string, payload: unknown) => {
     try {
-      await terminalSnapshotService.saveSnapshot(id, payload as any);
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: String(error) };
+      terminalSnapshotService.saveSnapshot(id, payload as any);
+    } catch {
+      // Best effort — fire-and-forget from beforeunload
     }
   });
 

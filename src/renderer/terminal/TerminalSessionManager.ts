@@ -4,7 +4,9 @@ import { SerializeAddon } from '@xterm/addon-serialize';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import type { TerminalSnapshot } from '../../shared/types';
 
-const SNAPSHOT_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
+const SNAPSHOT_DEBOUNCE_MS = 10_000;
+const SIGWINCH_DELAY_MS = 300;
+const SIGWINCH_MAX_RETRIES = 2;
 const MEMORY_LIMIT_BYTES = 128 * 1024 * 1024; // 128MB soft limit
 
 const darkTheme = {
@@ -62,8 +64,10 @@ export class TerminalSessionManager {
   private fitAddon: FitAddon;
   private serializeAddon: SerializeAddon;
   private resizeObserver: ResizeObserver | null = null;
-  private snapshotTimer: ReturnType<typeof setInterval> | null = null;
   private snapshotDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private snapshotDirty = false;
+  private dataBuffer: string[] | null = null;
+  private cursorShowPartial = '';
   private unsubData: (() => void) | null = null;
   private unsubExit: (() => void) | null = null;
   private ptyStarted = false;
@@ -73,6 +77,7 @@ export class TerminalSessionManager {
   private currentContainer: HTMLElement | null = null;
   private boundBeforeUnload: (() => void) | null = null;
   private suppressCursorShow = false;
+  private attachGeneration = 0;
 
   constructor(opts: { id: string; cwd: string; autoApprove?: boolean }) {
     this.id = opts.id;
@@ -130,6 +135,7 @@ export class TerminalSessionManager {
   }
 
   async attach(container: HTMLElement) {
+    const gen = ++this.attachGeneration;
     if (this.disposed) return;
     this.currentContainer = container;
 
@@ -139,6 +145,8 @@ export class TerminalSessionManager {
       this.opened = true;
       // Load GPU addon after terminal is in DOM
       await this.loadGpuAddon();
+      // After yielding, check if a newer attach() has started (React remount)
+      if (gen !== this.attachGeneration) return;
     } else {
       // Re-attach: move the xterm element back into the visible container
       const xtermEl = this.terminal.element;
@@ -159,71 +167,106 @@ export class TerminalSessionManager {
     // Save snapshot on page unload (CMD+R) so it's always available on reload
     if (!this.boundBeforeUnload) {
       this.boundBeforeUnload = () => {
-        this.saveSnapshot();
+        if (this.snapshotDirty && this.opened) {
+          this.saveSnapshot();
+        }
       };
       window.addEventListener('beforeunload', this.boundBeforeUnload);
     }
 
     // Start PTY if not started (first attach)
     let reattached = false;
+    let isDirectSpawn = false;
     if (!this.ptyStarted) {
-      await this.initializeTerminal();
+      // Check for Claude session to determine resume flag
+      let resume = false;
+      let existingSnapshot: TerminalSnapshot | null = null;
+      try {
+        const snapshotResp = await window.electronAPI.ptyGetSnapshot(this.id);
+        if (snapshotResp.success && snapshotResp.data) {
+          existingSnapshot = snapshotResp.data;
+          // Only check for session if we have a snapshot (nothing to resume without one)
+          const sessionResp = await window.electronAPI.ptyHasClaudeSession(this.cwd);
+          if (sessionResp.success && sessionResp.data) {
+            resume = true;
+          }
+        }
+      } catch {
+        // Best effort
+      }
+      if (gen !== this.attachGeneration) return;
+
+      const result = await this.startPty(resume);
+      if (gen !== this.attachGeneration) return;
+      reattached = result.reattached;
+      isDirectSpawn = result.isDirectSpawn;
+
+      // For non-resume fresh spawns, show previous snapshot for visual context
+      if (existingSnapshot && !resume && !reattached) {
+        try {
+          this.terminal.write(existingSnapshot.data);
+        } catch {
+          // Best effort
+        }
+      }
     }
 
-    // For reattached sessions, suppress xterm's real cursor immediately.
-    // Ink's TUI renders its own visual cursor as a styled character;
-    // xterm's real cursor would appear at the wrong position (end of buffer).
-    // Must be set before any PTY data arrives (SIGWINCH redraw).
-    if (reattached) {
+    if (reattached && isDirectSpawn) {
+      // For reattached direct spawns (Claude CLI), suppress xterm's real cursor.
+      // Ink's TUI renders its own visual cursor as a styled character;
+      // xterm's real cursor would appear at the wrong position (end of buffer).
       this.suppressCursorShow = true;
       this.terminal.write('\x1b[?25l');
-    }
 
-    // Re-attach (page reload): restore terminal content from snapshot,
-    // falling back to SIGWINCH if no snapshot exists.
-    let snapshotRestored = false;
-    if (reattached) {
-      snapshotRestored = await this.restoreSnapshot();
-    }
+      // Buffer live PTY data while we restore snapshot to prevent interleaving
+      this.dataBuffer = [];
+      this.connectPtyListeners();
 
-    // Fit canvas and send dimensions after layout settles
-    requestAnimationFrame(() => {
-      this.fitAddon.fit();
-      this.terminal.focus();
+      // Restore terminal content from snapshot
+      const snapshotRestored = await this.restoreSnapshot();
+      if (gen !== this.attachGeneration) {
+        this.dataBuffer = null;
+        return;
+      }
 
-      const dims = this.fitAddon.proposeDimensions();
-      if (!dims || dims.cols <= 0 || dims.rows <= 0) return;
+      // Flush buffered data and disable buffering
+      const buffered = this.dataBuffer;
+      this.dataBuffer = null;
+      for (const chunk of buffered) {
+        this.terminal.write(chunk);
+      }
 
-      if (reattached && !snapshotRestored) {
-        // No snapshot — force TUI redraw via SIGWINCH.
-        // Use rows+1 then correct rows (col changes affect wrapping).
-        // Cursor-show sequences from Ink's redraw are stripped by the
-        // data listener (suppressCursorShow), so no phantom cursor.
-        window.electronAPI.ptyResize({
-          id: this.id,
-          cols: dims.cols,
-          rows: dims.rows + 1,
-        });
-        setTimeout(() => {
-          window.electronAPI.ptyResize({
-            id: this.id,
-            cols: dims.cols,
-            rows: dims.rows,
-          });
-        }, 300);
-      } else {
-        // Normal case or snapshot restored — just send correct dimensions
+      // Fit canvas and send dimensions after layout settles
+      requestAnimationFrame(() => {
+        if (gen !== this.attachGeneration) return;
+        this.fitAddon.fit();
+        this.terminal.focus();
+
+        const dims = this.fitAddon.proposeDimensions();
+        if (!dims || dims.cols <= 0 || dims.rows <= 0) return;
+
+        // SIGWINCH after reattach forces the TUI to redraw with current state
+        this.triggerSigwinch(dims.cols, dims.rows);
+      });
+    } else {
+      // Fresh spawn or shell reattach — no buffering needed
+      this.connectPtyListeners();
+
+      requestAnimationFrame(() => {
+        if (gen !== this.attachGeneration) return;
+        this.fitAddon.fit();
+        this.terminal.focus();
+
+        const dims = this.fitAddon.proposeDimensions();
+        if (!dims || dims.cols <= 0 || dims.rows <= 0) return;
+
         window.electronAPI.ptyResize({
           id: this.id,
           cols: dims.cols,
           rows: dims.rows,
         });
-      }
-    });
-
-    // Snapshot timer
-    if (this.snapshotTimer) clearInterval(this.snapshotTimer);
-    this.snapshotTimer = setInterval(() => this.saveSnapshot(), SNAPSHOT_INTERVAL_MS);
+      });
+    }
   }
 
   detach() {
@@ -231,10 +274,6 @@ export class TerminalSessionManager {
     this.saveSnapshot();
 
     // Stop timers
-    if (this.snapshotTimer) {
-      clearInterval(this.snapshotTimer);
-      this.snapshotTimer = null;
-    }
     if (this.snapshotDebounceTimer) {
       clearTimeout(this.snapshotDebounceTimer);
       this.snapshotDebounceTimer = null;
@@ -250,7 +289,7 @@ export class TerminalSessionManager {
     // Terminal element stays in DOM but container will be unmounted by React
   }
 
-  async dispose() {
+  dispose() {
     if (this.disposed) return;
     this.disposed = true;
 
@@ -259,12 +298,8 @@ export class TerminalSessionManager {
       this.boundBeforeUnload = null;
     }
 
-    await this.saveSnapshot();
+    this.saveSnapshot();
 
-    if (this.snapshotTimer) {
-      clearInterval(this.snapshotTimer);
-      this.snapshotTimer = null;
-    }
     if (this.snapshotDebounceTimer) {
       clearTimeout(this.snapshotDebounceTimer);
       this.snapshotDebounceTimer = null;
@@ -314,63 +349,13 @@ export class TerminalSessionManager {
     }
   }
 
-  /**
-   * Initialize terminal with snapshot restore and resume support.
-   *
-   * For Claude CLI (which supports -r resume):
-   *   - Check if a Claude session exists for this cwd
-   *   - If yes: spawn with resume=true (CLI restores conversation via -r)
-   *     Skip snapshot restore since the CLI will replay its own output
-   *   - If no: spawn fresh (no resume, no snapshot)
-   *
-   * For shell fallback (no resume support):
-   *   - Restore snapshot for visual context, then spawn shell
-   */
-  private async initializeTerminal() {
-    // Check for existing snapshot
-    let snapshot: TerminalSnapshot | null = null;
-    try {
-      const resp = await window.electronAPI.ptyGetSnapshot(this.id);
-      if (resp.success && resp.data) {
-        snapshot = resp.data;
-      }
-    } catch {
-      // Best effort
-    }
-
-    // Check if Claude has an existing session for this working directory
-    let hasSession = false;
-    if (snapshot) {
-      try {
-        const resp = await window.electronAPI.ptyHasClaudeSession(this.cwd);
-        if (resp.success && resp.data) {
-          hasSession = true;
-        }
-      } catch {
-        // Best effort
-      }
-    }
-
-    await this.startPty(hasSession);
-
-    // For resume-capable CLIs, the CLI handles history replay — skip snapshot.
-    // For non-resume cases (no session found, or shell fallback), show the snapshot
-    // so the user sees their previous terminal output.
-    if (snapshot && !hasSession) {
-      try {
-        this.terminal.write(snapshot.data);
-      } catch {
-        // Best effort
-      }
-    }
-  }
-
-  private async startPty(resume: boolean = false) {
+  private async startPty(resume: boolean = false): Promise<{ reattached: boolean; isDirectSpawn: boolean }> {
     const dims = this.fitAddon.proposeDimensions();
     const cols = dims?.cols ?? 120;
     const rows = dims?.rows ?? 30;
 
     let reattached = false;
+    let isDirectSpawn = false;
 
     const resp = await window.electronAPI.ptyStartDirect({
       id: this.id,
@@ -383,6 +368,7 @@ export class TerminalSessionManager {
 
     if (resp.success) {
       reattached = resp.data?.reattached ?? false;
+      isDirectSpawn = resp.data?.isDirectSpawn ?? true;
     } else {
       // Fall back to shell
       const shellResp = await window.electronAPI.ptyStart({
@@ -392,12 +378,12 @@ export class TerminalSessionManager {
         rows,
       });
       reattached = shellResp.data?.reattached ?? false;
+      isDirectSpawn = shellResp.data?.isDirectSpawn ?? false;
     }
 
     this.ptyStarted = true;
-    this.connectPtyListeners();
 
-    return reattached;
+    return { reattached, isDirectSpawn };
   }
 
   private connectPtyListeners() {
@@ -407,16 +393,20 @@ export class TerminalSessionManager {
 
     // Listen for PTY data
     this.unsubData = window.electronAPI.onPtyData(this.id, (data) => {
-      if (!this.disposed) {
-        // After snapshot restore, xterm's real cursor is at the wrong position.
-        // Ink's TUI renders its own visual cursor, so we strip cursor-show
-        // sequences to keep xterm's cursor hidden.
-        // eslint-disable-next-line no-control-regex
-        const filtered = this.suppressCursorShow ? data.replace(/\x1b\[\?25h/g, '') : data;
-        this.terminal.write(filtered);
-        this.checkMemory();
-        this.debounceSaveSnapshot();
+      if (this.disposed) return;
+
+      const filtered = this.suppressCursorShow ? this.filterCursorShow(data) : data;
+
+      // Buffer data during snapshot restore to prevent interleaving
+      if (this.dataBuffer !== null) {
+        this.dataBuffer.push(filtered);
+        return;
       }
+
+      this.terminal.write(filtered);
+      this.snapshotDirty = true;
+      this.checkMemory();
+      this.debounceSaveSnapshot();
     });
 
     // Listen for PTY exit → spawn shell fallback
@@ -425,9 +415,13 @@ export class TerminalSessionManager {
 
       // Shell needs the real cursor — stop suppressing
       this.suppressCursorShow = false;
+      this.cursorShowPartial = '';
       this.terminal.write('\x1b[?25h');
 
       this.terminal.writeln(`\r\n\x1b[90m[Process exited with code ${info.exitCode}]\x1b[0m\r\n`);
+
+      // Ensure PTY is cleaned up in main process before spawning shell
+      window.electronAPI.ptyKill(this.id);
 
       // Spawn shell fallback
       const dims = this.fitAddon.proposeDimensions();
@@ -444,15 +438,47 @@ export class TerminalSessionManager {
     });
   }
 
+  private triggerSigwinch(cols: number, rows: number, attempt = 0) {
+    window.electronAPI.ptyResize({ id: this.id, cols, rows: rows + 1 });
+    setTimeout(() => {
+      window.electronAPI.ptyResize({ id: this.id, cols, rows });
+      if (attempt < SIGWINCH_MAX_RETRIES) {
+        setTimeout(() => {
+          const bufLen = this.terminal.buffer.active.length;
+          if (bufLen <= 1) this.triggerSigwinch(cols, rows, attempt + 1);
+        }, 200);
+      }
+    }, SIGWINCH_DELAY_MS);
+  }
+
+  // eslint-disable-next-line no-control-regex
+  private static readonly CURSOR_SHOW_RE = /\x1b\[\?25h/g;
+  private static readonly CURSOR_SHOW_SEQ = '\x1b[?25h';
+
+  private filterCursorShow(data: string): string {
+    const input = this.cursorShowPartial + data;
+    this.cursorShowPartial = '';
+
+    // Check if input ends with a prefix of the cursor-show sequence
+    const seq = TerminalSessionManager.CURSOR_SHOW_SEQ;
+    for (let i = 1; i < seq.length; i++) {
+      if (input.endsWith(seq.slice(0, i))) {
+        this.cursorShowPartial = seq.slice(0, i);
+        return input.slice(0, -i).replace(TerminalSessionManager.CURSOR_SHOW_RE, '');
+      }
+    }
+    return input.replace(TerminalSessionManager.CURSOR_SHOW_RE, '');
+  }
+
   private debounceSaveSnapshot() {
     if (this.snapshotDebounceTimer) clearTimeout(this.snapshotDebounceTimer);
     this.snapshotDebounceTimer = setTimeout(() => {
       this.snapshotDebounceTimer = null;
       this.saveSnapshot();
-    }, 3000);
+    }, SNAPSHOT_DEBOUNCE_MS);
   }
 
-  private async saveSnapshot() {
+  private saveSnapshot() {
     if (this.disposed || !this.opened) return;
     try {
       const data = this.serializeAddon.serialize();
@@ -464,7 +490,8 @@ export class TerminalSessionManager {
         rows: dims?.rows ?? 30,
         data,
       };
-      await window.electronAPI.ptySaveSnapshot(this.id, snapshot);
+      window.electronAPI.ptySaveSnapshot(this.id, snapshot);
+      this.snapshotDirty = false;
     } catch {
       // Best effort
     }

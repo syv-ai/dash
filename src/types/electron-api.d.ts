@@ -68,13 +68,13 @@ export interface ElectronAPI {
     rows: number;
     autoApprove?: boolean;
     resume?: boolean;
-  }) => Promise<IpcResponse<{ reattached: boolean }>>;
+  }) => Promise<IpcResponse<{ reattached: boolean; isDirectSpawn: boolean }>>;
   ptyStart: (args: {
     id: string;
     cwd: string;
     cols: number;
     rows: number;
-  }) => Promise<IpcResponse<{ reattached: boolean }>>;
+  }) => Promise<IpcResponse<{ reattached: boolean; isDirectSpawn: boolean }>>;
   ptyInput: (args: { id: string; data: string }) => void;
   ptyResize: (args: { id: string; cols: number; rows: number }) => void;
   ptyKill: (id: string) => void;
@@ -90,7 +90,7 @@ export interface ElectronAPI {
 
   // Snapshots
   ptyGetSnapshot: (id: string) => Promise<IpcResponse<TerminalSnapshot | null>>;
-  ptySaveSnapshot: (id: string, payload: TerminalSnapshot) => Promise<IpcResponse<void>>;
+  ptySaveSnapshot: (id: string, payload: TerminalSnapshot) => void;
   ptyClearSnapshot: (id: string) => Promise<IpcResponse<void>>;
 
   // Session detection

@@ -84,12 +84,20 @@ export async function startDirectPty(options: {
   autoApprove?: boolean;
   resume?: boolean;
   sender?: WebContents;
-}): Promise<{ reattached: boolean }> {
+}): Promise<{ reattached: boolean; isDirectSpawn: boolean }> {
   // Re-attach to existing PTY (e.g., after renderer reload)
   const existing = ptys.get(options.id);
-  if (existing) {
+  if (existing && !existing.isDirectSpawn) {
+    // Shell PTY exists for this ID, but we need Claude — kill it first
+    try {
+      existing.proc.kill();
+    } catch {
+      /* already dead */
+    }
+    ptys.delete(options.id);
+  } else if (existing) {
     existing.owner = options.sender || null;
-    return { reattached: true };
+    return { reattached: true, isDirectSpawn: true };
   }
 
   const pty = getPty();
@@ -142,7 +150,7 @@ export async function startDirectPty(options: {
     ptys.delete(options.id);
   });
 
-  return { reattached: false };
+  return { reattached: false, isDirectSpawn: true };
 }
 
 /**
@@ -154,12 +162,12 @@ export async function startPty(options: {
   cols: number;
   rows: number;
   sender?: WebContents;
-}): Promise<{ reattached: boolean }> {
+}): Promise<{ reattached: boolean; isDirectSpawn: boolean }> {
   // Re-attach to existing PTY (e.g., after renderer reload)
   const existing = ptys.get(options.id);
   if (existing) {
     existing.owner = options.sender || null;
-    return { reattached: true };
+    return { reattached: true, isDirectSpawn: existing.isDirectSpawn };
   }
 
   const pty = getPty();
@@ -205,7 +213,7 @@ export async function startPty(options: {
     ptys.delete(options.id);
   });
 
-  return { reattached: false };
+  return { reattached: false, isDirectSpawn: false };
 }
 
 /**

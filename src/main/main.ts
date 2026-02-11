@@ -74,6 +74,13 @@ app.whenReady().then(async () => {
   const { createWindow } = await import('./window');
   mainWindow = createWindow();
 
+  // Kill PTYs owned by this window on close (CMD+W on macOS)
+  mainWindow.on('close', () => {
+    import('./services/ptyManager').then(({ killByOwner }) => {
+      killByOwner(mainWindow!.webContents);
+    });
+  });
+
   // Start activity monitor — must happen after window creation
   const { activityMonitor } = await import('./services/ActivityMonitor');
   activityMonitor.start(mainWindow.webContents);

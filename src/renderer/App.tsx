@@ -101,6 +101,18 @@ export function App() {
     else localStorage.removeItem('activeTaskId');
   }, [activeTaskId]);
 
+  // Clear stale activeTaskId if it no longer exists in loaded tasks.
+  // Wait until all projects have had their tasks loaded to avoid clearing
+  // prematurely when tasks load out of order across projects.
+  useEffect(() => {
+    if (!activeTaskId || projects.length === 0) return;
+    if (Object.keys(tasksByProject).length < projects.length) return;
+    for (const tasks of Object.values(tasksByProject)) {
+      if (tasks.some((t) => t.id === activeTaskId && !t.archivedAt)) return;
+    }
+    setActiveTaskId(null);
+  }, [tasksByProject, activeTaskId, projects.length]);
+
   // Load tasks for all projects when projects change
   useEffect(() => {
     for (const project of projects) {
