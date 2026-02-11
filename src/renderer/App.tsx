@@ -15,9 +15,13 @@ const GIT_POLL_INTERVAL = 5000;
 
 export function App() {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(() =>
+    localStorage.getItem('activeProjectId'),
+  );
   const [tasksByProject, setTasksByProject] = useState<Record<string, Task[]>>({});
-  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(() =>
+    localStorage.getItem('activeTaskId'),
+  );
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [taskModalProjectId, setTaskModalProjectId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -85,6 +89,17 @@ export function App() {
     });
     return unsubscribe;
   }, []);
+
+  // Persist selection to localStorage (survives CMD+R reload)
+  useEffect(() => {
+    if (activeProjectId) localStorage.setItem('activeProjectId', activeProjectId);
+    else localStorage.removeItem('activeProjectId');
+  }, [activeProjectId]);
+
+  useEffect(() => {
+    if (activeTaskId) localStorage.setItem('activeTaskId', activeTaskId);
+    else localStorage.removeItem('activeTaskId');
+  }, [activeTaskId]);
 
   // Load tasks for all projects when projects change
   useEffect(() => {
@@ -253,8 +268,12 @@ export function App() {
     const resp = await window.electronAPI.getProjects();
     if (resp.success && resp.data) {
       setProjects(resp.data);
-      if (resp.data.length > 0 && !activeProjectId) {
-        setActiveProjectId(resp.data[0].id);
+      if (resp.data.length > 0) {
+        // Only default to first project if no valid selection exists
+        setActiveProjectId((prev) => {
+          if (prev && resp.data!.some((p) => p.id === prev)) return prev;
+          return resp.data![0].id;
+        });
       }
     }
   }

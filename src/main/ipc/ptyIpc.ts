@@ -29,11 +29,11 @@ export function registerPtyIpc(): void {
       },
     ) => {
       try {
-        await startDirectPty({
+        const result = await startDirectPty({
           ...args,
           sender: event.sender,
         });
-        return { success: true };
+        return { success: true, data: result };
       } catch (error) {
         return { success: false, error: String(error) };
       }
@@ -44,11 +44,11 @@ export function registerPtyIpc(): void {
     'pty:start',
     async (event, args: { id: string; cwd: string; cols: number; rows: number }) => {
       try {
-        await startPty({
+        const result = await startPty({
           ...args,
           sender: event.sender,
         });
-        return { success: true };
+        return { success: true, data: result };
       } catch (error) {
         return { success: false, error: String(error) };
       }

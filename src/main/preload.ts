@@ -68,7 +68,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Snapshots
   ptyGetSnapshot: (id: string) => ipcRenderer.invoke('pty:snapshot:get', id),
   ptySaveSnapshot: (id: string, payload: unknown) =>
-    ipcRenderer.invoke('pty:snapshot:save', id, payload),
+    ipcRenderer.send('pty:snapshot:save', id, payload),
   ptyClearSnapshot: (id: string) => ipcRenderer.invoke('pty:snapshot:clear', id),
 
   // Session detection

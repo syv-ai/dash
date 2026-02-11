@@ -84,7 +84,14 @@ export async function startDirectPty(options: {
   autoApprove?: boolean;
   resume?: boolean;
   sender?: WebContents;
-}): Promise<void> {
+}): Promise<{ reattached: boolean }> {
+  // Re-attach to existing PTY (e.g., after renderer reload)
+  const existing = ptys.get(options.id);
+  if (existing) {
+    existing.owner = options.sender || null;
+    return { reattached: true };
+  }
+
   const pty = getPty();
   const claudePath = await findClaudePath();
 
@@ -134,6 +141,8 @@ export async function startDirectPty(options: {
     }
     ptys.delete(options.id);
   });
+
+  return { reattached: false };
 }
 
 /**
@@ -145,7 +154,14 @@ export async function startPty(options: {
   cols: number;
   rows: number;
   sender?: WebContents;
-}): Promise<void> {
+}): Promise<{ reattached: boolean }> {
+  // Re-attach to existing PTY (e.g., after renderer reload)
+  const existing = ptys.get(options.id);
+  if (existing) {
+    existing.owner = options.sender || null;
+    return { reattached: true };
+  }
+
   const pty = getPty();
 
   const shell = process.env.SHELL || '/bin/bash';
@@ -165,14 +181,11 @@ export async function startPty(options: {
     env: env as Record<string, string>,
   });
 
-  const existing = ptys.get(options.id);
-  const owner = options.sender || existing?.owner || null;
-
   const record: PtyRecord = {
     proc,
     cwd: options.cwd,
     isDirectSpawn: false,
-    owner,
+    owner: options.sender || null,
   };
 
   ptys.set(options.id, record);
@@ -191,6 +204,8 @@ export async function startPty(options: {
     }
     ptys.delete(options.id);
   });
+
+  return { reattached: false };
 }
 
 /**

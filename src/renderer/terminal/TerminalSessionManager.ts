@@ -63,6 +63,7 @@ export class TerminalSessionManager {
   private serializeAddon: SerializeAddon;
   private resizeObserver: ResizeObserver | null = null;
   private snapshotTimer: ReturnType<typeof setInterval> | null = null;
+  private snapshotDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private unsubData: (() => void) | null = null;
   private unsubExit: (() => void) | null = null;
   private ptyStarted = false;
@@ -70,6 +71,8 @@ export class TerminalSessionManager {
   private opened = false;
   private autoApprove: boolean;
   private currentContainer: HTMLElement | null = null;
+  private boundBeforeUnload: (() => void) | null = null;
+  private suppressCursorShow = false;
 
   constructor(opts: { id: string; cwd: string; autoApprove?: boolean }) {
     this.id = opts.id;
@@ -153,16 +156,70 @@ export class TerminalSessionManager {
     });
     this.resizeObserver.observe(container);
 
-    // Initial fit after layout settles
-    requestAnimationFrame(() => {
-      this.fit();
-      this.terminal.focus();
-    });
+    // Save snapshot on page unload (CMD+R) so it's always available on reload
+    if (!this.boundBeforeUnload) {
+      this.boundBeforeUnload = () => {
+        this.saveSnapshot();
+      };
+      window.addEventListener('beforeunload', this.boundBeforeUnload);
+    }
 
     // Start PTY if not started (first attach)
+    let reattached = false;
     if (!this.ptyStarted) {
       await this.initializeTerminal();
     }
+
+    // For reattached sessions, suppress xterm's real cursor immediately.
+    // Ink's TUI renders its own visual cursor as a styled character;
+    // xterm's real cursor would appear at the wrong position (end of buffer).
+    // Must be set before any PTY data arrives (SIGWINCH redraw).
+    if (reattached) {
+      this.suppressCursorShow = true;
+      this.terminal.write('\x1b[?25l');
+    }
+
+    // Re-attach (page reload): restore terminal content from snapshot,
+    // falling back to SIGWINCH if no snapshot exists.
+    let snapshotRestored = false;
+    if (reattached) {
+      snapshotRestored = await this.restoreSnapshot();
+    }
+
+    // Fit canvas and send dimensions after layout settles
+    requestAnimationFrame(() => {
+      this.fitAddon.fit();
+      this.terminal.focus();
+
+      const dims = this.fitAddon.proposeDimensions();
+      if (!dims || dims.cols <= 0 || dims.rows <= 0) return;
+
+      if (reattached && !snapshotRestored) {
+        // No snapshot — force TUI redraw via SIGWINCH.
+        // Use rows+1 then correct rows (col changes affect wrapping).
+        // Cursor-show sequences from Ink's redraw are stripped by the
+        // data listener (suppressCursorShow), so no phantom cursor.
+        window.electronAPI.ptyResize({
+          id: this.id,
+          cols: dims.cols,
+          rows: dims.rows + 1,
+        });
+        setTimeout(() => {
+          window.electronAPI.ptyResize({
+            id: this.id,
+            cols: dims.cols,
+            rows: dims.rows,
+          });
+        }, 300);
+      } else {
+        // Normal case or snapshot restored — just send correct dimensions
+        window.electronAPI.ptyResize({
+          id: this.id,
+          cols: dims.cols,
+          rows: dims.rows,
+        });
+      }
+    });
 
     // Snapshot timer
     if (this.snapshotTimer) clearInterval(this.snapshotTimer);
@@ -177,6 +234,10 @@ export class TerminalSessionManager {
     if (this.snapshotTimer) {
       clearInterval(this.snapshotTimer);
       this.snapshotTimer = null;
+    }
+    if (this.snapshotDebounceTimer) {
+      clearTimeout(this.snapshotDebounceTimer);
+      this.snapshotDebounceTimer = null;
     }
 
     // Stop resize observer
@@ -193,11 +254,20 @@ export class TerminalSessionManager {
     if (this.disposed) return;
     this.disposed = true;
 
+    if (this.boundBeforeUnload) {
+      window.removeEventListener('beforeunload', this.boundBeforeUnload);
+      this.boundBeforeUnload = null;
+    }
+
     await this.saveSnapshot();
 
     if (this.snapshotTimer) {
       clearInterval(this.snapshotTimer);
       this.snapshotTimer = null;
+    }
+    if (this.snapshotDebounceTimer) {
+      clearTimeout(this.snapshotDebounceTimer);
+      this.snapshotDebounceTimer = null;
     }
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
@@ -300,6 +370,8 @@ export class TerminalSessionManager {
     const cols = dims?.cols ?? 120;
     const rows = dims?.rows ?? 30;
 
+    let reattached = false;
+
     const resp = await window.electronAPI.ptyStartDirect({
       id: this.id,
       cwd: this.cwd,
@@ -309,18 +381,23 @@ export class TerminalSessionManager {
       resume,
     });
 
-    if (!resp.success) {
+    if (resp.success) {
+      reattached = resp.data?.reattached ?? false;
+    } else {
       // Fall back to shell
-      await window.electronAPI.ptyStart({
+      const shellResp = await window.electronAPI.ptyStart({
         id: this.id,
         cwd: this.cwd,
         cols,
         rows,
       });
+      reattached = shellResp.data?.reattached ?? false;
     }
 
     this.ptyStarted = true;
     this.connectPtyListeners();
+
+    return reattached;
   }
 
   private connectPtyListeners() {
@@ -331,8 +408,14 @@ export class TerminalSessionManager {
     // Listen for PTY data
     this.unsubData = window.electronAPI.onPtyData(this.id, (data) => {
       if (!this.disposed) {
-        this.terminal.write(data);
+        // After snapshot restore, xterm's real cursor is at the wrong position.
+        // Ink's TUI renders its own visual cursor, so we strip cursor-show
+        // sequences to keep xterm's cursor hidden.
+        // eslint-disable-next-line no-control-regex
+        const filtered = this.suppressCursorShow ? data.replace(/\x1b\[\?25h/g, '') : data;
+        this.terminal.write(filtered);
         this.checkMemory();
+        this.debounceSaveSnapshot();
       }
     });
 
@@ -340,9 +423,11 @@ export class TerminalSessionManager {
     this.unsubExit = window.electronAPI.onPtyExit(this.id, (info) => {
       if (this.disposed) return;
 
-      this.terminal.writeln(
-        `\r\n\x1b[90m[Process exited with code ${info.exitCode}]\x1b[0m\r\n`,
-      );
+      // Shell needs the real cursor — stop suppressing
+      this.suppressCursorShow = false;
+      this.terminal.write('\x1b[?25h');
+
+      this.terminal.writeln(`\r\n\x1b[90m[Process exited with code ${info.exitCode}]\x1b[0m\r\n`);
 
       // Spawn shell fallback
       const dims = this.fitAddon.proposeDimensions();
@@ -357,6 +442,14 @@ export class TerminalSessionManager {
           this.connectPtyListeners();
         });
     });
+  }
+
+  private debounceSaveSnapshot() {
+    if (this.snapshotDebounceTimer) clearTimeout(this.snapshotDebounceTimer);
+    this.snapshotDebounceTimer = setTimeout(() => {
+      this.snapshotDebounceTimer = null;
+      this.saveSnapshot();
+    }, 3000);
   }
 
   private async saveSnapshot() {
@@ -375,6 +468,19 @@ export class TerminalSessionManager {
     } catch {
       // Best effort
     }
+  }
+
+  private async restoreSnapshot(): Promise<boolean> {
+    try {
+      const resp = await window.electronAPI.ptyGetSnapshot(this.id);
+      if (resp.success && resp.data && resp.data.data) {
+        this.terminal.write(resp.data.data);
+        return true;
+      }
+    } catch {
+      // Best effort
+    }
+    return false;
   }
 
   private checkMemory() {
