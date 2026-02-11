@@ -53,3 +53,4 @@ Two-process Electron app with strict context isolation (nodeIntegration disabled
 - Prettier: 2 spaces, single quotes, semicolons, trailing commas, 100-char width
 - ESLint: `@typescript-eslint/no-explicit-any` is warn (not error); unused vars prefixed with `_` are allowed
 - Tailwind CSS for all styling; dark/light theme via class on document root
+- See [docs/STYLEGUIDE.md](./docs/STYLEGUIDE.md) for UI component conventions, color usage, and icon guidelines

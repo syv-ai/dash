@@ -1,6 +1,18 @@
 import React, { useState } from 'react';
-import { FolderOpen, Plus, Trash2, Archive, Settings, GitBranch, ChevronRight, ChevronDown, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import {
+  FolderOpen,
+  Plus,
+  Trash2,
+  Archive,
+  Settings,
+  GitBranch,
+  ChevronRight,
+  ChevronDown,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from 'lucide-react';
 import type { Project, Task } from '../../shared/types';
+import { IconButton } from './ui/IconButton';
 
 interface LeftSidebarProps {
   projects: Project[];
@@ -111,20 +123,12 @@ export function LeftSidebar({
           Projects
         </span>
         <div className="flex items-center gap-1">
-          <button
-            onClick={onOpenFolder}
-            className="p-1.5 rounded-md hover:bg-accent/60 text-muted-foreground/50 hover:text-foreground transition-colors titlebar-no-drag"
-            title="Open folder"
-          >
-            <FolderOpen size={16} strokeWidth={1.5} />
-          </button>
-          <button
-            onClick={onToggleCollapse}
-            className="p-1.5 rounded-md hover:bg-accent/60 text-muted-foreground/50 hover:text-foreground transition-colors titlebar-no-drag"
-            title="Collapse sidebar"
-          >
-            <PanelLeftClose size={16} strokeWidth={1.5} />
-          </button>
+          <IconButton onClick={onOpenFolder} title="Open folder" className="titlebar-no-drag">
+            <FolderOpen size={15} strokeWidth={1.8} />
+          </IconButton>
+          <IconButton onClick={onToggleCollapse} title="Collapse sidebar" className="titlebar-no-drag">
+            <PanelLeftClose size={15} strokeWidth={1.8} />
+          </IconButton>
         </div>
       </div>
 
@@ -148,7 +152,7 @@ export function LeftSidebar({
               <div key={project.id}>
                 {/* Project row */}
                 <div
-                  className={`group flex items-center gap-2 px-2.5 py-2 rounded-lg text-[15px] cursor-pointer transition-colors relative ${
+                  className={`group flex items-center gap-1.5 px-2 py-[7px] rounded-full text-[13px] cursor-pointer transition-all duration-150 ${
                     isActive
                       ? 'text-foreground font-medium'
                       : 'text-muted-foreground hover:text-foreground'
@@ -160,11 +164,6 @@ export function LeftSidebar({
                     }
                   }}
                 >
-                  {/* Active accent */}
-                  {isActive && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[2.5px] h-4 rounded-r-full bg-primary" />
-                  )}
-
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -173,118 +172,145 @@ export function LeftSidebar({
                     className="p-0.5 rounded flex-shrink-0 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
                   >
                     {isCollapsed ? (
-                      <ChevronRight size={16} strokeWidth={1.8} />
+                      <ChevronRight size={14} strokeWidth={2} />
                     ) : (
-                      <ChevronDown size={16} strokeWidth={1.8} />
+                      <ChevronDown size={14} strokeWidth={2} />
                     )}
                   </button>
+
+                  {/* Project avatar */}
+                  <div
+                    className={`w-[18px] h-[18px] rounded-full flex items-center justify-center flex-shrink-0 text-[10px] font-bold ${
+                      isActive ? 'bg-primary/20 text-primary' : 'bg-accent/80 text-muted-foreground'
+                    }`}
+                  >
+                    {project.name.charAt(0).toUpperCase()}
+                  </div>
 
                   <span className="truncate flex-1">{project.name}</span>
 
                   {projectTasks.length > 0 && (
-                    <span className="text-xs text-muted-foreground/30 tabular-nums flex-shrink-0">
+                    <span className="text-[10px] text-foreground/40 tabular-nums flex-shrink-0">
                       {projectTasks.length}
                     </span>
                   )}
 
-                  <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 transition-opacity">
-                    <button
+                  {/* Actions */}
+                  <div className="opacity-0 group-hover:opacity-100 flex gap-0.5 transition-all duration-150">
+                    <IconButton
                       onClick={(e) => {
                         e.stopPropagation();
                         onNewTask(project.id);
                       }}
-                      className="p-1 rounded-md hover:bg-foreground/10 text-muted-foreground/40 hover:text-foreground transition-colors"
                       title="New task"
+                      size="sm"
                     >
-                      <Plus size={16} strokeWidth={1.8} />
-                    </button>
-                    <button
+                      <Plus size={13} strokeWidth={2} />
+                    </IconButton>
+                    <IconButton
                       onClick={(e) => {
                         e.stopPropagation();
                         onDeleteProject(project.id);
                       }}
-                      className="p-1 rounded-md hover:bg-destructive/10 text-muted-foreground/40 hover:text-destructive transition-colors"
-                      title="Remove project"
+                      title="Delete project"
+                      variant="destructive"
+                      size="sm"
                     >
-                      <Trash2 size={16} strokeWidth={1.5} />
-                    </button>
+                      <Trash2 size={13} strokeWidth={1.8} />
+                    </IconButton>
                   </div>
                 </div>
 
-                {/* Tasks */}
-                {!isCollapsed && (
-                  <div className="ml-[26px]">
-                    {projectTasks.map((task) => {
-                      const isActiveTask = task.id === activeTaskId;
-                      return (
-                        <div
-                          key={task.id}
-                          className={`group flex items-center gap-2 px-2.5 py-[7px] rounded-lg text-sm cursor-pointer transition-colors relative ${
-                            isActiveTask
-                              ? 'text-foreground font-medium'
-                              : 'text-muted-foreground/60 hover:text-foreground'
-                          }`}
-                          onClick={() => onSelectTask(project.id, task.id)}
-                        >
-                          {/* Active indicator */}
-                          {isActiveTask && (
-                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-3 rounded-full bg-primary/70" />
-                          )}
+                {/* Tasks nested under project */}
+                <div
+                  className="grid transition-[grid-template-rows] duration-200 ease-in-out"
+                  style={{ gridTemplateRows: isCollapsed ? '0fr' : '1fr' }}
+                >
+                  <div className="overflow-hidden">
+                    <div className="mt-1 ml-[18px]">
+                      {projectTasks.map((task, idx) => {
+                        const isLast = idx === projectTasks.length - 1;
+                        return (
+                          <div key={task.id} className="flex">
+                            {/* Tree connector */}
+                            <div className="flex-shrink-0 w-4 relative">
+                              {/* Vertical line */}
+                              {!isLast && (
+                                <div className="absolute left-[5px] top-0 bottom-0 w-px bg-border/40" />
+                              )}
+                              {/* Branch arm: vertical to center + horizontal */}
+                              <div className="absolute left-[5px] top-0 h-1/2 w-px bg-border/40" />
+                              <div className="absolute left-[5px] top-1/2 w-[10px] h-px bg-border/40" />
+                            </div>
 
-                          {/* Status dot */}
-                          <div className="relative flex-shrink-0">
+                            {/* Task card */}
                             <div
-                              className={`w-[7px] h-[7px] rounded-full ${
-                                task.status === 'active'
-                                  ? 'bg-[hsl(var(--git-added))] status-pulse'
-                                  : isActiveTask
-                                    ? 'bg-primary/50'
-                                    : 'bg-muted-foreground/20'
+                              className={`group flex-1 flex items-center gap-2 px-2 py-[6px] rounded-full text-[12px] cursor-pointer transition-all duration-150 ${
+                                task.id === activeTaskId
+                                  ? 'bg-primary/15 text-foreground font-medium'
+                                  : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
                               }`}
-                            />
-                          </div>
-
-                          <span className="truncate flex-1">{task.name}</span>
-
-                          {isActiveTask && (
-                            <GitBranch size={13} className="text-muted-foreground/30 flex-shrink-0" strokeWidth={1.8} />
-                          )}
-
-                          <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 transition-opacity">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onArchiveTask(task.id);
-                              }}
-                              className="p-1 rounded-md hover:bg-foreground/10 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
-                              title="Archive task"
+                              onClick={() => onSelectTask(project.id, task.id)}
                             >
-                              <Archive size={15} strokeWidth={1.5} />
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onDeleteTask(task.id);
-                              }}
-                              className="p-1 rounded-md hover:bg-destructive/10 text-muted-foreground/40 hover:text-destructive transition-colors"
-                              title="Delete task"
-                            >
-                              <Trash2 size={15} strokeWidth={1.5} />
-                            </button>
+                              {/* Status dot */}
+                              <div className="relative flex-shrink-0">
+                                <div
+                                  className={`w-[6px] h-[6px] rounded-full ${
+                                    task.status === 'active'
+                                      ? 'bg-[hsl(var(--git-added))] status-pulse'
+                                      : 'bg-muted-foreground/25'
+                                  }`}
+                                />
+                              </div>
+
+                              <span className="truncate flex-1">{task.name}</span>
+
+                              {/* Branch indicator */}
+                              {task.id === activeTaskId && (
+                                <GitBranch
+                                  size={11}
+                                  className="text-foreground/50 flex-shrink-0"
+                                  strokeWidth={2}
+                                />
+                              )}
+
+                              {/* Hover actions */}
+                              <div className="opacity-0 group-hover:opacity-100 flex gap-0.5 transition-all duration-150">
+                                <IconButton
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onArchiveTask(task.id);
+                                  }}
+                                  title="Archive task"
+                                  size="sm"
+                                >
+                                  <Archive size={12} strokeWidth={1.8} />
+                                </IconButton>
+                                <IconButton
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onDeleteTask(task.id);
+                                  }}
+                                  title="Delete task"
+                                  variant="destructive"
+                                  size="sm"
+                                >
+                                  <Trash2 size={12} strokeWidth={1.8} />
+                                </IconButton>
+                              </div>
+                            </div>
                           </div>
+                        );
+                      })}
+
+                      {projectTasks.length === 0 && isActive && (
+                        <div className="px-2 py-3 text-center">
+                          <p className="text-[10px] text-muted-foreground/40">No tasks yet</p>
                         </div>
-                      );
-                    })}
-
-                    {projectTasks.length === 0 && isActive && (
-                      <div className="px-2.5 py-2">
-                        <p className="text-xs text-muted-foreground/30">
-                          No tasks yet
-                        </p>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
-                )}
+                </div>
               </div>
             );
           })}
@@ -295,9 +321,9 @@ export function LeftSidebar({
       <div className="px-2 py-2 border-t border-border/30">
         <button
           onClick={onOpenSettings}
-          className="flex items-center gap-2.5 px-2.5 py-2 w-full rounded-lg text-sm text-muted-foreground/50 hover:text-foreground transition-colors titlebar-no-drag"
+          className="flex items-center gap-2 px-2.5 py-[7px] w-full rounded-lg text-[13px] text-foreground/70 hover:bg-accent/60 hover:text-foreground transition-all duration-150 titlebar-no-drag"
         >
-          <Settings size={17} strokeWidth={1.5} />
+          <Settings size={14} strokeWidth={1.8} />
           <span>Settings</span>
         </button>
       </div>
