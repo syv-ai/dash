@@ -10,6 +10,7 @@ import { MainContent } from './components/MainContent';
 import { FileChangesPanel } from './components/FileChangesPanel';
 import { DiffViewer } from './components/DiffViewer';
 import { TaskModal } from './components/TaskModal';
+import { AddProjectModal } from './components/AddProjectModal';
 import { SettingsModal } from './components/SettingsModal';
 import type { Project, Task, GitStatus, DiffResult } from '../shared/types';
 import { loadKeybindings, saveKeybindings, matchesBinding } from './keybindings';
@@ -31,6 +32,11 @@ export function App() {
   );
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [taskModalProjectId, setTaskModalProjectId] = useState<string | null>(null);
+  const [showAddProjectModal, setShowAddProjectModal] = useState(false);
+  const [cloneStatus, setCloneStatus] = useState<{ loading: boolean; error: string | null }>({
+    loading: false,
+    error: null,
+  });
   const [showSettings, setShowSettings] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('theme') as 'light' | 'dark') || 'dark';
@@ -285,7 +291,8 @@ export function App() {
       }
       if (keybindings.openFolder && matchesBinding(e, keybindings.openFolder)) {
         e.preventDefault();
-        handleOpenFolder();
+        setCloneStatus({ loading: false, error: null });
+        setShowAddProjectModal(true);
       }
       if (keybindings.closeDiff && matchesBinding(e, keybindings.closeDiff)) {
         if (showDiff) {
@@ -298,6 +305,9 @@ export function App() {
         } else if (showTaskModal) {
           e.preventDefault();
           setShowTaskModal(false);
+        } else if (showAddProjectModal) {
+          e.preventDefault();
+          setShowAddProjectModal(false);
         }
       }
       if (keybindings.focusTerminal && matchesBinding(e, keybindings.focusTerminal)) {
@@ -317,6 +327,7 @@ export function App() {
     showDiff,
     showSettings,
     showTaskModal,
+    showAddProjectModal,
     keybindings,
   ]);
 
@@ -381,6 +392,7 @@ export function App() {
   // ── Handlers ─────────────────────────────────────────────
 
   async function handleOpenFolder() {
+    setShowAddProjectModal(false);
     const resp = await window.electronAPI.showOpenDialog();
     if (resp.success && resp.data && resp.data.length > 0) {
       const folderPath = resp.data[0];
@@ -400,6 +412,39 @@ export function App() {
         await loadProjects();
         setActiveProjectId(saveResp.data.id);
       }
+    }
+  }
+
+  async function handleCloneRepo(url: string) {
+    setCloneStatus({ loading: true, error: null });
+    try {
+      const cloneResp = await window.electronAPI.gitClone({ url });
+      if (!cloneResp.success) {
+        setCloneStatus({ loading: false, error: cloneResp.error || 'Clone failed' });
+        return;
+      }
+
+      const { path: clonedPath, name } = cloneResp.data!;
+
+      const gitResp = await window.electronAPI.detectGit(clonedPath);
+      const gitInfo = gitResp.success ? gitResp.data : null;
+
+      const saveResp = await window.electronAPI.saveProject({
+        name,
+        path: clonedPath,
+        gitRemote: gitInfo?.remote ?? null,
+        gitBranch: gitInfo?.branch ?? null,
+      });
+
+      if (saveResp.success && saveResp.data) {
+        await loadProjects();
+        setActiveProjectId(saveResp.data.id);
+      }
+
+      setCloneStatus({ loading: false, error: null });
+      setShowAddProjectModal(false);
+    } catch (err) {
+      setCloneStatus({ loading: false, error: String(err) });
     }
   }
 
@@ -618,7 +663,10 @@ export function App() {
             projects={projects}
             activeProjectId={activeProjectId}
             onSelectProject={setActiveProjectId}
-            onOpenFolder={handleOpenFolder}
+            onOpenFolder={() => {
+              setCloneStatus({ loading: false, error: null });
+              setShowAddProjectModal(true);
+            }}
             onDeleteProject={handleDeleteProject}
             tasksByProject={tasksByProject}
             activeTaskId={activeTaskId}
@@ -656,6 +704,15 @@ export function App() {
           </>
         )}
       </PanelGroup>
+
+      {showAddProjectModal && (
+        <AddProjectModal
+          onClose={() => setShowAddProjectModal(false)}
+          onOpenFolder={handleOpenFolder}
+          onCloneRepo={handleCloneRepo}
+          cloneStatus={cloneStatus}
+        />
+      )}
 
       {showTaskModal && (
         <TaskModal onClose={() => setShowTaskModal(false)} onCreate={handleCreateTask} />

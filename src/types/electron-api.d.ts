@@ -112,6 +112,7 @@ export interface ElectronAPI {
   >;
 
   // Git operations
+  gitClone: (args: { url: string }) => Promise<IpcResponse<{ path: string; name: string }>>;
   gitGetStatus: (cwd: string) => Promise<IpcResponse<GitStatus>>;
   gitGetDiff: (args: {
     cwd: string;

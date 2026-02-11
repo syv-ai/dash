@@ -1,8 +1,49 @@
 import { ipcMain } from 'electron';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+import { existsSync, mkdirSync } from 'fs';
+import { join } from 'path';
+import { randomBytes } from 'crypto';
+import { homedir } from 'os';
 import { GitService } from '../services/GitService';
 import { startWatching, stopWatching } from '../services/FileWatcherService';
 
+const execFileAsync = promisify(execFile);
+
 export function registerGitIpc(): void {
+  // Clone a git repository
+  ipcMain.handle('git:clone', async (_event, args: { url: string }) => {
+    try {
+      const { url } = args;
+
+      // Extract repo name from URL
+      const urlPath = url.replace(/\.git$/, '').replace(/\/$/, '');
+      let repoName = urlPath.split('/').pop() || 'repo';
+
+      // Clone destination: ~/Dash/<repo-name>
+      const dashDir = join(homedir(), 'Dash');
+      if (!existsSync(dashDir)) {
+        mkdirSync(dashDir, { recursive: true });
+      }
+
+      let targetDir = join(dashDir, repoName);
+      if (existsSync(targetDir)) {
+        const suffix = randomBytes(2).toString('hex');
+        repoName = `${repoName}-${suffix}`;
+        targetDir = join(dashDir, repoName);
+      }
+
+      await execFileAsync('git', ['clone', url, targetDir], {
+        timeout: 120000,
+        maxBuffer: 10 * 1024 * 1024,
+      });
+
+      return { success: true, data: { path: targetDir, name: repoName } };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  });
+
   // Get full git status for a directory
   ipcMain.handle('git:getStatus', async (_event, cwd: string) => {
     try {
@@ -16,9 +57,17 @@ export function registerGitIpc(): void {
   // Get diff for a specific file
   ipcMain.handle(
     'git:getDiff',
-    async (_event, args: { cwd: string; filePath?: string; staged?: boolean; contextLines?: number }) => {
+    async (
+      _event,
+      args: { cwd: string; filePath?: string; staged?: boolean; contextLines?: number },
+    ) => {
       try {
-        const diff = await GitService.getDiff(args.cwd, args.filePath, args.staged, args.contextLines);
+        const diff = await GitService.getDiff(
+          args.cwd,
+          args.filePath,
+          args.staged,
+          args.contextLines,
+        );
         return { success: true, data: diff };
       } catch (error) {
         return { success: false, error: String(error) };
