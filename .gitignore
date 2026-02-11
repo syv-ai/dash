@@ -5,3 +5,4 @@ release/
 .DS_Store
 .env
 .env.local
+.claude/skills/steal
