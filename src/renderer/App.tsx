@@ -18,6 +18,7 @@ import type { KeyBindingMap } from './keybindings';
 import { sessionRegistry } from './terminal/SessionRegistry';
 import { playNotificationSound } from './sounds';
 import type { NotificationSound } from './sounds';
+import type { TerminalEmulatorSetting } from './components/SettingsModal';
 
 const GIT_POLL_INTERVAL = 5000;
 
@@ -58,6 +59,12 @@ export function App() {
       localStorage.getItem('desktopNotificationMessage') ||
       'Claude finished and needs your attention'
     );
+  });
+  const [terminalEmulator, setTerminalEmulator] = useState<TerminalEmulatorSetting>(() => {
+    return (localStorage.getItem('terminalEmulator') as TerminalEmulatorSetting) || 'builtin';
+  });
+  const [externalTerminalApp, setExternalTerminalApp] = useState(() => {
+    return localStorage.getItem('externalTerminalApp') || 'Terminal';
   });
 
   // Sync desktop notification settings to main process
@@ -683,7 +690,12 @@ export function App() {
         <PanelResizeHandle disabled={sidebarCollapsed} className="w-[1px] bg-border/40" />
 
         <Panel minSize={35}>
-          <MainContent activeTask={activeTask} activeProject={activeProject} />
+          <MainContent
+            activeTask={activeTask}
+            activeProject={activeProject}
+            terminalEmulator={terminalEmulator}
+            externalTerminalApp={externalTerminalApp}
+          />
         </Panel>
 
         {activeTask && (
@@ -725,6 +737,16 @@ export function App() {
             setTheme(t);
             localStorage.setItem('theme', t);
             sessionRegistry.setAllThemes(t === 'dark');
+          }}
+          terminalEmulator={terminalEmulator}
+          onTerminalEmulatorChange={(v) => {
+            setTerminalEmulator(v);
+            localStorage.setItem('terminalEmulator', v);
+          }}
+          externalTerminalApp={externalTerminalApp}
+          onExternalTerminalAppChange={(v) => {
+            setExternalTerminalApp(v);
+            localStorage.setItem('externalTerminalApp', v);
           }}
           diffContextLines={diffContextLines}
           onDiffContextLinesChange={(v) => {

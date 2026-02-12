@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Check, AlertCircle, Sun, Moon, Terminal, RotateCcw } from 'lucide-react';
+import { X, Check, AlertCircle, Sun, Moon, Terminal, Monitor, RotateCcw } from 'lucide-react';
 import type { KeyBindingMap, KeyBinding } from '../keybindings';
 import {
   getBindingKeys,
@@ -10,9 +10,20 @@ import {
 import { NOTIFICATION_SOUNDS, SOUND_LABELS } from '../sounds';
 import type { NotificationSound } from '../sounds';
 
+export type TerminalEmulatorSetting = 'builtin' | 'external';
+
+const COMMON_TERMINALS =
+  typeof navigator !== 'undefined' && navigator.userAgent.includes('Mac')
+    ? ['Terminal', 'iTerm2', 'Warp', 'Kitty', 'Alacritty']
+    : ['gnome-terminal', 'konsole', 'kitty', 'alacritty', 'xterm'];
+
 interface SettingsModalProps {
   theme: 'light' | 'dark';
   onThemeChange: (theme: 'light' | 'dark') => void;
+  terminalEmulator: TerminalEmulatorSetting;
+  onTerminalEmulatorChange: (value: TerminalEmulatorSetting) => void;
+  externalTerminalApp: string;
+  onExternalTerminalAppChange: (value: string) => void;
   diffContextLines: number | null;
   onDiffContextLinesChange: (value: number | null) => void;
   notificationSound: NotificationSound;
@@ -105,6 +116,10 @@ function KeyRecorder({
 export function SettingsModal({
   theme,
   onThemeChange,
+  terminalEmulator,
+  onTerminalEmulatorChange,
+  externalTerminalApp,
+  onExternalTerminalAppChange,
   diffContextLines,
   onDiffContextLinesChange,
   notificationSound,
@@ -232,6 +247,68 @@ export function SettingsModal({
                     Dark
                   </button>
                 </div>
+              </div>
+
+              {/* Terminal Emulator */}
+              <div>
+                <label className="block text-[12px] font-medium text-muted-foreground/70 mb-3">
+                  Terminal Emulator
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => onTerminalEmulatorChange('builtin')}
+                    className={`flex items-center gap-2.5 px-4 py-3 rounded-lg text-[13px] border transition-all duration-150 ${
+                      terminalEmulator === 'builtin'
+                        ? 'border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20'
+                        : 'border-border/60 text-muted-foreground/60 hover:bg-accent/40 hover:text-foreground'
+                    }`}
+                  >
+                    <Monitor size={15} strokeWidth={1.8} />
+                    Built-in
+                  </button>
+                  <button
+                    onClick={() => onTerminalEmulatorChange('external')}
+                    className={`flex items-center gap-2.5 px-4 py-3 rounded-lg text-[13px] border transition-all duration-150 ${
+                      terminalEmulator === 'external'
+                        ? 'border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20'
+                        : 'border-border/60 text-muted-foreground/60 hover:bg-accent/40 hover:text-foreground'
+                    }`}
+                  >
+                    <Terminal size={15} strokeWidth={1.8} />
+                    External
+                  </button>
+                </div>
+                {terminalEmulator === 'external' && (
+                  <div className="mt-3">
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {COMMON_TERMINALS.map((app) => (
+                        <button
+                          key={app}
+                          onClick={() => onExternalTerminalAppChange(app)}
+                          className={`px-2.5 py-1.5 rounded-md text-[11px] border transition-all duration-150 ${
+                            externalTerminalApp === app
+                              ? 'border-primary/40 bg-primary/8 text-foreground font-medium'
+                              : 'border-border/40 text-muted-foreground/50 hover:bg-accent/40 hover:text-foreground'
+                          }`}
+                        >
+                          {app}
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      type="text"
+                      value={externalTerminalApp}
+                      onChange={(e) => onExternalTerminalAppChange(e.target.value)}
+                      placeholder="Terminal app name..."
+                      className="w-full px-3 py-2 rounded-lg text-[12px] border border-border/60 bg-transparent text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-all duration-150"
+                    />
+                  </div>
+                )}
+                <p className="text-[10px] text-muted-foreground/40 mt-2">
+                  {terminalEmulator === 'builtin'
+                    ? 'Runs Claude in the built-in xterm.js terminal'
+                    : 'Opens Claude sessions in your preferred terminal app'}
+                </p>
               </div>
 
               {/* Diff Context */}

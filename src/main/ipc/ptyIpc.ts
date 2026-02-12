@@ -11,6 +11,10 @@ import {
   killPty,
   killByOwner,
 } from '../services/ptyManager';
+import {
+  launchExternalTerminal,
+  unregisterExternalTerminal,
+} from '../services/ExternalTerminalService';
 import { terminalSnapshotService } from '../services/TerminalSnapshotService';
 import { activityMonitor } from '../services/ActivityMonitor';
 
@@ -108,6 +112,32 @@ export function registerPtyIpc(): void {
   // Activity monitor
   ipcMain.handle('pty:activity:getAll', () => {
     return { success: true, data: activityMonitor.getAll() };
+  });
+
+  // External terminal
+  ipcMain.handle(
+    'pty:launchExternal',
+    async (
+      _event,
+      args: {
+        id: string;
+        cwd: string;
+        terminalApp: string;
+        autoApprove?: boolean;
+        resume?: boolean;
+      },
+    ) => {
+      try {
+        const result = await launchExternalTerminal(args);
+        return { success: true, data: result };
+      } catch (error) {
+        return { success: false, error: String(error) };
+      }
+    },
+  );
+
+  ipcMain.on('pty:unregisterExternal', (_event, id: string) => {
+    unregisterExternalTerminal(id);
   });
 }
 

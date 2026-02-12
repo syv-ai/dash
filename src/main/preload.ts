@@ -83,6 +83,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 
+  // External terminal
+  ptyLaunchExternal: (args: {
+    id: string;
+    cwd: string;
+    terminalApp: string;
+    autoApprove?: boolean;
+    resume?: boolean;
+  }) => ipcRenderer.invoke('pty:launchExternal', args),
+  ptyUnregisterExternal: (id: string) => ipcRenderer.send('pty:unregisterExternal', id),
+
   // Settings
   setDesktopNotification: (opts: { enabled: boolean; message: string }) =>
     ipcRenderer.send('app:setDesktopNotification', opts),

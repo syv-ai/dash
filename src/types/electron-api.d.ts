@@ -85,6 +85,16 @@ export interface ElectronAPI {
     callback: (info: { exitCode: number; signal?: number }) => void,
   ) => () => void;
 
+  // External terminal
+  ptyLaunchExternal: (args: {
+    id: string;
+    cwd: string;
+    terminalApp: string;
+    autoApprove?: boolean;
+    resume?: boolean;
+  }) => Promise<IpcResponse<{ launched: boolean; command: string; autoLaunched: boolean }>>;
+  ptyUnregisterExternal: (id: string) => void;
+
   // Activity monitor
   ptyGetAllActivity: () => Promise<IpcResponse<Record<string, 'busy' | 'idle'>>>;
   onPtyActivity: (callback: (data: Record<string, 'busy' | 'idle'>) => void) => () => void;
