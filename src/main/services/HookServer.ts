@@ -1,12 +1,33 @@
 import * as http from 'http';
+import { Notification } from 'electron';
 import { activityMonitor } from './ActivityMonitor';
 
 class HookServerImpl {
   private server: http.Server | null = null;
   private _port: number = 0;
+  private _desktopNotificationEnabled = false;
+  private _desktopNotificationMessage = 'Claude finished and needs your attention';
 
   get port(): number {
     return this._port;
+  }
+
+  setDesktopNotification(opts: { enabled: boolean; message: string }): void {
+    this._desktopNotificationEnabled = opts.enabled;
+    this._desktopNotificationMessage = opts.message || 'Claude finished and needs your attention';
+  }
+
+  private showDesktopNotification(): void {
+    if (!this._desktopNotificationEnabled) return;
+    try {
+      const n = new Notification({
+        title: 'Dash',
+        body: this._desktopNotificationMessage,
+      });
+      n.show();
+    } catch (err) {
+      console.error('[HookServer] Failed to show notification:', err);
+    }
   }
 
   async start(): Promise<number> {
@@ -21,6 +42,7 @@ class HookServerImpl {
           if (url.pathname === '/hook/stop') {
             console.error(`[HookServer] Stop hook fired for ptyId=${ptyId}`);
             activityMonitor.setIdle(ptyId);
+            this.showDesktopNotification();
             res.writeHead(200);
             res.end('ok');
             return;

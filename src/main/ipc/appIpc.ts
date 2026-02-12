@@ -1,4 +1,4 @@
-import { ipcMain, dialog, app, BrowserWindow } from 'electron';
+import { ipcMain, dialog, app, BrowserWindow, Notification } from 'electron';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
@@ -67,6 +67,19 @@ export function registerAppIpc(): void {
     async (_event, opts: { enabled: boolean; message: string }) => {
       const { setDesktopNotification } = await import('../services/ptyManager');
       setDesktopNotification(opts);
+
+      // Fire a test notification when newly enabled so macOS prompts for permission
+      if (opts.enabled) {
+        try {
+          const n = new Notification({
+            title: 'Dash',
+            body: 'Notifications enabled!',
+          });
+          n.show();
+        } catch {
+          // Ignore — user may have denied permission
+        }
+      }
     },
   );
 

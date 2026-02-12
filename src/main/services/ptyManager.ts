@@ -18,20 +18,8 @@ interface PtyRecord {
 
 const ptys = new Map<string, PtyRecord>();
 
-// Global setting: include macOS desktop notification in Stop hook
-let desktopNotificationEnabled = false;
-let desktopNotificationMessage = 'Claude finished and needs your attention';
-
 export function setDesktopNotification(opts: { enabled: boolean; message: string }): void {
-  desktopNotificationEnabled = opts.enabled;
-  desktopNotificationMessage = opts.message || 'Claude finished and needs your attention';
-
-  // Rewrite hook settings for all active direct-spawn PTYs
-  for (const [id, record] of ptys) {
-    if (record.isDirectSpawn) {
-      writeHookSettings(record.cwd, id);
-    }
-  }
+  hookServer.setDesktopNotification(opts);
 }
 
 // Lazy-load node-pty to avoid native binding issues at startup
@@ -110,18 +98,6 @@ function writeHookSettings(cwd: string, ptyId: string): void {
   const stopEntries: { hooks: { type: string; command: string }[] }[] = [
     { hooks: [{ type: 'command', command: `${curlBase}/hook/stop?ptyId=${ptyId}` }] },
   ];
-  if (desktopNotificationEnabled) {
-    // Escape double quotes in the user's message for AppleScript
-    const safeMsg = desktopNotificationMessage.replace(/"/g, '\\"');
-    stopEntries.push({
-      hooks: [
-        {
-          type: 'command',
-          command: `osascript -e 'display notification "${safeMsg}" with title "Dash"'`,
-        },
-      ],
-    });
-  }
 
   const hookSettings = {
     hooks: {
@@ -160,9 +136,7 @@ function writeHookSettings(cwd: string, ptyId: string): void {
     };
 
     fs.writeFileSync(settingsPath, JSON.stringify(merged, null, 2) + '\n');
-    console.error(
-      `[writeHookSettings] Wrote ${settingsPath} (desktopNotification=${desktopNotificationEnabled})`,
-    );
+    console.error(`[writeHookSettings] Wrote ${settingsPath}`);
   } catch (err) {
     console.error('[writeHookSettings] Failed:', err);
   }
