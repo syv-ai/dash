@@ -270,3 +270,17 @@
 .diff-hunk {
   background: hsl(217 91% 60% / 0.06);
 }
+
+/* ── Diff Line Selection & Comments ──────────────────────── */
+.diff-line-selected {
+  background: hsl(var(--primary) / 0.12) !important;
+}
+.diff-line-commented {
+  border-left: 2px solid hsl(var(--primary) / 0.50);
+}
+.diff-gutter-clickable {
+  cursor: pointer;
+}
+.diff-gutter-clickable:hover {
+  background: hsl(var(--primary) / 0.08);
+}
