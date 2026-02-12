@@ -331,9 +331,9 @@ export function FileChangesPanel({
         {totalChanges === 0 && (
           <div className="flex flex-col items-center justify-center h-full gap-2">
             <div className="w-8 h-8 rounded-xl bg-accent/40 flex items-center justify-center">
-              <FileDiff size={14} className="text-foreground/30" strokeWidth={1.5} />
+              <FileDiff size={14} className="text-foreground/50" strokeWidth={1.5} />
             </div>
-            <p className="text-[11px] text-foreground/40">No changes</p>
+            <p className="text-[11px] text-foreground/60">No changes</p>
             {gitStatus && gitStatus.ahead > 0 && (
               <p className="text-[10px] text-muted-foreground/40">
                 {gitStatus.ahead} commit{gitStatus.ahead !== 1 ? 's' : ''} ahead
