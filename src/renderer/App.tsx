@@ -86,8 +86,12 @@ export function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     return localStorage.getItem('sidebarCollapsed') === 'true';
   });
+  const [changesPanelCollapsed, setChangesPanelCollapsed] = useState(() => {
+    return localStorage.getItem('changesPanelCollapsed') === 'true';
+  });
 
   const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
+  const changesPanelRef = useRef<ImperativePanelHandle>(null);
   const fileWatcherCleanup = useRef<(() => void) | null>(null);
   const gitPollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -372,6 +376,16 @@ export function App() {
       panel.collapse();
     }
   }, [sidebarCollapsed]);
+
+  const toggleChangesPanel = useCallback(() => {
+    const panel = changesPanelRef.current;
+    if (!panel) return;
+    if (changesPanelCollapsed) {
+      panel.expand();
+    } else {
+      panel.collapse();
+    }
+  }, [changesPanelCollapsed]);
 
   // ── Data Loading ─────────────────────────────────────────
 
@@ -731,8 +745,23 @@ export function App() {
 
         {activeTask && (
           <>
-            <PanelResizeHandle className="w-[1px] bg-border/40" />
-            <Panel defaultSize={22} minSize={15} maxSize={40}>
+            <PanelResizeHandle disabled={changesPanelCollapsed} className="w-[1px] bg-border/40" />
+            <Panel
+              ref={changesPanelRef}
+              defaultSize={changesPanelCollapsed ? 3 : 22}
+              minSize={12}
+              maxSize={40}
+              collapsible
+              collapsedSize={3}
+              onCollapse={() => {
+                setChangesPanelCollapsed(true);
+                localStorage.setItem('changesPanelCollapsed', 'true');
+              }}
+              onExpand={() => {
+                setChangesPanelCollapsed(false);
+                localStorage.setItem('changesPanelCollapsed', 'false');
+              }}
+            >
               <FileChangesPanel
                 gitStatus={gitStatus}
                 loading={gitLoading}
@@ -744,6 +773,8 @@ export function App() {
                 onViewDiff={handleViewDiff}
                 onCommit={handleCommit}
                 onPush={handlePush}
+                collapsed={changesPanelCollapsed}
+                onToggleCollapse={toggleChangesPanel}
               />
             </Panel>
           </>

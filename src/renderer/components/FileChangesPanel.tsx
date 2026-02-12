@@ -13,6 +13,8 @@ import {
   ArrowDown,
   Check,
   Upload,
+  PanelRightOpen,
+  PanelRightClose,
 } from 'lucide-react';
 import type { FileChange, FileChangeStatus, GitStatus } from '../../shared/types';
 
@@ -27,6 +29,8 @@ interface FileChangesPanelProps {
   onViewDiff: (filePath: string, staged: boolean) => void;
   onCommit: (message: string) => Promise<void>;
   onPush: () => Promise<void>;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 const STATUS_COLORS: Record<FileChangeStatus, string> = {
@@ -164,11 +168,42 @@ export function FileChangesPanel({
   onViewDiff,
   onCommit,
   onPush,
+  collapsed,
+  onToggleCollapse,
 }: FileChangesPanelProps) {
   const [commitMsg, setCommitMsg] = useState('');
   const [committing, setCommitting] = useState(false);
   const [pushing, setPushing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const totalChanges = gitStatus?.files.length ?? 0;
+
+  if (collapsed) {
+    return (
+      <div
+        className="h-full flex flex-col items-center py-2 gap-2"
+        style={{ background: 'hsl(var(--surface-1))' }}
+      >
+        <button
+          onClick={onToggleCollapse}
+          className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-accent/60 text-muted-foreground/50 hover:text-foreground transition-colors"
+          title="Expand changes panel"
+        >
+          <PanelRightOpen size={18} strokeWidth={1.5} />
+        </button>
+        <div className="flex flex-col items-center gap-1">
+          <div className="w-8 h-8 rounded-lg bg-accent/40 flex items-center justify-center">
+            <FileDiff size={14} className="text-muted-foreground/50" strokeWidth={1.5} />
+          </div>
+          {totalChanges > 0 && (
+            <span className="min-w-[18px] h-[16px] flex items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary tabular-nums px-1">
+              {totalChanges}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   if (!gitStatus) {
     return (
@@ -182,7 +217,6 @@ export function FileChangesPanel({
 
   const stagedFiles = gitStatus.files.filter((f) => f.staged);
   const unstagedFiles = gitStatus.files.filter((f) => !f.staged);
-  const totalChanges = gitStatus.files.length;
   const allStaged = unstagedFiles.length === 0 && stagedFiles.length > 0;
   const noneStaged = stagedFiles.length === 0;
 
@@ -217,6 +251,15 @@ export function FileChangesPanel({
       {/* Header */}
       <div className="flex items-center justify-between px-3 h-10 flex-shrink-0 border-b border-border/60">
         <div className="flex items-center gap-2">
+          {onToggleCollapse && (
+            <button
+              onClick={onToggleCollapse}
+              className="p-[3px] -ml-1 rounded hover:bg-accent text-muted-foreground/40 hover:text-foreground transition-colors"
+              title="Collapse changes panel"
+            >
+              <PanelRightClose size={15} strokeWidth={1.8} />
+            </button>
+          )}
           <span className="text-[11px] font-semibold uppercase text-muted-foreground/70 tracking-[0.08em]">
             Changes
           </span>
