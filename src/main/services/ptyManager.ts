@@ -38,30 +38,36 @@ function getPty() {
 //    / /    ~/Desktop/project
 //  /_/      Status message...
 
-const ANSI_SGR = '(?:\\x1b\\[[0-9;]*m)*';
+// Match any common ANSI escape sequence (CSI sequences + character set selection).
+// The old pattern only matched SGR (\x1b[...m), missing erase-line (\x1b[K),
+// cursor movement (\x1b[C), and charset (\x1b(B) sequences that the CLI emits.
+const ANSI = '(?:\\x1b(?:\\[[0-9;?]*[a-zA-Z]|\\([A-Z0-9]))*';
+
+// eslint-disable-next-line no-control-regex
+const ANSI_STRIP_RE = /\x1b(?:\[[0-9;?]*[a-zA-Z]|\([A-Z0-9])/g;
 
 function extractTrailingAnsi(s: string): string {
   // eslint-disable-next-line no-control-regex
-  const m = s.match(/((?:\x1b\[[0-9;]*m)*)$/);
+  const m = s.match(/((?:\x1b(?:\[[0-9;?]*[a-zA-Z]|\([A-Z0-9]))*)$/);
   return m ? m[1] : '';
 }
 
-// Version line: spaces before "Claude Code v" → inject " _____  "
-const VERSION_LINE_RE = new RegExp(`( {8,})((?:\\x1b\\[[0-9;]*m)*)(Claude Code)`);
+// Version line: whitespace (possibly with interspersed ANSI codes) before "Claude Code v"
+const VERSION_LINE_RE = new RegExp(`((?:${ANSI}[ ]){6,}${ANSI})(Claude Code)`);
 
 // Logo line 1: (space)(▐▛███▜▌) = 8 chars → "|___  | "
 const LINE1_RE = new RegExp(
-  `${ANSI_SGR} ${ANSI_SGR}\\u2590${ANSI_SGR}\\u259B${ANSI_SGR}\\u2588${ANSI_SGR}\\u2588${ANSI_SGR}\\u2588${ANSI_SGR}\\u259C${ANSI_SGR}\\u258C${ANSI_SGR}`,
+  `${ANSI} ${ANSI}\\u2590${ANSI}\\u259B${ANSI}\\u2588${ANSI}\\u2588${ANSI}\\u2588${ANSI}\\u259C${ANSI}\\u258C${ANSI}`,
 );
 
 // Logo line 2: ▝▜█████▛▘ = 9 chars → "   / /   "
 const LINE2_RE = new RegExp(
-  `${ANSI_SGR}\\u259D${ANSI_SGR}\\u259C${ANSI_SGR}\\u2588${ANSI_SGR}\\u2588${ANSI_SGR}\\u2588${ANSI_SGR}\\u2588${ANSI_SGR}\\u2588${ANSI_SGR}\\u259B${ANSI_SGR}\\u2598${ANSI_SGR}`,
+  `${ANSI}\\u259D${ANSI}\\u259C${ANSI}\\u2588${ANSI}\\u2588${ANSI}\\u2588${ANSI}\\u2588${ANSI}\\u2588${ANSI}\\u259B${ANSI}\\u2598${ANSI}`,
 );
 
 // Logo line 3: ▘▘ ▝▝ = 5 chars → "/_/  "
 const LINE3_RE = new RegExp(
-  `${ANSI_SGR}\\u2598${ANSI_SGR}\\u2598${ANSI_SGR} ${ANSI_SGR}\\u259D${ANSI_SGR}\\u259D${ANSI_SGR}`,
+  `${ANSI}\\u2598${ANSI}\\u2598${ANSI} ${ANSI}\\u259D${ANSI}\\u259D${ANSI}`,
 );
 
 /**
@@ -86,14 +92,12 @@ function createBannerFilter(forward: (data: string) => void): (data: string) => 
     let result = data;
 
     if (!versionDone) {
-      const replaced = result.replace(
-        VERSION_LINE_RE,
-        (_m, spaces: string, ansi: string, text: string) => {
-          const art = ' _____  ';
-          const remaining = Math.max(1, spaces.length - art.length);
-          return `${art}${' '.repeat(remaining)}${ansi}${text}`;
-        },
-      );
+      const replaced = result.replace(VERSION_LINE_RE, (_m, leading: string, text: string) => {
+        const visualWidth = leading.replace(ANSI_STRIP_RE, '').length;
+        const art = ' _____  ';
+        const remaining = Math.max(1, visualWidth - art.length);
+        return `${art}${' '.repeat(remaining)}${text}`;
+      });
       if (replaced !== result) {
         versionDone = true;
         result = replaced;
