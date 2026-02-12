@@ -31,6 +31,112 @@ function getPty() {
   return ptyModule!;
 }
 
+// --- Banner logo replacement: swap Claude shield with ASCII "7" art ---
+//
+//  _____     Claude Code v2.1.39
+// |___  |   Opus 4.6 · Claude Max
+//    / /    ~/Desktop/project
+//  /_/      Status message...
+
+const ANSI_SGR = '(?:\\x1b\\[[0-9;]*m)*';
+
+function extractTrailingAnsi(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  const m = s.match(/((?:\x1b\[[0-9;]*m)*)$/);
+  return m ? m[1] : '';
+}
+
+// Version line: spaces before "Claude Code v" → inject " _____  "
+const VERSION_LINE_RE = new RegExp(`( {8,})((?:\\x1b\\[[0-9;]*m)*)(Claude Code)`);
+
+// Logo line 1: (space)(▐▛███▜▌) = 8 chars → "|___  | "
+const LINE1_RE = new RegExp(
+  `${ANSI_SGR} ${ANSI_SGR}\\u2590${ANSI_SGR}\\u259B${ANSI_SGR}\\u2588${ANSI_SGR}\\u2588${ANSI_SGR}\\u2588${ANSI_SGR}\\u259C${ANSI_SGR}\\u258C${ANSI_SGR}`,
+);
+
+// Logo line 2: ▝▜█████▛▘ = 9 chars → "   / /   "
+const LINE2_RE = new RegExp(
+  `${ANSI_SGR}\\u259D${ANSI_SGR}\\u259C${ANSI_SGR}\\u2588${ANSI_SGR}\\u2588${ANSI_SGR}\\u2588${ANSI_SGR}\\u2588${ANSI_SGR}\\u2588${ANSI_SGR}\\u259B${ANSI_SGR}\\u2598${ANSI_SGR}`,
+);
+
+// Logo line 3: ▘▘ ▝▝ = 5 chars → "/_/  "
+const LINE3_RE = new RegExp(
+  `${ANSI_SGR}\\u2598${ANSI_SGR}\\u2598${ANSI_SGR} ${ANSI_SGR}\\u259D${ANSI_SGR}\\u259D${ANSI_SGR}`,
+);
+
+/**
+ * Creates a filter that replaces the Claude logo with an ASCII "7" in early PTY output.
+ * Each line is replaced independently, preserving ANSI color codes.
+ * Stops scanning after all lines are replaced or 8KB of data has passed.
+ */
+function createBannerFilter(forward: (data: string) => void): (data: string) => void {
+  let versionDone = false;
+  let line1Done = false;
+  let line2Done = false;
+  let line3Done = false;
+  let bytesSeen = 0;
+
+  return (data: string) => {
+    if ((versionDone && line1Done && line2Done && line3Done) || bytesSeen > 8192) {
+      forward(data);
+      return;
+    }
+
+    bytesSeen += data.length;
+    let result = data;
+
+    if (!versionDone) {
+      const replaced = result.replace(
+        VERSION_LINE_RE,
+        (_m, spaces: string, ansi: string, text: string) => {
+          const art = ' _____  ';
+          const remaining = Math.max(1, spaces.length - art.length);
+          return `${art}${' '.repeat(remaining)}${ansi}${text}`;
+        },
+      );
+      if (replaced !== result) {
+        versionDone = true;
+        result = replaced;
+      }
+    }
+
+    if (!line1Done) {
+      const replaced = result.replace(LINE1_RE, (match) => {
+        const trailing = extractTrailingAnsi(match);
+        return `\x1b[0m|___  | ${trailing}`;
+      });
+      if (replaced !== result) {
+        line1Done = true;
+        result = replaced;
+      }
+    }
+
+    if (!line2Done) {
+      const replaced = result.replace(LINE2_RE, (match) => {
+        const trailing = extractTrailingAnsi(match);
+        return `\x1b[0m   / /   ${trailing}`;
+      });
+      if (replaced !== result) {
+        line2Done = true;
+        result = replaced;
+      }
+    }
+
+    if (!line3Done) {
+      const replaced = result.replace(LINE3_RE, (match) => {
+        const trailing = extractTrailingAnsi(match);
+        return `\x1b[0m/_/  ${trailing}`;
+      });
+      if (replaced !== result) {
+        line3Done = true;
+        result = replaced;
+      }
+    }
+
+    forward(result);
+  };
+}
+
 // Cached Claude CLI path
 let cachedClaudePath: string | null = null;
 
@@ -207,11 +313,15 @@ export async function startDirectPty(options: {
   ptys.set(options.id, record);
   activityMonitor.register(options.id, proc.pid, true);
 
-  // Forward output to renderer
-  proc.onData((data: string) => {
+  // Forward output to renderer, replacing the Claude logo with "7" art
+  const bannerFilter = createBannerFilter((filtered: string) => {
     if (record.owner && !record.owner.isDestroyed()) {
-      record.owner.send(`pty:data:${options.id}`, data);
+      record.owner.send(`pty:data:${options.id}`, filtered);
     }
+  });
+
+  proc.onData((data: string) => {
+    bannerFilter(data);
   });
 
   proc.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
