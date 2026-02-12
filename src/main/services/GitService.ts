@@ -257,6 +257,20 @@ export class GitService {
     }
   }
 
+  /**
+   * Commit staged changes.
+   */
+  static async commit(cwd: string, message: string): Promise<void> {
+    await git(cwd, ['commit', '-m', message]);
+  }
+
+  /**
+   * Push to remote.
+   */
+  static async push(cwd: string): Promise<void> {
+    await git(cwd, ['push']);
+  }
+
   // ── Diff Parsing ─────────────────────────────────────────
 
   private static parseDiff(raw: string, filePath: string): DiffResult {

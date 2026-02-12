@@ -138,6 +138,26 @@ export function registerGitIpc(): void {
     }
   });
 
+  // Commit staged changes
+  ipcMain.handle('git:commit', async (_event, args: { cwd: string; message: string }) => {
+    try {
+      await GitService.commit(args.cwd, args.message);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  });
+
+  // Push to remote
+  ipcMain.handle('git:push', async (_event, cwd: string) => {
+    try {
+      await GitService.push(cwd);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  });
+
   // Start watching a directory for file changes
   ipcMain.handle('git:watch', async (_event, args: { id: string; cwd: string }) => {
     try {

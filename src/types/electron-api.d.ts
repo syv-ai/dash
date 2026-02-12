@@ -130,6 +130,8 @@ export interface ElectronAPI {
   gitUnstageFile: (args: { cwd: string; filePath: string }) => Promise<IpcResponse<void>>;
   gitUnstageAll: (cwd: string) => Promise<IpcResponse<void>>;
   gitDiscardFile: (args: { cwd: string; filePath: string }) => Promise<IpcResponse<void>>;
+  gitCommit: (args: { cwd: string; message: string }) => Promise<IpcResponse<void>>;
+  gitPush: (cwd: string) => Promise<IpcResponse<void>>;
 
   // File watcher
   gitWatch: (args: { id: string; cwd: string }) => Promise<IpcResponse<void>>;

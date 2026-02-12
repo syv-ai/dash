@@ -56,7 +56,7 @@
     --secondary: 0 0% 14%;
     --secondary-foreground: 0 0% 83%;
     --muted: 0 0% 14%;
-    --muted-foreground: 0 0% 45%;
+    --muted-foreground: 0 0% 63%;
     --accent: 0 0% 16%;
     --accent-foreground: 0 0% 83%;
     --destructive: 0 63% 45%;
@@ -75,7 +75,7 @@
     --git-modified: 38 92% 50%;
     --git-deleted: 0 72% 56%;
     --git-renamed: 217 91% 60%;
-    --git-untracked: 0 0% 46%;
+    --git-untracked: 0 0% 56%;
     --git-conflicted: 25 95% 53%;
   }
 }
@@ -135,6 +135,10 @@
   background: hsl(var(--muted-foreground) / 0.3);
 }
 
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* ── Panel Resize Handle ──────────────────────────────────── */
 
 [data-panel-resize-handle-id] {
@@ -190,11 +194,13 @@
   0%,
   100% {
     opacity: 1;
-    box-shadow: 0 0 0 0 hsl(var(--git-added) / 0.4);
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.5);
+    transform: scale(1);
   }
   50% {
-    opacity: 0.8;
-    box-shadow: 0 0 0 3px hsl(var(--git-added) / 0);
+    opacity: 0.3;
+    box-shadow: 0 0 0 4px rgba(251, 191, 36, 0);
+    transform: scale(0.85);
   }
 }
 
@@ -212,6 +218,22 @@
 
 .status-pulse {
   animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* ── Status Bar Pulse (left-edge indicator) ──────────────── */
+
+@keyframes bar-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.status-bar-pulse {
+  animation: bar-pulse 2s ease-in-out infinite;
 }
 
 /* ── Focus Ring ───────────────────────────────────────────── */

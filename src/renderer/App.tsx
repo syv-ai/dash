@@ -310,6 +310,25 @@ export function App() {
           setShowAddProjectModal(false);
         }
       }
+      // Cmd+Shift+1..9 to jump to project by index
+      if (e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey) {
+        const digit = e.code >= 'Digit1' && e.code <= 'Digit9' ? parseInt(e.code[5], 10) : 0;
+        if (digit > 0 && digit <= projects.length) {
+          e.preventDefault();
+          const projectId = projects[digit - 1].id;
+          setActiveProjectId(projectId);
+          const tasks = (tasksByProject[projectId] || []).filter((t) => !t.archivedAt);
+          if (tasks.length > 0) setActiveTaskId(tasks[0].id);
+        }
+      }
+      // Cmd+1..9 to jump to task by index
+      if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+        const digit = e.key >= '1' && e.key <= '9' ? parseInt(e.key, 10) : 0;
+        if (digit > 0 && digit <= activeProjectTasks.length) {
+          e.preventDefault();
+          setActiveTaskId(activeProjectTasks[digit - 1].id);
+        }
+      }
       if (keybindings.focusTerminal && matchesBinding(e, keybindings.focusTerminal)) {
         e.preventDefault();
         const term = document.querySelector(
@@ -324,6 +343,8 @@ export function App() {
     activeProjectTasks,
     activeTaskId,
     activeProjectId,
+    projects,
+    tasksByProject,
     showDiff,
     showSettings,
     showTaskModal,
@@ -595,6 +616,20 @@ export function App() {
     refreshGitStatus(activeTask.path);
   }
 
+  async function handleCommit(message: string) {
+    if (!activeTask) return;
+    const res = await window.electronAPI.gitCommit({ cwd: activeTask.path, message });
+    if (!res.success) throw new Error(res.error || 'Commit failed');
+    refreshGitStatus(activeTask.path);
+  }
+
+  async function handlePush() {
+    if (!activeTask) return;
+    const res = await window.electronAPI.gitPush(activeTask.path);
+    if (!res.success) throw new Error(res.error || 'Push failed');
+    refreshGitStatus(activeTask.path);
+  }
+
   async function handleDiscardFile(filePath: string) {
     if (!activeTask) return;
     await window.electronAPI.gitDiscardFile({ cwd: activeTask.path, filePath });
@@ -683,7 +718,15 @@ export function App() {
         <PanelResizeHandle disabled={sidebarCollapsed} className="w-[1px] bg-border/40" />
 
         <Panel minSize={35}>
-          <MainContent activeTask={activeTask} activeProject={activeProject} />
+          <MainContent
+            activeTask={activeTask}
+            activeProject={activeProject}
+            sidebarCollapsed={sidebarCollapsed}
+            tasks={activeProjectTasks}
+            activeTaskId={activeTaskId}
+            taskActivity={taskActivity}
+            onSelectTask={setActiveTaskId}
+          />
         </Panel>
 
         {activeTask && (
@@ -699,6 +742,8 @@ export function App() {
                 onUnstageAll={handleUnstageAll}
                 onDiscardFile={handleDiscardFile}
                 onViewDiff={handleViewDiff}
+                onCommit={handleCommit}
+                onPush={handlePush}
               />
             </Panel>
           </>

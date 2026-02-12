@@ -63,12 +63,24 @@ export function LeftSidebar({
     });
   }
 
+  function projectActivity(projectId: string): 'busy' | 'idle' | null {
+    const tasks = (tasksByProject[projectId] || []).filter((t) => !t.archivedAt);
+    if (tasks.some((t) => taskActivity[t.id] === 'busy')) return 'busy';
+    if (tasks.some((t) => taskActivity[t.id] === 'idle')) return 'idle';
+    return null;
+  }
+
+  /* ── Collapsed ──────────────────────────────────────────── */
+
   if (collapsed) {
     return (
-      <div className="h-full flex flex-col items-center py-3" style={{ background: 'hsl(var(--surface-1))' }}>
+      <div
+        className="h-full flex flex-col items-center py-3 gap-1"
+        style={{ background: 'hsl(var(--surface-1))' }}
+      >
         <button
           onClick={onToggleCollapse}
-          className="p-1.5 rounded-md hover:bg-accent/60 text-muted-foreground/60 hover:text-foreground transition-colors titlebar-no-drag"
+          className="p-1.5 rounded-md hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
           title="Expand sidebar"
         >
           <PanelLeftOpen size={18} strokeWidth={1.5} />
@@ -76,39 +88,48 @@ export function LeftSidebar({
 
         <button
           onClick={onOpenFolder}
-          className="mt-1 p-1.5 rounded-md hover:bg-accent/60 text-muted-foreground/60 hover:text-foreground transition-colors titlebar-no-drag"
-          title="Open folder"
+          className="p-1.5 rounded-md hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
+          title="Add project"
         >
           <FolderOpen size={18} strokeWidth={1.5} />
         </button>
 
-        <div className="w-6 border-t border-border/30 my-2" />
+        <div className="w-6 border-t border-border/30 my-1" />
 
-        <div className="flex-1 overflow-y-auto flex flex-col items-center gap-1.5 w-full px-1.5">
+        <div className="flex-1 overflow-y-auto flex flex-col items-center gap-1 w-full px-1.5">
           {projects.map((project) => {
             const isActive = project.id === activeProjectId;
+            const activity = projectActivity(project.id);
+
             return (
               <button
                 key={project.id}
                 onClick={() => onSelectProject(project.id)}
-                className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-medium transition-colors titlebar-no-drag ${
+                className={`relative w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-medium transition-all duration-150 titlebar-no-drag ${
                   isActive
                     ? 'bg-primary/15 text-primary'
-                    : 'text-muted-foreground/50 hover:bg-accent/60 hover:text-foreground'
+                    : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
                 }`}
                 title={project.name}
               >
                 {project.name.charAt(0).toUpperCase()}
+                {activity && (
+                  <div
+                    className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border-2 border-[hsl(var(--surface-1))] ${
+                      activity === 'busy' ? 'bg-amber-400 status-pulse' : 'bg-emerald-400'
+                    }`}
+                  />
+                )}
               </button>
             );
           })}
         </div>
 
-        <div className="w-6 border-t border-border/30 my-2" />
+        <div className="w-6 border-t border-border/30 my-1" />
 
         <button
           onClick={onOpenSettings}
-          className="p-2 rounded-md hover:bg-accent/60 text-muted-foreground/40 hover:text-foreground transition-colors titlebar-no-drag"
+          className="p-2 rounded-md hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
           title="Settings"
         >
           <Settings size={18} strokeWidth={1.5} />
@@ -117,15 +138,17 @@ export function LeftSidebar({
     );
   }
 
+  /* ── Expanded ───────────────────────────────────────────── */
+
   return (
     <div className="h-full flex flex-col" style={{ background: 'hsl(var(--surface-1))' }}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-3 pb-1">
-        <span className="text-[13px] font-medium text-muted-foreground/50 select-none">
+        <span className="text-sm font-medium text-muted-foreground/50 select-none">
           Projects
         </span>
         <div className="flex items-center gap-1">
-          <IconButton onClick={onOpenFolder} title="Open folder" className="titlebar-no-drag">
+          <IconButton onClick={onOpenFolder} title="Add project" className="titlebar-no-drag">
             <FolderOpen size={15} strokeWidth={1.8} />
           </IconButton>
           <IconButton onClick={onToggleCollapse} title="Collapse sidebar" className="titlebar-no-drag">
@@ -144,17 +167,19 @@ export function LeftSidebar({
           </div>
         )}
 
-        <div className="space-y-px">
+        <div className="space-y-0.5">
           {projects.map((project) => {
             const isActive = project.id === activeProjectId;
-            const isCollapsed = collapsedProjects.has(project.id);
-            const projectTasks = (tasksByProject[project.id] || []).filter((t) => !t.archivedAt);
+            const isProjectCollapsed = collapsedProjects.has(project.id);
+            const projectTasks = (tasksByProject[project.id] || []).filter(
+              (t) => !t.archivedAt,
+            );
 
             return (
               <div key={project.id}>
                 {/* Project row */}
                 <div
-                  className={`group flex items-center gap-1.5 px-2 py-[7px] rounded-full text-[13px] cursor-pointer transition-all duration-150 ${
+                  className={`group flex items-center gap-1.5 px-2 py-[7px] rounded-md text-sm cursor-pointer transition-all duration-150 ${
                     isActive
                       ? 'text-foreground font-medium'
                       : 'text-muted-foreground hover:text-foreground'
@@ -173,32 +198,29 @@ export function LeftSidebar({
                     }}
                     className="p-0.5 rounded flex-shrink-0 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
                   >
-                    {isCollapsed ? (
+                    {isProjectCollapsed ? (
                       <ChevronRight size={14} strokeWidth={2} />
                     ) : (
                       <ChevronDown size={14} strokeWidth={2} />
                     )}
                   </button>
 
-                  {/* Project avatar */}
-                  <div
-                    className={`w-[18px] h-[18px] rounded-full flex items-center justify-center flex-shrink-0 text-[10px] font-bold ${
-                      isActive ? 'bg-primary/20 text-primary' : 'bg-accent/80 text-muted-foreground'
-                    }`}
-                  >
-                    {project.name.charAt(0).toUpperCase()}
-                  </div>
-
                   <span className="truncate flex-1">{project.name}</span>
 
                   {projectTasks.length > 0 && (
-                    <span className="text-[10px] text-foreground/40 tabular-nums flex-shrink-0">
+                    <span className="text-[10px] text-muted-foreground/30 tabular-nums flex-shrink-0 mr-0.5">
                       {projectTasks.length}
                     </span>
                   )}
 
-                  {/* Actions */}
-                  <div className="opacity-0 group-hover:opacity-100 flex gap-0.5 transition-all duration-150">
+                  {/* New task — visible on active project, hover on others */}
+                  <div
+                    className={`transition-opacity duration-150 ${
+                      isActive
+                        ? 'opacity-50 hover:opacity-100'
+                        : 'opacity-0 group-hover:opacity-100'
+                    }`}
+                  >
                     <IconButton
                       onClick={(e) => {
                         e.stopPropagation();
@@ -209,6 +231,10 @@ export function LeftSidebar({
                     >
                       <Plus size={13} strokeWidth={2} />
                     </IconButton>
+                  </div>
+
+                  {/* Delete — hover only */}
+                  <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                     <IconButton
                       onClick={(e) => {
                         e.stopPropagation();
@@ -226,60 +252,43 @@ export function LeftSidebar({
                 {/* Tasks nested under project */}
                 <div
                   className="grid transition-[grid-template-rows] duration-200 ease-in-out"
-                  style={{ gridTemplateRows: isCollapsed ? '0fr' : '1fr' }}
+                  style={{ gridTemplateRows: isProjectCollapsed ? '0fr' : '1fr' }}
                 >
                   <div className="overflow-hidden">
-                    <div className="mt-1 ml-[18px]">
-                      {projectTasks.map((task, idx) => {
-                        const isLast = idx === projectTasks.length - 1;
+                    <div className="ml-6 mr-1 mt-0.5 space-y-px">
+                      {projectTasks.map((task) => {
+                        const activity = taskActivity[task.id];
+                        const isActiveTask = task.id === activeTaskId;
+
                         return (
-                          <div key={task.id} className="flex">
-                            {/* Tree connector */}
-                            <div className="flex-shrink-0 w-4 relative">
-                              {/* Vertical line */}
-                              {!isLast && (
-                                <div className="absolute left-[5px] top-0 bottom-0 w-px bg-border/40" />
-                              )}
-                              {/* Branch arm: vertical to center + horizontal */}
-                              <div className="absolute left-[5px] top-0 h-1/2 w-px bg-border/40" />
-                              <div className="absolute left-[5px] top-1/2 w-[10px] h-px bg-border/40" />
-                            </div>
+                          <div
+                            key={task.id}
+                            className={`group/task relative flex items-center gap-2 pl-3.5 pr-2 py-[6px] rounded-md text-[13px] cursor-pointer transition-all duration-150 ${
+                              isActiveTask
+                                ? 'bg-primary/10 text-foreground font-medium'
+                                : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+                            }`}
+                            onClick={() => onSelectTask(project.id, task.id)}
+                          >
+                            {/* Status indicator */}
+                            {activity === 'busy' ? (
+                              <div className="w-[6px] h-[6px] rounded-full bg-amber-400 status-pulse flex-shrink-0" />
+                            ) : activity === 'idle' ? (
+                              <div className="w-[6px] h-[6px] rounded-full bg-emerald-400 flex-shrink-0" />
+                            ) : null}
 
-                            {/* Task card */}
-                            <div
-                              className={`group flex-1 flex items-center gap-2 px-2 py-[6px] rounded-full text-[12px] cursor-pointer transition-all duration-150 ${
-                                task.id === activeTaskId
-                                  ? 'bg-primary/15 text-foreground font-medium'
-                                  : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
-                              }`}
-                              onClick={() => onSelectTask(project.id, task.id)}
-                            >
-                              {/* Status dot */}
-                              <div className="relative flex-shrink-0">
-                                <div
-                                  className={`w-[6px] h-[6px] rounded-full ${
-                                    taskActivity[task.id] === 'busy'
-                                      ? 'bg-amber-400 status-pulse'
-                                      : taskActivity[task.id] === 'idle'
-                                        ? 'bg-[hsl(var(--git-added))]'
-                                        : 'bg-muted-foreground/25'
-                                  }`}
-                                />
-                              </div>
+                            <span className="truncate flex-1">{task.name}</span>
 
-                              <span className="truncate flex-1">{task.name}</span>
-
-                              {/* Branch indicator */}
-                              {task.id === activeTaskId && (
+                            {/* Right slot: branch icon by default, actions on hover */}
+                            <div className="flex items-center gap-0.5 flex-shrink-0">
+                              {isActiveTask && (
                                 <GitBranch
                                   size={11}
-                                  className="text-foreground/50 flex-shrink-0"
+                                  className="text-muted-foreground group-hover/task:hidden"
                                   strokeWidth={2}
                                 />
                               )}
-
-                              {/* Hover actions */}
-                              <div className="opacity-0 group-hover:opacity-100 flex gap-0.5 transition-all duration-150">
+                              <div className="hidden group-hover/task:flex gap-0.5">
                                 <IconButton
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -325,7 +334,7 @@ export function LeftSidebar({
       <div className="px-2 py-2 border-t border-border/30">
         <button
           onClick={onOpenSettings}
-          className="flex items-center gap-2 px-2.5 py-[7px] w-full rounded-lg text-[13px] text-foreground/70 hover:bg-accent/60 hover:text-foreground transition-all duration-150 titlebar-no-drag"
+          className="flex items-center gap-2 px-2.5 py-[7px] w-full rounded-md text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-all duration-150 titlebar-no-drag"
         >
           <Settings size={14} strokeWidth={1.8} />
           <span>Settings</span>
