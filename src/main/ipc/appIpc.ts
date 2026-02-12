@@ -62,26 +62,23 @@ export function registerAppIpc(): void {
     }
   });
 
-  ipcMain.on(
-    'app:setDesktopNotification',
-    async (_event, opts: { enabled: boolean; message: string }) => {
-      const { setDesktopNotification } = await import('../services/ptyManager');
-      setDesktopNotification(opts);
+  ipcMain.on('app:setDesktopNotification', async (_event, opts: { enabled: boolean }) => {
+    const { setDesktopNotification } = await import('../services/ptyManager');
+    setDesktopNotification(opts);
 
-      // Fire a test notification when newly enabled so macOS prompts for permission
-      if (opts.enabled) {
-        try {
-          const n = new Notification({
-            title: 'Dash',
-            body: 'Notifications enabled!',
-          });
-          n.show();
-        } catch {
-          // Ignore — user may have denied permission
-        }
+    // Fire a test notification when newly enabled so macOS prompts for permission
+    if (opts.enabled) {
+      try {
+        const n = new Notification({
+          title: 'Dash',
+          body: 'Notifications enabled!',
+        });
+        n.show();
+      } catch {
+        // Ignore — user may have denied permission
       }
-    },
-  );
+    }
+  });
 
   ipcMain.handle('app:detectClaude', async () => {
     try {

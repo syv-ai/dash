@@ -1,28 +1,51 @@
 import * as http from 'http';
-import { Notification } from 'electron';
+import { BrowserWindow, Notification } from 'electron';
+import { eq } from 'drizzle-orm';
 import { activityMonitor } from './ActivityMonitor';
+import { getDb } from '../db/client';
+import { tasks } from '../db/schema';
 
 class HookServerImpl {
   private server: http.Server | null = null;
   private _port: number = 0;
   private _desktopNotificationEnabled = false;
-  private _desktopNotificationMessage = 'Claude finished and needs your attention';
 
   get port(): number {
     return this._port;
   }
 
-  setDesktopNotification(opts: { enabled: boolean; message: string }): void {
+  setDesktopNotification(opts: { enabled: boolean }): void {
     this._desktopNotificationEnabled = opts.enabled;
-    this._desktopNotificationMessage = opts.message || 'Claude finished and needs your attention';
   }
 
-  private showDesktopNotification(): void {
+  private showDesktopNotification(ptyId: string): void {
     if (!this._desktopNotificationEnabled) return;
+
+    // Skip if the app window is focused — user is already looking at it
+    const win = BrowserWindow.getAllWindows()[0];
+    if (win && win.isFocused()) return;
+
     try {
+      let body = 'A task finished';
+      try {
+        const db = getDb();
+        const task = db.select({ name: tasks.name }).from(tasks).where(eq(tasks.id, ptyId)).get();
+        if (task?.name) {
+          body = `"${task.name}" finished`;
+        }
+      } catch {
+        // DB lookup failed — use fallback
+      }
       const n = new Notification({
         title: 'Dash',
-        body: this._desktopNotificationMessage,
+        body,
+      });
+      n.on('click', () => {
+        if (win) {
+          if (win.isMinimized()) win.restore();
+          win.focus();
+          win.webContents.send('app:focusTask', ptyId);
+        }
       });
       n.show();
     } catch (err) {
@@ -42,7 +65,7 @@ class HookServerImpl {
           if (url.pathname === '/hook/stop') {
             console.error(`[HookServer] Stop hook fired for ptyId=${ptyId}`);
             activityMonitor.setIdle(ptyId);
-            this.showDesktopNotification();
+            this.showDesktopNotification(ptyId);
             res.writeHead(200);
             res.end('ok');
             return;

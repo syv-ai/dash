@@ -18,7 +18,7 @@ interface PtyRecord {
 
 const ptys = new Map<string, PtyRecord>();
 
-export function setDesktopNotification(opts: { enabled: boolean; message: string }): void {
+export function setDesktopNotification(opts: { enabled: boolean }): void {
   hookServer.setDesktopNotification(opts);
 }
 

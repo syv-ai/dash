@@ -53,20 +53,12 @@ export function App() {
   const [desktopNotification, setDesktopNotification] = useState(() => {
     return localStorage.getItem('desktopNotification') === 'true';
   });
-  const [desktopNotificationMessage, setDesktopNotificationMessage] = useState(() => {
-    return (
-      localStorage.getItem('desktopNotificationMessage') ||
-      'Claude finished and needs your attention'
-    );
-  });
-
   // Sync desktop notification settings to main process
   useEffect(() => {
     window.electronAPI.setDesktopNotification?.({
       enabled: desktopNotification,
-      message: desktopNotificationMessage,
     });
-  }, [desktopNotification, desktopNotificationMessage]);
+  }, [desktopNotification]);
 
   // Activity state — keys are PTY IDs that have active sessions
   const [taskActivity, setTaskActivity] = useState<Record<string, 'busy' | 'idle'>>({});
@@ -120,6 +112,13 @@ export function App() {
   useEffect(() => {
     return window.electronAPI.onBeforeQuit(() => {
       sessionRegistry.saveAllSnapshots();
+    });
+  }, []);
+
+  // Focus a specific task when notification is clicked
+  useEffect(() => {
+    return window.electronAPI.onFocusTask((taskId) => {
+      setActiveTaskId(taskId);
     });
   }, []);
 
@@ -830,11 +829,6 @@ export function App() {
           onDesktopNotificationChange={(v) => {
             setDesktopNotification(v);
             localStorage.setItem('desktopNotification', String(v));
-          }}
-          desktopNotificationMessage={desktopNotificationMessage}
-          onDesktopNotificationMessageChange={(v) => {
-            setDesktopNotificationMessage(v);
-            localStorage.setItem('desktopNotificationMessage', v);
           }}
           keybindings={keybindings}
           onKeybindingsChange={(b) => {

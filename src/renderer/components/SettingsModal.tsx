@@ -19,8 +19,6 @@ interface SettingsModalProps {
   onNotificationSoundChange: (value: NotificationSound) => void;
   desktopNotification: boolean;
   onDesktopNotificationChange: (value: boolean) => void;
-  desktopNotificationMessage: string;
-  onDesktopNotificationMessageChange: (value: string) => void;
   keybindings: KeyBindingMap;
   onKeybindingsChange: (bindings: KeyBindingMap) => void;
   onClose: () => void;
@@ -111,8 +109,6 @@ export function SettingsModal({
   onNotificationSoundChange,
   desktopNotification,
   onDesktopNotificationChange,
-  desktopNotificationMessage,
-  onDesktopNotificationMessageChange,
   keybindings,
   onKeybindingsChange,
   onClose,
@@ -317,17 +313,8 @@ export function SettingsModal({
                   </div>
                   Show macOS notification when a task finishes
                 </button>
-                {desktopNotification && (
-                  <input
-                    type="text"
-                    value={desktopNotificationMessage}
-                    onChange={(e) => onDesktopNotificationMessageChange(e.target.value)}
-                    placeholder="Notification message..."
-                    className="mt-2 w-full px-3 py-2 rounded-lg text-[12px] border border-border/60 bg-transparent text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-all duration-150"
-                  />
-                )}
                 <p className="text-[10px] text-muted-foreground/40 mt-2">
-                  Takes effect for newly started tasks
+                  Notification will include the task name
                 </p>
               </div>
 

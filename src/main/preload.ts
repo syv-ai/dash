@@ -82,9 +82,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('app:beforeQuit', handler);
     };
   },
+  onFocusTask: (callback: (taskId: string) => void) => {
+    const handler = (_event: unknown, taskId: string) => callback(taskId);
+    ipcRenderer.on('app:focusTask', handler);
+    return () => {
+      ipcRenderer.removeListener('app:focusTask', handler);
+    };
+  },
 
   // Settings
-  setDesktopNotification: (opts: { enabled: boolean; message: string }) =>
+  setDesktopNotification: (opts: { enabled: boolean }) =>
     ipcRenderer.send('app:setDesktopNotification', opts),
 
   // Git detection

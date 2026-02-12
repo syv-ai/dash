@@ -100,9 +100,10 @@ export interface ElectronAPI {
 
   // App lifecycle
   onBeforeQuit: (callback: () => void) => () => void;
+  onFocusTask: (callback: (taskId: string) => void) => () => void;
 
   // Settings
-  setDesktopNotification: (opts: { enabled: boolean; message: string }) => void;
+  setDesktopNotification: (opts: { enabled: boolean }) => void;
 
   // Git detection
   detectGit: (
