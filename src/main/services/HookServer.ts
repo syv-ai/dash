@@ -31,7 +31,7 @@ class HookServerImpl {
         const db = getDb();
         const task = db.select({ name: tasks.name }).from(tasks).where(eq(tasks.id, ptyId)).get();
         if (task?.name) {
-          body = `"${task.name}" finished`;
+          body = `${task.name} finished`;
         }
       } catch {
         // DB lookup failed — use fallback
