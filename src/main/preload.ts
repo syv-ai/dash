@@ -106,9 +106,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   gitUnstageAll: (cwd: string) => ipcRenderer.invoke('git:unstageAll', cwd),
   gitDiscardFile: (args: { cwd: string; filePath: string }) =>
     ipcRenderer.invoke('git:discardFile', args),
-  gitCommit: (args: { cwd: string; message: string }) =>
-    ipcRenderer.invoke('git:commit', args),
+  gitCommit: (args: { cwd: string; message: string }) => ipcRenderer.invoke('git:commit', args),
   gitPush: (cwd: string) => ipcRenderer.invoke('git:push', cwd),
+
+  // Branch listing
+  gitListBranches: (cwd: string) => ipcRenderer.invoke('git:listBranches', cwd),
 
   // File watcher
   gitWatch: (args: { id: string; cwd: string }) => ipcRenderer.invoke('git:watch', args),

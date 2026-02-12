@@ -1,6 +1,16 @@
 import { execFile } from 'child_process';
+import { unlinkSync } from 'fs';
+import { join } from 'path';
 import { promisify } from 'util';
-import type { FileChange, FileChangeStatus, GitStatus, DiffResult, DiffHunk, DiffLine } from '@shared/types';
+import type {
+  FileChange,
+  FileChangeStatus,
+  GitStatus,
+  DiffResult,
+  DiffHunk,
+  DiffLine,
+  BranchInfo,
+} from '@shared/types';
 
 const execFileAsync = promisify(execFile);
 
@@ -16,6 +26,44 @@ async function git(cwd: string, args: string[]): Promise<string> {
 }
 
 export class GitService {
+  /**
+   * Fetch from remote and list remote branches sorted by most recent commit.
+   */
+  static async fetchAndListBranches(cwd: string): Promise<BranchInfo[]> {
+    // Fetch with prune to sync with remote (30s timeout)
+    await execFileAsync('git', ['fetch', '--prune', 'origin'], {
+      cwd,
+      timeout: 30000,
+    });
+
+    // List remote branches sorted by committerdate descending
+    const { stdout } = await execFileAsync(
+      'git',
+      [
+        'branch',
+        '-r',
+        '--format=%(refname:short)\t%(objectname:short)\t%(committerdate:relative)',
+        '--sort=-committerdate',
+      ],
+      { cwd, timeout: 15000 },
+    );
+
+    const branches: BranchInfo[] = [];
+    for (const line of stdout.split('\n').filter(Boolean)) {
+      const [ref, shortHash, ...dateParts] = line.split('\t');
+      if (!ref || ref === 'origin/HEAD') continue;
+      const name = ref.replace(/^origin\//, '');
+      branches.push({
+        name,
+        ref,
+        shortHash: shortHash || '',
+        relativeDate: dateParts.join('\t') || '',
+      });
+    }
+
+    return branches;
+  }
+
   /**
    * Get full git status for a working directory.
    */
@@ -153,13 +201,17 @@ export class GitService {
     try {
       const stagedOut = await git(cwd, ['diff', '--cached', '--numstat']);
       this.applyNumstat(stagedOut, files, true);
-    } catch { /* empty */ }
+    } catch {
+      /* empty */
+    }
 
     // Unstaged numstat
     try {
       const unstagedOut = await git(cwd, ['diff', '--numstat']);
       this.applyNumstat(unstagedOut, files, false);
-    } catch { /* empty */ }
+    } catch {
+      /* empty */
+    }
   }
 
   private static applyNumstat(output: string, files: FileChange[], staged: boolean): void {
@@ -180,7 +232,12 @@ export class GitService {
   /**
    * Get unified diff for a specific file (or all files).
    */
-  static async getDiff(cwd: string, filePath?: string, staged?: boolean, contextLines?: number): Promise<DiffResult> {
+  static async getDiff(
+    cwd: string,
+    filePath?: string,
+    staged?: boolean,
+    contextLines?: number,
+  ): Promise<DiffResult> {
     const ctx = contextLines ?? 999999;
     const args = ['diff'];
     if (staged) args.push('--cached');
@@ -191,17 +248,34 @@ export class GitService {
       const out = await git(cwd, args);
       return this.parseDiff(out, filePath || '(all)');
     } catch {
-      return { filePath: filePath || '(all)', hunks: [], isBinary: false, additions: 0, deletions: 0 };
+      return {
+        filePath: filePath || '(all)',
+        hunks: [],
+        isBinary: false,
+        additions: 0,
+        deletions: 0,
+      };
     }
   }
 
   /**
    * Get diff for an untracked file (show full contents as additions).
    */
-  static async getDiffUntracked(cwd: string, filePath: string, contextLines?: number): Promise<DiffResult> {
+  static async getDiffUntracked(
+    cwd: string,
+    filePath: string,
+    contextLines?: number,
+  ): Promise<DiffResult> {
     const ctx = contextLines ?? 999999;
     try {
-      const out = await git(cwd, ['diff', '--no-index', `--unified=${ctx}`, '--', '/dev/null', filePath]);
+      const out = await git(cwd, [
+        'diff',
+        '--no-index',
+        `--unified=${ctx}`,
+        '--',
+        '/dev/null',
+        filePath,
+      ]);
       return this.parseDiff(out, filePath);
     } catch (err: unknown) {
       // git diff --no-index returns exit code 1 when files differ (which is expected)
@@ -249,9 +323,7 @@ export class GitService {
     const out = await git(cwd, ['status', '--porcelain', '--', filePath]);
     if (out.trimStart().startsWith('??')) {
       // Untracked — remove it
-      const fs = require('fs');
-      const path = require('path');
-      fs.unlinkSync(path.join(cwd, filePath));
+      unlinkSync(join(cwd, filePath));
     } else {
       await git(cwd, ['checkout', 'HEAD', '--', filePath]);
     }
@@ -339,13 +411,20 @@ export class GitService {
 
   private static parseStatusChar(c: string): FileChangeStatus {
     switch (c) {
-      case 'M': return 'modified';
-      case 'A': return 'added';
-      case 'D': return 'deleted';
-      case 'R': return 'renamed';
-      case 'C': return 'added'; // copied → treat as added
-      case 'U': return 'conflicted';
-      default: return 'modified';
+      case 'M':
+        return 'modified';
+      case 'A':
+        return 'added';
+      case 'D':
+        return 'deleted';
+      case 'R':
+        return 'renamed';
+      case 'C':
+        return 'added'; // copied → treat as added
+      case 'U':
+        return 'conflicted';
+      default:
+        return 'modified';
     }
   }
 }

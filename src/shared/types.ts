@@ -77,9 +77,24 @@ export interface TerminalSnapshot {
   data: string;
 }
 
+// ── Branch Types ─────────────────────────────────────────────
+
+export interface BranchInfo {
+  name: string; // "main", "develop"
+  ref: string; // "origin/main", "origin/develop"
+  shortHash: string; // "a1b2c3d"
+  relativeDate: string; // "2 days ago"
+}
+
 // ── Git Types ────────────────────────────────────────────────
 
-export type FileChangeStatus = 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked' | 'conflicted';
+export type FileChangeStatus =
+  | 'modified'
+  | 'added'
+  | 'deleted'
+  | 'renamed'
+  | 'untracked'
+  | 'conflicted';
 
 export interface FileChange {
   path: string;

@@ -7,6 +7,7 @@ import type {
   TerminalSnapshot,
   GitStatus,
   DiffResult,
+  BranchInfo,
 } from '../shared/types';
 
 export interface ElectronAPI {
@@ -132,6 +133,9 @@ export interface ElectronAPI {
   gitDiscardFile: (args: { cwd: string; filePath: string }) => Promise<IpcResponse<void>>;
   gitCommit: (args: { cwd: string; message: string }) => Promise<IpcResponse<void>>;
   gitPush: (cwd: string) => Promise<IpcResponse<void>>;
+
+  // Branch listing
+  gitListBranches: (cwd: string) => Promise<IpcResponse<BranchInfo[]>>;
 
   // File watcher
   gitWatch: (args: { id: string; cwd: string }) => Promise<IpcResponse<void>>;

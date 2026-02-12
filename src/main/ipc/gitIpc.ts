@@ -158,6 +158,16 @@ export function registerGitIpc(): void {
     }
   });
 
+  // List remote branches (fetch + list)
+  ipcMain.handle('git:listBranches', async (_event, cwd: string) => {
+    try {
+      const branches = await GitService.fetchAndListBranches(cwd);
+      return { success: true, data: branches };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  });
+
   // Start watching a directory for file changes
   ipcMain.handle('git:watch', async (_event, args: { id: string; cwd: string }) => {
     try {
