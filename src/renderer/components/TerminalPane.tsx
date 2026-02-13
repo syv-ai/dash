@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { ArrowDown } from 'lucide-react';
 import { sessionRegistry } from '../terminal/SessionRegistry';
 
 const OVERLAY_MIN_MS = 2000;
@@ -15,6 +16,7 @@ export function TerminalPane({ id, cwd, autoApprove }: TerminalPaneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [showOverlay, setShowOverlay] = useState(false);
   const [overlayVisible, setOverlayVisible] = useState(false);
+  const [isAtBottom, setIsAtBottom] = useState(true);
 
   const hideOverlay = useCallback(() => {
     // Start fade-out
@@ -45,6 +47,8 @@ export function TerminalPane({ id, cwd, autoApprove }: TerminalPaneProps) {
       setTimeout(hideOverlay, remaining);
     });
 
+    session.onScrollStateChange(setIsAtBottom);
+
     // Now attach — the async work will call onRestarting/onReady as needed
     session.attach(container);
 
@@ -55,8 +59,7 @@ export function TerminalPane({ id, cwd, autoApprove }: TerminalPaneProps) {
 
   return (
     <div
-      ref={containerRef}
-      className={`terminal-container w-full h-full relative transition-all duration-150 ${
+      className={`w-full h-full relative transition-all duration-150 ${
         isDragOver ? 'ring-2 ring-inset ring-primary/30' : ''
       }`}
       onDragOver={(e) => {
@@ -78,6 +81,7 @@ export function TerminalPane({ id, cwd, autoApprove }: TerminalPaneProps) {
         }
       }}
     >
+      <div ref={containerRef} className="terminal-container w-full h-full" />
       {showOverlay && (
         <div
           className="absolute inset-0 z-10 pointer-events-none dark:bg-[#1f1f1f] bg-[#fafafa] flex flex-col items-center justify-center gap-4"
@@ -131,6 +135,18 @@ export function TerminalPane({ id, cwd, autoApprove }: TerminalPaneProps) {
             Drop files to paste paths
           </div>
         </div>
+      )}
+      {!isAtBottom && (
+        <button
+          onClick={() => {
+            const session = sessionRegistry.get(id);
+            session?.scrollToBottom();
+          }}
+          className="absolute bottom-4 right-4 z-10 w-8 h-8 rounded-full bg-accent/80 hover:bg-accent text-foreground/70 hover:text-foreground flex items-center justify-center shadow-md backdrop-blur-sm transition-all duration-150 hover:scale-105"
+          title="Scroll to bottom"
+        >
+          <ArrowDown size={16} strokeWidth={2} />
+        </button>
       )}
     </div>
   );

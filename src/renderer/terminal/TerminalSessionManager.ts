@@ -80,6 +80,9 @@ export class TerminalSessionManager {
   private onReadyCallback: (() => void) | null = null;
   private readyFired = false;
   private readyFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+  private onScrollStateChangeCallback: ((isAtBottom: boolean) => void) | null = null;
+  private lastEmittedAtBottom = true;
+  private wheelHandler: ((e: WheelEvent) => void) | null = null;
 
   constructor(opts: { id: string; cwd: string; autoApprove?: boolean; isDark?: boolean }) {
     this.id = opts.id;
@@ -117,6 +120,16 @@ export class TerminalSessionManager {
     this.terminal.onData((data) => {
       window.electronAPI.ptyInput({ id: this.id, data });
     });
+
+    // Track scroll position to notify UI when user scrolls away from bottom
+    this.terminal.onScroll(() => this.emitScrollState());
+    this.terminal.onWriteParsed(() => this.emitScrollState());
+
+    // Wheel events on the xterm viewport may not trigger onScroll when terminal
+    // lacks focus. Listen directly and recheck after the browser processes the event.
+    this.wheelHandler = () => {
+      requestAnimationFrame(() => this.emitScrollState());
+    };
   }
 
   private async loadGpuAddon() {
@@ -156,6 +169,11 @@ export class TerminalSessionManager {
       if (xtermEl && xtermEl.parentElement !== container) {
         container.appendChild(xtermEl);
       }
+    }
+
+    // Wheel listener for scroll detection even without terminal focus
+    if (this.wheelHandler) {
+      container.addEventListener('wheel', this.wheelHandler, { passive: true });
     }
 
     // Resize observer
@@ -274,9 +292,15 @@ export class TerminalSessionManager {
       this.readyFallbackTimer = null;
     }
 
-    // Clear restart callbacks to prevent stale setState on unmounted components
+    // Remove wheel listener
+    if (this.currentContainer && this.wheelHandler) {
+      this.currentContainer.removeEventListener('wheel', this.wheelHandler);
+    }
+
+    // Clear callbacks to prevent stale setState on unmounted components
     this.onRestartingCallback = null;
     this.onReadyCallback = null;
+    this.onScrollStateChangeCallback = null;
     this._isRestarting = false;
 
     // Stop resize observer
@@ -334,6 +358,31 @@ export class TerminalSessionManager {
 
   focus() {
     this.terminal.focus();
+  }
+
+  onScrollStateChange(cb: (isAtBottom: boolean) => void) {
+    this.onScrollStateChangeCallback = cb;
+  }
+
+  scrollToBottom() {
+    const viewport = this.terminal.element?.querySelector('.xterm-viewport');
+    if (viewport) {
+      viewport.scrollTo({ top: viewport.scrollHeight, behavior: 'smooth' });
+      // Emit state once smooth scroll finishes
+      const onScrollEnd = () => {
+        this.emitScrollState();
+        viewport.removeEventListener('scrollend', onScrollEnd);
+      };
+      viewport.addEventListener('scrollend', onScrollEnd);
+      // Fallback if scrollend doesn't fire
+      setTimeout(() => {
+        viewport.removeEventListener('scrollend', onScrollEnd);
+        this.emitScrollState();
+      }, 500);
+    } else {
+      this.terminal.scrollToBottom();
+      this.emitScrollState();
+    }
   }
 
   setTheme(isDark: boolean) {
@@ -525,6 +574,19 @@ export class TerminalSessionManager {
       // Best effort
     }
     return false;
+  }
+
+  private isAtBottom(): boolean {
+    const buf = this.terminal.buffer.active;
+    return buf.baseY - buf.viewportY <= 10;
+  }
+
+  private emitScrollState() {
+    const atBottom = this.isAtBottom();
+    if (atBottom !== this.lastEmittedAtBottom) {
+      this.lastEmittedAtBottom = atBottom;
+      this.onScrollStateChangeCallback?.(atBottom);
+    }
   }
 
   private checkMemory() {
