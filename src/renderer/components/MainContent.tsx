@@ -3,6 +3,18 @@ import { TerminalPane } from './TerminalPane';
 import { Terminal, FolderOpen, GitBranch } from 'lucide-react';
 import type { Project, Task } from '../../shared/types';
 
+/** Convert a git remote URL (SSH or HTTPS) to a GitHub issues base URL */
+function issueUrl(remote: string | null, num: number): string | null {
+  if (!remote) return null;
+  // git@github.com:org/repo.git → https://github.com/org/repo/issues/N
+  const ssh = remote.match(/git@github\.com:(.+?)(?:\.git)?$/);
+  if (ssh) return `https://github.com/${ssh[1]}/issues/${num}`;
+  // https://github.com/org/repo.git → https://github.com/org/repo/issues/N
+  const https = remote.match(/https:\/\/github\.com\/(.+?)(?:\.git)?$/);
+  if (https) return `https://github.com/${https[1]}/issues/${num}`;
+  return null;
+}
+
 interface MainContentProps {
   activeTask: Task | null;
   activeProject: Project | null;
@@ -11,7 +23,6 @@ interface MainContentProps {
   activeTaskId?: string | null;
   taskActivity?: Record<string, 'busy' | 'idle'>;
   onSelectTask?: (id: string) => void;
-  initialPrompt?: string;
 }
 
 export function MainContent({
@@ -22,7 +33,6 @@ export function MainContent({
   activeTaskId,
   taskActivity = {},
   onSelectTask,
-  initialPrompt,
 }: MainContentProps) {
   if (!activeProject) {
     return (
@@ -120,6 +130,31 @@ export function MainContent({
               <GitBranch size={11} strokeWidth={2} />
               <span className="text-[11px] font-mono">{activeTask.branch}</span>
             </div>
+            {activeTask.linkedIssues && activeTask.linkedIssues.length > 0 && (
+              <div className="ml-auto flex items-center gap-1">
+                {activeTask.linkedIssues.map((num) => {
+                  const url = issueUrl(activeProject?.gitRemote ?? null, num);
+                  return url ? (
+                    <a
+                      key={num}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium hover:bg-primary/20 transition-colors"
+                    >
+                      #{num}
+                    </a>
+                  ) : (
+                    <span
+                      key={num}
+                      className="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium"
+                    >
+                      #{num}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
           </>
         )}
       </div>
@@ -131,7 +166,6 @@ export function MainContent({
           id={activeTask.id}
           cwd={activeTask.path}
           autoApprove={activeTask.autoApprove}
-          initialPrompt={initialPrompt}
         />
       </div>
     </div>

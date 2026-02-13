@@ -1,4 +1,4 @@
-import { ipcMain, dialog, app, BrowserWindow, Notification } from 'electron';
+import { ipcMain, dialog, app, shell, BrowserWindow, Notification } from 'electron';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
@@ -9,6 +9,10 @@ const execFileAsync = promisify(execFile);
 export function registerAppIpc(): void {
   ipcMain.handle('app:getVersion', () => {
     return app.getVersion();
+  });
+
+  ipcMain.handle('app:openExternal', async (_event, url: string) => {
+    await shell.openExternal(url);
   });
 
   ipcMain.handle('app:showOpenDialog', async () => {

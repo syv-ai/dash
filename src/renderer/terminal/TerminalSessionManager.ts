@@ -83,20 +83,16 @@ export class TerminalSessionManager {
   private onScrollStateChangeCallback: ((isAtBottom: boolean) => void) | null = null;
   private lastEmittedAtBottom = true;
   private wheelHandler: ((e: WheelEvent) => void) | null = null;
-  private initialPrompt?: string;
-
   constructor(opts: {
     id: string;
     cwd: string;
     autoApprove?: boolean;
     isDark?: boolean;
-    initialPrompt?: string;
   }) {
     this.id = opts.id;
     this.cwd = opts.cwd;
     this.autoApprove = opts.autoApprove ?? false;
     this.isDark = opts.isDark ?? true;
-    this.initialPrompt = opts.initialPrompt;
 
     this.terminal = new Terminal({
       scrollback: 100_000,
@@ -105,6 +101,11 @@ export class TerminalSessionManager {
       allowProposedApi: true,
       theme: this.isDark ? darkTheme : lightTheme,
       cursorBlink: true,
+      linkHandler: {
+        activate: (_event, uri) => {
+          window.electronAPI.openExternal(uri);
+        },
+      },
     });
 
     this.fitAddon = new FitAddon();
@@ -112,7 +113,11 @@ export class TerminalSessionManager {
 
     this.terminal.loadAddon(this.fitAddon);
     this.terminal.loadAddon(this.serializeAddon);
-    this.terminal.loadAddon(new WebLinksAddon());
+    this.terminal.loadAddon(
+      new WebLinksAddon((_event, uri) => {
+        window.electronAPI.openExternal(uri);
+      }),
+    );
 
     // Shift+Enter → Ctrl+J (multiline input for Claude Code)
     this.terminal.attachCustomKeyEventHandler((e) => {
@@ -256,6 +261,21 @@ export class TerminalSessionManager {
         } catch {
           // Best effort
         }
+      }
+
+      // Show info line when issue context was injected via SessionStart hook
+      if (result.taskContextMeta && !result.reattached && !resume) {
+        const { issueNumbers, gitRemote } = result.taskContextMeta;
+        const issueLabels = issueNumbers.map((num) => {
+          const url = gitRemote ? this.issueUrl(gitRemote, num) : null;
+          // OSC 8 hyperlink: \x1b]8;;URL\x07TEXT\x1b]8;;\x07
+          return url
+            ? `\x1b]8;;${url}\x07#${num}\x1b]8;;\x07`
+            : `#${num}`;
+        });
+        this.terminal.write(
+          `\x1b[2m\x1b[36m● Issue context injected: ${issueLabels.join(', ')}\x1b[0m\r\n`,
+        );
       }
     }
 
@@ -431,15 +451,26 @@ export class TerminalSessionManager {
     }
   }
 
-  private async startPty(
-    resume: boolean = false,
-  ): Promise<{ reattached: boolean; isDirectSpawn: boolean }> {
+  private issueUrl(remote: string, num: number): string | null {
+    const ssh = remote.match(/git@github\.com:(.+?)(?:\.git)?$/);
+    if (ssh) return `https://github.com/${ssh[1]}/issues/${num}`;
+    const https = remote.match(/https:\/\/github\.com\/(.+?)(?:\.git)?$/);
+    if (https) return `https://github.com/${https[1]}/issues/${num}`;
+    return null;
+  }
+
+  private async startPty(resume: boolean = false): Promise<{
+    reattached: boolean;
+    isDirectSpawn: boolean;
+    taskContextMeta: { issueNumbers: number[]; gitRemote?: string } | null;
+  }> {
     const dims = this.fitAddon.proposeDimensions();
     const cols = dims?.cols ?? 120;
     const rows = dims?.rows ?? 30;
 
     let reattached = false;
     let isDirectSpawn = false;
+    let taskContextMeta: { issueNumbers: number[]; gitRemote?: string } | null = null;
 
     const resp = await window.electronAPI.ptyStartDirect({
       id: this.id,
@@ -449,12 +480,12 @@ export class TerminalSessionManager {
       autoApprove: this.autoApprove,
       resume,
       isDark: this.isDark,
-      initialPrompt: this.initialPrompt,
     });
 
     if (resp.success) {
       reattached = resp.data?.reattached ?? false;
       isDirectSpawn = resp.data?.isDirectSpawn ?? true;
+      taskContextMeta = resp.data?.taskContextMeta ?? null;
     } else {
       // Fall back to shell
       const shellResp = await window.electronAPI.ptyStart({
@@ -469,7 +500,7 @@ export class TerminalSessionManager {
 
     this.ptyStarted = true;
 
-    return { reattached, isDirectSpawn };
+    return { reattached, isDirectSpawn, taskContextMeta };
   }
 
   private fireReady() {

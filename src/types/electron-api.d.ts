@@ -18,6 +18,7 @@ export interface ElectronAPI {
 
   // Dialogs
   showOpenDialog: () => Promise<IpcResponse<string[]>>;
+  openExternal: (url: string) => Promise<void>;
 
   // Database - Projects
   getProjects: () => Promise<IpcResponse<Project[]>>;
@@ -76,8 +77,14 @@ export interface ElectronAPI {
     autoApprove?: boolean;
     resume?: boolean;
     isDark?: boolean;
-    initialPrompt?: string;
-  }) => Promise<IpcResponse<{ reattached: boolean; isDirectSpawn: boolean }>>;
+  }) => Promise<
+    IpcResponse<{
+      reattached: boolean;
+      isDirectSpawn: boolean;
+      hasTaskContext: boolean;
+      taskContextMeta: { issueNumbers: number[]; gitRemote?: string } | null;
+    }>
+  >;
   ptyStart: (args: {
     id: string;
     cwd: string;
@@ -104,6 +111,13 @@ export interface ElectronAPI {
 
   // Session detection
   ptyHasClaudeSession: (cwd: string) => Promise<IpcResponse<boolean>>;
+
+  // Task context for SessionStart hook
+  ptyWriteTaskContext: (args: {
+    cwd: string;
+    prompt: string;
+    meta?: { issueNumbers: number[]; gitRemote?: string };
+  }) => Promise<IpcResponse<void>>;
 
   // App lifecycle
   onBeforeQuit: (callback: () => void) => () => void;

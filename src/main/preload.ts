@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Dialogs
   showOpenDialog: () => ipcRenderer.invoke('app:showOpenDialog'),
+  openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
 
   // Database - Projects
   getProjects: () => ipcRenderer.invoke('db:getProjects'),
@@ -73,6 +74,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Session detection
   ptyHasClaudeSession: (cwd: string) => ipcRenderer.invoke('pty:hasClaudeSession', cwd),
+
+  // Task context for SessionStart hook
+  ptyWriteTaskContext: (args: { cwd: string; prompt: string }) =>
+    ipcRenderer.invoke('pty:writeTaskContext', args),
 
   // App lifecycle
   onBeforeQuit: (callback: () => void) => {

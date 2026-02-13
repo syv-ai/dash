@@ -84,8 +84,40 @@ function buildDirectEnv(isDark: boolean): Record<string, string> {
 }
 
 /**
- * Write .claude/settings.local.json with Stop and UserPromptSubmit hooks
- * that signal our local HookServer when Claude finishes or starts a turn.
+ * Write .claude/task-context.json with issue context for the SessionStart hook.
+ * Called from IPC during task creation, before Claude spawns.
+ */
+export function writeTaskContext(
+  cwd: string,
+  prompt: string,
+  meta?: { issueNumbers: number[]; gitRemote?: string },
+): void {
+  const claudeDir = path.join(cwd, '.claude');
+  const contextPath = path.join(claudeDir, 'task-context.json');
+
+  const payload: Record<string, unknown> = {
+    hookSpecificOutput: {
+      hookEventName: 'SessionStart',
+      additionalContext: prompt,
+    },
+  };
+  if (meta) {
+    payload.meta = meta;
+  }
+
+  try {
+    if (!fs.existsSync(claudeDir)) {
+      fs.mkdirSync(claudeDir, { recursive: true });
+    }
+    fs.writeFileSync(contextPath, JSON.stringify(payload, null, 2) + '\n');
+  } catch (err) {
+    console.error('[writeTaskContext] Failed:', err);
+  }
+}
+
+/**
+ * Write .claude/settings.local.json with Stop, UserPromptSubmit, and
+ * (optionally) SessionStart hooks.
  */
 function writeHookSettings(cwd: string, ptyId: string): void {
   const port = hookServer.port;
@@ -95,20 +127,30 @@ function writeHookSettings(cwd: string, ptyId: string): void {
   const settingsPath = path.join(claudeDir, 'settings.local.json');
   const curlBase = `curl -s --connect-timeout 2 http://127.0.0.1:${port}`;
 
-  const stopEntries: { hooks: { type: string; command: string }[] }[] = [
-    { hooks: [{ type: 'command', command: `${curlBase}/hook/stop?ptyId=${ptyId}` }] },
-  ];
-
-  const hookSettings = {
-    hooks: {
-      Stop: stopEntries,
-      UserPromptSubmit: [
-        {
-          hooks: [{ type: 'command', command: `${curlBase}/hook/busy?ptyId=${ptyId}` }],
-        },
-      ],
-    },
+  const hookSettings: Record<string, unknown[]> = {
+    Stop: [
+      { hooks: [{ type: 'command', command: `${curlBase}/hook/stop?ptyId=${ptyId}` }] },
+    ],
+    UserPromptSubmit: [
+      { hooks: [{ type: 'command', command: `${curlBase}/hook/busy?ptyId=${ptyId}` }] },
+    ],
   };
+
+  // Auto-detect task-context.json and inject SessionStart hook if it exists
+  const contextPath = path.join(claudeDir, 'task-context.json');
+  if (fs.existsSync(contextPath)) {
+    hookSettings.SessionStart = [
+      {
+        matcher: 'startup',
+        hooks: [
+          {
+            type: 'command',
+            command: `cat "${contextPath}"`,
+          },
+        ],
+      },
+    ];
+  }
 
   try {
     if (!fs.existsSync(claudeDir)) {
@@ -131,7 +173,7 @@ function writeHookSettings(cwd: string, ptyId: string): void {
         ...(existing.hooks && typeof existing.hooks === 'object'
           ? (existing.hooks as Record<string, unknown>)
           : {}),
-        ...hookSettings.hooks,
+        ...hookSettings,
       },
     };
 
@@ -153,9 +195,13 @@ export async function startDirectPty(options: {
   autoApprove?: boolean;
   resume?: boolean;
   isDark?: boolean;
-  initialPrompt?: string;
   sender?: WebContents;
-}): Promise<{ reattached: boolean; isDirectSpawn: boolean }> {
+}): Promise<{
+  reattached: boolean;
+  isDirectSpawn: boolean;
+  hasTaskContext: boolean;
+  taskContextMeta: { issueNumbers: number[]; gitRemote?: string } | null;
+}> {
   // Re-attach to existing PTY (e.g., after renderer reload)
   const existing = ptys.get(options.id);
   if (existing && !existing.isDirectSpawn) {
@@ -168,7 +214,7 @@ export async function startDirectPty(options: {
     ptys.delete(options.id);
   } else if (existing) {
     existing.owner = options.sender || null;
-    return { reattached: true, isDirectSpawn: true };
+    return { reattached: true, isDirectSpawn: true, hasTaskContext: false, taskContextMeta: null };
   }
 
   const pty = getPty();
@@ -185,10 +231,6 @@ export async function startDirectPty(options: {
   if (options.autoApprove) {
     args.push('--dangerously-skip-permissions');
   }
-  if (options.initialPrompt && !options.resume) {
-    args.push('-p', options.initialPrompt);
-  }
-
   const env = buildDirectEnv(options.isDark ?? true);
 
   writeHookSettings(options.cwd, options.id);
@@ -228,7 +270,17 @@ export async function startDirectPty(options: {
     ptys.delete(options.id);
   });
 
-  return { reattached: false, isDirectSpawn: true };
+  const contextPath = path.join(options.cwd, '.claude', 'task-context.json');
+  let taskContextMeta: { issueNumbers: number[]; gitRemote?: string } | null = null;
+  try {
+    if (fs.existsSync(contextPath)) {
+      const parsed = JSON.parse(fs.readFileSync(contextPath, 'utf-8'));
+      taskContextMeta = parsed.meta ?? null;
+    }
+  } catch {
+    // Best effort
+  }
+  return { reattached: false, isDirectSpawn: true, hasTaskContext: !!taskContextMeta, taskContextMeta };
 }
 
 /**

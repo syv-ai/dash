@@ -10,6 +10,7 @@ import {
   resizePty,
   killPty,
   killByOwner,
+  writeTaskContext,
 } from '../services/ptyManager';
 import { terminalSnapshotService } from '../services/TerminalSnapshotService';
 import { activityMonitor } from '../services/ActivityMonitor';
@@ -27,7 +28,6 @@ export function registerPtyIpc(): void {
         autoApprove?: boolean;
         resume?: boolean;
         isDark?: boolean;
-        initialPrompt?: string;
       },
     ) => {
       try {
@@ -105,6 +105,26 @@ export function registerPtyIpc(): void {
       return { success: false, data: false, error: String(error) };
     }
   });
+
+  // Write task context for SessionStart hook
+  ipcMain.handle(
+    'pty:writeTaskContext',
+    (
+      _event,
+      args: {
+        cwd: string;
+        prompt: string;
+        meta?: { issueNumbers: number[]; gitRemote?: string };
+      },
+    ) => {
+      try {
+        writeTaskContext(args.cwd, args.prompt, args.meta);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: String(error) };
+      }
+    },
+  );
 
   // Activity monitor
   ipcMain.handle('pty:activity:getAll', () => {

@@ -5,7 +5,6 @@ interface AttachOptions {
   cwd: string;
   container: HTMLElement;
   autoApprove?: boolean;
-  initialPrompt?: string;
 }
 
 class SessionRegistryImpl {
@@ -20,7 +19,6 @@ class SessionRegistryImpl {
         cwd: opts.cwd,
         autoApprove: opts.autoApprove,
         isDark: this._isDark,
-        initialPrompt: opts.initialPrompt,
       });
       this.sessions.set(opts.id, session);
     }

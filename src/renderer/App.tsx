@@ -90,8 +90,6 @@ export function App() {
   const [changesAnimating, setChangesAnimating] = useState(false);
   const fileWatcherCleanup = useRef<(() => void) | null>(null);
   const gitPollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const initialPromptsRef = useRef<Map<string, string>>(new Map());
-
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null;
 
   // Find activeTask across all projects
@@ -571,7 +569,7 @@ export function App() {
     if (saveResp.success && saveResp.data) {
       const taskId = saveResp.data.id;
 
-      // Build initial prompt from linked issues
+      // Write task context file for SessionStart hook injection
       if (linkedIssues && linkedIssues.length > 0) {
         const issueBlocks = linkedIssues.map((issue) => {
           const labels = issue.labels.length > 0 ? `Labels: ${issue.labels.join(', ')}\n` : '';
@@ -582,7 +580,14 @@ export function App() {
         });
 
         const prompt = `I'm working on the following GitHub issue(s):\n\n${issueBlocks.join('\n\n')}\n\nPlease help me implement a solution for this.`;
-        initialPromptsRef.current.set(taskId, prompt);
+        window.electronAPI.ptyWriteTaskContext({
+          cwd: taskPath,
+          prompt,
+          meta: {
+            issueNumbers: linkedIssues.map((i) => i.number),
+            gitRemote: targetProject.gitRemote ?? undefined,
+          },
+        });
       }
 
       await window.electronAPI.getOrCreateDefaultConversation(taskId);
@@ -801,7 +806,6 @@ export function App() {
             activeTaskId={activeTaskId}
             taskActivity={taskActivity}
             onSelectTask={setActiveTaskId}
-            initialPrompt={activeTaskId ? initialPromptsRef.current.get(activeTaskId) : undefined}
           />
         </Panel>
 

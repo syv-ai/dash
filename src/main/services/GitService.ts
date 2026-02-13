@@ -187,10 +187,20 @@ export class GitService {
       return [];
     }
 
-    // Get numstat for addition/deletion counts
-    await this.enrichWithNumstat(cwd, files);
+    // Filter out Dash-managed hook files (not user content).
+    // Git may report individual files or the whole .claude/ directory
+    // (when untracked with --untracked-files=normal).
+    const dashManagedFiles = new Set([
+      '.claude/',
+      '.claude/settings.local.json',
+      '.claude/task-context.json',
+    ]);
+    const filtered = files.filter((f) => !dashManagedFiles.has(f.path));
 
-    return files;
+    // Get numstat for addition/deletion counts
+    await this.enrichWithNumstat(cwd, filtered);
+
+    return filtered;
   }
 
   /**
