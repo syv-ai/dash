@@ -84,7 +84,7 @@ export function TerminalPane({ id, cwd, autoApprove }: TerminalPaneProps) {
       <div ref={containerRef} className="terminal-container w-full h-full" />
       {showOverlay && (
         <div
-          className="absolute inset-0 z-10 pointer-events-none dark:bg-[#1f1f1f] bg-[#fafafa] flex flex-col items-center justify-center gap-4"
+          className="absolute inset-0 z-10 pointer-events-none bg-background flex flex-col items-center justify-center gap-4"
           style={{
             opacity: overlayVisible ? 1 : 0,
             transition: `opacity ${OVERLAY_FADE_MS}ms ease-out`,
@@ -106,25 +106,10 @@ export function TerminalPane({ id, cwd, autoApprove }: TerminalPaneProps) {
               </linearGradient>
             </defs>
             <rect width="512" height="512" rx="108" fill="url(#restart-bg)" />
-            <rect
-              x="136"
-              y="240"
-              width="240"
-              height="36"
-              rx="18"
-              fill="url(#restart-dash)"
-            />
-            <rect
-              x="396"
-              y="232"
-              width="4"
-              height="52"
-              rx="2"
-              fill="#00ff88"
-              opacity="0.7"
-            />
+            <rect x="136" y="240" width="240" height="36" rx="18" fill="url(#restart-dash)" />
+            <rect x="396" y="232" width="4" height="52" rx="2" fill="#00ff88" opacity="0.7" />
           </svg>
-          <span className="text-[13px] dark:text-neutral-400 text-neutral-500 font-medium">
+          <span className="text-[13px] text-muted-foreground font-medium">
             Resuming your session...
           </span>
         </div>

@@ -1,3 +1,5 @@
+export type ThemeId = 'light' | 'dark' | 'solarized-dark' | 'nord';
+
 export interface Project {
   id: string;
   name: string;

@@ -14,10 +14,11 @@ import { AddProjectModal } from './components/AddProjectModal';
 import { DeleteTaskModal } from './components/DeleteTaskModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ToastContainer } from './components/Toast';
-import type { Project, Task, GitStatus, DiffResult, GithubIssue } from '../shared/types';
+import type { Project, Task, GitStatus, DiffResult, GithubIssue, ThemeId } from '../shared/types';
 import { loadKeybindings, saveKeybindings, matchesBinding } from './keybindings';
 import type { KeyBindingMap } from './keybindings';
 import { sessionRegistry } from './terminal/SessionRegistry';
+import { isThemeDark, THEMES } from './themes';
 import { playNotificationSound } from './sounds';
 import type { NotificationSound } from './sounds';
 
@@ -41,8 +42,11 @@ export function App() {
   });
   const [deleteTaskTarget, setDeleteTaskTarget] = useState<Task | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    return (localStorage.getItem('theme') as 'light' | 'dark') || 'dark';
+  const [theme, setTheme] = useState<ThemeId>(() => {
+    const stored = localStorage.getItem('theme');
+    const valid: ThemeId[] = THEMES.map((t) => t.id);
+    if (stored && valid.includes(stored as ThemeId)) return stored as ThemeId;
+    return 'dark';
   });
   const [diffContextLines, setDiffContextLines] = useState<number | null>(() => {
     const stored = localStorage.getItem('diffContextLines');
@@ -211,9 +215,13 @@ export function App() {
 
   // Theme
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark');
-    document.documentElement.classList.toggle('light', theme === 'light');
-    sessionRegistry.setAllThemes(theme === 'dark');
+    const allThemeClasses = THEMES.map((t) => t.id);
+    document.documentElement.classList.remove(...allThemeClasses, 'dark');
+    document.documentElement.classList.add(theme);
+    if (isThemeDark(theme)) {
+      document.documentElement.classList.add('dark');
+    }
+    sessionRegistry.setAllThemes(theme);
   }, [theme]);
 
   // Git: watch active task directory + poll
@@ -607,13 +615,11 @@ export function App() {
       // (branch linking happens in the worktree service before push)
       if (linkedIssues && linkedIssues.length > 0) {
         for (const issue of linkedIssues) {
-          window.electronAPI.githubPostBranchComment(
-            targetProject.path,
-            issue.number,
-            branch,
-          ).catch(() => {
-            // Best effort
-          });
+          window.electronAPI
+            .githubPostBranchComment(targetProject.path, issue.number, branch)
+            .catch(() => {
+              // Best effort
+            });
         }
       }
     }
@@ -801,7 +807,10 @@ export function App() {
         </Panel>
         <PanelResizeHandle disabled={sidebarCollapsed} className="w-[1px] bg-border/40" />
 
-        <Panel className={sidebarAnimating || changesAnimating ? 'panel-transition' : ''} minSize={35}>
+        <Panel
+          className={sidebarAnimating || changesAnimating ? 'panel-transition' : ''}
+          minSize={35}
+        >
           <MainContent
             activeTask={activeTask}
             activeProject={activeProject}
@@ -879,7 +888,6 @@ export function App() {
           onThemeChange={(t) => {
             setTheme(t);
             localStorage.setItem('theme', t);
-            sessionRegistry.setAllThemes(t === 'dark');
           }}
           diffContextLines={diffContextLines}
           onDiffContextLinesChange={(v) => {

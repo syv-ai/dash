@@ -78,6 +78,78 @@
     --git-untracked: 0 0% 56%;
     --git-conflicted: 25 95% 53%;
   }
+
+  .solarized-dark {
+    /* Solarized Dark — base03 bg (#002b36), base0 fg (#839496), yellow primary (#b58900) */
+    --background: 192 100% 11%;
+    --foreground: 186 13% 55%;
+    --card: 192 81% 14%;
+    --card-foreground: 186 13% 55%;
+    --popover: 192 81% 14%;
+    --popover-foreground: 186 13% 55%;
+    --primary: 45 100% 35%;
+    --primary-foreground: 192 100% 11%;
+    --secondary: 192 81% 14%;
+    --secondary-foreground: 186 13% 55%;
+    --muted: 192 81% 14%;
+    --muted-foreground: 186 8% 44%;
+    --accent: 192 49% 18%;
+    --accent-foreground: 186 13% 55%;
+    --destructive: 1 71% 52%;
+    --destructive-foreground: 44 87% 94%;
+    --border: 192 49% 18%;
+    --input: 192 49% 20%;
+    --ring: 45 100% 35%;
+    --radius: 0.5rem;
+
+    --surface-0: 192 100% 11%;
+    --surface-1: 192 81% 14%;
+    --surface-2: 192 49% 17%;
+    --surface-3: 192 49% 20%;
+
+    --git-added: 68 100% 30%;
+    --git-modified: 45 100% 35%;
+    --git-deleted: 1 71% 52%;
+    --git-renamed: 205 69% 49%;
+    --git-untracked: 186 8% 44%;
+    --git-conflicted: 18 89% 45%;
+  }
+
+  .nord {
+    /* Nord — polar night bg (#2e3440), snow storm fg (#d8dee9), frost blue primary (#5e81ac) */
+    --background: 220 16% 22%;
+    --foreground: 213 27% 84%;
+    --card: 220 17% 24%;
+    --card-foreground: 213 27% 84%;
+    --popover: 220 17% 24%;
+    --popover-foreground: 213 27% 84%;
+    --primary: 213 32% 52%;
+    --primary-foreground: 220 16% 22%;
+    --secondary: 220 17% 27%;
+    --secondary-foreground: 213 27% 84%;
+    --muted: 220 17% 27%;
+    --muted-foreground: 219 16% 50%;
+    --accent: 220 17% 30%;
+    --accent-foreground: 213 27% 84%;
+    --destructive: 354 42% 56%;
+    --destructive-foreground: 219 28% 88%;
+    --border: 220 17% 27%;
+    --input: 220 17% 30%;
+    --ring: 213 32% 52%;
+    --radius: 0.5rem;
+
+    --surface-0: 220 16% 22%;
+    --surface-1: 220 17% 24%;
+    --surface-2: 220 17% 27%;
+    --surface-3: 220 17% 30%;
+
+    --git-added: 92 28% 65%;
+    --git-modified: 40 71% 73%;
+    --git-deleted: 354 42% 56%;
+    --git-renamed: 193 43% 67%;
+    --git-untracked: 219 16% 50%;
+    --git-conflicted: 14 51% 63%;
+  }
 }
 
 @layer base {
@@ -276,7 +348,7 @@
   background: hsl(var(--primary) / 0.12) !important;
 }
 .diff-line-commented {
-  border-left: 2px solid hsl(var(--primary) / 0.50);
+  border-left: 2px solid hsl(var(--primary) / 0.5);
 }
 .diff-gutter-clickable {
   cursor: pointer;
@@ -287,7 +359,9 @@
 
 /* ── Panel Collapse/Expand Animation ─────────────────────── */
 .panel-transition {
-  transition: flex-grow 200ms ease-out, flex-shrink 200ms ease-out;
+  transition:
+    flex-grow 200ms ease-out,
+    flex-shrink 200ms ease-out;
 }
 
 /* ── File Item Enter Animation ───────────────────────────── */

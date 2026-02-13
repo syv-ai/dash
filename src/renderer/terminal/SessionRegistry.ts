@@ -1,3 +1,4 @@
+import type { ThemeId } from '../../shared/types';
 import { TerminalSessionManager } from './TerminalSessionManager';
 
 interface AttachOptions {
@@ -9,7 +10,7 @@ interface AttachOptions {
 
 class SessionRegistryImpl {
   private sessions = new Map<string, TerminalSessionManager>();
-  private _isDark = true;
+  private _themeId: ThemeId = 'dark';
 
   getOrCreate(opts: Omit<AttachOptions, 'container'>): TerminalSessionManager {
     let session = this.sessions.get(opts.id);
@@ -18,7 +19,7 @@ class SessionRegistryImpl {
         id: opts.id,
         cwd: opts.cwd,
         autoApprove: opts.autoApprove,
-        isDark: this._isDark,
+        themeId: this._themeId,
       });
       this.sessions.set(opts.id, session);
     }
@@ -54,10 +55,10 @@ class SessionRegistryImpl {
     }
   }
 
-  setAllThemes(isDark: boolean): void {
-    this._isDark = isDark;
+  setAllThemes(themeId: ThemeId): void {
+    this._themeId = themeId;
     for (const session of this.sessions.values()) {
-      session.setTheme(isDark);
+      session.setTheme(themeId);
     }
   }
 

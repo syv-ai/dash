@@ -1,5 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Check, AlertCircle, Sun, Moon, Terminal, RotateCcw } from 'lucide-react';
+import {
+  X,
+  Check,
+  AlertCircle,
+  Sun,
+  Moon,
+  Palette,
+  Snowflake,
+  Terminal,
+  RotateCcw,
+  type LucideIcon,
+} from 'lucide-react';
 import type { KeyBindingMap, KeyBinding } from '../keybindings';
 import {
   getBindingKeys,
@@ -9,10 +20,19 @@ import {
 } from '../keybindings';
 import { NOTIFICATION_SOUNDS, SOUND_LABELS } from '../sounds';
 import type { NotificationSound } from '../sounds';
+import type { ThemeId } from '../../shared/types';
+import { THEMES } from '../themes';
+
+const THEME_ICONS: Record<string, LucideIcon> = {
+  Sun,
+  Moon,
+  Palette,
+  Snowflake,
+};
 
 interface SettingsModalProps {
-  theme: 'light' | 'dark';
-  onThemeChange: (theme: 'light' | 'dark') => void;
+  theme: ThemeId;
+  onThemeChange: (theme: ThemeId) => void;
   diffContextLines: number | null;
   onDiffContextLinesChange: (value: number | null) => void;
   notificationSound: NotificationSound;
@@ -205,28 +225,23 @@ export function SettingsModal({
                   Appearance
                 </label>
                 <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => onThemeChange('light')}
-                    className={`flex items-center gap-2.5 px-4 py-3 rounded-lg text-[13px] border transition-all duration-150 ${
-                      theme === 'light'
-                        ? 'border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20'
-                        : 'border-border/60 text-muted-foreground/60 hover:bg-accent/40 hover:text-foreground'
-                    }`}
-                  >
-                    <Sun size={15} strokeWidth={1.8} />
-                    Light
-                  </button>
-                  <button
-                    onClick={() => onThemeChange('dark')}
-                    className={`flex items-center gap-2.5 px-4 py-3 rounded-lg text-[13px] border transition-all duration-150 ${
-                      theme === 'dark'
-                        ? 'border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20'
-                        : 'border-border/60 text-muted-foreground/60 hover:bg-accent/40 hover:text-foreground'
-                    }`}
-                  >
-                    <Moon size={15} strokeWidth={1.8} />
-                    Dark
-                  </button>
+                  {THEMES.map((t) => {
+                    const Icon = THEME_ICONS[t.icon];
+                    return (
+                      <button
+                        key={t.id}
+                        onClick={() => onThemeChange(t.id)}
+                        className={`flex items-center gap-2.5 px-4 py-3 rounded-lg text-[13px] border transition-all duration-150 ${
+                          theme === t.id
+                            ? 'border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20'
+                            : 'border-border/60 text-muted-foreground/60 hover:bg-accent/40 hover:text-foreground'
+                        }`}
+                      >
+                        {Icon && <Icon size={15} strokeWidth={1.8} />}
+                        {t.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
