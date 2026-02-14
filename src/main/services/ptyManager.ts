@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { app } from 'electron';
 import type { WebContents } from 'electron';
 import { activityMonitor } from './ActivityMonitor';
 import { hookServer } from './HookServer';
@@ -117,12 +118,42 @@ export function writeTaskContext(
 }
 
 /**
- * Write the status line helper script to .claude/dash-status.sh.
+ * Ensure Dash-managed files inside .claude/ are gitignored so they
+ * never pollute a task branch's working tree.
+ */
+function ensureClaudeGitignore(claudeDir: string): void {
+  const gitignorePath = path.join(claudeDir, '.gitignore');
+  const requiredEntries = ['settings.local.json', 'task-context.json'];
+
+  try {
+    let existing = '';
+    if (fs.existsSync(gitignorePath)) {
+      existing = fs.readFileSync(gitignorePath, 'utf-8');
+    }
+
+    const lines = existing.split('\n');
+    const missing = requiredEntries.filter((entry) => !lines.some((line) => line.trim() === entry));
+
+    if (missing.length > 0) {
+      const suffix = (existing && !existing.endsWith('\n') ? '\n' : '') + missing.join('\n') + '\n';
+      fs.writeFileSync(gitignorePath, existing + suffix);
+    }
+  } catch {
+    // Best effort — don't block PTY startup
+  }
+}
+
+/**
+ * Write the status line helper script to the app data directory
+ * (~/Library/Application Support/Dash/dash-status.sh) so it stays
+ * out of any project's git tree.
+ *
  * This script receives JSON from Claude Code's statusLine feature on stdin,
  * POSTs context data to the hook server, and optionally outputs a visual status line.
  */
-function writeStatusLineScript(claudeDir: string): string {
-  const scriptPath = path.join(claudeDir, 'dash-status.sh');
+function writeStatusLineScript(): string {
+  const scriptsDir = app.getPath('userData');
+  const scriptPath = path.join(scriptsDir, 'dash-status.sh');
   const script = `#!/bin/bash
 # Dash status line — receives JSON from Claude Code on stdin
 JSON=$(cat)
@@ -210,8 +241,11 @@ function writeHookSettings(cwd: string, ptyId: string, showStatusLine: boolean):
       fs.mkdirSync(claudeDir, { recursive: true });
     }
 
-    // Write the status line helper script
-    const scriptPath = writeStatusLineScript(claudeDir);
+    // Ensure our managed files are gitignored
+    ensureClaudeGitignore(claudeDir);
+
+    // Write the status line helper script (lives in app data dir, not project)
+    const scriptPath = writeStatusLineScript();
     const showFlag = showStatusLine ? '1' : '0';
     const statusLineCmd = `bash "${scriptPath}" ${port} ${ptyId} ${showFlag}`;
 

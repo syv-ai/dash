@@ -192,6 +192,7 @@ export class GitService {
     // (when untracked with --untracked-files=normal).
     const dashManagedFiles = new Set([
       '.claude/',
+      '.claude/.gitignore',
       '.claude/settings.local.json',
       '.claude/task-context.json',
     ]);
