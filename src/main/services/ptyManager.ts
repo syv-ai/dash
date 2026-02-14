@@ -117,10 +117,64 @@ export function writeTaskContext(
 }
 
 /**
- * Write .claude/settings.local.json with Stop, UserPromptSubmit, and
- * (optionally) SessionStart hooks.
+ * Write the status line helper script to .claude/dash-status.sh.
+ * This script receives JSON from Claude Code's statusLine feature on stdin,
+ * POSTs context data to the hook server, and optionally outputs a visual status line.
  */
-function writeHookSettings(cwd: string, ptyId: string): void {
+function writeStatusLineScript(claudeDir: string): string {
+  const scriptPath = path.join(claudeDir, 'dash-status.sh');
+  const script = `#!/bin/bash
+# Dash status line — receives JSON from Claude Code on stdin
+JSON=$(cat)
+PORT="$1"
+PTY_ID="$2"
+SHOW="$3"
+
+# POST context data to hook server (background, non-blocking)
+curl -s --connect-timeout 2 -X POST \\
+  -H "Content-Type: application/json" \\
+  -d "$JSON" \\
+  "http://127.0.0.1:\${PORT}/hook/context?ptyId=\${PTY_ID}" >/dev/null 2>&1 &
+
+# Output visual status line if enabled
+if [ "$SHOW" = "1" ]; then
+  PCT=$(echo "$JSON" | grep -o '"used_percentage":[0-9.]*' | head -1 | cut -d: -f2)
+  COST=$(echo "$JSON" | grep -o '"total_cost_usd":[0-9.]*' | head -1 | cut -d: -f2)
+  SIZE=$(echo "$JSON" | grep -o '"context_window_size":[0-9]*' | head -1 | cut -d: -f2)
+
+  if [ -n "$SIZE" ] && [ "$SIZE" -gt 0 ] 2>/dev/null; then
+    SIZE_K=$((SIZE / 1000))
+    SIZE_FMT="\${SIZE_K}k"
+  else
+    SIZE_FMT="?"
+  fi
+
+  PCT_INT=\${PCT%.*}
+  if [ "\${PCT_INT:-0}" -ge 80 ]; then
+    COLOR="\\033[31m"
+  elif [ "\${PCT_INT:-0}" -ge 60 ]; then
+    COLOR="\\033[33m"
+  else
+    COLOR="\\033[32m"
+  fi
+  RESET="\\033[0m"
+
+  printf "\${COLOR}ctx: \${PCT:-0}%% of \${SIZE_FMT}\${RESET} | \\$\${COST:-0}"
+fi
+`;
+  try {
+    fs.writeFileSync(scriptPath, script, { mode: 0o755 });
+  } catch (err) {
+    console.error('[writeStatusLineScript] Failed:', err);
+  }
+  return scriptPath;
+}
+
+/**
+ * Write .claude/settings.local.json with Stop, UserPromptSubmit,
+ * statusLine, and (optionally) SessionStart hooks.
+ */
+function writeHookSettings(cwd: string, ptyId: string, showStatusLine: boolean): void {
   const port = hookServer.port;
   if (port === 0) return;
 
@@ -156,6 +210,11 @@ function writeHookSettings(cwd: string, ptyId: string): void {
       fs.mkdirSync(claudeDir, { recursive: true });
     }
 
+    // Write the status line helper script
+    const scriptPath = writeStatusLineScript(claudeDir);
+    const showFlag = showStatusLine ? '1' : '0';
+    const statusLineCmd = `bash "${scriptPath}" ${port} ${ptyId} ${showFlag}`;
+
     // Merge with existing settings to preserve non-hook config
     let existing: Record<string, unknown> = {};
     if (fs.existsSync(settingsPath)) {
@@ -174,6 +233,7 @@ function writeHookSettings(cwd: string, ptyId: string): void {
           : {}),
         ...hookSettings,
       },
+      statusLine: statusLineCmd,
     };
 
     fs.writeFileSync(settingsPath, JSON.stringify(merged, null, 2) + '\n');
@@ -192,6 +252,7 @@ export async function startDirectPty(options: {
   cols: number;
   rows: number;
   autoApprove?: boolean;
+  showStatusLine?: boolean;
   resume?: boolean;
   isDark?: boolean;
   sender?: WebContents;
@@ -232,7 +293,7 @@ export async function startDirectPty(options: {
   }
   const env = buildDirectEnv(options.isDark ?? true);
 
-  writeHookSettings(options.cwd, options.id);
+  writeHookSettings(options.cwd, options.id, options.showStatusLine ?? false);
 
   const proc = pty.spawn(claudePath, args, {
     name: 'xterm-256color',
@@ -252,12 +313,11 @@ export async function startDirectPty(options: {
   ptys.set(options.id, record);
   activityMonitor.register(options.id, proc.pid, true);
 
-  // Forward output to renderer and context usage service
+  // Forward output to renderer
   proc.onData((data: string) => {
     if (record.owner && !record.owner.isDestroyed()) {
       record.owner.send(`pty:data:${options.id}`, data);
     }
-    contextUsageService.handleOutput(options.id, data);
   });
 
   proc.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {

@@ -78,6 +78,7 @@ export interface ElectronAPI {
     cols: number;
     rows: number;
     autoApprove?: boolean;
+    showStatusLine?: boolean;
     resume?: boolean;
     isDark?: boolean;
   }) => Promise<

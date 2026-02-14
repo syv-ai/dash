@@ -27,6 +27,7 @@ export function registerPtyIpc(): void {
         cols: number;
         rows: number;
         autoApprove?: boolean;
+        showStatusLine?: boolean;
         resume?: boolean;
         isDark?: boolean;
       },

@@ -212,6 +212,7 @@ export function MainContent({
           id={activeTask.id}
           cwd={activeTask.path}
           autoApprove={activeTask.autoApprove}
+          showStatusLine={activeTask.showStatusLine}
         />
       </div>
     </div>

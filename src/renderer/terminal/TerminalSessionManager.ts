@@ -71,6 +71,7 @@ export class TerminalSessionManager {
   private disposed = false;
   private opened = false;
   private autoApprove: boolean;
+  private showStatusLine: boolean;
   private currentContainer: HTMLElement | null = null;
   private boundBeforeUnload: (() => void) | null = null;
   private attachGeneration = 0;
@@ -87,11 +88,13 @@ export class TerminalSessionManager {
     id: string;
     cwd: string;
     autoApprove?: boolean;
+    showStatusLine?: boolean;
     isDark?: boolean;
   }) {
     this.id = opts.id;
     this.cwd = opts.cwd;
     this.autoApprove = opts.autoApprove ?? false;
+    this.showStatusLine = opts.showStatusLine ?? false;
     this.isDark = opts.isDark ?? true;
 
     this.terminal = new Terminal({
@@ -209,7 +212,7 @@ export class TerminalSessionManager {
     }
 
     // Start PTY if not started (first attach)
-    let reattached = false;
+    const reattached = false;
     let isDirectSpawn = false;
     if (!this.ptyStarted) {
       // Check for Claude session to determine resume flag
@@ -269,9 +272,7 @@ export class TerminalSessionManager {
         const issueLabels = issueNumbers.map((num) => {
           const url = gitRemote ? this.issueUrl(gitRemote, num) : null;
           // OSC 8 hyperlink: \x1b]8;;URL\x07TEXT\x1b]8;;\x07
-          return url
-            ? `\x1b]8;;${url}\x07#${num}\x1b]8;;\x07`
-            : `#${num}`;
+          return url ? `\x1b]8;;${url}\x07#${num}\x1b]8;;\x07` : `#${num}`;
         });
         this.terminal.write(
           `\x1b[2m\x1b[36m● Issue context injected: ${issueLabels.join(', ')}\x1b[0m\r\n`,
@@ -478,6 +479,7 @@ export class TerminalSessionManager {
       cols,
       rows,
       autoApprove: this.autoApprove,
+      showStatusLine: this.showStatusLine,
       resume,
       isDark: this.isDark,
     });

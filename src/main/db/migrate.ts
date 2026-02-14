@@ -59,8 +59,21 @@ export function runMigrations(): void {
   rawDb.exec(`CREATE INDEX IF NOT EXISTS idx_conversations_task_id ON conversations(task_id);`);
 
   // Migrations for existing databases
-  try { rawDb.exec(`ALTER TABLE tasks ADD COLUMN auto_approve INTEGER DEFAULT 0`); } catch { /* already exists */ }
-  try { rawDb.exec(`ALTER TABLE tasks ADD COLUMN linked_issues TEXT`); } catch { /* already exists */ }
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN auto_approve INTEGER DEFAULT 0`);
+  } catch {
+    /* already exists */
+  }
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN linked_issues TEXT`);
+  } catch {
+    /* already exists */
+  }
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN show_status_line INTEGER DEFAULT 0`);
+  } catch {
+    /* already exists */
+  }
 
   rawDb.pragma('foreign_keys = ON');
 }

@@ -1,5 +1,16 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, GitBranch, Zap, ChevronDown, Loader2, AlertCircle, Search, Github, Check } from 'lucide-react';
+import {
+  X,
+  GitBranch,
+  Zap,
+  ChevronDown,
+  Loader2,
+  AlertCircle,
+  Search,
+  Github,
+  Check,
+  BarChart3,
+} from 'lucide-react';
 import type { BranchInfo, GithubIssue } from '../../shared/types';
 
 interface TaskModalProps {
@@ -9,6 +20,7 @@ interface TaskModalProps {
     name: string,
     useWorktree: boolean,
     autoApprove: boolean,
+    showStatusLine: boolean,
     baseRef?: string,
     linkedIssues?: GithubIssue[],
   ) => void;
@@ -18,6 +30,9 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
   const [name, setName] = useState('');
   const [useWorktree, setUseWorktree] = useState(true);
   const [autoApprove, setAutoApprove] = useState(() => localStorage.getItem('yoloMode') === 'true');
+  const [showStatusLine, setShowStatusLine] = useState(
+    () => localStorage.getItem('showStatusLine') !== 'false',
+  );
 
   // Branch selector state
   const [branches, setBranches] = useState<BranchInfo[]>([]);
@@ -153,6 +168,7 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
         name.trim(),
         useWorktree,
         autoApprove,
+        showStatusLine,
         baseRef,
         selectedIssues.length > 0 ? selectedIssues : undefined,
       );
@@ -278,9 +294,7 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
                         setBranchSearch('');
                         setDropdownOpen(true);
                       }}
-                      placeholder={
-                        branchLoading ? 'Fetching branches...' : 'Search branches...'
-                      }
+                      placeholder={branchLoading ? 'Fetching branches...' : 'Search branches...'}
                       disabled={branchLoading}
                       className="flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/30 outline-none disabled:opacity-50"
                     />
@@ -410,9 +424,7 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
                         </div>
                       ) : (
                         issueResults.map((issue) => {
-                          const isSelected = selectedIssues.some(
-                            (i) => i.number === issue.number,
-                          );
+                          const isSelected = selectedIssues.some((i) => i.number === issue.number);
                           return (
                             <button
                               key={issue.number}
@@ -432,7 +444,11 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
                                 }`}
                               >
                                 {isSelected && (
-                                  <Check size={10} strokeWidth={3} className="text-primary-foreground" />
+                                  <Check
+                                    size={10}
+                                    strokeWidth={3}
+                                    className="text-primary-foreground"
+                                  />
                                 )}
                               </span>
                               <div className="flex-1 min-w-0">
@@ -469,7 +485,7 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
           )}
 
           {/* Yolo mode toggle */}
-          <div className="mb-6">
+          <div className="mb-4">
             <label className="flex items-center gap-3 cursor-pointer group">
               <div className="relative">
                 <input
@@ -488,6 +504,30 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
                 <Zap size={13} className="text-muted-foreground/40" strokeWidth={1.8} />
                 <span className="text-[13px] text-foreground/80">Yolo mode</span>
                 <span className="text-[11px] text-muted-foreground/40">skip permissions</span>
+              </div>
+            </label>
+          </div>
+
+          {/* Status line toggle */}
+          <div className="mb-6">
+            <label className="flex items-center gap-3 cursor-pointer group">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  checked={showStatusLine}
+                  onChange={(e) => {
+                    setShowStatusLine(e.target.checked);
+                    localStorage.setItem('showStatusLine', String(e.target.checked));
+                  }}
+                  className="sr-only peer"
+                />
+                <div className="w-8 h-[18px] rounded-full bg-accent peer-checked:bg-primary/80 transition-colors duration-200" />
+                <div className="absolute top-[3px] left-[3px] w-3 h-3 rounded-full bg-muted-foreground/40 peer-checked:bg-primary-foreground peer-checked:translate-x-[14px] transition-all duration-200" />
+              </div>
+              <div className="flex items-center gap-2">
+                <BarChart3 size={13} className="text-muted-foreground/40" strokeWidth={1.8} />
+                <span className="text-[13px] text-foreground/80">Status line</span>
+                <span className="text-[11px] text-muted-foreground/40">show context usage</span>
               </div>
             </label>
           </div>

@@ -24,9 +24,7 @@ export class DatabaseService {
     return rows.map(this.mapProject);
   }
 
-  static saveProject(
-    data: Partial<Project> & { name: string; path: string },
-  ): Project {
+  static saveProject(data: Partial<Project> & { name: string; path: string }): Project {
     const db = getDb();
     const id = data.id || randomUUID();
     const now = new Date().toISOString();
@@ -68,7 +66,12 @@ export class DatabaseService {
 
   static getTasks(projectId: string): Task[] {
     const db = getDb();
-    const rows = db.select().from(tasks).where(eq(tasks.projectId, projectId)).orderBy(desc(tasks.createdAt)).all();
+    const rows = db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.projectId, projectId))
+      .orderBy(desc(tasks.createdAt))
+      .all();
     return rows.map(this.mapTask);
   }
 
@@ -91,6 +94,7 @@ export class DatabaseService {
         status: data.status ?? 'idle',
         useWorktree: data.useWorktree ?? true,
         autoApprove: data.autoApprove ?? false,
+        showStatusLine: data.showStatusLine ?? false,
         linkedIssues: linkedIssuesJson,
         createdAt: now,
         updatedAt: now,
@@ -137,11 +141,7 @@ export class DatabaseService {
 
   static getConversations(taskId: string): Conversation[] {
     const db = getDb();
-    const rows = db
-      .select()
-      .from(conversations)
-      .where(eq(conversations.taskId, taskId))
-      .all();
+    const rows = db.select().from(conversations).where(eq(conversations.taskId, taskId)).all();
     return rows.map(this.mapConversation);
   }
 
@@ -149,11 +149,7 @@ export class DatabaseService {
     const db = getDb();
 
     // Check if main conversation exists
-    const existing = db
-      .select()
-      .from(conversations)
-      .where(eq(conversations.taskId, taskId))
-      .all();
+    const existing = db.select().from(conversations).where(eq(conversations.taskId, taskId)).all();
 
     const main = existing.find((c) => c.isMain);
     if (main) return this.mapConversation(main);
@@ -212,6 +208,7 @@ export class DatabaseService {
       status: row.status,
       useWorktree: row.useWorktree ?? true,
       autoApprove: row.autoApprove ?? false,
+      showStatusLine: row.showStatusLine ?? false,
       linkedIssues,
       archivedAt: row.archivedAt,
       createdAt: row.createdAt ?? '',

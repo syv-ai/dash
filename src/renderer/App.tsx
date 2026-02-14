@@ -567,6 +567,7 @@ export function App() {
     name: string,
     useWorktree: boolean,
     autoApprove: boolean,
+    showStatusLine: boolean,
     baseRef?: string,
     linkedIssues?: GithubIssue[],
   ) {
@@ -612,6 +613,7 @@ export function App() {
       path: taskPath,
       useWorktree,
       autoApprove,
+      showStatusLine,
       linkedIssues: linkedIssueNumbers,
     });
 

@@ -67,7 +67,6 @@ class HookServerImpl {
             console.error(`[HookServer] Stop hook fired for ptyId=${ptyId}`);
             activityMonitor.setIdle(ptyId);
             this.showDesktopNotification(ptyId);
-            contextUsageService.queryContext(ptyId);
             res.writeHead(200);
             res.end('ok');
             return;
@@ -79,6 +78,25 @@ class HookServerImpl {
             res.end('ok');
             return;
           }
+        }
+
+        // POST /hook/context — receives statusLine JSON from Claude Code
+        if (req.method === 'POST' && url.pathname === '/hook/context' && ptyId) {
+          let body = '';
+          req.on('data', (chunk: Buffer) => {
+            body += chunk.toString();
+          });
+          req.on('end', () => {
+            try {
+              const data = JSON.parse(body);
+              contextUsageService.updateFromStatusLine(ptyId, data);
+            } catch {
+              // Malformed JSON — ignore
+            }
+            res.writeHead(200);
+            res.end('ok');
+          });
+          return;
         }
 
         res.writeHead(404);
