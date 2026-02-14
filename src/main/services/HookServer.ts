@@ -82,11 +82,22 @@ class HookServerImpl {
 
         // POST /hook/context — receives statusLine JSON from Claude Code
         if (req.method === 'POST' && url.pathname === '/hook/context' && ptyId) {
+          const MAX_BODY = 65_536; // 64KB — statusLine JSON is typically <1KB
           let body = '';
+          let overflow = false;
           req.on('data', (chunk: Buffer) => {
             body += chunk.toString();
+            if (body.length > MAX_BODY) {
+              overflow = true;
+              req.destroy();
+            }
           });
           req.on('end', () => {
+            if (overflow) {
+              res.writeHead(413);
+              res.end('payload too large');
+              return;
+            }
             try {
               const data = JSON.parse(body);
               contextUsageService.updateFromStatusLine(ptyId, data);

@@ -1,7 +1,7 @@
 import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execFile } from 'child_process';
+import { execFile, execFileSync } from 'child_process';
 import { promisify } from 'util';
 import { app } from 'electron';
 import type { WebContents } from 'electron';
@@ -118,17 +118,30 @@ export function writeTaskContext(
 }
 
 /**
- * Ensure Dash-managed files inside .claude/ are gitignored so they
- * never pollute a task branch's working tree.
+ * Ensure Dash-managed files inside .claude/ are excluded from git
+ * using .git/info/exclude — the standard per-repo exclude mechanism
+ * that never creates tracked files.
+ *
+ * For worktrees, `git rev-parse --git-dir` returns the worktree-specific
+ * git dir (e.g., .git/worktrees/<name>), so excludes are per-worktree.
  */
-function ensureClaudeGitignore(claudeDir: string): void {
-  const gitignorePath = path.join(claudeDir, '.gitignore');
-  const requiredEntries = ['settings.local.json', 'task-context.json'];
-
+function ensureGitExcludes(cwd: string): void {
   try {
+    const gitDir = (
+      execFileSync('git', ['rev-parse', '--git-dir'], { cwd, encoding: 'utf-8' }) as string
+    ).trim();
+    const excludePath = path.resolve(cwd, gitDir, 'info', 'exclude');
+    const requiredEntries = ['.claude/settings.local.json', '.claude/task-context.json'];
+
     let existing = '';
-    if (fs.existsSync(gitignorePath)) {
-      existing = fs.readFileSync(gitignorePath, 'utf-8');
+    if (fs.existsSync(excludePath)) {
+      existing = fs.readFileSync(excludePath, 'utf-8');
+    } else {
+      // Ensure info/ directory exists
+      const infoDir = path.dirname(excludePath);
+      if (!fs.existsSync(infoDir)) {
+        fs.mkdirSync(infoDir, { recursive: true });
+      }
     }
 
     const lines = existing.split('\n');
@@ -136,24 +149,30 @@ function ensureClaudeGitignore(claudeDir: string): void {
 
     if (missing.length > 0) {
       const suffix = (existing && !existing.endsWith('\n') ? '\n' : '') + missing.join('\n') + '\n';
-      fs.writeFileSync(gitignorePath, existing + suffix);
+      fs.writeFileSync(excludePath, existing + suffix);
     }
   } catch {
-    // Best effort — don't block PTY startup
+    // Best effort — don't block PTY startup (not a git repo, etc.)
   }
 }
 
 /**
+ * Cached path to the status line script. Written once at app startup
+ * via initStatusLineScript() so every PTY spawn just references it.
+ */
+let statusLineScriptPath: string | null = null;
+
+/**
  * Write the status line helper script to the app data directory
  * (~/Library/Application Support/Dash/dash-status.sh) so it stays
- * out of any project's git tree.
+ * out of any project's git tree.  Called once at app startup.
  *
  * This script receives JSON from Claude Code's statusLine feature on stdin,
  * POSTs context data to the hook server, and optionally outputs a visual status line.
  */
-function writeStatusLineScript(): string {
+export function initStatusLineScript(): void {
   const scriptsDir = app.getPath('userData');
-  const scriptPath = path.join(scriptsDir, 'dash-status.sh');
+  statusLineScriptPath = path.join(scriptsDir, 'dash-status.sh');
   const script = `#!/bin/bash
 # Dash status line — receives JSON from Claude Code on stdin
 JSON=$(cat)
@@ -194,11 +213,10 @@ if [ "$SHOW" = "1" ]; then
 fi
 `;
   try {
-    fs.writeFileSync(scriptPath, script, { mode: 0o755 });
+    fs.writeFileSync(statusLineScriptPath, script, { mode: 0o755 });
   } catch (err) {
-    console.error('[writeStatusLineScript] Failed:', err);
+    console.error('[initStatusLineScript] Failed:', err);
   }
-  return scriptPath;
 }
 
 /**
@@ -241,13 +259,18 @@ function writeHookSettings(cwd: string, ptyId: string, showStatusLine: boolean):
       fs.mkdirSync(claudeDir, { recursive: true });
     }
 
-    // Ensure our managed files are gitignored
-    ensureClaudeGitignore(claudeDir);
+    // Ensure our managed files are excluded from git (via .git/info/exclude)
+    ensureGitExcludes(cwd);
 
-    // Write the status line helper script (lives in app data dir, not project)
-    const scriptPath = writeStatusLineScript();
+    // Status line script lives in app data dir, written once at startup
+    if (!statusLineScriptPath) {
+      console.error(
+        '[writeHookSettings] statusLineScriptPath not initialized — call initStatusLineScript() first',
+      );
+      return;
+    }
     const showFlag = showStatusLine ? '1' : '0';
-    const statusLineCmd = `bash "${scriptPath}" ${port} ${ptyId} ${showFlag}`;
+    const statusLineCmd = `bash "${statusLineScriptPath}" "${port}" "${ptyId}" "${showFlag}"`;
 
     // Merge with existing settings to preserve non-hook config
     let existing: Record<string, unknown> = {};
@@ -327,7 +350,7 @@ export async function startDirectPty(options: {
   }
   const env = buildDirectEnv(options.isDark ?? true);
 
-  writeHookSettings(options.cwd, options.id, options.showStatusLine ?? false);
+  writeHookSettings(options.cwd, options.id, options.showStatusLine ?? true);
 
   const proc = pty.spawn(claudePath, args, {
     name: 'xterm-256color',

@@ -94,7 +94,7 @@ export class TerminalSessionManager {
     this.id = opts.id;
     this.cwd = opts.cwd;
     this.autoApprove = opts.autoApprove ?? false;
-    this.showStatusLine = opts.showStatusLine ?? false;
+    this.showStatusLine = opts.showStatusLine ?? true;
     this.isDark = opts.isDark ?? true;
 
     this.terminal = new Terminal({
@@ -212,7 +212,6 @@ export class TerminalSessionManager {
     }
 
     // Start PTY if not started (first attach)
-    const reattached = false;
     let isDirectSpawn = false;
     if (!this.ptyStarted) {
       // Check for Claude session to determine resume flag

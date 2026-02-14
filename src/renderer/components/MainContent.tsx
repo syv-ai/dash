@@ -84,6 +84,11 @@ export function MainContent({
     );
   }
 
+  const activeCtxRaw = activeTask ? contextUsage[activeTask.id] : undefined;
+  const isStale = activeCtxRaw && Date.now() - new Date(activeCtxRaw.updatedAt).getTime() > 60_000;
+  const activeCtx =
+    activeCtxRaw && activeCtxRaw.percentage > 0 && !isStale ? activeCtxRaw : undefined;
+
   return (
     <div className="h-full flex flex-col bg-background">
       {/* Task header bar */}
@@ -143,39 +148,36 @@ export function MainContent({
               <span className="text-[11px] font-mono">{activeTask.branch}</span>
             </div>
             {/* Context usage indicator */}
-            {contextUsage[activeTask.id] &&
-              contextUsage[activeTask.id].percentage > 0 &&
-              (() => {
-                const ctx = contextUsage[activeTask.id];
-                const isHigh = ctx.percentage >= 80;
-                const isMedium = ctx.percentage >= 60;
-                return (
+            {activeCtx && (
+              <div
+                className="flex items-center gap-1.5"
+                title={`Context: ${activeCtx.used.toLocaleString()} / ${activeCtx.total.toLocaleString()} tokens (${Math.round(activeCtx.percentage)}%)`}
+              >
+                <div className="w-[48px] h-[4px] rounded-full bg-border/40 overflow-hidden">
                   <div
-                    className="flex items-center gap-1.5"
-                    title={`Context: ${ctx.used.toLocaleString()} / ${ctx.total.toLocaleString()} tokens (${Math.round(ctx.percentage)}%)`}
-                  >
-                    <div className="w-[48px] h-[4px] rounded-full bg-border/40 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          isHigh ? 'bg-red-400' : isMedium ? 'bg-amber-400' : 'bg-emerald-400'
-                        }`}
-                        style={{ width: `${Math.min(ctx.percentage, 100)}%` }}
-                      />
-                    </div>
-                    <span
-                      className={`text-[10px] tabular-nums ${
-                        isHigh
-                          ? 'text-red-400 font-medium'
-                          : isMedium
-                            ? 'text-amber-400'
-                            : 'text-muted-foreground/60'
-                      }`}
-                    >
-                      {formatTokens(ctx.used)}/{formatTokens(ctx.total)}
-                    </span>
-                  </div>
-                );
-              })()}
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      activeCtx.percentage >= 80
+                        ? 'bg-red-400'
+                        : activeCtx.percentage >= 60
+                          ? 'bg-amber-400'
+                          : 'bg-emerald-400'
+                    }`}
+                    style={{ width: `${Math.min(activeCtx.percentage, 100)}%` }}
+                  />
+                </div>
+                <span
+                  className={`text-[10px] tabular-nums ${
+                    activeCtx.percentage >= 80
+                      ? 'text-red-400 font-medium'
+                      : activeCtx.percentage >= 60
+                        ? 'text-amber-400'
+                        : 'text-muted-foreground/60'
+                  }`}
+                >
+                  {formatTokens(activeCtx.used)}/{formatTokens(activeCtx.total)}
+                </span>
+              </div>
+            )}
             {activeTask.linkedIssues && activeTask.linkedIssues.length > 0 && (
               <div className="ml-auto flex items-center gap-1">
                 {activeTask.linkedIssues.map((num) => {

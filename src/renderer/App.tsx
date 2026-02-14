@@ -14,6 +14,7 @@ import { AddProjectModal } from './components/AddProjectModal';
 import { DeleteTaskModal } from './components/DeleteTaskModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ToastContainer } from './components/Toast';
+import { toast } from 'sonner';
 import type {
   Project,
   Task,
@@ -208,10 +209,7 @@ export function App() {
       }
       const fromK = Math.round(from / 1000);
       const toK = Math.round(to / 1000);
-      // Use the toast system to surface compaction events
-      import('sonner').then(({ toast }) => {
-        toast(`${taskName}: Context compacted ${fromK}k → ${toK}k tokens`);
-      });
+      toast(`${taskName}: Context compacted ${fromK}k → ${toK}k tokens`);
     });
   }, [tasksByProject]);
 

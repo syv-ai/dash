@@ -13,6 +13,10 @@ class ContextUsageServiceImpl {
   // Track previous token counts to detect compaction
   private previousUsed = new Map<string, number>();
 
+  // Track when PTYs were unregistered to avoid false compaction on reuse
+  private recentlyUnregistered = new Map<string, number>();
+  private static readonly REUSE_GRACE_MS = 5_000;
+
   // Callback for compaction events
   private compactionCallback: ((ptyId: string, from: number, to: number) => void) | null = null;
 
@@ -59,10 +63,22 @@ class ContextUsageServiceImpl {
    * Update stored context data and check for compaction.
    */
   private updateContext(ptyId: string, usage: ContextUsage): void {
+    // Clear reuse grace if expired
+    const unregAt = this.recentlyUnregistered.get(ptyId);
+    if (unregAt && Date.now() - unregAt > ContextUsageServiceImpl.REUSE_GRACE_MS) {
+      this.recentlyUnregistered.delete(ptyId);
+    }
+
     const prevUsed = this.previousUsed.get(ptyId);
 
-    // Detect compaction: significant drop in used tokens (>30% decrease)
-    if (prevUsed !== undefined && usage.used < prevUsed * 0.7 && prevUsed > 1000) {
+    // Detect compaction: significant drop in used tokens (>30% decrease).
+    // Skip if this PTY was recently unregistered (new session, not compaction).
+    if (
+      prevUsed !== undefined &&
+      usage.used < prevUsed * 0.7 &&
+      prevUsed > 1000 &&
+      !this.recentlyUnregistered.has(ptyId)
+    ) {
       this.compactionCallback?.(ptyId, prevUsed, usage.used);
     }
 
@@ -88,6 +104,7 @@ class ContextUsageServiceImpl {
   unregister(ptyId: string): void {
     this.contextData.delete(ptyId);
     this.previousUsed.delete(ptyId);
+    this.recentlyUnregistered.set(ptyId, Date.now());
     this.emitAll();
   }
 
