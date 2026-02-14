@@ -9,6 +9,7 @@ import type {
   DiffResult,
   BranchInfo,
   GithubIssue,
+  ContextUsage,
 } from '../shared/types';
 
 export interface ElectronAPI {
@@ -105,6 +106,13 @@ export interface ElectronAPI {
   // Activity monitor
   ptyGetAllActivity: () => Promise<IpcResponse<Record<string, 'busy' | 'idle'>>>;
   onPtyActivity: (callback: (data: Record<string, 'busy' | 'idle'>) => void) => () => void;
+
+  // Context usage
+  ptyGetAllContextUsage: () => Promise<IpcResponse<Record<string, ContextUsage>>>;
+  onPtyContextUsage: (callback: (data: Record<string, ContextUsage>) => void) => () => void;
+  onPtyCompaction: (
+    callback: (data: { ptyId: string; from: number; to: number }) => void,
+  ) => () => void;
 
   // Snapshots
   ptyGetSnapshot: (id: string) => Promise<IpcResponse<TerminalSnapshot | null>>;

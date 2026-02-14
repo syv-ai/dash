@@ -14,7 +14,14 @@ import { AddProjectModal } from './components/AddProjectModal';
 import { DeleteTaskModal } from './components/DeleteTaskModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ToastContainer } from './components/Toast';
-import type { Project, Task, GitStatus, DiffResult, GithubIssue } from '../shared/types';
+import type {
+  Project,
+  Task,
+  GitStatus,
+  DiffResult,
+  GithubIssue,
+  ContextUsage,
+} from '../shared/types';
 import { loadKeybindings, saveKeybindings, matchesBinding } from './keybindings';
 import type { KeyBindingMap } from './keybindings';
 import { sessionRegistry } from './terminal/SessionRegistry';
@@ -65,6 +72,9 @@ export function App() {
 
   // Activity state — keys are PTY IDs that have active sessions
   const [taskActivity, setTaskActivity] = useState<Record<string, 'busy' | 'idle'>>({});
+
+  // Context usage — keys are PTY IDs (same as task IDs)
+  const [contextUsage, setContextUsage] = useState<Record<string, ContextUsage>>({});
 
   const notificationSoundRef = useRef(notificationSound);
   useEffect(() => {
@@ -168,6 +178,42 @@ export function App() {
 
     return unsubscribe;
   }, []);
+
+  // Context usage — subscribe first, then query to avoid race
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.onPtyContextUsage((data) => {
+      setContextUsage(data as Record<string, ContextUsage>);
+    });
+
+    window.electronAPI.ptyGetAllContextUsage().then((resp) => {
+      if (resp.success && resp.data) {
+        setContextUsage(resp.data);
+      }
+    });
+
+    return unsubscribe;
+  }, []);
+
+  // Compaction events — show toast notification
+  useEffect(() => {
+    return window.electronAPI.onPtyCompaction(({ ptyId, from, to }) => {
+      // Find task name for this PTY ID
+      let taskName = 'Task';
+      for (const tasks of Object.values(tasksByProject)) {
+        const found = tasks.find((t) => t.id === ptyId);
+        if (found) {
+          taskName = found.name;
+          break;
+        }
+      }
+      const fromK = Math.round(from / 1000);
+      const toK = Math.round(to / 1000);
+      // Use the toast system to surface compaction events
+      import('sonner').then(({ toast }) => {
+        toast(`${taskName}: Context compacted ${fromK}k → ${toK}k tokens`);
+      });
+    });
+  }, [tasksByProject]);
 
   // Persist selection to localStorage (survives CMD+R reload)
   useEffect(() => {
@@ -607,13 +653,11 @@ export function App() {
       // (branch linking happens in the worktree service before push)
       if (linkedIssues && linkedIssues.length > 0) {
         for (const issue of linkedIssues) {
-          window.electronAPI.githubPostBranchComment(
-            targetProject.path,
-            issue.number,
-            branch,
-          ).catch(() => {
-            // Best effort
-          });
+          window.electronAPI
+            .githubPostBranchComment(targetProject.path, issue.number, branch)
+            .catch(() => {
+              // Best effort
+            });
         }
       }
     }
@@ -797,11 +841,15 @@ export function App() {
             collapsed={sidebarCollapsed}
             onToggleCollapse={toggleSidebar}
             taskActivity={taskActivity}
+            contextUsage={contextUsage}
           />
         </Panel>
         <PanelResizeHandle disabled={sidebarCollapsed} className="w-[1px] bg-border/40" />
 
-        <Panel className={sidebarAnimating || changesAnimating ? 'panel-transition' : ''} minSize={35}>
+        <Panel
+          className={sidebarAnimating || changesAnimating ? 'panel-transition' : ''}
+          minSize={35}
+        >
           <MainContent
             activeTask={activeTask}
             activeProject={activeProject}
@@ -809,6 +857,7 @@ export function App() {
             tasks={activeProjectTasks}
             activeTaskId={activeTaskId}
             taskActivity={taskActivity}
+            contextUsage={contextUsage}
             onSelectTask={setActiveTaskId}
           />
         </Panel>

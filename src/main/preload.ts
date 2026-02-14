@@ -66,6 +66,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 
+  // Context usage
+  ptyGetAllContextUsage: () => ipcRenderer.invoke('pty:contextUsage:getAll'),
+  onPtyContextUsage: (callback: (data: Record<string, unknown>) => void) => {
+    const handler = (_event: unknown, data: Record<string, unknown>) => callback(data);
+    ipcRenderer.on('pty:contextUsage', handler);
+    return () => {
+      ipcRenderer.removeListener('pty:contextUsage', handler);
+    };
+  },
+  onPtyCompaction: (callback: (data: { ptyId: string; from: number; to: number }) => void) => {
+    const handler = (_event: unknown, data: { ptyId: string; from: number; to: number }) =>
+      callback(data);
+    ipcRenderer.on('pty:compaction', handler);
+    return () => {
+      ipcRenderer.removeListener('pty:compaction', handler);
+    };
+  },
+
   // Snapshots
   ptyGetSnapshot: (id: string) => ipcRenderer.invoke('pty:snapshot:get', id),
   ptySaveSnapshot: (id: string, payload: unknown) =>

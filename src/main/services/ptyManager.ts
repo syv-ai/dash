@@ -6,6 +6,7 @@ import { promisify } from 'util';
 import type { WebContents } from 'electron';
 import { activityMonitor } from './ActivityMonitor';
 import { hookServer } from './HookServer';
+import { contextUsageService } from './ContextUsageService';
 
 const execFileAsync = promisify(execFile);
 
@@ -128,9 +129,7 @@ function writeHookSettings(cwd: string, ptyId: string): void {
   const curlBase = `curl -s --connect-timeout 2 http://127.0.0.1:${port}`;
 
   const hookSettings: Record<string, unknown[]> = {
-    Stop: [
-      { hooks: [{ type: 'command', command: `${curlBase}/hook/stop?ptyId=${ptyId}` }] },
-    ],
+    Stop: [{ hooks: [{ type: 'command', command: `${curlBase}/hook/stop?ptyId=${ptyId}` }] }],
     UserPromptSubmit: [
       { hooks: [{ type: 'command', command: `${curlBase}/hook/busy?ptyId=${ptyId}` }] },
     ],
@@ -253,17 +252,19 @@ export async function startDirectPty(options: {
   ptys.set(options.id, record);
   activityMonitor.register(options.id, proc.pid, true);
 
-  // Forward output to renderer
+  // Forward output to renderer and context usage service
   proc.onData((data: string) => {
     if (record.owner && !record.owner.isDestroyed()) {
       record.owner.send(`pty:data:${options.id}`, data);
     }
+    contextUsageService.handleOutput(options.id, data);
   });
 
   proc.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
     // Skip if this PTY was replaced by a new spawn (kill+restart on reattach)
     if (ptys.get(options.id) !== record) return;
     activityMonitor.unregister(options.id);
+    contextUsageService.unregister(options.id);
     if (record.owner && !record.owner.isDestroyed()) {
       record.owner.send(`pty:exit:${options.id}`, { exitCode, signal });
     }
@@ -280,7 +281,12 @@ export async function startDirectPty(options: {
   } catch {
     // Best effort
   }
-  return { reattached: false, isDirectSpawn: true, hasTaskContext: !!taskContextMeta, taskContextMeta };
+  return {
+    reattached: false,
+    isDirectSpawn: true,
+    hasTaskContext: !!taskContextMeta,
+    taskContextMeta,
+  };
 }
 
 /**
@@ -381,6 +387,7 @@ export function killPty(id: string): void {
     // Delete first so the guarded onExit handler becomes a no-op
     ptys.delete(id);
     activityMonitor.unregister(id);
+    contextUsageService.unregister(id);
     try {
       record.proc.kill();
     } catch {

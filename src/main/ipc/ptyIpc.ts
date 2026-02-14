@@ -14,6 +14,7 @@ import {
 } from '../services/ptyManager';
 import { terminalSnapshotService } from '../services/TerminalSnapshotService';
 import { activityMonitor } from '../services/ActivityMonitor';
+import { contextUsageService } from '../services/ContextUsageService';
 
 export function registerPtyIpc(): void {
   ipcMain.handle(
@@ -129,6 +130,11 @@ export function registerPtyIpc(): void {
   // Activity monitor
   ipcMain.handle('pty:activity:getAll', () => {
     return { success: true, data: activityMonitor.getAll() };
+  });
+
+  // Context usage
+  ipcMain.handle('pty:contextUsage:getAll', () => {
+    return { success: true, data: contextUsageService.getAll() };
   });
 }
 

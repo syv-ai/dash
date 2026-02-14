@@ -89,6 +89,15 @@ app.whenReady().then(async () => {
   const { activityMonitor } = await import('./services/ActivityMonitor');
   activityMonitor.start(mainWindow.webContents);
 
+  // Start context usage service — broadcasts context data to renderer
+  const { contextUsageService } = await import('./services/ContextUsageService');
+  contextUsageService.setSender(mainWindow.webContents);
+  contextUsageService.onCompaction((ptyId, from, to) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('pty:compaction', { ptyId, from, to });
+    }
+  });
+
   // Cleanup orphaned reserve worktrees (background, non-blocking)
   setTimeout(async () => {
     try {
@@ -145,6 +154,8 @@ app.on('activate', async () => {
     mainWindow = createWindow();
     const { activityMonitor } = await import('./services/ActivityMonitor');
     activityMonitor.start(mainWindow.webContents);
+    const { contextUsageService } = await import('./services/ContextUsageService');
+    contextUsageService.setSender(mainWindow.webContents);
   }
 });
 

@@ -2,6 +2,7 @@ import * as http from 'http';
 import { BrowserWindow, Notification } from 'electron';
 import { eq } from 'drizzle-orm';
 import { activityMonitor } from './ActivityMonitor';
+import { contextUsageService } from './ContextUsageService';
 import { getDb } from '../db/client';
 import { tasks } from '../db/schema';
 
@@ -66,6 +67,7 @@ class HookServerImpl {
             console.error(`[HookServer] Stop hook fired for ptyId=${ptyId}`);
             activityMonitor.setIdle(ptyId);
             this.showDesktopNotification(ptyId);
+            contextUsageService.queryContext(ptyId);
             res.writeHead(200);
             res.end('ok');
             return;

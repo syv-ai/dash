@@ -11,7 +11,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
 } from 'lucide-react';
-import type { Project, Task } from '../../shared/types';
+import type { Project, Task, ContextUsage } from '../../shared/types';
 import { IconButton } from './ui/IconButton';
 
 interface LeftSidebarProps {
@@ -30,6 +30,7 @@ interface LeftSidebarProps {
   collapsed: boolean;
   onToggleCollapse: () => void;
   taskActivity: Record<string, 'busy' | 'idle'>;
+  contextUsage?: Record<string, ContextUsage>;
 }
 
 export function LeftSidebar({
@@ -48,6 +49,7 @@ export function LeftSidebar({
   collapsed,
   onToggleCollapse,
   taskActivity,
+  contextUsage = {},
 }: LeftSidebarProps) {
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
 
@@ -144,14 +146,16 @@ export function LeftSidebar({
     <div className="h-full flex flex-col" style={{ background: 'hsl(var(--surface-1))' }}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-3 pb-1">
-        <span className="text-sm font-medium text-muted-foreground/50 select-none">
-          Projects
-        </span>
+        <span className="text-sm font-medium text-muted-foreground/50 select-none">Projects</span>
         <div className="flex items-center gap-1">
           <IconButton onClick={onOpenFolder} title="Add project" className="titlebar-no-drag">
             <FolderOpen size={15} strokeWidth={1.8} />
           </IconButton>
-          <IconButton onClick={onToggleCollapse} title="Collapse sidebar" className="titlebar-no-drag">
+          <IconButton
+            onClick={onToggleCollapse}
+            title="Collapse sidebar"
+            className="titlebar-no-drag"
+          >
             <PanelLeftClose size={15} strokeWidth={1.8} />
           </IconButton>
         </div>
@@ -171,9 +175,7 @@ export function LeftSidebar({
           {projects.map((project) => {
             const isActive = project.id === activeProjectId;
             const isProjectCollapsed = collapsedProjects.has(project.id);
-            const projectTasks = (tasksByProject[project.id] || []).filter(
-              (t) => !t.archivedAt,
-            );
+            const projectTasks = (tasksByProject[project.id] || []).filter((t) => !t.archivedAt);
 
             return (
               <div key={project.id}>
@@ -259,59 +261,96 @@ export function LeftSidebar({
                       {projectTasks.map((task) => {
                         const activity = taskActivity[task.id];
                         const isActiveTask = task.id === activeTaskId;
+                        const ctx = contextUsage[task.id];
 
                         return (
                           <div
                             key={task.id}
-                            className={`group/task relative flex items-center gap-2 pl-3.5 pr-2 py-[6px] rounded-md text-[13px] cursor-pointer transition-all duration-150 ${
+                            className={`group/task relative flex flex-col pl-3.5 pr-2 py-[6px] rounded-md text-[13px] cursor-pointer transition-all duration-150 ${
                               isActiveTask
                                 ? 'bg-primary/10 text-foreground font-medium'
                                 : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
                             }`}
                             onClick={() => onSelectTask(project.id, task.id)}
                           >
-                            {/* Status indicator */}
-                            {activity === 'busy' ? (
-                              <div className="w-[6px] h-[6px] rounded-full bg-amber-400 status-pulse flex-shrink-0" />
-                            ) : activity === 'idle' ? (
-                              <div className="w-[6px] h-[6px] rounded-full bg-emerald-400 flex-shrink-0" />
-                            ) : null}
+                            <div className="flex items-center gap-2">
+                              {/* Status indicator */}
+                              {activity === 'busy' ? (
+                                <div className="w-[6px] h-[6px] rounded-full bg-amber-400 status-pulse flex-shrink-0" />
+                              ) : activity === 'idle' ? (
+                                <div className="w-[6px] h-[6px] rounded-full bg-emerald-400 flex-shrink-0" />
+                              ) : null}
 
-                            <span className="truncate flex-1">{task.name}</span>
+                              <span className="truncate flex-1">{task.name}</span>
 
-                            {/* Right slot: branch icon by default, actions on hover */}
-                            <div className="flex items-center gap-0.5 flex-shrink-0">
-                              {isActiveTask && (
-                                <GitBranch
-                                  size={11}
-                                  className="text-muted-foreground group-hover/task:hidden"
-                                  strokeWidth={2}
-                                />
+                              {/* Context percentage (visible when data available, hidden on hover to show actions) */}
+                              {ctx && ctx.percentage > 0 && (
+                                <span
+                                  className={`text-[9px] tabular-nums flex-shrink-0 group-hover/task:hidden ${
+                                    ctx.percentage >= 80
+                                      ? 'text-red-400 font-medium'
+                                      : ctx.percentage >= 60
+                                        ? 'text-amber-400'
+                                        : 'text-muted-foreground/50'
+                                  }`}
+                                >
+                                  {Math.round(ctx.percentage)}%
+                                </span>
                               )}
-                              <div className="hidden group-hover/task:flex gap-0.5">
-                                <IconButton
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onArchiveTask(task.id);
-                                  }}
-                                  title="Archive task"
-                                  size="sm"
-                                >
-                                  <Archive size={12} strokeWidth={1.8} />
-                                </IconButton>
-                                <IconButton
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onDeleteTask(task.id);
-                                  }}
-                                  title="Delete task"
-                                  variant="destructive"
-                                  size="sm"
-                                >
-                                  <Trash2 size={12} strokeWidth={1.8} />
-                                </IconButton>
+
+                              {/* Right slot: branch icon by default, actions on hover */}
+                              <div className="flex items-center gap-0.5 flex-shrink-0">
+                                {isActiveTask && !ctx && (
+                                  <GitBranch
+                                    size={11}
+                                    className="text-muted-foreground group-hover/task:hidden"
+                                    strokeWidth={2}
+                                  />
+                                )}
+                                <div className="hidden group-hover/task:flex gap-0.5">
+                                  <IconButton
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onArchiveTask(task.id);
+                                    }}
+                                    title="Archive task"
+                                    size="sm"
+                                  >
+                                    <Archive size={12} strokeWidth={1.8} />
+                                  </IconButton>
+                                  <IconButton
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onDeleteTask(task.id);
+                                    }}
+                                    title="Delete task"
+                                    variant="destructive"
+                                    size="sm"
+                                  >
+                                    <Trash2 size={12} strokeWidth={1.8} />
+                                  </IconButton>
+                                </div>
                               </div>
                             </div>
+
+                            {/* Context usage bar */}
+                            {ctx && ctx.percentage > 0 && (
+                              <div
+                                className="ml-[14px] mt-1 h-[2px] rounded-full bg-border/40 overflow-hidden"
+                                title={`Context: ${ctx.used.toLocaleString()} / ${ctx.total.toLocaleString()} tokens (${Math.round(ctx.percentage)}%)`}
+                              >
+                                <div
+                                  className={`h-full rounded-full transition-all duration-500 ${
+                                    ctx.percentage >= 80
+                                      ? 'bg-red-400'
+                                      : ctx.percentage >= 60
+                                        ? 'bg-amber-400'
+                                        : 'bg-emerald-400'
+                                  }`}
+                                  style={{ width: `${Math.min(ctx.percentage, 100)}%` }}
+                                />
+                              </div>
+                            )}
                           </div>
                         );
                       })}

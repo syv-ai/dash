@@ -1,7 +1,7 @@
 import React from 'react';
 import { TerminalPane } from './TerminalPane';
 import { Terminal, FolderOpen, GitBranch } from 'lucide-react';
-import type { Project, Task } from '../../shared/types';
+import type { Project, Task, ContextUsage } from '../../shared/types';
 
 /** Convert a git remote URL (SSH or HTTPS) to a GitHub issues base URL */
 function issueUrl(remote: string | null, num: number): string | null {
@@ -15,6 +15,13 @@ function issueUrl(remote: string | null, num: number): string | null {
   return null;
 }
 
+/** Format token count for compact display: 1234 → "1.2k", 123456 → "123k" */
+function formatTokens(n: number): string {
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}m`;
+  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`;
+  return String(n);
+}
+
 interface MainContentProps {
   activeTask: Task | null;
   activeProject: Project | null;
@@ -22,6 +29,7 @@ interface MainContentProps {
   tasks?: Task[];
   activeTaskId?: string | null;
   taskActivity?: Record<string, 'busy' | 'idle'>;
+  contextUsage?: Record<string, ContextUsage>;
   onSelectTask?: (id: string) => void;
 }
 
@@ -32,6 +40,7 @@ export function MainContent({
   tasks = [],
   activeTaskId,
   taskActivity = {},
+  contextUsage = {},
   onSelectTask,
 }: MainContentProps) {
   if (!activeProject) {
@@ -41,12 +50,8 @@ export function MainContent({
           <div className="w-14 h-14 rounded-2xl bg-accent/60 flex items-center justify-center mx-auto mb-4">
             <FolderOpen size={22} className="text-muted-foreground/40" strokeWidth={1.5} />
           </div>
-          <h2 className="text-[15px] font-semibold text-foreground/80 mb-1.5">
-            Dash
-          </h2>
-          <p className="text-[13px] text-muted-foreground/60">
-            Open a folder to get started
-          </p>
+          <h2 className="text-[15px] font-semibold text-foreground/80 mb-1.5">Dash</h2>
+          <p className="text-[13px] text-muted-foreground/60">Open a folder to get started</p>
         </div>
       </div>
     );
@@ -66,9 +71,13 @@ export function MainContent({
             Create a task to start a Claude session
           </p>
           <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/40 text-[11px] text-muted-foreground/50">
-            <kbd className="px-1.5 py-0.5 rounded bg-accent text-[10px] font-mono font-medium">Cmd</kbd>
+            <kbd className="px-1.5 py-0.5 rounded bg-accent text-[10px] font-mono font-medium">
+              Cmd
+            </kbd>
             <span>+</span>
-            <kbd className="px-1.5 py-0.5 rounded bg-accent text-[10px] font-mono font-medium">N</kbd>
+            <kbd className="px-1.5 py-0.5 rounded bg-accent text-[10px] font-mono font-medium">
+              N
+            </kbd>
           </div>
         </div>
       </div>
@@ -78,7 +87,10 @@ export function MainContent({
   return (
     <div className="h-full flex flex-col bg-background">
       {/* Task header bar */}
-      <div className="flex items-center gap-3 px-4 h-10 flex-shrink-0 border-b border-border/60" style={{ background: 'hsl(var(--surface-1))' }}>
+      <div
+        className="flex items-center gap-3 px-4 h-10 flex-shrink-0 border-b border-border/60"
+        style={{ background: 'hsl(var(--surface-1))' }}
+      >
         {sidebarCollapsed && tasks.length > 0 ? (
           <>
             <div className="flex items-center gap-0.5 overflow-x-auto scrollbar-none flex-1 min-w-0">
@@ -130,6 +142,40 @@ export function MainContent({
               <GitBranch size={11} strokeWidth={2} />
               <span className="text-[11px] font-mono">{activeTask.branch}</span>
             </div>
+            {/* Context usage indicator */}
+            {contextUsage[activeTask.id] &&
+              contextUsage[activeTask.id].percentage > 0 &&
+              (() => {
+                const ctx = contextUsage[activeTask.id];
+                const isHigh = ctx.percentage >= 80;
+                const isMedium = ctx.percentage >= 60;
+                return (
+                  <div
+                    className="flex items-center gap-1.5"
+                    title={`Context: ${ctx.used.toLocaleString()} / ${ctx.total.toLocaleString()} tokens (${Math.round(ctx.percentage)}%)`}
+                  >
+                    <div className="w-[48px] h-[4px] rounded-full bg-border/40 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          isHigh ? 'bg-red-400' : isMedium ? 'bg-amber-400' : 'bg-emerald-400'
+                        }`}
+                        style={{ width: `${Math.min(ctx.percentage, 100)}%` }}
+                      />
+                    </div>
+                    <span
+                      className={`text-[10px] tabular-nums ${
+                        isHigh
+                          ? 'text-red-400 font-medium'
+                          : isMedium
+                            ? 'text-amber-400'
+                            : 'text-muted-foreground/60'
+                      }`}
+                    >
+                      {formatTokens(ctx.used)}/{formatTokens(ctx.total)}
+                    </span>
+                  </div>
+                );
+              })()}
             {activeTask.linkedIssues && activeTask.linkedIssues.length > 0 && (
               <div className="ml-auto flex items-center gap-1">
                 {activeTask.linkedIssues.map((num) => {

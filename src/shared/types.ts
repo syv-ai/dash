@@ -139,6 +139,15 @@ export interface DiffLine {
   newLineNumber: number | null;
 }
 
+// ── Context Usage Types ─────────────────────────────────────
+
+export interface ContextUsage {
+  used: number;
+  total: number;
+  percentage: number;
+  updatedAt: string;
+}
+
 // ── GitHub Types ────────────────────────────────────────────
 
 export interface GithubIssue {
