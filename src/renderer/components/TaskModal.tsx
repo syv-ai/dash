@@ -9,7 +9,6 @@ import {
   Search,
   Github,
   Check,
-  BarChart3,
 } from 'lucide-react';
 import type { BranchInfo, GithubIssue } from '../../shared/types';
 
@@ -20,7 +19,6 @@ interface TaskModalProps {
     name: string,
     useWorktree: boolean,
     autoApprove: boolean,
-    showStatusLine: boolean,
     baseRef?: string,
     linkedIssues?: GithubIssue[],
   ) => void;
@@ -30,9 +28,7 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
   const [name, setName] = useState('');
   const [useWorktree, setUseWorktree] = useState(true);
   const [autoApprove, setAutoApprove] = useState(() => localStorage.getItem('yoloMode') === 'true');
-  const [showStatusLine, setShowStatusLine] = useState(
-    () => localStorage.getItem('showStatusLine') !== 'false',
-  );
+  const [hasExistingStatusLine, setHasExistingStatusLine] = useState(false);
 
   // Branch selector state
   const [branches, setBranches] = useState<BranchInfo[]>([]);
@@ -56,14 +52,19 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
   const issueSearchInputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Check gh availability on mount
+  // Check gh availability and existing statusLine on mount
   useEffect(() => {
     window.electronAPI.githubCheckAvailable().then((resp) => {
       if (resp.success && resp.data) {
         setGhAvailable(true);
       }
     });
-  }, []);
+    window.electronAPI.ptyHasExistingStatusLine(projectPath).then((resp) => {
+      if (resp.success && resp.data) {
+        setHasExistingStatusLine(true);
+      }
+    });
+  }, [projectPath]);
 
   // Fetch branches when worktree is enabled
   useEffect(() => {
@@ -168,7 +169,6 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
         name.trim(),
         useWorktree,
         autoApprove,
-        showStatusLine,
         baseRef,
         selectedIssues.length > 0 ? selectedIssues : undefined,
       );
@@ -485,7 +485,7 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
           )}
 
           {/* Yolo mode toggle */}
-          <div className="mb-4">
+          <div className="mb-6">
             <label className="flex items-center gap-3 cursor-pointer group">
               <div className="relative">
                 <input
@@ -508,29 +508,17 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
             </label>
           </div>
 
-          {/* Status line toggle */}
-          <div className="mb-6">
-            <label className="flex items-center gap-3 cursor-pointer group">
-              <div className="relative">
-                <input
-                  type="checkbox"
-                  checked={showStatusLine}
-                  onChange={(e) => {
-                    setShowStatusLine(e.target.checked);
-                    localStorage.setItem('showStatusLine', String(e.target.checked));
-                  }}
-                  className="sr-only peer"
-                />
-                <div className="w-8 h-[18px] rounded-full bg-accent peer-checked:bg-primary/80 transition-colors duration-200" />
-                <div className="absolute top-[3px] left-[3px] w-3 h-3 rounded-full bg-muted-foreground/40 peer-checked:bg-primary-foreground peer-checked:translate-x-[14px] transition-all duration-200" />
-              </div>
-              <div className="flex items-center gap-2">
-                <BarChart3 size={13} className="text-muted-foreground/40" strokeWidth={1.8} />
-                <span className="text-[13px] text-foreground/80">Status line</span>
-                <span className="text-[11px] text-muted-foreground/40">show context usage</span>
-              </div>
-            </label>
-          </div>
+          {/* Existing statusLine warning */}
+          {hasExistingStatusLine && (
+            <div className="mb-5 flex items-start gap-2 px-3 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[12px] text-amber-300">
+              <AlertCircle size={13} strokeWidth={2} className="shrink-0 mt-0.5" />
+              <span>
+                This project has a <code className="text-[11px] font-mono">statusLine</code> in{' '}
+                <code className="text-[11px] font-mono">.claude/settings.json</code>. Dash will
+                override it to track context usage.
+              </span>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex gap-2.5 justify-end">

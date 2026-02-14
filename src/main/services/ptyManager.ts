@@ -1,9 +1,8 @@
 import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execFile, execFileSync } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { app } from 'electron';
 import type { WebContents } from 'electron';
 import { activityMonitor } from './ActivityMonitor';
 import { hookServer } from './HookServer';
@@ -125,11 +124,10 @@ export function writeTaskContext(
  * For worktrees, `git rev-parse --git-dir` returns the worktree-specific
  * git dir (e.g., .git/worktrees/<name>), so excludes are per-worktree.
  */
-function ensureGitExcludes(cwd: string): void {
+async function ensureGitExcludes(cwd: string): Promise<void> {
   try {
-    const gitDir = (
-      execFileSync('git', ['rev-parse', '--git-dir'], { cwd, encoding: 'utf-8' }) as string
-    ).trim();
+    const { stdout } = await execFileAsync('git', ['rev-parse', '--git-dir'], { cwd });
+    const gitDir = stdout.trim();
     const excludePath = path.resolve(cwd, gitDir, 'info', 'exclude');
     const requiredEntries = ['.claude/settings.local.json', '.claude/task-context.json'];
 
@@ -157,73 +155,13 @@ function ensureGitExcludes(cwd: string): void {
 }
 
 /**
- * Cached path to the status line script. Written once at app startup
- * via initStatusLineScript() so every PTY spawn just references it.
- */
-let statusLineScriptPath: string | null = null;
-
-/**
- * Write the status line helper script to the app data directory
- * (~/Library/Application Support/Dash/dash-status.sh) so it stays
- * out of any project's git tree.  Called once at app startup.
- *
- * This script receives JSON from Claude Code's statusLine feature on stdin,
- * POSTs context data to the hook server, and optionally outputs a visual status line.
- */
-export function initStatusLineScript(): void {
-  const scriptsDir = app.getPath('userData');
-  statusLineScriptPath = path.join(scriptsDir, 'dash-status.sh');
-  const script = `#!/bin/bash
-# Dash status line — receives JSON from Claude Code on stdin
-JSON=$(cat)
-PORT="$1"
-PTY_ID="$2"
-SHOW="$3"
-
-# POST context data to hook server (background, non-blocking)
-curl -s --connect-timeout 2 -X POST \\
-  -H "Content-Type: application/json" \\
-  -d "$JSON" \\
-  "http://127.0.0.1:\${PORT}/hook/context?ptyId=\${PTY_ID}" >/dev/null 2>&1 &
-
-# Output visual status line if enabled
-if [ "$SHOW" = "1" ]; then
-  PCT=$(echo "$JSON" | grep -o '"used_percentage":[0-9.]*' | head -1 | cut -d: -f2)
-  COST=$(echo "$JSON" | grep -o '"total_cost_usd":[0-9.]*' | head -1 | cut -d: -f2)
-  SIZE=$(echo "$JSON" | grep -o '"context_window_size":[0-9]*' | head -1 | cut -d: -f2)
-
-  if [ -n "$SIZE" ] && [ "$SIZE" -gt 0 ] 2>/dev/null; then
-    SIZE_K=$((SIZE / 1000))
-    SIZE_FMT="\${SIZE_K}k"
-  else
-    SIZE_FMT="?"
-  fi
-
-  PCT_INT=\${PCT%.*}
-  if [ "\${PCT_INT:-0}" -ge 80 ]; then
-    COLOR="\\033[31m"
-  elif [ "\${PCT_INT:-0}" -ge 60 ]; then
-    COLOR="\\033[33m"
-  else
-    COLOR="\\033[32m"
-  fi
-  RESET="\\033[0m"
-
-  printf "\${COLOR}ctx: \${PCT:-0}%% of \${SIZE_FMT}\${RESET} | \\$\${COST:-0}"
-fi
-`;
-  try {
-    fs.writeFileSync(statusLineScriptPath, script, { mode: 0o755 });
-  } catch (err) {
-    console.error('[initStatusLineScript] Failed:', err);
-  }
-}
-
-/**
  * Write .claude/settings.local.json with Stop, UserPromptSubmit,
  * statusLine, and (optionally) SessionStart hooks.
+ *
+ * The statusLine is an inline curl that POSTs context JSON to the hook server.
+ * Context usage is displayed in the Dash UI (sidebar + header), not in the terminal.
  */
-function writeHookSettings(cwd: string, ptyId: string, showStatusLine: boolean): void {
+async function writeHookSettings(cwd: string, ptyId: string): Promise<void> {
   const port = hookServer.port;
   if (port === 0) return;
 
@@ -254,23 +192,16 @@ function writeHookSettings(cwd: string, ptyId: string, showStatusLine: boolean):
     ];
   }
 
+  // Inline curl: reads JSON from stdin, POSTs to hook server, produces no terminal output
+  const statusLineCmd = `curl -s --connect-timeout 2 -X POST -H "Content-Type: application/json" -d @- "http://127.0.0.1:${port}/hook/context?ptyId=${ptyId}" >/dev/null 2>&1`;
+
   try {
     if (!fs.existsSync(claudeDir)) {
       fs.mkdirSync(claudeDir, { recursive: true });
     }
 
-    // Ensure our managed files are excluded from git (via .git/info/exclude)
-    ensureGitExcludes(cwd);
-
-    // Status line script lives in app data dir, written once at startup
-    if (!statusLineScriptPath) {
-      console.error(
-        '[writeHookSettings] statusLineScriptPath not initialized — call initStatusLineScript() first',
-      );
-      return;
-    }
-    const showFlag = showStatusLine ? '1' : '0';
-    const statusLineCmd = `bash "${statusLineScriptPath}" "${port}" "${ptyId}" "${showFlag}"`;
+    // Ensure our managed files are excluded from git (async, non-blocking)
+    await ensureGitExcludes(cwd);
 
     // Merge with existing settings to preserve non-hook config
     let existing: Record<string, unknown> = {};
@@ -309,7 +240,6 @@ export async function startDirectPty(options: {
   cols: number;
   rows: number;
   autoApprove?: boolean;
-  showStatusLine?: boolean;
   resume?: boolean;
   isDark?: boolean;
   sender?: WebContents;
@@ -350,7 +280,7 @@ export async function startDirectPty(options: {
   }
   const env = buildDirectEnv(options.isDark ?? true);
 
-  writeHookSettings(options.cwd, options.id, options.showStatusLine ?? true);
+  await writeHookSettings(options.cwd, options.id);
 
   const proc = pty.spawn(claudePath, args, {
     name: 'xterm-256color',

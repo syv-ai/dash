@@ -78,7 +78,6 @@ export interface ElectronAPI {
     cols: number;
     rows: number;
     autoApprove?: boolean;
-    showStatusLine?: boolean;
     resume?: boolean;
     isDark?: boolean;
   }) => Promise<
@@ -122,6 +121,7 @@ export interface ElectronAPI {
 
   // Session detection
   ptyHasClaudeSession: (cwd: string) => Promise<IpcResponse<boolean>>;
+  ptyHasExistingStatusLine: (cwd: string) => Promise<IpcResponse<boolean>>;
 
   // Task context for SessionStart hook
   ptyWriteTaskContext: (args: {

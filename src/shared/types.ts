@@ -18,7 +18,6 @@ export interface Task {
   status: string;
   useWorktree: boolean;
   autoApprove: boolean;
-  showStatusLine: boolean;
   linkedIssues: number[] | null;
   archivedAt: string | null;
   createdAt: string;

@@ -85,9 +85,7 @@ export function MainContent({
   }
 
   const activeCtxRaw = activeTask ? contextUsage[activeTask.id] : undefined;
-  const isStale = activeCtxRaw && Date.now() - new Date(activeCtxRaw.updatedAt).getTime() > 60_000;
-  const activeCtx =
-    activeCtxRaw && activeCtxRaw.percentage > 0 && !isStale ? activeCtxRaw : undefined;
+  const activeCtx = activeCtxRaw && activeCtxRaw.percentage > 0 ? activeCtxRaw : undefined;
 
   return (
     <div className="h-full flex flex-col bg-background">
@@ -214,7 +212,6 @@ export function MainContent({
           id={activeTask.id}
           cwd={activeTask.path}
           autoApprove={activeTask.autoApprove}
-          showStatusLine={activeTask.showStatusLine}
         />
       </div>
     </div>

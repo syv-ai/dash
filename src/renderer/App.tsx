@@ -195,6 +195,28 @@ export function App() {
     return unsubscribe;
   }, []);
 
+  // Prune stale context usage entries every 30s so the UI
+  // stops showing outdated data without waiting for a new event.
+  useEffect(() => {
+    const STALE_MS = 60_000;
+    const timer = setInterval(() => {
+      setContextUsage((prev) => {
+        const now = Date.now();
+        let changed = false;
+        const next: Record<string, ContextUsage> = {};
+        for (const [id, ctx] of Object.entries(prev)) {
+          if (now - new Date(ctx.updatedAt).getTime() > STALE_MS) {
+            changed = true; // drop this entry
+          } else {
+            next[id] = ctx;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
   // Compaction events — show toast notification
   useEffect(() => {
     return window.electronAPI.onPtyCompaction(({ ptyId, from, to }) => {
@@ -565,7 +587,6 @@ export function App() {
     name: string,
     useWorktree: boolean,
     autoApprove: boolean,
-    showStatusLine: boolean,
     baseRef?: string,
     linkedIssues?: GithubIssue[],
   ) {
@@ -611,7 +632,6 @@ export function App() {
       path: taskPath,
       useWorktree,
       autoApprove,
-      showStatusLine,
       linkedIssues: linkedIssueNumbers,
     });
 

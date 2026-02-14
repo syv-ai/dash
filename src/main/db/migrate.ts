@@ -69,11 +69,5 @@ export function runMigrations(): void {
   } catch {
     /* already exists */
   }
-  try {
-    rawDb.exec(`ALTER TABLE tasks ADD COLUMN show_status_line INTEGER DEFAULT 1`);
-  } catch {
-    /* already exists */
-  }
-
   rawDb.pragma('foreign_keys = ON');
 }

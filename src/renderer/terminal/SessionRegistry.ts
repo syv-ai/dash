@@ -5,7 +5,6 @@ interface AttachOptions {
   cwd: string;
   container: HTMLElement;
   autoApprove?: boolean;
-  showStatusLine?: boolean;
 }
 
 class SessionRegistryImpl {
@@ -19,7 +18,6 @@ class SessionRegistryImpl {
         id: opts.id,
         cwd: opts.cwd,
         autoApprove: opts.autoApprove,
-        showStatusLine: opts.showStatusLine,
         isDark: this._isDark,
       });
       this.sessions.set(opts.id, session);

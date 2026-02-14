@@ -261,10 +261,7 @@ export function LeftSidebar({
                       {projectTasks.map((task) => {
                         const activity = taskActivity[task.id];
                         const isActiveTask = task.id === activeTaskId;
-                        const ctxRaw = contextUsage[task.id];
-                        const isStale =
-                          ctxRaw && Date.now() - new Date(ctxRaw.updatedAt).getTime() > 60_000;
-                        const ctx = ctxRaw && !isStale ? ctxRaw : undefined;
+                        const ctx = contextUsage[task.id];
 
                         return (
                           <div

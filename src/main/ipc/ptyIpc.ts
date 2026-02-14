@@ -27,7 +27,6 @@ export function registerPtyIpc(): void {
         cols: number;
         rows: number;
         autoApprove?: boolean;
-        showStatusLine?: boolean;
         resume?: boolean;
         isDark?: boolean;
       },
@@ -137,6 +136,31 @@ export function registerPtyIpc(): void {
   ipcMain.handle('pty:contextUsage:getAll', () => {
     return { success: true, data: contextUsageService.getAll() };
   });
+
+  // Check if the project has an existing statusLine in .claude/settings.json
+  ipcMain.handle('pty:hasExistingStatusLine', (_event, cwd: string) => {
+    try {
+      return { success: true, data: hasExistingStatusLine(cwd) };
+    } catch (error) {
+      return { success: false, data: false, error: String(error) };
+    }
+  });
+}
+
+/**
+ * Check if the project's .claude/settings.json already defines a statusLine command.
+ * Dash writes its own statusLine to settings.local.json, which takes precedence,
+ * so an existing user-configured statusLine would be silently overridden.
+ */
+function hasExistingStatusLine(cwd: string): boolean {
+  try {
+    const settingsPath = path.join(cwd, '.claude', 'settings.json');
+    if (!fs.existsSync(settingsPath)) return false;
+    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+    return typeof settings.statusLine === 'string' && settings.statusLine.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 /**

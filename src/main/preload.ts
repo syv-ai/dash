@@ -92,6 +92,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Session detection
   ptyHasClaudeSession: (cwd: string) => ipcRenderer.invoke('pty:hasClaudeSession', cwd),
+  ptyHasExistingStatusLine: (cwd: string) => ipcRenderer.invoke('pty:hasExistingStatusLine', cwd),
 
   // Task context for SessionStart hook
   ptyWriteTaskContext: (args: { cwd: string; prompt: string }) =>

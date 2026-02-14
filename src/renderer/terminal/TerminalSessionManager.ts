@@ -71,7 +71,6 @@ export class TerminalSessionManager {
   private disposed = false;
   private opened = false;
   private autoApprove: boolean;
-  private showStatusLine: boolean;
   private currentContainer: HTMLElement | null = null;
   private boundBeforeUnload: (() => void) | null = null;
   private attachGeneration = 0;
@@ -84,17 +83,10 @@ export class TerminalSessionManager {
   private onScrollStateChangeCallback: ((isAtBottom: boolean) => void) | null = null;
   private lastEmittedAtBottom = true;
   private wheelHandler: ((e: WheelEvent) => void) | null = null;
-  constructor(opts: {
-    id: string;
-    cwd: string;
-    autoApprove?: boolean;
-    showStatusLine?: boolean;
-    isDark?: boolean;
-  }) {
+  constructor(opts: { id: string; cwd: string; autoApprove?: boolean; isDark?: boolean }) {
     this.id = opts.id;
     this.cwd = opts.cwd;
     this.autoApprove = opts.autoApprove ?? false;
-    this.showStatusLine = opts.showStatusLine ?? true;
     this.isDark = opts.isDark ?? true;
 
     this.terminal = new Terminal({
@@ -478,7 +470,6 @@ export class TerminalSessionManager {
       cols,
       rows,
       autoApprove: this.autoApprove,
-      showStatusLine: this.showStatusLine,
       resume,
       isDark: this.isDark,
     });

@@ -89,10 +89,6 @@ app.whenReady().then(async () => {
   const { activityMonitor } = await import('./services/ActivityMonitor');
   activityMonitor.start(mainWindow.webContents);
 
-  // Write the status line helper script once (used by every PTY spawn)
-  const { initStatusLineScript } = await import('./services/ptyManager');
-  initStatusLineScript();
-
   // Start context usage service — broadcasts context data to renderer
   const { contextUsageService } = await import('./services/ContextUsageService');
   contextUsageService.setSender(mainWindow.webContents);
