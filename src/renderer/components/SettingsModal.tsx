@@ -185,7 +185,7 @@ export function SettingsModal({
           <h2 className="text-[14px] font-semibold text-foreground">Settings</h2>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground/50 hover:text-foreground transition-all duration-150"
+            className="p-1.5 rounded-lg hover:bg-accent text-foreground/50 hover:text-foreground transition-all duration-150"
           >
             <X size={14} strokeWidth={2} />
           </button>
@@ -200,7 +200,7 @@ export function SettingsModal({
               className={`px-3 py-2.5 text-[12px] font-medium border-b-2 transition-all duration-150 capitalize ${
                 tab === t
                   ? 'border-primary text-foreground'
-                  : 'border-transparent text-muted-foreground/50 hover:text-muted-foreground'
+                  : 'border-transparent text-foreground/50 hover:text-foreground/80'
               }`}
             >
               {t}
@@ -214,7 +214,7 @@ export function SettingsModal({
             <div className="space-y-6 animate-fade-in">
               {/* Diff Context */}
               <div>
-                <label className="block text-[12px] font-medium text-muted-foreground/70 mb-3">
+                <label className="block text-[12px] font-medium text-foreground mb-3">
                   Diff Context
                 </label>
                 <div className="grid grid-cols-4 gap-2">
@@ -228,7 +228,7 @@ export function SettingsModal({
                         className={`px-3 py-2.5 rounded-lg text-[12px] border transition-all duration-150 ${
                           isActive
                             ? 'border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20 font-medium'
-                            : 'border-border/60 text-muted-foreground/60 hover:bg-accent/40 hover:text-foreground'
+                            : 'border-border/60 text-foreground/60 hover:bg-accent/40 hover:text-foreground'
                         }`}
                       >
                         {label}
@@ -236,14 +236,14 @@ export function SettingsModal({
                     );
                   })}
                 </div>
-                <p className="text-[10px] text-muted-foreground/40 mt-2">
+                <p className="text-[10px] text-foreground/80 mt-2">
                   Number of unchanged lines shown around each change
                 </p>
               </div>
 
               {/* Notification Sound */}
               <div>
-                <label className="block text-[12px] font-medium text-muted-foreground/70 mb-3">
+                <label className="block text-[12px] font-medium text-foreground mb-3">
                   Notification Sound
                 </label>
                 <div className="flex flex-wrap gap-2">
@@ -256,7 +256,7 @@ export function SettingsModal({
                         className={`px-3 py-2.5 rounded-lg text-[12px] border transition-all duration-150 ${
                           isActive
                             ? 'border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20 font-medium'
-                            : 'border-border/60 text-muted-foreground/60 hover:bg-accent/40 hover:text-foreground'
+                            : 'border-border/60 text-foreground/60 hover:bg-accent/40 hover:text-foreground'
                         }`}
                       >
                         {SOUND_LABELS[sound]}
@@ -264,14 +264,14 @@ export function SettingsModal({
                     );
                   })}
                 </div>
-                <p className="text-[10px] text-muted-foreground/40 mt-2">
+                <p className="text-[10px] text-foreground/80 mt-2">
                   Play a sound when a task finishes and needs attention
                 </p>
               </div>
 
               {/* Desktop Notification */}
               <div>
-                <label className="block text-[12px] font-medium text-muted-foreground/70 mb-3">
+                <label className="block text-[12px] font-medium text-foreground mb-3">
                   Desktop Notifications
                 </label>
                 <button
@@ -279,7 +279,7 @@ export function SettingsModal({
                   className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg text-[13px] border transition-all duration-150 ${
                     desktopNotification
                       ? 'border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20'
-                      : 'border-border/60 text-muted-foreground/60 hover:bg-accent/40 hover:text-foreground'
+                      : 'border-border/60 text-foreground/60 hover:bg-accent/40 hover:text-foreground'
                   }`}
                 >
                   <div
@@ -295,14 +295,14 @@ export function SettingsModal({
                   </div>
                   Show macOS notification when a task finishes
                 </button>
-                <p className="text-[10px] text-muted-foreground/40 mt-2">
+                <p className="text-[10px] text-foreground/80 mt-2">
                   Notification will include the task name
                 </p>
               </div>
 
               {/* Shell Terminal */}
               <div>
-                <label className="block text-[12px] font-medium text-muted-foreground/70 mb-3">
+                <label className="block text-[12px] font-medium text-foreground mb-3">
                   Shell Terminal
                 </label>
                 <button
@@ -310,7 +310,7 @@ export function SettingsModal({
                   className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg text-[13px] border transition-all duration-150 ${
                     shellDrawerEnabled
                       ? 'border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20'
-                      : 'border-border/60 text-muted-foreground/60 hover:bg-accent/40 hover:text-foreground'
+                      : 'border-border/60 text-foreground/60 hover:bg-accent/40 hover:text-foreground'
                   }`}
                 >
                   <div
@@ -339,7 +339,7 @@ export function SettingsModal({
                         className={`px-3 py-2.5 rounded-lg text-[12px] border transition-all duration-150 ${
                           shellDrawerPosition === value
                             ? 'border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20 font-medium'
-                            : 'border-border/60 text-muted-foreground/60 hover:bg-accent/40 hover:text-foreground'
+                            : 'border-border/60 text-foreground/60 hover:bg-accent/40 hover:text-foreground'
                         }`}
                       >
                         {label}
@@ -347,17 +347,17 @@ export function SettingsModal({
                     ))}
                   </div>
                 )}
-                <p className="text-[10px] text-muted-foreground/40 mt-2">
+                <p className="text-[10px] text-foreground/80 mt-2">
                   Toggle with Cmd+J. Run git, npm, and other commands alongside Claude.
                 </p>
               </div>
 
               {/* Version */}
               <div>
-                <label className="block text-[12px] font-medium text-muted-foreground/70 mb-1.5">
+                <label className="block text-[12px] font-medium text-foreground mb-1.5">
                   Version
                 </label>
-                <p className="text-[13px] text-muted-foreground/50 font-mono">
+                <p className="text-[13px] text-foreground/80 font-mono">
                   {appVersion || '...'}
                 </p>
               </div>
@@ -368,7 +368,7 @@ export function SettingsModal({
             <div className="space-y-6 animate-fade-in">
               {/* App Theme */}
               <div>
-                <label className="block text-[12px] font-medium text-muted-foreground/70 mb-3">
+                <label className="block text-[12px] font-medium text-foreground mb-3">
                   App Theme
                 </label>
                 <div className="grid grid-cols-2 gap-2">
@@ -377,7 +377,7 @@ export function SettingsModal({
                     className={`flex items-center gap-2.5 px-4 py-3 rounded-lg text-[13px] border transition-all duration-150 ${
                       theme === 'light'
                         ? 'border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20'
-                        : 'border-border/60 text-muted-foreground/60 hover:bg-accent/40 hover:text-foreground'
+                        : 'border-border/60 text-foreground/60 hover:bg-accent/40 hover:text-foreground'
                     }`}
                   >
                     <Sun size={15} strokeWidth={1.8} />
@@ -388,7 +388,7 @@ export function SettingsModal({
                     className={`flex items-center gap-2.5 px-4 py-3 rounded-lg text-[13px] border transition-all duration-150 ${
                       theme === 'dark'
                         ? 'border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20'
-                        : 'border-border/60 text-muted-foreground/60 hover:bg-accent/40 hover:text-foreground'
+                        : 'border-border/60 text-foreground/60 hover:bg-accent/40 hover:text-foreground'
                     }`}
                   >
                     <Moon size={15} strokeWidth={1.8} />
@@ -399,7 +399,7 @@ export function SettingsModal({
 
               {/* Terminal Theme */}
               <div>
-                <label className="block text-[12px] font-medium text-muted-foreground/70 mb-3">
+                <label className="block text-[12px] font-medium text-foreground mb-3">
                   Terminal Theme
                 </label>
                 <div className="grid grid-cols-3 gap-2">
@@ -441,14 +441,14 @@ export function SettingsModal({
                         <span className="text-[10px] font-medium truncate w-full text-left">
                           {t.name}
                           {t.id === 'default' && (
-                            <span className="text-muted-foreground/40"> (auto)</span>
+                            <span className="text-foreground/40"> (auto)</span>
                           )}
                         </span>
                       </button>
                     );
                   })}
                 </div>
-                <p className="text-[10px] text-muted-foreground/40 mt-2">
+                <p className="text-[10px] text-foreground/80 mt-2">
                   Applies to both Claude and shell terminals
                 </p>
               </div>
@@ -459,12 +459,12 @@ export function SettingsModal({
             <div className="space-y-5 animate-fade-in">
               {/* Header row */}
               <div className="flex items-center justify-between">
-                <p className="text-[11px] text-muted-foreground/40">
+                <p className="text-[11px] text-foreground/60">
                   Click a shortcut to record a new binding
                 </p>
                 <button
                   onClick={handleResetAll}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] text-muted-foreground/40 hover:text-foreground hover:bg-accent/60 transition-all duration-150"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] text-foreground/60 hover:text-foreground hover:bg-accent/60 transition-all duration-150"
                 >
                   <RotateCcw size={10} strokeWidth={2} />
                   Reset all
@@ -475,7 +475,7 @@ export function SettingsModal({
               {groups.map((group) => (
                 <div key={group.category}>
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/50">
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground/60">
                       {group.category}
                     </span>
                     <div className="flex-1 h-px bg-border/30" />
@@ -510,7 +510,7 @@ export function SettingsModal({
                             {modified && (
                               <button
                                 onClick={() => handleResetOne(binding.id)}
-                                className="p-1.5 rounded-md text-muted-foreground/20 hover:text-foreground hover:bg-accent/60 opacity-0 group-hover:opacity-100 transition-all duration-150"
+                                className="p-1.5 rounded-md text-foreground/30 hover:text-foreground hover:bg-accent/60 opacity-0 group-hover:opacity-100 transition-all duration-150"
                                 title="Reset to default"
                               >
                                 <RotateCcw size={11} strokeWidth={2} />
@@ -552,20 +552,20 @@ export function SettingsModal({
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <Terminal size={12} className="text-muted-foreground/40" strokeWidth={2} />
+                    <Terminal size={12} className="text-foreground/50" strokeWidth={2} />
                     <p className="text-[13px] font-medium text-foreground/90">Claude Code CLI</p>
                   </div>
                   {claudeInfo?.installed ? (
                     <div className="space-y-0.5">
-                      <p className="text-[11px] text-muted-foreground/50 font-mono">
+                      <p className="text-[11px] text-foreground/60 font-mono">
                         {claudeInfo.version}
                       </p>
-                      <p className="text-[11px] text-muted-foreground/30 font-mono truncate">
+                      <p className="text-[11px] text-foreground/40 font-mono truncate">
                         {claudeInfo.path}
                       </p>
                     </div>
                   ) : (
-                    <p className="text-[11px] text-muted-foreground/50 leading-relaxed">
+                    <p className="text-[11px] text-foreground/60 leading-relaxed">
                       Not found. Install with{' '}
                       <code className="px-1.5 py-0.5 rounded bg-accent/80 text-[10px] font-mono text-foreground/70">
                         npm install -g @anthropic-ai/claude-code
