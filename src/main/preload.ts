@@ -142,6 +142,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Branch listing
   gitListBranches: (cwd: string) => ipcRenderer.invoke('git:listBranches', cwd),
 
+  // Commit graph
+  gitGetCommitGraph: (args: { cwd: string; limit?: number; skip?: number }) =>
+    ipcRenderer.invoke('git:getCommitGraph', args),
+  gitGetCommitDetail: (args: { cwd: string; hash: string }) =>
+    ipcRenderer.invoke('git:getCommitDetail', args),
+
   // File watcher
   gitWatch: (args: { id: string; cwd: string }) => ipcRenderer.invoke('git:watch', args),
   gitUnwatch: (id: string) => ipcRenderer.invoke('git:unwatch', id),

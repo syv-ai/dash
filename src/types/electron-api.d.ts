@@ -9,6 +9,8 @@ import type {
   DiffResult,
   BranchInfo,
   GithubIssue,
+  CommitGraphData,
+  CommitDetail,
 } from '../shared/types';
 
 export interface ElectronAPI {
@@ -173,6 +175,17 @@ export interface ElectronAPI {
   gitDiscardFile: (args: { cwd: string; filePath: string }) => Promise<IpcResponse<void>>;
   gitCommit: (args: { cwd: string; message: string }) => Promise<IpcResponse<void>>;
   gitPush: (cwd: string) => Promise<IpcResponse<void>>;
+
+  // Commit graph
+  gitGetCommitGraph: (args: {
+    cwd: string;
+    limit?: number;
+    skip?: number;
+  }) => Promise<IpcResponse<CommitGraphData>>;
+  gitGetCommitDetail: (args: {
+    cwd: string;
+    hash: string;
+  }) => Promise<IpcResponse<CommitDetail>>;
 
   // Branch listing
   gitListBranches: (cwd: string) => Promise<IpcResponse<BranchInfo[]>>;

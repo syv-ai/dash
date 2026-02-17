@@ -10,6 +10,12 @@ import type {
   DiffHunk,
   DiffLine,
   BranchInfo,
+  CommitNode,
+  CommitRef,
+  GraphCommit,
+  GraphConnection,
+  CommitGraphData,
+  CommitDetail,
 } from '@shared/types';
 
 const execFileAsync = promisify(execFile);
@@ -351,6 +357,223 @@ export class GitService {
    */
   static async push(cwd: string): Promise<void> {
     await git(cwd, ['push']);
+  }
+
+  // ── Commit Graph ────────────────────────────────────────
+
+  static async getCommitGraph(
+    cwd: string,
+    limit = 150,
+    skip = 0,
+  ): Promise<CommitGraphData> {
+    const args = [
+      'log',
+      '--exclude=refs/heads/_reserve/*',
+      '--all',
+      '--topo-order',
+      `--max-count=${limit}`,
+      `--skip=${skip}`,
+      '--format=%H%x00%h%x00%P%x00%an%x00%at%x00%s%x00%D',
+    ];
+
+    let output: string;
+    try {
+      output = await git(cwd, args);
+    } catch {
+      return { commits: [], totalCount: 0, maxLanes: 0 };
+    }
+
+    const lines = output.split('\n').filter(Boolean);
+    const commits: CommitNode[] = lines.map((line) => {
+      const parts = line.split('\0');
+      return {
+        hash: parts[0],
+        shortHash: parts[1],
+        parents: parts[2] ? parts[2].split(' ') : [],
+        authorName: parts[3],
+        authorDate: parseInt(parts[4], 10) || 0,
+        subject: parts[5],
+        refs: this.parseRefs(parts[6] || ''),
+      };
+    });
+
+    const graphCommits = this.assignLanes(commits);
+
+    // Get total count for pagination
+    let totalCount = commits.length + skip;
+    if (commits.length === limit) {
+      try {
+        const countOut = await git(cwd, ['rev-list', '--all', '--count']);
+        totalCount = parseInt(countOut.trim(), 10) || totalCount;
+      } catch {
+        // keep estimate
+      }
+    }
+
+    const maxLanes = graphCommits.reduce((max, gc) => Math.max(max, gc.lane + 1), 0);
+    return { commits: graphCommits, totalCount, maxLanes };
+  }
+
+  static async getCommitDetail(cwd: string, hash: string): Promise<CommitDetail> {
+    const format = '%H%x00%h%x00%P%x00%an%x00%at%x00%s%x00%D';
+    const out = await git(cwd, ['log', '-1', `--format=${format}`, hash]);
+    const parts = out.trim().split('\0');
+    const commit: CommitNode = {
+      hash: parts[0],
+      shortHash: parts[1],
+      parents: parts[2] ? parts[2].split(' ') : [],
+      authorName: parts[3],
+      authorDate: parseInt(parts[4], 10) || 0,
+      subject: parts[5],
+      refs: this.parseRefs(parts[6] || ''),
+    };
+
+    // Get body
+    let body = '';
+    try {
+      body = (await git(cwd, ['log', '-1', '--format=%b', hash])).trim();
+    } catch {
+      // no body
+    }
+
+    // Get stats
+    let additions = 0;
+    let deletions = 0;
+    let filesChanged = 0;
+    try {
+      const statOut = await git(cwd, ['diff', '--shortstat', `${hash}~1`, hash]);
+      const match = statOut.match(
+        /(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/,
+      );
+      if (match) {
+        filesChanged = parseInt(match[1], 10) || 0;
+        additions = parseInt(match[2], 10) || 0;
+        deletions = parseInt(match[3], 10) || 0;
+      }
+    } catch {
+      // root commit or error
+    }
+
+    return { commit, body, stats: { additions, deletions, filesChanged } };
+  }
+
+  private static parseRefs(refStr: string): CommitRef[] {
+    if (!refStr.trim()) return [];
+    return refStr
+      .split(',')
+      .map((r) => {
+        const trimmed = r.trim();
+        if (trimmed.startsWith('HEAD -> ')) {
+          return { name: trimmed.replace('HEAD -> ', ''), type: 'head' as const };
+        }
+        if (trimmed === 'HEAD') {
+          return { name: 'HEAD', type: 'head' as const };
+        }
+        if (trimmed.startsWith('tag: ')) {
+          return { name: trimmed.replace('tag: ', ''), type: 'tag' as const };
+        }
+        if (trimmed.includes('/')) {
+          return { name: trimmed, type: 'remote' as const };
+        }
+        return { name: trimmed, type: 'local' as const };
+      })
+      .filter((r) => !r.name.includes('_reserve/') && r.name !== 'origin/HEAD');
+  }
+
+  private static assignLanes(commits: CommitNode[]): GraphCommit[] {
+    const result: GraphCommit[] = [];
+    // Maps commit hash → { column, color }
+    const activeLanes = new Map<string, { column: number; color: number }>();
+    const freeColumns: number[] = [];
+    let nextColumn = 0;
+    let nextColor = 0;
+
+    // Build a map from hash → row index for connection endpoints
+    const rowIndex = new Map<string, number>();
+    for (let i = 0; i < commits.length; i++) {
+      rowIndex.set(commits[i].hash, i);
+    }
+
+    for (let row = 0; row < commits.length; row++) {
+      const commit = commits[row];
+      const connections: GraphConnection[] = [];
+
+      // Determine this commit's lane
+      let lane: { column: number; color: number };
+      if (activeLanes.has(commit.hash)) {
+        lane = activeLanes.get(commit.hash)!;
+        activeLanes.delete(commit.hash);
+      } else {
+        const col = freeColumns.length > 0 ? freeColumns.shift()! : nextColumn++;
+        lane = { column: col, color: nextColor++ % 8 };
+      }
+
+      // Process parents
+      for (let pi = 0; pi < commit.parents.length; pi++) {
+        const parentHash = commit.parents[pi];
+        const parentRow = rowIndex.get(parentHash);
+
+        if (activeLanes.has(parentHash)) {
+          // Parent already has a lane — draw merge line to it
+          const parentLane = activeLanes.get(parentHash)!;
+          connections.push({
+            fromColumn: lane.column,
+            toColumn: parentLane.column,
+            fromRow: row,
+            toRow: parentRow ?? row + 1,
+            color: pi === 0 ? lane.color : parentLane.color,
+            type: pi === 0 ? 'straight' : 'merge-in',
+          });
+        } else if (parentRow !== undefined) {
+          // Parent is in our commit list — assign lane
+          if (pi === 0) {
+            // First parent inherits this commit's lane
+            activeLanes.set(parentHash, { column: lane.column, color: lane.color });
+            connections.push({
+              fromColumn: lane.column,
+              toColumn: lane.column,
+              fromRow: row,
+              toRow: parentRow,
+              color: lane.color,
+              type: 'straight',
+            });
+          } else {
+            // Additional parents get new lane
+            const col = freeColumns.length > 0 ? freeColumns.shift()! : nextColumn++;
+            const color = nextColor++ % 8;
+            activeLanes.set(parentHash, { column: col, color });
+            connections.push({
+              fromColumn: lane.column,
+              toColumn: col,
+              fromRow: row,
+              toRow: parentRow,
+              color,
+              type: 'merge-out',
+            });
+          }
+        }
+      }
+
+      // If this commit has no parents continuing, free the column
+      if (commit.parents.length === 0 || !commit.parents.some((p) => rowIndex.has(p))) {
+        // Only free if no parent will reuse it
+        const columnStillActive = [...activeLanes.values()].some(
+          (l) => l.column === lane.column,
+        );
+        if (!columnStillActive) {
+          freeColumns.push(lane.column);
+        }
+      }
+
+      result.push({
+        commit,
+        lane: lane.column,
+        laneColor: lane.color,
+        connections,
+      });
+    }
+
+    return result;
   }
 
   // ── Diff Parsing ─────────────────────────────────────────

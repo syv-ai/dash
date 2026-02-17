@@ -168,6 +168,32 @@ export function registerGitIpc(): void {
     }
   });
 
+  // Get commit graph for all branches
+  ipcMain.handle(
+    'git:getCommitGraph',
+    async (_event, args: { cwd: string; limit?: number; skip?: number }) => {
+      try {
+        const data = await GitService.getCommitGraph(args.cwd, args.limit, args.skip);
+        return { success: true, data };
+      } catch (error) {
+        return { success: false, error: String(error) };
+      }
+    },
+  );
+
+  // Get detailed info for a single commit
+  ipcMain.handle(
+    'git:getCommitDetail',
+    async (_event, args: { cwd: string; hash: string }) => {
+      try {
+        const data = await GitService.getCommitDetail(args.cwd, args.hash);
+        return { success: true, data };
+      } catch (error) {
+        return { success: false, error: String(error) };
+      }
+    },
+  );
+
   // Start watching a directory for file changes
   ipcMain.handle('git:watch', async (_event, args: { id: string; cwd: string }) => {
     try {

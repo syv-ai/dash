@@ -7,6 +7,7 @@ import {
   ArchiveRestore,
   Settings,
   GitBranch,
+  GitGraph,
   ChevronRight,
   ChevronDown,
   PanelLeftClose,
@@ -29,6 +30,7 @@ interface LeftSidebarProps {
   onArchiveTask: (id: string) => void;
   onRestoreTask: (id: string) => void;
   onOpenSettings: () => void;
+  onShowCommitGraph: (projectId: string) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
   taskActivity: Record<string, 'busy' | 'idle'>;
@@ -48,6 +50,7 @@ export function LeftSidebar({
   onArchiveTask,
   onRestoreTask,
   onOpenSettings,
+  onShowCommitGraph,
   collapsed,
   onToggleCollapse,
   taskActivity,
@@ -213,7 +216,7 @@ export function LeftSidebar({
                       e.stopPropagation();
                       toggleCollapse(project.id);
                     }}
-                    className="p-0.5 rounded flex-shrink-0 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                    className="p-0.5 rounded flex-shrink-0 text-muted-foreground/60 hover:text-foreground transition-colors"
                   >
                     {isProjectCollapsed ? (
                       <ChevronRight size={14} strokeWidth={2} />
@@ -225,16 +228,36 @@ export function LeftSidebar({
                   <span className="truncate flex-1">{project.name}</span>
 
                   {projectTasks.length > 0 && (
-                    <span className="text-[10px] text-muted-foreground/50 tabular-nums flex-shrink-0 mr-0.5 leading-none">
+                    <span className="text-[10px] text-foreground/50 tabular-nums flex-shrink-0 mr-0.5 leading-none">
                       {projectTasks.length}
                     </span>
                   )}
+
+                  {/* Commit graph — visible on active project, hover on others */}
+                  <div
+                    className={`transition-opacity duration-150 ${
+                      isActive
+                        ? 'opacity-70 hover:opacity-100'
+                        : 'opacity-0 group-hover:opacity-100'
+                    }`}
+                  >
+                    <IconButton
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onShowCommitGraph(project.id);
+                      }}
+                      title="Commit graph"
+                      size="sm"
+                    >
+                      <GitGraph size={13} strokeWidth={2} />
+                    </IconButton>
+                  </div>
 
                   {/* New task — visible on active project, hover on others */}
                   <div
                     className={`transition-opacity duration-150 ${
                       isActive
-                        ? 'opacity-50 hover:opacity-100'
+                        ? 'opacity-70 hover:opacity-100'
                         : 'opacity-0 group-hover:opacity-100'
                     }`}
                   >
@@ -301,7 +324,7 @@ export function LeftSidebar({
                               {isActiveTask && (
                                 <GitBranch
                                   size={11}
-                                  className="text-muted-foreground group-hover/task:hidden"
+                                  className="text-foreground/50 group-hover/task:hidden"
                                   strokeWidth={2}
                                 />
                               )}
@@ -335,7 +358,7 @@ export function LeftSidebar({
 
                       {projectTasks.length === 0 && isActive && (
                         <div className="px-2 py-3 text-center">
-                          <p className="text-[10px] text-muted-foreground/40">No tasks yet</p>
+                          <p className="text-[10px] text-muted-foreground/60">No tasks yet</p>
                         </div>
                       )}
 

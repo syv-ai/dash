@@ -60,6 +60,15 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
     alt: false,
     key: 'u',
   },
+  commitGraph: {
+    id: 'commitGraph',
+    label: 'Commit Graph',
+    category: 'Git',
+    mod: true,
+    shift: true,
+    alt: false,
+    key: 'g',
+  },
   // ── Navigation ──
   openSettings: {
     id: 'openSettings',

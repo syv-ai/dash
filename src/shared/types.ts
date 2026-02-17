@@ -139,6 +139,51 @@ export interface DiffLine {
   newLineNumber: number | null;
 }
 
+// ── Commit Graph Types ──────────────────────────────────────
+
+export interface CommitRef {
+  name: string;
+  type: 'local' | 'remote' | 'tag' | 'head';
+}
+
+export interface CommitNode {
+  hash: string;
+  shortHash: string;
+  parents: string[];
+  authorName: string;
+  authorDate: number;
+  subject: string;
+  refs: CommitRef[];
+}
+
+export interface GraphConnection {
+  fromColumn: number;
+  toColumn: number;
+  fromRow: number;
+  toRow: number;
+  color: number;
+  type: 'straight' | 'merge-in' | 'merge-out';
+}
+
+export interface GraphCommit {
+  commit: CommitNode;
+  lane: number;
+  laneColor: number;
+  connections: GraphConnection[];
+}
+
+export interface CommitGraphData {
+  commits: GraphCommit[];
+  totalCount: number;
+  maxLanes: number;
+}
+
+export interface CommitDetail {
+  commit: CommitNode;
+  body: string;
+  stats: { additions: number; deletions: number; filesChanged: number };
+}
+
 // ── GitHub Types ────────────────────────────────────────────
 
 export interface GithubIssue {

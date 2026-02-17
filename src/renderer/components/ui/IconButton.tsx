@@ -12,8 +12,8 @@ interface IconButtonProps {
 }
 
 const variantStyles = {
-  default: 'hover:bg-accent text-foreground/70 hover:text-foreground',
-  destructive: 'hover:bg-destructive/15 text-foreground/70 hover:text-destructive',
+  default: 'hover:bg-accent text-foreground/80 hover:text-foreground',
+  destructive: 'hover:bg-destructive/15 text-foreground/80 hover:text-destructive',
 } as const;
 
 const sizeStyles = {
