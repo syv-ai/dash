@@ -43,10 +43,8 @@ export function ShellDrawerWrapper({
       <Panel minSize={20}>{children}</Panel>
       <PanelResizeHandle
         disabled={collapsed}
-        className="h-5 flex items-end"
-      >
-        <div className="h-[1px] w-full bg-border" />
-      </PanelResizeHandle>
+        className="h-[1px] bg-border"
+      />
       <Panel
         ref={panelRef}
         className={animating ? 'panel-transition' : ''}
