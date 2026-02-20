@@ -41,14 +41,11 @@ export function ShellDrawerWrapper({
   return (
     <PanelGroup direction="vertical" className="h-full">
       <Panel minSize={20}>{children}</Panel>
-      <PanelResizeHandle
-        disabled={collapsed}
-        className="h-[1px] bg-border"
-      />
+      <PanelResizeHandle disabled={collapsed} className="h-[1px] bg-border" />
       <Panel
         ref={panelRef}
         className={animating ? 'panel-transition' : ''}
-        defaultSize={collapsed ? 3 : 25}
+        defaultSize={collapsed ? 3 : 45}
         minSize={8}
         maxSize={60}
         collapsible
@@ -62,8 +59,14 @@ export function ShellDrawerWrapper({
           cwd={cwd}
           collapsed={collapsed}
           label={label}
-          onCollapse={() => { onAnimate(); panelRef.current?.collapse(); }}
-          onExpand={() => { onAnimate(); panelRef.current?.expand(); }}
+          onCollapse={() => {
+            onAnimate();
+            panelRef.current?.collapse();
+          }}
+          onExpand={() => {
+            onAnimate();
+            panelRef.current?.expand();
+          }}
         />
       </Panel>
     </PanelGroup>
