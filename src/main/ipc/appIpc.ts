@@ -6,6 +6,36 @@ import * as path from 'path';
 
 const execFileAsync = promisify(execFile);
 
+let cachedEditor: string | null = null;
+
+async function detectEditor(): Promise<string> {
+  if (cachedEditor) return cachedEditor;
+
+  // Check environment variables first
+  for (const envVar of ['VISUAL', 'EDITOR']) {
+    const val = process.env[envVar];
+    if (val) {
+      cachedEditor = val;
+      return val;
+    }
+  }
+
+  // Probe for known editors
+  for (const editor of ['cursor', 'code', 'zed']) {
+    try {
+      await execFileAsync('which', [editor]);
+      cachedEditor = editor;
+      return editor;
+    } catch {
+      // Not found, try next
+    }
+  }
+
+  // Fallback to macOS open
+  cachedEditor = 'open';
+  return 'open';
+}
+
 export function registerAppIpc(): void {
   ipcMain.handle('app:getVersion', () => {
     return app.getVersion();
@@ -96,4 +126,41 @@ export function registerAppIpc(): void {
       };
     }
   });
+
+  ipcMain.handle(
+    'app:openInEditor',
+    async (_event, args: { cwd: string; filePath: string; line?: number; col?: number }) => {
+      try {
+        const resolved = path.resolve(args.cwd, args.filePath);
+        if (!fs.existsSync(resolved)) {
+          return { success: false, error: `File not found: ${resolved}` };
+        }
+
+        const editor = await detectEditor();
+
+        // Build location string with line:col for editors that support -g
+        const gotoEditors = ['code', 'cursor', 'zed'];
+        const isGotoEditor = gotoEditors.some((e) => editor === e || editor.endsWith(`/${e}`));
+
+        if (isGotoEditor) {
+          const location =
+            args.line != null && args.col != null
+              ? `${resolved}:${args.line}:${args.col}`
+              : args.line != null
+                ? `${resolved}:${args.line}`
+                : resolved;
+          await execFileAsync(editor, ['-g', location]);
+        } else if (editor === 'open') {
+          await execFileAsync('open', [resolved]);
+        } else {
+          // Generic editor (vim, nano, etc.) — just open the file
+          await execFileAsync(editor, [resolved]);
+        }
+
+        return { success: true, data: null };
+      } catch (error) {
+        return { success: false, error: String(error) };
+      }
+    },
+  );
 }

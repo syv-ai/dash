@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Dialogs
   showOpenDialog: () => ipcRenderer.invoke('app:showOpenDialog'),
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
+  openInEditor: (args: { cwd: string; filePath: string; line?: number; col?: number }) =>
+    ipcRenderer.invoke('app:openInEditor', args),
 
   // Database - Projects
   getProjects: () => ipcRenderer.invoke('db:getProjects'),

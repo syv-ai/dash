@@ -21,6 +21,12 @@ export interface ElectronAPI {
   // Dialogs
   showOpenDialog: () => Promise<IpcResponse<string[]>>;
   openExternal: (url: string) => Promise<void>;
+  openInEditor: (args: {
+    cwd: string;
+    filePath: string;
+    line?: number;
+    col?: number;
+  }) => Promise<IpcResponse<null>>;
 
   // Database - Projects
   getProjects: () => Promise<IpcResponse<Project[]>>;
@@ -182,10 +188,7 @@ export interface ElectronAPI {
     limit?: number;
     skip?: number;
   }) => Promise<IpcResponse<CommitGraphData>>;
-  gitGetCommitDetail: (args: {
-    cwd: string;
-    hash: string;
-  }) => Promise<IpcResponse<CommitDetail>>;
+  gitGetCommitDetail: (args: { cwd: string; hash: string }) => Promise<IpcResponse<CommitDetail>>;
 
   // Branch listing
   gitListBranches: (cwd: string) => Promise<IpcResponse<BranchInfo[]>>;

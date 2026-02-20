@@ -3,6 +3,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { SerializeAddon } from '@xterm/addon-serialize';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import type { TerminalSnapshot } from '../../shared/types';
+import { FilePathLinkProvider } from './FilePathLinkProvider';
 import { darkTheme, lightTheme, resolveTheme } from './terminalThemes';
 
 const SNAPSHOT_DEBOUNCE_MS = 10_000;
@@ -82,6 +83,22 @@ export class TerminalSessionManager {
       new WebLinksAddon((_event, uri) => {
         window.electronAPI.openExternal(uri);
       }),
+    );
+
+    // Register file path link provider (click to open in editor)
+    this.terminal.registerLinkProvider(
+      new FilePathLinkProvider(
+        this.terminal,
+        () => this._currentCwd,
+        (filePath, line, col) => {
+          window.electronAPI.openInEditor({
+            cwd: this._currentCwd,
+            filePath,
+            line,
+            col,
+          });
+        },
+      ),
     );
 
     // Track cwd via OSC 7 (emitted by zsh on macOS by default)
@@ -310,9 +327,7 @@ export class TerminalSessionManager {
           const issueLabels = issueNumbers.map((num) => {
             const url = gitRemote ? this.issueUrl(gitRemote, num) : null;
             // OSC 8 hyperlink: \x1b]8;;URL\x07TEXT\x1b]8;;\x07
-            return url
-              ? `\x1b]8;;${url}\x07#${num}\x1b]8;;\x07`
-              : `#${num}`;
+            return url ? `\x1b]8;;${url}\x07#${num}\x1b]8;;\x07` : `#${num}`;
           });
           this.terminal.write(
             `\x1b[2m\x1b[36m● Issue context injected: ${issueLabels.join(', ')}\x1b[0m\r\n`,
