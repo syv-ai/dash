@@ -168,9 +168,9 @@ export function MainContent({
         <TerminalPane
           key={activeTask.id}
           id={activeTask.id}
-          cwd={activeTask.useWorktree && activeProject ? activeProject.path : activeTask.path}
+          cwd={activeTask.path}
           autoApprove={activeTask.autoApprove}
-          worktreeName={activeTask.useWorktree ? activeTask.path.split('/').pop() : undefined}
+          worktreeName={activeTask.useWorktree ? activeTask.branch : undefined}
         />
       </div>
     </div>

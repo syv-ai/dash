@@ -41,6 +41,26 @@ export interface IpcResponse<T = unknown> {
   error?: string;
 }
 
+export interface WorktreeInfo {
+  id: string;
+  name: string;
+  branch: string;
+  path: string;
+  projectId: string;
+  status: 'active' | 'error';
+  createdAt: string;
+}
+
+export interface ReserveWorktree {
+  id: string;
+  path: string;
+  branch: string;
+  projectId: string;
+  projectPath: string;
+  baseRef: string;
+  createdAt: string;
+}
+
 export interface RemoveWorktreeOptions {
   deleteWorktreeDir?: boolean;
   deleteLocalBranch?: boolean;

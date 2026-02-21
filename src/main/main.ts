@@ -89,6 +89,16 @@ app.whenReady().then(async () => {
   const { activityMonitor } = await import('./services/ActivityMonitor');
   activityMonitor.start(mainWindow.webContents);
 
+  // Cleanup orphaned reserve worktrees (background, non-blocking)
+  setTimeout(async () => {
+    try {
+      const { worktreePoolService } = await import('./services/WorktreePoolService');
+      await worktreePoolService.cleanupOrphanedReserves();
+    } catch {
+      // Best effort
+    }
+  }, 2000);
+
   // Detect Claude CLI (cache for settings UI)
   detectClaudeCli();
 });

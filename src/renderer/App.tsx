@@ -215,6 +215,16 @@ export function App() {
     for (const project of projects) {
       loadTasksForProject(project.id);
     }
+    // Ensure reserve worktree for active project
+    if (activeProjectId) {
+      const project = projects.find((p) => p.id === activeProjectId);
+      if (project) {
+        window.electronAPI.worktreeEnsureReserve({
+          projectId: activeProjectId,
+          projectPath: project.path,
+        });
+      }
+    }
   }, [projects, activeProjectId]);
 
   // Theme
@@ -560,28 +570,36 @@ export function App() {
     const targetProject = projects.find((p) => p.id === targetProjectId);
     if (!targetProject) return;
 
+    let worktreeInfo: { branch: string; path: string } | null = null;
+
     const linkedIssueNumbers = linkedIssues?.map((i) => i.number);
 
-    // Generate worktree name and path for worktree tasks.
-    // Claude CLI --worktree creates worktrees at <repo>/.claude/worktrees/<name>.
-    let worktreeName: string | undefined;
-    let taskPath = targetProject.path;
-    let branch = 'main';
-
     if (useWorktree) {
-      const slug = name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '')
-        .slice(0, 50);
-      const hash = Array.from(crypto.getRandomValues(new Uint8Array(3)))
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('')
-        .slice(0, 3);
-      worktreeName = `${slug}-${hash}`;
-      taskPath = `${targetProject.path}/.claude/worktrees/${worktreeName}`;
-      branch = worktreeName;
+      const claimResp = await window.electronAPI.worktreeClaimReserve({
+        projectId: targetProject.id,
+        taskName: name,
+        baseRef,
+        linkedIssueNumbers,
+      });
+
+      if (claimResp.success && claimResp.data) {
+        worktreeInfo = { branch: claimResp.data.branch, path: claimResp.data.path };
+      } else {
+        const createResp = await window.electronAPI.worktreeCreate({
+          projectPath: targetProject.path,
+          taskName: name,
+          baseRef,
+          projectId: targetProject.id,
+          linkedIssueNumbers,
+        });
+        if (createResp.success && createResp.data) {
+          worktreeInfo = { branch: createResp.data.branch, path: createResp.data.path };
+        }
+      }
     }
+
+    const branch = worktreeInfo?.branch ?? 'main';
+    const taskPath = worktreeInfo?.path ?? targetProject.path;
 
     const saveResp = await window.electronAPI.saveTask({
       projectId: targetProject.id,
@@ -607,9 +625,8 @@ export function App() {
         });
 
         const prompt = `I'm working on the following GitHub issue(s):\n\n${issueBlocks.join('\n\n')}\n\nPlease help me implement a solution for this.`;
-        // Write task context to project root (worktree doesn't exist yet)
         window.electronAPI.ptyWriteTaskContext({
-          cwd: targetProject.path,
+          cwd: taskPath,
           prompt,
           meta: {
             issueNumbers: linkedIssues.map((i) => i.number),
@@ -622,6 +639,23 @@ export function App() {
       await loadTasksForProject(targetProject.id);
       setActiveProjectId(targetProject.id);
       setActiveTaskId(taskId);
+
+      window.electronAPI.worktreeEnsureReserve({
+        projectId: targetProject.id,
+        projectPath: targetProject.path,
+      });
+
+      // Fire-and-forget: post branch comment on each linked issue
+      // (branch linking happens in the worktree service before push)
+      if (linkedIssues && linkedIssues.length > 0) {
+        for (const issue of linkedIssues) {
+          window.electronAPI
+            .githubPostBranchComment(targetProject.path, issue.number, branch)
+            .catch(() => {
+              // Best effort
+            });
+        }
+      }
     }
   }
 

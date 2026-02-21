@@ -29,7 +29,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('db:getOrCreateDefaultConversation', taskId),
 
   // Worktree
+  worktreeCreate: (args: unknown) => ipcRenderer.invoke('worktree:create', args),
   worktreeRemove: (args: unknown) => ipcRenderer.invoke('worktree:remove', args),
+  worktreeClaimReserve: (args: unknown) => ipcRenderer.invoke('worktree:claimReserve', args),
+  worktreeEnsureReserve: (args: unknown) => ipcRenderer.invoke('worktree:ensureReserve', args),
+  worktreeHasReserve: (projectId: string) => ipcRenderer.invoke('worktree:hasReserve', projectId),
 
   // PTY
   ptyStartDirect: (args: unknown) => ipcRenderer.invoke('pty:startDirect', args),
