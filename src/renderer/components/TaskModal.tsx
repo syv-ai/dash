@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, GitBranch, Zap, ChevronDown, Loader2, AlertCircle, Search, Github, Check } from 'lucide-react';
-import type { BranchInfo, GithubIssue } from '../../shared/types';
+import { X, GitBranch, Zap, Loader2, Search, Github, Check } from 'lucide-react';
+import type { GithubIssue } from '../../shared/types';
 
 interface TaskModalProps {
   projectPath: string;
@@ -19,14 +19,6 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
   const [useWorktree, setUseWorktree] = useState(true);
   const [autoApprove, setAutoApprove] = useState(() => localStorage.getItem('yoloMode') === 'true');
 
-  // Branch selector state
-  const [branches, setBranches] = useState<BranchInfo[]>([]);
-  const [branchLoading, setBranchLoading] = useState(false);
-  const [branchError, setBranchError] = useState<string | null>(null);
-  const [selectedBranch, setSelectedBranch] = useState<BranchInfo | null>(null);
-  const [branchSearch, setBranchSearch] = useState('');
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-
   // GitHub issue picker state
   const [ghAvailable, setGhAvailable] = useState(false);
   const [issueQuery, setIssueQuery] = useState('');
@@ -35,8 +27,6 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
   const [selectedIssues, setSelectedIssues] = useState<GithubIssue[]>([]);
   const [issueDropdownOpen, setIssueDropdownOpen] = useState(false);
 
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
   const issueDropdownRef = useRef<HTMLDivElement>(null);
   const issueSearchInputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -50,19 +40,9 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
     });
   }, []);
 
-  // Fetch branches when worktree is enabled
-  useEffect(() => {
-    if (useWorktree) {
-      fetchBranches();
-    }
-  }, [useWorktree, projectPath]);
-
   // Close dropdowns on click outside
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false);
-      }
       if (issueDropdownRef.current && !issueDropdownRef.current.contains(e.target as Node)) {
         setIssueDropdownOpen(false);
       }
@@ -70,13 +50,6 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  // Focus search input when dropdown opens
-  useEffect(() => {
-    if (dropdownOpen) {
-      searchInputRef.current?.focus();
-    }
-  }, [dropdownOpen]);
 
   useEffect(() => {
     if (issueDropdownOpen) {
@@ -121,39 +94,14 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
     [projectPath],
   );
 
-  async function fetchBranches() {
-    setBranchLoading(true);
-    setBranchError(null);
-    try {
-      const resp = await window.electronAPI.gitListBranches(projectPath);
-      if (resp.success && resp.data) {
-        setBranches(resp.data);
-        if (!selectedBranch && resp.data.length > 0) {
-          setSelectedBranch(resp.data[0]);
-        }
-      } else {
-        setBranchError(resp.error || 'Failed to load branches');
-      }
-    } catch (err) {
-      setBranchError(String(err));
-    } finally {
-      setBranchLoading(false);
-    }
-  }
-
-  const filteredBranches = branches.filter((b) =>
-    b.name.toLowerCase().includes(branchSearch.toLowerCase()),
-  );
-
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (name.trim()) {
-      const baseRef = useWorktree ? selectedBranch?.ref : undefined;
       onCreate(
         name.trim(),
         useWorktree,
         autoApprove,
-        baseRef,
+        undefined,
         selectedIssues.length > 0 ? selectedIssues : undefined,
       );
       onClose();
@@ -232,115 +180,6 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
             </label>
           </div>
 
-          {/* Branch selector — same inline search pattern as issue picker */}
-          {useWorktree && (
-            <div className="mb-4" ref={dropdownRef}>
-              <label className="block text-[12px] font-medium text-muted-foreground/70 mb-2">
-                Base branch
-              </label>
-
-              {branchError ? (
-                <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-[12px] text-destructive">
-                  <AlertCircle size={13} strokeWidth={2} />
-                  <span className="flex-1 truncate">{branchError}</span>
-                  <button
-                    type="button"
-                    onClick={fetchBranches}
-                    className="text-[11px] font-medium underline underline-offset-2 hover:no-underline shrink-0"
-                  >
-                    Retry
-                  </button>
-                </div>
-              ) : (
-                <div className="relative">
-                  <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-background border border-input/60 focus-within:ring-2 focus-within:ring-ring/30 focus-within:border-ring/50 transition-all duration-150">
-                    {branchLoading ? (
-                      <Loader2
-                        size={12}
-                        className="animate-spin text-muted-foreground/50 shrink-0"
-                      />
-                    ) : (
-                      <GitBranch
-                        size={12}
-                        className="text-muted-foreground/40 shrink-0"
-                        strokeWidth={1.8}
-                      />
-                    )}
-                    <input
-                      ref={searchInputRef}
-                      type="text"
-                      value={dropdownOpen ? branchSearch : selectedBranch?.name || ''}
-                      onChange={(e) => {
-                        setBranchSearch(e.target.value);
-                        if (!dropdownOpen) setDropdownOpen(true);
-                      }}
-                      onFocus={() => {
-                        setBranchSearch('');
-                        setDropdownOpen(true);
-                      }}
-                      placeholder={
-                        branchLoading ? 'Fetching branches...' : 'Search branches...'
-                      }
-                      disabled={branchLoading}
-                      className="flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/30 outline-none disabled:opacity-50"
-                    />
-                    {selectedBranch && !dropdownOpen && (
-                      <span className="text-[11px] text-muted-foreground/40 font-mono shrink-0">
-                        {selectedBranch.shortHash}
-                      </span>
-                    )}
-                    <ChevronDown
-                      size={13}
-                      className={`text-muted-foreground/40 shrink-0 transition-transform duration-150 ${dropdownOpen ? 'rotate-180' : ''}`}
-                    />
-                  </div>
-
-                  {dropdownOpen && (
-                    <div className="absolute z-50 mt-1 w-full bg-card border border-border/60 rounded-lg shadow-xl shadow-black/30 overflow-hidden">
-                      <div className="max-h-[200px] overflow-y-auto">
-                        {filteredBranches.length === 0 ? (
-                          <div className="px-3 py-3 text-[12px] text-muted-foreground/40 text-center">
-                            No branches found
-                          </div>
-                        ) : (
-                          filteredBranches.map((branch) => (
-                            <button
-                              key={branch.ref}
-                              type="button"
-                              onClick={() => {
-                                setSelectedBranch(branch);
-                                setDropdownOpen(false);
-                                setBranchSearch('');
-                              }}
-                              className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-accent/60 transition-colors duration-100 ${
-                                selectedBranch?.ref === branch.ref ? 'bg-accent/40' : ''
-                              }`}
-                            >
-                              <GitBranch
-                                size={11}
-                                className="text-muted-foreground/40 shrink-0"
-                                strokeWidth={1.8}
-                              />
-                              <span className="flex-1 truncate text-[12px] text-foreground/80">
-                                {branch.name}
-                              </span>
-                              <span className="text-[10px] text-muted-foreground/40 font-mono shrink-0">
-                                {branch.shortHash}
-                              </span>
-                              <span className="text-[10px] text-muted-foreground/30 shrink-0">
-                                {branch.relativeDate}
-                              </span>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
           {/* GitHub issue picker — only shown when gh is available */}
           {ghAvailable && (
             <div className="mb-4" ref={issueDropdownRef}>
@@ -410,9 +249,7 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
                         </div>
                       ) : (
                         issueResults.map((issue) => {
-                          const isSelected = selectedIssues.some(
-                            (i) => i.number === issue.number,
-                          );
+                          const isSelected = selectedIssues.some((i) => i.number === issue.number);
                           return (
                             <button
                               key={issue.number}
@@ -432,7 +269,11 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
                                 }`}
                               >
                                 {isSelected && (
-                                  <Check size={10} strokeWidth={3} className="text-primary-foreground" />
+                                  <Check
+                                    size={10}
+                                    strokeWidth={3}
+                                    className="text-primary-foreground"
+                                  />
                                 )}
                               </span>
                               <div className="flex-1 min-w-0">
