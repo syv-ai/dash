@@ -7,6 +7,7 @@ interface AttachOptions {
   autoApprove?: boolean;
   shellOnly?: boolean;
   themeId?: string;
+  worktreeName?: string;
 }
 
 class SessionRegistryImpl {
@@ -24,6 +25,7 @@ class SessionRegistryImpl {
         isDark: this._isDark,
         shellOnly: opts.shellOnly,
         themeId: opts.themeId ?? this._themeId,
+        worktreeName: opts.worktreeName,
       });
       this.sessions.set(opts.id, session);
     }

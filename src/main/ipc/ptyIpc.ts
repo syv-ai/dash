@@ -28,6 +28,7 @@ export function registerPtyIpc(): void {
         autoApprove?: boolean;
         resume?: boolean;
         isDark?: boolean;
+        worktreeName?: string;
       },
     ) => {
       try {

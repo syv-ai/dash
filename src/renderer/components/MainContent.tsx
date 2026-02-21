@@ -41,12 +41,8 @@ export function MainContent({
           <div className="w-14 h-14 rounded-2xl bg-accent/60 flex items-center justify-center mx-auto mb-4">
             <FolderOpen size={22} className="text-muted-foreground/40" strokeWidth={1.5} />
           </div>
-          <h2 className="text-[15px] font-semibold text-foreground/80 mb-1.5">
-            Dash
-          </h2>
-          <p className="text-[13px] text-muted-foreground/60">
-            Open a folder to get started
-          </p>
+          <h2 className="text-[15px] font-semibold text-foreground/80 mb-1.5">Dash</h2>
+          <p className="text-[13px] text-muted-foreground/60">Open a folder to get started</p>
         </div>
       </div>
     );
@@ -66,9 +62,13 @@ export function MainContent({
             Create a task to start a Claude session
           </p>
           <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/40 text-[11px] text-muted-foreground/50">
-            <kbd className="px-1.5 py-0.5 rounded bg-accent text-[10px] font-mono font-medium">Cmd</kbd>
+            <kbd className="px-1.5 py-0.5 rounded bg-accent text-[10px] font-mono font-medium">
+              Cmd
+            </kbd>
             <span>+</span>
-            <kbd className="px-1.5 py-0.5 rounded bg-accent text-[10px] font-mono font-medium">N</kbd>
+            <kbd className="px-1.5 py-0.5 rounded bg-accent text-[10px] font-mono font-medium">
+              N
+            </kbd>
           </div>
         </div>
       </div>
@@ -76,7 +76,10 @@ export function MainContent({
   }
 
   const taskHeader = (
-    <div className="flex items-center gap-3 px-4 h-10 flex-shrink-0 border-b border-border/60" style={{ background: 'hsl(var(--surface-1))' }}>
+    <div
+      className="flex items-center gap-3 px-4 h-10 flex-shrink-0 border-b border-border/60"
+      style={{ background: 'hsl(var(--surface-1))' }}
+    >
       {sidebarCollapsed && tasks.length > 0 ? (
         <>
           <div className="flex items-center gap-0.5 overflow-x-auto scrollbar-none flex-1 min-w-0">
@@ -165,8 +168,9 @@ export function MainContent({
         <TerminalPane
           key={activeTask.id}
           id={activeTask.id}
-          cwd={activeTask.path}
+          cwd={activeTask.useWorktree && activeProject ? activeProject.path : activeTask.path}
           autoApprove={activeTask.autoApprove}
+          worktreeName={activeTask.useWorktree ? activeTask.path.split('/').pop() : undefined}
         />
       </div>
     </div>

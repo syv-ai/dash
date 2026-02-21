@@ -130,9 +130,7 @@ function writeHookSettings(cwd: string, ptyId: string): void {
   const curlBase = `curl -s --connect-timeout 2 http://127.0.0.1:${port}`;
 
   const hookSettings: Record<string, unknown[]> = {
-    Stop: [
-      { hooks: [{ type: 'command', command: `${curlBase}/hook/stop?ptyId=${ptyId}` }] },
-    ],
+    Stop: [{ hooks: [{ type: 'command', command: `${curlBase}/hook/stop?ptyId=${ptyId}` }] }],
     UserPromptSubmit: [
       { hooks: [{ type: 'command', command: `${curlBase}/hook/busy?ptyId=${ptyId}` }] },
     ],
@@ -197,6 +195,7 @@ export async function startDirectPty(options: {
   autoApprove?: boolean;
   resume?: boolean;
   isDark?: boolean;
+  worktreeName?: string;
   sender?: WebContents;
 }): Promise<{
   reattached: boolean;
@@ -227,6 +226,9 @@ export async function startDirectPty(options: {
   }
 
   const args: string[] = [];
+  if (options.worktreeName) {
+    args.push('-w', options.worktreeName);
+  }
   if (options.resume) {
     args.push('-c', '-r');
   }
@@ -286,7 +288,12 @@ export async function startDirectPty(options: {
   } catch {
     // Best effort
   }
-  return { reattached: false, isDirectSpawn: true, hasTaskContext: !!taskContextMeta, taskContextMeta };
+  return {
+    reattached: false,
+    isDirectSpawn: true,
+    hasTaskContext: !!taskContextMeta,
+    taskContextMeta,
+  };
 }
 
 // ---------------------------------------------------------------------------

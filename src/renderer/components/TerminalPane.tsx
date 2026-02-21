@@ -9,9 +9,10 @@ interface TerminalPaneProps {
   id: string;
   cwd: string;
   autoApprove?: boolean;
+  worktreeName?: string;
 }
 
-export function TerminalPane({ id, cwd, autoApprove }: TerminalPaneProps) {
+export function TerminalPane({ id, cwd, autoApprove, worktreeName }: TerminalPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [showOverlay, setShowOverlay] = useState(false);
@@ -33,7 +34,7 @@ export function TerminalPane({ id, cwd, autoApprove }: TerminalPaneProps) {
 
     // Get or create session first so we can register callbacks
     // before the async attach() work detects a restart
-    const session = sessionRegistry.getOrCreate({ id, cwd, autoApprove });
+    const session = sessionRegistry.getOrCreate({ id, cwd, autoApprove, worktreeName });
 
     session.onRestarting(() => {
       overlayStartRef.current = Date.now();
@@ -55,7 +56,7 @@ export function TerminalPane({ id, cwd, autoApprove }: TerminalPaneProps) {
     return () => {
       sessionRegistry.detach(id);
     };
-  }, [id, cwd, autoApprove, hideOverlay]);
+  }, [id, cwd, autoApprove, worktreeName, hideOverlay]);
 
   return (
     <div
@@ -106,23 +107,8 @@ export function TerminalPane({ id, cwd, autoApprove }: TerminalPaneProps) {
               </linearGradient>
             </defs>
             <rect width="512" height="512" rx="108" fill="url(#restart-bg)" />
-            <rect
-              x="136"
-              y="240"
-              width="240"
-              height="36"
-              rx="18"
-              fill="url(#restart-dash)"
-            />
-            <rect
-              x="396"
-              y="232"
-              width="4"
-              height="52"
-              rx="2"
-              fill="#00ff88"
-              opacity="0.7"
-            />
+            <rect x="136" y="240" width="240" height="36" rx="18" fill="url(#restart-dash)" />
+            <rect x="396" y="232" width="4" height="52" rx="2" fill="#00ff88" opacity="0.7" />
           </svg>
           <span className="text-[13px] dark:text-neutral-400 text-neutral-500 font-medium">
             Resuming your session...

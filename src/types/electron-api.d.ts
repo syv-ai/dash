@@ -3,7 +3,6 @@ import type {
   Project,
   Task,
   Conversation,
-  WorktreeInfo,
   TerminalSnapshot,
   GitStatus,
   DiffResult,
@@ -49,13 +48,6 @@ export interface ElectronAPI {
   getOrCreateDefaultConversation: (taskId: string) => Promise<IpcResponse<Conversation>>;
 
   // Worktree
-  worktreeCreate: (args: {
-    projectPath: string;
-    taskName: string;
-    baseRef?: string;
-    projectId: string;
-    linkedIssueNumbers?: number[];
-  }) => Promise<IpcResponse<WorktreeInfo>>;
   worktreeRemove: (args: {
     projectPath: string;
     worktreePath: string;
@@ -66,17 +58,6 @@ export interface ElectronAPI {
       deleteRemoteBranch?: boolean;
     };
   }) => Promise<IpcResponse<void>>;
-  worktreeClaimReserve: (args: {
-    projectId: string;
-    taskName: string;
-    baseRef?: string;
-    linkedIssueNumbers?: number[];
-  }) => Promise<IpcResponse<WorktreeInfo>>;
-  worktreeEnsureReserve: (args: {
-    projectId: string;
-    projectPath: string;
-  }) => Promise<IpcResponse<void>>;
-  worktreeHasReserve: (projectId: string) => Promise<IpcResponse<boolean>>;
 
   // PTY
   ptyStartDirect: (args: {
@@ -87,6 +68,7 @@ export interface ElectronAPI {
     autoApprove?: boolean;
     resume?: boolean;
     isDark?: boolean;
+    worktreeName?: string;
   }) => Promise<
     IpcResponse<{
       reattached: boolean;
