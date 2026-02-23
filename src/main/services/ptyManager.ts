@@ -46,13 +46,49 @@ let cachedClaudePath: string | null = null;
 
 async function findClaudePath(): Promise<string | null> {
   if (cachedClaudePath) return cachedClaudePath;
+
+  // 1. Check the startup-detected cache from main.ts
+  try {
+    const { claudeCliCache } = await import('../main');
+    if (claudeCliCache.path) {
+      cachedClaudePath = claudeCliCache.path;
+      return cachedClaudePath;
+    }
+  } catch {
+    // Best effort
+  }
+
+  // 2. Try `which claude` (works when PATH is correct)
   try {
     const { stdout } = await execFileAsync('which', ['claude']);
-    cachedClaudePath = stdout.trim();
-    return cachedClaudePath;
+    const resolved = stdout.trim();
+    if (resolved) {
+      cachedClaudePath = resolved;
+      return cachedClaudePath;
+    }
   } catch {
-    return null;
+    // Not in PATH
   }
+
+  // 3. Direct probe common install locations
+  const home = os.homedir();
+  const candidates = [
+    path.join(home, '.local/bin/claude'),
+    '/opt/homebrew/bin/claude',
+    '/usr/local/bin/claude',
+  ];
+  for (const candidate of candidates) {
+    try {
+      await fs.promises.access(candidate, fs.constants.X_OK);
+      cachedClaudePath = candidate;
+      return cachedClaudePath;
+    } catch {
+      // Not found here
+    }
+  }
+
+  console.error('[findClaudePath] Claude CLI not found in any known location');
+  return null;
 }
 
 /**

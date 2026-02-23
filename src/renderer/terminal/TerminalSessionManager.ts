@@ -575,7 +575,14 @@ export class TerminalSessionManager {
       isDirectSpawn = resp.data?.isDirectSpawn ?? true;
       taskContextMeta = resp.data?.taskContextMeta ?? null;
     } else {
-      // Fall back to shell
+      // Fall back to shell — warn the user so they know why they see a shell
+      this.terminal.writeln(
+        '\x1b[33m⚠ Could not start Claude CLI directly — falling back to shell.\x1b[0m',
+      );
+      this.terminal.writeln(
+        '\x1b[33m  Install with: npm install -g @anthropic-ai/claude-code\x1b[0m\r\n',
+      );
+
       const shellResp = await window.electronAPI.ptyStart({
         id: this.id,
         cwd: this.cwd,

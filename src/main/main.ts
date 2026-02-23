@@ -18,7 +18,16 @@ function fixPath(): void {
   const additions: string[] = [];
 
   if (process.platform === 'darwin') {
-    additions.push('/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin');
+    const home = os.homedir();
+    additions.push(
+      path.join(home, '.local/bin'),
+      '/opt/homebrew/bin',
+      '/usr/local/bin',
+      '/usr/bin',
+      '/bin',
+      '/usr/sbin',
+      '/sbin',
+    );
     // Try to get login shell PATH
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
