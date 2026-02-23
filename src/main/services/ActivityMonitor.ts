@@ -72,6 +72,10 @@ class ActivityMonitorImpl {
   getAll(): Record<string, ActivityState> {
     const result: Record<string, ActivityState> = {};
     for (const [id, activity] of this.activities) {
+      // Only expose direct-spawn (Claude CLI) PTYs to the renderer.
+      // Shell terminals cycle busy/idle on every command, which would
+      // trigger notification sounds and misleading activity indicators.
+      if (!activity.isDirectSpawn) continue;
       result[id] = activity.state;
     }
     return result;
