@@ -234,7 +234,9 @@ function writeHookSettings(cwd: string, ptyId: string): void {
     }
 
     fs.writeFileSync(settingsPath, JSON.stringify(merged, null, 2) + '\n');
-    console.error(`[writeHookSettings] Wrote ${settingsPath}`);
+    console.error(
+      `[writeHookSettings] Wrote ${settingsPath} (attribution: ${commitAttributionSetting === undefined ? 'default' : commitAttributionSetting || 'none'})`,
+    );
   } catch (err) {
     console.error('[writeHookSettings] Failed:', err);
   }
