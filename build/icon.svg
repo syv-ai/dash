@@ -1,64 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#0a0a0a"/>
-      <stop offset="100%" style="stop-color:#1a1a2e"/>
-    </linearGradient>
-    <linearGradient id="dash" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" style="stop-color:#00ff88"/>
-      <stop offset="100%" style="stop-color:#00cc6a"/>
-    </linearGradient>
-    <filter id="glow">
-      <feGaussianBlur stdDeviation="8" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-    <filter id="softglow">
-      <feGaussianBlur stdDeviation="3" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-  </defs>
-
   <!-- Background rounded square -->
-  <rect width="512" height="512" rx="108" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="108" fill="#0a0a0a"/>
 
-  <!-- Subtle grid lines for code editor feel -->
-  <g opacity="0.06" stroke="#00ff88">
-    <line x1="0" y1="128" x2="512" y2="128" stroke-width="1"/>
-    <line x1="0" y1="192" x2="512" y2="192" stroke-width="1"/>
-    <line x1="0" y1="256" x2="512" y2="256" stroke-width="1"/>
-    <line x1="0" y1="320" x2="512" y2="320" stroke-width="1"/>
-    <line x1="0" y1="384" x2="512" y2="384" stroke-width="1"/>
-  </g>
-
-  <!-- Line numbers on the left -->
-  <g font-family="monospace" font-size="28" fill="#00ff88" opacity="0.15">
-    <text x="40" y="152">1</text>
-    <text x="40" y="216">2</text>
-    <text x="40" y="280">3</text>
-    <text x="40" y="344">4</text>
-    <text x="40" y="408">5</text>
-  </g>
-
-  <!-- Faint code lines -->
-  <g opacity="0.08">
-    <rect x="80" y="133" width="160" height="8" rx="4" fill="#00ff88"/>
-    <rect x="80" y="197" width="220" height="8" rx="4" fill="#00ff88"/>
-    <rect x="80" y="325" width="180" height="8" rx="4" fill="#00ff88"/>
-    <rect x="80" y="389" width="140" height="8" rx="4" fill="#00ff88"/>
-  </g>
-
-  <!-- Main dash symbol with glow -->
-  <rect x="136" y="240" width="240" height="36" rx="18" fill="url(#dash)" filter="url(#glow)"/>
-
-  <!-- Cursor blink -->
-  <rect x="396" y="232" width="4" height="52" rx="2" fill="#00ff88" opacity="0.7" filter="url(#softglow)"/>
-
-  <!-- Terminal prompt chevron -->
-  <text x="92" y="274" font-family="monospace" font-size="36" font-weight="bold" fill="#00ff88" opacity="0.3" filter="url(#softglow)">&#x203A;</text>
+  <!-- Green dash -->
+  <rect x="136" y="230" width="240" height="52" rx="26" fill="#00ff88"/>
 </svg>
