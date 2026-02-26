@@ -18,7 +18,10 @@ interface PtyRecord {
 
 const ptys = new Map<string, PtyRecord>();
 
-// Commit attribution setting: undefined = "default" (don't write key),
+const DASH_DEFAULT_ATTRIBUTION =
+  '\n\nCo-Authored-By: Claude <noreply@anthropic.com> via Dash <dash@syv.ai>';
+
+// Commit attribution setting: undefined = "default" (use Dash attribution),
 // '' = "none" (suppress attribution), any other string = custom text.
 let commitAttributionSetting: string | undefined = undefined;
 
@@ -225,13 +228,10 @@ function writeHookSettings(cwd: string, ptyId: string): void {
       },
     };
 
-    // Commit attribution: only write the key when user has explicitly configured it.
-    // When undefined ("default"), remove the key so repo/global settings take effect.
-    if (commitAttributionSetting !== undefined) {
-      merged.attribution = { commit: commitAttributionSetting };
-    } else {
-      delete merged.attribution;
-    }
+    // Commit attribution: undefined = Dash default, '' = suppress, other = custom.
+    const effectiveAttribution =
+      commitAttributionSetting === undefined ? DASH_DEFAULT_ATTRIBUTION : commitAttributionSetting;
+    merged.attribution = { commit: effectiveAttribution };
 
     fs.writeFileSync(settingsPath, JSON.stringify(merged, null, 2) + '\n');
     console.error(

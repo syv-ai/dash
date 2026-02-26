@@ -424,8 +424,8 @@ export function SettingsModal({
                   }`}
                 />
                 <p className="text-[10px] text-foreground/80 mt-2">
-                  Controls attribution appended to git commits by Claude. Default respects repo and
-                  global Claude settings. Clear the field to disable attribution.
+                  Controls attribution appended to git commits by Claude. Default uses the Dash
+                  attribution. Clear the field to disable attribution.
                 </p>
               </div>
 
