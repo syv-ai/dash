@@ -1002,12 +1002,6 @@ export function App() {
         )}
       </PanelGroup>
 
-      {/* Global footer */}
-      <div
-        className="h-6 flex-shrink-0 border-t border-border/40"
-        style={{ background: 'hsl(var(--surface-1))' }}
-      />
-
       {showAddProjectModal && (
         <AddProjectModal
           onClose={() => setShowAddProjectModal(false)}
