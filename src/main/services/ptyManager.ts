@@ -565,7 +565,10 @@ export async function startPty(options: {
  */
 export function sendRemoteControl(id: string): void {
   remoteControlService.startWatching(id);
-  writePty(id, '/rc\r');
+  // Write command text first, then send Enter separately so Claude Code's
+  // input handler processes the keystroke as a distinct event.
+  writePty(id, '/rc');
+  setTimeout(() => writePty(id, '\r'), 100);
 }
 
 /**

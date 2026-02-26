@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { X, Globe, Copy, Check, Loader2 } from 'lucide-react';
 import QRCode from 'qrcode';
 import type { RemoteControlState } from '../../shared/types';
@@ -13,14 +13,16 @@ export function RemoteControlModal({ ptyId, state, onClose }: RemoteControlModal
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [enabling, setEnabling] = useState(false);
+  const enabledRef = useRef(false);
 
   // Send /rc when modal opens if no active state
   useEffect(() => {
-    if (!state) {
+    if (!state && !enabledRef.current) {
+      enabledRef.current = true;
       setEnabling(true);
       window.electronAPI.ptyRemoteControlEnable(ptyId);
     }
-  }, []);
+  }, [ptyId, state]);
 
   // Update enabling state when we get a URL
   useEffect(() => {
@@ -32,6 +34,7 @@ export function RemoteControlModal({ ptyId, state, onClose }: RemoteControlModal
   // Generate QR code when URL arrives
   useEffect(() => {
     if (!state?.url) return;
+    console.log('[RemoteControl] QR code URL:', state.url);
     QRCode.toDataURL(state.url, {
       width: 200,
       margin: 2,
