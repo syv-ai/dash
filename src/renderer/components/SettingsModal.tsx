@@ -12,7 +12,7 @@ import type { NotificationSound } from '../sounds';
 import { TERMINAL_THEMES } from '../terminal/terminalThemes';
 
 const DASH_DEFAULT_ATTRIBUTION =
-  'Co-Authored-By: Claude <noreply@anthropic.com> via Dash <dash@syv.ai>';
+  '\n\nCo-Authored-By: Claude <noreply@anthropic.com> via Dash <dash@syv.ai>';
 
 interface SettingsModalProps {
   theme: 'light' | 'dark';
