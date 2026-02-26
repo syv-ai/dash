@@ -69,6 +69,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 
+  // Remote control
+  ptyRemoteControlEnable: (ptyId: string) =>
+    ipcRenderer.invoke('pty:remoteControl:enable', ptyId),
+  ptyRemoteControlGetAllStates: () => ipcRenderer.invoke('pty:remoteControl:getAllStates'),
+  onRemoteControlStateChanged: (
+    callback: (data: { ptyId: string; state: { url: string; active: boolean } | null }) => void,
+  ) => {
+    const handler = (
+      _event: unknown,
+      data: { ptyId: string; state: { url: string; active: boolean } | null },
+    ) => callback(data);
+    ipcRenderer.on('rc:stateChanged', handler);
+    return () => {
+      ipcRenderer.removeListener('rc:stateChanged', handler);
+    };
+  },
+
   // Snapshots
   ptyGetSnapshot: (id: string) => ipcRenderer.invoke('pty:snapshot:get', id),
   ptySaveSnapshot: (id: string, payload: unknown) =>

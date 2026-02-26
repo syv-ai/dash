@@ -98,6 +98,10 @@ app.whenReady().then(async () => {
   const { activityMonitor } = await import('./services/ActivityMonitor');
   activityMonitor.start(mainWindow.webContents);
 
+  // Remote control service needs a sender for state change events
+  const { remoteControlService } = await import('./services/remoteControlService');
+  remoteControlService.setSender(mainWindow.webContents);
+
   // Cleanup orphaned reserve worktrees (background, non-blocking)
   setTimeout(async () => {
     try {
@@ -154,6 +158,8 @@ app.on('activate', async () => {
     mainWindow = createWindow();
     const { activityMonitor } = await import('./services/ActivityMonitor');
     activityMonitor.start(mainWindow.webContents);
+    const { remoteControlService } = await import('./services/remoteControlService');
+    remoteControlService.setSender(mainWindow.webContents);
   }
 });
 

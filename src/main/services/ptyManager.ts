@@ -47,6 +47,7 @@ function getPty() {
 }
 
 import { createBannerFilter } from './bannerFilter';
+import { remoteControlService } from './remoteControlService';
 
 // Cached Claude CLI path
 let cachedClaudePath: string | null = null;
@@ -355,12 +356,14 @@ export async function startDirectPty(options: {
 
   proc.onData((data: string) => {
     bannerFilter(data);
+    remoteControlService.onPtyData(options.id, data);
   });
 
   proc.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
     // Skip if this PTY was replaced by a new spawn (kill+restart on reattach)
     if (ptys.get(options.id) !== record) return;
     activityMonitor.unregister(options.id);
+    remoteControlService.unregister(options.id);
     if (record.owner && !record.owner.isDestroyed()) {
       record.owner.send(`pty:exit:${options.id}`, { exitCode, signal });
     }
@@ -558,6 +561,14 @@ export async function startPty(options: {
 }
 
 /**
+ * Enable remote control for a PTY by sending `/rc` and watching for the URL.
+ */
+export function sendRemoteControl(id: string): void {
+  remoteControlService.startWatching(id);
+  writePty(id, '/rc\n');
+}
+
+/**
  * Send data to a PTY.
  */
 export function writePty(id: string, data: string): void {
@@ -590,6 +601,7 @@ export function killPty(id: string): void {
     // Delete first so the guarded onExit handler becomes a no-op
     ptys.delete(id);
     activityMonitor.unregister(id);
+    remoteControlService.unregister(id);
     try {
       record.proc.kill();
     } catch {

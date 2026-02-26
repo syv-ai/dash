@@ -11,6 +11,7 @@ import type {
   GithubIssue,
   CommitGraphData,
   CommitDetail,
+  RemoteControlState,
 } from '../shared/types';
 
 export interface ElectronAPI {
@@ -114,6 +115,15 @@ export interface ElectronAPI {
   ptyGetAllActivity: () => Promise<IpcResponse<Record<string, 'busy' | 'idle' | 'waiting'>>>;
   onPtyActivity: (
     callback: (data: Record<string, 'busy' | 'idle' | 'waiting'>) => void,
+  ) => () => void;
+
+  // Remote control
+  ptyRemoteControlEnable: (ptyId: string) => Promise<IpcResponse<void>>;
+  ptyRemoteControlGetAllStates: () => Promise<
+    IpcResponse<Record<string, RemoteControlState>>
+  >;
+  onRemoteControlStateChanged: (
+    callback: (data: { ptyId: string; state: RemoteControlState | null }) => void,
   ) => () => void;
 
   // Snapshots
