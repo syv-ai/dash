@@ -195,3 +195,10 @@ export interface GithubIssue {
   url: string;
   assignees?: string[];
 }
+
+// ── Remote Control Types ────────────────────────────────────
+
+export interface RemoteControlState {
+  url: string;
+  active: boolean;
+}

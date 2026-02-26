@@ -14,9 +14,17 @@ import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
 import { TaskModal } from './components/TaskModal';
 import { AddProjectModal } from './components/AddProjectModal';
 import { DeleteTaskModal } from './components/DeleteTaskModal';
+import { RemoteControlModal } from './components/RemoteControlModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ToastContainer } from './components/Toast';
-import type { Project, Task, GitStatus, DiffResult, GithubIssue } from '../shared/types';
+import type {
+  Project,
+  Task,
+  GitStatus,
+  DiffResult,
+  GithubIssue,
+  RemoteControlState,
+} from '../shared/types';
 import { loadKeybindings, saveKeybindings, matchesBinding } from './keybindings';
 import type { KeyBindingMap } from './keybindings';
 import { sessionRegistry } from './terminal/SessionRegistry';
@@ -89,6 +97,12 @@ export function App() {
 
   // Activity state — keys are PTY IDs that have active sessions
   const [taskActivity, setTaskActivity] = useState<Record<string, 'busy' | 'idle' | 'waiting'>>({});
+
+  // Remote control state
+  const [remoteControlStates, setRemoteControlStates] = useState<
+    Record<string, RemoteControlState>
+  >({});
+  const [remoteControlModalPtyId, setRemoteControlModalPtyId] = useState<string | null>(null);
 
   const notificationSoundRef = useRef(notificationSound);
   useEffect(() => {
@@ -200,6 +214,28 @@ export function App() {
           if (state === 'idle') hasBeenIdle.add(id);
         }
         setTaskActivity(resp.data);
+      }
+    });
+
+    return unsubscribe;
+  }, []);
+
+  // Remote control — subscribe to state changes
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.onRemoteControlStateChanged(({ ptyId, state }) => {
+      setRemoteControlStates((prev) => {
+        if (!state) {
+          const next = { ...prev };
+          delete next[ptyId];
+          return next;
+        }
+        return { ...prev, [ptyId]: state };
+      });
+    });
+
+    window.electronAPI.ptyRemoteControlGetAllStates().then((resp) => {
+      if (resp.success && resp.data) {
+        setRemoteControlStates(resp.data);
       }
     });
 
@@ -343,7 +379,10 @@ export function App() {
         setShowAddProjectModal(true);
       }
       if (keybindings.closeDiff && matchesBinding(e, keybindings.closeDiff)) {
-        if (deleteTaskTarget) {
+        if (remoteControlModalPtyId) {
+          e.preventDefault();
+          setRemoteControlModalPtyId(null);
+        } else if (deleteTaskTarget) {
           e.preventDefault();
           setDeleteTaskTarget(null);
         } else if (showDiff) {
@@ -403,6 +442,7 @@ export function App() {
     activeProjectId,
     projects,
     tasksByProject,
+    remoteControlModalPtyId,
     deleteTaskTarget,
     showDiff,
     showCommitGraph,
@@ -898,6 +938,7 @@ export function App() {
               collapsed={sidebarCollapsed}
               onToggleCollapse={toggleSidebar}
               taskActivity={taskActivity}
+              remoteControlStates={remoteControlStates}
             />
           </ShellDrawerWrapper>
         </Panel>
@@ -934,7 +975,9 @@ export function App() {
               tasks={activeProjectTasks}
               activeTaskId={activeTaskId}
               taskActivity={taskActivity}
+              remoteControlStates={remoteControlStates}
               onSelectTask={setActiveTaskId}
+              onEnableRemoteControl={(taskId) => setRemoteControlModalPtyId(taskId)}
             />
           </ShellDrawerWrapper>
         </Panel>
@@ -1086,6 +1129,14 @@ export function App() {
           task={deleteTaskTarget}
           onClose={() => setDeleteTaskTarget(null)}
           onConfirm={handleDeleteTaskConfirm}
+        />
+      )}
+
+      {remoteControlModalPtyId && (
+        <RemoteControlModal
+          ptyId={remoteControlModalPtyId}
+          state={remoteControlStates[remoteControlModalPtyId] ?? null}
+          onClose={() => setRemoteControlModalPtyId(null)}
         />
       )}
 

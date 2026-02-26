@@ -62,10 +62,12 @@
     ]
   },
   "dependencies": {
+    "@types/qrcode": "^1.5.6",
     "better-sqlite3": "^11.7.0",
     "drizzle-orm": "^0.32.0",
     "electron-log": "^5.1.0",
     "node-pty": "^1.0.0",
+    "qrcode": "^1.5.4",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "sonner": "^2.0.7"

@@ -11,9 +11,11 @@ import {
   killPty,
   killByOwner,
   writeTaskContext,
+  sendRemoteControl,
 } from '../services/ptyManager';
 import { terminalSnapshotService } from '../services/TerminalSnapshotService';
 import { activityMonitor } from '../services/ActivityMonitor';
+import { remoteControlService } from '../services/remoteControlService';
 
 export function registerPtyIpc(): void {
   ipcMain.handle(
@@ -129,6 +131,20 @@ export function registerPtyIpc(): void {
   // Activity monitor
   ipcMain.handle('pty:activity:getAll', () => {
     return { success: true, data: activityMonitor.getAll() };
+  });
+
+  // Remote control
+  ipcMain.handle('pty:remoteControl:enable', (_event, ptyId: string) => {
+    try {
+      sendRemoteControl(ptyId);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  });
+
+  ipcMain.handle('pty:remoteControl:getAllStates', () => {
+    return { success: true, data: remoteControlService.getAllStates() };
   });
 }
 

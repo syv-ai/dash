@@ -8,12 +8,13 @@ import {
   Settings,
   GitBranch,
   GitGraph,
+  Globe,
   ChevronRight,
   ChevronDown,
   PanelLeftClose,
   PanelLeftOpen,
 } from 'lucide-react';
-import type { Project, Task } from '../../shared/types';
+import type { Project, Task, RemoteControlState } from '../../shared/types';
 import { IconButton } from './ui/IconButton';
 
 interface LeftSidebarProps {
@@ -34,6 +35,7 @@ interface LeftSidebarProps {
   collapsed: boolean;
   onToggleCollapse: () => void;
   taskActivity: Record<string, 'busy' | 'idle' | 'waiting'>;
+  remoteControlStates?: Record<string, RemoteControlState>;
 }
 
 export function LeftSidebar({
@@ -54,6 +56,7 @@ export function LeftSidebar({
   collapsed,
   onToggleCollapse,
   taskActivity,
+  remoteControlStates = {},
 }: LeftSidebarProps) {
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [collapsedArchived, setCollapsedArchived] = useState<Set<string>>(new Set());
@@ -325,6 +328,13 @@ export function LeftSidebar({
                             ) : activity === 'idle' ? (
                               <div className="w-[6px] h-[6px] rounded-full bg-emerald-400 flex-shrink-0" />
                             ) : null}
+                            {remoteControlStates[task.id] && (
+                              <Globe
+                                size={10}
+                                strokeWidth={2}
+                                className="text-primary flex-shrink-0 -ml-0.5"
+                              />
+                            )}
 
                             <span className="truncate flex-1">{task.name}</span>
 

@@ -1,7 +1,7 @@
 import React from 'react';
 import { TerminalPane } from './TerminalPane';
-import { Terminal, FolderOpen, GitBranch } from 'lucide-react';
-import type { Project, Task } from '../../shared/types';
+import { Terminal, FolderOpen, GitBranch, Globe } from 'lucide-react';
+import type { Project, Task, RemoteControlState } from '../../shared/types';
 
 /** Convert a git remote URL (SSH or HTTPS) to a GitHub issues base URL */
 function issueUrl(remote: string | null, num: number): string | null {
@@ -22,7 +22,9 @@ interface MainContentProps {
   tasks?: Task[];
   activeTaskId?: string | null;
   taskActivity?: Record<string, 'busy' | 'idle' | 'waiting'>;
+  remoteControlStates?: Record<string, RemoteControlState>;
   onSelectTask?: (id: string) => void;
+  onEnableRemoteControl?: (taskId: string) => void;
 }
 
 export function MainContent({
@@ -32,7 +34,9 @@ export function MainContent({
   tasks = [],
   activeTaskId,
   taskActivity = {},
+  remoteControlStates = {},
   onSelectTask,
+  onEnableRemoteControl,
 }: MainContentProps) {
   if (!activeProject) {
     return (
@@ -134,7 +138,7 @@ export function MainContent({
             <span className="text-[11px] font-mono">{activeTask.branch}</span>
           </div>
           {activeTask.linkedIssues && activeTask.linkedIssues.length > 0 && (
-            <div className="ml-auto flex items-center gap-1">
+            <div className="flex items-center gap-1">
               {activeTask.linkedIssues.map((num) => {
                 const url = issueUrl(activeProject?.gitRemote ?? null, num);
                 return url ? (
@@ -157,6 +161,19 @@ export function MainContent({
                 );
               })}
             </div>
+          )}
+          {taskActivity[activeTask.id] && (
+            <button
+              onClick={() => onEnableRemoteControl?.(activeTask.id)}
+              className={`ml-auto p-1 rounded-md transition-colors ${
+                remoteControlStates[activeTask.id]
+                  ? 'text-primary hover:bg-primary/10'
+                  : 'text-muted-foreground/50 hover:text-foreground hover:bg-accent/60'
+              }`}
+              title="Remote control"
+            >
+              <Globe size={14} strokeWidth={1.8} />
+            </button>
           )}
         </>
       )}
