@@ -37,10 +37,37 @@ export class GitService {
    */
   static async fetchAndListBranches(cwd: string): Promise<BranchInfo[]> {
     // Fetch with prune to sync with remote (30s timeout)
-    await execFileAsync('git', ['fetch', '--prune', 'origin'], {
-      cwd,
-      timeout: 30000,
-    });
+    try {
+      await execFileAsync('git', ['fetch', '--prune', 'origin'], {
+        cwd,
+        timeout: 30000,
+      });
+    } catch (err: unknown) {
+      const msg = String((err as { stderr?: string }).stderr || err);
+      if (/does not appear to be a git repository/i.test(msg)) {
+        throw new Error('No remote named "origin" found. Add a remote or disable worktree mode.');
+      } else if (/could not read from remote repository/i.test(msg)) {
+        throw new Error(
+          'Could not connect to remote repository. Check your network connection and SSH/HTTPS credentials.',
+        );
+      } else if (/authentication failed/i.test(msg) || /could not resolve host/i.test(msg)) {
+        throw new Error(
+          'Authentication failed or host not reachable. Check your credentials and network.',
+        );
+      } else if (/not a git repository/i.test(msg)) {
+        throw new Error('This directory is not a git repository.');
+      } else if (/timed out/i.test(msg) || (err as { killed?: boolean }).killed) {
+        throw new Error('Fetch timed out. Check your network connection and try again.');
+      } else {
+        // Extract just the "fatal:" line from stderr for a cleaner message
+        const fatalMatch = msg.match(/fatal:\s*(.+)/i);
+        throw new Error(
+          fatalMatch
+            ? `Git fetch failed: ${fatalMatch[1].trim()}`
+            : `Git fetch failed: ${msg.split('\n')[0].trim()}`,
+        );
+      }
+    }
 
     // List remote branches sorted by committerdate descending
     const { stdout } = await execFileAsync(
@@ -361,11 +388,7 @@ export class GitService {
 
   // ── Commit Graph ────────────────────────────────────────
 
-  static async getCommitGraph(
-    cwd: string,
-    limit = 150,
-    skip = 0,
-  ): Promise<CommitGraphData> {
+  static async getCommitGraph(cwd: string, limit = 150, skip = 0): Promise<CommitGraphData> {
     const args = [
       'log',
       '--exclude=refs/heads/_reserve/*',
@@ -557,9 +580,7 @@ export class GitService {
       // If this commit has no parents continuing, free the column
       if (commit.parents.length === 0 || !commit.parents.some((p) => rowIndex.has(p))) {
         // Only free if no parent will reuse it
-        const columnStillActive = [...activeLanes.values()].some(
-          (l) => l.column === lane.column,
-        );
+        const columnStillActive = [...activeLanes.values()].some((l) => l.column === lane.column);
         if (!columnStillActive) {
           freeColumns.push(lane.column);
         }
