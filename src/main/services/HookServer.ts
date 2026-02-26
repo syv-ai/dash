@@ -18,7 +18,7 @@ class HookServerImpl {
     this._desktopNotificationEnabled = opts.enabled;
   }
 
-  private showDesktopNotification(ptyId: string, body?: string): void {
+  private showDesktopNotification(ptyId: string, opts?: { title?: string; body?: string }): void {
     if (!this._desktopNotificationEnabled) return;
 
     // Skip if the app window is focused — user is already looking at it
@@ -26,6 +26,8 @@ class HookServerImpl {
     if (win && win.isFocused()) return;
 
     try {
+      let { title, body } = opts ?? {};
+      if (!title) title = 'Dash';
       if (!body) {
         body = 'A task finished';
         try {
@@ -39,7 +41,7 @@ class HookServerImpl {
         }
       }
       const n = new Notification({
-        title: 'Dash',
+        title,
         body,
       });
       n.on('click', () => {
@@ -52,16 +54,6 @@ class HookServerImpl {
       n.show();
     } catch (err) {
       console.error('[HookServer] Failed to show notification:', err);
-    }
-  }
-
-  private getTaskName(ptyId: string): string {
-    try {
-      const db = getDb();
-      const task = db.select({ name: tasks.name }).from(tasks).where(eq(tasks.id, ptyId)).get();
-      return task?.name || 'A task';
-    } catch {
-      return 'A task';
     }
   }
 
@@ -112,16 +104,20 @@ class HookServerImpl {
 
               if (notificationType === 'permission_prompt') {
                 activityMonitor.setWaitingForPermission(ptyId);
-                // Use the message from Claude Code when available (e.g. "Claude needs your
-                // permission to use Bash"), otherwise fall back to a generic message.
-                const taskName = this.getTaskName(ptyId);
-                const notifBody = message
-                  ? `${taskName}: ${message}`
-                  : `${taskName} needs permission`;
-                this.showDesktopNotification(ptyId, notifBody);
+                // Forward the title & message from the payload so the desktop
+                // notification shows exactly what Claude Code reported, e.g.
+                //   title: "Permission needed"
+                //   body:  "Claude needs your permission to use Bash"
+                this.showDesktopNotification(ptyId, {
+                  title: payload.title,
+                  body: message,
+                });
               } else if (notificationType === 'idle_prompt') {
                 activityMonitor.setIdle(ptyId);
-                this.showDesktopNotification(ptyId);
+                this.showDesktopNotification(ptyId, {
+                  title: payload.title,
+                  body: message,
+                });
               }
             } catch (err) {
               console.error('[HookServer] Failed to parse notification body:', err);
