@@ -24,6 +24,10 @@ let commitAttributionSetting: string | undefined = undefined;
 
 export function setCommitAttribution(value: string | undefined): void {
   commitAttributionSetting = value;
+  // Re-write settings.local.json for all active PTYs so the change takes effect immediately
+  for (const [id, rec] of ptys) {
+    writeHookSettings(rec.cwd, id);
+  }
 }
 
 export function setDesktopNotification(opts: { enabled: boolean }): void {
