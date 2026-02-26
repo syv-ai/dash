@@ -19,7 +19,7 @@ interface PtyRecord {
 const ptys = new Map<string, PtyRecord>();
 
 const DASH_DEFAULT_ATTRIBUTION =
-  '\n\nCo-Authored-By: Claude <noreply@anthropic.com> via Dash <dash@syv.ai>';
+  '\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nCo-Authored-By: Dash <dash@syv.ai>';
 
 // Commit attribution setting: undefined = "default" (use Dash attribution),
 // '' = "none" (suppress attribution), any other string = custom text.
