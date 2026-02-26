@@ -91,6 +91,11 @@ class HookServerImpl {
           }
         }
 
+        // Notification hook — receives JSON on stdin with:
+        //   notification_type: 'permission_prompt' | 'idle_prompt' | 'auth_success' | 'elicitation_dialog'
+        //   message: string (e.g. "Claude needs your permission to use Bash")
+        //   title: string | undefined (e.g. "Permission needed")
+        //   session_id, transcript_path, cwd, permission_mode, hook_event_name
         if (req.method === 'POST' && ptyId && url.pathname === '/hook/notification') {
           let body = '';
           req.on('data', (chunk: Buffer) => {
@@ -99,15 +104,24 @@ class HookServerImpl {
           req.on('end', () => {
             try {
               const payload = JSON.parse(body);
-              const notificationType = payload.notification_type;
+              const notificationType: string = payload.notification_type;
+              const message: string | undefined = payload.message;
               console.error(
                 `[HookServer] Notification hook fired for ptyId=${ptyId} type=${notificationType}`,
               );
 
               if (notificationType === 'permission_prompt') {
                 activityMonitor.setWaitingForPermission(ptyId);
+                // Use the message from Claude Code when available (e.g. "Claude needs your
+                // permission to use Bash"), otherwise fall back to a generic message.
                 const taskName = this.getTaskName(ptyId);
-                this.showDesktopNotification(ptyId, `${taskName} needs permission`);
+                const notifBody = message
+                  ? `${taskName}: ${message}`
+                  : `${taskName} needs permission`;
+                this.showDesktopNotification(ptyId, notifBody);
+              } else if (notificationType === 'idle_prompt') {
+                activityMonitor.setIdle(ptyId);
+                this.showDesktopNotification(ptyId);
               }
             } catch (err) {
               console.error('[HookServer] Failed to parse notification body:', err);

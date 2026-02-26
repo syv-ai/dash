@@ -169,8 +169,23 @@ export function writeTaskContext(
 }
 
 /**
- * Write .claude/settings.local.json with Stop, UserPromptSubmit, and
- * (optionally) SessionStart hooks.
+ * Write .claude/settings.local.json with Stop, UserPromptSubmit, Notification,
+ * and (optionally) SessionStart hooks.
+ *
+ * Notification hooks fire when Claude Code sends notifications. Each entry can
+ * include a `matcher` to filter by notification_type:
+ *   - permission_prompt  — Claude needs the user to approve a tool use
+ *   - idle_prompt        — Claude is idle / waiting for user input
+ *   - auth_success       — authentication completed successfully
+ *   - elicitation_dialog — Claude is presenting a dialog for user input
+ * Omit the matcher to run the hook for all notification types.
+ *
+ * The hook receives JSON on stdin with these fields:
+ *   session_id, transcript_path, cwd, permission_mode, hook_event_name,
+ *   message (notification text), title (optional), notification_type.
+ *
+ * Notification hooks cannot block or modify notifications but may return
+ * { additionalContext: string } to inject context into the conversation.
  */
 function writeHookSettings(cwd: string, ptyId: string): void {
   const port = hookServer.port;
@@ -188,6 +203,15 @@ function writeHookSettings(cwd: string, ptyId: string): void {
     Notification: [
       {
         matcher: 'permission_prompt',
+        hooks: [
+          {
+            type: 'command',
+            command: `curl -s --connect-timeout 2 -X POST -H "Content-Type: application/json" -d @- http://127.0.0.1:${port}/hook/notification?ptyId=${ptyId}`,
+          },
+        ],
+      },
+      {
+        matcher: 'idle_prompt',
         hooks: [
           {
             type: 'command',
