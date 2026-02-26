@@ -111,8 +111,10 @@ export interface ElectronAPI {
   ) => () => void;
 
   // Activity monitor
-  ptyGetAllActivity: () => Promise<IpcResponse<Record<string, 'busy' | 'idle'>>>;
-  onPtyActivity: (callback: (data: Record<string, 'busy' | 'idle'>) => void) => () => void;
+  ptyGetAllActivity: () => Promise<IpcResponse<Record<string, 'busy' | 'idle' | 'waiting'>>>;
+  onPtyActivity: (
+    callback: (data: Record<string, 'busy' | 'idle' | 'waiting'>) => void,
+  ) => () => void;
 
   // Snapshots
   ptyGetSnapshot: (id: string) => Promise<IpcResponse<TerminalSnapshot | null>>;

@@ -88,7 +88,7 @@ export function App() {
   }, [commitAttribution]);
 
   // Activity state — keys are PTY IDs that have active sessions
-  const [taskActivity, setTaskActivity] = useState<Record<string, 'busy' | 'idle'>>({});
+  const [taskActivity, setTaskActivity] = useState<Record<string, 'busy' | 'idle' | 'waiting'>>({});
 
   const notificationSoundRef = useRef(notificationSound);
   useEffect(() => {
@@ -155,7 +155,7 @@ export function App() {
 
   // Activity monitor — subscribe first, then query to avoid race
   useEffect(() => {
-    const prevActivity: Record<string, 'busy' | 'idle'> = {};
+    const prevActivity: Record<string, 'busy' | 'idle' | 'waiting'> = {};
     // Track PTYs that have been idle at least once, so we skip the initial
     // busy→idle transition that fires when a direct-spawn PTY first registers.
     const hasBeenIdle = new Set<string>();
@@ -171,6 +171,7 @@ export function App() {
         }
       }
       // Detect any busy→idle transition (only for PTYs that completed a full work cycle)
+      // Skip transitions from 'waiting' — those are not task completions
       for (const [id, state] of Object.entries(newActivity)) {
         if (prevActivity[id] === 'busy' && state === 'idle' && hasBeenIdle.has(id)) {
           playNotificationSound(notificationSoundRef.current);

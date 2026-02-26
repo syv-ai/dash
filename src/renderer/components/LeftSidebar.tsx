@@ -33,7 +33,7 @@ interface LeftSidebarProps {
   onShowCommitGraph: (projectId: string) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
-  taskActivity: Record<string, 'busy' | 'idle'>;
+  taskActivity: Record<string, 'busy' | 'idle' | 'waiting'>;
 }
 
 export function LeftSidebar({
@@ -82,8 +82,9 @@ export function LeftSidebar({
     });
   }
 
-  function projectActivity(projectId: string): 'busy' | 'idle' | null {
+  function projectActivity(projectId: string): 'busy' | 'idle' | 'waiting' | null {
     const tasks = (tasksByProject[projectId] || []).filter((t) => !t.archivedAt);
+    if (tasks.some((t) => taskActivity[t.id] === 'waiting')) return 'waiting';
     if (tasks.some((t) => taskActivity[t.id] === 'busy')) return 'busy';
     if (tasks.some((t) => taskActivity[t.id] === 'idle')) return 'idle';
     return null;
@@ -135,7 +136,11 @@ export function LeftSidebar({
                 {activity && (
                   <div
                     className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border-2 border-[hsl(var(--surface-1))] ${
-                      activity === 'busy' ? 'bg-amber-400 status-pulse' : 'bg-emerald-400'
+                      activity === 'waiting'
+                        ? 'bg-orange-500'
+                        : activity === 'busy'
+                          ? 'bg-amber-400 status-pulse'
+                          : 'bg-emerald-400'
                     }`}
                   />
                 )}
@@ -163,14 +168,16 @@ export function LeftSidebar({
     <div className="h-full flex flex-col" style={{ background: 'hsl(var(--surface-1))' }}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-3 pb-1">
-        <span className="text-sm font-medium text-muted-foreground/50 select-none">
-          Projects
-        </span>
+        <span className="text-sm font-medium text-muted-foreground/50 select-none">Projects</span>
         <div className="flex items-center gap-1">
           <IconButton onClick={onOpenFolder} title="Add project" className="titlebar-no-drag">
             <FolderOpen size={15} strokeWidth={1.8} />
           </IconButton>
-          <IconButton onClick={onToggleCollapse} title="Collapse sidebar" className="titlebar-no-drag">
+          <IconButton
+            onClick={onToggleCollapse}
+            title="Collapse sidebar"
+            className="titlebar-no-drag"
+          >
             <PanelLeftClose size={15} strokeWidth={1.8} />
           </IconButton>
         </div>
@@ -311,7 +318,9 @@ export function LeftSidebar({
                             onClick={() => onSelectTask(project.id, task.id)}
                           >
                             {/* Status indicator */}
-                            {activity === 'busy' ? (
+                            {activity === 'waiting' ? (
+                              <div className="w-[6px] h-[6px] rounded-full bg-orange-500 flex-shrink-0" />
+                            ) : activity === 'busy' ? (
                               <div className="w-[6px] h-[6px] rounded-full bg-amber-400 status-pulse flex-shrink-0" />
                             ) : activity === 'idle' ? (
                               <div className="w-[6px] h-[6px] rounded-full bg-emerald-400 flex-shrink-0" />

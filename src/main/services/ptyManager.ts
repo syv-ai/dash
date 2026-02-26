@@ -182,6 +182,17 @@ function writeHookSettings(cwd: string, ptyId: string): void {
     UserPromptSubmit: [
       { hooks: [{ type: 'command', command: `${curlBase}/hook/busy?ptyId=${ptyId}` }] },
     ],
+    Notification: [
+      {
+        matcher: 'permission_prompt',
+        hooks: [
+          {
+            type: 'command',
+            command: `curl -s --connect-timeout 2 -X POST -H "Content-Type: application/json" -d @- http://127.0.0.1:${port}/hook/notification?ptyId=${ptyId}`,
+          },
+        ],
+      },
+    ],
   };
 
   // Auto-detect task-context.json and inject SessionStart hook if it exists

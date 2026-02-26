@@ -18,7 +18,7 @@ class HookServerImpl {
     this._desktopNotificationEnabled = opts.enabled;
   }
 
-  private showDesktopNotification(ptyId: string): void {
+  private showDesktopNotification(ptyId: string, body?: string): void {
     if (!this._desktopNotificationEnabled) return;
 
     // Skip if the app window is focused — user is already looking at it
@@ -26,15 +26,17 @@ class HookServerImpl {
     if (win && win.isFocused()) return;
 
     try {
-      let body = 'A task finished';
-      try {
-        const db = getDb();
-        const task = db.select({ name: tasks.name }).from(tasks).where(eq(tasks.id, ptyId)).get();
-        if (task?.name) {
-          body = `${task.name} finished`;
+      if (!body) {
+        body = 'A task finished';
+        try {
+          const db = getDb();
+          const task = db.select({ name: tasks.name }).from(tasks).where(eq(tasks.id, ptyId)).get();
+          if (task?.name) {
+            body = `${task.name} finished`;
+          }
+        } catch {
+          // DB lookup failed — use fallback
         }
-      } catch {
-        // DB lookup failed — use fallback
       }
       const n = new Notification({
         title: 'Dash',
@@ -50,6 +52,16 @@ class HookServerImpl {
       n.show();
     } catch (err) {
       console.error('[HookServer] Failed to show notification:', err);
+    }
+  }
+
+  private getTaskName(ptyId: string): string {
+    try {
+      const db = getDb();
+      const task = db.select({ name: tasks.name }).from(tasks).where(eq(tasks.id, ptyId)).get();
+      return task?.name || 'A task';
+    } catch {
+      return 'A task';
     }
   }
 
@@ -77,6 +89,33 @@ class HookServerImpl {
             res.end('ok');
             return;
           }
+        }
+
+        if (req.method === 'POST' && ptyId && url.pathname === '/hook/notification') {
+          let body = '';
+          req.on('data', (chunk: Buffer) => {
+            body += chunk.toString();
+          });
+          req.on('end', () => {
+            try {
+              const payload = JSON.parse(body);
+              const notificationType = payload.notification_type;
+              console.error(
+                `[HookServer] Notification hook fired for ptyId=${ptyId} type=${notificationType}`,
+              );
+
+              if (notificationType === 'permission_prompt') {
+                activityMonitor.setWaitingForPermission(ptyId);
+                const taskName = this.getTaskName(ptyId);
+                this.showDesktopNotification(ptyId, `${taskName} needs permission`);
+              }
+            } catch (err) {
+              console.error('[HookServer] Failed to parse notification body:', err);
+            }
+            res.writeHead(200);
+            res.end('ok');
+          });
+          return;
         }
 
         res.writeHead(404);

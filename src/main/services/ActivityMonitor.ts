@@ -4,7 +4,7 @@ import type { WebContents } from 'electron';
 
 const execFileAsync = promisify(execFile);
 
-type ActivityState = 'busy' | 'idle';
+type ActivityState = 'busy' | 'idle' | 'waiting';
 
 interface PtyActivity {
   pid: number;
@@ -47,6 +47,17 @@ class ActivityMonitorImpl {
     const activity = this.activities.get(ptyId);
     if (!activity || activity.state === 'busy') return;
     activity.state = 'busy';
+    this.emitAll();
+  }
+
+  /**
+   * Immediately transition a PTY to waiting (permission prompt).
+   * Called by HookServer when a Notification hook fires with permission_prompt.
+   */
+  setWaitingForPermission(ptyId: string): void {
+    const activity = this.activities.get(ptyId);
+    if (!activity || activity.state === 'waiting') return;
+    activity.state = 'waiting';
     this.emitAll();
   }
 
