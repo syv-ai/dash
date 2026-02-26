@@ -565,7 +565,7 @@ export async function startPty(options: {
  */
 export function sendRemoteControl(id: string): void {
   remoteControlService.startWatching(id);
-  writePty(id, '/rc\n');
+  writePty(id, '/rc\r');
 }
 
 /**
