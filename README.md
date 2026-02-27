@@ -4,6 +4,8 @@ Desktop app for running [Claude Code](https://docs.anthropic.com/en/docs/claude-
 
 The main idea: you open a project, create tasks, and each task gets an isolated git worktree with its own branch. Claude Code runs in a real terminal (xterm.js + node-pty) inside each worktree, so you can have multiple tasks going in parallel without branch conflicts.
 
+![Dash screenshot](docs/screenshot.png)
+
 ## What it does
 
 - **Project management** — Open any git repo as a project. Tasks are nested under projects in the sidebar.
