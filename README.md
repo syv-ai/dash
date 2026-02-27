@@ -147,6 +147,10 @@ All keybindings are customizable in Settings > Keybindings.
 - **Terminal snapshots**: `~/Library/Application Support/Dash/terminal-snapshots/`
 - **Worktrees**: `{project}/../worktrees/{task-slug}/`
 
+## Acknowledgements
+
+Inspired by [emdash](https://github.com/generalaction/emdash).
+
 ## License
 
 MIT
