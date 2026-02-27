@@ -8,6 +8,7 @@ DEST="/Applications/$APP_NAME.app"
 
 echo "==> Rebuilding native modules for Electron..."
 cd "$ROOT"
+export SDKROOT="$(xcrun --show-sdk-path)"
 pnpm exec electron-rebuild -f -w better-sqlite3,node-pty
 
 echo "==> Building $APP_NAME..."
