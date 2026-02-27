@@ -141,10 +141,11 @@ export class WslService {
   ): Promise<{ installed: boolean; version: string | null; path: string | null }> {
     try {
       // First, try to find the Claude CLI path using 'which'
+      // Use bash -l -c to run as a login shell, ensuring PATH is set correctly
       const { stdout: whichOutput } = await execFileAsync(
         'wsl.exe',
-        ['-d', distro, '--', 'which', 'claude'],
-        { timeout: 10000 },
+        ['-d', distro, '--', 'bash', '-l', '-c', 'which claude'],
+        { timeout: 15000 },
       );
 
       const claudePath = whichOutput.trim();
@@ -156,8 +157,8 @@ export class WslService {
       try {
         const { stdout: versionOutput } = await execFileAsync(
           'wsl.exe',
-          ['-d', distro, '--', 'claude', '--version'],
-          { timeout: 10000 },
+          ['-d', distro, '--', 'bash', '-l', '-c', 'claude --version'],
+          { timeout: 15000 },
         );
 
         const version = versionOutput.trim();
