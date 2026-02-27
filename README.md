@@ -8,11 +8,19 @@ The main idea: you open a project, create tasks, and each task gets an isolated 
 
 ## What it does
 
-- **Project management** — Open any git repo as a project. Tasks are nested under projects in the sidebar.
+- **Project management** — Open any git repo as a project, or clone from a URL. Tasks are nested under projects in the sidebar.
 - **Git worktrees** — Each task gets its own worktree and branch. A reserve pool pre-creates worktrees so new tasks start instantly (<100ms).
-- **Terminal** — Full PTY terminal per task. Sessions persist when switching between tasks (state is snapshotted and restored). Shift+Enter sends multiline input. File drag-drop pastes paths.
+- **Terminal** — Full PTY terminal per task. Sessions persist when switching between tasks (state is snapshotted and restored). Shift+Enter sends multiline input. File drag-drop pastes paths. 16 terminal themes.
+- **Shell drawer** — Separate shell terminal alongside the task terminal. Configurable position (left, right, or replacing main content).
 - **File changes panel** — Real-time git status with staged/unstaged sections. Stage, unstage, discard per-file. Click to view diffs.
-- **Diff viewer** — Full file or configurable context lines. Unified diff with syntax highlighting.
+- **Diff viewer** — Full file or configurable context lines. Unified diff with syntax highlighting. Select lines to add inline comments and send them to the terminal.
+- **Commit graph** — Visualize branch history with a DAG-style commit graph per project.
+- **GitHub issues** — Search and link issues to tasks. Auto-posts branch comments on linked issues.
+- **Remote control** — Generate a QR code / URL to control a task's terminal from another device.
+- **Activity indicators** — Busy (amber) and idle (green) status per task, with desktop notifications and sound alerts (chime, cash, ping, droplet, marimba).
+- **Editor integration** — Open changed files in your editor (Cursor, VS Code, Zed, Vim) with line navigation.
+- **Commit attribution** — Configurable co-author line on commits (default, none, or custom text).
+- **Task archiving** — Archive inactive tasks to keep the sidebar clean; restore when needed.
 - **Customizable keybindings** — Remap any shortcut from Settings.
 - **Dark/light theme**
 
