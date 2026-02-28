@@ -42,6 +42,14 @@ function fixPath(): void {
     } catch {
       // Ignore — best effort
     }
+  } else if (process.platform === 'win32') {
+    // Windows: ensure Git for Windows is in PATH
+    additions.push(
+      'C:\\Program Files\\Git\\bin',
+      'C:\\Program Files\\Git\\cmd',
+      'C:\\Program Files (x86)\\Git\\bin',
+      'C:\\Program Files (x86)\\Git\\cmd',
+    );
   } else if (process.platform === 'linux') {
     const home = os.homedir();
     additions.push(
@@ -52,11 +60,12 @@ function fixPath(): void {
     );
   }
 
-  const pathSet = new Set(currentPath.split(':'));
+  const separator = process.platform === 'win32' ? ';' : ':';
+  const pathSet = new Set(currentPath.split(separator));
   for (const p of additions) {
     pathSet.add(p);
   }
-  process.env.PATH = [...pathSet].join(':');
+  process.env.PATH = [...pathSet].join(separator);
 }
 
 fixPath();
@@ -124,17 +133,34 @@ export let claudeCliCache: { installed: boolean; version: string | null; path: s
 };
 
 async function detectClaudeCli(): Promise<void> {
-  try {
-    const { stdout } = await execFileAsync('which', ['claude']);
-    const claudePath = stdout.trim();
-    const { stdout: versionOut } = await execFileAsync(claudePath, ['--version']);
-    claudeCliCache = {
-      installed: true,
-      version: versionOut.trim(),
-      path: claudePath,
-    };
-  } catch {
-    claudeCliCache = { installed: false, version: null, path: null };
+  if (process.platform === 'win32') {
+    // Windows: detect Claude CLI in WSL
+    try {
+      const { WslService } = await import('./services/WslService');
+      const distro = await WslService.resolveDistribution();
+      if (distro) {
+        const result = await WslService.detectClaudeCli(distro);
+        claudeCliCache = result;
+      } else {
+        claudeCliCache = { installed: false, version: null, path: null };
+      }
+    } catch {
+      claudeCliCache = { installed: false, version: null, path: null };
+    }
+  } else {
+    // macOS/Linux: detect Claude CLI directly
+    try {
+      const { stdout } = await execFileAsync('which', ['claude']);
+      const claudePath = stdout.trim();
+      const { stdout: versionOut } = await execFileAsync(claudePath, ['--version']);
+      claudeCliCache = {
+        installed: true,
+        version: versionOut.trim(),
+        path: claudePath,
+      };
+    } catch {
+      claudeCliCache = { installed: false, version: null, path: null };
+    }
   }
 }
 

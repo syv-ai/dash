@@ -40,10 +40,21 @@ This builds the app, ad-hoc signs it, and copies `Dash.app` to `/Applications`.
 
 ## Prerequisites
 
+### All platforms
+
 - Node.js 22+
 - [pnpm](https://pnpm.io/)
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (`npm install -g @anthropic-ai/claude-code`)
 - Git
+
+### macOS
+
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (`npm install -g @anthropic-ai/claude-code`)
+
+### Windows (experimental)
+
+- [WSL 2](https://learn.microsoft.com/en-us/windows/wsl/install) with a Linux distribution
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed inside WSL
+- [Git for Windows](https://git-scm.com/download/win)
 
 ## Setup
 
@@ -53,6 +64,8 @@ pnpm rebuild  # rebuilds native modules (node-pty, better-sqlite3)
 ```
 
 ## Development
+
+### macOS
 
 ```bash
 pnpm dev
@@ -66,6 +79,16 @@ To just rebuild and launch the main process:
 pnpm build:main
 npx electron dist/main/main/entry.js --dev
 ```
+
+### Windows (experimental)
+
+Windows support is experimental. Dash runs as a native Windows Electron app but spawns Claude Code inside WSL.
+
+```bash
+pnpm dev
+```
+
+The app detects Windows and spawns terminal sessions via `wsl.exe`. Projects use Windows paths (e.g., `C:\Users\you\project`) which are translated to WSL paths (`/mnt/c/Users/you/project`) when spawning Claude. Git operations use Git for Windows; Claude CLI runs inside your default WSL distribution.
 
 ## Build
 
@@ -126,34 +149,34 @@ src/
 
 ## Default keybindings
 
-| Shortcut | Action |
-|----------|--------|
-| `Cmd+N` | New task |
-| `Cmd+Shift+K` | Next task |
-| `Cmd+Shift+J` | Previous task |
-| `Cmd+Shift+A` | Stage all |
-| `Cmd+Shift+U` | Unstage all |
-| `Cmd+,` | Settings |
-| `Cmd+O` | Open folder |
-| `Cmd+`` ` `` | Focus terminal |
-| `Esc` | Close overlay |
+| Shortcut      | Action         |
+| ------------- | -------------- |
+| `Cmd+N`       | New task       |
+| `Cmd+Shift+K` | Next task      |
+| `Cmd+Shift+J` | Previous task  |
+| `Cmd+Shift+A` | Stage all      |
+| `Cmd+Shift+U` | Unstage all    |
+| `Cmd+,`       | Settings       |
+| `Cmd+O`       | Open folder    |
+| `Cmd+`` ` ``  | Focus terminal |
+| `Esc`         | Close overlay  |
 
 All keybindings are customizable in Settings > Keybindings.
 
 ## Tech stack
 
-| | |
-|---|---|
-| Shell | Electron 30 |
-| UI | React 18, TypeScript, Tailwind CSS 3 |
-| Build | Vite 5, pnpm |
-| Terminal | xterm.js + node-pty |
+|          |                                       |
+| -------- | ------------------------------------- |
+| Shell    | Electron 30                           |
+| UI       | React 18, TypeScript, Tailwind CSS 3  |
+| Build    | Vite 5, pnpm                          |
+| Terminal | xterm.js + node-pty                   |
 | Database | SQLite (better-sqlite3) + Drizzle ORM |
-| Package | electron-builder |
+| Package  | electron-builder                      |
 
 ## Data storage
 
-- **Database**: `~/Library/Application Support/Dash/app.db` (macOS)
+- **Database**: `~/Library/Application Support/Dash/app.db`
 - **Terminal snapshots**: `~/Library/Application Support/Dash/terminal-snapshots/`
 - **Worktrees**: `{project}/../worktrees/{task-slug}/`
 
