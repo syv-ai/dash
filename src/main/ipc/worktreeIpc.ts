@@ -13,6 +13,7 @@ export function registerWorktreeIpc(): void {
         baseRef?: string;
         projectId: string;
         linkedIssueNumbers?: number[];
+        pushRemote?: boolean;
       },
     ) => {
       try {
@@ -20,6 +21,7 @@ export function registerWorktreeIpc(): void {
           baseRef: args.baseRef,
           projectId: args.projectId,
           linkedIssueNumbers: args.linkedIssueNumbers,
+          pushRemote: args.pushRemote,
         });
         return { success: true, data };
       } catch (error) {
@@ -73,7 +75,13 @@ export function registerWorktreeIpc(): void {
     'worktree:claimReserve',
     async (
       _event,
-      args: { projectId: string; taskName: string; baseRef?: string; linkedIssueNumbers?: number[] },
+      args: {
+        projectId: string;
+        taskName: string;
+        baseRef?: string;
+        linkedIssueNumbers?: number[];
+        pushRemote?: boolean;
+      },
     ) => {
       try {
         const data = await worktreePoolService.claimReserve(
@@ -81,6 +89,7 @@ export function registerWorktreeIpc(): void {
           args.taskName,
           args.baseRef,
           args.linkedIssueNumbers,
+          args.pushRemote,
         );
         if (data) {
           return { success: true, data };

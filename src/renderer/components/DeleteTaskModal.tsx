@@ -18,7 +18,7 @@ interface DeleteTaskModalProps {
 export function DeleteTaskModal({ task, onClose, onConfirm }: DeleteTaskModalProps) {
   const [deleteWorktreeDir, setDeleteWorktreeDir] = useState(true);
   const [deleteLocalBranch, setDeleteLocalBranch] = useState(true);
-  const [deleteRemoteBranch, setDeleteRemoteBranch] = useState(true);
+  const [deleteRemoteBranch, setDeleteRemoteBranch] = useState(false);
 
   function handleConfirm() {
     if (task.useWorktree) {

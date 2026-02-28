@@ -624,6 +624,7 @@ export function App() {
     autoApprove: boolean,
     baseRef?: string,
     linkedIssues?: GithubIssue[],
+    pushRemote?: boolean,
   ) {
     const targetProjectId = taskModalProjectId || activeProjectId;
     const targetProject = projects.find((p) => p.id === targetProjectId);
@@ -639,6 +640,7 @@ export function App() {
         taskName: name,
         baseRef,
         linkedIssueNumbers,
+        pushRemote,
       });
 
       if (claimResp.success && claimResp.data) {
@@ -650,6 +652,7 @@ export function App() {
           baseRef,
           projectId: targetProject.id,
           linkedIssueNumbers,
+          pushRemote,
         });
         if (createResp.success && createResp.data) {
           worktreeInfo = { branch: createResp.data.branch, path: createResp.data.path };
