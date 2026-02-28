@@ -575,22 +575,41 @@ export class TerminalSessionManager {
       isDirectSpawn = resp.data?.isDirectSpawn ?? true;
       taskContextMeta = resp.data?.taskContextMeta ?? null;
     } else {
-      // Fall back to shell — warn the user so they know why they see a shell
-      this.terminal.writeln(
-        '\x1b[33m⚠ Could not start Claude CLI directly — falling back to shell.\x1b[0m',
-      );
-      this.terminal.writeln(
-        '\x1b[33m  Install with: npm install -g @anthropic-ai/claude-code\x1b[0m\r\n',
-      );
+      const isNativeModuleError = resp.error?.includes('[native module]');
 
-      const shellResp = await window.electronAPI.ptyStart({
-        id: this.id,
-        cwd: this.cwd,
-        cols,
-        rows,
-      });
-      reattached = shellResp.data?.reattached ?? false;
-      isDirectSpawn = shellResp.data?.isDirectSpawn ?? false;
+      if (isNativeModuleError) {
+        // node-pty itself failed — shell fallback won't work either
+        this.terminal.writeln('\x1b[31m✖ Terminal failed to start: native module error.\x1b[0m');
+        this.terminal.writeln('\x1b[31m  Rebuild native modules with: pnpm rebuild\x1b[0m');
+        if (resp.error) {
+          this.terminal.writeln(`\x1b[90m  ${resp.error}\x1b[0m\r\n`);
+        }
+      } else {
+        // Claude CLI not found — fall back to shell
+        this.terminal.writeln(
+          '\x1b[33m⚠ Could not start Claude CLI directly — falling back to shell.\x1b[0m',
+        );
+        this.terminal.writeln(
+          '\x1b[33m  Install with: npm install -g @anthropic-ai/claude-code\x1b[0m\r\n',
+        );
+
+        const shellResp = await window.electronAPI.ptyStart({
+          id: this.id,
+          cwd: this.cwd,
+          cols,
+          rows,
+        });
+
+        if (shellResp.success) {
+          reattached = shellResp.data?.reattached ?? false;
+          isDirectSpawn = shellResp.data?.isDirectSpawn ?? false;
+        } else {
+          this.terminal.writeln('\x1b[31m✖ Shell also failed to start.\x1b[0m');
+          if (shellResp.error) {
+            this.terminal.writeln(`\x1b[90m  ${shellResp.error}\x1b[0m\r\n`);
+          }
+        }
+      }
     }
 
     this.ptyStarted = true;
