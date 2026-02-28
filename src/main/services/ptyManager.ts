@@ -39,9 +39,20 @@ export function setDesktopNotification(opts: { enabled: boolean }): void {
 
 // Lazy-load node-pty to avoid native binding issues at startup
 let ptyModule: typeof import('node-pty') | null = null;
+let ptyLoadError: string | null = null;
 function getPty() {
+  if (ptyLoadError) {
+    throw new Error(ptyLoadError);
+  }
   if (!ptyModule) {
-    ptyModule = require('node-pty');
+    try {
+      ptyModule = require('node-pty');
+    } catch (err) {
+      ptyLoadError =
+        `[native module] node-pty failed to load: ${String(err)}. ` +
+        'Try rebuilding native modules: pnpm rebuild';
+      throw new Error(ptyLoadError);
+    }
   }
   return ptyModule!;
 }

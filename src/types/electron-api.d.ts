@@ -56,6 +56,7 @@ export interface ElectronAPI {
     baseRef?: string;
     projectId: string;
     linkedIssueNumbers?: number[];
+    pushRemote?: boolean;
   }) => Promise<IpcResponse<WorktreeInfo>>;
   worktreeRemove: (args: {
     projectPath: string;
@@ -72,6 +73,7 @@ export interface ElectronAPI {
     taskName: string;
     baseRef?: string;
     linkedIssueNumbers?: number[];
+    pushRemote?: boolean;
   }) => Promise<IpcResponse<WorktreeInfo>>;
   worktreeEnsureReserve: (args: {
     projectId: string;
@@ -119,9 +121,7 @@ export interface ElectronAPI {
 
   // Remote control
   ptyRemoteControlEnable: (ptyId: string) => Promise<IpcResponse<void>>;
-  ptyRemoteControlGetAllStates: () => Promise<
-    IpcResponse<Record<string, RemoteControlState>>
-  >;
+  ptyRemoteControlGetAllStates: () => Promise<IpcResponse<Record<string, RemoteControlState>>>;
   onRemoteControlStateChanged: (
     callback: (data: { ptyId: string; state: RemoteControlState | null }) => void,
   ) => () => void;

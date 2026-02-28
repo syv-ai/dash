@@ -1,5 +1,16 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, GitBranch, Zap, ChevronDown, Loader2, AlertCircle, Search, Github, Check } from 'lucide-react';
+import {
+  X,
+  GitBranch,
+  Zap,
+  ChevronDown,
+  Loader2,
+  AlertCircle,
+  Search,
+  Github,
+  Check,
+  Upload,
+} from 'lucide-react';
 import type { BranchInfo, GithubIssue } from '../../shared/types';
 
 interface TaskModalProps {
@@ -11,6 +22,7 @@ interface TaskModalProps {
     autoApprove: boolean,
     baseRef?: string,
     linkedIssues?: GithubIssue[],
+    pushRemote?: boolean,
   ) => void;
 }
 
@@ -18,6 +30,7 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
   const [name, setName] = useState('');
   const [useWorktree, setUseWorktree] = useState(true);
   const [autoApprove, setAutoApprove] = useState(() => localStorage.getItem('yoloMode') === 'true');
+  const [pushRemote, setPushRemote] = useState(true);
 
   // Branch selector state
   const [branches, setBranches] = useState<BranchInfo[]>([]);
@@ -155,9 +168,18 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
         autoApprove,
         baseRef,
         selectedIssues.length > 0 ? selectedIssues : undefined,
+        useWorktree ? pushRemote : undefined,
       );
       onClose();
     }
+  }
+
+  function slugify(str: string): string {
+    return str
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 50);
   }
 
   function toggleIssue(issue: GithubIssue) {
@@ -278,9 +300,7 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
                         setBranchSearch('');
                         setDropdownOpen(true);
                       }}
-                      placeholder={
-                        branchLoading ? 'Fetching branches...' : 'Search branches...'
-                      }
+                      placeholder={branchLoading ? 'Fetching branches...' : 'Search branches...'}
                       disabled={branchLoading}
                       className="flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/30 outline-none disabled:opacity-50"
                     />
@@ -410,9 +430,7 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
                         </div>
                       ) : (
                         issueResults.map((issue) => {
-                          const isSelected = selectedIssues.some(
-                            (i) => i.number === issue.number,
-                          );
+                          const isSelected = selectedIssues.some((i) => i.number === issue.number);
                           return (
                             <button
                               key={issue.number}
@@ -432,7 +450,11 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
                                 }`}
                               >
                                 {isSelected && (
-                                  <Check size={10} strokeWidth={3} className="text-primary-foreground" />
+                                  <Check
+                                    size={10}
+                                    strokeWidth={3}
+                                    className="text-primary-foreground"
+                                  />
                                 )}
                               </span>
                               <div className="flex-1 min-w-0">
@@ -465,6 +487,33 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Push remote branch toggle — only when worktree is enabled */}
+          {useWorktree && (
+            <div className="mb-4">
+              <label className="flex items-center gap-3 cursor-pointer group">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    checked={pushRemote}
+                    onChange={(e) => setPushRemote(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-8 h-[18px] rounded-full bg-accent peer-checked:bg-primary/80 transition-colors duration-200" />
+                  <div className="absolute top-[3px] left-[3px] w-3 h-3 rounded-full bg-muted-foreground/40 peer-checked:bg-primary-foreground peer-checked:translate-x-[14px] transition-all duration-200" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Upload size={13} className="text-muted-foreground/40" strokeWidth={1.8} />
+                  <span className="text-[13px] text-foreground/80">Push remote branch</span>
+                </div>
+              </label>
+              {pushRemote && name.trim() && (
+                <p className="ml-[44px] mt-1 text-[11px] text-muted-foreground/40 font-mono truncate">
+                  origin/{slugify(name.trim())}
+                </p>
+              )}
             </div>
           )}
 

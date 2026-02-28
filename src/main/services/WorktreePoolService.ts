@@ -84,6 +84,7 @@ export class WorktreePoolService {
     taskName: string,
     baseRef?: string,
     linkedIssueNumbers?: number[],
+    pushRemote?: boolean,
   ): Promise<WorktreeInfo | null> {
     const reserve = this.reserves.get(projectId);
     if (!reserve) return null;
@@ -125,33 +126,45 @@ export class WorktreePoolService {
         }
       }
 
-      // Link branch to issues before pushing (createLinkedBranch needs the branch to not exist)
-      if (linkedIssueNumbers && linkedIssueNumbers.length > 0) {
-        (async () => {
-          try {
-            for (const num of linkedIssueNumbers) {
-              try {
-                const issueUrl = await GithubService.linkBranch(newPath, num, newBranch);
-                for (const win of BrowserWindow.getAllWindows()) {
-                  if (!win.isDestroyed()) {
-                    win.webContents.send('app:toast', {
-                      message: `Issue #${num} linked to branch '${newBranch}'`,
-                      url: issueUrl,
-                    });
+      // Push to remote if requested (default: true for backwards compat)
+      const shouldPush = pushRemote ?? true;
+      if (shouldPush) {
+        // Link branch to issues before pushing (createLinkedBranch needs the branch to not exist)
+        if (linkedIssueNumbers && linkedIssueNumbers.length > 0) {
+          (async () => {
+            try {
+              for (const num of linkedIssueNumbers) {
+                try {
+                  const issueUrl = await GithubService.linkBranch(newPath, num, newBranch);
+                  for (const win of BrowserWindow.getAllWindows()) {
+                    if (!win.isDestroyed()) {
+                      win.webContents.send('app:toast', {
+                        message: `Issue #${num} linked to branch '${newBranch}'`,
+                        url: issueUrl,
+                      });
+                    }
                   }
+                } catch {
+                  // Best effort
                 }
-              } catch {
-                // Best effort
               }
+              await execFileAsync(
+                'git',
+                ['branch', '--set-upstream-to', `origin/${newBranch}`, newBranch],
+                { cwd: newPath },
+              );
+            } catch {
+              execFileAsync('git', ['push', '-u', 'origin', newBranch], { cwd: newPath }).catch(
+                () => {},
+              );
             }
-            await execFileAsync('git', ['branch', '--set-upstream-to', `origin/${newBranch}`, newBranch], { cwd: newPath });
-          } catch {
-            execFileAsync('git', ['push', '-u', 'origin', newBranch], { cwd: newPath }).catch(() => {});
-          }
-        })();
-      } else {
-        // Push branch async (non-blocking)
-        execFileAsync('git', ['push', '-u', 'origin', newBranch], { cwd: newPath }).catch(() => {});
+          })();
+        } else {
+          // Push branch async (non-blocking)
+          execFileAsync('git', ['push', '-u', 'origin', newBranch], { cwd: newPath }).catch(
+            () => {},
+          );
+        }
       }
 
       // Fire-and-forget replenish
@@ -186,8 +199,6 @@ export class WorktreePoolService {
    * Cleanup orphaned reserve worktrees on startup.
    */
   async cleanupOrphanedReserves(): Promise<void> {
-    // Scan for _reserve-* directories
-    const homeDir = require('os').homedir();
     // We can't scan everywhere, so just clean up known projects from the database
     try {
       const { DatabaseService } = await import('./DatabaseService');

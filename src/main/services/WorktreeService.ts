@@ -25,7 +25,12 @@ export class WorktreeService {
   async createWorktree(
     projectPath: string,
     taskName: string,
-    options: { baseRef?: string; projectId: string; linkedIssueNumbers?: number[] },
+    options: {
+      baseRef?: string;
+      projectId: string;
+      linkedIssueNumbers?: number[];
+      pushRemote?: boolean;
+    },
   ): Promise<WorktreeInfo> {
     const slug = this.slugify(taskName);
     const hash = this.generateShortHash();
@@ -49,12 +54,16 @@ export class WorktreeService {
     // Copy preserved files
     await this.preserveFiles(projectPath, worktreePath);
 
-    // Link branch to issues before pushing (createLinkedBranch needs the branch to not exist)
-    if (options.linkedIssueNumbers && options.linkedIssueNumbers.length > 0) {
-      this.linkAndPushAsync(worktreePath, branchName, options.linkedIssueNumbers);
-    } else {
-      // Push branch with upstream tracking (async, non-blocking)
-      this.pushBranchAsync(worktreePath, branchName);
+    // Push to remote if requested (default: true for backwards compat)
+    const pushRemote = options.pushRemote ?? true;
+    if (pushRemote) {
+      // Link branch to issues before pushing (createLinkedBranch needs the branch to not exist)
+      if (options.linkedIssueNumbers && options.linkedIssueNumbers.length > 0) {
+        this.linkAndPushAsync(worktreePath, branchName, options.linkedIssueNumbers);
+      } else {
+        // Push branch with upstream tracking (async, non-blocking)
+        this.pushBranchAsync(worktreePath, branchName);
+      }
     }
 
     const id = this.stableIdFromPath(worktreePath);
