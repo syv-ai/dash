@@ -42,6 +42,7 @@ export class TerminalSessionManager {
   private fitDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private lastPtyCols = 0;
   private lastPtyRows = 0;
+  private writeScrollRafPending = false;
   readonly shellOnly: boolean;
   private themeId: string;
   constructor(opts: {
@@ -155,7 +156,17 @@ export class TerminalSessionManager {
 
     // Track scroll position to notify UI when user scrolls away from bottom
     this.terminal.onScroll(() => this.emitScrollState());
-    this.terminal.onWriteParsed(() => this.emitScrollState());
+    // Batch write-driven scroll checks to once per frame to avoid
+    // excessive React re-renders during heavy terminal output
+    this.terminal.onWriteParsed(() => {
+      if (!this.writeScrollRafPending) {
+        this.writeScrollRafPending = true;
+        requestAnimationFrame(() => {
+          this.writeScrollRafPending = false;
+          this.emitScrollState();
+        });
+      }
+    });
 
     // Wheel events on the xterm viewport may not trigger onScroll when terminal
     // lacks focus. Listen directly and recheck after the browser processes the event.
@@ -217,10 +228,12 @@ export class TerminalSessionManager {
       const rect = entries[0]?.contentRect;
       if (!rect || rect.height < 10) return;
       if (this.fitDebounceTimer) clearTimeout(this.fitDebounceTimer);
+      // 250ms debounce covers panel-transition animations (200ms) to avoid
+      // fitting at intermediate sizes which causes scroll jumps and clipping
       this.fitDebounceTimer = setTimeout(() => {
         this.fitDebounceTimer = null;
         this.fit();
-      }, 100);
+      }, 250);
     });
     this.resizeObserver.observe(container);
 

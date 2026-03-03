@@ -59,7 +59,7 @@ export function TerminalPane({ id, cwd, autoApprove }: TerminalPaneProps) {
 
   return (
     <div
-      className={`w-full h-full relative transition-all duration-150 ${
+      className={`w-full h-full relative transition-shadow duration-150 ${
         isDragOver ? 'ring-2 ring-inset ring-primary/30' : ''
       }`}
       onDragOver={(e) => {
@@ -106,23 +106,8 @@ export function TerminalPane({ id, cwd, autoApprove }: TerminalPaneProps) {
               </linearGradient>
             </defs>
             <rect width="512" height="512" rx="108" fill="url(#restart-bg)" />
-            <rect
-              x="136"
-              y="240"
-              width="240"
-              height="36"
-              rx="18"
-              fill="url(#restart-dash)"
-            />
-            <rect
-              x="396"
-              y="232"
-              width="4"
-              height="52"
-              rx="2"
-              fill="#00ff88"
-              opacity="0.7"
-            />
+            <rect x="136" y="240" width="240" height="36" rx="18" fill="url(#restart-dash)" />
+            <rect x="396" y="232" width="4" height="52" rx="2" fill="#00ff88" opacity="0.7" />
           </svg>
           <span className="text-[13px] dark:text-neutral-400 text-neutral-500 font-medium">
             Resuming your session...
