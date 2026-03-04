@@ -13,25 +13,12 @@ pnpm exec electron-rebuild -f -w better-sqlite3,node-pty
 echo "==> Building $APP_NAME..."
 pnpm build
 
-echo "==> Packaging for macOS (signed + notarized)..."
-export APPLE_TEAM_ID="2DD8ZKZ975"
+echo "==> Packaging for macOS..."
+pnpm exec electron-builder --mac
 
-if [ -z "$APPLE_ID" ] || [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ]; then
-  echo "⚠️  APPLE_ID and APPLE_APP_SPECIFIC_PASSWORD not set."
-  echo "    The app will be signed but NOT notarized."
-  echo "    To notarize, run:"
-  echo "      export APPLE_ID=your@email.com"
-  echo "      export APPLE_APP_SPECIFIC_PASSWORD=xxxx-xxxx-xxxx-xxxx"
-  echo ""
-fi
-
-pnpm exec electron-builder --mac --arm64
-
-echo "==> Verifying code signature..."
-codesign --verify --verbose=2 "$APP_PATH"
-echo ""
-echo "==> Checking notarization status..."
-spctl --assess --verbose=2 "$APP_PATH" 2>&1 || echo "(spctl check may fail if not notarized — this is OK for local dev)"
+echo "==> Ad-hoc signing..."
+codesign --force --deep --sign - --entitlements "$ROOT/build/entitlements.mac.plist" "$APP_PATH"
+codesign --verify --verbose "$APP_PATH"
 
 echo "==> Moving to /Applications..."
 if [ -d "$DEST" ]; then
