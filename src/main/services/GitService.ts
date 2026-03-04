@@ -21,6 +21,7 @@ import type {
 const execFileAsync = promisify(execFile);
 
 const MAX_DIFF_SIZE = 1024 * 1024; // 1MB max diff output
+const NULL_DEVICE = process.platform === 'win32' ? 'NUL' : '/dev/null';
 
 async function git(cwd: string, args: string[]): Promise<string> {
   const { stdout } = await execFileAsync('git', args, {
@@ -316,7 +317,7 @@ export class GitService {
         '--no-index',
         `--unified=${ctx}`,
         '--',
-        '/dev/null',
+        NULL_DEVICE,
         filePath,
       ]);
       return this.parseDiff(out, filePath);

@@ -136,11 +136,14 @@ class HookServerImpl {
         res.end();
       });
 
-      this.server.listen(0, '127.0.0.1', () => {
+      // On Windows, bind to 0.0.0.0 so WSL can reach the hook server via the host gateway IP.
+      // On macOS/Linux, bind to 127.0.0.1 to avoid exposing the server on the network.
+      const bindAddr = process.platform === 'win32' ? '0.0.0.0' : '127.0.0.1';
+      this.server.listen(0, bindAddr, () => {
         const addr = this.server!.address();
         if (addr && typeof addr === 'object') {
           this._port = addr.port;
-          console.error(`[HookServer] Listening on 127.0.0.1:${this._port}`);
+          console.error(`[HookServer] Listening on ${bindAddr}:${this._port}`);
           resolve(this._port);
         } else {
           reject(new Error('Failed to get hook server address'));
