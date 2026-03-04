@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - 'test/code-signing'
   workflow_dispatch:
 
 jobs:
@@ -28,13 +30,60 @@ jobs:
       - name: Rebuild native modules for Electron
         run: pnpm exec electron-rebuild -f -w node-pty,better-sqlite3
 
+      - name: Import code signing certificate
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          # Decode the .p12 certificate from base64
+          echo "$CSC_LINK" | base64 --decode > certificate.p12
+
+          # Create a temporary keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import certificate to keychain
+          security import certificate.p12 -P "$CSC_KEY_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+          # Clean up
+          rm certificate.p12
+
       - name: Build
         run: pnpm build
 
-      - name: Package
+      - name: Package and sign
         run: pnpm exec electron-builder --mac --arm64 --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Signing (certificate imported to keychain above)
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # Notarization
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: 2DD8ZKZ975
+
+      - name: Verify code signature
+        run: |
+          APP_PATH="release/mac-arm64/Dash.app"
+          echo "==> Verifying code signature..."
+          codesign --verify --verbose=2 "$APP_PATH"
+          echo "==> Checking notarization..."
+          spctl --assess --verbose=2 "$APP_PATH"
+
+      - name: Clean up keychain
+        if: always()
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          if [ -f "$KEYCHAIN_PATH" ]; then
+            security delete-keychain "$KEYCHAIN_PATH"
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
