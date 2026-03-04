@@ -41,7 +41,7 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
 
       - name: Notarize
-        timeout-minutes: 20
+        timeout-minutes: 45
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
@@ -55,7 +55,7 @@ jobs:
             --apple-id "$APPLE_ID" \
             --password "$APPLE_APP_SPECIFIC_PASSWORD" \
             --team-id "$APPLE_TEAM_ID" \
-            --wait --timeout 15m
+            --wait --timeout 30m
 
           echo "==> Stapling DMG..."
           xcrun stapler staple "$DMG_PATH"
@@ -65,7 +65,7 @@ jobs:
             --apple-id "$APPLE_ID" \
             --password "$APPLE_APP_SPECIFIC_PASSWORD" \
             --team-id "$APPLE_TEAM_ID" \
-            --wait --timeout 15m
+            --wait --timeout 30m
 
       - name: Verify code signature
         run: |
