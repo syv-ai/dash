@@ -1,6 +1,6 @@
 {
   "name": "dash",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Dash — Desktop app for Claude Code with git worktree management",
   "main": "dist/main/main/entry.js",
   "author": "mhenrichsen",
