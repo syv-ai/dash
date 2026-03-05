@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-    tags:
-      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -40,7 +38,6 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
 
       - name: Notarize
-        if: startsWith(github.ref, 'refs/tags/v')
         timeout-minutes: 45
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -93,54 +90,51 @@ jobs:
             release/*.yml
           if-no-files-found: error
 
-  release-latest:
+  release:
     needs: build-mac
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
     permissions:
       contents: write
 
     steps:
       - uses: actions/checkout@v4
 
+      - name: Get version from package.json
+        id: version
+        run: echo "version=v$(node -p 'require(\"./package.json\").version')" >> "$GITHUB_OUTPUT"
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
 
-      - name: Update latest release
+      - name: Check if version tag exists
+        id: tag_check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Delete existing latest release and tag if they exist
-          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+          if git ls-remote --tags origin "${{ steps.version.outputs.version }}" | grep -q .; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
 
-          # Create new latest release with current artifacts
-          gh release create latest \
-            --title "Latest Build" \
-            --notes "Built from main ($(git rev-parse --short HEAD)) on $(date -u +%Y-%m-%d)." \
-            --prerelease \
+      - name: Create tagged release
+        if: steps.tag_check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.version }}" \
+            --title "${{ steps.version.outputs.version }}" \
+            --generate-notes \
             artifacts/*
 
-  release-tagged:
-    needs: build-mac
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    permissions:
-      contents: write
-
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
-
-      - name: Create release
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: true
-          generate_release_notes: true
-          files: |
-            artifacts/*
+      - name: Update existing release artifacts
+        if: steps.tag_check.outputs.exists == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Upload latest artifacts to existing release (overwrites)
+          gh release upload "${{ steps.version.outputs.version }}" \
+            artifacts/* --clobber
