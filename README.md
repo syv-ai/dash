@@ -26,17 +26,7 @@ The main idea: you open a project, create tasks, and each task gets an isolated 
 
 ## Install
 
-Build and install locally:
-
-```bash
-git clone git@github.com:syv-ai/dash.git
-cd dash
-pnpm install
-pnpm rebuild
-./scripts/build-local.sh
-```
-
-This builds the app, ad-hoc signs it, and copies `Dash.app` to `/Applications`.
+Download the latest signed and notarized build from [Releases](https://github.com/syv-ai/dash/releases/tag/latest). Open the `.dmg` and drag `Dash.app` to `/Applications`.
 
 ## Prerequisites
 
@@ -126,30 +116,30 @@ src/
 
 ## Default keybindings
 
-| Shortcut | Action |
-|----------|--------|
-| `Cmd+N` | New task |
-| `Cmd+Shift+K` | Next task |
-| `Cmd+Shift+J` | Previous task |
-| `Cmd+Shift+A` | Stage all |
-| `Cmd+Shift+U` | Unstage all |
-| `Cmd+,` | Settings |
-| `Cmd+O` | Open folder |
-| `Cmd+`` ` `` | Focus terminal |
-| `Esc` | Close overlay |
+| Shortcut      | Action         |
+| ------------- | -------------- |
+| `Cmd+N`       | New task       |
+| `Cmd+Shift+K` | Next task      |
+| `Cmd+Shift+J` | Previous task  |
+| `Cmd+Shift+A` | Stage all      |
+| `Cmd+Shift+U` | Unstage all    |
+| `Cmd+,`       | Settings       |
+| `Cmd+O`       | Open folder    |
+| `Cmd+`` ` ``  | Focus terminal |
+| `Esc`         | Close overlay  |
 
 All keybindings are customizable in Settings > Keybindings.
 
 ## Tech stack
 
-| | |
-|---|---|
-| Shell | Electron 30 |
-| UI | React 18, TypeScript, Tailwind CSS 3 |
-| Build | Vite 5, pnpm |
-| Terminal | xterm.js + node-pty |
+|          |                                       |
+| -------- | ------------------------------------- |
+| Shell    | Electron 30                           |
+| UI       | React 18, TypeScript, Tailwind CSS 3  |
+| Build    | Vite 5, pnpm                          |
+| Terminal | xterm.js + node-pty                   |
 | Database | SQLite (better-sqlite3) + Drizzle ORM |
-| Package | electron-builder |
+| Package  | electron-builder                      |
 
 ## Data storage
 
