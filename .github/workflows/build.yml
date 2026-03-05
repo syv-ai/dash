@@ -4,10 +4,32 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
+  version-check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check version was bumped
+        run: |
+          PR_VERSION=$(node -p 'require("./package.json").version')
+          MAIN_VERSION=$(git show origin/main:package.json | node -p 'JSON.parse(require("fs").readFileSync("/dev/stdin","utf8")).version')
+          if [ "$PR_VERSION" = "$MAIN_VERSION" ]; then
+            echo "::error::Version in package.json ($PR_VERSION) was not bumped. Please update the version before merging."
+            exit 1
+          fi
+          echo "Version bumped: $MAIN_VERSION -> $PR_VERSION"
+
   build-mac:
+    if: github.event_name != 'pull_request'
     runs-on: macos-latest
 
     steps:
