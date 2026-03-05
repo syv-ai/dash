@@ -196,6 +196,13 @@ export interface ElectronAPI {
   gitCommit: (args: { cwd: string; message: string }) => Promise<IpcResponse<void>>;
   gitPush: (cwd: string) => Promise<IpcResponse<void>>;
 
+  // Merge to main
+  gitMergeToMain: (args: {
+    projectPath: string;
+    taskBranch: string;
+    taskPath: string;
+  }) => Promise<IpcResponse<{ conflicts?: string[] }>>;
+
   // Commit graph
   gitGetCommitGraph: (args: {
     cwd: string;

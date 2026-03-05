@@ -386,6 +386,41 @@ export class GitService {
     await git(cwd, ['push']);
   }
 
+  /**
+   * Merge a task branch into main in the main project repo.
+   */
+  static async mergeTaskToMain(args: {
+    projectPath: string;
+    taskBranch: string;
+    taskPath: string;
+  }): Promise<{ success: boolean; error?: string; conflicts?: string[] }> {
+    const { projectPath, taskBranch } = args;
+    try {
+      await git(projectPath, ['merge', taskBranch, '--no-ff', '-m', `Merge ${taskBranch}`]);
+      return { success: true };
+    } catch (err: unknown) {
+      const error = err as { stderr?: string; stdout?: string };
+      const msg = String(error.stderr || error.stdout || err);
+
+      // Check for merge conflicts
+      if (/conflict/i.test(msg) || /automatic merge failed/i.test(msg)) {
+        // Get list of conflicted files
+        try {
+          const statusOut = await git(projectPath, ['diff', '--name-only', '--diff-filter=U']);
+          const conflicts = statusOut
+            .split('\n')
+            .map((l) => l.trim())
+            .filter(Boolean);
+          return { success: false, error: 'Merge conflicts', conflicts };
+        } catch {
+          return { success: false, error: 'Merge conflicts', conflicts: [] };
+        }
+      }
+
+      return { success: false, error: msg.split('\n')[0].trim() };
+    }
+  }
+
   // ── Commit Graph ────────────────────────────────────────
 
   static async getCommitGraph(cwd: string, limit = 150, skip = 0): Promise<CommitGraphData> {

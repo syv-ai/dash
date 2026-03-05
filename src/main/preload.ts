@@ -162,6 +162,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   gitCommit: (args: { cwd: string; message: string }) => ipcRenderer.invoke('git:commit', args),
   gitPush: (cwd: string) => ipcRenderer.invoke('git:push', cwd),
 
+  // Merge to main
+  gitMergeToMain: (args: { projectPath: string; taskBranch: string; taskPath: string }) =>
+    ipcRenderer.invoke('git:mergeToMain', args),
+
   // Branch listing
   gitListBranches: (cwd: string) => ipcRenderer.invoke('git:listBranches', cwd),
 

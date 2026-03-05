@@ -16,6 +16,7 @@ import {
   PanelRightOpen,
   PanelRightClose,
   GitBranch,
+  GitMerge,
 } from 'lucide-react';
 import type { FileChange, FileChangeStatus, GitStatus } from '../../shared/types';
 
@@ -33,6 +34,9 @@ interface FileChangesPanelProps {
   collapsed?: boolean;
   onToggleCollapse?: () => void;
   onShowCommitGraph?: () => void;
+  onMergeToMain?: () => Promise<void>;
+  activeTaskBranch?: string | null;
+  activeTaskUseWorktree?: boolean;
 }
 
 const STATUS_COLORS: Record<FileChangeStatus, string> = {
@@ -123,9 +127,7 @@ function FileItem({
 
       <span className="truncate flex-1 min-w-0" title={file.path}>
         <span className="text-foreground/90">{fileName}</span>
-        {dirPath && (
-          <span className="text-muted-foreground/40 ml-1">{dirPath}/</span>
-        )}
+        {dirPath && <span className="text-muted-foreground/40 ml-1">{dirPath}/</span>}
       </span>
 
       {/* Stat badge */}
@@ -141,7 +143,9 @@ function FileItem({
       )}
 
       {/* Status badge */}
-      <span className={`w-[18px] h-[16px] rounded flex items-center justify-center text-[9px] font-bold flex-shrink-0 ${STATUS_BADGE_COLORS[file.status]}`}>
+      <span
+        className={`w-[18px] h-[16px] rounded flex items-center justify-center text-[9px] font-bold flex-shrink-0 ${STATUS_BADGE_COLORS[file.status]}`}
+      >
         {STATUS_LABELS[file.status]}
       </span>
 
@@ -149,7 +153,10 @@ function FileItem({
       {!file.staged && (
         <div className="opacity-0 group-hover:opacity-100 flex gap-px flex-shrink-0 transition-all duration-150">
           <button
-            onClick={(e) => { e.stopPropagation(); onDiscard(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDiscard();
+            }}
             className="p-[3px] rounded hover:bg-destructive/15 text-muted-foreground/50 hover:text-destructive"
             title="Discard changes"
           >
@@ -175,10 +182,15 @@ export function FileChangesPanel({
   collapsed,
   onToggleCollapse,
   onShowCommitGraph,
+  onMergeToMain,
+  activeTaskBranch,
+  activeTaskUseWorktree,
 }: FileChangesPanelProps) {
   const [commitMsg, setCommitMsg] = useState('');
   const [committing, setCommitting] = useState(false);
   const [pushing, setPushing] = useState(false);
+  const [merging, setMerging] = useState(false);
+  const [showMergeConfirm, setShowMergeConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Track previous file keys to detect newly added files
@@ -232,7 +244,10 @@ export function FileChangesPanel({
 
   if (!gitStatus) {
     return (
-      <div className="h-full flex items-center justify-center" style={{ background: 'hsl(var(--surface-1))' }}>
+      <div
+        className="h-full flex items-center justify-center"
+        style={{ background: 'hsl(var(--surface-1))' }}
+      >
         <p className="text-[11px] text-muted-foreground/40">
           {loading ? 'Loading...' : 'No task selected'}
         </p>
@@ -271,8 +286,33 @@ export function FileChangesPanel({
     }
   }
 
+  async function handleMergeToMain() {
+    if (!onMergeToMain) return;
+    setMerging(true);
+    setError(null);
+    setShowMergeConfirm(false);
+    try {
+      await onMergeToMain();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setMerging(false);
+    }
+  }
+
+  const showMergeButton =
+    onMergeToMain &&
+    activeTaskUseWorktree &&
+    activeTaskBranch &&
+    activeTaskBranch !== 'main' &&
+    activeTaskBranch !== 'master';
+  const hasUncommittedChanges = (gitStatus?.files.length ?? 0) > 0;
+
   return (
-    <div className="h-full flex flex-col overflow-hidden" style={{ background: 'hsl(var(--surface-1))' }}>
+    <div
+      className="h-full flex flex-col overflow-hidden"
+      style={{ background: 'hsl(var(--surface-1))' }}
+    >
       {/* Header */}
       <div className="flex items-center justify-between px-3 h-10 flex-shrink-0 border-b border-border/60">
         <div className="flex items-center gap-2">
@@ -308,12 +348,14 @@ export function FileChangesPanel({
             <div className="flex items-center gap-1 text-muted-foreground/40 mr-1">
               {gitStatus.ahead > 0 && (
                 <span className="flex items-center gap-0.5 text-[9px] text-[hsl(var(--git-added))]">
-                  <ArrowUp size={8} strokeWidth={2.5} />{gitStatus.ahead}
+                  <ArrowUp size={8} strokeWidth={2.5} />
+                  {gitStatus.ahead}
                 </span>
               )}
               {gitStatus.behind > 0 && (
                 <span className="flex items-center gap-0.5 text-[9px] text-[hsl(var(--git-deleted))]">
-                  <ArrowDown size={8} strokeWidth={2.5} />{gitStatus.behind}
+                  <ArrowDown size={8} strokeWidth={2.5} />
+                  {gitStatus.behind}
                 </span>
               )}
             </div>
@@ -394,7 +436,10 @@ export function FileChangesPanel({
           )}
           <textarea
             value={commitMsg}
-            onChange={(e) => { setCommitMsg(e.target.value); setError(null); }}
+            onChange={(e) => {
+              setCommitMsg(e.target.value);
+              setError(null);
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && e.metaKey) {
                 e.preventDefault();
@@ -426,6 +471,58 @@ export function FileChangesPanel({
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Merge to main */}
+      {showMergeButton && (
+        <div className="flex-shrink-0 border-t border-border/60 p-2">
+          {error && totalChanges === 0 && (
+            <p className="text-[11px] text-destructive bg-destructive/10 rounded px-2 py-1 break-words mb-1.5">
+              {error}
+            </p>
+          )}
+          {showMergeConfirm ? (
+            <div className="flex flex-col gap-1.5">
+              <p className="text-[11px] text-foreground/70">
+                Merge <span className="font-medium text-foreground">{activeTaskBranch}</span> into
+                main?
+              </p>
+              <div className="flex gap-1.5">
+                <button
+                  onClick={handleMergeToMain}
+                  disabled={merging}
+                  className="flex-1 flex items-center justify-center gap-1.5 text-[12px] px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/20 font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <GitMerge size={12} strokeWidth={1.8} />
+                  {merging ? 'Merging...' : 'Confirm'}
+                </button>
+                <button
+                  onClick={() => setShowMergeConfirm(false)}
+                  className="flex items-center justify-center px-3 py-1.5 rounded-lg text-[12px] bg-accent hover:bg-accent/80 text-foreground/60 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => {
+                setError(null);
+                setShowMergeConfirm(true);
+              }}
+              disabled={hasUncommittedChanges || merging}
+              title={
+                hasUncommittedChanges
+                  ? 'Commit or stash changes before merging'
+                  : `Merge ${activeTaskBranch} into main`
+              }
+              className="w-full flex items-center justify-center gap-1.5 text-[12px] px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/20 font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <GitMerge size={12} strokeWidth={1.8} />
+              Merge to main
+            </button>
+          )}
         </div>
       )}
     </div>
