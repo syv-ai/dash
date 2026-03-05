@@ -32,6 +32,11 @@
       "node_modules/node-pty/**"
     ],
     "npmRebuild": false,
+    "publish": {
+      "provider": "github",
+      "owner": "syv-ai",
+      "repo": "dash"
+    },
     "mac": {
       "target": [
         {
@@ -68,6 +73,7 @@
     "better-sqlite3": "^11.7.0",
     "drizzle-orm": "^0.32.0",
     "electron-log": "^5.1.0",
+    "electron-updater": "^6.8.3",
     "node-pty": "^1.0.0",
     "qrcode": "^1.5.4",
     "react": "^18.3.0",

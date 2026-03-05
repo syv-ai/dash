@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Check, AlertCircle, Sun, Moon, Terminal, RotateCcw } from 'lucide-react';
+import { X, Check, AlertCircle, Sun, Moon, Terminal, RotateCcw, Download } from 'lucide-react';
 import type { KeyBindingMap, KeyBinding } from '../keybindings';
 import {
   getBindingKeys,
@@ -145,6 +145,26 @@ export function SettingsModal({
   } | null>(null);
   const [appVersion, setAppVersion] = useState('');
   const [claudeDefaultAttribution, setClaudeDefaultAttribution] = useState<string | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<
+    'idle' | 'checking' | 'available' | 'downloading' | 'ready'
+  >('idle');
+  const [updateVersion, setUpdateVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    const cleanups = [
+      window.electronAPI.onAutoUpdateAvailable((info) => {
+        setUpdateStatus('available');
+        setUpdateVersion(info.version);
+      }),
+      window.electronAPI.onAutoUpdateDownloaded(() => {
+        setUpdateStatus('ready');
+      }),
+      window.electronAPI.onAutoUpdateError(() => {
+        setUpdateStatus('idle');
+      }),
+    ];
+    return () => cleanups.forEach((fn) => fn());
+  }, []);
 
   useEffect(() => {
     window.electronAPI.detectClaude().then((resp) => {
@@ -429,12 +449,58 @@ export function SettingsModal({
                 </p>
               </div>
 
-              {/* Version */}
+              {/* Updates */}
               <div>
-                <label className="block text-[12px] font-medium text-foreground mb-1.5">
-                  Version
+                <label className="block text-[12px] font-medium text-foreground mb-3">
+                  Updates
                 </label>
-                <p className="text-[13px] text-foreground/80 font-mono">{appVersion || '...'}</p>
+                <div className="flex items-center gap-3">
+                  <p className="text-[13px] text-foreground/80 font-mono">{appVersion || '...'}</p>
+                  {updateStatus === 'ready' ? (
+                    <button
+                      onClick={() => window.electronAPI.autoUpdateQuitAndInstall()}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium border border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20 hover:bg-primary/15 transition-all duration-150"
+                    >
+                      <Download size={12} strokeWidth={2} />
+                      Restart to Update {updateVersion && `(v${updateVersion})`}
+                    </button>
+                  ) : updateStatus === 'available' ? (
+                    <button
+                      onClick={() => {
+                        setUpdateStatus('downloading');
+                        window.electronAPI.autoUpdateDownload();
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium border border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20 hover:bg-primary/15 transition-all duration-150"
+                    >
+                      <Download size={12} strokeWidth={2} />
+                      Download v{updateVersion}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setUpdateStatus('checking');
+                        window.electronAPI.autoUpdateCheck().then((resp) => {
+                          if (resp.success && updateStatus === 'checking') {
+                            // Will be updated by event listeners if update found
+                            setTimeout(() => {
+                              setUpdateStatus((s) => (s === 'checking' ? 'idle' : s));
+                            }, 5000);
+                          } else if (!resp.success) {
+                            setUpdateStatus('idle');
+                          }
+                        });
+                      }}
+                      disabled={updateStatus === 'checking' || updateStatus === 'downloading'}
+                      className="px-3 py-1.5 rounded-lg text-[12px] border border-border/60 text-foreground/60 hover:bg-accent/40 hover:text-foreground transition-all duration-150 disabled:opacity-50"
+                    >
+                      {updateStatus === 'checking'
+                        ? 'Checking...'
+                        : updateStatus === 'downloading'
+                          ? 'Downloading...'
+                          : 'Check for Updates'}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           )}

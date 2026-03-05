@@ -34,7 +34,12 @@ jobs:
         run: pnpm build
 
       - name: Package and sign
-        run: pnpm exec electron-builder --mac --arm64 --publish never
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            pnpm exec electron-builder --mac --arm64 --publish always
+          else
+            pnpm exec electron-builder --mac --arm64 --publish never
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
@@ -59,6 +64,16 @@ jobs:
           echo "==> Stapling DMG..."
           xcrun stapler staple "$DMG_PATH"
 
+          ZIP_PATH=$(ls release/*.zip | head -1)
+          if [ -n "$ZIP_PATH" ]; then
+            echo "==> Submitting ZIP for notarization..."
+            xcrun notarytool submit "$ZIP_PATH" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              --wait --timeout 30m
+          fi
+
       - name: Verify code signature
         run: |
           APP_PATH="release/mac-arm64/Dash.app"
@@ -74,6 +89,8 @@ jobs:
           path: |
             release/*.dmg
             release/*.zip
+            release/*.yml
+            release/*.yaml
           if-no-files-found: error
 
   release-latest:
@@ -125,4 +142,5 @@ jobs:
         with:
           draft: true
           generate_release_notes: true
-          files: artifacts/*
+          files: |
+            artifacts/*
