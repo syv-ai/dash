@@ -2,6 +2,8 @@ name: Build
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
@@ -74,7 +76,37 @@ jobs:
             release/*.zip
           if-no-files-found: error
 
-  release:
+  release-latest:
+    needs: build-mac
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Update latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Delete existing latest release and tag if they exist
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+
+          # Create new latest release with current artifacts
+          gh release create latest \
+            --title "Latest Build" \
+            --notes "Built from main ($(git rev-parse --short HEAD)) on $(date -u +%Y-%m-%d)." \
+            --prerelease \
+            artifacts/*
+
+  release-tagged:
     needs: build-mac
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
