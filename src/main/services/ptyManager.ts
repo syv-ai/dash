@@ -527,7 +527,9 @@ export async function startPty(options: {
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.ELECTRON_NO_ATTACH_CONSOLE;
   // Enable macOS zsh OSC 7 cwd reporting (sources /etc/zshrc_Apple_Terminal)
-  env.TERM_PROGRAM = 'Apple_Terminal';
+  if (process.platform === 'darwin') {
+    env.TERM_PROGRAM = 'Apple_Terminal';
+  }
 
   // Inject custom prompt for zsh via ZDOTDIR
   if (shell.endsWith('/zsh') || shell === 'zsh') {

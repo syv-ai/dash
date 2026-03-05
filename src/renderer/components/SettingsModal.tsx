@@ -333,7 +333,7 @@ export function SettingsModal({
                       }`}
                     />
                   </div>
-                  Show macOS notification when a task finishes
+                  Show desktop notification when a task finishes
                 </button>
                 <p className="text-[10px] text-foreground/80 mt-2">
                   Notification will include the task name

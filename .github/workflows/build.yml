@@ -112,8 +112,45 @@ jobs:
             release/*.yml
           if-no-files-found: error
 
+  build-linux:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Rebuild native modules for Electron
+        run: pnpm exec electron-rebuild -f -w node-pty,better-sqlite3
+
+      - name: Build
+        run: pnpm build
+
+      - name: Package
+        run: pnpm exec electron-builder --linux --x64 --publish never
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dash-linux-x64
+          path: |
+            release/*.AppImage
+            release/*.yml
+          if-no-files-found: error
+
   release:
-    needs: build-mac
+    needs: [build-mac, build-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write

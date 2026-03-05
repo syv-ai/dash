@@ -32,9 +32,9 @@ async function detectEditor(): Promise<string> {
     }
   }
 
-  // Fallback to macOS open
-  cachedEditor = 'open';
-  return 'open';
+  // Fallback to system opener
+  cachedEditor = process.platform === 'darwin' ? 'open' : 'xdg-open';
+  return cachedEditor;
 }
 
 export function registerAppIpc(): void {

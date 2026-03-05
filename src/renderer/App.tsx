@@ -875,10 +875,12 @@ export function App() {
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden">
-      <div
-        className="titlebar-drag h-[38px] flex-shrink-0 border-b border-border/40"
-        style={{ background: 'hsl(var(--surface-1))' }}
-      />
+      {window.electronAPI.getPlatform() === 'darwin' && (
+        <div
+          className="titlebar-drag h-[38px] flex-shrink-0 border-b border-border/40"
+          style={{ background: 'hsl(var(--surface-1))' }}
+        />
+      )}
 
       <PanelGroup direction="horizontal" className="flex-1">
         <Panel

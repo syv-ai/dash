@@ -2,7 +2,7 @@
 
 ## What is Dash
 
-Electron desktop app for running Claude Code across multiple projects, each task in its own git worktree. xterm.js + node-pty terminals, SQLite + Drizzle ORM, React 18 UI. macOS arm64 only.
+Electron desktop app for running Claude Code across multiple projects, each task in its own git worktree. xterm.js + node-pty terminals, SQLite + Drizzle ORM, React 18 UI. macOS arm64, Linux x64.
 
 ## Commands
 
@@ -15,6 +15,7 @@ pnpm dev:renderer         # Vite dev server only
 pnpm build                # compile main (tsc) + renderer (vite)
 pnpm type-check           # typecheck both processes
 pnpm package:mac          # build + package as .dmg (arm64)
+pnpm package:linux        # build + package as .AppImage (x64)
 pnpm drizzle:generate     # generate Drizzle migrations
 ```
 
@@ -110,15 +111,15 @@ Electron 30, React 18, xterm.js 5 (fit/serialize/web-links/webgl/canvas addons),
 
 ## Data Storage
 
-- **DB**: `~/Library/Application Support/Dash/app.db`
-- **Snapshots**: `~/Library/Application Support/Dash/terminal-snapshots/`
+- **DB**: `~/Library/Application Support/Dash/app.db` (macOS) · `~/.config/Dash/app.db` (Linux)
+- **Snapshots**: `~/Library/Application Support/Dash/terminal-snapshots/` (macOS) · `~/.config/Dash/terminal-snapshots/` (Linux)
 - **Worktrees**: `{projectPath}/../worktrees/{task-slug}/`
 - **UI state**: localStorage (active project/task, theme, keybindings, panel states, notification prefs)
 
 ## CI/CD
 
-GitHub Actions (`.github/workflows/build.yml`): triggers on `v*` tags + manual dispatch. Builds macOS arm64 DMG/ZIP, creates GitHub release.
+GitHub Actions (`.github/workflows/build.yml`): triggers on push to main + manual dispatch. Builds macOS arm64 DMG/ZIP and Linux x64 AppImage, creates GitHub release.
 
 ## Requirements
 
-Node.js 22+ (`.nvmrc`), pnpm (`shamefully-hoist` in `.npmrc`), Claude Code CLI, Git, macOS arm64.
+Node.js 22+ (`.nvmrc`), pnpm (`shamefully-hoist` in `.npmrc`), Claude Code CLI, Git. macOS arm64 or Linux x64.
