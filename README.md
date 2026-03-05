@@ -26,7 +26,7 @@ The main idea: you open a project, create tasks, and each task gets an isolated 
 
 ## Install
 
-Download the latest signed and notarized build from [Releases](https://github.com/syv-ai/dash/releases/tag/latest). Open the `.dmg` and drag `Dash.app` to `/Applications`.
+Download the latest build from [Releases](https://github.com/syv-ai/dash/releases/tag/latest). Open the `.dmg` and drag `Dash.app` to `/Applications`.
 
 ## Prerequisites
 
