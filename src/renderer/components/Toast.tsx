@@ -48,5 +48,12 @@ export function ToastContainer() {
     });
   }, []);
 
+  // Auto-update: error
+  useEffect(() => {
+    return window.electronAPI.onAutoUpdateError((message) => {
+      toast.error(message, { duration: 5000 });
+    });
+  }, []);
+
   return <Toaster theme="system" position="bottom-right" />;
 }

@@ -156,11 +156,14 @@ export function SettingsModal({
         setUpdateStatus('available');
         setUpdateVersion(info.version);
       }),
+      window.electronAPI.onAutoUpdateNotAvailable(() => {
+        setUpdateStatus('idle');
+      }),
       window.electronAPI.onAutoUpdateDownloaded(() => {
         setUpdateStatus('ready');
       }),
       window.electronAPI.onAutoUpdateError(() => {
-        setUpdateStatus('idle');
+        setUpdateStatus((s) => (s === 'downloading' ? 'available' : 'idle'));
       }),
     ];
     return () => cleanups.forEach((fn) => fn());
@@ -480,14 +483,10 @@ export function SettingsModal({
                       onClick={() => {
                         setUpdateStatus('checking');
                         window.electronAPI.autoUpdateCheck().then((resp) => {
-                          if (resp.success && updateStatus === 'checking') {
-                            // Will be updated by event listeners if update found
-                            setTimeout(() => {
-                              setUpdateStatus((s) => (s === 'checking' ? 'idle' : s));
-                            }, 5000);
-                          } else if (!resp.success) {
+                          if (!resp.success) {
                             setUpdateStatus('idle');
                           }
+                          // Event listeners (notAvailable/available) will update status
                         });
                       }}
                       disabled={updateStatus === 'checking' || updateStatus === 'downloading'}

@@ -34,25 +34,24 @@ jobs:
         run: pnpm build
 
       - name: Package and sign
-        run: |
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            pnpm exec electron-builder --mac --arm64 --publish always
-          else
-            pnpm exec electron-builder --mac --arm64 --publish never
-          fi
+        run: pnpm exec electron-builder --mac --arm64 --publish never
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
 
       - name: Notarize
+        if: startsWith(github.ref, 'refs/tags/v')
         timeout-minutes: 45
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: 2DD8ZKZ975
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          DMG_PATH=$(ls release/*.dmg | head -1)
+          DMG_PATH=$(ls release/*.dmg 2>/dev/null | head -1)
+          if [ -z "$DMG_PATH" ]; then
+            echo "ERROR: No DMG found in release/" >&2
+            exit 1
+          fi
 
           echo "==> Submitting DMG for notarization..."
           xcrun notarytool submit "$DMG_PATH" \
@@ -64,7 +63,7 @@ jobs:
           echo "==> Stapling DMG..."
           xcrun stapler staple "$DMG_PATH"
 
-          ZIP_PATH=$(ls release/*.zip | head -1)
+          ZIP_PATH=$(ls release/*.zip 2>/dev/null | head -1)
           if [ -n "$ZIP_PATH" ]; then
             echo "==> Submitting ZIP for notarization..."
             xcrun notarytool submit "$ZIP_PATH" \
@@ -72,6 +71,8 @@ jobs:
               --password "$APPLE_APP_SPECIFIC_PASSWORD" \
               --team-id "$APPLE_TEAM_ID" \
               --wait --timeout 30m
+            # Note: ZIP archives cannot be stapled; the .app inside relies on
+            # online OCSP ticket lookup for Gatekeeper validation.
           fi
 
       - name: Verify code signature
@@ -90,7 +91,6 @@ jobs:
             release/*.dmg
             release/*.zip
             release/*.yml
-            release/*.yaml
           if-no-files-found: error
 
   release-latest:

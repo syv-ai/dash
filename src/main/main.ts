@@ -166,6 +166,12 @@ app.on('activate', async () => {
     activityMonitor.start(mainWindow.webContents);
     const { remoteControlService } = await import('./services/remoteControlService');
     remoteControlService.setSender(mainWindow.webContents);
+
+    // Update auto-updater window reference
+    if (!process.argv.includes('--dev')) {
+      const { AutoUpdateService } = await import('./services/AutoUpdateService');
+      AutoUpdateService.setWindow(mainWindow);
+    }
   }
 });
 

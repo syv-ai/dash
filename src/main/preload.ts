@@ -186,12 +186,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   autoUpdateCheck: () => ipcRenderer.invoke('autoUpdate:check'),
   autoUpdateDownload: () => ipcRenderer.invoke('autoUpdate:download'),
   autoUpdateQuitAndInstall: () => ipcRenderer.invoke('autoUpdate:quitAndInstall'),
-  onAutoUpdateAvailable: (callback: (info: { version: string; releaseDate: string }) => void) => {
-    const handler = (_event: unknown, info: { version: string; releaseDate: string }) =>
-      callback(info);
+  onAutoUpdateAvailable: (callback: (info: { version: string }) => void) => {
+    const handler = (_event: unknown, info: { version: string }) => callback(info);
     ipcRenderer.on('autoUpdate:available', handler);
     return () => {
       ipcRenderer.removeListener('autoUpdate:available', handler);
+    };
+  },
+  onAutoUpdateNotAvailable: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on('autoUpdate:notAvailable', handler);
+    return () => {
+      ipcRenderer.removeListener('autoUpdate:notAvailable', handler);
     };
   },
   onAutoUpdateDownloadProgress: (

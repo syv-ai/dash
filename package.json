@@ -35,7 +35,8 @@
     "publish": {
       "provider": "github",
       "owner": "syv-ai",
-      "repo": "dash"
+      "repo": "dash",
+      "releaseType": "draft"
     },
     "mac": {
       "target": [

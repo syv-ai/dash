@@ -216,9 +216,8 @@ export interface ElectronAPI {
   autoUpdateCheck: () => Promise<IpcResponse<void>>;
   autoUpdateDownload: () => Promise<IpcResponse<void>>;
   autoUpdateQuitAndInstall: () => Promise<IpcResponse<void>>;
-  onAutoUpdateAvailable: (
-    callback: (info: { version: string; releaseDate: string }) => void,
-  ) => () => void;
+  onAutoUpdateAvailable: (callback: (info: { version: string }) => void) => () => void;
+  onAutoUpdateNotAvailable: (callback: () => void) => () => void;
   onAutoUpdateDownloadProgress: (
     callback: (progress: {
       percent: number;
