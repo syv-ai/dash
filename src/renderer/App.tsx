@@ -743,30 +743,33 @@ export function App() {
   }) {
     const task = deleteTaskTarget;
     if (!task) return;
-    setDeleteTaskTarget(null);
 
     const taskProjectId = task.projectId;
 
-    if (task.useWorktree) {
-      const project = projects.find((p) => p.id === taskProjectId);
-      if (project) {
-        await window.electronAPI.worktreeRemove({
-          projectPath: project.path,
-          worktreePath: task.path,
-          branch: task.branch,
-          options,
-        });
+    try {
+      if (task.useWorktree) {
+        const project = projects.find((p) => p.id === taskProjectId);
+        if (project) {
+          await window.electronAPI.worktreeRemove({
+            projectPath: project.path,
+            worktreePath: task.path,
+            branch: task.branch,
+            options,
+          });
+        }
       }
-    }
 
-    // Clean up shell terminal session
-    sessionRegistry.dispose(`shell:${task.id}`);
+      // Clean up shell terminal session
+      sessionRegistry.dispose(`shell:${task.id}`);
 
-    await window.electronAPI.deleteTask(task.id);
-    if (activeTaskId === task.id) {
-      setActiveTaskId(null);
+      await window.electronAPI.deleteTask(task.id);
+      if (activeTaskId === task.id) {
+        setActiveTaskId(null);
+      }
+      await loadTasksForProject(taskProjectId);
+    } finally {
+      setDeleteTaskTarget(null);
     }
-    await loadTasksForProject(taskProjectId);
   }
 
   async function handleArchiveTask(id: string) {

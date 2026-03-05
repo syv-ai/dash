@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Trash2 } from 'lucide-react';
+import { X, Trash2, Loader2 } from 'lucide-react';
 import type { Task } from '../../shared/types';
 import { CircleCheck } from './ui/CircleCheck';
 
@@ -12,26 +12,32 @@ interface RemoveWorktreeOptions {
 interface DeleteTaskModalProps {
   task: Task;
   onClose: () => void;
-  onConfirm: (options?: RemoveWorktreeOptions) => void;
+  onConfirm: (options?: RemoveWorktreeOptions) => Promise<void>;
 }
 
 export function DeleteTaskModal({ task, onClose, onConfirm }: DeleteTaskModalProps) {
   const [deleteWorktreeDir, setDeleteWorktreeDir] = useState(true);
   const [deleteLocalBranch, setDeleteLocalBranch] = useState(true);
   const [deleteRemoteBranch, setDeleteRemoteBranch] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  function handleConfirm() {
-    if (task.useWorktree) {
-      onConfirm({ deleteWorktreeDir, deleteLocalBranch, deleteRemoteBranch });
-    } else {
-      onConfirm();
+  async function handleConfirm() {
+    setIsDeleting(true);
+    try {
+      if (task.useWorktree) {
+        await onConfirm({ deleteWorktreeDir, deleteLocalBranch, deleteRemoteBranch });
+      } else {
+        await onConfirm();
+      }
+    } finally {
+      setIsDeleting(false);
     }
   }
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop animate-fade-in"
-      onClick={onClose}
+      onClick={isDeleting ? undefined : onClose}
     >
       <div
         className="bg-card border border-border/60 rounded-xl shadow-2xl shadow-black/40 w-[420px] animate-slide-up overflow-hidden"
@@ -45,7 +51,8 @@ export function DeleteTaskModal({ task, onClose, onConfirm }: DeleteTaskModalPro
           <h2 className="text-[14px] font-semibold text-foreground">Delete Task</h2>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground/50 hover:text-foreground transition-all duration-150"
+            disabled={isDeleting}
+            className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground/50 hover:text-foreground transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none"
           >
             <X size={14} strokeWidth={2} />
           </button>
@@ -100,17 +107,28 @@ export function DeleteTaskModal({ task, onClose, onConfirm }: DeleteTaskModalPro
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-full text-[13px] text-muted-foreground/60 hover:text-foreground hover:bg-accent/60 transition-all duration-150"
+              disabled={isDeleting}
+              className="px-4 py-2 rounded-full text-[13px] text-muted-foreground/60 hover:text-foreground hover:bg-accent/60 transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={handleConfirm}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[13px] font-medium bg-destructive text-destructive-foreground hover:brightness-110 transition-all duration-150"
+              disabled={isDeleting}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[13px] font-medium bg-destructive text-destructive-foreground hover:brightness-110 transition-all duration-150 disabled:opacity-70 disabled:pointer-events-none"
             >
-              <Trash2 size={13} strokeWidth={2} />
-              Delete
+              {isDeleting ? (
+                <>
+                  <Loader2 size={13} strokeWidth={2} className="animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 size={13} strokeWidth={2} />
+                  Delete
+                </>
+              )}
             </button>
           </div>
         </div>
