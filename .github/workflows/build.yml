@@ -137,13 +137,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if git ls-remote --tags origin "${{ steps.version.outputs.version }}" | grep -q .; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::error::Version ${{ steps.version.outputs.version }} already released. Bump the version in package.json before merging."
+            exit 1
           fi
 
       - name: Create tagged release
-        if: steps.tag_check.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -151,12 +149,3 @@ jobs:
             --title "${{ steps.version.outputs.version }}" \
             --generate-notes \
             artifacts/*
-
-      - name: Update existing release artifacts
-        if: steps.tag_check.outputs.exists == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Upload latest artifacts to existing release (overwrites)
-          gh release upload "${{ steps.version.outputs.version }}" \
-            artifacts/* --clobber
