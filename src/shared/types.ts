@@ -5,6 +5,7 @@ export interface Project {
   gitRemote: string | null;
   gitBranch: string | null;
   baseRef: string | null;
+  worktreeSetupScript: string | null;
   createdAt: string;
   updatedAt: string;
 }

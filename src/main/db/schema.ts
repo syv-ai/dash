@@ -10,6 +10,7 @@ export const projects = sqliteTable(
     gitRemote: text('git_remote'),
     gitBranch: text('git_branch'),
     baseRef: text('base_ref'),
+    worktreeSetupScript: text('worktree_setup_script'),
     createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
   },

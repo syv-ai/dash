@@ -167,6 +167,9 @@ export class WorktreePoolService {
         }
       }
 
+      // Run worktree setup script (async, non-blocking)
+      worktreeService.runSetupScriptAsync(projectId, newPath, newBranch, reserve.projectPath);
+
       // Fire-and-forget replenish
       this.ensureReserve(projectId, reserve.projectPath);
 

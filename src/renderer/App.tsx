@@ -1175,6 +1175,15 @@ export function App() {
             localStorage.setItem('desktopNotification', String(v));
           }}
           activeProjectPath={activeProject?.path}
+          worktreeSetupScript={activeProject?.worktreeSetupScript ?? null}
+          onWorktreeSetupScriptChange={(v) => {
+            if (!activeProject) return;
+            window.electronAPI
+              .saveProject({ ...activeProject, worktreeSetupScript: v })
+              .then((resp) => {
+                if (resp.success) loadProjects();
+              });
+          }}
           commitAttribution={commitAttribution}
           onCommitAttributionChange={(v) => {
             setCommitAttribution(v);

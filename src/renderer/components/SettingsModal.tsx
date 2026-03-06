@@ -29,6 +29,8 @@ interface SettingsModalProps {
   onShellDrawerPositionChange: (value: 'left' | 'main' | 'right') => void;
   terminalTheme: string;
   onTerminalThemeChange: (id: string) => void;
+  worktreeSetupScript: string | null;
+  onWorktreeSetupScriptChange: (value: string | null) => void;
   commitAttribution: string | undefined;
   onCommitAttributionChange: (value: string | undefined) => void;
   activeProjectPath?: string;
@@ -128,6 +130,8 @@ export function SettingsModal({
   onShellDrawerPositionChange,
   terminalTheme,
   onTerminalThemeChange,
+  worktreeSetupScript,
+  onWorktreeSetupScriptChange,
   commitAttribution,
   onCommitAttributionChange,
   activeProjectPath,
@@ -387,6 +391,35 @@ export function SettingsModal({
                 )}
                 <p className="text-[10px] text-foreground/80 mt-2">
                   Toggle with Cmd+J. Run git, npm, and other commands alongside Claude.
+                </p>
+              </div>
+
+              {/* Worktree Setup Script */}
+              <div>
+                <label className="block text-[12px] font-medium text-foreground mb-3">
+                  Worktree Setup Script
+                </label>
+                <textarea
+                  value={worktreeSetupScript ?? ''}
+                  onChange={(e) =>
+                    onWorktreeSetupScriptChange(e.target.value || null)
+                  }
+                  placeholder="e.g. pnpm install && cp .env.example .env"
+                  rows={2}
+                  className="w-full px-3 py-2.5 rounded-lg text-[12px] font-mono border border-border/60 bg-transparent text-foreground placeholder:text-foreground/30 resize-none focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40"
+                />
+                <p className="text-[10px] text-foreground/80 mt-2">
+                  Shell command to run after creating a worktree for this project. Runs in the
+                  worktree directory. Available env vars:{' '}
+                  <code className="px-1 py-0.5 rounded bg-accent/80 text-[10px] font-mono text-foreground/70">
+                    DASH_WORKTREE_PATH
+                  </code>{' '}
+                  <code className="px-1 py-0.5 rounded bg-accent/80 text-[10px] font-mono text-foreground/70">
+                    DASH_PROJECT_PATH
+                  </code>{' '}
+                  <code className="px-1 py-0.5 rounded bg-accent/80 text-[10px] font-mono text-foreground/70">
+                    DASH_BRANCH
+                  </code>
                 </p>
               </div>
 

@@ -104,6 +104,11 @@ export function runMigrations(): void {
   } catch {
     /* already exists */
   }
+  try {
+    rawDb.exec(`ALTER TABLE projects ADD COLUMN worktree_setup_script TEXT`);
+  } catch {
+    /* already exists */
+  }
 
   rawDb.pragma('foreign_keys = ON');
 }
