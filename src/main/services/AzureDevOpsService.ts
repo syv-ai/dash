@@ -61,11 +61,13 @@ export class AzureDevOpsService {
       ? `SELECT [System.Id] FROM WorkItems WHERE [System.Title] CONTAINS '${sanitized}' ORDER BY [System.ChangedDate] DESC`
       : `SELECT [System.Id] FROM WorkItems WHERE [System.State] <> 'Closed' AND [System.State] <> 'Removed' ORDER BY [System.ChangedDate] DESC`;
 
+    console.log('[ADO WIQL]', wiql);
     const wiqlResult = (await this.request(config, `${config.project}/_apis/wit/wiql`, {
       method: 'POST',
       body: { query: wiql },
     })) as { workItems?: { id: number }[] };
 
+    console.log('[ADO WIQL] result workItems count:', wiqlResult.workItems?.length ?? 0);
     const ids = wiqlResult.workItems?.map((w) => w.id).slice(0, 20) ?? [];
     if (ids.length === 0) return [];
 
@@ -104,17 +106,19 @@ export class AzureDevOpsService {
     options?: { expand?: boolean },
   ): Promise<AzureDevOpsWorkItem[]> {
     const idsParam = ids.join(',');
-    const fields =
-      'System.Id,System.Title,System.State,System.WorkItemType,System.AssignedTo,System.Tags,System.Description,Microsoft.VSTS.Common.AcceptanceCriteria';
+    // ADO API does not allow $expand and fields together; when expanding relations, omit fields
+    const fields = options?.expand
+      ? ''
+      : '&fields=System.Id,System.Title,System.State,System.WorkItemType,System.AssignedTo,System.Tags,System.Description,Microsoft.VSTS.Common.AcceptanceCriteria';
     const expand = options?.expand ? '&$expand=relations' : '';
     const result = (await this.request(
       config,
-      `${config.project}/_apis/wit/workitems?ids=${idsParam}&fields=${fields}${expand}`,
+      `${config.project}/_apis/wit/workitems?ids=${idsParam}${fields}${expand}`,
     )) as {
       value: Array<RawWorkItem>;
     };
 
-    const items = result.value.map((item) => this.mapWorkItem(item));
+    const items = result.value.map((item) => this.mapWorkItem(item, config));
 
     // Resolve parent chains if relations were expanded
     if (options?.expand) {
@@ -159,14 +163,14 @@ export class AzureDevOpsService {
       if (idsToFetch.size === 0) break;
 
       try {
-        // Single request: fetch fields + relations together
+        // Fetch with relations expanded (cannot combine $expand with fields)
         const result = (await this.request(
           config,
-          `${config.project}/_apis/wit/workitems?ids=${[...idsToFetch].join(',')}&$expand=relations&fields=System.Id,System.Title,System.State,System.WorkItemType`,
+          `${config.project}/_apis/wit/workitems?ids=${[...idsToFetch].join(',')}&$expand=relations`,
         )) as { value: Array<RawWorkItem> };
 
         for (const raw of result.value) {
-          const item = this.mapWorkItem(raw);
+          const item = this.mapWorkItem(raw, config);
           fetched.set(item.id, {
             id: item.id,
             title: item.title,
@@ -210,19 +214,20 @@ export class AzureDevOpsService {
     return match ? parseInt(match[1], 10) : null;
   }
 
-  private static mapWorkItem(raw: RawWorkItem): AzureDevOpsWorkItem {
+  private static mapWorkItem(raw: RawWorkItem, config: AzureDevOpsConfig): AzureDevOpsWorkItem {
     const fields = raw.fields;
     const assignedTo = fields['System.AssignedTo'] as
       | { displayName?: string; uniqueName?: string }
       | undefined;
     const tags = fields['System.Tags'] as string | undefined;
+    const baseUrl = config.organizationUrl.replace(/\/+$/, '');
 
     return {
       id: raw.id,
       title: (fields['System.Title'] as string) ?? '',
       state: (fields['System.State'] as string) ?? '',
       type: (fields['System.WorkItemType'] as string) ?? '',
-      url: raw._links?.html?.href ?? '',
+      url: raw._links?.html?.href || `${baseUrl}/${config.project}/_workitems/edit/${raw.id}`,
       assignedTo: assignedTo?.displayName ?? assignedTo?.uniqueName,
       tags: tags
         ? tags

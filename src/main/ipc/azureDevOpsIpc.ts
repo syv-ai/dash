@@ -51,10 +51,18 @@ export function registerAzureDevOpsIpc(): void {
   ipcMain.handle('ado:search-work-items', async (_event, args: { query: string }) => {
     try {
       const config = ConfigService.getAdoConfig();
+      console.log(
+        '[ADO search] config:',
+        config
+          ? `${config.organizationUrl} / ${config.project} (PAT length: ${config.pat.length})`
+          : 'null',
+      );
       if (!config) return { success: false, error: 'Azure DevOps not configured' };
       const items = await AzureDevOpsService.searchWorkItems(config, args.query);
+      console.log('[ADO search] query:', JSON.stringify(args.query), '→ results:', items.length);
       return { success: true, data: items };
     } catch (err) {
+      console.error('[ADO search] error:', err);
       return { success: false, error: String(err) };
     }
   });

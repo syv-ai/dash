@@ -39,7 +39,7 @@ Download the latest build from [Releases](https://github.com/syv-ai/dash/release
 
 ```bash
 pnpm install
-pnpm rebuild  # rebuilds native modules (node-pty, better-sqlite3)
+npx electron-rebuild -f -w node-pty,better-sqlite3  # rebuild native modules for Electron
 ```
 
 ## Development

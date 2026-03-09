@@ -8,7 +8,7 @@ Electron desktop app for running Claude Code across multiple projects, each task
 
 ```bash
 pnpm install              # install deps
-pnpm rebuild              # rebuild native modules (node-pty, better-sqlite3)
+npx electron-rebuild -f -w node-pty,better-sqlite3  # rebuild native modules for Electron
 pnpm dev                  # Vite on :3000 + Electron
 pnpm dev:main             # main process only
 pnpm dev:renderer         # Vite dev server only
