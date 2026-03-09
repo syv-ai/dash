@@ -6,3 +6,4 @@ release/
 .env
 .env.local
 .claude/skills/steal
+claude.local.md

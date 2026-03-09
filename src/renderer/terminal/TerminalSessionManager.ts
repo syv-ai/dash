@@ -43,6 +43,7 @@ export class TerminalSessionManager {
   private lastPtyCols = 0;
   private lastPtyRows = 0;
   private writeScrollRafPending = false;
+  private savedViewportY: number | null = null;
   readonly shellOnly: boolean;
   private themeId: string;
   constructor(opts: {
@@ -402,6 +403,11 @@ export class TerminalSessionManager {
         this.fitAddon.fit();
         this.terminal.focus();
 
+        if (this.savedViewportY !== null) {
+          this.forceScrollToLine(this.savedViewportY);
+          this.savedViewportY = null;
+        }
+
         // Use fit() dedup logic — avoid redundant SIGWINCH that can cause
         // the shell to redraw while the user is already typing
         const dims = this.fitAddon.proposeDimensions();
@@ -420,6 +426,8 @@ export class TerminalSessionManager {
   }
 
   detach() {
+    this.savedViewportY = this.terminal.buffer.active.viewportY;
+
     // Save snapshot before detaching
     this.saveSnapshot();
 
@@ -760,6 +768,20 @@ export class TerminalSessionManager {
       // Best effort
     }
     return false;
+  }
+
+  /**
+   * scrollToLine(n) is a no-op when viewportY already equals n — xterm skips
+   * the scroll event so the Viewport never syncs the DOM scrollTop. After a
+   * DOM re-attach (appendChild), scrollTop resets to 0 but viewportY keeps its
+   * old value, leaving them desynced. Force the event by scrolling away first.
+   */
+  private forceScrollToLine(line: number) {
+    const buf = this.terminal.buffer.active;
+    if (buf.viewportY === line) {
+      this.terminal.scrollToLine(line > 0 ? line - 1 : line + 1);
+    }
+    this.terminal.scrollToLine(line);
   }
 
   private isAtBottom(): boolean {
