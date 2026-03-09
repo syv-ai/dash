@@ -49,7 +49,8 @@ export class ConfigService {
       } else {
         pat = Buffer.from(config.ado.encryptedPat, 'base64').toString('utf-8');
       }
-    } catch {
+    } catch (err) {
+      console.error('[ConfigService] Failed to decrypt ADO PAT:', err);
       return null;
     }
 
@@ -86,7 +87,6 @@ export class ConfigService {
   }
 
   static isAdoConfigured(): boolean {
-    const config = this.readConfig();
-    return !!config.ado;
+    return this.getAdoConfig() !== null;
   }
 }
