@@ -400,6 +400,11 @@ export class TerminalSessionManager {
 
       requestAnimationFrame(() => {
         if (gen !== this.attachGeneration) return;
+        // Disable focus reporting before focusing — a restored snapshot or
+        // previous Ink process may have left it enabled, and the focus event
+        // would send \x1b[I as PTY input before the new Ink process is ready,
+        // causing stray "O"/"I" chars in the input field.
+        this.terminal.write('\x1b[?1004l');
         this.fitAddon.fit();
         this.terminal.focus();
 
