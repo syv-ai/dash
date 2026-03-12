@@ -1131,6 +1131,12 @@ export function App() {
               prev?.id === id ? { ...prev, name: newName } : prev,
             );
           }}
+          onWorktreeSetupScriptChange={async (id, script) => {
+            const proj = projects.find((p) => p.id === id);
+            if (!proj) return;
+            await window.electronAPI.saveProject({ ...proj, worktreeSetupScript: script });
+            await loadProjects();
+          }}
         />
       )}
 
@@ -1175,15 +1181,6 @@ export function App() {
             localStorage.setItem('desktopNotification', String(v));
           }}
           activeProjectPath={activeProject?.path}
-          worktreeSetupScript={activeProject?.worktreeSetupScript ?? null}
-          onWorktreeSetupScriptChange={(v) => {
-            if (!activeProject) return;
-            window.electronAPI
-              .saveProject({ ...activeProject, worktreeSetupScript: v })
-              .then((resp) => {
-                if (resp.success) loadProjects();
-              });
-          }}
           commitAttribution={commitAttribution}
           onCommitAttributionChange={(v) => {
             setCommitAttribution(v);

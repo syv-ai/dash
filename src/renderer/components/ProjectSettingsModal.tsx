@@ -8,10 +8,17 @@ interface ProjectSettingsModalProps {
   project: Project;
   onClose: () => void;
   onRename: (id: string, name: string) => void;
+  onWorktreeSetupScriptChange: (id: string, script: string | null) => void;
 }
 
-export function ProjectSettingsModal({ project, onClose, onRename }: ProjectSettingsModalProps) {
+export function ProjectSettingsModal({
+  project,
+  onClose,
+  onRename,
+  onWorktreeSetupScriptChange,
+}: ProjectSettingsModalProps) {
   const [name, setName] = useState(project.name);
+  const [setupScript, setSetupScript] = useState(project.worktreeSetupScript ?? '');
 
   function handleSaveName() {
     const trimmed = name.trim();
@@ -63,6 +70,27 @@ export function ProjectSettingsModal({ project, onClose, onRename }: ProjectSett
             </div>
             <p className="text-[10px] text-muted-foreground/50 mt-1.5 font-mono truncate">
               {project.path}
+            </p>
+          </div>
+
+          {/* Worktree setup script */}
+          <div>
+            <label className="block text-[12px] font-medium text-muted-foreground/70 mb-2">
+              Worktree setup script
+            </label>
+            <textarea
+              value={setupScript}
+              onChange={(e) => setSetupScript(e.target.value)}
+              onBlur={() => onWorktreeSetupScriptChange(project.id, setupScript.trim() || null)}
+              placeholder="e.g. pnpm install && cp .env.example .env"
+              rows={3}
+              className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[12px] font-mono placeholder:text-muted-foreground/30 resize-none focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150"
+            />
+            <p className="text-[10px] text-muted-foreground/50 mt-1.5 leading-relaxed">
+              Runs after a worktree is created. Env vars:{' '}
+              <code className="font-mono">DASH_WORKTREE_PATH</code>,{' '}
+              <code className="font-mono">DASH_PROJECT_PATH</code>,{' '}
+              <code className="font-mono">DASH_BRANCH</code>
             </p>
           </div>
 
