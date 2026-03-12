@@ -187,6 +187,7 @@ export class TerminalSessionManager {
         const webgl = new WebglAddon();
         webgl.onContextLoss(() => {
           webgl.dispose();
+          this.loadGpuAddon();
         });
         this.terminal.loadAddon(webgl);
         return;
