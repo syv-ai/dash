@@ -177,20 +177,29 @@ export class TerminalSessionManager {
   }
 
   private async loadGpuAddon() {
-    try {
-      const { WebglAddon } = await import('@xterm/addon-webgl');
-      const webgl = new WebglAddon();
-      webgl.onContextLoss(() => {
-        webgl.dispose();
-      });
-      this.terminal.loadAddon(webgl);
-    } catch {
+    // On Linux, WebGL has compositing bugs that cause the terminal canvas to
+    // go blank when content updates (typing, output). Skip straight to Canvas.
+    const isLinux = navigator.userAgent.includes('Linux');
+
+    if (!isLinux) {
       try {
-        const { CanvasAddon } = await import('@xterm/addon-canvas');
-        this.terminal.loadAddon(new CanvasAddon());
+        const { WebglAddon } = await import('@xterm/addon-webgl');
+        const webgl = new WebglAddon();
+        webgl.onContextLoss(() => {
+          webgl.dispose();
+        });
+        this.terminal.loadAddon(webgl);
+        return;
       } catch {
-        // Software renderer fallback
+        // Fall through to canvas
       }
+    }
+
+    try {
+      const { CanvasAddon } = await import('@xterm/addon-canvas');
+      this.terminal.loadAddon(new CanvasAddon());
+    } catch {
+      // Software renderer fallback
     }
   }
 
