@@ -116,15 +116,13 @@
 
 .terminal-container .xterm {
   height: 100%;
-  padding: 0 8px;
+  padding-left: 12px;
 }
 
-/* Inset the absolutely-positioned viewport to match .xterm padding
-   so the canvas renders within the padded area. FitAddon reads .xterm
-   padding and subtracts it from available width automatically. */
-.terminal-container .xterm .xterm-viewport {
-  left: 8px;
-  right: 8px;
+/* Inset left edge of absolutely-positioned children to match left padding. */
+.terminal-container .xterm .xterm-viewport,
+.terminal-container .xterm .xterm-screen {
+  left: 12px !important;
 }
 
 /* ── Scrollbar ────────────────────────────────────────────── */

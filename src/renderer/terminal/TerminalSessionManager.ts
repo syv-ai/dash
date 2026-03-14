@@ -213,6 +213,11 @@ export class TerminalSessionManager {
       // First time: open xterm in this container
       this.terminal.open(container);
       this.opened = true;
+      // Sync .xterm background so padding gutters match the theme
+      const bg = resolveTheme(this.themeId, this.isDark).background;
+      if (this.terminal.element && bg) {
+        this.terminal.element.style.backgroundColor = bg;
+      }
       // Load GPU addon after terminal is in DOM
       await this.loadGpuAddon();
       // After yielding, check if a newer attach() has started (React remount)
@@ -285,7 +290,7 @@ export class TerminalSessionManager {
         const shellResp = await window.electronAPI.ptyStart({
           id: this.id,
           cwd: this.cwd,
-          cols: dims?.cols ?? 120,
+          cols: this.ptyCols(dims?.cols ?? 120),
           rows: dims?.rows ?? 30,
         });
         if (gen !== this.attachGeneration) return;
@@ -426,13 +431,14 @@ export class TerminalSessionManager {
         // Use fit() dedup logic — avoid redundant SIGWINCH that can cause
         // the shell to redraw while the user is already typing
         const dims = this.fitAddon.proposeDimensions();
-        if (!dims || dims.cols <= 0 || dims.rows <= 0) return;
-        if (dims.cols !== this.lastPtyCols || dims.rows !== this.lastPtyRows) {
-          this.lastPtyCols = dims.cols;
+        if (!dims) return;
+        const cols = this.ptyCols(dims.cols);
+        if (cols !== this.lastPtyCols || dims.rows !== this.lastPtyRows) {
+          this.lastPtyCols = cols;
           this.lastPtyRows = dims.rows;
           window.electronAPI.ptyResize({
             id: this.id,
-            cols: dims.cols,
+            cols,
             rows: dims.rows,
           });
         }
@@ -557,21 +563,28 @@ export class TerminalSessionManager {
   setTerminalTheme(themeId: string, isDark: boolean) {
     this.themeId = themeId;
     this.isDark = isDark;
+    const theme = resolveTheme(themeId, isDark);
     try {
-      this.terminal.options.theme = resolveTheme(themeId, isDark);
+      this.terminal.options.theme = theme;
     } catch {
       // WebGL addon may crash if GPU context is lost (e.g. hidden terminal).
       // Re-apply after reloading the addon on next attach.
+    }
+
+    // Sync .xterm background so padding gutters match the theme
+    if (this.terminal.element && theme.background) {
+      this.terminal.element.style.backgroundColor = theme.background;
     }
 
     // Trigger SIGWINCH so the TUI redraws with the new ANSI palette.
     // rows+1 then rows forces the PTY process to handle SIGWINCH.
     if (this.ptyStarted && this.opened) {
       const dims = this.fitAddon.proposeDimensions();
-      if (dims && dims.cols > 0 && dims.rows > 0) {
-        window.electronAPI.ptyResize({ id: this.id, cols: dims.cols, rows: dims.rows + 1 });
+      if (dims) {
+        const cols = this.ptyCols(dims.cols);
+        window.electronAPI.ptyResize({ id: this.id, cols, rows: dims.rows + 1 });
         setTimeout(() => {
-          window.electronAPI.ptyResize({ id: this.id, cols: dims.cols, rows: dims.rows });
+          window.electronAPI.ptyResize({ id: this.id, cols, rows: dims.rows });
         }, 50);
       }
     }
@@ -582,18 +595,27 @@ export class TerminalSessionManager {
     await this.saveSnapshot();
   }
 
+  /** Reserve columns so the TUI doesn't render into the right edge. */
+  private static readonly COL_RESERVE = 5;
+
+  /** Reduce cols for PTY so the TUI leaves a right-side gutter. */
+  private ptyCols(cols: number): number {
+    return Math.max(1, cols - TerminalSessionManager.COL_RESERVE);
+  }
+
   private fit() {
     try {
       this.fitAddon.fit();
       const dims = this.fitAddon.proposeDimensions();
       if (dims && dims.cols > 0 && dims.rows > 0) {
+        const cols = this.ptyCols(dims.cols);
         // Skip redundant PTY resizes to avoid SIGWINCH prompt redraw
-        if (dims.cols === this.lastPtyCols && dims.rows === this.lastPtyRows) return;
-        this.lastPtyCols = dims.cols;
+        if (cols === this.lastPtyCols && dims.rows === this.lastPtyRows) return;
+        this.lastPtyCols = cols;
         this.lastPtyRows = dims.rows;
         window.electronAPI.ptyResize({
           id: this.id,
-          cols: dims.cols,
+          cols,
           rows: dims.rows,
         });
       }
@@ -608,7 +630,7 @@ export class TerminalSessionManager {
     taskContextMeta: import('../../shared/types').TaskContextMeta | null;
   }> {
     const dims = this.fitAddon.proposeDimensions();
-    const cols = dims?.cols ?? 120;
+    const cols = this.ptyCols(dims?.cols ?? 120);
     const rows = dims?.rows ?? 30;
 
     let reattached = false;
@@ -736,7 +758,7 @@ export class TerminalSessionManager {
         .ptyStart({
           id: this.id,
           cwd: this.cwd,
-          cols: dims?.cols ?? 120,
+          cols: this.ptyCols(dims?.cols ?? 120),
           rows: dims?.rows ?? 30,
         })
         .then(() => {
