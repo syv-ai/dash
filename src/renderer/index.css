@@ -152,6 +152,12 @@
   left: 6px !important;
   top: 4px !important;
 }
+.terminal-drawer .xterm .xterm-viewport {
+  scrollbar-width: none !important;
+}
+.terminal-drawer .xterm .xterm-viewport::-webkit-scrollbar {
+  display: none !important;
+}
 
 /* ── Scrollbar ────────────────────────────────────────────── */
 
