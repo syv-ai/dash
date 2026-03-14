@@ -61,7 +61,7 @@ export function TerminalDrawer({
       cwd,
       shellOnly: true,
     });
-    session.attach(container);
+    session.attach(container, { autoFocus: false });
 
     setDisplayCwd(session.currentCwd);
 
@@ -74,9 +74,13 @@ export function TerminalDrawer({
     };
   }, [shellId, cwd]);
 
-  // Focus terminal when expanding
+  // Focus terminal when the user explicitly expands the drawer
+  const prevCollapsedRef = useRef(collapsed);
   useEffect(() => {
-    if (!collapsed) {
+    const wasCollapsed = prevCollapsedRef.current;
+    prevCollapsedRef.current = collapsed;
+
+    if (wasCollapsed && !collapsed) {
       const session = sessionRegistry.get(shellId);
       if (session) {
         requestAnimationFrame(() => session.focus());

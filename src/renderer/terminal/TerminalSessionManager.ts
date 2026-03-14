@@ -204,7 +204,7 @@ export class TerminalSessionManager {
     }
   }
 
-  async attach(container: HTMLElement) {
+  async attach(container: HTMLElement, opts?: { autoFocus?: boolean }) {
     const gen = ++this.attachGeneration;
     if (this.disposed) return;
     this.currentContainer = container;
@@ -421,7 +421,9 @@ export class TerminalSessionManager {
         // causing stray "O"/"I" chars in the input field.
         this.terminal.write('\x1b[?1004l');
         this.fitAddon.fit();
-        this.terminal.focus();
+        if (opts?.autoFocus !== false) {
+          this.terminal.focus();
+        }
 
         if (this.savedViewportY !== null) {
           this.forceScrollToLine(this.savedViewportY);
