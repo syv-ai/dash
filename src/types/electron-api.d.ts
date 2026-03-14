@@ -9,9 +9,12 @@ import type {
   DiffResult,
   BranchInfo,
   GithubIssue,
+  AzureDevOpsWorkItem,
+  AzureDevOpsConfig,
   CommitGraphData,
   CommitDetail,
   RemoteControlState,
+  TaskContextMeta,
 } from '../shared/types';
 
 export interface ElectronAPI {
@@ -95,7 +98,7 @@ export interface ElectronAPI {
       reattached: boolean;
       isDirectSpawn: boolean;
       hasTaskContext: boolean;
-      taskContextMeta: { issueNumbers: number[]; gitRemote?: string } | null;
+      taskContextMeta: TaskContextMeta | null;
     }>
   >;
   ptyStart: (args: {
@@ -138,7 +141,7 @@ export interface ElectronAPI {
   ptyWriteTaskContext: (args: {
     cwd: string;
     prompt: string;
-    meta?: { issueNumbers: number[]; gitRemote?: string };
+    meta?: TaskContextMeta;
   }) => Promise<IpcResponse<void>>;
 
   // App lifecycle
@@ -164,6 +167,23 @@ export interface ElectronAPI {
     cwd: string,
     issueNumber: number,
     branch: string,
+  ) => Promise<IpcResponse<void>>;
+
+  // Azure DevOps
+  adoCheckConfigured: (projectId?: string) => Promise<IpcResponse<boolean>>;
+  adoTestConnection: (config: AzureDevOpsConfig) => Promise<IpcResponse<boolean>>;
+  adoSaveConfig: (config: AzureDevOpsConfig, projectId?: string) => Promise<IpcResponse<void>>;
+  adoGetConfig: (projectId?: string) => Promise<IpcResponse<AzureDevOpsConfig | null>>;
+  adoRemoveConfig: (projectId?: string) => Promise<IpcResponse<void>>;
+  adoSearchWorkItems: (
+    query: string,
+    projectId?: string,
+  ) => Promise<IpcResponse<AzureDevOpsWorkItem[]>>;
+  adoGetWorkItem: (id: number, projectId?: string) => Promise<IpcResponse<AzureDevOpsWorkItem>>;
+  adoPostBranchComment: (
+    workItemId: number,
+    branch: string,
+    projectId?: string,
   ) => Promise<IpcResponse<void>>;
 
   // Git detection
@@ -211,6 +231,23 @@ export interface ElectronAPI {
   gitWatch: (args: { id: string; cwd: string }) => Promise<IpcResponse<void>>;
   gitUnwatch: (id: string) => Promise<IpcResponse<void>>;
   onGitFileChanged: (callback: (id: string) => void) => () => void;
+
+  // Auto-update
+  autoUpdateCheck: () => Promise<IpcResponse<void>>;
+  autoUpdateDownload: () => Promise<IpcResponse<void>>;
+  autoUpdateQuitAndInstall: () => Promise<IpcResponse<void>>;
+  onAutoUpdateAvailable: (callback: (info: { version: string }) => void) => () => void;
+  onAutoUpdateNotAvailable: (callback: () => void) => () => void;
+  onAutoUpdateDownloadProgress: (
+    callback: (progress: {
+      percent: number;
+      bytesPerSecond: number;
+      transferred: number;
+      total: number;
+    }) => void,
+  ) => () => void;
+  onAutoUpdateDownloaded: (callback: () => void) => () => void;
+  onAutoUpdateError: (callback: (message: string) => void) => () => void;
 }
 
 declare global {

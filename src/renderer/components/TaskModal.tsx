@@ -1,32 +1,77 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  X,
-  GitBranch,
-  Zap,
-  ChevronDown,
-  Loader2,
-  AlertCircle,
-  Search,
-  Github,
-  Check,
-  Upload,
-} from 'lucide-react';
-import type { BranchInfo, GithubIssue } from '../../shared/types';
+import { X, GitBranch, Zap, ChevronDown, Loader2, AlertCircle, Search, Upload } from 'lucide-react';
+import { SearchableMultiSelect } from './SearchableMultiSelect';
+import type { BranchInfo, GithubIssue, AzureDevOpsWorkItem, LinkedItem } from '../../shared/types';
+
+export interface CreateTaskOptions {
+  name: string;
+  useWorktree: boolean;
+  autoApprove: boolean;
+  baseRef?: string;
+  pushRemote?: boolean;
+  linkedItems?: LinkedItem[];
+}
 
 interface TaskModalProps {
   projectPath: string;
+  projectId?: string;
   onClose: () => void;
-  onCreate: (
-    name: string,
-    useWorktree: boolean,
-    autoApprove: boolean,
-    baseRef?: string,
-    linkedIssues?: GithubIssue[],
-    pushRemote?: boolean,
-  ) => void;
+  onCreate: (options: CreateTaskOptions) => void;
 }
 
-export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
+function GithubIssueRow({ issue }: { issue: GithubIssue }) {
+  return (
+    <>
+      <div className="flex items-center gap-1.5">
+        <span className="text-[11px] text-muted-foreground/50 font-mono shrink-0">
+          #{issue.number}
+        </span>
+        <span className="text-[12px] text-foreground/80 truncate">{issue.title}</span>
+      </div>
+      {issue.labels.length > 0 && (
+        <div className="flex gap-1 mt-0.5 flex-wrap">
+          {issue.labels.slice(0, 3).map((label) => (
+            <span
+              key={label}
+              className="px-1.5 py-0.5 rounded text-[9px] bg-accent/60 text-muted-foreground/60"
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function AdoWorkItemRow({ item }: { item: AzureDevOpsWorkItem }) {
+  return (
+    <>
+      <div className="flex items-center gap-1.5">
+        <span className="text-[11px] text-muted-foreground/50 font-mono shrink-0">#{item.id}</span>
+        <span className="text-[12px] text-foreground/80 truncate">{item.title}</span>
+      </div>
+      <div className="flex gap-1 mt-0.5 flex-wrap">
+        <span className="px-1.5 py-0.5 rounded text-[9px] bg-accent/60 text-muted-foreground/60">
+          {item.type}
+        </span>
+        <span className="px-1.5 py-0.5 rounded text-[9px] bg-accent/60 text-muted-foreground/60">
+          {item.state}
+        </span>
+        {item.tags?.slice(0, 2).map((tag) => (
+          <span
+            key={tag}
+            className="px-1.5 py-0.5 rounded text-[9px] bg-accent/60 text-muted-foreground/60"
+          >
+            {tag}
+          </span>
+        ))}
+      </div>
+    </>
+  );
+}
+
+export function TaskModal({ projectPath, projectId, onClose, onCreate }: TaskModalProps) {
   const [name, setName] = useState('');
   const [useWorktree, setUseWorktree] = useState(true);
   const [autoApprove, setAutoApprove] = useState(() => localStorage.getItem('yoloMode') === 'true');
@@ -40,98 +85,58 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
   const [branchSearch, setBranchSearch] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  // GitHub issue picker state
+  // Issue/work item selection
   const [ghAvailable, setGhAvailable] = useState(false);
-  const [issueQuery, setIssueQuery] = useState('');
-  const [issueResults, setIssueResults] = useState<GithubIssue[]>([]);
-  const [issueLoading, setIssueLoading] = useState(false);
+  const [adoAvailable, setAdoAvailable] = useState(false);
   const [selectedIssues, setSelectedIssues] = useState<GithubIssue[]>([]);
-  const [issueDropdownOpen, setIssueDropdownOpen] = useState(false);
+  const [selectedWorkItems, setSelectedWorkItems] = useState<AzureDevOpsWorkItem[]>([]);
+
+  const showGithub = ghAvailable;
+  const showAdo = adoAvailable;
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const issueDropdownRef = useRef<HTMLDivElement>(null);
-  const issueSearchInputRef = useRef<HTMLInputElement>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Check gh availability on mount
+  // Check gh and ADO availability on mount
   useEffect(() => {
     window.electronAPI.githubCheckAvailable().then((resp) => {
-      if (resp.success && resp.data) {
-        setGhAvailable(true);
-      }
+      if (resp.success && resp.data) setGhAvailable(true);
+    });
+    window.electronAPI.adoCheckConfigured(projectId).then((resp) => {
+      if (resp.success && resp.data) setAdoAvailable(true);
     });
   }, []);
 
   // Fetch branches when worktree is enabled
   useEffect(() => {
-    if (useWorktree) {
-      fetchBranches();
-    }
+    if (useWorktree) fetchBranches();
   }, [useWorktree, projectPath]);
 
-  // Close dropdowns on click outside
+  // Close branch dropdown on click outside
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setDropdownOpen(false);
-      }
-      if (issueDropdownRef.current && !issueDropdownRef.current.contains(e.target as Node)) {
-        setIssueDropdownOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Focus search input when dropdown opens
+  // Focus search input when branch dropdown opens
   useEffect(() => {
-    if (dropdownOpen) {
-      searchInputRef.current?.focus();
-    }
+    if (dropdownOpen) searchInputRef.current?.focus();
   }, [dropdownOpen]);
 
-  useEffect(() => {
-    if (issueDropdownOpen) {
-      issueSearchInputRef.current?.focus();
-    }
-  }, [issueDropdownOpen]);
-
-  // Fetch recent issues (no query) for initial display
-  const fetchRecentIssues = useCallback(async () => {
-    if (issueResults.length > 0) return; // Already have results
-    setIssueLoading(true);
-    try {
-      const resp = await window.electronAPI.githubSearchIssues(projectPath, '');
-      if (resp.success && resp.data) {
-        setIssueResults(resp.data);
-      }
-    } catch {
-      // Best effort
-    } finally {
-      setIssueLoading(false);
-    }
-  }, [projectPath, issueResults.length]);
-
-  // Debounced issue search
-  const searchIssues = useCallback(
-    (query: string) => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      setIssueLoading(true);
-      debounceRef.current = setTimeout(async () => {
-        try {
-          const resp = await window.electronAPI.githubSearchIssues(projectPath, query);
-          if (resp.success && resp.data) {
-            setIssueResults(resp.data);
-          }
-        } catch {
-          // Best effort
-        } finally {
-          setIssueLoading(false);
-        }
-      }, 400);
-    },
+  // Search callbacks for SearchableMultiSelect
+  const searchGithubIssues = useCallback(
+    (query: string) => window.electronAPI.githubSearchIssues(projectPath, query),
     [projectPath],
+  );
+
+  const searchAdoWorkItems = useCallback(
+    (query: string) => window.electronAPI.adoSearchWorkItems(query, projectId),
+    [projectId],
   );
 
   async function fetchBranches() {
@@ -162,14 +167,38 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
     e.preventDefault();
     if (name.trim()) {
       const baseRef = useWorktree ? selectedBranch?.ref : undefined;
-      onCreate(
-        name.trim(),
+
+      // Build unified linkedItems from both providers
+      const ghItems: LinkedItem[] = selectedIssues.map((issue) => ({
+        provider: 'github' as const,
+        id: issue.number,
+        title: issue.title,
+        url: issue.url,
+        labels: issue.labels.length > 0 ? issue.labels : undefined,
+        body: issue.body || undefined,
+      }));
+      const adoItems: LinkedItem[] = selectedWorkItems.map((wi) => ({
+        provider: 'ado' as const,
+        id: wi.id,
+        title: wi.title,
+        url: wi.url,
+        type: wi.type,
+        state: wi.state,
+        tags: wi.tags,
+        description: wi.description,
+        acceptanceCriteria: wi.acceptanceCriteria,
+        parents: wi.parents,
+      }));
+      const allLinkedItems: LinkedItem[] = [...ghItems, ...adoItems];
+
+      onCreate({
+        name: name.trim(),
         useWorktree,
         autoApprove,
         baseRef,
-        selectedIssues.length > 0 ? selectedIssues : undefined,
-        useWorktree ? pushRemote : undefined,
-      );
+        pushRemote: useWorktree ? pushRemote : undefined,
+        linkedItems: allLinkedItems.length > 0 ? allLinkedItems : undefined,
+      });
       onClose();
     }
   }
@@ -180,18 +209,6 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '')
       .slice(0, 50);
-  }
-
-  function toggleIssue(issue: GithubIssue) {
-    setSelectedIssues((prev) => {
-      const exists = prev.some((i) => i.number === issue.number);
-      if (exists) return prev.filter((i) => i.number !== issue.number);
-      return [...prev, issue];
-    });
-  }
-
-  function removeIssue(number: number) {
-    setSelectedIssues((prev) => prev.filter((i) => i.number !== number));
   }
 
   return (
@@ -254,7 +271,7 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
             </label>
           </div>
 
-          {/* Branch selector — same inline search pattern as issue picker */}
+          {/* Branch selector */}
           {useWorktree && (
             <div className="mb-4" ref={dropdownRef}>
               <label className="block text-[12px] font-medium text-muted-foreground/70 mb-2">
@@ -361,136 +378,48 @@ export function TaskModal({ projectPath, onClose, onCreate }: TaskModalProps) {
             </div>
           )}
 
-          {/* GitHub issue picker — only shown when gh is available */}
-          {ghAvailable && (
-            <div className="mb-4" ref={issueDropdownRef}>
+          {/* Issue/Work Item pickers */}
+          {(showGithub || showAdo) && (
+            <div className="mb-4">
               <label className="block text-[12px] font-medium text-muted-foreground/70 mb-2">
                 <span className="flex items-center gap-1.5">
-                  <Github size={12} strokeWidth={1.8} />
-                  Link issues
+                  <Search size={12} strokeWidth={1.8} />
+                  {showGithub && showAdo
+                    ? 'Link issues / work items'
+                    : showAdo
+                      ? 'Link work items'
+                      : 'Link issues'}
                   <span className="text-muted-foreground/40 font-normal">optional</span>
                 </span>
               </label>
 
-              {/* Selected issue pills */}
-              {selectedIssues.length > 0 && (
-                <div className="flex flex-wrap gap-1 mb-2">
-                  {selectedIssues.map((issue) => (
-                    <button
-                      key={issue.number}
-                      type="button"
-                      onClick={() => removeIssue(issue.number)}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-medium hover:bg-destructive/10 hover:text-destructive transition-colors"
-                    >
-                      #{issue.number}
-                      <X size={9} strokeWidth={2.5} />
-                    </button>
-                  ))}
-                </div>
+              {showGithub && (
+                <SearchableMultiSelect<GithubIssue>
+                  onSearch={searchGithubIssues}
+                  selected={selectedIssues}
+                  onSelect={setSelectedIssues}
+                  getKey={(i) => i.number}
+                  getLabel={(i) => `#${i.number}`}
+                  renderItem={(issue) => <GithubIssueRow issue={issue} />}
+                  placeholder="Search GitHub issues..."
+                />
               )}
 
-              {/* Issue search */}
-              <div className="relative">
-                <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-background border border-input/60 focus-within:ring-2 focus-within:ring-ring/30 focus-within:border-ring/50 transition-all duration-150">
-                  {issueLoading ? (
-                    <Loader2 size={12} className="animate-spin text-muted-foreground/50 shrink-0" />
-                  ) : (
-                    <Search size={12} className="text-muted-foreground/40 shrink-0" />
-                  )}
-                  <input
-                    ref={issueSearchInputRef}
-                    type="text"
-                    value={issueQuery}
-                    onChange={(e) => {
-                      setIssueQuery(e.target.value);
-                      searchIssues(e.target.value);
-                      setIssueDropdownOpen(true);
-                    }}
-                    onFocus={() => {
-                      setIssueDropdownOpen(true);
-                      fetchRecentIssues();
-                    }}
-                    placeholder="Search issues..."
-                    className="flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/30 outline-none"
-                  />
-                </div>
-
-                {/* Issue results dropdown */}
-                {issueDropdownOpen && (
-                  <div className="absolute z-50 mt-1 w-full bg-card border border-border/60 rounded-lg shadow-xl shadow-black/30 overflow-hidden">
-                    <div className="max-h-[200px] overflow-y-auto">
-                      {issueLoading && issueResults.length === 0 ? (
-                        <div className="px-3 py-3 text-[12px] text-muted-foreground/40 text-center flex items-center justify-center gap-2">
-                          <Loader2 size={12} className="animate-spin" />
-                          Searching...
-                        </div>
-                      ) : issueResults.length === 0 ? (
-                        <div className="px-3 py-3 text-[12px] text-muted-foreground/40 text-center">
-                          No issues found
-                        </div>
-                      ) : (
-                        issueResults.map((issue) => {
-                          const isSelected = selectedIssues.some((i) => i.number === issue.number);
-                          return (
-                            <button
-                              key={issue.number}
-                              type="button"
-                              onClick={() => {
-                                toggleIssue(issue);
-                              }}
-                              className={`w-full flex items-start gap-2 px-3 py-2 text-left hover:bg-accent/60 transition-colors duration-100 ${
-                                isSelected ? 'bg-primary/5' : ''
-                              }`}
-                            >
-                              <span
-                                className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-colors duration-150 ${
-                                  isSelected
-                                    ? 'bg-primary border-primary'
-                                    : 'border-border hover:border-foreground/40'
-                                }`}
-                              >
-                                {isSelected && (
-                                  <Check
-                                    size={10}
-                                    strokeWidth={3}
-                                    className="text-primary-foreground"
-                                  />
-                                )}
-                              </span>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-[11px] text-muted-foreground/50 font-mono shrink-0">
-                                    #{issue.number}
-                                  </span>
-                                  <span className="text-[12px] text-foreground/80 truncate">
-                                    {issue.title}
-                                  </span>
-                                </div>
-                                {issue.labels.length > 0 && (
-                                  <div className="flex gap-1 mt-0.5 flex-wrap">
-                                    {issue.labels.slice(0, 3).map((label) => (
-                                      <span
-                                        key={label}
-                                        className="px-1.5 py-0.5 rounded text-[9px] bg-accent/60 text-muted-foreground/60"
-                                      >
-                                        {label}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            </button>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
+              {showAdo && (
+                <SearchableMultiSelect<AzureDevOpsWorkItem>
+                  onSearch={searchAdoWorkItems}
+                  selected={selectedWorkItems}
+                  onSelect={setSelectedWorkItems}
+                  getKey={(i) => i.id}
+                  getLabel={(i) => `#${i.id}`}
+                  renderItem={(item) => <AdoWorkItemRow item={item} />}
+                  placeholder="Search work items..."
+                />
+              )}
             </div>
           )}
 
-          {/* Push remote branch toggle — only when worktree is enabled */}
+          {/* Push remote branch toggle */}
           {useWorktree && (
             <div className="mb-4">
               <label className="flex items-center gap-3 cursor-pointer group">

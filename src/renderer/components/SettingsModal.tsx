@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Check, AlertCircle, Sun, Moon, Terminal, RotateCcw } from 'lucide-react';
+import { X, Check, AlertCircle, Sun, Moon, RotateCcw, Download } from 'lucide-react';
 import type { KeyBindingMap, KeyBinding } from '../keybindings';
 import {
   getBindingKeys,
@@ -135,9 +135,7 @@ export function SettingsModal({
   onKeybindingsChange,
   onClose,
 }: SettingsModalProps) {
-  const [tab, setTab] = useState<'general' | 'appearance' | 'keybindings' | 'connections'>(
-    'general',
-  );
+  const [tab, setTab] = useState<'general' | 'appearance' | 'keybindings'>('general');
   const [claudeInfo, setClaudeInfo] = useState<{
     installed: boolean;
     version: string | null;
@@ -145,6 +143,29 @@ export function SettingsModal({
   } | null>(null);
   const [appVersion, setAppVersion] = useState('');
   const [claudeDefaultAttribution, setClaudeDefaultAttribution] = useState<string | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<
+    'idle' | 'checking' | 'available' | 'downloading' | 'ready'
+  >('idle');
+  const [updateVersion, setUpdateVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    const cleanups = [
+      window.electronAPI.onAutoUpdateAvailable((info) => {
+        setUpdateStatus('available');
+        setUpdateVersion(info.version);
+      }),
+      window.electronAPI.onAutoUpdateNotAvailable(() => {
+        setUpdateStatus('idle');
+      }),
+      window.electronAPI.onAutoUpdateDownloaded(() => {
+        setUpdateStatus('ready');
+      }),
+      window.electronAPI.onAutoUpdateError(() => {
+        setUpdateStatus((s) => (s === 'downloading' ? 'available' : 'idle'));
+      }),
+    ];
+    return () => cleanups.forEach((fn) => fn());
+  }, []);
 
   useEffect(() => {
     window.electronAPI.detectClaude().then((resp) => {
@@ -210,7 +231,7 @@ export function SettingsModal({
 
         {/* Tabs */}
         <div className="flex gap-0 px-5 border-b border-border/40">
-          {(['general', 'appearance', 'keybindings', 'connections'] as const).map((t) => (
+          {(['general', 'appearance', 'keybindings'] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -310,7 +331,7 @@ export function SettingsModal({
                       }`}
                     />
                   </div>
-                  Show macOS notification when a task finishes
+                  Show desktop notification when a task finishes
                 </button>
                 <p className="text-[10px] text-foreground/80 mt-2">
                   Notification will include the task name
@@ -429,12 +450,102 @@ export function SettingsModal({
                 </p>
               </div>
 
-              {/* Version */}
+              {/* Claude CLI */}
               <div>
-                <label className="block text-[12px] font-medium text-foreground mb-1.5">
-                  Version
+                <label className="block text-[12px] font-medium text-foreground mb-3">
+                  Claude Code CLI
                 </label>
-                <p className="text-[13px] text-foreground/80 font-mono">{appVersion || '...'}</p>
+                <div
+                  className="flex items-start gap-3.5 p-4 rounded-xl border border-border/40"
+                  style={{ background: 'hsl(var(--surface-2))' }}
+                >
+                  <div
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                      claudeInfo?.installed
+                        ? 'bg-[hsl(var(--git-added)/0.12)]'
+                        : 'bg-[hsl(var(--git-modified)/0.12)]'
+                    }`}
+                  >
+                    {claudeInfo?.installed ? (
+                      <Check size={14} className="text-[hsl(var(--git-added))]" strokeWidth={2.5} />
+                    ) : (
+                      <AlertCircle
+                        size={14}
+                        className="text-[hsl(var(--git-modified))]"
+                        strokeWidth={2}
+                      />
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    {claudeInfo?.installed ? (
+                      <div className="space-y-0.5">
+                        <p className="text-[11px] text-foreground/60 font-mono">
+                          {claudeInfo.version}
+                        </p>
+                        <p className="text-[11px] text-foreground/40 font-mono truncate">
+                          {claudeInfo.path}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-foreground/60 leading-relaxed">
+                        Not found. Install with{' '}
+                        <code className="px-1.5 py-0.5 rounded bg-accent/80 text-[10px] font-mono text-foreground/70">
+                          npm install -g @anthropic-ai/claude-code
+                        </code>
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Updates */}
+              <div>
+                <label className="block text-[12px] font-medium text-foreground mb-3">
+                  Updates
+                </label>
+                <div className="flex items-center gap-3">
+                  <p className="text-[13px] text-foreground/80 font-mono">{appVersion || '...'}</p>
+                  {updateStatus === 'ready' ? (
+                    <button
+                      onClick={() => window.electronAPI.autoUpdateQuitAndInstall()}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium border border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20 hover:bg-primary/15 transition-all duration-150"
+                    >
+                      <Download size={12} strokeWidth={2} />
+                      Restart to Update {updateVersion && `(v${updateVersion})`}
+                    </button>
+                  ) : updateStatus === 'available' ? (
+                    <button
+                      onClick={() => {
+                        setUpdateStatus('downloading');
+                        window.electronAPI.autoUpdateDownload();
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium border border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20 hover:bg-primary/15 transition-all duration-150"
+                    >
+                      <Download size={12} strokeWidth={2} />
+                      Download v{updateVersion}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setUpdateStatus('checking');
+                        window.electronAPI.autoUpdateCheck().then((resp) => {
+                          if (!resp.success) {
+                            setUpdateStatus('idle');
+                          }
+                          // Event listeners (notAvailable/available) will update status
+                        });
+                      }}
+                      disabled={updateStatus === 'checking' || updateStatus === 'downloading'}
+                      className="px-3 py-1.5 rounded-lg text-[12px] border border-border/60 text-foreground/60 hover:bg-accent/40 hover:text-foreground transition-all duration-150 disabled:opacity-50"
+                    >
+                      {updateStatus === 'checking'
+                        ? 'Checking...'
+                        : updateStatus === 'downloading'
+                          ? 'Downloading...'
+                          : 'Check for Updates'}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -601,57 +712,6 @@ export function SettingsModal({
                   </div>
                 </div>
               ))}
-            </div>
-          )}
-
-          {tab === 'connections' && (
-            <div className="space-y-3 animate-fade-in">
-              {/* Claude CLI */}
-              <div
-                className="flex items-start gap-3.5 p-4 rounded-xl border border-border/40"
-                style={{ background: 'hsl(var(--surface-2))' }}
-              >
-                <div
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                    claudeInfo?.installed
-                      ? 'bg-[hsl(var(--git-added)/0.12)]'
-                      : 'bg-[hsl(var(--git-modified)/0.12)]'
-                  }`}
-                >
-                  {claudeInfo?.installed ? (
-                    <Check size={14} className="text-[hsl(var(--git-added))]" strokeWidth={2.5} />
-                  ) : (
-                    <AlertCircle
-                      size={14}
-                      className="text-[hsl(var(--git-modified))]"
-                      strokeWidth={2}
-                    />
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Terminal size={12} className="text-foreground/50" strokeWidth={2} />
-                    <p className="text-[13px] font-medium text-foreground/90">Claude Code CLI</p>
-                  </div>
-                  {claudeInfo?.installed ? (
-                    <div className="space-y-0.5">
-                      <p className="text-[11px] text-foreground/60 font-mono">
-                        {claudeInfo.version}
-                      </p>
-                      <p className="text-[11px] text-foreground/40 font-mono truncate">
-                        {claudeInfo.path}
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="text-[11px] text-foreground/60 leading-relaxed">
-                      Not found. Install with{' '}
-                      <code className="px-1.5 py-0.5 rounded bg-accent/80 text-[10px] font-mono text-foreground/70">
-                        npm install -g @anthropic-ai/claude-code
-                      </code>
-                    </p>
-                  )}
-                </div>
-              </div>
             </div>
           )}
         </div>

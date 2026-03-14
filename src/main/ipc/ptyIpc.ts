@@ -116,7 +116,7 @@ export function registerPtyIpc(): void {
       args: {
         cwd: string;
         prompt: string;
-        meta?: { issueNumbers: number[]; gitRemote?: string };
+        meta?: import('@shared/types').TaskContextMeta;
       },
     ) => {
       try {

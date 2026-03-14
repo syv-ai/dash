@@ -2,12 +2,34 @@ name: Build
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
+  version-check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check version was bumped
+        run: |
+          PR_VERSION=$(node -p 'require("./package.json").version')
+          MAIN_VERSION=$(git show origin/main:package.json | node -p 'JSON.parse(require("fs").readFileSync("/dev/stdin","utf8")).version')
+          if [ "$PR_VERSION" = "$MAIN_VERSION" ]; then
+            echo "::error::Version in package.json ($PR_VERSION) was not bumped. Please update the version before merging."
+            exit 1
+          fi
+          echo "Version bumped: $MAIN_VERSION -> $PR_VERSION"
+
   build-mac:
+    if: github.event_name != 'pull_request'
     runs-on: macos-latest
 
     steps:
@@ -31,10 +53,54 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Package
+      - name: Package and sign
         run: pnpm exec electron-builder --mac --arm64 --publish never
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+
+      - name: Notarize
+        timeout-minutes: 45
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          DMG_PATH=$(ls release/*.dmg 2>/dev/null | head -1)
+          if [ -z "$DMG_PATH" ]; then
+            echo "ERROR: No DMG found in release/" >&2
+            exit 1
+          fi
+
+          echo "==> Submitting DMG for notarization..."
+          xcrun notarytool submit "$DMG_PATH" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait --timeout 30m
+
+          echo "==> Stapling DMG..."
+          xcrun stapler staple "$DMG_PATH"
+
+          ZIP_PATH=$(ls release/*.zip 2>/dev/null | head -1)
+          if [ -n "$ZIP_PATH" ]; then
+            echo "==> Submitting ZIP for notarization..."
+            xcrun notarytool submit "$ZIP_PATH" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              --wait --timeout 30m
+            # Note: ZIP archives cannot be stapled; the .app inside relies on
+            # online OCSP ticket lookup for Gatekeeper validation.
+          fi
+
+      - name: Verify code signature
+        run: |
+          APP_PATH="release/mac-arm64/Dash.app"
+          echo "==> Verifying code signature..."
+          codesign --verify --verbose=2 "$APP_PATH"
+          echo "==> Checking notarization..."
+          spctl --assess --verbose=2 "$APP_PATH"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -43,25 +109,82 @@ jobs:
           path: |
             release/*.dmg
             release/*.zip
+            release/*.yml
+          if-no-files-found: error
+
+  build-linux:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Rebuild native modules for Electron
+        run: pnpm exec electron-rebuild -f -w node-pty,better-sqlite3
+
+      - name: Build
+        run: pnpm build
+
+      - name: Package
+        run: pnpm exec electron-builder --linux --x64 --publish never
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dash-linux-x64
+          path: |
+            release/*.AppImage
+            release/*.yml
           if-no-files-found: error
 
   release:
-    needs: build-mac
+    needs: [build-mac, build-linux]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
 
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from package.json
+        id: version
+        run: |
+          VERSION=$(node -p 'require("./package.json").version')
+          echo "version=v${VERSION}" >> "$GITHUB_OUTPUT"
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
 
-      - name: Create release
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: true
-          generate_release_notes: true
-          files: artifacts/*
+      - name: Check if version tag exists
+        id: tag_check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if git ls-remote --tags origin "${{ steps.version.outputs.version }}" | grep -q .; then
+            echo "::error::Version ${{ steps.version.outputs.version }} already released. Bump the version in package.json before merging."
+            exit 1
+          fi
+
+      - name: Create tagged release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.version }}" \
+            --title "${{ steps.version.outputs.version }}" \
+            --generate-notes \
+            artifacts/*

@@ -59,8 +59,51 @@ export function runMigrations(): void {
   rawDb.exec(`CREATE INDEX IF NOT EXISTS idx_conversations_task_id ON conversations(task_id);`);
 
   // Migrations for existing databases
-  try { rawDb.exec(`ALTER TABLE tasks ADD COLUMN auto_approve INTEGER DEFAULT 0`); } catch { /* already exists */ }
-  try { rawDb.exec(`ALTER TABLE tasks ADD COLUMN linked_issues TEXT`); } catch { /* already exists */ }
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN auto_approve INTEGER DEFAULT 0`);
+  } catch {
+    /* already exists */
+  }
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN linked_issues TEXT`);
+  } catch {
+    /* already exists */
+  }
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN linked_items TEXT`);
+  } catch {
+    /* already exists */
+  }
+
+  // Migrate legacy linked_issues (number[]) → linked_items (LinkedItem[])
+  try {
+    const rows = rawDb
+      .prepare(
+        `SELECT id, linked_issues FROM tasks WHERE linked_issues IS NOT NULL AND linked_items IS NULL`,
+      )
+      .all() as { id: string; linked_issues: string }[];
+    for (const row of rows) {
+      try {
+        const nums: number[] = JSON.parse(row.linked_issues);
+        if (Array.isArray(nums) && nums.length > 0) {
+          const items = nums.map((n) => ({ provider: 'github', id: n, title: '', url: '' }));
+          rawDb
+            .prepare(`UPDATE tasks SET linked_items = ? WHERE id = ?`)
+            .run(JSON.stringify(items), row.id);
+        }
+      } catch {
+        /* skip malformed */
+      }
+    }
+  } catch {
+    /* migration best effort */
+  }
+
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN branch_created_by_dash INTEGER DEFAULT 0`);
+  } catch {
+    /* already exists */
+  }
 
   rawDb.pragma('foreign_keys = ON');
 }

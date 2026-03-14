@@ -18,5 +18,42 @@ export function ToastContainer() {
     });
   }, []);
 
+  // Auto-update: update available
+  useEffect(() => {
+    return window.electronAPI.onAutoUpdateAvailable((info) => {
+      toast(`Update v${info.version} available`, {
+        duration: Infinity,
+        action: {
+          label: 'Download',
+          onClick: () => {
+            window.electronAPI.autoUpdateDownload();
+          },
+        },
+      });
+    });
+  }, []);
+
+  // Auto-update: download complete
+  useEffect(() => {
+    return window.electronAPI.onAutoUpdateDownloaded(() => {
+      toast('Update ready to install', {
+        duration: Infinity,
+        action: {
+          label: 'Restart',
+          onClick: () => {
+            window.electronAPI.autoUpdateQuitAndInstall();
+          },
+        },
+      });
+    });
+  }, []);
+
+  // Auto-update: error
+  useEffect(() => {
+    return window.electronAPI.onAutoUpdateError((message) => {
+      toast.error(message, { duration: 5000 });
+    });
+  }, []);
+
   return <Toaster theme="system" position="bottom-right" />;
 }

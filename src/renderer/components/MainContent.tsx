@@ -2,18 +2,7 @@ import React from 'react';
 import { TerminalPane } from './TerminalPane';
 import { Terminal, FolderOpen, GitBranch, Globe } from 'lucide-react';
 import type { Project, Task, RemoteControlState } from '../../shared/types';
-
-/** Convert a git remote URL (SSH or HTTPS) to a GitHub issues base URL */
-function issueUrl(remote: string | null, num: number): string | null {
-  if (!remote) return null;
-  // git@github.com:org/repo.git → https://github.com/org/repo/issues/N
-  const ssh = remote.match(/git@github\.com:(.+?)(?:\.git)?$/);
-  if (ssh) return `https://github.com/${ssh[1]}/issues/${num}`;
-  // https://github.com/org/repo.git → https://github.com/org/repo/issues/N
-  const https = remote.match(/https:\/\/github\.com\/(.+?)(?:\.git)?$/);
-  if (https) return `https://github.com/${https[1]}/issues/${num}`;
-  return null;
-}
+import { linkedItemUrl } from '../../shared/urls';
 
 interface MainContentProps {
   activeTask: Task | null;
@@ -137,31 +126,33 @@ export function MainContent({
             <GitBranch size={11} strokeWidth={2} />
             <span className="text-[11px] font-mono">{activeTask.branch}</span>
           </div>
-          {activeTask.linkedIssues && activeTask.linkedIssues.length > 0 && (
+          {activeTask.linkedItems && activeTask.linkedItems.length > 0 ? (
             <div className="flex items-center gap-1">
-              {activeTask.linkedIssues.map((num) => {
-                const url = issueUrl(activeProject?.gitRemote ?? null, num);
+              {activeTask.linkedItems.map((item) => {
+                const url = linkedItemUrl(item, activeProject?.gitRemote ?? null);
                 return url ? (
                   <a
-                    key={num}
+                    key={`${item.provider}-${item.id}`}
                     href={url}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium hover:bg-primary/20 transition-colors"
+                    title={item.title || undefined}
                   >
-                    #{num}
+                    #{item.id}
                   </a>
                 ) : (
                   <span
-                    key={num}
+                    key={`${item.provider}-${item.id}`}
                     className="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium"
+                    title={item.title || undefined}
                   >
-                    #{num}
+                    #{item.id}
                   </span>
                 );
               })}
             </div>
-          )}
+          ) : null}
           {taskActivity[activeTask.id] && (
             <button
               onClick={() => onEnableRemoteControl?.(activeTask.id)}

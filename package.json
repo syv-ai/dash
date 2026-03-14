@@ -1,6 +1,6 @@
 {
   "name": "dash",
-  "version": "0.1.1",
+  "version": "0.3.3",
   "description": "Dash — Desktop app for Claude Code with git worktree management",
   "main": "dist/main/main/entry.js",
   "author": "mhenrichsen",
@@ -15,7 +15,8 @@
     "rebuild": "electron-rebuild -f -w node-pty,better-sqlite3",
     "package:mac": "pnpm build && electron-builder --mac",
     "package:win": "pnpm build && electron-builder --win",
-    "package:all": "pnpm build && electron-builder --mac --win",
+    "package:linux": "pnpm build && electron-builder --linux",
+    "package:all": "pnpm build && electron-builder --mac --win --linux",
     "type-check": "tsc --noEmit && tsc -p tsconfig.main.json --noEmit",
     "drizzle:generate": "drizzle-kit generate",
     "prepare": "husky"
@@ -34,6 +35,12 @@
       "node_modules/node-pty/**"
     ],
     "npmRebuild": false,
+    "publish": {
+      "provider": "github",
+      "owner": "syv-ai",
+      "repo": "dash",
+      "releaseType": "draft"
+    },
     "mac": {
       "target": [
         {
@@ -52,6 +59,21 @@
       "icon": "build/icon.icns",
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
+      "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.svg",
+      "category": "Development",
       "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
     },
     "win": {
@@ -95,6 +117,7 @@
     "better-sqlite3": "^11.7.0",
     "drizzle-orm": "^0.32.0",
     "electron-log": "^5.1.0",
+    "electron-updater": "^6.8.3",
     "node-pty": "^1.0.0",
     "qrcode": "^1.5.4",
     "react": "^18.3.0",

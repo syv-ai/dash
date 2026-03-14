@@ -9,6 +9,32 @@ export interface Project {
   updatedAt: string;
 }
 
+export type IssueProvider = 'github' | 'ado';
+
+export interface LinkedGithubIssue {
+  provider: 'github';
+  id: number;
+  title: string;
+  url: string;
+  labels?: string[];
+  body?: string;
+}
+
+export interface LinkedAdoWorkItem {
+  provider: 'ado';
+  id: number;
+  title: string;
+  url: string;
+  type: string;
+  state: string;
+  tags?: string[];
+  description?: string;
+  acceptanceCriteria?: string;
+  parents?: AzureDevOpsWorkItemRef[];
+}
+
+export type LinkedItem = LinkedGithubIssue | LinkedAdoWorkItem;
+
 export interface Task {
   id: string;
   projectId: string;
@@ -18,7 +44,8 @@ export interface Task {
   status: string;
   useWorktree: boolean;
   autoApprove: boolean;
-  linkedIssues: number[] | null;
+  branchCreatedByDash: boolean;
+  linkedItems: LinkedItem[] | null;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -65,6 +92,16 @@ export interface RemoveWorktreeOptions {
   deleteWorktreeDir?: boolean;
   deleteLocalBranch?: boolean;
   deleteRemoteBranch?: boolean;
+}
+
+export interface TaskContextMetaItem {
+  id: number;
+  url: string;
+}
+
+export interface TaskContextMeta {
+  githubIssues?: TaskContextMetaItem[];
+  adoWorkItems?: TaskContextMetaItem[];
 }
 
 export interface PtyOptions {
@@ -194,6 +231,35 @@ export interface GithubIssue {
   body: string;
   url: string;
   assignees?: string[];
+}
+
+// ── Azure DevOps Types ─────────────────────────────────────
+
+export interface AzureDevOpsWorkItemRef {
+  id: number;
+  title: string;
+  type: string;
+  state: string;
+  url: string;
+}
+
+export interface AzureDevOpsWorkItem {
+  id: number;
+  title: string;
+  state: string;
+  type: string;
+  url: string;
+  assignedTo?: string;
+  tags?: string[];
+  description?: string;
+  acceptanceCriteria?: string;
+  parents?: AzureDevOpsWorkItemRef[];
+}
+
+export interface AzureDevOpsConfig {
+  organizationUrl: string;
+  project: string;
+  pat: string;
 }
 
 // ── Remote Control Types ────────────────────────────────────

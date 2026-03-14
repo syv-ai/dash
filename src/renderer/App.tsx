@@ -16,15 +16,22 @@ import { AddProjectModal } from './components/AddProjectModal';
 import { DeleteTaskModal } from './components/DeleteTaskModal';
 import { RemoteControlModal } from './components/RemoteControlModal';
 import { SettingsModal } from './components/SettingsModal';
+import { ProjectSettingsModal } from './components/ProjectSettingsModal';
+import { AdoSetupModal } from './components/AdoSetupModal';
+import { parseAdoRemote } from '../shared/urls';
 import { ToastContainer } from './components/Toast';
+import { toast } from 'sonner';
 import type {
   Project,
   Task,
   GitStatus,
   DiffResult,
-  GithubIssue,
+  LinkedGithubIssue,
+  LinkedAdoWorkItem,
   RemoteControlState,
 } from '../shared/types';
+import type { CreateTaskOptions } from './components/TaskModal';
+import { formatTaskContextPrompt } from '../shared/taskContext';
 import { loadKeybindings, saveKeybindings, matchesBinding } from './keybindings';
 import type { KeyBindingMap } from './keybindings';
 import { sessionRegistry } from './terminal/SessionRegistry';
@@ -50,6 +57,12 @@ export function App() {
     error: null,
   });
   const [deleteTaskTarget, setDeleteTaskTarget] = useState<Task | null>(null);
+  const [projectSettingsTarget, setProjectSettingsTarget] = useState<Project | null>(null);
+  const [adoSetup, setAdoSetup] = useState<{
+    projectId: string;
+    organizationUrl: string;
+    project: string;
+  } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('theme') as 'light' | 'dark') || 'dark';
@@ -339,6 +352,10 @@ export function App() {
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // Skip global shortcuts when typing in text inputs
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
       // Tasks
       if (keybindings.newTask && matchesBinding(e, keybindings.newTask)) {
         e.preventDefault();
@@ -536,6 +553,18 @@ export function App() {
 
   // ── Handlers ─────────────────────────────────────────────
 
+  function promptAdoSetupIfNeeded(projectId: string, remote: string | null) {
+    if (!remote) return;
+    const adoInfo = parseAdoRemote(remote);
+    if (adoInfo) {
+      setAdoSetup({
+        projectId,
+        organizationUrl: adoInfo.organizationUrl,
+        project: adoInfo.project,
+      });
+    }
+  }
+
   async function handleOpenFolder() {
     setShowAddProjectModal(false);
     const resp = await window.electronAPI.showOpenDialog();
@@ -556,6 +585,7 @@ export function App() {
       if (saveResp.success && saveResp.data) {
         await loadProjects();
         setActiveProjectId(saveResp.data.id);
+        promptAdoSetupIfNeeded(saveResp.data.id, gitInfo?.remote ?? null);
       }
     }
   }
@@ -584,6 +614,7 @@ export function App() {
       if (saveResp.success && saveResp.data) {
         await loadProjects();
         setActiveProjectId(saveResp.data.id);
+        promptAdoSetupIfNeeded(saveResp.data.id, gitInfo?.remote ?? null);
       }
 
       setCloneStatus({ loading: false, error: null });
@@ -618,28 +649,27 @@ export function App() {
     setShowTaskModal(true);
   }
 
-  async function handleCreateTask(
-    name: string,
-    useWorktree: boolean,
-    autoApprove: boolean,
-    baseRef?: string,
-    linkedIssues?: GithubIssue[],
-    pushRemote?: boolean,
-  ) {
+  async function handleCreateTask(options: CreateTaskOptions) {
+    const { name, useWorktree, autoApprove, baseRef, pushRemote, linkedItems } = options;
+
     const targetProjectId = taskModalProjectId || activeProjectId;
     const targetProject = projects.find((p) => p.id === targetProjectId);
     if (!targetProject) return;
 
     let worktreeInfo: { branch: string; path: string } | null = null;
 
-    const linkedIssueNumbers = linkedIssues?.map((i) => i.number);
+    // Split linked items by provider
+    const ghItems =
+      linkedItems?.filter((i): i is LinkedGithubIssue => i.provider === 'github') ?? [];
+    const adoItems = linkedItems?.filter((i): i is LinkedAdoWorkItem => i.provider === 'ado') ?? [];
+    const ghIssueNumbers = ghItems.map((i) => i.id);
 
     if (useWorktree) {
       const claimResp = await window.electronAPI.worktreeClaimReserve({
         projectId: targetProject.id,
         taskName: name,
         baseRef,
-        linkedIssueNumbers,
+        linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
         pushRemote,
       });
 
@@ -651,7 +681,7 @@ export function App() {
           taskName: name,
           baseRef,
           projectId: targetProject.id,
-          linkedIssueNumbers,
+          linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
           pushRemote,
         });
         if (createResp.success && createResp.data) {
@@ -670,31 +700,30 @@ export function App() {
       path: taskPath,
       useWorktree,
       autoApprove,
-      linkedIssues: linkedIssueNumbers,
+      branchCreatedByDash: useWorktree && !!worktreeInfo,
+      linkedItems: linkedItems ?? null,
     });
 
     if (saveResp.success && saveResp.data) {
       const taskId = saveResp.data.id;
 
-      // Write task context file for SessionStart hook injection
-      if (linkedIssues && linkedIssues.length > 0) {
-        const issueBlocks = linkedIssues.map((issue) => {
-          const labels = issue.labels.length > 0 ? `Labels: ${issue.labels.join(', ')}\n` : '';
-          const bodyExcerpt = issue.body
-            ? issue.body.slice(0, 2000) + (issue.body.length > 2000 ? '...' : '')
-            : '';
-          return `## Issue #${issue.number}: ${issue.title}\n${labels}${bodyExcerpt}`;
-        });
-
-        const prompt = `I'm working on the following GitHub issue(s):\n\n${issueBlocks.join('\n\n')}\n\nPlease help me implement a solution for this.`;
-        window.electronAPI.ptyWriteTaskContext({
-          cwd: taskPath,
-          prompt,
-          meta: {
-            issueNumbers: linkedIssues.map((i) => i.number),
-            gitRemote: targetProject.gitRemote ?? undefined,
-          },
-        });
+      // Write task context for SessionStart hook injection
+      if (linkedItems && linkedItems.length > 0) {
+        const prompt = formatTaskContextPrompt(linkedItems);
+        if (prompt) {
+          window.electronAPI.ptyWriteTaskContext({
+            cwd: taskPath,
+            prompt,
+            meta: {
+              githubIssues:
+                ghItems.length > 0 ? ghItems.map((i) => ({ id: i.id, url: i.url })) : undefined,
+              adoWorkItems:
+                adoItems.length > 0
+                  ? adoItems.map((wi) => ({ id: wi.id, url: wi.url }))
+                  : undefined,
+            },
+          });
+        }
       }
 
       await window.electronAPI.getOrCreateDefaultConversation(taskId);
@@ -711,16 +740,18 @@ export function App() {
         projectPath: targetProject.path,
       });
 
-      // Fire-and-forget: post branch comment on each linked issue
-      // (branch linking happens in the worktree service before push)
-      if (linkedIssues && linkedIssues.length > 0) {
-        for (const issue of linkedIssues) {
-          window.electronAPI
-            .githubPostBranchComment(targetProject.path, issue.number, branch)
-            .catch(() => {
-              // Best effort
-            });
-        }
+      // Fire-and-forget: post branch comment on each linked GitHub issue
+      for (const num of ghIssueNumbers) {
+        window.electronAPI
+          .githubPostBranchComment(targetProject.path, num, branch)
+          .catch(() => toast.error(`Failed to link branch to issue #${num}`));
+      }
+
+      // Fire-and-forget: post branch comment on each linked ADO work item
+      for (const wi of adoItems) {
+        window.electronAPI
+          .adoPostBranchComment(wi.id, branch, targetProject.id)
+          .catch(() => toast.error(`Failed to link branch to work item #${wi.id}`));
       }
     }
   }
@@ -743,30 +774,33 @@ export function App() {
   }) {
     const task = deleteTaskTarget;
     if (!task) return;
-    setDeleteTaskTarget(null);
 
     const taskProjectId = task.projectId;
 
-    if (task.useWorktree) {
-      const project = projects.find((p) => p.id === taskProjectId);
-      if (project) {
-        await window.electronAPI.worktreeRemove({
-          projectPath: project.path,
-          worktreePath: task.path,
-          branch: task.branch,
-          options,
-        });
+    try {
+      if (task.useWorktree) {
+        const project = projects.find((p) => p.id === taskProjectId);
+        if (project) {
+          await window.electronAPI.worktreeRemove({
+            projectPath: project.path,
+            worktreePath: task.path,
+            branch: task.branch,
+            options,
+          });
+        }
       }
-    }
 
-    // Clean up shell terminal session
-    sessionRegistry.dispose(`shell:${task.id}`);
+      // Clean up shell terminal session
+      sessionRegistry.dispose(`shell:${task.id}`);
 
-    await window.electronAPI.deleteTask(task.id);
-    if (activeTaskId === task.id) {
-      setActiveTaskId(null);
+      await window.electronAPI.deleteTask(task.id);
+      if (activeTaskId === task.id) {
+        setActiveTaskId(null);
+      }
+      await loadTasksForProject(taskProjectId);
+    } finally {
+      setDeleteTaskTarget(null);
     }
-    await loadTasksForProject(taskProjectId);
   }
 
   async function handleArchiveTask(id: string) {
@@ -872,10 +906,12 @@ export function App() {
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden">
-      <div
-        className="titlebar-drag h-[38px] flex-shrink-0 border-b border-border/40"
-        style={{ background: 'hsl(var(--surface-1))' }}
-      />
+      {window.electronAPI.getPlatform() === 'darwin' && (
+        <div
+          className="titlebar-drag h-[38px] flex-shrink-0 border-b border-border/40"
+          style={{ background: 'hsl(var(--surface-1))' }}
+        />
+      )}
 
       <PanelGroup direction="horizontal" className="flex-1">
         <Panel
@@ -926,6 +962,10 @@ export function App() {
                 setShowAddProjectModal(true);
               }}
               onDeleteProject={handleDeleteProject}
+              onProjectSettings={(id) => {
+                const p = projects.find((proj) => proj.id === id);
+                if (p) setProjectSettingsTarget(p);
+              }}
               tasksByProject={tasksByProject}
               activeTaskId={activeTaskId}
               onSelectTask={handleSelectTask}
@@ -1063,8 +1103,34 @@ export function App() {
           projectPath={
             projects.find((p) => p.id === (taskModalProjectId || activeProjectId))?.path ?? ''
           }
+          projectId={taskModalProjectId || activeProjectId || undefined}
           onClose={() => setShowTaskModal(false)}
           onCreate={handleCreateTask}
+        />
+      )}
+
+      {adoSetup && (
+        <AdoSetupModal
+          projectId={adoSetup.projectId}
+          organizationUrl={adoSetup.organizationUrl}
+          project={adoSetup.project}
+          onClose={() => setAdoSetup(null)}
+        />
+      )}
+
+      {projectSettingsTarget && (
+        <ProjectSettingsModal
+          project={projectSettingsTarget}
+          onClose={() => setProjectSettingsTarget(null)}
+          onRename={async (id, newName) => {
+            const proj = projects.find((p) => p.id === id);
+            if (!proj) return;
+            await window.electronAPI.saveProject({ ...proj, name: newName });
+            await loadProjects();
+            setProjectSettingsTarget((prev) =>
+              prev?.id === id ? { ...prev, name: newName } : prev,
+            );
+          }}
         />
       )}
 

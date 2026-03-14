@@ -2,21 +2,21 @@
 
 ## What is Dash
 
-Electron desktop app for running Claude Code across multiple projects, each task in its own git worktree. xterm.js + node-pty terminals, SQLite + Drizzle ORM, React 18 UI. macOS arm64 only.
+Electron desktop app for running Claude Code across multiple projects, each task in its own git worktree. xterm.js + node-pty terminals, SQLite + Drizzle ORM, React 18 UI. macOS arm64, Linux x64.
 
 ## Commands
 
 ```bash
 pnpm install              # install deps
-pnpm rebuild              # rebuild native modules (node-pty, better-sqlite3)
+npx electron-rebuild -f -w node-pty,better-sqlite3  # rebuild native modules for Electron
 pnpm dev                  # Vite on :3000 + Electron
 pnpm dev:main             # main process only
 pnpm dev:renderer         # Vite dev server only
 pnpm build                # compile main (tsc) + renderer (vite)
 pnpm type-check           # typecheck both processes
 pnpm package:mac          # build + package as .dmg (arm64)
+pnpm package:linux        # build + package as .AppImage (x64)
 pnpm drizzle:generate     # generate Drizzle migrations
-./scripts/build-local.sh  # build, sign, install to /Applications
 ```
 
 Renderer hot-reloads; main process changes require restart. Husky pre-commit runs lint-staged (Prettier + ESLint on staged `.ts`/`.tsx`).
@@ -35,42 +35,44 @@ Two-process Electron app, strict context isolation (nodeIntegration disabled).
 
 Stateless singletons with static methods:
 
-| Service | Purpose |
-|---------|---------|
-| `DatabaseService` | CRUD projects/tasks/conversations, upsert pattern, cascade deletes, linkedIssues as JSON |
-| `WorktreePoolService` | Pre-creates reserve worktrees (<100ms task start). 30min expiry. Claims via `git worktree move` + `branch -m` |
-| `WorktreeService` | Create/remove worktrees, resolve base refs, copy preserved files (.env, .envrc, docker-compose.override.yml). Branch: `{slug}-{3char-hash}` |
-| `ptyManager` | Two spawn paths: direct Claude CLI (bypasses shell, minimal env) and shell (fallback). Configures `.claude/settings.local.json` hooks. Reattaches on reload |
-| `TerminalSnapshotService` | Persist terminal state to disk (8MB/snapshot, 64MB cap) at `~/Library/Application Support/Dash/terminal-snapshots/` |
-| `GitService` | Status (porcelain v2), diff parsing into hunks/lines, stage/unstage/commit/push. 15s timeout, 1MB max diff. Filters `.claude/*` |
-| `GithubService` | `gh` CLI: issue search, branch linking via GraphQL, post branch comments. 15s timeout |
-| `HookServer` | HTTP on `127.0.0.1:{random}`. `/hook/stop` → idle + notification, `/hook/busy` → busy. Click-to-focus |
-| `ActivityMonitor` | PTY busy/idle tracking. Direct spawns: hook-driven. Shell spawns: poll process tree (2s). Broadcasts `pty:activity` |
-| `FileWatcherService` | Recursive `fs.watch`, 500ms debounce, ignores node_modules/.git. Sends `git:fileChanged` |
+| Service                   | Purpose                                                                                                                                                     |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DatabaseService`         | CRUD projects/tasks/conversations, upsert pattern, cascade deletes, linkedItems as JSON                                                                     |
+| `WorktreePoolService`     | Pre-creates reserve worktrees (<100ms task start). 30min expiry. Claims via `git worktree move` + `branch -m`                                               |
+| `WorktreeService`         | Create/remove worktrees, resolve base refs, copy preserved files (.env, .envrc, docker-compose.override.yml). Branch: `{slug}-{3char-hash}`                 |
+| `ptyManager`              | Two spawn paths: direct Claude CLI (bypasses shell, minimal env) and shell (fallback). Configures `.claude/settings.local.json` hooks. Reattaches on reload |
+| `TerminalSnapshotService` | Persist terminal state to disk (8MB/snapshot, 64MB cap) at `~/Library/Application Support/Dash/terminal-snapshots/`                                         |
+| `GitService`              | Status (porcelain v2), diff parsing into hunks/lines, stage/unstage/commit/push. 15s timeout, 1MB max diff. Filters `.claude/*`                             |
+| `GithubService`           | `gh` CLI: issue search, branch linking via GraphQL, post branch comments. 15s timeout                                                                       |
+| `HookServer`              | HTTP on `127.0.0.1:{random}`. `/hook/stop` → idle + notification, `/hook/busy` → busy. Click-to-focus                                                       |
+| `ActivityMonitor`         | PTY busy/idle tracking. Direct spawns: hook-driven. Shell spawns: poll process tree (2s). Broadcasts `pty:activity`                                         |
+| `FileWatcherService`      | Recursive `fs.watch`, 500ms debounce, ignores node_modules/.git. Sends `git:fileChanged`                                                                    |
 
 ### IPC Handlers (`src/main/ipc/`)
 
-| File | Handles |
-|------|---------|
-| `appIpc` | Version, dialogs, openExternal, git/Claude detection, notification toggle |
-| `dbIpc` | CRUD projects/tasks/conversations, archive/restore |
-| `gitIpc` | Status, diff, stage/unstage, discard, commit, push, branches, file watcher, clone |
-| `ptyIpc` | PTY start (direct+shell), input/resize/kill, snapshots, session detection, task context, activity |
-| `worktreeIpc` | Create, remove, claim/ensure/check reserve |
-| `githubIpc` | Check availability, search issues, get issue, branch comment, link branch |
+| File          | Handles                                                                                           |
+| ------------- | ------------------------------------------------------------------------------------------------- |
+| `appIpc`      | Version, dialogs, openExternal, git/Claude detection, notification toggle                         |
+| `dbIpc`       | CRUD projects/tasks/conversations, archive/restore                                                |
+| `gitIpc`      | Status, diff, stage/unstage, discard, commit, push, branches, file watcher, clone                 |
+| `ptyIpc`      | PTY start (direct+shell), input/resize/kill, snapshots, session detection, task context, activity |
+| `worktreeIpc` | Create, remove, claim/ensure/check reserve                                                        |
+| `githubIpc`   | Check availability, search issues, get issue, branch comment, link branch                         |
 
 ### Database (`src/main/db/`)
 
 SQLite via better-sqlite3 + Drizzle ORM. WAL mode, 5s busy timeout, foreign keys ON. DB at `~/Library/Application Support/Dash/app.db`. Migrations run on startup.
 
 **Tables** (cascade deletes: projects → tasks → conversations):
+
 - `projects`: id, name, path (unique), git_remote, git_branch, base_ref, timestamps
-- `tasks`: id, project_id (FK), name, branch, path, status, use_worktree, auto_approve, linked_issues (JSON), archived_at, timestamps
+- `tasks`: id, project_id (FK), name, branch, path, status, use_worktree, auto_approve, linked_items (JSON), archived_at, timestamps
 - `conversations`: id, task_id (FK), title, is_active, is_main, display_order, timestamps
 
 ### Renderer (`src/renderer/`)
 
 **Layout** — 3-panel via `react-resizable-panels`:
+
 - `LeftSidebar` — projects + nested tasks, activity indicators (busy=amber, idle=green)
 - `MainContent` — task header (name, branch, linked issues) + `TerminalPane`
 - `FileChangesPanel` — staged/unstaged files, per-file actions, commit/push
@@ -109,15 +111,15 @@ Electron 30, React 18, xterm.js 5 (fit/serialize/web-links/webgl/canvas addons),
 
 ## Data Storage
 
-- **DB**: `~/Library/Application Support/Dash/app.db`
-- **Snapshots**: `~/Library/Application Support/Dash/terminal-snapshots/`
+- **DB**: `~/Library/Application Support/Dash/app.db` (macOS) · `~/.config/Dash/app.db` (Linux)
+- **Snapshots**: `~/Library/Application Support/Dash/terminal-snapshots/` (macOS) · `~/.config/Dash/terminal-snapshots/` (Linux)
 - **Worktrees**: `{projectPath}/../worktrees/{task-slug}/`
 - **UI state**: localStorage (active project/task, theme, keybindings, panel states, notification prefs)
 
 ## CI/CD
 
-GitHub Actions (`.github/workflows/build.yml`): triggers on `v*` tags + manual dispatch. Builds macOS arm64 DMG/ZIP, creates GitHub release.
+GitHub Actions (`.github/workflows/build.yml`): triggers on push to main + manual dispatch. Builds macOS arm64 DMG/ZIP and Linux x64 AppImage, creates GitHub release.
 
 ## Requirements
 
-Node.js 22+ (`.nvmrc`), pnpm (`shamefully-hoist` in `.npmrc`), Claude Code CLI, Git, macOS arm64.
+Node.js 22+ (`.nvmrc`), pnpm (`shamefully-hoist` in `.npmrc`), Claude Code CLI, Git. macOS arm64 or Linux x64.

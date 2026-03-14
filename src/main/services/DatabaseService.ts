@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import { initDb, getDb } from '../db/client';
 import { runMigrations } from '../db/migrate';
 import { projects, tasks, conversations } from '../db/schema';
-import type { Project, Task, Conversation } from '@shared/types';
+import type { Project, Task, Conversation, LinkedItem } from '@shared/types';
 
 export class DatabaseService {
   private static initialized = false;
@@ -24,9 +24,7 @@ export class DatabaseService {
     return rows.map(this.mapProject);
   }
 
-  static saveProject(
-    data: Partial<Project> & { name: string; path: string },
-  ): Project {
+  static saveProject(data: Partial<Project> & { name: string; path: string }): Project {
     const db = getDb();
     const id = data.id || randomUUID();
     const now = new Date().toISOString();
@@ -68,7 +66,12 @@ export class DatabaseService {
 
   static getTasks(projectId: string): Task[] {
     const db = getDb();
-    const rows = db.select().from(tasks).where(eq(tasks.projectId, projectId)).orderBy(desc(tasks.createdAt)).all();
+    const rows = db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.projectId, projectId))
+      .orderBy(desc(tasks.createdAt))
+      .all();
     return rows.map(this.mapTask);
   }
 
@@ -79,7 +82,7 @@ export class DatabaseService {
     const id = data.id || randomUUID();
     const now = new Date().toISOString();
 
-    const linkedIssuesJson = data.linkedIssues ? JSON.stringify(data.linkedIssues) : null;
+    const linkedItemsJson = data.linkedItems ? JSON.stringify(data.linkedItems) : null;
 
     db.insert(tasks)
       .values({
@@ -91,7 +94,8 @@ export class DatabaseService {
         status: data.status ?? 'idle',
         useWorktree: data.useWorktree ?? true,
         autoApprove: data.autoApprove ?? false,
-        linkedIssues: linkedIssuesJson,
+        branchCreatedByDash: data.branchCreatedByDash ?? false,
+        linkedItems: linkedItemsJson,
         createdAt: now,
         updatedAt: now,
       })
@@ -102,7 +106,7 @@ export class DatabaseService {
           branch: data.branch,
           path: data.path,
           status: data.status ?? 'idle',
-          linkedIssues: linkedIssuesJson,
+          linkedItems: linkedItemsJson,
           updatedAt: now,
         },
       })
@@ -137,11 +141,7 @@ export class DatabaseService {
 
   static getConversations(taskId: string): Conversation[] {
     const db = getDb();
-    const rows = db
-      .select()
-      .from(conversations)
-      .where(eq(conversations.taskId, taskId))
-      .all();
+    const rows = db.select().from(conversations).where(eq(conversations.taskId, taskId)).all();
     return rows.map(this.mapConversation);
   }
 
@@ -149,11 +149,7 @@ export class DatabaseService {
     const db = getDb();
 
     // Check if main conversation exists
-    const existing = db
-      .select()
-      .from(conversations)
-      .where(eq(conversations.taskId, taskId))
-      .all();
+    const existing = db.select().from(conversations).where(eq(conversations.taskId, taskId)).all();
 
     const main = existing.find((c) => c.isMain);
     if (main) return this.mapConversation(main);
@@ -194,10 +190,10 @@ export class DatabaseService {
   }
 
   private static mapTask(row: typeof tasks.$inferSelect): Task {
-    let linkedIssues: number[] | null = null;
-    if (row.linkedIssues) {
+    let linkedItems: LinkedItem[] | null = null;
+    if (row.linkedItems) {
       try {
-        linkedIssues = JSON.parse(row.linkedIssues);
+        linkedItems = JSON.parse(row.linkedItems);
       } catch {
         // Corrupted JSON — ignore
       }
@@ -212,7 +208,8 @@ export class DatabaseService {
       status: row.status,
       useWorktree: row.useWorktree ?? true,
       autoApprove: row.autoApprove ?? false,
-      linkedIssues,
+      branchCreatedByDash: row.branchCreatedByDash ?? false,
+      linkedItems,
       archivedAt: row.archivedAt,
       createdAt: row.createdAt ?? '',
       updatedAt: row.updatedAt ?? '',

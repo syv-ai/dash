@@ -23,6 +23,7 @@ interface LeftSidebarProps {
   onSelectProject: (id: string) => void;
   onOpenFolder: () => void;
   onDeleteProject: (id: string) => void;
+  onProjectSettings: (id: string) => void;
   tasksByProject: Record<string, Task[]>;
   activeTaskId: string | null;
   onSelectTask: (projectId: string, taskId: string) => void;
@@ -44,6 +45,7 @@ export function LeftSidebar({
   onSelectProject,
   onOpenFolder,
   onDeleteProject,
+  onProjectSettings,
   tasksByProject,
   activeTaskId,
   onSelectTask,
@@ -138,6 +140,13 @@ export function LeftSidebar({
                 {project.name.charAt(0).toUpperCase()}
                 {activity && (
                   <div
+                    title={
+                      activity === 'waiting'
+                        ? 'Waiting for user'
+                        : activity === 'busy'
+                          ? 'Claude is working'
+                          : 'Idle'
+                    }
                     className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border-2 border-[hsl(var(--surface-1))] ${
                       activity === 'waiting'
                         ? 'bg-orange-500'
@@ -243,6 +252,20 @@ export function LeftSidebar({
                     </span>
                   )}
 
+                  {/* Project settings — hover only */}
+                  <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                    <IconButton
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onProjectSettings(project.id);
+                      }}
+                      title="Project settings"
+                      size="sm"
+                    >
+                      <Settings size={14} strokeWidth={1.8} />
+                    </IconButton>
+                  </div>
+
                   {/* Commit graph — visible on active project, hover on others */}
                   <div
                     className={`transition-opacity duration-150 ${
@@ -322,11 +345,20 @@ export function LeftSidebar({
                           >
                             {/* Status indicator */}
                             {activity === 'waiting' ? (
-                              <div className="w-[6px] h-[6px] rounded-full bg-orange-500 flex-shrink-0" />
+                              <div
+                                title="Waiting for user"
+                                className="w-[6px] h-[6px] rounded-full bg-orange-500 flex-shrink-0"
+                              />
                             ) : activity === 'busy' ? (
-                              <div className="w-[6px] h-[6px] rounded-full bg-amber-400 status-pulse flex-shrink-0" />
+                              <div
+                                title="Claude is working"
+                                className="w-[6px] h-[6px] rounded-full bg-amber-400 status-pulse flex-shrink-0"
+                              />
                             ) : activity === 'idle' ? (
-                              <div className="w-[6px] h-[6px] rounded-full bg-emerald-400 flex-shrink-0" />
+                              <div
+                                title="Idle"
+                                className="w-[6px] h-[6px] rounded-full bg-emerald-400 flex-shrink-0"
+                              />
                             ) : null}
                             {remoteControlStates[task.id] && (
                               <Globe

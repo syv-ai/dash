@@ -26,17 +26,7 @@ The main idea: you open a project, create tasks, and each task gets an isolated 
 
 ## Install
 
-Build and install locally:
-
-```bash
-git clone git@github.com:syv-ai/dash.git
-cd dash
-pnpm install
-pnpm rebuild
-./scripts/build-local.sh
-```
-
-This builds the app, ad-hoc signs it, and copies `Dash.app` to `/Applications`.
+Download the latest build from [Releases](https://github.com/syv-ai/dash/releases/tag/latest). Open the `.dmg` and drag `Dash.app` to `/Applications`.
 
 ## Prerequisites
 
@@ -60,7 +50,7 @@ This builds the app, ad-hoc signs it, and copies `Dash.app` to `/Applications`.
 
 ```bash
 pnpm install
-pnpm rebuild  # rebuilds native modules (node-pty, better-sqlite3)
+npx electron-rebuild -f -w node-pty,better-sqlite3  # rebuild native modules for Electron
 ```
 
 ## Development

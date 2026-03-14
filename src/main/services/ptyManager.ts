@@ -8,6 +8,7 @@ import { type WebContents, app } from 'electron';
 import { activityMonitor } from './ActivityMonitor';
 import { hookServer } from './HookServer';
 import { toWslPath } from '../utils/pathTranslation';
+import type { TaskContextMeta } from '@shared/types';
 
 const execFileAsync = promisify(execFile);
 
@@ -204,11 +205,7 @@ function buildWslEnv(isDark: boolean): { env: Record<string, string>; envArgs: s
  * Write .claude/task-context.json with issue context for the SessionStart hook.
  * Called from IPC during task creation, before Claude spawns.
  */
-export function writeTaskContext(
-  cwd: string,
-  prompt: string,
-  meta?: { issueNumbers: number[]; gitRemote?: string },
-): void {
+export function writeTaskContext(cwd: string, prompt: string, meta?: TaskContextMeta): void {
   const claudeDir = path.join(cwd, '.claude');
   const contextPath = path.join(claudeDir, 'task-context.json');
 
@@ -366,7 +363,7 @@ export async function startDirectPty(options: {
   reattached: boolean;
   isDirectSpawn: boolean;
   hasTaskContext: boolean;
-  taskContextMeta: { issueNumbers: number[]; gitRemote?: string } | null;
+  taskContextMeta: TaskContextMeta | null;
 }> {
   // Re-attach to existing PTY (e.g., after renderer reload)
   const existing = ptys.get(options.id);
@@ -469,7 +466,7 @@ async function spawnDirectUnix(options: {
   });
 
   const contextPath = path.join(options.cwd, '.claude', 'task-context.json');
-  let taskContextMeta: { issueNumbers: number[]; gitRemote?: string } | null = null;
+  let taskContextMeta: TaskContextMeta | null = null;
   try {
     if (fs.existsSync(contextPath)) {
       const parsed = JSON.parse(fs.readFileSync(contextPath, 'utf-8'));
@@ -743,7 +740,9 @@ export async function startPty(options: {
     delete env.ELECTRON_RUN_AS_NODE;
     delete env.ELECTRON_NO_ATTACH_CONSOLE;
     // Enable macOS zsh OSC 7 cwd reporting (sources /etc/zshrc_Apple_Terminal)
-    env.TERM_PROGRAM = 'Apple_Terminal';
+    if (process.platform === 'darwin') {
+      env.TERM_PROGRAM = 'Apple_Terminal';
+    }
 
     // Inject custom prompt for zsh via ZDOTDIR
     if (shell.endsWith('/zsh') || shell === 'zsh') {

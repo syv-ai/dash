@@ -111,6 +111,12 @@ app.whenReady().then(async () => {
   const { remoteControlService } = await import('./services/remoteControlService');
   remoteControlService.setSender(mainWindow.webContents);
 
+  // Initialize auto-updater (production only)
+  if (!process.argv.includes('--dev')) {
+    const { AutoUpdateService } = await import('./services/AutoUpdateService');
+    AutoUpdateService.initialize(mainWindow);
+  }
+
   // Cleanup orphaned reserve worktrees (background, non-blocking)
   setTimeout(async () => {
     try {
@@ -186,6 +192,12 @@ app.on('activate', async () => {
     activityMonitor.start(mainWindow.webContents);
     const { remoteControlService } = await import('./services/remoteControlService');
     remoteControlService.setSender(mainWindow.webContents);
+
+    // Update auto-updater window reference
+    if (!process.argv.includes('--dev')) {
+      const { AutoUpdateService } = await import('./services/AutoUpdateService');
+      AutoUpdateService.setWindow(mainWindow);
+    }
   }
 });
 
@@ -199,6 +211,14 @@ app.on('before-quit', async () => {
     }
     // Give renderer a moment to save snapshots
     await new Promise((resolve) => setTimeout(resolve, 200));
+  } catch {
+    // Best effort
+  }
+
+  // Stop auto-updater
+  try {
+    const { AutoUpdateService } = await import('./services/AutoUpdateService');
+    AutoUpdateService.cleanup();
   } catch {
     // Best effort
   }

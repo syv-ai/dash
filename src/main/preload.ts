@@ -70,8 +70,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // Remote control
-  ptyRemoteControlEnable: (ptyId: string) =>
-    ipcRenderer.invoke('pty:remoteControl:enable', ptyId),
+  ptyRemoteControlEnable: (ptyId: string) => ipcRenderer.invoke('pty:remoteControl:enable', ptyId),
   ptyRemoteControlGetAllStates: () => ipcRenderer.invoke('pty:remoteControl:getAllStates'),
   onRemoteControlStateChanged: (
     callback: (data: { ptyId: string; state: { url: string; active: boolean } | null }) => void,
@@ -96,7 +95,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ptyHasClaudeSession: (cwd: string) => ipcRenderer.invoke('pty:hasClaudeSession', cwd),
 
   // Task context for SessionStart hook
-  ptyWriteTaskContext: (args: { cwd: string; prompt: string }) =>
+  ptyWriteTaskContext: (args: { cwd: string; prompt: string; meta?: unknown }) =>
     ipcRenderer.invoke('pty:writeTaskContext', args),
 
   // App lifecycle
@@ -141,6 +140,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   githubLinkBranch: (cwd: string, issueNumber: number, branch: string) =>
     ipcRenderer.invoke('github:link-branch', { cwd, issueNumber, branch }),
 
+  // Azure DevOps
+  adoCheckConfigured: (projectId?: string) =>
+    ipcRenderer.invoke('ado:check-configured', { projectId }),
+  adoTestConnection: (config: unknown) => ipcRenderer.invoke('ado:test-connection', config),
+  adoSaveConfig: (config: unknown, projectId?: string) =>
+    ipcRenderer.invoke('ado:save-config', { config, projectId }),
+  adoGetConfig: (projectId?: string) => ipcRenderer.invoke('ado:get-config', { projectId }),
+  adoRemoveConfig: (projectId?: string) => ipcRenderer.invoke('ado:remove-config', { projectId }),
+  adoSearchWorkItems: (query: string, projectId?: string) =>
+    ipcRenderer.invoke('ado:search-work-items', { query, projectId }),
+  adoGetWorkItem: (id: number, projectId?: string) =>
+    ipcRenderer.invoke('ado:get-work-item', { id, projectId }),
+  adoPostBranchComment: (workItemId: number, branch: string, projectId?: string) =>
+    ipcRenderer.invoke('ado:post-branch-comment', { workItemId, branch, projectId }),
+
   // Git detection
   detectGit: (folderPath: string) => ipcRenderer.invoke('app:detectGit', folderPath),
   detectClaude: () => ipcRenderer.invoke('app:detectClaude'),
@@ -180,6 +194,56 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('git:fileChanged', handler);
     return () => {
       ipcRenderer.removeListener('git:fileChanged', handler);
+    };
+  },
+
+  // Auto-update
+  autoUpdateCheck: () => ipcRenderer.invoke('autoUpdate:check'),
+  autoUpdateDownload: () => ipcRenderer.invoke('autoUpdate:download'),
+  autoUpdateQuitAndInstall: () => ipcRenderer.invoke('autoUpdate:quitAndInstall'),
+  onAutoUpdateAvailable: (callback: (info: { version: string }) => void) => {
+    const handler = (_event: unknown, info: { version: string }) => callback(info);
+    ipcRenderer.on('autoUpdate:available', handler);
+    return () => {
+      ipcRenderer.removeListener('autoUpdate:available', handler);
+    };
+  },
+  onAutoUpdateNotAvailable: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on('autoUpdate:notAvailable', handler);
+    return () => {
+      ipcRenderer.removeListener('autoUpdate:notAvailable', handler);
+    };
+  },
+  onAutoUpdateDownloadProgress: (
+    callback: (progress: {
+      percent: number;
+      bytesPerSecond: number;
+      transferred: number;
+      total: number;
+    }) => void,
+  ) => {
+    const handler = (
+      _event: unknown,
+      progress: { percent: number; bytesPerSecond: number; transferred: number; total: number },
+    ) => callback(progress);
+    ipcRenderer.on('autoUpdate:downloadProgress', handler);
+    return () => {
+      ipcRenderer.removeListener('autoUpdate:downloadProgress', handler);
+    };
+  },
+  onAutoUpdateDownloaded: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on('autoUpdate:downloaded', handler);
+    return () => {
+      ipcRenderer.removeListener('autoUpdate:downloaded', handler);
+    };
+  },
+  onAutoUpdateError: (callback: (message: string) => void) => {
+    const handler = (_event: unknown, message: string) => callback(message);
+    ipcRenderer.on('autoUpdate:error', handler);
+    return () => {
+      ipcRenderer.removeListener('autoUpdate:error', handler);
     };
   },
 });
