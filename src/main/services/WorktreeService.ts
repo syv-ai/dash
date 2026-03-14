@@ -191,7 +191,7 @@ export class WorktreeService {
   /**
    * Copy preserved files (.env, etc) from source to target.
    */
-  private async preserveFiles(from: string, to: string): Promise<void> {
+  async preserveFiles(from: string, to: string): Promise<void> {
     for (const pattern of PRESERVE_PATTERNS) {
       // Simple glob: if no wildcard, just check exact file
       if (!pattern.includes('*')) {
@@ -295,8 +295,12 @@ export class WorktreeService {
             DASH_BRANCH: branchName,
           },
         });
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
+      } catch (error: unknown) {
+        const stderr =
+          error && typeof error === 'object' && 'stderr' in error
+            ? String((error as { stderr: unknown }).stderr).trim()
+            : '';
+        const msg = stderr || (error instanceof Error ? error.message : String(error));
         for (const win of BrowserWindow.getAllWindows()) {
           if (!win.isDestroyed()) {
             win.webContents.send('app:toast', {

@@ -167,6 +167,9 @@ export class WorktreePoolService {
         }
       }
 
+      // Copy preserved files (.env, etc) from project to worktree
+      await worktreeService.preserveFiles(reserve.projectPath, newPath);
+
       // Run worktree setup script (async, non-blocking)
       worktreeService.runSetupScriptAsync(projectId, newPath, newBranch, reserve.projectPath);
 
