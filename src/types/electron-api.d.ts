@@ -32,6 +32,8 @@ export interface ElectronAPI {
     line?: number;
     col?: number;
   }) => Promise<IpcResponse<null>>;
+  openInIDE: (args: { folderPath: string; ide?: 'cursor' | 'code' }) => Promise<IpcResponse<null>>;
+  detectAvailableIDEs: () => Promise<IpcResponse<string[]>>;
 
   // Database - Projects
   getProjects: () => Promise<IpcResponse<Project[]>>;

@@ -29,6 +29,8 @@ interface SettingsModalProps {
   onShellDrawerPositionChange: (value: 'left' | 'main' | 'right') => void;
   terminalTheme: string;
   onTerminalThemeChange: (id: string) => void;
+  preferredIDE: 'cursor' | 'code' | 'auto';
+  onPreferredIDEChange: (value: 'cursor' | 'code' | 'auto') => void;
   commitAttribution: string | undefined;
   onCommitAttributionChange: (value: string | undefined) => void;
   activeProjectPath?: string;
@@ -128,6 +130,8 @@ export function SettingsModal({
   onShellDrawerPositionChange,
   terminalTheme,
   onTerminalThemeChange,
+  preferredIDE,
+  onPreferredIDEChange,
   commitAttribution,
   onCommitAttributionChange,
   activeProjectPath,
@@ -387,6 +391,40 @@ export function SettingsModal({
                 )}
                 <p className="text-[10px] text-foreground/80 mt-2">
                   Toggle with Cmd+J. Run git, npm, and other commands alongside Claude.
+                </p>
+              </div>
+
+              {/* Preferred IDE */}
+              <div>
+                <label className="block text-[12px] font-medium text-foreground mb-3">
+                  Preferred IDE
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(
+                    [
+                      { value: 'auto' as const, label: 'Auto-detect' },
+                      { value: 'cursor' as const, label: 'Cursor' },
+                      { value: 'code' as const, label: 'VS Code' },
+                    ] as const
+                  ).map(({ value, label }) => {
+                    const isActive = preferredIDE === value;
+                    return (
+                      <button
+                        key={value}
+                        onClick={() => onPreferredIDEChange(value)}
+                        className={`px-3 py-2.5 rounded-lg text-[12px] border transition-all duration-150 ${
+                          isActive
+                            ? 'border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20 font-medium'
+                            : 'border-border/60 text-foreground/60 hover:bg-accent/40 hover:text-foreground'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-foreground/80 mt-2">
+                  IDE used when opening a task from the header
                 </p>
               </div>
 

@@ -167,6 +167,57 @@ export function registerAppIpc(): void {
   });
 
   ipcMain.handle(
+    'app:openInIDE',
+    async (_event, args: { folderPath: string; ide?: 'cursor' | 'code' }) => {
+      try {
+        if (!existsSync(args.folderPath)) {
+          return { success: false, error: `Path not found: ${args.folderPath}` };
+        }
+
+        let ide = args.ide;
+        if (!ide) {
+          // Auto-detect: prefer cursor, then code
+          for (const candidate of ['cursor', 'code'] as const) {
+            try {
+              await execFileAsync('which', [candidate]);
+              ide = candidate;
+              break;
+            } catch {
+              // Not found, try next
+            }
+          }
+        }
+
+        if (!ide) {
+          return { success: false, error: 'No supported IDE found (cursor, code)' };
+        }
+
+        await execFileAsync(ide, [args.folderPath]);
+        return { success: true, data: null };
+      } catch (error) {
+        return { success: false, error: String(error) };
+      }
+    },
+  );
+
+  ipcMain.handle('app:detectAvailableIDEs', async () => {
+    try {
+      const available: string[] = [];
+      for (const ide of ['cursor', 'code']) {
+        try {
+          await execFileAsync('which', [ide]);
+          available.push(ide);
+        } catch {
+          // Not found
+        }
+      }
+      return { success: true, data: available };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  });
+
+  ipcMain.handle(
     'app:openInEditor',
     async (_event, args: { cwd: string; filePath: string; line?: number; col?: number }) => {
       try {

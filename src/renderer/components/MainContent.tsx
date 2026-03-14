@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { TerminalPane } from './TerminalPane';
-import { Terminal, FolderOpen, GitBranch, Globe, GitPullRequest } from 'lucide-react';
+import { Terminal, FolderOpen, GitBranch, Globe, GitPullRequest, Code2 } from 'lucide-react';
 import type { Project, Task, RemoteControlState, PullRequestInfo } from '../../shared/types';
 import { linkedItemUrl, isAdoRemote } from '../../shared/urls';
 
@@ -191,18 +191,6 @@ export function MainContent({
             </div>
           ) : null}
           <div className="ml-auto flex items-center gap-1.5">
-            {prInfo && (
-              <a
-                href={prInfo.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 text-[10px] font-medium hover:bg-green-500/20 transition-colors"
-                title={prInfo.title}
-              >
-                <GitPullRequest size={10} strokeWidth={2} />
-                PR #{prInfo.number}
-              </a>
-            )}
             {taskActivity[activeTask.id] && (
               <button
                 onClick={() => onEnableRemoteControl?.(activeTask.id)}
@@ -215,6 +203,29 @@ export function MainContent({
               >
                 <Globe size={14} strokeWidth={1.8} />
               </button>
+            )}
+            <button
+              onClick={() => {
+                const stored = localStorage.getItem('preferredIDE');
+                const ide = stored === 'cursor' || stored === 'code' ? stored : undefined;
+                window.electronAPI.openInIDE({ folderPath: activeTask.path, ide });
+              }}
+              className="p-1 rounded-md transition-colors text-muted-foreground/50 hover:text-foreground hover:bg-accent/60"
+              title="Open in IDE"
+            >
+              <Code2 size={14} strokeWidth={1.8} />
+            </button>
+            {prInfo && (
+              <a
+                href={prInfo.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 text-[10px] font-medium hover:bg-green-500/20 transition-colors"
+                title={prInfo.title}
+              >
+                <GitPullRequest size={10} strokeWidth={2} />
+                PR #{prInfo.number}
+              </a>
             )}
           </div>
         </>

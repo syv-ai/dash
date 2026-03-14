@@ -94,6 +94,9 @@ export function App() {
   const [terminalTheme, setTerminalTheme] = useState(() => {
     return localStorage.getItem('terminalTheme') || 'default';
   });
+  const [preferredIDE, setPreferredIDE] = useState<'cursor' | 'code' | 'auto'>(() => {
+    return (localStorage.getItem('preferredIDE') as 'cursor' | 'code' | 'auto') || 'auto';
+  });
   const [commitAttribution, setCommitAttribution] = useState<string | undefined>(() => {
     const stored = localStorage.getItem('commitAttribution');
     if (stored === null) return undefined; // "default" — key absent
@@ -1219,6 +1222,15 @@ export function App() {
             localStorage.setItem('desktopNotification', String(v));
           }}
           activeProjectPath={activeProject?.path}
+          preferredIDE={preferredIDE}
+          onPreferredIDEChange={(v) => {
+            setPreferredIDE(v);
+            if (v === 'auto') {
+              localStorage.removeItem('preferredIDE');
+            } else {
+              localStorage.setItem('preferredIDE', v);
+            }
+          }}
           commitAttribution={commitAttribution}
           onCommitAttributionChange={(v) => {
             setCommitAttribution(v);
