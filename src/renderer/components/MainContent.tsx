@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { TerminalPane } from './TerminalPane';
-import { Terminal, FolderOpen, GitBranch, Globe, GitPullRequest, Code2 } from 'lucide-react';
+import { ProjectOverview } from './ProjectOverview';
+import { FolderOpen, GitBranch, Globe, GitPullRequest, Code2 } from 'lucide-react';
 import type { Project, Task, RemoteControlState, PullRequestInfo } from '../../shared/types';
 import { linkedItemUrl, isAdoRemote } from '../../shared/urls';
 
@@ -14,6 +15,14 @@ interface MainContentProps {
   remoteControlStates?: Record<string, RemoteControlState>;
   onSelectTask?: (id: string) => void;
   onEnableRemoteControl?: (taskId: string) => void;
+  onNewTask?: () => void;
+  onProjectSettings?: () => void;
+  onShowCommitGraph?: () => void;
+  onDeleteProject?: () => void;
+  archivedTasks?: Task[];
+  onDeleteTask?: (id: string) => void;
+  onArchiveTask?: (id: string) => void;
+  onRestoreTask?: (id: string) => void;
 }
 
 export function MainContent({
@@ -26,6 +35,14 @@ export function MainContent({
   remoteControlStates = {},
   onSelectTask,
   onEnableRemoteControl,
+  onNewTask,
+  onProjectSettings,
+  onShowCommitGraph,
+  onDeleteProject,
+  archivedTasks = [],
+  onDeleteTask,
+  onArchiveTask,
+  onRestoreTask,
 }: MainContentProps) {
   const [prInfo, setPrInfo] = useState<PullRequestInfo | null>(null);
 
@@ -80,28 +97,20 @@ export function MainContent({
 
   if (!activeTask) {
     return (
-      <div className="h-full flex items-center justify-center bg-background">
-        <div className="text-center animate-fade-in">
-          <div className="w-14 h-14 rounded-2xl bg-accent/60 flex items-center justify-center mx-auto mb-4">
-            <Terminal size={22} className="text-muted-foreground/40" strokeWidth={1.5} />
-          </div>
-          <h2 className="text-[15px] font-semibold text-foreground/80 mb-1.5">
-            {activeProject.name}
-          </h2>
-          <p className="text-[13px] text-muted-foreground/60 mb-3">
-            Create a task to start a Claude session
-          </p>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/40 text-[11px] text-muted-foreground/50">
-            <kbd className="px-1.5 py-0.5 rounded bg-accent text-[10px] font-mono font-medium">
-              Cmd
-            </kbd>
-            <span>+</span>
-            <kbd className="px-1.5 py-0.5 rounded bg-accent text-[10px] font-mono font-medium">
-              N
-            </kbd>
-          </div>
-        </div>
-      </div>
+      <ProjectOverview
+        project={activeProject}
+        tasks={tasks}
+        archivedTasks={archivedTasks}
+        taskActivity={taskActivity}
+        onSelectTask={(id) => onSelectTask?.(id)}
+        onNewTask={() => onNewTask?.()}
+        onProjectSettings={() => onProjectSettings?.()}
+        onShowCommitGraph={() => onShowCommitGraph?.()}
+        onDeleteProject={() => onDeleteProject?.()}
+        onDeleteTask={(id) => onDeleteTask?.(id)}
+        onArchiveTask={(id) => onArchiveTask?.(id)}
+        onRestoreTask={(id) => onRestoreTask?.(id)}
+      />
     );
   }
 

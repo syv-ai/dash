@@ -993,7 +993,10 @@ export function App() {
             <LeftSidebar
               projects={projects}
               activeProjectId={activeProjectId}
-              onSelectProject={setActiveProjectId}
+              onSelectProject={(id) => {
+                setActiveProjectId(id);
+                setActiveTaskId(null);
+              }}
               onOpenFolder={() => {
                 setCloneStatus({ loading: false, error: null });
                 setShowAddProjectModal(true);
@@ -1058,6 +1061,27 @@ export function App() {
               remoteControlStates={remoteControlStates}
               onSelectTask={setActiveTaskId}
               onEnableRemoteControl={(taskId) => setRemoteControlModalPtyId(taskId)}
+              onNewTask={() => activeProjectId && handleNewTask(activeProjectId)}
+              onProjectSettings={() => {
+                if (activeProject) setProjectSettingsTarget(activeProject);
+              }}
+              onShowCommitGraph={() => {
+                if (activeProjectId) {
+                  setActiveProjectId(activeProjectId);
+                  setShowCommitGraph(true);
+                }
+              }}
+              onDeleteProject={() => {
+                if (activeProject) handleDeleteProject(activeProject.id);
+              }}
+              archivedTasks={
+                activeProjectId
+                  ? (tasksByProject[activeProjectId] || []).filter((t) => t.archivedAt)
+                  : []
+              }
+              onDeleteTask={handleDeleteTask}
+              onArchiveTask={handleArchiveTask}
+              onRestoreTask={handleRestoreTask}
             />
           </ShellDrawerWrapper>
         </Panel>
