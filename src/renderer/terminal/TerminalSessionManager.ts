@@ -93,12 +93,21 @@ export class TerminalSessionManager {
         this.terminal,
         () => this._currentCwd,
         (filePath, line, col) => {
-          window.electronAPI.openInEditor({
-            cwd: this._currentCwd,
-            filePath,
-            line,
-            col,
-          });
+          window.electronAPI
+            .openInEditor({
+              cwd: this._currentCwd,
+              filePath,
+              line,
+              col,
+            })
+            .then((res) => {
+              if (!res.success) {
+                console.warn('[FilePathLink] openInEditor failed:', res.error);
+              }
+            })
+            .catch((err) => {
+              console.warn('[FilePathLink] openInEditor error:', err);
+            });
         },
       ),
     );

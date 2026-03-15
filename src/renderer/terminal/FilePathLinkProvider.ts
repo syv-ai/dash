@@ -5,12 +5,14 @@ const EXTENSIONS =
   'ts|tsx|js|jsx|mjs|cjs|json|md|mdx|py|rb|rs|go|java|kt|swift|c|cpp|h|hpp|css|scss|less|html|xml|yaml|yml|toml|sql|sh|bash|zsh|vue|svelte|astro|graphql|gql|proto|prisma|env|lock|txt|csv|log|conf|cfg|ini|makefile|dockerfile';
 
 // Matches file paths with at least one `/`, a known extension, and optional :line:col
-// Preceded by start-of-string, whitespace, or punctuation boundary (avoids matching inside URLs)
+// Uses negative lookbehind: path must NOT be preceded by a path character (word char, slash, etc.)
+// This handles Claude Code's TUI characters (⏺, ⎿, box-drawing) without needing to enumerate them
 const FILE_PATH_RE = new RegExp(
-  `(?:^|(?<=[\\s(\\[{'\`",:]))` + // boundary: start or whitespace/punctuation
-    `(\\.{0,2}/` + // start with optional ./ or ../ or just /
-    `[\\w.@/-]+` + // path chars (letters, digits, dots, @, hyphens, slashes)
-    `\\.(?:${EXTENSIONS})` + // require known extension
+  `(?:^|(?<![\\w.@/\\\\-]))` + // boundary: not preceded by a path character
+    `(` +
+    `(?:\\.{0,2}/)?` + // optional ./ or ../ or / prefix (bare relative paths also match)
+    `[\\w.@-]+(?:/[\\w.@-]+)+` + // at least one dir separator (avoids matching lone filenames)
+    `\\.(?:${EXTENSIONS})(?![\\w.])` + // require known extension (word boundary prevents .ts matching .tsx)
     `(?::(\\d+)(?::(\\d+))?)?)`, // optional :line:col
   'gi',
 );
@@ -117,6 +119,7 @@ export class FilePathLinkProvider implements ILinkProvider {
       return {
         range,
         text: p.text,
+        decorations: { pointerCursor: true, underline: true },
         activate: () => {
           this.onOpen(p.filePath, p.line, p.col);
         },

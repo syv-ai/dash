@@ -127,19 +127,13 @@
   top: 10px !important;
 }
 
-/* Inset scrollbar away from resize handle */
+/* Inset scrollbar away from resize handle.
+   clip-path exposes only the scrollbar track so it sits above .xterm-screen
+   (which needs pointer-events for Linkifier2 link detection). */
 .terminal-container .xterm .xterm-viewport {
   right: 8px !important;
-}
-
-/* Let pointer events fall through the screen to the viewport scrollbar.
-   Canvas children re-enable events so terminal interaction still works. */
-.terminal-container .xterm .xterm-screen {
-  pointer-events: none;
-}
-.terminal-container .xterm .xterm-screen canvas,
-.terminal-container .xterm .xterm-screen .xterm-decoration-container {
-  pointer-events: auto;
+  z-index: 1;
+  clip-path: inset(0 0 0 calc(100% - 16px));
 }
 
 /* Sidebar shell terminal: tighter padding */
