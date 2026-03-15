@@ -227,6 +227,7 @@ export interface ElectronAPI {
   gitDiscardFile: (args: { cwd: string; filePath: string }) => Promise<IpcResponse<void>>;
   gitCommit: (args: { cwd: string; message: string }) => Promise<IpcResponse<void>>;
   gitPush: (cwd: string) => Promise<IpcResponse<void>>;
+  gitRemoteBranchExists: (args: { cwd: string; branch: string }) => Promise<IpcResponse<boolean>>;
 
   // Commit graph
   gitGetCommitGraph: (args: {

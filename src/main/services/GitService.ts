@@ -386,6 +386,15 @@ export class GitService {
     await git(cwd, ['push']);
   }
 
+  static async remoteBranchExists(cwd: string, branch: string): Promise<boolean> {
+    try {
+      const output = await git(cwd, ['ls-remote', '--heads', 'origin', branch]);
+      return output.trim().length > 0;
+    } catch {
+      return false;
+    }
+  }
+
   // ── Commit Graph ────────────────────────────────────────
 
   static async getCommitGraph(cwd: string, limit = 150, skip = 0): Promise<CommitGraphData> {

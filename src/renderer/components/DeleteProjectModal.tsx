@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { X, Trash2, Loader2 } from 'lucide-react';
 import type { Project, Task } from '../../shared/types';
 import { CircleCheck } from './ui/CircleCheck';
@@ -49,9 +49,37 @@ export function DeleteProjectModal({
     [tasks],
   );
 
-  const remoteBranchTasks = useMemo(
+  const candidateRemoteTasks = useMemo(
     () => branchTasks.filter((t) => t.branchCreatedByDash),
     [branchTasks],
+  );
+
+  const [remoteBranchTaskIds, setRemoteBranchTaskIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (candidateRemoteTasks.length === 0) return;
+    let cancelled = false;
+    Promise.all(
+      candidateRemoteTasks.map(
+        (t) =>
+          window.electronAPI
+            .gitRemoteBranchExists?.({ cwd: t.path, branch: t.branch })
+            ?.then((res) => (res.success && res.data ? t.id : null))
+            .catch(() => null) ?? Promise.resolve(null),
+      ),
+    ).then((ids) => {
+      if (!cancelled) {
+        setRemoteBranchTaskIds(new Set(ids.filter((id): id is string => id !== null)));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [candidateRemoteTasks]);
+
+  const remoteBranchTasks = useMemo(
+    () => candidateRemoteTasks.filter((t) => remoteBranchTaskIds.has(t.id)),
+    [candidateRemoteTasks, remoteBranchTaskIds],
   );
 
   const hasCleanupOptions =

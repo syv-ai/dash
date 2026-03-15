@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Trash2, Loader2 } from 'lucide-react';
 import type { Task } from '../../shared/types';
 import { CircleCheck } from './ui/CircleCheck';
@@ -20,6 +20,20 @@ export function DeleteTaskModal({ task, onClose, onConfirm }: DeleteTaskModalPro
   const [deleteLocalBranch, setDeleteLocalBranch] = useState(true);
   const [deleteRemoteBranch, setDeleteRemoteBranch] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [hasRemoteBranch, setHasRemoteBranch] = useState(false);
+
+  useEffect(() => {
+    if (task.useWorktree && task.branchCreatedByDash && task.branch) {
+      window.electronAPI
+        .gitRemoteBranchExists?.({ cwd: task.path, branch: task.branch })
+        ?.then((res) => {
+          if (res.success && res.data) {
+            setHasRemoteBranch(true);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [task]);
 
   async function handleConfirm() {
     setIsDeleting(true);
@@ -88,7 +102,7 @@ export function DeleteTaskModal({ task, onClose, onConfirm }: DeleteTaskModalPro
                   </>
                 }
               />
-              {task.branchCreatedByDash && (
+              {hasRemoteBranch && (
                 <CircleCheck
                   checked={deleteRemoteBranch}
                   onChange={setDeleteRemoteBranch}

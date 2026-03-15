@@ -183,6 +183,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('git:discardFile', args),
   gitCommit: (args: { cwd: string; message: string }) => ipcRenderer.invoke('git:commit', args),
   gitPush: (cwd: string) => ipcRenderer.invoke('git:push', cwd),
+  gitRemoteBranchExists: (args: { cwd: string; branch: string }) =>
+    ipcRenderer.invoke('git:remoteBranchExists', args),
 
   // Branch listing
   gitListBranches: (cwd: string) => ipcRenderer.invoke('git:listBranches', cwd),

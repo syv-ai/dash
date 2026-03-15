@@ -158,6 +158,19 @@ export function registerGitIpc(): void {
     }
   });
 
+  // Check if a remote branch exists
+  ipcMain.handle(
+    'git:remoteBranchExists',
+    async (_event, args: { cwd: string; branch: string }) => {
+      try {
+        const exists = await GitService.remoteBranchExists(args.cwd, args.branch);
+        return { success: true, data: exists };
+      } catch (error) {
+        return { success: false, error: String(error) };
+      }
+    },
+  );
+
   // List remote branches (fetch + list)
   ipcMain.handle('git:listBranches', async (_event, cwd: string) => {
     try {
@@ -182,17 +195,14 @@ export function registerGitIpc(): void {
   );
 
   // Get detailed info for a single commit
-  ipcMain.handle(
-    'git:getCommitDetail',
-    async (_event, args: { cwd: string; hash: string }) => {
-      try {
-        const data = await GitService.getCommitDetail(args.cwd, args.hash);
-        return { success: true, data };
-      } catch (error) {
-        return { success: false, error: String(error) };
-      }
-    },
-  );
+  ipcMain.handle('git:getCommitDetail', async (_event, args: { cwd: string; hash: string }) => {
+    try {
+      const data = await GitService.getCommitDetail(args.cwd, args.hash);
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  });
 
   // Start watching a directory for file changes
   ipcMain.handle('git:watch', async (_event, args: { id: string; cwd: string }) => {

@@ -149,7 +149,8 @@ export class WorktreeService {
     }
 
     // Delete remote branch (best effort, non-blocking)
-    if (deleteRemoteBranch) {
+    const protectedBranches = ['main', 'master', 'develop', 'dev'];
+    if (deleteRemoteBranch && !protectedBranches.includes(branch)) {
       execFileAsync('git', ['push', 'origin', '--delete', branch], { cwd: projectPath }).catch(
         () => {},
       );
