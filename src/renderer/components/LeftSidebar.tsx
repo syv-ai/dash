@@ -304,7 +304,7 @@ export function LeftSidebar({
                   </div>
 
                   {projectTasks.length > 0 && (
-                    <span className="text-[10px] text-foreground/50 tabular-nums flex-shrink-0 mr-0.5 leading-none">
+                    <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0 mr-0.5 leading-none">
                       {projectTasks.length}
                     </span>
                   )}
