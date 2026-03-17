@@ -206,6 +206,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 
+  // Pixel Agents
+  pixelAgentsGetConfig: () => ipcRenderer.invoke('pixelAgents:getConfig'),
+  pixelAgentsSaveConfig: (config: unknown) => ipcRenderer.invoke('pixelAgents:saveConfig', config),
+  pixelAgentsGetStatus: () => ipcRenderer.invoke('pixelAgents:getStatus'),
+  pixelAgentsStart: () => ipcRenderer.invoke('pixelAgents:start'),
+  pixelAgentsStop: () => ipcRenderer.invoke('pixelAgents:stop'),
+  onPixelAgentsStatusChanged: (callback: (status: unknown) => void) => {
+    const handler = (_event: unknown, status: unknown) => callback(status);
+    ipcRenderer.on('pixelAgents:statusChanged', handler);
+    return () => {
+      ipcRenderer.removeListener('pixelAgents:statusChanged', handler);
+    };
+  },
+
   // Auto-update
   autoUpdateCheck: () => ipcRenderer.invoke('autoUpdate:check'),
   autoUpdateDownload: () => ipcRenderer.invoke('autoUpdate:download'),

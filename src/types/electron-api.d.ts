@@ -16,6 +16,8 @@ import type {
   RemoteControlState,
   TaskContextMeta,
   PullRequestInfo,
+  PixelAgentsConfig,
+  PixelAgentsStatus,
 } from '../shared/types';
 
 export interface ElectronAPI {
@@ -244,6 +246,14 @@ export interface ElectronAPI {
   gitWatch: (args: { id: string; cwd: string }) => Promise<IpcResponse<void>>;
   gitUnwatch: (id: string) => Promise<IpcResponse<void>>;
   onGitFileChanged: (callback: (id: string) => void) => () => void;
+
+  // Pixel Agents
+  pixelAgentsGetConfig: () => Promise<IpcResponse<PixelAgentsConfig | null>>;
+  pixelAgentsSaveConfig: (config: PixelAgentsConfig) => Promise<IpcResponse<void>>;
+  pixelAgentsGetStatus: () => Promise<IpcResponse<PixelAgentsStatus>>;
+  pixelAgentsStart: () => Promise<IpcResponse<void>>;
+  pixelAgentsStop: () => Promise<IpcResponse<void>>;
+  onPixelAgentsStatusChanged: (callback: (status: PixelAgentsStatus) => void) => () => void;
 
   // Auto-update
   autoUpdateCheck: () => Promise<IpcResponse<void>>;
