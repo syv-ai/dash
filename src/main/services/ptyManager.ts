@@ -297,6 +297,7 @@ export async function startDirectPty(options: {
   autoApprove?: boolean;
   resume?: boolean;
   isDark?: boolean;
+  chatMode?: boolean;
   sender?: WebContents;
 }): Promise<{
   reattached: boolean;
@@ -327,6 +328,9 @@ export async function startDirectPty(options: {
   }
 
   const args: string[] = [];
+  if (options.chatMode) {
+    args.push('--output-format', 'stream-json');
+  }
   if (options.resume) {
     args.push('-c', '-r');
   }

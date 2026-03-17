@@ -30,6 +30,7 @@ export function registerPtyIpc(): void {
         autoApprove?: boolean;
         resume?: boolean;
         isDark?: boolean;
+        chatMode?: boolean;
       },
     ) => {
       try {

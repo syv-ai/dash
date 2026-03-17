@@ -1,10 +1,20 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { TerminalPane } from './TerminalPane';
+import { ChatPane } from './ChatPane';
 import { ProjectOverview } from './ProjectOverview';
-import { FolderOpen, GitBranch, Globe, GitPullRequest, Code2 } from 'lucide-react';
-import type { Project, Task, RemoteControlState, PullRequestInfo } from '../../shared/types';
+import {
+  FolderOpen,
+  GitBranch,
+  Globe,
+  GitPullRequest,
+  Code2,
+  Terminal,
+  MessageSquare,
+} from 'lucide-react';
+import type { Project, Task, RemoteControlState, PullRequestInfo, ViewMode } from '../../shared/types';
 import { linkedItemUrl, isAdoRemote } from '../../shared/urls';
 import { Tooltip } from './ui/Tooltip';
+import { sessionRegistry } from '../terminal/SessionRegistry';
 
 interface MainContentProps {
   activeTask: Task | null;
@@ -46,6 +56,38 @@ export function MainContent({
   onRestoreTask,
 }: MainContentProps) {
   const [prInfo, setPrInfo] = useState<PullRequestInfo | null>(null);
+
+  // Per-task view mode persisted in localStorage
+  const viewModeKey = activeTask ? `viewMode:${activeTask.id}` : null;
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    if (!viewModeKey) return 'terminal';
+    return (localStorage.getItem(viewModeKey) as ViewMode) || 'terminal';
+  });
+
+  // Reset view mode when task changes
+  useEffect(() => {
+    if (viewModeKey) {
+      const stored = localStorage.getItem(viewModeKey) as ViewMode;
+      setViewMode(stored || 'terminal');
+    }
+  }, [viewModeKey]);
+
+  const handleToggleViewMode = useCallback(() => {
+    if (!activeTask || !viewModeKey) return;
+
+    const newMode: ViewMode = viewMode === 'terminal' ? 'chat' : 'terminal';
+
+    // Kill the current PTY so the new mode can spawn its own
+    window.electronAPI.ptyKill(activeTask.id);
+
+    // If switching away from terminal, detach and dispose the xterm session
+    if (viewMode === 'terminal') {
+      sessionRegistry.dispose(activeTask.id);
+    }
+
+    localStorage.setItem(viewModeKey, newMode);
+    setViewMode(newMode);
+  }, [activeTask, viewModeKey, viewMode]);
 
   useEffect(() => {
     setPrInfo(null);
@@ -158,9 +200,31 @@ export function MainContent({
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-1.5 text-foreground/60 flex-shrink-0">
-            <GitBranch size={11} strokeWidth={2} />
-            <span className="text-[11px] font-mono">{activeTask.branch}</span>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <div className="flex items-center rounded-md border border-border/60 overflow-hidden mr-1.5">
+              <button
+                onClick={() => viewMode !== 'terminal' && handleToggleViewMode()}
+                className={`p-0.5 transition-colors ${
+                  viewMode === 'terminal'
+                    ? 'bg-primary/15 text-primary'
+                    : 'text-muted-foreground/50 hover:text-foreground hover:bg-accent/60'
+                }`}
+              >
+                <Terminal size={11} strokeWidth={1.8} />
+              </button>
+              <button
+                onClick={() => viewMode !== 'chat' && handleToggleViewMode()}
+                className={`p-0.5 transition-colors ${
+                  viewMode === 'chat'
+                    ? 'bg-primary/15 text-primary'
+                    : 'text-muted-foreground/50 hover:text-foreground hover:bg-accent/60'
+                }`}
+              >
+                <MessageSquare size={11} strokeWidth={1.8} />
+              </button>
+            </div>
+            <GitBranch size={11} strokeWidth={2} className="text-foreground/60" />
+            <span className="text-[11px] font-mono text-foreground/60">{activeTask.branch}</span>
           </div>
         </>
       ) : (
@@ -206,6 +270,33 @@ export function MainContent({
             </div>
           ) : null}
           <div className="ml-auto flex items-center gap-1.5">
+            {/* View mode toggle */}
+            <div className="flex items-center rounded-md border border-border/60 overflow-hidden">
+              <Tooltip content="Terminal view">
+                <button
+                  onClick={() => viewMode !== 'terminal' && handleToggleViewMode()}
+                  className={`p-1 transition-colors ${
+                    viewMode === 'terminal'
+                      ? 'bg-primary/15 text-primary'
+                      : 'text-muted-foreground/50 hover:text-foreground hover:bg-accent/60'
+                  }`}
+                >
+                  <Terminal size={13} strokeWidth={1.8} />
+                </button>
+              </Tooltip>
+              <Tooltip content="Chat view">
+                <button
+                  onClick={() => viewMode !== 'chat' && handleToggleViewMode()}
+                  className={`p-1 transition-colors ${
+                    viewMode === 'chat'
+                      ? 'bg-primary/15 text-primary'
+                      : 'text-muted-foreground/50 hover:text-foreground hover:bg-accent/60'
+                  }`}
+                >
+                  <MessageSquare size={13} strokeWidth={1.8} />
+                </button>
+              </Tooltip>
+            </div>
             {taskActivity[activeTask.id] && (
               <Tooltip content="Remote control">
                 <button
@@ -255,12 +346,21 @@ export function MainContent({
     <div className="h-full flex flex-col bg-background">
       {taskHeader}
       <div className="flex-1 min-h-0">
-        <TerminalPane
-          key={activeTask.id}
-          id={activeTask.id}
-          cwd={activeTask.path}
-          autoApprove={activeTask.autoApprove}
-        />
+        {viewMode === 'chat' ? (
+          <ChatPane
+            key={`chat-${activeTask.id}`}
+            id={activeTask.id}
+            cwd={activeTask.path}
+            autoApprove={activeTask.autoApprove}
+          />
+        ) : (
+          <TerminalPane
+            key={activeTask.id}
+            id={activeTask.id}
+            cwd={activeTask.path}
+            autoApprove={activeTask.autoApprove}
+          />
+        )}
       </div>
     </div>
   );

@@ -96,6 +96,7 @@ export interface ElectronAPI {
     autoApprove?: boolean;
     resume?: boolean;
     isDark?: boolean;
+    chatMode?: boolean;
   }) => Promise<
     IpcResponse<{
       reattached: boolean;

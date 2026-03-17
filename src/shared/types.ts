@@ -272,6 +272,63 @@ export interface PullRequestInfo {
   provider: 'github' | 'ado';
 }
 
+// ── Chat UI Types ───────────────────────────────────────────
+
+export type ViewMode = 'terminal' | 'chat';
+
+/** A single content block inside an assistant message. */
+export type ChatContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
+  | { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean };
+
+/** Parsed chat message for display. */
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: ChatContentBlock[];
+  timestamp: number;
+  /** Cost in USD for this turn (from result events). */
+  costUsd?: number;
+  /** Model that produced this message. */
+  model?: string;
+}
+
+/** Raw stream-json event from Claude CLI. */
+export type StreamJsonEvent =
+  | {
+      type: 'system';
+      subtype: 'init' | 'error';
+      session_id?: string;
+      message?: string;
+      tools?: unknown[];
+    }
+  | {
+      type: 'assistant';
+      message: {
+        id: string;
+        role: 'assistant';
+        content: ChatContentBlock[];
+        model?: string;
+        stop_reason?: string;
+      };
+    }
+  | {
+      type: 'user';
+      message: {
+        role: 'user';
+        content: ChatContentBlock[];
+      };
+    }
+  | {
+      type: 'result';
+      subtype: 'success' | 'error';
+      cost_usd?: number;
+      duration_ms?: number;
+      session_id?: string;
+      is_error?: boolean;
+    };
+
 // ── Remote Control Types ────────────────────────────────────
 
 export interface RemoteControlState {
