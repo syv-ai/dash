@@ -193,10 +193,16 @@ export class PixelAgentsService {
       mkdirSync(PIXEL_AGENTS_DIR, { recursive: true });
     }
 
-    // Clone the repo
-    console.log(`[pixel-agents] Cloning ${REPO_URL}...`);
-    await execFileAsync('git', ['clone', '--depth', '1', REPO_URL, REPO_DIR], {
-      timeout: 60000,
+    // Sparse clone — only checkout packages/office-proxy/
+    console.log(`[pixel-agents] Cloning ${REPO_URL} (sparse: packages/office-proxy/)...`);
+    await execFileAsync(
+      'git',
+      ['clone', '--depth', '1', '--filter=blob:none', '--sparse', REPO_URL, REPO_DIR],
+      { timeout: 60000 },
+    );
+    await execFileAsync('git', ['sparse-checkout', 'set', 'packages/office-proxy'], {
+      cwd: REPO_DIR,
+      timeout: 15000,
     });
 
     // Install dependencies in the office-proxy package
