@@ -51,12 +51,14 @@ function fixPath(): void {
       '/usr/local/bin',
     );
   } else if (process.platform === 'win32') {
+    // Common Node/npm install locations on Windows including nvm4w
     const home = os.homedir();
     const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
     const localAppData = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
     additions.push(
       path.join(appData, 'npm'),
       path.join(localAppData, 'Programs', 'nodejs'),
+      'C:\\nvm4w\\nodejs',
       'C:\\Program Files\\nodejs',
       'C:\\Program Files\\Git\\bin',
       'C:\\Program Files\\Git\\usr\\bin',
@@ -118,8 +120,8 @@ app.whenReady().then(async () => {
   const { remoteControlService } = await import('./services/remoteControlService');
   remoteControlService.setSender(mainWindow.webContents);
 
-  // Initialize auto-updater (production only)
-  if (!process.argv.includes('--dev')) {
+  // Initialize auto-updater (production only, disabled on Windows custom builds)
+  if (!process.argv.includes('--dev') && process.platform !== 'win32') {
     const { AutoUpdateService } = await import('./services/AutoUpdateService');
     AutoUpdateService.initialize(mainWindow);
   }

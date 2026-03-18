@@ -168,6 +168,7 @@ async function findClaudePath(): Promise<string | null> {
             'claude.cmd',
           ),
           path.join(home, 'AppData', 'Local', 'Programs', 'nodejs', 'claude.cmd'),
+          'C:\\nvm4w\\nodejs\\claude.cmd',
           path.join('C:\\Program Files\\nodejs', 'claude.cmd'),
         ]
       : [path.join(home, '.local/bin/claude'), '/opt/homebrew/bin/claude', '/usr/local/bin/claude'];
@@ -207,7 +208,9 @@ function buildDirectEnv(isDark: boolean): Record<string, string> {
   };
 
   if (isWin) {
-    // Windows requires system env vars for DNS, credential storage, and Node.js
+    // Windows requires system env vars for DNS, credential storage, and Node.js.
+    // Includes both casings of SystemRoot since some processes look for one or
+    // the other (cmd.exe sets SystemRoot, PowerShell sees SYSTEMROOT in env).
     env.USERNAME = os.userInfo().username;
     const winVars = [
       'APPDATA',
