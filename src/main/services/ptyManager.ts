@@ -78,13 +78,22 @@ async function findClaudePath(): Promise<string | null> {
     // Best effort
   }
 
-  // 2. Try `which claude` (works when PATH is correct)
+  // 2. Try `which`/`where` (works when PATH is correct)
   try {
-    const { stdout } = await execFileAsync('which', ['claude']);
-    const resolved = stdout.trim();
-    if (resolved) {
-      cachedClaudePath = resolved;
-      return cachedClaudePath;
+    if (process.platform === 'win32') {
+      const { stdout } = await execFileAsync('where', ['claude.cmd']);
+      const resolved = stdout.split('\n')[0].trim();
+      if (resolved) {
+        cachedClaudePath = resolved;
+        return cachedClaudePath;
+      }
+    } else {
+      const { stdout } = await execFileAsync('which', ['claude']);
+      const resolved = stdout.trim();
+      if (resolved) {
+        cachedClaudePath = resolved;
+        return cachedClaudePath;
+      }
     }
   } catch {
     // Not in PATH
@@ -92,14 +101,17 @@ async function findClaudePath(): Promise<string | null> {
 
   // 3. Direct probe common install locations
   const home = os.homedir();
-  const candidates = [
-    path.join(home, '.local/bin/claude'),
-    '/opt/homebrew/bin/claude',
-    '/usr/local/bin/claude',
-  ];
+  const candidates =
+    process.platform === 'win32'
+      ? [
+          path.join(home, 'AppData', 'Roaming', 'npm', 'claude.cmd'),
+          'C:\\nvm4w\\nodejs\\claude.cmd',
+          'C:\\Program Files\\nodejs\\claude.cmd',
+        ]
+      : [path.join(home, '.local/bin/claude'), '/opt/homebrew/bin/claude', '/usr/local/bin/claude'];
   for (const candidate of candidates) {
     try {
-      await fs.promises.access(candidate, fs.constants.X_OK);
+      await fs.promises.access(candidate, fs.constants.F_OK);
       cachedClaudePath = candidate;
       return cachedClaudePath;
     } catch {
@@ -127,7 +139,7 @@ function buildDirectEnv(isDark: boolean): Record<string, string> {
     COLORFGBG: isDark ? '15;0' : '0;15',
   };
 
-  // Auth passthrough
+  // Auth + network passthrough
   const authVars = [
     'ANTHROPIC_API_KEY',
     'GH_TOKEN',
@@ -143,6 +155,29 @@ function buildDirectEnv(isDark: boolean): Record<string, string> {
   for (const key of authVars) {
     if (process.env[key]) {
       env[key] = process.env[key]!;
+    }
+  }
+
+  // On Windows, pass through system variables required for network stack,
+  // credential storage, and Node.js/Claude to work correctly
+  if (process.platform === 'win32') {
+    const winVars = [
+      'USERPROFILE',
+      'APPDATA',
+      'LOCALAPPDATA',
+      'SYSTEMROOT',
+      'WINDIR',
+      'COMPUTERNAME',
+      'USERDOMAIN',
+      'SystemDrive',
+      'ProgramFiles',
+      'TEMP',
+      'TMP',
+    ];
+    for (const key of winVars) {
+      if (process.env[key]) {
+        env[key] = process.env[key]!;
+      }
     }
   }
 
@@ -515,8 +550,11 @@ export async function startPty(options: {
 
   const pty = getPty();
 
-  const shell = process.env.SHELL || '/bin/bash';
-  const args = ['-il']; // Login + interactive
+  const isWindows = process.platform === 'win32';
+  const shell = isWindows
+    ? process.env.COMSPEC || 'C:\\Windows\\System32\\cmd.exe'
+    : process.env.SHELL || '/bin/bash';
+  const args = isWindows ? [] : ['-il']; // Login + interactive (Unix only)
 
   // Clean environment for shell
   const env = { ...process.env };
@@ -529,7 +567,7 @@ export async function startPty(options: {
   }
 
   // Inject custom prompt for zsh via ZDOTDIR
-  if (shell.endsWith('/zsh') || shell === 'zsh') {
+  if (!isWindows && (shell.endsWith('/zsh') || shell === 'zsh')) {
     env.ZDOTDIR = ensureShellConfig();
   }
 
