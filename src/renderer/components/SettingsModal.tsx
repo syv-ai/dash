@@ -33,7 +33,10 @@ import type {
 const DASH_DEFAULT_ATTRIBUTION =
   '\n\nCo-Authored-By: Claude <noreply@anthropic.com> via Dash <dash@syv.ai>';
 
+type SettingsTab = 'general' | 'appearance' | 'keybindings' | 'pixel-agents';
+
 interface SettingsModalProps {
+  initialTab?: string;
   theme: 'light' | 'dark';
   onThemeChange: (theme: 'light' | 'dark') => void;
   diffContextLines: number | null;
@@ -456,6 +459,7 @@ function OfficeForm({
 }
 
 export function SettingsModal({
+  initialTab,
   theme,
   onThemeChange,
   diffContextLines,
@@ -482,8 +486,11 @@ export function SettingsModal({
   pixelAgentsStatus,
   onClose,
 }: SettingsModalProps) {
-  const [tab, setTab] = useState<'general' | 'appearance' | 'keybindings' | 'pixel-agents'>(
-    'general',
+  const validTabs: SettingsTab[] = ['general', 'appearance', 'keybindings', 'pixel-agents'];
+  const [tab, setTab] = useState<SettingsTab>(
+    initialTab && validTabs.includes(initialTab as SettingsTab)
+      ? (initialTab as SettingsTab)
+      : 'general',
   );
   const [claudeInfo, setClaudeInfo] = useState<{
     installed: boolean;
@@ -599,9 +606,16 @@ export function SettingsModal({
             >
               {t.label}
               {t.id === 'pixel-agents' && (
-                <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-primary/15 text-primary leading-none">
-                  Experimental
-                </span>
+                <>
+                  {Object.values(pixelAgentsStatus.offices).some(
+                    (s) => s === 'connected' || s === 'registered',
+                  ) && (
+                    <span className="ml-1.5 w-2 h-2 rounded-full bg-[hsl(var(--git-added))] inline-block" />
+                  )}
+                  <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-primary/15 text-primary leading-none">
+                    Experimental
+                  </span>
+                </>
               )}
             </button>
           ))}

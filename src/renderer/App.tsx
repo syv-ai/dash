@@ -68,6 +68,7 @@ export function App() {
     project: string;
   } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>();
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('theme') as 'light' | 'dark') || 'dark';
   });
@@ -1063,7 +1064,14 @@ export function App() {
               onDeleteTask={handleDeleteTask}
               onArchiveTask={handleArchiveTask}
               onRestoreTask={handleRestoreTask}
-              onOpenSettings={() => setShowSettings(true)}
+              onOpenSettings={() => {
+                setSettingsInitialTab(undefined);
+                setShowSettings(true);
+              }}
+              onOpenPixelAgents={() => {
+                setSettingsInitialTab('pixel-agents');
+                setShowSettings(true);
+              }}
               onShowCommitGraph={(projectId) => {
                 setActiveProjectId(projectId);
                 setShowCommitGraph(true);
@@ -1073,6 +1081,11 @@ export function App() {
               taskActivity={taskActivity}
               remoteControlStates={remoteControlStates}
               onReorderProjects={handleReorderProjects}
+              pixelAgentsConnectedCount={
+                Object.values(pixelAgentsStatus.offices).filter(
+                  (s) => s === 'connected' || s === 'registered',
+                ).length
+              }
             />
           </ShellDrawerWrapper>
         </Panel>
@@ -1258,6 +1271,7 @@ export function App() {
 
       {showSettings && (
         <SettingsModal
+          initialTab={settingsInitialTab}
           theme={theme}
           onThemeChange={(t) => {
             setTheme(t);
