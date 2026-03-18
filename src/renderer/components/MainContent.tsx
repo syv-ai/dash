@@ -13,6 +13,7 @@ interface MainContentProps {
   tasks?: Task[];
   activeTaskId?: string | null;
   taskActivity?: Record<string, 'busy' | 'idle' | 'waiting'>;
+  unseenTaskIds?: Set<string>;
   remoteControlStates?: Record<string, RemoteControlState>;
   onSelectTask?: (id: string) => void;
   onEnableRemoteControl?: (taskId: string) => void;
@@ -33,6 +34,7 @@ export function MainContent({
   tasks = [],
   activeTaskId,
   taskActivity = {},
+  unseenTaskIds,
   remoteControlStates = {},
   onSelectTask,
   onEnableRemoteControl,
@@ -139,9 +141,11 @@ export function MainContent({
                       ? 'bg-orange-500'
                       : taskActivity[task.id] === 'busy'
                         ? 'bg-amber-400 animate-pulse'
-                        : taskActivity[task.id] === 'idle'
-                          ? 'bg-green-400'
-                          : 'bg-muted-foreground/30'
+                        : taskActivity[task.id] === 'idle' && unseenTaskIds?.has(task.id)
+                          ? 'bg-blue-400'
+                          : taskActivity[task.id] === 'idle'
+                            ? 'bg-green-400'
+                            : 'bg-muted-foreground/30'
                   }`}
                 />
                 <span className="truncate max-w-[140px]">{task.name}</span>

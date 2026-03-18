@@ -150,6 +150,36 @@ export function App() {
     notificationSoundRef.current = notificationSound;
   }, [notificationSound]);
 
+  const [unseenTaskIds, setUnseenTaskIds] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem('unseenTaskIds');
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  const activeTaskIdRef = useRef(activeTaskId);
+  useEffect(() => {
+    activeTaskIdRef.current = activeTaskId;
+  }, [activeTaskId]);
+
+  // Persist unseenTaskIds to localStorage
+  useEffect(() => {
+    localStorage.setItem('unseenTaskIds', JSON.stringify([...unseenTaskIds]));
+  }, [unseenTaskIds]);
+
+  // Clear unseen when a task becomes active
+  useEffect(() => {
+    if (!activeTaskId) return;
+    setUnseenTaskIds((prev) => {
+      if (!prev.has(activeTaskId)) return prev;
+      const next = new Set(prev);
+      next.delete(activeTaskId);
+      return next;
+    });
+  }, [activeTaskId]);
+
   // Git state
   const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
   const [gitLoading, setGitLoading] = useState(false);
@@ -227,10 +257,18 @@ export function App() {
       }
       // Detect any busy→idle transition (only for PTYs that completed a full work cycle)
       // Skip transitions from 'waiting' — those are not task completions
+      const newlyDoneIds: string[] = [];
       for (const [id, state] of Object.entries(newActivity)) {
         if (prevActivity[id] === 'busy' && state === 'idle' && hasBeenIdle.has(id)) {
-          playNotificationSound(notificationSoundRef.current);
-          break; // one sound per update, even if multiple tasks transition
+          newlyDoneIds.push(id);
+        }
+      }
+      if (newlyDoneIds.length > 0) {
+        playNotificationSound(notificationSoundRef.current);
+        const currentActiveId = activeTaskIdRef.current;
+        const toMarkUnseen = newlyDoneIds.filter((id) => id !== currentActiveId);
+        if (toMarkUnseen.length > 0) {
+          setUnseenTaskIds((prev) => new Set([...prev, ...toMarkUnseen]));
         }
       }
       // Mark PTYs that have reached idle (so the *next* busy→idle triggers)
@@ -1079,6 +1117,7 @@ export function App() {
               collapsed={sidebarCollapsed}
               onToggleCollapse={toggleSidebar}
               taskActivity={taskActivity}
+              unseenTaskIds={unseenTaskIds}
               remoteControlStates={remoteControlStates}
               onReorderProjects={handleReorderProjects}
               pixelAgentsConnectedCount={
@@ -1122,6 +1161,7 @@ export function App() {
               tasks={activeProjectTasks}
               activeTaskId={activeTaskId}
               taskActivity={taskActivity}
+              unseenTaskIds={unseenTaskIds}
               remoteControlStates={remoteControlStates}
               onSelectTask={setActiveTaskId}
               onEnableRemoteControl={(taskId) => setRemoteControlModalPtyId(taskId)}
