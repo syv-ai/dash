@@ -112,6 +112,9 @@ export class PixelAgentsService {
   static start(): void {
     if (PixelAgentsService.child) return;
 
+    // Ensure config file has decrypted tokens (may have been scrubbed by stop())
+    PixelAgentsService.hydrateConfigTokens();
+
     const binPath = PixelAgentsService.resolveBinPath();
     if (!binPath) {
       console.error('[pixel-agents] Could not resolve watcher binary');
@@ -244,6 +247,24 @@ export class PixelAgentsService {
         token: null,
         enabled: o.enabled,
       }));
+      writeFileSync(getConfigPath(), JSON.stringify(raw, null, 2), { mode: 0o600 });
+    } catch {
+      // Best effort
+    }
+  }
+
+  /** Write decrypted tokens from encrypted storage into the config file before spawning */
+  private static hydrateConfigTokens(): void {
+    try {
+      if (!existsSync(getConfigPath())) return;
+      const raw = JSON.parse(readFileSync(getConfigPath(), 'utf-8'));
+      const decryptedTokens = ConnectionConfigService.getAllPixelAgentsTokens();
+      raw.offices = (raw.offices || []).map(
+        (o: { id: string; url: string; token?: string; enabled: boolean }) => ({
+          ...o,
+          token: decryptedTokens[o.id] || null,
+        }),
+      );
       writeFileSync(getConfigPath(), JSON.stringify(raw, null, 2), { mode: 0o600 });
     } catch {
       // Best effort
