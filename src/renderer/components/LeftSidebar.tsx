@@ -38,6 +38,7 @@ interface LeftSidebarProps {
   collapsed: boolean;
   onToggleCollapse: () => void;
   taskActivity: Record<string, 'busy' | 'idle' | 'waiting'>;
+  unseenTaskIds?: Set<string>;
   remoteControlStates?: Record<string, RemoteControlState>;
   onReorderProjects?: (reordered: Project[]) => void;
   pixelAgentsConnectedCount?: number;
@@ -63,6 +64,7 @@ export function LeftSidebar({
   collapsed,
   onToggleCollapse,
   taskActivity,
+  unseenTaskIds,
   remoteControlStates = {},
   onReorderProjects,
   pixelAgentsConnectedCount = 0,
@@ -408,6 +410,10 @@ export function LeftSidebar({
                             ) : activity === 'busy' ? (
                               <Tooltip content="Claude is working">
                                 <div className="w-[6px] h-[6px] rounded-full bg-amber-400 status-pulse flex-shrink-0" />
+                              </Tooltip>
+                            ) : activity === 'idle' && unseenTaskIds?.has(task.id) ? (
+                              <Tooltip content="Done (unseen)">
+                                <div className="w-[6px] h-[6px] rounded-full bg-blue-400 flex-shrink-0" />
                               </Tooltip>
                             ) : activity === 'idle' ? (
                               <Tooltip content="Idle">
