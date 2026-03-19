@@ -364,6 +364,7 @@ export async function startDirectPty(options: {
 
   proc.onData((data: string) => {
     bannerFilter(data);
+    activityMonitor.noteData(options.id);
     remoteControlService.onPtyData(options.id, data);
   });
 
