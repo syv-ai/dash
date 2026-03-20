@@ -15,6 +15,7 @@
     "rebuild": "electron-rebuild -f -w node-pty,better-sqlite3",
     "package:mac": "pnpm build && electron-builder --mac",
     "package:linux": "pnpm build && electron-builder --linux",
+    "package:win": "pnpm build && electron-builder --win",
     "type-check": "tsc --noEmit && tsc -p tsconfig.main.json --noEmit",
     "drizzle:generate": "drizzle-kit generate",
     "prepare": "husky"
@@ -73,6 +74,18 @@
       ],
       "icon": "build/icon.svg",
       "category": "Development",
+      "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
       "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
     }
   },

@@ -50,13 +50,25 @@ function fixPath(): void {
       path.join(home, '.local/bin'),
       '/usr/local/bin',
     );
+  } else if (process.platform === 'win32') {
+    const home = os.homedir();
+    const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
+    const localAppData = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
+    additions.push(
+      path.join(appData, 'npm'),
+      path.join(localAppData, 'Programs', 'nodejs'),
+      'C:\\Program Files\\nodejs',
+      'C:\\Program Files\\Git\\bin',
+      'C:\\Program Files\\Git\\usr\\bin',
+    );
   }
 
-  const pathSet = new Set(currentPath.split(':'));
+  const pathSep = process.platform === 'win32' ? ';' : ':';
+  const pathSet = new Set(currentPath.split(pathSep));
   for (const p of additions) {
     pathSet.add(p);
   }
-  process.env.PATH = [...pathSet].join(':');
+  process.env.PATH = [...pathSet].join(pathSep);
 }
 
 fixPath();
@@ -143,8 +155,10 @@ export let claudeCliCache: { installed: boolean; version: string | null; path: s
 
 async function detectClaudeCli(): Promise<void> {
   try {
-    const { stdout } = await execFileAsync('which', ['claude']);
-    const claudePath = stdout.trim();
+    const findCmd = process.platform === 'win32' ? 'where.exe' : 'which';
+    const { stdout } = await execFileAsync(findCmd, ['claude']);
+    // where.exe may return multiple lines; take the first
+    const claudePath = stdout.trim().split(/\r?\n/)[0].trim();
     const { stdout: versionOut } = await execFileAsync(claudePath, ['--version']);
     claudeCliCache = {
       installed: true,

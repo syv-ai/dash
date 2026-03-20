@@ -78,10 +78,16 @@ async function findClaudePath(): Promise<string | null> {
     // Best effort
   }
 
-  // 2. Try `which claude` (works when PATH is correct)
+  // 2. Try `which`/`where.exe` (works when PATH is correct)
   try {
-    const { stdout } = await execFileAsync('which', ['claude']);
-    const resolved = stdout.trim();
+    const findCmd = process.platform === 'win32' ? 'where.exe' : 'which';
+    const { stdout } = await execFileAsync(findCmd, ['claude']);
+    // where.exe may return multiple lines; prefer .cmd on Windows
+    const lines = stdout.trim().split(/\r?\n/).filter(Boolean);
+    const resolved =
+      process.platform === 'win32'
+        ? (lines.find((l) => l.toLowerCase().endsWith('.cmd')) || lines[0])?.trim()
+        : lines[0]?.trim();
     if (resolved) {
       cachedClaudePath = resolved;
       return cachedClaudePath;
@@ -92,14 +98,21 @@ async function findClaudePath(): Promise<string | null> {
 
   // 3. Direct probe common install locations
   const home = os.homedir();
-  const candidates = [
-    path.join(home, '.local/bin/claude'),
-    '/opt/homebrew/bin/claude',
-    '/usr/local/bin/claude',
-  ];
+  const candidates =
+    process.platform === 'win32'
+      ? [
+          path.join(
+            process.env.APPDATA || path.join(home, 'AppData', 'Roaming'),
+            'npm',
+            'claude.cmd',
+          ),
+          path.join(home, 'AppData', 'Local', 'Programs', 'nodejs', 'claude.cmd'),
+          path.join('C:\\Program Files\\nodejs', 'claude.cmd'),
+        ]
+      : [path.join(home, '.local/bin/claude'), '/opt/homebrew/bin/claude', '/usr/local/bin/claude'];
   for (const candidate of candidates) {
     try {
-      await fs.promises.access(candidate, fs.constants.X_OK);
+      await fs.promises.access(candidate, fs.constants.F_OK);
       cachedClaudePath = candidate;
       return cachedClaudePath;
     } catch {
@@ -115,17 +128,39 @@ async function findClaudePath(): Promise<string | null> {
  * Build minimal environment for direct CLI spawn (no shell config overhead).
  */
 function buildDirectEnv(isDark: boolean): Record<string, string> {
+  const isWin = process.platform === 'win32';
   const env: Record<string, string> = {
-    TERM: 'xterm-256color',
-    COLORTERM: 'truecolor',
     TERM_PROGRAM: 'dash',
     HOME: os.homedir(),
-    USER: os.userInfo().username,
     PATH: process.env.PATH || '',
     // Tell CLI apps about terminal background (rxvt convention)
     // Format: "fg;bg" where higher values = lighter colors
     COLORFGBG: isDark ? '15;0' : '0;15',
   };
+
+  if (isWin) {
+    // Windows requires several env vars for basic operation
+    env.USERNAME = os.userInfo().username;
+    const winVars = [
+      'APPDATA',
+      'LOCALAPPDATA',
+      'USERPROFILE',
+      'TEMP',
+      'TMP',
+      'SystemRoot',
+      'SystemDrive',
+      'WINDIR',
+      'COMSPEC',
+      'PATHEXT',
+    ];
+    for (const key of winVars) {
+      if (process.env[key]) env[key] = process.env[key]!;
+    }
+  } else {
+    env.TERM = 'xterm-256color';
+    env.COLORTERM = 'truecolor';
+    env.USER = os.userInfo().username;
+  }
 
   // Auth passthrough
   const authVars = [
@@ -202,7 +237,9 @@ function writeHookSettings(cwd: string, ptyId: string): void {
 
   const claudeDir = path.join(cwd, '.claude');
   const settingsPath = path.join(claudeDir, 'settings.local.json');
-  const curlBase = `curl -s --connect-timeout 2 http://127.0.0.1:${port}`;
+  // On Windows, use curl.exe to avoid the PowerShell Invoke-WebRequest alias
+  const curlBin = process.platform === 'win32' ? 'curl.exe' : 'curl';
+  const curlBase = `${curlBin} -s --connect-timeout 2 http://127.0.0.1:${port}`;
 
   const hookSettings: Record<string, unknown[]> = {
     Stop: [{ hooks: [{ type: 'command', command: `${curlBase}/hook/stop?ptyId=${ptyId}` }] }],
@@ -215,7 +252,7 @@ function writeHookSettings(cwd: string, ptyId: string): void {
         hooks: [
           {
             type: 'command',
-            command: `curl -s --connect-timeout 2 -X POST -H "Content-Type: application/json" -d @- http://127.0.0.1:${port}/hook/notification?ptyId=${ptyId}`,
+            command: `${curlBin} -s --connect-timeout 2 -X POST -H "Content-Type: application/json" -d @- http://127.0.0.1:${port}/hook/notification?ptyId=${ptyId}`,
           },
         ],
       },
@@ -224,7 +261,7 @@ function writeHookSettings(cwd: string, ptyId: string): void {
         hooks: [
           {
             type: 'command',
-            command: `curl -s --connect-timeout 2 -X POST -H "Content-Type: application/json" -d @- http://127.0.0.1:${port}/hook/notification?ptyId=${ptyId}`,
+            command: `${curlBin} -s --connect-timeout 2 -X POST -H "Content-Type: application/json" -d @- http://127.0.0.1:${port}/hook/notification?ptyId=${ptyId}`,
           },
         ],
       },
@@ -240,7 +277,8 @@ function writeHookSettings(cwd: string, ptyId: string): void {
         hooks: [
           {
             type: 'command',
-            command: `cat "${contextPath}"`,
+            command:
+              process.platform === 'win32' ? `type "${contextPath}"` : `cat "${contextPath}"`,
           },
         ],
       },
@@ -337,7 +375,11 @@ export async function startDirectPty(options: {
 
   writeHookSettings(options.cwd, options.id);
 
-  const proc = pty.spawn(claudePath, args, {
+  // On Windows, .cmd files must be invoked through cmd.exe
+  const spawnFile = process.platform === 'win32' ? 'cmd.exe' : claudePath;
+  const spawnArgs: string[] = process.platform === 'win32' ? ['/c', claudePath, ...args] : args;
+
+  const proc = pty.spawn(spawnFile, spawnArgs, {
     name: 'xterm-256color',
     cols: options.cols,
     rows: options.rows,
@@ -516,22 +558,26 @@ export async function startPty(options: {
 
   const pty = getPty();
 
-  const shell = process.env.SHELL || '/bin/bash';
-  const args = ['-il']; // Login + interactive
+  const isWin = process.platform === 'win32';
+  const shell = isWin ? 'powershell.exe' : process.env.SHELL || '/bin/bash';
+  const args = isWin ? ['-NoLogo'] : ['-il']; // Login + interactive on Unix
 
   // Clean environment for shell
   const env = { ...process.env };
   // Remove Electron packaging artifacts
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.ELECTRON_NO_ATTACH_CONSOLE;
-  // Enable macOS zsh OSC 7 cwd reporting (sources /etc/zshrc_Apple_Terminal)
-  if (process.platform === 'darwin') {
-    env.TERM_PROGRAM = 'Apple_Terminal';
-  }
 
-  // Inject custom prompt for zsh via ZDOTDIR
-  if (shell.endsWith('/zsh') || shell === 'zsh') {
-    env.ZDOTDIR = ensureShellConfig();
+  if (!isWin) {
+    // Enable macOS zsh OSC 7 cwd reporting (sources /etc/zshrc_Apple_Terminal)
+    if (process.platform === 'darwin') {
+      env.TERM_PROGRAM = 'Apple_Terminal';
+    }
+
+    // Inject custom prompt for zsh via ZDOTDIR
+    if (shell.endsWith('/zsh') || shell === 'zsh') {
+      env.ZDOTDIR = ensureShellConfig();
+    }
   }
 
   const proc = pty.spawn(shell, args, {
