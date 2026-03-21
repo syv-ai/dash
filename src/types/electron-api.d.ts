@@ -276,7 +276,7 @@ export interface ElectronAPI {
     }) => void,
   ) => () => void;
   onAutoUpdateDownloaded: (callback: () => void) => () => void;
-  onAutoUpdateError: (callback: (message: string) => void) => () => void;
+  onAutoUpdateError: (callback: (info: { message: string; detail: string }) => void) => () => void;
 }
 
 declare global {
