@@ -19,6 +19,9 @@ interface PtyRecord {
 
 const ptys = new Map<string, PtyRecord>();
 
+/** Tracks all settings.local.json paths Dash has written hooks to, for cleanup on exit. */
+const writtenSettingsPaths = new Set<string>();
+
 const DASH_DEFAULT_ATTRIBUTION =
   '\n\nCo-Authored-By: Claude <noreply@anthropic.com> via Dash <dash@syv.ai>';
 
@@ -205,9 +208,25 @@ function writeHookSettings(cwd: string, ptyId: string): void {
   const curlBase = `curl -s --connect-timeout 2 http://127.0.0.1:${port}`;
 
   const hookSettings: Record<string, unknown[]> = {
-    Stop: [{ hooks: [{ type: 'command', command: `${curlBase}/hook/stop?ptyId=${ptyId}` }] }],
+    Stop: [
+      {
+        hooks: [
+          {
+            type: 'command',
+            command: `${curlBase}/hook/stop?ptyId=${ptyId} || exit 0`,
+          },
+        ],
+      },
+    ],
     UserPromptSubmit: [
-      { hooks: [{ type: 'command', command: `${curlBase}/hook/busy?ptyId=${ptyId}` }] },
+      {
+        hooks: [
+          {
+            type: 'command',
+            command: `${curlBase}/hook/busy?ptyId=${ptyId} || exit 0`,
+          },
+        ],
+      },
     ],
     Notification: [
       {
@@ -215,7 +234,7 @@ function writeHookSettings(cwd: string, ptyId: string): void {
         hooks: [
           {
             type: 'command',
-            command: `curl -s --connect-timeout 2 -X POST -H "Content-Type: application/json" -d @- http://127.0.0.1:${port}/hook/notification?ptyId=${ptyId}`,
+            command: `curl -s --connect-timeout 2 -X POST -H "Content-Type: application/json" -d @- http://127.0.0.1:${port}/hook/notification?ptyId=${ptyId} || exit 0`,
           },
         ],
       },
@@ -224,7 +243,7 @@ function writeHookSettings(cwd: string, ptyId: string): void {
         hooks: [
           {
             type: 'command',
-            command: `curl -s --connect-timeout 2 -X POST -H "Content-Type: application/json" -d @- http://127.0.0.1:${port}/hook/notification?ptyId=${ptyId}`,
+            command: `curl -s --connect-timeout 2 -X POST -H "Content-Type: application/json" -d @- http://127.0.0.1:${port}/hook/notification?ptyId=${ptyId} || exit 0`,
           },
         ],
       },
@@ -278,12 +297,56 @@ function writeHookSettings(cwd: string, ptyId: string): void {
     merged.attribution = { commit: effectiveAttribution };
 
     fs.writeFileSync(settingsPath, JSON.stringify(merged, null, 2) + '\n');
+    writtenSettingsPaths.add(settingsPath);
     console.error(
       `[writeHookSettings] Wrote ${settingsPath} (attribution: ${commitAttributionSetting === undefined ? 'default' : commitAttributionSetting || 'none'})`,
     );
   } catch (err) {
     console.error('[writeHookSettings] Failed:', err);
   }
+}
+
+/**
+ * Remove Dash-written hooks and attribution from all settings.local.json files
+ * that were written during this session. Called on app quit to prevent stale hooks.
+ */
+export function cleanupHookSettings(): void {
+  const hookKeys = ['Stop', 'UserPromptSubmit', 'Notification', 'SessionStart'];
+
+  for (const settingsPath of writtenSettingsPaths) {
+    try {
+      if (!fs.existsSync(settingsPath)) continue;
+
+      const raw = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+      const hooks = raw.hooks;
+
+      if (hooks && typeof hooks === 'object') {
+        for (const key of hookKeys) {
+          delete hooks[key];
+        }
+        // Remove hooks object entirely if empty
+        if (Object.keys(hooks).length === 0) {
+          delete raw.hooks;
+        }
+      }
+
+      // Remove Dash attribution
+      delete raw.attribution;
+
+      // If nothing meaningful remains, delete the file
+      if (Object.keys(raw).length === 0) {
+        fs.unlinkSync(settingsPath);
+        console.error(`[cleanupHookSettings] Removed empty ${settingsPath}`);
+      } else {
+        fs.writeFileSync(settingsPath, JSON.stringify(raw, null, 2) + '\n');
+        console.error(`[cleanupHookSettings] Cleaned hooks from ${settingsPath}`);
+      }
+    } catch (err) {
+      console.error(`[cleanupHookSettings] Failed for ${settingsPath}:`, err);
+    }
+  }
+
+  writtenSettingsPaths.clear();
 }
 
 /**
