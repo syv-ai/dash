@@ -164,6 +164,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Git detection
   detectGit: (folderPath: string) => ipcRenderer.invoke('app:detectGit', folderPath),
+  gitInit: (folderPath: string) => ipcRenderer.invoke('git:init', folderPath),
   detectClaude: () => ipcRenderer.invoke('app:detectClaude'),
 
   // Git operations

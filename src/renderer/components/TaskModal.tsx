@@ -1,5 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, GitBranch, Zap, ChevronDown, Loader2, AlertCircle, Search, Upload } from 'lucide-react';
+import {
+  X,
+  GitBranch,
+  Zap,
+  ChevronDown,
+  Loader2,
+  AlertCircle,
+  Search,
+  Upload,
+  FolderGit2,
+} from 'lucide-react';
 import { SearchableMultiSelect } from './SearchableMultiSelect';
 import type { BranchInfo, GithubIssue, AzureDevOpsWorkItem, LinkedItem } from '../../shared/types';
 import { isAdoRemote } from '../../shared/urls';
@@ -16,9 +26,11 @@ export interface CreateTaskOptions {
 interface TaskModalProps {
   projectPath: string;
   projectId?: string;
+  isGitRepo: boolean;
   gitRemote: string | null;
   onClose: () => void;
   onCreate: (options: CreateTaskOptions) => void;
+  onGitInit?: () => void;
 }
 
 function GithubIssueRow({ issue }: { issue: GithubIssue }) {
@@ -76,14 +88,18 @@ function AdoWorkItemRow({ item }: { item: AzureDevOpsWorkItem }) {
 export function TaskModal({
   projectPath,
   projectId,
+  isGitRepo,
   gitRemote,
   onClose,
   onCreate,
+  onGitInit,
 }: TaskModalProps) {
   const [name, setName] = useState('');
-  const [useWorktree, setUseWorktree] = useState(true);
+  const [gitReady, setGitReady] = useState(isGitRepo);
+  const [useWorktree, setUseWorktree] = useState(isGitRepo);
   const [autoApprove, setAutoApprove] = useState(() => localStorage.getItem('yoloMode') === 'true');
   const [pushRemote, setPushRemote] = useState(true);
+  const [gitInitLoading, setGitInitLoading] = useState(false);
 
   // Branch selector state
   const [branches, setBranches] = useState<BranchInfo[]>([]);
@@ -168,6 +184,20 @@ export function TaskModal({
       setBranchError(String(err));
     } finally {
       setBranchLoading(false);
+    }
+  }
+
+  async function handleGitInit() {
+    setGitInitLoading(true);
+    try {
+      const resp = await window.electronAPI.gitInit(projectPath);
+      if (resp.success) {
+        setGitReady(true);
+        setUseWorktree(true);
+        onGitInit?.();
+      }
+    } finally {
+      setGitInitLoading(false);
     }
   }
 
@@ -263,25 +293,42 @@ export function TaskModal({
           </div>
 
           {/* Worktree toggle */}
-          <div className="mb-4">
-            <label className="flex items-center gap-3 cursor-pointer group">
-              <div className="relative">
-                <input
-                  type="checkbox"
-                  checked={useWorktree}
-                  onChange={(e) => setUseWorktree(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-8 h-[18px] rounded-full bg-accent peer-checked:bg-primary/80 transition-colors duration-200" />
-                <div className="absolute top-[3px] left-[3px] w-3 h-3 rounded-full bg-muted-foreground/40 peer-checked:bg-primary-foreground peer-checked:translate-x-[14px] transition-all duration-200" />
-              </div>
-              <div className="flex items-center gap-2">
-                <GitBranch size={13} className="text-muted-foreground/40" strokeWidth={1.8} />
-                <span className="text-[13px] text-foreground/80">Git worktree</span>
-                <span className="text-[11px] text-muted-foreground/40">isolated branch</span>
-              </div>
-            </label>
-          </div>
+          {gitReady ? (
+            <div className="mb-4">
+              <label className="flex items-center gap-3 cursor-pointer group">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    checked={useWorktree}
+                    onChange={(e) => setUseWorktree(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-8 h-[18px] rounded-full bg-accent peer-checked:bg-primary/80 transition-colors duration-200" />
+                  <div className="absolute top-[3px] left-[3px] w-3 h-3 rounded-full bg-muted-foreground/40 peer-checked:bg-primary-foreground peer-checked:translate-x-[14px] transition-all duration-200" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <GitBranch size={13} className="text-muted-foreground/40" strokeWidth={1.8} />
+                  <span className="text-[13px] text-foreground/80">Git worktree</span>
+                  <span className="text-[11px] text-muted-foreground/40">isolated branch</span>
+                </div>
+              </label>
+            </div>
+          ) : (
+            <div className="mb-4 flex items-center gap-2 px-3 py-2.5 rounded-lg bg-surface-1 border border-border/40">
+              <FolderGit2 size={13} className="text-muted-foreground/40" strokeWidth={1.8} />
+              <span className="text-[12px] text-muted-foreground/60 flex-1">
+                Not a git repository
+              </span>
+              <button
+                type="button"
+                onClick={handleGitInit}
+                disabled={gitInitLoading}
+                className="text-[11px] font-medium text-primary hover:text-primary/80 transition-colors disabled:opacity-50"
+              >
+                {gitInitLoading ? 'Initializing...' : 'Initialize Git'}
+              </button>
+            </div>
+          )}
 
           {/* Branch selector */}
           {useWorktree && (

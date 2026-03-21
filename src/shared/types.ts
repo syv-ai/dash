@@ -2,6 +2,7 @@ export interface Project {
   id: string;
   name: string;
   path: string;
+  isGitRepo: boolean;
   gitRemote: string | null;
   gitBranch: string | null;
   baseRef: string | null;

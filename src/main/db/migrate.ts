@@ -1,3 +1,5 @@
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { getRawDb } from './client';
 
 /**
@@ -108,6 +110,28 @@ export function runMigrations(): void {
     rawDb.exec(`ALTER TABLE projects ADD COLUMN worktree_setup_script TEXT`);
   } catch {
     /* already exists */
+  }
+
+  try {
+    rawDb.exec(`ALTER TABLE projects ADD COLUMN is_git_repo INTEGER DEFAULT 1`);
+  } catch {
+    /* already exists */
+  }
+
+  // Backfill: sync is_git_repo with actual filesystem state
+  try {
+    const allProjects = rawDb.prepare(`SELECT id, path FROM projects`).all() as {
+      id: string;
+      path: string;
+    }[];
+    for (const proj of allProjects) {
+      const hasGit = existsSync(join(proj.path, '.git'));
+      rawDb
+        .prepare(`UPDATE projects SET is_git_repo = ? WHERE id = ?`)
+        .run(hasGit ? 1 : 0, proj.id);
+    }
+  } catch {
+    /* best effort */
   }
 
   rawDb.pragma('foreign_keys = ON');

@@ -36,65 +36,103 @@ export class GitService {
    * Fetch from remote and list remote branches sorted by most recent commit.
    */
   static async fetchAndListBranches(cwd: string): Promise<BranchInfo[]> {
-    // Fetch with prune to sync with remote (30s timeout)
+    // Check if origin remote exists
+    let hasOrigin = false;
     try {
-      await execFileAsync('git', ['fetch', '--prune', 'origin'], {
-        cwd,
-        timeout: 30000,
-      });
-    } catch (err: unknown) {
-      const msg = String((err as { stderr?: string }).stderr || err);
-      if (/does not appear to be a git repository/i.test(msg)) {
-        throw new Error('No remote named "origin" found. Add a remote or disable worktree mode.');
-      } else if (/could not read from remote repository/i.test(msg)) {
-        throw new Error(
-          'Could not connect to remote repository. Check your network connection and SSH/HTTPS credentials.',
-        );
-      } else if (/authentication failed/i.test(msg) || /could not resolve host/i.test(msg)) {
-        throw new Error(
-          'Authentication failed or host not reachable. Check your credentials and network.',
-        );
-      } else if (/not a git repository/i.test(msg)) {
-        throw new Error('This directory is not a git repository.');
-      } else if (/timed out/i.test(msg) || (err as { killed?: boolean }).killed) {
-        throw new Error('Fetch timed out. Check your network connection and try again.');
-      } else {
-        // Extract just the "fatal:" line from stderr for a cleaner message
-        const fatalMatch = msg.match(/fatal:\s*(.+)/i);
-        throw new Error(
-          fatalMatch
-            ? `Git fetch failed: ${fatalMatch[1].trim()}`
-            : `Git fetch failed: ${msg.split('\n')[0].trim()}`,
-        );
+      const { stdout } = await execFileAsync('git', ['remote'], { cwd, timeout: 5000 });
+      hasOrigin = stdout.split('\n').some((r) => r.trim() === 'origin');
+    } catch {
+      // no remotes
+    }
+
+    if (hasOrigin) {
+      // Fetch with prune to sync with remote (30s timeout)
+      try {
+        await execFileAsync('git', ['fetch', '--prune', 'origin'], {
+          cwd,
+          timeout: 30000,
+        });
+      } catch (err: unknown) {
+        const msg = String((err as { stderr?: string }).stderr || err);
+        if (/could not read from remote repository/i.test(msg)) {
+          throw new Error(
+            'Could not connect to remote repository. Check your network connection and SSH/HTTPS credentials.',
+          );
+        } else if (/authentication failed/i.test(msg) || /could not resolve host/i.test(msg)) {
+          throw new Error(
+            'Authentication failed or host not reachable. Check your credentials and network.',
+          );
+        } else if (/not a git repository/i.test(msg)) {
+          throw new Error('This directory is not a git repository.');
+        } else if (/timed out/i.test(msg) || (err as { killed?: boolean }).killed) {
+          throw new Error('Fetch timed out. Check your network connection and try again.');
+        } else {
+          const fatalMatch = msg.match(/fatal:\s*(.+)/i);
+          throw new Error(
+            fatalMatch
+              ? `Git fetch failed: ${fatalMatch[1].trim()}`
+              : `Git fetch failed: ${msg.split('\n')[0].trim()}`,
+          );
+        }
       }
+
+      // List remote branches sorted by committerdate descending
+      const { stdout } = await execFileAsync(
+        'git',
+        [
+          'branch',
+          '-r',
+          '--format=%(refname:short)\t%(objectname:short)\t%(committerdate:relative)',
+          '--sort=-committerdate',
+        ],
+        { cwd, timeout: 15000 },
+      );
+
+      const branches: BranchInfo[] = [];
+      for (const line of stdout.split('\n').filter(Boolean)) {
+        const [ref, shortHash, ...dateParts] = line.split('\t');
+        if (!ref || ref === 'origin/HEAD') continue;
+        const name = ref.replace(/^origin\//, '');
+        branches.push({
+          name,
+          ref,
+          shortHash: shortHash || '',
+          relativeDate: dateParts.join('\t') || '',
+        });
+      }
+
+      return branches;
     }
 
-    // List remote branches sorted by committerdate descending
-    const { stdout } = await execFileAsync(
-      'git',
-      [
-        'branch',
-        '-r',
-        '--format=%(refname:short)\t%(objectname:short)\t%(committerdate:relative)',
-        '--sort=-committerdate',
-      ],
-      { cwd, timeout: 15000 },
-    );
+    // No remote — fall back to local branches
+    try {
+      const { stdout } = await execFileAsync(
+        'git',
+        [
+          'branch',
+          '--format=%(refname:short)\t%(objectname:short)\t%(committerdate:relative)',
+          '--sort=-committerdate',
+        ],
+        { cwd, timeout: 15000 },
+      );
 
-    const branches: BranchInfo[] = [];
-    for (const line of stdout.split('\n').filter(Boolean)) {
-      const [ref, shortHash, ...dateParts] = line.split('\t');
-      if (!ref || ref === 'origin/HEAD') continue;
-      const name = ref.replace(/^origin\//, '');
-      branches.push({
-        name,
-        ref,
-        shortHash: shortHash || '',
-        relativeDate: dateParts.join('\t') || '',
-      });
+      const branches: BranchInfo[] = [];
+      for (const line of stdout.split('\n').filter(Boolean)) {
+        const [name, shortHash, ...dateParts] = line.split('\t');
+        if (!name) continue;
+        branches.push({
+          name,
+          ref: name,
+          shortHash: shortHash || '',
+          relativeDate: dateParts.join('\t') || '',
+        });
+      }
+
+      return branches;
+    } catch {
+      // No commits yet — no branches to list
+      return [];
     }
-
-    return branches;
   }
 
   /**

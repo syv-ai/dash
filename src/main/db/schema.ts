@@ -7,6 +7,7 @@ export const projects = sqliteTable(
     id: text('id').primaryKey(),
     name: text('name').notNull(),
     path: text('path').notNull(),
+    isGitRepo: integer('is_git_repo', { mode: 'boolean' }).default(true),
     gitRemote: text('git_remote'),
     gitBranch: text('git_branch'),
     baseRef: text('base_ref'),

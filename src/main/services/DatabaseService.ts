@@ -34,6 +34,7 @@ export class DatabaseService {
         id,
         name: data.name,
         path: data.path,
+        isGitRepo: data.isGitRepo ?? true,
         gitRemote: data.gitRemote ?? null,
         gitBranch: data.gitBranch ?? null,
         baseRef: data.baseRef ?? null,
@@ -46,6 +47,7 @@ export class DatabaseService {
         set: {
           name: data.name,
           path: data.path,
+          isGitRepo: data.isGitRepo ?? true,
           gitRemote: data.gitRemote ?? null,
           gitBranch: data.gitBranch ?? null,
           baseRef: data.baseRef ?? null,
@@ -183,6 +185,7 @@ export class DatabaseService {
       id: row.id,
       name: row.name,
       path: row.path,
+      isGitRepo: row.isGitRepo ?? true,
       gitRemote: row.gitRemote,
       gitBranch: row.gitBranch,
       baseRef: row.baseRef,

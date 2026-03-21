@@ -676,6 +676,7 @@ export function App() {
       const saveResp = await window.electronAPI.saveProject({
         name,
         path: folderPath,
+        isGitRepo: gitInfo?.isGitRepo ?? false,
         gitRemote: gitInfo?.remote ?? null,
         gitBranch: gitInfo?.branch ?? null,
       });
@@ -705,6 +706,7 @@ export function App() {
       const saveResp = await window.electronAPI.saveProject({
         name,
         path: clonedPath,
+        isGitRepo: gitInfo?.isGitRepo ?? true,
         gitRemote: gitInfo?.remote ?? null,
         gitBranch: gitInfo?.branch ?? null,
       });
@@ -1271,12 +1273,32 @@ export function App() {
             projects.find((p) => p.id === (taskModalProjectId || activeProjectId))?.path ?? ''
           }
           projectId={taskModalProjectId || activeProjectId || undefined}
+          isGitRepo={
+            projects.find((p) => p.id === (taskModalProjectId || activeProjectId))?.isGitRepo ??
+            false
+          }
           gitRemote={
             projects.find((p) => p.id === (taskModalProjectId || activeProjectId))?.gitRemote ??
             null
           }
           onClose={() => setShowTaskModal(false)}
           onCreate={handleCreateTask}
+          onGitInit={() => {
+            const pid = taskModalProjectId || activeProjectId;
+            const proj = projects.find((p) => p.id === pid);
+            if (proj) {
+              window.electronAPI.detectGit(proj.path).then(async (gitResp) => {
+                const gitInfo = gitResp.success ? gitResp.data : null;
+                await window.electronAPI.saveProject({
+                  ...proj,
+                  isGitRepo: gitInfo?.isGitRepo ?? true,
+                  gitRemote: gitInfo?.remote ?? null,
+                  gitBranch: gitInfo?.branch ?? null,
+                });
+                loadProjects();
+              });
+            }
+          }}
         />
       )}
 
