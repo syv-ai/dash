@@ -182,7 +182,13 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
         setMessages((prev) => [...prev, localMsg]);
       }
 
-      window.electronAPI.ptyInput({ id, data: sendText + '\r' });
+      // Write text first, then submit with \r after a delay.
+      // The TUI detects rapid character input as a paste ("[ Pasted text ]")
+      // and needs time to process it before the submit \r arrives.
+      window.electronAPI.ptyInput({ id, data: sendText });
+      setTimeout(() => {
+        window.electronAPI.ptyInput({ id, data: '\r' });
+      }, 300);
 
       if (!isSlashCommand) {
         setIsBusy(true);
