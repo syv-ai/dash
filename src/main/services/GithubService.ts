@@ -52,17 +52,36 @@ export class GithubService {
   ): Promise<PullRequestInfo | null> {
     const { stdout } = await execFileAsync(
       'gh',
-      ['pr', 'list', '--head', branch, '--json', 'number,title,url', '--limit', '1'],
+      [
+        'pr',
+        'list',
+        '--head',
+        branch,
+        '--state',
+        'all',
+        '--json',
+        'number,title,url,state',
+        '--limit',
+        '5',
+      ],
       { cwd, timeout: TIMEOUT_MS, env: process.env as Record<string, string> },
     );
 
     const prs = JSON.parse(stdout);
     if (!Array.isArray(prs) || prs.length === 0) return null;
 
+    // Prefer open PR, then merged, then closed
+    const sorted = prs.sort((a: { state: string }, b: { state: string }) => {
+      const order: Record<string, number> = { OPEN: 0, MERGED: 1, CLOSED: 2 };
+      return (order[a.state] ?? 3) - (order[b.state] ?? 3);
+    });
+
     return {
-      number: prs[0].number,
-      title: prs[0].title,
-      url: prs[0].url,
+      number: sorted[0].number,
+      title: sorted[0].title,
+      url: sorted[0].url,
+      state:
+        sorted[0].state === 'MERGED' ? 'merged' : sorted[0].state === 'OPEN' ? 'open' : 'closed',
       provider: 'github',
     };
   }

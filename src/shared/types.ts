@@ -267,10 +267,13 @@ export interface AzureDevOpsConfig {
 
 // ── Pull Request Types ──────────────────────────────────────
 
+export type PullRequestState = 'open' | 'merged' | 'closed';
+
 export interface PullRequestInfo {
   number: number;
   title: string;
   url: string;
+  state: PullRequestState;
   provider: 'github' | 'ado';
 }
 
