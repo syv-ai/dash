@@ -60,18 +60,13 @@ export function MainContent({
   useEffect(() => {
     setPrInfo(null);
 
+    const liveBranch = gitStatus?.branch;
     const defaultBranch = activeProject?.baseRef || activeProject?.gitBranch || 'main';
-    if (
-      !activeTask?.branch ||
-      !activeProject ||
-      gitStatus?.branch !== activeTask.branch ||
-      activeTask.branch === defaultBranch
-    ) {
+    if (!liveBranch || !activeProject || liveBranch === defaultBranch) {
       return;
     }
 
     let cancelled = false;
-    const branch = activeTask.branch;
     const remote = activeProject.gitRemote;
 
     (async () => {
@@ -79,11 +74,15 @@ export function MainContent({
         let pr: PullRequestInfo | null = null;
 
         if (remote && isAdoRemote(remote)) {
-          const resp = await window.electronAPI.adoGetPrForBranch(branch, remote, activeProject.id);
+          const resp = await window.electronAPI.adoGetPrForBranch(
+            liveBranch,
+            remote,
+            activeProject.id,
+          );
           if (!cancelled && resp.success) pr = resp.data ?? null;
         } else {
-          const cwd = activeTask.path || activeProject.path;
-          const resp = await window.electronAPI.githubGetPrForBranch(cwd, branch);
+          const cwd = activeTask?.path || activeProject.path;
+          const resp = await window.electronAPI.githubGetPrForBranch(cwd, liveBranch);
           if (!cancelled && resp.success) pr = resp.data ?? null;
         }
 
@@ -96,13 +95,7 @@ export function MainContent({
     return () => {
       cancelled = true;
     };
-  }, [
-    activeTask?.id,
-    activeTask?.branch,
-    activeProject?.id,
-    activeProject?.gitRemote,
-    gitStatus?.branch,
-  ]);
+  }, [activeTask?.id, activeProject?.id, activeProject?.gitRemote, gitStatus?.branch]);
 
   if (!activeProject) {
     return (
