@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { highlightBlock, langFromPath } from './highlightCode';
 import {
   ChevronRight,
   FileText,
@@ -58,39 +59,189 @@ export function ToolUseBlock({ block, result }: ToolUseBlockProps) {
 
       {/* Expanded detail view */}
       {expanded && (
-        <div className="border-t border-border/40">
-          <div className="px-3 py-2" style={{ background: 'hsl(var(--surface-0))' }}>
-            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
-              Input
-            </div>
-            <pre className="text-[11px] font-mono text-foreground/70 whitespace-pre-wrap break-all overflow-x-auto max-h-[200px] overflow-y-auto">
-              {formatJson(block.input)}
-            </pre>
-          </div>
+        <div className="border-t border-border/40">{renderExpandedDetail(block, result)}</div>
+      )}
+    </div>
+  );
+}
 
-          {result && (
-            <div
-              className="px-3 py-2 border-t border-border/40"
-              style={{ background: 'hsl(var(--surface-0))' }}
-            >
-              <div
-                className={`text-[10px] font-medium uppercase tracking-wide mb-1 ${
-                  result.is_error ? 'text-destructive' : 'text-muted-foreground'
-                }`}
-              >
-                {result.is_error ? 'Error' : 'Output'}
-              </div>
-              <pre
-                className={`text-[11px] font-mono whitespace-pre-wrap break-all overflow-x-auto max-h-[200px] overflow-y-auto ${
-                  result.is_error ? 'text-destructive/80' : 'text-foreground/70'
-                }`}
-              >
-                {result.content}
-              </pre>
-            </div>
-          )}
+function renderExpandedDetail(
+  block: ChatContentBlock & { type: 'tool_use' },
+  result?: (ChatContentBlock & { type: 'tool_result' }) | null,
+): React.ReactNode {
+  const input = block.input as Record<string, any>;
+
+  const lang = input.file_path ? langFromPath(input.file_path) : undefined;
+
+  if (block.name === 'Edit') {
+    const oldStr = typeof input.old_string === 'string' ? input.old_string : '';
+    const newStr = typeof input.new_string === 'string' ? input.new_string : '';
+    return buildFullDiff(oldStr, newStr, lang);
+  }
+
+  if (block.name === 'Write') {
+    const content = typeof input.content === 'string' ? input.content : '';
+    const highlighted = highlightBlock(content, lang);
+    const htmlLines = highlighted.split('\n');
+    return (
+      <div className="overflow-y-auto max-h-[400px]">
+        {htmlLines.map((html, i) => (
+          <div
+            key={i}
+            className="flex text-[11px] font-mono leading-relaxed bg-[hsl(var(--git-added))]/10"
+          >
+            <span className="w-10 text-right pr-2 text-muted-foreground/50 select-none flex-shrink-0">
+              {i + 1}
+            </span>
+            <span
+              className="text-foreground/70 whitespace-pre-wrap break-all"
+              dangerouslySetInnerHTML={{ __html: html || '&nbsp;' }}
+            />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // Default: raw JSON input + result
+  return (
+    <>
+      <div className="px-3 py-2" style={{ background: 'hsl(var(--surface-0))' }}>
+        <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
+          Input
+        </div>
+        <pre className="text-[11px] font-mono text-foreground/70 whitespace-pre-wrap break-all overflow-x-auto max-h-[300px] overflow-y-auto">
+          {formatJson(input)}
+        </pre>
+      </div>
+      {result && (
+        <div
+          className="px-3 py-2 border-t border-border/40"
+          style={{ background: 'hsl(var(--surface-0))' }}
+        >
+          <div
+            className={`text-[10px] font-medium uppercase tracking-wide mb-1 ${
+              result.is_error ? 'text-destructive' : 'text-muted-foreground'
+            }`}
+          >
+            {result.is_error ? 'Error' : 'Output'}
+          </div>
+          <pre
+            className={`text-[11px] font-mono whitespace-pre-wrap break-all overflow-x-auto max-h-[300px] overflow-y-auto ${
+              result.is_error ? 'text-destructive/80' : 'text-foreground/70'
+            }`}
+          >
+            {result.content}
+          </pre>
         </div>
       )}
+    </>
+  );
+}
+
+function buildFullDiff(oldStr: string, newStr: string, lang?: string): React.ReactNode {
+  const oldLines = oldStr.split('\n');
+  const newLines = newStr.split('\n');
+
+  // Highlight both versions as complete blocks, then split into lines.
+  // This gives highlight.js full context for multi-line token handling.
+  const oldHighlighted = highlightBlock(oldStr, lang).split('\n');
+  const newHighlighted = highlightBlock(newStr, lang).split('\n');
+
+  // Simple diff: find common prefix and suffix
+  let prefixLen = 0;
+  while (
+    prefixLen < oldLines.length &&
+    prefixLen < newLines.length &&
+    oldLines[prefixLen] === newLines[prefixLen]
+  ) {
+    prefixLen++;
+  }
+
+  let suffixLen = 0;
+  while (
+    suffixLen < oldLines.length - prefixLen &&
+    suffixLen < newLines.length - prefixLen &&
+    oldLines[oldLines.length - 1 - suffixLen] === newLines[newLines.length - 1 - suffixLen]
+  ) {
+    suffixLen++;
+  }
+
+  let lineNum = 1;
+  const rows: React.ReactNode[] = [];
+
+  // Common prefix (context) — use old highlighted (same as new for these lines)
+  for (let i = 0; i < prefixLen; i++) {
+    rows.push(
+      <DiffLine key={`ctx-pre-${lineNum}`} num={lineNum} type="context" html={oldHighlighted[i]} />,
+    );
+    lineNum++;
+  }
+  // Removed lines
+  for (let i = prefixLen; i < oldLines.length - suffixLen; i++) {
+    rows.push(
+      <DiffLine key={`del-${lineNum}`} num={lineNum} type="removed" html={oldHighlighted[i]} />,
+    );
+    lineNum++;
+  }
+  // Added lines
+  let addLineNum = prefixLen + 1;
+  for (let i = prefixLen; i < newLines.length - suffixLen; i++) {
+    rows.push(
+      <DiffLine key={`add-${addLineNum}`} num={addLineNum} type="added" html={newHighlighted[i]} />,
+    );
+    addLineNum++;
+  }
+  // Common suffix (context)
+  for (let i = newLines.length - suffixLen; i < newLines.length; i++) {
+    rows.push(
+      <DiffLine
+        key={`ctx-suf-${addLineNum}`}
+        num={addLineNum}
+        type="context"
+        html={newHighlighted[i]}
+      />,
+    );
+    addLineNum++;
+  }
+
+  return <div className="overflow-y-auto max-h-[400px]">{rows}</div>;
+}
+
+function DiffLine({
+  num,
+  type,
+  html,
+}: {
+  num: number;
+  type: 'context' | 'added' | 'removed';
+  html: string;
+}) {
+  const bg =
+    type === 'added'
+      ? 'bg-[hsl(var(--git-added))]/15'
+      : type === 'removed'
+        ? 'bg-[hsl(var(--git-deleted))]/15'
+        : '';
+  const marker =
+    type === 'added' ? (
+      <span className="text-[hsl(var(--git-added))]">+</span>
+    ) : type === 'removed' ? (
+      <span className="text-[hsl(var(--git-deleted))]">−</span>
+    ) : (
+      <span className="text-muted-foreground/30"> </span>
+    );
+
+  return (
+    <div className={`flex text-[11px] font-mono leading-relaxed ${bg}`}>
+      <span className="w-10 text-right pr-1 text-muted-foreground/40 select-none flex-shrink-0">
+        {num}
+      </span>
+      <span className="w-4 text-center select-none flex-shrink-0">{marker}</span>
+      <span
+        className="text-foreground/70 whitespace-pre-wrap break-all"
+        dangerouslySetInnerHTML={{ __html: html || '&nbsp;' }}
+      />
     </div>
   );
 }
@@ -124,10 +275,11 @@ function formatToolSummary(
       const oldLineCount = oldStr ? oldStr.split('\n').length : 0;
       const newLineCount = newStr ? newStr.split('\n').length : 0;
       const desc = input.replace_all ? ' (all occurrences)' : '';
+      const editLang = input.file_path ? langFromPath(input.file_path) : undefined;
       return {
         icon: <FileEdit {...iconProps} />,
         summary: `Edit(${file})${desc}`,
-        preview: buildDiffPreview(oldStr, newStr, oldLineCount, newLineCount),
+        preview: buildDiffPreview(oldStr, newStr, oldLineCount, newLineCount, editLang),
       };
     }
 
@@ -244,17 +396,18 @@ function buildDiffPreview(
   newStr: string,
   oldLineCount: number,
   newLineCount: number,
+  lang?: string,
 ): React.ReactNode | null {
   if (!oldStr && !newStr) return null;
 
-  const oldLines = oldStr.split('\n').slice(0, 4);
-  const newLines = newStr.split('\n').slice(0, 4);
-  const oldRemaining = oldLineCount - oldLines.length;
-  const newRemaining = newLineCount - newLines.length;
+  const oldHtml = highlightBlock(oldStr, lang).split('\n').slice(0, 4);
+  const newHtml = highlightBlock(newStr, lang).split('\n').slice(0, 4);
+  const oldRemaining = oldLineCount - oldHtml.length;
+  const newRemaining = newLineCount - newHtml.length;
 
   return (
     <div className="overflow-hidden max-h-[200px]">
-      {oldLines.map((line, i) => (
+      {oldHtml.map((html, i) => (
         <div
           key={`old-${i}`}
           className="flex text-[11px] font-mono leading-relaxed bg-[hsl(var(--git-deleted))]/15"
@@ -262,7 +415,10 @@ function buildDiffPreview(
           <span className="w-6 text-center text-[hsl(var(--git-deleted))] select-none flex-shrink-0">
             −
           </span>
-          <span className="text-foreground/70 whitespace-pre-wrap break-all">{line}</span>
+          <span
+            className="text-foreground/70 whitespace-pre-wrap break-all"
+            dangerouslySetInnerHTML={{ __html: html || '&nbsp;' }}
+          />
         </div>
       ))}
       {oldRemaining > 0 && (
@@ -270,7 +426,7 @@ function buildDiffPreview(
           … +{oldRemaining} lines removed
         </div>
       )}
-      {newLines.map((line, i) => (
+      {newHtml.map((html, i) => (
         <div
           key={`new-${i}`}
           className="flex text-[11px] font-mono leading-relaxed bg-[hsl(var(--git-added))]/15"
@@ -278,7 +434,10 @@ function buildDiffPreview(
           <span className="w-6 text-center text-[hsl(var(--git-added))] select-none flex-shrink-0">
             +
           </span>
-          <span className="text-foreground/70 whitespace-pre-wrap break-all">{line}</span>
+          <span
+            className="text-foreground/70 whitespace-pre-wrap break-all"
+            dangerouslySetInnerHTML={{ __html: html || '&nbsp;' }}
+          />
         </div>
       ))}
       {newRemaining > 0 && (

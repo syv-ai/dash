@@ -1,4 +1,5 @@
 import React from 'react';
+import { highlightBlock } from './highlightCode';
 
 interface MarkdownRendererProps {
   content: string;
@@ -101,7 +102,8 @@ function parseBlocks(text: string): Block[] {
 
 function renderBlock(block: Block, key: number): React.ReactNode {
   switch (block.type) {
-    case 'code':
+    case 'code': {
+      const highlighted = highlightBlock(block.code, block.lang || undefined);
       return (
         <div key={key} className="my-2 rounded-md overflow-hidden border border-border/60">
           {block.lang && (
@@ -110,10 +112,11 @@ function renderBlock(block: Block, key: number): React.ReactNode {
             </div>
           )}
           <pre className="p-3 text-[12px] font-mono leading-relaxed overflow-x-auto bg-surface-0">
-            <code>{block.code}</code>
+            <code dangerouslySetInnerHTML={{ __html: highlighted }} />
           </pre>
         </div>
       );
+    }
 
     case 'heading': {
       const sizes = [
