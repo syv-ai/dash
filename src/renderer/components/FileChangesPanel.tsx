@@ -220,14 +220,14 @@ export function FileChangesPanel({
         <Tooltip content="Expand changes panel">
           <button
             onClick={onToggleCollapse}
-            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-accent/60 text-muted-foreground/50 hover:text-foreground transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors"
           >
             <PanelRightOpen size={18} strokeWidth={1.5} />
           </button>
         </Tooltip>
         <div className="flex flex-col items-center gap-1">
           <div className="w-8 h-8 rounded-lg bg-accent/40 flex items-center justify-center">
-            <FileDiff size={14} className="text-muted-foreground/50" strokeWidth={1.5} />
+            <FileDiff size={14} className="text-muted-foreground" strokeWidth={1.5} />
           </div>
           {totalChanges > 0 && (
             <span className="min-w-[18px] h-[16px] flex items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary tabular-nums px-1">
@@ -295,7 +295,7 @@ export function FileChangesPanel({
             <Tooltip content="Collapse changes panel">
               <button
                 onClick={onToggleCollapse}
-                className="p-[3px] -ml-1 rounded hover:bg-accent text-muted-foreground/60 hover:text-foreground transition-colors"
+                className="p-[3px] -ml-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
               >
                 <PanelRightClose size={15} strokeWidth={1.8} />
               </button>
@@ -315,7 +315,7 @@ export function FileChangesPanel({
             <Tooltip content="Commit graph">
               <button
                 onClick={onShowCommitGraph}
-                className="p-[3px] rounded hover:bg-accent text-muted-foreground/40 hover:text-foreground transition-colors"
+                className="p-[3px] rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
               >
                 <GitBranch size={11} strokeWidth={2} />
               </button>
@@ -341,7 +341,7 @@ export function FileChangesPanel({
             <Tooltip content="Stage all">
               <button
                 onClick={() => onStageAll()}
-                className="p-[3px] rounded hover:bg-accent text-muted-foreground/40 hover:text-foreground transition-colors"
+                className="p-[3px] rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
               >
                 <Plus size={11} strokeWidth={2} />
               </button>
@@ -351,7 +351,7 @@ export function FileChangesPanel({
             <Tooltip content="Unstage all">
               <button
                 onClick={() => onUnstageAll()}
-                className="p-[3px] rounded hover:bg-accent text-muted-foreground/40 hover:text-foreground transition-colors"
+                className="p-[3px] rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
               >
                 <Minus size={11} strokeWidth={2} />
               </button>
