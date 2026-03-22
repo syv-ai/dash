@@ -4,12 +4,14 @@ import { SendHorizonal } from 'lucide-react';
 interface ComposeBoxProps {
   onSend: (text: string) => void;
   disabled?: boolean;
+  isBusy?: boolean;
   placeholder?: string;
 }
 
 export function ComposeBox({
   onSend,
   disabled = false,
+  isBusy = false,
   placeholder = 'Send a message...',
 }: ComposeBoxProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -18,13 +20,15 @@ export function ComposeBox({
   const handleSend = useCallback(() => {
     const text = value.trim();
     if (!text || disabled) return;
+    // When busy, only allow slash commands
+    if (isBusy && !text.startsWith('/')) return;
     onSend(text);
     setValue('');
     // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [value, disabled, onSend]);
+  }, [value, disabled, isBusy, onSend]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -59,14 +63,14 @@ export function ComposeBox({
         />
         <button
           onClick={handleSend}
-          disabled={disabled || !value.trim()}
+          disabled={disabled || !value.trim() || (isBusy && !value.trim().startsWith('/'))}
           className="p-1 rounded-md text-primary hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0"
         >
           <SendHorizonal size={16} strokeWidth={2} />
         </button>
       </div>
       <div className="mt-1.5 text-[10px] text-muted-foreground/50 text-center">
-        Enter to send, Shift+Enter for new line
+        {isBusy ? 'Esc to interrupt' : 'Enter to send, Shift+Enter for new line'}
       </div>
     </div>
   );

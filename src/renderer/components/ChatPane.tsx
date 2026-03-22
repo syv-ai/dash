@@ -26,7 +26,25 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
     // Subscribe to live JSONL updates
     const unsubChat = window.electronAPI.onChatMessages(id, (newMessages) => {
       setMessages((prev) => {
-        const toAdd = newMessages.filter((m) => !seenIds.has(m.id));
+        const toAdd = newMessages.filter((m) => {
+          if (seenIds.has(m.id)) return false;
+          // Skip user messages that duplicate a locally-added message
+          if (m.role === 'user') {
+            const lastUser = [...prev].reverse().find((p) => p.role === 'user');
+            if (lastUser && lastUser.id.startsWith('local-user-')) {
+              const localText = lastUser.content
+                .filter((b) => b.type === 'text')
+                .map((b) => (b as { text: string }).text)
+                .join('');
+              const newText = m.content
+                .filter((b) => b.type === 'text')
+                .map((b) => (b as { text: string }).text)
+                .join('');
+              if (localText === newText) return false;
+            }
+          }
+          return true;
+        });
         if (toAdd.length === 0) return prev;
         for (const m of toAdd) seenIds.add(m.id);
 
@@ -95,19 +113,40 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
     }
   }, []);
 
-  // Send user message via PTY stdin
+  // ESC to interrupt the agent (sends Ctrl+C to PTY)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isBusy) {
+        e.preventDefault();
+        window.electronAPI.ptyInput({ id, data: '\x03' });
+        setIsBusy(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [id, isBusy]);
+
+  // Send user message or slash command via PTY stdin
   const handleSend = useCallback(
     (text: string) => {
-      // Add user message to chat immediately
-      const localMsg: ChatMessage = {
-        id: `local-user-${Date.now()}`,
-        role: 'user',
-        content: [{ type: 'text', text }],
-        timestamp: Date.now(),
-      };
-      setMessages((prev) => [...prev, localMsg]);
+      const isSlashCommand = text.startsWith('/');
+
+      if (!isSlashCommand) {
+        // Add user message to chat immediately
+        const localMsg: ChatMessage = {
+          id: `local-user-${Date.now()}`,
+          role: 'user',
+          content: [{ type: 'text', text }],
+          timestamp: Date.now(),
+        };
+        setMessages((prev) => [...prev, localMsg]);
+      }
+
       window.electronAPI.ptyInput({ id, data: text + '\r' });
-      setIsBusy(true);
+
+      if (!isSlashCommand) {
+        setIsBusy(true);
+      }
     },
     [id],
   );
@@ -174,8 +213,11 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
       {/* Compose box */}
       <ComposeBox
         onSend={handleSend}
-        disabled={!connected || isBusy}
-        placeholder={isBusy ? 'Waiting for Claude to finish...' : 'Send a message...'}
+        disabled={!connected}
+        isBusy={isBusy}
+        placeholder={
+          isBusy ? 'Type / for commands, or press Esc to interrupt...' : 'Send a message...'
+        }
       />
     </div>
   );
