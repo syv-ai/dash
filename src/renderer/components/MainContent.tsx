@@ -132,7 +132,7 @@ export function MainContent({
 
   const currentBranch = gitStatus?.branch || activeTask?.branch;
   const currentBranchUrl =
-    currentBranch && activeProject?.gitRemote
+    currentBranch && activeProject?.gitRemote && gitStatus?.hasUpstream
       ? branchUrl(activeProject.gitRemote, currentBranch)
       : null;
 

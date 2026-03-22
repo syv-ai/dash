@@ -153,6 +153,7 @@ export interface FileChange {
 
 export interface GitStatus {
   branch: string | null;
+  hasUpstream: boolean;
   ahead: number;
   behind: number;
   files: FileChange[];

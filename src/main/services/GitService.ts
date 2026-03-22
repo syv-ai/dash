@@ -140,9 +140,9 @@ export class GitService {
    */
   static async getStatus(cwd: string): Promise<GitStatus> {
     const branch = await this.getBranch(cwd);
-    const { ahead, behind } = await this.getAheadBehind(cwd);
+    const { hasUpstream, ahead, behind } = await this.getAheadBehind(cwd);
     const files = await this.getFileChanges(cwd);
-    return { branch, ahead, behind, files };
+    return { branch, hasUpstream, ahead, behind, files };
   }
 
   /**
@@ -160,16 +160,19 @@ export class GitService {
   /**
    * Get ahead/behind counts relative to upstream.
    */
-  static async getAheadBehind(cwd: string): Promise<{ ahead: number; behind: number }> {
+  static async getAheadBehind(
+    cwd: string,
+  ): Promise<{ hasUpstream: boolean; ahead: number; behind: number }> {
     try {
       const out = await git(cwd, ['rev-list', '--left-right', '--count', '@{upstream}...HEAD']);
       const parts = out.trim().split(/\s+/);
       return {
+        hasUpstream: true,
         behind: parseInt(parts[0], 10) || 0,
         ahead: parseInt(parts[1], 10) || 0,
       };
     } catch {
-      return { ahead: 0, behind: 0 };
+      return { hasUpstream: false, ahead: 0, behind: 0 };
     }
   }
 
