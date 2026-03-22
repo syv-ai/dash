@@ -197,15 +197,20 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
           <MessageBubble key={msg.id} message={msg} allMessages={messages} />
         ))}
 
-        {/* Busy indicator */}
+        {/* Inline thinking/tool status as a chat message */}
         {isBusy && messages.length > 0 && (
-          <div className="flex items-center gap-2 px-4 py-3">
-            <div className="w-6 h-6 rounded-full bg-accent/80 flex items-center justify-center">
+          <div className="flex gap-3 px-4 py-3 bg-surface-0/50">
+            <div className="w-6 h-6 rounded-full bg-accent/80 flex items-center justify-center shrink-0 mt-0.5">
               <Loader2 size={12} strokeWidth={2} className="animate-spin text-muted-foreground" />
             </div>
-            <span className="text-[12px] text-muted-foreground animate-pulse">
-              {busyStatus ? `Running ${busyStatus}...` : 'Claude is thinking...'}
-            </span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-[12px] font-semibold text-foreground">Claude</span>
+              </div>
+              <p className="text-[13px] text-muted-foreground/70 animate-pulse">
+                {busyStatus ? `Running ${busyStatus}...` : 'Thinking...'}
+              </p>
+            </div>
           </div>
         )}
       </div>
