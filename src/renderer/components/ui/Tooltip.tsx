@@ -14,7 +14,6 @@ export function Tooltip({ content, side = 'top', delay = 150, children }: Toolti
   const [visible, setVisible] = useState(false);
   const [coords, setCoords] = useState<{ x: number; y: number } | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
-  const tooltipRef = useRef<HTMLDivElement | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const show = useCallback(() => {
@@ -35,21 +34,22 @@ export function Tooltip({ content, side = 'top', delay = 150, children }: Toolti
     setCoords(null);
   }, []);
 
-  // Clamp tooltip within viewport after render
-  useEffect(() => {
-    if (!visible || !coords || !tooltipRef.current) return;
-    const el = tooltipRef.current;
-    const ttRect = el.getBoundingClientRect();
-
-    // Clamp horizontal: keep within viewport with padding
-    const minLeft = PADDING;
-    const maxLeft = window.innerWidth - ttRect.width - PADDING;
-    const idealLeft = coords.x - ttRect.width / 2;
-    const clampedLeft = Math.max(minLeft, Math.min(maxLeft, idealLeft));
-
-    el.style.left = `${clampedLeft}px`;
-    el.style.transform = side === 'top' ? 'translateY(-100%)' : '';
-  }, [visible, coords, side]);
+  // Ref callback: measures and clamps position before first paint
+  const tooltipRefCallback = useCallback(
+    (el: HTMLDivElement | null) => {
+      if (!el || !coords) return;
+      const ttWidth = el.offsetWidth;
+      const idealLeft = coords.x - ttWidth / 2;
+      const clampedLeft = Math.max(
+        PADDING,
+        Math.min(window.innerWidth - ttWidth - PADDING, idealLeft),
+      );
+      el.style.left = `${clampedLeft}px`;
+      el.style.transform = side === 'top' ? 'translateY(-100%)' : '';
+      el.style.visibility = 'visible';
+    },
+    [coords, side],
+  );
 
   useEffect(() => {
     return () => {
@@ -69,12 +69,11 @@ export function Tooltip({ content, side = 'top', delay = 150, children }: Toolti
         coords &&
         createPortal(
           <div
-            ref={tooltipRef}
+            ref={tooltipRefCallback}
             className="tooltip-popup"
             style={{
-              left: coords.x,
               top: side === 'top' ? coords.y - 6 : coords.y + 6,
-              transform: side === 'top' ? 'translateX(-50%) translateY(-100%)' : 'translateX(-50%)',
+              visibility: 'hidden',
             }}
             data-side={side}
           >
