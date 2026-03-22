@@ -67,7 +67,7 @@ export function registerAppIpc(): void {
     try {
       const gitDir = join(folderPath, '.git');
       if (!existsSync(gitDir)) {
-        return { success: true, data: { remote: null, branch: null } };
+        return { success: true, data: { isGitRepo: false, remote: null, branch: null } };
       }
 
       let remote: string | null = null;
@@ -91,7 +91,16 @@ export function registerAppIpc(): void {
         // No branch
       }
 
-      return { success: true, data: { remote, branch } };
+      return { success: true, data: { isGitRepo: true, remote, branch } };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  });
+
+  ipcMain.handle('git:init', async (_event, folderPath: string) => {
+    try {
+      await execFileAsync('git', ['init'], { cwd: folderPath, timeout: 10000 });
+      return { success: true, data: null };
     } catch (error) {
       return { success: false, error: String(error) };
     }

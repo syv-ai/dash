@@ -71,6 +71,10 @@ if (!gotLock) {
 let mainWindow: BrowserWindow | null = null;
 
 app.whenReady().then(async () => {
+  // Initialize telemetry (before anything else, never throws)
+  const { TelemetryService } = await import('./services/TelemetryService');
+  TelemetryService.initialize();
+
   // Initialize database
   const { DatabaseService } = await import('./services/DatabaseService');
   await DatabaseService.initialize();
@@ -106,6 +110,14 @@ app.whenReady().then(async () => {
   if (!process.argv.includes('--dev')) {
     const { AutoUpdateService } = await import('./services/AutoUpdateService');
     AutoUpdateService.initialize(mainWindow);
+  }
+
+  // Start pixel-agents watcher if configured
+  const { PixelAgentsService } = await import('./services/PixelAgentsService');
+  PixelAgentsService.setSender(mainWindow.webContents);
+  const paConfig = PixelAgentsService.readConfig();
+  if (paConfig?.name && paConfig.offices.some((o) => o.enabled)) {
+    PixelAgentsService.start();
   }
 
   // Cleanup orphaned reserve worktrees (background, non-blocking)
@@ -166,6 +178,8 @@ app.on('activate', async () => {
     activityMonitor.start(mainWindow.webContents);
     const { remoteControlService } = await import('./services/remoteControlService');
     remoteControlService.setSender(mainWindow.webContents);
+    const { PixelAgentsService } = await import('./services/PixelAgentsService');
+    PixelAgentsService.setSender(mainWindow.webContents);
 
     // Update auto-updater window reference
     if (!process.argv.includes('--dev')) {
@@ -197,6 +211,14 @@ app.on('before-quit', async () => {
     // Best effort
   }
 
+  // Clean up hook settings from all settings.local.json files before stopping server
+  try {
+    const { cleanupHookSettings } = await import('./services/ptyManager');
+    cleanupHookSettings();
+  } catch {
+    // Best effort
+  }
+
   // Stop hook server
   try {
     const { hookServer } = await import('./services/HookServer');
@@ -217,6 +239,22 @@ app.on('before-quit', async () => {
   try {
     const { stopAll } = await import('./services/FileWatcherService');
     stopAll();
+  } catch {
+    // Best effort
+  }
+
+  // Stop pixel-agents watcher
+  try {
+    const { PixelAgentsService } = await import('./services/PixelAgentsService');
+    PixelAgentsService.stop();
+  } catch {
+    // Best effort
+  }
+
+  // Flush telemetry
+  try {
+    const { TelemetryService } = await import('./services/TelemetryService');
+    await TelemetryService.shutdown();
   } catch {
     // Best effort
   }

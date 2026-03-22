@@ -5,14 +5,23 @@ import { ProjectOverview } from './ProjectOverview';
 import {
   FolderOpen,
   GitBranch,
+  FolderGit2,
   Globe,
   GitPullRequest,
+  GitMerge,
   Code2,
   Terminal,
   MessageSquare,
 } from 'lucide-react';
-import type { Project, Task, RemoteControlState, PullRequestInfo, ViewMode } from '../../shared/types';
-import { linkedItemUrl, isAdoRemote } from '../../shared/urls';
+import type {
+  Project,
+  Task,
+  RemoteControlState,
+  PullRequestInfo,
+  GitStatus,
+  ViewMode,
+} from '../../shared/types';
+import { linkedItemUrl, isAdoRemote, branchUrl } from '../../shared/urls';
 import { Tooltip } from './ui/Tooltip';
 import { sessionRegistry } from '../terminal/SessionRegistry';
 
@@ -23,6 +32,7 @@ interface MainContentProps {
   tasks?: Task[];
   activeTaskId?: string | null;
   taskActivity?: Record<string, 'busy' | 'idle' | 'waiting'>;
+  unseenTaskIds?: Set<string>;
   remoteControlStates?: Record<string, RemoteControlState>;
   onSelectTask?: (id: string) => void;
   onEnableRemoteControl?: (taskId: string) => void;
@@ -34,6 +44,7 @@ interface MainContentProps {
   onDeleteTask?: (id: string) => void;
   onArchiveTask?: (id: string) => void;
   onRestoreTask?: (id: string) => void;
+  gitStatus?: GitStatus | null;
 }
 
 export function MainContent({
@@ -43,6 +54,7 @@ export function MainContent({
   tasks = [],
   activeTaskId,
   taskActivity = {},
+  unseenTaskIds,
   remoteControlStates = {},
   onSelectTask,
   onEnableRemoteControl,
@@ -54,6 +66,7 @@ export function MainContent({
   onDeleteTask,
   onArchiveTask,
   onRestoreTask,
+  gitStatus,
 }: MainContentProps) {
   const [prInfo, setPrInfo] = useState<PullRequestInfo | null>(null);
 
@@ -92,24 +105,29 @@ export function MainContent({
   useEffect(() => {
     setPrInfo(null);
 
-    if (!activeTask?.branch || !activeProject) {
+    const liveBranch = gitStatus?.branch;
+    const defaultBranch = activeProject?.baseRef || activeProject?.gitBranch || 'main';
+    if (!liveBranch || !activeProject || liveBranch === defaultBranch) {
       return;
     }
 
     let cancelled = false;
-    const branch = activeTask.branch;
     const remote = activeProject.gitRemote;
 
-    (async () => {
+    async function fetchPr() {
       try {
         let pr: PullRequestInfo | null = null;
 
         if (remote && isAdoRemote(remote)) {
-          const resp = await window.electronAPI.adoGetPrForBranch(branch, remote, activeProject.id);
+          const resp = await window.electronAPI.adoGetPrForBranch(
+            liveBranch!,
+            remote,
+            activeProject!.id,
+          );
           if (!cancelled && resp.success) pr = resp.data ?? null;
         } else {
-          const cwd = activeTask.path || activeProject.path;
-          const resp = await window.electronAPI.githubGetPrForBranch(cwd, branch);
+          const cwd = activeTask?.path || activeProject!.path;
+          const resp = await window.electronAPI.githubGetPrForBranch(cwd, liveBranch!);
           if (!cancelled && resp.success) pr = resp.data ?? null;
         }
 
@@ -117,12 +135,16 @@ export function MainContent({
       } catch {
         if (!cancelled) setPrInfo(null);
       }
-    })();
+    }
+
+    fetchPr();
+    const interval = setInterval(fetchPr, 30_000);
 
     return () => {
       cancelled = true;
+      clearInterval(interval);
     };
-  }, [activeTask?.id, activeTask?.branch, activeProject?.id, activeProject?.gitRemote]);
+  }, [activeTask?.id, activeProject?.id, activeProject?.gitRemote, gitStatus?.branch]);
 
   if (!activeProject) {
     return (
@@ -157,6 +179,27 @@ export function MainContent({
     );
   }
 
+  const currentBranch = gitStatus?.branch || activeTask?.branch;
+  const currentBranchUrl =
+    currentBranch && activeProject?.gitRemote && gitStatus?.hasUpstream
+      ? branchUrl(activeProject.gitRemote, currentBranch)
+      : null;
+
+  const branchTooltip = gitStatus?.hasUpstream ? 'Branch' : 'Branch (no upstream detected)';
+
+  const branchLabel = currentBranchUrl ? (
+    <a
+      href={currentBranchUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-[11px] font-mono hover:underline truncate"
+    >
+      {currentBranch}
+    </a>
+  ) : (
+    <span className="text-[11px] font-mono truncate">{currentBranch}</span>
+  );
+
   const taskHeader = (
     <div
       className="flex items-center gap-3 px-4 h-10 flex-shrink-0 border-b border-border/60"
@@ -181,9 +224,11 @@ export function MainContent({
                       ? 'bg-orange-500'
                       : taskActivity[task.id] === 'busy'
                         ? 'bg-amber-400 animate-pulse'
-                        : taskActivity[task.id] === 'idle'
-                          ? 'bg-green-400'
-                          : 'bg-muted-foreground/30'
+                        : taskActivity[task.id] === 'idle' && unseenTaskIds?.has(task.id)
+                          ? 'bg-blue-400'
+                          : taskActivity[task.id] === 'idle'
+                            ? 'bg-green-400'
+                            : 'bg-muted-foreground/30'
                   }`}
                 />
                 <span className="truncate max-w-[140px]">{task.name}</span>
@@ -223,19 +268,31 @@ export function MainContent({
                 <MessageSquare size={11} strokeWidth={1.8} />
               </button>
             </div>
-            <GitBranch size={11} strokeWidth={2} className="text-foreground/60" />
-            <span className="text-[11px] font-mono text-foreground/60">{activeTask.branch}</span>
+            {activeTask.useWorktree && (
+              <Tooltip content="Worktree">
+                <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
+                  <FolderGit2 size={11} strokeWidth={2} className="flex-shrink-0" />
+                  <span className="text-[11px] font-mono truncate">
+                    {activeTask.path.split('/').pop()}
+                  </span>
+                </div>
+              </Tooltip>
+            )}
+            <Tooltip content={branchTooltip}>
+              <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
+                <GitBranch size={11} strokeWidth={2} className="flex-shrink-0" />
+                {branchLabel}
+              </div>
+            </Tooltip>
           </div>
         </>
       ) : (
         <>
-          <div className="flex items-center gap-2">
-            <div className="w-[7px] h-[7px] rounded-full bg-[hsl(var(--git-added))] status-pulse" />
-            <span className="text-[13px] font-medium text-foreground">{activeTask.name}</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-foreground/60">
-            <GitBranch size={11} strokeWidth={2} />
-            <span className="text-[11px] font-mono">{activeTask.branch}</span>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="w-[7px] h-[7px] rounded-full bg-[hsl(var(--git-added))] status-pulse flex-shrink-0" />
+            <span className="text-[13px] font-medium text-foreground whitespace-nowrap">
+              {activeTask.name}
+            </span>
           </div>
           {activeTask.linkedItems && activeTask.linkedItems.length > 0 ? (
             <div className="flex items-center gap-1">
@@ -297,6 +354,22 @@ export function MainContent({
                 </button>
               </Tooltip>
             </div>
+            {activeTask.useWorktree && (
+              <Tooltip content="Worktree">
+                <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
+                  <FolderGit2 size={11} strokeWidth={2} className="flex-shrink-0" />
+                  <span className="text-[11px] font-mono truncate">
+                    {activeTask.path.split('/').pop()}
+                  </span>
+                </div>
+              </Tooltip>
+            )}
+            <Tooltip content={branchTooltip}>
+              <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
+                <GitBranch size={11} strokeWidth={2} className="flex-shrink-0" />
+                {branchLabel}
+              </div>
+            </Tooltip>
             {taskActivity[activeTask.id] && (
               <Tooltip content="Remote control">
                 <button
@@ -304,7 +377,7 @@ export function MainContent({
                   className={`p-1 rounded-md transition-colors ${
                     remoteControlStates[activeTask.id]
                       ? 'text-primary hover:bg-primary/10'
-                      : 'text-muted-foreground/50 hover:text-foreground hover:bg-accent/60'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/60'
                   }`}
                 >
                   <Globe size={14} strokeWidth={1.8} />
@@ -318,20 +391,28 @@ export function MainContent({
                   const ide = stored === 'cursor' || stored === 'code' ? stored : undefined;
                   window.electronAPI.openInIDE({ folderPath: activeTask.path, ide });
                 }}
-                className="p-1 rounded-md transition-colors text-muted-foreground/50 hover:text-foreground hover:bg-accent/60"
+                className="p-1 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-accent/60"
               >
                 <Code2 size={14} strokeWidth={1.8} />
               </button>
             </Tooltip>
-            {prInfo && (
-              <Tooltip content={prInfo.title}>
+            {prInfo && prInfo.state !== 'closed' && (
+              <Tooltip content={`${prInfo.title} (${prInfo.state})`}>
                 <a
                   href={prInfo.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 text-[10px] font-medium hover:bg-green-500/20 transition-colors"
+                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium transition-colors ${
+                    prInfo.state === 'merged'
+                      ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20'
+                      : 'bg-green-500/10 text-green-600 dark:text-green-400 hover:bg-green-500/20'
+                  }`}
                 >
-                  <GitPullRequest size={10} strokeWidth={2} />
+                  {prInfo.state === 'merged' ? (
+                    <GitMerge size={10} strokeWidth={2} />
+                  ) : (
+                    <GitPullRequest size={10} strokeWidth={2} />
+                  )}
                   PR #{prInfo.number}
                 </a>
               </Tooltip>

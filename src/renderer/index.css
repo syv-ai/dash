@@ -428,21 +428,17 @@
 }
 
 .tooltip-popup[data-side='top'] {
-  transform: translateX(-50%) translateY(-100%);
-}
-
-.tooltip-popup[data-side='bottom'] {
-  transform: translateX(-50%);
+  transform: translateY(-100%);
 }
 
 @keyframes tooltip-in {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(-100%) scale(0.96);
+    transform: translateY(-100%) scale(0.96);
   }
   to {
     opacity: 1;
-    transform: translateX(-50%) translateY(-100%) scale(1);
+    transform: translateY(-100%) scale(1);
   }
 }
 
@@ -453,11 +449,11 @@
 @keyframes tooltip-in-bottom {
   from {
     opacity: 0;
-    transform: translateX(-50%) scale(0.96);
+    scale: 0.96;
   }
   to {
     opacity: 1;
-    transform: translateX(-50%) scale(1);
+    scale: 1;
   }
 }
 

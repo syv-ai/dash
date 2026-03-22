@@ -2,6 +2,7 @@ export interface Project {
   id: string;
   name: string;
   path: string;
+  isGitRepo: boolean;
   gitRemote: string | null;
   gitBranch: string | null;
   baseRef: string | null;
@@ -152,6 +153,7 @@ export interface FileChange {
 
 export interface GitStatus {
   branch: string | null;
+  hasUpstream: boolean;
   ahead: number;
   behind: number;
   files: FileChange[];
@@ -265,10 +267,13 @@ export interface AzureDevOpsConfig {
 
 // ── Pull Request Types ──────────────────────────────────────
 
+export type PullRequestState = 'open' | 'merged' | 'closed';
+
 export interface PullRequestInfo {
   number: number;
   title: string;
   url: string;
+  state: PullRequestState;
   provider: 'github' | 'ado';
 }
 
@@ -334,4 +339,28 @@ export type StreamJsonEvent =
 export interface RemoteControlState {
   url: string;
   active: boolean;
+}
+
+// ── Pixel Agents Types ──────────────────────────────────────
+
+export interface PixelAgentsOffice {
+  id: string;
+  url: string;
+  token: string | null;
+  enabled: boolean;
+}
+
+export interface PixelAgentsConfig {
+  name: string;
+  palette?: number;
+  hueShift?: number;
+  phrases?: string[];
+  offices: PixelAgentsOffice[];
+}
+
+export type PixelAgentsOfficeStatus = 'connected' | 'registered' | 'disconnected' | 'unknown';
+
+export interface PixelAgentsStatus {
+  running: boolean;
+  offices: Record<string, PixelAgentsOfficeStatus>;
 }

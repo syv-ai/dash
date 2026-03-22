@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 import { DatabaseService } from '../services/DatabaseService';
+import { TelemetryService } from '../services/TelemetryService';
 
 export function registerDbIpc(): void {
   // ── Projects ─────────────────────────────────────────────
@@ -15,7 +16,9 @@ export function registerDbIpc(): void {
 
   ipcMain.handle('db:saveProject', (_event, project) => {
     try {
+      const isNew = !project.id;
       const data = DatabaseService.saveProject(project);
+      if (isNew) TelemetryService.capture('project_added');
       return { success: true, data };
     } catch (error) {
       return { success: false, error: String(error) };
@@ -25,6 +28,7 @@ export function registerDbIpc(): void {
   ipcMain.handle('db:deleteProject', (_event, id: string) => {
     try {
       DatabaseService.deleteProject(id);
+      TelemetryService.capture('project_deleted');
       return { success: true };
     } catch (error) {
       return { success: false, error: String(error) };
@@ -44,7 +48,9 @@ export function registerDbIpc(): void {
 
   ipcMain.handle('db:saveTask', (_event, task) => {
     try {
+      const isNew = !task.id;
       const data = DatabaseService.saveTask(task);
+      if (isNew) TelemetryService.capture('task_created');
       return { success: true, data };
     } catch (error) {
       return { success: false, error: String(error) };
@@ -54,6 +60,7 @@ export function registerDbIpc(): void {
   ipcMain.handle('db:deleteTask', (_event, id: string) => {
     try {
       DatabaseService.deleteTask(id);
+      TelemetryService.capture('task_deleted');
       return { success: true };
     } catch (error) {
       return { success: false, error: String(error) };
@@ -63,6 +70,7 @@ export function registerDbIpc(): void {
   ipcMain.handle('db:archiveTask', (_event, id: string) => {
     try {
       DatabaseService.archiveTask(id);
+      TelemetryService.capture('task_archived');
       return { success: true };
     } catch (error) {
       return { success: false, error: String(error) };
@@ -72,6 +80,7 @@ export function registerDbIpc(): void {
   ipcMain.handle('db:restoreTask', (_event, id: string) => {
     try {
       DatabaseService.restoreTask(id);
+      TelemetryService.capture('task_restored');
       return { success: true };
     } catch (error) {
       return { success: false, error: String(error) };

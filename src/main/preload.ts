@@ -164,6 +164,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Git detection
   detectGit: (folderPath: string) => ipcRenderer.invoke('app:detectGit', folderPath),
+  gitInit: (folderPath: string) => ipcRenderer.invoke('git:init', folderPath),
   detectClaude: () => ipcRenderer.invoke('app:detectClaude'),
 
   // Git operations
@@ -205,6 +206,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('git:fileChanged', handler);
     };
   },
+
+  // Pixel Agents
+  pixelAgentsGetConfig: () => ipcRenderer.invoke('pixelAgents:getConfig'),
+  pixelAgentsSaveConfig: (config: unknown) => ipcRenderer.invoke('pixelAgents:saveConfig', config),
+  pixelAgentsGetStatus: () => ipcRenderer.invoke('pixelAgents:getStatus'),
+  pixelAgentsStart: () => ipcRenderer.invoke('pixelAgents:start'),
+  pixelAgentsStop: () => ipcRenderer.invoke('pixelAgents:stop'),
+  onPixelAgentsStatusChanged: (callback: (status: unknown) => void) => {
+    const handler = (_event: unknown, status: unknown) => callback(status);
+    ipcRenderer.on('pixelAgents:statusChanged', handler);
+    return () => {
+      ipcRenderer.removeListener('pixelAgents:statusChanged', handler);
+    };
+  },
+
+  // Telemetry
+  telemetryCapture: (event: string, properties?: Record<string, unknown>) =>
+    ipcRenderer.invoke('telemetry:capture', { event, properties }),
+  telemetryGetStatus: () => ipcRenderer.invoke('telemetry:getStatus'),
+  telemetrySetEnabled: (enabled: boolean) => ipcRenderer.invoke('telemetry:setEnabled', enabled),
 
   // Auto-update
   autoUpdateCheck: () => ipcRenderer.invoke('autoUpdate:check'),
@@ -248,8 +269,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('autoUpdate:downloaded', handler);
     };
   },
-  onAutoUpdateError: (callback: (message: string) => void) => {
-    const handler = (_event: unknown, message: string) => callback(message);
+  onAutoUpdateError: (callback: (info: { message: string; detail: string }) => void) => {
+    const handler = (_event: unknown, info: { message: string; detail: string }) => callback(info);
     ipcRenderer.on('autoUpdate:error', handler);
     return () => {
       ipcRenderer.removeListener('autoUpdate:error', handler);

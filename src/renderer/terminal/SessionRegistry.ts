@@ -59,6 +59,15 @@ class SessionRegistryImpl {
     }
   }
 
+  async disposeByPrefix(prefix: string): Promise<void> {
+    for (const [id, session] of this.sessions) {
+      if (id.startsWith(prefix)) {
+        await session.dispose();
+        this.sessions.delete(id);
+      }
+    }
+  }
+
   setAllThemes(isDark: boolean): void {
     this._isDark = isDark;
     this.setAllTerminalThemes(this._themeId, isDark);

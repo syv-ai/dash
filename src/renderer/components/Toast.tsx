@@ -50,8 +50,16 @@ export function ToastContainer() {
 
   // Auto-update: error
   useEffect(() => {
-    return window.electronAPI.onAutoUpdateError((message) => {
-      toast.error(message, { duration: 5000 });
+    return window.electronAPI.onAutoUpdateError((info) => {
+      toast.error(`${info.message}. ${info.detail}`, {
+        duration: 10000,
+        action: {
+          label: 'Download manually',
+          onClick: () => {
+            window.electronAPI.openExternal('https://github.com/syv-ai/dash/releases/latest');
+          },
+        },
+      });
     });
   }, []);
 

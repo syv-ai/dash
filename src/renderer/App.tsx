@@ -30,6 +30,8 @@ import type {
   LinkedGithubIssue,
   LinkedAdoWorkItem,
   RemoteControlState,
+  PixelAgentsConfig,
+  PixelAgentsStatus,
 } from '../shared/types';
 import type { CreateTaskOptions } from './components/TaskModal';
 import { formatTaskContextPrompt } from '../shared/taskContext';
@@ -66,6 +68,7 @@ export function App() {
     project: string;
   } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>();
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('theme') as 'light' | 'dark') || 'dark';
   });
@@ -102,6 +105,26 @@ export function App() {
     if (stored === null) return undefined; // "default" — key absent
     return stored; // '' for "none", or custom text
   });
+  // Pixel Agents state
+  const [pixelAgentsConfig, setPixelAgentsConfig] = useState<PixelAgentsConfig | null>(null);
+  const [pixelAgentsStatus, setPixelAgentsStatus] = useState<PixelAgentsStatus>({
+    running: false,
+    offices: {},
+  });
+
+  // Load pixel agents config on mount + subscribe to status changes
+  useEffect(() => {
+    window.electronAPI.pixelAgentsGetConfig().then((resp) => {
+      if (resp.success && resp.data) setPixelAgentsConfig(resp.data);
+    });
+    window.electronAPI.pixelAgentsGetStatus().then((resp) => {
+      if (resp.success && resp.data) setPixelAgentsStatus(resp.data);
+    });
+    return window.electronAPI.onPixelAgentsStatusChanged((status) => {
+      setPixelAgentsStatus(status);
+    });
+  }, []);
+
   // Sync desktop notification settings to main process
   useEffect(() => {
     window.electronAPI.setDesktopNotification?.({
@@ -126,6 +149,36 @@ export function App() {
   useEffect(() => {
     notificationSoundRef.current = notificationSound;
   }, [notificationSound]);
+
+  const [unseenTaskIds, setUnseenTaskIds] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem('unseenTaskIds');
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  const activeTaskIdRef = useRef(activeTaskId);
+  useEffect(() => {
+    activeTaskIdRef.current = activeTaskId;
+  }, [activeTaskId]);
+
+  // Persist unseenTaskIds to localStorage
+  useEffect(() => {
+    localStorage.setItem('unseenTaskIds', JSON.stringify([...unseenTaskIds]));
+  }, [unseenTaskIds]);
+
+  // Clear unseen when a task becomes active
+  useEffect(() => {
+    if (!activeTaskId) return;
+    setUnseenTaskIds((prev) => {
+      if (!prev.has(activeTaskId)) return prev;
+      const next = new Set(prev);
+      next.delete(activeTaskId);
+      return next;
+    });
+  }, [activeTaskId]);
 
   // Git state
   const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
@@ -204,10 +257,18 @@ export function App() {
       }
       // Detect any busy→idle transition (only for PTYs that completed a full work cycle)
       // Skip transitions from 'waiting' — those are not task completions
+      const newlyDoneIds: string[] = [];
       for (const [id, state] of Object.entries(newActivity)) {
         if (prevActivity[id] === 'busy' && state === 'idle' && hasBeenIdle.has(id)) {
-          playNotificationSound(notificationSoundRef.current);
-          break; // one sound per update, even if multiple tasks transition
+          newlyDoneIds.push(id);
+        }
+      }
+      if (newlyDoneIds.length > 0) {
+        playNotificationSound(notificationSoundRef.current);
+        const currentActiveId = activeTaskIdRef.current;
+        const toMarkUnseen = newlyDoneIds.filter((id) => id !== currentActiveId);
+        if (toMarkUnseen.length > 0) {
+          setUnseenTaskIds((prev) => new Set([...prev, ...toMarkUnseen]));
         }
       }
       // Mark PTYs that have reached idle (so the *next* busy→idle triggers)
@@ -615,6 +676,7 @@ export function App() {
       const saveResp = await window.electronAPI.saveProject({
         name,
         path: folderPath,
+        isGitRepo: gitInfo?.isGitRepo ?? false,
         gitRemote: gitInfo?.remote ?? null,
         gitBranch: gitInfo?.branch ?? null,
       });
@@ -644,6 +706,7 @@ export function App() {
       const saveResp = await window.electronAPI.saveProject({
         name,
         path: clonedPath,
+        isGitRepo: gitInfo?.isGitRepo ?? true,
         gitRemote: gitInfo?.remote ?? null,
         gitBranch: gitInfo?.branch ?? null,
       });
@@ -687,6 +750,7 @@ export function App() {
         });
       }
       sessionRegistry.dispose(`shell:${task.id}`);
+      sessionRegistry.disposeByPrefix(`shell:${task.id}:`);
     }
 
     await window.electronAPI.deleteProject(project.id);
@@ -855,8 +919,9 @@ export function App() {
         }
       }
 
-      // Clean up shell terminal session
+      // Clean up shell terminal sessions (first tab + any extra tabs)
       sessionRegistry.dispose(`shell:${task.id}`);
+      sessionRegistry.disposeByPrefix(`shell:${task.id}:`);
 
       await window.electronAPI.deleteTask(task.id);
       if (activeTaskId === task.id) {
@@ -1041,7 +1106,14 @@ export function App() {
               onDeleteTask={handleDeleteTask}
               onArchiveTask={handleArchiveTask}
               onRestoreTask={handleRestoreTask}
-              onOpenSettings={() => setShowSettings(true)}
+              onOpenSettings={() => {
+                setSettingsInitialTab(undefined);
+                setShowSettings(true);
+              }}
+              onOpenPixelAgents={() => {
+                setSettingsInitialTab('pixel-agents');
+                setShowSettings(true);
+              }}
               onShowCommitGraph={(projectId) => {
                 setActiveProjectId(projectId);
                 setShowCommitGraph(true);
@@ -1049,8 +1121,14 @@ export function App() {
               collapsed={sidebarCollapsed}
               onToggleCollapse={toggleSidebar}
               taskActivity={taskActivity}
+              unseenTaskIds={unseenTaskIds}
               remoteControlStates={remoteControlStates}
               onReorderProjects={handleReorderProjects}
+              pixelAgentsConnectedCount={
+                Object.values(pixelAgentsStatus.offices).filter(
+                  (s) => s === 'connected' || s === 'registered',
+                ).length
+              }
             />
           </ShellDrawerWrapper>
         </Panel>
@@ -1087,6 +1165,7 @@ export function App() {
               tasks={activeProjectTasks}
               activeTaskId={activeTaskId}
               taskActivity={taskActivity}
+              unseenTaskIds={unseenTaskIds}
               remoteControlStates={remoteControlStates}
               onSelectTask={setActiveTaskId}
               onEnableRemoteControl={(taskId) => setRemoteControlModalPtyId(taskId)}
@@ -1111,6 +1190,7 @@ export function App() {
               onDeleteTask={handleDeleteTask}
               onArchiveTask={handleArchiveTask}
               onRestoreTask={handleRestoreTask}
+              gitStatus={gitStatus}
             />
           </ShellDrawerWrapper>
         </Panel>
@@ -1194,12 +1274,32 @@ export function App() {
             projects.find((p) => p.id === (taskModalProjectId || activeProjectId))?.path ?? ''
           }
           projectId={taskModalProjectId || activeProjectId || undefined}
+          isGitRepo={
+            projects.find((p) => p.id === (taskModalProjectId || activeProjectId))?.isGitRepo ??
+            false
+          }
           gitRemote={
             projects.find((p) => p.id === (taskModalProjectId || activeProjectId))?.gitRemote ??
             null
           }
           onClose={() => setShowTaskModal(false)}
           onCreate={handleCreateTask}
+          onGitInit={() => {
+            const pid = taskModalProjectId || activeProjectId;
+            const proj = projects.find((p) => p.id === pid);
+            if (proj) {
+              window.electronAPI.detectGit(proj.path).then(async (gitResp) => {
+                const gitInfo = gitResp.success ? gitResp.data : null;
+                await window.electronAPI.saveProject({
+                  ...proj,
+                  isGitRepo: gitInfo?.isGitRepo ?? true,
+                  gitRemote: gitInfo?.remote ?? null,
+                  gitBranch: gitInfo?.branch ?? null,
+                });
+                loadProjects();
+              });
+            }
+          }}
         />
       )}
 
@@ -1236,6 +1336,7 @@ export function App() {
 
       {showSettings && (
         <SettingsModal
+          initialTab={settingsInitialTab}
           theme={theme}
           onThemeChange={(t) => {
             setTheme(t);
@@ -1298,6 +1399,12 @@ export function App() {
             setKeybindings(b);
             saveKeybindings(b);
           }}
+          pixelAgentsConfig={pixelAgentsConfig}
+          onPixelAgentsConfigChange={(config) => {
+            setPixelAgentsConfig(config);
+            window.electronAPI.pixelAgentsSaveConfig(config);
+          }}
+          pixelAgentsStatus={pixelAgentsStatus}
           onClose={() => setShowSettings(false)}
         />
       )}

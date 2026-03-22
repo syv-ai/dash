@@ -10,9 +10,16 @@ interface PtyActivity {
   pid: number;
   state: ActivityState;
   isDirectSpawn: boolean;
+  lastDataTime: number;
 }
 
 const POLL_INTERVAL = 2000;
+
+/** How long (ms) a direct-spawn PTY must have no children AND no PTY data
+ *  before the polling fallback transitions it to idle. This covers the case
+ *  where the Stop hook doesn't fire (e.g. interrupted mid-response) without
+ *  falsely marking "thinking" responses (data flowing, no children) as idle. */
+const DIRECT_SPAWN_IDLE_GRACE_MS = 6000;
 
 class ActivityMonitorImpl {
   private activities = new Map<string, PtyActivity>();
@@ -24,8 +31,21 @@ class ActivityMonitorImpl {
       pid,
       state: 'idle',
       isDirectSpawn,
+      lastDataTime: Date.now(),
     });
     this.emitAll();
+  }
+
+  /**
+   * Record that PTY data was received. Used by the polling fallback to
+   * distinguish "Claude is thinking" (data flowing) from "interrupted"
+   * (no data, no children).
+   */
+  noteData(ptyId: string): void {
+    const activity = this.activities.get(ptyId);
+    if (activity) {
+      activity.lastDataTime = Date.now();
+    }
   }
 
   /**
@@ -116,8 +136,21 @@ class ActivityMonitorImpl {
         continue;
       }
 
-      // Direct-spawn PTYs are driven by Claude Code hooks, not polling
-      if (activity.isDirectSpawn) continue;
+      // Direct-spawn PTYs are primarily driven by Claude Code hooks.
+      // Polling fallback: if busy/waiting with no children AND no PTY data
+      // for DIRECT_SPAWN_IDLE_GRACE_MS, the hook likely failed (e.g.
+      // interrupted mid-response). Transition to idle.
+      if (activity.isDirectSpawn) {
+        if (activity.state === 'busy' || activity.state === 'waiting') {
+          const isWorking = this.hasActiveWork(activity.pid, true, childMap);
+          const dataSilent = Date.now() - activity.lastDataTime > DIRECT_SPAWN_IDLE_GRACE_MS;
+          if (!isWorking && dataSilent) {
+            activity.state = 'idle';
+            changed = true;
+          }
+        }
+        continue;
+      }
 
       const isWorking = this.hasActiveWork(activity.pid, activity.isDirectSpawn, childMap);
       const newState: ActivityState = isWorking ? 'busy' : 'idle';

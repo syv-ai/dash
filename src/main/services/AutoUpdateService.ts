@@ -68,11 +68,15 @@ export class AutoUpdateService {
       send('autoUpdate:downloaded');
     });
 
-    autoUpdater.on('error', () => {
-      // Reset to previous valid state on error
+    autoUpdater.on('error', (err: Error) => {
+      const prevState = state;
       if (state === 'checking') state = 'idle';
       if (state === 'downloading') state = 'available';
-      send('autoUpdate:error', 'Update failed. Please try again later.');
+      console.error(`[AutoUpdate] Error during ${prevState}:`, err?.message || err);
+      send('autoUpdate:error', {
+        message: prevState === 'downloading' ? 'Download failed' : 'Update check failed',
+        detail: err?.message || String(err),
+      });
     });
 
     // Initial check after delay

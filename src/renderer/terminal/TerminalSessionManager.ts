@@ -132,6 +132,36 @@ export class TerminalSessionManager {
     this.terminal.attachCustomKeyEventHandler((e) => {
       if (e.type !== 'keydown') return true;
 
+      const isMac = navigator.userAgent.includes('Mac');
+
+      // Copy: Cmd+C (macOS) or Ctrl+Shift+C (Linux) — copy terminal selection
+      // Also Ctrl+C on any platform when there's an active selection (matches
+      // native terminal behaviour: Ctrl+C copies when selected, sends SIGINT otherwise)
+      if (
+        (isMac && e.metaKey && e.key === 'c') ||
+        (!isMac && e.ctrlKey && e.shiftKey && e.key === 'C') ||
+        (e.ctrlKey && !e.shiftKey && e.key === 'c' && this.terminal.hasSelection())
+      ) {
+        const sel = this.terminal.getSelection();
+        if (sel) {
+          e.preventDefault();
+          navigator.clipboard.writeText(sel);
+          return false;
+        }
+      }
+
+      // Paste: Cmd+V (macOS) or Ctrl+Shift+V (Linux)
+      if (
+        (isMac && e.metaKey && e.key === 'v') ||
+        (!isMac && e.ctrlKey && e.shiftKey && e.key === 'V')
+      ) {
+        e.preventDefault();
+        navigator.clipboard.readText().then((text) => {
+          if (text) window.electronAPI.ptyInput({ id: this.id, data: text });
+        });
+        return false;
+      }
+
       // Shift+Enter → Ctrl+J (multiline input for Claude Code)
       if (e.key === 'Enter' && e.shiftKey) {
         e.preventDefault();

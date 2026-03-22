@@ -16,6 +16,8 @@ import type {
   RemoteControlState,
   TaskContextMeta,
   PullRequestInfo,
+  PixelAgentsConfig,
+  PixelAgentsStatus,
 } from '../shared/types';
 
 export interface ElectronAPI {
@@ -202,7 +204,8 @@ export interface ElectronAPI {
   // Git detection
   detectGit: (
     folderPath: string,
-  ) => Promise<IpcResponse<{ remote: string | null; branch: string | null }>>;
+  ) => Promise<IpcResponse<{ isGitRepo: boolean; remote: string | null; branch: string | null }>>;
+  gitInit: (folderPath: string) => Promise<IpcResponse<null>>;
   detectClaude: () => Promise<
     IpcResponse<{ installed: boolean; version: string | null; path: string | null }>
   >;
@@ -246,6 +249,19 @@ export interface ElectronAPI {
   gitUnwatch: (id: string) => Promise<IpcResponse<void>>;
   onGitFileChanged: (callback: (id: string) => void) => () => void;
 
+  // Pixel Agents
+  pixelAgentsGetConfig: () => Promise<IpcResponse<PixelAgentsConfig | null>>;
+  pixelAgentsSaveConfig: (config: PixelAgentsConfig) => Promise<IpcResponse<void>>;
+  pixelAgentsGetStatus: () => Promise<IpcResponse<PixelAgentsStatus>>;
+  pixelAgentsStart: () => Promise<IpcResponse<void>>;
+  pixelAgentsStop: () => Promise<IpcResponse<void>>;
+  onPixelAgentsStatusChanged: (callback: (status: PixelAgentsStatus) => void) => () => void;
+
+  // Telemetry
+  telemetryCapture: (event: string, properties?: Record<string, unknown>) => Promise<void>;
+  telemetryGetStatus: () => Promise<IpcResponse<{ enabled: boolean; envDisabled: boolean }>>;
+  telemetrySetEnabled: (enabled: boolean) => Promise<IpcResponse<void>>;
+
   // Auto-update
   autoUpdateCheck: () => Promise<IpcResponse<void>>;
   autoUpdateDownload: () => Promise<IpcResponse<void>>;
@@ -261,7 +277,7 @@ export interface ElectronAPI {
     }) => void,
   ) => () => void;
   onAutoUpdateDownloaded: (callback: () => void) => () => void;
-  onAutoUpdateError: (callback: (message: string) => void) => () => void;
+  onAutoUpdateError: (callback: (info: { message: string; detail: string }) => void) => () => void;
 }
 
 declare global {

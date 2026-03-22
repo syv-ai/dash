@@ -33,12 +33,15 @@ interface LeftSidebarProps {
   onArchiveTask: (id: string) => void;
   onRestoreTask: (id: string) => void;
   onOpenSettings: () => void;
+  onOpenPixelAgents?: () => void;
   onShowCommitGraph: (projectId: string) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
   taskActivity: Record<string, 'busy' | 'idle' | 'waiting'>;
+  unseenTaskIds?: Set<string>;
   remoteControlStates?: Record<string, RemoteControlState>;
   onReorderProjects?: (reordered: Project[]) => void;
+  pixelAgentsConnectedCount?: number;
 }
 
 export function LeftSidebar({
@@ -56,12 +59,15 @@ export function LeftSidebar({
   onArchiveTask,
   onRestoreTask,
   onOpenSettings,
+  onOpenPixelAgents,
   onShowCommitGraph,
   collapsed,
   onToggleCollapse,
   taskActivity,
+  unseenTaskIds,
   remoteControlStates = {},
   onReorderProjects,
+  pixelAgentsConnectedCount = 0,
 }: LeftSidebarProps) {
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [collapsedArchived, setCollapsedArchived] = useState<Set<string>>(new Set());
@@ -201,9 +207,12 @@ export function LeftSidebar({
         <Tooltip content="Settings">
           <button
             onClick={onOpenSettings}
-            className="p-2 rounded-md hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
+            className="relative p-2 rounded-md hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
           >
             <Settings size={18} strokeWidth={1.5} />
+            {pixelAgentsConnectedCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[hsl(var(--git-added))]" />
+            )}
           </button>
         </Tooltip>
       </div>
@@ -402,6 +411,10 @@ export function LeftSidebar({
                               <Tooltip content="Claude is working">
                                 <div className="w-[6px] h-[6px] rounded-full bg-amber-400 status-pulse flex-shrink-0" />
                               </Tooltip>
+                            ) : activity === 'idle' && unseenTaskIds?.has(task.id) ? (
+                              <Tooltip content="Done (unseen)">
+                                <div className="w-[6px] h-[6px] rounded-full bg-blue-400 flex-shrink-0" />
+                              </Tooltip>
                             ) : activity === 'idle' ? (
                               <Tooltip content="Idle">
                                 <div className="w-[6px] h-[6px] rounded-full bg-emerald-400 flex-shrink-0" />
@@ -530,6 +543,22 @@ export function LeftSidebar({
         >
           <Settings size={14} strokeWidth={1.8} />
           <span>Settings</span>
+          {pixelAgentsConnectedCount > 0 && (
+            <Tooltip content="Pixel Agents streaming to office">
+              <span
+                className="ml-auto flex items-center gap-1.5 text-[12px] text-[hsl(var(--git-added))] hover:underline"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenPixelAgents?.();
+                }}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--git-added))]" />
+                {pixelAgentsConnectedCount === 1
+                  ? '1 office'
+                  : `${pixelAgentsConnectedCount} offices`}
+              </span>
+            </Tooltip>
+          )}
         </button>
       </div>
     </div>

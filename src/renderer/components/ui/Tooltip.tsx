@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+const PADDING = 8;
+
 interface TooltipProps {
   content: string;
   side?: 'top' | 'bottom';
@@ -32,6 +34,23 @@ export function Tooltip({ content, side = 'top', delay = 150, children }: Toolti
     setCoords(null);
   }, []);
 
+  // Ref callback: measures and clamps position before first paint
+  const tooltipRefCallback = useCallback(
+    (el: HTMLDivElement | null) => {
+      if (!el || !coords) return;
+      const ttWidth = el.offsetWidth;
+      const idealLeft = coords.x - ttWidth / 2;
+      const clampedLeft = Math.max(
+        PADDING,
+        Math.min(window.innerWidth - ttWidth - PADDING, idealLeft),
+      );
+      el.style.left = `${clampedLeft}px`;
+      el.style.transform = side === 'top' ? 'translateY(-100%)' : '';
+      el.style.visibility = 'visible';
+    },
+    [coords, side],
+  );
+
   useEffect(() => {
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -50,10 +69,11 @@ export function Tooltip({ content, side = 'top', delay = 150, children }: Toolti
         coords &&
         createPortal(
           <div
+            ref={tooltipRefCallback}
             className="tooltip-popup"
             style={{
-              left: coords.x,
               top: side === 'top' ? coords.y - 6 : coords.y + 6,
+              visibility: 'hidden',
             }}
             data-side={side}
           >

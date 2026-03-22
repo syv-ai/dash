@@ -9,8 +9,14 @@ interface StoredAdoEntry {
   encryptedPat: string;
 }
 
+interface StoredPixelAgentsToken {
+  officeId: string;
+  encryptedToken: string;
+}
+
 interface StoredConfig {
   ado?: Record<string, StoredAdoEntry>; // keyed by projectId or 'default'
+  pixelAgentsTokens?: StoredPixelAgentsToken[];
 }
 
 const CONFIG_FILE = 'config.json';
@@ -118,5 +124,52 @@ export class ConnectionConfigService {
     if (!config.ado) return false;
     if (projectId && config.ado[projectId]) return true;
     return config.ado[DEFAULT_KEY] != null;
+  }
+
+  // ── Pixel Agents Token Storage ──────────────────────────────
+
+  static savePixelAgentsToken(officeId: string, token: string): void {
+    const config = this.readConfig();
+    if (!config.pixelAgentsTokens) config.pixelAgentsTokens = [];
+    const existing = config.pixelAgentsTokens.find((t) => t.officeId === officeId);
+    const encryptedToken = this.encryptPat(token);
+    if (existing) {
+      existing.encryptedToken = encryptedToken;
+    } else {
+      config.pixelAgentsTokens.push({ officeId, encryptedToken });
+    }
+    this.writeConfig(config);
+  }
+
+  static getPixelAgentsToken(officeId: string): string | null {
+    const config = this.readConfig();
+    const entry = config.pixelAgentsTokens?.find((t) => t.officeId === officeId);
+    if (!entry) return null;
+    try {
+      return this.decryptPat(entry.encryptedToken);
+    } catch {
+      return null;
+    }
+  }
+
+  static removePixelAgentsToken(officeId: string): void {
+    const config = this.readConfig();
+    if (!config.pixelAgentsTokens) return;
+    config.pixelAgentsTokens = config.pixelAgentsTokens.filter((t) => t.officeId !== officeId);
+    if (config.pixelAgentsTokens.length === 0) delete config.pixelAgentsTokens;
+    this.writeConfig(config);
+  }
+
+  static getAllPixelAgentsTokens(): Record<string, string> {
+    const config = this.readConfig();
+    const result: Record<string, string> = {};
+    for (const entry of config.pixelAgentsTokens || []) {
+      try {
+        result[entry.officeId] = this.decryptPat(entry.encryptedToken);
+      } catch {
+        // Skip corrupted entries
+      }
+    }
+    return result;
   }
 }

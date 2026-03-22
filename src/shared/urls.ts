@@ -72,6 +72,26 @@ export function parseAdoRemote(
   return null;
 }
 
+/** Convert a git remote URL + branch name to a branch URL on the hosting provider */
+export function branchUrl(remote: string, branch: string): string | null {
+  const encodedBranch = encodeURIComponent(branch);
+
+  // GitHub
+  const ghSsh = remote.match(/git@github\.com:(.+?)(?:\.git)?$/);
+  if (ghSsh) return `https://github.com/${ghSsh[1]}/tree/${encodedBranch}`;
+  const ghHttps = remote.match(/https:\/\/github\.com\/(.+?)(?:\.git)?$/);
+  if (ghHttps) return `https://github.com/${ghHttps[1]}/tree/${encodedBranch}`;
+
+  // ADO
+  const ado = parseAdoRemote(remote);
+  if (ado?.repository) {
+    const base = ado.organizationUrl.replace(/\/+$/, '');
+    return `${base}/${ado.project}/_git/${ado.repository}?version=GB${encodedBranch}`;
+  }
+
+  return null;
+}
+
 /** Check if a git remote URL points to an ADO repository */
 export function isAdoRemote(remote: string | null): boolean {
   if (!remote) return false;
