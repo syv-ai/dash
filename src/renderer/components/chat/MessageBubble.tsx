@@ -8,9 +8,15 @@ interface MessageBubbleProps {
   message: ChatMessage;
   /** All messages in the conversation, for finding tool results. */
   allMessages: ChatMessage[];
+  /** True if the previous message has the same role (group continuation). */
+  isGroupContinuation?: boolean;
 }
 
-export function MessageBubble({ message, allMessages }: MessageBubbleProps) {
+export function MessageBubble({
+  message,
+  allMessages,
+  isGroupContinuation = false,
+}: MessageBubbleProps) {
   if (message.role === 'system') {
     return (
       <div className="flex items-start gap-2 px-4 py-2 animate-chat-entry">
@@ -29,6 +35,19 @@ export function MessageBubble({ message, allMessages }: MessageBubbleProps) {
     (block) => block.type === 'text' || block.type === 'tool_use',
   );
   if (!hasVisibleContent) return null;
+
+  // Continuation messages: no avatar, no header, tighter spacing
+  if (isGroupContinuation) {
+    return (
+      <div className={`flex gap-3 px-4 pb-2 animate-chat-entry ${isUser ? '' : 'bg-surface-0/50'}`}>
+        {/* Spacer matching avatar width */}
+        <div className="w-6 shrink-0" />
+        <div className="flex-1 min-w-0 space-y-1">
+          {message.content.map((block, i) => renderContentBlock(block, i, allMessages))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`flex gap-3 px-4 py-3 animate-chat-entry ${isUser ? '' : 'bg-surface-0/50'}`}>

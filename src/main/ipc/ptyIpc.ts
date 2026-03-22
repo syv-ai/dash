@@ -207,6 +207,7 @@ interface ChatWatcher {
   fsWatcher: fs.FSWatcher | null;
   filePath: string;
   byteOffset: number;
+  lineBuffer: string;
 }
 
 const chatWatchers = new Map<string, ChatWatcher>();
@@ -242,12 +243,18 @@ function startChatWatcher(id: string, cwd: string, sender: Electron.WebContents)
       fs.closeSync(fd);
       byteOffset = stat.size;
 
-      const newText = buf.toString('utf-8');
+      const watcher = chatWatchers.get(id);
+      const newText = (watcher?.lineBuffer || '') + buf.toString('utf-8');
+      const lines = newText.split('\n');
+      // Keep the last (possibly incomplete) line in the buffer
+      const incompleteLine = lines.pop() || '';
+      if (watcher) watcher.lineBuffer = incompleteLine;
+
       const messages: ChatHistoryMessage[] = [];
       let counter = Date.now();
       let latestStatus: string | null = null;
 
-      for (const line of newText.split('\n')) {
+      for (const line of lines) {
         if (!line.trim()) continue;
         try {
           const entry = JSON.parse(line);
@@ -295,7 +302,7 @@ function startChatWatcher(id: string, cwd: string, sender: Electron.WebContents)
   // Poll every 500ms as fallback (fs.watch can miss events)
   const interval = setInterval(readNewEntries, 500);
 
-  chatWatchers.set(id, { interval, fsWatcher, filePath, byteOffset });
+  chatWatchers.set(id, { interval, fsWatcher, filePath, byteOffset, lineBuffer: '' });
 }
 
 function stopChatWatcher(id: string): void {

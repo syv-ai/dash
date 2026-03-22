@@ -226,9 +226,27 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
           </div>
         )}
 
-        {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} allMessages={messages} />
-        ))}
+        {messages.map((msg, idx) => {
+          // Find the previous VISIBLE message for grouping
+          // (skip tool_result-only messages that render as null)
+          let prevVisibleRole: string | null = null;
+          for (let j = idx - 1; j >= 0; j--) {
+            const prev = messages[j];
+            const hasVisible = prev.content.some((b) => b.type === 'text' || b.type === 'tool_use');
+            if (hasVisible) {
+              prevVisibleRole = prev.role;
+              break;
+            }
+          }
+          return (
+            <MessageBubble
+              key={msg.id}
+              message={msg}
+              allMessages={messages}
+              isGroupContinuation={prevVisibleRole === msg.role}
+            />
+          );
+        })}
 
         {/* Inline thinking/tool status as a chat message */}
         {isBusy && messages.length > 0 && (
