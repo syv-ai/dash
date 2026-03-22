@@ -218,6 +218,7 @@ function startChatWatcher(id: string, cwd: string, sender: Electron.WebContents)
       const newText = buf.toString('utf-8');
       const messages: ChatHistoryMessage[] = [];
       let counter = Date.now();
+      let latestStatus: string | null = null;
 
       for (const line of newText.split('\n')) {
         if (!line.trim()) continue;
@@ -225,13 +226,31 @@ function startChatWatcher(id: string, cwd: string, sender: Electron.WebContents)
           const entry = JSON.parse(line);
           const msg = parseConversationEntry(entry, counter++);
           if (msg) messages.push(msg);
+
+          // Extract status from assistant tool_use blocks
+          if (entry.type === 'assistant' && Array.isArray(entry.message?.content)) {
+            for (const block of entry.message.content) {
+              if (block?.type === 'tool_use' && block.name) {
+                latestStatus = block.name;
+              }
+            }
+          }
+          // Clear status on result/progress indicating turn end
+          if (entry.type === 'result') {
+            latestStatus = null;
+          }
         } catch {
           // Skip malformed lines
         }
       }
 
-      if (messages.length > 0 && !sender.isDestroyed()) {
-        sender.send(`pty:chatMessages:${id}`, messages);
+      if (!sender.isDestroyed()) {
+        if (messages.length > 0) {
+          sender.send(`pty:chatMessages:${id}`, messages);
+        }
+        if (latestStatus !== undefined) {
+          sender.send(`pty:chatStatus:${id}`, latestStatus);
+        }
       }
     } catch {
       // File may have been deleted/rotated

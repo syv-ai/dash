@@ -106,6 +106,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener(`pty:chatMessages:${id}`, handler);
     };
   },
+  onChatStatus: (id: string, callback: (status: string | null) => void) => {
+    const handler = (_event: unknown, status: string | null) => callback(status);
+    ipcRenderer.on(`pty:chatStatus:${id}`, handler);
+    return () => {
+      ipcRenderer.removeListener(`pty:chatStatus:${id}`, handler);
+    };
+  },
 
   // Task context for SessionStart hook
   ptyWriteTaskContext: (args: { cwd: string; prompt: string; meta?: unknown }) =>

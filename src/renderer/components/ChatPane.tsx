@@ -14,6 +14,7 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isBusy, setIsBusy] = useState(false);
+  const [busyStatus, setBusyStatus] = useState<string | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [connected, setConnected] = useState(false);
   const busyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -52,6 +53,7 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
         const hasAssistant = toAdd.some((m) => m.role === 'assistant');
         if (hasAssistant) {
           setIsBusy(false);
+          setBusyStatus(null);
           if (busyTimerRef.current) clearTimeout(busyTimerRef.current);
         }
 
@@ -59,8 +61,16 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
       });
     });
 
+    const unsubStatus = window.electronAPI.onChatStatus(id, (status) => {
+      setBusyStatus(status);
+      if (status) {
+        setIsBusy(true);
+      }
+    });
+
     const unsubExit = window.electronAPI.onPtyExit(id, () => {
       setIsBusy(false);
+      setBusyStatus(null);
       setConnected(false);
     });
 
@@ -84,6 +94,7 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
 
     return () => {
       unsubChat();
+      unsubStatus();
       unsubExit();
       if (busyTimerRef.current) clearTimeout(busyTimerRef.current);
       window.electronAPI.ptyChatUnwatch(id);
@@ -91,12 +102,12 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
     };
   }, [id, cwd]);
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to bottom when new messages arrive or status changes
   useEffect(() => {
     if (isAtBottom && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isAtBottom]);
+  }, [messages, isBusy, busyStatus, isAtBottom]);
 
   // Track scroll position
   const handleScroll = useCallback(() => {
@@ -120,6 +131,7 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
         e.preventDefault();
         window.electronAPI.ptyInput({ id, data: '\x03' });
         setIsBusy(false);
+        setBusyStatus(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -192,7 +204,7 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
               <Loader2 size={12} strokeWidth={2} className="animate-spin text-muted-foreground" />
             </div>
             <span className="text-[12px] text-muted-foreground animate-pulse">
-              Claude is thinking...
+              {busyStatus ? `Running ${busyStatus}...` : 'Claude is thinking...'}
             </span>
           </div>
         )}
