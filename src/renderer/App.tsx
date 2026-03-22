@@ -1190,6 +1190,7 @@ export function App() {
               onDeleteTask={handleDeleteTask}
               onArchiveTask={handleArchiveTask}
               onRestoreTask={handleRestoreTask}
+              gitStatus={gitStatus}
             />
           </ShellDrawerWrapper>
         </Panel>

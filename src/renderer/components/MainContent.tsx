@@ -2,7 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { TerminalPane } from './TerminalPane';
 import { ProjectOverview } from './ProjectOverview';
 import { FolderOpen, GitBranch, Globe, GitPullRequest, Code2 } from 'lucide-react';
-import type { Project, Task, RemoteControlState, PullRequestInfo } from '../../shared/types';
+import type {
+  Project,
+  Task,
+  RemoteControlState,
+  PullRequestInfo,
+  GitStatus,
+} from '../../shared/types';
 import { linkedItemUrl, isAdoRemote } from '../../shared/urls';
 import { Tooltip } from './ui/Tooltip';
 
@@ -25,6 +31,7 @@ interface MainContentProps {
   onDeleteTask?: (id: string) => void;
   onArchiveTask?: (id: string) => void;
   onRestoreTask?: (id: string) => void;
+  gitStatus?: GitStatus | null;
 }
 
 export function MainContent({
@@ -46,13 +53,20 @@ export function MainContent({
   onDeleteTask,
   onArchiveTask,
   onRestoreTask,
+  gitStatus,
 }: MainContentProps) {
   const [prInfo, setPrInfo] = useState<PullRequestInfo | null>(null);
 
   useEffect(() => {
     setPrInfo(null);
 
-    if (!activeTask?.branch || !activeProject) {
+    const defaultBranch = activeProject?.baseRef || activeProject?.gitBranch || 'main';
+    if (
+      !activeTask?.branch ||
+      !activeProject ||
+      gitStatus?.branch !== activeTask.branch ||
+      activeTask.branch === defaultBranch
+    ) {
       return;
     }
 
@@ -82,7 +96,13 @@ export function MainContent({
     return () => {
       cancelled = true;
     };
-  }, [activeTask?.id, activeTask?.branch, activeProject?.id, activeProject?.gitRemote]);
+  }, [
+    activeTask?.id,
+    activeTask?.branch,
+    activeProject?.id,
+    activeProject?.gitRemote,
+    gitStatus?.branch,
+  ]);
 
   if (!activeProject) {
     return (
