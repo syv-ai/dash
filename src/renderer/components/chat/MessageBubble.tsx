@@ -13,7 +13,7 @@ interface MessageBubbleProps {
 export function MessageBubble({ message, allMessages }: MessageBubbleProps) {
   if (message.role === 'system') {
     return (
-      <div className="flex items-start gap-2 px-4 py-2">
+      <div className="flex items-start gap-2 px-4 py-2 animate-fade-in">
         <AlertTriangle size={14} strokeWidth={1.8} className="text-orange-500 mt-0.5 shrink-0" />
         <div className="text-[12px] text-orange-600 dark:text-orange-400">
           {getTextContent(message.content)}
@@ -25,20 +25,14 @@ export function MessageBubble({ message, allMessages }: MessageBubbleProps) {
   const isUser = message.role === 'user';
 
   return (
-    <div className={`flex gap-3 px-4 py-3 ${isUser ? '' : 'bg-surface-0/50'}`}>
+    <div className={`flex gap-3 px-4 py-3 animate-fade-in ${isUser ? '' : 'bg-surface-0/50'}`}>
       {/* Avatar */}
       <div
         className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
-          isUser
-            ? 'bg-primary/10 text-primary'
-            : 'bg-accent/80 text-muted-foreground'
+          isUser ? 'bg-primary/10 text-primary' : 'bg-accent/80 text-muted-foreground'
         }`}
       >
-        {isUser ? (
-          <User size={13} strokeWidth={2} />
-        ) : (
-          <Bot size={13} strokeWidth={2} />
-        )}
+        {isUser ? <User size={13} strokeWidth={2} /> : <Bot size={13} strokeWidth={2} />}
       </div>
 
       {/* Content */}
@@ -51,9 +45,7 @@ export function MessageBubble({ message, allMessages }: MessageBubbleProps) {
             <span className="text-[10px] text-muted-foreground font-mono">{message.model}</span>
           )}
           {message.costUsd !== undefined && (
-            <span className="text-[10px] text-muted-foreground">
-              ${message.costUsd.toFixed(4)}
-            </span>
+            <span className="text-[10px] text-muted-foreground">${message.costUsd.toFixed(4)}</span>
           )}
         </div>
 

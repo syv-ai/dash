@@ -199,7 +199,7 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
 
         {/* Inline thinking/tool status as a chat message */}
         {isBusy && messages.length > 0 && (
-          <div className="flex gap-3 px-4 py-3 bg-surface-0/50">
+          <div className="flex gap-3 px-4 py-3 bg-surface-0/50 animate-fade-in">
             <div className="w-6 h-6 rounded-full bg-accent/80 flex items-center justify-center shrink-0 mt-0.5">
               <Loader2 size={12} strokeWidth={2} className="animate-spin text-muted-foreground" />
             </div>
