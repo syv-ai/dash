@@ -173,6 +173,33 @@ export function registerPtyIpc(): void {
   });
 }
 
+/** Format a human-readable status string from a tool_use block. */
+function formatToolStatus(name: string, input: any): string {
+  const fileName = (p: string) => p.split('/').pop() || p;
+  switch (name) {
+    case 'Read':
+      return input?.file_path ? `Reading ${fileName(input.file_path)}` : 'Reading';
+    case 'Edit':
+      return input?.file_path ? `Editing ${fileName(input.file_path)}` : 'Editing';
+    case 'Write':
+      return input?.file_path ? `Writing ${fileName(input.file_path)}` : 'Writing';
+    case 'Bash':
+      return input?.command ? `Running \`${input.command.slice(0, 60)}\`` : 'Running command';
+    case 'Glob':
+      return input?.pattern ? `Searching for ${input.pattern}` : 'Searching files';
+    case 'Grep':
+      return input?.pattern ? `Searching for "${input.pattern}"` : 'Searching content';
+    case 'Agent':
+      return input?.description || 'Running subagent';
+    case 'WebFetch':
+      return 'Fetching web page';
+    case 'WebSearch':
+      return input?.query ? `Searching "${input.query.slice(0, 50)}"` : 'Searching web';
+    default:
+      return `Running ${name}`;
+  }
+}
+
 // ── JSONL Chat Watcher ──────────────────────────────────────
 
 interface ChatWatcher {
@@ -231,7 +258,7 @@ function startChatWatcher(id: string, cwd: string, sender: Electron.WebContents)
           if (entry.type === 'assistant' && Array.isArray(entry.message?.content)) {
             for (const block of entry.message.content) {
               if (block?.type === 'tool_use' && block.name) {
-                latestStatus = block.name;
+                latestStatus = formatToolStatus(block.name, block.input);
               }
             }
           }
@@ -289,9 +316,6 @@ function parseConversationEntry(entry: any, counter: number): ChatHistoryMessage
     if (entry.isMeta) return null;
     const rawContent = msg.content;
     if (typeof rawContent === 'string' && rawContent.includes('<command-name>')) return null;
-    if (Array.isArray(rawContent) && rawContent.every((b: any) => b?.type === 'tool_result')) {
-      return null;
-    }
     const content = normalizeContent(rawContent);
     if (content.length === 0) return null;
     return {

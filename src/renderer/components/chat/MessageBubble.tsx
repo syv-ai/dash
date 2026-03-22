@@ -24,6 +24,15 @@ export function MessageBubble({ message, allMessages }: MessageBubbleProps) {
 
   const isUser = message.role === 'user';
 
+  // Check if the message has any visible content to render.
+  // tool_use without results and standalone tool_result are hidden.
+  const hasVisibleContent = message.content.some((block) => {
+    if (block.type === 'text') return true;
+    if (block.type === 'tool_use') return !!findToolResult(block.id, allMessages);
+    return false; // tool_result rendered inline with tool_use
+  });
+  if (!hasVisibleContent) return null;
+
   return (
     <div className={`flex gap-3 px-4 py-3 animate-chat-entry ${isUser ? '' : 'bg-surface-0/50'}`}>
       {/* Avatar */}
