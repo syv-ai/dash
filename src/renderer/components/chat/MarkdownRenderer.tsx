@@ -18,7 +18,8 @@ type Block =
   | { type: 'code'; lang: string; code: string }
   | { type: 'paragraph'; text: string }
   | { type: 'heading'; level: number; text: string }
-  | { type: 'list'; ordered: boolean; items: string[] };
+  | { type: 'list'; ordered: boolean; items: string[] }
+  | { type: 'table'; headers: string[]; rows: string[][] };
 
 function parseBlocks(text: string): Block[] {
   const blocks: Block[] = [];
@@ -73,6 +74,32 @@ function parseBlocks(text: string): Block[] {
       continue;
     }
 
+    // Table: header row | separator row | data rows
+    if (
+      line.includes('|') &&
+      i + 1 < lines.length &&
+      lines[i + 1].match(/^\s*\|?\s*[-:]+[-|:\s]*$/)
+    ) {
+      const parseRow = (r: string) =>
+        r
+          .split('|')
+          .map((c) => c.trim())
+          .filter((_, idx, arr) => idx > 0 || arr[0] !== '');
+      const headers = parseRow(line);
+      // Remove trailing empty cell if row ended with |
+      if (headers.length > 0 && headers[headers.length - 1] === '') headers.pop();
+      i += 2; // skip header + separator
+      const rows: string[][] = [];
+      while (i < lines.length && lines[i].includes('|')) {
+        const row = parseRow(lines[i]);
+        if (row.length > 0 && row[row.length - 1] === '') row.pop();
+        rows.push(row);
+        i++;
+      }
+      blocks.push({ type: 'table', headers, rows });
+      continue;
+    }
+
     // Empty line
     if (line.trim() === '') {
       i++;
@@ -87,7 +114,12 @@ function parseBlocks(text: string): Block[] {
       !lines[i].match(/^```/) &&
       !lines[i].match(/^#{1,6}\s+/) &&
       !lines[i].match(/^\s*[-*]\s+/) &&
-      !lines[i].match(/^\s*\d+\.\s+/)
+      !lines[i].match(/^\s*\d+\.\s+/) &&
+      !(
+        lines[i].includes('|') &&
+        i + 1 < lines.length &&
+        lines[i + 1]?.match(/^\s*\|?\s*[-:]+[-|:\s]*$/)
+      )
     ) {
       paraLines.push(lines[i]);
       i++;
@@ -149,6 +181,41 @@ function renderBlock(block: Block, key: number): React.ReactNode {
         </Tag>
       );
     }
+
+    case 'table':
+      return (
+        <div key={key} className="my-2 overflow-x-auto rounded-md border border-border/60">
+          <table className="w-full text-[12px]">
+            <thead>
+              <tr
+                className="border-b border-border/60"
+                style={{ background: 'hsl(var(--surface-1))' }}
+              >
+                {block.headers.map((h, j) => (
+                  <th key={j} className="px-3 py-1.5 text-left font-semibold text-foreground/80">
+                    {renderInline(h)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {block.rows.map((row, j) => (
+                <tr
+                  key={j}
+                  className="border-b border-border/30 last:border-0"
+                  style={{ background: j % 2 === 0 ? 'hsl(var(--surface-0))' : 'transparent' }}
+                >
+                  {row.map((cell, k) => (
+                    <td key={k} className="px-3 py-1.5 text-foreground/80">
+                      {renderInline(cell)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
 
     case 'paragraph':
       return (

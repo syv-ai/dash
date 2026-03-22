@@ -13,7 +13,7 @@ interface MessageBubbleProps {
 export function MessageBubble({ message, allMessages }: MessageBubbleProps) {
   if (message.role === 'system') {
     return (
-      <div className="flex items-start gap-2 px-4 py-2 animate-fade-in">
+      <div className="flex items-start gap-2 px-4 py-2 animate-chat-entry">
         <AlertTriangle size={14} strokeWidth={1.8} className="text-orange-500 mt-0.5 shrink-0" />
         <div className="text-[12px] text-orange-600 dark:text-orange-400">
           {getTextContent(message.content)}
@@ -25,7 +25,7 @@ export function MessageBubble({ message, allMessages }: MessageBubbleProps) {
   const isUser = message.role === 'user';
 
   return (
-    <div className={`flex gap-3 px-4 py-3 animate-fade-in ${isUser ? '' : 'bg-surface-0/50'}`}>
+    <div className={`flex gap-3 px-4 py-3 animate-chat-entry ${isUser ? '' : 'bg-surface-0/50'}`}>
       {/* Avatar */}
       <div
         className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
@@ -67,8 +67,10 @@ function renderContentBlock(
       return <MarkdownRenderer key={key} content={block.text} />;
 
     case 'tool_use': {
-      // Find the corresponding tool_result in subsequent messages
+      // Only render once the tool has completed (result available).
+      // While running, the status indicator shows "Running [tool]..." instead.
       const result = findToolResult(block.id, allMessages);
+      if (!result) return null;
       return <ToolUseBlock key={key} block={block} result={result} />;
     }
 

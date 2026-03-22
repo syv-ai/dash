@@ -103,6 +103,103 @@ function renderExpandedDetail(
     );
   }
 
+  if (block.name === 'Bash') {
+    const cmd = typeof input.command === 'string' ? input.command : '';
+    const output = result?.content || '';
+    const highlighted = highlightBlock(cmd, 'bash');
+    return (
+      <>
+        <div className="px-3 py-2" style={{ background: 'hsl(var(--surface-0))' }}>
+          <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
+            Command
+          </div>
+          <pre className="text-[11px] font-mono leading-relaxed overflow-x-auto">
+            <code dangerouslySetInnerHTML={{ __html: highlighted }} />
+          </pre>
+        </div>
+        {output && (
+          <div
+            className="px-3 py-2 border-t border-border/40"
+            style={{ background: 'hsl(var(--surface-0))' }}
+          >
+            <div
+              className={`text-[10px] font-medium uppercase tracking-wide mb-1 ${
+                result?.is_error ? 'text-destructive' : 'text-muted-foreground'
+              }`}
+            >
+              {result?.is_error ? 'Error' : 'Output'}
+            </div>
+            <pre
+              className={`text-[11px] font-mono whitespace-pre-wrap break-all overflow-x-auto max-h-[400px] overflow-y-auto ${
+                result?.is_error ? 'text-destructive/80' : 'text-foreground/70'
+              }`}
+            >
+              {output}
+            </pre>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  if (block.name === 'Read') {
+    const filePath = input.file_path || '';
+    const output = result?.content || '';
+    const readLang = filePath ? langFromPath(filePath) : undefined;
+    const highlighted = output ? highlightBlock(output, readLang) : '';
+    const htmlLines = highlighted ? highlighted.split('\n') : [];
+    const startLine = input.offset || 1;
+    return (
+      <div className="overflow-y-auto max-h-[400px]">
+        {htmlLines.map((html, i) => (
+          <div key={i} className="flex text-[11px] font-mono leading-relaxed">
+            <span className="w-10 text-right pr-2 text-muted-foreground/40 select-none flex-shrink-0">
+              {startLine + i}
+            </span>
+            <span
+              className="text-foreground/70 whitespace-pre-wrap break-all"
+              dangerouslySetInnerHTML={{ __html: html || '&nbsp;' }}
+            />
+          </div>
+        ))}
+        {htmlLines.length === 0 && (
+          <div className="px-3 py-2 text-[11px] text-muted-foreground">No content</div>
+        )}
+      </div>
+    );
+  }
+
+  if (block.name === 'Grep' || block.name === 'Glob') {
+    const output = result?.content || '';
+    return (
+      <>
+        <div className="px-3 py-2" style={{ background: 'hsl(var(--surface-0))' }}>
+          <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
+            {block.name === 'Grep' ? 'Search' : 'Pattern'}
+          </div>
+          <pre className="text-[11px] font-mono text-foreground/70">
+            {block.name === 'Grep'
+              ? `${input.pattern || ''}${input.path ? ` in ${input.path}` : ''}`
+              : input.pattern || ''}
+          </pre>
+        </div>
+        {output && (
+          <div
+            className="px-3 py-2 border-t border-border/40"
+            style={{ background: 'hsl(var(--surface-0))' }}
+          >
+            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
+              Results
+            </div>
+            <pre className="text-[11px] font-mono text-foreground/70 whitespace-pre-wrap break-all overflow-x-auto max-h-[400px] overflow-y-auto">
+              {output}
+            </pre>
+          </div>
+        )}
+      </>
+    );
+  }
+
   // Default: raw JSON input + result
   return (
     <>
