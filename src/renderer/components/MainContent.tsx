@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { TerminalPane } from './TerminalPane';
 import { ProjectOverview } from './ProjectOverview';
-import { FolderOpen, GitBranch, Globe, GitPullRequest, Code2 } from 'lucide-react';
+import { FolderOpen, GitBranch, FolderGit2, Globe, GitPullRequest, Code2 } from 'lucide-react';
 import type {
   Project,
   Task,
@@ -9,7 +9,7 @@ import type {
   PullRequestInfo,
   GitStatus,
 } from '../../shared/types';
-import { linkedItemUrl, isAdoRemote } from '../../shared/urls';
+import { linkedItemUrl, isAdoRemote, branchUrl } from '../../shared/urls';
 import { Tooltip } from './ui/Tooltip';
 
 interface MainContentProps {
@@ -137,6 +137,25 @@ export function MainContent({
     );
   }
 
+  const currentBranch = gitStatus?.branch || activeTask?.branch;
+  const currentBranchUrl =
+    currentBranch && activeProject?.gitRemote
+      ? branchUrl(activeProject.gitRemote, currentBranch)
+      : null;
+
+  const branchLabel = currentBranchUrl ? (
+    <a
+      href={currentBranchUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-[11px] font-mono hover:underline truncate"
+    >
+      {currentBranch}
+    </a>
+  ) : (
+    <span className="text-[11px] font-mono truncate">{currentBranch}</span>
+  );
+
   const taskHeader = (
     <div
       className="flex items-center gap-3 px-4 h-10 flex-shrink-0 border-b border-border/60"
@@ -182,20 +201,30 @@ export function MainContent({
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-1.5 text-foreground/60 flex-shrink-0">
-            <GitBranch size={11} strokeWidth={2} />
-            <span className="text-[11px] font-mono">{activeTask.branch}</span>
-          </div>
+          {activeTask.useWorktree && (
+            <Tooltip content="Worktree">
+              <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
+                <FolderGit2 size={11} strokeWidth={2} className="flex-shrink-0" />
+                <span className="text-[11px] font-mono truncate">
+                  {activeTask.path.split('/').pop()}
+                </span>
+              </div>
+            </Tooltip>
+          )}
+          <Tooltip content="Branch">
+            <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
+              <GitBranch size={11} strokeWidth={2} className="flex-shrink-0" />
+              {branchLabel}
+            </div>
+          </Tooltip>
         </>
       ) : (
         <>
-          <div className="flex items-center gap-2">
-            <div className="w-[7px] h-[7px] rounded-full bg-[hsl(var(--git-added))] status-pulse" />
-            <span className="text-[13px] font-medium text-foreground">{activeTask.name}</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-foreground/60">
-            <GitBranch size={11} strokeWidth={2} />
-            <span className="text-[11px] font-mono">{activeTask.branch}</span>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="w-[7px] h-[7px] rounded-full bg-[hsl(var(--git-added))] status-pulse flex-shrink-0" />
+            <span className="text-[13px] font-medium text-foreground whitespace-nowrap">
+              {activeTask.name}
+            </span>
           </div>
           {activeTask.linkedItems && activeTask.linkedItems.length > 0 ? (
             <div className="flex items-center gap-1">
@@ -230,6 +259,22 @@ export function MainContent({
             </div>
           ) : null}
           <div className="ml-auto flex items-center gap-1.5">
+            {activeTask.useWorktree && (
+              <Tooltip content="Worktree">
+                <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
+                  <FolderGit2 size={11} strokeWidth={2} className="flex-shrink-0" />
+                  <span className="text-[11px] font-mono truncate">
+                    {activeTask.path.split('/').pop()}
+                  </span>
+                </div>
+              </Tooltip>
+            )}
+            <Tooltip content="Branch">
+              <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
+                <GitBranch size={11} strokeWidth={2} className="flex-shrink-0" />
+                {branchLabel}
+              </div>
+            </Tooltip>
             {taskActivity[activeTask.id] && (
               <Tooltip content="Remote control">
                 <button

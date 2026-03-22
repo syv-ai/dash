@@ -287,6 +287,7 @@ export function TaskModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Fix auth bug, Add dark mode..."
+              maxLength={60}
               className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[13px] placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150"
               autoFocus
             />
