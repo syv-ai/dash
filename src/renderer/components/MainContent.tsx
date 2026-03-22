@@ -1,7 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { TerminalPane } from './TerminalPane';
 import { ProjectOverview } from './ProjectOverview';
-import { FolderOpen, GitBranch, FolderGit2, Globe, GitPullRequest, Code2 } from 'lucide-react';
+import {
+  FolderOpen,
+  GitBranch,
+  FolderGit2,
+  Globe,
+  GitPullRequest,
+  GitMerge,
+  Code2,
+} from 'lucide-react';
 import type {
   Project,
   Task,
@@ -69,20 +77,20 @@ export function MainContent({
     let cancelled = false;
     const remote = activeProject.gitRemote;
 
-    (async () => {
+    async function fetchPr() {
       try {
         let pr: PullRequestInfo | null = null;
 
         if (remote && isAdoRemote(remote)) {
           const resp = await window.electronAPI.adoGetPrForBranch(
-            liveBranch,
+            liveBranch!,
             remote,
-            activeProject.id,
+            activeProject!.id,
           );
           if (!cancelled && resp.success) pr = resp.data ?? null;
         } else {
-          const cwd = activeTask?.path || activeProject.path;
-          const resp = await window.electronAPI.githubGetPrForBranch(cwd, liveBranch);
+          const cwd = activeTask?.path || activeProject!.path;
+          const resp = await window.electronAPI.githubGetPrForBranch(cwd, liveBranch!);
           if (!cancelled && resp.success) pr = resp.data ?? null;
         }
 
@@ -90,10 +98,14 @@ export function MainContent({
       } catch {
         if (!cancelled) setPrInfo(null);
       }
-    })();
+    }
+
+    fetchPr();
+    const interval = setInterval(fetchPr, 30_000);
 
     return () => {
       cancelled = true;
+      clearInterval(interval);
     };
   }, [activeTask?.id, activeProject?.id, activeProject?.gitRemote, gitStatus?.branch]);
 
@@ -296,15 +308,23 @@ export function MainContent({
                 <Code2 size={14} strokeWidth={1.8} />
               </button>
             </Tooltip>
-            {prInfo && (
-              <Tooltip content={prInfo.title}>
+            {prInfo && prInfo.state !== 'closed' && (
+              <Tooltip content={`${prInfo.title} (${prInfo.state})`}>
                 <a
                   href={prInfo.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 text-[10px] font-medium hover:bg-green-500/20 transition-colors"
+                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium transition-colors ${
+                    prInfo.state === 'merged'
+                      ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20'
+                      : 'bg-green-500/10 text-green-600 dark:text-green-400 hover:bg-green-500/20'
+                  }`}
                 >
-                  <GitPullRequest size={10} strokeWidth={2} />
+                  {prInfo.state === 'merged' ? (
+                    <GitMerge size={10} strokeWidth={2} />
+                  ) : (
+                    <GitPullRequest size={10} strokeWidth={2} />
+                  )}
                   PR #{prInfo.number}
                 </a>
               </Tooltip>

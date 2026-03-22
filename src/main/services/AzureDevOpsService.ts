@@ -90,20 +90,35 @@ export class AzureDevOpsService {
     const sourceRef = `refs/heads/${branch}`;
     const result = (await this.request(
       config,
-      `${config.project}/_apis/git/repositories/${encodeURIComponent(repositoryName)}/pullrequests?searchCriteria.sourceRefName=${encodeURIComponent(sourceRef)}&searchCriteria.status=active&$top=1`,
-    )) as { value?: Array<{ pullRequestId: number; title: string; url?: string }> };
+      `${config.project}/_apis/git/repositories/${encodeURIComponent(repositoryName)}/pullrequests?searchCriteria.sourceRefName=${encodeURIComponent(sourceRef)}&searchCriteria.status=all&$top=5`,
+    )) as {
+      value?: Array<{ pullRequestId: number; title: string; status: string; url?: string }>;
+    };
 
     const prs = result.value;
     if (!prs || prs.length === 0) return null;
 
-    const pr = prs[0];
+    // Prefer active, then completed (merged), then abandoned (closed)
+    const sorted = prs.sort((a, b) => {
+      const order: Record<string, number> = { active: 0, completed: 1, abandoned: 2 };
+      return (order[a.status] ?? 3) - (order[b.status] ?? 3);
+    });
+
+    const pr = sorted[0];
     const baseUrl = config.organizationUrl.replace(/\/+$/, '');
     const prUrl = `${baseUrl}/${config.project}/_git/${repositoryName}/pullrequest/${pr.pullRequestId}`;
+
+    const stateMap: Record<string, 'open' | 'merged' | 'closed'> = {
+      active: 'open',
+      completed: 'merged',
+      abandoned: 'closed',
+    };
 
     return {
       number: pr.pullRequestId,
       title: pr.title,
       url: prUrl,
+      state: stateMap[pr.status] ?? 'open',
       provider: 'ado',
     };
   }
