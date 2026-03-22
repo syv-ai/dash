@@ -156,23 +156,23 @@ function renderBlock(block: Block, key: number): React.ReactNode {
   }
 }
 
-/** Render inline markdown: bold, italic, inline code, links. */
+/** Render inline markdown: bold, italic, inline code, links. Recurses for nested formatting. */
 function renderInline(text: string): React.ReactNode {
-  // Split on inline patterns, preserving delimiters
   const parts: React.ReactNode[] = [];
   // Regex for: `code`, **bold**, *italic*, [text](url)
-  const regex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\([^)]+\))/g;
+  // Use .+? for bold/italic to allow nested inline tokens inside
+  const regex = /(`[^`]+`|\*\*.+?\*\*|\*[^*]+?\*|\[[^\]]+\]\([^)]+\))/g;
   let lastIndex = 0;
   let match;
 
   while ((match = regex.exec(text)) !== null) {
-    // Add preceding text
     if (match.index > lastIndex) {
       parts.push(text.slice(lastIndex, match.index));
     }
 
     const token = match[0];
     if (token.startsWith('`')) {
+      // Inline code — no recursion, render literally
       parts.push(
         <code
           key={match.index}
@@ -184,13 +184,13 @@ function renderInline(text: string): React.ReactNode {
     } else if (token.startsWith('**')) {
       parts.push(
         <strong key={match.index} className="font-semibold">
-          {token.slice(2, -2)}
+          {renderInline(token.slice(2, -2))}
         </strong>,
       );
     } else if (token.startsWith('*')) {
       parts.push(
         <em key={match.index} className="italic">
-          {token.slice(1, -1)}
+          {renderInline(token.slice(1, -1))}
         </em>,
       );
     } else if (token.startsWith('[')) {
@@ -204,7 +204,7 @@ function renderInline(text: string): React.ReactNode {
             rel="noopener noreferrer"
             className="text-primary hover:underline"
           >
-            {linkMatch[1]}
+            {renderInline(linkMatch[1])}
           </a>,
         );
       }
@@ -213,7 +213,6 @@ function renderInline(text: string): React.ReactNode {
     lastIndex = match.index + token.length;
   }
 
-  // Add remaining text
   if (lastIndex < text.length) {
     parts.push(text.slice(lastIndex));
   }

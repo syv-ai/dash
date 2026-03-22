@@ -30,7 +30,10 @@ export function ChatPane({ id, cwd, autoApprove }: ChatPaneProps) {
       setMessages([...parser.getMessages()]);
     });
 
-    const unsubWaiting = parser.onWaitingChange(setIsWaiting);
+    const unsubWaiting = parser.onWaitingChange((waiting) => {
+      setIsWaiting(waiting);
+      if (waiting) setIsBusy(false);
+    });
 
     // Connect to PTY
     const unsubData = window.electronAPI.onPtyData(id, (data: string) => {
@@ -75,9 +78,9 @@ export function ChatPane({ id, cwd, autoApprove }: ChatPaneProps) {
       unsubWaiting();
       unsubData();
       unsubExit();
-      // Don't kill PTY on unmount — mode switch preserves it, kill is explicit
+      window.electronAPI.ptyKill(id);
     };
-  }, [id, cwd, autoApprove]);
+  }, [id, cwd]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -106,7 +109,6 @@ export function ChatPane({ id, cwd, autoApprove }: ChatPaneProps) {
     (text: string) => {
       window.electronAPI.ptyInput({ id, data: text + '\n' });
       setIsBusy(true);
-      setIsWaiting(false);
     },
     [id],
   );
@@ -173,8 +175,8 @@ export function ChatPane({ id, cwd, autoApprove }: ChatPaneProps) {
       {/* Compose box */}
       <ComposeBox
         onSend={handleSend}
-        disabled={!connected}
-        placeholder={isWaiting ? 'Send a message...' : 'Waiting for Claude to finish...'}
+        disabled={!connected || isBusy}
+        placeholder={isBusy ? 'Waiting for Claude to finish...' : 'Send a message...'}
       />
     </div>
   );
