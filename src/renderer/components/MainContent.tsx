@@ -282,7 +282,7 @@ export function MainContent({
                   className={`p-1 rounded-md transition-colors ${
                     remoteControlStates[activeTask.id]
                       ? 'text-primary hover:bg-primary/10'
-                      : 'text-muted-foreground/50 hover:text-foreground hover:bg-accent/60'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/60'
                   }`}
                 >
                   <Globe size={14} strokeWidth={1.8} />
@@ -296,7 +296,7 @@ export function MainContent({
                   const ide = stored === 'cursor' || stored === 'code' ? stored : undefined;
                   window.electronAPI.openInIDE({ folderPath: activeTask.path, ide });
                 }}
-                className="p-1 rounded-md transition-colors text-muted-foreground/50 hover:text-foreground hover:bg-accent/60"
+                className="p-1 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-accent/60"
               >
                 <Code2 size={14} strokeWidth={1.8} />
               </button>
