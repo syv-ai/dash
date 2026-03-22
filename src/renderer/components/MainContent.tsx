@@ -136,6 +136,8 @@ export function MainContent({
       ? branchUrl(activeProject.gitRemote, currentBranch)
       : null;
 
+  const branchTooltip = gitStatus?.hasUpstream ? 'Branch' : 'Branch (no upstream detected)';
+
   const branchLabel = currentBranchUrl ? (
     <a
       href={currentBranchUrl}
@@ -204,7 +206,7 @@ export function MainContent({
               </div>
             </Tooltip>
           )}
-          <Tooltip content="Branch">
+          <Tooltip content={branchTooltip}>
             <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
               <GitBranch size={11} strokeWidth={2} className="flex-shrink-0" />
               {branchLabel}
@@ -262,7 +264,7 @@ export function MainContent({
                 </div>
               </Tooltip>
             )}
-            <Tooltip content="Branch">
+            <Tooltip content={branchTooltip}>
               <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
                 <GitBranch size={11} strokeWidth={2} className="flex-shrink-0" />
                 {branchLabel}
