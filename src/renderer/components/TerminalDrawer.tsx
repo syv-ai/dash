@@ -7,29 +7,6 @@ interface TerminalTab {
   label: string;
 }
 
-/**
- * Shorten a path for display: `[...]/parentOfInitial/current/sub/dirs`.
- * If the user navigates outside the initial tree, falls back to last 2 segments.
- */
-function shortenCwd(current: string, initial: string): string {
-  if (current === '/') return '/';
-  const initialParts = initial.split('/');
-  // Anchor = grandparent of initial cwd (parent of the parent dir)
-  // e.g., initial=/a/b/c → grandparent=/a → show [...]/b/c, [...]/b/c/d, etc.
-  const grandparent = initialParts.slice(0, -2).join('/') || '/';
-  const prefix = grandparent === '/' ? '/' : grandparent + '/';
-
-  if (current.startsWith(prefix) && current.length > prefix.length) {
-    return '[...] /' + current.slice(prefix.length);
-  }
-
-  // Fallback: show last 2 non-empty segments
-  const parts = current.split('/').filter(Boolean);
-  if (parts.length === 0) return '/';
-  if (parts.length <= 2) return '/' + parts.join('/');
-  return '[...] /' + parts.slice(-2).join('/');
-}
-
 interface TerminalDrawerProps {
   taskId: string;
   cwd: string;
@@ -49,8 +26,6 @@ export function TerminalDrawer({
 }: TerminalDrawerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const shellId = `shell:${taskId}`;
-  const [displayCwd, setDisplayCwd] = useState(cwd);
-
   // Tab state — persisted to localStorage per task
   const [tabs, setTabs] = useState<TerminalTab[]>(() => {
     try {
@@ -78,11 +53,6 @@ export function TerminalDrawer({
     localStorage.setItem(`shellActiveTab:${taskId}`, activeTabId);
   }, [activeTabId, taskId]);
 
-  // Reset displayCwd when the task's cwd prop changes (e.g. switching tasks)
-  useEffect(() => {
-    setDisplayCwd(cwd);
-  }, [cwd]);
-
   // Attach the active tab's session to the container
   useEffect(() => {
     const container = containerRef.current;
@@ -100,12 +70,6 @@ export function TerminalDrawer({
       shellOnly: true,
     });
     session.attach(container, { autoFocus: false });
-
-    setDisplayCwd(session.currentCwd || cwd);
-
-    session.onCwdChange((newCwd) => {
-      setDisplayCwd(newCwd);
-    });
 
     return () => {
       sessionRegistry.detach(activeTabId);
@@ -171,14 +135,14 @@ export function TerminalDrawer({
               className={`flex items-center gap-1 px-2 h-full border-b-2 cursor-pointer transition-colors flex-shrink-0 select-none ${
                 tab.id === activeTabId
                   ? 'border-primary text-foreground'
-                  : 'border-transparent text-muted-foreground/60 hover:text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
               onClick={() => setActiveTabId(tab.id)}
             >
               <span className="text-[11px] font-medium">{tab.label}</span>
               {tabs.length > 1 && (
                 <button
-                  className="w-3.5 h-3.5 rounded flex items-center justify-center text-muted-foreground/40 hover:text-foreground hover:bg-accent transition-colors"
+                  className="w-3.5 h-3.5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                   onClick={(e) => {
                     e.stopPropagation();
                     handleCloseTab(tab.id);
@@ -191,18 +155,16 @@ export function TerminalDrawer({
             </div>
           ))}
           <button
-            className="ml-1 w-5 h-5 flex items-center justify-center rounded text-muted-foreground/40 hover:text-foreground hover:bg-accent transition-colors flex-shrink-0"
+            className="ml-1 w-5 h-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors flex-shrink-0"
             onClick={handleAddTab}
             aria-label="Add terminal"
           >
             <Plus size={11} strokeWidth={2} />
           </button>
-          <span className="text-[11px] font-mono text-muted-foreground/50 truncate flex-1 ml-2">
-            {shortenCwd(displayCwd, cwd)}
-          </span>
+          <div className="flex-1" />
           <button
             onClick={onCollapse}
-            className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground/40 hover:text-foreground transition-colors flex-shrink-0"
+            className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
           >
             <ChevronDown size={12} strokeWidth={2} />
           </button>
