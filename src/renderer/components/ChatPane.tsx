@@ -29,19 +29,19 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
       setMessages((prev) => {
         const toAdd = newMessages.filter((m) => {
           if (seenIds.has(m.id)) return false;
-          // Skip user messages that duplicate a locally-added message
+          // Skip user messages that duplicate a locally-added message.
+          // Normalize whitespace for comparison since PTY collapses newlines to spaces.
           if (m.role === 'user') {
             const lastUser = [...prev].reverse().find((p) => p.role === 'user');
             if (lastUser && lastUser.id.startsWith('local-user-')) {
-              const localText = lastUser.content
-                .filter((b) => b.type === 'text')
-                .map((b) => (b as { text: string }).text)
-                .join('');
-              const newText = m.content
-                .filter((b) => b.type === 'text')
-                .map((b) => (b as { text: string }).text)
-                .join('');
-              if (localText === newText) return false;
+              const normalize = (msg: ChatMessage) =>
+                msg.content
+                  .filter((b) => b.type === 'text')
+                  .map((b) => (b as { text: string }).text)
+                  .join('')
+                  .replace(/\s+/g, ' ')
+                  .trim();
+              if (normalize(lastUser) === normalize(m)) return false;
             }
           }
           return true;
@@ -167,20 +167,19 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
     (text: string) => {
       const isSlashCommand = text.startsWith('/');
 
-      // Collapse newlines to spaces — the TUI interprets \n as submit,
-      // and bracketed paste is unreliable across PTY/TUI states.
-      const sendText = text.replace(/\n+/g, ' ');
-
       if (!isSlashCommand) {
-        // Add user message to chat immediately (showing what was actually sent)
+        // Add user message to chat with original formatting preserved
         const localMsg: ChatMessage = {
           id: `local-user-${Date.now()}`,
           role: 'user',
-          content: [{ type: 'text', text: sendText }],
+          content: [{ type: 'text', text }],
           timestamp: Date.now(),
         };
         setMessages((prev) => [...prev, localMsg]);
       }
+
+      // Collapse newlines to spaces for PTY — the TUI interprets \n as submit
+      const sendText = text.replace(/\n+/g, ' ');
 
       // Write text first, then submit with \r after a delay.
       // The TUI detects rapid character input as a paste ("[ Pasted text ]")

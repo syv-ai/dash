@@ -156,6 +156,18 @@ function renderBlock(block: Block, key: number): React.ReactNode {
   }
 }
 
+/** Convert newlines in plain text to <br> elements. */
+function textWithBreaks(str: string): React.ReactNode {
+  const segments = str.split('\n');
+  if (segments.length === 1) return str;
+  return segments.map((s, i) => (
+    <React.Fragment key={i}>
+      {s}
+      {i < segments.length - 1 && <br />}
+    </React.Fragment>
+  ));
+}
+
 /** Render inline markdown: bold, italic, inline code, links. Recurses for nested formatting. */
 function renderInline(text: string): React.ReactNode {
   const parts: React.ReactNode[] = [];
@@ -167,7 +179,7 @@ function renderInline(text: string): React.ReactNode {
 
   while ((match = regex.exec(text)) !== null) {
     if (match.index > lastIndex) {
-      parts.push(text.slice(lastIndex, match.index));
+      parts.push(textWithBreaks(text.slice(lastIndex, match.index)));
     }
 
     const token = match[0];
@@ -214,7 +226,7 @@ function renderInline(text: string): React.ReactNode {
   }
 
   if (lastIndex < text.length) {
-    parts.push(text.slice(lastIndex));
+    parts.push(textWithBreaks(text.slice(lastIndex)));
   }
 
   return parts.length === 1 ? parts[0] : <>{parts}</>;
