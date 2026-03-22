@@ -68,6 +68,19 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
       }
     });
 
+    // Track PTY activity state for accurate busy detection
+    const unsubActivity = window.electronAPI.onPtyActivity(
+      (states: Record<string, 'busy' | 'idle' | 'waiting'>) => {
+        const state = states[id];
+        if (state === 'idle') {
+          setIsBusy(false);
+          setBusyStatus(null);
+        } else if (state === 'busy') {
+          setIsBusy(true);
+        }
+      },
+    );
+
     const unsubExit = window.electronAPI.onPtyExit(id, () => {
       setIsBusy(false);
       setBusyStatus(null);
@@ -105,6 +118,7 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
     return () => {
       unsubChat();
       unsubStatus();
+      unsubActivity();
       unsubExit();
       if (busyTimerRef.current) clearTimeout(busyTimerRef.current);
       window.electronAPI.ptyChatUnwatch(id);
