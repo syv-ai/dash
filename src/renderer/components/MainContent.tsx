@@ -90,12 +90,10 @@ export function MainContent({
 
     const newMode: ViewMode = viewMode === 'terminal' ? 'chat' : 'terminal';
 
-    // Kill the current PTY so the new mode can spawn its own
-    window.electronAPI.ptyKill(activeTask.id);
-
-    // If switching away from terminal, detach and dispose the xterm session
+    // Don't kill the PTY — both views share the same running session.
+    // Just detach the xterm terminal when switching away from it.
     if (viewMode === 'terminal') {
-      sessionRegistry.dispose(activeTask.id);
+      sessionRegistry.detach(activeTask.id);
     }
 
     localStorage.setItem(viewModeKey, newMode);
@@ -428,12 +426,7 @@ export function MainContent({
       {taskHeader}
       <div className="flex-1 min-h-0">
         {viewMode === 'chat' ? (
-          <ChatPane
-            key={`chat-${activeTask.id}`}
-            id={activeTask.id}
-            cwd={activeTask.path}
-            autoApprove={activeTask.autoApprove}
-          />
+          <ChatPane key={`chat-${activeTask.id}`} id={activeTask.id} cwd={activeTask.path} />
         ) : (
           <TerminalPane
             key={activeTask.id}

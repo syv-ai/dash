@@ -360,7 +360,6 @@ export async function startDirectPty(options: {
   autoApprove?: boolean;
   resume?: boolean;
   isDark?: boolean;
-  chatMode?: boolean;
   sender?: WebContents;
 }): Promise<{
   reattached: boolean;
@@ -383,7 +382,6 @@ export async function startDirectPty(options: {
     return { reattached: true, isDirectSpawn: true, hasTaskContext: false, taskContextMeta: null };
   }
 
-  const pty = getPty();
   const claudePath = await findClaudePath();
 
   if (!claudePath) {
@@ -391,9 +389,6 @@ export async function startDirectPty(options: {
   }
 
   const args: string[] = [];
-  if (options.chatMode) {
-    args.push('--output-format', 'stream-json');
-  }
   if (options.resume) {
     args.push('-c', '-r');
   }
@@ -404,6 +399,7 @@ export async function startDirectPty(options: {
 
   writeHookSettings(options.cwd, options.id);
 
+  const pty = getPty();
   const proc = pty.spawn(claudePath, args, {
     name: 'xterm-256color',
     cols: options.cols,

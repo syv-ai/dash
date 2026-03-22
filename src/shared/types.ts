@@ -299,41 +299,6 @@ export interface ChatMessage {
   model?: string;
 }
 
-/** Raw stream-json event from Claude CLI. */
-export type StreamJsonEvent =
-  | {
-      type: 'system';
-      subtype: 'init' | 'error';
-      session_id?: string;
-      message?: string;
-      tools?: unknown[];
-    }
-  | {
-      type: 'assistant';
-      message: {
-        id: string;
-        role: 'assistant';
-        content: ChatContentBlock[];
-        model?: string;
-        stop_reason?: string;
-      };
-    }
-  | {
-      type: 'user';
-      message: {
-        role: 'user';
-        content: ChatContentBlock[];
-      };
-    }
-  | {
-      type: 'result';
-      subtype: 'success' | 'error';
-      cost_usd?: number;
-      duration_ms?: number;
-      session_id?: string;
-      is_error?: boolean;
-    };
-
 // ── Remote Control Types ────────────────────────────────────
 
 export interface RemoteControlState {

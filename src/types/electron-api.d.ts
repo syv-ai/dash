@@ -18,6 +18,7 @@ import type {
   PullRequestInfo,
   PixelAgentsConfig,
   PixelAgentsStatus,
+  ChatMessage,
 } from '../shared/types';
 
 export interface ElectronAPI {
@@ -98,7 +99,6 @@ export interface ElectronAPI {
     autoApprove?: boolean;
     resume?: boolean;
     isDark?: boolean;
-    chatMode?: boolean;
   }) => Promise<
     IpcResponse<{
       reattached: boolean;
@@ -142,6 +142,10 @@ export interface ElectronAPI {
 
   // Session detection
   ptyHasClaudeSession: (cwd: string) => Promise<IpcResponse<boolean>>;
+  ptyChatHistory: (cwd: string) => Promise<IpcResponse<ChatMessage[]>>;
+  ptyChatWatch: (args: { id: string; cwd: string }) => Promise<IpcResponse<void>>;
+  ptyChatUnwatch: (id: string) => void;
+  onChatMessages: (id: string, callback: (messages: ChatMessage[]) => void) => () => void;
 
   // Task context for SessionStart hook
   ptyWriteTaskContext: (args: {

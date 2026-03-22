@@ -31,7 +31,6 @@ export function registerPtyIpc(): void {
         autoApprove?: boolean;
         resume?: boolean;
         isDark?: boolean;
-        chatMode?: boolean;
       },
     ) => {
       try {
@@ -111,6 +110,29 @@ export function registerPtyIpc(): void {
     }
   });
 
+  // Read conversation history from Claude's JSONL files
+  ipcMain.handle('pty:chatHistory', async (_event, cwd: string) => {
+    try {
+      return { success: true, data: readConversationHistory(cwd) };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  });
+
+  // Watch a JSONL conversation file for new entries
+  ipcMain.handle('pty:chatWatch', (event, args: { id: string; cwd: string }) => {
+    try {
+      startChatWatcher(args.id, args.cwd, event.sender);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  });
+
+  ipcMain.on('pty:chatUnwatch', (_event, id: string) => {
+    stopChatWatcher(id);
+  });
+
   // Write task context for SessionStart hook
   ipcMain.handle(
     'pty:writeTaskContext',
@@ -149,6 +171,256 @@ export function registerPtyIpc(): void {
   ipcMain.handle('pty:remoteControl:getAllStates', () => {
     return { success: true, data: remoteControlService.getAllStates() };
   });
+}
+
+// ── JSONL Chat Watcher ──────────────────────────────────────
+
+interface ChatWatcher {
+  interval: ReturnType<typeof setInterval>;
+  fsWatcher: fs.FSWatcher | null;
+  filePath: string;
+  byteOffset: number;
+}
+
+const chatWatchers = new Map<string, ChatWatcher>();
+
+function startChatWatcher(id: string, cwd: string, sender: Electron.WebContents): void {
+  // Stop existing watcher for this id
+  stopChatWatcher(id);
+
+  const projectDir = findClaudeProjectDir(cwd);
+  if (!projectDir) return;
+
+  const filePath = findNewestJsonl(projectDir);
+  if (!filePath) return;
+
+  // Start tailing from end of file
+  let byteOffset = 0;
+  try {
+    const stat = fs.statSync(filePath);
+    byteOffset = stat.size;
+  } catch {
+    // File may not exist yet
+  }
+
+  const readNewEntries = () => {
+    try {
+      const stat = fs.statSync(filePath);
+      if (stat.size <= byteOffset) return;
+
+      const newBytes = stat.size - byteOffset;
+      const fd = fs.openSync(filePath, 'r');
+      const buf = Buffer.alloc(newBytes);
+      fs.readSync(fd, buf, 0, buf.length, byteOffset);
+      fs.closeSync(fd);
+      byteOffset = stat.size;
+
+      const newText = buf.toString('utf-8');
+      const messages: ChatHistoryMessage[] = [];
+      let counter = Date.now();
+
+      for (const line of newText.split('\n')) {
+        if (!line.trim()) continue;
+        try {
+          const entry = JSON.parse(line);
+          const msg = parseConversationEntry(entry, counter++);
+          if (msg) messages.push(msg);
+        } catch {
+          // Skip malformed lines
+        }
+      }
+
+      if (messages.length > 0 && !sender.isDestroyed()) {
+        sender.send(`pty:chatMessages:${id}`, messages);
+      }
+    } catch {
+      // File may have been deleted/rotated
+    }
+  };
+
+  // Use fs.watch for immediate notification, plus a polling fallback
+  let fsWatcher: fs.FSWatcher | null = null;
+  try {
+    fsWatcher = fs.watch(filePath, () => readNewEntries());
+  } catch {
+    // fs.watch not available on some platforms
+  }
+
+  // Poll every 500ms as fallback (fs.watch can miss events)
+  const interval = setInterval(readNewEntries, 500);
+
+  chatWatchers.set(id, { interval, fsWatcher, filePath, byteOffset });
+}
+
+function stopChatWatcher(id: string): void {
+  const watcher = chatWatchers.get(id);
+  if (watcher) {
+    clearInterval(watcher.interval);
+    watcher.fsWatcher?.close();
+    chatWatchers.delete(id);
+  }
+}
+
+/** Parse a single JSONL entry into a ChatHistoryMessage, or null if not relevant. */
+function parseConversationEntry(entry: any, counter: number): ChatHistoryMessage | null {
+  const type = entry.type;
+  const msg = entry.message;
+
+  if (type === 'user' && msg?.role === 'user') {
+    if (entry.isMeta) return null;
+    const rawContent = msg.content;
+    if (typeof rawContent === 'string' && rawContent.includes('<command-name>')) return null;
+    if (Array.isArray(rawContent) && rawContent.every((b: any) => b?.type === 'tool_result')) {
+      return null;
+    }
+    const content = normalizeContent(rawContent);
+    if (content.length === 0) return null;
+    return {
+      id: entry.uuid || `live-user-${counter}`,
+      role: 'user',
+      content,
+      timestamp: entry.timestamp ? new Date(entry.timestamp).getTime() : Date.now(),
+    };
+  }
+
+  if (type === 'assistant' && msg?.role === 'assistant') {
+    const content = normalizeContent(msg.content);
+    if (content.length === 0) return null;
+    return {
+      id: entry.uuid || `live-asst-${counter}`,
+      role: 'assistant',
+      content,
+      timestamp: entry.timestamp ? new Date(entry.timestamp).getTime() : Date.now(),
+      model: msg.model,
+    };
+  }
+
+  return null;
+}
+
+function findNewestJsonl(projectDir: string): string | null {
+  const files = fs.readdirSync(projectDir).filter((f) => f.endsWith('.jsonl'));
+  if (files.length === 0) return null;
+
+  let newest = '';
+  let newestMtime = 0;
+  for (const file of files) {
+    const stat = fs.statSync(path.join(projectDir, file));
+    if (stat.mtimeMs > newestMtime) {
+      newestMtime = stat.mtimeMs;
+      newest = file;
+    }
+  }
+  return newest ? path.join(projectDir, newest) : null;
+}
+
+// ── Chat History ────────────────────────────────────────────
+
+interface ChatHistoryMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: Array<
+    | { type: 'text'; text: string }
+    | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
+    | { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean }
+  >;
+  timestamp: number;
+  model?: string;
+}
+
+/**
+ * Find the Claude projects directory for a given cwd.
+ * Returns the path if found, null otherwise.
+ */
+function findClaudeProjectDir(cwd: string): string | null {
+  const projectsDir = path.join(os.homedir(), '.claude', 'projects');
+  if (!fs.existsSync(projectsDir)) return null;
+
+  // Check path-based directory name (slashes replaced with hyphens)
+  const pathBasedName = cwd.replace(/\//g, '-');
+  const pathBased = path.join(projectsDir, pathBasedName);
+  if (fs.existsSync(pathBased)) return pathBased;
+
+  // Check hash-based directory name
+  const cwdHash = crypto.createHash('sha256').update(cwd).digest('hex').slice(0, 16);
+  const hashBased = path.join(projectsDir, cwdHash);
+  if (fs.existsSync(hashBased)) return hashBased;
+
+  return null;
+}
+
+/**
+ * Read conversation history from Claude's JSONL files for the given cwd.
+ * Returns the most recent conversation as ChatMessage-compatible objects.
+ */
+function readConversationHistory(cwd: string): ChatHistoryMessage[] {
+  const projectDir = findClaudeProjectDir(cwd);
+  if (!projectDir) return [];
+
+  const filePath = findNewestJsonl(projectDir);
+  if (!filePath) return [];
+
+  const content = fs.readFileSync(filePath, 'utf-8');
+  const messages: ChatHistoryMessage[] = [];
+  let counter = 0;
+
+  for (const line of content.split('\n')) {
+    if (!line.trim()) continue;
+    try {
+      const entry = JSON.parse(line);
+      const msg = parseConversationEntry(entry, counter++);
+      if (msg) messages.push(msg);
+    } catch {
+      // Skip malformed lines
+    }
+  }
+
+  return messages;
+}
+
+/**
+ * Normalize Claude JSONL message content into ChatContentBlock[].
+ */
+function normalizeContent(raw: unknown): ChatHistoryMessage['content'] {
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) return [];
+    return [{ type: 'text', text: trimmed }];
+  }
+  if (Array.isArray(raw)) {
+    const blocks: ChatHistoryMessage['content'] = [];
+    for (const block of raw) {
+      if (!block || typeof block !== 'object') continue;
+      if (block.type === 'text' && typeof block.text === 'string' && block.text.trim()) {
+        blocks.push({ type: 'text', text: block.text });
+      } else if (block.type === 'tool_use') {
+        blocks.push({
+          type: 'tool_use',
+          id: block.id || '',
+          name: block.name || '',
+          input: block.input || {},
+        });
+      } else if (block.type === 'tool_result') {
+        const content =
+          typeof block.content === 'string'
+            ? block.content
+            : Array.isArray(block.content)
+              ? block.content
+                  .filter((c: any) => c?.type === 'text')
+                  .map((c: any) => c.text)
+                  .join('\n')
+              : '';
+        blocks.push({
+          type: 'tool_result',
+          tool_use_id: block.tool_use_id || '',
+          content,
+          is_error: block.is_error,
+        });
+      }
+    }
+    return blocks;
+  }
+  return [];
 }
 
 /**
