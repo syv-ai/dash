@@ -24,13 +24,10 @@ export function MessageBubble({ message, allMessages }: MessageBubbleProps) {
 
   const isUser = message.role === 'user';
 
-  // Check if the message has any visible content to render.
-  // tool_use without results and standalone tool_result are hidden.
-  const hasVisibleContent = message.content.some((block) => {
-    if (block.type === 'text') return true;
-    if (block.type === 'tool_use') return !!findToolResult(block.id, allMessages);
-    return false; // tool_result rendered inline with tool_use
-  });
+  // Hide messages that contain only tool_result blocks (rendered inline with tool_use)
+  const hasVisibleContent = message.content.some(
+    (block) => block.type === 'text' || block.type === 'tool_use',
+  );
   if (!hasVisibleContent) return null;
 
   return (
@@ -76,10 +73,7 @@ function renderContentBlock(
       return <MarkdownRenderer key={key} content={block.text} />;
 
     case 'tool_use': {
-      // Only render once the tool has completed (result available).
-      // While running, the status indicator shows "Running [tool]..." instead.
       const result = findToolResult(block.id, allMessages);
-      if (!result) return null;
       return <ToolUseBlock key={key} block={block} result={result} />;
     }
 
