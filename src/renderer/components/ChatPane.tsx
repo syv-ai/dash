@@ -83,9 +83,19 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
           setMessages(historyResp.data);
         }
 
-        // The PTY is already running (started by TerminalPane or previous mount).
-        // Just start watching the JSONL file for live updates.
+        // Ensure PTY is running (reattaches if alive, starts fresh if not)
+        const isDark = document.documentElement.classList.contains('dark');
+        await window.electronAPI.ptyStartDirect({
+          id,
+          cwd,
+          cols: 120,
+          rows: 40,
+          resume: true,
+          isDark,
+        });
         setConnected(true);
+
+        // Start watching the JSONL file for live updates
         await window.electronAPI.ptyChatWatch({ id, cwd });
       } catch (err) {
         console.error('[ChatPane] Failed to start:', err);
@@ -199,16 +209,16 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
 
         {/* Inline thinking/tool status as a chat message */}
         {isBusy && messages.length > 0 && (
-          <div className="flex gap-3 px-4 py-3 bg-surface-0/50 animate-fade-in">
-            <div className="w-6 h-6 rounded-full bg-accent/80 flex items-center justify-center shrink-0 mt-0.5">
-              <Loader2 size={12} strokeWidth={2} className="animate-spin text-muted-foreground" />
+          <div className="flex gap-3 px-4 py-3 bg-surface-0/50 animate-chat-entry">
+            <div className="w-6 h-6 rounded-full bg-amber-400/20 flex items-center justify-center shrink-0 mt-0.5">
+              <Loader2 size={12} strokeWidth={2} className="animate-spin text-amber-400" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-0.5">
                 <span className="text-[12px] font-semibold text-foreground">Claude</span>
               </div>
               <p className="text-[13px] text-muted-foreground/70 animate-pulse">
-                {busyStatus ? `Running ${busyStatus}...` : 'Thinking...'}
+                {busyStatus ? `${busyStatus}...` : 'Thinking...'}
               </p>
             </div>
           </div>
