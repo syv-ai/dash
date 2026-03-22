@@ -77,20 +77,20 @@ export function MainContent({
     let cancelled = false;
     const remote = activeProject.gitRemote;
 
-    (async () => {
+    async function fetchPr() {
       try {
         let pr: PullRequestInfo | null = null;
 
         if (remote && isAdoRemote(remote)) {
           const resp = await window.electronAPI.adoGetPrForBranch(
-            liveBranch,
+            liveBranch!,
             remote,
-            activeProject.id,
+            activeProject!.id,
           );
           if (!cancelled && resp.success) pr = resp.data ?? null;
         } else {
-          const cwd = activeTask?.path || activeProject.path;
-          const resp = await window.electronAPI.githubGetPrForBranch(cwd, liveBranch);
+          const cwd = activeTask?.path || activeProject!.path;
+          const resp = await window.electronAPI.githubGetPrForBranch(cwd, liveBranch!);
           if (!cancelled && resp.success) pr = resp.data ?? null;
         }
 
@@ -98,10 +98,14 @@ export function MainContent({
       } catch {
         if (!cancelled) setPrInfo(null);
       }
-    })();
+    }
+
+    fetchPr();
+    const interval = setInterval(fetchPr, 30_000);
 
     return () => {
       cancelled = true;
+      clearInterval(interval);
     };
   }, [activeTask?.id, activeProject?.id, activeProject?.gitRemote, gitStatus?.branch]);
 
