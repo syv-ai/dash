@@ -233,6 +233,28 @@ export class WorktreePoolService {
           }
         }
 
+        // Delete orphaned reserve branches
+        try {
+          const { stdout } = await execFileAsync(
+            'git',
+            ['branch', '--list', `${RESERVE_PREFIX}/*`],
+            { cwd: project.path },
+          );
+          const branches = stdout
+            .split('\n')
+            .map((b) => b.trim())
+            .filter(Boolean);
+          for (const branch of branches) {
+            try {
+              await execFileAsync('git', ['branch', '-D', branch], { cwd: project.path });
+            } catch {
+              // Best effort
+            }
+          }
+        } catch {
+          // Best effort
+        }
+
         // Prune
         try {
           await execFileAsync('git', ['worktree', 'prune'], { cwd: project.path });
