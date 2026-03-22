@@ -167,18 +167,22 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
     (text: string) => {
       const isSlashCommand = text.startsWith('/');
 
+      // Collapse newlines to spaces — the TUI interprets \n as submit,
+      // and bracketed paste is unreliable across PTY/TUI states.
+      const sendText = text.replace(/\n+/g, ' ');
+
       if (!isSlashCommand) {
-        // Add user message to chat immediately
+        // Add user message to chat immediately (showing what was actually sent)
         const localMsg: ChatMessage = {
           id: `local-user-${Date.now()}`,
           role: 'user',
-          content: [{ type: 'text', text }],
+          content: [{ type: 'text', text: sendText }],
           timestamp: Date.now(),
         };
         setMessages((prev) => [...prev, localMsg]);
       }
 
-      window.electronAPI.ptyInput({ id, data: text + '\r' });
+      window.electronAPI.ptyInput({ id, data: sendText + '\r' });
 
       if (!isSlashCommand) {
         setIsBusy(true);
