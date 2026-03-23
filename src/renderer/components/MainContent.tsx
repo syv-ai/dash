@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { TerminalPane } from './TerminalPane';
 import { ChatPane } from './ChatPane';
 import { ProjectOverview } from './ProjectOverview';
@@ -69,6 +69,8 @@ export function MainContent({
   gitStatus,
 }: MainContentProps) {
   const [prInfo, setPrInfo] = useState<PullRequestInfo | null>(null);
+  // Track when we auto-switched to TUI for an interactive command
+  const pendingReturnToChatRef = useRef(false);
 
   // Per-task view mode persisted in localStorage
   const viewModeKey = activeTask ? `viewMode:${activeTask.id}` : null;
@@ -99,6 +101,22 @@ export function MainContent({
     localStorage.setItem(viewModeKey, newMode);
     setViewMode(newMode);
   }, [activeTask, viewModeKey, viewMode]);
+
+  // Auto-switch back to chat after interactive command completes
+  useEffect(() => {
+    if (!activeTask || !pendingReturnToChatRef.current) return;
+    const activity = taskActivity[activeTask.id];
+    if (activity === 'idle' && viewMode === 'terminal') {
+      pendingReturnToChatRef.current = false;
+      // Small delay to let the TUI finish rendering
+      setTimeout(() => {
+        if (viewModeKey) {
+          localStorage.setItem(viewModeKey, 'chat');
+          setViewMode('chat');
+        }
+      }, 500);
+    }
+  }, [activeTask, taskActivity, viewMode, viewModeKey]);
 
   useEffect(() => {
     setPrInfo(null);
@@ -406,7 +424,10 @@ export function MainContent({
             id={activeTask.id}
             cwd={activeTask.path}
             onSwitchToTerminal={() => {
-              if (viewMode === 'chat') handleToggleViewMode();
+              if (viewMode === 'chat') {
+                pendingReturnToChatRef.current = true;
+                handleToggleViewMode();
+              }
             }}
           />
         ) : (
