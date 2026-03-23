@@ -18,6 +18,8 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [connected, setConnected] = useState(false);
   const busyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Map of tool_use_id -> tool_result block for O(1) lookup
+  const toolResultsRef = useRef(new Map<string, ChatMessage['content'][0]>());
 
   // Initialize PTY + JSONL watcher
   useEffect(() => {
@@ -47,7 +49,15 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
           return true;
         });
         if (toAdd.length === 0) return prev;
-        for (const m of toAdd) seenIds.add(m.id);
+        for (const m of toAdd) {
+          seenIds.add(m.id);
+          // Index tool_results for O(1) lookup by ToolUseBlock
+          for (const b of m.content) {
+            if (b.type === 'tool_result') {
+              toolResultsRef.current.set(b.tool_use_id, b);
+            }
+          }
+        }
 
         // If we get an assistant message, mark busy then schedule idle
         const hasAssistant = toAdd.some((m) => m.role === 'assistant');
@@ -92,7 +102,14 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
         // Load existing conversation history
         const historyResp = await window.electronAPI.ptyChatHistory(cwd);
         if (historyResp.success && historyResp.data && historyResp.data.length > 0) {
-          for (const m of historyResp.data) seenIds.add(m.id);
+          for (const m of historyResp.data) {
+            seenIds.add(m.id);
+            for (const b of m.content) {
+              if (b.type === 'tool_result') {
+                toolResultsRef.current.set(b.tool_use_id, b);
+              }
+            }
+          }
           setMessages(historyResp.data);
         }
 
@@ -243,13 +260,15 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
               key={msg.id}
               message={msg}
               allMessages={messages}
+              toolResults={toolResultsRef.current}
               isGroupContinuation={prevVisibleRole === msg.role}
             />
           );
         })}
 
-        {/* Inline thinking/tool status as a chat message */}
-        {isBusy && messages.length > 0 && (
+        {/* Inline thinking indicator — only when no tool-specific status
+            (tool blocks now show their own amber spinner) */}
+        {isBusy && !busyStatus && messages.length > 0 && (
           <div className="flex gap-3 px-4 py-3 bg-surface-0/50 animate-chat-entry">
             <div className="w-6 h-6 rounded-full bg-amber-400/20 flex items-center justify-center shrink-0 mt-0.5">
               <Loader2 size={12} strokeWidth={2} className="animate-spin text-amber-400" />
@@ -258,9 +277,7 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
               <div className="flex items-center gap-2 mb-0.5">
                 <span className="text-[12px] font-semibold text-foreground">Claude</span>
               </div>
-              <p className="text-[13px] text-muted-foreground/70 animate-pulse">
-                {busyStatus ? `${busyStatus}...` : 'Thinking...'}
-              </p>
+              <p className="text-[13px] text-muted-foreground/70 animate-pulse">Thinking...</p>
             </div>
           </div>
         )}

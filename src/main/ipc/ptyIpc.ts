@@ -208,6 +208,8 @@ interface ChatWatcher {
   filePath: string;
   byteOffset: number;
   lineBuffer: string;
+  /** Timer for delayed tool_result flush. */
+  toolResultTimer: ReturnType<typeof setTimeout> | null;
 }
 
 const chatWatchers = new Map<string, ChatWatcher>();
@@ -233,6 +235,9 @@ function startChatWatcher(id: string, cwd: string, sender: Electron.WebContents)
 
   const readNewEntries = () => {
     try {
+      const watcher = chatWatchers.get(id);
+      if (!watcher) return;
+
       const stat = fs.statSync(filePath);
       if (stat.size <= byteOffset) return;
 
@@ -243,14 +248,27 @@ function startChatWatcher(id: string, cwd: string, sender: Electron.WebContents)
       fs.closeSync(fd);
       byteOffset = stat.size;
 
-      const watcher = chatWatchers.get(id);
-      const newText = (watcher?.lineBuffer || '') + buf.toString('utf-8');
+      const newText = (watcher.lineBuffer || '') + buf.toString('utf-8');
       const lines = newText.split('\n');
-      // Keep the last (possibly incomplete) line in the buffer
-      const incompleteLine = lines.pop() || '';
-      if (watcher) watcher.lineBuffer = incompleteLine;
+      // Keep the last (possibly incomplete) line in the buffer — but if
+      // it's valid JSON, include it (the file may not end with \n yet)
+      const lastLine = lines.pop() || '';
+      if (lastLine.trim()) {
+        try {
+          JSON.parse(lastLine);
+          // Valid JSON — include it as a complete line
+          lines.push(lastLine);
+          watcher.lineBuffer = '';
+        } catch {
+          // Incomplete — keep in buffer for next read
+          watcher.lineBuffer = lastLine;
+        }
+      } else {
+        watcher.lineBuffer = '';
+      }
 
       const messages: ChatHistoryMessage[] = [];
+      const toolResultMessages: ChatHistoryMessage[] = [];
       let counter = Date.now();
       let latestStatus: string | null = null;
 
@@ -259,7 +277,16 @@ function startChatWatcher(id: string, cwd: string, sender: Electron.WebContents)
         try {
           const entry = JSON.parse(line);
           const msg = parseConversationEntry(entry, counter++);
-          if (msg) messages.push(msg);
+          if (msg) {
+            // Separate tool_result messages so tool_use blocks render first
+            const isToolResultOnly =
+              msg.role === 'user' && msg.content.every((b) => b.type === 'tool_result');
+            if (isToolResultOnly) {
+              toolResultMessages.push(msg);
+            } else {
+              messages.push(msg);
+            }
+          }
 
           // Extract status from assistant tool_use blocks
           if (entry.type === 'assistant' && Array.isArray(entry.message?.content)) {
@@ -285,6 +312,17 @@ function startChatWatcher(id: string, cwd: string, sender: Electron.WebContents)
         if (latestStatus !== undefined) {
           sender.send(`pty:chatStatus:${id}`, latestStatus);
         }
+        // Send tool_results after a delay so the UI renders tool_use with
+        // amber spinner first, then updates to green dot when results arrive.
+        if (toolResultMessages.length > 0) {
+          if (watcher.toolResultTimer) clearTimeout(watcher.toolResultTimer);
+          watcher.toolResultTimer = setTimeout(() => {
+            if (!sender.isDestroyed()) {
+              sender.send(`pty:chatMessages:${id}`, toolResultMessages);
+            }
+            if (watcher) watcher.toolResultTimer = null;
+          }, 400);
+        }
       }
     } catch {
       // File may have been deleted/rotated
@@ -302,13 +340,21 @@ function startChatWatcher(id: string, cwd: string, sender: Electron.WebContents)
   // Poll every 500ms as fallback (fs.watch can miss events)
   const interval = setInterval(readNewEntries, 500);
 
-  chatWatchers.set(id, { interval, fsWatcher, filePath, byteOffset, lineBuffer: '' });
+  chatWatchers.set(id, {
+    interval,
+    fsWatcher,
+    filePath,
+    byteOffset,
+    lineBuffer: '',
+    toolResultTimer: null,
+  });
 }
 
 function stopChatWatcher(id: string): void {
   const watcher = chatWatchers.get(id);
   if (watcher) {
     clearInterval(watcher.interval);
+    if (watcher.toolResultTimer) clearTimeout(watcher.toolResultTimer);
     watcher.fsWatcher?.close();
     chatWatchers.delete(id);
   }

@@ -8,6 +8,8 @@ interface MessageBubbleProps {
   message: ChatMessage;
   /** All messages in the conversation, for finding tool results. */
   allMessages: ChatMessage[];
+  /** Map of tool_use_id -> tool_result block for fast lookup. */
+  toolResults?: Map<string, ChatContentBlock>;
   /** True if the previous message has the same role (group continuation). */
   isGroupContinuation?: boolean;
 }
@@ -15,6 +17,7 @@ interface MessageBubbleProps {
 export function MessageBubble({
   message,
   allMessages,
+  toolResults,
   isGroupContinuation = false,
 }: MessageBubbleProps) {
   if (message.role === 'system') {
@@ -43,7 +46,9 @@ export function MessageBubble({
         {/* Spacer matching avatar width */}
         <div className="w-6 shrink-0" />
         <div className="flex-1 min-w-0 space-y-1">
-          {message.content.map((block, i) => renderContentBlock(block, i, allMessages))}
+          {message.content.map((block, i) =>
+            renderContentBlock(block, i, allMessages, toolResults),
+          )}
         </div>
       </div>
     );
@@ -75,7 +80,9 @@ export function MessageBubble({
         </div>
 
         <div className="space-y-1">
-          {message.content.map((block, i) => renderContentBlock(block, i, allMessages))}
+          {message.content.map((block, i) =>
+            renderContentBlock(block, i, allMessages, toolResults),
+          )}
         </div>
       </div>
     </div>
@@ -86,13 +93,16 @@ function renderContentBlock(
   block: ChatContentBlock,
   key: number,
   allMessages: ChatMessage[],
+  toolResults?: Map<string, ChatContentBlock>,
 ): React.ReactNode {
   switch (block.type) {
     case 'text':
       return <MarkdownRenderer key={key} content={block.text} />;
 
     case 'tool_use': {
-      const result = findToolResult(block.id, allMessages);
+      const result =
+        (toolResults?.get(block.id) as (ChatContentBlock & { type: 'tool_result' }) | undefined) ??
+        null;
       return <ToolUseBlock key={key} block={block} result={result} />;
     }
 

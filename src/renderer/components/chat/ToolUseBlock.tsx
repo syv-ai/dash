@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { highlightBlock, langFromPath } from './highlightCode';
+import { Loader2 } from 'lucide-react';
 import {
   ChevronRight,
   FileText,
@@ -41,13 +42,15 @@ export function ToolUseBlock({ block, result }: ToolUseBlockProps) {
         <span className="text-[12px] font-mono font-medium text-foreground/80 truncate">
           {summary}
         </span>
-        {result?.is_error && (
-          <AlertCircle
-            size={12}
-            strokeWidth={2}
-            className="text-destructive ml-auto flex-shrink-0"
-          />
-        )}
+        <span className="ml-auto flex-shrink-0">
+          {!result ? (
+            <Loader2 size={11} strokeWidth={2} className="animate-spin text-amber-400" />
+          ) : result?.is_error ? (
+            <AlertCircle size={12} strokeWidth={2} className="text-destructive" />
+          ) : (
+            <div className="w-2 h-2 rounded-full bg-[hsl(var(--git-added))] animate-scale-in" />
+          )}
+        </span>
       </button>
 
       {/* Preview (shown when collapsed) */}
