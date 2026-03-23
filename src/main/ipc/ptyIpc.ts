@@ -400,6 +400,19 @@ function parseConversationEntry(entry: any, counter: number): ChatHistoryMessage
     };
   }
 
+  // System entries for local command output (e.g., /cost stdout)
+  if (type === 'system' && entry.subtype === 'local_command' && typeof entry.content === 'string') {
+    const content = entry.content.trim();
+    if (content) {
+      return {
+        id: entry.uuid || `live-sys-${counter}`,
+        role: 'system',
+        content: [{ type: 'text', text: content }],
+        timestamp: entry.timestamp ? new Date(entry.timestamp).getTime() : Date.now(),
+      };
+    }
+  }
+
   if (type === 'assistant' && msg?.role === 'assistant') {
     const content = normalizeContent(msg.content);
     if (content.length === 0) return null;
