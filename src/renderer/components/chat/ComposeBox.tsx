@@ -105,9 +105,19 @@ export function ComposeBox({
         }
         if (e.key === 'Tab') {
           e.preventDefault();
-          if (filtered[slashSelectedIndex]) {
-            setValue(filtered[slashSelectedIndex].command + ' ');
-          }
+          const tabIds: Array<'all' | 'commands' | 'skills' | 'plugins' | 'mcp'> = [
+            'all',
+            'commands',
+            'skills',
+            'plugins',
+            'mcp',
+          ];
+          const currentIdx = tabIds.indexOf(slashTab);
+          const nextIdx = e.shiftKey
+            ? (currentIdx - 1 + tabIds.length) % tabIds.length
+            : (currentIdx + 1) % tabIds.length;
+          setSlashTab(tabIds[nextIdx]);
+          setSlashSelectedIndex(0);
           return;
         }
       }
