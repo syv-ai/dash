@@ -23,16 +23,14 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
 
   // Initialize PTY + JSONL watcher
   useEffect(() => {
-    // Track message IDs to avoid duplicates between history and live updates
-    const seenIds = new Set<string>();
-
-    // Subscribe to live JSONL updates
+    // Subscribe to live JSONL updates — dedup against existing messages in state
     const unsubChat = window.electronAPI.onChatMessages(id, (newMessages) => {
       setMessages((prev) => {
+        const existingIds = new Set(prev.map((m) => m.id));
+
         const toAdd = newMessages.filter((m) => {
-          if (seenIds.has(m.id)) return false;
+          if (existingIds.has(m.id)) return false;
           // Skip user messages that duplicate a locally-added message.
-          // Normalize whitespace for comparison since PTY collapses newlines to spaces.
           if (m.role === 'user') {
             const lastUser = [...prev].reverse().find((p) => p.role === 'user');
             if (lastUser && lastUser.id.startsWith('local-user-')) {
@@ -49,9 +47,9 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
           return true;
         });
         if (toAdd.length === 0) return prev;
+
+        // Index tool_results for O(1) lookup by ToolUseBlock
         for (const m of toAdd) {
-          seenIds.add(m.id);
-          // Index tool_results for O(1) lookup by ToolUseBlock
           for (const b of m.content) {
             if (b.type === 'tool_result') {
               toolResultsRef.current.set(b.tool_use_id, b);
@@ -60,7 +58,6 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
         }
 
         // Only clear busy when an assistant message with text arrives
-        // (not tool_use-only messages which are just the start of work)
         const hasAssistantText = toAdd.some(
           (m) => m.role === 'assistant' && m.content.some((b) => b.type === 'text'),
         );
@@ -105,8 +102,8 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
         // Load existing conversation history
         const historyResp = await window.electronAPI.ptyChatHistory(cwd);
         if (historyResp.success && historyResp.data && historyResp.data.length > 0) {
+          // Index tool_results from history
           for (const m of historyResp.data) {
-            seenIds.add(m.id);
             for (const b of m.content) {
               if (b.type === 'tool_result') {
                 toolResultsRef.current.set(b.tool_use_id, b);
