@@ -6,12 +6,25 @@ import { Tooltip } from './ui/Tooltip';
 import type { ChatMessage } from '../../shared/types';
 import { resolveTheme } from '../terminal/terminalThemes';
 
+// Slash commands that open interactive TUI menus/dialogs
+const INTERACTIVE_COMMANDS = new Set([
+  '/doctor',
+  '/config',
+  '/model',
+  '/permissions',
+  '/login',
+  '/logout',
+  '/terminal-setup',
+  '/review',
+]);
+
 interface ChatPaneProps {
   id: string;
   cwd: string;
+  onSwitchToTerminal?: () => void;
 }
 
-export function ChatPane({ id, cwd }: ChatPaneProps) {
+export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isBusy, setIsBusy] = useState(false);
@@ -307,11 +320,14 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
         window.electronAPI.ptyInput({ id, data: '\r' });
       }, 300);
 
-      if (!isSlashCommand) {
+      if (isSlashCommand && INTERACTIVE_COMMANDS.has(sendText.split(' ')[0])) {
+        // Switch to TUI for interactive commands that need menu/dialog input
+        setTimeout(() => onSwitchToTerminal?.(), 400);
+      } else if (!isSlashCommand) {
         setIsBusy(true);
       }
     },
-    [id],
+    [id, onSwitchToTerminal],
   );
 
   return (

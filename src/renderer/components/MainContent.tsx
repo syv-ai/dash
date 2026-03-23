@@ -401,7 +401,14 @@ export function MainContent({
       {taskHeader}
       <div className="flex-1 min-h-0">
         {viewMode === 'chat' ? (
-          <ChatPane key={`chat-${activeTask.id}`} id={activeTask.id} cwd={activeTask.path} />
+          <ChatPane
+            key={`chat-${activeTask.id}`}
+            id={activeTask.id}
+            cwd={activeTask.path}
+            onSwitchToTerminal={() => {
+              if (viewMode === 'chat') handleToggleViewMode();
+            }}
+          />
         ) : (
           <TerminalPane
             key={activeTask.id}
