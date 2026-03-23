@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import { ArrowDown, Loader2 } from 'lucide-react';
+import { ArrowDown, Bot, Loader2 } from 'lucide-react';
 import { MessageBubble } from './chat/MessageBubble';
 import { ComposeBox } from './chat/ComposeBox';
 import { Tooltip } from './ui/Tooltip';
@@ -373,32 +373,66 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
           );
         })}
 
-        {/* Inline status — appears as continuation of the last assistant message */}
-        {isBusy && messages.length > 0 && (
-          <div className="flex gap-3 px-4 pb-3 pt-1 animate-chat-entry">
-            {/* Spacer matching avatar width */}
-            <div className="w-6 shrink-0" />
-            <div className="flex items-center gap-2 text-muted-foreground/60">
-              <div className="flex gap-0.5">
-                <div
-                  className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce"
-                  style={{ animationDelay: '0ms' }}
-                />
-                <div
-                  className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce"
-                  style={{ animationDelay: '150ms' }}
-                />
-                <div
-                  className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce"
-                  style={{ animationDelay: '300ms' }}
-                />
+        {/* Inline status — shows as new Claude message or continuation */}
+        {isBusy &&
+          messages.length > 0 &&
+          (() => {
+            // Check if last visible message is from assistant
+            let lastVisibleRole: string | null = null;
+            for (let j = messages.length - 1; j >= 0; j--) {
+              const m = messages[j];
+              if (m.content.some((b) => b.type === 'text' || b.type === 'tool_use')) {
+                lastVisibleRole = m.role;
+                break;
+              }
+            }
+            const isContinuation = lastVisibleRole === 'assistant';
+
+            const dots = (
+              <div className="flex items-center gap-2 text-muted-foreground/60">
+                <div className="flex gap-0.5">
+                  <div
+                    className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce"
+                    style={{ animationDelay: '0ms' }}
+                  />
+                  <div
+                    className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce"
+                    style={{ animationDelay: '150ms' }}
+                  />
+                  <div
+                    className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce"
+                    style={{ animationDelay: '300ms' }}
+                  />
+                </div>
+                {busyStatus && (
+                  <span className="text-[11px] text-muted-foreground/50">{busyStatus}</span>
+                )}
               </div>
-              {busyStatus && (
-                <span className="text-[11px] text-muted-foreground/50">{busyStatus}</span>
-              )}
-            </div>
-          </div>
-        )}
+            );
+
+            if (isContinuation) {
+              return (
+                <div className="flex gap-3 px-4 pb-3 pt-3 animate-chat-entry">
+                  <div className="w-6 shrink-0" />
+                  {dots}
+                </div>
+              );
+            }
+
+            return (
+              <div className="flex gap-3 px-4 py-3 bg-surface-0/50 animate-chat-entry">
+                <div className="w-6 h-6 rounded-full bg-accent/80 flex items-center justify-center shrink-0 mt-0.5">
+                  <Bot size={13} strokeWidth={2} className="text-muted-foreground" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-[12px] font-semibold text-foreground">Claude</span>
+                  </div>
+                  {dots}
+                </div>
+              </div>
+            );
+          })()}
       </div>
 
       {/* Scroll to bottom button */}
