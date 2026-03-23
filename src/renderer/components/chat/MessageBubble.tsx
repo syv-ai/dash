@@ -105,24 +105,29 @@ function renderContentBlock(
       // Show slash commands/skills as elegant cards
       if (text.includes('<command-name>')) {
         const cmdMatch = text.match(/<command-name>(.*?)<\/command-name>/);
-        // Search all text blocks in the message for stdout (may be in a separate block)
+        // Search for stdout: same block, sibling blocks, or subsequent messages
         let stdout: string | undefined;
         const stdoutMatch = text.match(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/);
         if (stdoutMatch) {
           stdout = stdoutMatch[1]?.trim();
         } else {
-          // Search sibling content blocks for stdout
-          for (const sibling of allMessages.find((m) => m.content.some((b) => b === block))
-            ?.content ?? []) {
-            if (sibling.type === 'text') {
-              const sibMatch = sibling.text.match(
-                /<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/,
-              );
-              if (sibMatch) {
-                stdout = sibMatch[1]?.trim();
-                break;
+          // Search all messages for the stdout that follows this command
+          const thisMsg = allMessages.find((m) => m.content.some((b) => b === block));
+          const thisIdx = thisMsg ? allMessages.indexOf(thisMsg) : -1;
+          // Check sibling blocks in same message, then next few messages
+          const searchMessages =
+            thisIdx >= 0 ? [thisMsg!, ...allMessages.slice(thisIdx + 1, thisIdx + 4)] : [];
+          for (const msg of searchMessages) {
+            for (const b of msg.content) {
+              if (b.type === 'text') {
+                const m = b.text.match(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/);
+                if (m) {
+                  stdout = m[1]?.trim();
+                  break;
+                }
               }
             }
+            if (stdout) break;
           }
         }
         if (cmdMatch) {
