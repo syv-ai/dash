@@ -96,8 +96,22 @@ function renderContentBlock(
   toolResults?: Map<string, ChatContentBlock>,
 ): React.ReactNode {
   switch (block.type) {
-    case 'text':
-      return <MarkdownRenderer key={key} content={block.text} />;
+    case 'text': {
+      // Filter out Claude Code internal XML messages
+      const text = block.text;
+      if (text.includes('<task-notification>')) {
+        return <TaskNotification key={key} xml={text} />;
+      }
+      // Hide local-command-caveat, command-name, local-command-stdout XML
+      if (
+        text.includes('<local-command-caveat>') ||
+        text.includes('<command-name>') ||
+        (text.startsWith('<') && text.includes('</') && !text.includes('\n'))
+      ) {
+        return null;
+      }
+      return <MarkdownRenderer key={key} content={text} />;
+    }
 
     case 'tool_use': {
       const result =
@@ -127,6 +141,53 @@ function findToolResult(
     }
   }
   return null;
+}
+
+function TaskNotification({ xml }: { xml: string }): React.ReactElement | null {
+  // Parse key fields from the XML
+  const getTag = (tag: string) => {
+    const match = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`));
+    return match ? match[1].trim() : null;
+  };
+
+  const status = getTag('status');
+  const summary = getTag('summary');
+  const totalTokens = getTag('total_tokens');
+  const toolUses = getTag('tool_uses');
+  const durationMs = getTag('duration_ms');
+
+  if (!summary) return null;
+
+  const duration = durationMs
+    ? Number(durationMs) >= 60000
+      ? `${(Number(durationMs) / 60000).toFixed(1)}m`
+      : `${(Number(durationMs) / 1000).toFixed(1)}s`
+    : null;
+
+  return (
+    <div className="my-1.5 rounded-md border border-border/60 overflow-hidden">
+      <div
+        className="flex items-center gap-2 px-3 py-2"
+        style={{ background: 'hsl(var(--surface-1))' }}
+      >
+        <Bot size={12} strokeWidth={1.8} className="text-muted-foreground flex-shrink-0" />
+        <span className="text-[12px] font-medium text-foreground/80 truncate">{summary}</span>
+        {status === 'completed' && (
+          <div className="w-2 h-2 rounded-full bg-[hsl(var(--git-added))] ml-auto flex-shrink-0" />
+        )}
+      </div>
+      {(totalTokens || duration || toolUses) && (
+        <div
+          className="flex items-center gap-3 px-3 py-1.5 text-[10px] text-muted-foreground/60 border-t border-border/40"
+          style={{ background: 'hsl(var(--surface-0))' }}
+        >
+          {duration && <span>{duration}</span>}
+          {totalTokens && <span>{Number(totalTokens).toLocaleString()} tokens</span>}
+          {toolUses && <span>{toolUses} tool uses</span>}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function getTextContent(blocks: ChatContentBlock[]): string {
