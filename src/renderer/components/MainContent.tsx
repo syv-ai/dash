@@ -69,8 +69,8 @@ export function MainContent({
   gitStatus,
 }: MainContentProps) {
   const [prInfo, setPrInfo] = useState<PullRequestInfo | null>(null);
-  // Track when we auto-switched to TUI for an interactive command
-  const pendingReturnToChatRef = useRef(false);
+  // Track interactive command state: null → 'waitForBusy' → 'waitForIdle' → switch back
+  const interactiveCmdStateRef = useRef<'waitForBusy' | 'waitForIdle' | null>(null);
 
   // Per-task view mode persisted in localStorage
   const viewModeKey = activeTask ? `viewMode:${activeTask.id}` : null;
@@ -103,14 +103,17 @@ export function MainContent({
   }, [activeTask, viewModeKey, viewMode]);
 
   // Auto-switch back to chat after interactive command completes
+  // State machine: waitForBusy → waitForIdle → switch back
   useEffect(() => {
-    if (!activeTask || !pendingReturnToChatRef.current) return;
+    if (!activeTask || !interactiveCmdStateRef.current) return;
     const activity = taskActivity[activeTask.id];
-    if (activity === 'idle' && viewMode === 'terminal') {
-      pendingReturnToChatRef.current = false;
-      // Small delay to let the TUI finish rendering
+
+    if (interactiveCmdStateRef.current === 'waitForBusy' && activity === 'busy') {
+      interactiveCmdStateRef.current = 'waitForIdle';
+    } else if (interactiveCmdStateRef.current === 'waitForIdle' && activity === 'idle') {
+      interactiveCmdStateRef.current = null;
       setTimeout(() => {
-        if (viewModeKey) {
+        if (viewModeKey && viewMode === 'terminal') {
           localStorage.setItem(viewModeKey, 'chat');
           setViewMode('chat');
         }
@@ -425,7 +428,7 @@ export function MainContent({
             cwd={activeTask.path}
             onSwitchToTerminal={() => {
               if (viewMode === 'chat') {
-                pendingReturnToChatRef.current = true;
+                interactiveCmdStateRef.current = 'waitForBusy';
                 handleToggleViewMode();
               }
             }}
