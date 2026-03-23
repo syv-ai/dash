@@ -373,18 +373,29 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
           );
         })}
 
-        {/* Inline thinking indicator — only when no tool-specific status
-            (tool blocks now show their own amber spinner) */}
-        {isBusy && !busyStatus && messages.length > 0 && (
-          <div className="flex gap-3 px-4 py-3 bg-surface-0/50 animate-chat-entry">
-            <div className="w-6 h-6 rounded-full bg-amber-400/20 flex items-center justify-center shrink-0 mt-0.5">
-              <Loader2 size={12} strokeWidth={2} className="animate-spin text-amber-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-[12px] font-semibold text-foreground">Claude</span>
+        {/* Inline status — appears as continuation of the last assistant message */}
+        {isBusy && messages.length > 0 && (
+          <div className="flex gap-3 px-4 pb-3 pt-1 animate-chat-entry">
+            {/* Spacer matching avatar width */}
+            <div className="w-6 shrink-0" />
+            <div className="flex items-center gap-2 text-muted-foreground/60">
+              <div className="flex gap-0.5">
+                <div
+                  className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce"
+                  style={{ animationDelay: '0ms' }}
+                />
+                <div
+                  className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce"
+                  style={{ animationDelay: '150ms' }}
+                />
+                <div
+                  className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce"
+                  style={{ animationDelay: '300ms' }}
+                />
               </div>
-              <p className="text-[13px] text-muted-foreground/70 animate-pulse">Thinking...</p>
+              {busyStatus && (
+                <span className="text-[11px] text-muted-foreground/50">{busyStatus}</span>
+              )}
             </div>
           </div>
         )}
