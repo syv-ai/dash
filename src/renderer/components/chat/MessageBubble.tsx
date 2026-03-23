@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, Bot, AlertTriangle } from 'lucide-react';
+import { User, Bot, AlertTriangle, TerminalSquare } from 'lucide-react';
 import type { ChatMessage, ChatContentBlock } from '../../../shared/types';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ToolUseBlock } from './ToolUseBlock';
@@ -102,14 +102,36 @@ function renderContentBlock(
       if (text.includes('<task-notification>')) {
         return <TaskNotification key={key} xml={text} />;
       }
-      // Show slash commands/skills as clean messages
+      // Show slash commands/skills as elegant cards
       if (text.includes('<command-name>')) {
-        const cmdMatch = text.match(/<command-message>(.*?)<\/command-message>/);
+        const cmdMatch = text.match(/<command-name>(.*?)<\/command-name>/);
+        const stdoutMatch = text.match(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/);
         if (cmdMatch) {
+          const cmd = cmdMatch[1].startsWith('/') ? cmdMatch[1] : `/${cmdMatch[1]}`;
+          const stdout = stdoutMatch?.[1]?.trim();
           return (
-            <span key={key} className="text-[13px] font-mono text-muted-foreground">
-              /{cmdMatch[1]}
-            </span>
+            <div key={key} className="my-1.5 rounded-md border border-border/60 overflow-hidden">
+              <div
+                className="flex items-center gap-2 px-3 py-2"
+                style={{ background: 'hsl(var(--surface-1))' }}
+              >
+                <TerminalSquare
+                  size={12}
+                  strokeWidth={1.8}
+                  className="text-muted-foreground flex-shrink-0"
+                />
+                <span className="text-[12px] font-mono font-medium text-foreground/80">{cmd}</span>
+                <div className="w-2 h-2 rounded-full bg-[hsl(var(--git-added))] ml-auto flex-shrink-0" />
+              </div>
+              {stdout && (
+                <div
+                  className="px-3 py-1.5 text-[11px] text-muted-foreground/70 border-t border-border/40"
+                  style={{ background: 'hsl(var(--surface-0))' }}
+                >
+                  {stdout}
+                </div>
+              )}
+            </div>
           );
         }
       }
