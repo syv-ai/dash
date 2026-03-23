@@ -100,6 +100,8 @@ export function ComposeBox({
         }
         if (e.key === 'Escape') {
           e.preventDefault();
+          e.stopPropagation();
+          e.nativeEvent.stopImmediatePropagation();
           setShowSlashMenu(false);
           return;
         }
