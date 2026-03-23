@@ -370,16 +370,16 @@ function renderExpandedDetail(
   );
 }
 
-function buildFullDiff(oldStr: string, newStr: string, lang?: string): React.ReactNode {
-  const oldLines = oldStr.split('\n');
-  const newLines = newStr.split('\n');
-
-  // Highlight both versions as complete blocks, then split into lines.
-  // This gives highlight.js full context for multi-line token handling.
-  const oldHighlighted = highlightBlock(oldStr, lang).split('\n');
-  const newHighlighted = highlightBlock(newStr, lang).split('\n');
-
-  // Simple diff: find common prefix and suffix
+/**
+ * Compute diff entries from old and new strings.
+ * Returns an array of {type, oldIdx, newIdx} entries that interleave
+ * context, removed, and added lines naturally.
+ */
+function computeDiff(
+  oldLines: string[],
+  newLines: string[],
+): Array<{ type: 'context' | 'removed' | 'added'; lineIdx: number }> {
+  // Find common prefix
   let prefixLen = 0;
   while (
     prefixLen < oldLines.length &&
@@ -389,6 +389,7 @@ function buildFullDiff(oldStr: string, newStr: string, lang?: string): React.Rea
     prefixLen++;
   }
 
+  // Find common suffix
   let suffixLen = 0;
   while (
     suffixLen < oldLines.length - prefixLen &&
@@ -398,42 +399,81 @@ function buildFullDiff(oldStr: string, newStr: string, lang?: string): React.Rea
     suffixLen++;
   }
 
-  let lineNum = 1;
+  const entries: Array<{ type: 'context' | 'removed' | 'added'; lineIdx: number }> = [];
+
+  // Common prefix
+  for (let i = 0; i < prefixLen; i++) {
+    entries.push({ type: 'context', lineIdx: i });
+  }
+
+  // Changed section: interleave removed/added lines
+  const oldChanged = oldLines.slice(prefixLen, oldLines.length - suffixLen);
+  const newChanged = newLines.slice(prefixLen, newLines.length - suffixLen);
+  const maxChanged = Math.max(oldChanged.length, newChanged.length);
+
+  for (let i = 0; i < maxChanged; i++) {
+    if (i < oldChanged.length) {
+      entries.push({ type: 'removed', lineIdx: prefixLen + i });
+    }
+    if (i < newChanged.length) {
+      entries.push({ type: 'added', lineIdx: prefixLen + i });
+    }
+  }
+
+  // Common suffix
+  for (let i = newLines.length - suffixLen; i < newLines.length; i++) {
+    entries.push({ type: 'context', lineIdx: i });
+  }
+
+  return entries;
+}
+
+function buildFullDiff(oldStr: string, newStr: string, lang?: string): React.ReactNode {
+  const oldLines = oldStr.split('\n');
+  const newLines = newStr.split('\n');
+
+  const oldHighlighted = highlightBlock(oldStr, lang).split('\n');
+  const newHighlighted = highlightBlock(newStr, lang).split('\n');
+
+  const entries = computeDiff(oldLines, newLines);
+
+  let oldLineNum = 1;
+  let newLineNum = 1;
   const rows: React.ReactNode[] = [];
 
-  // Common prefix (context) — use old highlighted (same as new for these lines)
-  for (let i = 0; i < prefixLen; i++) {
-    rows.push(
-      <DiffLine key={`ctx-pre-${lineNum}`} num={lineNum} type="context" html={oldHighlighted[i]} />,
-    );
-    lineNum++;
-  }
-  // Removed lines
-  for (let i = prefixLen; i < oldLines.length - suffixLen; i++) {
-    rows.push(
-      <DiffLine key={`del-${lineNum}`} num={lineNum} type="removed" html={oldHighlighted[i]} />,
-    );
-    lineNum++;
-  }
-  // Added lines
-  let addLineNum = prefixLen + 1;
-  for (let i = prefixLen; i < newLines.length - suffixLen; i++) {
-    rows.push(
-      <DiffLine key={`add-${addLineNum}`} num={addLineNum} type="added" html={newHighlighted[i]} />,
-    );
-    addLineNum++;
-  }
-  // Common suffix (context)
-  for (let i = newLines.length - suffixLen; i < newLines.length; i++) {
-    rows.push(
-      <DiffLine
-        key={`ctx-suf-${addLineNum}`}
-        num={addLineNum}
-        type="context"
-        html={newHighlighted[i]}
-      />,
-    );
-    addLineNum++;
+  for (const entry of entries) {
+    if (entry.type === 'context') {
+      rows.push(
+        <DiffLine
+          key={`ctx-${newLineNum}`}
+          num={newLineNum}
+          type="context"
+          html={newHighlighted[entry.lineIdx]}
+        />,
+      );
+      oldLineNum++;
+      newLineNum++;
+    } else if (entry.type === 'removed') {
+      rows.push(
+        <DiffLine
+          key={`del-${oldLineNum}`}
+          num={oldLineNum}
+          type="removed"
+          html={oldHighlighted[entry.lineIdx]}
+        />,
+      );
+      oldLineNum++;
+    } else {
+      rows.push(
+        <DiffLine
+          key={`add-${newLineNum}`}
+          num={newLineNum}
+          type="added"
+          html={newHighlighted[entry.lineIdx]}
+        />,
+      );
+      newLineNum++;
+    }
   }
 
   return <div className="overflow-y-auto max-h-[400px]">{rows}</div>;
@@ -677,55 +717,62 @@ function formatToolSummary(
 function buildDiffPreview(
   oldStr: string,
   newStr: string,
-  oldLineCount: number,
-  newLineCount: number,
+  _oldLineCount: number,
+  _newLineCount: number,
   lang?: string,
 ): React.ReactNode | null {
   if (!oldStr && !newStr) return null;
 
-  const oldHtml = highlightBlock(oldStr, lang).split('\n').slice(0, 4);
-  const newHtml = highlightBlock(newStr, lang).split('\n').slice(0, 4);
-  const oldRemaining = oldLineCount - oldHtml.length;
-  const newRemaining = newLineCount - newHtml.length;
+  const oldLines = oldStr.split('\n');
+  const newLines = newStr.split('\n');
+  const oldHighlighted = highlightBlock(oldStr, lang).split('\n');
+  const newHighlighted = highlightBlock(newStr, lang).split('\n');
+
+  const entries = computeDiff(oldLines, newLines);
+
+  // Show up to 8 diff lines in the preview
+  const MAX_PREVIEW = 8;
+  const previewEntries = entries.filter((e) => e.type !== 'context').slice(0, MAX_PREVIEW);
+  const totalChanged = entries.filter((e) => e.type !== 'context').length;
+  const remaining = totalChanged - previewEntries.length;
 
   return (
     <div className="overflow-hidden max-h-[200px]">
-      {oldHtml.map((html, i) => (
-        <div
-          key={`old-${i}`}
-          className="flex text-[11px] font-mono leading-relaxed bg-[hsl(var(--git-deleted))]/15"
-        >
-          <span className="w-6 text-center text-[hsl(var(--git-deleted))] select-none flex-shrink-0">
-            −
-          </span>
-          <span
-            className="text-foreground/70 whitespace-pre-wrap break-all"
-            dangerouslySetInnerHTML={{ __html: html || '&nbsp;' }}
-          />
-        </div>
-      ))}
-      {oldRemaining > 0 && (
-        <div className="pl-6 text-[10px] text-muted-foreground/60 bg-[hsl(var(--git-deleted))]/8 py-0.5">
-          … +{oldRemaining} lines removed
-        </div>
-      )}
-      {newHtml.map((html, i) => (
-        <div
-          key={`new-${i}`}
-          className="flex text-[11px] font-mono leading-relaxed bg-[hsl(var(--git-added))]/15"
-        >
-          <span className="w-6 text-center text-[hsl(var(--git-added))] select-none flex-shrink-0">
-            +
-          </span>
-          <span
-            className="text-foreground/70 whitespace-pre-wrap break-all"
-            dangerouslySetInnerHTML={{ __html: html || '&nbsp;' }}
-          />
-        </div>
-      ))}
-      {newRemaining > 0 && (
-        <div className="pl-6 text-[10px] text-muted-foreground/60 bg-[hsl(var(--git-added))]/8 py-0.5">
-          … +{newRemaining} lines added
+      {previewEntries.map((entry, i) => {
+        if (entry.type === 'removed') {
+          return (
+            <div
+              key={`old-${i}`}
+              className="flex text-[11px] font-mono leading-relaxed bg-[hsl(var(--git-deleted))]/15"
+            >
+              <span className="w-6 text-center text-[hsl(var(--git-deleted))] select-none flex-shrink-0">
+                −
+              </span>
+              <span
+                className="text-foreground/70 whitespace-pre-wrap break-all"
+                dangerouslySetInnerHTML={{ __html: oldHighlighted[entry.lineIdx] || '&nbsp;' }}
+              />
+            </div>
+          );
+        }
+        return (
+          <div
+            key={`new-${i}`}
+            className="flex text-[11px] font-mono leading-relaxed bg-[hsl(var(--git-added))]/15"
+          >
+            <span className="w-6 text-center text-[hsl(var(--git-added))] select-none flex-shrink-0">
+              +
+            </span>
+            <span
+              className="text-foreground/70 whitespace-pre-wrap break-all"
+              dangerouslySetInnerHTML={{ __html: newHighlighted[entry.lineIdx] || '&nbsp;' }}
+            />
+          </div>
+        );
+      })}
+      {remaining > 0 && (
+        <div className="pl-6 text-[10px] text-muted-foreground/60 py-0.5">
+          … +{remaining} more changes
         </div>
       )}
     </div>
