@@ -287,16 +287,14 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
     (text: string) => {
       const isSlashCommand = text.startsWith('/');
 
-      if (!isSlashCommand) {
-        // Add user message to chat with original formatting preserved
-        const localMsg: ChatMessage = {
-          id: `local-user-${Date.now()}`,
-          role: 'user',
-          content: [{ type: 'text', text }],
-          timestamp: Date.now(),
-        };
-        setMessages((prev) => [...prev, localMsg]);
-      }
+      // Always show what was sent (both messages and slash commands)
+      const localMsg: ChatMessage = {
+        id: `local-user-${Date.now()}`,
+        role: 'user',
+        content: [{ type: 'text', text }],
+        timestamp: Date.now(),
+      };
+      setMessages((prev) => [...prev, localMsg]);
 
       // Collapse newlines to spaces for PTY — the TUI interprets \n as submit
       const sendText = text.replace(/\n+/g, ' ');
