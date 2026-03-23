@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import { ArrowDown, Bot, Loader2 } from 'lucide-react';
+import { ArrowDown, Bot, Loader2, Shield } from 'lucide-react';
 import { MessageBubble } from './chat/MessageBubble';
 import { ComposeBox } from './chat/ComposeBox';
 import { Tooltip } from './ui/Tooltip';
@@ -65,6 +65,7 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
   const toolResultsRef = useRef(new Map<string, ChatMessage['content'][0]>());
   const [busyElapsed, setBusyElapsed] = useState(0);
   const busyStartRef = useRef(0);
+  const [isWaiting, setIsWaiting] = useState(false);
 
   // Resolve terminal theme background for the chat UI to match the TUI.
   // Re-resolve when theme changes (localStorage) or dark/light toggles.
@@ -165,8 +166,13 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
         if (state === 'idle') {
           setIsBusy(false);
           setBusyStatus(null);
+          setIsWaiting(false);
         } else if (state === 'busy') {
           setIsBusy(true);
+          setIsWaiting(false);
+        } else if (state === 'waiting') {
+          setIsBusy(false);
+          setIsWaiting(true);
         }
       },
     );
@@ -246,7 +252,7 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
     if (isAtBottom && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isBusy, busyStatus, isAtBottom]);
+  }, [messages, isBusy, busyStatus, isWaiting, isAtBottom]);
 
   // Load older messages when scrolling to top
   const loadOlderMessages = useCallback(async () => {
@@ -307,9 +313,42 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
     }
   }, []);
 
-  // ESC to interrupt the agent (sends Ctrl+C to PTY)
+  // Keyboard handling: ESC to interrupt, arrow keys + Enter for permission prompts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // When waiting for permission, forward navigation keys to the TUI
+      if (isWaiting) {
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          window.electronAPI.ptyInput({ id, data: '\x1b[A' });
+          return;
+        }
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          window.electronAPI.ptyInput({ id, data: '\x1b[B' });
+          return;
+        }
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          window.electronAPI.ptyInput({ id, data: '\r' });
+          setIsWaiting(false);
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          window.electronAPI.ptyInput({ id, data: '\x1b' });
+          setIsWaiting(false);
+          return;
+        }
+        // Number keys for direct selection
+        if (e.key >= '1' && e.key <= '9') {
+          e.preventDefault();
+          window.electronAPI.ptyInput({ id, data: e.key });
+          setIsWaiting(false);
+          return;
+        }
+        return;
+      }
       if (e.key === 'Escape' && isBusy) {
         e.preventDefault();
         window.electronAPI.ptyInput({ id, data: '\x03' });
@@ -319,7 +358,7 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [id, isBusy]);
+  }, [id, isBusy, isWaiting]);
 
   // Send user message or slash command via PTY stdin
   const handleSend = useCallback(
@@ -503,6 +542,63 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
               </div>
             );
           })()}
+
+        {/* Permission prompt — shown when the TUI is waiting for user approval */}
+        {isWaiting && (
+          <div className="flex gap-3 px-4 py-3 animate-chat-entry">
+            <div className="w-6 h-6 rounded-full bg-orange-500/20 flex items-center justify-center shrink-0 mt-0.5">
+              <Shield size={12} strokeWidth={2} className="text-orange-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[12px] font-semibold text-foreground">
+                  Permission required
+                </span>
+              </div>
+              <p className="text-[12px] text-muted-foreground mb-3">
+                Claude wants to perform an action that requires your approval.
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    window.electronAPI.ptyInput({ id, data: '1' });
+                    setIsWaiting(false);
+                  }}
+                  className="px-3 py-1.5 rounded-md text-[11px] font-medium bg-[hsl(var(--git-added))]/15 text-[hsl(var(--git-added))] hover:bg-[hsl(var(--git-added))]/25 transition-colors"
+                >
+                  Allow
+                </button>
+                <button
+                  onClick={() => {
+                    window.electronAPI.ptyInput({ id, data: '2' });
+                    setIsWaiting(false);
+                  }}
+                  className="px-3 py-1.5 rounded-md text-[11px] font-medium bg-amber-400/15 text-amber-400 hover:bg-amber-400/25 transition-colors"
+                >
+                  Allow for session
+                </button>
+                <button
+                  onClick={() => {
+                    window.electronAPI.ptyInput({ id, data: '3' });
+                    setIsWaiting(false);
+                  }}
+                  className="px-3 py-1.5 rounded-md text-[11px] font-medium bg-[hsl(var(--git-deleted))]/15 text-[hsl(var(--git-deleted))] hover:bg-[hsl(var(--git-deleted))]/25 transition-colors"
+                >
+                  Deny
+                </button>
+                <button
+                  onClick={() => {
+                    window.electronAPI.ptyInput({ id, data: '\x1b' });
+                    setIsWaiting(false);
+                  }}
+                  className="px-3 py-1.5 rounded-md text-[11px] font-medium text-muted-foreground hover:bg-accent/60 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Scroll to bottom button */}
