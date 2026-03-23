@@ -32,6 +32,7 @@ import type {
   SkillsRegistryMeta,
   InstalledSkillsResult,
 } from '../shared/types';
+import type { ParsedSessionMessage, SessionMetrics, SessionUpdate } from '../shared/sessionTypes';
 
 export interface ElectronAPI {
   // App
@@ -309,6 +310,18 @@ export interface ElectronAPI {
   }) => Promise<IpcResponse<InstalledSkillsResult>>;
   skillsUninstall: (args: SkillUninstallArgs) => Promise<IpcResponse<void>>;
   skillsResetCache: () => Promise<IpcResponse<SkillsRegistryMeta>>;
+
+  // Session (structured view)
+  sessionWatch: (args: { taskId: string; taskPath: string }) => Promise<IpcResponse<void>>;
+  sessionUnwatch: (taskId: string) => Promise<IpcResponse<void>>;
+  sessionGetMessages: (
+    taskId: string,
+  ) => Promise<IpcResponse<{ messages: ParsedSessionMessage[]; metrics: SessionMetrics } | null>>;
+  sessionGetSubagent: (args: {
+    taskId: string;
+    agentId: string;
+  }) => Promise<IpcResponse<{ messages: ParsedSessionMessage[]; metrics: SessionMetrics } | null>>;
+  onSessionUpdate: (callback: (data: SessionUpdate) => void) => () => void;
 
   // Telemetry
   telemetryCapture: (event: string, properties?: Record<string, unknown>) => Promise<void>;
