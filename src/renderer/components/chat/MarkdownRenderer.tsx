@@ -238,12 +238,24 @@ function textWithBreaks(str: string): React.ReactNode {
   ));
 }
 
-/** Render inline markdown: bold, italic, inline code, links. Recurses for nested formatting. */
+/** Check if a string looks like a file path (contains / or \ and ends with a file extension). */
+function isFilePath(str: string): boolean {
+  return /^[\w./\\-]+\.\w{1,10}(:\d+)?$/.test(str) && (str.includes('/') || str.includes('\\'));
+}
+
+/** Handle clicking a file path link — opens in the user's preferred editor. */
+function handleFileClick(filePath: string) {
+  const [path, lineStr] = filePath.split(':');
+  const line = lineStr ? parseInt(lineStr, 10) : undefined;
+  window.electronAPI.openInEditor({ cwd: '', filePath: path, line });
+}
+
+/** Render inline markdown: bold, italic, inline code, links, bare URLs, file paths. */
 function renderInline(text: string): React.ReactNode {
   const parts: React.ReactNode[] = [];
-  // Regex for: `code`, **bold**, *italic*, [text](url)
-  // Use .+? for bold/italic to allow nested inline tokens inside
-  const regex = /(`[^`]+`|\*\*.+?\*\*|\*[^*]+?\*|\[[^\]]+\]\([^)]+\))/g;
+  // Regex for: `code`, **bold**, *italic*, [text](url), bare URLs, file_path:line
+  const regex =
+    /(`[^`]+`|\*\*.+?\*\*|\*[^*]+?\*|\[[^\]]+\]\([^)]+\)|https?:\/\/[^\s)>\]]+|(?:[\w./\\-]+\/[\w./\\-]+\.\w{1,10}(?::\d+)?))/g;
   let lastIndex = 0;
   let match;
 
@@ -254,15 +266,28 @@ function renderInline(text: string): React.ReactNode {
 
     const token = match[0];
     if (token.startsWith('`')) {
-      // Inline code — no recursion, render literally
-      parts.push(
-        <code
-          key={match.index}
-          className="px-1 py-0.5 rounded bg-surface-1 text-[12px] font-mono text-foreground/80"
-        >
-          {token.slice(1, -1)}
-        </code>,
-      );
+      // Inline code — check if content is a file path
+      const inner = token.slice(1, -1);
+      if (isFilePath(inner)) {
+        parts.push(
+          <code
+            key={match.index}
+            className="px-1 py-0.5 rounded bg-surface-1 text-[12px] font-mono text-primary cursor-pointer hover:underline"
+            onClick={() => handleFileClick(inner)}
+          >
+            {inner}
+          </code>,
+        );
+      } else {
+        parts.push(
+          <code
+            key={match.index}
+            className="px-1 py-0.5 rounded bg-surface-1 text-[12px] font-mono text-foreground/80"
+          >
+            {inner}
+          </code>,
+        );
+      }
     } else if (token.startsWith('**')) {
       parts.push(
         <strong key={match.index} className="font-semibold">
@@ -278,18 +303,51 @@ function renderInline(text: string): React.ReactNode {
     } else if (token.startsWith('[')) {
       const linkMatch = token.match(/\[([^\]]+)\]\(([^)]+)\)/);
       if (linkMatch) {
+        const href = linkMatch[2];
         parts.push(
           <a
             key={match.index}
-            href={linkMatch[2]}
+            href={href}
             target="_blank"
             rel="noopener noreferrer"
             className="text-primary hover:underline"
+            onClick={(e) => {
+              e.preventDefault();
+              window.electronAPI.openExternal(href);
+            }}
           >
             {renderInline(linkMatch[1])}
           </a>,
         );
       }
+    } else if (token.startsWith('http')) {
+      // Bare URL
+      parts.push(
+        <a
+          key={match.index}
+          href={token}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary hover:underline"
+          onClick={(e) => {
+            e.preventDefault();
+            window.electronAPI.openExternal(token);
+          }}
+        >
+          {token}
+        </a>,
+      );
+    } else if (isFilePath(token)) {
+      // Bare file path
+      parts.push(
+        <span
+          key={match.index}
+          className="font-mono text-primary cursor-pointer hover:underline"
+          onClick={() => handleFileClick(token)}
+        >
+          {token}
+        </span>,
+      );
     }
 
     lastIndex = match.index + token.length;
