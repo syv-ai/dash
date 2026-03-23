@@ -65,25 +65,49 @@ class HookServerImpl {
     }
   }
 
+  /** Broadcast an IPC event to the renderer that owns this ptyId. */
+  private sendToRenderers(channel: string, data: unknown): void {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send(channel, data);
+      }
+    }
+  }
+
+  /** Parse a POST request body as JSON. */
+  private parsePostBody(req: http.IncomingMessage): Promise<any> {
+    return new Promise((resolve) => {
+      let body = '';
+      req.on('data', (chunk: Buffer) => {
+        body += chunk.toString();
+      });
+      req.on('end', () => {
+        try {
+          resolve(JSON.parse(body));
+        } catch {
+          resolve({});
+        }
+      });
+    });
+  }
+
   async start(): Promise<number> {
     if (this.server) return this._port;
 
     return new Promise((resolve, reject) => {
-      this.server = http.createServer((req, res) => {
+      this.server = http.createServer(async (req, res) => {
         const url = new URL(req.url || '', `http://127.0.0.1:${this._port}`);
         const ptyId = url.searchParams.get('ptyId');
 
-        if (req.method === 'GET' && ptyId) {
-          if (url.pathname === '/hook/stop') {
-            console.error(`[HookServer] Stop hook fired for ptyId=${ptyId}`);
-            activityMonitor.setIdle(ptyId);
-            this.showDesktopNotification(ptyId);
-            res.writeHead(200);
-            res.end('ok');
-            return;
-          }
+        if (!ptyId) {
+          res.writeHead(400);
+          res.end();
+          return;
+        }
+
+        // GET endpoints (legacy)
+        if (req.method === 'GET') {
           if (url.pathname === '/hook/busy') {
-            console.error(`[HookServer] Busy hook fired for ptyId=${ptyId}`);
             activityMonitor.setBusy(ptyId);
             res.writeHead(200);
             res.end('ok');
@@ -91,29 +115,120 @@ class HookServerImpl {
           }
         }
 
-        // Notification hook — receives JSON on stdin with:
-        //   notification_type: 'permission_prompt' | 'idle_prompt' | 'auth_success' | 'elicitation_dialog'
-        //   message: string (e.g. "Claude needs your permission to use Bash")
-        //   title: string | undefined (e.g. "Permission needed")
-        //   session_id, transcript_path, cwd, permission_mode, hook_event_name
-        if (req.method === 'POST' && ptyId && url.pathname === '/hook/notification') {
-          let body = '';
-          req.on('data', (chunk: Buffer) => {
-            body += chunk.toString();
-          });
-          req.on('end', () => {
-            try {
-              const payload = JSON.parse(body);
+        // All POST endpoints
+        if (req.method === 'POST') {
+          const payload = await this.parsePostBody(req);
+
+          switch (url.pathname) {
+            // ── Stop ──────────────────────────────────────────
+            case '/hook/stop': {
+              activityMonitor.setIdle(ptyId);
+              this.showDesktopNotification(ptyId);
+              this.sendToRenderers(`hook:stop:${ptyId}`, {
+                lastAssistantMessage: payload.last_assistant_message || null,
+              });
+              res.writeHead(200);
+              res.end('ok');
+              return;
+            }
+
+            // ── StopFailure ───────────────────────────────────
+            case '/hook/stop-failure': {
+              activityMonitor.setIdle(ptyId);
+              this.sendToRenderers(`hook:stopFailure:${ptyId}`, {
+                error: payload.error || 'unknown',
+                errorDetails: payload.error_details || '',
+                lastAssistantMessage: payload.last_assistant_message || '',
+              });
+              const taskName = this.getTaskName(ptyId);
+              this.showDesktopNotification(ptyId, `${taskName}: API error (${payload.error})`);
+              res.writeHead(200);
+              res.end('ok');
+              return;
+            }
+
+            // ── PreToolUse ────────────────────────────────────
+            case '/hook/pre-tool-use': {
+              this.sendToRenderers(`hook:preToolUse:${ptyId}`, {
+                toolName: payload.tool_name,
+                toolInput: payload.tool_input,
+                toolUseId: payload.tool_use_id,
+              });
+              res.writeHead(200);
+              res.end('ok');
+              return;
+            }
+
+            // ── PostToolUse ───────────────────────────────────
+            case '/hook/post-tool-use': {
+              this.sendToRenderers(`hook:postToolUse:${ptyId}`, {
+                toolName: payload.tool_name,
+                toolInput: payload.tool_input,
+                toolResponse: payload.tool_response,
+                toolUseId: payload.tool_use_id,
+              });
+              res.writeHead(200);
+              res.end('ok');
+              return;
+            }
+
+            // ── PostToolUseFailure ────────────────────────────
+            case '/hook/post-tool-use-failure': {
+              this.sendToRenderers(`hook:postToolUseFailure:${ptyId}`, {
+                toolName: payload.tool_name,
+                toolInput: payload.tool_input,
+                toolUseId: payload.tool_use_id,
+                error: payload.error,
+                isInterrupt: payload.is_interrupt || false,
+              });
+              res.writeHead(200);
+              res.end('ok');
+              return;
+            }
+
+            // ── SubagentStart ─────────────────────────────────
+            case '/hook/subagent-start': {
+              this.sendToRenderers(`hook:subagentStart:${ptyId}`, {
+                agentId: payload.agent_id,
+                agentType: payload.agent_type,
+              });
+              res.writeHead(200);
+              res.end('ok');
+              return;
+            }
+
+            // ── SubagentStop ──────────────────────────────────
+            case '/hook/subagent-stop': {
+              this.sendToRenderers(`hook:subagentStop:${ptyId}`, {
+                agentId: payload.agent_id,
+                agentType: payload.agent_type,
+                agentTranscriptPath: payload.agent_transcript_path || null,
+                lastAssistantMessage: payload.last_assistant_message || null,
+              });
+              res.writeHead(200);
+              res.end('ok');
+              return;
+            }
+
+            // ── SessionStart ──────────────────────────────────
+            case '/hook/session-start': {
+              this.sendToRenderers(`hook:sessionStart:${ptyId}`, {
+                sessionId: payload.session_id,
+                source: payload.source,
+                transcriptPath: payload.transcript_path,
+              });
+              res.writeHead(200);
+              res.end('ok');
+              return;
+            }
+
+            // ── Notification ──────────────────────────────────
+            case '/hook/notification': {
               const notificationType: string = payload.notification_type;
               const message: string | undefined = payload.message;
-              console.error(
-                `[HookServer] Notification hook fired for ptyId=${ptyId} type=${notificationType}`,
-              );
 
               if (notificationType === 'permission_prompt') {
                 activityMonitor.setWaitingForPermission(ptyId);
-                // Use the message from Claude Code when available (e.g. "Claude needs your
-                // permission to use Bash"), otherwise fall back to a generic message.
                 const taskName = this.getTaskName(ptyId);
                 const notifBody = message
                   ? `${taskName}: ${message}`
@@ -123,13 +238,20 @@ class HookServerImpl {
                 activityMonitor.setIdle(ptyId);
                 this.showDesktopNotification(ptyId);
               }
-            } catch (err) {
-              console.error('[HookServer] Failed to parse notification body:', err);
+
+              this.sendToRenderers(`hook:notification:${ptyId}`, {
+                notificationType,
+                message: message || '',
+                title: payload.title || '',
+              });
+              res.writeHead(200);
+              res.end('ok');
+              return;
             }
-            res.writeHead(200);
-            res.end('ok');
-          });
-          return;
+
+            default:
+              break;
+          }
         }
 
         res.writeHead(404);

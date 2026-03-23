@@ -44,6 +44,35 @@ const INTERACTIVE_COMMANDS = new Set([
   '/theme',
 ]);
 
+/** Format a human-readable status string from a tool_use hook event. */
+function formatToolStatus(toolName: string, input: Record<string, unknown>): string {
+  const fileName = (p: string) => p.split('/').pop() || p;
+  switch (toolName) {
+    case 'Read':
+      return input?.file_path ? `Reading ${fileName(input.file_path as string)}` : 'Reading';
+    case 'Edit':
+      return input?.file_path ? `Editing ${fileName(input.file_path as string)}` : 'Editing';
+    case 'Write':
+      return input?.file_path ? `Writing ${fileName(input.file_path as string)}` : 'Writing';
+    case 'Bash':
+      return input?.command
+        ? `Running \`${(input.command as string).slice(0, 60)}\``
+        : 'Running command';
+    case 'Glob':
+      return input?.pattern ? `Searching for ${input.pattern}` : 'Searching files';
+    case 'Grep':
+      return input?.pattern ? `Searching for "${input.pattern}"` : 'Searching content';
+    case 'Agent':
+      return (input?.description as string) || 'Running subagent';
+    case 'WebFetch':
+      return input?.url ? `Fetching ${(input.url as string).slice(0, 50)}` : 'Fetching web page';
+    case 'WebSearch':
+      return input?.query ? `Searching "${(input.query as string).slice(0, 50)}"` : 'Searching web';
+    default:
+      return `Running ${toolName}`;
+  }
+}
+
 interface ChatPaneProps {
   id: string;
   cwd: string;
@@ -154,20 +183,13 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
           if (busyTimerRef.current) clearTimeout(busyTimerRef.current);
         }
 
-        // Track background processes and subagents from live updates
+        // Track background Bash tasks from JSONL (these don't trigger subagent hooks)
         const bgTasks = bgTasksRef.current;
         let bgChanged = false;
         for (const m of toAdd) {
           for (const block of m.content) {
-            // Background Bash task started
             if (block.type === 'tool_use' && block.name === 'Bash') {
               const input = block.input as Record<string, any>;
-              console.log(
-                '[bg-track] Bash tool_use:',
-                block.id,
-                'run_in_background:',
-                input?.run_in_background,
-              );
               if (input?.run_in_background && !bgTasks.has(block.id)) {
                 const cmd = input.command || '';
                 bgTasks.set(block.id, {
@@ -178,24 +200,10 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
                 bgChanged = true;
               }
             }
-            // Subagent started
-            if (block.type === 'tool_use' && block.name === 'Agent' && !bgTasks.has(block.id)) {
-              const input = block.input as Record<string, any>;
-              bgTasks.set(block.id, {
-                id: block.id,
-                name: 'Agent',
-                summary: `Agent(${input?.subagent_type || 'subagent'})`,
-              });
-              bgChanged = true;
-            }
-            // tool_result: complete agents, extract output file for bg tasks
+            // Extract output file path from tool_result
             if (block.type === 'tool_result') {
               const existing = bgTasks.get(block.tool_use_id);
-              if (existing?.name === 'Agent') {
-                bgTasks.delete(block.tool_use_id);
-                bgChanged = true;
-              } else if (existing?.name === 'Bash' && block.content) {
-                // Extract output file path from tool_result
+              if (existing?.name === 'Bash' && block.content) {
                 const fileMatch = block.content.match(/Output is being written to:\s*(\S+)/);
                 if (fileMatch) {
                   existing.outputFile = fileMatch[1];
@@ -217,7 +225,6 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
           }
         }
         if (bgChanged) {
-          console.log('[bg-track] changed, active:', [...bgTasks.values()]);
           setActiveSubprocesses([...bgTasks.values()]);
         }
 
@@ -225,6 +232,7 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
       });
     });
 
+    // JSONL-based tool status (fallback, will be superseded by hooks when available)
     const unsubStatus = window.electronAPI.onChatStatus(id, (status) => {
       setBusyStatus(status);
       if (status) {
@@ -232,20 +240,85 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
       }
     });
 
-    // Track PTY activity state for accurate busy detection
+    // ── Hook-based events ───────────────────────────────────
+    // These fire instantly via HookServer, replacing JSONL polling for tool status.
+
+    const unsubPreToolUse = window.electronAPI.onHookPreToolUse(id, (data) => {
+      setIsBusy(true);
+      setBusyStatus(formatToolStatus(data.toolName, data.toolInput));
+    });
+
+    const unsubPostToolUse = window.electronAPI.onHookPostToolUse(id, (_data) => {
+      // Tool completed — status will update on next PreToolUse or Stop
+      setBusyStatus(null);
+    });
+
+    const unsubPostToolUseFailure = window.electronAPI.onHookPostToolUseFailure(id, (_data) => {
+      setBusyStatus(null);
+    });
+
+    const unsubStop = window.electronAPI.onHookStop(id, (_data) => {
+      setIsBusy(false);
+      setBusyStatus(null);
+      setIsWaiting(false);
+    });
+
+    const unsubStopFailure = window.electronAPI.onHookStopFailure(id, (data) => {
+      setIsBusy(false);
+      setBusyStatus(null);
+      // Show API error as a system message in chat
+      const errorMsg: ChatMessage = {
+        id: `error-${Date.now()}`,
+        role: 'system',
+        content: [
+          {
+            type: 'text',
+            text: `API Error: ${data.error}${data.errorDetails ? ` — ${data.errorDetails}` : ''}`,
+          },
+        ],
+        timestamp: Date.now(),
+      };
+      setMessages((prev) => [...prev, errorMsg]);
+    });
+
+    const unsubSubagentStart = window.electronAPI.onHookSubagentStart(id, (data) => {
+      const bgTasks = bgTasksRef.current;
+      bgTasks.set(data.agentId, {
+        id: data.agentId,
+        name: 'Agent',
+        summary: `Agent(${data.agentType || 'subagent'})`,
+      });
+      setActiveSubprocesses([...bgTasks.values()]);
+    });
+
+    const unsubSubagentStop = window.electronAPI.onHookSubagentStop(id, (data) => {
+      const bgTasks = bgTasksRef.current;
+      bgTasks.delete(data.agentId);
+      setActiveSubprocesses([...bgTasks.values()]);
+    });
+
+    const unsubSessionStart = window.electronAPI.onHookSessionStart(id, (data) => {
+      // Session rotated (e.g. /clear) — restart the JSONL watcher on the new file
+      if (data.source === 'clear' || data.source === 'startup') {
+        window.electronAPI.ptyChatUnwatch(id);
+        window.electronAPI.ptyChatWatch({ id, cwd });
+        // Clear messages for fresh session
+        if (data.source === 'clear') {
+          setMessages([]);
+          toolResultsRef.current.clear();
+        }
+      }
+    });
+
+    // Track PTY activity state (still needed for permission prompts)
     const unsubActivity = window.electronAPI.onPtyActivity(
       (states: Record<string, 'busy' | 'idle' | 'waiting'>) => {
         const state = states[id];
-        if (state === 'idle') {
-          setIsBusy(false);
-          setBusyStatus(null);
-          setIsWaiting(false);
-        } else if (state === 'busy') {
-          setIsBusy(true);
-          setIsWaiting(false);
-        } else if (state === 'waiting') {
+        if (state === 'waiting') {
           setIsBusy(false);
           setIsWaiting(true);
+        } else if (state === 'idle') {
+          setIsWaiting(false);
         }
       },
     );
@@ -298,6 +371,14 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
     return () => {
       unsubChat();
       unsubStatus();
+      unsubPreToolUse();
+      unsubPostToolUse();
+      unsubPostToolUseFailure();
+      unsubStop();
+      unsubStopFailure();
+      unsubSubagentStart();
+      unsubSubagentStop();
+      unsubSessionStart();
       unsubActivity();
       unsubExit();
       if (busyTimerRef.current) clearTimeout(busyTimerRef.current);

@@ -152,6 +152,64 @@ export interface ElectronAPI {
   ptyReadFile: (filePath: string) => Promise<IpcResponse<string>>;
   onChatMessages: (id: string, callback: (messages: ChatMessage[]) => void) => () => void;
   onChatStatus: (id: string, callback: (status: string | null) => void) => () => void;
+
+  // Hook events
+  onHookPreToolUse: (
+    id: string,
+    callback: (data: {
+      toolName: string;
+      toolInput: Record<string, unknown>;
+      toolUseId: string;
+    }) => void,
+  ) => () => void;
+  onHookPostToolUse: (
+    id: string,
+    callback: (data: {
+      toolName: string;
+      toolInput: Record<string, unknown>;
+      toolResponse: unknown;
+      toolUseId: string;
+    }) => void,
+  ) => () => void;
+  onHookPostToolUseFailure: (
+    id: string,
+    callback: (data: {
+      toolName: string;
+      toolInput: Record<string, unknown>;
+      toolUseId: string;
+      error: string;
+      isInterrupt: boolean;
+    }) => void,
+  ) => () => void;
+  onHookStop: (
+    id: string,
+    callback: (data: { lastAssistantMessage: string | null }) => void,
+  ) => () => void;
+  onHookStopFailure: (
+    id: string,
+    callback: (data: { error: string; errorDetails: string; lastAssistantMessage: string }) => void,
+  ) => () => void;
+  onHookSubagentStart: (
+    id: string,
+    callback: (data: { agentId: string; agentType: string }) => void,
+  ) => () => void;
+  onHookSubagentStop: (
+    id: string,
+    callback: (data: {
+      agentId: string;
+      agentType: string;
+      agentTranscriptPath: string | null;
+      lastAssistantMessage: string | null;
+    }) => void,
+  ) => () => void;
+  onHookSessionStart: (
+    id: string,
+    callback: (data: { sessionId: string; source: string; transcriptPath: string }) => void,
+  ) => () => void;
+  onHookNotification: (
+    id: string,
+    callback: (data: { notificationType: string; message: string; title: string }) => void,
+  ) => () => void;
   ptyDiscoverCommands: (projectCwd: string) => Promise<
     IpcResponse<
       Array<{
