@@ -351,7 +351,7 @@ export function SlashCommandMenu({
       </div>
 
       {/* Command list */}
-      <div ref={listRef} className="max-h-[200px] overflow-y-auto">
+      <div ref={listRef} className="h-[200px] overflow-y-auto">
         {filtered.length === 0 ? (
           <div className="px-3 py-3 text-[11px] text-muted-foreground/50 text-center">
             No commands found
