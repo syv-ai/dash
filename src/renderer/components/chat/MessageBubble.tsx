@@ -21,12 +21,16 @@ export function MessageBubble({
   isGroupContinuation = false,
 }: MessageBubbleProps) {
   if (message.role === 'system') {
+    const sysText = getTextContent(message.content);
+    // Hide system messages that are command stdout (displayed by the command card)
+    // or other internal XML
+    if (sysText.includes('<local-command-stdout>') || sysText.includes('<local-command-caveat>')) {
+      return null;
+    }
     return (
       <div className="flex items-start gap-2 px-4 py-2 animate-chat-entry">
         <AlertTriangle size={14} strokeWidth={1.8} className="text-orange-500 mt-0.5 shrink-0" />
-        <div className="text-[12px] text-orange-600 dark:text-orange-400">
-          {getTextContent(message.content)}
-        </div>
+        <div className="text-[12px] text-orange-600 dark:text-orange-400">{sysText}</div>
       </div>
     );
   }
