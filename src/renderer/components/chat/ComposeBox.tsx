@@ -46,6 +46,9 @@ export function ComposeBox({
   }, [cwd]);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
+  const [slashTab, setSlashTab] = useState<'all' | 'commands' | 'skills' | 'plugins' | 'mcp'>(
+    'all',
+  );
 
   const handleSend = useCallback(() => {
     const text = value.trim();
@@ -77,7 +80,7 @@ export function ComposeBox({
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (showSlashMenu) {
-        const filtered = getFilteredCommands(value, dynamicCommands);
+        const filtered = getFilteredCommands(value, dynamicCommands, slashTab);
         if (e.key === 'ArrowUp') {
           e.preventDefault();
           setSlashSelectedIndex((prev) => (prev > 0 ? prev - 1 : filtered.length - 1));
@@ -114,7 +117,15 @@ export function ComposeBox({
         handleSend();
       }
     },
-    [handleSend, handleSlashSelect, showSlashMenu, slashSelectedIndex, value],
+    [
+      handleSend,
+      handleSlashSelect,
+      showSlashMenu,
+      slashSelectedIndex,
+      slashTab,
+      dynamicCommands,
+      value,
+    ],
   );
 
   const handleInput = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -125,6 +136,7 @@ export function ComposeBox({
     if (newValue.startsWith('/') && !newValue.includes(' ')) {
       setShowSlashMenu(true);
       setSlashSelectedIndex(0);
+      setSlashTab('all');
     } else {
       setShowSlashMenu(false);
     }
@@ -146,6 +158,11 @@ export function ComposeBox({
           selectedIndex={slashSelectedIndex}
           extraCommands={dynamicCommands}
           onSelect={handleSlashSelect}
+          activeTab={slashTab}
+          onTabChange={(tab) => {
+            setSlashTab(tab);
+            setSlashSelectedIndex(0);
+          }}
         />
       )}
       <div className="flex items-end gap-2 rounded-lg border border-border/80 bg-background px-3 py-2 focus-within:border-primary/50 transition-colors">
