@@ -93,6 +93,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     command: '/doctor',
     description: 'Run diagnostic checks',
     icon: <Stethoscope {...ICON_PROPS} />,
+    interactive: true,
   },
   // Tool & extension management
   {
