@@ -13,6 +13,9 @@ import {
   Bot,
   AlertCircle,
   Wrench,
+  ListChecks,
+  CheckCircle2,
+  PackageSearch,
 } from 'lucide-react';
 import type { ChatContentBlock } from '../../../shared/types';
 
@@ -195,6 +198,134 @@ function renderExpandedDetail(
               Results
             </div>
             <pre className="text-[11px] font-mono text-foreground/70 whitespace-pre-wrap break-all overflow-x-auto max-h-[400px] overflow-y-auto">
+              {output}
+            </pre>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  if (block.name === 'WebFetch') {
+    const url = input.url || '';
+    const prompt = input.prompt || '';
+    const output = result?.content || '';
+    return (
+      <>
+        <div className="px-3 py-2" style={{ background: 'hsl(var(--surface-0))' }}>
+          <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
+            URL
+          </div>
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] font-mono text-primary hover:underline break-all"
+          >
+            {url}
+          </a>
+          {prompt && (
+            <>
+              <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1 mt-2">
+                Prompt
+              </div>
+              <p className="text-[11px] text-foreground/70">{prompt}</p>
+            </>
+          )}
+        </div>
+        {output && (
+          <div
+            className="px-3 py-2 border-t border-border/40"
+            style={{ background: 'hsl(var(--surface-0))' }}
+          >
+            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
+              Response
+            </div>
+            <pre className="text-[11px] font-mono text-foreground/70 whitespace-pre-wrap break-all overflow-x-auto max-h-[400px] overflow-y-auto">
+              {output}
+            </pre>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  if (block.name === 'TaskCreate') {
+    const subject = input.subject || '';
+    const description = input.description || '';
+    const output = result?.content || '';
+    return (
+      <div className="px-3 py-2" style={{ background: 'hsl(var(--surface-0))' }}>
+        {subject && (
+          <div className="text-[12px] font-medium text-foreground/90 mb-1">{subject}</div>
+        )}
+        {description && (
+          <p className="text-[11px] text-foreground/70 whitespace-pre-wrap">{description}</p>
+        )}
+        {output && <div className="mt-2 text-[10px] text-muted-foreground">{output}</div>}
+      </div>
+    );
+  }
+
+  if (block.name === 'TaskUpdate') {
+    const output = result?.content || '';
+    return (
+      <div className="px-3 py-2" style={{ background: 'hsl(var(--surface-0))' }}>
+        <div className="flex gap-3 text-[11px]">
+          {input.taskId && (
+            <div>
+              <span className="text-muted-foreground">Task:</span>{' '}
+              <span className="font-mono text-foreground/80">#{input.taskId}</span>
+            </div>
+          )}
+          {input.status && (
+            <div>
+              <span className="text-muted-foreground">Status:</span>{' '}
+              <span
+                className={`font-medium ${
+                  input.status === 'completed'
+                    ? 'text-[hsl(var(--git-added))]'
+                    : input.status === 'in_progress'
+                      ? 'text-amber-400'
+                      : 'text-foreground/80'
+                }`}
+              >
+                {input.status}
+              </span>
+            </div>
+          )}
+          {input.subject && (
+            <div>
+              <span className="text-muted-foreground">Subject:</span>{' '}
+              <span className="text-foreground/80">{input.subject}</span>
+            </div>
+          )}
+        </div>
+        {output && <div className="mt-1 text-[10px] text-muted-foreground">{output}</div>}
+      </div>
+    );
+  }
+
+  if (block.name === 'ToolSearch') {
+    const query = input.query || '';
+    const output = result?.content || '';
+    return (
+      <>
+        <div className="px-3 py-2" style={{ background: 'hsl(var(--surface-0))' }}>
+          <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
+            Query
+          </div>
+          <pre className="text-[11px] font-mono text-foreground/70">{query}</pre>
+        </div>
+        {output && (
+          <div
+            className="px-3 py-2 border-t border-border/40"
+            style={{ background: 'hsl(var(--surface-0))' }}
+          >
+            <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
+              Result
+            </div>
+            <pre className="text-[11px] font-mono text-foreground/70 whitespace-pre-wrap break-all overflow-x-auto max-h-[300px] overflow-y-auto">
               {output}
             </pre>
           </div>
@@ -463,21 +594,73 @@ function formatToolSummary(
       };
     }
 
-    case 'WebFetch':
-    case 'WebSearch': {
-      const query = input.query || input.url || '';
+    case 'WebFetch': {
+      const url = input.url || '';
+      const prompt = input.prompt || '';
       return {
         icon: <Globe {...iconProps} />,
-        summary: `${block.name}(${query.slice(0, 60)})`,
+        summary: `WebFetch(${url.slice(0, 60)})`,
+        preview: prompt ? (
+          <div className="px-3 py-1.5">
+            <span className="text-[11px] text-muted-foreground">{prompt.slice(0, 120)}</span>
+          </div>
+        ) : null,
+      };
+    }
+
+    case 'WebSearch': {
+      const query = input.query || '';
+      return {
+        icon: <Globe {...iconProps} />,
+        summary: `WebSearch("${query.slice(0, 60)}")`,
         preview: null,
       };
     }
 
     case 'Agent': {
       const desc = input.description || input.prompt?.slice(0, 60) || 'subagent';
+      const agentType = input.subagent_type || '';
       return {
         icon: <Bot {...iconProps} />,
-        summary: `Agent: ${desc}`,
+        summary: agentType ? `Agent(${agentType}): ${desc}` : `Agent: ${desc}`,
+        preview: null,
+      };
+    }
+
+    case 'TaskCreate': {
+      const subject = input.subject || '';
+      return {
+        icon: <ListChecks {...iconProps} />,
+        summary: `TaskCreate: ${subject.slice(0, 60)}`,
+        preview: input.description ? (
+          <div className="px-3 py-1.5">
+            <span className="text-[11px] text-muted-foreground">
+              {input.description.slice(0, 150)}
+            </span>
+          </div>
+        ) : null,
+      };
+    }
+
+    case 'TaskUpdate': {
+      const status = input.status || '';
+      const taskId = input.taskId || '';
+      const subject = input.subject || '';
+      const label = subject
+        ? `TaskUpdate(#${taskId}): ${subject.slice(0, 40)}`
+        : `TaskUpdate(#${taskId}) → ${status}`;
+      return {
+        icon: <CheckCircle2 {...iconProps} />,
+        summary: label,
+        preview: null,
+      };
+    }
+
+    case 'ToolSearch': {
+      const query = input.query || '';
+      return {
+        icon: <PackageSearch {...iconProps} />,
+        summary: `ToolSearch("${query.slice(0, 60)}")`,
         preview: null,
       };
     }

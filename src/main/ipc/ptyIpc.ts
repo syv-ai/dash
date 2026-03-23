@@ -198,9 +198,15 @@ function formatToolStatus(name: string, input: any): string {
     case 'Agent':
       return input?.description || 'Running subagent';
     case 'WebFetch':
-      return 'Fetching web page';
+      return input?.url ? `Fetching ${input.url.slice(0, 50)}` : 'Fetching web page';
     case 'WebSearch':
       return input?.query ? `Searching "${input.query.slice(0, 50)}"` : 'Searching web';
+    case 'TaskCreate':
+      return input?.subject ? `Creating task: ${input.subject.slice(0, 50)}` : 'Creating task';
+    case 'TaskUpdate':
+      return input?.status ? `Updating task #${input.taskId} → ${input.status}` : 'Updating task';
+    case 'ToolSearch':
+      return input?.query ? `Searching tools: "${input.query.slice(0, 50)}"` : 'Searching tools';
     default:
       return `Running ${name}`;
   }
