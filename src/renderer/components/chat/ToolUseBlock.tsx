@@ -371,59 +371,48 @@ function renderExpandedDetail(
 }
 
 /**
- * Compute diff entries from old and new strings.
- * Returns an array of {type, oldIdx, newIdx} entries that interleave
- * context, removed, and added lines naturally.
+ * Compute diff entries using LCS (Longest Common Subsequence) to correctly
+ * identify unchanged lines within the changed section.
  */
 function computeDiff(
   oldLines: string[],
   newLines: string[],
 ): Array<{ type: 'context' | 'removed' | 'added'; lineIdx: number }> {
-  // Find common prefix
-  let prefixLen = 0;
-  while (
-    prefixLen < oldLines.length &&
-    prefixLen < newLines.length &&
-    oldLines[prefixLen] === newLines[prefixLen]
-  ) {
-    prefixLen++;
+  // Build LCS table
+  const m = oldLines.length;
+  const n = newLines.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (oldLines[i - 1] === newLines[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1] + 1;
+      } else {
+        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+      }
+    }
   }
 
-  // Find common suffix
-  let suffixLen = 0;
-  while (
-    suffixLen < oldLines.length - prefixLen &&
-    suffixLen < newLines.length - prefixLen &&
-    oldLines[oldLines.length - 1 - suffixLen] === newLines[newLines.length - 1 - suffixLen]
-  ) {
-    suffixLen++;
-  }
-
+  // Backtrack to produce diff entries
   const entries: Array<{ type: 'context' | 'removed' | 'added'; lineIdx: number }> = [];
+  let i = m;
+  let j = n;
 
-  // Common prefix
-  for (let i = 0; i < prefixLen; i++) {
-    entries.push({ type: 'context', lineIdx: i });
-  }
-
-  // Changed section: interleave removed/added lines
-  const oldChanged = oldLines.slice(prefixLen, oldLines.length - suffixLen);
-  const newChanged = newLines.slice(prefixLen, newLines.length - suffixLen);
-  const maxChanged = Math.max(oldChanged.length, newChanged.length);
-
-  for (let i = 0; i < maxChanged; i++) {
-    if (i < oldChanged.length) {
-      entries.push({ type: 'removed', lineIdx: prefixLen + i });
-    }
-    if (i < newChanged.length) {
-      entries.push({ type: 'added', lineIdx: prefixLen + i });
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && oldLines[i - 1] === newLines[j - 1]) {
+      entries.push({ type: 'context', lineIdx: j - 1 });
+      i--;
+      j--;
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      entries.push({ type: 'added', lineIdx: j - 1 });
+      j--;
+    } else {
+      entries.push({ type: 'removed', lineIdx: i - 1 });
+      i--;
     }
   }
 
-  // Common suffix
-  for (let i = newLines.length - suffixLen; i < newLines.length; i++) {
-    entries.push({ type: 'context', lineIdx: i });
-  }
+  entries.reverse();
 
   return entries;
 }
