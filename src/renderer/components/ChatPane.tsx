@@ -1,9 +1,10 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { ArrowDown, Loader2 } from 'lucide-react';
 import { MessageBubble } from './chat/MessageBubble';
 import { ComposeBox } from './chat/ComposeBox';
 import { Tooltip } from './ui/Tooltip';
 import type { ChatMessage } from '../../shared/types';
+import { resolveTheme } from '../terminal/terminalThemes';
 
 interface ChatPaneProps {
   id: string;
@@ -23,6 +24,41 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
   const historyStartIndexRef = useRef(0);
   // Map of tool_use_id -> tool_result block for O(1) lookup
   const toolResultsRef = useRef(new Map<string, ChatMessage['content'][0]>());
+
+  // Resolve terminal theme background for the chat UI to match the TUI.
+  // Re-resolve when theme changes (localStorage) or dark/light toggles.
+  const [themeBg, setThemeBg] = useState(() => {
+    const themeId = localStorage.getItem('terminalTheme') || 'default';
+    const isDark = document.documentElement.classList.contains('dark');
+    return resolveTheme(themeId, isDark).background || (isDark ? '#1a1a1a' : '#ffffff');
+  });
+
+  useEffect(() => {
+    const updateThemeBg = () => {
+      const themeId = localStorage.getItem('terminalTheme') || 'default';
+      const isDark = document.documentElement.classList.contains('dark');
+      setThemeBg(resolveTheme(themeId, isDark).background || (isDark ? '#1a1a1a' : '#ffffff'));
+    };
+
+    // Listen for localStorage changes (theme selection)
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'terminalTheme') updateThemeBg();
+    };
+    window.addEventListener('storage', onStorage);
+
+    // Watch for dark/light class changes on <html>
+    const observer = new MutationObserver(updateThemeBg);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
+    // Also poll briefly since same-window localStorage.setItem doesn't fire 'storage'
+    const interval = setInterval(updateThemeBg, 1000);
+
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      observer.disconnect();
+      clearInterval(interval);
+    };
+  }, []);
 
   // Initialize PTY + JSONL watcher
   useEffect(() => {
@@ -265,7 +301,7 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
   );
 
   return (
-    <div className="w-full h-full flex flex-col bg-background relative">
+    <div className="w-full h-full flex flex-col relative" style={{ background: themeBg }}>
       {/* Message list */}
       <div
         ref={scrollRef}
@@ -371,6 +407,7 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
         onSend={handleSend}
         disabled={!connected}
         isBusy={isBusy}
+        themeBg={themeBg}
         placeholder={
           isBusy ? 'Type / for commands, or press Esc to interrupt...' : 'Send a message...'
         }

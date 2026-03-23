@@ -5,6 +5,7 @@ interface ComposeBoxProps {
   onSend: (text: string) => void;
   disabled?: boolean;
   isBusy?: boolean;
+  themeBg?: string;
   placeholder?: string;
 }
 
@@ -12,6 +13,7 @@ export function ComposeBox({
   onSend,
   disabled = false,
   isBusy = false,
+  themeBg,
   placeholder = 'Send a message...',
 }: ComposeBoxProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -49,7 +51,10 @@ export function ComposeBox({
   }, []);
 
   return (
-    <div className="border-t border-border/60 p-3" style={{ background: 'hsl(var(--surface-1))' }}>
+    <div
+      className="border-t border-border/60 p-3"
+      style={{ background: themeBg || 'hsl(var(--surface-1))' }}
+    >
       <div className="flex items-end gap-2 rounded-lg border border-border/80 bg-background px-3 py-2 focus-within:border-primary/50 transition-colors">
         <textarea
           ref={textareaRef}
