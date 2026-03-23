@@ -75,7 +75,9 @@ export function ComposeBox({
         </button>
       </div>
       <div className="mt-1.5 text-[10px] text-muted-foreground/50 text-center">
-        {isBusy ? 'Esc to interrupt' : 'Enter to send, Shift+Enter for new line'}
+        {isBusy
+          ? 'Esc to interrupt'
+          : 'Enter to send, Shift+Enter for new line · Chat UI is experimental'}
       </div>
     </div>
   );
