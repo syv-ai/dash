@@ -102,10 +102,21 @@ function renderContentBlock(
       if (text.includes('<task-notification>')) {
         return <TaskNotification key={key} xml={text} />;
       }
-      // Hide local-command-caveat, command-name, local-command-stdout XML
+      // Show slash commands/skills as clean messages
+      if (text.includes('<command-name>')) {
+        const cmdMatch = text.match(/<command-message>(.*?)<\/command-message>/);
+        if (cmdMatch) {
+          return (
+            <span key={key} className="text-[13px] font-mono text-muted-foreground">
+              /{cmdMatch[1]}
+            </span>
+          );
+        }
+      }
+      // Hide internal caveat/stdout XML
       if (
         text.includes('<local-command-caveat>') ||
-        text.includes('<command-name>') ||
+        text.includes('<local-command-stdout>') ||
         (text.startsWith('<') && text.includes('</') && !text.includes('\n'))
       ) {
         return null;
