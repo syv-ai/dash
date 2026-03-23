@@ -400,8 +400,8 @@ function parseConversationEntry(entry: any, counter: number): ChatHistoryMessage
     };
   }
 
-  // System entries for local command output (e.g., /cost stdout)
-  if (type === 'system' && entry.subtype === 'local_command' && typeof entry.content === 'string') {
+  // System entries: local command output and slash command entries
+  if (type === 'system' && typeof entry.content === 'string') {
     const content = entry.content.trim();
     if (content) {
       return {
