@@ -64,7 +64,6 @@ export function MainContent({
   gitStatus,
 }: MainContentProps) {
   const [prInfo, setPrInfo] = useState<PullRequestInfo | null>(null);
-
   useEffect(() => {
     setPrInfo(null);
 
@@ -338,7 +337,7 @@ export function MainContent({
   return (
     <div className="h-full flex flex-col bg-background">
       {taskHeader}
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 relative">
         <TerminalPane
           key={activeTask.id}
           id={activeTask.id}
