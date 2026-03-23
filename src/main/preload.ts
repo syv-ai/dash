@@ -99,6 +99,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ptyChatHistory: (args: { cwd: string; limit?: number; beforeIndex?: number }) =>
     ipcRenderer.invoke('pty:chatHistory', args),
   ptyChatWatch: (args: { id: string; cwd: string }) => ipcRenderer.invoke('pty:chatWatch', args),
+  ptyDiscoverCommands: (projectCwd: string) =>
+    ipcRenderer.invoke('pty:discoverCommands', projectCwd),
   ptyChatUnwatch: (id: string) => ipcRenderer.send('pty:chatUnwatch', id),
   onChatMessages: (id: string, callback: (messages: unknown[]) => void) => {
     const handler = (_event: unknown, messages: unknown[]) => callback(messages);

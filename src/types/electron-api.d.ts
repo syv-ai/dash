@@ -151,6 +151,16 @@ export interface ElectronAPI {
   ptyChatUnwatch: (id: string) => void;
   onChatMessages: (id: string, callback: (messages: ChatMessage[]) => void) => () => void;
   onChatStatus: (id: string, callback: (status: string | null) => void) => () => void;
+  ptyDiscoverCommands: (projectCwd: string) => Promise<
+    IpcResponse<
+      Array<{
+        command: string;
+        description: string;
+        source: 'skill' | 'plugin' | 'mcp';
+        interactive?: boolean;
+      }>
+    >
+  >;
 
   // Task context for SessionStart hook
   ptyWriteTaskContext: (args: {

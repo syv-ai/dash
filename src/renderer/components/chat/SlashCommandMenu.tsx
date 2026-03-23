@@ -35,7 +35,8 @@ import {
 export interface SlashCommand {
   command: string;
   description: string;
-  icon: React.ReactNode;
+  icon: React.ReactNode | null;
+  source?: 'skill' | 'plugin' | 'mcp';
   interactive?: boolean;
 }
 
@@ -230,20 +231,36 @@ export const SLASH_COMMANDS: SlashCommand[] = [
 interface SlashCommandMenuProps {
   filter: string;
   selectedIndex: number;
+  extraCommands?: SlashCommand[];
   onSelect: (command: string) => void;
 }
 
-export function getFilteredCommands(filter: string): SlashCommand[] {
+const SOURCE_ICONS: Record<string, React.ReactNode> = {
+  skill: <Layers {...ICON_PROPS} />,
+  plugin: <Puzzle {...ICON_PROPS} />,
+  mcp: <Globe {...ICON_PROPS} />,
+};
+
+export function getFilteredCommands(
+  filter: string,
+  extraCommands: SlashCommand[] = [],
+): SlashCommand[] {
+  const all = [...SLASH_COMMANDS, ...extraCommands];
   const q = filter.toLowerCase().replace(/^\//, '');
-  if (!q) return SLASH_COMMANDS;
-  return SLASH_COMMANDS.filter(
+  if (!q) return all;
+  return all.filter(
     (cmd) => cmd.command.toLowerCase().includes(q) || cmd.description.toLowerCase().includes(q),
   );
 }
 
-export function SlashCommandMenu({ filter, selectedIndex, onSelect }: SlashCommandMenuProps) {
+export function SlashCommandMenu({
+  filter,
+  selectedIndex,
+  extraCommands,
+  onSelect,
+}: SlashCommandMenuProps) {
   const listRef = useRef<HTMLDivElement>(null);
-  const filtered = getFilteredCommands(filter);
+  const filtered = getFilteredCommands(filter, extraCommands);
 
   // Scroll selected item into view
   useEffect(() => {
@@ -275,7 +292,7 @@ export function SlashCommandMenu({ filter, selectedIndex, onSelect }: SlashComma
           }`}
         >
           <span className={i === selectedIndex ? 'text-primary' : 'text-muted-foreground'}>
-            {cmd.icon}
+            {cmd.icon || (cmd.source && SOURCE_ICONS[cmd.source]) || <Layers {...ICON_PROPS} />}
           </span>
           <div className="flex-1 min-w-0">
             <span className="text-[12px] font-mono font-medium">{cmd.command}</span>

@@ -1,12 +1,13 @@
-import React, { useRef, useCallback, useState } from 'react';
+import React, { useRef, useCallback, useState, useEffect } from 'react';
 import { SendHorizonal } from 'lucide-react';
-import { SlashCommandMenu, getFilteredCommands } from './SlashCommandMenu';
+import { SlashCommandMenu, getFilteredCommands, type SlashCommand } from './SlashCommandMenu';
 
 interface ComposeBoxProps {
   onSend: (text: string) => void;
   disabled?: boolean;
   isBusy?: boolean;
   themeBg?: string;
+  cwd?: string;
   placeholder?: string;
 }
 
@@ -15,10 +16,34 @@ export function ComposeBox({
   disabled = false,
   isBusy = false,
   themeBg,
+  cwd,
   placeholder = 'Send a message...',
 }: ComposeBoxProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [value, setValue] = useState('');
+  const [dynamicCommands, setDynamicCommands] = useState<SlashCommand[]>([]);
+
+  // Load dynamic commands (skills, plugins, MCP) on mount
+  useEffect(() => {
+    if (!cwd) return;
+    (async () => {
+      try {
+        const resp = await window.electronAPI.ptyDiscoverCommands(cwd);
+        if (resp.success && resp.data) {
+          const mapped: SlashCommand[] = resp.data.map((cmd) => ({
+            command: cmd.command,
+            description: cmd.description,
+            icon: null, // Will use source-based default in SlashCommandMenu
+            source: cmd.source,
+            interactive: cmd.interactive,
+          }));
+          setDynamicCommands(mapped);
+        }
+      } catch {
+        // Best effort
+      }
+    })();
+  }, [cwd]);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
 
@@ -52,7 +77,7 @@ export function ComposeBox({
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (showSlashMenu) {
-        const filtered = getFilteredCommands(value);
+        const filtered = getFilteredCommands(value, dynamicCommands);
         if (e.key === 'ArrowUp') {
           e.preventDefault();
           setSlashSelectedIndex((prev) => (prev > 0 ? prev - 1 : filtered.length - 1));
@@ -119,6 +144,7 @@ export function ComposeBox({
         <SlashCommandMenu
           filter={value}
           selectedIndex={slashSelectedIndex}
+          extraCommands={dynamicCommands}
           onSelect={handleSlashSelect}
         />
       )}

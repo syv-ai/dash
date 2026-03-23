@@ -518,6 +518,7 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
         disabled={!connected}
         isBusy={isBusy}
         themeBg={themeBg}
+        cwd={cwd}
         placeholder={
           isBusy ? 'Type / for commands, or press Esc to interrupt...' : 'Send a message...'
         }
