@@ -77,6 +77,14 @@ export function ComposeBox({
     (e: React.KeyboardEvent) => {
       if (showSlashMenu) {
         const filtered = getFilteredCommands(value, dynamicCommands, slashTab);
+        const tabIds: Array<'all' | 'commands' | 'skills' | 'plugins' | 'mcp'> = [
+          'all',
+          'commands',
+          'skills',
+          'plugins',
+          'mcp',
+        ];
+        // Arrow up/down: navigate items
         if (e.key === 'ArrowUp') {
           e.preventDefault();
           setSlashSelectedIndex((prev) => (prev > 0 ? prev - 1 : filtered.length - 1));
@@ -87,7 +95,33 @@ export function ComposeBox({
           setSlashSelectedIndex((prev) => (prev < filtered.length - 1 ? prev + 1 : 0));
           return;
         }
+        // Arrow left/right: cycle tabs
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          const currentIdx = tabIds.indexOf(slashTab);
+          setSlashTab(tabIds[(currentIdx - 1 + tabIds.length) % tabIds.length]);
+          setSlashSelectedIndex(0);
+          return;
+        }
+        if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          const currentIdx = tabIds.indexOf(slashTab);
+          setSlashTab(tabIds[(currentIdx + 1) % tabIds.length]);
+          setSlashSelectedIndex(0);
+          return;
+        }
+        // Enter: directly submit the selected command
         if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          if (filtered[slashSelectedIndex]) {
+            onSend(filtered[slashSelectedIndex].command);
+            setValue('');
+            setShowSlashMenu(false);
+          }
+          return;
+        }
+        // Tab: insert command into input for editing/adding arguments
+        if (e.key === 'Tab') {
           e.preventDefault();
           if (filtered[slashSelectedIndex]) {
             handleSlashSelect(filtered[slashSelectedIndex].command);
@@ -99,23 +133,6 @@ export function ComposeBox({
           e.stopPropagation();
           e.nativeEvent.stopImmediatePropagation();
           setShowSlashMenu(false);
-          return;
-        }
-        if (e.key === 'Tab') {
-          e.preventDefault();
-          const tabIds: Array<'all' | 'commands' | 'skills' | 'plugins' | 'mcp'> = [
-            'all',
-            'commands',
-            'skills',
-            'plugins',
-            'mcp',
-          ];
-          const currentIdx = tabIds.indexOf(slashTab);
-          const nextIdx = e.shiftKey
-            ? (currentIdx - 1 + tabIds.length) % tabIds.length
-            : (currentIdx + 1) % tabIds.length;
-          setSlashTab(tabIds[nextIdx]);
-          setSlashSelectedIndex(0);
           return;
         }
       }
