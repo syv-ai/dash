@@ -17,7 +17,10 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
   const [busyStatus, setBusyStatus] = useState<string | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [connected, setConnected] = useState(false);
+  const [hasOlderMessages, setHasOlderMessages] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const busyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const historyStartIndexRef = useRef(0);
   // Map of tool_use_id -> tool_result block for O(1) lookup
   const toolResultsRef = useRef(new Map<string, ChatMessage['content'][0]>());
 
@@ -99,18 +102,22 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
 
     (async () => {
       try {
-        // Load existing conversation history
-        const historyResp = await window.electronAPI.ptyChatHistory(cwd);
-        if (historyResp.success && historyResp.data && historyResp.data.length > 0) {
-          // Index tool_results from history
-          for (const m of historyResp.data) {
-            for (const b of m.content) {
-              if (b.type === 'tool_result') {
-                toolResultsRef.current.set(b.tool_use_id, b);
+        // Load the most recent 100 messages from conversation history
+        const historyResp = await window.electronAPI.ptyChatHistory({ cwd, limit: 100 });
+        if (historyResp.success && historyResp.data) {
+          const { messages: histMsgs, totalCount, startIndex } = historyResp.data;
+          historyStartIndexRef.current = startIndex;
+          setHasOlderMessages(startIndex > 0);
+          if (histMsgs.length > 0) {
+            for (const m of histMsgs) {
+              for (const b of m.content) {
+                if (b.type === 'tool_result') {
+                  toolResultsRef.current.set(b.tool_use_id, b);
+                }
               }
             }
+            setMessages(histMsgs);
           }
-          setMessages(historyResp.data);
         }
 
         // Ensure PTY is running (reattaches if alive, starts fresh if not)
@@ -150,13 +157,57 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
     }
   }, [messages, isBusy, busyStatus, isAtBottom]);
 
-  // Track scroll position
+  // Load older messages when scrolling to top
+  const loadOlderMessages = useCallback(async () => {
+    if (loadingOlder || !hasOlderMessages) return;
+    setLoadingOlder(true);
+    try {
+      const resp = await window.electronAPI.ptyChatHistory({
+        cwd,
+        limit: 100,
+        beforeIndex: historyStartIndexRef.current,
+      });
+      if (resp.success && resp.data) {
+        const { messages: olderMsgs, startIndex } = resp.data;
+        historyStartIndexRef.current = startIndex;
+        setHasOlderMessages(startIndex > 0);
+        if (olderMsgs.length > 0) {
+          for (const m of olderMsgs) {
+            for (const b of m.content) {
+              if (b.type === 'tool_result') {
+                toolResultsRef.current.set(b.tool_use_id, b);
+              }
+            }
+          }
+          // Prepend older messages and maintain scroll position
+          const el = scrollRef.current;
+          const prevHeight = el?.scrollHeight || 0;
+          setMessages((prev) => [...olderMsgs, ...prev]);
+          // After render, adjust scroll to keep current position
+          requestAnimationFrame(() => {
+            if (el) {
+              el.scrollTop = el.scrollHeight - prevHeight;
+            }
+          });
+        }
+      }
+    } catch {
+      // Best effort
+    }
+    setLoadingOlder(false);
+  }, [cwd, loadingOlder, hasOlderMessages]);
+
+  // Track scroll position + lazy load older messages at top
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
     setIsAtBottom(atBottom);
-  }, []);
+    // Load older messages when scrolled near the top
+    if (el.scrollTop < 100 && hasOlderMessages && !loadingOlder) {
+      loadOlderMessages();
+    }
+  }, [hasOlderMessages, loadingOlder, loadOlderMessages]);
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
@@ -221,6 +272,26 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto overflow-x-hidden"
       >
+        {/* Lazy load indicator at top */}
+        {loadingOlder && (
+          <div className="flex items-center justify-center py-3">
+            <Loader2 size={14} strokeWidth={2} className="animate-spin text-muted-foreground/40" />
+            <span className="ml-2 text-[11px] text-muted-foreground/50">
+              Loading older messages...
+            </span>
+          </div>
+        )}
+        {hasOlderMessages && !loadingOlder && (
+          <div className="flex items-center justify-center py-2">
+            <button
+              onClick={loadOlderMessages}
+              className="text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+            >
+              ↑ Load older messages
+            </button>
+          </div>
+        )}
+
         {messages.length === 0 && connected && (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">

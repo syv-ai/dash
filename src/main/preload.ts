@@ -96,7 +96,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Session detection
   ptyHasClaudeSession: (cwd: string) => ipcRenderer.invoke('pty:hasClaudeSession', cwd),
-  ptyChatHistory: (cwd: string) => ipcRenderer.invoke('pty:chatHistory', cwd),
+  ptyChatHistory: (args: { cwd: string; limit?: number; beforeIndex?: number }) =>
+    ipcRenderer.invoke('pty:chatHistory', args),
   ptyChatWatch: (args: { id: string; cwd: string }) => ipcRenderer.invoke('pty:chatWatch', args),
   ptyChatUnwatch: (id: string) => ipcRenderer.send('pty:chatUnwatch', id),
   onChatMessages: (id: string, callback: (messages: unknown[]) => void) => {

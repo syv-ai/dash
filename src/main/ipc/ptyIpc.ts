@@ -111,13 +111,19 @@ export function registerPtyIpc(): void {
   });
 
   // Read conversation history from Claude's JSONL files
-  ipcMain.handle('pty:chatHistory', async (_event, cwd: string) => {
-    try {
-      return { success: true, data: readConversationHistory(cwd) };
-    } catch (error) {
-      return { success: false, error: String(error) };
-    }
-  });
+  ipcMain.handle(
+    'pty:chatHistory',
+    async (_event, args: { cwd: string; limit?: number; beforeIndex?: number }) => {
+      try {
+        return {
+          success: true,
+          data: readConversationHistory(args.cwd, args.limit, args.beforeIndex),
+        };
+      } catch (error) {
+        return { success: false, error: String(error) };
+      }
+    },
+  );
 
   // Watch a JSONL conversation file for new entries
   ipcMain.handle('pty:chatWatch', (event, args: { id: string; cwd: string }) => {
@@ -447,17 +453,26 @@ function findClaudeProjectDir(cwd: string): string | null {
 
 /**
  * Read conversation history from Claude's JSONL files for the given cwd.
- * Returns the most recent conversation as ChatMessage-compatible objects.
+ *
+ * @param limit - Max messages to return (from the end). Default: 100.
+ * @param beforeIndex - If provided, return messages before this index in the
+ *   full message list (for loading older pages). 0-based.
+ * @returns { messages, totalCount, startIndex } where startIndex is the
+ *   index of the first returned message in the full list.
  */
-function readConversationHistory(cwd: string): ChatHistoryMessage[] {
+function readConversationHistory(
+  cwd: string,
+  limit = 100,
+  beforeIndex?: number,
+): { messages: ChatHistoryMessage[]; totalCount: number; startIndex: number } {
   const projectDir = findClaudeProjectDir(cwd);
-  if (!projectDir) return [];
+  if (!projectDir) return { messages: [], totalCount: 0, startIndex: 0 };
 
   const filePath = findNewestJsonl(projectDir);
-  if (!filePath) return [];
+  if (!filePath) return { messages: [], totalCount: 0, startIndex: 0 };
 
   const content = fs.readFileSync(filePath, 'utf-8');
-  const messages: ChatHistoryMessage[] = [];
+  const allMessages: ChatHistoryMessage[] = [];
   let counter = 0;
 
   for (const line of content.split('\n')) {
@@ -465,13 +480,21 @@ function readConversationHistory(cwd: string): ChatHistoryMessage[] {
     try {
       const entry = JSON.parse(line);
       const msg = parseConversationEntry(entry, counter++);
-      if (msg) messages.push(msg);
+      if (msg) allMessages.push(msg);
     } catch {
       // Skip malformed lines
     }
   }
 
-  return messages;
+  const totalCount = allMessages.length;
+  const endIndex = beforeIndex !== undefined ? Math.min(beforeIndex, totalCount) : totalCount;
+  const startIndex = Math.max(0, endIndex - limit);
+
+  return {
+    messages: allMessages.slice(startIndex, endIndex),
+    totalCount,
+    startIndex,
+  };
 }
 
 /**

@@ -142,7 +142,11 @@ export interface ElectronAPI {
 
   // Session detection
   ptyHasClaudeSession: (cwd: string) => Promise<IpcResponse<boolean>>;
-  ptyChatHistory: (cwd: string) => Promise<IpcResponse<ChatMessage[]>>;
+  ptyChatHistory: (args: {
+    cwd: string;
+    limit?: number;
+    beforeIndex?: number;
+  }) => Promise<IpcResponse<{ messages: ChatMessage[]; totalCount: number; startIndex: number }>>;
   ptyChatWatch: (args: { id: string; cwd: string }) => Promise<IpcResponse<void>>;
   ptyChatUnwatch: (id: string) => void;
   onChatMessages: (id: string, callback: (messages: ChatMessage[]) => void) => () => void;
