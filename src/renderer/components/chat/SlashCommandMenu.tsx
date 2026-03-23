@@ -254,10 +254,19 @@ const SOURCE_ICONS: Record<string, React.ReactNode> = {
   mcp: <Globe {...ICON_PROPS} />,
 };
 
+const TAB_TO_SOURCE: Record<TabId, string | undefined> = {
+  all: undefined,
+  commands: undefined,
+  skills: 'skill',
+  plugins: 'plugin',
+  mcp: 'mcp',
+};
+
 function filterByTab(commands: SlashCommand[], tab: TabId): SlashCommand[] {
   if (tab === 'all') return commands;
   if (tab === 'commands') return commands.filter((c) => !c.source);
-  return commands.filter((c) => c.source === tab);
+  const source = TAB_TO_SOURCE[tab];
+  return commands.filter((c) => c.source === source);
 }
 
 export function getFilteredCommands(
