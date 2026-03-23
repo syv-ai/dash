@@ -59,9 +59,12 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
           }
         }
 
-        // If we get an assistant message, mark busy then schedule idle
-        const hasAssistant = toAdd.some((m) => m.role === 'assistant');
-        if (hasAssistant) {
+        // Only clear busy when an assistant message with text arrives
+        // (not tool_use-only messages which are just the start of work)
+        const hasAssistantText = toAdd.some(
+          (m) => m.role === 'assistant' && m.content.some((b) => b.type === 'text'),
+        );
+        if (hasAssistantText) {
           setIsBusy(false);
           setBusyStatus(null);
           if (busyTimerRef.current) clearTimeout(busyTimerRef.current);
