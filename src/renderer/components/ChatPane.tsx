@@ -341,12 +341,11 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
       const sendText = text.replace(/\n+/g, ' ');
 
       if (isSlashCommand && INTERACTIVE_COMMANDS.has(sendText.split(' ')[0])) {
-        // For interactive commands: switch to TUI first, type the command
-        // into the terminal prompt, and let the user press Enter
+        // Interactive commands need the TUI — switch first, then send
         onSwitchToTerminal?.();
         setTimeout(() => {
           window.electronAPI.ptyInput({ id, data: sendText + '\r' });
-        }, 800);
+        }, 600);
       } else {
         // Regular messages and non-interactive commands: send immediately
         window.electronAPI.ptyInput({ id, data: sendText });
