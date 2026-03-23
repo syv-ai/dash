@@ -22,6 +22,20 @@ export function MessageBubble({
 }: MessageBubbleProps) {
   if (message.role === 'system') {
     const sysText = getTextContent(message.content);
+    // Render command cards for system-level slash command entries (e.g., /doctor)
+    if (sysText.includes('<command-name>')) {
+      // Render using the text block handler which creates the card
+      return (
+        <div className="flex gap-3 px-4 py-3 animate-chat-entry">
+          <div className="w-6 shrink-0" />
+          <div className="flex-1 min-w-0 space-y-1">
+            {message.content.map((block, i) =>
+              renderContentBlock(block, i, allMessages, toolResults),
+            )}
+          </div>
+        </div>
+      );
+    }
     // Hide system messages that are command stdout (displayed by the command card)
     // or other internal XML
     if (sysText.includes('<local-command-stdout>') || sysText.includes('<local-command-caveat>')) {
