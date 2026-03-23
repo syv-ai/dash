@@ -14,6 +14,7 @@ const INTERACTIVE_COMMANDS = new Set([
   '/compact',
   '/config',
   '/context',
+  '/doctor',
   '/copy',
   '/diff',
   '/effort',
