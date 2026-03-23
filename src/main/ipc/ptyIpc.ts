@@ -389,7 +389,7 @@ function parseConversationEntry(entry: any, counter: number): ChatHistoryMessage
   if (type === 'user' && msg?.role === 'user') {
     if (entry.isMeta) return null;
     const rawContent = msg.content;
-    if (typeof rawContent === 'string' && rawContent.includes('<command-name>')) return null;
+    // Allow <command-name> messages through — rendered as cards in the chat UI
     const content = normalizeContent(rawContent);
     if (content.length === 0) return null;
     return {
