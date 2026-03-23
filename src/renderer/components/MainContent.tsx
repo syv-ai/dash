@@ -294,7 +294,11 @@ export function MainContent({
             </Tooltip>
             <button
               onClick={handleToggleViewMode}
-              className="p-0.5 rounded transition-colors text-muted-foreground/50 hover:text-foreground hover:bg-accent/60"
+              className={`p-0.5 rounded transition-colors ${
+                viewMode === 'chat'
+                  ? 'bg-amber-400/20 text-amber-400 hover:bg-amber-400/30'
+                  : 'text-muted-foreground/50 hover:text-foreground hover:bg-accent/60'
+              }`}
             >
               {viewMode === 'terminal' ? (
                 <MessageSquare size={11} strokeWidth={1.8} />
@@ -413,7 +417,11 @@ export function MainContent({
             >
               <button
                 onClick={handleToggleViewMode}
-                className="p-1 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                className={`p-1 rounded-md transition-colors ${
+                  viewMode === 'chat'
+                    ? 'bg-amber-400/20 text-amber-400 hover:bg-amber-400/30'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent/60'
+                }`}
               >
                 {viewMode === 'terminal' ? (
                   <MessageSquare size={14} strokeWidth={1.8} />

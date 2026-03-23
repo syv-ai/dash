@@ -209,10 +209,15 @@ export function ComposeBox({
           <SendHorizonal size={16} strokeWidth={2} />
         </button>
       </div>
-      <div className="mt-1.5 text-[10px] text-muted-foreground/50 text-center">
-        {isBusy
-          ? 'Esc to interrupt'
-          : 'Enter to send, Shift+Enter for new line · Chat UI is experimental'}
+      <div className="mt-1.5 text-[10px] text-muted-foreground text-center">
+        {isBusy ? (
+          'Esc to interrupt'
+        ) : (
+          <>
+            Enter to send, Shift+Enter for new line ·{' '}
+            <span className="text-amber-400">Chat UI is experimental</span>
+          </>
+        )}
       </div>
     </div>
   );
