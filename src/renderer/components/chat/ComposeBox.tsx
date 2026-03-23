@@ -64,18 +64,14 @@ export function ComposeBox({
     }
   }, [value, disabled, isBusy, onSend]);
 
-  const handleSlashSelect = useCallback(
-    (command: string) => {
-      onSend(command);
-      setValue('');
-      setShowSlashMenu(false);
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
-        textareaRef.current.focus();
-      }
-    },
-    [onSend],
-  );
+  const handleSlashSelect = useCallback((command: string) => {
+    // Insert command into input so user can add arguments before sending
+    setValue(command + ' ');
+    setShowSlashMenu(false);
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, []);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
