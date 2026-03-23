@@ -34,6 +34,17 @@ hljs.registerLanguage('java', java);
 hljs.registerLanguage('diff', diff);
 hljs.registerLanguage('shell', shell);
 
+// Custom language for terminal output (git stat, file listings, etc.)
+// Colorizes +/- runs, numbers, and file paths without requiring line-start markers.
+hljs.registerLanguage('terminal-output', () => ({
+  name: 'terminal-output',
+  contains: [
+    { className: 'addition', begin: /\++(?=\s*$|\s*-)/, relevance: 0 },
+    { className: 'deletion', begin: /-+(?=\s*$|\s*\+)/, relevance: 0 },
+    { className: 'number', begin: /\b\d+\b/, relevance: 0 },
+  ],
+}));
+
 // Aliases
 hljs.registerLanguage('ts', typescript);
 hljs.registerLanguage('tsx', typescript);
@@ -111,7 +122,12 @@ export function highlightBlock(code: string, lang?: string): string {
   if (!lang) {
     try {
       const result = hljs.highlightAuto(code);
-      return result.value;
+      // If auto-detection found a good match, use it
+      if (result.language && result.relevance > 3) {
+        return result.value;
+      }
+      // Otherwise try terminal-output for light colorization
+      return hljs.highlight(code, { language: 'terminal-output', ignoreIllegals: true }).value;
     } catch {
       return escapeHtml(code);
     }

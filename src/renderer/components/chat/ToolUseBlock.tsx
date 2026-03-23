@@ -139,9 +139,10 @@ function renderExpandedDetail(
               className={`text-[11px] font-mono whitespace-pre-wrap break-all overflow-x-auto max-h-[400px] overflow-y-auto ${
                 result?.is_error ? 'text-destructive/80' : 'text-foreground/70'
               }`}
-            >
-              {output}
-            </pre>
+              dangerouslySetInnerHTML={{
+                __html: result?.is_error ? output : highlightBlock(output),
+              }}
+            />
           </div>
         )}
       </>
@@ -197,9 +198,10 @@ function renderExpandedDetail(
             <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
               Results
             </div>
-            <pre className="text-[11px] font-mono text-foreground/70 whitespace-pre-wrap break-all overflow-x-auto max-h-[400px] overflow-y-auto">
-              {output}
-            </pre>
+            <pre
+              className="text-[11px] font-mono text-foreground/70 whitespace-pre-wrap break-all overflow-x-auto max-h-[400px] overflow-y-auto"
+              dangerouslySetInnerHTML={{ __html: highlightBlock(output) }}
+            />
           </div>
         )}
       </>
@@ -584,16 +586,17 @@ function formatToolSummary(
       const remaining = resultLines.length - showLines.length;
       let preview: React.ReactNode | null = null;
       if (resultContent.trim()) {
+        const previewText = showLines.join('\n') + (remaining > 0 ? `\n… +${remaining} lines` : '');
         preview = (
           <div className="px-3 py-1.5 overflow-hidden max-h-[120px]">
             <pre
               className={`text-[11px] font-mono whitespace-pre-wrap break-all ${
                 result?.is_error ? 'text-destructive/80' : 'text-foreground/70'
               }`}
-            >
-              {showLines.join('\n')}
-              {remaining > 0 ? `\n… +${remaining} lines` : ''}
-            </pre>
+              dangerouslySetInnerHTML={{
+                __html: result?.is_error ? previewText : highlightBlock(previewText),
+              }}
+            />
           </div>
         );
       }
