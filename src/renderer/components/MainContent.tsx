@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { TerminalPane } from './TerminalPane';
 import { ChatPane } from './ChatPane';
 import { ProjectOverview } from './ProjectOverview';
@@ -69,8 +69,6 @@ export function MainContent({
   gitStatus,
 }: MainContentProps) {
   const [prInfo, setPrInfo] = useState<PullRequestInfo | null>(null);
-  // Track interactive command state: null → 'waitForBusy' → 'waitForIdle' → switch back
-  const interactiveCmdStateRef = useRef<'waitForBusy' | 'waitForIdle' | null>(null);
 
   // Per-task view mode persisted in localStorage
   const viewModeKey = activeTask ? `viewMode:${activeTask.id}` : null;
@@ -101,25 +99,6 @@ export function MainContent({
     localStorage.setItem(viewModeKey, newMode);
     setViewMode(newMode);
   }, [activeTask, viewModeKey, viewMode]);
-
-  // Auto-switch back to chat after interactive command completes
-  // State machine: waitForBusy → waitForIdle → switch back
-  useEffect(() => {
-    if (!activeTask || !interactiveCmdStateRef.current) return;
-    const activity = taskActivity[activeTask.id];
-
-    if (interactiveCmdStateRef.current === 'waitForBusy' && activity === 'busy') {
-      interactiveCmdStateRef.current = 'waitForIdle';
-    } else if (interactiveCmdStateRef.current === 'waitForIdle' && activity === 'idle') {
-      interactiveCmdStateRef.current = null;
-      setTimeout(() => {
-        if (viewModeKey && viewMode === 'terminal') {
-          localStorage.setItem(viewModeKey, 'chat');
-          setViewMode('chat');
-        }
-      }, 500);
-    }
-  }, [activeTask, taskActivity, viewMode, viewModeKey]);
 
   useEffect(() => {
     setPrInfo(null);
@@ -427,10 +406,7 @@ export function MainContent({
             id={activeTask.id}
             cwd={activeTask.path}
             onSwitchToTerminal={() => {
-              if (viewMode === 'chat') {
-                interactiveCmdStateRef.current = 'waitForBusy';
-                handleToggleViewMode();
-              }
+              if (viewMode === 'chat') handleToggleViewMode();
             }}
           />
         ) : (
