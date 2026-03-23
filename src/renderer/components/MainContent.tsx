@@ -329,6 +329,27 @@ export function MainContent({
                 {branchLabel}
               </div>
             </Tooltip>
+            {prInfo && prInfo.state !== 'closed' && (
+              <Tooltip content={`${prInfo.title} (${prInfo.state})`}>
+                <a
+                  href={prInfo.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium transition-colors ${
+                    prInfo.state === 'merged'
+                      ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20'
+                      : 'bg-green-500/10 text-green-600 dark:text-green-400 hover:bg-green-500/20'
+                  }`}
+                >
+                  {prInfo.state === 'merged' ? (
+                    <GitMerge size={10} strokeWidth={2} />
+                  ) : (
+                    <GitPullRequest size={10} strokeWidth={2} />
+                  )}
+                  <span className="whitespace-nowrap">PR #{prInfo.number}</span>
+                </a>
+              </Tooltip>
+            )}
             {taskActivity[activeTask.id] && (
               <Tooltip content="Remote control">
                 <button
@@ -355,27 +376,6 @@ export function MainContent({
                 <Code2 size={14} strokeWidth={1.8} />
               </button>
             </Tooltip>
-            {prInfo && prInfo.state !== 'closed' && (
-              <Tooltip content={`${prInfo.title} (${prInfo.state})`}>
-                <a
-                  href={prInfo.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium transition-colors ${
-                    prInfo.state === 'merged'
-                      ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20'
-                      : 'bg-green-500/10 text-green-600 dark:text-green-400 hover:bg-green-500/20'
-                  }`}
-                >
-                  {prInfo.state === 'merged' ? (
-                    <GitMerge size={10} strokeWidth={2} />
-                  ) : (
-                    <GitPullRequest size={10} strokeWidth={2} />
-                  )}
-                  <span className="whitespace-nowrap">PR #{prInfo.number}</span>
-                </a>
-              </Tooltip>
-            )}
             <Tooltip
               content={viewMode === 'terminal' ? 'Switch to chat view' : 'Switch to terminal view'}
             >
