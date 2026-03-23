@@ -6,16 +6,41 @@ import { Tooltip } from './ui/Tooltip';
 import type { ChatMessage } from '../../shared/types';
 import { resolveTheme } from '../terminal/terminalThemes';
 
-// Slash commands that open interactive TUI menus/dialogs
+// Slash commands that open interactive TUI menus/dialogs requiring keyboard input
 const INTERACTIVE_COMMANDS = new Set([
-  '/doctor',
+  '/agents',
+  '/chrome',
+  '/color',
+  '/compact',
   '/config',
+  '/context',
+  '/copy',
+  '/diff',
+  '/effort',
+  '/export',
+  '/hooks',
+  '/ide',
+  '/init',
+  '/install-github-app',
+  '/install-slack-app',
+  '/keybindings',
+  '/memory',
+  '/mcp',
   '/model',
   '/permissions',
-  '/login',
-  '/logout',
+  '/plugin',
+  '/pr-comments',
+  '/remote-control',
+  '/rc',
+  '/rewind',
+  '/checkpoint',
+  '/resume',
+  '/continue',
+  '/skills',
+  '/statusline',
+  '/tasks',
   '/terminal-setup',
-  '/review',
+  '/theme',
 ]);
 
 interface ChatPaneProps {

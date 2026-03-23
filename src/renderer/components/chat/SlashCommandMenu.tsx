@@ -13,17 +13,36 @@ import {
   Shield,
   GitPullRequest,
   TerminalSquare,
+  Zap,
+  BarChart3,
+  FileText,
+  Bug,
+  Palette,
+  Eye,
+  Clipboard,
+  GitBranch,
+  Globe,
+  Puzzle,
+  MessageSquare,
+  Mic,
+  Monitor,
+  RefreshCw,
+  Lock,
+  Layers,
+  Map,
 } from 'lucide-react';
 
 export interface SlashCommand {
   command: string;
   description: string;
   icon: React.ReactNode;
+  interactive?: boolean;
 }
 
 const ICON_PROPS = { size: 14, strokeWidth: 1.8 };
 
 export const SLASH_COMMANDS: SlashCommand[] = [
+  // Most commonly used
   {
     command: '/help',
     description: 'Show available commands',
@@ -38,36 +57,173 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     command: '/compact',
     description: 'Compact conversation to save context',
     icon: <Minimize2 {...ICON_PROPS} />,
+    interactive: true,
   },
-  { command: '/config', description: 'Show configuration', icon: <Settings {...ICON_PROPS} /> },
   {
     command: '/cost',
     description: 'Show token usage and cost',
     icon: <DollarSign {...ICON_PROPS} />,
   },
   {
-    command: '/doctor',
-    description: 'Run diagnostic checks',
-    icon: <Stethoscope {...ICON_PROPS} />,
+    command: '/model',
+    description: 'Switch AI model',
+    icon: <Cpu {...ICON_PROPS} />,
+    interactive: true,
   },
-  { command: '/login', description: 'Log in to your account', icon: <LogIn {...ICON_PROPS} /> },
-  { command: '/logout', description: 'Log out of your account', icon: <LogOut {...ICON_PROPS} /> },
-  { command: '/memory', description: 'View and manage memory', icon: <Brain {...ICON_PROPS} /> },
-  { command: '/model', description: 'Switch AI model', icon: <Cpu {...ICON_PROPS} /> },
+  {
+    command: '/config',
+    description: 'Show configuration',
+    icon: <Settings {...ICON_PROPS} />,
+    interactive: true,
+  },
+  {
+    command: '/memory',
+    description: 'View and manage memory',
+    icon: <Brain {...ICON_PROPS} />,
+    interactive: true,
+  },
   {
     command: '/permissions',
     description: 'View and manage permissions',
     icon: <Shield {...ICON_PROPS} />,
+    interactive: true,
   },
+  {
+    command: '/doctor',
+    description: 'Run diagnostic checks',
+    icon: <Stethoscope {...ICON_PROPS} />,
+  },
+  // Tool & extension management
+  {
+    command: '/mcp',
+    description: 'Manage MCP servers',
+    icon: <Globe {...ICON_PROPS} />,
+    interactive: true,
+  },
+  {
+    command: '/hooks',
+    description: 'View hook configurations',
+    icon: <Puzzle {...ICON_PROPS} />,
+    interactive: true,
+  },
+  {
+    command: '/skills',
+    description: 'List available skills',
+    icon: <Layers {...ICON_PROPS} />,
+    interactive: true,
+  },
+  {
+    command: '/plugin',
+    description: 'Manage plugins',
+    icon: <Puzzle {...ICON_PROPS} />,
+    interactive: true,
+  },
+  // Session management
+  {
+    command: '/resume',
+    description: 'Resume a previous session',
+    icon: <RefreshCw {...ICON_PROPS} />,
+    interactive: true,
+  },
+  {
+    command: '/branch',
+    description: 'Create conversation branch',
+    icon: <GitBranch {...ICON_PROPS} />,
+  },
+  {
+    command: '/rewind',
+    description: 'Rewind to a checkpoint',
+    icon: <RefreshCw {...ICON_PROPS} />,
+    interactive: true,
+  },
+  // Mode toggles
+  { command: '/plan', description: 'Enter plan/analysis mode', icon: <Map {...ICON_PROPS} /> },
+  { command: '/fast', description: 'Toggle fast mode', icon: <Zap {...ICON_PROPS} /> },
+  { command: '/vim', description: 'Toggle Vim mode', icon: <TerminalSquare {...ICON_PROPS} /> },
+  { command: '/voice', description: 'Toggle voice dictation', icon: <Mic {...ICON_PROPS} /> },
+  { command: '/sandbox', description: 'Toggle sandbox mode', icon: <Lock {...ICON_PROPS} /> },
+  // Display & theme
+  {
+    command: '/theme',
+    description: 'Change color theme',
+    icon: <Palette {...ICON_PROPS} />,
+    interactive: true,
+  },
+  {
+    command: '/effort',
+    description: 'Set effort level',
+    icon: <BarChart3 {...ICON_PROPS} />,
+    interactive: true,
+  },
+  {
+    command: '/diff',
+    description: 'View interactive diff',
+    icon: <Eye {...ICON_PROPS} />,
+    interactive: true,
+  },
+  {
+    command: '/context',
+    description: 'Show context usage',
+    icon: <BarChart3 {...ICON_PROPS} />,
+    interactive: true,
+  },
+  // Info & output
+  {
+    command: '/usage',
+    description: 'Show plan usage and rate limits',
+    icon: <BarChart3 {...ICON_PROPS} />,
+  },
+  { command: '/stats', description: 'Show usage statistics', icon: <BarChart3 {...ICON_PROPS} /> },
+  {
+    command: '/copy',
+    description: 'Copy code block or response',
+    icon: <Clipboard {...ICON_PROPS} />,
+    interactive: true,
+  },
+  {
+    command: '/export',
+    description: 'Export conversation',
+    icon: <FileText {...ICON_PROPS} />,
+    interactive: true,
+  },
+  { command: '/release-notes', description: 'Show changelog', icon: <FileText {...ICON_PROPS} /> },
+  // Review & analysis
   {
     command: '/review',
     description: 'Review code changes',
     icon: <GitPullRequest {...ICON_PROPS} />,
   },
   {
+    command: '/security-review',
+    description: 'Security vulnerability scan',
+    icon: <Shield {...ICON_PROPS} />,
+  },
+  // Account
+  { command: '/login', description: 'Log in to your account', icon: <LogIn {...ICON_PROPS} /> },
+  { command: '/logout', description: 'Log out of your account', icon: <LogOut {...ICON_PROPS} /> },
+  // Feedback
+  {
+    command: '/bug',
+    description: 'Report a bug',
+    icon: <Bug {...ICON_PROPS} />,
+  },
+  {
+    command: '/feedback',
+    description: 'Submit feedback',
+    icon: <MessageSquare {...ICON_PROPS} />,
+  },
+  // Setup
+  {
     command: '/terminal-setup',
     description: 'Configure terminal integration',
     icon: <TerminalSquare {...ICON_PROPS} />,
+    interactive: true,
+  },
+  {
+    command: '/ide',
+    description: 'Manage IDE integration',
+    icon: <Monitor {...ICON_PROPS} />,
+    interactive: true,
   },
 ];
 
@@ -125,6 +281,9 @@ export function SlashCommandMenu({ filter, selectedIndex, onSelect }: SlashComma
             <span className="text-[12px] font-mono font-medium">{cmd.command}</span>
             <span className="text-[11px] text-muted-foreground ml-2">{cmd.description}</span>
           </div>
+          {cmd.interactive && (
+            <span className="text-[9px] text-muted-foreground/50 flex-shrink-0">TUI</span>
+          )}
         </button>
       ))}
     </div>
