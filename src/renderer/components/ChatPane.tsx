@@ -325,14 +325,16 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
     (text: string) => {
       const isSlashCommand = text.startsWith('/');
 
-      // Always show what was sent (both messages and slash commands)
-      const localMsg: ChatMessage = {
-        id: `local-user-${Date.now()}`,
-        role: 'user',
-        content: [{ type: 'text', text }],
-        timestamp: Date.now(),
-      };
-      setMessages((prev) => [...prev, localMsg]);
+      // Show user messages locally; slash commands will appear via JSONL watcher as cards
+      if (!isSlashCommand) {
+        const localMsg: ChatMessage = {
+          id: `local-user-${Date.now()}`,
+          role: 'user',
+          content: [{ type: 'text', text }],
+          timestamp: Date.now(),
+        };
+        setMessages((prev) => [...prev, localMsg]);
+      }
 
       // Collapse newlines to spaces for PTY — the TUI interprets \n as submit
       const sendText = text.replace(/\n+/g, ' ');
