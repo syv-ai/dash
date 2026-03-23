@@ -1,6 +1,13 @@
 import React, { useRef, useCallback, useState, useEffect } from 'react';
-import { SendHorizonal } from 'lucide-react';
+import { ChevronDown, Loader2, SendHorizonal, Terminal } from 'lucide-react';
 import { SlashCommandMenu, getFilteredCommands, type SlashCommand } from './SlashCommandMenu';
+
+export interface SubprocessInfo {
+  id: string;
+  name: string;
+  summary: string;
+  outputFile?: string;
+}
 
 interface ComposeBoxProps {
   onSend: (text: string) => void;
@@ -9,6 +16,7 @@ interface ComposeBoxProps {
   themeBg?: string;
   cwd?: string;
   placeholder?: string;
+  activeSubprocesses?: SubprocessInfo[];
 }
 
 export function ComposeBox({
@@ -18,6 +26,7 @@ export function ComposeBox({
   themeBg,
   cwd,
   placeholder = 'Send a message...',
+  activeSubprocesses = [],
 }: ComposeBoxProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [value, setValue] = useState('');
@@ -44,6 +53,36 @@ export function ComposeBox({
       }
     })();
   }, [cwd]);
+  const [showTasks, setShowTasks] = useState(false);
+  const [taskSelectedIndex, setTaskSelectedIndex] = useState(0);
+  const [viewingTaskFile, setViewingTaskFile] = useState<string | null>(null);
+  const [taskOutput, setTaskOutput] = useState('');
+  const taskPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Poll the viewed task's output file
+  useEffect(() => {
+    if (!viewingTaskFile) {
+      setTaskOutput('');
+      if (taskPollRef.current) {
+        clearInterval(taskPollRef.current);
+        taskPollRef.current = null;
+      }
+      return;
+    }
+    const readFile = async () => {
+      try {
+        const resp = await window.electronAPI.ptyReadFile(viewingTaskFile);
+        if (resp.success && resp.data) setTaskOutput(resp.data);
+      } catch {
+        // File may not exist yet
+      }
+    };
+    readFile();
+    taskPollRef.current = setInterval(readFile, 1000);
+    return () => {
+      if (taskPollRef.current) clearInterval(taskPollRef.current);
+    };
+  }, [viewingTaskFile]);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
   const [slashTab, setSlashTab] = useState<'all' | 'commands' | 'skills' | 'plugins' | 'mcp'>(
@@ -137,19 +176,64 @@ export function ComposeBox({
         }
       }
 
+      // Enter in tasks panel → view task logs inline
+      if (e.key === 'Enter' && !e.shiftKey && showTasks && activeSubprocesses.length > 0) {
+        e.preventDefault();
+        const task = activeSubprocesses[taskSelectedIndex];
+        if (task?.outputFile) {
+          setViewingTaskFile((prev) => (prev === task.outputFile ? null : task.outputFile!));
+        }
+        return;
+      }
+
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         handleSend();
+        return;
+      }
+
+      // Arrow down at end of input → open/navigate tasks panel
+      if (e.key === 'ArrowDown' && activeSubprocesses.length > 0 && !showSlashMenu) {
+        const el = textareaRef.current;
+        if (el && el.selectionStart === el.value.length) {
+          e.preventDefault();
+          if (!showTasks) {
+            setShowTasks(true);
+            setTaskSelectedIndex(0);
+          } else {
+            setTaskSelectedIndex((prev) => (prev < activeSubprocesses.length - 1 ? prev + 1 : 0));
+          }
+          return;
+        }
+      }
+      // Arrow up in tasks panel
+      if (e.key === 'ArrowUp' && showTasks && !showSlashMenu) {
+        e.preventDefault();
+        setTaskSelectedIndex((prev) => (prev > 0 ? prev - 1 : activeSubprocesses.length - 1));
+        return;
+      }
+      // Escape closes log view first, then tasks panel
+      if (e.key === 'Escape' && (viewingTaskFile || showTasks)) {
+        e.preventDefault();
+        if (viewingTaskFile) {
+          setViewingTaskFile(null);
+        } else {
+          setShowTasks(false);
+        }
+        return;
       }
     },
     [
       handleSend,
       handleSlashSelect,
       showSlashMenu,
+      showTasks,
+      taskSelectedIndex,
       slashSelectedIndex,
       slashTab,
       dynamicCommands,
       value,
+      activeSubprocesses,
     ],
   );
 
@@ -209,16 +293,89 @@ export function ComposeBox({
           <SendHorizonal size={16} strokeWidth={2} />
         </button>
       </div>
-      <div className="mt-1.5 text-[10px] text-muted-foreground text-center">
-        {isBusy ? (
-          'Esc to interrupt'
-        ) : (
-          <>
-            Enter to send, Shift+Enter for new line ·{' '}
-            <span className="text-amber-400">Chat UI is experimental</span>
-          </>
-        )}
+      <div className="mt-1.5 text-[10px] text-muted-foreground flex items-center justify-between px-0.5">
+        <div>
+          {activeSubprocesses.length > 0 ? (
+            <button
+              onClick={() => {
+                setShowTasks((prev) => !prev);
+                setTaskSelectedIndex(0);
+              }}
+              className="flex items-center gap-1 text-primary hover:text-primary/80 transition-colors"
+            >
+              <span>
+                {activeSubprocesses.length} {activeSubprocesses.length === 1 ? 'task' : 'tasks'}
+              </span>
+              <ChevronDown
+                size={9}
+                strokeWidth={2}
+                className={`transition-transform duration-150 ${showTasks ? 'rotate-180' : ''}`}
+              />
+            </button>
+          ) : (
+            <span />
+          )}
+        </div>
+        <div>
+          {isBusy ? (
+            'Esc to interrupt'
+          ) : (
+            <>
+              Enter to send, Shift+Enter for new line ·{' '}
+              <span className="text-amber-400">Chat UI is experimental</span>
+            </>
+          )}
+        </div>
       </div>
+      {showTasks && activeSubprocesses.length > 0 && (
+        <div className="mt-1 rounded-md border border-border/40 overflow-hidden">
+          {activeSubprocesses.map((task, i) => (
+            <div
+              key={task.id}
+              onClick={() => {
+                setTaskSelectedIndex(i);
+                if (task.outputFile) {
+                  setViewingTaskFile((prev) =>
+                    prev === task.outputFile ? null : task.outputFile!,
+                  );
+                }
+              }}
+              className={`flex items-center gap-2 px-2.5 py-1.5 text-[10px] cursor-pointer transition-colors ${
+                i === taskSelectedIndex
+                  ? 'bg-primary/10 text-foreground'
+                  : 'text-muted-foreground/70 hover:bg-accent/30'
+              }`}
+              style={
+                i !== taskSelectedIndex ? { background: 'hsl(var(--surface-0) / 0.5)' } : undefined
+              }
+            >
+              <Terminal size={9} strokeWidth={1.8} className="flex-shrink-0" />
+              <span className="font-mono truncate">{task.summary}</span>
+              <Loader2
+                size={9}
+                strokeWidth={2}
+                className="animate-spin text-amber-400 ml-auto flex-shrink-0"
+              />
+            </div>
+          ))}
+          {viewingTaskFile && (
+            <div
+              className="border-t border-border/40 max-h-[200px] overflow-y-auto"
+              style={{ background: 'hsl(var(--surface-0))' }}
+            >
+              <pre className="px-2.5 py-2 text-[10px] font-mono text-foreground/70 whitespace-pre-wrap break-all">
+                {taskOutput || 'Waiting for output...'}
+              </pre>
+            </div>
+          )}
+          <div
+            className="px-2.5 py-1 text-[9px] text-muted-foreground/40 border-t border-border/30"
+            style={{ background: 'hsl(var(--surface-0) / 0.3)' }}
+          >
+            ↑↓ navigate · Enter to view logs · Esc to close
+          </div>
+        </div>
+      )}
     </div>
   );
 }

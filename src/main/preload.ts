@@ -102,6 +102,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ptyDiscoverCommands: (projectCwd: string) =>
     ipcRenderer.invoke('pty:discoverCommands', projectCwd),
   ptyChatUnwatch: (id: string) => ipcRenderer.send('pty:chatUnwatch', id),
+  ptyReadFile: (filePath: string) => ipcRenderer.invoke('pty:readFile', filePath),
   onChatMessages: (id: string, callback: (messages: unknown[]) => void) => {
     const handler = (_event: unknown, messages: unknown[]) => callback(messages);
     ipcRenderer.on(`pty:chatMessages:${id}`, handler);

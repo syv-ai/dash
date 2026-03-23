@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { ArrowDown, Bot, Loader2, Shield } from 'lucide-react';
 import { MessageBubble } from './chat/MessageBubble';
-import { ComposeBox } from './chat/ComposeBox';
+import { ComposeBox, type SubprocessInfo } from './chat/ComposeBox';
 import { Tooltip } from './ui/Tooltip';
 import type { ChatMessage } from '../../shared/types';
 import { resolveTheme } from '../terminal/terminalThemes';
@@ -66,6 +66,12 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
   const [busyElapsed, setBusyElapsed] = useState(0);
   const busyStartRef = useRef(0);
   const [isWaiting, setIsWaiting] = useState(false);
+
+  // Track active background processes and subagents
+  const bgTasksRef = useRef(
+    new Map<string, { id: string; name: string; summary: string; outputFile?: string }>(),
+  );
+  const [activeSubprocesses, setActiveSubprocesses] = useState<SubprocessInfo[]>([]);
 
   // Resolve terminal theme background for the chat UI to match the TUI.
   // Re-resolve when theme changes (localStorage) or dark/light toggles.
@@ -146,6 +152,73 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
           setIsBusy(false);
           setBusyStatus(null);
           if (busyTimerRef.current) clearTimeout(busyTimerRef.current);
+        }
+
+        // Track background processes and subagents from live updates
+        const bgTasks = bgTasksRef.current;
+        let bgChanged = false;
+        for (const m of toAdd) {
+          for (const block of m.content) {
+            // Background Bash task started
+            if (block.type === 'tool_use' && block.name === 'Bash') {
+              const input = block.input as Record<string, any>;
+              console.log(
+                '[bg-track] Bash tool_use:',
+                block.id,
+                'run_in_background:',
+                input?.run_in_background,
+              );
+              if (input?.run_in_background && !bgTasks.has(block.id)) {
+                const cmd = input.command || '';
+                bgTasks.set(block.id, {
+                  id: block.id,
+                  name: 'Bash',
+                  summary: `$ ${cmd.length > 50 ? cmd.slice(0, 47) + '...' : cmd}`,
+                });
+                bgChanged = true;
+              }
+            }
+            // Subagent started
+            if (block.type === 'tool_use' && block.name === 'Agent' && !bgTasks.has(block.id)) {
+              const input = block.input as Record<string, any>;
+              bgTasks.set(block.id, {
+                id: block.id,
+                name: 'Agent',
+                summary: `Agent(${input?.subagent_type || 'subagent'})`,
+              });
+              bgChanged = true;
+            }
+            // tool_result: complete agents, extract output file for bg tasks
+            if (block.type === 'tool_result') {
+              const existing = bgTasks.get(block.tool_use_id);
+              if (existing?.name === 'Agent') {
+                bgTasks.delete(block.tool_use_id);
+                bgChanged = true;
+              } else if (existing?.name === 'Bash' && block.content) {
+                // Extract output file path from tool_result
+                const fileMatch = block.content.match(/Output is being written to:\s*(\S+)/);
+                if (fileMatch) {
+                  existing.outputFile = fileMatch[1];
+                  bgChanged = true;
+                }
+              }
+            }
+            // Background task completed (task-notification XML)
+            if (block.type === 'text') {
+              const text = (block as { text: string }).text;
+              const match = text.match(
+                /<task-notification>[\s\S]*?<tool-use-id>(.*?)<\/tool-use-id>[\s\S]*?<status>(?:completed|killed)<\/status>/,
+              );
+              if (match && bgTasks.has(match[1])) {
+                bgTasks.delete(match[1]);
+                bgChanged = true;
+              }
+            }
+          }
+        }
+        if (bgChanged) {
+          console.log('[bg-track] changed, active:', [...bgTasks.values()]);
+          setActiveSubprocesses([...bgTasks.values()]);
         }
 
         return [...prev, ...toAdd];
@@ -623,6 +696,7 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
         placeholder={
           isBusy ? 'Type / for commands, or press Esc to interrupt...' : 'Send a message...'
         }
+        activeSubprocesses={activeSubprocesses}
       />
     </div>
   );

@@ -139,6 +139,16 @@ export function registerPtyIpc(): void {
     stopChatWatcher(id);
   });
 
+  // Read a file (for viewing background task output)
+  ipcMain.handle('pty:readFile', async (_event, filePath: string) => {
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      return { success: true, data: content };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  });
+
   // Discover dynamic slash commands (skills, plugins, MCP prompts)
   ipcMain.handle('pty:discoverCommands', async (_event, projectCwd: string) => {
     try {
