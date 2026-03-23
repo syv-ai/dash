@@ -441,13 +441,15 @@ export function MainContent({
               if (viewMode === 'chat') {
                 pendingReturnRef.current = true;
                 handleToggleViewMode();
-                // Focus the terminal after it mounts
-                setTimeout(() => {
+                // Focus the terminal repeatedly to ensure it sticks
+                // (the TUI dialog setup can steal focus briefly)
+                const focusTerminal = () => {
                   const session = sessionRegistry.get(activeTask!.id);
-                  if (session) {
-                    session.focus();
-                  }
-                }, 200);
+                  if (session) session.focus();
+                };
+                setTimeout(focusTerminal, 200);
+                setTimeout(focusTerminal, 800);
+                setTimeout(focusTerminal, 1200);
               }
             }}
           />
