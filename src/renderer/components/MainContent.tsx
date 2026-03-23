@@ -244,28 +244,6 @@ export function MainContent({
             ))}
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
-            <div className="flex items-center rounded-md border border-border/60 overflow-hidden mr-1.5">
-              <button
-                onClick={() => viewMode !== 'terminal' && handleToggleViewMode()}
-                className={`p-0.5 transition-colors ${
-                  viewMode === 'terminal'
-                    ? 'bg-primary/15 text-primary'
-                    : 'text-muted-foreground/50 hover:text-foreground hover:bg-accent/60'
-                }`}
-              >
-                <Terminal size={11} strokeWidth={1.8} />
-              </button>
-              <button
-                onClick={() => viewMode !== 'chat' && handleToggleViewMode()}
-                className={`p-0.5 transition-colors ${
-                  viewMode === 'chat'
-                    ? 'bg-primary/15 text-primary'
-                    : 'text-muted-foreground/50 hover:text-foreground hover:bg-accent/60'
-                }`}
-              >
-                <MessageSquare size={11} strokeWidth={1.8} />
-              </button>
-            </div>
             {activeTask.useWorktree && (
               <Tooltip content="Worktree">
                 <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
@@ -282,6 +260,16 @@ export function MainContent({
                 {branchLabel}
               </div>
             </Tooltip>
+            <button
+              onClick={handleToggleViewMode}
+              className="p-0.5 rounded transition-colors text-muted-foreground/50 hover:text-foreground hover:bg-accent/60"
+            >
+              {viewMode === 'terminal' ? (
+                <MessageSquare size={11} strokeWidth={1.8} />
+              ) : (
+                <Terminal size={11} strokeWidth={1.8} />
+              )}
+            </button>
           </div>
         </>
       ) : (
@@ -325,33 +313,6 @@ export function MainContent({
             </div>
           ) : null}
           <div className="ml-auto flex items-center gap-1.5">
-            {/* View mode toggle */}
-            <div className="flex items-center rounded-md border border-border/60 overflow-hidden">
-              <Tooltip content="Terminal view">
-                <button
-                  onClick={() => viewMode !== 'terminal' && handleToggleViewMode()}
-                  className={`p-1 transition-colors ${
-                    viewMode === 'terminal'
-                      ? 'bg-primary/15 text-primary'
-                      : 'text-muted-foreground/50 hover:text-foreground hover:bg-accent/60'
-                  }`}
-                >
-                  <Terminal size={13} strokeWidth={1.8} />
-                </button>
-              </Tooltip>
-              <Tooltip content="Chat view">
-                <button
-                  onClick={() => viewMode !== 'chat' && handleToggleViewMode()}
-                  className={`p-1 transition-colors ${
-                    viewMode === 'chat'
-                      ? 'bg-primary/15 text-primary'
-                      : 'text-muted-foreground/50 hover:text-foreground hover:bg-accent/60'
-                  }`}
-                >
-                  <MessageSquare size={13} strokeWidth={1.8} />
-                </button>
-              </Tooltip>
-            </div>
             {activeTask.useWorktree && (
               <Tooltip content="Worktree">
                 <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
@@ -415,6 +376,20 @@ export function MainContent({
                 </a>
               </Tooltip>
             )}
+            <Tooltip
+              content={viewMode === 'terminal' ? 'Switch to chat view' : 'Switch to terminal view'}
+            >
+              <button
+                onClick={handleToggleViewMode}
+                className="p-1 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-accent/60"
+              >
+                {viewMode === 'terminal' ? (
+                  <MessageSquare size={14} strokeWidth={1.8} />
+                ) : (
+                  <Terminal size={14} strokeWidth={1.8} />
+                )}
+              </button>
+            </Tooltip>
           </div>
         </>
       )}

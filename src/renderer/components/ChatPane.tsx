@@ -317,12 +317,15 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
   );
 
   return (
-    <div className="w-full h-full flex flex-col relative" style={{ background: themeBg }}>
+    <div
+      className="w-full h-full min-w-0 flex flex-col relative overflow-hidden"
+      style={{ background: themeBg }}
+    >
       {/* Message list */}
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto overflow-x-hidden"
+        className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden"
       >
         {/* Lazy load indicator at top */}
         {loadingOlder && (

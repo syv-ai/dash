@@ -30,7 +30,7 @@ export function ToolUseBlock({ block, result }: ToolUseBlockProps) {
   const { icon, summary, preview } = formatToolSummary(block, result);
 
   return (
-    <div className="my-1.5 rounded-md border border-border/60 overflow-hidden">
+    <div className="my-1.5 rounded-md border border-border/60 overflow-hidden min-w-0">
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-accent/30 transition-colors"
@@ -504,13 +504,13 @@ function DiffLine({
     );
 
   return (
-    <div className={`flex text-[11px] font-mono leading-relaxed ${bg}`}>
+    <div className={`flex text-[11px] font-mono leading-relaxed min-w-0 ${bg}`}>
       <span className="w-10 text-right pr-1 text-muted-foreground/40 select-none flex-shrink-0">
         {num}
       </span>
       <span className="w-4 text-center select-none flex-shrink-0">{marker}</span>
       <span
-        className="text-foreground/70 whitespace-pre-wrap break-all"
+        className="text-foreground/70 whitespace-pre-wrap break-all min-w-0 overflow-hidden"
         dangerouslySetInnerHTML={{ __html: html || '&nbsp;' }}
       />
     </div>
