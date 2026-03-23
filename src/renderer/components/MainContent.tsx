@@ -372,7 +372,7 @@ export function MainContent({
                   ) : (
                     <GitPullRequest size={10} strokeWidth={2} />
                   )}
-                  PR #{prInfo.number}
+                  <span className="whitespace-nowrap">PR #{prInfo.number}</span>
                 </a>
               </Tooltip>
             )}
