@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { TerminalPane } from './TerminalPane';
 import { ChatPane } from './ChatPane';
 import { ProjectOverview } from './ProjectOverview';
@@ -99,6 +99,38 @@ export function MainContent({
     localStorage.setItem(viewModeKey, newMode);
     setViewMode(newMode);
   }, [activeTask, viewModeKey, viewMode]);
+
+  // Auto-return to chat after interactive command completes.
+  // Start a temporary JSONL watcher to detect the command stdout entry.
+  const pendingReturnRef = useRef(false);
+  useEffect(() => {
+    if (!activeTask || !pendingReturnRef.current || viewMode !== 'terminal') return;
+
+    // Start a watcher (ChatPane's watcher stops on unmount)
+    window.electronAPI.ptyChatWatch({ id: `return-${activeTask.id}`, cwd: activeTask.path });
+
+    const unsub = window.electronAPI.onChatMessages(`return-${activeTask.id}`, (msgs) => {
+      const hasCommandDone = msgs.some(
+        (m) =>
+          m.role === 'system' &&
+          m.content.some((b) => b.type === 'text' && b.text.includes('<local-command-stdout>')),
+      );
+      if (hasCommandDone && pendingReturnRef.current) {
+        pendingReturnRef.current = false;
+        setTimeout(() => {
+          if (viewModeKey) {
+            localStorage.setItem(viewModeKey, 'chat');
+            setViewMode('chat');
+          }
+        }, 300);
+      }
+    });
+
+    return () => {
+      unsub();
+      window.electronAPI.ptyChatUnwatch(`return-${activeTask.id}`);
+    };
+  }, [activeTask, viewMode, viewModeKey]);
 
   useEffect(() => {
     setPrInfo(null);
@@ -406,7 +438,10 @@ export function MainContent({
             id={activeTask.id}
             cwd={activeTask.path}
             onSwitchToTerminal={() => {
-              if (viewMode === 'chat') handleToggleViewMode();
+              if (viewMode === 'chat') {
+                pendingReturnRef.current = true;
+                handleToggleViewMode();
+              }
             }}
           />
         ) : (
