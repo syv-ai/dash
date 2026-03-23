@@ -24,6 +24,8 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
   const historyStartIndexRef = useRef(0);
   // Map of tool_use_id -> tool_result block for O(1) lookup
   const toolResultsRef = useRef(new Map<string, ChatMessage['content'][0]>());
+  const [busyElapsed, setBusyElapsed] = useState(0);
+  const busyStartRef = useRef(0);
 
   // Resolve terminal theme background for the chat UI to match the TUI.
   // Re-resolve when theme changes (localStorage) or dark/light toggles.
@@ -185,6 +187,20 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
       // Don't kill the PTY — it's shared with terminal mode
     };
   }, [id, cwd]);
+
+  // Track busy elapsed time
+  useEffect(() => {
+    if (isBusy) {
+      busyStartRef.current = Date.now();
+      setBusyElapsed(0);
+      const timer = setInterval(() => {
+        setBusyElapsed(Math.floor((Date.now() - busyStartRef.current) / 1000));
+      }, 1000);
+      return () => clearInterval(timer);
+    } else {
+      setBusyElapsed(0);
+    }
+  }, [isBusy]);
 
   // Auto-scroll to bottom when new messages arrive or status changes
   useEffect(() => {
@@ -392,20 +408,27 @@ export function ChatPane({ id, cwd }: ChatPaneProps) {
               <div className="flex items-center gap-2 text-muted-foreground/60">
                 <div className="flex gap-0.5">
                   <div
-                    className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce"
+                    className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce"
                     style={{ animationDelay: '0ms' }}
                   />
                   <div
-                    className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce"
+                    className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce"
                     style={{ animationDelay: '150ms' }}
                   />
                   <div
-                    className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce"
+                    className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce"
                     style={{ animationDelay: '300ms' }}
                   />
                 </div>
                 {busyStatus && (
                   <span className="text-[11px] text-muted-foreground/50">{busyStatus}</span>
+                )}
+                {busyElapsed > 0 && (
+                  <span className="text-[10px] font-mono text-muted-foreground/40">
+                    {busyElapsed >= 60
+                      ? `${Math.floor(busyElapsed / 60)}:${String(busyElapsed % 60).padStart(2, '0')}`
+                      : `${busyElapsed}s`}
+                  </span>
                 )}
               </div>
             );
