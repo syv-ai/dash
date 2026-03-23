@@ -441,6 +441,13 @@ export function MainContent({
               if (viewMode === 'chat') {
                 pendingReturnRef.current = true;
                 handleToggleViewMode();
+                // Focus the terminal after it mounts
+                setTimeout(() => {
+                  const session = sessionRegistry.get(activeTask!.id);
+                  if (session) {
+                    session.focus();
+                  }
+                }, 200);
               }
             }}
           />
