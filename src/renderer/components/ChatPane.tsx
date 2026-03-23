@@ -340,19 +340,25 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
       // Collapse newlines to spaces for PTY — the TUI interprets \n as submit
       const sendText = text.replace(/\n+/g, ' ');
 
-      // Write text first, then submit with \r after a delay.
-      // The TUI detects rapid character input as a paste ("[ Pasted text ]")
-      // and needs time to process it before the submit \r arrives.
-      window.electronAPI.ptyInput({ id, data: sendText });
-      setTimeout(() => {
-        window.electronAPI.ptyInput({ id, data: '\r' });
-      }, 300);
-
       if (isSlashCommand && INTERACTIVE_COMMANDS.has(sendText.split(' ')[0])) {
-        // Switch to TUI for interactive commands that need menu/dialog input
-        setTimeout(() => onSwitchToTerminal?.(), 400);
-      } else if (!isSlashCommand) {
-        setIsBusy(true);
+        // For interactive commands: switch to TUI first, then send command
+        // after the terminal is mounted and focused
+        onSwitchToTerminal?.();
+        setTimeout(() => {
+          window.electronAPI.ptyInput({ id, data: sendText });
+          setTimeout(() => {
+            window.electronAPI.ptyInput({ id, data: '\r' });
+          }, 300);
+        }, 600);
+      } else {
+        // Regular messages and non-interactive commands: send immediately
+        window.electronAPI.ptyInput({ id, data: sendText });
+        setTimeout(() => {
+          window.electronAPI.ptyInput({ id, data: '\r' });
+        }, 300);
+        if (!isSlashCommand) {
+          setIsBusy(true);
+        }
       }
     },
     [id, onSwitchToTerminal],
