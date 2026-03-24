@@ -136,6 +136,9 @@ function findLatestSessionFile(projectDir: string): string | null {
 // ── JSONL Parsing ───────────────────────────────────────────
 
 function parseConversationEntry(entry: any, counter: number): ChatHistoryMessage | null {
+  // Skip sidechain messages (branched conversation paths)
+  if (entry.isSidechain) return null;
+
   const type = entry.type;
   const msg = entry.message;
 
@@ -164,6 +167,8 @@ function parseConversationEntry(entry: any, counter: number): ChatHistoryMessage
   }
 
   if (type === 'assistant' && msg?.role === 'assistant') {
+    // Skip synthetic messages (internal placeholders)
+    if (msg.model === '<synthetic>') return null;
     const content = normalizeContent(msg.content);
     if (content.length === 0) return null;
     return {
@@ -572,7 +577,7 @@ export function readHistory(
   if (!filePath) return { messages: [], totalCount: 0, startIndex: 0 };
 
   const content = fs.readFileSync(filePath, 'utf-8');
-  const allMessages: ChatHistoryMessage[] = [];
+  const parsed: Array<{ msg: ChatHistoryMessage; requestId?: string }> = [];
   let counter = 0;
 
   for (const line of content.split('\n')) {
@@ -580,11 +585,22 @@ export function readHistory(
     try {
       const entry = JSON.parse(line);
       const msg = parseConversationEntry(entry, counter++);
-      if (msg) allMessages.push(msg);
+      if (msg) parsed.push({ msg, requestId: entry.requestId });
     } catch {
       // Skip malformed lines
     }
   }
+
+  // Deduplicate by requestId — Claude writes multiple entries per streaming response,
+  // only the last entry per requestId has final content/token counts.
+  const lastByRequestId = new Map<string, number>();
+  for (let i = 0; i < parsed.length; i++) {
+    const rid = parsed[i].requestId;
+    if (rid) lastByRequestId.set(rid, i);
+  }
+  const allMessages = parsed
+    .filter((p, i) => !p.requestId || lastByRequestId.get(p.requestId) === i)
+    .map((p) => p.msg);
 
   const totalCount = allMessages.length;
   const endIndex = beforeIndex !== undefined ? Math.min(beforeIndex, totalCount) : totalCount;
