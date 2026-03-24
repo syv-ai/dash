@@ -149,6 +149,7 @@ export interface ElectronAPI {
   }) => Promise<IpcResponse<{ messages: ChatMessage[]; totalCount: number; startIndex: number }>>;
   ptyChatWatch: (args: { id: string; cwd: string }) => Promise<IpcResponse<void>>;
   ptyChatUnwatch: (id: string) => void;
+  ptyChatResetSession: (id: string) => void;
   ptyReadFile: (filePath: string) => Promise<IpcResponse<string>>;
   onChatMessages: (id: string, callback: (messages: ChatMessage[]) => void) => () => void;
   onChatStatus: (id: string, callback: (status: string | null) => void) => () => void;

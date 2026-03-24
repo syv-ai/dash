@@ -298,11 +298,9 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
     });
 
     const unsubSessionStart = window.electronAPI.onHookSessionStart(id, (data) => {
-      // Session rotated (e.g. /clear) — restart the JSONL watcher on the new file
+      // Session rotated (e.g. /clear) — tell the watcher to switch to the new file
       if (data.source === 'clear' || data.source === 'startup') {
-        window.electronAPI.ptyChatUnwatch(id);
-        window.electronAPI.ptyChatWatch({ id, cwd });
-        // Clear messages for fresh session
+        window.electronAPI.ptyChatResetSession(id);
         if (data.source === 'clear') {
           setMessages([]);
           toolResultsRef.current.clear();
