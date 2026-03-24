@@ -144,6 +144,9 @@ export function registerPtyIpc(): void {
         (status) => {
           if (!sender.isDestroyed()) sender.send(`pty:chatStatus:${args.id}`, status);
         },
+        (metrics) => {
+          if (!sender.isDestroyed()) sender.send(`pty:chatMetrics:${args.id}`, metrics);
+        },
       );
       return { success: true };
     } catch (error) {

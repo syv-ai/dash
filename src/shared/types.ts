@@ -299,6 +299,24 @@ export interface ChatMessage {
   model?: string;
 }
 
+// ── Session Metrics ─────────────────────────────────────────
+
+export interface TokenUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+}
+
+export interface SessionMetrics {
+  durationMs: number;
+  totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  messageCount: number;
+}
+
 // ── Remote Control Types ────────────────────────────────────
 
 export interface RemoteControlState {

@@ -15,6 +15,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
+import type { SessionMetrics, TokenUsage } from '@shared/types';
 
 // ── Types ───────────────────────────────────────────────────
 
@@ -32,6 +33,7 @@ export interface ChatHistoryMessage {
 
 export type MessageCallback = (messages: ChatHistoryMessage[]) => void;
 export type StatusCallback = (status: string | null) => void;
+export type MetricsCallback = (metrics: SessionMetrics) => void;
 
 // ── Watcher State ───────────────────────────────────────────
 
@@ -52,8 +54,18 @@ interface WatchEntry {
   partialLine: string;
   /** Set of requestIds already seen — for dedup of streaming entries. */
   seenRequestIds: Set<string>;
+  /** Accumulated token usage for metrics. */
+  metrics: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    messageCount: number;
+    firstTimestamp: number;
+    lastTimestamp: number;
+  };
   onMessages: MessageCallback;
   onStatus: StatusCallback;
+  onMetrics: MetricsCallback;
 }
 
 const watchers = new Map<string, WatchEntry>();
@@ -297,10 +309,27 @@ function readIncrementalBytes(entry: WatchEntry): void {
               latestStatus = formatToolStatus(block.name, block.input);
             }
           }
+          // Accumulate token usage from assistant messages
+          const usage = raw.message?.usage as TokenUsage | undefined;
+          if (usage) {
+            entry.metrics.inputTokens += usage.input_tokens || 0;
+            entry.metrics.outputTokens += usage.output_tokens || 0;
+            entry.metrics.cacheReadTokens += usage.cache_read_input_tokens || 0;
+          }
         }
         if (raw.type === 'result') {
           latestStatus = null;
         }
+
+        // Track timestamps for duration
+        if (raw.timestamp) {
+          const ts = new Date(raw.timestamp).getTime();
+          if (!isNaN(ts)) {
+            if (entry.metrics.firstTimestamp === 0) entry.metrics.firstTimestamp = ts;
+            entry.metrics.lastTimestamp = ts;
+          }
+        }
+        entry.metrics.messageCount++;
       } catch {
         // Skip malformed lines
       }
@@ -308,6 +337,17 @@ function readIncrementalBytes(entry: WatchEntry): void {
 
     if (messages.length > 0) entry.onMessages(messages);
     if (latestStatus !== undefined) entry.onStatus(latestStatus);
+
+    // Emit updated metrics
+    const m = entry.metrics;
+    entry.onMetrics({
+      durationMs: m.lastTimestamp - m.firstTimestamp,
+      totalTokens: m.inputTokens + m.outputTokens + m.cacheReadTokens,
+      inputTokens: m.inputTokens,
+      outputTokens: m.outputTokens,
+      cacheReadTokens: m.cacheReadTokens,
+      messageCount: m.messageCount,
+    });
 
     // Send tool_results after a delay so tool_use blocks render with amber spinner first
     if (toolResultMessages.length > 0) {
@@ -399,6 +439,7 @@ export function startWatching(
   cwd: string,
   onMessages: MessageCallback,
   onStatus: StatusCallback,
+  onMetrics?: MetricsCallback,
 ): void {
   stopWatching(id);
 
@@ -417,8 +458,17 @@ export function startWatching(
     bytesRead: 0,
     partialLine: '',
     seenRequestIds: new Set(),
+    metrics: {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      messageCount: 0,
+      firstTimestamp: 0,
+      lastTimestamp: 0,
+    },
     onMessages,
     onStatus,
+    onMetrics: onMetrics || (() => {}),
   };
 
   watchers.set(id, entry);
@@ -561,6 +611,14 @@ export function resetSession(id: string): void {
     entry.bytesRead = 0;
     entry.partialLine = '';
     entry.seenRequestIds.clear();
+    entry.metrics = {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      messageCount: 0,
+      firstTimestamp: 0,
+      lastTimestamp: 0,
+    };
     startFileWatcher(entry);
   }
 }

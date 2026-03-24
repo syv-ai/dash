@@ -118,6 +118,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener(`pty:chatStatus:${id}`, handler);
     };
   },
+  onChatMetrics: (id: string, callback: (metrics: unknown) => void) => {
+    const handler = (_event: unknown, metrics: unknown) => callback(metrics);
+    ipcRenderer.on(`pty:chatMetrics:${id}`, handler);
+    return () => {
+      ipcRenderer.removeListener(`pty:chatMetrics:${id}`, handler);
+    };
+  },
 
   // Hook events — forwarded from HookServer to renderer
   onHookPreToolUse: (id: string, callback: (data: any) => void) => {

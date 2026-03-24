@@ -1,6 +1,13 @@
 import React, { useRef, useCallback, useState, useEffect } from 'react';
 import { ChevronDown, Loader2, SendHorizonal, Terminal } from 'lucide-react';
 import { SlashCommandMenu, getFilteredCommands, type SlashCommand } from './SlashCommandMenu';
+import type { SessionMetrics } from '../../../shared/types';
+
+function formatTokenCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
+}
 
 export interface SubprocessInfo {
   id: string;
@@ -17,6 +24,7 @@ interface ComposeBoxProps {
   cwd?: string;
   placeholder?: string;
   activeSubprocesses?: SubprocessInfo[];
+  sessionMetrics?: SessionMetrics | null;
 }
 
 export function ComposeBox({
@@ -27,6 +35,7 @@ export function ComposeBox({
   cwd,
   placeholder = 'Send a message...',
   activeSubprocesses = [],
+  sessionMetrics,
 }: ComposeBoxProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [value, setValue] = useState('');
@@ -312,6 +321,10 @@ export function ComposeBox({
                 className={`transition-transform duration-150 ${showTasks ? 'rotate-180' : ''}`}
               />
             </button>
+          ) : sessionMetrics && sessionMetrics.totalTokens > 0 ? (
+            <span className="text-muted-foreground/40 font-mono">
+              {formatTokenCount(sessionMetrics.totalTokens)} tokens
+            </span>
           ) : (
             <span />
           )}

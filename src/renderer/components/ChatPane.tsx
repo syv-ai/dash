@@ -3,7 +3,7 @@ import { ArrowDown, Bot, Loader2, Shield } from 'lucide-react';
 import { MessageBubble } from './chat/MessageBubble';
 import { ComposeBox, type SubprocessInfo } from './chat/ComposeBox';
 import { Tooltip } from './ui/Tooltip';
-import type { ChatMessage } from '../../shared/types';
+import type { ChatMessage, SessionMetrics } from '../../shared/types';
 import { resolveTheme } from '../terminal/terminalThemes';
 
 // Slash commands that open interactive TUI menus/dialogs requiring keyboard input
@@ -95,6 +95,7 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
   const [busyElapsed, setBusyElapsed] = useState(0);
   const busyStartRef = useRef(0);
   const [isWaiting, setIsWaiting] = useState(false);
+  const [sessionMetrics, setSessionMetrics] = useState<SessionMetrics | null>(null);
 
   // Track active background processes and subagents
   const bgTasksRef = useRef(
@@ -230,6 +231,10 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
 
         return [...prev, ...toAdd];
       });
+    });
+
+    const unsubMetrics = window.electronAPI.onChatMetrics(id, (metrics) => {
+      setSessionMetrics(metrics);
     });
 
     // JSONL-based tool status (fallback, will be superseded by hooks when available)
@@ -368,6 +373,7 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
 
     return () => {
       unsubChat();
+      unsubMetrics();
       unsubStatus();
       unsubPreToolUse();
       unsubPostToolUse();
@@ -776,6 +782,7 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
           isBusy ? 'Type / for commands, or press Esc to interrupt...' : 'Send a message...'
         }
         activeSubprocesses={activeSubprocesses}
+        sessionMetrics={sessionMetrics}
       />
     </div>
   );

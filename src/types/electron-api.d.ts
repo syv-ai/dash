@@ -19,6 +19,7 @@ import type {
   PixelAgentsConfig,
   PixelAgentsStatus,
   ChatMessage,
+  SessionMetrics,
 } from '../shared/types';
 
 export interface ElectronAPI {
@@ -153,6 +154,7 @@ export interface ElectronAPI {
   ptyReadFile: (filePath: string) => Promise<IpcResponse<string>>;
   onChatMessages: (id: string, callback: (messages: ChatMessage[]) => void) => () => void;
   onChatStatus: (id: string, callback: (status: string | null) => void) => () => void;
+  onChatMetrics: (id: string, callback: (metrics: SessionMetrics) => void) => () => void;
 
   // Hook events
   onHookPreToolUse: (
