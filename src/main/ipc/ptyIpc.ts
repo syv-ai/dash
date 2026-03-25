@@ -166,7 +166,15 @@ export function registerPtyIpc(): void {
   // Read a file (for viewing background task output)
   ipcMain.handle('pty:readFile', async (_event, filePath: string) => {
     try {
-      const content = fs.readFileSync(filePath, 'utf-8');
+      // Security: only allow reading files within the user's home directory
+      // (Claude Code writes background task output to ~/.claude/ or /tmp/)
+      const resolved = path.resolve(filePath);
+      const home = os.homedir();
+      const tmpDir = os.tmpdir();
+      if (!resolved.startsWith(home + path.sep) && !resolved.startsWith(tmpDir + path.sep)) {
+        return { success: false, error: 'Access denied: path outside allowed directories' };
+      }
+      const content = fs.readFileSync(resolved, 'utf-8');
       return { success: true, data: content };
     } catch (error) {
       return { success: false, error: String(error) };

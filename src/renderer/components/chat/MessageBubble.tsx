@@ -203,20 +203,6 @@ function renderContentBlock(
   }
 }
 
-function findToolResult(
-  toolUseId: string,
-  allMessages: ChatMessage[],
-): (ChatContentBlock & { type: 'tool_result' }) | null {
-  for (const msg of allMessages) {
-    for (const block of msg.content) {
-      if (block.type === 'tool_result' && block.tool_use_id === toolUseId) {
-        return block;
-      }
-    }
-  }
-  return null;
-}
-
 function TaskNotification({ xml }: { xml: string }): React.ReactElement | null {
   // Parse key fields from the XML
   const getTag = (tag: string) => {

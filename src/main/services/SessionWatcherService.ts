@@ -15,23 +15,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
-import type { SessionMetrics, TokenUsage } from '@shared/types';
+import type { ChatMessage, SessionMetrics, TokenUsage } from '@shared/types';
+import { formatToolStatus } from '@shared/formatToolStatus';
 
 // ── Types ───────────────────────────────────────────────────
 
-export interface ChatHistoryMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: Array<
-    | { type: 'text'; text: string }
-    | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
-    | { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean }
-  >;
-  timestamp: number;
-  model?: string;
-}
-
-export type MessageCallback = (messages: ChatHistoryMessage[]) => void;
+export type MessageCallback = (messages: ChatMessage[]) => void;
 export type StatusCallback = (status: string | null) => void;
 export type MetricsCallback = (metrics: SessionMetrics) => void;
 
@@ -135,7 +124,7 @@ function findLatestSessionFile(projectDir: string): string | null {
 
 // ── JSONL Parsing ───────────────────────────────────────────
 
-function parseConversationEntry(entry: any, counter: number): ChatHistoryMessage | null {
+function parseConversationEntry(entry: any, counter: number): ChatMessage | null {
   // Skip sidechain messages (branched conversation paths)
   if (entry.isSidechain) return null;
 
@@ -183,14 +172,14 @@ function parseConversationEntry(entry: any, counter: number): ChatHistoryMessage
   return null;
 }
 
-function normalizeContent(raw: unknown): ChatHistoryMessage['content'] {
+function normalizeContent(raw: unknown): ChatMessage['content'] {
   if (typeof raw === 'string') {
     const trimmed = raw.trim();
     if (!trimmed) return [];
     return [{ type: 'text', text: trimmed }];
   }
   if (Array.isArray(raw)) {
-    const blocks: ChatHistoryMessage['content'] = [];
+    const blocks: ChatMessage['content'] = [];
     for (const block of raw) {
       if (!block || typeof block !== 'object') continue;
       if (block.type === 'text' && typeof block.text === 'string' && block.text.trim()) {
@@ -225,39 +214,6 @@ function normalizeContent(raw: unknown): ChatHistoryMessage['content'] {
   return [];
 }
 
-/** Format a human-readable status string from a tool_use block. */
-function formatToolStatus(name: string, input: any): string {
-  const fileName = (p: string) => p.split('/').pop() || p;
-  switch (name) {
-    case 'Read':
-      return input?.file_path ? `Reading ${fileName(input.file_path)}` : 'Reading';
-    case 'Edit':
-      return input?.file_path ? `Editing ${fileName(input.file_path)}` : 'Editing';
-    case 'Write':
-      return input?.file_path ? `Writing ${fileName(input.file_path)}` : 'Writing';
-    case 'Bash':
-      return input?.command ? `Running \`${input.command.slice(0, 60)}\`` : 'Running command';
-    case 'Glob':
-      return input?.pattern ? `Searching for ${input.pattern}` : 'Searching files';
-    case 'Grep':
-      return input?.pattern ? `Searching for "${input.pattern}"` : 'Searching content';
-    case 'Agent':
-      return input?.description || 'Running subagent';
-    case 'WebFetch':
-      return input?.url ? `Fetching ${input.url.slice(0, 50)}` : 'Fetching web page';
-    case 'WebSearch':
-      return input?.query ? `Searching "${input.query.slice(0, 50)}"` : 'Searching web';
-    case 'TaskCreate':
-      return input?.subject ? `Creating task: ${input.subject.slice(0, 50)}` : 'Creating task';
-    case 'TaskUpdate':
-      return input?.status ? `Updating task #${input.taskId} → ${input.status}` : 'Updating task';
-    case 'ToolSearch':
-      return input?.query ? `Searching tools: "${input.query.slice(0, 50)}"` : 'Searching tools';
-    default:
-      return `Running ${name}`;
-  }
-}
-
 // ── Incremental Reading ─────────────────────────────────────
 
 function readIncrementalBytes(entry: WatchEntry): void {
@@ -281,10 +237,10 @@ function readIncrementalBytes(entry: WatchEntry): void {
     // Adjust bytesRead to account for the buffered partial line
     entry.bytesRead = stat.size - Buffer.byteLength(entry.partialLine, 'utf-8');
 
-    const messages: ChatHistoryMessage[] = [];
-    const toolResultMessages: ChatHistoryMessage[] = [];
+    const messages: ChatMessage[] = [];
+    const toolResultMessages: ChatMessage[] = [];
     let counter = Date.now();
-    let latestStatus: string | null = null;
+    let latestStatus: string | null | undefined = undefined;
 
     for (const line of lines) {
       if (!line.trim()) continue;
@@ -569,7 +525,7 @@ export function readHistory(
   cwd: string,
   limit = 100,
   beforeIndex?: number,
-): { messages: ChatHistoryMessage[]; totalCount: number; startIndex: number } {
+): { messages: ChatMessage[]; totalCount: number; startIndex: number } {
   const projectDir = findProjectDir(cwd);
   if (!projectDir) return { messages: [], totalCount: 0, startIndex: 0 };
 
@@ -577,7 +533,7 @@ export function readHistory(
   if (!filePath) return { messages: [], totalCount: 0, startIndex: 0 };
 
   const content = fs.readFileSync(filePath, 'utf-8');
-  const parsed: Array<{ msg: ChatHistoryMessage; requestId?: string }> = [];
+  const parsed: Array<{ msg: ChatMessage; requestId?: string }> = [];
   let counter = 0;
 
   for (const line of content.split('\n')) {

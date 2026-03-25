@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { TerminalPane } from './TerminalPane';
 import { ChatPane } from './ChatPane';
+import { ChatErrorBoundary } from './chat/ChatErrorBoundary';
 import { ProjectOverview } from './ProjectOverview';
 import {
   FolderOpen,
@@ -441,17 +442,22 @@ export function MainContent({
       {taskHeader}
       <div className="flex-1 min-h-0">
         {viewMode === 'chat' ? (
-          <ChatPane
-            key={`chat-${activeTask.id}`}
-            id={activeTask.id}
-            cwd={activeTask.path}
-            onSwitchToTerminal={() => {
-              if (viewMode === 'chat') {
-                pendingReturnRef.current = true;
-                handleToggleViewMode();
-              }
-            }}
-          />
+          <ChatErrorBoundary
+            key={`chat-boundary-${activeTask.id}`}
+            onSwitchToTerminal={handleToggleViewMode}
+          >
+            <ChatPane
+              key={`chat-${activeTask.id}`}
+              id={activeTask.id}
+              cwd={activeTask.path}
+              onSwitchToTerminal={() => {
+                if (viewMode === 'chat') {
+                  pendingReturnRef.current = true;
+                  handleToggleViewMode();
+                }
+              }}
+            />
+          </ChatErrorBoundary>
         ) : (
           <TerminalPane
             key={activeTask.id}

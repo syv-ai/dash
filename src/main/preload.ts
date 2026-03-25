@@ -1,5 +1,15 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
+/** Create an id-scoped IPC listener that returns an unsubscribe function. */
+function idListener(channel: string) {
+  return (id: string, callback: (data: any) => void) => {
+    const scoped = `${channel}:${id}`;
+    const handler = (_event: unknown, data: any) => callback(data);
+    ipcRenderer.on(scoped, handler);
+    return () => ipcRenderer.removeListener(scoped, handler);
+  };
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
   // App
   getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
@@ -104,74 +114,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ptyChatUnwatch: (id: string) => ipcRenderer.send('pty:chatUnwatch', id),
   ptyChatResetSession: (id: string) => ipcRenderer.send('pty:chatResetSession', id),
   ptyReadFile: (filePath: string) => ipcRenderer.invoke('pty:readFile', filePath),
-  onChatMessages: (id: string, callback: (messages: unknown[]) => void) => {
-    const handler = (_event: unknown, messages: unknown[]) => callback(messages);
-    ipcRenderer.on(`pty:chatMessages:${id}`, handler);
-    return () => {
-      ipcRenderer.removeListener(`pty:chatMessages:${id}`, handler);
-    };
-  },
-  onChatStatus: (id: string, callback: (status: string | null) => void) => {
-    const handler = (_event: unknown, status: string | null) => callback(status);
-    ipcRenderer.on(`pty:chatStatus:${id}`, handler);
-    return () => {
-      ipcRenderer.removeListener(`pty:chatStatus:${id}`, handler);
-    };
-  },
-  onChatMetrics: (id: string, callback: (metrics: unknown) => void) => {
-    const handler = (_event: unknown, metrics: unknown) => callback(metrics);
-    ipcRenderer.on(`pty:chatMetrics:${id}`, handler);
-    return () => {
-      ipcRenderer.removeListener(`pty:chatMetrics:${id}`, handler);
-    };
-  },
+  onChatMessages: idListener('pty:chatMessages'),
+  onChatStatus: idListener('pty:chatStatus'),
+  onChatMetrics: idListener('pty:chatMetrics'),
 
   // Hook events — forwarded from HookServer to renderer
-  onHookPreToolUse: (id: string, callback: (data: any) => void) => {
-    const handler = (_event: unknown, data: any) => callback(data);
-    ipcRenderer.on(`hook:preToolUse:${id}`, handler);
-    return () => ipcRenderer.removeListener(`hook:preToolUse:${id}`, handler);
-  },
-  onHookPostToolUse: (id: string, callback: (data: any) => void) => {
-    const handler = (_event: unknown, data: any) => callback(data);
-    ipcRenderer.on(`hook:postToolUse:${id}`, handler);
-    return () => ipcRenderer.removeListener(`hook:postToolUse:${id}`, handler);
-  },
-  onHookPostToolUseFailure: (id: string, callback: (data: any) => void) => {
-    const handler = (_event: unknown, data: any) => callback(data);
-    ipcRenderer.on(`hook:postToolUseFailure:${id}`, handler);
-    return () => ipcRenderer.removeListener(`hook:postToolUseFailure:${id}`, handler);
-  },
-  onHookStop: (id: string, callback: (data: any) => void) => {
-    const handler = (_event: unknown, data: any) => callback(data);
-    ipcRenderer.on(`hook:stop:${id}`, handler);
-    return () => ipcRenderer.removeListener(`hook:stop:${id}`, handler);
-  },
-  onHookStopFailure: (id: string, callback: (data: any) => void) => {
-    const handler = (_event: unknown, data: any) => callback(data);
-    ipcRenderer.on(`hook:stopFailure:${id}`, handler);
-    return () => ipcRenderer.removeListener(`hook:stopFailure:${id}`, handler);
-  },
-  onHookSubagentStart: (id: string, callback: (data: any) => void) => {
-    const handler = (_event: unknown, data: any) => callback(data);
-    ipcRenderer.on(`hook:subagentStart:${id}`, handler);
-    return () => ipcRenderer.removeListener(`hook:subagentStart:${id}`, handler);
-  },
-  onHookSubagentStop: (id: string, callback: (data: any) => void) => {
-    const handler = (_event: unknown, data: any) => callback(data);
-    ipcRenderer.on(`hook:subagentStop:${id}`, handler);
-    return () => ipcRenderer.removeListener(`hook:subagentStop:${id}`, handler);
-  },
-  onHookSessionStart: (id: string, callback: (data: any) => void) => {
-    const handler = (_event: unknown, data: any) => callback(data);
-    ipcRenderer.on(`hook:sessionStart:${id}`, handler);
-    return () => ipcRenderer.removeListener(`hook:sessionStart:${id}`, handler);
-  },
-  onHookNotification: (id: string, callback: (data: any) => void) => {
-    const handler = (_event: unknown, data: any) => callback(data);
-    ipcRenderer.on(`hook:notification:${id}`, handler);
-    return () => ipcRenderer.removeListener(`hook:notification:${id}`, handler);
-  },
+  onHookPreToolUse: idListener('hook:preToolUse'),
+  onHookPostToolUse: idListener('hook:postToolUse'),
+  onHookPostToolUseFailure: idListener('hook:postToolUseFailure'),
+  onHookStop: idListener('hook:stop'),
+  onHookStopFailure: idListener('hook:stopFailure'),
+  onHookSubagentStart: idListener('hook:subagentStart'),
+  onHookSubagentStop: idListener('hook:subagentStop'),
+  onHookSessionStart: idListener('hook:sessionStart'),
+  onHookNotification: idListener('hook:notification'),
 
   // Task context for SessionStart hook
   ptyWriteTaskContext: (args: { cwd: string; prompt: string; meta?: unknown }) =>
