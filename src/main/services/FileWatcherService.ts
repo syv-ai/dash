@@ -1,19 +1,20 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import { BrowserWindow } from 'electron';
+import chokidar from 'chokidar';
 
 const DEBOUNCE_MS = 500;
-const IGNORE_PATTERNS = [
-  /node_modules/,
-  /\.git\//,
-  /\.DS_Store/,
-  /\.swp$/,
-  /~$/,
-  /\.tmp$/,
+
+/** Directories/patterns excluded at the filesystem level (no inotify watches created). */
+const IGNORED = [
+  '**/node_modules/**',
+  '**/.git/**',
+  '**/.DS_Store',
+  '**/*.swp',
+  '**/*~',
+  '**/*.tmp',
 ];
 
 interface WatcherEntry {
-  watcher: fs.FSWatcher;
+  watcher: chokidar.FSWatcher;
   debounceTimer: ReturnType<typeof setTimeout> | null;
   cwd: string;
 }
@@ -29,16 +30,16 @@ export function startWatching(id: string, cwd: string): void {
   if (watchers.has(id)) return;
 
   try {
-    const watcher = fs.watch(cwd, { recursive: true }, (_eventType, filename) => {
-      if (!filename) return;
+    const watcher = chokidar.watch(cwd, {
+      ignored: IGNORED,
+      ignoreInitial: true,
+      persistent: true,
+    });
 
-      // Ignore patterns
-      if (IGNORE_PATTERNS.some((p) => p.test(filename))) return;
-
+    const debouncedNotify = () => {
       const entry = watchers.get(id);
       if (!entry) return;
 
-      // Debounce: reset timer on each change
       if (entry.debounceTimer) {
         clearTimeout(entry.debounceTimer);
       }
@@ -47,7 +48,11 @@ export function startWatching(id: string, cwd: string): void {
         notifyRenderers(id);
         entry.debounceTimer = null;
       }, DEBOUNCE_MS);
-    });
+    };
+
+    watcher.on('change', debouncedNotify);
+    watcher.on('add', debouncedNotify);
+    watcher.on('unlink', debouncedNotify);
 
     watcher.on('error', () => {
       // Watcher errored — clean up silently
@@ -72,7 +77,7 @@ export function stopWatching(id: string): void {
   }
 
   try {
-    entry.watcher.close();
+    entry.watcher.close().catch(() => {});
   } catch {
     // Already closed
   }
