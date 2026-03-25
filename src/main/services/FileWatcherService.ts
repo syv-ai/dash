@@ -1,67 +1,51 @@
+import * as path from 'path';
 import { BrowserWindow } from 'electron';
-import chokidar from 'chokidar';
+import * as fs from 'fs';
 
 const DEBOUNCE_MS = 500;
 
-/** Directories/patterns excluded at the filesystem level (no inotify watches created). */
-const IGNORED = [
-  '**/node_modules/**',
-  '**/.git/**',
-  '**/.DS_Store',
-  '**/*.swp',
-  '**/*~',
-  '**/*.tmp',
-];
+/** Only these git internals need watching to detect status changes. */
+const GIT_WATCH_FILES = ['index', 'HEAD', 'MERGE_HEAD', 'REBASE_HEAD', 'CHERRY_PICK_HEAD'];
 
 interface WatcherEntry {
-  watcher: chokidar.FSWatcher;
+  watchers: fs.FSWatcher[];
   debounceTimer: ReturnType<typeof setTimeout> | null;
   cwd: string;
 }
 
-const watchers = new Map<string, WatcherEntry>();
+const entries = new Map<string, WatcherEntry>();
 
 /**
- * Start watching a directory for file changes.
+ * Start watching a directory's .git internals for state changes.
  * Sends 'git:fileChanged' events to all renderer windows when changes detected.
  */
 export function startWatching(id: string, cwd: string): void {
-  // Don't double-watch
-  if (watchers.has(id)) return;
+  if (entries.has(id)) return;
 
-  try {
-    const watcher = chokidar.watch(cwd, {
-      ignored: IGNORED,
-      ignoreInitial: true,
-      persistent: true,
-    });
+  const gitDir = path.join(cwd, '.git');
+  const fsWatchers: fs.FSWatcher[] = [];
+  const entry: WatcherEntry = { watchers: fsWatchers, debounceTimer: null, cwd };
+  entries.set(id, entry);
 
-    const debouncedNotify = () => {
-      const entry = watchers.get(id);
-      if (!entry) return;
+  const debouncedNotify = () => {
+    if (entry.debounceTimer) {
+      clearTimeout(entry.debounceTimer);
+    }
+    entry.debounceTimer = setTimeout(() => {
+      notifyRenderers(id);
+      entry.debounceTimer = null;
+    }, DEBOUNCE_MS);
+  };
 
-      if (entry.debounceTimer) {
-        clearTimeout(entry.debounceTimer);
-      }
-
-      entry.debounceTimer = setTimeout(() => {
-        notifyRenderers(id);
-        entry.debounceTimer = null;
-      }, DEBOUNCE_MS);
-    };
-
-    watcher.on('change', debouncedNotify);
-    watcher.on('add', debouncedNotify);
-    watcher.on('unlink', debouncedNotify);
-
-    watcher.on('error', () => {
-      // Watcher errored — clean up silently
-      stopWatching(id);
-    });
-
-    watchers.set(id, { watcher, debounceTimer: null, cwd });
-  } catch {
-    // Directory doesn't exist or can't be watched
+  for (const file of GIT_WATCH_FILES) {
+    const filePath = path.join(gitDir, file);
+    try {
+      const watcher = fs.watch(filePath, debouncedNotify);
+      watcher.on('error', () => {}); // File may not exist (e.g. MERGE_HEAD)
+      fsWatchers.push(watcher);
+    } catch {
+      // File doesn't exist yet — that's fine
+    }
   }
 }
 
@@ -69,27 +53,29 @@ export function startWatching(id: string, cwd: string): void {
  * Stop watching a directory.
  */
 export function stopWatching(id: string): void {
-  const entry = watchers.get(id);
+  const entry = entries.get(id);
   if (!entry) return;
 
   if (entry.debounceTimer) {
     clearTimeout(entry.debounceTimer);
   }
 
-  try {
-    entry.watcher.close().catch(() => {});
-  } catch {
-    // Already closed
+  for (const w of entry.watchers) {
+    try {
+      w.close();
+    } catch {
+      // Already closed
+    }
   }
 
-  watchers.delete(id);
+  entries.delete(id);
 }
 
 /**
  * Stop all watchers (on app quit).
  */
 export function stopAll(): void {
-  for (const [id] of watchers) {
+  for (const [id] of entries) {
     stopWatching(id);
   }
 }
