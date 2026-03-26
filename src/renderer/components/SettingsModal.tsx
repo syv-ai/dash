@@ -627,30 +627,81 @@ function UsageSection({
 }) {
   const entries = Object.entries(statusLineData);
 
+  // Pick rate limits from the most recently updated session (they're account-wide)
+  let latestRateLimits: StatusLineData['rateLimits'] | undefined;
+  let latestRateLimitsTime = 0;
+  for (const sl of Object.values(statusLineData)) {
+    if (sl.rateLimits && new Date(sl.updatedAt).getTime() > latestRateLimitsTime) {
+      latestRateLimits = sl.rateLimits;
+      latestRateLimitsTime = new Date(sl.updatedAt).getTime();
+    }
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Active Sessions */}
+      {/* Account-wide rate limits */}
       <div>
         <div className="flex items-center gap-2 mb-3">
           <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground/60">
-            Active Sessions
+            Your Usage
+          </span>
+          <div className="flex-1 h-px bg-border/30" />
+        </div>
+
+        {latestRateLimits ? (
+          <div
+            className="rounded-xl border border-border/40 p-4 space-y-3"
+            style={{ background: 'hsl(var(--surface-2))' }}
+          >
+            {latestRateLimits.fiveHour && (
+              <UsageBar
+                label="5-hour rate limit"
+                percentage={latestRateLimits.fiveHour.usedPercentage}
+                detail={
+                  latestRateLimits.fiveHour.resetsAt
+                    ? `resets ${formatResetTime(latestRateLimits.fiveHour.resetsAt)}`
+                    : undefined
+                }
+              />
+            )}
+            {latestRateLimits.sevenDay && (
+              <UsageBar
+                label="7-day rate limit"
+                percentage={latestRateLimits.sevenDay.usedPercentage}
+                detail={
+                  latestRateLimits.sevenDay.resetsAt
+                    ? `resets ${formatResetTime(latestRateLimits.sevenDay.resetsAt)}`
+                    : undefined
+                }
+              />
+            )}
+          </div>
+        ) : (
+          <p className="text-[12px] text-foreground/40 py-4 text-center">
+            Rate limit data appears after the first API response
+          </p>
+        )}
+      </div>
+
+      {/* Per-session context usage */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground/60">
+            Sessions
           </span>
           <div className="flex-1 h-px bg-border/30" />
         </div>
 
         {entries.length === 0 ? (
-          <p className="text-[12px] text-foreground/40 py-4 text-center">
-            No active sessions with usage data
-          </p>
+          <p className="text-[12px] text-foreground/40 py-4 text-center">No active sessions</p>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {entries.map(([ptyId, sl]) => (
               <div
                 key={ptyId}
                 className="rounded-xl border border-border/40 p-4 space-y-3"
                 style={{ background: 'hsl(var(--surface-2))' }}
               >
-                {/* Header */}
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[12px] font-medium text-foreground/80 truncate">
                     {taskNames[ptyId] || 'Unknown task'}
@@ -660,38 +711,12 @@ function UsageSection({
                   </span>
                 </div>
 
-                {/* Context window */}
                 <UsageBar
-                  label="Context window"
+                  label="Context"
                   percentage={sl.contextUsage.percentage}
                   detail={`${formatTokens(sl.contextUsage.used)} / ${formatTokens(sl.contextUsage.total)}`}
                 />
 
-                {/* Rate limits */}
-                {sl.rateLimits?.fiveHour && (
-                  <UsageBar
-                    label="5-hour rate limit"
-                    percentage={sl.rateLimits.fiveHour.usedPercentage}
-                    detail={
-                      sl.rateLimits.fiveHour.resetsAt
-                        ? `resets ${formatResetTime(sl.rateLimits.fiveHour.resetsAt)}`
-                        : undefined
-                    }
-                  />
-                )}
-                {sl.rateLimits?.sevenDay && (
-                  <UsageBar
-                    label="7-day rate limit"
-                    percentage={sl.rateLimits.sevenDay.usedPercentage}
-                    detail={
-                      sl.rateLimits.sevenDay.resetsAt
-                        ? `resets ${formatResetTime(sl.rateLimits.sevenDay.resetsAt)}`
-                        : undefined
-                    }
-                  />
-                )}
-
-                {/* Stats row */}
                 {sl.cost && (
                   <div className="flex items-center gap-4 pt-1 text-[10px] text-foreground/40">
                     <span>API: {formatDuration(sl.cost.totalApiDurationMs)}</span>
@@ -720,7 +745,7 @@ function UsageSection({
           <div className="flex-1 h-px bg-border/30" />
         </div>
         <p className="text-[11px] text-foreground/40 mb-3">
-          Show a notification when usage exceeds these thresholds. Leave empty to disable.
+          Show a notification when usage exceeds a threshold. Leave empty to disable.
         </p>
         <div
           className="rounded-xl border border-border/40 px-4 divide-y divide-border/20"
@@ -745,13 +770,6 @@ function UsageSection({
             value={thresholds.sevenDayPercentage}
             onChange={(v) => onThresholdsChange({ ...thresholds, sevenDayPercentage: v })}
             suffix="%"
-            placeholder="Off"
-          />
-          <ThresholdInput
-            label="Session cost"
-            value={thresholds.costUsd}
-            onChange={(v) => onThresholdsChange({ ...thresholds, costUsd: v })}
-            suffix="$"
             placeholder="Off"
           />
         </div>

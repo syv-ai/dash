@@ -443,7 +443,6 @@ export function App() {
           sl.rateLimits?.sevenDay?.usedPercentage ?? 0,
           usageThresholds.sevenDayPercentage,
         ],
-        ['cost', sl.cost?.totalCostUsd ?? 0, usageThresholds.costUsd],
       ];
       for (const [kind, value, threshold] of checks) {
         if (threshold === null || threshold <= 0) continue;
@@ -454,7 +453,6 @@ export function App() {
             context: `Context window at ${Math.round(value)}%`,
             fiveHour: `5-hour rate limit at ${Math.round(value)}%`,
             sevenDay: `7-day rate limit at ${Math.round(value)}%`,
-            cost: `Session cost reached $${value.toFixed(2)}`,
           };
           toast.warning(labels[kind] || `Usage threshold reached: ${kind}`);
         }
