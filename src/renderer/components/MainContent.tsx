@@ -208,22 +208,21 @@ export function MainContent({
               </button>
             ))}
           </div>
-          {activeTask.useWorktree && (
-            <Tooltip content="Worktree">
+          {activeTask.useWorktree ? (
+            <Tooltip content={branchTooltip}>
               <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
                 <FolderGit2 size={11} strokeWidth={2} className="flex-shrink-0" />
-                <span className="text-[11px] font-mono truncate">
-                  {activeTask.path.split('/').pop()}
-                </span>
+                {branchLabel}
+              </div>
+            </Tooltip>
+          ) : (
+            <Tooltip content={branchTooltip}>
+              <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
+                <GitBranch size={11} strokeWidth={2} className="flex-shrink-0" />
+                {branchLabel}
               </div>
             </Tooltip>
           )}
-          <Tooltip content={branchTooltip}>
-            <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
-              <GitBranch size={11} strokeWidth={2} className="flex-shrink-0" />
-              {branchLabel}
-            </div>
-          </Tooltip>
         </>
       ) : (
         <>
@@ -266,22 +265,21 @@ export function MainContent({
             </div>
           ) : null}
           <div className="ml-auto flex items-center gap-1.5">
-            {activeTask.useWorktree && (
-              <Tooltip content="Worktree">
+            {activeTask.useWorktree ? (
+              <Tooltip content={branchTooltip}>
                 <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
                   <FolderGit2 size={11} strokeWidth={2} className="flex-shrink-0" />
-                  <span className="text-[11px] font-mono truncate">
-                    {activeTask.path.split('/').pop()}
-                  </span>
+                  {branchLabel}
+                </div>
+              </Tooltip>
+            ) : (
+              <Tooltip content={branchTooltip}>
+                <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
+                  <GitBranch size={11} strokeWidth={2} className="flex-shrink-0" />
+                  {branchLabel}
                 </div>
               </Tooltip>
             )}
-            <Tooltip content={branchTooltip}>
-              <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
-                <GitBranch size={11} strokeWidth={2} className="flex-shrink-0" />
-                {branchLabel}
-              </div>
-            </Tooltip>
             {taskActivity[activeTask.id] && (
               <Tooltip content="Remote control">
                 <button
