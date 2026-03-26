@@ -123,6 +123,48 @@ export interface TerminalSnapshot {
   data: string;
 }
 
+// ── Context Usage Types ─────────────────────────────────────
+
+export interface ContextUsage {
+  used: number;
+  total: number;
+  percentage: number;
+  updatedAt: string;
+}
+
+export interface SessionCost {
+  totalCostUsd: number;
+  totalDurationMs: number;
+  totalApiDurationMs: number;
+  totalLinesAdded: number;
+  totalLinesRemoved: number;
+}
+
+export interface RateLimitInfo {
+  usedPercentage: number;
+  resetsAt: number; // epoch seconds
+}
+
+export interface RateLimits {
+  fiveHour?: RateLimitInfo;
+  sevenDay?: RateLimitInfo;
+}
+
+export interface StatusLineData {
+  contextUsage: ContextUsage;
+  cost?: SessionCost;
+  rateLimits?: RateLimits;
+  model?: string;
+  updatedAt: string;
+}
+
+export interface UsageThresholds {
+  contextPercentage: number | null; // e.g. 80 = warn at 80%
+  fiveHourPercentage: number | null;
+  sevenDayPercentage: number | null;
+  costUsd: number | null;
+}
+
 // ── Branch Types ─────────────────────────────────────────────
 
 export interface BranchInfo {

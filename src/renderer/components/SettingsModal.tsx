@@ -28,12 +28,14 @@ import type {
   PixelAgentsStatus,
   PixelAgentsOffice,
   PixelAgentsOfficeStatus,
+  StatusLineData,
+  UsageThresholds,
 } from '../../shared/types';
 
 const DASH_DEFAULT_ATTRIBUTION =
   '\n\nCo-Authored-By: Claude <noreply@anthropic.com> via Dash <dash@syv.ai>';
 
-type SettingsTab = 'general' | 'appearance' | 'keybindings' | 'pixel-agents';
+type SettingsTab = 'general' | 'appearance' | 'keybindings' | 'usage' | 'pixel-agents';
 
 interface SettingsModalProps {
   initialTab?: string;
@@ -61,6 +63,10 @@ interface SettingsModalProps {
   pixelAgentsConfig: PixelAgentsConfig | null;
   onPixelAgentsConfigChange: (config: PixelAgentsConfig) => void;
   pixelAgentsStatus: PixelAgentsStatus;
+  statusLineData?: Record<string, StatusLineData>;
+  taskNames?: Record<string, string>;
+  usageThresholds?: UsageThresholds;
+  onUsageThresholdsChange?: (thresholds: UsageThresholds) => void;
   onClose: () => void;
 }
 
@@ -511,6 +517,249 @@ function OfficeForm({
   );
 }
 
+function formatTokens(n: number): string {
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}m`;
+  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`;
+  return String(n);
+}
+
+function formatDuration(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  if (m < 60) return `${m}m ${rem}s`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60}m`;
+}
+
+function formatResetTime(epochSeconds: number): string {
+  if (!epochSeconds) return '';
+  const d = new Date(epochSeconds * 1000);
+  const now = new Date();
+  const diffMs = d.getTime() - now.getTime();
+  if (diffMs <= 0) return 'now';
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 60) return `in ${diffMin}m`;
+  const diffH = Math.floor(diffMin / 60);
+  return `in ${diffH}h ${diffMin % 60}m`;
+}
+
+function UsageBar({
+  label,
+  percentage,
+  detail,
+}: {
+  label: string;
+  percentage: number;
+  detail?: string;
+}) {
+  const color =
+    percentage >= 80 ? 'bg-red-400' : percentage >= 60 ? 'bg-amber-400' : 'bg-emerald-400';
+  const textColor =
+    percentage >= 80 ? 'text-red-400' : percentage >= 60 ? 'text-amber-400' : 'text-foreground/60';
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[12px] text-foreground/80">{label}</span>
+        <span className={`text-[11px] tabular-nums font-medium ${textColor}`}>
+          {Math.round(percentage)}%
+          {detail && <span className="text-foreground/40 font-normal ml-1.5">{detail}</span>}
+        </span>
+      </div>
+      <div className="h-[6px] rounded-full bg-border/40 overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${color}`}
+          style={{ width: `${Math.min(percentage, 100)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ThresholdInput({
+  label,
+  value,
+  onChange,
+  suffix,
+  placeholder,
+}: {
+  label: string;
+  value: number | null;
+  onChange: (v: number | null) => void;
+  suffix?: string;
+  placeholder?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between py-2">
+      <span className="text-[12px] text-foreground/80">{label}</span>
+      <div className="flex items-center gap-1.5">
+        <input
+          type="number"
+          min={0}
+          step={suffix === '$' ? 0.5 : 5}
+          value={value ?? ''}
+          onChange={(e) => {
+            const raw = e.target.value;
+            onChange(raw === '' ? null : Number(raw));
+          }}
+          placeholder={placeholder ?? 'Off'}
+          className="w-[72px] px-2 py-1 rounded-md text-[12px] text-right tabular-nums bg-surface-2 border border-border/40 text-foreground placeholder:text-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary/40"
+          style={{ background: 'hsl(var(--surface-2))' }}
+        />
+        {suffix && <span className="text-[11px] text-foreground/40">{suffix}</span>}
+      </div>
+    </div>
+  );
+}
+
+function UsageSection({
+  statusLineData,
+  taskNames,
+  thresholds,
+  onThresholdsChange,
+}: {
+  statusLineData: Record<string, StatusLineData>;
+  taskNames: Record<string, string>;
+  thresholds: UsageThresholds;
+  onThresholdsChange: (t: UsageThresholds) => void;
+}) {
+  const entries = Object.entries(statusLineData);
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      {/* Active Sessions */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground/60">
+            Active Sessions
+          </span>
+          <div className="flex-1 h-px bg-border/30" />
+        </div>
+
+        {entries.length === 0 ? (
+          <p className="text-[12px] text-foreground/40 py-4 text-center">
+            No active sessions with usage data
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {entries.map(([ptyId, sl]) => (
+              <div
+                key={ptyId}
+                className="rounded-xl border border-border/40 p-4 space-y-3"
+                style={{ background: 'hsl(var(--surface-2))' }}
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12px] font-medium text-foreground/80 truncate">
+                    {taskNames[ptyId] || 'Unknown task'}
+                  </span>
+                  <span className="text-[10px] text-foreground/40 flex-shrink-0">
+                    {sl.model ?? 'Claude'}
+                  </span>
+                </div>
+
+                {/* Context window */}
+                <UsageBar
+                  label="Context window"
+                  percentage={sl.contextUsage.percentage}
+                  detail={`${formatTokens(sl.contextUsage.used)} / ${formatTokens(sl.contextUsage.total)}`}
+                />
+
+                {/* Rate limits */}
+                {sl.rateLimits?.fiveHour && (
+                  <UsageBar
+                    label="5-hour rate limit"
+                    percentage={sl.rateLimits.fiveHour.usedPercentage}
+                    detail={
+                      sl.rateLimits.fiveHour.resetsAt
+                        ? `resets ${formatResetTime(sl.rateLimits.fiveHour.resetsAt)}`
+                        : undefined
+                    }
+                  />
+                )}
+                {sl.rateLimits?.sevenDay && (
+                  <UsageBar
+                    label="7-day rate limit"
+                    percentage={sl.rateLimits.sevenDay.usedPercentage}
+                    detail={
+                      sl.rateLimits.sevenDay.resetsAt
+                        ? `resets ${formatResetTime(sl.rateLimits.sevenDay.resetsAt)}`
+                        : undefined
+                    }
+                  />
+                )}
+
+                {/* Stats row */}
+                {sl.cost && (
+                  <div className="flex items-center gap-4 pt-1 text-[10px] text-foreground/40">
+                    <span>API: {formatDuration(sl.cost.totalApiDurationMs)}</span>
+                    <span>Wall: {formatDuration(sl.cost.totalDurationMs)}</span>
+                    {(sl.cost.totalLinesAdded > 0 || sl.cost.totalLinesRemoved > 0) && (
+                      <span>
+                        <span className="text-emerald-400">+{sl.cost.totalLinesAdded}</span>
+                        {' / '}
+                        <span className="text-red-400">-{sl.cost.totalLinesRemoved}</span>
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Threshold Alerts */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground/60">
+            Threshold Alerts
+          </span>
+          <div className="flex-1 h-px bg-border/30" />
+        </div>
+        <p className="text-[11px] text-foreground/40 mb-3">
+          Show a notification when usage exceeds these thresholds. Leave empty to disable.
+        </p>
+        <div
+          className="rounded-xl border border-border/40 px-4 divide-y divide-border/20"
+          style={{ background: 'hsl(var(--surface-2))' }}
+        >
+          <ThresholdInput
+            label="Context window"
+            value={thresholds.contextPercentage}
+            onChange={(v) => onThresholdsChange({ ...thresholds, contextPercentage: v })}
+            suffix="%"
+            placeholder="80"
+          />
+          <ThresholdInput
+            label="5-hour rate limit"
+            value={thresholds.fiveHourPercentage}
+            onChange={(v) => onThresholdsChange({ ...thresholds, fiveHourPercentage: v })}
+            suffix="%"
+            placeholder="Off"
+          />
+          <ThresholdInput
+            label="7-day rate limit"
+            value={thresholds.sevenDayPercentage}
+            onChange={(v) => onThresholdsChange({ ...thresholds, sevenDayPercentage: v })}
+            suffix="%"
+            placeholder="Off"
+          />
+          <ThresholdInput
+            label="Session cost"
+            value={thresholds.costUsd}
+            onChange={(v) => onThresholdsChange({ ...thresholds, costUsd: v })}
+            suffix="$"
+            placeholder="Off"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SettingsModal({
   initialTab,
   theme,
@@ -537,9 +786,19 @@ export function SettingsModal({
   pixelAgentsConfig,
   onPixelAgentsConfigChange,
   pixelAgentsStatus,
+  statusLineData = {},
+  taskNames = {},
+  usageThresholds,
+  onUsageThresholdsChange,
   onClose,
 }: SettingsModalProps) {
-  const validTabs: SettingsTab[] = ['general', 'appearance', 'keybindings', 'pixel-agents'];
+  const validTabs: SettingsTab[] = [
+    'general',
+    'appearance',
+    'keybindings',
+    'usage',
+    'pixel-agents',
+  ];
   const [tab, setTab] = useState<SettingsTab>(
     initialTab && validTabs.includes(initialTab as SettingsTab)
       ? (initialTab as SettingsTab)
@@ -653,6 +912,7 @@ export function SettingsModal({
               { id: 'general', label: 'General' },
               { id: 'appearance', label: 'Appearance' },
               { id: 'keybindings', label: 'Keybindings' },
+              { id: 'usage', label: 'Usage' },
               { id: 'pixel-agents', label: 'Pixel Agents' },
             ] as const
           ).map((t) => (
@@ -1180,6 +1440,22 @@ export function SettingsModal({
                 status={pixelAgentsStatus}
               />
             </div>
+          )}
+
+          {tab === 'usage' && (
+            <UsageSection
+              statusLineData={statusLineData}
+              taskNames={taskNames}
+              thresholds={
+                usageThresholds ?? {
+                  contextPercentage: 80,
+                  fiveHourPercentage: null,
+                  sevenDayPercentage: null,
+                  costUsd: null,
+                }
+              }
+              onThresholdsChange={onUsageThresholdsChange ?? (() => {})}
+            />
           )}
 
           {tab === 'keybindings' && (

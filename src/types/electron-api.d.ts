@@ -13,6 +13,8 @@ import type {
   AzureDevOpsConfig,
   CommitGraphData,
   CommitDetail,
+  ContextUsage,
+  StatusLineData,
   RemoteControlState,
   TaskContextMeta,
   PullRequestInfo,
@@ -133,6 +135,17 @@ export interface ElectronAPI {
   onRemoteControlStateChanged: (
     callback: (data: { ptyId: string; state: RemoteControlState | null }) => void,
   ) => () => void;
+
+  // Context usage
+  ptyGetAllContextUsage: () => Promise<IpcResponse<Record<string, ContextUsage>>>;
+  onPtyContextUsage: (callback: (data: Record<string, ContextUsage>) => void) => () => void;
+  onPtyCompaction: (
+    callback: (data: { ptyId: string; from: number; to: number }) => void,
+  ) => () => void;
+
+  // Full status line data (context + cost + rate limits)
+  ptyGetAllStatusLine: () => Promise<IpcResponse<Record<string, StatusLineData>>>;
+  onPtyStatusLine: (callback: (data: Record<string, StatusLineData>) => void) => () => void;
 
   // Snapshots
   ptyGetSnapshot: (id: string) => Promise<IpcResponse<TerminalSnapshot | null>>;

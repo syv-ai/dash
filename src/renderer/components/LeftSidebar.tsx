@@ -14,7 +14,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
 } from 'lucide-react';
-import type { Project, Task, RemoteControlState } from '../../shared/types';
+import type { Project, Task, RemoteControlState, ContextUsage } from '../../shared/types';
 import { IconButton } from './ui/IconButton';
 import { Tooltip } from './ui/Tooltip';
 
@@ -40,6 +40,7 @@ interface LeftSidebarProps {
   taskActivity: Record<string, 'busy' | 'idle' | 'waiting'>;
   unseenTaskIds?: Set<string>;
   remoteControlStates?: Record<string, RemoteControlState>;
+  contextUsage?: Record<string, ContextUsage>;
   onReorderProjects?: (reordered: Project[]) => void;
   pixelAgentsConnectedCount?: number;
 }
@@ -66,6 +67,7 @@ export function LeftSidebar({
   taskActivity,
   unseenTaskIds,
   remoteControlStates = {},
+  contextUsage = {},
   onReorderProjects,
   pixelAgentsConnectedCount = 0,
 }: LeftSidebarProps) {
@@ -391,78 +393,115 @@ export function LeftSidebar({
                       {projectTasks.map((task) => {
                         const activity = taskActivity[task.id];
                         const isActiveTask = task.id === activeTaskId;
+                        const ctx = contextUsage[task.id];
 
                         return (
                           <div
                             key={task.id}
-                            className={`group/task relative flex items-center gap-2 pl-3.5 pr-2 py-[6px] rounded-md text-[13px] cursor-pointer transition-all duration-150 ${
+                            className={`group/task relative flex flex-col pl-3.5 pr-2 py-[6px] rounded-md text-[13px] cursor-pointer transition-all duration-150 ${
                               isActiveTask
                                 ? 'bg-primary/10 text-foreground font-medium'
                                 : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
                             }`}
                             onClick={() => onSelectTask(project.id, task.id)}
                           >
-                            {/* Status indicator */}
-                            {activity === 'waiting' ? (
-                              <Tooltip content="Waiting for user">
-                                <div className="w-[6px] h-[6px] rounded-full bg-orange-500 flex-shrink-0" />
-                              </Tooltip>
-                            ) : activity === 'busy' ? (
-                              <Tooltip content="Claude is working">
-                                <div className="w-[6px] h-[6px] rounded-full bg-amber-400 status-pulse flex-shrink-0" />
-                              </Tooltip>
-                            ) : activity === 'idle' && unseenTaskIds?.has(task.id) ? (
-                              <Tooltip content="Done (unseen)">
-                                <div className="w-[6px] h-[6px] rounded-full bg-blue-400 flex-shrink-0" />
-                              </Tooltip>
-                            ) : activity === 'idle' ? (
-                              <Tooltip content="Idle">
-                                <div className="w-[6px] h-[6px] rounded-full bg-emerald-400 flex-shrink-0" />
-                              </Tooltip>
-                            ) : null}
-                            {remoteControlStates[task.id] && (
-                              <Globe
-                                size={10}
-                                strokeWidth={2}
-                                className="text-primary flex-shrink-0 -ml-0.5"
-                              />
-                            )}
-
-                            <span className="truncate flex-1">{task.name}</span>
-
-                            {/* Right slot: branch icon by default, actions on hover */}
-                            <div className="flex items-center gap-0.5 flex-shrink-0">
-                              {isActiveTask && (
-                                <GitBranch
-                                  size={11}
-                                  className="text-foreground/50 group-hover/task:hidden"
+                            <div className="flex items-center gap-2">
+                              {/* Status indicator */}
+                              {activity === 'waiting' ? (
+                                <Tooltip content="Waiting for user">
+                                  <div className="w-[6px] h-[6px] rounded-full bg-orange-500 flex-shrink-0" />
+                                </Tooltip>
+                              ) : activity === 'busy' ? (
+                                <Tooltip content="Claude is working">
+                                  <div className="w-[6px] h-[6px] rounded-full bg-amber-400 status-pulse flex-shrink-0" />
+                                </Tooltip>
+                              ) : activity === 'idle' && unseenTaskIds?.has(task.id) ? (
+                                <Tooltip content="Done (unseen)">
+                                  <div className="w-[6px] h-[6px] rounded-full bg-blue-400 flex-shrink-0" />
+                                </Tooltip>
+                              ) : activity === 'idle' ? (
+                                <Tooltip content="Idle">
+                                  <div className="w-[6px] h-[6px] rounded-full bg-emerald-400 flex-shrink-0" />
+                                </Tooltip>
+                              ) : null}
+                              {remoteControlStates[task.id] && (
+                                <Globe
+                                  size={10}
                                   strokeWidth={2}
+                                  className="text-primary flex-shrink-0 -ml-0.5"
                                 />
                               )}
-                              <div className="hidden group-hover/task:flex gap-0.5">
-                                <IconButton
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onArchiveTask(task.id);
-                                  }}
-                                  title="Archive task"
-                                  size="sm"
+
+                              <span className="truncate flex-1">{task.name}</span>
+
+                              {/* Context percentage (visible when data available, hidden on hover to show actions) */}
+                              {ctx && ctx.percentage > 0 && (
+                                <span
+                                  className={`text-[9px] tabular-nums flex-shrink-0 group-hover/task:hidden ${
+                                    ctx.percentage >= 80
+                                      ? 'text-red-400 font-medium'
+                                      : ctx.percentage >= 60
+                                        ? 'text-amber-400'
+                                        : 'text-muted-foreground/50'
+                                  }`}
                                 >
-                                  <Archive size={12} strokeWidth={1.8} />
-                                </IconButton>
-                                <IconButton
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onDeleteTask(task.id);
-                                  }}
-                                  title="Delete task"
-                                  variant="destructive"
-                                  size="sm"
-                                >
-                                  <Trash2 size={12} strokeWidth={1.8} />
-                                </IconButton>
+                                  {Math.round(ctx.percentage)}%
+                                </span>
+                              )}
+
+                              {/* Right slot: branch icon by default, actions on hover */}
+                              <div className="flex items-center gap-0.5 flex-shrink-0">
+                                {isActiveTask && !ctx && (
+                                  <GitBranch
+                                    size={11}
+                                    className="text-foreground/50 group-hover/task:hidden"
+                                    strokeWidth={2}
+                                  />
+                                )}
+                                <div className="hidden group-hover/task:flex gap-0.5">
+                                  <IconButton
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onArchiveTask(task.id);
+                                    }}
+                                    title="Archive task"
+                                    size="sm"
+                                  >
+                                    <Archive size={12} strokeWidth={1.8} />
+                                  </IconButton>
+                                  <IconButton
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onDeleteTask(task.id);
+                                    }}
+                                    title="Delete task"
+                                    variant="destructive"
+                                    size="sm"
+                                  >
+                                    <Trash2 size={12} strokeWidth={1.8} />
+                                  </IconButton>
+                                </div>
                               </div>
                             </div>
+
+                            {/* Context usage bar */}
+                            {ctx && ctx.percentage > 0 && (
+                              <div
+                                className="ml-[14px] mt-1 h-[2px] rounded-full bg-border/40 overflow-hidden"
+                                title={`Context: ${ctx.used.toLocaleString()} / ${ctx.total.toLocaleString()} tokens (${Math.round(ctx.percentage)}%)`}
+                              >
+                                <div
+                                  className={`h-full rounded-full transition-all duration-500 ${
+                                    ctx.percentage >= 80
+                                      ? 'bg-red-400'
+                                      : ctx.percentage >= 60
+                                        ? 'bg-amber-400'
+                                        : 'bg-emerald-400'
+                                  }`}
+                                  style={{ width: `${Math.min(ctx.percentage, 100)}%` }}
+                                />
+                              </div>
+                            )}
                           </div>
                         );
                       })}

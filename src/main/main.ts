@@ -106,6 +106,15 @@ app.whenReady().then(async () => {
   const { remoteControlService } = await import('./services/remoteControlService');
   remoteControlService.setSender(mainWindow.webContents);
 
+  // Start context usage service — broadcasts context data to renderer
+  const { contextUsageService } = await import('./services/ContextUsageService');
+  contextUsageService.setSender(mainWindow.webContents);
+  contextUsageService.onCompaction((ptyId, from, to) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('pty:compaction', { ptyId, from, to });
+    }
+  });
+
   // Initialize auto-updater (production only)
   if (!process.argv.includes('--dev')) {
     const { AutoUpdateService } = await import('./services/AutoUpdateService');
@@ -180,6 +189,8 @@ app.on('activate', async () => {
     remoteControlService.setSender(mainWindow.webContents);
     const { PixelAgentsService } = await import('./services/PixelAgentsService');
     PixelAgentsService.setSender(mainWindow.webContents);
+    const { contextUsageService } = await import('./services/ContextUsageService');
+    contextUsageService.setSender(mainWindow.webContents);
 
     // Update auto-updater window reference
     if (!process.argv.includes('--dev')) {

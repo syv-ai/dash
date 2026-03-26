@@ -6,6 +6,7 @@ import { promisify } from 'util';
 import { type WebContents, app } from 'electron';
 import { activityMonitor } from './ActivityMonitor';
 import { hookServer } from './HookServer';
+import { contextUsageService } from './ContextUsageService';
 import type { TaskContextMeta } from '@shared/types';
 
 const execFileAsync = promisify(execFile);
@@ -291,6 +292,12 @@ function writeHookSettings(cwd: string, ptyId: string): void {
       },
     };
 
+    // statusLine: inline curl that reads JSON from stdin and POSTs to hook server
+    merged.statusLine = {
+      type: 'command',
+      command: `curl -s --connect-timeout 2 -X POST -H "Content-Type: application/json" -d @- "http://127.0.0.1:${port}/hook/context?ptyId=${ptyId}" >/dev/null 2>&1`,
+    };
+
     // Commit attribution: undefined = Dash default, '' = suppress, other = custom.
     const effectiveAttribution =
       commitAttributionSetting === undefined ? DASH_DEFAULT_ATTRIBUTION : commitAttributionSetting;
@@ -330,7 +337,8 @@ export function cleanupHookSettings(): void {
         }
       }
 
-      // Remove Dash attribution
+      // Remove Dash statusLine and attribution
+      delete raw.statusLine;
       delete raw.attribution;
 
       // If nothing meaningful remains, delete the file
@@ -436,6 +444,7 @@ export async function startDirectPty(options: {
     if (ptys.get(options.id) !== record) return;
     activityMonitor.unregister(options.id);
     remoteControlService.unregister(options.id);
+    contextUsageService.unregister(options.id);
     if (record.owner && !record.owner.isDestroyed()) {
       record.owner.send(`pty:exit:${options.id}`, { exitCode, signal });
     }
@@ -679,6 +688,7 @@ export function killPty(id: string): void {
     ptys.delete(id);
     activityMonitor.unregister(id);
     remoteControlService.unregister(id);
+    contextUsageService.unregister(id);
     try {
       record.proc.kill();
     } catch {

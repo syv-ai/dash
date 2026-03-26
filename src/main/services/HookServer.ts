@@ -2,6 +2,7 @@ import * as http from 'http';
 import { BrowserWindow, Notification } from 'electron';
 import { eq } from 'drizzle-orm';
 import { activityMonitor } from './ActivityMonitor';
+import { contextUsageService } from './ContextUsageService';
 import { getDb } from '../db/client';
 import { tasks } from '../db/schema';
 
@@ -125,6 +126,36 @@ class HookServerImpl {
               }
             } catch (err) {
               console.error('[HookServer] Failed to parse notification body:', err);
+            }
+            res.writeHead(200);
+            res.end('ok');
+          });
+          return;
+        }
+
+        // POST /hook/context — receives statusLine JSON from Claude Code
+        if (req.method === 'POST' && url.pathname === '/hook/context' && ptyId) {
+          const MAX_BODY = 65_536; // 64KB — statusLine JSON is typically <1KB
+          let body = '';
+          let overflow = false;
+          req.on('data', (chunk: Buffer) => {
+            body += chunk.toString();
+            if (body.length > MAX_BODY) {
+              overflow = true;
+              req.destroy();
+            }
+          });
+          req.on('end', () => {
+            if (overflow) {
+              res.writeHead(413);
+              res.end('payload too large');
+              return;
+            }
+            try {
+              const data = JSON.parse(body);
+              contextUsageService.updateFromStatusLine(ptyId, data);
+            } catch {
+              // Malformed JSON — ignore
             }
             res.writeHead(200);
             res.end('ok');

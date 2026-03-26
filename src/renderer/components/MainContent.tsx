@@ -14,11 +14,18 @@ import type {
   Project,
   Task,
   RemoteControlState,
+  ContextUsage,
   PullRequestInfo,
   GitStatus,
 } from '../../shared/types';
 import { linkedItemUrl, isAdoRemote, branchUrl } from '../../shared/urls';
 import { Tooltip } from './ui/Tooltip';
+
+function formatTokens(n: number): string {
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}m`;
+  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`;
+  return String(n);
+}
 
 interface MainContentProps {
   activeTask: Task | null;
@@ -29,6 +36,7 @@ interface MainContentProps {
   taskActivity?: Record<string, 'busy' | 'idle' | 'waiting'>;
   unseenTaskIds?: Set<string>;
   remoteControlStates?: Record<string, RemoteControlState>;
+  contextUsage?: Record<string, ContextUsage>;
   onSelectTask?: (id: string) => void;
   onEnableRemoteControl?: (taskId: string) => void;
   onNewTask?: () => void;
@@ -51,6 +59,7 @@ export function MainContent({
   taskActivity = {},
   unseenTaskIds,
   remoteControlStates = {},
+  contextUsage = {},
   onSelectTask,
   onEnableRemoteControl,
   onNewTask,
@@ -163,6 +172,9 @@ export function MainContent({
     <span className="text-[11px] font-mono truncate">{currentBranch}</span>
   );
 
+  const activeCtxRaw = activeTask ? contextUsage[activeTask.id] : undefined;
+  const activeCtx = activeCtxRaw && activeCtxRaw.percentage > 0 ? activeCtxRaw : undefined;
+
   const taskHeader = (
     <div
       className="flex items-center gap-3 px-4 h-10 flex-shrink-0 border-b border-border/60"
@@ -265,6 +277,37 @@ export function MainContent({
             </div>
           ) : null}
           <div className="ml-auto flex items-center gap-1.5">
+            {/* Context usage indicator */}
+            {activeCtx && (
+              <div
+                className="flex items-center gap-1.5"
+                title={`Context: ${activeCtx.used.toLocaleString()} / ${activeCtx.total.toLocaleString()} tokens (${Math.round(activeCtx.percentage)}%)`}
+              >
+                <div className="w-[48px] h-[4px] rounded-full bg-border/40 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      activeCtx.percentage >= 80
+                        ? 'bg-red-400'
+                        : activeCtx.percentage >= 60
+                          ? 'bg-amber-400'
+                          : 'bg-emerald-400'
+                    }`}
+                    style={{ width: `${Math.min(activeCtx.percentage, 100)}%` }}
+                  />
+                </div>
+                <span
+                  className={`text-[10px] tabular-nums ${
+                    activeCtx.percentage >= 80
+                      ? 'text-red-400 font-medium'
+                      : activeCtx.percentage >= 60
+                        ? 'text-amber-400'
+                        : 'text-muted-foreground/60'
+                  }`}
+                >
+                  {formatTokens(activeCtx.used)}/{formatTokens(activeCtx.total)}
+                </span>
+              </div>
+            )}
             {activeTask.useWorktree ? (
               <Tooltip content={branchTooltip}>
                 <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
