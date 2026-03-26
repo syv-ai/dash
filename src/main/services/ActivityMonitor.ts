@@ -13,6 +13,9 @@ interface PtyActivity {
   lastDataTime: number;
   /** Timestamp when child processes were last observed (for direct-spawn PTYs). */
   lastChildSeenTime: number;
+  /** Timestamp when children were first continuously observed while idle.
+   *  Reset to 0 when no children are detected. Used for delayed idle→busy self-heal. */
+  idleChildrenSince: number;
 }
 
 const POLL_INTERVAL = 2000;
@@ -30,6 +33,12 @@ const DIRECT_SPAWN_IDLE_GRACE_MS = 6000;
  *  normal "thinking" phases (API calls with no child processes). */
 const DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS = 45_000;
 
+/** How long (ms) children must be continuously present while idle before
+ *  polling self-heals to busy. Filters out brief startup child processes
+ *  (which last < 1s) while recovering from missed busy hooks or mid-response
+ *  stop hooks that fired between chained tool calls. */
+const IDLE_TO_BUSY_GRACE_MS = 4000;
+
 class ActivityMonitorImpl {
   private activities = new Map<string, PtyActivity>();
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
@@ -43,6 +52,7 @@ class ActivityMonitorImpl {
       isDirectSpawn,
       lastDataTime: now,
       lastChildSeenTime: now,
+      idleChildrenSince: 0,
     });
     this.emitAll();
   }
@@ -79,6 +89,7 @@ class ActivityMonitorImpl {
     if (!activity || activity.state === 'busy') return;
     activity.state = 'busy';
     activity.lastChildSeenTime = Date.now();
+    activity.idleChildrenSince = 0;
     this.emitAll();
   }
 
@@ -159,12 +170,28 @@ class ActivityMonitorImpl {
 
         // Self-heal: if children are detected while waiting for permission,
         // the user approved and Claude started a tool. Transition to busy.
-        // Note: we intentionally don't self-heal idle → busy here because
-        // Claude CLI briefly spawns children during startup, which would
-        // cause a false busy flash on every reopen.
         if (activity.state === 'waiting' && hasChildren) {
           activity.state = 'busy';
+          activity.idleChildrenSince = 0;
           changed = true;
+        }
+
+        // Delayed self-heal: idle → busy when children are continuously
+        // present for IDLE_TO_BUSY_GRACE_MS. This recovers from missed
+        // busy hooks and mid-response stop hooks (which fire between
+        // chained tool calls). The grace period filters out brief startup
+        // child processes that last < 1s.
+        if (activity.state === 'idle' && hasChildren) {
+          if (activity.idleChildrenSince === 0) {
+            activity.idleChildrenSince = Date.now();
+          } else if (Date.now() - activity.idleChildrenSince > IDLE_TO_BUSY_GRACE_MS) {
+            activity.state = 'busy';
+            activity.idleChildrenSince = 0;
+            changed = true;
+          }
+        }
+        if (activity.state === 'idle' && !hasChildren) {
+          activity.idleChildrenSince = 0;
         }
 
         // Fallback busy/waiting → idle when hooks miss (e.g. interrupted
