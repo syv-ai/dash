@@ -16,6 +16,10 @@ interface PtyActivity {
   /** Timestamp when children were first continuously observed while idle.
    *  Reset to 0 when no children are detected. Used for delayed idle→busy self-heal. */
   idleChildrenSince: number;
+  /** Timestamp of last statusLine update from Claude Code.
+   *  StatusLine only fires while Claude is actively working, so a recent
+   *  update is strong evidence of busy state even without child processes. */
+  lastStatusLineTime: number;
 }
 
 const POLL_INTERVAL = 2000;
@@ -32,6 +36,11 @@ const DIRECT_SPAWN_IDLE_GRACE_MS = 6000;
  *  check from ever triggering. Long enough to avoid false positives during
  *  normal "thinking" phases (API calls with no child processes). */
 const DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS = 45_000;
+
+/** How long (ms) after the last statusLine update we still consider Claude
+ *  to be actively working. StatusLine fires continuously while Claude is
+ *  responding, so a gap longer than this means Claude has truly stopped. */
+const STATUS_LINE_ACTIVE_MS = 8000;
 
 /** How long (ms) children must be continuously present while idle before
  *  polling self-heals to busy. Filters out brief startup child processes
@@ -53,6 +62,7 @@ class ActivityMonitorImpl {
       lastDataTime: now,
       lastChildSeenTime: now,
       idleChildrenSince: 0,
+      lastStatusLineTime: 0,
     });
     this.emitAll();
   }
@@ -66,6 +76,26 @@ class ActivityMonitorImpl {
     const activity = this.activities.get(ptyId);
     if (activity) {
       activity.lastDataTime = Date.now();
+    }
+  }
+
+  /**
+   * Called when a statusLine update is received from Claude Code.
+   * StatusLine only fires while Claude is actively working, so treat
+   * it as evidence of busy state. This covers gaps between tool calls
+   * where child processes have exited but Claude is still responding.
+   */
+  noteStatusLine(ptyId: string): void {
+    const activity = this.activities.get(ptyId);
+    if (!activity) return;
+    const now = Date.now();
+    activity.lastDataTime = now;
+    activity.lastStatusLineTime = now;
+    if (activity.state === 'idle') {
+      activity.state = 'busy';
+      activity.lastChildSeenTime = Date.now();
+      activity.idleChildrenSince = 0;
+      this.emitAll();
     }
   }
 
@@ -195,12 +225,15 @@ class ActivityMonitorImpl {
         }
 
         // Fallback busy/waiting → idle when hooks miss (e.g. interrupted
-        // mid-response). Two checks:
-        // 1. Data silence: no children AND no PTY data for 6s
-        // 2. Hard timeout: no children for 45s (handles statusline
-        //    escape sequences that keep lastDataTime refreshed)
+        // mid-response). Skip if a recent statusLine update confirms Claude
+        // is still active (covers gaps between tool calls where children
+        // have exited but Claude is still responding).
         if (activity.state === 'busy' || activity.state === 'waiting') {
-          if (!hasChildren) {
+          const statusLineActive =
+            activity.lastStatusLineTime > 0 &&
+            Date.now() - activity.lastStatusLineTime < STATUS_LINE_ACTIVE_MS;
+
+          if (!hasChildren && !statusLineActive) {
             const dataSilent = Date.now() - activity.lastDataTime > DIRECT_SPAWN_IDLE_GRACE_MS;
             const childlessTimeout =
               Date.now() - activity.lastChildSeenTime > DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS;

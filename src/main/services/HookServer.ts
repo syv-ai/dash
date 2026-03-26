@@ -154,6 +154,7 @@ class HookServerImpl {
             try {
               const data = JSON.parse(body);
               contextUsageService.updateFromStatusLine(ptyId, data);
+              activityMonitor.noteStatusLine(ptyId);
             } catch {
               // Malformed JSON — ignore
             }
