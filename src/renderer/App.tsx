@@ -431,6 +431,11 @@ export function App() {
   // Check thresholds and show desktop notifications
   const firedThresholdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
+    const taskById = new Map<string, string>();
+    for (const tasks of Object.values(tasksByProject)) {
+      for (const t of tasks) taskById.set(t.id, t.name);
+    }
+
     for (const [ptyId, sl] of Object.entries(statusLineData)) {
       const checks: [string, number, number | null][] = [
         ['context', sl.contextUsage.percentage, usageThresholds.contextPercentage],
@@ -445,21 +450,24 @@ export function App() {
           usageThresholds.sevenDayPercentage,
         ],
       ];
+      const taskName = taskById.get(ptyId);
       for (const [kind, value, threshold] of checks) {
         if (threshold === null || threshold <= 0) continue;
         const key = `${ptyId}:${kind}`;
         if (value >= threshold && !firedThresholdsRef.current.has(key)) {
           firedThresholdsRef.current.add(key);
+          const pct = Math.round(value);
           const labels: Record<string, string> = {
-            context: `Context window at ${Math.round(value)}%`,
-            fiveHour: `5-hour rate limit at ${Math.round(value)}%`,
-            sevenDay: `7-day rate limit at ${Math.round(value)}%`,
+            context: `Context window at ${pct}%`,
+            fiveHour: `5-hour rate limit at ${pct}%`,
+            sevenDay: `7-day rate limit at ${pct}%`,
           };
-          toast.warning(labels[kind] || `Usage threshold reached: ${kind}`);
+          const base = labels[kind] || `Usage threshold reached: ${kind}`;
+          toast.warning(taskName ? `${taskName}: ${base}` : base);
         }
       }
     }
-  }, [statusLineData, usageThresholds]);
+  }, [statusLineData, usageThresholds, tasksByProject]);
 
   // Extract account-wide rate limits from the most recently updated session
   const latestRateLimits = useMemo((): RateLimits | undefined => {
