@@ -19,6 +19,7 @@ import { RemoteControlModal } from './components/RemoteControlModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ProjectSettingsModal } from './components/ProjectSettingsModal';
 import { AdoSetupModal } from './components/AdoSetupModal';
+import { RateLimitsWidget } from './components/RateLimitsWidget';
 import { parseAdoRemote } from '../shared/urls';
 import { ToastContainer } from './components/Toast';
 import { toast } from 'sonner';
@@ -33,6 +34,7 @@ import type {
   ContextUsage,
   StatusLineData,
   UsageThresholds,
+  RateLimits,
   PixelAgentsConfig,
   PixelAgentsStatus,
 } from '../shared/types';
@@ -458,6 +460,19 @@ export function App() {
       }
     }
   }, [statusLineData, usageThresholds]);
+
+  // Extract account-wide rate limits from the most recently updated session
+  const latestRateLimits = useMemo((): RateLimits | undefined => {
+    let best: RateLimits | undefined;
+    let bestTime = 0;
+    for (const sl of Object.values(statusLineData)) {
+      if (sl.rateLimits && new Date(sl.updatedAt).getTime() > bestTime) {
+        best = sl.rateLimits;
+        bestTime = new Date(sl.updatedAt).getTime();
+      }
+    }
+    return best;
+  }, [statusLineData]);
 
   // Persist selection to localStorage (survives CMD+R reload)
   useEffect(() => {
@@ -1357,43 +1372,50 @@ export function App() {
                 setTimeout(() => setChangesAnimating(false), 200);
               }}
             >
-              <ShellDrawerWrapper
-                enabled={
-                  shellDrawerEnabled && shellDrawerPosition === 'right' && !changesPanelCollapsed
-                }
-                taskId={activeTask?.id ?? null}
-                cwd={activeTask?.path ?? null}
-                collapsed={shellDrawerCollapsed}
-                panelRef={shellDrawerPanelRef}
-                animating={shellDrawerAnimating}
-                onAnimate={() => setShellDrawerAnimating(true)}
-                onCollapse={() => {
-                  setShellDrawerCollapsed(true);
-                  localStorage.setItem('shellDrawerCollapsed', 'true');
-                  setTimeout(() => setShellDrawerAnimating(false), 200);
-                }}
-                onExpand={() => {
-                  setShellDrawerCollapsed(false);
-                  localStorage.setItem('shellDrawerCollapsed', 'false');
-                  setTimeout(() => setShellDrawerAnimating(false), 200);
-                }}
-              >
-                <FileChangesPanel
-                  gitStatus={gitStatus}
-                  loading={gitLoading}
-                  onStageFile={handleStageFile}
-                  onUnstageFile={handleUnstageFile}
-                  onStageAll={handleStageAll}
-                  onUnstageAll={handleUnstageAll}
-                  onDiscardFile={handleDiscardFile}
-                  onViewDiff={handleViewDiff}
-                  onCommit={handleCommit}
-                  onPush={handlePush}
-                  collapsed={changesPanelCollapsed}
-                  onToggleCollapse={toggleChangesPanel}
-                  onShowCommitGraph={() => setShowCommitGraph(true)}
-                />
-              </ShellDrawerWrapper>
+              <div className="h-full flex flex-col overflow-hidden">
+                {!changesPanelCollapsed &&
+                  latestRateLimits &&
+                  (latestRateLimits.fiveHour || latestRateLimits.sevenDay) && (
+                    <RateLimitsWidget rateLimits={latestRateLimits} />
+                  )}
+                <ShellDrawerWrapper
+                  enabled={
+                    shellDrawerEnabled && shellDrawerPosition === 'right' && !changesPanelCollapsed
+                  }
+                  taskId={activeTask?.id ?? null}
+                  cwd={activeTask?.path ?? null}
+                  collapsed={shellDrawerCollapsed}
+                  panelRef={shellDrawerPanelRef}
+                  animating={shellDrawerAnimating}
+                  onAnimate={() => setShellDrawerAnimating(true)}
+                  onCollapse={() => {
+                    setShellDrawerCollapsed(true);
+                    localStorage.setItem('shellDrawerCollapsed', 'true');
+                    setTimeout(() => setShellDrawerAnimating(false), 200);
+                  }}
+                  onExpand={() => {
+                    setShellDrawerCollapsed(false);
+                    localStorage.setItem('shellDrawerCollapsed', 'false');
+                    setTimeout(() => setShellDrawerAnimating(false), 200);
+                  }}
+                >
+                  <FileChangesPanel
+                    gitStatus={gitStatus}
+                    loading={gitLoading}
+                    onStageFile={handleStageFile}
+                    onUnstageFile={handleUnstageFile}
+                    onStageAll={handleStageAll}
+                    onUnstageAll={handleUnstageAll}
+                    onDiscardFile={handleDiscardFile}
+                    onViewDiff={handleViewDiff}
+                    onCommit={handleCommit}
+                    onPush={handlePush}
+                    collapsed={changesPanelCollapsed}
+                    onToggleCollapse={toggleChangesPanel}
+                    onShowCommitGraph={() => setShowCommitGraph(true)}
+                  />
+                </ShellDrawerWrapper>
+              </div>
             </Panel>
           </>
         )}
