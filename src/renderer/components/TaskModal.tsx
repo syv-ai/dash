@@ -29,7 +29,7 @@ interface TaskModalProps {
   isGitRepo: boolean;
   gitRemote: string | null;
   onClose: () => void;
-  onCreate: (options: CreateTaskOptions) => void;
+  onCreate: (options: CreateTaskOptions) => Promise<void>;
   onGitInit?: () => void;
 }
 
@@ -100,6 +100,7 @@ export function TaskModal({
   const [autoApprove, setAutoApprove] = useState(() => localStorage.getItem('yoloMode') === 'true');
   const [pushRemote, setPushRemote] = useState(true);
   const [gitInitLoading, setGitInitLoading] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
   // Branch selector state
   const [branches, setBranches] = useState<BranchInfo[]>([]);
@@ -205,9 +206,9 @@ export function TaskModal({
     b.name.toLowerCase().includes(branchSearch.toLowerCase()),
   );
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (name.trim()) {
+    if (name.trim() && !isCreating) {
       const baseRef = useWorktree ? selectedBranch?.ref : undefined;
 
       // Build unified linkedItems from both providers
@@ -233,15 +234,20 @@ export function TaskModal({
       }));
       const allLinkedItems: LinkedItem[] = [...ghItems, ...adoItems];
 
-      onCreate({
-        name: name.trim(),
-        useWorktree,
-        autoApprove,
-        baseRef,
-        pushRemote: useWorktree ? pushRemote : undefined,
-        linkedItems: allLinkedItems.length > 0 ? allLinkedItems : undefined,
-      });
-      onClose();
+      setIsCreating(true);
+      try {
+        await onCreate({
+          name: name.trim(),
+          useWorktree,
+          autoApprove,
+          baseRef,
+          pushRemote: useWorktree ? pushRemote : undefined,
+          linkedItems: allLinkedItems.length > 0 ? allLinkedItems : undefined,
+        });
+        onClose();
+      } finally {
+        setIsCreating(false);
+      }
     }
   }
 
@@ -256,7 +262,7 @@ export function TaskModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop animate-fade-in"
-      onClick={onClose}
+      onClick={isCreating ? undefined : onClose}
     >
       <div
         className="bg-card border border-border/60 rounded-xl shadow-2xl shadow-black/40 w-[420px] animate-slide-up overflow-visible"
@@ -270,7 +276,8 @@ export function TaskModal({
           <h2 className="text-[14px] font-semibold text-foreground">New Task</h2>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground/50 hover:text-foreground transition-all duration-150"
+            disabled={isCreating}
+            className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground/50 hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
           >
             <X size={14} strokeWidth={2} />
           </button>
@@ -535,16 +542,18 @@ export function TaskModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg text-[13px] text-muted-foreground/60 hover:text-foreground hover:bg-accent/60 transition-all duration-150"
+              disabled={isCreating}
+              className="px-4 py-2 rounded-lg text-[13px] text-muted-foreground/60 hover:text-foreground hover:bg-accent/60 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={!name.trim()}
-              className="px-5 py-2 rounded-lg text-[13px] font-medium bg-primary text-primary-foreground hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
+              disabled={!name.trim() || isCreating}
+              className="px-5 py-2 rounded-lg text-[13px] font-medium bg-primary text-primary-foreground hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 flex items-center gap-2"
             >
-              Create Task
+              {isCreating && <Loader2 size={14} className="animate-spin" />}
+              {isCreating ? 'Creating…' : 'Create Task'}
             </button>
           </div>
         </form>

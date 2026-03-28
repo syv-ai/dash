@@ -214,10 +214,14 @@ export class WorktreePoolService {
         const worktreesDir = worktreeService.getWorktreesDir(project.path);
         if (!fs.existsSync(worktreesDir)) continue;
 
+        const activeReservePaths = new Set(
+          [...this.reserves.values()].map((r) => r.path),
+        );
         const entries = fs.readdirSync(worktreesDir);
         for (const entry of entries) {
           if (entry.startsWith(`${RESERVE_PREFIX}-`)) {
             const reservePath = path.join(worktreesDir, entry);
+            if (activeReservePaths.has(reservePath)) continue;
             try {
               await execFileAsync('git', ['worktree', 'remove', '--force', reservePath], {
                 cwd: project.path,
@@ -240,11 +244,15 @@ export class WorktreePoolService {
             ['branch', '--list', `${RESERVE_PREFIX}/*`],
             { cwd: project.path },
           );
+          const activeReserveBranches = new Set(
+            [...this.reserves.values()].map((r) => r.branch),
+          );
           const branches = stdout
             .split('\n')
             .map((b) => b.trim())
             .filter(Boolean);
           for (const branch of branches) {
+            if (activeReserveBranches.has(branch)) continue;
             try {
               await execFileAsync('git', ['branch', '-D', branch], { cwd: project.path });
             } catch {

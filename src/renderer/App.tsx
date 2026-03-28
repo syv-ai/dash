@@ -53,6 +53,7 @@ export function App() {
     localStorage.getItem('activeTaskId'),
   );
   const [showTaskModal, setShowTaskModal] = useState(false);
+  const [isCreatingTask, setIsCreatingTask] = useState(false);
   const [taskModalProjectId, setTaskModalProjectId] = useState<string | null>(null);
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
   const [cloneStatus, setCloneStatus] = useState<{ loading: boolean; error: string | null }>({
@@ -498,7 +499,7 @@ export function App() {
         } else if (showSettings) {
           e.preventDefault();
           setShowSettings(false);
-        } else if (showTaskModal) {
+        } else if (showTaskModal && !isCreatingTask) {
           e.preventDefault();
           setShowTaskModal(false);
         } else if (showAddProjectModal) {
@@ -802,103 +803,111 @@ export function App() {
     const targetProject = projects.find((p) => p.id === targetProjectId);
     if (!targetProject) return;
 
-    let worktreeInfo: { branch: string; path: string } | null = null;
+    setIsCreatingTask(true);
+    try {
+      let worktreeInfo: { branch: string; path: string } | null = null;
 
-    // Split linked items by provider
-    const ghItems =
-      linkedItems?.filter((i): i is LinkedGithubIssue => i.provider === 'github') ?? [];
-    const adoItems = linkedItems?.filter((i): i is LinkedAdoWorkItem => i.provider === 'ado') ?? [];
-    const ghIssueNumbers = ghItems.map((i) => i.id);
+      // Split linked items by provider
+      const ghItems =
+        linkedItems?.filter((i): i is LinkedGithubIssue => i.provider === 'github') ?? [];
+      const adoItems =
+        linkedItems?.filter((i): i is LinkedAdoWorkItem => i.provider === 'ado') ?? [];
+      const ghIssueNumbers = ghItems.map((i) => i.id);
 
-    if (useWorktree) {
-      const claimResp = await window.electronAPI.worktreeClaimReserve({
-        projectId: targetProject.id,
-        taskName: name,
-        baseRef,
-        linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
-        pushRemote,
-      });
-
-      if (claimResp.success && claimResp.data) {
-        worktreeInfo = { branch: claimResp.data.branch, path: claimResp.data.path };
-      } else {
-        const createResp = await window.electronAPI.worktreeCreate({
-          projectPath: targetProject.path,
+      if (useWorktree) {
+        const claimResp = await window.electronAPI.worktreeClaimReserve({
+          projectId: targetProject.id,
           taskName: name,
           baseRef,
-          projectId: targetProject.id,
           linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
           pushRemote,
         });
-        if (createResp.success && createResp.data) {
-          worktreeInfo = { branch: createResp.data.branch, path: createResp.data.path };
-        }
-      }
-    }
 
-    const branch = worktreeInfo?.branch ?? 'main';
-    const taskPath = worktreeInfo?.path ?? targetProject.path;
-
-    const saveResp = await window.electronAPI.saveTask({
-      projectId: targetProject.id,
-      name,
-      branch,
-      path: taskPath,
-      useWorktree,
-      autoApprove,
-      branchCreatedByDash: useWorktree && !!worktreeInfo,
-      linkedItems: linkedItems ?? null,
-    });
-
-    if (saveResp.success && saveResp.data) {
-      const taskId = saveResp.data.id;
-
-      // Write task context for SessionStart hook injection
-      if (linkedItems && linkedItems.length > 0) {
-        const prompt = formatTaskContextPrompt(linkedItems);
-        if (prompt) {
-          window.electronAPI.ptyWriteTaskContext({
-            cwd: taskPath,
-            prompt,
-            meta: {
-              githubIssues:
-                ghItems.length > 0 ? ghItems.map((i) => ({ id: i.id, url: i.url })) : undefined,
-              adoWorkItems:
-                adoItems.length > 0
-                  ? adoItems.map((wi) => ({ id: wi.id, url: wi.url }))
-                  : undefined,
-            },
+        if (claimResp.success && claimResp.data) {
+          worktreeInfo = { branch: claimResp.data.branch, path: claimResp.data.path };
+        } else {
+          const createResp = await window.electronAPI.worktreeCreate({
+            projectPath: targetProject.path,
+            taskName: name,
+            baseRef,
+            projectId: targetProject.id,
+            linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
+            pushRemote,
           });
+          if (createResp.success && createResp.data) {
+            worktreeInfo = { branch: createResp.data.branch, path: createResp.data.path };
+          }
         }
       }
 
-      await window.electronAPI.getOrCreateDefaultConversation(taskId);
-      await loadTasksForProject(targetProject.id);
-      setActiveProjectId(targetProject.id);
-      setActiveTaskId(taskId);
+      const branch = worktreeInfo?.branch ?? 'main';
+      const taskPath = worktreeInfo?.path ?? targetProject.path;
 
-      if (notificationSoundRef.current === 'peon') {
-        playPeonSound('what');
-      }
-
-      window.electronAPI.worktreeEnsureReserve({
+      const saveResp = await window.electronAPI.saveTask({
         projectId: targetProject.id,
-        projectPath: targetProject.path,
+        name,
+        branch,
+        path: taskPath,
+        useWorktree,
+        autoApprove,
+        branchCreatedByDash: useWorktree && !!worktreeInfo,
+        linkedItems: linkedItems ?? null,
       });
 
-      // Fire-and-forget: post branch comment on each linked GitHub issue
-      for (const num of ghIssueNumbers) {
-        window.electronAPI
-          .githubPostBranchComment(targetProject.path, num, branch)
-          .catch(() => toast.error(`Failed to link branch to issue #${num}`));
-      }
+      if (saveResp.success && saveResp.data) {
+        const taskId = saveResp.data.id;
 
-      // Fire-and-forget: post branch comment on each linked ADO work item
-      for (const wi of adoItems) {
-        window.electronAPI
-          .adoPostBranchComment(wi.id, branch, targetProject.id)
-          .catch(() => toast.error(`Failed to link branch to work item #${wi.id}`));
+        // Write task context for SessionStart hook injection
+        if (linkedItems && linkedItems.length > 0) {
+          const prompt = formatTaskContextPrompt(linkedItems);
+          if (prompt) {
+            window.electronAPI.ptyWriteTaskContext({
+              cwd: taskPath,
+              prompt,
+              meta: {
+                githubIssues:
+                  ghItems.length > 0
+                    ? ghItems.map((i) => ({ id: i.id, url: i.url }))
+                    : undefined,
+                adoWorkItems:
+                  adoItems.length > 0
+                    ? adoItems.map((wi) => ({ id: wi.id, url: wi.url }))
+                    : undefined,
+              },
+            });
+          }
+        }
+
+        await window.electronAPI.getOrCreateDefaultConversation(taskId);
+        await loadTasksForProject(targetProject.id);
+        setActiveProjectId(targetProject.id);
+        setActiveTaskId(taskId);
+
+        if (notificationSoundRef.current === 'peon') {
+          playPeonSound('what');
+        }
+
+        window.electronAPI.worktreeEnsureReserve({
+          projectId: targetProject.id,
+          projectPath: targetProject.path,
+        });
+
+        // Fire-and-forget: post branch comment on each linked GitHub issue
+        for (const num of ghIssueNumbers) {
+          window.electronAPI
+            .githubPostBranchComment(targetProject.path, num, branch)
+            .catch(() => toast.error(`Failed to link branch to issue #${num}`));
+        }
+
+        // Fire-and-forget: post branch comment on each linked ADO work item
+        for (const wi of adoItems) {
+          window.electronAPI
+            .adoPostBranchComment(wi.id, branch, targetProject.id)
+            .catch(() => toast.error(`Failed to link branch to work item #${wi.id}`));
+        }
       }
+    } finally {
+      setIsCreatingTask(false);
     }
   }
 
