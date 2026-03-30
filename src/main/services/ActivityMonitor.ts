@@ -81,9 +81,11 @@ class ActivityMonitorImpl {
 
   /**
    * Called when a statusLine update is received from Claude Code.
-   * StatusLine only fires while Claude is actively working, so treat
-   * it as evidence of busy state. This covers gaps between tool calls
-   * where child processes have exited but Claude is still responding.
+   * StatusLine only fires while Claude is actively working, so refresh
+   * timestamps to prevent the polling fallback from falsely transitioning
+   * busy→idle. Does NOT transition idle→busy — that is handled by the
+   * setBusy hook (UserPromptSubmit) and the polling grace period, which
+   * avoids false busy states from delayed/buffered statusLine POSTs.
    */
   noteStatusLine(ptyId: string): void {
     const activity = this.activities.get(ptyId);
@@ -91,12 +93,7 @@ class ActivityMonitorImpl {
     const now = Date.now();
     activity.lastDataTime = now;
     activity.lastStatusLineTime = now;
-    if (activity.state === 'idle') {
-      activity.state = 'busy';
-      activity.lastChildSeenTime = Date.now();
-      activity.idleChildrenSince = 0;
-      this.emitAll();
-    }
+    activity.lastChildSeenTime = now;
   }
 
   /**

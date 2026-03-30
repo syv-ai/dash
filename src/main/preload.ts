@@ -90,8 +90,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Status line data (context + cost + rate limits)
   ptyGetAllStatusLine: () => ipcRenderer.invoke('pty:statusLine:getAll'),
-  onPtyStatusLine: (callback: (data: Record<string, unknown>) => void) => {
-    const handler = (_event: unknown, data: Record<string, unknown>) => callback(data);
+  onPtyStatusLine: (
+    callback: (data: Record<string, import('../shared/types').StatusLineData>) => void,
+  ) => {
+    const handler = (
+      _event: unknown,
+      data: Record<string, import('../shared/types').StatusLineData>,
+    ) => callback(data);
     ipcRenderer.on('pty:statusLine', handler);
     return () => {
       ipcRenderer.removeListener('pty:statusLine', handler);
