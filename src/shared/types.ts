@@ -129,7 +129,6 @@ export interface ContextUsage {
   used: number;
   total: number;
   percentage: number;
-  updatedAt: string;
 }
 
 export interface SessionCost {
@@ -162,7 +161,6 @@ export interface UsageThresholds {
   contextPercentage: number | null; // e.g. 80 = warn at 80%
   fiveHourPercentage: number | null;
   sevenDayPercentage: number | null;
-  costUsd: number | null;
 }
 
 // ── Branch Types ─────────────────────────────────────────────

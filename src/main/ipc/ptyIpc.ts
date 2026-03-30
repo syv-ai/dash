@@ -150,12 +150,7 @@ export function registerPtyIpc(): void {
     return { success: true, data: remoteControlService.getAllStates() };
   });
 
-  // Context usage
-  ipcMain.handle('pty:contextUsage:getAll', () => {
-    return { success: true, data: contextUsageService.getAll() };
-  });
-
-  // Full status line data (context + cost + rate limits)
+  // Status line data (context + cost + rate limits)
   ipcMain.handle('pty:statusLine:getAll', () => {
     return { success: true, data: contextUsageService.getAllStatusLine() };
   });

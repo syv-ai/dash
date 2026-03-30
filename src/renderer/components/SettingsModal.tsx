@@ -29,8 +29,11 @@ import type {
   PixelAgentsOffice,
   PixelAgentsOfficeStatus,
   StatusLineData,
+  RateLimits,
   UsageThresholds,
 } from '../../shared/types';
+import { formatTokens, formatDuration, formatResetTime } from '../../shared/format';
+import { UsageBar } from './ui/UsageBar';
 
 const DASH_DEFAULT_ATTRIBUTION =
   '\n\nCo-Authored-By: Claude <noreply@anthropic.com> via Dash <dash@syv.ai>';
@@ -63,10 +66,11 @@ interface SettingsModalProps {
   pixelAgentsConfig: PixelAgentsConfig | null;
   onPixelAgentsConfigChange: (config: PixelAgentsConfig) => void;
   pixelAgentsStatus: PixelAgentsStatus;
-  statusLineData?: Record<string, StatusLineData>;
-  taskNames?: Record<string, string>;
-  usageThresholds?: UsageThresholds;
-  onUsageThresholdsChange?: (thresholds: UsageThresholds) => void;
+  statusLineData: Record<string, StatusLineData>;
+  taskNames: Record<string, string>;
+  latestRateLimits?: RateLimits;
+  usageThresholds: UsageThresholds;
+  onUsageThresholdsChange: (thresholds: UsageThresholds) => void;
   onClose: () => void;
 }
 
@@ -517,67 +521,6 @@ function OfficeForm({
   );
 }
 
-function formatTokens(n: number): string {
-  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}m`;
-  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`;
-  return String(n);
-}
-
-function formatDuration(ms: number): string {
-  const s = Math.floor(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  const rem = s % 60;
-  if (m < 60) return `${m}m ${rem}s`;
-  const h = Math.floor(m / 60);
-  return `${h}h ${m % 60}m`;
-}
-
-function formatResetTime(epochSeconds: number): string {
-  if (!epochSeconds) return '';
-  const d = new Date(epochSeconds * 1000);
-  const now = new Date();
-  const diffMs = d.getTime() - now.getTime();
-  if (diffMs <= 0) return 'now';
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 60) return `in ${diffMin}m`;
-  const diffH = Math.floor(diffMin / 60);
-  return `in ${diffH}h ${diffMin % 60}m`;
-}
-
-function UsageBar({
-  label,
-  percentage,
-  detail,
-}: {
-  label: string;
-  percentage: number;
-  detail?: string;
-}) {
-  const color =
-    percentage >= 80 ? 'bg-red-400' : percentage >= 60 ? 'bg-amber-400' : 'bg-emerald-400';
-  const textColor =
-    percentage >= 80 ? 'text-red-400' : percentage >= 60 ? 'text-amber-400' : 'text-foreground/60';
-
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between">
-        <span className="text-[12px] text-foreground/80">{label}</span>
-        <span className={`text-[11px] tabular-nums font-medium ${textColor}`}>
-          {Math.round(percentage)}%
-          {detail && <span className="text-foreground/40 font-normal ml-1.5">{detail}</span>}
-        </span>
-      </div>
-      <div className="h-[6px] rounded-full bg-border/40 overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all duration-500 ${color}`}
-          style={{ width: `${Math.min(percentage, 100)}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
 function ThresholdInput({
   label,
   value,
@@ -617,25 +560,17 @@ function ThresholdInput({
 function UsageSection({
   statusLineData,
   taskNames,
+  latestRateLimits,
   thresholds,
   onThresholdsChange,
 }: {
   statusLineData: Record<string, StatusLineData>;
   taskNames: Record<string, string>;
+  latestRateLimits?: RateLimits;
   thresholds: UsageThresholds;
   onThresholdsChange: (t: UsageThresholds) => void;
 }) {
   const entries = Object.entries(statusLineData);
-
-  // Pick rate limits from the most recently updated session (they're account-wide)
-  let latestRateLimits: StatusLineData['rateLimits'] | undefined;
-  let latestRateLimitsTime = 0;
-  for (const sl of Object.values(statusLineData)) {
-    if (sl.rateLimits && new Date(sl.updatedAt).getTime() > latestRateLimitsTime) {
-      latestRateLimits = sl.rateLimits;
-      latestRateLimitsTime = new Date(sl.updatedAt).getTime();
-    }
-  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -804,8 +739,9 @@ export function SettingsModal({
   pixelAgentsConfig,
   onPixelAgentsConfigChange,
   pixelAgentsStatus,
-  statusLineData = {},
-  taskNames = {},
+  statusLineData,
+  taskNames,
+  latestRateLimits,
   usageThresholds,
   onUsageThresholdsChange,
   onClose,
@@ -1464,15 +1400,9 @@ export function SettingsModal({
             <UsageSection
               statusLineData={statusLineData}
               taskNames={taskNames}
-              thresholds={
-                usageThresholds ?? {
-                  contextPercentage: 80,
-                  fiveHourPercentage: null,
-                  sevenDayPercentage: null,
-                  costUsd: null,
-                }
-              }
-              onThresholdsChange={onUsageThresholdsChange ?? (() => {})}
+              latestRateLimits={latestRateLimits}
+              thresholds={usageThresholds}
+              onThresholdsChange={onUsageThresholdsChange}
             />
           )}
 

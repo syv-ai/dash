@@ -7,26 +7,11 @@ import type { ContextUsage, StatusLineData, SessionCost, RateLimits } from '@sha
  * via the HookServer's /hook/context endpoint.
  */
 class ContextUsageServiceImpl {
-  private contextData = new Map<string, ContextUsage>();
   private statusLineData = new Map<string, StatusLineData>();
   private sender: WebContents | null = null;
 
-  // Track previous token counts to detect compaction
-  private previousUsed = new Map<string, number>();
-
-  // Track when PTYs were unregistered to avoid false compaction on reuse
-  private recentlyUnregistered = new Map<string, number>();
-  private static readonly REUSE_GRACE_MS = 5_000;
-
-  // Callback for compaction events
-  private compactionCallback: ((ptyId: string, from: number, to: number) => void) | null = null;
-
   setSender(sender: WebContents): void {
     this.sender = sender;
-  }
-
-  onCompaction(callback: (ptyId: string, from: number, to: number) => void): void {
-    this.compactionCallback = callback;
   }
 
   /**
@@ -38,7 +23,6 @@ class ContextUsageServiceImpl {
     const cw = data.context_window;
     if (!cw) return;
 
-    const percentage = typeof cw.used_percentage === 'number' ? cw.used_percentage : 0;
     const total = typeof cw.context_window_size === 'number' ? cw.context_window_size : 0;
 
     // current_usage is an object: { input_tokens, output_tokens, cache_creation_input_tokens, ... }
@@ -51,12 +35,16 @@ class ContextUsageServiceImpl {
         0,
       );
     } else {
-      used = Math.round((percentage / 100) * total);
+      const pct = typeof cw.used_percentage === 'number' ? cw.used_percentage : 0;
+      used = Math.round((pct / 100) * total);
     }
+
+    // Compute percentage from used/total to keep fields consistent
+    const percentage = Math.max(0, Math.min(100, total > 0 ? (used / total) * 100 : 0));
 
     const now = new Date().toISOString();
 
-    const usage: ContextUsage = { used, total, percentage, updatedAt: now };
+    const usage: ContextUsage = { used, total, percentage };
 
     // Parse cost
     let cost: SessionCost | undefined;
@@ -99,38 +87,7 @@ class ContextUsageServiceImpl {
     };
 
     this.statusLineData.set(ptyId, statusLine);
-    this.updateContext(ptyId, usage);
-    this.emitStatusLine();
-  }
-
-  private updateContext(ptyId: string, usage: ContextUsage): void {
-    const unregAt = this.recentlyUnregistered.get(ptyId);
-    if (unregAt && Date.now() - unregAt > ContextUsageServiceImpl.REUSE_GRACE_MS) {
-      this.recentlyUnregistered.delete(ptyId);
-    }
-
-    const prevUsed = this.previousUsed.get(ptyId);
-
-    if (
-      prevUsed !== undefined &&
-      usage.used < prevUsed * 0.7 &&
-      prevUsed > 1000 &&
-      !this.recentlyUnregistered.has(ptyId)
-    ) {
-      this.compactionCallback?.(ptyId, prevUsed, usage.used);
-    }
-
-    this.previousUsed.set(ptyId, usage.used);
-    this.contextData.set(ptyId, usage);
-    this.emitAll();
-  }
-
-  getAll(): Record<string, ContextUsage> {
-    const result: Record<string, ContextUsage> = {};
-    for (const [id, usage] of this.contextData) {
-      result[id] = usage;
-    }
-    return result;
+    this.emit();
   }
 
   getAllStatusLine(): Record<string, StatusLineData> {
@@ -142,21 +99,11 @@ class ContextUsageServiceImpl {
   }
 
   unregister(ptyId: string): void {
-    this.contextData.delete(ptyId);
     this.statusLineData.delete(ptyId);
-    this.previousUsed.delete(ptyId);
-    this.recentlyUnregistered.set(ptyId, Date.now());
-    this.emitAll();
-    this.emitStatusLine();
+    this.emit();
   }
 
-  private emitAll(): void {
-    if (this.sender && !this.sender.isDestroyed()) {
-      this.sender.send('pty:contextUsage', this.getAll());
-    }
-  }
-
-  private emitStatusLine(): void {
+  private emit(): void {
     if (this.sender && !this.sender.isDestroyed()) {
       this.sender.send('pty:statusLine', this.getAllStatusLine());
     }

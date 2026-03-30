@@ -155,11 +155,13 @@ class HookServerImpl {
               const data = JSON.parse(body);
               contextUsageService.updateFromStatusLine(ptyId, data);
               activityMonitor.noteStatusLine(ptyId);
-            } catch {
-              // Malformed JSON — ignore
+              res.writeHead(200);
+              res.end('ok');
+            } catch (err) {
+              console.error('[HookServer] Failed to process context body:', err);
+              res.writeHead(400);
+              res.end('bad request');
             }
-            res.writeHead(200);
-            res.end('ok');
           });
           return;
         }

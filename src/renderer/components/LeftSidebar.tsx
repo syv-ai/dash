@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { usageColor, usageTextColor } from './ui/UsageBar';
 import {
   FolderOpen,
   Plus,
@@ -440,9 +441,7 @@ export function LeftSidebar({
                                   className={`text-[9px] tabular-nums flex-shrink-0 group-hover/task:hidden ${
                                     ctx.percentage >= 80
                                       ? 'text-red-400 font-medium'
-                                      : ctx.percentage >= 60
-                                        ? 'text-amber-400'
-                                        : 'text-muted-foreground/50'
+                                      : usageTextColor(ctx.percentage)
                                   }`}
                                 >
                                   {Math.round(ctx.percentage)}%
@@ -491,13 +490,7 @@ export function LeftSidebar({
                                 title={`Context: ${ctx.used.toLocaleString()} / ${ctx.total.toLocaleString()} tokens (${Math.round(ctx.percentage)}%)`}
                               >
                                 <div
-                                  className={`h-full rounded-full transition-all duration-500 ${
-                                    ctx.percentage >= 80
-                                      ? 'bg-red-400'
-                                      : ctx.percentage >= 60
-                                        ? 'bg-amber-400'
-                                        : 'bg-emerald-400'
-                                  }`}
+                                  className={`h-full rounded-full transition-all duration-500 ${usageColor(ctx.percentage)}`}
                                   style={{ width: `${Math.min(ctx.percentage, 100)}%` }}
                                 />
                               </div>

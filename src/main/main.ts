@@ -106,14 +106,9 @@ app.whenReady().then(async () => {
   const { remoteControlService } = await import('./services/remoteControlService');
   remoteControlService.setSender(mainWindow.webContents);
 
-  // Start context usage service — broadcasts context data to renderer
+  // Start context usage service — broadcasts status line data to renderer
   const { contextUsageService } = await import('./services/ContextUsageService');
   contextUsageService.setSender(mainWindow.webContents);
-  contextUsageService.onCompaction((ptyId, from, to) => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('pty:compaction', { ptyId, from, to });
-    }
-  });
 
   // Initialize auto-updater (production only)
   if (!process.argv.includes('--dev')) {

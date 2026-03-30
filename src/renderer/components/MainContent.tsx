@@ -21,11 +21,8 @@ import type {
 import { linkedItemUrl, isAdoRemote, branchUrl } from '../../shared/urls';
 import { Tooltip } from './ui/Tooltip';
 
-function formatTokens(n: number): string {
-  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}m`;
-  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`;
-  return String(n);
-}
+import { formatTokens } from '../../shared/format';
+import { usageColor, usageTextColor } from './ui/UsageBar';
 
 interface MainContentProps {
   activeTask: Task | null;
@@ -285,13 +282,7 @@ export function MainContent({
               >
                 <div className="w-[48px] h-[4px] rounded-full bg-border/40 overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      activeCtx.percentage >= 80
-                        ? 'bg-red-400'
-                        : activeCtx.percentage >= 60
-                          ? 'bg-amber-400'
-                          : 'bg-emerald-400'
-                    }`}
+                    className={`h-full rounded-full transition-all duration-500 ${usageColor(activeCtx.percentage)}`}
                     style={{ width: `${Math.min(activeCtx.percentage, 100)}%` }}
                   />
                 </div>
@@ -299,9 +290,7 @@ export function MainContent({
                   className={`text-[10px] tabular-nums ${
                     activeCtx.percentage >= 80
                       ? 'text-red-400 font-medium'
-                      : activeCtx.percentage >= 60
-                        ? 'text-amber-400'
-                        : 'text-muted-foreground/60'
+                      : usageTextColor(activeCtx.percentage)
                   }`}
                 >
                   {formatTokens(activeCtx.used)}/{formatTokens(activeCtx.total)}

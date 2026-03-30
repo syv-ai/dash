@@ -23,6 +23,8 @@ import { RateLimitsWidget } from './components/RateLimitsWidget';
 import { parseAdoRemote } from '../shared/urls';
 import { ToastContainer } from './components/Toast';
 import { toast } from 'sonner';
+import { useStatusLine } from './hooks/useStatusLine';
+import { useThresholdAlerts } from './hooks/useThresholdAlerts';
 import type {
   Project,
   Task,
@@ -31,10 +33,7 @@ import type {
   LinkedGithubIssue,
   LinkedAdoWorkItem,
   RemoteControlState,
-  ContextUsage,
-  StatusLineData,
   UsageThresholds,
-  RateLimits,
   PixelAgentsConfig,
   PixelAgentsStatus,
 } from '../shared/types';
@@ -150,11 +149,8 @@ export function App() {
   >({});
   const [remoteControlModalPtyId, setRemoteControlModalPtyId] = useState<string | null>(null);
 
-  // Context usage — keys are PTY IDs (same as task IDs)
-  const [contextUsage, setContextUsage] = useState<Record<string, ContextUsage>>({});
-
-  // Full status line data (context + cost + rate limits)
-  const [statusLineData, setStatusLineData] = useState<Record<string, StatusLineData>>({});
+  // Status line data (context + cost + rate limits) — derived contextUsage & latestRateLimits
+  const { statusLineData, contextUsage, latestRateLimits } = useStatusLine();
 
   // Usage thresholds for popup notifications
   const [usageThresholds, setUsageThresholds] = useState<UsageThresholds>(() => {
@@ -166,14 +162,12 @@ export function App() {
             contextPercentage: 80,
             fiveHourPercentage: null,
             sevenDayPercentage: null,
-            costUsd: null,
           };
     } catch {
       return {
         contextPercentage: 80,
         fiveHourPercentage: null,
         sevenDayPercentage: null,
-        costUsd: null,
       };
     }
   });
@@ -371,116 +365,22 @@ export function App() {
     return unsubscribe;
   }, []);
 
-  // Context usage — subscribe to updates from ContextUsageService
-  useEffect(() => {
-    const unsubscribe = window.electronAPI.onPtyContextUsage((data) => {
-      setContextUsage(data as Record<string, ContextUsage>);
-    });
+  // Task name lookup (used for threshold alerts and settings)
+  const taskNames = useMemo(() => {
+    const names: Record<string, string> = {};
+    for (const tasks of Object.values(tasksByProject)) {
+      for (const t of tasks) names[t.id] = t.name;
+    }
+    return names;
+  }, [tasksByProject]);
 
-    window.electronAPI.ptyGetAllContextUsage().then((resp) => {
-      if (resp.success && resp.data) {
-        setContextUsage(resp.data);
-      }
-    });
-
-    return unsubscribe;
-  }, []);
-
-  // Prune stale context usage entries every 30s
-  useEffect(() => {
-    const STALE_MS = 60_000;
-    const timer = setInterval(() => {
-      setContextUsage((prev) => {
-        const now = Date.now();
-        let changed = false;
-        const next: Record<string, ContextUsage> = {};
-        for (const id of Object.keys(prev)) {
-          const ctx = prev[id];
-          if (now - new Date(ctx.updatedAt).getTime() > STALE_MS) {
-            changed = true;
-          } else {
-            next[id] = ctx;
-          }
-        }
-        return changed ? next : prev;
-      });
-    }, 30_000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Status line data — subscribe to full statusLine updates
-  useEffect(() => {
-    const unsubscribe = window.electronAPI.onPtyStatusLine((data) => {
-      setStatusLineData(data as Record<string, StatusLineData>);
-    });
-
-    window.electronAPI.ptyGetAllStatusLine().then((resp) => {
-      if (resp.success && resp.data) {
-        setStatusLineData(resp.data);
-      }
-    });
-
-    return unsubscribe;
-  }, []);
+  // Threshold alerts — fires toast notifications when usage exceeds thresholds
+  useThresholdAlerts(statusLineData, usageThresholds, tasksByProject);
 
   // Persist usage thresholds
   useEffect(() => {
     localStorage.setItem('usageThresholds', JSON.stringify(usageThresholds));
   }, [usageThresholds]);
-
-  // Check thresholds and show desktop notifications
-  const firedThresholdsRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    const taskById = new Map<string, string>();
-    for (const tasks of Object.values(tasksByProject)) {
-      for (const t of tasks) taskById.set(t.id, t.name);
-    }
-
-    for (const [ptyId, sl] of Object.entries(statusLineData)) {
-      const checks: [string, number, number | null][] = [
-        ['context', sl.contextUsage.percentage, usageThresholds.contextPercentage],
-        [
-          'fiveHour',
-          sl.rateLimits?.fiveHour?.usedPercentage ?? 0,
-          usageThresholds.fiveHourPercentage,
-        ],
-        [
-          'sevenDay',
-          sl.rateLimits?.sevenDay?.usedPercentage ?? 0,
-          usageThresholds.sevenDayPercentage,
-        ],
-      ];
-      const taskName = taskById.get(ptyId);
-      for (const [kind, value, threshold] of checks) {
-        if (threshold === null || threshold <= 0) continue;
-        const key = `${ptyId}:${kind}`;
-        if (value >= threshold && !firedThresholdsRef.current.has(key)) {
-          firedThresholdsRef.current.add(key);
-          const pct = Math.round(value);
-          const labels: Record<string, string> = {
-            context: `Context window at ${pct}%`,
-            fiveHour: `5-hour rate limit at ${pct}%`,
-            sevenDay: `7-day rate limit at ${pct}%`,
-          };
-          const base = labels[kind] || `Usage threshold reached: ${kind}`;
-          toast.warning(taskName ? `${taskName}: ${base}` : base);
-        }
-      }
-    }
-  }, [statusLineData, usageThresholds, tasksByProject]);
-
-  // Extract account-wide rate limits from the most recently updated session
-  const latestRateLimits = useMemo((): RateLimits | undefined => {
-    let best: RateLimits | undefined;
-    let bestTime = 0;
-    for (const sl of Object.values(statusLineData)) {
-      if (sl.rateLimits && new Date(sl.updatedAt).getTime() > bestTime) {
-        best = sl.rateLimits;
-        bestTime = new Date(sl.updatedAt).getTime();
-      }
-    }
-    return best;
-  }, [statusLineData]);
 
   // Persist selection to localStorage (survives CMD+R reload)
   useEffect(() => {
@@ -1576,15 +1476,8 @@ export function App() {
           }}
           pixelAgentsStatus={pixelAgentsStatus}
           statusLineData={statusLineData}
-          taskNames={(() => {
-            const names: Record<string, string> = {};
-            for (const tasks of Object.values(tasksByProject)) {
-              for (const t of tasks as Task[]) {
-                names[t.id] = t.name;
-              }
-            }
-            return names;
-          })()}
+          taskNames={taskNames}
+          latestRateLimits={latestRateLimits}
           usageThresholds={usageThresholds}
           onUsageThresholdsChange={setUsageThresholds}
           onClose={() => setShowSettings(false)}
