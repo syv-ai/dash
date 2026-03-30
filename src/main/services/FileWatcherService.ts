@@ -1,16 +1,11 @@
-import * as fs from 'fs';
 import * as path from 'path';
 import { BrowserWindow } from 'electron';
+import * as fs from 'fs';
 
 const DEBOUNCE_MS = 500;
-const IGNORE_PATTERNS = [
-  /node_modules/,
-  /\.git\//,
-  /\.DS_Store/,
-  /\.swp$/,
-  /~$/,
-  /\.tmp$/,
-];
+
+/** Only these git internals need watching to detect status changes. */
+const GIT_WATCH_FILES = ['index', 'HEAD', 'MERGE_HEAD', 'REBASE_HEAD', 'CHERRY_PICK_HEAD'];
 
 interface WatcherEntry {
   watcher: fs.FSWatcher;
@@ -18,53 +13,44 @@ interface WatcherEntry {
   cwd: string;
 }
 
-const watchers = new Map<string, WatcherEntry>();
+const entries = new Map<string, WatcherEntry>();
 
 /**
- * Start watching a directory for file changes.
+ * Start watching a directory's .git internals for state changes.
  * Sends 'git:fileChanged' events to all renderer windows when changes detected.
  */
 export function startWatching(id: string, cwd: string): void {
-  // Don't double-watch
-  if (watchers.has(id)) return;
+  if (entries.has(id)) return;
 
-  try {
-    const watcher = fs.watch(cwd, { recursive: true }, (_eventType, filename) => {
-      if (!filename) return;
+  const gitDir = path.join(cwd, '.git');
 
-      // Ignore patterns
-      if (IGNORE_PATTERNS.some((p) => p.test(filename))) return;
+  // Watch the .git directory itself (non-recursively) instead of individual files.
+  // Git updates files atomically (write tmp → rename), which breaks per-file watchers
+  // on macOS since the watcher follows the old inode. Watching the directory works on
+  // both platforms and automatically picks up files created later (e.g. MERGE_HEAD).
+  const watcher = fs.watch(gitDir, (_eventType, filename) => {
+    if (!filename || !GIT_WATCH_FILES.includes(filename)) return;
 
-      const entry = watchers.get(id);
-      if (!entry) return;
+    if (entry.debounceTimer) {
+      clearTimeout(entry.debounceTimer);
+    }
+    entry.debounceTimer = setTimeout(() => {
+      notifyRenderers(id);
+      entry.debounceTimer = null;
+    }, DEBOUNCE_MS);
+  });
 
-      // Debounce: reset timer on each change
-      if (entry.debounceTimer) {
-        clearTimeout(entry.debounceTimer);
-      }
+  watcher.on('error', () => {}); // .git dir may vanish (e.g. repo deleted)
 
-      entry.debounceTimer = setTimeout(() => {
-        notifyRenderers(id);
-        entry.debounceTimer = null;
-      }, DEBOUNCE_MS);
-    });
-
-    watcher.on('error', () => {
-      // Watcher errored — clean up silently
-      stopWatching(id);
-    });
-
-    watchers.set(id, { watcher, debounceTimer: null, cwd });
-  } catch {
-    // Directory doesn't exist or can't be watched
-  }
+  const entry: WatcherEntry = { watcher, debounceTimer: null, cwd };
+  entries.set(id, entry);
 }
 
 /**
  * Stop watching a directory.
  */
 export function stopWatching(id: string): void {
-  const entry = watchers.get(id);
+  const entry = entries.get(id);
   if (!entry) return;
 
   if (entry.debounceTimer) {
@@ -77,14 +63,14 @@ export function stopWatching(id: string): void {
     // Already closed
   }
 
-  watchers.delete(id);
+  entries.delete(id);
 }
 
 /**
  * Stop all watchers (on app quit).
  */
 export function stopAll(): void {
-  for (const [id] of watchers) {
+  for (const [id] of entries) {
     stopWatching(id);
   }
 }

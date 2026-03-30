@@ -11,6 +11,8 @@ interface PtyActivity {
   state: ActivityState;
   isDirectSpawn: boolean;
   lastDataTime: number;
+  /** Timestamp when child processes were last observed (for direct-spawn PTYs). */
+  lastChildSeenTime: number;
 }
 
 const POLL_INTERVAL = 2000;
@@ -21,17 +23,26 @@ const POLL_INTERVAL = 2000;
  *  falsely marking "thinking" responses (data flowing, no children) as idle. */
 const DIRECT_SPAWN_IDLE_GRACE_MS = 6000;
 
+/** Hard safety valve: if no child processes for this long while busy/waiting,
+ *  force idle regardless of PTY data. Handles the case where Claude Code's
+ *  statusline keeps emitting escape sequences, preventing the data-silence
+ *  check from ever triggering. Long enough to avoid false positives during
+ *  normal "thinking" phases (API calls with no child processes). */
+const DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS = 45_000;
+
 class ActivityMonitorImpl {
   private activities = new Map<string, PtyActivity>();
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
   private sender: WebContents | null = null;
 
   register(ptyId: string, pid: number, isDirectSpawn: boolean): void {
+    const now = Date.now();
     this.activities.set(ptyId, {
       pid,
       state: 'idle',
       isDirectSpawn,
-      lastDataTime: Date.now(),
+      lastDataTime: now,
+      lastChildSeenTime: now,
     });
     this.emitAll();
   }
@@ -67,6 +78,7 @@ class ActivityMonitorImpl {
     const activity = this.activities.get(ptyId);
     if (!activity || activity.state === 'busy') return;
     activity.state = 'busy';
+    activity.lastChildSeenTime = Date.now();
     this.emitAll();
   }
 
@@ -137,16 +149,38 @@ class ActivityMonitorImpl {
       }
 
       // Direct-spawn PTYs are primarily driven by Claude Code hooks.
-      // Polling fallback: if busy/waiting with no children AND no PTY data
-      // for DIRECT_SPAWN_IDLE_GRACE_MS, the hook likely failed (e.g.
-      // interrupted mid-response). Transition to idle.
+      // Polling provides fallback transitions for when hooks miss.
       if (activity.isDirectSpawn) {
+        const hasChildren = this.hasActiveWork(activity.pid, true, childMap);
+
+        if (hasChildren) {
+          activity.lastChildSeenTime = Date.now();
+        }
+
+        // Self-heal: if children are detected while waiting for permission,
+        // the user approved and Claude started a tool. Transition to busy.
+        // Note: we intentionally don't self-heal idle → busy here because
+        // Claude CLI briefly spawns children during startup, which would
+        // cause a false busy flash on every reopen.
+        if (activity.state === 'waiting' && hasChildren) {
+          activity.state = 'busy';
+          changed = true;
+        }
+
+        // Fallback busy/waiting → idle when hooks miss (e.g. interrupted
+        // mid-response). Two checks:
+        // 1. Data silence: no children AND no PTY data for 6s
+        // 2. Hard timeout: no children for 45s (handles statusline
+        //    escape sequences that keep lastDataTime refreshed)
         if (activity.state === 'busy' || activity.state === 'waiting') {
-          const isWorking = this.hasActiveWork(activity.pid, true, childMap);
-          const dataSilent = Date.now() - activity.lastDataTime > DIRECT_SPAWN_IDLE_GRACE_MS;
-          if (!isWorking && dataSilent) {
-            activity.state = 'idle';
-            changed = true;
+          if (!hasChildren) {
+            const dataSilent = Date.now() - activity.lastDataTime > DIRECT_SPAWN_IDLE_GRACE_MS;
+            const childlessTimeout =
+              Date.now() - activity.lastChildSeenTime > DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS;
+            if (dataSilent || childlessTimeout) {
+              activity.state = 'idle';
+              changed = true;
+            }
           }
         }
         continue;
