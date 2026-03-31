@@ -11,6 +11,10 @@ interface PtyActivity {
   state: ActivityState;
   isDirectSpawn: boolean;
   lastDataTime: number;
+  /** Timestamp of last actual PTY output (terminal data from node-pty).
+   *  Unlike lastDataTime, this is NOT refreshed by statusLine POSTs,
+   *  so it accurately reflects when the terminal last produced output. */
+  lastPtyOutputTime: number;
   /** Timestamp when child processes were last observed (for direct-spawn PTYs). */
   lastChildSeenTime: number;
   /** Timestamp when children were first continuously observed while idle.
@@ -57,6 +61,7 @@ class ActivityMonitorImpl {
       state: 'idle',
       isDirectSpawn,
       lastDataTime: now,
+      lastPtyOutputTime: now,
       lastChildSeenTime: now,
       idleChildrenSince: 0,
       lastStatusLineTime: 0,
@@ -73,7 +78,9 @@ class ActivityMonitorImpl {
   noteData(ptyId: string): void {
     const activity = this.activities.get(ptyId);
     if (activity) {
-      activity.lastDataTime = Date.now();
+      const now = Date.now();
+      activity.lastDataTime = now;
+      activity.lastPtyOutputTime = now;
     }
   }
 
@@ -229,17 +236,18 @@ class ActivityMonitorImpl {
         }
 
         // Safety valve: force idle if no children for a very long time AND
-        // no recent PTY data. The primary busy→idle signal is the Stop hook
+        // no recent PTY output. The primary busy→idle signal is the Stop hook
         // (setIdle). This only catches truly stuck states (e.g. hook never
         // fires due to crash). Process death is handled above via isProcessAlive.
         // During extended thinking, Claude has no child processes but the
-        // spinner still emits PTY data — so we must check lastDataTime too.
+        // spinner still emits PTY data — so we check lastPtyOutputTime too
+        // (not lastDataTime, which statusLine POSTs also refresh).
         if (activity.state === 'busy' || activity.state === 'waiting') {
           const now = Date.now();
           const childlessTimeout =
             !hasChildren &&
             now - activity.lastChildSeenTime > DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS &&
-            now - activity.lastDataTime > DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS;
+            now - activity.lastPtyOutputTime > DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS;
           if (childlessTimeout) {
             activity.state = 'idle';
             changed = true;
