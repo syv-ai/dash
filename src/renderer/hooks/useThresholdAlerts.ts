@@ -1,20 +1,15 @@
 import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
-import type { StatusLineData, UsageThresholds, Task } from '../../shared/types';
+import type { StatusLineData, UsageThresholds } from '../../shared/types';
 
 export function useThresholdAlerts(
   statusLineData: Record<string, StatusLineData>,
   usageThresholds: UsageThresholds,
-  tasksByProject: Record<string, Task[]>,
+  taskNames: Record<string, string>,
 ) {
   const firedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    const taskById = new Map<string, string>();
-    for (const tasks of Object.values(tasksByProject)) {
-      for (const t of tasks) taskById.set(t.id, t.name);
-    }
-
     // Prune fired keys for PTYs that no longer exist
     for (const key of firedRef.current) {
       const ptyId = key.split(':')[0];
@@ -37,7 +32,7 @@ export function useThresholdAlerts(
           usageThresholds.sevenDayPercentage,
         ],
       ];
-      const taskName = taskById.get(ptyId);
+      const taskName = taskNames[ptyId];
       for (const [kind, value, threshold] of checks) {
         if (threshold === null || threshold <= 0) continue;
         const key = `${ptyId}:${kind}`;
@@ -61,5 +56,5 @@ export function useThresholdAlerts(
         }
       }
     }
-  }, [statusLineData, usageThresholds, tasksByProject]);
+  }, [statusLineData, usageThresholds, taskNames]);
 }

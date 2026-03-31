@@ -12,11 +12,16 @@ export function useStatusLine() {
       setStatusLineData(data as Record<string, StatusLineData>);
     });
 
-    window.electronAPI.ptyGetAllStatusLine().then((resp) => {
-      if (resp.success && resp.data) {
-        setStatusLineData(resp.data);
-      }
-    });
+    window.electronAPI
+      .ptyGetAllStatusLine()
+      .then((resp) => {
+        if (resp.success && resp.data) {
+          setStatusLineData(resp.data);
+        }
+      })
+      .catch(() => {
+        // IPC not ready yet — live updates will arrive via onPtyStatusLine
+      });
 
     return unsubscribe;
   }, []);
