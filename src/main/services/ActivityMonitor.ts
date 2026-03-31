@@ -228,14 +228,18 @@ class ActivityMonitorImpl {
           activity.idleChildrenSince = 0;
         }
 
-        // Safety valve: force idle if no children for a very long time.
-        // The primary busy→idle signal is the Stop hook (setIdle). This
-        // only catches truly stuck states (e.g. hook never fires due to
-        // crash). Process death is handled above via isProcessAlive.
+        // Safety valve: force idle if no children for a very long time AND
+        // no recent PTY data. The primary busy→idle signal is the Stop hook
+        // (setIdle). This only catches truly stuck states (e.g. hook never
+        // fires due to crash). Process death is handled above via isProcessAlive.
+        // During extended thinking, Claude has no child processes but the
+        // spinner still emits PTY data — so we must check lastDataTime too.
         if (activity.state === 'busy' || activity.state === 'waiting') {
+          const now = Date.now();
           const childlessTimeout =
             !hasChildren &&
-            Date.now() - activity.lastChildSeenTime > DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS;
+            now - activity.lastChildSeenTime > DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS &&
+            now - activity.lastDataTime > DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS;
           if (childlessTimeout) {
             activity.state = 'idle';
             changed = true;
