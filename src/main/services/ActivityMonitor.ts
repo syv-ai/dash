@@ -20,33 +20,30 @@ interface PtyActivity {
    *  StatusLine only fires while Claude is actively working, so a recent
    *  update is strong evidence of busy state even without child processes. */
   lastStatusLineTime: number;
+  /** Timestamp when setIdle was last called. Used by noteStatusLine to avoid
+   *  transitioning back to busy from delayed/buffered statusLine POSTs. */
+  lastIdleTime: number;
 }
 
 const POLL_INTERVAL = 2000;
 
-/** How long (ms) a direct-spawn PTY must have no children AND no PTY data
- *  before the polling fallback transitions it to idle. This covers the case
- *  where the Stop hook doesn't fire (e.g. interrupted mid-response) without
- *  falsely marking "thinking" responses (data flowing, no children) as idle. */
-const DIRECT_SPAWN_IDLE_GRACE_MS = 6000;
-
 /** Hard safety valve: if no child processes for this long while busy/waiting,
- *  force idle regardless of PTY data. Handles the case where Claude Code's
- *  statusline keeps emitting escape sequences, preventing the data-silence
- *  check from ever triggering. Long enough to avoid false positives during
- *  normal "thinking" phases (API calls with no child processes). */
+ *  force idle. The primary busy→idle signal is the Stop hook — this only
+ *  catches truly stuck states where the hook never fires. Long enough to
+ *  avoid false positives during agent execution and thinking phases. */
 const DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS = 45_000;
-
-/** How long (ms) after the last statusLine update we still consider Claude
- *  to be actively working. StatusLine fires continuously while Claude is
- *  responding, so a gap longer than this means Claude has truly stopped. */
-const STATUS_LINE_ACTIVE_MS = 8000;
 
 /** How long (ms) children must be continuously present while idle before
  *  polling self-heals to busy. Filters out brief startup child processes
  *  (which last < 1s) while recovering from missed busy hooks or mid-response
  *  stop hooks that fired between chained tool calls. */
 const IDLE_TO_BUSY_GRACE_MS = 4000;
+
+/** How long (ms) after setIdle before noteStatusLine is allowed to transition
+ *  back to busy. Prevents delayed/buffered statusLine POSTs from racing with
+ *  the Stop hook. After this window, statusLine acts as a fast busy signal
+ *  for cases where the UserPromptSubmit hook missed. */
+const IDLE_SETTLE_MS = 2000;
 
 class ActivityMonitorImpl {
   private activities = new Map<string, PtyActivity>();
@@ -63,6 +60,7 @@ class ActivityMonitorImpl {
       lastChildSeenTime: now,
       idleChildrenSince: 0,
       lastStatusLineTime: 0,
+      lastIdleTime: 0,
     });
     this.emitAll();
   }
@@ -83,9 +81,10 @@ class ActivityMonitorImpl {
    * Called when a statusLine update is received from Claude Code.
    * StatusLine only fires while Claude is actively working, so refresh
    * timestamps to prevent the polling fallback from falsely transitioning
-   * busy→idle. Does NOT transition idle→busy — that is handled by the
-   * setBusy hook (UserPromptSubmit) and the polling grace period, which
-   * avoids false busy states from delayed/buffered statusLine POSTs.
+   * busy→idle. Also transitions idle→busy if the PTY has been idle for
+   * longer than IDLE_SETTLE_MS, providing fast busy detection when the
+   * UserPromptSubmit hook misses. The settle window prevents delayed
+   * statusLine POSTs from racing with the Stop hook.
    */
   noteStatusLine(ptyId: string): void {
     const activity = this.activities.get(ptyId);
@@ -94,6 +93,11 @@ class ActivityMonitorImpl {
     activity.lastDataTime = now;
     activity.lastStatusLineTime = now;
     activity.lastChildSeenTime = now;
+    if (activity.state === 'idle' && now - activity.lastIdleTime > IDLE_SETTLE_MS) {
+      activity.state = 'busy';
+      activity.idleChildrenSince = 0;
+      this.emitAll();
+    }
   }
 
   /**
@@ -104,6 +108,9 @@ class ActivityMonitorImpl {
     const activity = this.activities.get(ptyId);
     if (!activity || activity.state === 'idle') return;
     activity.state = 'idle';
+    activity.lastIdleTime = Date.now();
+    activity.lastStatusLineTime = 0;
+    activity.idleChildrenSince = 0;
     this.emitAll();
   }
 
@@ -221,23 +228,17 @@ class ActivityMonitorImpl {
           activity.idleChildrenSince = 0;
         }
 
-        // Fallback busy/waiting → idle when hooks miss (e.g. interrupted
-        // mid-response). Skip if a recent statusLine update confirms Claude
-        // is still active (covers gaps between tool calls where children
-        // have exited but Claude is still responding).
+        // Safety valve: force idle if no children for a very long time.
+        // The primary busy→idle signal is the Stop hook (setIdle). This
+        // only catches truly stuck states (e.g. hook never fires due to
+        // crash). Process death is handled above via isProcessAlive.
         if (activity.state === 'busy' || activity.state === 'waiting') {
-          const statusLineActive =
-            activity.lastStatusLineTime > 0 &&
-            Date.now() - activity.lastStatusLineTime < STATUS_LINE_ACTIVE_MS;
-
-          if (!hasChildren && !statusLineActive) {
-            const dataSilent = Date.now() - activity.lastDataTime > DIRECT_SPAWN_IDLE_GRACE_MS;
-            const childlessTimeout =
-              Date.now() - activity.lastChildSeenTime > DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS;
-            if (dataSilent || childlessTimeout) {
-              activity.state = 'idle';
-              changed = true;
-            }
+          const childlessTimeout =
+            !hasChildren &&
+            Date.now() - activity.lastChildSeenTime > DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS;
+          if (childlessTimeout) {
+            activity.state = 'idle';
+            changed = true;
           }
         }
         continue;

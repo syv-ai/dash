@@ -7,7 +7,7 @@ import type { ContextUsage, StatusLineData, SessionCost, RateLimits } from '@sha
  * via the HookServer's /hook/context endpoint.
  */
 const EMIT_DEBOUNCE_MS = 500;
-const STALE_MS = 120_000; // 2 minutes
+const STALE_MS = 600_000; // 10 minutes — crash-recovery safety net only
 
 class ContextUsageServiceImpl {
   private statusLineData = new Map<string, StatusLineData>();
