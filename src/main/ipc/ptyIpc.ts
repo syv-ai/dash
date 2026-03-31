@@ -15,6 +15,7 @@ import {
 } from '../services/ptyManager';
 import { terminalSnapshotService } from '../services/TerminalSnapshotService';
 import { activityMonitor } from '../services/ActivityMonitor';
+import { contextUsageService } from '../services/ContextUsageService';
 import { remoteControlService } from '../services/remoteControlService';
 import { TelemetryService } from '../services/TelemetryService';
 
@@ -147,6 +148,11 @@ export function registerPtyIpc(): void {
 
   ipcMain.handle('pty:remoteControl:getAllStates', () => {
     return { success: true, data: remoteControlService.getAllStates() };
+  });
+
+  // Status line data (context + cost + rate limits)
+  ipcMain.handle('pty:statusLine:getAll', () => {
+    return { success: true, data: contextUsageService.getAllStatusLine() };
   });
 }
 

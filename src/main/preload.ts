@@ -88,6 +88,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 
+  // Status line data (context + cost + rate limits)
+  ptyGetAllStatusLine: () => ipcRenderer.invoke('pty:statusLine:getAll'),
+  onPtyStatusLine: (
+    callback: (data: Record<string, import('../shared/types').StatusLineData>) => void,
+  ) => {
+    const handler = (
+      _event: unknown,
+      data: Record<string, import('../shared/types').StatusLineData>,
+    ) => callback(data);
+    ipcRenderer.on('pty:statusLine', handler);
+    return () => {
+      ipcRenderer.removeListener('pty:statusLine', handler);
+    };
+  },
+
   // Snapshots
   ptyGetSnapshot: (id: string) => ipcRenderer.invoke('pty:snapshot:get', id),
   ptySaveSnapshot: (id: string, payload: unknown) =>

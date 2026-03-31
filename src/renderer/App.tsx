@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   PanelGroup,
   Panel,
@@ -19,9 +19,12 @@ import { RemoteControlModal } from './components/RemoteControlModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ProjectSettingsModal } from './components/ProjectSettingsModal';
 import { AdoSetupModal } from './components/AdoSetupModal';
+import { RateLimitsWidget } from './components/RateLimitsWidget';
 import { parseAdoRemote } from '../shared/urls';
 import { ToastContainer } from './components/Toast';
 import { toast } from 'sonner';
+import { useStatusLine } from './hooks/useStatusLine';
+import { useThresholdAlerts } from './hooks/useThresholdAlerts';
 import type {
   Project,
   Task,
@@ -30,6 +33,7 @@ import type {
   LinkedGithubIssue,
   LinkedAdoWorkItem,
   RemoteControlState,
+  UsageThresholds,
   PixelAgentsConfig,
   PixelAgentsStatus,
 } from '../shared/types';
@@ -145,6 +149,29 @@ export function App() {
     Record<string, RemoteControlState>
   >({});
   const [remoteControlModalPtyId, setRemoteControlModalPtyId] = useState<string | null>(null);
+
+  // Status line data (context + cost + rate limits) — derived contextUsage & latestRateLimits
+  const { statusLineData, contextUsage, latestRateLimits } = useStatusLine();
+
+  // Usage thresholds for popup notifications
+  const [usageThresholds, setUsageThresholds] = useState<UsageThresholds>(() => {
+    try {
+      const stored = localStorage.getItem('usageThresholds');
+      return stored
+        ? JSON.parse(stored)
+        : {
+            contextPercentage: 80,
+            fiveHourPercentage: null,
+            sevenDayPercentage: null,
+          };
+    } catch {
+      return {
+        contextPercentage: 80,
+        fiveHourPercentage: null,
+        sevenDayPercentage: null,
+      };
+    }
+  });
 
   const notificationSoundRef = useRef(notificationSound);
   useEffect(() => {
@@ -338,6 +365,23 @@ export function App() {
 
     return unsubscribe;
   }, []);
+
+  // Task name lookup (used for threshold alerts and settings)
+  const taskNames = useMemo(() => {
+    const names: Record<string, string> = {};
+    for (const tasks of Object.values(tasksByProject)) {
+      for (const t of tasks) names[t.id] = t.name;
+    }
+    return names;
+  }, [tasksByProject]);
+
+  // Threshold alerts — fires toast notifications when usage exceeds thresholds
+  useThresholdAlerts(statusLineData, usageThresholds, taskNames);
+
+  // Persist usage thresholds
+  useEffect(() => {
+    localStorage.setItem('usageThresholds', JSON.stringify(usageThresholds));
+  }, [usageThresholds]);
 
   // Persist selection to localStorage (survives CMD+R reload)
   useEffect(() => {
@@ -866,9 +910,7 @@ export function App() {
               prompt,
               meta: {
                 githubIssues:
-                  ghItems.length > 0
-                    ? ghItems.map((i) => ({ id: i.id, url: i.url }))
-                    : undefined,
+                  ghItems.length > 0 ? ghItems.map((i) => ({ id: i.id, url: i.url })) : undefined,
                 adoWorkItems:
                   adoItems.length > 0
                     ? adoItems.map((wi) => ({ id: wi.id, url: wi.url }))
@@ -1149,6 +1191,7 @@ export function App() {
               taskActivity={taskActivity}
               unseenTaskIds={unseenTaskIds}
               remoteControlStates={remoteControlStates}
+              contextUsage={contextUsage}
               onReorderProjects={handleReorderProjects}
               pixelAgentsConnectedCount={
                 Object.values(pixelAgentsStatus.offices).filter(
@@ -1193,6 +1236,7 @@ export function App() {
               taskActivity={taskActivity}
               unseenTaskIds={unseenTaskIds}
               remoteControlStates={remoteControlStates}
+              contextUsage={contextUsage}
               onSelectTask={setActiveTaskId}
               onEnableRemoteControl={(taskId) => setRemoteControlModalPtyId(taskId)}
               onNewTask={() => activeProjectId && handleNewTask(activeProjectId)}
@@ -1243,43 +1287,50 @@ export function App() {
                 setTimeout(() => setChangesAnimating(false), 200);
               }}
             >
-              <ShellDrawerWrapper
-                enabled={
-                  shellDrawerEnabled && shellDrawerPosition === 'right' && !changesPanelCollapsed
-                }
-                taskId={activeTask?.id ?? null}
-                cwd={activeTask?.path ?? null}
-                collapsed={shellDrawerCollapsed}
-                panelRef={shellDrawerPanelRef}
-                animating={shellDrawerAnimating}
-                onAnimate={() => setShellDrawerAnimating(true)}
-                onCollapse={() => {
-                  setShellDrawerCollapsed(true);
-                  localStorage.setItem('shellDrawerCollapsed', 'true');
-                  setTimeout(() => setShellDrawerAnimating(false), 200);
-                }}
-                onExpand={() => {
-                  setShellDrawerCollapsed(false);
-                  localStorage.setItem('shellDrawerCollapsed', 'false');
-                  setTimeout(() => setShellDrawerAnimating(false), 200);
-                }}
-              >
-                <FileChangesPanel
-                  gitStatus={gitStatus}
-                  loading={gitLoading}
-                  onStageFile={handleStageFile}
-                  onUnstageFile={handleUnstageFile}
-                  onStageAll={handleStageAll}
-                  onUnstageAll={handleUnstageAll}
-                  onDiscardFile={handleDiscardFile}
-                  onViewDiff={handleViewDiff}
-                  onCommit={handleCommit}
-                  onPush={handlePush}
-                  collapsed={changesPanelCollapsed}
-                  onToggleCollapse={toggleChangesPanel}
-                  onShowCommitGraph={() => setShowCommitGraph(true)}
-                />
-              </ShellDrawerWrapper>
+              <div className="h-full flex flex-col overflow-hidden">
+                {!changesPanelCollapsed &&
+                  latestRateLimits &&
+                  (latestRateLimits.fiveHour || latestRateLimits.sevenDay) && (
+                    <RateLimitsWidget rateLimits={latestRateLimits} />
+                  )}
+                <ShellDrawerWrapper
+                  enabled={
+                    shellDrawerEnabled && shellDrawerPosition === 'right' && !changesPanelCollapsed
+                  }
+                  taskId={activeTask?.id ?? null}
+                  cwd={activeTask?.path ?? null}
+                  collapsed={shellDrawerCollapsed}
+                  panelRef={shellDrawerPanelRef}
+                  animating={shellDrawerAnimating}
+                  onAnimate={() => setShellDrawerAnimating(true)}
+                  onCollapse={() => {
+                    setShellDrawerCollapsed(true);
+                    localStorage.setItem('shellDrawerCollapsed', 'true');
+                    setTimeout(() => setShellDrawerAnimating(false), 200);
+                  }}
+                  onExpand={() => {
+                    setShellDrawerCollapsed(false);
+                    localStorage.setItem('shellDrawerCollapsed', 'false');
+                    setTimeout(() => setShellDrawerAnimating(false), 200);
+                  }}
+                >
+                  <FileChangesPanel
+                    gitStatus={gitStatus}
+                    loading={gitLoading}
+                    onStageFile={handleStageFile}
+                    onUnstageFile={handleUnstageFile}
+                    onStageAll={handleStageAll}
+                    onUnstageAll={handleUnstageAll}
+                    onDiscardFile={handleDiscardFile}
+                    onViewDiff={handleViewDiff}
+                    onCommit={handleCommit}
+                    onPush={handlePush}
+                    collapsed={changesPanelCollapsed}
+                    onToggleCollapse={toggleChangesPanel}
+                    onShowCommitGraph={() => setShowCommitGraph(true)}
+                  />
+                </ShellDrawerWrapper>
+              </div>
             </Panel>
           </>
         )}
@@ -1431,6 +1482,11 @@ export function App() {
             window.electronAPI.pixelAgentsSaveConfig(config);
           }}
           pixelAgentsStatus={pixelAgentsStatus}
+          statusLineData={statusLineData}
+          taskNames={taskNames}
+          latestRateLimits={latestRateLimits}
+          usageThresholds={usageThresholds}
+          onUsageThresholdsChange={setUsageThresholds}
           onClose={() => setShowSettings(false)}
         />
       )}

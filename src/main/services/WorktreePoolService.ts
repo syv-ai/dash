@@ -214,9 +214,7 @@ export class WorktreePoolService {
         const worktreesDir = worktreeService.getWorktreesDir(project.path);
         if (!fs.existsSync(worktreesDir)) continue;
 
-        const activeReservePaths = new Set(
-          [...this.reserves.values()].map((r) => r.path),
-        );
+        const activeReservePaths = new Set([...this.reserves.values()].map((r) => r.path));
         const entries = fs.readdirSync(worktreesDir);
         for (const entry of entries) {
           if (entry.startsWith(`${RESERVE_PREFIX}-`)) {
@@ -244,9 +242,7 @@ export class WorktreePoolService {
             ['branch', '--list', `${RESERVE_PREFIX}/*`],
             { cwd: project.path },
           );
-          const activeReserveBranches = new Set(
-            [...this.reserves.values()].map((r) => r.branch),
-          );
+          const activeReserveBranches = new Set([...this.reserves.values()].map((r) => r.branch));
           const branches = stdout
             .split('\n')
             .map((b) => b.trim())

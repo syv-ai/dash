@@ -11,24 +11,43 @@ interface PtyActivity {
   state: ActivityState;
   isDirectSpawn: boolean;
   lastDataTime: number;
+  /** Timestamp of last actual PTY output (terminal data from node-pty).
+   *  Unlike lastDataTime, this is NOT refreshed by statusLine POSTs,
+   *  so it accurately reflects when the terminal last produced output. */
+  lastPtyOutputTime: number;
   /** Timestamp when child processes were last observed (for direct-spawn PTYs). */
   lastChildSeenTime: number;
+  /** Timestamp when children were first continuously observed while idle.
+   *  Reset to 0 when no children are detected. Used for delayed idle→busy self-heal. */
+  idleChildrenSince: number;
+  /** Timestamp of last statusLine update from Claude Code.
+   *  StatusLine only fires while Claude is actively working, so a recent
+   *  update is strong evidence of busy state even without child processes. */
+  lastStatusLineTime: number;
+  /** Timestamp when setIdle was last called. Used by noteStatusLine to avoid
+   *  transitioning back to busy from delayed/buffered statusLine POSTs. */
+  lastIdleTime: number;
 }
 
 const POLL_INTERVAL = 2000;
 
-/** How long (ms) a direct-spawn PTY must have no children AND no PTY data
- *  before the polling fallback transitions it to idle. This covers the case
- *  where the Stop hook doesn't fire (e.g. interrupted mid-response) without
- *  falsely marking "thinking" responses (data flowing, no children) as idle. */
-const DIRECT_SPAWN_IDLE_GRACE_MS = 6000;
-
 /** Hard safety valve: if no child processes for this long while busy/waiting,
- *  force idle regardless of PTY data. Handles the case where Claude Code's
- *  statusline keeps emitting escape sequences, preventing the data-silence
- *  check from ever triggering. Long enough to avoid false positives during
- *  normal "thinking" phases (API calls with no child processes). */
+ *  force idle. The primary busy→idle signal is the Stop hook — this only
+ *  catches truly stuck states where the hook never fires. Long enough to
+ *  avoid false positives during agent execution and thinking phases. */
 const DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS = 45_000;
+
+/** How long (ms) children must be continuously present while idle before
+ *  polling self-heals to busy. Filters out brief startup child processes
+ *  (which last < 1s) while recovering from missed busy hooks or mid-response
+ *  stop hooks that fired between chained tool calls. */
+const IDLE_TO_BUSY_GRACE_MS = 4000;
+
+/** How long (ms) after setIdle before noteStatusLine is allowed to transition
+ *  back to busy. Prevents delayed/buffered statusLine POSTs from racing with
+ *  the Stop hook. After this window, statusLine acts as a fast busy signal
+ *  for cases where the UserPromptSubmit hook missed. */
+const IDLE_SETTLE_MS = 2000;
 
 class ActivityMonitorImpl {
   private activities = new Map<string, PtyActivity>();
@@ -42,7 +61,11 @@ class ActivityMonitorImpl {
       state: 'idle',
       isDirectSpawn,
       lastDataTime: now,
+      lastPtyOutputTime: now,
       lastChildSeenTime: now,
+      idleChildrenSince: 0,
+      lastStatusLineTime: 0,
+      lastIdleTime: 0,
     });
     this.emitAll();
   }
@@ -55,7 +78,32 @@ class ActivityMonitorImpl {
   noteData(ptyId: string): void {
     const activity = this.activities.get(ptyId);
     if (activity) {
-      activity.lastDataTime = Date.now();
+      const now = Date.now();
+      activity.lastDataTime = now;
+      activity.lastPtyOutputTime = now;
+    }
+  }
+
+  /**
+   * Called when a statusLine update is received from Claude Code.
+   * StatusLine only fires while Claude is actively working, so refresh
+   * timestamps to prevent the polling fallback from falsely transitioning
+   * busy→idle. Also transitions idle→busy if the PTY has been idle for
+   * longer than IDLE_SETTLE_MS, providing fast busy detection when the
+   * UserPromptSubmit hook misses. The settle window prevents delayed
+   * statusLine POSTs from racing with the Stop hook.
+   */
+  noteStatusLine(ptyId: string): void {
+    const activity = this.activities.get(ptyId);
+    if (!activity) return;
+    const now = Date.now();
+    activity.lastDataTime = now;
+    activity.lastStatusLineTime = now;
+    activity.lastChildSeenTime = now;
+    if (activity.state === 'idle' && now - activity.lastIdleTime > IDLE_SETTLE_MS) {
+      activity.state = 'busy';
+      activity.idleChildrenSince = 0;
+      this.emitAll();
     }
   }
 
@@ -67,6 +115,9 @@ class ActivityMonitorImpl {
     const activity = this.activities.get(ptyId);
     if (!activity || activity.state === 'idle') return;
     activity.state = 'idle';
+    activity.lastIdleTime = Date.now();
+    activity.lastStatusLineTime = 0;
+    activity.idleChildrenSince = 0;
     this.emitAll();
   }
 
@@ -79,6 +130,7 @@ class ActivityMonitorImpl {
     if (!activity || activity.state === 'busy') return;
     activity.state = 'busy';
     activity.lastChildSeenTime = Date.now();
+    activity.idleChildrenSince = 0;
     this.emitAll();
   }
 
@@ -159,28 +211,46 @@ class ActivityMonitorImpl {
 
         // Self-heal: if children are detected while waiting for permission,
         // the user approved and Claude started a tool. Transition to busy.
-        // Note: we intentionally don't self-heal idle → busy here because
-        // Claude CLI briefly spawns children during startup, which would
-        // cause a false busy flash on every reopen.
         if (activity.state === 'waiting' && hasChildren) {
           activity.state = 'busy';
+          activity.idleChildrenSince = 0;
           changed = true;
         }
 
-        // Fallback busy/waiting → idle when hooks miss (e.g. interrupted
-        // mid-response). Two checks:
-        // 1. Data silence: no children AND no PTY data for 6s
-        // 2. Hard timeout: no children for 45s (handles statusline
-        //    escape sequences that keep lastDataTime refreshed)
+        // Delayed self-heal: idle → busy when children are continuously
+        // present for IDLE_TO_BUSY_GRACE_MS. This recovers from missed
+        // busy hooks and mid-response stop hooks (which fire between
+        // chained tool calls). The grace period filters out brief startup
+        // child processes that last < 1s.
+        if (activity.state === 'idle' && hasChildren) {
+          if (activity.idleChildrenSince === 0) {
+            activity.idleChildrenSince = Date.now();
+          } else if (Date.now() - activity.idleChildrenSince > IDLE_TO_BUSY_GRACE_MS) {
+            activity.state = 'busy';
+            activity.idleChildrenSince = 0;
+            changed = true;
+          }
+        }
+        if (activity.state === 'idle' && !hasChildren) {
+          activity.idleChildrenSince = 0;
+        }
+
+        // Safety valve: force idle if no children for a very long time AND
+        // no recent PTY output. The primary busy→idle signal is the Stop hook
+        // (setIdle). This only catches truly stuck states (e.g. hook never
+        // fires due to crash). Process death is handled above via isProcessAlive.
+        // During extended thinking, Claude has no child processes but the
+        // spinner still emits PTY data — so we check lastPtyOutputTime too
+        // (not lastDataTime, which statusLine POSTs also refresh).
         if (activity.state === 'busy' || activity.state === 'waiting') {
-          if (!hasChildren) {
-            const dataSilent = Date.now() - activity.lastDataTime > DIRECT_SPAWN_IDLE_GRACE_MS;
-            const childlessTimeout =
-              Date.now() - activity.lastChildSeenTime > DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS;
-            if (dataSilent || childlessTimeout) {
-              activity.state = 'idle';
-              changed = true;
-            }
+          const now = Date.now();
+          const childlessTimeout =
+            !hasChildren &&
+            now - activity.lastChildSeenTime > DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS &&
+            now - activity.lastPtyOutputTime > DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS;
+          if (childlessTimeout) {
+            activity.state = 'idle';
+            changed = true;
           }
         }
         continue;
