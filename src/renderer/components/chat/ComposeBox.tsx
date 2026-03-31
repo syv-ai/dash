@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useState, useEffect } from 'react';
-import { ChevronDown, Loader2, SendHorizonal, Terminal } from 'lucide-react';
+import { ChevronDown, ImageIcon, Loader2, SendHorizonal, Terminal } from 'lucide-react';
 import { SlashCommandMenu, getFilteredCommands, type SlashCommand } from './SlashCommandMenu';
 import type { SessionMetrics } from '../../../shared/types';
 
@@ -25,6 +25,14 @@ interface ComposeBoxProps {
   placeholder?: string;
   activeSubprocesses?: SubprocessInfo[];
   sessionMetrics?: SessionMetrics | null;
+  /** Called on mount so parent can focus the textarea */
+  onReady?: (focus: () => void) => void;
+  /** Past user messages to seed input history (newest first) */
+  inputHistory?: string[];
+  /** Called when user pastes an image from clipboard; returns true if handled */
+  onImagePaste?: () => void;
+  /** Number of images attached via PTY paste */
+  imageCount?: number;
 }
 
 export function ComposeBox({
@@ -35,11 +43,43 @@ export function ComposeBox({
   cwd,
   placeholder = 'Send a message...',
   activeSubprocesses = [],
+  onReady,
+  inputHistory = [],
+  onImagePaste,
+  imageCount = 0,
   sessionMetrics,
 }: ComposeBoxProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [value, setValue] = useState('');
   const [dynamicCommands, setDynamicCommands] = useState<SlashCommand[]>([]);
+
+  // ── Input history ──────────────────────────────────────────────
+  // Seed from past user messages, then prepend new sends
+  const historyRef = useRef<string[]>(inputHistory);
+  const historyIndexRef = useRef(-1);
+  const draftRef = useRef('');
+
+  // Expose focus method to parent
+  useEffect(() => {
+    onReady?.(() => textareaRef.current?.focus());
+  }, [onReady]);
+
+  // Detect image paste and delegate to parent (which sends Ctrl+V to PTY)
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items || !onImagePaste) return;
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault();
+          onImagePaste();
+          return;
+        }
+      }
+      // Text paste falls through to default textarea behavior
+    },
+    [onImagePaste],
+  );
 
   // Load dynamic commands (skills, plugins, MCP) on mount
   useEffect(() => {
@@ -103,6 +143,13 @@ export function ComposeBox({
     if (!text || disabled) return;
     // When busy, only allow slash commands
     if (isBusy && !text.startsWith('/')) return;
+    // Save to input history
+    if (historyRef.current[0] !== text) {
+      historyRef.current.unshift(text);
+      if (historyRef.current.length > 50) historyRef.current.pop();
+    }
+    historyIndexRef.current = -1;
+    draftRef.current = '';
     onSend(text);
     setValue('');
     setShowSlashMenu(false);
@@ -183,6 +230,54 @@ export function ComposeBox({
           setShowSlashMenu(false);
           return;
         }
+      }
+
+      // Arrow Up → cycle input history
+      if (e.key === 'ArrowUp' && !showTasks && !showSlashMenu && historyRef.current.length > 0) {
+        // Only activate when textarea is empty or has single-line content with cursor at start
+        const el = textareaRef.current;
+        if (!el) return;
+        const isEmpty = el.value.length === 0;
+        const isSingleLineAtStart = !el.value.includes('\n') && el.selectionStart === 0;
+        const isBrowsingHistory = historyIndexRef.current >= 0;
+        if (isEmpty || isSingleLineAtStart || isBrowsingHistory) {
+          e.preventDefault();
+          if (historyIndexRef.current === -1) {
+            draftRef.current = el.value;
+          }
+          const nextIdx = Math.min(historyIndexRef.current + 1, historyRef.current.length - 1);
+          if (nextIdx === historyIndexRef.current) return;
+          historyIndexRef.current = nextIdx;
+          const newVal = historyRef.current[nextIdx];
+          setValue(newVal);
+          requestAnimationFrame(() => {
+            el.style.height = 'auto';
+            el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+          });
+          return;
+        }
+      }
+      // Arrow Down → restore draft or cycle forward in history
+      if (e.key === 'ArrowDown' && !showTasks && !showSlashMenu && historyIndexRef.current >= 0) {
+        e.preventDefault();
+        const el = textareaRef.current;
+        const nextIdx = historyIndexRef.current - 1;
+        let newVal: string;
+        if (nextIdx < 0) {
+          historyIndexRef.current = -1;
+          newVal = draftRef.current;
+        } else {
+          historyIndexRef.current = nextIdx;
+          newVal = historyRef.current[nextIdx];
+        }
+        setValue(newVal);
+        if (el) {
+          requestAnimationFrame(() => {
+            el.style.height = 'auto';
+            el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+          });
+        }
+        return;
       }
 
       // Enter in tasks panel → view task logs inline
@@ -283,12 +378,21 @@ export function ComposeBox({
           }}
         />
       )}
+      {imageCount > 0 && (
+        <div className="flex items-center gap-1.5 mb-1.5 px-1">
+          <ImageIcon size={12} strokeWidth={1.8} className="text-primary/70" />
+          <span className="text-[10px] text-primary/70">
+            {imageCount} {imageCount === 1 ? 'image' : 'images'} attached
+          </span>
+        </div>
+      )}
       <div className="flex items-end gap-2 rounded-lg border border-border/80 bg-background px-3 py-2 focus-within:border-primary/50 transition-colors">
         <textarea
           ref={textareaRef}
           value={value}
           onChange={handleInput}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={placeholder}
           disabled={disabled}
           rows={1}

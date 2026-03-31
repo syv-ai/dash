@@ -5,7 +5,7 @@
  * Improvements over inline ptyIpc watcher:
  * - Watches project directory for new session files (handles /clear, session rotation)
  * - Watches ~/.claude/projects/ for project dir creation (first-time tasks)
- * - Debounces fs.watch events (300ms) to avoid redundant reads
+ * - Debounces fs.watch events (80ms) to avoid redundant reads
  * - Tracks partial line byte offset correctly
  * - Deduplicates entries by requestId (Claude writes multiple entries per streaming response)
  * - Clean standalone service with start/stop/getHistory API
@@ -26,8 +26,8 @@ export type MetricsCallback = (metrics: SessionMetrics) => void;
 
 // ── Watcher State ───────────────────────────────────────────
 
-const DEBOUNCE_MS = 300;
-const POLL_INTERVAL_MS = 500;
+const DEBOUNCE_MS = 80;
+const POLL_INTERVAL_MS = 200;
 
 interface WatchEntry {
   id: string;
@@ -38,7 +38,6 @@ interface WatchEntry {
   dirWatcher: fs.FSWatcher | null;
   pollInterval: ReturnType<typeof setInterval> | null;
   debounceTimer: ReturnType<typeof setTimeout> | null;
-  toolResultTimer: ReturnType<typeof setTimeout> | null;
   bytesRead: number;
   partialLine: string;
   /** Set of requestIds already seen — for dedup of streaming entries. */
@@ -143,15 +142,27 @@ function parseConversationEntry(entry: any, counter: number): ChatMessage | null
     };
   }
 
-  if (type === 'system' && typeof entry.content === 'string') {
-    const text = entry.content.trim();
-    if (text) {
+  if (type === 'system') {
+    // Compact boundary events — show a summary card
+    if (entry.subtype === 'compact_boundary') {
+      const summary = entry.summary || 'Conversation compacted to save context';
       return {
         id: entry.uuid || `msg-sys-${counter}`,
         role: 'system',
-        content: [{ type: 'text', text }],
+        content: [{ type: 'text', text: `<compact-summary>${summary}</compact-summary>` }],
         timestamp: entry.timestamp ? new Date(entry.timestamp).getTime() : Date.now(),
       };
+    }
+    if (typeof entry.content === 'string') {
+      const text = entry.content.trim();
+      if (text) {
+        return {
+          id: entry.uuid || `msg-sys-${counter}`,
+          role: 'system',
+          content: [{ type: 'text', text }],
+          timestamp: entry.timestamp ? new Date(entry.timestamp).getTime() : Date.now(),
+        };
+      }
     }
   }
 
@@ -238,30 +249,24 @@ function readIncrementalBytes(entry: WatchEntry): void {
     entry.bytesRead = stat.size - Buffer.byteLength(entry.partialLine, 'utf-8');
 
     const messages: ChatMessage[] = [];
-    const toolResultMessages: ChatMessage[] = [];
     let counter = Date.now();
     let latestStatus: string | null | undefined = undefined;
+
+    // Collect all parsed entries, then deduplicate by requestId keeping the
+    // LAST entry (most complete). This handles Claude's streaming writes where
+    // each successive entry with the same requestId has more content.
+    const allParsed: Array<{ raw: any; msg: ChatMessage | null; requestId?: string }> = [];
 
     for (const line of lines) {
       if (!line.trim()) continue;
       try {
         const raw = JSON.parse(line);
 
-        // Deduplicate by requestId — Claude writes multiple entries during streaming
+        // Skip requestIds already processed in a previous incremental read
         if (raw.requestId && entry.seenRequestIds.has(raw.requestId)) continue;
-        if (raw.requestId) entry.seenRequestIds.add(raw.requestId);
 
         const msg = parseConversationEntry(raw, counter++);
-        if (msg) {
-          // Separate tool_result messages for delayed delivery
-          const isToolResultOnly =
-            msg.role === 'user' && msg.content.every((b) => b.type === 'tool_result');
-          if (isToolResultOnly) {
-            toolResultMessages.push(msg);
-          } else {
-            messages.push(msg);
-          }
-        }
+        allParsed.push({ raw, msg, requestId: raw.requestId });
 
         // Extract status from assistant tool_use blocks (JSONL fallback for status)
         if (raw.type === 'assistant' && Array.isArray(raw.message?.content)) {
@@ -282,6 +287,19 @@ function readIncrementalBytes(entry: WatchEntry): void {
           latestStatus = null;
         }
 
+        // Surface API retry / rate limit events as status
+        if (raw.type === 'system' && raw.subtype === 'api_retry') {
+          const delaySec = Math.ceil((raw.retry_delay_ms || 0) / 1000);
+          const errorType = raw.error || 'unknown';
+          if (errorType === 'rate_limit') {
+            latestStatus = `Rate limited — retrying in ${delaySec}s (attempt ${raw.attempt}/${raw.max_retries})`;
+          } else if (errorType === 'server_error') {
+            latestStatus = `API error — retrying in ${delaySec}s (attempt ${raw.attempt}/${raw.max_retries})`;
+          } else {
+            latestStatus = `${errorType} — retrying in ${delaySec}s`;
+          }
+        }
+
         // Track timestamps for duration
         if (raw.timestamp) {
           const ts = new Date(raw.timestamp).getTime();
@@ -294,6 +312,20 @@ function readIncrementalBytes(entry: WatchEntry): void {
       } catch {
         // Skip malformed lines
       }
+    }
+
+    // Deduplicate by requestId — keep only the LAST entry per requestId
+    // (Claude writes multiple entries during streaming, each more complete).
+    const lastByRequestId = new Map<string, number>();
+    for (let i = 0; i < allParsed.length; i++) {
+      const rid = allParsed[i].requestId;
+      if (rid) lastByRequestId.set(rid, i);
+    }
+    for (let i = 0; i < allParsed.length; i++) {
+      const { msg, requestId } = allParsed[i];
+      if (requestId && lastByRequestId.get(requestId) !== i) continue;
+      if (requestId) entry.seenRequestIds.add(requestId);
+      if (msg) messages.push(msg);
     }
 
     if (messages.length > 0) entry.onMessages(messages);
@@ -309,15 +341,6 @@ function readIncrementalBytes(entry: WatchEntry): void {
       cacheReadTokens: m.cacheReadTokens,
       messageCount: m.messageCount,
     });
-
-    // Send tool_results after a delay so tool_use blocks render with amber spinner first
-    if (toolResultMessages.length > 0) {
-      if (entry.toolResultTimer) clearTimeout(entry.toolResultTimer);
-      entry.toolResultTimer = setTimeout(() => {
-        entry.onMessages(toolResultMessages);
-        entry.toolResultTimer = null;
-      }, 400);
-    }
   } catch {
     // File may have been deleted/rotated
   }
@@ -415,7 +438,6 @@ export function startWatching(
     dirWatcher: null,
     pollInterval: null,
     debounceTimer: null,
-    toolResultTimer: null,
     bytesRead: 0,
     partialLine: '',
     seenRequestIds: new Set(),
@@ -492,7 +514,6 @@ export function stopWatching(id: string): void {
   if (!entry) return;
 
   if (entry.debounceTimer) clearTimeout(entry.debounceTimer);
-  if (entry.toolResultTimer) clearTimeout(entry.toolResultTimer);
   if (entry.pollInterval) clearInterval(entry.pollInterval);
   if (entry.fileWatcher) {
     try {

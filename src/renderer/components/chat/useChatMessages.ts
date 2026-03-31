@@ -130,6 +130,15 @@ export function useChatMessages(id: string, cwd: string): UseChatMessagesReturn 
       setActiveSubprocesses([...bgTasks.values()]);
     });
 
+    // Clear all background tasks when the main task completes
+    const unsubStop = window.electronAPI.onHookStop(id, () => {
+      const bgTasks = bgTasksRef.current;
+      if (bgTasks.size > 0) {
+        bgTasks.clear();
+        setActiveSubprocesses([]);
+      }
+    });
+
     // Session rotation (e.g. /clear)
     const unsubSessionStart = window.electronAPI.onHookSessionStart(id, (data) => {
       if (data.source === 'clear' || data.source === 'startup') {
@@ -180,6 +189,7 @@ export function useChatMessages(id: string, cwd: string): UseChatMessagesReturn 
       unsubChat();
       unsubSubagentStart();
       unsubSubagentStop();
+      unsubStop();
       unsubSessionStart();
       unsubExit();
       window.electronAPI.ptyChatUnwatch(id);

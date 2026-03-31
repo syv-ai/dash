@@ -1,5 +1,5 @@
-import React from 'react';
-import { User, Bot, AlertTriangle, TerminalSquare } from 'lucide-react';
+import React, { useState, useCallback } from 'react';
+import { User, Bot, AlertTriangle, TerminalSquare, Minimize2, Copy, Check } from 'lucide-react';
 import type { ChatMessage, ChatContentBlock } from '../../../shared/types';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ToolUseBlock } from './ToolUseBlock';
@@ -57,10 +57,14 @@ export function MessageBubble({
   );
   if (!hasVisibleContent) return null;
 
+  const textForCopy = getTextContent(message.content);
+
   // Continuation messages: no avatar, no header, tighter spacing
   if (isGroupContinuation) {
     return (
-      <div className={`flex gap-3 px-4 pb-2 animate-chat-entry ${isUser ? '' : 'bg-surface-0/50'}`}>
+      <div
+        className={`group/msg relative flex gap-3 px-4 pb-2 animate-chat-entry ${isUser ? '' : 'bg-surface-0/50'}`}
+      >
         {/* Spacer matching avatar width */}
         <div className="w-6 shrink-0" />
         <div className="flex-1 min-w-0 space-y-1">
@@ -68,12 +72,15 @@ export function MessageBubble({
             renderContentBlock(block, i, allMessages, toolResults),
           )}
         </div>
+        {textForCopy && <MessageActions text={textForCopy} />}
       </div>
     );
   }
 
   return (
-    <div className={`flex gap-3 px-4 py-3 animate-chat-entry ${isUser ? '' : 'bg-surface-0/50'}`}>
+    <div
+      className={`group/msg relative flex gap-3 px-4 py-3 animate-chat-entry ${isUser ? '' : 'bg-surface-0/50'}`}
+    >
       {/* Avatar */}
       <div
         className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
@@ -103,6 +110,7 @@ export function MessageBubble({
           )}
         </div>
       </div>
+      {textForCopy && <MessageActions text={textForCopy} />}
     </div>
   );
 }
@@ -119,6 +127,9 @@ function renderContentBlock(
       const text = block.text;
       if (text.includes('<task-notification>')) {
         return <TaskNotification key={key} xml={text} />;
+      }
+      if (text.includes('<compact-summary>')) {
+        return <CompactSummary key={key} xml={text} />;
       }
       // Show slash commands/skills as elegant cards
       if (text.includes('<command-name>')) {
@@ -246,6 +257,48 @@ function TaskNotification({ xml }: { xml: string }): React.ReactElement | null {
           {toolUses && <span>{toolUses} tool uses</span>}
         </div>
       )}
+    </div>
+  );
+}
+
+function MessageActions({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }, [text]);
+
+  return (
+    <div className="absolute top-1 right-2 opacity-0 group-hover/msg:opacity-100 transition-opacity duration-100">
+      <button
+        onClick={handleCopy}
+        className="p-1 rounded-md hover:bg-accent/60 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+        title="Copy message"
+      >
+        {copied ? (
+          <Check size={12} strokeWidth={2} className="text-[hsl(var(--git-added))]" />
+        ) : (
+          <Copy size={12} strokeWidth={2} />
+        )}
+      </button>
+    </div>
+  );
+}
+
+function CompactSummary({ xml }: { xml: string }): React.ReactElement {
+  const match = xml.match(/<compact-summary>([\s\S]*?)<\/compact-summary>/);
+  const summary = match?.[1]?.trim() || 'Conversation compacted to save context';
+
+  return (
+    <div className="my-3 mx-4 flex items-center gap-3">
+      <div className="flex-1 border-t border-border/40" />
+      <div className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-border/40 bg-surface-1/50">
+        <Minimize2 size={11} strokeWidth={1.8} className="text-muted-foreground/60" />
+        <span className="text-[10px] text-muted-foreground/60">{summary}</span>
+      </div>
+      <div className="flex-1 border-t border-border/40" />
     </div>
   );
 }

@@ -1,5 +1,5 @@
-import React, { useRef, useEffect, useCallback } from 'react';
-import { ArrowDown, Bot, Loader2, Shield } from 'lucide-react';
+import React, { useRef, useEffect, useCallback, useMemo, useState } from 'react';
+import { ArrowDown, Bot, ChevronDown, ChevronUp, Loader2, Search, Shield, X } from 'lucide-react';
 import { MessageBubble } from './chat/MessageBubble';
 import { ComposeBox } from './chat/ComposeBox';
 import { Tooltip } from './ui/Tooltip';
@@ -46,14 +46,41 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
     sessionMetrics,
   } = useBusyState(id, setMessages);
 
-  // ── Auto-scroll ──────────────────────────────────────────────
+  // ── Auto-scroll & unseen tracking ─────────────────────────────
   const [isAtBottom, setIsAtBottom] = React.useState(true);
+  // The message ID after which new (unseen) messages arrived while scrolled away
+  const lastSeenIdRef = useRef<string | null>(null);
+  const [unseenCount, setUnseenCount] = React.useState(0);
 
   useEffect(() => {
     if (isAtBottom && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isBusy, busyStatus, isWaiting, isAtBottom]);
+
+  // Track unseen messages when scrolled away
+  useEffect(() => {
+    if (messages.length === 0) return;
+    if (isAtBottom) {
+      lastSeenIdRef.current = null;
+      setUnseenCount(0);
+    } else {
+      // User is scrolled up — if we don't have a marker yet, set one
+      if (!lastSeenIdRef.current) {
+        lastSeenIdRef.current = messages[messages.length - 1].id;
+        setUnseenCount(0);
+      } else {
+        // Count assistant messages after the marker
+        const markerIdx = messages.findIndex((m) => m.id === lastSeenIdRef.current);
+        if (markerIdx >= 0) {
+          const unseen = messages
+            .slice(markerIdx + 1)
+            .filter((m) => m.role === 'assistant' && m.content.some((b) => b.type === 'text'));
+          setUnseenCount(unseen.length);
+        }
+      }
+    }
+  }, [messages, isAtBottom]);
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
@@ -68,12 +95,83 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
       setIsAtBottom(true);
+      lastSeenIdRef.current = null;
+      setUnseenCount(0);
     }
+  }, []);
+
+  // Compute the unseen divider position (index after which unseen messages start)
+  const unseenDividerAfterIndex = useMemo(() => {
+    if (!lastSeenIdRef.current || isAtBottom) return -1;
+    return messages.findIndex((m) => m.id === lastSeenIdRef.current);
+  }, [messages, isAtBottom]);
+
+  // ── Search in transcript ─────────────────────────────────────
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchMatchIndex, setSearchMatchIndex] = useState(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const searchMatches = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    const matches: number[] = [];
+    messages.forEach((msg, idx) => {
+      const text = msg.content
+        .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
+        .map((b) => b.text)
+        .join(' ')
+        .toLowerCase();
+      if (text.includes(q)) matches.push(idx);
+    });
+    return matches;
+  }, [messages, searchQuery]);
+
+  const scrollToMessage = useCallback((msgIdx: number) => {
+    // Defer to let React render the highlight first
+    requestAnimationFrame(() => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const target = el.querySelector(`[data-msg-idx="${msgIdx}"]`);
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+  }, []);
+
+  const searchNext = useCallback(() => {
+    if (searchMatches.length === 0) return;
+    const next = (searchMatchIndex + 1) % searchMatches.length;
+    setSearchMatchIndex(next);
+    scrollToMessage(searchMatches[next]);
+  }, [searchMatches, searchMatchIndex, scrollToMessage]);
+
+  const searchPrev = useCallback(() => {
+    if (searchMatches.length === 0) return;
+    const prev = (searchMatchIndex - 1 + searchMatches.length) % searchMatches.length;
+    setSearchMatchIndex(prev);
+    scrollToMessage(searchMatches[prev]);
+  }, [searchMatches, searchMatchIndex, scrollToMessage]);
+
+  const composeFocusRef = useRef<() => void>(() => {});
+
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+    setSearchQuery('');
+    setSearchMatchIndex(0);
+    setTimeout(() => composeFocusRef.current(), 0);
   }, []);
 
   // ── Keyboard handling ────────────────────────────────────────
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd/Ctrl+F → open search
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault();
+        setSearchOpen(true);
+        setTimeout(() => searchInputRef.current?.focus(), 0);
+        return;
+      }
       if (isWaiting) {
         if (e.key === 'ArrowUp') {
           e.preventDefault();
@@ -105,7 +203,7 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
         }
         return;
       }
-      if (e.key === 'Escape' && isBusy) {
+      if (e.key === 'Escape' && isBusy && !searchOpen) {
         e.preventDefault();
         window.electronAPI.ptyInput({ id, data: '\x03' });
         setIsBusy(false);
@@ -114,7 +212,23 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [id, isBusy, isWaiting, setIsBusy, setBusyStatus, setIsWaiting]);
+  }, [id, isBusy, isWaiting, searchOpen, setIsBusy, setBusyStatus, setIsWaiting]);
+
+  // ── Image paste tracking ─────────────────────────────────────
+  const [pastedImageCount, setPastedImageCount] = useState(0);
+
+  // ── Queued prompts ───────────────────────────────────────────
+  const [queuedPrompts, setQueuedPrompts] = useState<string[]>([]);
+
+  // Clear queued prompts when Claude responds (busy → not busy transition)
+  const prevBusyRef = useRef(isBusy);
+  useEffect(() => {
+    if (prevBusyRef.current && !isBusy && queuedPrompts.length > 0) {
+      // Remove the first queued prompt — it's now being processed
+      setQueuedPrompts((prev) => prev.slice(1));
+    }
+    prevBusyRef.current = isBusy;
+  }, [isBusy, queuedPrompts.length]);
 
   // ── Send message ─────────────────────────────────────────────
   const handleSend = useCallback(
@@ -129,6 +243,10 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
           timestamp: Date.now(),
         };
         setMessages((prev) => [...prev, localMsg]);
+        // Track queued prompts sent while busy
+        if (isBusy) {
+          setQueuedPrompts((prev) => [...prev, text]);
+        }
       }
 
       const sendText = text.replace(/\n+/g, ' ');
@@ -147,8 +265,9 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
           setIsBusy(true);
         }
       }
+      setPastedImageCount(0);
     },
-    [id, onSwitchToTerminal, setMessages, setIsBusy],
+    [id, isBusy, onSwitchToTerminal, setMessages, setIsBusy],
   );
 
   // ── Render ───────────────────────────────────────────────────
@@ -157,6 +276,61 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
       className="w-full h-full min-w-0 flex flex-col relative overflow-hidden"
       style={{ background: themeBg }}
     >
+      {searchOpen && (
+        <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border/60 bg-surface-1/80 backdrop-blur-sm">
+          <Search size={13} strokeWidth={2} className="text-muted-foreground/50 shrink-0" />
+          <input
+            ref={searchInputRef}
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setSearchMatchIndex(0);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                e.shiftKey ? searchPrev() : searchNext();
+              }
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                e.nativeEvent.stopImmediatePropagation();
+                closeSearch();
+              }
+            }}
+            placeholder="Search messages..."
+            className="flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
+            autoFocus
+          />
+          {searchQuery && (
+            <span className="text-[10px] text-muted-foreground/50 tabular-nums shrink-0">
+              {searchMatches.length > 0
+                ? `${searchMatchIndex + 1}/${searchMatches.length}`
+                : 'No matches'}
+            </span>
+          )}
+          <button
+            onClick={searchPrev}
+            disabled={searchMatches.length === 0}
+            className="p-0.5 rounded hover:bg-accent/60 text-muted-foreground/50 hover:text-muted-foreground disabled:opacity-30 transition-colors"
+          >
+            <ChevronUp size={14} strokeWidth={2} />
+          </button>
+          <button
+            onClick={searchNext}
+            disabled={searchMatches.length === 0}
+            className="p-0.5 rounded hover:bg-accent/60 text-muted-foreground/50 hover:text-muted-foreground disabled:opacity-30 transition-colors"
+          >
+            <ChevronDown size={14} strokeWidth={2} />
+          </button>
+          <button
+            onClick={closeSearch}
+            className="p-0.5 rounded hover:bg-accent/60 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+          >
+            <X size={14} strokeWidth={2} />
+          </button>
+        </div>
+      )}
       <div
         ref={scrollRef}
         onScroll={handleScroll}
@@ -212,14 +386,36 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
               break;
             }
           }
+          const isCurrentSearchHit =
+            searchOpen && searchMatches.length > 0 && searchMatches[searchMatchIndex] === idx;
+          const isAnySearchHit = searchOpen && searchMatches.includes(idx);
           return (
-            <MessageBubble
-              key={msg.id}
-              message={msg}
-              allMessages={messages}
-              toolResults={toolResults}
-              isGroupContinuation={prevVisibleRole === msg.role}
-            />
+            <React.Fragment key={msg.id}>
+              {idx - 1 === unseenDividerAfterIndex && unseenDividerAfterIndex >= 0 && (
+                <div className="flex items-center gap-3 mx-4 my-2">
+                  <div className="flex-1 border-t border-primary/40" />
+                  <span className="text-[10px] font-medium text-primary/70">New</span>
+                  <div className="flex-1 border-t border-primary/40" />
+                </div>
+              )}
+              <div
+                data-msg-idx={idx}
+                className={
+                  isCurrentSearchHit
+                    ? 'bg-primary/15 border-l-2 border-primary'
+                    : isAnySearchHit
+                      ? 'bg-primary/5'
+                      : undefined
+                }
+              >
+                <MessageBubble
+                  message={msg}
+                  allMessages={messages}
+                  toolResults={toolResults}
+                  isGroupContinuation={prevVisibleRole === msg.role}
+                />
+              </div>
+            </React.Fragment>
           );
         })}
 
@@ -236,11 +432,31 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
         <Tooltip content="Scroll to bottom">
           <button
             onClick={scrollToBottom}
-            className="absolute bottom-[100px] right-4 z-10 w-8 h-8 rounded-full bg-accent/80 hover:bg-accent text-foreground/70 hover:text-foreground flex items-center justify-center shadow-md backdrop-blur-sm transition-all duration-150 hover:scale-105"
+            className="absolute bottom-[100px] right-4 z-10 rounded-full bg-accent/80 hover:bg-accent text-foreground/70 hover:text-foreground flex items-center justify-center shadow-md backdrop-blur-sm transition-all duration-150 hover:scale-105 gap-1.5 px-2.5 h-8"
           >
-            <ArrowDown size={16} strokeWidth={2} />
+            {unseenCount > 0 && (
+              <span className="text-[10px] font-medium text-primary">{unseenCount} new</span>
+            )}
+            <ArrowDown size={14} strokeWidth={2} />
           </button>
         </Tooltip>
+      )}
+
+      {queuedPrompts.length > 0 && (
+        <div
+          className="border-t border-border/40 px-4 py-1.5"
+          style={{ background: themeBg || 'hsl(var(--surface-1))' }}
+        >
+          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/50">
+            <Loader2 size={10} strokeWidth={2} className="animate-spin shrink-0" />
+            <span>
+              {queuedPrompts.length} queued {queuedPrompts.length === 1 ? 'prompt' : 'prompts'}:
+            </span>
+            <span className="truncate font-mono text-muted-foreground/40">
+              {queuedPrompts.map((p) => p.slice(0, 30)).join(' → ')}
+            </span>
+          </div>
+        </div>
       )}
 
       <ComposeBox
@@ -249,9 +465,28 @@ export function ChatPane({ id, cwd, onSwitchToTerminal }: ChatPaneProps) {
         isBusy={isBusy}
         themeBg={themeBg}
         cwd={cwd}
+        onReady={(focus) => {
+          composeFocusRef.current = focus;
+        }}
+        inputHistory={messages
+          .filter((m) => m.role === 'user' && m.content.some((b) => b.type === 'text'))
+          .map((m) =>
+            m.content
+              .filter((b) => b.type === 'text')
+              .map((b) => (b as { type: 'text'; text: string }).text)
+              .join('\n'),
+          )
+          .reverse()}
         placeholder={
           isBusy ? 'Type / for commands, or press Esc to interrupt...' : 'Send a message...'
         }
+        onImagePaste={() => {
+          // Send Ctrl+V to the PTY — Claude Code's TUI will read the
+          // system clipboard and handle the image natively.
+          window.electronAPI.ptyInput({ id, data: '\x16' });
+          setPastedImageCount((c) => c + 1);
+        }}
+        imageCount={pastedImageCount}
         activeSubprocesses={activeSubprocesses}
         sessionMetrics={sessionMetrics}
       />
@@ -300,7 +535,17 @@ function BusyIndicator({
           style={{ animationDelay: '300ms' }}
         />
       </div>
-      {busyStatus && <span className="text-[11px] text-muted-foreground/50">{busyStatus}</span>}
+      {busyStatus && (
+        <span
+          className={`text-[11px] ${
+            busyStatus.includes('Rate limited') || busyStatus.includes('retrying')
+              ? 'text-amber-400'
+              : 'text-muted-foreground/50'
+          }`}
+        >
+          {busyStatus}
+        </span>
+      )}
       {busyElapsed > 0 && (
         <span className="text-[10px] font-mono text-muted-foreground/40">
           {busyElapsed >= 60
