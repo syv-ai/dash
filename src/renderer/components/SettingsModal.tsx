@@ -581,30 +581,20 @@ export function SettingsModal({
 
   const [fontDropdownOpen, setFontDropdownOpen] = useState(false);
   const [fontSearch, setFontSearch] = useState('');
-  const [showSystemFonts, setShowSystemFonts] = useState(false);
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
-  const [systemFontsLoading, setSystemFontsLoading] = useState(false);
   const fontDropdownRef = useRef<HTMLDivElement>(null);
 
-  const loadSystemFonts = async () => {
-    if (systemFonts.length > 0) return;
-    setSystemFontsLoading(true);
-    try {
-      const resp = await window.electronAPI.getSystemFonts();
-      if (resp.success && resp.data) {
-        setSystemFonts(resp.data);
-      }
-    } catch {
-      // Silently fail — curated list still works
-    }
-    setSystemFontsLoading(false);
-  };
-
+  // Load system fonts when dropdown opens
   useEffect(() => {
-    if (showSystemFonts && systemFonts.length === 0) {
-      loadSystemFonts();
+    if (fontDropdownOpen && systemFonts.length === 0) {
+      window.electronAPI
+        .getSystemFonts()
+        .then((resp) => {
+          if (resp.success && resp.data) setSystemFonts(resp.data);
+        })
+        .catch(() => {});
     }
-  }, [showSystemFonts]);
+  }, [fontDropdownOpen]);
 
   // Close font dropdown on click outside
   useEffect(() => {
@@ -1217,9 +1207,7 @@ export function SettingsModal({
                               setFontSearch('');
                             }}
                             className={`w-full text-left px-3 py-1.5 text-[13px] hover:bg-surface-2 transition-colors ${
-                              terminalFontFamily === null
-                                ? 'text-primary'
-                                : 'text-foreground/80'
+                              terminalFontFamily === null ? 'text-primary' : 'text-foreground/80'
                             }`}
                           >
                             Default (monospace)
@@ -1256,23 +1244,19 @@ export function SettingsModal({
                             </button>
                           ))}
 
-                          {/* System fonts toggle + list */}
-                          <div className="border-t border-border/40 mt-1 pt-1">
-                            <button
-                              onClick={() => setShowSystemFonts(!showSystemFonts)}
-                              className="w-full text-left px-3 py-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-                            >
-                              {showSystemFonts ? '▾' : '▸'} System fonts
-                              {systemFontsLoading && (
-                                <span className="ml-2 text-[10px] text-muted-foreground/50">
-                                  Loading...
-                                </span>
-                              )}
-                            </button>
-                            {showSystemFonts &&
-                              systemFonts
-                                .filter((f) =>
-                                  f.toLowerCase().includes(fontSearch.toLowerCase()),
+                          {/* System fonts — flat list, deduped against curated */}
+                          {systemFonts.length > 0 && (
+                            <>
+                              <div className="px-3 pt-2 pb-1 text-[10px] text-muted-foreground/60 uppercase tracking-wider border-t border-border/40 mt-1">
+                                System
+                              </div>
+                              {systemFonts
+                                .filter(
+                                  (f) =>
+                                    f.toLowerCase().includes(fontSearch.toLowerCase()) &&
+                                    !CURATED_FONTS.some(
+                                      (c) => c.name.toLowerCase() === f.toLowerCase(),
+                                    ),
                                 )
                                 .map((f) => {
                                   const family = `'${f}', monospace`;
@@ -1287,7 +1271,7 @@ export function SettingsModal({
                                       className={`w-full text-left px-3 py-1.5 text-[13px] hover:bg-surface-2 transition-colors ${
                                         terminalFontFamily === family
                                           ? 'text-primary'
-                                          : 'text-foreground/60'
+                                          : 'text-foreground/80'
                                       }`}
                                       style={{ fontFamily: family }}
                                     >
@@ -1300,7 +1284,8 @@ export function SettingsModal({
                                     </button>
                                   );
                                 })}
-                          </div>
+                            </>
+                          )}
                         </div>
                       </div>
                     )}
@@ -1384,8 +1369,7 @@ export function SettingsModal({
                       fontFamily: terminalFontFamily || 'monospace',
                       fontSize: `${terminalFontSize}px`,
                       lineHeight: terminalLineHeight,
-                      color:
-                        resolveTheme(terminalTheme, theme === 'dark').foreground || '#d4d4d4',
+                      color: resolveTheme(terminalTheme, theme === 'dark').foreground || '#d4d4d4',
                     }}
                   >
                     <div>
