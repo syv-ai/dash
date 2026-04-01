@@ -50,13 +50,25 @@ function fixPath(): void {
       path.join(home, '.local/bin'),
       '/usr/local/bin',
     );
+  } else if (process.platform === 'win32') {
+    // Add common Windows Node/npm install locations
+    const home = os.homedir();
+    const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
+    additions.push(
+      path.join(home, 'AppData', 'Roaming', 'npm'),
+      path.join(appData, 'npm'),
+      'C:\\nvm4w\\nodejs',
+      'C:\\Program Files\\nodejs',
+      path.join(home, '.nvm', 'versions', 'node'),
+    );
   }
 
-  const pathSet = new Set(currentPath.split(':'));
+  const separator = process.platform === 'win32' ? ';' : ':';
+  const pathSet = new Set(currentPath.split(separator));
   for (const p of additions) {
     pathSet.add(p);
   }
-  process.env.PATH = [...pathSet].join(':');
+  process.env.PATH = [...pathSet].join(separator);
 }
 
 fixPath();
@@ -106,8 +118,8 @@ app.whenReady().then(async () => {
   const { remoteControlService } = await import('./services/remoteControlService');
   remoteControlService.setSender(mainWindow.webContents);
 
-  // Initialize auto-updater (production only)
-  if (!process.argv.includes('--dev')) {
+  // Initialize auto-updater (production only, disabled on Windows custom builds)
+  if (!process.argv.includes('--dev') && process.platform !== 'win32') {
     const { AutoUpdateService } = await import('./services/AutoUpdateService');
     AutoUpdateService.initialize(mainWindow);
   }
@@ -143,8 +155,42 @@ export let claudeCliCache: { installed: boolean; version: string | null; path: s
 
 async function detectClaudeCli(): Promise<void> {
   try {
-    const { stdout } = await execFileAsync('which', ['claude']);
-    const claudePath = stdout.trim();
+    let claudePath: string | null = null;
+
+    if (process.platform === 'win32') {
+      // Try `where claude.cmd` first
+      try {
+        const { stdout } = await execFileAsync('where', ['claude.cmd']);
+        claudePath = stdout.split('\n')[0].trim() || null;
+      } catch {
+        /* not in PATH */
+      }
+
+      // Fall back to known Windows install locations
+      if (!claudePath) {
+        const home = os.homedir();
+        const candidates = [
+          path.join(home, 'AppData', 'Roaming', 'npm', 'claude.cmd'),
+          'C:\\nvm4w\\nodejs\\claude.cmd',
+          'C:\\Program Files\\nodejs\\claude.cmd',
+        ];
+        for (const c of candidates) {
+          try {
+            await import('fs').then((f) => f.promises.access(c));
+            claudePath = c;
+            break;
+          } catch {
+            /* not here */
+          }
+        }
+      }
+    } else {
+      const { stdout } = await execFileAsync('which', ['claude']);
+      claudePath = stdout.trim() || null;
+    }
+
+    if (!claudePath) throw new Error('Claude CLI not found');
+
     const { stdout: versionOut } = await execFileAsync(claudePath, ['--version']);
     claudeCliCache = {
       installed: true,
