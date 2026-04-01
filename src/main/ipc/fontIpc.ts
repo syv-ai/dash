@@ -24,38 +24,31 @@ set AppleScript's text item delimiters to "\\n"
 return monoFonts as text`;
 
 async function detectMonospaceFonts(): Promise<string[]> {
-  if (cachedFonts) return cachedFonts;
+  if (cachedFonts && cachedFonts.length > 0) return cachedFonts;
 
   try {
+    let stdout: string;
     if (process.platform === 'darwin') {
       // macOS: use NSFontManager via AppleScript to reliably detect fixed-pitch fonts
-      const { stdout } = await execFileAsync('osascript', ['-e', APPLESCRIPT_MONO_FONTS], {
+      ({ stdout } = await execFileAsync('/usr/bin/osascript', ['-e', APPLESCRIPT_MONO_FONTS], {
         timeout: 15000,
-      });
-      const families = new Set<string>();
-      for (const line of stdout.split('\n')) {
-        const name = line.trim();
-        if (name) families.add(name);
-      }
-      cachedFonts = [...families].sort((a, b) => a.localeCompare(b));
+      }));
     } else {
       // Linux: use fc-list to find monospace fonts
-      const { stdout } = await execFileAsync('fc-list', [
-        ':spacing=mono',
-        '--format=%{family[0]}\n',
-      ]);
-      const families = new Set<string>();
-      for (const line of stdout.split('\n')) {
-        const name = line.trim();
-        if (name) families.add(name);
-      }
-      cachedFonts = [...families].sort((a, b) => a.localeCompare(b));
+      ({ stdout } = await execFileAsync('fc-list', [':spacing=mono', '--format=%{family[0]}\n']));
     }
-  } catch {
-    cachedFonts = [];
+    const families = new Set<string>();
+    for (const line of stdout.split('\n')) {
+      const name = line.trim();
+      if (name) families.add(name);
+    }
+    cachedFonts = [...families].sort((a, b) => a.localeCompare(b));
+  } catch (err) {
+    console.error('[fontIpc] Failed to detect system fonts:', err);
+    cachedFonts = null;
   }
 
-  return cachedFonts;
+  return cachedFonts ?? [];
 }
 
 export function registerFontIpc(): void {

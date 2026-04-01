@@ -590,11 +590,15 @@ export function SettingsModal({
       window.electronAPI
         .getSystemFonts()
         .then((resp) => {
-          if (resp.success && resp.data) setSystemFonts(resp.data);
+          if (resp.success && resp.data && resp.data.length > 0) {
+            setSystemFonts(resp.data);
+          }
         })
-        .catch(() => {});
+        .catch((err) => {
+          console.error('[SettingsModal] Failed to load system fonts:', err);
+        });
     }
-  }, [fontDropdownOpen]);
+  }, [fontDropdownOpen, systemFonts.length]);
 
   // Close font dropdown on click outside
   useEffect(() => {
