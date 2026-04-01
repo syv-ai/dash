@@ -30,6 +30,7 @@ import {
   LINE_HEIGHT_MIN,
   LINE_HEIGHT_MAX,
   LINE_HEIGHT_STEP,
+  detectInstalledFonts,
 } from '../terminal/terminalFonts';
 import type {
   PixelAgentsConfig,
@@ -584,19 +585,11 @@ export function SettingsModal({
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
   const fontDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Load system fonts when dropdown opens
+  // Detect installed system fonts when dropdown first opens
   useEffect(() => {
     if (fontDropdownOpen && systemFonts.length === 0) {
-      window.electronAPI
-        .getSystemFonts()
-        .then((resp) => {
-          if (resp.success && resp.data && resp.data.length > 0) {
-            setSystemFonts(resp.data);
-          }
-        })
-        .catch((err) => {
-          console.error('[SettingsModal] Failed to load system fonts:', err);
-        });
+      const detected = detectInstalledFonts();
+      if (detected.length > 0) setSystemFonts(detected);
     }
   }, [fontDropdownOpen, systemFonts.length]);
 
