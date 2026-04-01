@@ -6,36 +6,36 @@ const execFileAsync = promisify(execFile);
 
 let cachedFonts: string[] | null = null;
 
+const APPLESCRIPT_MONO_FONTS = `
+use framework "AppKit"
+set fm to current application's NSFontManager's sharedFontManager()
+set fonts to fm's availableFontFamilies() as list
+set monoFonts to {}
+repeat with f in fonts
+  set members to fm's availableMembersOfFontFamily:(f as text)
+  if members is not missing value and (count of members) > 0 then
+    set traits to item 4 of item 1 of (members as list)
+    if (traits mod 2048) div 1024 = 1 then
+      set end of monoFonts to (f as text)
+    end if
+  end if
+end repeat
+set AppleScript's text item delimiters to "\\n"
+return monoFonts as text`;
+
 async function detectMonospaceFonts(): Promise<string[]> {
   if (cachedFonts) return cachedFonts;
 
   try {
     if (process.platform === 'darwin') {
-      // macOS: use system_profiler to list all fonts, filter for monospace
-      const { stdout } = await execFileAsync('system_profiler', ['SPFontsDataType'], {
-        maxBuffer: 10 * 1024 * 1024,
+      // macOS: use NSFontManager via AppleScript to reliably detect fixed-pitch fonts
+      const { stdout } = await execFileAsync('osascript', ['-e', APPLESCRIPT_MONO_FONTS], {
+        timeout: 15000,
       });
       const families = new Set<string>();
-      let currentFamily = '';
       for (const line of stdout.split('\n')) {
-        const familyMatch = line.match(/^\s+Family:\s+(.+)/);
-        if (familyMatch) {
-          currentFamily = familyMatch[1].trim();
-        }
-        // Look for monospace/fixed-width type indicators
-        if (
-          currentFamily &&
-          (line.includes('Style: Monospaced') ||
-            line.includes('Style: Fixed') ||
-            /\bMono\b/i.test(currentFamily) ||
-            /\bCode\b/i.test(currentFamily) ||
-            /\bConsolas\b/i.test(currentFamily) ||
-            /\bCourier\b/i.test(currentFamily) ||
-            /\bMenlo\b/i.test(currentFamily) ||
-            /\bMonaco\b/i.test(currentFamily))
-        ) {
-          families.add(currentFamily);
-        }
+        const name = line.trim();
+        if (name) families.add(name);
       }
       cachedFonts = [...families].sort((a, b) => a.localeCompare(b));
     } else {
