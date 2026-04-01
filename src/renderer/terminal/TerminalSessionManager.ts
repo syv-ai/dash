@@ -46,6 +46,7 @@ export class TerminalSessionManager {
   private savedViewportY: number | null = null;
   readonly shellOnly: boolean;
   private themeId: string;
+  private fontFamily: string | null;
   constructor(opts: {
     id: string;
     cwd: string;
@@ -53,6 +54,9 @@ export class TerminalSessionManager {
     isDark?: boolean;
     shellOnly?: boolean;
     themeId?: string;
+    fontFamily?: string | null;
+    fontSize?: number;
+    lineHeight?: number;
   }) {
     this.id = opts.id;
     this.cwd = opts.cwd;
@@ -61,11 +65,13 @@ export class TerminalSessionManager {
     this.isDark = opts.isDark ?? true;
     this.shellOnly = opts.shellOnly ?? false;
     this.themeId = opts.themeId ?? 'default';
+    this.fontFamily = opts.fontFamily ?? null;
 
     this.terminal = new Terminal({
       scrollback: 100_000,
-      fontSize: 13,
-      lineHeight: 1.2,
+      fontSize: opts.fontSize ?? 13,
+      lineHeight: opts.lineHeight ?? 1.2,
+      fontFamily: opts.fontFamily ?? undefined,
       allowProposedApi: true,
       theme: resolveTheme(this.themeId, this.isDark),
       cursorBlink: true,
@@ -628,6 +634,27 @@ export class TerminalSessionManager {
           window.electronAPI.ptyResize({ id: this.id, cols, rows: dims.rows });
         }, 50);
       }
+    }
+  }
+
+  setTerminalFont(fontFamily: string | null, fontSize: number, lineHeight: number) {
+    this.fontFamily = fontFamily;
+    try {
+      if (fontFamily) {
+        this.terminal.options.fontFamily = fontFamily;
+      } else {
+        // Reset to xterm.js default
+        this.terminal.options.fontFamily = undefined;
+      }
+      this.terminal.options.fontSize = fontSize;
+      this.terminal.options.lineHeight = lineHeight;
+    } catch {
+      // WebGL addon may crash if GPU context is lost
+    }
+
+    // Refit terminal since character dimensions changed
+    if (this.opened) {
+      this.fit();
     }
   }
 
