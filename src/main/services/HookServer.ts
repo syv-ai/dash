@@ -65,25 +65,40 @@ class HookServerImpl {
     }
   }
 
+  /** Parse a POST request body as JSON. */
+  private parsePostBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
+    return new Promise((resolve) => {
+      let body = '';
+      req.on('data', (chunk: Buffer) => {
+        body += chunk.toString();
+      });
+      req.on('end', () => {
+        try {
+          resolve(JSON.parse(body));
+        } catch {
+          resolve({});
+        }
+      });
+    });
+  }
+
   async start(): Promise<number> {
     if (this.server) return this._port;
 
     return new Promise((resolve, reject) => {
-      this.server = http.createServer((req, res) => {
+      this.server = http.createServer(async (req, res) => {
         const url = new URL(req.url || '', `http://127.0.0.1:${this._port}`);
         const ptyId = url.searchParams.get('ptyId');
 
-        if (req.method === 'GET' && ptyId) {
-          if (url.pathname === '/hook/stop') {
-            console.error(`[HookServer] Stop hook fired for ptyId=${ptyId}`);
-            activityMonitor.setIdle(ptyId);
-            this.showDesktopNotification(ptyId);
-            res.writeHead(200);
-            res.end('ok');
-            return;
-          }
+        if (!ptyId) {
+          res.writeHead(400);
+          res.end();
+          return;
+        }
+
+        // GET endpoints (legacy)
+        if (req.method === 'GET') {
           if (url.pathname === '/hook/busy') {
-            console.error(`[HookServer] Busy hook fired for ptyId=${ptyId}`);
             activityMonitor.setBusy(ptyId);
             res.writeHead(200);
             res.end('ok');
@@ -91,29 +106,25 @@ class HookServerImpl {
           }
         }
 
-        // Notification hook — receives JSON on stdin with:
-        //   notification_type: 'permission_prompt' | 'idle_prompt' | 'auth_success' | 'elicitation_dialog'
-        //   message: string (e.g. "Claude needs your permission to use Bash")
-        //   title: string | undefined (e.g. "Permission needed")
-        //   session_id, transcript_path, cwd, permission_mode, hook_event_name
-        if (req.method === 'POST' && ptyId && url.pathname === '/hook/notification') {
-          let body = '';
-          req.on('data', (chunk: Buffer) => {
-            body += chunk.toString();
-          });
-          req.on('end', () => {
-            try {
-              const payload = JSON.parse(body);
-              const notificationType: string = payload.notification_type;
-              const message: string | undefined = payload.message;
-              console.error(
-                `[HookServer] Notification hook fired for ptyId=${ptyId} type=${notificationType}`,
-              );
+        // POST endpoints
+        if (req.method === 'POST') {
+          const payload = await this.parsePostBody(req);
+
+          switch (url.pathname) {
+            case '/hook/stop': {
+              activityMonitor.setIdle(ptyId);
+              this.showDesktopNotification(ptyId);
+              res.writeHead(200);
+              res.end('ok');
+              return;
+            }
+
+            case '/hook/notification': {
+              const notificationType = payload.notification_type as string;
+              const message = payload.message as string | undefined;
 
               if (notificationType === 'permission_prompt') {
                 activityMonitor.setWaitingForPermission(ptyId);
-                // Use the message from Claude Code when available (e.g. "Claude needs your
-                // permission to use Bash"), otherwise fall back to a generic message.
                 const taskName = this.getTaskName(ptyId);
                 const notifBody = message
                   ? `${taskName}: ${message}`
@@ -123,13 +134,14 @@ class HookServerImpl {
                 activityMonitor.setIdle(ptyId);
                 this.showDesktopNotification(ptyId);
               }
-            } catch (err) {
-              console.error('[HookServer] Failed to parse notification body:', err);
+              res.writeHead(200);
+              res.end('ok');
+              return;
             }
-            res.writeHead(200);
-            res.end('ok');
-          });
-          return;
+
+            default:
+              break;
+          }
         }
 
         res.writeHead(404);

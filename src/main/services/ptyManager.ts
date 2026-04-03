@@ -248,17 +248,18 @@ function writeHookSettings(cwd: string, ptyId: string): void {
 
   const claudeDir = path.join(cwd, '.claude');
   const settingsPath = path.join(claudeDir, 'settings.local.json');
-  const curlBase = `curl -s --connect-timeout 2 http://127.0.0.1:${port}`;
+  const curlGet = `curl -s --connect-timeout 2 http://127.0.0.1:${port}`;
+  const curlPost = `curl -s --connect-timeout 2 -X POST -H "Content-Type: application/json" -d @- http://127.0.0.1:${port}`;
+
+  const postHook = (endpoint: string) => ({
+    type: 'command',
+    command: `${curlPost}${endpoint}?ptyId=${ptyId} || exit 0`,
+  });
 
   const hookSettings: Record<string, unknown[]> = {
     Stop: [
       {
-        hooks: [
-          {
-            type: 'command',
-            command: `${curlBase}/hook/stop?ptyId=${ptyId} || exit 0`,
-          },
-        ],
+        hooks: [postHook('/hook/stop')],
       },
     ],
     UserPromptSubmit: [
@@ -266,7 +267,7 @@ function writeHookSettings(cwd: string, ptyId: string): void {
         hooks: [
           {
             type: 'command',
-            command: `${curlBase}/hook/busy?ptyId=${ptyId} || exit 0`,
+            command: `${curlGet}/hook/busy?ptyId=${ptyId} || exit 0`,
           },
         ],
       },
@@ -274,21 +275,11 @@ function writeHookSettings(cwd: string, ptyId: string): void {
     Notification: [
       {
         matcher: 'permission_prompt',
-        hooks: [
-          {
-            type: 'command',
-            command: `curl -s --connect-timeout 2 -X POST -H "Content-Type: application/json" -d @- http://127.0.0.1:${port}/hook/notification?ptyId=${ptyId} || exit 0`,
-          },
-        ],
+        hooks: [postHook('/hook/notification')],
       },
       {
         matcher: 'idle_prompt',
-        hooks: [
-          {
-            type: 'command',
-            command: `curl -s --connect-timeout 2 -X POST -H "Content-Type: application/json" -d @- http://127.0.0.1:${port}/hook/notification?ptyId=${ptyId} || exit 0`,
-          },
-        ],
+        hooks: [postHook('/hook/notification')],
       },
     ],
   };
@@ -425,7 +416,6 @@ export async function startDirectPty(options: {
     return { reattached: true, isDirectSpawn: true, hasTaskContext: false, taskContextMeta: null };
   }
 
-  const pty = getPty();
   const claudePath = await findClaudePath();
 
   if (!claudePath) {
@@ -443,6 +433,7 @@ export async function startDirectPty(options: {
 
   writeHookSettings(options.cwd, options.id);
 
+  const pty = getPty();
   const proc = pty.spawn(claudePath, args, {
     name: 'xterm-256color',
     cols: options.cols,
