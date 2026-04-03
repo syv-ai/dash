@@ -114,14 +114,12 @@ function RotationSection({
                 <div className="w-[6px] h-[6px] rounded-full bg-emerald-400 flex-shrink-0" />
               ) : null}
 
-              <span className="truncate flex-1">
-                {task.name}
-                {project && (
-                  <span className="text-muted-foreground/40 text-[11px] ml-1.5">
-                    {project.name}
-                  </span>
-                )}
-              </span>
+              <span className="truncate flex-1">{task.name}</span>
+              {project && (
+                <span className="text-muted-foreground/40 text-[11px] whitespace-nowrap overflow-hidden flex-shrink min-w-0">
+                  {project.name}
+                </span>
+              )}
 
               <IconButton
                 onClick={(e) => {

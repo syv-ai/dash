@@ -879,6 +879,12 @@ export function App() {
   function handleSelectTask(projectId: string, taskId: string) {
     setActiveProjectId(projectId);
     setActiveTaskId(taskId);
+    setRotationExclusions((prev) => {
+      if (!prev.has(taskId)) return prev;
+      const next = new Set(prev);
+      next.delete(taskId);
+      return next;
+    });
   }
 
   function handleNewTask(projectId: string) {
