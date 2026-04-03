@@ -243,6 +243,14 @@ app.on('before-quit', async () => {
     // Best effort
   }
 
+  // Stop all session watchers
+  try {
+    const { stopAll: stopSessionWatchers } = await import('./services/SessionWatcherService');
+    stopSessionWatchers();
+  } catch {
+    // Best effort
+  }
+
   // Stop pixel-agents watcher
   try {
     const { PixelAgentsService } = await import('./services/PixelAgentsService');

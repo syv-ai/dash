@@ -8,6 +8,7 @@ import { registerAutoUpdateIpc } from './autoUpdateIpc';
 import { registerAzureDevOpsIpc } from './azureDevOpsIpc';
 import { registerPixelAgentsIpc } from './pixelAgentsIpc';
 import { registerTelemetryIpc } from './telemetryIpc';
+import { registerSessionIpc } from './sessionIpc';
 
 export function registerAllIpc(): void {
   registerAppIpc();
@@ -20,4 +21,5 @@ export function registerAllIpc(): void {
   registerAzureDevOpsIpc();
   registerPixelAgentsIpc();
   registerTelemetryIpc();
+  registerSessionIpc();
 }

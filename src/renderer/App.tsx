@@ -8,6 +8,7 @@ import {
 import { LeftSidebar } from './components/LeftSidebar';
 import { MainContent } from './components/MainContent';
 import { FileChangesPanel } from './components/FileChangesPanel';
+import { StructuredView } from './components/structured/StructuredView';
 import { ShellDrawerWrapper } from './components/ShellDrawerWrapper';
 import { DiffViewer } from './components/DiffViewer';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
@@ -219,6 +220,9 @@ export function App() {
   });
   const [changesPanelCollapsed, setChangesPanelCollapsed] = useState(() => {
     return localStorage.getItem('changesPanelCollapsed') === 'true';
+  });
+  const [rightPanelTab, setRightPanelTab] = useState<'changes' | 'structured'>(() => {
+    return (localStorage.getItem('rightPanelTab') as 'changes' | 'structured') || 'structured';
   });
 
   const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
@@ -1287,21 +1291,72 @@ export function App() {
                   setTimeout(() => setShellDrawerAnimating(false), 200);
                 }}
               >
-                <FileChangesPanel
-                  gitStatus={gitStatus}
-                  loading={gitLoading}
-                  onStageFile={handleStageFile}
-                  onUnstageFile={handleUnstageFile}
-                  onStageAll={handleStageAll}
-                  onUnstageAll={handleUnstageAll}
-                  onDiscardFile={handleDiscardFile}
-                  onViewDiff={handleViewDiff}
-                  onCommit={handleCommit}
-                  onPush={handlePush}
-                  collapsed={changesPanelCollapsed}
-                  onToggleCollapse={toggleChangesPanel}
-                  onShowCommitGraph={() => setShowCommitGraph(true)}
-                />
+                <div className="h-full flex flex-col">
+                  {!changesPanelCollapsed && (
+                    <div
+                      className="flex items-center gap-0.5 px-2 h-9 flex-shrink-0 border-b border-border/60"
+                      style={{ background: 'hsl(var(--surface-1))' }}
+                    >
+                      {(['structured', 'changes'] as const).map((tab) => (
+                        <button
+                          key={tab}
+                          onClick={() => {
+                            setRightPanelTab(tab);
+                            localStorage.setItem('rightPanelTab', tab);
+                          }}
+                          className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
+                            rightPanelTab === tab
+                              ? 'bg-primary/15 text-foreground'
+                              : 'text-muted-foreground hover:text-foreground hover:bg-accent/40'
+                          }`}
+                        >
+                          {tab === 'changes' ? 'Changes' : 'Structured'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex-1 min-h-0">
+                    {rightPanelTab === 'changes' ? (
+                      <FileChangesPanel
+                        gitStatus={gitStatus}
+                        loading={gitLoading}
+                        onStageFile={handleStageFile}
+                        onUnstageFile={handleUnstageFile}
+                        onStageAll={handleStageAll}
+                        onUnstageAll={handleUnstageAll}
+                        onDiscardFile={handleDiscardFile}
+                        onViewDiff={handleViewDiff}
+                        onCommit={handleCommit}
+                        onPush={handlePush}
+                        collapsed={changesPanelCollapsed}
+                        onToggleCollapse={toggleChangesPanel}
+                        onShowCommitGraph={() => setShowCommitGraph(true)}
+                      />
+                    ) : changesPanelCollapsed ? (
+                      <FileChangesPanel
+                        gitStatus={gitStatus}
+                        loading={gitLoading}
+                        onStageFile={handleStageFile}
+                        onUnstageFile={handleUnstageFile}
+                        onStageAll={handleStageAll}
+                        onUnstageAll={handleUnstageAll}
+                        onDiscardFile={handleDiscardFile}
+                        onViewDiff={handleViewDiff}
+                        onCommit={handleCommit}
+                        onPush={handlePush}
+                        collapsed={changesPanelCollapsed}
+                        onToggleCollapse={toggleChangesPanel}
+                        onShowCommitGraph={() => setShowCommitGraph(true)}
+                      />
+                    ) : (
+                      <StructuredView
+                        key={`structured-${activeTask.id}`}
+                        taskId={activeTask.id}
+                        taskPath={activeTask.path}
+                      />
+                    )}
+                  </div>
+                </div>
               </ShellDrawerWrapper>
             </Panel>
           </>
