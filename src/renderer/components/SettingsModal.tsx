@@ -1185,54 +1185,6 @@ export function SettingsModal({
                 </p>
               </div>
 
-              {/* Claude CLI */}
-              <div>
-                <label className="block text-[12px] font-medium text-foreground mb-3">
-                  Claude Code CLI
-                </label>
-                <div
-                  className="flex items-start gap-3.5 p-4 rounded-xl border border-border/40"
-                  style={{ background: 'hsl(var(--surface-2))' }}
-                >
-                  <div
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                      claudeInfo?.installed
-                        ? 'bg-[hsl(var(--git-added)/0.12)]'
-                        : 'bg-[hsl(var(--git-modified)/0.12)]'
-                    }`}
-                  >
-                    {claudeInfo?.installed ? (
-                      <Check size={14} className="text-[hsl(var(--git-added))]" strokeWidth={1.8} />
-                    ) : (
-                      <AlertCircle
-                        size={14}
-                        className="text-[hsl(var(--git-modified))]"
-                        strokeWidth={2}
-                      />
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    {claudeInfo?.installed ? (
-                      <div className="space-y-0.5">
-                        <p className="text-[11px] text-foreground/60 font-mono">
-                          {claudeInfo.version}
-                        </p>
-                        <p className="text-[11px] text-foreground/40 font-mono truncate">
-                          {claudeInfo.path}
-                        </p>
-                      </div>
-                    ) : (
-                      <p className="text-[11px] text-foreground/60 leading-relaxed">
-                        Not found. Install with{' '}
-                        <code className="px-1.5 py-0.5 rounded bg-accent/80 text-[10px] font-mono text-foreground/70">
-                          npm install -g @anthropic-ai/claude-code
-                        </code>
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
               {/* Updates */}
               <div>
                 <label className="block text-[12px] font-medium text-foreground mb-3">
@@ -1528,6 +1480,44 @@ export function SettingsModal({
                   </div>
                 </div>
               ))}
+
+              {/* Fixed shortcuts (not rebindable) */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground/60">
+                    Active Tasks
+                  </span>
+                  <div className="flex-1 h-px bg-border/30" />
+                </div>
+                <div
+                  className="rounded-xl border border-border/40 overflow-hidden"
+                  style={{ background: 'hsl(var(--surface-2))' }}
+                >
+                  {[
+                    { label: 'Next Active Task', keys: ['Ctrl', '⇥'] },
+                    { label: 'Previous Active Task', keys: ['Ctrl', '⇧', '⇥'] },
+                  ].map(({ label, keys }, i) => (
+                    <div
+                      key={label}
+                      className={`flex items-center justify-between px-4 py-2.5 ${
+                        i === 0 ? 'border-b border-border/20' : ''
+                      }`}
+                    >
+                      <span className="text-[13px] text-foreground/80">{label}</span>
+                      <div className="flex items-center gap-[3px]">
+                        {keys.map((k) => (
+                          <kbd
+                            key={k}
+                            className="min-w-[22px] h-[22px] flex items-center justify-center rounded-md bg-accent/60 text-[11px] text-foreground/70 font-mono px-1.5"
+                          >
+                            {k}
+                          </kbd>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
         </div>
