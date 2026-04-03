@@ -252,21 +252,13 @@ function readIncrementalBytes(entry: WatchEntry): void {
     let counter = Date.now();
     let latestStatus: string | null | undefined = undefined;
 
-    // Collect all parsed entries, then deduplicate by requestId keeping the
-    // LAST entry (most complete). This handles Claude's streaming writes where
-    // each successive entry with the same requestId has more content.
-    const allParsed: Array<{ raw: any; msg: ChatMessage | null; requestId?: string }> = [];
-
     for (const line of lines) {
       if (!line.trim()) continue;
       try {
         const raw = JSON.parse(line);
 
-        // Skip requestIds already processed in a previous incremental read
-        if (raw.requestId && entry.seenRequestIds.has(raw.requestId)) continue;
-
         const msg = parseConversationEntry(raw, counter++);
-        allParsed.push({ raw, msg, requestId: raw.requestId });
+        if (msg) messages.push(msg);
 
         // Extract status from assistant tool_use blocks (JSONL fallback for status)
         if (raw.type === 'assistant' && Array.isArray(raw.message?.content)) {
@@ -312,20 +304,6 @@ function readIncrementalBytes(entry: WatchEntry): void {
       } catch {
         // Skip malformed lines
       }
-    }
-
-    // Deduplicate by requestId — keep only the LAST entry per requestId
-    // (Claude writes multiple entries during streaming, each more complete).
-    const lastByRequestId = new Map<string, number>();
-    for (let i = 0; i < allParsed.length; i++) {
-      const rid = allParsed[i].requestId;
-      if (rid) lastByRequestId.set(rid, i);
-    }
-    for (let i = 0; i < allParsed.length; i++) {
-      const { msg, requestId } = allParsed[i];
-      if (requestId && lastByRequestId.get(requestId) !== i) continue;
-      if (requestId) entry.seenRequestIds.add(requestId);
-      if (msg) messages.push(msg);
     }
 
     if (messages.length > 0) entry.onMessages(messages);

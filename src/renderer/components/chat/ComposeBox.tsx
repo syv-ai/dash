@@ -280,14 +280,35 @@ export function ComposeBox({
         return;
       }
 
-      // Enter in tasks panel → view task logs inline
-      if (e.key === 'Enter' && !e.shiftKey && showTasks && activeSubprocesses.length > 0) {
-        e.preventDefault();
-        const task = activeSubprocesses[taskSelectedIndex];
-        if (task?.outputFile) {
-          setViewingTaskFile((prev) => (prev === task.outputFile ? null : task.outputFile!));
+      // ── Task panel navigation (highest priority when open) ──────
+      if (showTasks && activeSubprocesses.length > 0) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setTaskSelectedIndex((prev) => (prev < activeSubprocesses.length - 1 ? prev + 1 : 0));
+          return;
         }
-        return;
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setTaskSelectedIndex((prev) => (prev > 0 ? prev - 1 : activeSubprocesses.length - 1));
+          return;
+        }
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          const task = activeSubprocesses[taskSelectedIndex];
+          if (task?.outputFile) {
+            setViewingTaskFile((prev) => (prev === task.outputFile ? null : task.outputFile!));
+          }
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          if (viewingTaskFile) {
+            setViewingTaskFile(null);
+          } else {
+            setShowTasks(false);
+          }
+          return;
+        }
       }
 
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -296,34 +317,20 @@ export function ComposeBox({
         return;
       }
 
-      // Arrow down at end of input → open/navigate tasks panel
+      // Arrow down at end of input → open tasks panel
       if (e.key === 'ArrowDown' && activeSubprocesses.length > 0 && !showSlashMenu) {
         const el = textareaRef.current;
         if (el && el.selectionStart === el.value.length) {
           e.preventDefault();
-          if (!showTasks) {
-            setShowTasks(true);
-            setTaskSelectedIndex(0);
-          } else {
-            setTaskSelectedIndex((prev) => (prev < activeSubprocesses.length - 1 ? prev + 1 : 0));
-          }
+          setShowTasks(true);
+          setTaskSelectedIndex(0);
           return;
         }
       }
-      // Arrow up in tasks panel
-      if (e.key === 'ArrowUp' && showTasks && !showSlashMenu) {
+      // Escape closes log view (when tasks panel not open)
+      if (e.key === 'Escape' && viewingTaskFile) {
         e.preventDefault();
-        setTaskSelectedIndex((prev) => (prev > 0 ? prev - 1 : activeSubprocesses.length - 1));
-        return;
-      }
-      // Escape closes log view first, then tasks panel
-      if (e.key === 'Escape' && (viewingTaskFile || showTasks)) {
-        e.preventDefault();
-        if (viewingTaskFile) {
-          setViewingTaskFile(null);
-        } else {
-          setShowTasks(false);
-        }
+        setViewingTaskFile(null);
         return;
       }
     },
