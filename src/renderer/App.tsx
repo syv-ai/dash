@@ -115,7 +115,9 @@ export function App() {
   const [customClaudeEnvVars, setCustomClaudeEnvVars] = useState<Record<string, string>>(() => {
     try {
       return JSON.parse(localStorage.getItem('customClaudeEnvVars') || '{}');
-    } catch {
+    } catch (err) {
+      console.error('Failed to parse customClaudeEnvVars from localStorage, resetting:', err);
+      localStorage.removeItem('customClaudeEnvVars');
       return {};
     }
   });

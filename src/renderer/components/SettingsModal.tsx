@@ -541,7 +541,7 @@ function ClaudeCodeTab({
 
   function addEntry() {
     const key = newKey.trim();
-    if (!key) return;
+    if (!key || !/^[A-Z_][A-Z0-9_]*$/.test(key)) return;
     onCustomEnvVarsChange({ ...customEnvVars, [key]: newValue });
     setNewKey('');
     setNewValue('');
@@ -568,9 +568,9 @@ function ClaudeCodeTab({
           }`}
         >
           {claudeInfo?.installed ? (
-            <Check size={14} className="text-[hsl(var(--git-added))]" strokeWidth={2.5} />
+            <Check size={14} className="text-[hsl(var(--git-added))]" strokeWidth={1.8} />
           ) : (
-            <AlertCircle size={14} className="text-[hsl(var(--git-modified))]" strokeWidth={2} />
+            <AlertCircle size={14} className="text-[hsl(var(--git-modified))]" strokeWidth={1.8} />
           )}
         </div>
         <div className="min-w-0">
@@ -675,7 +675,7 @@ function ClaudeCodeTab({
                 onClick={() => removeEntry(key)}
                 className="p-1.5 rounded-lg hover:bg-destructive/10 text-foreground/40 hover:text-destructive transition-all duration-150 flex-shrink-0"
               >
-                <Trash2 size={12} strokeWidth={2} />
+                <Trash2 size={14} strokeWidth={1.8} />
               </button>
             </div>
           ))}
@@ -706,7 +706,7 @@ function ClaudeCodeTab({
               disabled={!newKey.trim()}
               className="p-1.5 rounded-lg hover:bg-primary/10 text-foreground/40 hover:text-primary transition-all duration-150 flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
             >
-              <Plus size={14} strokeWidth={2} />
+              <Plus size={14} strokeWidth={1.8} />
             </button>
           </div>
         </div>
@@ -720,7 +720,7 @@ function ClaudeCodeTab({
             className="inline-flex items-center gap-0.5 text-primary hover:underline"
           >
             Browse all variables
-            <ExternalLink size={9} strokeWidth={2} />
+            <ExternalLink size={9} strokeWidth={1.8} />
           </a>
         </p>
       </div>
@@ -1167,7 +1167,7 @@ export function SettingsModal({
                     }`}
                   >
                     {claudeInfo?.installed ? (
-                      <Check size={14} className="text-[hsl(var(--git-added))]" strokeWidth={2.5} />
+                      <Check size={14} className="text-[hsl(var(--git-added))]" strokeWidth={1.8} />
                     ) : (
                       <AlertCircle
                         size={14}

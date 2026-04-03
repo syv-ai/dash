@@ -172,11 +172,25 @@ function buildDirectEnv(isDark: boolean): Record<string, string> {
     }
   }
 
+  // Merge user-configured Claude Code env vars (curated toggles + custom vars from settings),
+  // but prevent overriding internal keys that would break spawned processes.
+  const RESERVED_ENV_KEYS = new Set([
+    'PATH',
+    'HOME',
+    'USER',
+    'TERM',
+    'COLORTERM',
+    'TERM_PROGRAM',
+    'COLORFGBG',
+  ]);
+  for (const [key, value] of Object.entries(claudeEnvVars)) {
+    if (!RESERVED_ENV_KEYS.has(key)) {
+      env[key] = value;
+    }
+  }
+
   // Always enable fullscreen rendering (NO_FLICKER) — Dash handles its own viewport
   env.CLAUDE_CODE_NO_FLICKER = '1';
-
-  // Merge user-configured Claude Code env vars (curated toggles + custom vars from settings)
-  Object.assign(env, claudeEnvVars);
 
   return env;
 }
