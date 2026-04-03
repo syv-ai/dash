@@ -134,7 +134,7 @@ export function LeftSidebar({
 
         <div className="w-6 border-t border-border/30 my-1" />
 
-        <div className="flex-1 overflow-y-auto flex flex-col items-center gap-1 w-full px-1.5">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col items-center gap-1 w-full px-1.5">
           {projects.map((project) => {
             const isActive = project.id === activeProjectId;
             const activity = projectActivity(project.id);
@@ -289,7 +289,7 @@ export function LeftSidebar({
                     dragIdRef.current = null;
                     setDraggingId(null);
                   }}
-                  className={`group flex items-center gap-1.5 px-2 h-8 rounded-md text-sm cursor-pointer transition-transform duration-200 ease-in-out ${
+                  className={`group relative flex items-center gap-1.5 px-2 h-8 rounded-md text-sm cursor-pointer transition-transform duration-200 ease-in-out ${
                     isActive
                       ? 'text-foreground font-medium'
                       : 'text-muted-foreground hover:text-foreground'
@@ -317,8 +317,14 @@ export function LeftSidebar({
 
                   <span className="truncate flex-1">{project.name}</span>
 
-                  {/* New task — hover only */}
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                  {projectTasks.length > 0 && (
+                    <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0 mr-0.5 leading-none group-hover:invisible">
+                      {projectTasks.length}
+                    </span>
+                  )}
+
+                  {/* Action buttons — overlay from right on hover */}
+                  <div className="absolute right-1 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center gap-0.5 bg-[hsl(var(--surface-1))] rounded-md pl-1">
                     <IconButton
                       onClick={(e) => {
                         e.stopPropagation();
@@ -329,10 +335,6 @@ export function LeftSidebar({
                     >
                       <Plus size={13} strokeWidth={2} />
                     </IconButton>
-                  </div>
-
-                  {/* Commit graph — hover only */}
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                     <IconButton
                       onClick={(e) => {
                         e.stopPropagation();
@@ -343,10 +345,6 @@ export function LeftSidebar({
                     >
                       <GitGraph size={13} strokeWidth={2} />
                     </IconButton>
-                  </div>
-
-                  {/* Project settings — hover only */}
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                     <IconButton
                       onClick={(e) => {
                         e.stopPropagation();
@@ -357,10 +355,6 @@ export function LeftSidebar({
                     >
                       <Settings size={14} strokeWidth={1.8} />
                     </IconButton>
-                  </div>
-
-                  {/* Delete — hover only */}
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                     <IconButton
                       onClick={(e) => {
                         e.stopPropagation();
@@ -373,12 +367,6 @@ export function LeftSidebar({
                       <Trash2 size={13} strokeWidth={1.8} />
                     </IconButton>
                   </div>
-
-                  {projectTasks.length > 0 && (
-                    <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0 mr-0.5 leading-none">
-                      {projectTasks.length}
-                    </span>
-                  )}
                 </div>
 
                 {/* Tasks nested under project */}
@@ -539,7 +527,7 @@ export function LeftSidebar({
       <div className="px-2 py-2 border-t border-border/30">
         <button
           onClick={onOpenSettings}
-          className="flex items-center gap-2 px-2.5 py-[7px] w-full rounded-md text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-all duration-150 titlebar-no-drag"
+          className="settings-btn flex items-center gap-2 px-2.5 py-[7px] w-full rounded-md text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-all duration-150 titlebar-no-drag"
         >
           <Settings size={14} strokeWidth={1.8} />
           <span>Settings</span>
@@ -552,10 +540,13 @@ export function LeftSidebar({
                   onOpenPixelAgents?.();
                 }}
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--git-added))]" />
-                {pixelAgentsConnectedCount === 1
-                  ? '1 office'
-                  : `${pixelAgentsConnectedCount} offices`}
+                <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--git-added))] flex-shrink-0" />
+                <span className="office-label">
+                  {pixelAgentsConnectedCount === 1
+                    ? '1 office'
+                    : `${pixelAgentsConnectedCount} offices`}
+                </span>
+                <span className="office-count">{pixelAgentsConnectedCount}</span>
               </span>
             </Tooltip>
           )}

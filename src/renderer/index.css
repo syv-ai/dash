@@ -478,3 +478,19 @@
 .file-item-enter {
   animation: file-item-enter 200ms ease-out;
 }
+
+/* Settings button: swap "1 office" ↔ "1" based on container width */
+.settings-btn {
+  container-type: inline-size;
+}
+.settings-btn .office-count {
+  display: none;
+}
+@container (max-width: 10rem) {
+  .settings-btn .office-label {
+    display: none;
+  }
+  .settings-btn .office-count {
+    display: inline;
+  }
+}
