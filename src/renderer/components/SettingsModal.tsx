@@ -22,16 +22,8 @@ import {
 } from '../keybindings';
 import { NOTIFICATION_SOUNDS, SOUND_LABELS } from '../sounds';
 import type { NotificationSound } from '../sounds';
-import { TERMINAL_THEMES, resolveTheme } from '../terminal/terminalThemes';
-import {
-  CURATED_FONTS,
-  FONT_SIZE_MIN,
-  FONT_SIZE_MAX,
-  LINE_HEIGHT_MIN,
-  LINE_HEIGHT_MAX,
-  LINE_HEIGHT_STEP,
-  detectInstalledFonts,
-} from '../terminal/terminalFonts';
+import { TERMINAL_THEMES } from '../terminal/terminalThemes';
+import { TerminalFontSettings } from './TerminalFontSettings';
 import type {
   PixelAgentsConfig,
   PixelAgentsStatus,
@@ -60,12 +52,6 @@ interface SettingsModalProps {
   onShellDrawerPositionChange: (value: 'left' | 'main' | 'right') => void;
   terminalTheme: string;
   onTerminalThemeChange: (id: string) => void;
-  terminalFontFamily: string | null;
-  onTerminalFontFamilyChange: (family: string | null) => void;
-  terminalFontSize: number;
-  onTerminalFontSizeChange: (size: number) => void;
-  terminalLineHeight: number;
-  onTerminalLineHeightChange: (height: number) => void;
   preferredIDE: 'cursor' | 'code' | 'auto';
   onPreferredIDEChange: (value: 'cursor' | 'code' | 'auto') => void;
   commitAttribution: string | undefined;
@@ -542,12 +528,6 @@ export function SettingsModal({
   onShellDrawerPositionChange,
   terminalTheme,
   onTerminalThemeChange,
-  terminalFontFamily,
-  onTerminalFontFamilyChange,
-  terminalFontSize,
-  onTerminalFontSizeChange,
-  terminalLineHeight,
-  onTerminalLineHeightChange,
   preferredIDE,
   onPreferredIDEChange,
   commitAttribution,
@@ -579,32 +559,6 @@ export function SettingsModal({
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
   const [telemetryEnabled, setTelemetryEnabled] = useState(true);
   const [telemetryEnvDisabled, setTelemetryEnvDisabled] = useState(false);
-
-  const [fontDropdownOpen, setFontDropdownOpen] = useState(false);
-  const [fontSearch, setFontSearch] = useState('');
-  const [systemFonts, setSystemFonts] = useState<string[]>([]);
-  const fontDropdownRef = useRef<HTMLDivElement>(null);
-
-  // Detect installed system fonts when dropdown first opens
-  useEffect(() => {
-    if (fontDropdownOpen && systemFonts.length === 0) {
-      const detected = detectInstalledFonts();
-      if (detected.length > 0) setSystemFonts(detected);
-    }
-  }, [fontDropdownOpen, systemFonts.length]);
-
-  // Close font dropdown on click outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (fontDropdownRef.current && !fontDropdownRef.current.contains(e.target as Node)) {
-        setFontDropdownOpen(false);
-      }
-    };
-    if (fontDropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [fontDropdownOpen]);
 
   useEffect(() => {
     const cleanups = [
@@ -1158,257 +1112,7 @@ export function SettingsModal({
                 </div>
               </div>
 
-              {/* Terminal Font */}
-              <div>
-                <label className="block text-[12px] font-medium text-foreground mb-3">
-                  Terminal Font
-                </label>
-
-                {/* Font Family Picker */}
-                <div className="mb-4">
-                  <div className="text-[11px] text-muted-foreground mb-1.5">Font Family</div>
-                  <div ref={fontDropdownRef} className="relative">
-                    <button
-                      onClick={() => setFontDropdownOpen(!fontDropdownOpen)}
-                      className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-border/60 bg-surface-0 text-[13px] text-foreground hover:border-border transition-colors"
-                    >
-                      <span style={{ fontFamily: terminalFontFamily || 'monospace' }}>
-                        {terminalFontFamily
-                          ? CURATED_FONTS.find((f) => f.family === terminalFontFamily)?.name ||
-                            terminalFontFamily.split(',')[0].replace(/'/g, '').trim()
-                          : 'Default (monospace)'}
-                      </span>
-                      <span className="text-muted-foreground text-[10px]">▼</span>
-                    </button>
-
-                    {fontDropdownOpen && (
-                      <div className="absolute z-50 top-full left-0 right-0 mt-1 rounded-lg border border-border/60 bg-surface-1 shadow-lg max-h-[280px] overflow-hidden flex flex-col">
-                        {/* Search */}
-                        <div className="p-2 border-b border-border/40">
-                          <input
-                            type="text"
-                            value={fontSearch}
-                            onChange={(e) => setFontSearch(e.target.value)}
-                            placeholder="Search fonts..."
-                            className="w-full px-2.5 py-1.5 rounded-md border border-border/60 bg-surface-0 text-[12px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/40"
-                            autoFocus
-                          />
-                        </div>
-
-                        <div className="overflow-y-auto flex-1">
-                          {/* Default option */}
-                          <button
-                            onClick={() => {
-                              onTerminalFontFamilyChange(null);
-                              setFontDropdownOpen(false);
-                              setFontSearch('');
-                            }}
-                            className={`w-full text-left px-3 py-1.5 text-[13px] hover:bg-surface-2 transition-colors ${
-                              terminalFontFamily === null ? 'text-primary' : 'text-foreground/80'
-                            }`}
-                          >
-                            Default (monospace)
-                            {terminalFontFamily === null && (
-                              <span className="float-right text-primary text-[11px]">✓</span>
-                            )}
-                          </button>
-
-                          {/* Curated fonts */}
-                          <div className="px-3 pt-2 pb-1 text-[10px] text-muted-foreground/60 uppercase tracking-wider">
-                            Popular
-                          </div>
-                          {CURATED_FONTS.filter((f) =>
-                            f.name.toLowerCase().includes(fontSearch.toLowerCase()),
-                          ).map((f) => (
-                            <button
-                              key={f.family}
-                              onClick={() => {
-                                onTerminalFontFamilyChange(f.family);
-                                setFontDropdownOpen(false);
-                                setFontSearch('');
-                              }}
-                              className={`w-full text-left px-3 py-1.5 text-[13px] hover:bg-surface-2 transition-colors ${
-                                terminalFontFamily === f.family
-                                  ? 'text-primary'
-                                  : 'text-foreground/80'
-                              }`}
-                              style={{ fontFamily: f.family }}
-                            >
-                              {f.name}
-                              {terminalFontFamily === f.family && (
-                                <span className="float-right text-primary text-[11px]">✓</span>
-                              )}
-                            </button>
-                          ))}
-
-                          {/* System fonts — flat list, deduped against curated */}
-                          {systemFonts.length > 0 && (
-                            <>
-                              <div className="px-3 pt-2 pb-1 text-[10px] text-muted-foreground/60 uppercase tracking-wider border-t border-border/40 mt-1">
-                                System
-                              </div>
-                              {systemFonts
-                                .filter(
-                                  (f) =>
-                                    f.toLowerCase().includes(fontSearch.toLowerCase()) &&
-                                    !CURATED_FONTS.some(
-                                      (c) => c.name.toLowerCase() === f.toLowerCase(),
-                                    ),
-                                )
-                                .map((f) => {
-                                  const family = `'${f}', monospace`;
-                                  return (
-                                    <button
-                                      key={f}
-                                      onClick={() => {
-                                        onTerminalFontFamilyChange(family);
-                                        setFontDropdownOpen(false);
-                                        setFontSearch('');
-                                      }}
-                                      className={`w-full text-left px-3 py-1.5 text-[13px] hover:bg-surface-2 transition-colors ${
-                                        terminalFontFamily === family
-                                          ? 'text-primary'
-                                          : 'text-foreground/80'
-                                      }`}
-                                      style={{ fontFamily: family }}
-                                    >
-                                      {f}
-                                      {terminalFontFamily === family && (
-                                        <span className="float-right text-primary text-[11px]">
-                                          ✓
-                                        </span>
-                                      )}
-                                    </button>
-                                  );
-                                })}
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Font Size */}
-                <div className="mb-4">
-                  <div className="text-[11px] text-muted-foreground mb-1.5">Font Size</div>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="range"
-                      min={FONT_SIZE_MIN}
-                      max={FONT_SIZE_MAX}
-                      step={1}
-                      value={terminalFontSize}
-                      onChange={(e) => onTerminalFontSizeChange(parseInt(e.target.value, 10))}
-                      className="flex-1 accent-primary"
-                    />
-                    <input
-                      type="number"
-                      min={FONT_SIZE_MIN}
-                      max={FONT_SIZE_MAX}
-                      step={1}
-                      value={terminalFontSize}
-                      onChange={(e) => {
-                        const v = parseInt(e.target.value, 10);
-                        if (v >= FONT_SIZE_MIN && v <= FONT_SIZE_MAX) {
-                          onTerminalFontSizeChange(v);
-                        }
-                      }}
-                      className="w-[50px] text-center px-1.5 py-1 rounded-md border border-border/60 bg-surface-0 text-[13px] text-foreground focus:outline-none focus:border-primary/40"
-                    />
-                    <span className="text-[11px] text-muted-foreground">px</span>
-                  </div>
-                </div>
-
-                {/* Line Height */}
-                <div className="mb-4">
-                  <div className="text-[11px] text-muted-foreground mb-1.5">Line Height</div>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="range"
-                      min={LINE_HEIGHT_MIN}
-                      max={LINE_HEIGHT_MAX}
-                      step={LINE_HEIGHT_STEP}
-                      value={terminalLineHeight}
-                      onChange={(e) => onTerminalLineHeightChange(parseFloat(e.target.value))}
-                      className="flex-1 accent-primary"
-                    />
-                    <input
-                      type="number"
-                      min={LINE_HEIGHT_MIN}
-                      max={LINE_HEIGHT_MAX}
-                      step={LINE_HEIGHT_STEP}
-                      value={terminalLineHeight}
-                      onChange={(e) => {
-                        const v = parseFloat(e.target.value);
-                        if (v >= LINE_HEIGHT_MIN && v <= LINE_HEIGHT_MAX) {
-                          onTerminalLineHeightChange(v);
-                        }
-                      }}
-                      className="w-[50px] text-center px-1.5 py-1 rounded-md border border-border/60 bg-surface-0 text-[13px] text-foreground focus:outline-none focus:border-primary/40"
-                    />
-                  </div>
-                </div>
-
-                {/* Live Preview */}
-                <div
-                  className="rounded-lg border border-border/60 p-3 overflow-hidden"
-                  style={{
-                    backgroundColor:
-                      resolveTheme(terminalTheme, theme === 'dark').background || '#1f1f1f',
-                  }}
-                >
-                  <div className="text-[10px] uppercase tracking-wider mb-2 opacity-40 font-sans text-foreground">
-                    Preview
-                  </div>
-                  <div
-                    style={{
-                      fontFamily: terminalFontFamily || 'monospace',
-                      fontSize: `${terminalFontSize}px`,
-                      lineHeight: terminalLineHeight,
-                      color: resolveTheme(terminalTheme, theme === 'dark').foreground || '#d4d4d4',
-                    }}
-                  >
-                    <div>
-                      <span
-                        style={{
-                          color: resolveTheme(terminalTheme, theme === 'dark').magenta || '#c678dd',
-                        }}
-                      >
-                        const
-                      </span>{' '}
-                      <span
-                        style={{
-                          color: resolveTheme(terminalTheme, theme === 'dark').yellow || '#e5c07b',
-                        }}
-                      >
-                        greeting
-                      </span>{' '}
-                      ={' '}
-                      <span
-                        style={{
-                          color: resolveTheme(terminalTheme, theme === 'dark').green || '#98c379',
-                        }}
-                      >
-                        &apos;Hello, World!&apos;
-                      </span>
-                      ;
-                    </div>
-                    <div
-                      style={{
-                        color:
-                          resolveTheme(terminalTheme, theme === 'dark').brightBlack || '#5c6370',
-                      }}
-                    >
-                      {'// 0O oO ilIL1| {} [] () <>'}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="text-[10px] text-muted-foreground/50 mt-1.5">
-                  Applies to all Claude and shell terminals
-                </div>
-              </div>
+              <TerminalFontSettings terminalTheme={terminalTheme} theme={theme} />
 
               {/* Terminal Theme */}
               <div>

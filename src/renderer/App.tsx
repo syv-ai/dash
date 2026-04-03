@@ -98,17 +98,6 @@ export function App() {
   const [terminalTheme, setTerminalTheme] = useState(() => {
     return localStorage.getItem('terminalTheme') || 'default';
   });
-  const [terminalFontFamily, setTerminalFontFamily] = useState<string | null>(() => {
-    return localStorage.getItem('terminalFontFamily') || null;
-  });
-  const [terminalFontSize, setTerminalFontSize] = useState(() => {
-    const stored = localStorage.getItem('terminalFontSize');
-    return stored ? parseInt(stored, 10) : 13;
-  });
-  const [terminalLineHeight, setTerminalLineHeight] = useState(() => {
-    const stored = localStorage.getItem('terminalLineHeight');
-    return stored ? parseFloat(stored) : 1.2;
-  });
   const [preferredIDE, setPreferredIDE] = useState<'cursor' | 'code' | 'auto'>(() => {
     return (localStorage.getItem('preferredIDE') as 'cursor' | 'code' | 'auto') || 'auto';
   });
@@ -396,11 +385,6 @@ export function App() {
     document.documentElement.classList.toggle('light', theme === 'light');
     sessionRegistry.setAllTerminalThemes(terminalTheme, theme === 'dark');
   }, [theme, terminalTheme]);
-
-  // Terminal font
-  useEffect(() => {
-    sessionRegistry.setAllTerminalFont(terminalFontFamily, terminalFontSize, terminalLineHeight);
-  }, [terminalFontFamily, terminalFontSize, terminalLineHeight]);
 
   // Git: watch active task directory + poll
   useEffect(() => {
@@ -882,9 +866,7 @@ export function App() {
               prompt,
               meta: {
                 githubIssues:
-                  ghItems.length > 0
-                    ? ghItems.map((i) => ({ id: i.id, url: i.url }))
-                    : undefined,
+                  ghItems.length > 0 ? ghItems.map((i) => ({ id: i.id, url: i.url })) : undefined,
                 adoWorkItems:
                   adoItems.length > 0
                     ? adoItems.map((wi) => ({ id: wi.id, url: wi.url }))
@@ -1400,25 +1382,6 @@ export function App() {
             setTerminalTheme(id);
             localStorage.setItem('terminalTheme', id);
             sessionRegistry.setAllTerminalThemes(id, theme === 'dark');
-          }}
-          terminalFontFamily={terminalFontFamily}
-          onTerminalFontFamilyChange={(f: string | null) => {
-            setTerminalFontFamily(f);
-            if (f) {
-              localStorage.setItem('terminalFontFamily', f);
-            } else {
-              localStorage.removeItem('terminalFontFamily');
-            }
-          }}
-          terminalFontSize={terminalFontSize}
-          onTerminalFontSizeChange={(s: number) => {
-            setTerminalFontSize(s);
-            localStorage.setItem('terminalFontSize', String(s));
-          }}
-          terminalLineHeight={terminalLineHeight}
-          onTerminalLineHeightChange={(h: number) => {
-            setTerminalLineHeight(h);
-            localStorage.setItem('terminalLineHeight', String(h));
           }}
           diffContextLines={diffContextLines}
           onDiffContextLinesChange={(v) => {

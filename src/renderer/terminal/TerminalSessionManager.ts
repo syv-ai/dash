@@ -46,7 +46,6 @@ export class TerminalSessionManager {
   private savedViewportY: number | null = null;
   readonly shellOnly: boolean;
   private themeId: string;
-  private fontFamily: string | null;
   constructor(opts: {
     id: string;
     cwd: string;
@@ -65,7 +64,6 @@ export class TerminalSessionManager {
     this.isDark = opts.isDark ?? true;
     this.shellOnly = opts.shellOnly ?? false;
     this.themeId = opts.themeId ?? 'default';
-    this.fontFamily = opts.fontFamily ?? null;
 
     this.terminal = new Terminal({
       scrollback: 100_000,
@@ -638,7 +636,6 @@ export class TerminalSessionManager {
   }
 
   setTerminalFont(fontFamily: string | null, fontSize: number, lineHeight: number) {
-    this.fontFamily = fontFamily;
     try {
       if (fontFamily) {
         this.terminal.options.fontFamily = fontFamily;

@@ -35,7 +35,10 @@ async function detectMonospaceFonts(): Promise<string[]> {
       }));
     } else {
       // Linux: use fc-list to find monospace fonts
-      ({ stdout } = await execFileAsync('fc-list', [':spacing=mono', '--format=%{family[0]}\n']));
+      ({ stdout } = await execFileAsync('/usr/bin/fc-list', [
+        ':spacing=mono',
+        '--format=%{family[0]}\n',
+      ]));
     }
     const families = new Set<string>();
     for (const line of stdout.split('\n')) {
