@@ -106,6 +106,19 @@ export function App() {
     if (stored === null) return undefined; // "default" — key absent
     return stored; // '' for "none", or custom text
   });
+  const [effortLevel, setEffortLevel] = useState<string>(() => {
+    return localStorage.getItem('claudeEffortLevel') || 'auto';
+  });
+  const [syncShellEnv, setSyncShellEnv] = useState(() => {
+    return localStorage.getItem('syncShellEnv') === 'true';
+  });
+  const [customClaudeEnvVars, setCustomClaudeEnvVars] = useState<Record<string, string>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('customClaudeEnvVars') || '{}');
+    } catch {
+      return {};
+    }
+  });
   // Pixel Agents state
   const [pixelAgentsConfig, setPixelAgentsConfig] = useState<PixelAgentsConfig | null>(null);
   const [pixelAgentsStatus, setPixelAgentsStatus] = useState<PixelAgentsStatus>({
@@ -136,6 +149,16 @@ export function App() {
   useEffect(() => {
     window.electronAPI.setCommitAttribution?.(commitAttribution);
   }, [commitAttribution]);
+  // Sync shell env inheritance to main process
+  useEffect(() => {
+    window.electronAPI.setSyncShellEnv?.(syncShellEnv);
+  }, [syncShellEnv]);
+  // Sync Claude Code env vars to main process
+  useEffect(() => {
+    const vars: Record<string, string> = { ...customClaudeEnvVars };
+    if (effortLevel !== 'auto') vars.CLAUDE_CODE_EFFORT_LEVEL = effortLevel;
+    window.electronAPI.setClaudeEnvVars?.(vars);
+  }, [effortLevel, customClaudeEnvVars]);
 
   // Activity state — keys are PTY IDs that have active sessions
   const [taskActivity, setTaskActivity] = useState<Record<string, 'busy' | 'idle' | 'waiting'>>({});
@@ -866,9 +889,7 @@ export function App() {
               prompt,
               meta: {
                 githubIssues:
-                  ghItems.length > 0
-                    ? ghItems.map((i) => ({ id: i.id, url: i.url }))
-                    : undefined,
+                  ghItems.length > 0 ? ghItems.map((i) => ({ id: i.id, url: i.url })) : undefined,
                 adoWorkItems:
                   adoItems.length > 0
                     ? adoItems.map((wi) => ({ id: wi.id, url: wi.url }))
@@ -1419,6 +1440,25 @@ export function App() {
             } else {
               localStorage.setItem('commitAttribution', v);
             }
+          }}
+          effortLevel={effortLevel}
+          onEffortLevelChange={(v) => {
+            setEffortLevel(v);
+            if (v === 'auto') {
+              localStorage.removeItem('claudeEffortLevel');
+            } else {
+              localStorage.setItem('claudeEffortLevel', v);
+            }
+          }}
+          syncShellEnv={syncShellEnv}
+          onSyncShellEnvChange={(v) => {
+            setSyncShellEnv(v);
+            localStorage.setItem('syncShellEnv', String(v));
+          }}
+          customClaudeEnvVars={customClaudeEnvVars}
+          onCustomClaudeEnvVarsChange={(v) => {
+            setCustomClaudeEnvVars(v);
+            localStorage.setItem('customClaudeEnvVars', JSON.stringify(v));
           }}
           keybindings={keybindings}
           onKeybindingsChange={(b) => {

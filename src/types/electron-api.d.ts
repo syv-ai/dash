@@ -157,6 +157,8 @@ export interface ElectronAPI {
   // Settings
   setDesktopNotification: (opts: { enabled: boolean }) => void;
   setCommitAttribution: (value: string | undefined) => void;
+  setClaudeEnvVars: (vars: Record<string, string>) => void;
+  setSyncShellEnv: (enabled: boolean) => void;
   getClaudeAttribution: (projectPath?: string) => Promise<IpcResponse<string | null>>;
 
   // GitHub

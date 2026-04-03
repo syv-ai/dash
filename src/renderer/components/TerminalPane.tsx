@@ -1,7 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { ArrowDown } from 'lucide-react';
 import { sessionRegistry } from '../terminal/SessionRegistry';
-import { Tooltip } from './ui/Tooltip';
 
 const OVERLAY_MIN_MS = 2000;
 const OVERLAY_FADE_MS = 300;
@@ -17,7 +15,6 @@ export function TerminalPane({ id, cwd, autoApprove }: TerminalPaneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [showOverlay, setShowOverlay] = useState(false);
   const [overlayVisible, setOverlayVisible] = useState(false);
-  const [isAtBottom, setIsAtBottom] = useState(true);
 
   const hideOverlay = useCallback(() => {
     // Start fade-out
@@ -47,8 +44,6 @@ export function TerminalPane({ id, cwd, autoApprove }: TerminalPaneProps) {
       const remaining = Math.max(0, OVERLAY_MIN_MS - elapsed);
       setTimeout(hideOverlay, remaining);
     });
-
-    session.onScrollStateChange(setIsAtBottom);
 
     // Now attach — the async work will call onRestarting/onReady as needed
     session.attach(container);
@@ -121,19 +116,6 @@ export function TerminalPane({ id, cwd, autoApprove }: TerminalPaneProps) {
             Drop files to paste paths
           </div>
         </div>
-      )}
-      {!isAtBottom && (
-        <Tooltip content="Scroll to bottom">
-          <button
-            onClick={() => {
-              const session = sessionRegistry.get(id);
-              session?.scrollToBottom();
-            }}
-            className="absolute bottom-4 right-4 z-10 w-8 h-8 rounded-full bg-accent/80 hover:bg-accent text-foreground/70 hover:text-foreground flex items-center justify-center shadow-md backdrop-blur-sm transition-all duration-150 hover:scale-105"
-          >
-            <ArrowDown size={16} strokeWidth={2} />
-          </button>
-        </Tooltip>
       )}
     </div>
   );

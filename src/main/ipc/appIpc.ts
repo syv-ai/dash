@@ -162,6 +162,16 @@ export function registerAppIpc(): void {
     setCommitAttribution(value);
   });
 
+  ipcMain.on('app:setClaudeEnvVars', async (_event, vars: Record<string, string>) => {
+    const { setClaudeEnvVars } = await import('../services/ptyManager');
+    setClaudeEnvVars(vars);
+  });
+
+  ipcMain.on('app:setSyncShellEnv', async (_event, enabled: boolean) => {
+    const { setSyncShellEnv } = await import('../services/ptyManager');
+    setSyncShellEnv(enabled);
+  });
+
   ipcMain.handle('app:detectClaude', async () => {
     try {
       // Import cached result from main

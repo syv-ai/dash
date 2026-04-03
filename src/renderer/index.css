@@ -118,6 +118,7 @@
   height: 100%;
   padding-left: 12px;
   padding-top: 10px;
+  padding-bottom: 10px;
 }
 
 /* Inset left edge of absolutely-positioned children to match left padding. */
@@ -127,13 +128,12 @@
   top: 10px !important;
 }
 
-/* Inset scrollbar away from resize handle.
-   clip-path exposes only the scrollbar track so it sits above .xterm-screen
-   (which needs pointer-events for Linkifier2 link detection). */
+/* Hide xterm scrollbar — Claude Code fullscreen mode handles its own scrolling. */
 .terminal-container .xterm .xterm-viewport {
-  right: 8px !important;
-  z-index: 1;
-  clip-path: inset(0 0 0 calc(100% - 16px));
+  scrollbar-width: none !important;
+}
+.terminal-container .xterm .xterm-viewport::-webkit-scrollbar {
+  display: none !important;
 }
 
 /* Sidebar shell terminal: tighter padding */

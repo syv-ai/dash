@@ -29,6 +29,12 @@ const DASH_DEFAULT_ATTRIBUTION =
 // '' = "none" (suppress attribution), any other string = custom text.
 let commitAttributionSetting: string | undefined = undefined;
 
+// Custom environment variables passed to spawned Claude processes (set from renderer settings).
+let claudeEnvVars: Record<string, string> = {};
+
+// When true, inherit the full parent process.env as a base instead of the minimal set.
+let syncShellEnv = false;
+
 export function setCommitAttribution(value: string | undefined): void {
   commitAttributionSetting = value;
   // Re-write settings.local.json for all active PTYs so the change takes effect immediately
@@ -39,6 +45,14 @@ export function setCommitAttribution(value: string | undefined): void {
 
 export function setDesktopNotification(opts: { enabled: boolean }): void {
   hookServer.setDesktopNotification(opts);
+}
+
+export function setClaudeEnvVars(vars: Record<string, string>): void {
+  claudeEnvVars = vars;
+}
+
+export function setSyncShellEnv(enabled: boolean): void {
+  syncShellEnv = enabled;
 }
 
 // Lazy-load node-pty to avoid native binding issues at startup
@@ -115,10 +129,17 @@ async function findClaudePath(): Promise<string | null> {
 }
 
 /**
- * Build minimal environment for direct CLI spawn (no shell config overhead).
+ * Build environment for direct CLI spawn.
+ * When syncShellEnv is off (default), uses a minimal set for fast, predictable spawns.
+ * When on, inherits the full parent process.env as a base.
  */
 function buildDirectEnv(isDark: boolean): Record<string, string> {
+  const base: Record<string, string> = syncShellEnv
+    ? Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => !!e[1]))
+    : {};
+
   const env: Record<string, string> = {
+    ...base,
     TERM: 'xterm-256color',
     COLORTERM: 'truecolor',
     TERM_PROGRAM: 'dash',
@@ -130,24 +151,32 @@ function buildDirectEnv(isDark: boolean): Record<string, string> {
     COLORFGBG: isDark ? '15;0' : '0;15',
   };
 
-  // Auth passthrough
-  const authVars = [
-    'ANTHROPIC_API_KEY',
-    'GH_TOKEN',
-    'GITHUB_TOKEN',
-    'HTTP_PROXY',
-    'HTTPS_PROXY',
-    'NO_PROXY',
-    'http_proxy',
-    'https_proxy',
-    'no_proxy',
-  ];
+  if (!syncShellEnv) {
+    // Auth passthrough — only needed when not inheriting full env
+    const authVars = [
+      'ANTHROPIC_API_KEY',
+      'GH_TOKEN',
+      'GITHUB_TOKEN',
+      'HTTP_PROXY',
+      'HTTPS_PROXY',
+      'NO_PROXY',
+      'http_proxy',
+      'https_proxy',
+      'no_proxy',
+    ];
 
-  for (const key of authVars) {
-    if (process.env[key]) {
-      env[key] = process.env[key]!;
+    for (const key of authVars) {
+      if (process.env[key]) {
+        env[key] = process.env[key]!;
+      }
     }
   }
+
+  // Always enable fullscreen rendering (NO_FLICKER) — Dash handles its own viewport
+  env.CLAUDE_CODE_NO_FLICKER = '1';
+
+  // Merge user-configured Claude Code env vars (curated toggles + custom vars from settings)
+  Object.assign(env, claudeEnvVars);
 
   return env;
 }
