@@ -656,6 +656,7 @@ export function App() {
     showTaskModal,
     showAddProjectModal,
     keybindings,
+    cycleTask,
     cycleRotation,
   ]);
 
