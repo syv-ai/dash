@@ -45,6 +45,8 @@ interface SettingsModalProps {
   onNotificationSoundChange: (value: NotificationSound) => void;
   desktopNotification: boolean;
   onDesktopNotificationChange: (value: boolean) => void;
+  showActiveTasksSection: boolean;
+  onShowActiveTasksSectionChange: (value: boolean) => void;
   shellDrawerEnabled: boolean;
   onShellDrawerEnabledChange: (value: boolean) => void;
   shellDrawerPosition: 'left' | 'main' | 'right';
@@ -738,6 +740,8 @@ export function SettingsModal({
   onNotificationSoundChange,
   desktopNotification,
   onDesktopNotificationChange,
+  showActiveTasksSection,
+  onShowActiveTasksSectionChange,
   shellDrawerEnabled,
   onShellDrawerEnabledChange,
   shellDrawerPosition,
@@ -1001,6 +1005,37 @@ export function SettingsModal({
                 </button>
                 <p className="text-[10px] text-foreground/80 mt-2">
                   Notification will include the task name
+                </p>
+              </div>
+
+              {/* Active Tasks Section */}
+              <div>
+                <label className="block text-[12px] font-medium text-foreground mb-3">
+                  Active Tasks
+                </label>
+                <button
+                  onClick={() => onShowActiveTasksSectionChange(!showActiveTasksSection)}
+                  className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg text-[13px] border transition-all duration-150 ${
+                    showActiveTasksSection
+                      ? 'border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20'
+                      : 'border-border/60 text-foreground/60 hover:bg-accent/40 hover:text-foreground'
+                  }`}
+                >
+                  <div
+                    className={`w-8 h-[18px] rounded-full relative transition-colors duration-150 flex-shrink-0 ${
+                      showActiveTasksSection ? 'bg-primary' : 'bg-border'
+                    }`}
+                  >
+                    <div
+                      className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-transform duration-150 ${
+                        showActiveTasksSection ? 'translate-x-[16px]' : 'translate-x-[2px]'
+                      }`}
+                    />
+                  </div>
+                  Show active tasks in sidebar
+                </button>
+                <p className="text-[10px] text-foreground/80 mt-2">
+                  Quick-switch between running tasks with Ctrl+Tab.
                 </p>
               </div>
 
