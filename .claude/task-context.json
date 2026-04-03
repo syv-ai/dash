@@ -1,0 +1,14 @@
+{
+  "hookSpecificOutput": {
+    "hookEventName": "SessionStart",
+    "additionalContext": "I'm working on the following GitHub issue(s):\n\n## Issue #78: Add optional Chat UI mode alongside native terminal view\nAdd a per-task toggle that lets users switch between the current native terminal view (xterm.js + node-pty) and a rendered chat UI for interacting with Claude Code — at any time, including mid-session.\n\nThe raw terminal works well but a chat UI would provide:\n\t∙\tClear visual separation between user prompts, assistant responses, and tool use\n\t∙\tRendered markdown (code blocks, lists, tables)\n\t∙\tCollapsible tool use/result sections\n\t∙\tA cleaner input experience (multiline compose box vs. terminal stdin)\nCritically, if the chat UI ever breaks due to a Claude Code update or can’t handle a particular interaction, the user must be able to flip back to the terminal instantly — no lost context, no restart.\n\n##% Vanilla approach\nTwo spawn modes, one session\n\n``` \nTerminal mode (current):\n  node-pty → PTY → claude (interactive)\n                      ↓\n                  xterm.js\n\nChat mode (new):\n  child_process.spawn → piped stdin/stdout\n    claude --output-format stream-json\n                      ↓\n              stream parser → React chat UI\n```\n\nBoth modes use --session-id, so they share the same conversation history. Switching modes mid-session means:\n\t1.\tKill the current process (PTY or piped child)\n\t2.\tRespawn Claude in the other mode with the same --session-id\n\t3.\tClaude resumes the conversation from its persisted session\nThe toggle is a simple button on the task — “Switch to Chat” / “Switch to Terminal”. No data loss, no re-prompting.\nWhy this works\nClaude Code sessions are file-backed (~/.claude/projects/<hash>/<session-id>.jsonl). The session ID is the continuity mechanism, not the process. Killing and respawning with the same session ID picks up where it left off. This means:\n\t∙\tChat → Terminal: If the stream parser chokes on an unexpected format, the user clicks one button and is back in the familiar terminal, same session.\n\t∙\tTerminal → Chat: If the user wants a cleaner view of a long-running session, they can switch over and the chat UI reconstructs history from t...\n\nPlease help me implement a solution for this."
+  },
+  "meta": {
+    "githubIssues": [
+      {
+        "id": 78,
+        "url": "https://github.com/syv-ai/dash/issues/78"
+      }
+    ]
+  }
+}

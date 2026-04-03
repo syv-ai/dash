@@ -18,6 +18,8 @@ import type {
   PullRequestInfo,
   PixelAgentsConfig,
   PixelAgentsStatus,
+  ChatMessage,
+  SessionMetrics,
 } from '../shared/types';
 
 export interface ElectronAPI {
@@ -141,6 +143,86 @@ export interface ElectronAPI {
 
   // Session detection
   ptyHasClaudeSession: (cwd: string) => Promise<IpcResponse<boolean>>;
+  ptyChatHistory: (args: {
+    cwd: string;
+    limit?: number;
+    beforeIndex?: number;
+  }) => Promise<IpcResponse<{ messages: ChatMessage[]; totalCount: number; startIndex: number }>>;
+  ptyChatWatch: (args: { id: string; cwd: string }) => Promise<IpcResponse<void>>;
+  ptyChatUnwatch: (id: string) => void;
+  ptyChatResetSession: (id: string) => void;
+  ptyReadFile: (filePath: string) => Promise<IpcResponse<string>>;
+  onChatMessages: (id: string, callback: (messages: ChatMessage[]) => void) => () => void;
+  onChatStatus: (id: string, callback: (status: string | null) => void) => () => void;
+  onChatMetrics: (id: string, callback: (metrics: SessionMetrics) => void) => () => void;
+
+  // Hook events
+  onHookPreToolUse: (
+    id: string,
+    callback: (data: {
+      toolName: string;
+      toolInput: Record<string, unknown>;
+      toolUseId: string;
+    }) => void,
+  ) => () => void;
+  onHookPostToolUse: (
+    id: string,
+    callback: (data: {
+      toolName: string;
+      toolInput: Record<string, unknown>;
+      toolResponse: unknown;
+      toolUseId: string;
+    }) => void,
+  ) => () => void;
+  onHookPostToolUseFailure: (
+    id: string,
+    callback: (data: {
+      toolName: string;
+      toolInput: Record<string, unknown>;
+      toolUseId: string;
+      error: string;
+      isInterrupt: boolean;
+    }) => void,
+  ) => () => void;
+  onHookStop: (
+    id: string,
+    callback: (data: { lastAssistantMessage: string | null }) => void,
+  ) => () => void;
+  onHookStopFailure: (
+    id: string,
+    callback: (data: { error: string; errorDetails: string; lastAssistantMessage: string }) => void,
+  ) => () => void;
+  onHookSubagentStart: (
+    id: string,
+    callback: (data: { agentId: string; agentType: string }) => void,
+  ) => () => void;
+  onHookSubagentStop: (
+    id: string,
+    callback: (data: {
+      agentId: string;
+      agentType: string;
+      agentTranscriptPath: string | null;
+      lastAssistantMessage: string | null;
+    }) => void,
+  ) => () => void;
+  onHookSessionStart: (
+    id: string,
+    callback: (data: { sessionId: string; source: string; transcriptPath: string }) => void,
+  ) => () => void;
+  onHookNotification: (
+    id: string,
+    callback: (data: { notificationType: string; message: string; title: string }) => void,
+  ) => () => void;
+  ptyDiscoverCommands: (projectCwd: string) => Promise<
+    IpcResponse<
+      Array<{
+        command: string;
+        description: string;
+        source: 'skill' | 'plugin' | 'mcp';
+        interactive?: boolean;
+      }>
+    >
+  >;
 
   // Task context for SessionStart hook
   ptyWriteTaskContext: (args: {

@@ -1,6 +1,6 @@
 {
   "name": "dash",
-  "version": "0.7.9",
+  "version": "0.8.0",
   "description": "Dash — Desktop app for Claude Code with git worktree management",
   "main": "dist/main/main/entry.js",
   "author": "mhenrichsen <mads@syv.ai>, nthomsencph <nicolai@syv.ai>, FabianScott <fabian@syv.ai>",
@@ -91,6 +91,7 @@
     "drizzle-orm": "^0.32.0",
     "electron-log": "^5.1.0",
     "electron-updater": "^6.8.3",
+    "highlight.js": "^11.11.1",
     "node-pty": "^1.0.0",
     "posthog-node": "^5.28.2",
     "qrcode": "^1.5.4",

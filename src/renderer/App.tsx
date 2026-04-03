@@ -866,9 +866,7 @@ export function App() {
               prompt,
               meta: {
                 githubIssues:
-                  ghItems.length > 0
-                    ? ghItems.map((i) => ({ id: i.id, url: i.url }))
-                    : undefined,
+                  ghItems.length > 0 ? ghItems.map((i) => ({ id: i.id, url: i.url })) : undefined,
                 adoWorkItems:
                   adoItems.length > 0
                     ? adoItems.map((wi) => ({ id: wi.id, url: wi.url }))
@@ -1383,6 +1381,7 @@ export function App() {
           onTerminalThemeChange={(id) => {
             setTerminalTheme(id);
             localStorage.setItem('terminalTheme', id);
+            window.dispatchEvent(new CustomEvent('terminalThemeChange', { detail: id }));
             sessionRegistry.setAllTerminalThemes(id, theme === 'dark');
           }}
           diffContextLines={diffContextLines}

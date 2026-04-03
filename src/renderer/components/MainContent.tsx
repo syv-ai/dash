@@ -1,5 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { TerminalPane } from './TerminalPane';
+import { ChatPane } from './ChatPane';
+import { ChatErrorBoundary } from './chat/ChatErrorBoundary';
 import { ProjectOverview } from './ProjectOverview';
 import {
   FolderOpen,
@@ -9,6 +11,8 @@ import {
   GitPullRequest,
   GitMerge,
   Code2,
+  Terminal,
+  MessageSquare,
 } from 'lucide-react';
 import type {
   Project,
@@ -16,9 +20,11 @@ import type {
   RemoteControlState,
   PullRequestInfo,
   GitStatus,
+  ViewMode,
 } from '../../shared/types';
 import { linkedItemUrl, isAdoRemote, branchUrl } from '../../shared/urls';
 import { Tooltip } from './ui/Tooltip';
+import { sessionRegistry } from '../terminal/SessionRegistry';
 
 interface MainContentProps {
   activeTask: Task | null;
@@ -64,6 +70,68 @@ export function MainContent({
   gitStatus,
 }: MainContentProps) {
   const [prInfo, setPrInfo] = useState<PullRequestInfo | null>(null);
+
+  // Per-task view mode persisted in localStorage
+  const viewModeKey = activeTask ? `viewMode:${activeTask.id}` : null;
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    if (!viewModeKey) return 'terminal';
+    return (localStorage.getItem(viewModeKey) as ViewMode) || 'terminal';
+  });
+
+  // Reset view mode when task changes
+  useEffect(() => {
+    if (viewModeKey) {
+      const stored = localStorage.getItem(viewModeKey) as ViewMode;
+      setViewMode(stored || 'terminal');
+    }
+  }, [viewModeKey]);
+
+  const handleToggleViewMode = useCallback(() => {
+    if (!activeTask || !viewModeKey) return;
+
+    const newMode: ViewMode = viewMode === 'terminal' ? 'chat' : 'terminal';
+
+    // Don't kill the PTY — both views share the same running session.
+    // Just detach the xterm terminal when switching away from it.
+    if (viewMode === 'terminal') {
+      sessionRegistry.detach(activeTask.id);
+    }
+
+    localStorage.setItem(viewModeKey, newMode);
+    setViewMode(newMode);
+  }, [activeTask, viewModeKey, viewMode]);
+
+  // Auto-return to chat after interactive command completes.
+  // Start a temporary JSONL watcher to detect the command stdout entry.
+  const pendingReturnRef = useRef(false);
+  useEffect(() => {
+    if (!activeTask || !pendingReturnRef.current || viewMode !== 'terminal') return;
+
+    // Start a watcher (ChatPane's watcher stops on unmount)
+    window.electronAPI.ptyChatWatch({ id: `return-${activeTask.id}`, cwd: activeTask.path });
+
+    const unsub = window.electronAPI.onChatMessages(`return-${activeTask.id}`, (msgs) => {
+      const hasCommandDone = msgs.some(
+        (m) =>
+          m.role === 'system' &&
+          m.content.some((b) => b.type === 'text' && b.text.includes('<local-command-stdout>')),
+      );
+      if (hasCommandDone && pendingReturnRef.current) {
+        pendingReturnRef.current = false;
+        setTimeout(() => {
+          if (viewModeKey) {
+            localStorage.setItem(viewModeKey, 'chat');
+            setViewMode('chat');
+          }
+        }, 300);
+      }
+    });
+
+    return () => {
+      unsub();
+      window.electronAPI.ptyChatUnwatch(`return-${activeTask.id}`);
+    };
+  }, [activeTask, viewMode, viewModeKey]);
 
   useEffect(() => {
     setPrInfo(null);
@@ -208,21 +276,37 @@ export function MainContent({
               </button>
             ))}
           </div>
-          {activeTask.useWorktree ? (
-            <Tooltip content={branchTooltip}>
-              <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
-                <FolderGit2 size={11} strokeWidth={2} className="flex-shrink-0" />
-                {branchLabel}
-              </div>
-            </Tooltip>
-          ) : (
-            <Tooltip content={branchTooltip}>
-              <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
-                <GitBranch size={11} strokeWidth={2} className="flex-shrink-0" />
-                {branchLabel}
-              </div>
-            </Tooltip>
-          )}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {activeTask.useWorktree ? (
+              <Tooltip content={branchTooltip}>
+                <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
+                  <FolderGit2 size={11} strokeWidth={2} className="flex-shrink-0" />
+                  {branchLabel}
+                </div>
+              </Tooltip>
+            ) : (
+              <Tooltip content={branchTooltip}>
+                <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
+                  <GitBranch size={11} strokeWidth={2} className="flex-shrink-0" />
+                  {branchLabel}
+                </div>
+              </Tooltip>
+            )}
+            <button
+              onClick={handleToggleViewMode}
+              className={`p-0.5 rounded transition-colors ${
+                viewMode === 'chat'
+                  ? 'bg-amber-400/20 text-amber-400 hover:bg-amber-400/30'
+                  : 'text-muted-foreground/50 hover:text-foreground hover:bg-accent/60'
+              }`}
+            >
+              {viewMode === 'terminal' ? (
+                <MessageSquare size={11} strokeWidth={1.8} />
+              ) : (
+                <Terminal size={11} strokeWidth={1.8} />
+              )}
+            </button>
+          </div>
         </>
       ) : (
         <>
@@ -280,6 +364,27 @@ export function MainContent({
                 </div>
               </Tooltip>
             )}
+            {prInfo && prInfo.state !== 'closed' && (
+              <Tooltip content={`${prInfo.title} (${prInfo.state})`}>
+                <a
+                  href={prInfo.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium transition-colors ${
+                    prInfo.state === 'merged'
+                      ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20'
+                      : 'bg-green-500/10 text-green-600 dark:text-green-400 hover:bg-green-500/20'
+                  }`}
+                >
+                  {prInfo.state === 'merged' ? (
+                    <GitMerge size={10} strokeWidth={2} />
+                  ) : (
+                    <GitPullRequest size={10} strokeWidth={2} />
+                  )}
+                  <span className="whitespace-nowrap">PR #{prInfo.number}</span>
+                </a>
+              </Tooltip>
+            )}
             {taskActivity[activeTask.id] && (
               <Tooltip content="Remote control">
                 <button
@@ -306,27 +411,24 @@ export function MainContent({
                 <Code2 size={14} strokeWidth={1.8} />
               </button>
             </Tooltip>
-            {prInfo && prInfo.state !== 'closed' && (
-              <Tooltip content={`${prInfo.title} (${prInfo.state})`}>
-                <a
-                  href={prInfo.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium transition-colors ${
-                    prInfo.state === 'merged'
-                      ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20'
-                      : 'bg-green-500/10 text-green-600 dark:text-green-400 hover:bg-green-500/20'
-                  }`}
-                >
-                  {prInfo.state === 'merged' ? (
-                    <GitMerge size={10} strokeWidth={2} />
-                  ) : (
-                    <GitPullRequest size={10} strokeWidth={2} />
-                  )}
-                  PR #{prInfo.number}
-                </a>
-              </Tooltip>
-            )}
+            <Tooltip
+              content={viewMode === 'terminal' ? 'Switch to chat view' : 'Switch to terminal view'}
+            >
+              <button
+                onClick={handleToggleViewMode}
+                className={`p-1 rounded-md transition-colors ${
+                  viewMode === 'chat'
+                    ? 'bg-amber-400/20 text-amber-400 hover:bg-amber-400/30'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent/60'
+                }`}
+              >
+                {viewMode === 'terminal' ? (
+                  <MessageSquare size={14} strokeWidth={1.8} />
+                ) : (
+                  <Terminal size={14} strokeWidth={1.8} />
+                )}
+              </button>
+            </Tooltip>
           </div>
         </>
       )}
@@ -337,12 +439,31 @@ export function MainContent({
     <div className="h-full flex flex-col bg-background">
       {taskHeader}
       <div className="flex-1 min-h-0">
-        <TerminalPane
-          key={activeTask.id}
-          id={activeTask.id}
-          cwd={activeTask.path}
-          autoApprove={activeTask.autoApprove}
-        />
+        {viewMode === 'chat' ? (
+          <ChatErrorBoundary
+            key={`chat-boundary-${activeTask.id}`}
+            onSwitchToTerminal={handleToggleViewMode}
+          >
+            <ChatPane
+              key={`chat-${activeTask.id}`}
+              id={activeTask.id}
+              cwd={activeTask.path}
+              onSwitchToTerminal={() => {
+                if (viewMode === 'chat') {
+                  pendingReturnRef.current = true;
+                  handleToggleViewMode();
+                }
+              }}
+            />
+          </ChatErrorBoundary>
+        ) : (
+          <TerminalPane
+            key={activeTask.id}
+            id={activeTask.id}
+            cwd={activeTask.path}
+            autoApprove={activeTask.autoApprove}
+          />
+        )}
       </div>
     </div>
   );

@@ -1,0 +1,595 @@
+/**
+ * SessionWatcherService — watches Claude Code's conversation JSONL files
+ * for live updates and forwards parsed messages to the renderer.
+ *
+ * Improvements over inline ptyIpc watcher:
+ * - Watches project directory for new session files (handles /clear, session rotation)
+ * - Watches ~/.claude/projects/ for project dir creation (first-time tasks)
+ * - Debounces fs.watch events (80ms) to avoid redundant reads
+ * - Tracks partial line byte offset correctly
+ * - Deduplicates entries by requestId (Claude writes multiple entries per streaming response)
+ * - Clean standalone service with start/stop/getHistory API
+ */
+
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import * as crypto from 'crypto';
+import type { ChatMessage, SessionMetrics, TokenUsage } from '@shared/types';
+import { formatToolStatus } from '@shared/formatToolStatus';
+
+// ── Types ───────────────────────────────────────────────────
+
+export type MessageCallback = (messages: ChatMessage[]) => void;
+export type StatusCallback = (status: string | null) => void;
+export type MetricsCallback = (metrics: SessionMetrics) => void;
+
+// ── Watcher State ───────────────────────────────────────────
+
+const DEBOUNCE_MS = 80;
+const POLL_INTERVAL_MS = 200;
+
+interface WatchEntry {
+  id: string;
+  cwd: string;
+  projectDir: string | null;
+  sessionFilePath: string | null;
+  fileWatcher: fs.FSWatcher | null;
+  dirWatcher: fs.FSWatcher | null;
+  pollInterval: ReturnType<typeof setInterval> | null;
+  debounceTimer: ReturnType<typeof setTimeout> | null;
+  bytesRead: number;
+  partialLine: string;
+  /** Set of requestIds already seen — for dedup of streaming entries. */
+  seenRequestIds: Set<string>;
+  /** Accumulated token usage for metrics. */
+  metrics: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    messageCount: number;
+    firstTimestamp: number;
+    lastTimestamp: number;
+  };
+  onMessages: MessageCallback;
+  onStatus: StatusCallback;
+  onMetrics: MetricsCallback;
+}
+
+const watchers = new Map<string, WatchEntry>();
+
+// ── Project Directory Discovery ─────────────────────────────
+
+function getProjectsDir(): string {
+  return path.join(os.homedir(), '.claude', 'projects');
+}
+
+function encodeProjectPath(absolutePath: string): string {
+  return absolutePath.replace(/\//g, '-');
+}
+
+export function findProjectDir(taskPath: string): string | null {
+  const projectsDir = getProjectsDir();
+  if (!fs.existsSync(projectsDir)) return null;
+
+  // Strategy 1: path-based (slashes → hyphens)
+  const pathBased = path.join(projectsDir, encodeProjectPath(taskPath));
+  if (fs.existsSync(pathBased)) return pathBased;
+
+  // Strategy 2: SHA-256 hash prefix
+  const hashBased = path.join(
+    projectsDir,
+    crypto.createHash('sha256').update(taskPath).digest('hex').slice(0, 16),
+  );
+  if (fs.existsSync(hashBased)) return hashBased;
+
+  // Strategy 3: partial path match (last 3 segments)
+  try {
+    const parts = taskPath.split('/').filter((p) => p.length > 0);
+    const suffix = parts.slice(-3).join('-');
+    const dirs = fs.readdirSync(projectsDir);
+    for (const dir of dirs) {
+      if (dir.includes(suffix)) return path.join(projectsDir, dir);
+    }
+  } catch {
+    // Ignore
+  }
+
+  return null;
+}
+
+function findLatestSessionFile(projectDir: string): string | null {
+  try {
+    let latest: string | null = null;
+    let latestMtime = 0;
+    for (const file of fs.readdirSync(projectDir)) {
+      if (!file.endsWith('.jsonl')) continue;
+      const fullPath = path.join(projectDir, file);
+      try {
+        const stat = fs.statSync(fullPath);
+        if (stat.mtimeMs > latestMtime) {
+          latestMtime = stat.mtimeMs;
+          latest = fullPath;
+        }
+      } catch {
+        // Skip inaccessible
+      }
+    }
+    return latest;
+  } catch {
+    return null;
+  }
+}
+
+// ── JSONL Parsing ───────────────────────────────────────────
+
+function parseConversationEntry(entry: any, counter: number): ChatMessage | null {
+  // Skip sidechain messages (branched conversation paths)
+  if (entry.isSidechain) return null;
+
+  const type = entry.type;
+  const msg = entry.message;
+
+  if (type === 'user' && msg?.role === 'user') {
+    if (entry.isMeta) return null;
+    const content = normalizeContent(msg.content);
+    if (content.length === 0) return null;
+    return {
+      id: entry.uuid || `msg-user-${counter}`,
+      role: 'user',
+      content,
+      timestamp: entry.timestamp ? new Date(entry.timestamp).getTime() : Date.now(),
+    };
+  }
+
+  if (type === 'system') {
+    // Compact boundary events — show a summary card
+    if (entry.subtype === 'compact_boundary') {
+      const summary = entry.summary || 'Conversation compacted to save context';
+      return {
+        id: entry.uuid || `msg-sys-${counter}`,
+        role: 'system',
+        content: [{ type: 'text', text: `<compact-summary>${summary}</compact-summary>` }],
+        timestamp: entry.timestamp ? new Date(entry.timestamp).getTime() : Date.now(),
+      };
+    }
+    if (typeof entry.content === 'string') {
+      const text = entry.content.trim();
+      if (text) {
+        return {
+          id: entry.uuid || `msg-sys-${counter}`,
+          role: 'system',
+          content: [{ type: 'text', text }],
+          timestamp: entry.timestamp ? new Date(entry.timestamp).getTime() : Date.now(),
+        };
+      }
+    }
+  }
+
+  if (type === 'assistant' && msg?.role === 'assistant') {
+    // Skip synthetic messages (internal placeholders)
+    if (msg.model === '<synthetic>') return null;
+    const content = normalizeContent(msg.content);
+    if (content.length === 0) return null;
+    return {
+      id: entry.uuid || `msg-asst-${counter}`,
+      role: 'assistant',
+      content,
+      timestamp: entry.timestamp ? new Date(entry.timestamp).getTime() : Date.now(),
+      model: msg.model,
+    };
+  }
+
+  return null;
+}
+
+function normalizeContent(raw: unknown): ChatMessage['content'] {
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) return [];
+    return [{ type: 'text', text: trimmed }];
+  }
+  if (Array.isArray(raw)) {
+    const blocks: ChatMessage['content'] = [];
+    for (const block of raw) {
+      if (!block || typeof block !== 'object') continue;
+      if (block.type === 'text' && typeof block.text === 'string' && block.text.trim()) {
+        blocks.push({ type: 'text', text: block.text });
+      } else if (block.type === 'tool_use') {
+        blocks.push({
+          type: 'tool_use',
+          id: block.id || '',
+          name: block.name || '',
+          input: block.input || {},
+        });
+      } else if (block.type === 'tool_result') {
+        const content =
+          typeof block.content === 'string'
+            ? block.content
+            : Array.isArray(block.content)
+              ? block.content
+                  .filter((c: any) => c?.type === 'text')
+                  .map((c: any) => c.text)
+                  .join('\n')
+              : '';
+        blocks.push({
+          type: 'tool_result',
+          tool_use_id: block.tool_use_id || '',
+          content,
+          is_error: block.is_error,
+        });
+      }
+    }
+    return blocks;
+  }
+  return [];
+}
+
+// ── Incremental Reading ─────────────────────────────────────
+
+function readIncrementalBytes(entry: WatchEntry): void {
+  if (!entry.sessionFilePath) return;
+
+  try {
+    const stat = fs.statSync(entry.sessionFilePath);
+    if (stat.size <= entry.bytesRead) return;
+
+    const bytesToRead = stat.size - entry.bytesRead;
+    const fd = fs.openSync(entry.sessionFilePath, 'r');
+    const buffer = Buffer.alloc(bytesToRead);
+    fs.readSync(fd, buffer, 0, bytesToRead, entry.bytesRead);
+    fs.closeSync(fd);
+
+    const rawData = entry.partialLine + buffer.toString('utf-8');
+    const lines = rawData.split('\n');
+
+    // Last element may be a partial line — buffer it
+    entry.partialLine = lines.pop() ?? '';
+    // Adjust bytesRead to account for the buffered partial line
+    entry.bytesRead = stat.size - Buffer.byteLength(entry.partialLine, 'utf-8');
+
+    const messages: ChatMessage[] = [];
+    let counter = Date.now();
+    let latestStatus: string | null | undefined = undefined;
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const raw = JSON.parse(line);
+
+        const msg = parseConversationEntry(raw, counter++);
+        if (msg) messages.push(msg);
+
+        // Extract status from assistant tool_use blocks (JSONL fallback for status)
+        if (raw.type === 'assistant' && Array.isArray(raw.message?.content)) {
+          for (const block of raw.message.content) {
+            if (block?.type === 'tool_use' && block.name) {
+              latestStatus = formatToolStatus(block.name, block.input);
+            }
+          }
+          // Accumulate token usage from assistant messages
+          const usage = raw.message?.usage as TokenUsage | undefined;
+          if (usage) {
+            entry.metrics.inputTokens += usage.input_tokens || 0;
+            entry.metrics.outputTokens += usage.output_tokens || 0;
+            entry.metrics.cacheReadTokens += usage.cache_read_input_tokens || 0;
+          }
+        }
+        if (raw.type === 'result') {
+          latestStatus = null;
+        }
+
+        // Surface API retry / rate limit events as status
+        if (raw.type === 'system' && raw.subtype === 'api_retry') {
+          const delaySec = Math.ceil((raw.retry_delay_ms || 0) / 1000);
+          const errorType = raw.error || 'unknown';
+          if (errorType === 'rate_limit') {
+            latestStatus = `Rate limited — retrying in ${delaySec}s (attempt ${raw.attempt}/${raw.max_retries})`;
+          } else if (errorType === 'server_error') {
+            latestStatus = `API error — retrying in ${delaySec}s (attempt ${raw.attempt}/${raw.max_retries})`;
+          } else {
+            latestStatus = `${errorType} — retrying in ${delaySec}s`;
+          }
+        }
+
+        // Track timestamps for duration
+        if (raw.timestamp) {
+          const ts = new Date(raw.timestamp).getTime();
+          if (!isNaN(ts)) {
+            if (entry.metrics.firstTimestamp === 0) entry.metrics.firstTimestamp = ts;
+            entry.metrics.lastTimestamp = ts;
+          }
+        }
+        entry.metrics.messageCount++;
+      } catch {
+        // Skip malformed lines
+      }
+    }
+
+    if (messages.length > 0) entry.onMessages(messages);
+    if (latestStatus !== undefined) entry.onStatus(latestStatus);
+
+    // Emit updated metrics
+    const m = entry.metrics;
+    entry.onMetrics({
+      durationMs: m.lastTimestamp - m.firstTimestamp,
+      totalTokens: m.inputTokens + m.outputTokens + m.cacheReadTokens,
+      inputTokens: m.inputTokens,
+      outputTokens: m.outputTokens,
+      cacheReadTokens: m.cacheReadTokens,
+      messageCount: m.messageCount,
+    });
+  } catch {
+    // File may have been deleted/rotated
+  }
+}
+
+// ── File & Directory Watching ───────────────────────────────
+
+function startFileWatcher(entry: WatchEntry): void {
+  if (!entry.sessionFilePath) return;
+
+  if (entry.fileWatcher) {
+    try {
+      entry.fileWatcher.close();
+    } catch {
+      // Already closed
+    }
+  }
+
+  try {
+    entry.fileWatcher = fs.watch(entry.sessionFilePath, () => {
+      // Debounce to avoid redundant reads on rapid writes
+      if (entry.debounceTimer) clearTimeout(entry.debounceTimer);
+      entry.debounceTimer = setTimeout(() => {
+        entry.debounceTimer = null;
+        readIncrementalBytes(entry);
+      }, DEBOUNCE_MS);
+    });
+    entry.fileWatcher.on('error', () => {});
+  } catch {
+    // Can't watch file
+  }
+}
+
+function startDirWatcher(entry: WatchEntry): void {
+  if (!entry.projectDir) return;
+
+  if (entry.dirWatcher) {
+    try {
+      entry.dirWatcher.close();
+    } catch {
+      // Already closed
+    }
+  }
+
+  try {
+    entry.dirWatcher = fs.watch(entry.projectDir, (_eventType, filename) => {
+      if (!filename || !filename.endsWith('.jsonl')) return;
+
+      const newFile = path.join(entry.projectDir!, filename);
+      if (newFile === entry.sessionFilePath) return;
+
+      // Check if this is a newer session file
+      try {
+        const newStat = fs.statSync(newFile);
+        if (entry.sessionFilePath) {
+          const currentStat = fs.statSync(entry.sessionFilePath);
+          if (newStat.mtimeMs <= currentStat.mtimeMs) return;
+        }
+      } catch {
+        return;
+      }
+
+      // Switch to the new session file
+      entry.sessionFilePath = newFile;
+      entry.bytesRead = 0;
+      entry.partialLine = '';
+      entry.seenRequestIds.clear();
+      startFileWatcher(entry);
+    });
+    entry.dirWatcher.on('error', () => {});
+  } catch {
+    // Can't watch directory
+  }
+}
+
+// ── Public API ──────────────────────────────────────────────
+
+export function startWatching(
+  id: string,
+  cwd: string,
+  onMessages: MessageCallback,
+  onStatus: StatusCallback,
+  onMetrics?: MetricsCallback,
+): void {
+  stopWatching(id);
+
+  const projectDir = findProjectDir(cwd);
+
+  const entry: WatchEntry = {
+    id,
+    cwd,
+    projectDir,
+    sessionFilePath: null,
+    fileWatcher: null,
+    dirWatcher: null,
+    pollInterval: null,
+    debounceTimer: null,
+    bytesRead: 0,
+    partialLine: '',
+    seenRequestIds: new Set(),
+    metrics: {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      messageCount: 0,
+      firstTimestamp: 0,
+      lastTimestamp: 0,
+    },
+    onMessages,
+    onStatus,
+    onMetrics: onMetrics || (() => {}),
+  };
+
+  watchers.set(id, entry);
+
+  if (!projectDir) {
+    // No project dir yet — watch ~/.claude/projects/ for it to appear
+    const projectsDir = getProjectsDir();
+    if (!fs.existsSync(projectsDir)) return;
+
+    const encodedName = encodeProjectPath(cwd);
+    try {
+      entry.dirWatcher = fs.watch(projectsDir, (_eventType, filename) => {
+        if (filename !== encodedName) return;
+
+        entry.projectDir = path.join(projectsDir, encodedName);
+        if (entry.dirWatcher) {
+          try {
+            entry.dirWatcher.close();
+          } catch {
+            // Already closed
+          }
+        }
+
+        const sessionFile = findLatestSessionFile(entry.projectDir);
+        if (sessionFile) {
+          entry.sessionFilePath = sessionFile;
+          const stat = fs.statSync(sessionFile);
+          entry.bytesRead = stat.size;
+          startFileWatcher(entry);
+        }
+        startDirWatcher(entry);
+      });
+    } catch {
+      // Can't watch projects dir
+    }
+    return;
+  }
+
+  // Find latest session file and start tailing from end
+  const sessionFile = findLatestSessionFile(projectDir);
+  if (sessionFile) {
+    entry.sessionFilePath = sessionFile;
+    try {
+      entry.bytesRead = fs.statSync(sessionFile).size;
+    } catch {
+      // File may not exist yet
+    }
+    startFileWatcher(entry);
+  }
+
+  // Watch directory for new session files (e.g. after /clear)
+  startDirWatcher(entry);
+
+  // Polling fallback — fs.watch can miss events on some platforms
+  entry.pollInterval = setInterval(() => readIncrementalBytes(entry), POLL_INTERVAL_MS);
+}
+
+export function stopWatching(id: string): void {
+  const entry = watchers.get(id);
+  if (!entry) return;
+
+  if (entry.debounceTimer) clearTimeout(entry.debounceTimer);
+  if (entry.pollInterval) clearInterval(entry.pollInterval);
+  if (entry.fileWatcher) {
+    try {
+      entry.fileWatcher.close();
+    } catch {
+      // Already closed
+    }
+  }
+  if (entry.dirWatcher) {
+    try {
+      entry.dirWatcher.close();
+    } catch {
+      // Already closed
+    }
+  }
+  watchers.delete(id);
+}
+
+export function stopAll(): void {
+  for (const id of watchers.keys()) {
+    stopWatching(id);
+  }
+}
+
+/**
+ * Read full conversation history from the latest JSONL file.
+ * Supports pagination via limit/beforeIndex for lazy loading.
+ */
+export function readHistory(
+  cwd: string,
+  limit = 100,
+  beforeIndex?: number,
+): { messages: ChatMessage[]; totalCount: number; startIndex: number } {
+  const projectDir = findProjectDir(cwd);
+  if (!projectDir) return { messages: [], totalCount: 0, startIndex: 0 };
+
+  const filePath = findLatestSessionFile(projectDir);
+  if (!filePath) return { messages: [], totalCount: 0, startIndex: 0 };
+
+  const content = fs.readFileSync(filePath, 'utf-8');
+  const parsed: Array<{ msg: ChatMessage; requestId?: string }> = [];
+  let counter = 0;
+
+  for (const line of content.split('\n')) {
+    if (!line.trim()) continue;
+    try {
+      const entry = JSON.parse(line);
+      const msg = parseConversationEntry(entry, counter++);
+      if (msg) parsed.push({ msg, requestId: entry.requestId });
+    } catch {
+      // Skip malformed lines
+    }
+  }
+
+  // Deduplicate by requestId — Claude writes multiple entries per streaming response,
+  // only the last entry per requestId has final content/token counts.
+  const lastByRequestId = new Map<string, number>();
+  for (let i = 0; i < parsed.length; i++) {
+    const rid = parsed[i].requestId;
+    if (rid) lastByRequestId.set(rid, i);
+  }
+  const allMessages = parsed
+    .filter((p, i) => !p.requestId || lastByRequestId.get(p.requestId) === i)
+    .map((p) => p.msg);
+
+  const totalCount = allMessages.length;
+  const endIndex = beforeIndex !== undefined ? Math.min(beforeIndex, totalCount) : totalCount;
+  const startIndex = Math.max(0, endIndex - limit);
+
+  return {
+    messages: allMessages.slice(startIndex, endIndex),
+    totalCount,
+    startIndex,
+  };
+}
+
+/**
+ * Force the watcher for the given id to switch to a new session file.
+ * Called from SessionStart hook when /clear or new session is detected.
+ */
+export function resetSession(id: string): void {
+  const entry = watchers.get(id);
+  if (!entry || !entry.projectDir) return;
+
+  const sessionFile = findLatestSessionFile(entry.projectDir);
+  if (sessionFile && sessionFile !== entry.sessionFilePath) {
+    entry.sessionFilePath = sessionFile;
+    entry.bytesRead = 0;
+    entry.partialLine = '';
+    entry.seenRequestIds.clear();
+    entry.metrics = {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      messageCount: 0,
+      firstTimestamp: 0,
+      lastTimestamp: 0,
+    };
+    startFileWatcher(entry);
+  }
+}

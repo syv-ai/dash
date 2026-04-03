@@ -1,5 +1,15 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
+/** Create an id-scoped IPC listener that returns an unsubscribe function. */
+function idListener(channel: string) {
+  return (id: string, callback: (data: any) => void) => {
+    const scoped = `${channel}:${id}`;
+    const handler = (_event: unknown, data: any) => callback(data);
+    ipcRenderer.on(scoped, handler);
+    return () => ipcRenderer.removeListener(scoped, handler);
+  };
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
   // App
   getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
@@ -96,6 +106,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Session detection
   ptyHasClaudeSession: (cwd: string) => ipcRenderer.invoke('pty:hasClaudeSession', cwd),
+  ptyChatHistory: (args: { cwd: string; limit?: number; beforeIndex?: number }) =>
+    ipcRenderer.invoke('pty:chatHistory', args),
+  ptyChatWatch: (args: { id: string; cwd: string }) => ipcRenderer.invoke('pty:chatWatch', args),
+  ptyDiscoverCommands: (projectCwd: string) =>
+    ipcRenderer.invoke('pty:discoverCommands', projectCwd),
+  ptyChatUnwatch: (id: string) => ipcRenderer.send('pty:chatUnwatch', id),
+  ptyChatResetSession: (id: string) => ipcRenderer.send('pty:chatResetSession', id),
+  ptyReadFile: (filePath: string) => ipcRenderer.invoke('pty:readFile', filePath),
+  onChatMessages: idListener('pty:chatMessages'),
+  onChatStatus: idListener('pty:chatStatus'),
+  onChatMetrics: idListener('pty:chatMetrics'),
+
+  // Hook events — forwarded from HookServer to renderer
+  onHookPreToolUse: idListener('hook:preToolUse'),
+  onHookPostToolUse: idListener('hook:postToolUse'),
+  onHookPostToolUseFailure: idListener('hook:postToolUseFailure'),
+  onHookStop: idListener('hook:stop'),
+  onHookStopFailure: idListener('hook:stopFailure'),
+  onHookSubagentStart: idListener('hook:subagentStart'),
+  onHookSubagentStop: idListener('hook:subagentStop'),
+  onHookSessionStart: idListener('hook:sessionStart'),
+  onHookNotification: idListener('hook:notification'),
 
   // Task context for SessionStart hook
   ptyWriteTaskContext: (args: { cwd: string; prompt: string; meta?: unknown }) =>

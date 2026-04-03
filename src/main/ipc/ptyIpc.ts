@@ -2,7 +2,6 @@ import { ipcMain } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import * as crypto from 'crypto';
 import {
   startDirectPty,
   startPty,
@@ -13,6 +12,13 @@ import {
   writeTaskContext,
   sendRemoteControl,
 } from '../services/ptyManager';
+import {
+  startWatching,
+  stopWatching,
+  readHistory,
+  resetSession,
+  findProjectDir,
+} from '../services/SessionWatcherService';
 import { terminalSnapshotService } from '../services/TerminalSnapshotService';
 import { activityMonitor } from '../services/ActivityMonitor';
 import { remoteControlService } from '../services/remoteControlService';
@@ -110,6 +116,80 @@ export function registerPtyIpc(): void {
     }
   });
 
+  // Read conversation history from Claude's JSONL files
+  ipcMain.handle(
+    'pty:chatHistory',
+    async (_event, args: { cwd: string; limit?: number; beforeIndex?: number }) => {
+      try {
+        return {
+          success: true,
+          data: readHistory(args.cwd, args.limit, args.beforeIndex),
+        };
+      } catch (error) {
+        return { success: false, error: String(error) };
+      }
+    },
+  );
+
+  // Watch a JSONL conversation file for new entries
+  ipcMain.handle('pty:chatWatch', (event, args: { id: string; cwd: string }) => {
+    try {
+      const sender = event.sender;
+      startWatching(
+        args.id,
+        args.cwd,
+        (messages) => {
+          if (!sender.isDestroyed()) sender.send(`pty:chatMessages:${args.id}`, messages);
+        },
+        (status) => {
+          if (!sender.isDestroyed()) sender.send(`pty:chatStatus:${args.id}`, status);
+        },
+        (metrics) => {
+          if (!sender.isDestroyed()) sender.send(`pty:chatMetrics:${args.id}`, metrics);
+        },
+      );
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  });
+
+  ipcMain.on('pty:chatUnwatch', (_event, id: string) => {
+    stopWatching(id);
+  });
+
+  // Force session reset (called from SessionStart hook)
+  ipcMain.on('pty:chatResetSession', (_event, id: string) => {
+    resetSession(id);
+  });
+
+  // Read a file (for viewing background task output)
+  ipcMain.handle('pty:readFile', async (_event, filePath: string) => {
+    try {
+      // Security: only allow reading files within the user's home directory
+      // (Claude Code writes background task output to ~/.claude/ or /tmp/)
+      const resolved = path.resolve(filePath);
+      const home = os.homedir();
+      const tmpDir = os.tmpdir();
+      if (!resolved.startsWith(home + path.sep) && !resolved.startsWith(tmpDir + path.sep)) {
+        return { success: false, error: 'Access denied: path outside allowed directories' };
+      }
+      const content = fs.readFileSync(resolved, 'utf-8');
+      return { success: true, data: content };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  });
+
+  // Discover dynamic slash commands (skills, plugins, MCP prompts)
+  ipcMain.handle('pty:discoverCommands', async (_event, projectCwd: string) => {
+    try {
+      return { success: true, data: discoverDynamicCommands(projectCwd) };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  });
+
   // Write task context for SessionStart hook
   ipcMain.handle(
     'pty:writeTaskContext',
@@ -150,29 +230,166 @@ export function registerPtyIpc(): void {
   });
 }
 
+interface DynamicCommand {
+  command: string;
+  description: string;
+  source: 'skill' | 'plugin' | 'mcp';
+  interactive?: boolean;
+}
+
+/**
+ * Discover dynamic slash commands from skills, plugins, and MCP servers.
+ */
+function discoverDynamicCommands(projectCwd: string): DynamicCommand[] {
+  const commands: DynamicCommand[] = [];
+  const home = os.homedir();
+  const claudeDir = path.join(home, '.claude');
+
+  // 1. User skills (~/.claude/skills/*/SKILL.md)
+  const userSkillsDir = path.join(claudeDir, 'skills');
+  if (fs.existsSync(userSkillsDir)) {
+    try {
+      for (const dir of fs.readdirSync(userSkillsDir)) {
+        const skillFile = path.join(userSkillsDir, dir, 'SKILL.md');
+        if (fs.existsSync(skillFile)) {
+          const desc = parseSkillDescription(skillFile);
+          commands.push({
+            command: `/${dir}`,
+            description: desc || 'User skill',
+            source: 'skill',
+          });
+        }
+      }
+    } catch {
+      // Best effort
+    }
+  }
+
+  // 2. Project skills (.claude/skills/*/SKILL.md)
+  const projectSkillsDir = path.join(projectCwd, '.claude', 'skills');
+  if (fs.existsSync(projectSkillsDir)) {
+    try {
+      for (const dir of fs.readdirSync(projectSkillsDir)) {
+        const skillFile = path.join(projectSkillsDir, dir, 'SKILL.md');
+        if (fs.existsSync(skillFile)) {
+          const desc = parseSkillDescription(skillFile);
+          // Don't duplicate if already added from user skills
+          if (!commands.some((c) => c.command === `/${dir}`)) {
+            commands.push({
+              command: `/${dir}`,
+              description: desc || 'Project skill',
+              source: 'skill',
+            });
+          }
+        }
+      }
+    } catch {
+      // Best effort
+    }
+  }
+
+  // 3. Enabled plugin skills/commands
+  const settingsFile = path.join(claudeDir, 'settings.json');
+  if (fs.existsSync(settingsFile)) {
+    try {
+      const settings = JSON.parse(fs.readFileSync(settingsFile, 'utf-8'));
+      const enabledPlugins = settings.enabledPlugins || {};
+      for (const pluginKey of Object.keys(enabledPlugins)) {
+        if (!enabledPlugins[pluginKey]) continue;
+        const [pluginName, marketplace] = pluginKey.split('@');
+        if (!marketplace) continue;
+
+        // Find the plugin's latest cache dir
+        const cacheDir = path.join(claudeDir, 'plugins', 'cache', marketplace, pluginName);
+        if (!fs.existsSync(cacheDir)) continue;
+
+        // Get the most recently modified version
+        const versions = fs.readdirSync(cacheDir).map((v) => ({
+          name: v,
+          mtime: fs.statSync(path.join(cacheDir, v)).mtimeMs,
+        }));
+        versions.sort((a, b) => b.mtime - a.mtime);
+        if (versions.length === 0) continue;
+
+        const pluginDir = path.join(cacheDir, versions[0].name);
+
+        // Scan for commands/*.md
+        const commandsDir = path.join(pluginDir, 'commands');
+        if (fs.existsSync(commandsDir)) {
+          for (const file of fs.readdirSync(commandsDir)) {
+            if (!file.endsWith('.md')) continue;
+            const cmdName = file.replace(/\.md$/, '');
+            const desc = parseSkillDescription(path.join(commandsDir, file));
+            commands.push({
+              command: `/${pluginName}:${cmdName}`,
+              description: desc || `Plugin command`,
+              source: 'plugin',
+            });
+          }
+        }
+
+        // Scan for skills/*/SKILL.md
+        const skillsDir = path.join(pluginDir, 'skills');
+        if (fs.existsSync(skillsDir)) {
+          for (const dir of fs.readdirSync(skillsDir)) {
+            const skillFile = path.join(skillsDir, dir, 'SKILL.md');
+            if (fs.existsSync(skillFile)) {
+              const desc = parseSkillDescription(skillFile);
+              commands.push({
+                command: `/${pluginName}:${dir}`,
+                description: desc || `Plugin skill`,
+                source: 'plugin',
+              });
+            }
+          }
+        }
+      }
+    } catch {
+      // Best effort
+    }
+  }
+
+  // 4. MCP server prompts (listed by server name, prompts aren't discoverable without connecting)
+  for (const mcpFile of [path.join(claudeDir, 'mcp.json'), path.join(projectCwd, '.mcp.json')]) {
+    if (fs.existsSync(mcpFile)) {
+      try {
+        const mcpConfig = JSON.parse(fs.readFileSync(mcpFile, 'utf-8'));
+        for (const serverName of Object.keys(mcpConfig.mcpServers || {})) {
+          commands.push({
+            command: `/mcp__${serverName.replace(/\s+/g, '_')}`,
+            description: `MCP server: ${serverName}`,
+            source: 'mcp',
+            interactive: true,
+          });
+        }
+      } catch {
+        // Best effort
+      }
+    }
+  }
+
+  return commands;
+}
+
+/** Extract description from SKILL.md or command .md YAML frontmatter. */
+function parseSkillDescription(filePath: string): string {
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const fmMatch = content.match(/^---\s*\n([\s\S]*?)\n---/);
+    if (fmMatch) {
+      const descMatch = fmMatch[1].match(/description:\s*["']?(.*?)["']?\s*$/m);
+      if (descMatch) return descMatch[1].slice(0, 100);
+    }
+    return '';
+  } catch {
+    return '';
+  }
+}
+
 /**
  * Check if Claude Code has an existing session for the given working directory.
  * Claude stores sessions in ~/.claude/projects/ with various naming schemes.
  */
 function hasClaudeSession(cwd: string): boolean {
-  try {
-    const projectsDir = path.join(os.homedir(), '.claude', 'projects');
-    if (!fs.existsSync(projectsDir)) return false;
-
-    // Check hash-based directory name
-    const cwdHash = crypto.createHash('sha256').update(cwd).digest('hex').slice(0, 16);
-    if (fs.existsSync(path.join(projectsDir, cwdHash))) return true;
-
-    // Check path-based directory name (slashes replaced with hyphens)
-    const pathBasedName = cwd.replace(/\//g, '-');
-    if (fs.existsSync(path.join(projectsDir, pathBasedName))) return true;
-
-    // Scan for partial path match (last 3 segments)
-    const cwdParts = cwd.split('/').filter((p) => p.length > 0);
-    const lastParts = cwdParts.slice(-3).join('-');
-    const dirs = fs.readdirSync(projectsDir);
-    return dirs.some((dir) => dir.includes(lastParts));
-  } catch {
-    return false;
-  }
+  return findProjectDir(cwd) !== null;
 }

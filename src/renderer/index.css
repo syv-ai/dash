@@ -266,6 +266,19 @@
 .animate-fade-in {
   animation: fadeIn 200ms ease-out;
 }
+.animate-chat-entry {
+  animation: chatEntry 400ms ease-out;
+}
+@keyframes chatEntry {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 .animate-slide-up {
   animation: slideUp 250ms cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -477,4 +490,109 @@
 }
 .file-item-enter {
   animation: file-item-enter 200ms ease-out;
+}
+
+/* ── Highlight.js theme (adapts to light/dark) ───────────── */
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-built_in {
+  color: hsl(280, 68%, 60%);
+}
+.hljs-string,
+.hljs-attr {
+  color: hsl(150, 60%, 40%);
+}
+.hljs-number,
+.hljs-literal {
+  color: hsl(30, 90%, 50%);
+}
+.hljs-comment,
+.hljs-doctag {
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+}
+.hljs-type,
+.hljs-class .hljs-title,
+.hljs-title.class_ {
+  color: hsl(200, 70%, 55%);
+}
+.hljs-function .hljs-title,
+.hljs-title.function_ {
+  color: hsl(210, 70%, 60%);
+}
+.hljs-variable,
+.hljs-template-variable {
+  color: hsl(var(--foreground));
+}
+.hljs-params {
+  color: hsl(var(--foreground) / 0.8);
+}
+.hljs-meta,
+.hljs-meta .hljs-keyword {
+  color: hsl(350, 60%, 55%);
+}
+.hljs-tag,
+.hljs-name {
+  color: hsl(350, 60%, 55%);
+}
+.hljs-attribute {
+  color: hsl(30, 80%, 55%);
+}
+.hljs-selector-class,
+.hljs-selector-id {
+  color: hsl(200, 70%, 55%);
+}
+.hljs-regexp {
+  color: hsl(0, 70%, 55%);
+}
+.hljs-symbol,
+.hljs-bullet {
+  color: hsl(280, 68%, 60%);
+}
+.hljs-addition {
+  color: hsl(var(--git-added));
+}
+.hljs-deletion {
+  color: hsl(var(--git-deleted));
+}
+
+.dark .hljs-keyword,
+.dark .hljs-selector-tag,
+.dark .hljs-built_in {
+  color: hsl(280, 80%, 72%);
+}
+.dark .hljs-string,
+.dark .hljs-attr {
+  color: hsl(150, 60%, 60%);
+}
+.dark .hljs-number,
+.dark .hljs-literal {
+  color: hsl(30, 90%, 65%);
+}
+.dark .hljs-type,
+.dark .hljs-class .hljs-title,
+.dark .hljs-title.class_ {
+  color: hsl(200, 80%, 70%);
+}
+.dark .hljs-function .hljs-title,
+.dark .hljs-title.function_ {
+  color: hsl(210, 80%, 72%);
+}
+.dark .hljs-meta,
+.dark .hljs-meta .hljs-keyword {
+  color: hsl(350, 70%, 68%);
+}
+.dark .hljs-tag,
+.dark .hljs-name {
+  color: hsl(350, 70%, 68%);
+}
+.dark .hljs-attribute {
+  color: hsl(30, 80%, 68%);
+}
+.dark .hljs-selector-class,
+.dark .hljs-selector-id {
+  color: hsl(200, 80%, 70%);
+}
+.dark .hljs-regexp {
+  color: hsl(0, 80%, 68%);
 }
