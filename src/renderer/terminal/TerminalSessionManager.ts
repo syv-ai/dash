@@ -158,6 +158,11 @@ export class TerminalSessionManager {
         return false;
       }
 
+      // Ctrl+Tab — let it bubble to window for rotation cycling
+      if (e.ctrlKey && !e.metaKey && !e.altKey && e.key === 'Tab') {
+        return false;
+      }
+
       // Shift+Enter → Ctrl+J (multiline input for Claude Code)
       if (e.key === 'Enter' && e.shiftKey) {
         e.preventDefault();

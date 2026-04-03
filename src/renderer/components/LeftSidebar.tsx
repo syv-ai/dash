@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   FolderOpen,
   Plus,
@@ -13,10 +13,134 @@ import {
   ChevronDown,
   PanelLeftClose,
   PanelLeftOpen,
+  X,
 } from 'lucide-react';
 import type { Project, Task, RemoteControlState } from '../../shared/types';
 import { IconButton } from './ui/IconButton';
 import { Tooltip } from './ui/Tooltip';
+
+/* ── Rotation (Active Tasks) with sliding highlight ──────── */
+
+function RotationSection({
+  rotationTasks,
+  activeTaskId,
+  taskActivity,
+  projects,
+  onSelectTask,
+  onRemoveFromRotation,
+}: {
+  rotationTasks: Task[];
+  activeTaskId: string | null;
+  taskActivity: Record<string, 'busy' | 'idle' | 'waiting'>;
+  projects: Project[];
+  onSelectTask: (projectId: string, taskId: string) => void;
+  onRemoveFromRotation?: (taskId: string) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const [highlight, setHighlight] = useState<{ top: number; height: number } | null>(null);
+  const hasAnimated = useRef(false);
+
+  const setRowRef = useCallback((taskId: string, el: HTMLDivElement | null) => {
+    if (el) rowRefs.current.set(taskId, el);
+    else rowRefs.current.delete(taskId);
+  }, []);
+
+  useEffect(() => {
+    if (!activeTaskId || !containerRef.current) {
+      setHighlight(null);
+      return;
+    }
+    const row = rowRefs.current.get(activeTaskId);
+    if (!row) {
+      setHighlight(null);
+      return;
+    }
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const rowRect = row.getBoundingClientRect();
+    setHighlight({
+      top: rowRect.top - containerRect.top,
+      height: rowRect.height,
+    });
+    // Enable transitions after first measurement
+    if (!hasAnimated.current) {
+      requestAnimationFrame(() => {
+        hasAnimated.current = true;
+      });
+    }
+  }, [activeTaskId, rotationTasks]);
+
+  return (
+    <div className="px-2 pt-1 pb-1.5 mb-0.5 border-b border-border">
+      <Tooltip content="Cycle with Ctrl+Tab">
+        <span className="block px-2 pb-1 text-[11px] font-medium text-muted-foreground/50 select-none tracking-wide uppercase">
+          Active tasks
+        </span>
+      </Tooltip>
+      <div ref={containerRef} className="relative space-y-px">
+        {/* Sliding highlight */}
+        {highlight && (
+          <div
+            className="absolute left-0 right-0 bg-primary/10 rounded-md pointer-events-none"
+            style={{
+              top: highlight.top,
+              height: highlight.height,
+              transition: hasAnimated.current ? 'top 200ms ease, height 200ms ease' : 'none',
+            }}
+          />
+        )}
+        {rotationTasks.map((task) => {
+          const activity = taskActivity[task.id];
+          const isActiveTask = task.id === activeTaskId;
+          const project = projects.find((p) => p.id === task.projectId);
+
+          return (
+            <div
+              key={task.id}
+              ref={(el) => setRowRef(task.id, el)}
+              className={`group/rot relative flex items-center gap-2 pl-3.5 pr-2 py-[5px] rounded-md text-[13px] cursor-pointer transition-colors duration-150 ${
+                isActiveTask
+                  ? 'text-foreground font-medium'
+                  : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+              }`}
+              onClick={() => onSelectTask(task.projectId, task.id)}
+            >
+              {/* Status indicator */}
+              {activity === 'waiting' ? (
+                <div className="w-[6px] h-[6px] rounded-full bg-orange-500 flex-shrink-0" />
+              ) : activity === 'busy' ? (
+                <div className="w-[6px] h-[6px] rounded-full bg-amber-400 status-pulse flex-shrink-0" />
+              ) : activity === 'idle' ? (
+                <div className="w-[6px] h-[6px] rounded-full bg-emerald-400 flex-shrink-0" />
+              ) : null}
+
+              <span className="truncate flex-1">
+                {task.name}
+                {project && (
+                  <span className="text-muted-foreground/40 text-[11px] ml-1.5">
+                    {project.name}
+                  </span>
+                )}
+              </span>
+
+              <IconButton
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemoveFromRotation?.(task.id);
+                }}
+                title="Remove from rotation"
+                size="sm"
+                className="opacity-0 group-hover/rot:opacity-100 flex-shrink-0"
+              >
+                <X size={12} strokeWidth={1.8} />
+              </IconButton>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 interface LeftSidebarProps {
   projects: Project[];
@@ -42,6 +166,10 @@ interface LeftSidebarProps {
   remoteControlStates?: Record<string, RemoteControlState>;
   onReorderProjects?: (reordered: Project[]) => void;
   pixelAgentsConnectedCount?: number;
+  rotationTasks?: Task[];
+  onRemoveFromRotation?: (taskId: string) => void;
+  showActiveTasksSection?: boolean;
+  onToggleActiveTasksSection?: () => void;
 }
 
 export function LeftSidebar({
@@ -68,6 +196,10 @@ export function LeftSidebar({
   remoteControlStates = {},
   onReorderProjects,
   pixelAgentsConnectedCount = 0,
+  rotationTasks = [],
+  onRemoveFromRotation,
+  showActiveTasksSection = true,
+  onToggleActiveTasksSection,
 }: LeftSidebarProps) {
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [collapsedArchived, setCollapsedArchived] = useState<Set<string>>(new Set());
@@ -225,7 +357,9 @@ export function LeftSidebar({
     <div className="h-full flex flex-col" style={{ background: 'hsl(var(--surface-1))' }}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-3 pb-1">
-        <span className="text-sm font-medium text-muted-foreground/50 select-none">Projects</span>
+        <span className="text-sm font-medium text-muted-foreground/50 select-none">
+          {showActiveTasksSection && rotationTasks.length > 0 ? 'Dash' : 'Projects'}
+        </span>
         <div className="flex items-center gap-1">
           <IconButton onClick={onOpenFolder} title="Add project" className="titlebar-no-drag">
             <FolderOpen size={15} strokeWidth={1.8} />
@@ -240,8 +374,25 @@ export function LeftSidebar({
         </div>
       </div>
 
+      {/* Rotation section */}
+      {showActiveTasksSection && rotationTasks.length > 0 && (
+        <RotationSection
+          rotationTasks={rotationTasks}
+          activeTaskId={activeTaskId}
+          taskActivity={taskActivity}
+          projects={projects}
+          onSelectTask={onSelectTask}
+          onRemoveFromRotation={onRemoveFromRotation}
+        />
+      )}
+
       {/* Project list */}
       <div className="flex-1 overflow-y-auto px-2 pb-2 pt-1">
+        {showActiveTasksSection && rotationTasks.length > 0 && projects.length > 0 && (
+          <span className="block px-2 pb-1 pt-0.5 text-[11px] font-medium text-muted-foreground/50 select-none tracking-wide uppercase">
+            Projects
+          </span>
+        )}
         {projects.length === 0 && (
           <div className="px-2 py-10 text-center">
             <p className="text-[13px] text-muted-foreground/40 leading-relaxed">

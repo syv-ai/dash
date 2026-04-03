@@ -206,6 +206,27 @@ export function App() {
     });
   }, [activeTaskId]);
 
+  // Rotation — tasks the user cycles through with Ctrl+Tab
+  const [showActiveTasksSection, setShowActiveTasksSection] = useState(
+    () => localStorage.getItem('showActiveTasksSection') !== 'false',
+  );
+  useEffect(() => {
+    localStorage.setItem('showActiveTasksSection', String(showActiveTasksSection));
+  }, [showActiveTasksSection]);
+
+  const [rotationExclusions, setRotationExclusions] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem('rotationExclusions');
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('rotationExclusions', JSON.stringify([...rotationExclusions]));
+  }, [rotationExclusions]);
+
   // Git state
   const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
   const [gitLoading, setGitLoading] = useState(false);
@@ -244,6 +265,23 @@ export function App() {
   const activeProjectTasks = activeProjectId
     ? (tasksByProject[activeProjectId] || []).filter((t) => !t.archivedAt)
     : [];
+
+  // Rotation: all tasks with activity, minus exclusions
+  const rotationTasks = React.useMemo(() => {
+    const tasks: Task[] = [];
+    for (const [, projectTasks] of Object.entries(tasksByProject)) {
+      for (const task of projectTasks) {
+        if (
+          !task.archivedAt &&
+          taskActivity[task.id] !== undefined &&
+          !rotationExclusions.has(task.id)
+        ) {
+          tasks.push(task);
+        }
+      }
+    }
+    return tasks;
+  }, [tasksByProject, taskActivity, rotationExclusions]);
 
   // Load projects on mount
   useEffect(() => {
@@ -458,9 +496,47 @@ export function App() {
     };
   }, [activeTask?.id, activeTask?.path]);
 
+  const cycleTask = useCallback(
+    (direction: 1 | -1) => {
+      if (activeProjectTasks.length === 0) return;
+      const currentIdx = activeProjectTasks.findIndex((t) => t.id === activeTaskId);
+      const nextIdx =
+        (currentIdx + direction + activeProjectTasks.length) % activeProjectTasks.length;
+      setActiveTaskId(activeProjectTasks[nextIdx].id);
+    },
+    [activeProjectTasks, activeTaskId],
+  );
+
+  const cycleRotation = useCallback(
+    (direction: 1 | -1) => {
+      if (rotationTasks.length === 0) return;
+      const currentIdx = rotationTasks.findIndex((t) => t.id === activeTaskId);
+      const nextIdx = (currentIdx + direction + rotationTasks.length) % rotationTasks.length;
+      const nextTask = rotationTasks[nextIdx];
+      setActiveProjectId(nextTask.projectId);
+      setActiveTaskId(nextTask.id);
+    },
+    [rotationTasks, activeTaskId],
+  );
+
+  const removeFromRotation = useCallback((taskId: string) => {
+    setRotationExclusions((prev) => {
+      const next = new Set(prev);
+      next.add(taskId);
+      return next;
+    });
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // Ctrl+Tab / Ctrl+Shift+Tab — cycle rotation (works even when terminal is focused)
+      if (e.ctrlKey && !e.metaKey && !e.altKey && e.key === 'Tab') {
+        e.preventDefault();
+        cycleRotation(e.shiftKey ? -1 : 1);
+        return;
+      }
+
       // Skip global shortcuts when typing in text inputs
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
@@ -580,18 +656,8 @@ export function App() {
     showTaskModal,
     showAddProjectModal,
     keybindings,
+    cycleRotation,
   ]);
-
-  const cycleTask = useCallback(
-    (direction: 1 | -1) => {
-      if (activeProjectTasks.length === 0) return;
-      const currentIdx = activeProjectTasks.findIndex((t) => t.id === activeTaskId);
-      const nextIdx =
-        (currentIdx + direction + activeProjectTasks.length) % activeProjectTasks.length;
-      setActiveTaskId(activeProjectTasks[nextIdx].id);
-    },
-    [activeProjectTasks, activeTaskId],
-  );
 
   const toggleSidebar = useCallback(() => {
     const panel = sidebarPanelRef.current;
@@ -1178,6 +1244,10 @@ export function App() {
                   (s) => s === 'connected' || s === 'registered',
                 ).length
               }
+              rotationTasks={rotationTasks}
+              onRemoveFromRotation={removeFromRotation}
+              showActiveTasksSection={showActiveTasksSection}
+              onToggleActiveTasksSection={() => setShowActiveTasksSection((v) => !v)}
             />
           </ShellDrawerWrapper>
         </Panel>
@@ -1392,6 +1462,8 @@ export function App() {
             localStorage.setItem('theme', t);
             sessionRegistry.setAllTerminalThemes(terminalTheme, t === 'dark');
           }}
+          showActiveTasksSection={showActiveTasksSection}
+          onShowActiveTasksSectionChange={setShowActiveTasksSection}
           shellDrawerEnabled={shellDrawerEnabled}
           onShellDrawerEnabledChange={(v) => {
             setShellDrawerEnabled(v);
