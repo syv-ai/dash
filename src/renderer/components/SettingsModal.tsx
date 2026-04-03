@@ -23,6 +23,7 @@ import {
 import { NOTIFICATION_SOUNDS, SOUND_LABELS } from '../sounds';
 import type { NotificationSound } from '../sounds';
 import { TERMINAL_THEMES } from '../terminal/terminalThemes';
+import { TerminalFontSettings } from './TerminalFontSettings';
 import type {
   PixelAgentsConfig,
   PixelAgentsStatus,
@@ -1327,6 +1328,8 @@ export function SettingsModal({
                   </button>
                 </div>
               </div>
+
+              <TerminalFontSettings terminalTheme={terminalTheme} theme={theme} />
 
               {/* Terminal Theme */}
               <div>

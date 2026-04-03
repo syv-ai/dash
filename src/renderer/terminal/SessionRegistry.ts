@@ -1,4 +1,5 @@
 import { TerminalSessionManager } from './TerminalSessionManager';
+import { FONT_SIZE_DEFAULT, LINE_HEIGHT_DEFAULT } from './terminalFonts';
 
 interface AttachOptions {
   id: string;
@@ -13,6 +14,9 @@ class SessionRegistryImpl {
   private sessions = new Map<string, TerminalSessionManager>();
   private _isDark = true;
   private _themeId = 'default';
+  private _fontFamily: string | null = null;
+  private _fontSize: number = FONT_SIZE_DEFAULT;
+  private _lineHeight: number = LINE_HEIGHT_DEFAULT;
 
   getOrCreate(opts: Omit<AttachOptions, 'container'>): TerminalSessionManager {
     let session = this.sessions.get(opts.id);
@@ -24,6 +28,9 @@ class SessionRegistryImpl {
         isDark: this._isDark,
         shellOnly: opts.shellOnly,
         themeId: opts.themeId ?? this._themeId,
+        fontFamily: this._fontFamily,
+        fontSize: this._fontSize,
+        lineHeight: this._lineHeight,
       });
       this.sessions.set(opts.id, session);
     }
@@ -78,6 +85,15 @@ class SessionRegistryImpl {
     this._isDark = isDark;
     for (const session of this.sessions.values()) {
       session.setTerminalTheme(themeId, isDark);
+    }
+  }
+
+  setAllTerminalFont(fontFamily: string | null, fontSize: number, lineHeight: number): void {
+    this._fontFamily = fontFamily;
+    this._fontSize = fontSize;
+    this._lineHeight = lineHeight;
+    for (const session of this.sessions.values()) {
+      session.setTerminalFont(fontFamily, fontSize, lineHeight);
     }
   }
 

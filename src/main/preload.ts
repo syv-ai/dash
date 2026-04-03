@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openInIDE: (args: { folderPath: string; ide?: 'cursor' | 'code' }) =>
     ipcRenderer.invoke('app:openInIDE', args),
   detectAvailableIDEs: () => ipcRenderer.invoke('app:detectAvailableIDEs'),
+  getSystemFonts: () => ipcRenderer.invoke('font:getSystemFonts'),
 
   // Database - Projects
   getProjects: () => ipcRenderer.invoke('db:getProjects'),
