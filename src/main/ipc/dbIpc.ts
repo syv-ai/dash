@@ -1,4 +1,6 @@
 import { ipcMain } from 'electron';
+import fs from 'fs';
+import path from 'path';
 import { DatabaseService } from '../services/DatabaseService';
 import { TelemetryService } from '../services/TelemetryService';
 
@@ -59,6 +61,17 @@ export function registerDbIpc(): void {
 
   ipcMain.handle('db:deleteTask', (_event, id: string) => {
     try {
+      // Fetch task before deleting so we can clean up task-context.json
+      const task = DatabaseService.getTask(id);
+      if (task && !task.useWorktree) {
+        const contextPath = path.join(task.path, '.claude', 'task-context.json');
+        try {
+          if (fs.existsSync(contextPath)) fs.unlinkSync(contextPath);
+        } catch {
+          // Best effort — file may already be gone
+        }
+      }
+
       DatabaseService.deleteTask(id);
       TelemetryService.capture('task_deleted');
       return { success: true };

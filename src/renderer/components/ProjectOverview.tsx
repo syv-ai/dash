@@ -288,7 +288,7 @@ export function ProjectOverview({
                                 {label}
                               </span>
                               <div className="flex flex-wrap gap-1.5">
-                                {linkedItems.map((item) => {
+                                {linkedItems.slice(0, 3).map((item) => {
                                   const url = linkedItemUrl(item, project.gitRemote);
                                   const badge = (
                                     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-[10px] text-primary font-medium">
@@ -322,6 +322,11 @@ export function ProjectOverview({
                                     link
                                   );
                                 })}
+                                {linkedItems.length > 3 && (
+                                  <span className="text-[10px] text-muted-foreground self-center">
+                                    +{linkedItems.length - 3} more
+                                  </span>
+                                )}
                               </div>
                             </div>
                           );

@@ -102,8 +102,6 @@ export interface ElectronAPI {
     IpcResponse<{
       reattached: boolean;
       isDirectSpawn: boolean;
-      hasTaskContext: boolean;
-      taskContextMeta: TaskContextMeta | null;
     }>
   >;
   ptyStart: (args: {

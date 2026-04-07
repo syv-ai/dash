@@ -372,32 +372,6 @@ export class TerminalSessionManager {
             // Best effort
           }
         }
-
-        // Show info line when context was injected via SessionStart hook
-        if (result.taskContextMeta && !result.reattached && !resume) {
-          const { githubIssues, adoWorkItems } = result.taskContextMeta;
-
-          if (githubIssues && githubIssues.length > 0) {
-            const issueLabels = githubIssues.map((issue) => {
-              // OSC 8 hyperlink: \x1b]8;;URL\x07TEXT\x1b]8;;\x07
-              return issue.url
-                ? `\x1b]8;;${issue.url}\x07#${issue.id}\x1b]8;;\x07`
-                : `#${issue.id}`;
-            });
-            this.terminal.write(
-              `\x1b[2m\x1b[36m● Issue context injected: ${issueLabels.join(', ')}\x1b[0m\r\n`,
-            );
-          }
-
-          if (adoWorkItems && adoWorkItems.length > 0) {
-            const wiLabels = adoWorkItems.map((wi) => {
-              return wi.url ? `\x1b]8;;${wi.url}\x07#${wi.id}\x1b]8;;\x07` : `#${wi.id}`;
-            });
-            this.terminal.write(
-              `\x1b[2m\x1b[36m● Work item context injected: ${wiLabels.join(', ')}\x1b[0m\r\n`,
-            );
-          }
-        }
       }
     }
 
@@ -633,7 +607,6 @@ export class TerminalSessionManager {
   private async startPty(resume: boolean = false): Promise<{
     reattached: boolean;
     isDirectSpawn: boolean;
-    taskContextMeta: import('../../shared/types').TaskContextMeta | null;
   }> {
     const dims = this.fitAddon.proposeDimensions();
     const cols = this.ptyCols(dims?.cols ?? 120);
@@ -641,8 +614,6 @@ export class TerminalSessionManager {
 
     let reattached = false;
     let isDirectSpawn = false;
-    let taskContextMeta: import('../../shared/types').TaskContextMeta | null = null;
-
     const resp = await window.electronAPI.ptyStartDirect({
       id: this.id,
       cwd: this.cwd,
@@ -656,7 +627,6 @@ export class TerminalSessionManager {
     if (resp.success) {
       reattached = resp.data?.reattached ?? false;
       isDirectSpawn = resp.data?.isDirectSpawn ?? true;
-      taskContextMeta = resp.data?.taskContextMeta ?? null;
     } else {
       const isNativeModuleError = resp.error?.includes('[native module]');
 
@@ -697,7 +667,7 @@ export class TerminalSessionManager {
 
     this.ptyStarted = true;
 
-    return { reattached, isDirectSpawn, taskContextMeta };
+    return { reattached, isDirectSpawn };
   }
 
   private fireReady() {

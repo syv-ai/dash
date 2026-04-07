@@ -120,6 +120,12 @@ export class DatabaseService {
     return this.mapTask(rows[0]);
   }
 
+  static getTask(id: string): Task | undefined {
+    const db = getDb();
+    const row = db.select().from(tasks).where(eq(tasks.id, id)).get();
+    return row ? this.mapTask(row) : undefined;
+  }
+
   static deleteTask(id: string): void {
     const db = getDb();
     db.delete(tasks).where(eq(tasks.id, id)).run();

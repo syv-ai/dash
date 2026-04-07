@@ -10,6 +10,39 @@ import type { TaskContextMeta } from '@shared/types';
 
 const execFileAsync = promisify(execFile);
 
+/**
+ * Locate the Claude projects directory for a given cwd.
+ * Claude stores sessions under ~/.claude/projects/<encoded-cwd>/.
+ */
+function findClaudeProjectDir(cwd: string): string | null {
+  try {
+    const projectsDir = path.join(os.homedir(), '.claude', 'projects');
+    if (!fs.existsSync(projectsDir)) return null;
+
+    // Path-based: slashes → hyphens (the primary naming scheme)
+    const pathBased = path.join(projectsDir, cwd.replace(/\//g, '-'));
+    if (fs.existsSync(pathBased)) return pathBased;
+
+    // Partial match: last 3 path segments
+    const parts = cwd.split('/').filter((p) => p.length > 0);
+    const suffix = parts.slice(-3).join('-');
+    const dirs = fs.readdirSync(projectsDir);
+    const match = dirs.find((d) => d.includes(suffix));
+    if (match) return path.join(projectsDir, match);
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Check whether Claude has a session file for the given UUID in this cwd. */
+function hasSessionForId(cwd: string, sessionId: string): boolean {
+  const projDir = findClaudeProjectDir(cwd);
+  if (!projDir) return false;
+  return fs.existsSync(path.join(projDir, `${sessionId}.jsonl`));
+}
+
 interface PtyRecord {
   proc: any; // IPty from node-pty
   cwd: string;
@@ -284,19 +317,22 @@ function writeHookSettings(cwd: string, ptyId: string): void {
     ],
   };
 
-  // Auto-detect task-context.json and inject SessionStart hook if it exists
+  // Inject task context via SessionStart hook. Fires on startup (new session),
+  // and re-injects after compact/clear so Claude retains issue awareness.
   const contextPath = path.join(claudeDir, 'task-context.json');
   if (fs.existsSync(contextPath)) {
+    const sessionStartHook = {
+      hooks: [
+        {
+          type: 'command',
+          command: `cat "${contextPath}"`,
+        },
+      ],
+    };
     hookSettings.SessionStart = [
-      {
-        matcher: 'startup',
-        hooks: [
-          {
-            type: 'command',
-            command: `cat "${contextPath}"`,
-          },
-        ],
-      },
+      { matcher: 'startup', ...sessionStartHook },
+      { matcher: 'compact', ...sessionStartHook },
+      { matcher: 'clear', ...sessionStartHook },
     ];
   }
 
@@ -398,8 +434,6 @@ export async function startDirectPty(options: {
 }): Promise<{
   reattached: boolean;
   isDirectSpawn: boolean;
-  hasTaskContext: boolean;
-  taskContextMeta: TaskContextMeta | null;
 }> {
   // Re-attach to existing PTY (e.g., after renderer reload)
   const existing = ptys.get(options.id);
@@ -413,7 +447,7 @@ export async function startDirectPty(options: {
     ptys.delete(options.id);
   } else if (existing) {
     existing.owner = options.sender || null;
-    return { reattached: true, isDirectSpawn: true, hasTaskContext: false, taskContextMeta: null };
+    return { reattached: true, isDirectSpawn: true };
   }
 
   const claudePath = await findClaudePath();
@@ -423,9 +457,20 @@ export async function startDirectPty(options: {
   }
 
   const args: string[] = [];
-  if (options.resume) {
+
+  // Pin each task to its own Claude session so tasks sharing the same cwd
+  // (e.g. multiple tasks in the main worktree) never resume each other.
+  if (options.resume && hasSessionForId(options.cwd, options.id)) {
+    // Session was created with --session-id; resume it by ID.
+    args.push('-r', options.id);
+  } else if (options.resume) {
+    // Legacy task created before session pinning — fall back to most recent.
     args.push('-c', '-r');
+  } else {
+    // New session: create with deterministic UUID tied to this task.
+    args.push('--session-id', options.id);
   }
+
   if (options.autoApprove) {
     args.push('--dangerously-skip-permissions');
   }
@@ -476,21 +521,9 @@ export async function startDirectPty(options: {
     ptys.delete(options.id);
   });
 
-  const contextPath = path.join(options.cwd, '.claude', 'task-context.json');
-  let taskContextMeta: TaskContextMeta | null = null;
-  try {
-    if (fs.existsSync(contextPath)) {
-      const parsed = JSON.parse(fs.readFileSync(contextPath, 'utf-8'));
-      taskContextMeta = parsed.meta ?? null;
-    }
-  } catch {
-    // Best effort
-  }
   return {
     reattached: false,
     isDirectSpawn: true,
-    hasTaskContext: !!taskContextMeta,
-    taskContextMeta,
   };
 }
 

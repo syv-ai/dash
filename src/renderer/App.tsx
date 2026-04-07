@@ -955,11 +955,11 @@ export function App() {
       if (saveResp.success && saveResp.data) {
         const taskId = saveResp.data.id;
 
-        // Write task context for SessionStart hook injection
+        // Write task context so startDirectPty can pass it as the initial prompt
         if (linkedItems && linkedItems.length > 0) {
           const prompt = formatTaskContextPrompt(linkedItems);
           if (prompt) {
-            window.electronAPI.ptyWriteTaskContext({
+            await window.electronAPI.ptyWriteTaskContext({
               cwd: taskPath,
               prompt,
               meta: {
@@ -971,6 +971,30 @@ export function App() {
                     : undefined,
               },
             });
+
+            // Notify the user that linked context will be injected
+            const maxVisible = 3;
+            const visible = linkedItems.slice(0, maxVisible);
+            const overflow = linkedItems.length - maxVisible;
+            toast(
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">Context injected</span>
+                {visible.map((item) => (
+                  <a
+                    key={`${item.provider}-${item.id}`}
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium hover:bg-primary/20 transition-colors"
+                  >
+                    #{item.id}
+                  </a>
+                ))}
+                {overflow > 0 && (
+                  <span className="text-[10px] text-muted-foreground">+{overflow} more</span>
+                )}
+              </div>,
+            );
           }
         }
 
@@ -1041,9 +1065,14 @@ export function App() {
         }
       }
 
-      // Clean up shell terminal sessions (first tab + any extra tabs)
+      // Clean up all terminal sessions: Claude main session + shell tabs
+      sessionRegistry.dispose(task.id);
       sessionRegistry.dispose(`shell:${task.id}`);
       sessionRegistry.disposeByPrefix(`shell:${task.id}:`);
+
+      // Kill PTY and clear snapshot so a new task in the same cwd starts fresh
+      window.electronAPI.ptyKill(task.id);
+      window.electronAPI.ptyClearSnapshot(task.id);
 
       await window.electronAPI.deleteTask(task.id);
       if (activeTaskId === task.id) {
