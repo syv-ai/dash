@@ -65,7 +65,7 @@ class ActivityMonitorImpl {
       lastChildSeenTime: now,
       idleChildrenSince: 0,
       lastStatusLineTime: 0,
-      lastIdleTime: 0,
+      lastIdleTime: now,
     });
     this.emitAll();
   }

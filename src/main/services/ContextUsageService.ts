@@ -7,7 +7,6 @@ import type { ContextUsage, StatusLineData, SessionCost, RateLimits } from '@sha
  * via the HookServer's /hook/context endpoint.
  */
 const EMIT_DEBOUNCE_MS = 500;
-const STALE_MS = 600_000; // 10 minutes — crash-recovery safety net only
 
 class ContextUsageServiceImpl {
   private statusLineData = new Map<string, StatusLineData>();
@@ -111,20 +110,10 @@ class ContextUsageServiceImpl {
     if (this.emitTimer) return;
     this.emitTimer = setTimeout(() => {
       this.emitTimer = null;
-      this.pruneStale();
       if (this.sender && !this.sender.isDestroyed()) {
         this.sender.send('pty:statusLine', this.getAllStatusLine());
       }
     }, EMIT_DEBOUNCE_MS);
-  }
-
-  private pruneStale(): void {
-    const now = Date.now();
-    for (const [id, sl] of this.statusLineData) {
-      if (now - new Date(sl.updatedAt).getTime() > STALE_MS) {
-        this.statusLineData.delete(id);
-      }
-    }
   }
 }
 
