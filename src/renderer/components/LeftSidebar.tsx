@@ -177,6 +177,8 @@ interface LeftSidebarProps {
   remoteControlStates?: Record<string, RemoteControlState>;
   contextUsage?: Record<string, ContextUsage>;
   onReorderProjects?: (reordered: Project[]) => void;
+  onReorderTasks?: (projectId: string, reordered: Task[]) => void;
+  onReorderTasksCommit?: (projectId: string, reordered: Task[]) => void;
   pixelAgentsConnectedCount?: number;
   rotationTasks?: Task[];
   onRemoveFromRotation?: (taskId: string) => void;
@@ -208,6 +210,8 @@ export function LeftSidebar({
   remoteControlStates = {},
   contextUsage = {},
   onReorderProjects,
+  onReorderTasks,
+  onReorderTasksCommit,
   pixelAgentsConnectedCount = 0,
   rotationTasks = [],
   onRemoveFromRotation,
@@ -218,6 +222,11 @@ export function LeftSidebar({
   const [collapsedArchived, setCollapsedArchived] = useState<Set<string>>(new Set());
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const dragIdRef = useRef<string | null>(null);
+  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
+  const dragTaskIdRef = useRef<string | null>(null);
+  const dragTaskProjectIdRef = useRef<string | null>(null);
+  const dragTaskInitialOrderRef = useRef<string[] | null>(null);
+  const dragTaskDidDropRef = useRef<boolean>(false);
 
   function toggleCollapse(projectId: string) {
     setCollapsedProjects((prev) => {
@@ -571,11 +580,76 @@ export function LeftSidebar({
                         return (
                           <div
                             key={task.id}
+                            draggable
+                            onDragStart={(e) => {
+                              dragTaskIdRef.current = task.id;
+                              dragTaskProjectIdRef.current = project.id;
+                              dragTaskInitialOrderRef.current = projectTasks.map((t) => t.id);
+                              dragTaskDidDropRef.current = false;
+                              setDraggingTaskId(task.id);
+                              e.dataTransfer.effectAllowed = 'move';
+                              const el = e.currentTarget;
+                              e.dataTransfer.setDragImage(
+                                el,
+                                el.offsetWidth / 2,
+                                el.offsetHeight / 2,
+                              );
+                            }}
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              e.dataTransfer.dropEffect = 'move';
+                              const fromId = dragTaskIdRef.current;
+                              if (!fromId || fromId === task.id) return;
+                              if (dragTaskProjectIdRef.current !== project.id) return;
+                              const fromIdx = projectTasks.findIndex((t) => t.id === fromId);
+                              const toIdx = projectTasks.findIndex((t) => t.id === task.id);
+                              if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
+                              const reordered = [...projectTasks];
+                              const [moved] = reordered.splice(fromIdx, 1);
+                              reordered.splice(toIdx, 0, moved);
+                              onReorderTasks?.(project.id, reordered);
+                            }}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              dragTaskDidDropRef.current = true;
+                            }}
+                            onDragEnd={() => {
+                              const projectId = dragTaskProjectIdRef.current;
+                              const initialOrder = dragTaskInitialOrderRef.current;
+                              const didDrop = dragTaskDidDropRef.current;
+                              dragTaskIdRef.current = null;
+                              dragTaskProjectIdRef.current = null;
+                              dragTaskInitialOrderRef.current = null;
+                              dragTaskDidDropRef.current = false;
+                              setDraggingTaskId(null);
+                              if (!projectId || !initialOrder) return;
+                              const finalTasks = (tasksByProject[projectId] || []).filter(
+                                (t) => !t.archivedAt,
+                              );
+                              const finalIds = finalTasks.map((t) => t.id);
+                              const unchanged =
+                                finalIds.length === initialOrder.length &&
+                                finalIds.every((id, i) => id === initialOrder[i]);
+                              // Cancelled drag (Esc / dropped outside): revert to initial order
+                              if (!didDrop && !unchanged) {
+                                const byId = new Map(finalTasks.map((t) => [t.id, t]));
+                                const reverted = initialOrder
+                                  .map((id) => byId.get(id))
+                                  .filter((t): t is Task => !!t);
+                                onReorderTasks?.(projectId, reverted);
+                                return;
+                              }
+                              // No-op drop: skip the round-trip
+                              if (unchanged) return;
+                              onReorderTasksCommit?.(projectId, finalTasks);
+                            }}
                             className={`group/task relative flex flex-col pl-3.5 pr-2 py-[6px] rounded-md text-[13px] cursor-pointer transition-all duration-150 ${
                               isActiveTask
                                 ? 'bg-primary/10 text-foreground font-medium'
                                 : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-                            }`}
+                            } ${draggingTaskId === task.id ? 'opacity-40' : ''}`}
                             onClick={() => onSelectTask(project.id, task.id)}
                           >
                             <div className="flex items-center gap-2">

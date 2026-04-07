@@ -37,6 +37,7 @@ export const tasks = sqliteTable(
     contextPrompt: text('context_prompt'),
     branchCreatedByDash: integer('branch_created_by_dash', { mode: 'boolean' }).default(false),
     archivedAt: text('archived_at'),
+    sortOrder: integer('sort_order').notNull().default(0),
     createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
   },

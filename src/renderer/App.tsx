@@ -773,6 +773,26 @@ export function App() {
     localStorage.setItem('projectOrder', JSON.stringify(reordered.map((p) => p.id)));
   }
 
+  function handleReorderTasks(projectId: string, reordered: Task[]) {
+    setTasksByProject((prev) => {
+      const current = prev[projectId] || [];
+      const archived = current.filter((t) => t.archivedAt);
+      return { ...prev, [projectId]: [...reordered, ...archived] };
+    });
+  }
+
+  async function handleReorderTasksCommit(projectId: string, reordered: Task[]) {
+    const ids = reordered.map((t) => t.id);
+    const resp = await window.electronAPI.reorderTasks(projectId, ids);
+    if (!resp.success) {
+      console.error('Failed to persist task reorder:', resp.error);
+      const refetch = await window.electronAPI.getTasks(projectId);
+      if (refetch.success && refetch.data) {
+        setTasksByProject((prev) => ({ ...prev, [projectId]: refetch.data! }));
+      }
+    }
+  }
+
   async function loadProjects() {
     const resp = await window.electronAPI.getProjects();
     if (resp.success && resp.data) {
@@ -1317,6 +1337,8 @@ export function App() {
               remoteControlStates={remoteControlStates}
               contextUsage={contextUsage}
               onReorderProjects={handleReorderProjects}
+              onReorderTasks={handleReorderTasks}
+              onReorderTasksCommit={handleReorderTasksCommit}
               pixelAgentsConnectedCount={
                 Object.values(pixelAgentsStatus.offices).filter(
                   (s) => s === 'connected' || s === 'registered',

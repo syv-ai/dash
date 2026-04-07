@@ -107,6 +107,22 @@ export function runMigrations(): void {
     /* already exists */
   }
   try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`);
+    // Backfill sort_order from created_at DESC per project so existing ordering is preserved
+    const rows = rawDb
+      .prepare(`SELECT id, project_id FROM tasks ORDER BY project_id, created_at DESC`)
+      .all() as { id: string; project_id: string }[];
+    const counters = new Map<string, number>();
+    const update = rawDb.prepare(`UPDATE tasks SET sort_order = ? WHERE id = ?`);
+    for (const r of rows) {
+      const n = counters.get(r.project_id) ?? 0;
+      update.run(n, r.id);
+      counters.set(r.project_id, n + 1);
+    }
+  } catch {
+    /* already exists */
+  }
+  try {
     rawDb.exec(`ALTER TABLE projects ADD COLUMN worktree_setup_script TEXT`);
   } catch {
     /* already exists */

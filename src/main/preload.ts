@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteTask: (id: string) => ipcRenderer.invoke('db:deleteTask', id),
   archiveTask: (id: string) => ipcRenderer.invoke('db:archiveTask', id),
   restoreTask: (id: string) => ipcRenderer.invoke('db:restoreTask', id),
+  reorderTasks: (projectId: string, orderedTaskIds: string[]) =>
+    ipcRenderer.invoke('db:reorderTasks', { projectId, orderedTaskIds }),
 
   // Database - Conversations
   getConversations: (taskId: string) => ipcRenderer.invoke('db:getConversations', taskId),

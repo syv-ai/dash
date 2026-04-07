@@ -1,4 +1,4 @@
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, asc, sql } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { initDb, getDb } from '../db/client';
 import { runMigrations } from '../db/migrate';
@@ -74,7 +74,7 @@ export class DatabaseService {
       .select()
       .from(tasks)
       .where(eq(tasks.projectId, projectId))
-      .orderBy(desc(tasks.createdAt))
+      .orderBy(asc(tasks.sortOrder), desc(tasks.createdAt))
       .all();
     return rows.map(this.mapTask);
   }
@@ -88,6 +88,18 @@ export class DatabaseService {
 
     const linkedItemsJson = data.linkedItems ? JSON.stringify(data.linkedItems) : null;
 
+    // New tasks prepend to the top of the project list (matches legacy createdAt DESC UX)
+    let sortOrder = data.sortOrder;
+    if (sortOrder === undefined && !data.id) {
+      const minRow = db
+        .select({ min: sql<number | null>`MIN(${tasks.sortOrder})` })
+        .from(tasks)
+        .where(eq(tasks.projectId, data.projectId))
+        .all();
+      const currentMin = minRow[0]?.min ?? 0;
+      sortOrder = (currentMin ?? 0) - 1;
+    }
+
     db.insert(tasks)
       .values({
         id,
@@ -100,6 +112,7 @@ export class DatabaseService {
         autoApprove: data.autoApprove ?? false,
         branchCreatedByDash: data.branchCreatedByDash ?? false,
         linkedItems: linkedItemsJson,
+        sortOrder: sortOrder ?? 0,
         createdAt: now,
         updatedAt: now,
       })
@@ -145,6 +158,19 @@ export class DatabaseService {
       .set({ archivedAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
       .where(eq(tasks.id, id))
       .run();
+  }
+
+  static reorderTasks(projectId: string, orderedTaskIds: string[]): void {
+    const db = getDb();
+    const now = new Date().toISOString();
+    db.transaction((tx) => {
+      orderedTaskIds.forEach((taskId, index) => {
+        tx.update(tasks)
+          .set({ sortOrder: index, updatedAt: now })
+          .where(eq(tasks.id, taskId))
+          .run();
+      });
+    });
   }
 
   static restoreTask(id: string): void {
@@ -232,6 +258,7 @@ export class DatabaseService {
       linkedItems,
       contextPrompt: row.contextPrompt ?? null,
       archivedAt: row.archivedAt,
+      sortOrder: row.sortOrder,
       createdAt: row.createdAt ?? '',
       updatedAt: row.updatedAt ?? '',
     };
