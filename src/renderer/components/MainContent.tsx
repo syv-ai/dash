@@ -13,12 +13,60 @@ import {
 import type {
   Project,
   Task,
+  LinkedItem,
   RemoteControlState,
   PullRequestInfo,
   GitStatus,
 } from '../../shared/types';
 import { linkedItemUrl, isAdoRemote, branchUrl } from '../../shared/urls';
 import { Tooltip } from './ui/Tooltip';
+
+function LinkedItemBadges({
+  items,
+  gitRemote,
+  max = 3,
+}: {
+  items: LinkedItem[];
+  gitRemote: string | null;
+  max?: number;
+}) {
+  const visible = items.slice(0, max);
+  const overflow = items.length - max;
+  return (
+    <div className="flex items-center gap-1">
+      {visible.map((item) => {
+        const url = linkedItemUrl(item, gitRemote);
+        const key = `${item.provider}-${item.id}`;
+        const badge = url ? (
+          <a
+            key={key}
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium hover:bg-primary/20 transition-colors"
+          >
+            #{item.id}
+          </a>
+        ) : (
+          <span
+            key={key}
+            className="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium"
+          >
+            #{item.id}
+          </span>
+        );
+        return item.title ? (
+          <Tooltip key={key} content={item.title}>
+            {badge}
+          </Tooltip>
+        ) : (
+          badge
+        );
+      })}
+      {overflow > 0 && <span className="text-[10px] text-muted-foreground">+{overflow} more</span>}
+    </div>
+  );
+}
 
 interface MainContentProps {
   activeTask: Task | null;
@@ -232,48 +280,12 @@ export function MainContent({
               {activeTask.name}
             </span>
           </div>
-          {activeTask.linkedItems && activeTask.linkedItems.length > 0
-            ? (() => {
-                const maxVisible = 3;
-                const visible = activeTask.linkedItems.slice(0, maxVisible);
-                const overflow = activeTask.linkedItems.length - maxVisible;
-                return (
-                  <div className="flex items-center gap-1">
-                    {visible.map((item) => {
-                      const url = linkedItemUrl(item, activeProject?.gitRemote ?? null);
-                      const linkEl = url ? (
-                        <a
-                          key={`${item.provider}-${item.id}`}
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium hover:bg-primary/20 transition-colors"
-                        >
-                          #{item.id}
-                        </a>
-                      ) : (
-                        <span
-                          key={`${item.provider}-${item.id}`}
-                          className="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium"
-                        >
-                          #{item.id}
-                        </span>
-                      );
-                      return item.title ? (
-                        <Tooltip key={`${item.provider}-${item.id}`} content={item.title}>
-                          {linkEl}
-                        </Tooltip>
-                      ) : (
-                        linkEl
-                      );
-                    })}
-                    {overflow > 0 && (
-                      <span className="text-[10px] text-muted-foreground">+{overflow} more</span>
-                    )}
-                  </div>
-                );
-              })()
-            : null}
+          {activeTask.linkedItems && activeTask.linkedItems.length > 0 && (
+            <LinkedItemBadges
+              items={activeTask.linkedItems}
+              gitRemote={activeProject?.gitRemote ?? null}
+            />
+          )}
           <div className="ml-auto flex items-center gap-1.5">
             {activeTask.useWorktree ? (
               <Tooltip content={branchTooltip}>

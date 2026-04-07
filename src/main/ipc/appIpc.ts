@@ -119,8 +119,11 @@ export function registerAppIpc(): void {
             body: 'Notifications enabled!',
           });
           n.show();
-        } catch {
-          // Ignore — user may have denied permission
+        } catch (err) {
+          console.error(
+            '[app:setDesktopNotification] Test notification failed (permission denied?):',
+            err,
+          );
         }
       }
     } catch (err) {
@@ -155,7 +158,8 @@ export function registerAppIpc(): void {
 
         // No custom attribution configured — Claude uses its built-in default
         return { success: true, data: null };
-      } catch {
+      } catch (err) {
+        console.error('[app:getClaudeAttribution] Failed to read settings:', err);
         return { success: true, data: null };
       }
     },
@@ -194,8 +198,10 @@ export function registerAppIpc(): void {
       const { claudeCliCache } = await import('../main');
       return { success: true, data: claudeCliCache };
     } catch (error) {
+      console.error('[app:detectClaude] Failed to import main module:', error);
       return {
-        success: true,
+        success: false,
+        error: String(error),
         data: { installed: false, version: null, path: null },
       };
     }

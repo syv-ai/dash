@@ -31,7 +31,8 @@ function findClaudeProjectDir(cwd: string): string | null {
     if (match) return path.join(projectsDir, match);
 
     return null;
-  } catch {
+  } catch (err) {
+    console.error('[findClaudeProjectDir] Failed to scan projects dir:', err);
     return null;
   }
 }
@@ -67,6 +68,16 @@ let claudeEnvVars: Record<string, string> = {};
 
 // When true, inherit the full parent process.env as a base instead of the minimal set.
 let syncShellEnv = false;
+
+const RESERVED_ENV_KEYS = new Set([
+  'PATH',
+  'HOME',
+  'USER',
+  'TERM',
+  'COLORTERM',
+  'TERM_PROGRAM',
+  'COLORFGBG',
+]);
 
 export function setCommitAttribution(value: string | undefined): void {
   commitAttributionSetting = value;
@@ -207,15 +218,6 @@ function buildDirectEnv(isDark: boolean): Record<string, string> {
 
   // Merge user-configured Claude Code env vars (curated toggles + custom vars from settings),
   // but prevent overriding internal keys that would break spawned processes.
-  const RESERVED_ENV_KEYS = new Set([
-    'PATH',
-    'HOME',
-    'USER',
-    'TERM',
-    'COLORTERM',
-    'TERM_PROGRAM',
-    'COLORFGBG',
-  ]);
   for (const [key, value] of Object.entries(claudeEnvVars)) {
     if (!RESERVED_ENV_KEYS.has(key)) {
       env[key] = value;
@@ -233,7 +235,8 @@ function getTaskContextPrompt(taskId: string): string | null {
   try {
     const task = DatabaseService.getTask(taskId);
     return task?.contextPrompt ?? null;
-  } catch {
+  } catch (err) {
+    console.error('[getTaskContextPrompt] Failed to read context for task', taskId, err);
     return null;
   }
 }
@@ -287,16 +290,10 @@ function writeHookSettings(cwd: string, ptyId: string): void {
         ],
       },
     ],
-    Notification: [
-      {
-        matcher: 'permission_prompt',
-        hooks: [postHook('/hook/notification')],
-      },
-      {
-        matcher: 'idle_prompt',
-        hooks: [postHook('/hook/notification')],
-      },
-    ],
+    Notification: ['permission_prompt', 'idle_prompt'].map((matcher) => ({
+      matcher,
+      hooks: [postHook('/hook/notification')],
+    })),
   };
 
   // Inject task context via SessionStart hook. Fires on startup (new session),
@@ -309,19 +306,21 @@ function writeHookSettings(cwd: string, ptyId: string): void {
         additionalContext: contextPrompt,
       },
     });
+    // Use base64 encoding to safely embed user-controlled content in a shell command.
+    // Single-quote escaping is fragile with content from GitHub issues / ADO work items.
+    const b64 = Buffer.from(hookPayload).toString('base64');
     const sessionStartHook = {
       hooks: [
         {
           type: 'command',
-          command: `printf '%s' '${hookPayload.replace(/'/g, "'\\''")}'`,
+          command: `echo '${b64}' | base64 -d`,
         },
       ],
     };
-    hookSettings.SessionStart = [
-      { matcher: 'startup', ...sessionStartHook },
-      { matcher: 'compact', ...sessionStartHook },
-      { matcher: 'clear', ...sessionStartHook },
-    ];
+    hookSettings.SessionStart = ['startup', 'compact', 'clear'].map((matcher) => ({
+      matcher,
+      ...sessionStartHook,
+    }));
   }
 
   try {
@@ -334,8 +333,13 @@ function writeHookSettings(cwd: string, ptyId: string): void {
     if (fs.existsSync(settingsPath)) {
       try {
         existing = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
-      } catch {
-        // Corrupted — overwrite
+      } catch (err) {
+        console.error(
+          '[writeHookSettings] Corrupted settings.local.json at',
+          settingsPath,
+          '— overwriting:',
+          err,
+        );
       }
     }
 
@@ -764,12 +768,14 @@ export function killAll(): void {
 export function killByOwner(owner: WebContents): void {
   for (const [id, record] of ptys) {
     if (record.owner === owner) {
+      ptys.delete(id);
+      activityMonitor.unregister(id);
+      remoteControlService.unregister(id);
       try {
         record.proc.kill();
       } catch {
-        activityMonitor.unregister(id);
+        // Already dead
       }
-      ptys.delete(id);
     }
   }
 }

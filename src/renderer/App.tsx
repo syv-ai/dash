@@ -269,7 +269,7 @@ export function App() {
   // Rotation: all tasks with activity, minus exclusions
   const rotationTasks = React.useMemo(() => {
     const tasks: Task[] = [];
-    for (const [, projectTasks] of Object.entries(tasksByProject)) {
+    for (const projectTasks of Object.values(tasksByProject)) {
       for (const task of projectTasks) {
         if (
           !task.archivedAt &&

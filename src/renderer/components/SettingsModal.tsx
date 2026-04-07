@@ -13,6 +13,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { Tooltip } from './ui/Tooltip';
+import { ToggleSwitch } from './ui/ToggleSwitch';
 import type { KeyBindingMap, KeyBinding } from '../keybindings';
 import {
   getBindingKeys,
@@ -597,27 +598,11 @@ function ClaudeCodeTab({
         <label className="block text-[12px] font-medium text-foreground mb-3">
           Shell Environment
         </label>
-        <button
-          onClick={() => onSyncShellEnvChange(!syncShellEnv)}
-          className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg text-[13px] border transition-all duration-150 ${
-            syncShellEnv
-              ? 'border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20'
-              : 'border-border/60 text-foreground/60 hover:bg-accent/40 hover:text-foreground'
-          }`}
-        >
-          <div
-            className={`w-8 h-[18px] rounded-full relative transition-colors duration-150 flex-shrink-0 ${
-              syncShellEnv ? 'bg-primary' : 'bg-border'
-            }`}
-          >
-            <div
-              className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-transform duration-150 ${
-                syncShellEnv ? 'translate-x-[16px]' : 'translate-x-[2px]'
-              }`}
-            />
-          </div>
-          Inherit environment from Dash process
-        </button>
+        <ToggleSwitch
+          enabled={syncShellEnv}
+          onToggle={onSyncShellEnvChange}
+          label="Inherit environment from Dash process"
+        />
         <p className="text-[10px] text-foreground/80 mt-2">
           {syncShellEnv
             ? 'Claude Code inherits all environment variables from the Dash process. Variables below override inherited values.'
@@ -982,27 +967,11 @@ export function SettingsModal({
                 <label className="block text-[12px] font-medium text-foreground mb-3">
                   Desktop Notifications
                 </label>
-                <button
-                  onClick={() => onDesktopNotificationChange(!desktopNotification)}
-                  className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg text-[13px] border transition-all duration-150 ${
-                    desktopNotification
-                      ? 'border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20'
-                      : 'border-border/60 text-foreground/60 hover:bg-accent/40 hover:text-foreground'
-                  }`}
-                >
-                  <div
-                    className={`w-8 h-[18px] rounded-full relative transition-colors duration-150 flex-shrink-0 ${
-                      desktopNotification ? 'bg-primary' : 'bg-border'
-                    }`}
-                  >
-                    <div
-                      className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-transform duration-150 ${
-                        desktopNotification ? 'translate-x-[16px]' : 'translate-x-[2px]'
-                      }`}
-                    />
-                  </div>
-                  Show desktop notification when a task finishes
-                </button>
+                <ToggleSwitch
+                  enabled={desktopNotification}
+                  onToggle={onDesktopNotificationChange}
+                  label="Show desktop notification when a task finishes"
+                />
                 <p className="text-[10px] text-foreground/80 mt-2">
                   Notification will include the task name
                 </p>
@@ -1013,27 +982,11 @@ export function SettingsModal({
                 <label className="block text-[12px] font-medium text-foreground mb-3">
                   Active Tasks
                 </label>
-                <button
-                  onClick={() => onShowActiveTasksSectionChange(!showActiveTasksSection)}
-                  className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg text-[13px] border transition-all duration-150 ${
-                    showActiveTasksSection
-                      ? 'border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20'
-                      : 'border-border/60 text-foreground/60 hover:bg-accent/40 hover:text-foreground'
-                  }`}
-                >
-                  <div
-                    className={`w-8 h-[18px] rounded-full relative transition-colors duration-150 flex-shrink-0 ${
-                      showActiveTasksSection ? 'bg-primary' : 'bg-border'
-                    }`}
-                  >
-                    <div
-                      className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-transform duration-150 ${
-                        showActiveTasksSection ? 'translate-x-[16px]' : 'translate-x-[2px]'
-                      }`}
-                    />
-                  </div>
-                  Show active tasks in sidebar
-                </button>
+                <ToggleSwitch
+                  enabled={showActiveTasksSection}
+                  onToggle={onShowActiveTasksSectionChange}
+                  label="Show active tasks in sidebar"
+                />
                 <p className="text-[10px] text-foreground/80 mt-2">
                   Quick-switch between running tasks with Ctrl+Tab.
                 </p>
@@ -1044,27 +997,11 @@ export function SettingsModal({
                 <label className="block text-[12px] font-medium text-foreground mb-3">
                   Shell Terminal
                 </label>
-                <button
-                  onClick={() => onShellDrawerEnabledChange(!shellDrawerEnabled)}
-                  className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg text-[13px] border transition-all duration-150 ${
-                    shellDrawerEnabled
-                      ? 'border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20'
-                      : 'border-border/60 text-foreground/60 hover:bg-accent/40 hover:text-foreground'
-                  }`}
-                >
-                  <div
-                    className={`w-8 h-[18px] rounded-full relative transition-colors duration-150 flex-shrink-0 ${
-                      shellDrawerEnabled ? 'bg-primary' : 'bg-border'
-                    }`}
-                  >
-                    <div
-                      className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-transform duration-150 ${
-                        shellDrawerEnabled ? 'translate-x-[16px]' : 'translate-x-[2px]'
-                      }`}
-                    />
-                  </div>
-                  Show shell terminal drawer
-                </button>
+                <ToggleSwitch
+                  enabled={shellDrawerEnabled}
+                  onToggle={onShellDrawerEnabledChange}
+                  label="Show shell terminal drawer"
+                />
                 {shellDrawerEnabled && (
                   <div className="grid grid-cols-3 gap-2 mt-3">
                     {[

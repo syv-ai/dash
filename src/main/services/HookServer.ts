@@ -34,8 +34,8 @@ class HookServerImpl {
           if (task?.name) {
             body = `${task.name} finished`;
           }
-        } catch {
-          // DB lookup failed — use fallback
+        } catch (err) {
+          console.error('[HookServer] DB lookup for notification body failed:', err);
         }
       }
       const n = new Notification({
@@ -60,7 +60,8 @@ class HookServerImpl {
       const db = getDb();
       const task = db.select({ name: tasks.name }).from(tasks).where(eq(tasks.id, ptyId)).get();
       return task?.name || 'A task';
-    } catch {
+    } catch (err) {
+      console.error('[HookServer] getTaskName failed for ptyId', ptyId, err);
       return 'A task';
     }
   }
@@ -75,7 +76,13 @@ class HookServerImpl {
       req.on('end', () => {
         try {
           resolve(JSON.parse(body));
-        } catch {
+        } catch (err) {
+          console.error(
+            '[HookServer] Failed to parse POST body:',
+            err,
+            '| raw:',
+            body.slice(0, 200),
+          );
           resolve({});
         }
       });
