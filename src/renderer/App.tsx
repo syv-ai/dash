@@ -955,21 +955,13 @@ export function App() {
       if (saveResp.success && saveResp.data) {
         const taskId = saveResp.data.id;
 
-        // Write task context so startDirectPty can pass it as the initial prompt
+        // Store task context so the SessionStart hook can inject it
         if (linkedItems && linkedItems.length > 0) {
           const prompt = formatTaskContextPrompt(linkedItems);
           if (prompt) {
             await window.electronAPI.ptyWriteTaskContext({
-              cwd: taskPath,
+              taskId,
               prompt,
-              meta: {
-                githubIssues:
-                  ghItems.length > 0 ? ghItems.map((i) => ({ id: i.id, url: i.url })) : undefined,
-                adoWorkItems:
-                  adoItems.length > 0
-                    ? adoItems.map((wi) => ({ id: wi.id, url: wi.url }))
-                    : undefined,
-              },
             });
 
             // Notify the user that linked context will be injected

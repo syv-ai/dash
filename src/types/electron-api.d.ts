@@ -14,7 +14,6 @@ import type {
   CommitGraphData,
   CommitDetail,
   RemoteControlState,
-  TaskContextMeta,
   PullRequestInfo,
   PixelAgentsConfig,
   PixelAgentsStatus,
@@ -141,11 +140,7 @@ export interface ElectronAPI {
   ptyHasClaudeSession: (cwd: string) => Promise<IpcResponse<boolean>>;
 
   // Task context for SessionStart hook
-  ptyWriteTaskContext: (args: {
-    cwd: string;
-    prompt: string;
-    meta?: TaskContextMeta;
-  }) => Promise<IpcResponse<void>>;
+  ptyWriteTaskContext: (args: { taskId: string; prompt: string }) => Promise<IpcResponse<void>>;
 
   // App lifecycle
   onBeforeQuit: (callback: () => void) => () => void;

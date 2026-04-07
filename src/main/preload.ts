@@ -98,7 +98,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ptyHasClaudeSession: (cwd: string) => ipcRenderer.invoke('pty:hasClaudeSession', cwd),
 
   // Task context for SessionStart hook
-  ptyWriteTaskContext: (args: { cwd: string; prompt: string; meta?: unknown }) =>
+  ptyWriteTaskContext: (args: { taskId: string; prompt: string }) =>
     ipcRenderer.invoke('pty:writeTaskContext', args),
 
   // App lifecycle

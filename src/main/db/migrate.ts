@@ -118,6 +118,12 @@ export function runMigrations(): void {
     /* already exists */
   }
 
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN context_prompt TEXT`);
+  } catch {
+    /* already exists */
+  }
+
   // Backfill: sync is_git_repo with actual filesystem state
   try {
     const allProjects = rawDb.prepare(`SELECT id, path FROM projects`).all() as {

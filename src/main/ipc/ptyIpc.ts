@@ -10,9 +10,9 @@ import {
   resizePty,
   killPty,
   killByOwner,
-  writeTaskContext,
   sendRemoteControl,
 } from '../services/ptyManager';
+import { DatabaseService } from '../services/DatabaseService';
 import { terminalSnapshotService } from '../services/TerminalSnapshotService';
 import { activityMonitor } from '../services/ActivityMonitor';
 import { remoteControlService } from '../services/remoteControlService';
@@ -110,25 +110,15 @@ export function registerPtyIpc(): void {
     }
   });
 
-  // Write task context for SessionStart hook
-  ipcMain.handle(
-    'pty:writeTaskContext',
-    (
-      _event,
-      args: {
-        cwd: string;
-        prompt: string;
-        meta?: import('@shared/types').TaskContextMeta;
-      },
-    ) => {
-      try {
-        writeTaskContext(args.cwd, args.prompt, args.meta);
-        return { success: true };
-      } catch (error) {
-        return { success: false, error: String(error) };
-      }
-    },
-  );
+  // Store task context prompt in DB for SessionStart hook injection
+  ipcMain.handle('pty:writeTaskContext', (_event, args: { taskId: string; prompt: string }) => {
+    try {
+      DatabaseService.setTaskContextPrompt(args.taskId, args.prompt);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  });
 
   // Activity monitor
   ipcMain.handle('pty:activity:getAll', () => {

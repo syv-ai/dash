@@ -6,7 +6,7 @@ import { promisify } from 'util';
 import { type WebContents, app } from 'electron';
 import { activityMonitor } from './ActivityMonitor';
 import { hookServer } from './HookServer';
-import type { TaskContextMeta } from '@shared/types';
+import { DatabaseService } from './DatabaseService';
 
 const execFileAsync = promisify(execFile);
 
@@ -228,31 +228,13 @@ function buildDirectEnv(isDark: boolean): Record<string, string> {
   return env;
 }
 
-/**
- * Write .claude/task-context.json with issue context for the SessionStart hook.
- * Called from IPC during task creation, before Claude spawns.
- */
-export function writeTaskContext(cwd: string, prompt: string, meta?: TaskContextMeta): void {
-  const claudeDir = path.join(cwd, '.claude');
-  const contextPath = path.join(claudeDir, 'task-context.json');
-
-  const payload: Record<string, unknown> = {
-    hookSpecificOutput: {
-      hookEventName: 'SessionStart',
-      additionalContext: prompt,
-    },
-  };
-  if (meta) {
-    payload.meta = meta;
-  }
-
+/** Retrieve stored task context prompt from the database. */
+function getTaskContextPrompt(taskId: string): string | null {
   try {
-    if (!fs.existsSync(claudeDir)) {
-      fs.mkdirSync(claudeDir, { recursive: true });
-    }
-    fs.writeFileSync(contextPath, JSON.stringify(payload, null, 2) + '\n');
-  } catch (err) {
-    console.error('[writeTaskContext] Failed:', err);
+    const task = DatabaseService.getTask(taskId);
+    return task?.contextPrompt ?? null;
+  } catch {
+    return null;
   }
 }
 
@@ -319,13 +301,19 @@ function writeHookSettings(cwd: string, ptyId: string): void {
 
   // Inject task context via SessionStart hook. Fires on startup (new session),
   // and re-injects after compact/clear so Claude retains issue awareness.
-  const contextPath = path.join(claudeDir, 'task-context.json');
-  if (fs.existsSync(contextPath)) {
+  const contextPrompt = getTaskContextPrompt(ptyId);
+  if (contextPrompt) {
+    const hookPayload = JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'SessionStart',
+        additionalContext: contextPrompt,
+      },
+    });
     const sessionStartHook = {
       hooks: [
         {
           type: 'command',
-          command: `cat "${contextPath}"`,
+          command: `printf '%s' '${hookPayload.replace(/'/g, "'\\''")}'`,
         },
       ],
     };

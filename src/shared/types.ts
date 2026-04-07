@@ -48,6 +48,7 @@ export interface Task {
   autoApprove: boolean;
   branchCreatedByDash: boolean;
   linkedItems: LinkedItem[] | null;
+  contextPrompt: string | null;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -94,16 +95,6 @@ export interface RemoveWorktreeOptions {
   deleteWorktreeDir?: boolean;
   deleteLocalBranch?: boolean;
   deleteRemoteBranch?: boolean;
-}
-
-export interface TaskContextMetaItem {
-  id: number;
-  url: string;
-}
-
-export interface TaskContextMeta {
-  githubIssues?: TaskContextMetaItem[];
-  adoWorkItems?: TaskContextMetaItem[];
 }
 
 export interface PtyOptions {
