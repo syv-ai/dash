@@ -224,6 +224,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 
+  // Skills
+  skillsFetchRegistry: (args?: { forceRefresh?: boolean }) =>
+    ipcRenderer.invoke('skills:fetchRegistry', args),
+  skillsSearch: (args: { query: string; category?: string; limit?: number; offset?: number }) =>
+    ipcRenderer.invoke('skills:search', args),
+  skillsGetContent: (args: { repo: string; path: string; branch: string }) =>
+    ipcRenderer.invoke('skills:getContent', args),
+  skillsInstall: (args: {
+    repo: string;
+    path: string;
+    branch: string;
+    skillName: string;
+    target: 'global' | 'project';
+    projectPath?: string;
+  }) => ipcRenderer.invoke('skills:install', args),
+  skillsCheckInstalled: (args: { skillName: string; projectPaths: string[] }) =>
+    ipcRenderer.invoke('skills:checkInstalled', args),
+  skillsUninstall: (args: {
+    skillName: string;
+    target: 'global' | 'project';
+    projectPath?: string;
+  }) => ipcRenderer.invoke('skills:uninstall', args),
+
   // Telemetry
   telemetryCapture: (event: string, properties?: Record<string, unknown>) =>
     ipcRenderer.invoke('telemetry:capture', { event, properties }),

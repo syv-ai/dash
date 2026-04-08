@@ -17,6 +17,9 @@ import type {
   PullRequestInfo,
   PixelAgentsConfig,
   PixelAgentsStatus,
+  RegistrySkill,
+  SkillsSearchResult,
+  SkillInstallStatus,
 } from '../shared/types';
 
 export interface ElectronAPI {
@@ -250,6 +253,37 @@ export interface ElectronAPI {
   pixelAgentsStart: () => Promise<IpcResponse<void>>;
   pixelAgentsStop: () => Promise<IpcResponse<void>>;
   onPixelAgentsStatusChanged: (callback: (status: PixelAgentsStatus) => void) => () => void;
+
+  // Skills
+  skillsFetchRegistry: (args?: { forceRefresh?: boolean }) => Promise<IpcResponse<RegistrySkill[]>>;
+  skillsSearch: (args: {
+    query: string;
+    category?: string;
+    limit?: number;
+    offset?: number;
+  }) => Promise<IpcResponse<SkillsSearchResult>>;
+  skillsGetContent: (args: {
+    repo: string;
+    path: string;
+    branch: string;
+  }) => Promise<IpcResponse<string>>;
+  skillsInstall: (args: {
+    repo: string;
+    path: string;
+    branch: string;
+    skillName: string;
+    target: 'global' | 'project';
+    projectPath?: string;
+  }) => Promise<IpcResponse<void>>;
+  skillsCheckInstalled: (args: {
+    skillName: string;
+    projectPaths: string[];
+  }) => Promise<IpcResponse<SkillInstallStatus>>;
+  skillsUninstall: (args: {
+    skillName: string;
+    target: 'global' | 'project';
+    projectPath?: string;
+  }) => Promise<IpcResponse<void>>;
 
   // Telemetry
   telemetryCapture: (event: string, properties?: Record<string, unknown>) => Promise<void>;

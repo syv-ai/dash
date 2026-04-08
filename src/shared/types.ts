@@ -284,6 +284,30 @@ export interface PixelAgentsOffice {
   enabled: boolean;
 }
 
+// ── Skills Registry Types ──────────────────────────────────
+
+export interface RegistrySkill {
+  name: string;
+  description: string;
+  repo: string;
+  path: string;
+  branch: string;
+  category: string;
+  tags: string[];
+  stars: number;
+  source: string;
+}
+
+export interface SkillsSearchResult {
+  skills: RegistrySkill[];
+  total: number;
+}
+
+export interface SkillInstallStatus {
+  global: boolean;
+  projectPaths: string[];
+}
+
 export interface PixelAgentsConfig {
   name: string;
   palette?: number;
