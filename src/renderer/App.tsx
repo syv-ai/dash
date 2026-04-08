@@ -11,6 +11,7 @@ import { FileChangesPanel } from './components/FileChangesPanel';
 import { ShellDrawerWrapper } from './components/ShellDrawerWrapper';
 import { DiffViewer } from './components/DiffViewer';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
+import { SkillsBrowserModal } from './components/SkillsBrowserModal';
 import { TaskModal } from './components/TaskModal';
 import { AddProjectModal } from './components/AddProjectModal';
 import { DeleteTaskModal } from './components/DeleteTaskModal';
@@ -69,6 +70,7 @@ export function App() {
     project: string;
   } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showSkillsBrowser, setShowSkillsBrowser] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>();
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('theme') as 'light' | 'dark') || 'dark';
@@ -597,6 +599,9 @@ export function App() {
         } else if (showCommitGraph) {
           e.preventDefault();
           setShowCommitGraph(false);
+        } else if (showSkillsBrowser) {
+          e.preventDefault();
+          setShowSkillsBrowser(false);
         } else if (showSettings) {
           e.preventDefault();
           setShowSettings(false);
@@ -652,6 +657,7 @@ export function App() {
     deleteProjectTarget,
     showDiff,
     showCommitGraph,
+    showSkillsBrowser,
     showSettings,
     showTaskModal,
     showAddProjectModal,
@@ -1276,6 +1282,7 @@ export function App() {
               onRemoveFromRotation={removeFromRotation}
               showActiveTasksSection={showActiveTasksSection}
               onToggleActiveTasksSection={() => setShowActiveTasksSection((v) => !v)}
+              onOpenSkillsBrowser={() => setShowSkillsBrowser(true)}
             />
           </ShellDrawerWrapper>
         </Panel>
@@ -1619,6 +1626,14 @@ export function App() {
             setActiveTaskId(taskId);
             setShowCommitGraph(false);
           }}
+        />
+      )}
+
+      {showSkillsBrowser && (
+        <SkillsBrowserModal
+          projects={projects.map((p) => ({ id: p.id, name: p.name, path: p.path }))}
+          activeProjectId={activeProjectId ?? undefined}
+          onClose={() => setShowSkillsBrowser(false)}
         />
       )}
 
