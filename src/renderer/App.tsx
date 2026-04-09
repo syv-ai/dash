@@ -235,6 +235,14 @@ export function App() {
     });
   }, [activeTaskId]);
 
+  // Show inline usage bars in sidebar and header
+  const [showUsageInline, setShowUsageInline] = useState(
+    () => localStorage.getItem('showUsageInline') !== 'false',
+  );
+  useEffect(() => {
+    localStorage.setItem('showUsageInline', String(showUsageInline));
+  }, [showUsageInline]);
+
   // Rotation — tasks the user cycles through with Ctrl+Tab
   const [showActiveTasksSection, setShowActiveTasksSection] = useState(
     () => localStorage.getItem('showActiveTasksSection') !== 'false',
@@ -1335,7 +1343,7 @@ export function App() {
               taskActivity={taskActivity}
               unseenTaskIds={unseenTaskIds}
               remoteControlStates={remoteControlStates}
-              contextUsage={contextUsage}
+              contextUsage={showUsageInline ? contextUsage : {}}
               onReorderProjects={handleReorderProjects}
               onReorderTasks={handleReorderTasks}
               onReorderTasksCommit={handleReorderTasksCommit}
@@ -1386,7 +1394,7 @@ export function App() {
               taskActivity={taskActivity}
               unseenTaskIds={unseenTaskIds}
               remoteControlStates={remoteControlStates}
-              contextUsage={contextUsage}
+              contextUsage={showUsageInline ? contextUsage : {}}
               onSelectTask={setActiveTaskId}
               onEnableRemoteControl={(taskId) => setRemoteControlModalPtyId(taskId)}
               onNewTask={() => activeProjectId && handleNewTask(activeProjectId)}
@@ -1570,6 +1578,8 @@ export function App() {
             localStorage.setItem('theme', t);
             sessionRegistry.setAllTerminalThemes(terminalTheme, t === 'dark');
           }}
+          showUsageInline={showUsageInline}
+          onShowUsageInlineChange={setShowUsageInline}
           showActiveTasksSection={showActiveTasksSection}
           onShowActiveTasksSectionChange={setShowActiveTasksSection}
           shellDrawerEnabled={shellDrawerEnabled}

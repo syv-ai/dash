@@ -57,6 +57,8 @@ interface SettingsModalProps {
   onNotificationSoundChange: (value: NotificationSound) => void;
   desktopNotification: boolean;
   onDesktopNotificationChange: (value: boolean) => void;
+  showUsageInline: boolean;
+  onShowUsageInlineChange: (value: boolean) => void;
   showActiveTasksSection: boolean;
   onShowActiveTasksSectionChange: (value: boolean) => void;
   shellDrawerEnabled: boolean;
@@ -934,6 +936,8 @@ export function SettingsModal({
   onNotificationSoundChange,
   desktopNotification,
   onDesktopNotificationChange,
+  showUsageInline,
+  onShowUsageInlineChange,
   showActiveTasksSection,
   onShowActiveTasksSectionChange,
   shellDrawerEnabled,
@@ -1190,6 +1194,22 @@ export function SettingsModal({
                 />
                 <p className="text-[10px] text-foreground/80 mt-2">
                   Notification will include the task name
+                </p>
+              </div>
+
+              {/* Inline Usage */}
+              <div>
+                <label className="block text-[12px] font-medium text-foreground mb-3">
+                  Inline Usage
+                </label>
+                <ToggleSwitch
+                  enabled={showUsageInline}
+                  onToggle={onShowUsageInlineChange}
+                  label="Show context usage in sidebar and header"
+                />
+                <p className="text-[10px] text-foreground/80 mt-2">
+                  Display context window percentage and progress bars next to tasks. Detailed stats
+                  are always available in the Usage tab.
                 </p>
               </div>
 
