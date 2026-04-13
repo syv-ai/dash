@@ -136,10 +136,14 @@ export class DatabaseService {
 
   static setTaskLastSessionId(id: string, sessionId: string): void {
     const db = getDb();
-    db.update(tasks)
+    const result = db
+      .update(tasks)
       .set({ lastSessionId: sessionId, updatedAt: new Date().toISOString() })
       .where(eq(tasks.id, id))
       .run();
+    if (result.changes === 0) {
+      console.warn(`[DatabaseService] setTaskLastSessionId: no task found for id=${id}`);
+    }
   }
 
   static deleteTask(id: string): void {

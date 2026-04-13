@@ -302,8 +302,9 @@ function writeHookSettings(cwd: string, ptyId: string): void {
   //   1. Capture Claude's real session_id and persist it per-task, so the next
   //      spawn can resume the correct session even if Claude forked or the
   //      filename doesn't match task.id.
-  //   2. Re-inject task context (linked issue/work-item prompt) after compact
-  //      or clear, so Claude retains issue awareness.
+  //   2. Inject task context (linked issue/work-item prompt) on every
+  //      SessionStart event — especially important after compact or clear,
+  //      which lose the original context.
   //
   // The hook commands pass stdin through; curl forwards the entire payload
   // (which includes session_id) to the hook server.
@@ -322,7 +323,7 @@ function writeHookSettings(cwd: string, ptyId: string): void {
     const b64 = Buffer.from(hookPayload).toString('base64');
     sessionStartHooks.push({
       type: 'command',
-      command: `echo '${b64}' | base64 -d`,
+      command: `echo '${b64}' | base64 --decode`,
     });
   }
 

@@ -134,7 +134,7 @@ export function registerAppIpc(): void {
   // Read effective commit attribution from Claude Code settings hierarchy
   ipcMain.handle(
     'app:getClaudeAttribution',
-    (_event, projectPath?: string): { success: boolean; data: string | null } => {
+    (_event, projectPath?: string): { success: boolean; data?: string | null; error?: string } => {
       try {
         // Check project-level settings first (higher precedence)
         if (projectPath) {
@@ -160,7 +160,7 @@ export function registerAppIpc(): void {
         return { success: true, data: null };
       } catch (err) {
         console.error('[app:getClaudeAttribution] Failed to read settings:', err);
-        return { success: true, data: null };
+        return { success: false, error: String(err) };
       }
     },
   );

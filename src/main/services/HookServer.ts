@@ -67,8 +67,8 @@ class HookServerImpl {
     }
   }
 
-  /** Parse a POST request body as JSON. */
-  private parsePostBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
+  /** Parse a POST request body as JSON. Returns null on failure. */
+  private parsePostBody(req: http.IncomingMessage): Promise<Record<string, unknown> | null> {
     return new Promise((resolve) => {
       let body = '';
       req.on('data', (chunk: Buffer) => {
@@ -84,8 +84,12 @@ class HookServerImpl {
             '| raw:',
             body.slice(0, 200),
           );
-          resolve({});
+          resolve(null);
         }
+      });
+      req.on('error', (err) => {
+        console.error('[HookServer] Request stream error:', err);
+        resolve(null);
       });
     });
   }
@@ -104,7 +108,7 @@ class HookServerImpl {
           return;
         }
 
-        // GET endpoints (legacy)
+        // GET endpoints
         if (req.method === 'GET') {
           if (url.pathname === '/hook/busy') {
             activityMonitor.setBusy(ptyId);
@@ -117,6 +121,11 @@ class HookServerImpl {
         // POST endpoints
         if (req.method === 'POST') {
           const payload = await this.parsePostBody(req);
+          if (!payload) {
+            res.writeHead(400);
+            res.end();
+            return;
+          }
 
           switch (url.pathname) {
             case '/hook/stop': {
@@ -132,7 +141,8 @@ class HookServerImpl {
               // event (startup, resume, compact, clear). Persist it per task so
               // the next spawn can resume the correct session even if Claude
               // forked or the filename doesn't match task.id.
-              const sessionId = payload.session_id as string | undefined;
+              const sessionId =
+                typeof payload.session_id === 'string' ? payload.session_id : undefined;
               if (sessionId) {
                 try {
                   DatabaseService.setTaskLastSessionId(ptyId, sessionId);
@@ -146,8 +156,11 @@ class HookServerImpl {
             }
 
             case '/hook/notification': {
-              const notificationType = payload.notification_type as string;
-              const message = payload.message as string | undefined;
+              const notificationType =
+                typeof payload.notification_type === 'string'
+                  ? payload.notification_type
+                  : undefined;
+              const message = typeof payload.message === 'string' ? payload.message : undefined;
 
               if (notificationType === 'permission_prompt') {
                 activityMonitor.setWaitingForPermission(ptyId);

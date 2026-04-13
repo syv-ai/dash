@@ -218,7 +218,9 @@ export function App() {
     try {
       const stored = localStorage.getItem('rotationExclusions');
       return stored ? new Set(JSON.parse(stored)) : new Set();
-    } catch {
+    } catch (err) {
+      console.error('Failed to parse rotationExclusions from localStorage, resetting:', err);
+      localStorage.removeItem('rotationExclusions');
       return new Set();
     }
   });
