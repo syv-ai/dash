@@ -2,6 +2,7 @@ import * as http from 'http';
 import { BrowserWindow, Notification } from 'electron';
 import { eq } from 'drizzle-orm';
 import { activityMonitor } from './ActivityMonitor';
+import { DatabaseService } from './DatabaseService';
 import { getDb } from '../db/client';
 import { tasks } from '../db/schema';
 
@@ -121,6 +122,24 @@ class HookServerImpl {
             case '/hook/stop': {
               activityMonitor.setIdle(ptyId);
               this.showDesktopNotification(ptyId);
+              res.writeHead(200);
+              res.end('ok');
+              return;
+            }
+
+            case '/hook/session-start': {
+              // Claude sends the real session_id on stdin for every SessionStart
+              // event (startup, resume, compact, clear). Persist it per task so
+              // the next spawn can resume the correct session even if Claude
+              // forked or the filename doesn't match task.id.
+              const sessionId = payload.session_id as string | undefined;
+              if (sessionId) {
+                try {
+                  DatabaseService.setTaskLastSessionId(ptyId, sessionId);
+                } catch (err) {
+                  console.error('[HookServer] setTaskLastSessionId failed:', err);
+                }
+              }
               res.writeHead(200);
               res.end('ok');
               return;

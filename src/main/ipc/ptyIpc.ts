@@ -1,8 +1,4 @@
 import { ipcMain } from 'electron';
-import * as path from 'path';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as crypto from 'crypto';
 import {
   startDirectPty,
   startPty,
@@ -29,7 +25,6 @@ export function registerPtyIpc(): void {
         cols: number;
         rows: number;
         autoApprove?: boolean;
-        resume?: boolean;
         isDark?: boolean;
       },
     ) => {
@@ -101,15 +96,6 @@ export function registerPtyIpc(): void {
     }
   });
 
-  // Check if a Claude session exists for a given working directory
-  ipcMain.handle('pty:hasClaudeSession', async (_event, cwd: string) => {
-    try {
-      return { success: true, data: hasClaudeSession(cwd) };
-    } catch (error) {
-      return { success: false, data: false, error: String(error) };
-    }
-  });
-
   // Store task context prompt in DB for SessionStart hook injection
   ipcMain.handle('pty:writeTaskContext', (_event, args: { taskId: string; prompt: string }) => {
     try {
@@ -138,31 +124,4 @@ export function registerPtyIpc(): void {
   ipcMain.handle('pty:remoteControl:getAllStates', () => {
     return { success: true, data: remoteControlService.getAllStates() };
   });
-}
-
-/**
- * Check if Claude Code has an existing session for the given working directory.
- * Claude stores sessions in ~/.claude/projects/ with various naming schemes.
- */
-function hasClaudeSession(cwd: string): boolean {
-  try {
-    const projectsDir = path.join(os.homedir(), '.claude', 'projects');
-    if (!fs.existsSync(projectsDir)) return false;
-
-    // Check hash-based directory name
-    const cwdHash = crypto.createHash('sha256').update(cwd).digest('hex').slice(0, 16);
-    if (fs.existsSync(path.join(projectsDir, cwdHash))) return true;
-
-    // Check path-based directory name (slashes replaced with hyphens)
-    const pathBasedName = cwd.replace(/\//g, '-');
-    if (fs.existsSync(path.join(projectsDir, pathBasedName))) return true;
-
-    // Scan for partial path match (last 3 segments)
-    const cwdParts = cwd.split('/').filter((p) => p.length > 0);
-    const lastParts = cwdParts.slice(-3).join('-');
-    const dirs = fs.readdirSync(projectsDir);
-    return dirs.some((dir) => dir.includes(lastParts));
-  } catch {
-    return false;
-  }
 }

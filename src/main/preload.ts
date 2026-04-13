@@ -94,9 +94,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.send('pty:snapshot:save', id, payload),
   ptyClearSnapshot: (id: string) => ipcRenderer.invoke('pty:snapshot:clear', id),
 
-  // Session detection
-  ptyHasClaudeSession: (cwd: string) => ipcRenderer.invoke('pty:hasClaudeSession', cwd),
-
   // Task context for SessionStart hook
   ptyWriteTaskContext: (args: { taskId: string; prompt: string }) =>
     ipcRenderer.invoke('pty:writeTaskContext', args),

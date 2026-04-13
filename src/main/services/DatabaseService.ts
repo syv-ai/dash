@@ -134,6 +134,14 @@ export class DatabaseService {
       .run();
   }
 
+  static setTaskLastSessionId(id: string, sessionId: string): void {
+    const db = getDb();
+    db.update(tasks)
+      .set({ lastSessionId: sessionId, updatedAt: new Date().toISOString() })
+      .where(eq(tasks.id, id))
+      .run();
+  }
+
   static deleteTask(id: string): void {
     const db = getDb();
     db.delete(tasks).where(eq(tasks.id, id)).run();
@@ -231,6 +239,7 @@ export class DatabaseService {
       branchCreatedByDash: row.branchCreatedByDash ?? false,
       linkedItems,
       contextPrompt: row.contextPrompt ?? null,
+      lastSessionId: row.lastSessionId ?? null,
       archivedAt: row.archivedAt,
       createdAt: row.createdAt ?? '',
       updatedAt: row.updatedAt ?? '',

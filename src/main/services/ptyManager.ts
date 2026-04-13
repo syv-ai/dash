@@ -296,8 +296,19 @@ function writeHookSettings(cwd: string, ptyId: string): void {
     })),
   };
 
-  // Inject task context via SessionStart hook. Fires on startup (new session),
-  // and re-injects after compact/clear so Claude retains issue awareness.
+  // SessionStart hook fires on: startup (new session), resume (reattach by id),
+  // compact (auto/manual compaction), clear (/clear command). We use it for two
+  // purposes:
+  //   1. Capture Claude's real session_id and persist it per-task, so the next
+  //      spawn can resume the correct session even if Claude forked or the
+  //      filename doesn't match task.id.
+  //   2. Re-inject task context (linked issue/work-item prompt) after compact
+  //      or clear, so Claude retains issue awareness.
+  //
+  // The hook commands pass stdin through; curl forwards the entire payload
+  // (which includes session_id) to the hook server.
+  const sessionStartHooks: { type: string; command: string }[] = [postHook('/hook/session-start')];
+
   const contextPrompt = getTaskContextPrompt(ptyId);
   if (contextPrompt) {
     const hookPayload = JSON.stringify({
@@ -309,19 +320,16 @@ function writeHookSettings(cwd: string, ptyId: string): void {
     // Use base64 encoding to safely embed user-controlled content in a shell command.
     // Single-quote escaping is fragile with content from GitHub issues / ADO work items.
     const b64 = Buffer.from(hookPayload).toString('base64');
-    const sessionStartHook = {
-      hooks: [
-        {
-          type: 'command',
-          command: `echo '${b64}' | base64 -d`,
-        },
-      ],
-    };
-    hookSettings.SessionStart = ['startup', 'compact', 'clear'].map((matcher) => ({
-      matcher,
-      ...sessionStartHook,
-    }));
+    sessionStartHooks.push({
+      type: 'command',
+      command: `echo '${b64}' | base64 -d`,
+    });
   }
+
+  hookSettings.SessionStart = ['startup', 'resume', 'compact', 'clear'].map((matcher) => ({
+    matcher,
+    hooks: sessionStartHooks,
+  }));
 
   try {
     if (!fs.existsSync(claudeDir)) {
@@ -420,7 +428,6 @@ export async function startDirectPty(options: {
   cols: number;
   rows: number;
   autoApprove?: boolean;
-  resume?: boolean;
   isDark?: boolean;
   sender?: WebContents;
 }): Promise<{
@@ -452,14 +459,17 @@ export async function startDirectPty(options: {
 
   // Pin each task to its own Claude session so tasks sharing the same cwd
   // (e.g. multiple tasks in the main worktree) never resume each other.
-  if (options.resume && hasSessionForId(options.cwd, options.id)) {
-    // Session was created with --session-id; resume it by ID.
+  // Prefer the hook-captured lastSessionId (Claude may fork on /clear or
+  // /compact, so the live session id can drift from task.id). Never fall
+  // back to `-c -r`: in a shared cwd that would hijack another task's
+  // most-recent session.
+  const task = DatabaseService.getTask(options.id);
+  const resumeId = task?.lastSessionId ?? options.id;
+  if (hasSessionForId(options.cwd, resumeId)) {
+    args.push('-r', resumeId);
+  } else if (resumeId !== options.id && hasSessionForId(options.cwd, options.id)) {
     args.push('-r', options.id);
-  } else if (options.resume) {
-    // Legacy task created before session pinning — fall back to most recent.
-    args.push('-c', '-r');
   } else {
-    // New session: create with deterministic UUID tied to this task.
     args.push('--session-id', options.id);
   }
 
