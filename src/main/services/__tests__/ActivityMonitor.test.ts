@@ -13,6 +13,9 @@ vi.mock('electron', () => ({
 
 import { activityMonitor } from '../ActivityMonitor';
 
+// setBusy debounces by 300ms before transitioning state
+const BUSY_DEBOUNCE_MS = 300;
+
 describe('ActivityMonitor', () => {
   const mockSender = {
     send: vi.fn(),
@@ -42,15 +45,31 @@ describe('ActivityMonitor', () => {
       expect(all['pty1'].state).toBe('idle');
     });
 
-    it('transitions idle → busy on setBusy', () => {
+    it('transitions idle → busy on setBusy after debounce', () => {
       activityMonitor.register('pty1', 12345, true);
       activityMonitor.setBusy('pty1');
+      // Still idle before debounce fires
+      expect(activityMonitor.getAll()['pty1'].state).toBe('idle');
+      vi.advanceTimersByTime(BUSY_DEBOUNCE_MS);
       expect(activityMonitor.getAll()['pty1'].state).toBe('busy');
+    });
+
+    it('cancels busy debounce if setIdle fires before it completes', () => {
+      activityMonitor.register('pty1', 12345, true);
+      activityMonitor.setToolStart('pty1', 'Bash'); // force busy immediately
+      activityMonitor.setIdle('pty1');
+      activityMonitor.setBusy('pty1'); // schedule debounce
+      // setIdle arrives before debounce completes (e.g. /clear)
+      activityMonitor.setIdle('pty1');
+      vi.advanceTimersByTime(BUSY_DEBOUNCE_MS);
+      // Should stay idle — the debounce was cancelled
+      expect(activityMonitor.getAll()['pty1'].state).toBe('idle');
     });
 
     it('transitions busy → idle on setIdle', () => {
       activityMonitor.register('pty1', 12345, true);
       activityMonitor.setBusy('pty1');
+      vi.advanceTimersByTime(BUSY_DEBOUNCE_MS);
       activityMonitor.setIdle('pty1');
       expect(activityMonitor.getAll()['pty1'].state).toBe('idle');
     });
@@ -58,6 +77,7 @@ describe('ActivityMonitor', () => {
     it('transitions to waiting on setWaitingForPermission', () => {
       activityMonitor.register('pty1', 12345, true);
       activityMonitor.setBusy('pty1');
+      vi.advanceTimersByTime(BUSY_DEBOUNCE_MS);
       activityMonitor.setWaitingForPermission('pty1');
       expect(activityMonitor.getAll()['pty1'].state).toBe('waiting');
     });
@@ -65,6 +85,7 @@ describe('ActivityMonitor', () => {
     it('transitions to error on setError', () => {
       activityMonitor.register('pty1', 12345, true);
       activityMonitor.setBusy('pty1');
+      vi.advanceTimersByTime(BUSY_DEBOUNCE_MS);
       activityMonitor.setError('pty1', 'rate_limit', 'Rate limited');
       const info = activityMonitor.getAll()['pty1'];
       expect(info.state).toBe('error');
@@ -88,6 +109,7 @@ describe('ActivityMonitor', () => {
       activityMonitor.register('pty1', 12345, true);
       activityMonitor.setError('pty1', 'rate_limit');
       activityMonitor.setBusy('pty1');
+      vi.advanceTimersByTime(BUSY_DEBOUNCE_MS);
       const info = activityMonitor.getAll()['pty1'];
       expect(info.state).toBe('busy');
       expect(info.error).toBeUndefined();
@@ -103,12 +125,13 @@ describe('ActivityMonitor', () => {
   });
 
   describe('tool tracking', () => {
-    it('sets tool on setToolStart', () => {
+    it('sets tool on setToolStart and transitions to busy immediately', () => {
       activityMonitor.register('pty1', 12345, true);
       activityMonitor.setToolStart('pty1', 'Bash', { command: 'ls -la' });
       const info = activityMonitor.getAll()['pty1'];
       expect(info.tool?.toolName).toBe('Bash');
       expect(info.tool?.label).toBe('ls -la');
+      // setToolStart bypasses debounce — busy is immediate
       expect(info.state).toBe('busy');
     });
 
@@ -131,6 +154,7 @@ describe('ActivityMonitor', () => {
     it('sets and clears compacting state', () => {
       activityMonitor.register('pty1', 12345, true);
       activityMonitor.setBusy('pty1');
+      vi.advanceTimersByTime(BUSY_DEBOUNCE_MS);
       activityMonitor.setCompacting('pty1', true);
       expect(activityMonitor.getAll()['pty1'].compacting).toBe(true);
 
@@ -147,23 +171,23 @@ describe('ActivityMonitor', () => {
   });
 
   describe('noteStatusLine', () => {
-    it('does not transition idle → busy within IDLE_SETTLE_MS', () => {
+    it('does not transition idle → busy (statusLine only refreshes timestamps)', () => {
       activityMonitor.register('pty1', 12345, true);
-      activityMonitor.setBusy('pty1');
-      activityMonitor.setIdle('pty1');
-      // Immediately after setIdle, noteStatusLine should NOT flip back to busy
+      // Advance well past any grace periods
+      vi.advanceTimersByTime(20_000);
       activityMonitor.noteStatusLine('pty1');
       expect(activityMonitor.getAll()['pty1'].state).toBe('idle');
     });
 
-    it('transitions idle → busy after IDLE_SETTLE_MS', () => {
+    it('refreshes timestamps to keep busy state alive', () => {
       activityMonitor.register('pty1', 12345, true);
-      activityMonitor.setBusy('pty1');
-      activityMonitor.setIdle('pty1');
-      // Advance past IDLE_SETTLE_MS (2000ms)
-      vi.advanceTimersByTime(2100);
+      activityMonitor.setToolStart('pty1', 'Bash');
+      const activity = (activityMonitor as any).activities.get('pty1');
+      const prevDataTime = activity.lastDataTime;
+      vi.advanceTimersByTime(1000);
       activityMonitor.noteStatusLine('pty1');
-      expect(activityMonitor.getAll()['pty1'].state).toBe('busy');
+      expect(activity.lastDataTime).toBeGreaterThan(prevDataTime);
+      expect(activity.lastStatusLineTime).toBeGreaterThan(0);
     });
   });
 
