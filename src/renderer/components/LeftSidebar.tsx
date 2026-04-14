@@ -35,6 +35,7 @@ function RotationSection({
   unseenTaskIds,
   projects,
   onSelectTask,
+  onReorderRotation,
   onRemoveFromRotation,
 }: {
   rotationTasks: Task[];
@@ -43,12 +44,17 @@ function RotationSection({
   unseenTaskIds?: Set<string>;
   projects: Project[];
   onSelectTask: (projectId: string, taskId: string) => void;
+  onReorderRotation?: (reordered: Task[]) => void;
   onRemoveFromRotation?: (taskId: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [highlight, setHighlight] = useState<{ top: number; height: number } | null>(null);
   const hasAnimated = useRef(false);
+  const [draggingRotId, setDraggingRotId] = useState<string | null>(null);
+  const dragRotIdRef = useRef<string | null>(null);
+  const dragRotInitialOrderRef = useRef<string[] | null>(null);
+  const dragRotDidDropRef = useRef<boolean>(false);
 
   const setRowRef = useCallback((taskId: string, el: HTMLDivElement | null) => {
     if (el) rowRefs.current.set(taskId, el);
@@ -107,11 +113,65 @@ function RotationSection({
             <div
               key={task.id}
               ref={(el) => setRowRef(task.id, el)}
+              draggable
+              onDragStart={(e) => {
+                dragRotIdRef.current = task.id;
+                dragRotInitialOrderRef.current = rotationTasks.map((t) => t.id);
+                dragRotDidDropRef.current = false;
+                setDraggingRotId(task.id);
+                e.dataTransfer.effectAllowed = 'move';
+                const el = e.currentTarget;
+                e.dataTransfer.setDragImage(el, el.offsetWidth / 2, el.offsetHeight / 2);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.dataTransfer.dropEffect = 'move';
+                const fromId = dragRotIdRef.current;
+                if (!fromId || fromId === task.id) return;
+                const fromIdx = rotationTasks.findIndex((t) => t.id === fromId);
+                const toIdx = rotationTasks.findIndex((t) => t.id === task.id);
+                if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
+                const reordered = [...rotationTasks];
+                const [moved] = reordered.splice(fromIdx, 1);
+                reordered.splice(toIdx, 0, moved);
+                onReorderRotation?.(reordered);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dragRotDidDropRef.current = true;
+              }}
+              onDragEnd={() => {
+                const initialOrder = dragRotInitialOrderRef.current;
+                const didDrop = dragRotDidDropRef.current;
+                dragRotIdRef.current = null;
+                dragRotInitialOrderRef.current = null;
+                dragRotDidDropRef.current = false;
+                setDraggingRotId(null);
+                if (!initialOrder) return;
+                const finalIds = rotationTasks.map((t) => t.id);
+                const unchanged =
+                  finalIds.length === initialOrder.length &&
+                  finalIds.every((id, i) => id === initialOrder[i]);
+                // Cancelled drag: revert
+                if (!didDrop && !unchanged) {
+                  const byId = new Map(rotationTasks.map((t) => [t.id, t]));
+                  const reverted = initialOrder
+                    .map((id) => byId.get(id))
+                    .filter((t): t is Task => !!t);
+                  onReorderRotation?.(reverted);
+                  return;
+                }
+                // No-op: skip
+                if (unchanged) return;
+                onReorderRotation?.(rotationTasks);
+              }}
               className={`group/rot relative flex items-center gap-2 pl-3.5 pr-2 py-[5px] rounded-md text-[13px] cursor-pointer transition-colors duration-150 ${
                 isActiveTask
                   ? 'text-foreground font-medium'
                   : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-              }`}
+              } ${draggingRotId === task.id ? 'opacity-40' : ''}`}
               onClick={() => onSelectTask(task.projectId, task.id)}
             >
               {/* Status indicator */}
@@ -181,6 +241,7 @@ interface LeftSidebarProps {
   onReorderTasksCommit?: (projectId: string, reordered: Task[]) => void;
   pixelAgentsConnectedCount?: number;
   rotationTasks?: Task[];
+  onReorderRotation?: (reordered: Task[]) => void;
   onRemoveFromRotation?: (taskId: string) => void;
   showActiveTasksSection?: boolean;
   onToggleActiveTasksSection?: () => void;
@@ -214,6 +275,7 @@ export function LeftSidebar({
   onReorderTasksCommit,
   pixelAgentsConnectedCount = 0,
   rotationTasks = [],
+  onReorderRotation,
   onRemoveFromRotation,
   showActiveTasksSection = true,
   onToggleActiveTasksSection,
@@ -410,6 +472,7 @@ export function LeftSidebar({
           unseenTaskIds={unseenTaskIds}
           projects={projects}
           onSelectTask={onSelectTask}
+          onReorderRotation={onReorderRotation}
           onRemoveFromRotation={onRemoveFromRotation}
         />
       )}

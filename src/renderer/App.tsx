@@ -265,6 +265,19 @@ export function App() {
     localStorage.setItem('rotationExclusions', JSON.stringify([...rotationExclusions]));
   }, [rotationExclusions]);
 
+  const [rotationOrder, setRotationOrder] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('rotationOrder');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('rotationOrder', JSON.stringify(rotationOrder));
+  }, [rotationOrder]);
+
   // Git state
   const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
   const [gitLoading, setGitLoading] = useState(false);
@@ -318,8 +331,13 @@ export function App() {
         }
       }
     }
+    // Sort by persisted rotation order; unknown tasks go to the end
+    if (rotationOrder.length > 0) {
+      const orderMap = new Map(rotationOrder.map((id, i) => [id, i]));
+      tasks.sort((a, b) => (orderMap.get(a.id) ?? Infinity) - (orderMap.get(b.id) ?? Infinity));
+    }
     return tasks;
-  }, [tasksByProject, taskActivity, rotationExclusions]);
+  }, [tasksByProject, taskActivity, rotationExclusions, rotationOrder]);
 
   // Load projects on mount
   useEffect(() => {
@@ -582,6 +600,10 @@ export function App() {
       next.add(taskId);
       return next;
     });
+  }, []);
+
+  const handleReorderRotation = useCallback((reordered: Task[]) => {
+    setRotationOrder(reordered.map((t) => t.id));
   }, []);
 
   // Keyboard shortcuts
@@ -1353,6 +1375,7 @@ export function App() {
                 ).length
               }
               rotationTasks={rotationTasks}
+              onReorderRotation={handleReorderRotation}
               onRemoveFromRotation={removeFromRotation}
               showActiveTasksSection={showActiveTasksSection}
               onToggleActiveTasksSection={() => setShowActiveTasksSection((v) => !v)}
