@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useDragReorder } from '../hooks/useDragReorder';
 import { UsageBarInline, usageTextColor } from './ui/UsageBar';
 import {
   FolderOpen,
@@ -51,10 +52,15 @@ function RotationSection({
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [highlight, setHighlight] = useState<{ top: number; height: number } | null>(null);
   const hasAnimated = useRef(false);
-  const [draggingRotId, setDraggingRotId] = useState<string | null>(null);
-  const dragRotIdRef = useRef<string | null>(null);
-  const dragRotInitialOrderRef = useRef<string[] | null>(null);
-  const dragRotDidDropRef = useRef<boolean>(false);
+  const rotationOnReorder = useCallback(
+    (_gId: string | undefined, reordered: Task[]) => onReorderRotation?.(reordered),
+    [onReorderRotation],
+  );
+  const rotationGetItems = useCallback(() => rotationTasks, [rotationTasks]);
+  const { draggingId: draggingRotId, getDragHandlers: getRotDragHandlers } = useDragReorder<Task>({
+    onReorder: rotationOnReorder,
+    getItems: rotationGetItems,
+  });
 
   const setRowRef = useCallback((taskId: string, el: HTMLDivElement | null) => {
     if (el) rowRefs.current.set(taskId, el);
@@ -114,59 +120,7 @@ function RotationSection({
               key={task.id}
               ref={(el) => setRowRef(task.id, el)}
               draggable
-              onDragStart={(e) => {
-                dragRotIdRef.current = task.id;
-                dragRotInitialOrderRef.current = rotationTasks.map((t) => t.id);
-                dragRotDidDropRef.current = false;
-                setDraggingRotId(task.id);
-                e.dataTransfer.effectAllowed = 'move';
-                const el = e.currentTarget;
-                e.dataTransfer.setDragImage(el, el.offsetWidth / 2, el.offsetHeight / 2);
-              }}
-              onDragOver={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                e.dataTransfer.dropEffect = 'move';
-                const fromId = dragRotIdRef.current;
-                if (!fromId || fromId === task.id) return;
-                const fromIdx = rotationTasks.findIndex((t) => t.id === fromId);
-                const toIdx = rotationTasks.findIndex((t) => t.id === task.id);
-                if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
-                const reordered = [...rotationTasks];
-                const [moved] = reordered.splice(fromIdx, 1);
-                reordered.splice(toIdx, 0, moved);
-                onReorderRotation?.(reordered);
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                dragRotDidDropRef.current = true;
-              }}
-              onDragEnd={() => {
-                const initialOrder = dragRotInitialOrderRef.current;
-                const didDrop = dragRotDidDropRef.current;
-                dragRotIdRef.current = null;
-                dragRotInitialOrderRef.current = null;
-                dragRotDidDropRef.current = false;
-                setDraggingRotId(null);
-                if (!initialOrder) return;
-                const finalIds = rotationTasks.map((t) => t.id);
-                const unchanged =
-                  finalIds.length === initialOrder.length &&
-                  finalIds.every((id, i) => id === initialOrder[i]);
-                // Cancelled drag: revert
-                if (!didDrop && !unchanged) {
-                  const byId = new Map(rotationTasks.map((t) => [t.id, t]));
-                  const reverted = initialOrder
-                    .map((id) => byId.get(id))
-                    .filter((t): t is Task => !!t);
-                  onReorderRotation?.(reverted);
-                  return;
-                }
-                // No-op: skip
-                if (unchanged) return;
-                onReorderRotation?.(rotationTasks);
-              }}
+              {...getRotDragHandlers(task.id, rotationTasks)}
               className={`group/rot relative flex items-center gap-2 pl-3.5 pr-2 py-[5px] rounded-md text-[13px] cursor-pointer transition-colors duration-150 ${
                 isActiveTask
                   ? 'text-foreground font-medium'
@@ -284,11 +238,30 @@ export function LeftSidebar({
   const [collapsedArchived, setCollapsedArchived] = useState<Set<string>>(new Set());
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const dragIdRef = useRef<string | null>(null);
-  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
-  const dragTaskIdRef = useRef<string | null>(null);
-  const dragTaskProjectIdRef = useRef<string | null>(null);
-  const dragTaskInitialOrderRef = useRef<string[] | null>(null);
-  const dragTaskDidDropRef = useRef<boolean>(false);
+  const taskOnReorder = useCallback(
+    (groupId: string | undefined, reordered: Task[]) => {
+      if (groupId) onReorderTasks?.(groupId, reordered);
+    },
+    [onReorderTasks],
+  );
+  const taskOnCommit = useCallback(
+    (groupId: string | undefined, reordered: Task[]) => {
+      if (groupId) onReorderTasksCommit?.(groupId, reordered);
+    },
+    [onReorderTasksCommit],
+  );
+  const taskGetItems = useCallback(
+    (groupId: string | undefined) =>
+      (tasksByProject[groupId ?? ''] || []).filter((t) => !t.archivedAt),
+    [tasksByProject],
+  );
+  const { draggingId: draggingTaskId, getDragHandlers: getTaskDragHandlers } = useDragReorder<Task>(
+    {
+      onReorder: taskOnReorder,
+      onCommit: taskOnCommit,
+      getItems: taskGetItems,
+    },
+  );
 
   function toggleCollapse(projectId: string) {
     setCollapsedProjects((prev) => {
@@ -644,70 +617,7 @@ export function LeftSidebar({
                           <div
                             key={task.id}
                             draggable
-                            onDragStart={(e) => {
-                              dragTaskIdRef.current = task.id;
-                              dragTaskProjectIdRef.current = project.id;
-                              dragTaskInitialOrderRef.current = projectTasks.map((t) => t.id);
-                              dragTaskDidDropRef.current = false;
-                              setDraggingTaskId(task.id);
-                              e.dataTransfer.effectAllowed = 'move';
-                              const el = e.currentTarget;
-                              e.dataTransfer.setDragImage(
-                                el,
-                                el.offsetWidth / 2,
-                                el.offsetHeight / 2,
-                              );
-                            }}
-                            onDragOver={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              e.dataTransfer.dropEffect = 'move';
-                              const fromId = dragTaskIdRef.current;
-                              if (!fromId || fromId === task.id) return;
-                              if (dragTaskProjectIdRef.current !== project.id) return;
-                              const fromIdx = projectTasks.findIndex((t) => t.id === fromId);
-                              const toIdx = projectTasks.findIndex((t) => t.id === task.id);
-                              if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
-                              const reordered = [...projectTasks];
-                              const [moved] = reordered.splice(fromIdx, 1);
-                              reordered.splice(toIdx, 0, moved);
-                              onReorderTasks?.(project.id, reordered);
-                            }}
-                            onDrop={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              dragTaskDidDropRef.current = true;
-                            }}
-                            onDragEnd={() => {
-                              const projectId = dragTaskProjectIdRef.current;
-                              const initialOrder = dragTaskInitialOrderRef.current;
-                              const didDrop = dragTaskDidDropRef.current;
-                              dragTaskIdRef.current = null;
-                              dragTaskProjectIdRef.current = null;
-                              dragTaskInitialOrderRef.current = null;
-                              dragTaskDidDropRef.current = false;
-                              setDraggingTaskId(null);
-                              if (!projectId || !initialOrder) return;
-                              const finalTasks = (tasksByProject[projectId] || []).filter(
-                                (t) => !t.archivedAt,
-                              );
-                              const finalIds = finalTasks.map((t) => t.id);
-                              const unchanged =
-                                finalIds.length === initialOrder.length &&
-                                finalIds.every((id, i) => id === initialOrder[i]);
-                              // Cancelled drag (Esc / dropped outside): revert to initial order
-                              if (!didDrop && !unchanged) {
-                                const byId = new Map(finalTasks.map((t) => [t.id, t]));
-                                const reverted = initialOrder
-                                  .map((id) => byId.get(id))
-                                  .filter((t): t is Task => !!t);
-                                onReorderTasks?.(projectId, reverted);
-                                return;
-                              }
-                              // No-op drop: skip the round-trip
-                              if (unchanged) return;
-                              onReorderTasksCommit?.(projectId, finalTasks);
-                            }}
+                            {...getTaskDragHandlers(task.id, projectTasks, project.id)}
                             className={`group/task relative flex flex-col pl-3.5 pr-2 py-[6px] rounded-md text-[13px] cursor-pointer transition-all duration-150 ${
                               isActiveTask
                                 ? 'bg-primary/10 text-foreground font-medium'

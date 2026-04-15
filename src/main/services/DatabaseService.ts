@@ -1,4 +1,4 @@
-import { eq, desc, asc, sql } from 'drizzle-orm';
+import { eq, and, desc, asc, sql } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { initDb, getDb } from '../db/client';
 import { runMigrations } from '../db/migrate';
@@ -88,46 +88,48 @@ export class DatabaseService {
 
     const linkedItemsJson = data.linkedItems ? JSON.stringify(data.linkedItems) : null;
 
-    // New tasks prepend to the top of the project list (matches legacy createdAt DESC UX)
-    let sortOrder = data.sortOrder;
-    if (sortOrder === undefined && !data.id) {
-      const minRow = db
-        .select({ min: sql<number | null>`MIN(${tasks.sortOrder})` })
-        .from(tasks)
-        .where(eq(tasks.projectId, data.projectId))
-        .all();
-      const currentMin = minRow[0]?.min ?? 0;
-      sortOrder = (currentMin ?? 0) - 1;
-    }
+    // Wrap read-min + insert in a transaction so concurrent creates don't race on sortOrder
+    db.transaction((tx) => {
+      let sortOrder = data.sortOrder;
+      if (sortOrder === undefined && !data.id) {
+        const minRow = tx
+          .select({ min: sql<number | null>`MIN(${tasks.sortOrder})` })
+          .from(tasks)
+          .where(eq(tasks.projectId, data.projectId))
+          .all();
+        const currentMin = minRow[0]?.min ?? 0;
+        sortOrder = (currentMin ?? 0) - 1;
+      }
 
-    db.insert(tasks)
-      .values({
-        id,
-        projectId: data.projectId,
-        name: data.name,
-        branch: data.branch,
-        path: data.path,
-        status: data.status ?? 'idle',
-        useWorktree: data.useWorktree ?? true,
-        autoApprove: data.autoApprove ?? false,
-        branchCreatedByDash: data.branchCreatedByDash ?? false,
-        linkedItems: linkedItemsJson,
-        sortOrder: sortOrder ?? 0,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .onConflictDoUpdate({
-        target: tasks.id,
-        set: {
+      tx.insert(tasks)
+        .values({
+          id,
+          projectId: data.projectId,
           name: data.name,
           branch: data.branch,
           path: data.path,
           status: data.status ?? 'idle',
+          useWorktree: data.useWorktree ?? true,
+          autoApprove: data.autoApprove ?? false,
+          branchCreatedByDash: data.branchCreatedByDash ?? false,
           linkedItems: linkedItemsJson,
+          sortOrder: sortOrder ?? 0,
+          createdAt: now,
           updatedAt: now,
-        },
-      })
-      .run();
+        })
+        .onConflictDoUpdate({
+          target: tasks.id,
+          set: {
+            name: data.name,
+            branch: data.branch,
+            path: data.path,
+            status: data.status ?? 'idle',
+            linkedItems: linkedItemsJson,
+            updatedAt: now,
+          },
+        })
+        .run();
+    });
 
     const rows = db.select().from(tasks).where(eq(tasks.id, id)).all();
     return this.mapTask(rows[0]);
@@ -167,7 +169,7 @@ export class DatabaseService {
       orderedTaskIds.forEach((taskId, index) => {
         tx.update(tasks)
           .set({ sortOrder: index, updatedAt: now })
-          .where(eq(tasks.id, taskId))
+          .where(and(eq(tasks.id, taskId), eq(tasks.projectId, projectId)))
           .run();
       });
     });

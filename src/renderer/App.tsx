@@ -278,6 +278,21 @@ export function App() {
     localStorage.setItem('rotationOrder', JSON.stringify(rotationOrder));
   }, [rotationOrder]);
 
+  // Clean up rotationOrder: prune IDs for tasks that no longer exist
+  useEffect(() => {
+    const allTaskIds = new Set(
+      Object.values(tasksByProject)
+        .flat()
+        .map((t) => t.id),
+    );
+    if (allTaskIds.size > 0 && rotationOrder.length > 0) {
+      const pruned = rotationOrder.filter((id) => allTaskIds.has(id));
+      if (pruned.length !== rotationOrder.length) {
+        setRotationOrder(pruned);
+      }
+    }
+  }, [tasksByProject]);
+
   // Git state
   const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
   const [gitLoading, setGitLoading] = useState(false);
@@ -816,9 +831,23 @@ export function App() {
     const resp = await window.electronAPI.reorderTasks(projectId, ids);
     if (!resp.success) {
       console.error('Failed to persist task reorder:', resp.error);
+      toast.error('Failed to save task order');
       const refetch = await window.electronAPI.getTasks(projectId);
       if (refetch.success && refetch.data) {
         setTasksByProject((prev) => ({ ...prev, [projectId]: refetch.data! }));
+      } else {
+        // Refetch also failed — force reload to avoid stale optimistic state
+        toast.error('Could not recover task list — reloading');
+        const allProjects = await window.electronAPI.getProjects();
+        if (allProjects.success && allProjects.data) {
+          const project = allProjects.data.find((p) => p.id === projectId);
+          if (project) {
+            const retry = await window.electronAPI.getTasks(projectId);
+            if (retry.success && retry.data) {
+              setTasksByProject((prev) => ({ ...prev, [projectId]: retry.data! }));
+            }
+          }
+        }
       }
     }
   }
