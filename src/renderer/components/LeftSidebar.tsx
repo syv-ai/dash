@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useDragReorder } from '../hooks/useDragReorder';
 import { UsageBarInline, usageTextColor } from './ui/UsageBar';
 import {
   FolderOpen,
@@ -35,6 +36,7 @@ function RotationSection({
   unseenTaskIds,
   projects,
   onSelectTask,
+  onReorderRotation,
   onRemoveFromRotation,
   contextUsage = {},
 }: {
@@ -44,6 +46,7 @@ function RotationSection({
   unseenTaskIds?: Set<string>;
   projects: Project[];
   onSelectTask: (projectId: string, taskId: string) => void;
+  onReorderRotation?: (reordered: Task[]) => void;
   onRemoveFromRotation?: (taskId: string) => void;
   contextUsage?: Record<string, ContextUsage>;
 }) {
@@ -51,6 +54,15 @@ function RotationSection({
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [highlight, setHighlight] = useState<{ top: number; height: number } | null>(null);
   const hasAnimated = useRef(false);
+  const rotationOnReorder = useCallback(
+    (_gId: string | undefined, reordered: Task[]) => onReorderRotation?.(reordered),
+    [onReorderRotation],
+  );
+  const rotationGetItems = useCallback(() => rotationTasks, [rotationTasks]);
+  const { draggingId: draggingRotId, getDragHandlers: getRotDragHandlers } = useDragReorder<Task>({
+    onReorder: rotationOnReorder,
+    getItems: rotationGetItems,
+  });
 
   const setRowRef = useCallback((taskId: string, el: HTMLDivElement | null) => {
     if (el) rowRefs.current.set(taskId, el);
@@ -110,11 +122,13 @@ function RotationSection({
             <div
               key={task.id}
               ref={(el) => setRowRef(task.id, el)}
+              draggable
+              {...getRotDragHandlers(task.id, rotationTasks)}
               className={`group/rot relative flex items-center gap-2 pl-3.5 pr-2 py-[5px] rounded-md text-[13px] cursor-pointer transition-colors duration-150 ${
                 isActiveTask
                   ? 'text-foreground font-medium'
                   : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-              }`}
+              } ${draggingRotId === task.id ? 'opacity-40' : ''}`}
               onClick={() => onSelectTask(task.projectId, task.id)}
             >
               {/* Status indicator */}
@@ -192,8 +206,11 @@ interface LeftSidebarProps {
   remoteControlStates?: Record<string, RemoteControlState>;
   contextUsage?: Record<string, ContextUsage>;
   onReorderProjects?: (reordered: Project[]) => void;
+  onReorderTasks?: (projectId: string, reordered: Task[]) => void;
+  onReorderTasksCommit?: (projectId: string, reordered: Task[]) => void;
   pixelAgentsConnectedCount?: number;
   rotationTasks?: Task[];
+  onReorderRotation?: (reordered: Task[]) => void;
   onRemoveFromRotation?: (taskId: string) => void;
   showActiveTasksSection?: boolean;
   onToggleActiveTasksSection?: () => void;
@@ -223,8 +240,11 @@ export function LeftSidebar({
   remoteControlStates = {},
   contextUsage = {},
   onReorderProjects,
+  onReorderTasks,
+  onReorderTasksCommit,
   pixelAgentsConnectedCount = 0,
   rotationTasks = [],
+  onReorderRotation,
   onRemoveFromRotation,
   showActiveTasksSection = true,
   onToggleActiveTasksSection,
@@ -233,6 +253,30 @@ export function LeftSidebar({
   const [collapsedArchived, setCollapsedArchived] = useState<Set<string>>(new Set());
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const dragIdRef = useRef<string | null>(null);
+  const taskOnReorder = useCallback(
+    (groupId: string | undefined, reordered: Task[]) => {
+      if (groupId) onReorderTasks?.(groupId, reordered);
+    },
+    [onReorderTasks],
+  );
+  const taskOnCommit = useCallback(
+    (groupId: string | undefined, reordered: Task[]) => {
+      if (groupId) onReorderTasksCommit?.(groupId, reordered);
+    },
+    [onReorderTasksCommit],
+  );
+  const taskGetItems = useCallback(
+    (groupId: string | undefined) =>
+      (tasksByProject[groupId ?? ''] || []).filter((t) => !t.archivedAt),
+    [tasksByProject],
+  );
+  const { draggingId: draggingTaskId, getDragHandlers: getTaskDragHandlers } = useDragReorder<Task>(
+    {
+      onReorder: taskOnReorder,
+      onCommit: taskOnCommit,
+      getItems: taskGetItems,
+    },
+  );
 
   function toggleCollapse(projectId: string) {
     setCollapsedProjects((prev) => {
@@ -416,6 +460,7 @@ export function LeftSidebar({
           unseenTaskIds={unseenTaskIds}
           projects={projects}
           onSelectTask={onSelectTask}
+          onReorderRotation={onReorderRotation}
           onRemoveFromRotation={onRemoveFromRotation}
           contextUsage={contextUsage}
         />
@@ -587,11 +632,13 @@ export function LeftSidebar({
                         return (
                           <div
                             key={task.id}
+                            draggable
+                            {...getTaskDragHandlers(task.id, projectTasks, project.id)}
                             className={`group/task relative flex flex-col pl-3.5 pr-2 py-[6px] rounded-md text-[13px] cursor-pointer transition-all duration-150 ${
                               isActiveTask
                                 ? 'bg-primary/10 text-foreground font-medium'
                                 : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-                            }`}
+                            } ${draggingTaskId === task.id ? 'opacity-40' : ''}`}
                             onClick={() => onSelectTask(project.id, task.id)}
                           >
                             <div className="flex items-center gap-2">

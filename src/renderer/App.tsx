@@ -265,6 +265,34 @@ export function App() {
     localStorage.setItem('rotationExclusions', JSON.stringify([...rotationExclusions]));
   }, [rotationExclusions]);
 
+  const [rotationOrder, setRotationOrder] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('rotationOrder');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('rotationOrder', JSON.stringify(rotationOrder));
+  }, [rotationOrder]);
+
+  // Clean up rotationOrder: prune IDs for tasks that no longer exist
+  useEffect(() => {
+    const allTaskIds = new Set(
+      Object.values(tasksByProject)
+        .flat()
+        .map((t) => t.id),
+    );
+    if (allTaskIds.size > 0 && rotationOrder.length > 0) {
+      const pruned = rotationOrder.filter((id) => allTaskIds.has(id));
+      if (pruned.length !== rotationOrder.length) {
+        setRotationOrder(pruned);
+      }
+    }
+  }, [tasksByProject]);
+
   // Git state
   const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
   const [gitLoading, setGitLoading] = useState(false);
@@ -318,8 +346,13 @@ export function App() {
         }
       }
     }
+    // Sort by persisted rotation order; unknown tasks go to the end
+    if (rotationOrder.length > 0) {
+      const orderMap = new Map(rotationOrder.map((id, i) => [id, i]));
+      tasks.sort((a, b) => (orderMap.get(a.id) ?? Infinity) - (orderMap.get(b.id) ?? Infinity));
+    }
     return tasks;
-  }, [tasksByProject, taskActivity, rotationExclusions]);
+  }, [tasksByProject, taskActivity, rotationExclusions, rotationOrder]);
 
   // Load projects on mount
   useEffect(() => {
@@ -584,6 +617,10 @@ export function App() {
     });
   }, []);
 
+  const handleReorderRotation = useCallback((reordered: Task[]) => {
+    setRotationOrder(reordered.map((t) => t.id));
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -779,6 +816,40 @@ export function App() {
     setProjects(reordered);
     // Only persist IDs that still exist, pruning stale entries
     localStorage.setItem('projectOrder', JSON.stringify(reordered.map((p) => p.id)));
+  }
+
+  function handleReorderTasks(projectId: string, reordered: Task[]) {
+    setTasksByProject((prev) => {
+      const current = prev[projectId] || [];
+      const archived = current.filter((t) => t.archivedAt);
+      return { ...prev, [projectId]: [...reordered, ...archived] };
+    });
+  }
+
+  async function handleReorderTasksCommit(projectId: string, reordered: Task[]) {
+    const ids = reordered.map((t) => t.id);
+    const resp = await window.electronAPI.reorderTasks(projectId, ids);
+    if (!resp.success) {
+      console.error('Failed to persist task reorder:', resp.error);
+      toast.error('Failed to save task order');
+      const refetch = await window.electronAPI.getTasks(projectId);
+      if (refetch.success && refetch.data) {
+        setTasksByProject((prev) => ({ ...prev, [projectId]: refetch.data! }));
+      } else {
+        // Refetch also failed — force reload to avoid stale optimistic state
+        toast.error('Could not recover task list — reloading');
+        const allProjects = await window.electronAPI.getProjects();
+        if (allProjects.success && allProjects.data) {
+          const project = allProjects.data.find((p) => p.id === projectId);
+          if (project) {
+            const retry = await window.electronAPI.getTasks(projectId);
+            if (retry.success && retry.data) {
+              setTasksByProject((prev) => ({ ...prev, [projectId]: retry.data! }));
+            }
+          }
+        }
+      }
+    }
   }
 
   async function loadProjects() {
@@ -1325,12 +1396,15 @@ export function App() {
               remoteControlStates={remoteControlStates}
               contextUsage={showUsageInline ? contextUsage : {}}
               onReorderProjects={handleReorderProjects}
+              onReorderTasks={handleReorderTasks}
+              onReorderTasksCommit={handleReorderTasksCommit}
               pixelAgentsConnectedCount={
                 Object.values(pixelAgentsStatus.offices).filter(
                   (s) => s === 'connected' || s === 'registered',
                 ).length
               }
               rotationTasks={rotationTasks}
+              onReorderRotation={handleReorderRotation}
               onRemoveFromRotation={removeFromRotation}
               showActiveTasksSection={showActiveTasksSection}
               onToggleActiveTasksSection={() => setShowActiveTasksSection((v) => !v)}

@@ -53,6 +53,7 @@ export interface ElectronAPI {
   deleteTask: (id: string) => Promise<IpcResponse<void>>;
   archiveTask: (id: string) => Promise<IpcResponse<void>>;
   restoreTask: (id: string) => Promise<IpcResponse<void>>;
+  reorderTasks: (projectId: string, orderedTaskIds: string[]) => Promise<IpcResponse<void>>;
 
   // Database - Conversations
   getConversations: (taskId: string) => Promise<IpcResponse<Conversation[]>>;
