@@ -263,6 +263,28 @@ export class WorktreeService {
     }
   }
 
+  private async linkIssuesAsync(
+    cwd: string,
+    branch: string,
+    issueNumbers: number[],
+  ): Promise<void> {
+    for (const num of issueNumbers) {
+      try {
+        const issueUrl = await GithubService.linkBranch(cwd, num, branch);
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send('app:toast', {
+              message: `Issue #${num} linked to branch '${branch}'`,
+              url: issueUrl,
+            });
+          }
+        }
+      } catch {
+        // Best effort — gh may not be available
+      }
+    }
+  }
+
   private pushBranchAsync(cwd: string, branch: string): void {
     execFileAsync('git', ['push', '-u', 'origin', branch], { cwd }).catch(() => {
       // Best effort — no remote is fine
@@ -322,7 +344,17 @@ export class WorktreeService {
     branch: string,
     options: { projectId: string; linkedIssueNumbers?: number[] },
   ): Promise<WorktreeInfo> {
-    if (!branch || branch.startsWith('-')) {
+    // eslint-disable-next-line no-control-regex
+    const hasControlChars = /[\x00-\x1f\x7f]/.test(branch);
+    if (
+      !branch ||
+      branch.startsWith('-') ||
+      hasControlChars ||
+      /[ ~^:?*\\[\]@{]/.test(branch) ||
+      branch.includes('..') ||
+      branch.endsWith('.lock') ||
+      branch.endsWith('/')
+    ) {
       throw new Error(`Invalid branch name: '${branch}'`);
     }
 
@@ -342,7 +374,10 @@ export class WorktreeService {
       });
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
-      const stderr = (error as { stderr?: string })?.stderr ?? '';
+      const stderr =
+        error && typeof error === 'object' && 'stderr' in error
+          ? String((error as Record<string, unknown>).stderr)
+          : '';
       const fullMsg = `${msg} ${stderr}`;
       if (fullMsg.includes('already checked out')) {
         throw new Error(`Branch '${branch}' is already checked out in another worktree`);
@@ -356,9 +391,11 @@ export class WorktreeService {
     // Copy preserved files
     await this.preserveFiles(projectPath, worktreePath);
 
-    // Link branch to issues if requested (async, non-blocking)
+    // Link branch to issues if requested (async, non-blocking).
+    // For existing branches, only link issues — do not push, since the branch
+    // already exists and the user manages its remote state.
     if (options.linkedIssueNumbers && options.linkedIssueNumbers.length > 0) {
-      this.linkAndPushAsync(worktreePath, branch, options.linkedIssueNumbers);
+      this.linkIssuesAsync(worktreePath, branch, options.linkedIssueNumbers);
     }
 
     // Run worktree setup script (async, non-blocking)

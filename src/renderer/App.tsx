@@ -952,7 +952,8 @@ export function App() {
   }
 
   async function handleCreateTask(options: CreateTaskOptions) {
-    const { name, useWorktree, autoApprove, baseRef, pushRemote, linkedItems } = options;
+    const { name, useWorktree, autoApprove, baseRef, pushRemote, linkedItems, useExistingBranch } =
+      options;
 
     const targetProjectId = taskModalProjectId || activeProjectId;
     const targetProject = projects.find((p) => p.id === targetProjectId);
@@ -970,12 +971,12 @@ export function App() {
       const ghIssueNumbers = ghItems.map((i) => i.id);
 
       if (useWorktree) {
-        if (options.useExistingBranch && !baseRef) {
+        if (useExistingBranch && !baseRef) {
           toast.error('Please select a branch');
           return;
         }
 
-        if (options.useExistingBranch && baseRef) {
+        if (useExistingBranch && baseRef) {
           // Existing branch: skip reserve pool, create worktree directly
           const createResp = await window.electronAPI.worktreeCreateFromExisting({
             projectPath: targetProject.path,
@@ -1012,6 +1013,9 @@ export function App() {
             });
             if (createResp.success && createResp.data) {
               worktreeInfo = { branch: createResp.data.branch, path: createResp.data.path };
+            } else {
+              toast.error(createResp.error || 'Failed to create worktree');
+              return;
             }
           }
         }
@@ -1027,7 +1031,9 @@ export function App() {
         path: taskPath,
         useWorktree,
         autoApprove,
-        branchCreatedByDash: useWorktree && !!worktreeInfo && !options.useExistingBranch,
+        // Existing branches weren't created by Dash — mark false to prevent
+        // automatic deletion of the local/remote branch on task removal.
+        branchCreatedByDash: useWorktree && !!worktreeInfo && !useExistingBranch,
         linkedItems: linkedItems ?? null,
       });
 

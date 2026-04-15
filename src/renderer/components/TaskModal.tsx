@@ -353,7 +353,10 @@ export function TaskModal({
                   <input
                     type="checkbox"
                     checked={useExistingBranch}
-                    onChange={(e) => setUseExistingBranch(e.target.checked)}
+                    onChange={(e) => {
+                      setUseExistingBranch(e.target.checked);
+                      setSelectedBranch(null);
+                    }}
                     className="sr-only peer"
                   />
                   <div className="w-8 h-[18px] rounded-full bg-accent peer-checked:bg-primary/80 transition-colors duration-200" />
