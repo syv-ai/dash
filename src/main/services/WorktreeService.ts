@@ -313,6 +313,69 @@ export class WorktreeService {
     })();
   }
 
+  /**
+   * Create a git worktree for an existing branch (no new branch created).
+   */
+  async createWorktreeFromExistingBranch(
+    projectPath: string,
+    taskName: string,
+    branch: string,
+    options: { projectId: string; linkedIssueNumbers?: number[] },
+  ): Promise<WorktreeInfo> {
+    if (!branch || branch.startsWith('-')) {
+      throw new Error(`Invalid branch name: '${branch}'`);
+    }
+
+    const dirSlug = this.slugify(branch);
+    const hash = this.generateShortHash();
+    const worktreesDir = this.getWorktreesDir(projectPath);
+
+    if (!fs.existsSync(worktreesDir)) {
+      fs.mkdirSync(worktreesDir, { recursive: true });
+    }
+
+    const worktreePath = path.join(worktreesDir, `${dirSlug}-${hash}`);
+
+    try {
+      await execFileAsync('git', ['worktree', 'add', worktreePath, branch], {
+        cwd: projectPath,
+      });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      const stderr = (error as { stderr?: string })?.stderr ?? '';
+      const fullMsg = `${msg} ${stderr}`;
+      if (fullMsg.includes('already checked out')) {
+        throw new Error(`Branch '${branch}' is already checked out in another worktree`);
+      }
+      if (fullMsg.includes('pathspec') && fullMsg.includes('did not match')) {
+        throw new Error(`Branch '${branch}' not found`);
+      }
+      throw error;
+    }
+
+    // Copy preserved files
+    await this.preserveFiles(projectPath, worktreePath);
+
+    // Link branch to issues if requested (async, non-blocking)
+    if (options.linkedIssueNumbers && options.linkedIssueNumbers.length > 0) {
+      this.linkAndPushAsync(worktreePath, branch, options.linkedIssueNumbers);
+    }
+
+    // Run worktree setup script (async, non-blocking)
+    this.runSetupScriptAsync(options.projectId, worktreePath, branch, projectPath);
+
+    const id = this.stableIdFromPath(worktreePath);
+    return {
+      id,
+      name: taskName,
+      branch,
+      path: worktreePath,
+      projectId: options.projectId,
+      status: 'active',
+      createdAt: new Date().toISOString(),
+    };
+  }
+
   getWorktreesDir(projectPath: string): string {
     return path.join(path.dirname(projectPath), 'worktrees');
   }

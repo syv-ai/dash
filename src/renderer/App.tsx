@@ -911,7 +911,7 @@ export function App() {
           branch: task.branch,
           options: {
             deleteWorktreeDir: options.deleteWorktreeDirs,
-            deleteLocalBranch: options.deleteLocalBranches,
+            deleteLocalBranch: options.deleteLocalBranches && task.branchCreatedByDash,
             deleteRemoteBranch: options.deleteRemoteBranches && task.branchCreatedByDash,
           },
         });
@@ -970,27 +970,49 @@ export function App() {
       const ghIssueNumbers = ghItems.map((i) => i.id);
 
       if (useWorktree) {
-        const claimResp = await window.electronAPI.worktreeClaimReserve({
-          projectId: targetProject.id,
-          taskName: name,
-          baseRef,
-          linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
-          pushRemote,
-        });
+        if (options.useExistingBranch && !baseRef) {
+          toast.error('Please select a branch');
+          return;
+        }
 
-        if (claimResp.success && claimResp.data) {
-          worktreeInfo = { branch: claimResp.data.branch, path: claimResp.data.path };
-        } else {
-          const createResp = await window.electronAPI.worktreeCreate({
+        if (options.useExistingBranch && baseRef) {
+          // Existing branch: skip reserve pool, create worktree directly
+          const createResp = await window.electronAPI.worktreeCreateFromExisting({
             projectPath: targetProject.path,
             taskName: name,
-            baseRef,
+            branch: baseRef,
             projectId: targetProject.id,
             linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
-            pushRemote,
           });
           if (createResp.success && createResp.data) {
             worktreeInfo = { branch: createResp.data.branch, path: createResp.data.path };
+          } else {
+            toast.error(createResp.error || 'Failed to create worktree from existing branch');
+            return;
+          }
+        } else {
+          const claimResp = await window.electronAPI.worktreeClaimReserve({
+            projectId: targetProject.id,
+            taskName: name,
+            baseRef,
+            linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
+            pushRemote,
+          });
+
+          if (claimResp.success && claimResp.data) {
+            worktreeInfo = { branch: claimResp.data.branch, path: claimResp.data.path };
+          } else {
+            const createResp = await window.electronAPI.worktreeCreate({
+              projectPath: targetProject.path,
+              taskName: name,
+              baseRef,
+              projectId: targetProject.id,
+              linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
+              pushRemote,
+            });
+            if (createResp.success && createResp.data) {
+              worktreeInfo = { branch: createResp.data.branch, path: createResp.data.path };
+            }
           }
         }
       }
@@ -1005,7 +1027,7 @@ export function App() {
         path: taskPath,
         useWorktree,
         autoApprove,
-        branchCreatedByDash: useWorktree && !!worktreeInfo,
+        branchCreatedByDash: useWorktree && !!worktreeInfo && !options.useExistingBranch,
         linkedItems: linkedItems ?? null,
       });
 
@@ -1109,7 +1131,13 @@ export function App() {
             projectPath: project.path,
             worktreePath: task.path,
             branch: task.branch,
-            options,
+            options: options
+              ? {
+                  deleteWorktreeDir: options.deleteWorktreeDir,
+                  deleteLocalBranch: options.deleteLocalBranch && task.branchCreatedByDash,
+                  deleteRemoteBranch: options.deleteRemoteBranch && task.branchCreatedByDash,
+                }
+              : undefined,
           });
         }
       }

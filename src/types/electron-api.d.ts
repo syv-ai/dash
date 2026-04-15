@@ -84,6 +84,13 @@ export interface ElectronAPI {
     linkedIssueNumbers?: number[];
     pushRemote?: boolean;
   }) => Promise<IpcResponse<WorktreeInfo>>;
+  worktreeCreateFromExisting: (args: {
+    projectPath: string;
+    taskName: string;
+    branch: string;
+    projectId: string;
+    linkedIssueNumbers?: number[];
+  }) => Promise<IpcResponse<WorktreeInfo>>;
   worktreeEnsureReserve: (args: {
     projectId: string;
     projectPath: string;

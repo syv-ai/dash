@@ -21,6 +21,7 @@ export interface CreateTaskOptions {
   baseRef?: string;
   pushRemote?: boolean;
   linkedItems?: LinkedItem[];
+  useExistingBranch?: boolean;
 }
 
 interface TaskModalProps {
@@ -100,6 +101,7 @@ export function TaskModal({
   const [autoApprove, setAutoApprove] = useState(() => localStorage.getItem('yoloMode') === 'true');
   const [pushRemote, setPushRemote] = useState(true);
   const [gitInitLoading, setGitInitLoading] = useState(false);
+  const [useExistingBranch, setUseExistingBranch] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
 
   // Branch selector state
@@ -209,7 +211,11 @@ export function TaskModal({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (name.trim() && !isCreating) {
-      const baseRef = useWorktree ? selectedBranch?.ref : undefined;
+      // For existing branch mode, pass branch name (not full ref) for git worktree add
+      let baseRef: string | undefined;
+      if (useWorktree) {
+        baseRef = useExistingBranch ? selectedBranch?.name : selectedBranch?.ref;
+      }
 
       // Build unified linkedItems from both providers
       const ghItems: LinkedItem[] = selectedIssues.map((issue) => ({
@@ -241,8 +247,9 @@ export function TaskModal({
           useWorktree,
           autoApprove,
           baseRef,
-          pushRemote: useWorktree ? pushRemote : undefined,
+          pushRemote: useWorktree && !useExistingBranch ? pushRemote : undefined,
           linkedItems: allLinkedItems.length > 0 ? allLinkedItems : undefined,
+          useExistingBranch: useWorktree ? useExistingBranch : undefined,
         });
         onClose();
       } finally {
@@ -338,11 +345,33 @@ export function TaskModal({
             </div>
           )}
 
+          {/* Use existing branch toggle */}
+          {useWorktree && (
+            <div className="mb-4">
+              <label className="flex items-center gap-3 cursor-pointer group">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    checked={useExistingBranch}
+                    onChange={(e) => setUseExistingBranch(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-8 h-[18px] rounded-full bg-accent peer-checked:bg-primary/80 transition-colors duration-200" />
+                  <div className="absolute top-[3px] left-[3px] w-3 h-3 rounded-full bg-muted-foreground/40 peer-checked:bg-primary-foreground peer-checked:translate-x-[14px] transition-all duration-200" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <GitBranch size={13} className="text-muted-foreground/40" strokeWidth={1.8} />
+                  <span className="text-[13px] text-foreground/80">Use existing branch</span>
+                </div>
+              </label>
+            </div>
+          )}
+
           {/* Branch selector */}
           {useWorktree && (
             <div className="mb-4" ref={dropdownRef}>
               <label className="block text-[12px] font-medium text-muted-foreground/70 mb-2">
-                Base branch
+                {useExistingBranch ? 'Branch' : 'Base branch'}
               </label>
 
               {branchError ? (
@@ -487,7 +516,7 @@ export function TaskModal({
           )}
 
           {/* Push remote branch toggle */}
-          {useWorktree && (
+          {useWorktree && !useExistingBranch && (
             <div className="mb-4">
               <label className="flex items-center gap-3 cursor-pointer group">
                 <div className="relative">
