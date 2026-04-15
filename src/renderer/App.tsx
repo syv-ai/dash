@@ -103,9 +103,53 @@ export function App() {
   const [terminalTheme, setTerminalTheme] = useState(() => {
     return localStorage.getItem('terminalTheme') || 'default';
   });
-  const [preferredIDE, setPreferredIDE] = useState<'cursor' | 'code' | 'auto'>(() => {
-    return (localStorage.getItem('preferredIDE') as 'cursor' | 'code' | 'auto') || 'auto';
+  const [preferredIDE, setPreferredIDE] = useState<string>(() => {
+    const stored = localStorage.getItem('preferredIDE');
+    if (!stored) return 'auto';
+    // Migrate legacy 'code' → 'vscode'
+    if (stored === 'code') {
+      localStorage.setItem('preferredIDE', 'vscode');
+      return 'vscode';
+    }
+    return stored;
   });
+  const [customIDE, setCustomIDE] = useState<{ path: string; args: string[] }>(() => {
+    const raw = localStorage.getItem('customIDE');
+    if (!raw) return { path: '', args: [] };
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.path === 'string' && Array.isArray(parsed.args)) {
+        return parsed;
+      }
+      console.warn('[openInIDE] customIDE has unexpected shape, resetting');
+    } catch (err) {
+      console.warn('[openInIDE] Failed to parse customIDE from localStorage:', err);
+    }
+    return { path: '', args: [] };
+  });
+  const [availableIDEs, setAvailableIDEs] = useState<Array<{ id: string; label: string }>>([]);
+  useEffect(() => {
+    let cancelled = false;
+    window.electronAPI.detectAvailableIDEs().then((res) => {
+      if (cancelled) return;
+      if (!res.success || !res.data) {
+        console.warn('[openInIDE] Failed to detect available IDEs:', res.error);
+        return;
+      }
+      setAvailableIDEs(res.data);
+      // Self-heal: if the stored IDE was uninstalled, fall back to auto so
+      // Settings doesn't show a phantom selection and clicks don't 404.
+      setPreferredIDE((current) => {
+        if (current === 'auto' || current === 'custom') return current;
+        if (res.data!.some((d) => d.id === current)) return current;
+        localStorage.removeItem('preferredIDE');
+        return 'auto';
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [commitAttribution, setCommitAttribution] = useState<string | undefined>(() => {
     const stored = localStorage.getItem('commitAttribution');
     if (stored === null) return undefined; // "default" — key absent
@@ -1610,6 +1654,16 @@ export function App() {
               localStorage.removeItem('preferredIDE');
             } else {
               localStorage.setItem('preferredIDE', v);
+            }
+          }}
+          availableIDEs={availableIDEs}
+          customIDE={customIDE}
+          onCustomIDEChange={(v) => {
+            setCustomIDE(v);
+            if (!v.path && v.args.length === 0) {
+              localStorage.removeItem('customIDE');
+            } else {
+              localStorage.setItem('customIDE', JSON.stringify(v));
             }
           }}
           commitAttribution={commitAttribution}

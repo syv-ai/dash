@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { openInIde } from '../lib/openInIde';
 import {
   GitBranch,
   Plus,
@@ -255,12 +256,7 @@ export function ProjectOverview({
                         tabIndex={-1}
                         onClick={(e) => {
                           e.stopPropagation();
-                          const stored = localStorage.getItem('preferredIDE');
-                          const ide = stored === 'cursor' || stored === 'code' ? stored : undefined;
-                          window.electronAPI.openInIDE({
-                            folderPath: task.path || project.path,
-                            ide,
-                          });
+                          openInIde(task.path || project.path);
                         }}
                         className="absolute top-3 right-3 p-1 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-accent/60 opacity-0 group-hover:opacity-100"
                       >
