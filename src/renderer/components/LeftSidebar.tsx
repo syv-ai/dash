@@ -36,6 +36,7 @@ function RotationSection({
   projects,
   onSelectTask,
   onRemoveFromRotation,
+  contextUsage = {},
 }: {
   rotationTasks: Task[];
   activeTaskId: string | null;
@@ -44,6 +45,7 @@ function RotationSection({
   projects: Project[];
   onSelectTask: (projectId: string, taskId: string) => void;
   onRemoveFromRotation?: (taskId: string) => void;
+  contextUsage?: Record<string, ContextUsage>;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -102,6 +104,7 @@ function RotationSection({
           const activity = taskActivity[task.id]?.state;
           const isActiveTask = task.id === activeTaskId;
           const project = projects.find((p) => p.id === task.projectId);
+          const ctx = contextUsage[task.id];
 
           return (
             <div
@@ -128,6 +131,18 @@ function RotationSection({
               ) : null}
 
               <span className="truncate flex-1">{task.name}</span>
+              {ctx && ctx.percentage > 0 && (
+                <span
+                  className={`text-[9px] tabular-nums flex-shrink-0 ${
+                    ctx.percentage >= 80
+                      ? 'text-red-400 font-medium'
+                      : usageTextColor(ctx.percentage)
+                  }`}
+                  title={`Context: ${ctx.used.toLocaleString()} / ${ctx.total.toLocaleString()} tokens (${Math.round(ctx.percentage)}%)`}
+                >
+                  {Math.round(ctx.percentage)}%
+                </span>
+              )}
               {project && (
                 <span className="text-muted-foreground/40 text-[11px] whitespace-nowrap overflow-hidden flex-shrink min-w-0">
                   {project.name}
@@ -402,6 +417,7 @@ export function LeftSidebar({
           projects={projects}
           onSelectTask={onSelectTask}
           onRemoveFromRotation={onRemoveFromRotation}
+          contextUsage={contextUsage}
         />
       )}
 

@@ -581,12 +581,16 @@ function UsageSection({
   latestRateLimits,
   thresholds,
   onThresholdsChange,
+  showUsageInline,
+  onShowUsageInlineChange,
 }: {
   statusLineData: Record<string, StatusLineData>;
   taskNames: Record<string, string>;
   latestRateLimits?: RateLimits;
   thresholds: UsageThresholds;
   onThresholdsChange: (t: UsageThresholds) => void;
+  showUsageInline: boolean;
+  onShowUsageInlineChange: (value: boolean) => void;
 }) {
   const entries = Object.entries(statusLineData);
 
@@ -687,6 +691,24 @@ function UsageSection({
             ))}
           </div>
         )}
+      </div>
+
+      {/* Inline Usage Display */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground/60">
+            Display
+          </span>
+          <div className="flex-1 h-px bg-border/30" />
+        </div>
+        <ToggleSwitch
+          enabled={showUsageInline}
+          onToggle={onShowUsageInlineChange}
+          label="Show context usage in sidebar and header"
+        />
+        <p className="text-[10px] text-foreground/40 mt-2">
+          Display context window percentage and progress bars next to tasks.
+        </p>
       </div>
 
       {/* Threshold Alerts */}
@@ -1591,6 +1613,8 @@ export function SettingsModal({
               latestRateLimits={latestRateLimits}
               thresholds={usageThresholds}
               onThresholdsChange={onUsageThresholdsChange}
+              showUsageInline={showUsageInline}
+              onShowUsageInlineChange={onShowUsageInlineChange}
             />
           )}
 
