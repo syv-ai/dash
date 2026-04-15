@@ -16,13 +16,20 @@ export function Tooltip({ content, side = 'top', delay = 150, children }: Toolti
   const triggerRef = useRef<HTMLElement | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [effectiveSide, setEffectiveSide] = useState(side);
+
   const show = useCallback(() => {
     timeoutRef.current = setTimeout(() => {
       if (!triggerRef.current) return;
       const rect = triggerRef.current.getBoundingClientRect();
+      // On Windows there's no titlebar inset, so top-side tooltips near the
+      // top of the viewport render off-screen. Flip to bottom in that case.
+      const isWin = window.electronAPI?.getPlatform() === 'win32';
+      const resolved = side === 'top' && isWin && rect.top < 40 ? 'bottom' : side;
+      setEffectiveSide(resolved);
       setCoords({
         x: rect.left + rect.width / 2,
-        y: side === 'top' ? rect.top : rect.bottom,
+        y: resolved === 'top' ? rect.top : rect.bottom,
       });
       setVisible(true);
     }, delay);
@@ -45,10 +52,10 @@ export function Tooltip({ content, side = 'top', delay = 150, children }: Toolti
         Math.min(window.innerWidth - ttWidth - PADDING, idealLeft),
       );
       el.style.left = `${clampedLeft}px`;
-      el.style.transform = side === 'top' ? 'translateY(-100%)' : '';
+      el.style.transform = effectiveSide === 'top' ? 'translateY(-100%)' : '';
       el.style.visibility = 'visible';
     },
-    [coords, side],
+    [coords, effectiveSide],
   );
 
   useEffect(() => {
@@ -72,10 +79,10 @@ export function Tooltip({ content, side = 'top', delay = 150, children }: Toolti
             ref={tooltipRefCallback}
             className="tooltip-popup"
             style={{
-              top: side === 'top' ? coords.y - 6 : coords.y + 6,
+              top: effectiveSide === 'top' ? coords.y - 6 : coords.y + 6,
               visibility: 'hidden',
             }}
-            data-side={side}
+            data-side={effectiveSide}
           >
             {content}
           </div>,

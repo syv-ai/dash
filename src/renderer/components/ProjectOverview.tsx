@@ -246,7 +246,7 @@ export function ProjectOverview({
                   <button
                     key={task.id}
                     onClick={() => onSelectTask(task.id)}
-                    className="relative flex flex-col p-4 rounded-xl border border-border bg-[hsl(var(--surface-2))] hover:bg-[hsl(var(--surface-3))] hover:border-foreground/20 transition-all duration-150 text-left group"
+                    className="relative flex flex-col p-4 rounded-xl border border-border bg-[hsl(var(--surface-2))] hover:bg-[hsl(var(--surface-3))] hover:border-foreground/20 transition-all duration-150 text-left group overflow-hidden min-w-0"
                   >
                     {/* Open in IDE — top right */}
                     <Tooltip content="Open in IDE">
@@ -269,7 +269,7 @@ export function ProjectOverview({
                     </Tooltip>
 
                     {/* Task name + status */}
-                    <div className="flex items-start gap-2.5 mb-3 pr-6">
+                    <div className="flex items-start gap-2.5 mb-3 pr-6 min-w-0">
                       <div className="mt-1.5 flex-shrink-0">
                         <ActivityDot info={activity} />
                       </div>
@@ -279,19 +279,19 @@ export function ProjectOverview({
                     </div>
 
                     {/* Details */}
-                    <div className="flex flex-col gap-1.5 flex-1 text-[11px]">
+                    <div className="flex flex-col gap-1.5 flex-1 text-[11px] w-full overflow-hidden">
                       {task.branch && (
-                        <div className="flex items-center gap-1.5 text-muted-foreground">
-                          <span className="flex-shrink-0 text-muted-foreground/70">Branch:</span>
-                          <span className="truncate">{task.branch}</span>
+                        <div className="text-muted-foreground truncate">
+                          <span className="text-muted-foreground/70">Branch: </span>
+                          {task.branch}
                         </div>
                       )}
 
                       {task.useWorktree && task.path && (
-                        <div className="flex items-center gap-1.5 text-muted-foreground">
-                          <span className="flex-shrink-0 text-muted-foreground/70">Worktree:</span>
-                          <span className="truncate font-mono text-[10px]">
-                            {task.path.split('/').slice(-2).join('/')}
+                        <div className="text-muted-foreground truncate">
+                          <span className="text-muted-foreground/70">Worktree: </span>
+                          <span className="font-mono text-[10px]">
+                            {task.path.split(/[\\/]/).slice(-2).join('/')}
                           </span>
                         </div>
                       )}

@@ -238,6 +238,10 @@ export class TerminalSessionManager {
       if (this.terminal.element && bg) {
         this.terminal.element.style.backgroundColor = bg;
       }
+      // Windows: pad right so fit addon leaves room for the scrollbar.
+      if (this.terminal.element && window.electronAPI.getPlatform() === 'win32') {
+        this.terminal.element.style.paddingRight = '24px';
+      }
       // Load GPU addon after terminal is in DOM
       await this.loadGpuAddon();
       // After yielding, check if a newer attach() has started (React remount)
@@ -577,6 +581,12 @@ export class TerminalSessionManager {
 
   /** Reduce cols for PTY so the TUI leaves a right-side gutter. */
   private ptyCols(cols: number): number {
+    // Windows: no col reserve — Ink's cursor positioning drifts from xterm's
+    // grid during streaming if PTY cols < xterm cols, producing garbled output.
+    // Scrollbar clearance is handled by paddingRight on the .xterm element.
+    if (window.electronAPI.getPlatform() === 'win32') {
+      return Math.max(1, cols);
+    }
     const reserve = this.shellOnly
       ? TerminalSessionManager.COL_RESERVE_SHELL
       : TerminalSessionManager.COL_RESERVE;

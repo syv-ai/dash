@@ -1,4 +1,4 @@
-import { BrowserWindow, shell } from 'electron';
+import { BrowserWindow, Menu, shell } from 'electron';
 import * as path from 'path';
 
 const isDev = process.argv.includes('--dev');
@@ -19,6 +19,11 @@ export function createWindow(): BrowserWindow {
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const } : {}),
     show: false,
   });
+
+  // Remove the native menu bar entirely on Windows
+  if (process.platform === 'win32') {
+    mainWindow.setMenu(null);
+  }
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();

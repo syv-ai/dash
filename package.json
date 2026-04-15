@@ -15,6 +15,7 @@
     "rebuild": "electron-rebuild -f -w node-pty,better-sqlite3",
     "package:mac": "pnpm build && electron-builder --mac",
     "package:linux": "pnpm build && electron-builder --linux",
+    "package:win": "pnpm build && electron-builder --win",
     "test": "vitest run",
     "test:watch": "vitest",
     "type-check": "tsc --noEmit && tsc -p tsconfig.main.json --noEmit",
@@ -76,6 +77,30 @@
       "icon": "build/icon.svg",
       "category": "Development",
       "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/win/icon.ico",
+      "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/win/icon.ico",
+      "uninstallerIcon": "build/win/icon.ico",
+      "installerHeaderIcon": "build/win/icon.ico",
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": true,
+      "include": "build/win/installer.nsh",
+      "installerSidebar": "build/win/installerSidebar.bmp",
+      "uninstallerSidebar": "build/win/installerSidebar.bmp"
     }
   },
   "pnpm": {

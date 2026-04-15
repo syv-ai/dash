@@ -7,6 +7,8 @@ import { join, resolve } from 'path';
 
 const execFileAsync = promisify(execFile);
 
+const FIND_CMD = process.platform === 'win32' ? 'where.exe' : 'which';
+
 let cachedEditor: string | null = null;
 
 async function detectEditor(): Promise<string> {
@@ -24,7 +26,7 @@ async function detectEditor(): Promise<string> {
   // Probe for known editors
   for (const editor of ['cursor', 'code', 'zed']) {
     try {
-      await execFileAsync('which', [editor]);
+      await execFileAsync(FIND_CMD, [editor]);
       cachedEditor = editor;
       return editor;
     } catch {
@@ -33,7 +35,13 @@ async function detectEditor(): Promise<string> {
   }
 
   // Fallback to system opener
-  cachedEditor = process.platform === 'darwin' ? 'open' : 'xdg-open';
+  if (process.platform === 'darwin') {
+    cachedEditor = 'open';
+  } else if (process.platform === 'win32') {
+    cachedEditor = 'start';
+  } else {
+    cachedEditor = 'xdg-open';
+  }
   return cachedEditor;
 }
 
@@ -220,7 +228,7 @@ export function registerAppIpc(): void {
           // Auto-detect: prefer cursor, then code
           for (const candidate of ['cursor', 'code'] as const) {
             try {
-              await execFileAsync('which', [candidate]);
+              await execFileAsync(FIND_CMD, [candidate]);
               ide = candidate;
               break;
             } catch {
@@ -233,7 +241,12 @@ export function registerAppIpc(): void {
           return { success: false, error: 'No supported IDE found (cursor, code)' };
         }
 
-        await execFileAsync(ide, [args.folderPath]);
+        // On Windows, IDE binaries are typically .cmd wrappers that must run via cmd.exe
+        if (process.platform === 'win32') {
+          await execFileAsync('cmd.exe', ['/c', ide, args.folderPath]);
+        } else {
+          await execFileAsync(ide, [args.folderPath]);
+        }
         return { success: true, data: null };
       } catch (error) {
         return { success: false, error: String(error) };
@@ -246,7 +259,7 @@ export function registerAppIpc(): void {
       const available: string[] = [];
       for (const ide of ['cursor', 'code']) {
         try {
-          await execFileAsync('which', [ide]);
+          await execFileAsync(FIND_CMD, [ide]);
           available.push(ide);
         } catch {
           // Not found
@@ -270,8 +283,7 @@ export function registerAppIpc(): void {
         const editor = await detectEditor();
 
         // Build location string with line:col for editors that support -g
-        const gotoEditors = ['code', 'cursor', 'zed'];
-        const isGotoEditor = gotoEditors.some((e) => editor === e || editor.endsWith(`/${e}`));
+        const isGotoEditor = /[\\/]?(cursor|code|zed)(\.cmd|\.exe)?$/i.test(editor);
 
         if (isGotoEditor) {
           const location =
@@ -280,9 +292,16 @@ export function registerAppIpc(): void {
               : args.line != null
                 ? `${resolved}:${args.line}`
                 : resolved;
-          await execFileAsync(editor, ['-g', location]);
+          if (process.platform === 'win32') {
+            await execFileAsync('cmd.exe', ['/c', editor, '-g', location]);
+          } else {
+            await execFileAsync(editor, ['-g', location]);
+          }
         } else if (editor === 'open') {
           await execFileAsync('open', [resolved]);
+        } else if (editor === 'start') {
+          // Windows fallback — empty title arg keeps `start` from treating the path as a window title
+          await execFileAsync('cmd.exe', ['/c', 'start', '', resolved]);
         } else {
           // Generic editor (vim, nano, etc.) — just open the file
           await execFileAsync(editor, [resolved]);
