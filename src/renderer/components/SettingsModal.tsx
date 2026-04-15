@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { toast } from 'sonner';
 import {
   X,
   Check,
@@ -11,6 +12,8 @@ import {
   Trash2,
   Plus,
   ExternalLink,
+  HelpCircle,
+  FolderOpen,
 } from 'lucide-react';
 import { Tooltip } from './ui/Tooltip';
 import { ToggleSwitch } from './ui/ToggleSwitch';
@@ -67,8 +70,11 @@ interface SettingsModalProps {
   onShellDrawerPositionChange: (value: 'left' | 'main' | 'right') => void;
   terminalTheme: string;
   onTerminalThemeChange: (id: string) => void;
-  preferredIDE: 'cursor' | 'code' | 'auto';
-  onPreferredIDEChange: (value: 'cursor' | 'code' | 'auto') => void;
+  preferredIDE: string;
+  onPreferredIDEChange: (value: string) => void;
+  availableIDEs: Array<{ id: string; label: string }>;
+  customIDE: { path: string; args: string[] };
+  onCustomIDEChange: (value: { path: string; args: string[] }) => void;
   commitAttribution: string | undefined;
   onCommitAttributionChange: (value: string | undefined) => void;
   effortLevel: string;
@@ -948,6 +954,9 @@ export function SettingsModal({
   onTerminalThemeChange,
   preferredIDE,
   onPreferredIDEChange,
+  availableIDEs,
+  customIDE,
+  onCustomIDEChange,
   commitAttribution,
   onCommitAttributionChange,
   effortLevel,
@@ -1270,18 +1279,17 @@ export function SettingsModal({
                   Preferred IDE
                 </label>
                 <div className="grid grid-cols-3 gap-2">
-                  {(
-                    [
-                      { value: 'auto' as const, label: 'Auto-detect' },
-                      { value: 'cursor' as const, label: 'Cursor' },
-                      { value: 'code' as const, label: 'VS Code' },
-                    ] as const
-                  ).map(({ value, label }) => {
-                    const isActive = preferredIDE === value;
+                  {[
+                    ...(availableIDEs.length > 0
+                      ? [{ id: 'auto', label: 'Auto-detect' }, ...availableIDEs]
+                      : []),
+                    { id: 'custom', label: 'Custom' },
+                  ].map(({ id, label }) => {
+                    const isActive = preferredIDE === id;
                     return (
                       <button
-                        key={value}
-                        onClick={() => onPreferredIDEChange(value)}
+                        key={id}
+                        onClick={() => onPreferredIDEChange(id)}
                         className={`px-3 py-2.5 rounded-lg text-[12px] border transition-all duration-150 ${
                           isActive
                             ? 'border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20 font-medium'
@@ -1293,9 +1301,84 @@ export function SettingsModal({
                     );
                   })}
                 </div>
+                {availableIDEs.length === 0 && (
+                  <p className="text-[11px] text-foreground/70 mt-2">
+                    No supported IDE auto-detected. Install Cursor, VS Code, Windsurf, Antigravity,
+                    or Zed — or configure a Custom IDE below.
+                  </p>
+                )}
                 <p className="text-[10px] text-foreground/80 mt-2">
-                  IDE used when opening a task from the header
+                  IDE used when opening a task from the header. Only installed IDEs are shown.
                 </p>
+
+                {preferredIDE === 'custom' && (
+                  <div className="mt-4 space-y-3 p-3 rounded-lg border border-border/40 bg-accent/20">
+                    <Tooltip content="Launch any editor Dash doesn't detect natively. Point at an executable and pass flags — use {path} to place the folder anywhere in the command, or it's appended at the end.">
+                      <div className="inline-flex items-center gap-1.5 cursor-help">
+                        <span className="text-[11px] font-medium text-foreground">
+                          Custom IDE command
+                        </span>
+                        <HelpCircle size={12} strokeWidth={1.8} className="text-foreground/60" />
+                      </div>
+                    </Tooltip>
+
+                    <div>
+                      <label className="block text-[10px] text-foreground/70 mb-1">
+                        Executable path
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={customIDE.path}
+                          onChange={(e) =>
+                            onCustomIDEChange({ ...customIDE, path: e.target.value })
+                          }
+                          placeholder="/Applications/MyIDE.app/Contents/MacOS/myide"
+                          className="flex-1 px-2.5 py-1.5 text-[11px] rounded-md border border-border/60 bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-1 focus:ring-primary/40"
+                        />
+                        <button
+                          onClick={async () => {
+                            const res = await window.electronAPI.pickExecutable();
+                            if (!res.success) {
+                              toast.error(res.error || 'Failed to open file picker');
+                              return;
+                            }
+                            if (res.data) {
+                              onCustomIDEChange({ ...customIDE, path: res.data });
+                            }
+                          }}
+                          className="px-2.5 py-1.5 text-[11px] rounded-md border border-border/60 text-foreground/80 hover:bg-accent/40 hover:text-foreground flex items-center gap-1"
+                        >
+                          <FolderOpen size={12} strokeWidth={1.8} />
+                          Browse
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] text-foreground/70 mb-1">
+                        Arguments (optional, one per line)
+                      </label>
+                      <textarea
+                        value={customIDE.args.join('\n')}
+                        onChange={(e) =>
+                          onCustomIDEChange({
+                            ...customIDE,
+                            args: e.target.value.split('\n').filter((line) => line.length > 0),
+                          })
+                        }
+                        rows={3}
+                        placeholder={'--new-window\n{path}'}
+                        className="w-full px-2.5 py-1.5 text-[11px] rounded-md border border-border/60 bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-1 focus:ring-primary/40 font-mono resize-y"
+                      />
+                      <p className="text-[10px] text-foreground/60 mt-1">
+                        One argument per line — spaces inside a line are preserved. Use{' '}
+                        <code>{'{path}'}</code> to place the folder anywhere; otherwise it's
+                        appended at the end.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Commit Attribution */}

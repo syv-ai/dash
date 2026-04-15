@@ -10,9 +10,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
   openInEditor: (args: { cwd: string; filePath: string; line?: number; col?: number }) =>
     ipcRenderer.invoke('app:openInEditor', args),
-  openInIDE: (args: { folderPath: string; ide?: 'cursor' | 'code' }) =>
-    ipcRenderer.invoke('app:openInIDE', args),
+  openInIDE: (args: {
+    folderPath: string;
+    ide?: string;
+    customCommand?: { path: string; args: string[] };
+  }) => ipcRenderer.invoke('app:openInIDE', args),
   detectAvailableIDEs: () => ipcRenderer.invoke('app:detectAvailableIDEs'),
+  pickExecutable: () => ipcRenderer.invoke('app:pickExecutable'),
 
   // Database - Projects
   getProjects: () => ipcRenderer.invoke('db:getProjects'),
