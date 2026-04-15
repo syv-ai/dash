@@ -71,7 +71,7 @@ interface DetectedIde {
 }
 
 async function detectIdes(): Promise<DetectedIde[]> {
-  // No caching: detection is cheap (parallelized existsSync on macOS, parallel
+  // No caching: detection is fast (a few existsSync calls on macOS, parallel
   // `which` on Linux) and skipping the cache means install/uninstall changes
   // take effect immediately without an app restart.
   const appSearchRoots =
@@ -91,7 +91,16 @@ async function detectIdes(): Promise<DetectedIde[]> {
       try {
         const { stdout } = await execFileAsync('which', [entry.linuxCommand]);
         return stdout.trim() || null;
-      } catch {
+      } catch (err: unknown) {
+        // `which` exits 1 when the command isn't found — that's expected.
+        // Log anything else so real failures aren't silently swallowed.
+        const code =
+          err && typeof err === 'object' && 'code' in err
+            ? (err as { code: number }).code
+            : undefined;
+        if (code !== 1) {
+          console.warn(`[detectIdes] Unexpected error detecting ${entry.linuxCommand}:`, err);
+        }
         return null;
       }
     }),
@@ -361,7 +370,7 @@ export function registerAppIpc(): void {
           if (!existsSync(custom.path)) {
             return { success: false, error: `Custom IDE not found: ${custom.path}` };
           }
-          const substituted = custom.args.map((a) => a.replace('{path}', args.folderPath));
+          const substituted = custom.args.map((a) => a.split('{path}').join(args.folderPath));
           const finalArgs = custom.args.some((a) => a.includes('{path}'))
             ? substituted
             : [...substituted, args.folderPath];

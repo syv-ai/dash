@@ -130,22 +130,29 @@ export function App() {
   const [availableIDEs, setAvailableIDEs] = useState<Array<{ id: string; label: string }>>([]);
   useEffect(() => {
     let cancelled = false;
-    window.electronAPI.detectAvailableIDEs().then((res) => {
-      if (cancelled) return;
-      if (!res.success || !res.data) {
-        console.warn('[openInIDE] Failed to detect available IDEs:', res.error);
-        return;
-      }
-      setAvailableIDEs(res.data);
-      // Self-heal: if the stored IDE was uninstalled, fall back to auto so
-      // Settings doesn't show a phantom selection and clicks don't 404.
-      setPreferredIDE((current) => {
-        if (current === 'auto' || current === 'custom') return current;
-        if (res.data!.some((d) => d.id === current)) return current;
-        localStorage.removeItem('preferredIDE');
-        return 'auto';
+    window.electronAPI
+      .detectAvailableIDEs()
+      .then((res) => {
+        if (cancelled) return;
+        if (!res.success || !res.data) {
+          console.warn('[openInIDE] Failed to detect available IDEs:', res.error);
+          return;
+        }
+        setAvailableIDEs(res.data);
+        // Self-heal: if the stored IDE was uninstalled, fall back to auto so
+        // Settings doesn't show a phantom selection and clicks don't fail.
+        setPreferredIDE((current) => {
+          if (current === 'auto' || current === 'custom') return current;
+          if (res.data!.some((d) => d.id === current)) return current;
+          localStorage.removeItem('preferredIDE');
+          return 'auto';
+        });
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error('[openInIDE] detectAvailableIDEs IPC call rejected:', err);
+        }
       });
-    });
     return () => {
       cancelled = true;
     };
