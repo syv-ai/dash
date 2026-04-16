@@ -96,8 +96,9 @@ function FileItem({
   onDiscard: () => void;
   onViewDiff: () => void;
 }) {
-  const fileName = file.path.split('/').pop() || file.path;
-  const dirPath = file.path.includes('/') ? file.path.substring(0, file.path.lastIndexOf('/')) : '';
+  const fileName = file.path.split(/[\\/]/).pop() || file.path;
+  const lastSep = Math.max(file.path.lastIndexOf('/'), file.path.lastIndexOf('\\'));
+  const dirPath = lastSep > -1 ? file.path.substring(0, lastSep) : '';
 
   return (
     <div

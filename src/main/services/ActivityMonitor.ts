@@ -1,34 +1,120 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { WebContents } from 'electron';
+import type { ActivityState, ActivityInfo, ToolActivity, ActivityError } from '@shared/types';
 
 const execFileAsync = promisify(execFile);
-
-type ActivityState = 'busy' | 'idle' | 'waiting';
 
 interface PtyActivity {
   pid: number;
   state: ActivityState;
   isDirectSpawn: boolean;
   lastDataTime: number;
+  /** Timestamp of last actual PTY output (terminal data from node-pty).
+   *  Unlike lastDataTime, this is NOT refreshed by statusLine POSTs,
+   *  so it accurately reflects when the terminal last produced output. */
+  lastPtyOutputTime: number;
   /** Timestamp when child processes were last observed (for direct-spawn PTYs). */
   lastChildSeenTime: number;
+  /** Timestamp when children were first continuously observed while idle.
+   *  Reset to 0 when no children are detected. Used for delayed idle→busy self-heal. */
+  idleChildrenSince: number;
+  /** Timestamp of last statusLine update from Claude Code.
+   *  StatusLine only fires while Claude is actively working, so a recent
+   *  update is strong evidence of busy state even without child processes. */
+  lastStatusLineTime: number;
+  /** Current tool being executed (from PreToolUse hook). */
+  tool: ToolActivity | null;
+  /** Error info from StopFailure hook. */
+  error: ActivityError | null;
+  /** Whether context is being compacted. */
+  compacting: boolean;
+  /** Timestamp when this PTY was registered. Used to suppress idle→busy
+   *  self-heal during Claude CLI startup (initialization child processes). */
+  registeredAt: number;
+  /** Pending busy timer. setBusy defers the actual transition so that
+   *  slash commands like /clear (which fire UserPromptSubmit then Stop
+   *  almost immediately) don't flash busy. */
+  pendingBusyTimer: ReturnType<typeof setTimeout> | null;
 }
 
-const POLL_INTERVAL = 2000;
-
-/** How long (ms) a direct-spawn PTY must have no children AND no PTY data
- *  before the polling fallback transitions it to idle. This covers the case
- *  where the Stop hook doesn't fire (e.g. interrupted mid-response) without
- *  falsely marking "thinking" responses (data flowing, no children) as idle. */
-const DIRECT_SPAWN_IDLE_GRACE_MS = 6000;
+// PowerShell is heavier than ps, so poll less frequently on Windows
+const POLL_INTERVAL = process.platform === 'win32' ? 5000 : 2000;
 
 /** Hard safety valve: if no child processes for this long while busy/waiting,
- *  force idle regardless of PTY data. Handles the case where Claude Code's
- *  statusline keeps emitting escape sequences, preventing the data-silence
- *  check from ever triggering. Long enough to avoid false positives during
- *  normal "thinking" phases (API calls with no child processes). */
+ *  force idle. The primary busy→idle signal is the Stop hook — this only
+ *  catches truly stuck states where the hook never fires. Long enough to
+ *  avoid false positives during agent execution and thinking phases. */
 const DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS = 45_000;
+
+/** How long (ms) children must be continuously present while idle before
+ *  polling self-heals to busy. Filters out brief startup child processes
+ *  (which last < 1s) while recovering from missed busy hooks or mid-response
+ *  stop hooks that fired between chained tool calls. */
+const IDLE_TO_BUSY_GRACE_MS = 4000;
+
+/** How long (ms) after PTY registration before the idle→busy polling
+ *  self-heal is allowed. During Claude CLI startup, initialization child
+ *  processes (loading CLAUDE.md, indexing, etc.) would falsely trigger
+ *  the self-heal. After this window, hooks are the primary signal. */
+const STARTUP_GRACE_MS = 15_000;
+
+/** How long (ms) to defer the busy transition after UserPromptSubmit.
+ *  Slash commands like /clear fire UserPromptSubmit then Stop almost
+ *  immediately — this debounce prevents a visible busy flash. Real
+ *  prompts take longer, so the delay is imperceptible. */
+const BUSY_DEBOUNCE_MS = 300;
+
+/** Build a human-readable label from a PreToolUse hook payload. */
+function buildToolLabel(toolName: string, toolInput: Record<string, unknown> | undefined): string {
+  if (!toolInput) return toolName;
+
+  switch (toolName) {
+    case 'Bash': {
+      const cmd = toolInput.description || toolInput.command;
+      if (typeof cmd === 'string') {
+        const short = cmd.length > 60 ? cmd.slice(0, 57) + '...' : cmd;
+        return short;
+      }
+      return 'Running command';
+    }
+    case 'Edit':
+    case 'Write':
+    case 'Read': {
+      const fp = toolInput.file_path;
+      if (typeof fp === 'string') {
+        const parts = fp.split('/');
+        const filename = parts[parts.length - 1];
+        const verb = toolName === 'Read' ? 'Reading' : toolName === 'Edit' ? 'Editing' : 'Writing';
+        return `${verb} ${filename}`;
+      }
+      return toolName;
+    }
+    case 'Grep':
+      return typeof toolInput.pattern === 'string'
+        ? `Searching for "${toolInput.pattern}"`
+        : 'Searching code';
+    case 'Glob':
+      return typeof toolInput.pattern === 'string'
+        ? `Finding ${toolInput.pattern}`
+        : 'Finding files';
+    case 'Agent':
+      return typeof toolInput.description === 'string' ? toolInput.description : 'Running agent';
+    case 'WebFetch':
+      return 'Fetching web content';
+    case 'WebSearch':
+      return typeof toolInput.query === 'string'
+        ? `Searching "${toolInput.query}"`
+        : 'Searching web';
+    default:
+      // MCP tools: mcp__server__tool → "server: tool"
+      if (toolName.startsWith('mcp__')) {
+        const parts = toolName.split('__');
+        if (parts.length >= 3) return `${parts[1]}: ${parts.slice(2).join('__')}`;
+      }
+      return toolName;
+  }
+}
 
 class ActivityMonitorImpl {
   private activities = new Map<string, PtyActivity>();
@@ -42,7 +128,15 @@ class ActivityMonitorImpl {
       state: 'idle',
       isDirectSpawn,
       lastDataTime: now,
+      lastPtyOutputTime: now,
       lastChildSeenTime: now,
+      idleChildrenSince: 0,
+      lastStatusLineTime: 0,
+      tool: null,
+      error: null,
+      compacting: false,
+      registeredAt: now,
+      pendingBusyTimer: null,
     });
     this.emitAll();
   }
@@ -55,8 +149,29 @@ class ActivityMonitorImpl {
   noteData(ptyId: string): void {
     const activity = this.activities.get(ptyId);
     if (activity) {
-      activity.lastDataTime = Date.now();
+      const now = Date.now();
+      activity.lastDataTime = now;
+      activity.lastPtyOutputTime = now;
     }
+  }
+
+  /**
+   * Called when a statusLine update is received from Claude Code.
+   * Refreshes timestamps so the polling fallback doesn't falsely transition
+   * busy→idle while Claude is working (statusLine fires during active work).
+   *
+   * Does NOT transition idle→busy — that is handled by setBusy (UserPromptSubmit),
+   * setToolStart (PreToolUse), and the polling self-heal. StatusLine can fire
+   * during session startup/load before Claude is actually working, which would
+   * cause false busy state with no subsequent Stop hook to clear it.
+   */
+  noteStatusLine(ptyId: string): void {
+    const activity = this.activities.get(ptyId);
+    if (!activity) return;
+    const now = Date.now();
+    activity.lastDataTime = now;
+    activity.lastStatusLineTime = now;
+    activity.lastChildSeenTime = now;
   }
 
   /**
@@ -65,8 +180,18 @@ class ActivityMonitorImpl {
    */
   setIdle(ptyId: string): void {
     const activity = this.activities.get(ptyId);
-    if (!activity || activity.state === 'idle') return;
+    if (!activity) return;
+    // Cancel any pending busy transition (e.g. from /clear)
+    if (activity.pendingBusyTimer) {
+      clearTimeout(activity.pendingBusyTimer);
+      activity.pendingBusyTimer = null;
+    }
+    if (activity.state === 'idle') return;
     activity.state = 'idle';
+    activity.lastStatusLineTime = 0;
+    activity.idleChildrenSince = 0;
+    activity.tool = null;
+    activity.compacting = false;
     this.emitAll();
   }
 
@@ -77,9 +202,21 @@ class ActivityMonitorImpl {
   setBusy(ptyId: string): void {
     const activity = this.activities.get(ptyId);
     if (!activity || activity.state === 'busy') return;
-    activity.state = 'busy';
-    activity.lastChildSeenTime = Date.now();
-    this.emitAll();
+    // Cancel any existing pending timer before scheduling a new one
+    if (activity.pendingBusyTimer) {
+      clearTimeout(activity.pendingBusyTimer);
+    }
+    // Defer the transition so slash commands that fire Stop immediately
+    // after UserPromptSubmit don't flash busy in the UI.
+    activity.pendingBusyTimer = setTimeout(() => {
+      activity.pendingBusyTimer = null;
+      if (activity.state === 'busy') return; // Already transitioned by another path
+      activity.state = 'busy';
+      activity.lastChildSeenTime = Date.now();
+      activity.idleChildrenSince = 0;
+      activity.error = null;
+      this.emitAll();
+    }, BUSY_DEBOUNCE_MS);
   }
 
   /**
@@ -90,11 +227,98 @@ class ActivityMonitorImpl {
     const activity = this.activities.get(ptyId);
     if (!activity || activity.state === 'waiting') return;
     activity.state = 'waiting';
+    activity.tool = null;
+    this.emitAll();
+  }
+
+  /**
+   * Record that a tool started executing (PreToolUse hook).
+   * Sets the current tool info and ensures the PTY is in busy state.
+   */
+  setToolStart(ptyId: string, toolName: string, toolInput?: Record<string, unknown>): void {
+    const activity = this.activities.get(ptyId);
+    if (!activity) return;
+
+    // Tool start is definitive proof of work — cancel any pending debounce
+    // and transition to busy immediately.
+    if (activity.pendingBusyTimer) {
+      clearTimeout(activity.pendingBusyTimer);
+      activity.pendingBusyTimer = null;
+    }
+
+    activity.tool = {
+      toolName,
+      label: buildToolLabel(toolName, toolInput),
+    };
+
+    // Ensure busy state (covers edge case where UserPromptSubmit was missed)
+    if (activity.state !== 'busy') {
+      activity.state = 'busy';
+      activity.idleChildrenSince = 0;
+      activity.error = null;
+    }
+
+    const now = Date.now();
+    activity.lastDataTime = now;
+    activity.lastChildSeenTime = now;
+    this.emitAll();
+  }
+
+  /**
+   * Record that a tool finished executing (PostToolUse hook).
+   * Clears the current tool but keeps the PTY busy (Claude is between tools).
+   */
+  setToolEnd(ptyId: string): void {
+    const activity = this.activities.get(ptyId);
+    if (!activity) return;
+    activity.tool = null;
+    const now = Date.now();
+    activity.lastDataTime = now;
+    activity.lastChildSeenTime = now;
+    this.emitAll();
+  }
+
+  /**
+   * Record a stop failure (StopFailure hook).
+   * Transitions to error state with details about the failure.
+   */
+  private static readonly ERROR_TYPE_MAP: Record<string, ActivityError['type']> = {
+    rate_limit: 'rate_limit',
+    authentication_failed: 'auth_error',
+    billing_error: 'billing_error',
+  };
+
+  setError(ptyId: string, errorType: string, message?: string): void {
+    const activity = this.activities.get(ptyId);
+    if (!activity) return;
+
+    const mappedType: ActivityError['type'] =
+      ActivityMonitorImpl.ERROR_TYPE_MAP[errorType] ?? 'unknown';
+
+    activity.state = 'error';
+    activity.tool = null;
+    activity.error = { type: mappedType, message };
+    this.emitAll();
+  }
+
+  /**
+   * Set compacting state (PreCompact/PostCompact hooks).
+   */
+  setCompacting(ptyId: string, compacting: boolean): void {
+    const activity = this.activities.get(ptyId);
+    if (!activity) return;
+    activity.compacting = compacting;
+    if (compacting) {
+      activity.tool = null; // Clear tool during compaction
+    }
     this.emitAll();
   }
 
   unregister(ptyId: string): void {
-    if (this.activities.delete(ptyId)) {
+    const activity = this.activities.get(ptyId);
+    if (activity) {
+      if (activity.pendingBusyTimer) clearTimeout(activity.pendingBusyTimer);
+      this.activities.delete(ptyId);
       this.emitAll();
     }
   }
@@ -112,14 +336,18 @@ class ActivityMonitorImpl {
     this.sender = null;
   }
 
-  getAll(): Record<string, ActivityState> {
-    const result: Record<string, ActivityState> = {};
+  getAll(): Record<string, ActivityInfo> {
+    const result: Record<string, ActivityInfo> = {};
     for (const [id, activity] of this.activities) {
       // Only expose direct-spawn (Claude CLI) PTYs to the renderer.
       // Shell terminals cycle busy/idle on every command, which would
       // trigger notification sounds and misleading activity indicators.
       if (!activity.isDirectSpawn) continue;
-      result[id] = activity.state;
+      const info: ActivityInfo = { state: activity.state };
+      if (activity.tool) info.tool = activity.tool;
+      if (activity.error) info.error = activity.error;
+      if (activity.compacting) info.compacting = true;
+      result[id] = info;
     }
     return result;
   }
@@ -159,28 +387,53 @@ class ActivityMonitorImpl {
 
         // Self-heal: if children are detected while waiting for permission,
         // the user approved and Claude started a tool. Transition to busy.
-        // Note: we intentionally don't self-heal idle → busy here because
-        // Claude CLI briefly spawns children during startup, which would
-        // cause a false busy flash on every reopen.
         if (activity.state === 'waiting' && hasChildren) {
           activity.state = 'busy';
+          activity.idleChildrenSince = 0;
           changed = true;
         }
 
-        // Fallback busy/waiting → idle when hooks miss (e.g. interrupted
-        // mid-response). Two checks:
-        // 1. Data silence: no children AND no PTY data for 6s
-        // 2. Hard timeout: no children for 45s (handles statusline
-        //    escape sequences that keep lastDataTime refreshed)
-        if (activity.state === 'busy' || activity.state === 'waiting') {
-          if (!hasChildren) {
-            const dataSilent = Date.now() - activity.lastDataTime > DIRECT_SPAWN_IDLE_GRACE_MS;
-            const childlessTimeout =
-              Date.now() - activity.lastChildSeenTime > DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS;
-            if (dataSilent || childlessTimeout) {
-              activity.state = 'idle';
-              changed = true;
-            }
+        // Delayed self-heal: idle → busy when children are continuously
+        // present for IDLE_TO_BUSY_GRACE_MS. This recovers from missed
+        // busy hooks and mid-response stop hooks (which fire between
+        // chained tool calls). Suppressed during startup grace period
+        // to avoid false positives from Claude CLI initialization.
+        const pastStartup = Date.now() - activity.registeredAt > STARTUP_GRACE_MS;
+        if (activity.state === 'idle' && hasChildren && pastStartup) {
+          if (activity.idleChildrenSince === 0) {
+            activity.idleChildrenSince = Date.now();
+          } else if (Date.now() - activity.idleChildrenSince > IDLE_TO_BUSY_GRACE_MS) {
+            activity.state = 'busy';
+            activity.idleChildrenSince = 0;
+            changed = true;
+          }
+        }
+        if (activity.state === 'idle' && !hasChildren) {
+          activity.idleChildrenSince = 0;
+        }
+
+        // Safety valve: force idle if no children for a very long time AND
+        // no recent PTY output. The primary busy→idle signal is the Stop hook
+        // (setIdle). This only catches truly stuck states (e.g. hook never
+        // fires due to crash). Process death is handled above via isProcessAlive.
+        // During extended thinking, Claude has no child processes but the
+        // spinner still emits PTY data — so we check lastPtyOutputTime too
+        // (not lastDataTime, which statusLine POSTs also refresh).
+        if (
+          activity.state === 'busy' ||
+          activity.state === 'waiting' ||
+          activity.state === 'error'
+        ) {
+          const now = Date.now();
+          const childlessTimeout =
+            !hasChildren &&
+            now - activity.lastChildSeenTime > DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS &&
+            now - activity.lastPtyOutputTime > DIRECT_SPAWN_CHILDLESS_HARD_LIMIT_MS;
+          if (childlessTimeout) {
+            activity.state = 'idle';
+            activity.tool = null;
+            activity.compacting = false;
+            changed = true;
           }
         }
         continue;
@@ -191,6 +444,9 @@ class ActivityMonitorImpl {
 
       if (activity.state !== newState) {
         activity.state = newState;
+        if (!isWorking) {
+          activity.tool = null;
+        }
         changed = true;
       }
     }
@@ -243,16 +499,40 @@ class ActivityMonitorImpl {
   private async buildChildMap(): Promise<Map<number, number[]>> {
     const map = new Map<number, number[]>();
     try {
-      const { stdout } = await execFileAsync('ps', ['-eo', 'pid=,ppid='], {
-        timeout: 2000,
-      });
-      for (const line of stdout.split('\n')) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        const parts = trimmed.split(/\s+/);
-        if (parts.length < 2) continue;
-        const pid = parseInt(parts[0], 10);
-        const ppid = parseInt(parts[1], 10);
+      let pidPpidPairs: Array<[number, number]> = [];
+
+      if (process.platform === 'win32') {
+        // Windows: PowerShell Get-CimInstance returns the same data as ps -eo
+        const { stdout } = await execFileAsync(
+          'powershell.exe',
+          [
+            '-NoProfile',
+            '-Command',
+            'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId | ConvertTo-Csv -NoTypeInformation',
+          ],
+          { timeout: 5000 },
+        );
+        const lines = stdout.split(/\r?\n/);
+        // Skip CSV header
+        for (let i = 1; i < lines.length; i++) {
+          const match = lines[i].trim().match(/^"?(\d+)"?,"?(\d+)"?$/);
+          if (!match) continue;
+          pidPpidPairs.push([parseInt(match[1], 10), parseInt(match[2], 10)]);
+        }
+      } else {
+        const { stdout } = await execFileAsync('ps', ['-eo', 'pid=,ppid='], {
+          timeout: 2000,
+        });
+        pidPpidPairs = stdout
+          .split('\n')
+          .map((l) => l.trim())
+          .filter(Boolean)
+          .map((l) => l.split(/\s+/))
+          .filter((parts) => parts.length >= 2)
+          .map((parts) => [parseInt(parts[0], 10), parseInt(parts[1], 10)] as [number, number]);
+      }
+
+      for (const [pid, ppid] of pidPpidPairs) {
         if (isNaN(pid) || isNaN(ppid)) continue;
         let siblings = map.get(ppid);
         if (!siblings) {
@@ -262,7 +542,7 @@ class ActivityMonitorImpl {
         siblings.push(pid);
       }
     } catch {
-      // ps failed — return empty map, all PTYs will show idle
+      // ps/powershell failed — return empty map, all PTYs will show idle
     }
     return map;
   }

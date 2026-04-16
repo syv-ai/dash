@@ -128,7 +128,7 @@
   top: 10px !important;
 }
 
-/* Hide xterm scrollbar — Claude Code fullscreen mode handles its own scrolling. */
+/* Hide xterm scrollbar — Dash sets CLAUDE_CODE_NO_FLICKER=1 so Claude Code manages scrolling internally. */
 .terminal-container .xterm .xterm-viewport {
   scrollbar-width: none !important;
 }

@@ -6,6 +6,7 @@ import { promisify } from 'util';
 import { type WebContents, app } from 'electron';
 import { activityMonitor } from './ActivityMonitor';
 import { hookServer } from './HookServer';
+import { contextUsageService } from './ContextUsageService';
 import { DatabaseService } from './DatabaseService';
 
 const execFileAsync = promisify(execFile);
@@ -27,7 +28,7 @@ function findClaudeProjectDir(cwd: string): string | null {
     const parts = cwd.split('/').filter((p) => p.length > 0);
     const suffix = parts.slice(-3).join('-');
     const dirs = fs.readdirSync(projectsDir);
-    const match = dirs.find((d) => d.includes(suffix));
+    const match = dirs.find((d) => d.endsWith(suffix));
     if (match) return path.join(projectsDir, match);
 
     return null;
@@ -91,6 +92,10 @@ export function setDesktopNotification(opts: { enabled: boolean }): void {
   hookServer.setDesktopNotification(opts);
 }
 
+export function hasPty(id: string): boolean {
+  return ptys.has(id);
+}
+
 export function setClaudeEnvVars(vars: Record<string, string>): void {
   claudeEnvVars = vars;
 }
@@ -139,10 +144,16 @@ async function findClaudePath(): Promise<string | null> {
     // Best effort
   }
 
-  // 2. Try `which claude` (works when PATH is correct)
+  // 2. Try `which`/`where.exe` (works when PATH is correct)
   try {
-    const { stdout } = await execFileAsync('which', ['claude']);
-    const resolved = stdout.trim();
+    const findCmd = process.platform === 'win32' ? 'where.exe' : 'which';
+    const { stdout } = await execFileAsync(findCmd, ['claude']);
+    // where.exe may return multiple lines; prefer .cmd on Windows
+    const lines = stdout.trim().split(/\r?\n/).filter(Boolean);
+    const resolved =
+      process.platform === 'win32'
+        ? (lines.find((l) => l.toLowerCase().endsWith('.cmd')) || lines[0])?.trim()
+        : lines[0]?.trim();
     if (resolved) {
       cachedClaudePath = resolved;
       return cachedClaudePath;
@@ -153,14 +164,27 @@ async function findClaudePath(): Promise<string | null> {
 
   // 3. Direct probe common install locations
   const home = os.homedir();
-  const candidates = [
-    path.join(home, '.local/bin/claude'),
-    '/opt/homebrew/bin/claude',
-    '/usr/local/bin/claude',
-  ];
+  const candidates: string[] =
+    process.platform === 'win32'
+      ? [
+          path.join(
+            process.env.APPDATA || path.join(home, 'AppData', 'Roaming'),
+            'npm',
+            'claude.cmd',
+          ),
+          path.join(home, 'AppData', 'Local', 'Programs', 'nodejs', 'claude.cmd'),
+          path.join('C:\\Program Files\\nodejs', 'claude.cmd'),
+          // Version managers: check their env-var-based directories
+          ...(process.env.NVM_SYMLINK ? [path.join(process.env.NVM_SYMLINK, 'claude.cmd')] : []),
+          ...(process.env.VOLTA_HOME
+            ? [path.join(process.env.VOLTA_HOME, 'bin', 'claude.cmd')]
+            : []),
+        ]
+      : [path.join(home, '.local/bin/claude'), '/opt/homebrew/bin/claude', '/usr/local/bin/claude'];
   for (const candidate of candidates) {
     try {
-      await fs.promises.access(candidate, fs.constants.X_OK);
+      const accessMode = process.platform === 'win32' ? fs.constants.F_OK : fs.constants.X_OK;
+      await fs.promises.access(candidate, accessMode);
       cachedClaudePath = candidate;
       return cachedClaudePath;
     } catch {
@@ -178,22 +202,50 @@ async function findClaudePath(): Promise<string | null> {
  * When on, inherits the full parent process.env as a base.
  */
 function buildDirectEnv(isDark: boolean): Record<string, string> {
+  const isWin = process.platform === 'win32';
   const base: Record<string, string> = syncShellEnv
     ? Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => !!e[1]))
     : {};
 
   const env: Record<string, string> = {
     ...base,
-    TERM: 'xterm-256color',
-    COLORTERM: 'truecolor',
     TERM_PROGRAM: 'dash',
     HOME: os.homedir(),
-    USER: os.userInfo().username,
     PATH: process.env.PATH || '',
     // Tell CLI apps about terminal background (rxvt convention)
     // Format: "fg;bg" where higher values = lighter colors
     COLORFGBG: isDark ? '15;0' : '0;15',
   };
+
+  if (isWin) {
+    // Windows requires system env vars for DNS, credential storage, and Node.js.
+    // Includes both casings of SystemRoot since some processes look for one or
+    // the other (cmd.exe sets SystemRoot, PowerShell sees SYSTEMROOT in env).
+    env.USERNAME = process.env.USERNAME || os.userInfo().username;
+    const winVars = [
+      'APPDATA',
+      'LOCALAPPDATA',
+      'USERPROFILE',
+      'TEMP',
+      'TMP',
+      'SystemRoot',
+      'SYSTEMROOT',
+      'SystemDrive',
+      'WINDIR',
+      'COMSPEC',
+      'PATHEXT',
+      'COMPUTERNAME',
+      'USERDOMAIN',
+      'ProgramFiles',
+    ];
+    for (const key of winVars) {
+      if (process.env[key]) env[key] = process.env[key]!;
+    }
+  } else {
+    env.TERM = 'xterm-256color';
+    env.COLORTERM = 'truecolor';
+    env.USER = os.userInfo().username;
+  }
 
   if (!syncShellEnv) {
     // Auth passthrough — only needed when not inheriting full env
@@ -216,15 +268,15 @@ function buildDirectEnv(isDark: boolean): Record<string, string> {
     }
   }
 
-  // Merge user-configured Claude Code env vars (curated toggles + custom vars from settings),
-  // but prevent overriding internal keys that would break spawned processes.
+  // Merge user-configured environment variables from settings,
+  // preventing overrides of internal keys that would break spawned processes.
   for (const [key, value] of Object.entries(claudeEnvVars)) {
     if (!RESERVED_ENV_KEYS.has(key)) {
       env[key] = value;
     }
   }
 
-  // Always enable fullscreen rendering (NO_FLICKER) — Dash handles its own viewport
+  // Disable Claude Code's built-in viewport scrolling — Dash uses its own terminal viewport
   env.CLAUDE_CODE_NO_FLICKER = '1';
 
   return env;
@@ -242,23 +294,28 @@ function getTaskContextPrompt(taskId: string): string | null {
 }
 
 /**
- * Write .claude/settings.local.json with Stop, UserPromptSubmit, Notification,
- * and (optionally) SessionStart hooks.
+ * All hook event names that Dash writes to settings.local.json.
+ * Used by both writeHookSettings and cleanupHookSettings.
+ */
+const DASH_HOOK_EVENTS = [
+  'Stop',
+  'UserPromptSubmit',
+  'Notification',
+  'PreToolUse',
+  'PostToolUse',
+  'StopFailure',
+  'PreCompact',
+  'PostCompact',
+  'SessionStart',
+] as const;
+
+/**
+ * Write .claude/settings.local.json with hooks for activity monitoring,
+ * tool tracking, error detection, and context usage.
  *
- * Notification hooks fire when Claude Code sends notifications. Each entry can
- * include a `matcher` to filter by notification_type:
- *   - permission_prompt  — Claude needs the user to approve a tool use
- *   - idle_prompt        — Claude is idle / waiting for user input
- *   - auth_success       — authentication completed successfully
- *   - elicitation_dialog — Claude is presenting a dialog for user input
- * Omit the matcher to run the hook for all notification types.
- *
- * The hook receives JSON on stdin with these fields:
- *   session_id, transcript_path, cwd, permission_mode, hook_event_name,
- *   message (notification text), title (optional), notification_type.
- *
- * Notification hooks cannot block or modify notifications but may return
- * { additionalContext: string } to inject context into the conversation.
+ * Hooks use type: "http" — Claude Code POSTs the hook JSON body directly
+ * to our local HookServer. The statusLine uses type: "command" with curl
+ * (http type is not supported for statusLine).
  */
 function writeHookSettings(cwd: string, ptyId: string): void {
   const port = hookServer.port;
@@ -266,50 +323,51 @@ function writeHookSettings(cwd: string, ptyId: string): void {
 
   const claudeDir = path.join(cwd, '.claude');
   const settingsPath = path.join(claudeDir, 'settings.local.json');
-  const curlGet = `curl -s --connect-timeout 2 http://127.0.0.1:${port}`;
-  const curlPost = `curl -s --connect-timeout 2 -X POST -H "Content-Type: application/json" -d @- http://127.0.0.1:${port}`;
+  const base = `http://127.0.0.1:${port}`;
 
-  const postHook = (endpoint: string) => ({
-    type: 'command',
-    command: `${curlPost}${endpoint}?ptyId=${ptyId} || exit 0`,
+  /** Shorthand: build an HTTP hook entry. */
+  const httpHook = (endpoint: string, async?: boolean) => ({
+    type: 'http' as const,
+    url: `${base}${endpoint}?ptyId=${ptyId}`,
+    ...(async ? { async: true } : {}),
   });
 
   const hookSettings: Record<string, unknown[]> = {
-    Stop: [
-      {
-        hooks: [postHook('/hook/stop')],
-      },
+    // ── Activity state signals ──────────────────────────────
+    Stop: [{ hooks: [httpHook('/hook/stop')] }],
+    UserPromptSubmit: [{ hooks: [httpHook('/hook/busy')] }],
+
+    // ── Notification (permission prompt, idle) ──────────────
+    Notification: [
+      { matcher: 'permission_prompt', hooks: [httpHook('/hook/notification')] },
+      { matcher: 'idle_prompt', hooks: [httpHook('/hook/notification')] },
     ],
-    UserPromptSubmit: [
-      {
-        hooks: [
-          {
-            type: 'command',
-            command: `${curlGet}/hook/busy?ptyId=${ptyId} || exit 0`,
-          },
-        ],
-      },
-    ],
-    Notification: ['permission_prompt', 'idle_prompt'].map((matcher) => ({
-      matcher,
-      hooks: [postHook('/hook/notification')],
-    })),
+
+    // ── Tool activity tracking ──────────────────────────────
+    PreToolUse: [{ matcher: '*', hooks: [httpHook('/hook/tool-start', true)] }],
+    PostToolUse: [{ matcher: '*', hooks: [httpHook('/hook/tool-end', true)] }],
+
+    // ── Error detection ─────────────────────────────────────
+    StopFailure: [{ matcher: '*', hooks: [httpHook('/hook/stop-failure')] }],
+
+    // ── Context compaction ──────────────────────────────────
+    PreCompact: [{ matcher: '*', hooks: [httpHook('/hook/compact-start', true)] }],
+    PostCompact: [{ matcher: '*', hooks: [httpHook('/hook/compact-end', true)] }],
   };
 
   // SessionStart hook fires on: startup (new session), resume (reattach by id),
   // compact (auto/manual compaction), clear (/clear command). We use it for two
   // purposes:
-  //   1. Capture Claude's real session_id and persist it per-task, so the next
-  //      spawn can resume the correct session even if Claude forked or the
-  //      filename doesn't match task.id.
-  //   2. Re-inject task context (linked issue/work-item prompt) after compact
-  //      or clear, so Claude retains issue awareness.
-  //
-  // The hook commands pass stdin through; curl forwards the entire payload
-  // (which includes session_id) to the hook server.
-  const sessionStartHooks: { type: string; command: string }[] = [postHook('/hook/session-start')];
+  //   1. Capture Claude's real session_id (all 4 matchers) so the next spawn
+  //      can resume the correct session even if Claude forked or the filename
+  //      doesn't match task.id.
+  //   2. Re-inject task context (linked issue/work-item prompt) on startup,
+  //      compact, and clear — NOT resume, since resumed sessions already have
+  //      context in history.
+  const captureHook = httpHook('/hook/session-start');
 
   const contextPrompt = getTaskContextPrompt(ptyId);
+  let contextHook: { type: 'command'; command: string } | null = null;
   if (contextPrompt) {
     const hookPayload = JSON.stringify({
       hookSpecificOutput: {
@@ -320,16 +378,22 @@ function writeHookSettings(cwd: string, ptyId: string): void {
     // Use base64 encoding to safely embed user-controlled content in a shell command.
     // Single-quote escaping is fragile with content from GitHub issues / ADO work items.
     const b64 = Buffer.from(hookPayload).toString('base64');
-    sessionStartHooks.push({
-      type: 'command',
-      command: `echo '${b64}' | base64 -d`,
-    });
+    // Cross-platform decode: macOS uses `base64 -D`, Linux uses `base64 -d`,
+    // Windows cmd.exe doesn't have base64 so we use PowerShell instead.
+    const decodeCmd =
+      process.platform === 'win32'
+        ? `powershell.exe -NoProfile -Command "[Console]::Out.Write([System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64}')))"`
+        : `echo '${b64}' | base64 ${process.platform === 'darwin' ? '-D' : '-d'}`;
+    contextHook = { type: 'command', command: decodeCmd };
   }
 
-  hookSettings.SessionStart = ['startup', 'resume', 'compact', 'clear'].map((matcher) => ({
-    matcher,
-    hooks: sessionStartHooks,
-  }));
+  hookSettings.SessionStart = ['startup', 'resume', 'compact', 'clear'].map((matcher) => {
+    const hooks: unknown[] = [captureHook];
+    if (contextHook && matcher !== 'resume') {
+      hooks.push(contextHook);
+    }
+    return { matcher, hooks };
+  });
 
   try {
     if (!fs.existsSync(claudeDir)) {
@@ -361,6 +425,13 @@ function writeHookSettings(cwd: string, ptyId: string): void {
       },
     };
 
+    // statusLine: command that pipes Claude Code's JSON context data to our hook server
+    const contextUrl = `${base}/hook/context?ptyId=${ptyId}`;
+    merged.statusLine = {
+      type: 'command',
+      command: `curl -s --connect-timeout 2 -X POST -H "Content-Type: application/json" -d @- "${contextUrl}" >/dev/null 2>&1`,
+    };
+
     // Commit attribution: undefined = Dash default, '' = suppress, other = custom.
     const effectiveAttribution =
       commitAttributionSetting === undefined ? DASH_DEFAULT_ATTRIBUTION : commitAttributionSetting;
@@ -381,8 +452,6 @@ function writeHookSettings(cwd: string, ptyId: string): void {
  * that were written during this session. Called on app quit to prevent stale hooks.
  */
 export function cleanupHookSettings(): void {
-  const hookKeys = ['Stop', 'UserPromptSubmit', 'Notification', 'SessionStart'];
-
   for (const settingsPath of writtenSettingsPaths) {
     try {
       if (!fs.existsSync(settingsPath)) continue;
@@ -391,7 +460,7 @@ export function cleanupHookSettings(): void {
       const hooks = raw.hooks;
 
       if (hooks && typeof hooks === 'object') {
-        for (const key of hookKeys) {
+        for (const key of DASH_HOOK_EVENTS) {
           delete hooks[key];
         }
         // Remove hooks object entirely if empty
@@ -400,7 +469,8 @@ export function cleanupHookSettings(): void {
         }
       }
 
-      // Remove Dash attribution
+      // Remove Dash statusLine and attribution
+      delete raw.statusLine;
       delete raw.attribution;
 
       // If nothing meaningful remains, delete the file
@@ -481,7 +551,11 @@ export async function startDirectPty(options: {
   writeHookSettings(options.cwd, options.id);
 
   const pty = getPty();
-  const proc = pty.spawn(claudePath, args, {
+  // On Windows, .cmd files must be invoked through cmd.exe
+  const spawnFile = process.platform === 'win32' ? 'cmd.exe' : claudePath;
+  const spawnArgs: string[] = process.platform === 'win32' ? ['/c', claudePath, ...args] : args;
+
+  const proc = pty.spawn(spawnFile, spawnArgs, {
     name: 'xterm-256color',
     cols: options.cols,
     rows: options.rows,
@@ -517,6 +591,7 @@ export async function startDirectPty(options: {
     if (ptys.get(options.id) !== record) return;
     activityMonitor.unregister(options.id);
     remoteControlService.unregister(options.id);
+    contextUsageService.unregister(options.id);
     if (record.owner && !record.owner.isDestroyed()) {
       record.owner.send(`pty:exit:${options.id}`, { exitCode, signal });
     }
@@ -648,22 +723,26 @@ export async function startPty(options: {
 
   const pty = getPty();
 
-  const shell = process.env.SHELL || '/bin/bash';
-  const args = ['-il']; // Login + interactive
+  const isWin = process.platform === 'win32';
+  const shell = isWin ? 'powershell.exe' : process.env.SHELL || '/bin/bash';
+  const args = isWin ? ['-NoLogo'] : ['-il']; // Login + interactive on Unix
 
   // Clean environment for shell
   const env = { ...process.env };
   // Remove Electron packaging artifacts
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.ELECTRON_NO_ATTACH_CONSOLE;
-  // Enable macOS zsh OSC 7 cwd reporting (sources /etc/zshrc_Apple_Terminal)
-  if (process.platform === 'darwin') {
-    env.TERM_PROGRAM = 'Apple_Terminal';
-  }
 
-  // Inject custom prompt for zsh via ZDOTDIR
-  if (shell.endsWith('/zsh') || shell === 'zsh') {
-    env.ZDOTDIR = ensureShellConfig();
+  if (!isWin) {
+    // Enable macOS zsh OSC 7 cwd reporting (sources /etc/zshrc_Apple_Terminal)
+    if (process.platform === 'darwin') {
+      env.TERM_PROGRAM = 'Apple_Terminal';
+    }
+
+    // Inject custom prompt for zsh via ZDOTDIR
+    if (shell.endsWith('/zsh') || shell === 'zsh') {
+      env.ZDOTDIR = ensureShellConfig();
+    }
   }
 
   const proc = pty.spawn(shell, args, {
@@ -748,6 +827,7 @@ export function killPty(id: string): void {
     ptys.delete(id);
     activityMonitor.unregister(id);
     remoteControlService.unregister(id);
+    contextUsageService.unregister(id);
     try {
       record.proc.kill();
     } catch {
@@ -781,6 +861,7 @@ export function killByOwner(owner: WebContents): void {
       ptys.delete(id);
       activityMonitor.unregister(id);
       remoteControlService.unregister(id);
+      contextUsageService.unregister(id);
       try {
         record.proc.kill();
       } catch {

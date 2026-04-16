@@ -87,7 +87,7 @@ export function DeleteTaskModal({ task, onClose, onConfirm }: DeleteTaskModalPro
                   <>
                     Delete worktree directory{' '}
                     <span className="text-muted-foreground/50 font-normal">
-                      {task.path.split('/').slice(-3).join('/')}
+                      {task.path.split(/[\\/]/).slice(-3).join('/')}
                     </span>
                   </>
                 }

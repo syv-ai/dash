@@ -50,13 +50,31 @@ function fixPath(): void {
       path.join(home, '.local/bin'),
       '/usr/local/bin',
     );
+  } else if (process.platform === 'win32') {
+    // Common Node/npm install locations on Windows including nvm4w
+    const home = os.homedir();
+    const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
+    const localAppData = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
+    additions.push(
+      path.join(appData, 'npm'),
+      path.join(localAppData, 'Programs', 'nodejs'),
+      'C:\\Program Files\\nodejs',
+      'C:\\Program Files\\Git\\bin',
+      'C:\\Program Files\\Git\\usr\\bin',
+    );
+    // Version managers set env vars pointing to the active Node.js directory
+    if (process.env.NVM_SYMLINK) additions.push(process.env.NVM_SYMLINK);
+    if (process.env.NVM_HOME) additions.push(process.env.NVM_HOME);
+    if (process.env.FNM_DIR) additions.push(path.join(process.env.FNM_DIR, 'aliases', 'default'));
+    if (process.env.VOLTA_HOME) additions.push(path.join(process.env.VOLTA_HOME, 'bin'));
   }
 
-  const pathSet = new Set(currentPath.split(':'));
+  const pathSep = process.platform === 'win32' ? ';' : ':';
+  const pathSet = new Set(currentPath.split(pathSep));
   for (const p of additions) {
     pathSet.add(p);
   }
-  process.env.PATH = [...pathSet].join(':');
+  process.env.PATH = [...pathSet].join(pathSep);
 }
 
 fixPath();
@@ -81,6 +99,8 @@ app.whenReady().then(async () => {
 
   // Start hook server (must be ready before any PTY spawns)
   const { hookServer } = await import('./services/HookServer');
+  const { hasPty } = await import('./services/ptyManager');
+  hookServer.setPtyValidator(hasPty);
   await hookServer.start();
 
   // Register IPC handlers
@@ -106,8 +126,12 @@ app.whenReady().then(async () => {
   const { remoteControlService } = await import('./services/remoteControlService');
   remoteControlService.setSender(mainWindow.webContents);
 
-  // Initialize auto-updater (production only)
-  if (!process.argv.includes('--dev')) {
+  // Start context usage service — broadcasts status line data to renderer
+  const { contextUsageService } = await import('./services/ContextUsageService');
+  contextUsageService.setSender(mainWindow.webContents);
+
+  // Initialize auto-updater (production only, disabled on Windows custom builds)
+  if (!process.argv.includes('--dev') && process.platform !== 'win32') {
     const { AutoUpdateService } = await import('./services/AutoUpdateService');
     AutoUpdateService.initialize(mainWindow);
   }
@@ -143,9 +167,15 @@ export let claudeCliCache: { installed: boolean; version: string | null; path: s
 
 async function detectClaudeCli(): Promise<void> {
   try {
-    const { stdout } = await execFileAsync('which', ['claude']);
-    const claudePath = stdout.trim();
-    const { stdout: versionOut } = await execFileAsync(claudePath, ['--version']);
+    const findCmd = process.platform === 'win32' ? 'where.exe' : 'which';
+    const { stdout } = await execFileAsync(findCmd, ['claude']);
+    // where.exe may return multiple lines; take the first
+    const claudePath = stdout.trim().split(/\r?\n/)[0].trim();
+    // .cmd files on Windows must be invoked through cmd.exe
+    const { stdout: versionOut } =
+      process.platform === 'win32'
+        ? await execFileAsync('cmd.exe', ['/c', claudePath, '--version'])
+        : await execFileAsync(claudePath, ['--version']);
     claudeCliCache = {
       installed: true,
       version: versionOut.trim(),
@@ -180,6 +210,8 @@ app.on('activate', async () => {
     remoteControlService.setSender(mainWindow.webContents);
     const { PixelAgentsService } = await import('./services/PixelAgentsService');
     PixelAgentsService.setSender(mainWindow.webContents);
+    const { contextUsageService } = await import('./services/ContextUsageService');
+    contextUsageService.setSender(mainWindow.webContents);
 
     // Update auto-updater window reference
     if (!process.argv.includes('--dev')) {
@@ -231,6 +263,14 @@ app.on('before-quit', async () => {
   try {
     const { killAll } = await import('./services/ptyManager');
     killAll();
+  } catch {
+    // Best effort
+  }
+
+  // Stop context usage service (clears debounce timer)
+  try {
+    const { contextUsageService } = await import('./services/ContextUsageService');
+    contextUsageService.stop();
   } catch {
     // Best effort
   }

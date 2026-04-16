@@ -29,12 +29,23 @@ import type {
   PixelAgentsStatus,
   PixelAgentsOffice,
   PixelAgentsOfficeStatus,
+  StatusLineData,
+  RateLimits,
+  UsageThresholds,
 } from '../../shared/types';
+import { formatTokens, formatDuration, formatResetTime } from '../../shared/format';
+import { UsageBar } from './ui/UsageBar';
 
 const DASH_DEFAULT_ATTRIBUTION =
   '\n\nCo-Authored-By: Claude <noreply@anthropic.com> via Dash <dash@syv.ai>';
 
-type SettingsTab = 'general' | 'appearance' | 'claude-code' | 'keybindings' | 'pixel-agents';
+type SettingsTab =
+  | 'general'
+  | 'appearance'
+  | 'claude-code'
+  | 'keybindings'
+  | 'usage'
+  | 'pixel-agents';
 
 interface SettingsModalProps {
   initialTab?: string;
@@ -46,6 +57,8 @@ interface SettingsModalProps {
   onNotificationSoundChange: (value: NotificationSound) => void;
   desktopNotification: boolean;
   onDesktopNotificationChange: (value: boolean) => void;
+  showUsageInline: boolean;
+  onShowUsageInlineChange: (value: boolean) => void;
   showActiveTasksSection: boolean;
   onShowActiveTasksSectionChange: (value: boolean) => void;
   shellDrawerEnabled: boolean;
@@ -70,6 +83,11 @@ interface SettingsModalProps {
   pixelAgentsConfig: PixelAgentsConfig | null;
   onPixelAgentsConfigChange: (config: PixelAgentsConfig) => void;
   pixelAgentsStatus: PixelAgentsStatus;
+  statusLineData: Record<string, StatusLineData>;
+  taskNames: Record<string, string>;
+  latestRateLimits?: RateLimits;
+  usageThresholds: UsageThresholds;
+  onUsageThresholdsChange: (thresholds: UsageThresholds) => void;
   onClose: () => void;
 }
 
@@ -520,6 +538,221 @@ function OfficeForm({
   );
 }
 
+function ThresholdInput({
+  label,
+  value,
+  onChange,
+  suffix,
+  placeholder,
+}: {
+  label: string;
+  value: number | null;
+  onChange: (v: number | null) => void;
+  suffix?: string;
+  placeholder?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between py-2">
+      <span className="text-[12px] text-foreground/80">{label}</span>
+      <div className="flex items-center gap-1.5">
+        <input
+          type="number"
+          min={0}
+          step={5}
+          value={value ?? ''}
+          onChange={(e) => {
+            const raw = e.target.value;
+            const n = Number(raw);
+            onChange(raw === '' || !Number.isFinite(n) || n < 0 ? null : Math.min(100, n));
+          }}
+          placeholder={placeholder ?? 'Off'}
+          className="w-[72px] px-2 py-1 rounded-md text-[12px] text-right tabular-nums border border-border/40 text-foreground placeholder:text-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary/40"
+          style={{ background: 'hsl(var(--surface-2))' }}
+        />
+        {suffix && <span className="text-[11px] text-foreground/40">{suffix}</span>}
+      </div>
+    </div>
+  );
+}
+
+function UsageSection({
+  statusLineData,
+  taskNames,
+  latestRateLimits,
+  thresholds,
+  onThresholdsChange,
+  showUsageInline,
+  onShowUsageInlineChange,
+}: {
+  statusLineData: Record<string, StatusLineData>;
+  taskNames: Record<string, string>;
+  latestRateLimits?: RateLimits;
+  thresholds: UsageThresholds;
+  onThresholdsChange: (t: UsageThresholds) => void;
+  showUsageInline: boolean;
+  onShowUsageInlineChange: (value: boolean) => void;
+}) {
+  const entries = Object.entries(statusLineData);
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      {/* Account-wide rate limits */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground/60">
+            Your Usage
+          </span>
+          <div className="flex-1 h-px bg-border/30" />
+        </div>
+
+        {latestRateLimits ? (
+          <div
+            className="rounded-xl border border-border/40 p-4 space-y-3"
+            style={{ background: 'hsl(var(--surface-2))' }}
+          >
+            {latestRateLimits.fiveHour && (
+              <UsageBar
+                label="5-hour rate limit"
+                percentage={latestRateLimits.fiveHour.usedPercentage}
+                detail={
+                  latestRateLimits.fiveHour.resetsAt
+                    ? `resets ${formatResetTime(latestRateLimits.fiveHour.resetsAt)}`
+                    : undefined
+                }
+              />
+            )}
+            {latestRateLimits.sevenDay && (
+              <UsageBar
+                label="7-day rate limit"
+                percentage={latestRateLimits.sevenDay.usedPercentage}
+                detail={
+                  latestRateLimits.sevenDay.resetsAt
+                    ? `resets ${formatResetTime(latestRateLimits.sevenDay.resetsAt)}`
+                    : undefined
+                }
+              />
+            )}
+          </div>
+        ) : (
+          <p className="text-[12px] text-foreground/40 py-4 text-center">
+            Rate limit data appears after the first API response
+          </p>
+        )}
+      </div>
+
+      {/* Per-session context usage */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground/60">
+            Sessions
+          </span>
+          <div className="flex-1 h-px bg-border/30" />
+        </div>
+
+        {entries.length === 0 ? (
+          <p className="text-[12px] text-foreground/40 py-4 text-center">No active sessions</p>
+        ) : (
+          <div className="space-y-3">
+            {entries.map(([ptyId, sl]) => (
+              <div
+                key={ptyId}
+                className="rounded-xl border border-border/40 p-4 space-y-3"
+                style={{ background: 'hsl(var(--surface-2))' }}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12px] font-medium text-foreground/80 truncate">
+                    {taskNames[ptyId] || 'Unknown task'}
+                  </span>
+                  <span className="text-[10px] text-foreground/40 flex-shrink-0">
+                    {sl.model ?? 'Claude'}
+                  </span>
+                </div>
+
+                <UsageBar
+                  label="Context"
+                  percentage={sl.contextUsage.percentage}
+                  detail={`${formatTokens(sl.contextUsage.used)} / ${formatTokens(sl.contextUsage.total)}`}
+                />
+
+                {sl.cost && (
+                  <div className="flex items-center gap-4 pt-1 text-[10px] text-foreground/40">
+                    <span>API: {formatDuration(sl.cost.totalApiDurationMs)}</span>
+                    <span>Wall: {formatDuration(sl.cost.totalDurationMs)}</span>
+                    {(sl.cost.totalLinesAdded > 0 || sl.cost.totalLinesRemoved > 0) && (
+                      <span>
+                        <span className="text-emerald-400">+{sl.cost.totalLinesAdded}</span>
+                        {' / '}
+                        <span className="text-red-400">-{sl.cost.totalLinesRemoved}</span>
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Inline Usage Display */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground/60">
+            Display
+          </span>
+          <div className="flex-1 h-px bg-border/30" />
+        </div>
+        <ToggleSwitch
+          enabled={showUsageInline}
+          onToggle={onShowUsageInlineChange}
+          label="Show context usage in sidebar and header"
+        />
+        <p className="text-[10px] text-foreground/40 mt-2">
+          Display context window percentage and progress bars next to tasks.
+        </p>
+      </div>
+
+      {/* Threshold Alerts */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground/60">
+            Threshold Alerts
+          </span>
+          <div className="flex-1 h-px bg-border/30" />
+        </div>
+        <p className="text-[11px] text-foreground/40 mb-3">
+          Show a notification when usage exceeds a threshold. Leave empty to disable.
+        </p>
+        <div
+          className="rounded-xl border border-border/40 px-4 divide-y divide-border/20"
+          style={{ background: 'hsl(var(--surface-2))' }}
+        >
+          <ThresholdInput
+            label="Context window"
+            value={thresholds.contextPercentage}
+            onChange={(v) => onThresholdsChange({ ...thresholds, contextPercentage: v })}
+            suffix="%"
+            placeholder="80"
+          />
+          <ThresholdInput
+            label="5-hour rate limit"
+            value={thresholds.fiveHourPercentage}
+            onChange={(v) => onThresholdsChange({ ...thresholds, fiveHourPercentage: v })}
+            suffix="%"
+            placeholder="Off"
+          />
+          <ThresholdInput
+            label="7-day rate limit"
+            value={thresholds.sevenDayPercentage}
+            onChange={(v) => onThresholdsChange({ ...thresholds, sevenDayPercentage: v })}
+            suffix="%"
+            placeholder="Off"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ClaudeCodeTab({
   effortLevel,
   onEffortLevelChange,
@@ -544,7 +777,7 @@ function ClaudeCodeTab({
 
   function addEntry() {
     const key = newKey.trim();
-    if (!key || !/^[A-Z_][A-Z0-9_]*$/.test(key)) return;
+    if (!key || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) return;
     onCustomEnvVarsChange({ ...customEnvVars, [key]: newValue });
     setNewKey('');
     setNewValue('');
@@ -670,7 +903,7 @@ function ClaudeCodeTab({
             <input
               type="text"
               value={newKey}
-              onChange={(e) => setNewKey(e.target.value.toUpperCase())}
+              onChange={(e) => setNewKey(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') addEntry();
               }}
@@ -725,6 +958,8 @@ export function SettingsModal({
   onNotificationSoundChange,
   desktopNotification,
   onDesktopNotificationChange,
+  showUsageInline,
+  onShowUsageInlineChange,
   showActiveTasksSection,
   onShowActiveTasksSectionChange,
   shellDrawerEnabled,
@@ -749,6 +984,11 @@ export function SettingsModal({
   pixelAgentsConfig,
   onPixelAgentsConfigChange,
   pixelAgentsStatus,
+  statusLineData,
+  taskNames,
+  latestRateLimits,
+  usageThresholds,
+  onUsageThresholdsChange,
   onClose,
 }: SettingsModalProps) {
   const validTabs: SettingsTab[] = [
@@ -756,6 +996,7 @@ export function SettingsModal({
     'appearance',
     'claude-code',
     'keybindings',
+    'usage',
     'pixel-agents',
   ];
   const [tab, setTab] = useState<SettingsTab>(
@@ -872,6 +1113,7 @@ export function SettingsModal({
               { id: 'appearance', label: 'Appearance' },
               { id: 'keybindings', label: 'Keybindings' },
               { id: 'claude-code', label: 'Claude' },
+              { id: 'usage', label: 'Usage' },
               { id: 'pixel-agents', label: 'Pixel Agents' },
             ] as const
           ).map((t) => (
@@ -974,6 +1216,22 @@ export function SettingsModal({
                 />
                 <p className="text-[10px] text-foreground/80 mt-2">
                   Notification will include the task name
+                </p>
+              </div>
+
+              {/* Inline Usage */}
+              <div>
+                <label className="block text-[12px] font-medium text-foreground mb-3">
+                  Inline Usage
+                </label>
+                <ToggleSwitch
+                  enabled={showUsageInline}
+                  onToggle={onShowUsageInlineChange}
+                  label="Show context usage in sidebar and header"
+                />
+                <p className="text-[10px] text-foreground/80 mt-2">
+                  Display context window percentage and progress bars next to tasks. Detailed stats
+                  are always available in the Usage tab.
                 </p>
               </div>
 
@@ -1346,6 +1604,18 @@ export function SettingsModal({
                 status={pixelAgentsStatus}
               />
             </div>
+          )}
+
+          {tab === 'usage' && (
+            <UsageSection
+              statusLineData={statusLineData}
+              taskNames={taskNames}
+              latestRateLimits={latestRateLimits}
+              thresholds={usageThresholds}
+              onThresholdsChange={onUsageThresholdsChange}
+              showUsageInline={showUsageInline}
+              onShowUsageInlineChange={onShowUsageInlineChange}
+            />
           )}
 
           {tab === 'keybindings' && (

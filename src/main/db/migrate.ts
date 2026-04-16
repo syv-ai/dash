@@ -120,8 +120,11 @@ export function runMigrations(): void {
 
   try {
     rawDb.exec(`ALTER TABLE tasks ADD COLUMN context_prompt TEXT`);
-  } catch {
-    /* already exists */
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!msg.includes('duplicate column')) {
+      console.error('[migrate] Failed to add context_prompt column:', err);
+    }
   }
 
   try {

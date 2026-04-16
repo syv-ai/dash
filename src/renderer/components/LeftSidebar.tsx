@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { UsageBarInline, usageTextColor } from './ui/UsageBar';
 import {
   FolderOpen,
   Plus,
@@ -15,7 +16,13 @@ import {
   PanelLeftOpen,
   X,
 } from 'lucide-react';
-import type { Project, Task, RemoteControlState } from '../../shared/types';
+import type {
+  Project,
+  Task,
+  RemoteControlState,
+  ContextUsage,
+  ActivityInfo,
+} from '../../shared/types';
 import { IconButton } from './ui/IconButton';
 import { Tooltip } from './ui/Tooltip';
 
@@ -25,16 +32,20 @@ function RotationSection({
   rotationTasks,
   activeTaskId,
   taskActivity,
+  unseenTaskIds,
   projects,
   onSelectTask,
   onRemoveFromRotation,
+  contextUsage = {},
 }: {
   rotationTasks: Task[];
   activeTaskId: string | null;
-  taskActivity: Record<string, 'busy' | 'idle' | 'waiting'>;
+  taskActivity: Record<string, ActivityInfo>;
+  unseenTaskIds?: Set<string>;
   projects: Project[];
   onSelectTask: (projectId: string, taskId: string) => void;
   onRemoveFromRotation?: (taskId: string) => void;
+  contextUsage?: Record<string, ContextUsage>;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -90,9 +101,10 @@ function RotationSection({
           />
         )}
         {rotationTasks.map((task) => {
-          const activity = taskActivity[task.id];
+          const activity = taskActivity[task.id]?.state;
           const isActiveTask = task.id === activeTaskId;
           const project = projects.find((p) => p.id === task.projectId);
+          const ctx = contextUsage[task.id];
 
           return (
             <div
@@ -106,15 +118,31 @@ function RotationSection({
               onClick={() => onSelectTask(task.projectId, task.id)}
             >
               {/* Status indicator */}
-              {activity === 'waiting' ? (
+              {activity === 'error' ? (
+                <div className="w-[6px] h-[6px] rounded-full bg-destructive flex-shrink-0" />
+              ) : activity === 'waiting' ? (
                 <div className="w-[6px] h-[6px] rounded-full bg-orange-500 flex-shrink-0" />
               ) : activity === 'busy' ? (
                 <div className="w-[6px] h-[6px] rounded-full bg-amber-400 status-pulse flex-shrink-0" />
+              ) : activity === 'idle' && unseenTaskIds?.has(task.id) ? (
+                <div className="w-[6px] h-[6px] rounded-full bg-blue-400 flex-shrink-0" />
               ) : activity === 'idle' ? (
                 <div className="w-[6px] h-[6px] rounded-full bg-emerald-400 flex-shrink-0" />
               ) : null}
 
               <span className="truncate flex-1">{task.name}</span>
+              {ctx && ctx.percentage > 0 && (
+                <span
+                  className={`text-[9px] tabular-nums flex-shrink-0 ${
+                    ctx.percentage >= 80
+                      ? 'text-red-400 font-medium'
+                      : usageTextColor(ctx.percentage)
+                  }`}
+                  title={`Context: ${ctx.used.toLocaleString()} / ${ctx.total.toLocaleString()} tokens (${Math.round(ctx.percentage)}%)`}
+                >
+                  {Math.round(ctx.percentage)}%
+                </span>
+              )}
               {project && (
                 <span className="text-muted-foreground/40 text-[11px] whitespace-nowrap overflow-hidden flex-shrink min-w-0">
                   {project.name}
@@ -159,9 +187,10 @@ interface LeftSidebarProps {
   onShowCommitGraph: (projectId: string) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
-  taskActivity: Record<string, 'busy' | 'idle' | 'waiting'>;
+  taskActivity: Record<string, ActivityInfo>;
   unseenTaskIds?: Set<string>;
   remoteControlStates?: Record<string, RemoteControlState>;
+  contextUsage?: Record<string, ContextUsage>;
   onReorderProjects?: (reordered: Project[]) => void;
   pixelAgentsConnectedCount?: number;
   rotationTasks?: Task[];
@@ -192,6 +221,7 @@ export function LeftSidebar({
   taskActivity,
   unseenTaskIds,
   remoteControlStates = {},
+  contextUsage = {},
   onReorderProjects,
   pixelAgentsConnectedCount = 0,
   rotationTasks = [],
@@ -228,11 +258,12 @@ export function LeftSidebar({
     });
   }
 
-  function projectActivity(projectId: string): 'busy' | 'idle' | 'waiting' | null {
+  function projectActivity(projectId: string): 'busy' | 'idle' | 'waiting' | 'error' | null {
     const tasks = (tasksByProject[projectId] || []).filter((t) => !t.archivedAt);
-    if (tasks.some((t) => taskActivity[t.id] === 'waiting')) return 'waiting';
-    if (tasks.some((t) => taskActivity[t.id] === 'busy')) return 'busy';
-    if (tasks.some((t) => taskActivity[t.id] === 'idle')) return 'idle';
+    if (tasks.some((t) => taskActivity[t.id]?.state === 'error')) return 'error';
+    if (tasks.some((t) => taskActivity[t.id]?.state === 'waiting')) return 'waiting';
+    if (tasks.some((t) => taskActivity[t.id]?.state === 'busy')) return 'busy';
+    if (tasks.some((t) => taskActivity[t.id]?.state === 'idle')) return 'idle';
     return null;
   }
 
@@ -308,20 +339,24 @@ export function LeftSidebar({
                   {activity && (
                     <Tooltip
                       content={
-                        activity === 'waiting'
-                          ? 'Waiting for user'
-                          : activity === 'busy'
-                            ? 'Claude is working'
-                            : 'Idle'
+                        activity === 'error'
+                          ? 'Error'
+                          : activity === 'waiting'
+                            ? 'Waiting for user'
+                            : activity === 'busy'
+                              ? 'Claude is working'
+                              : 'Idle'
                       }
                     >
                       <div
                         className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border-2 border-[hsl(var(--surface-1))] ${
-                          activity === 'waiting'
-                            ? 'bg-orange-500'
-                            : activity === 'busy'
-                              ? 'bg-amber-400 status-pulse'
-                              : 'bg-emerald-400'
+                          activity === 'error'
+                            ? 'bg-destructive'
+                            : activity === 'waiting'
+                              ? 'bg-orange-500'
+                              : activity === 'busy'
+                                ? 'bg-amber-400 status-pulse'
+                                : 'bg-emerald-400'
                         }`}
                       />
                     </Tooltip>
@@ -378,9 +413,11 @@ export function LeftSidebar({
           rotationTasks={rotationTasks}
           activeTaskId={activeTaskId}
           taskActivity={taskActivity}
+          unseenTaskIds={unseenTaskIds}
           projects={projects}
           onSelectTask={onSelectTask}
           onRemoveFromRotation={onRemoveFromRotation}
+          contextUsage={contextUsage}
         />
       )}
 
@@ -526,80 +563,128 @@ export function LeftSidebar({
                   <div className="overflow-hidden">
                     <div className="ml-6 mr-1 mt-0.5 space-y-px">
                       {projectTasks.map((task) => {
-                        const activity = taskActivity[task.id];
+                        const activityInfo = taskActivity[task.id];
+                        const activityState = activityInfo?.state;
                         const isActiveTask = task.id === activeTaskId;
+                        const ctx = contextUsage[task.id];
+
+                        // Build tooltip text with tool details when available
+                        const busyTooltip = activityInfo?.compacting
+                          ? 'Compacting context...'
+                          : activityInfo?.tool?.label
+                            ? activityInfo.tool.label
+                            : 'Claude is working';
+                        const errorTooltip = activityInfo?.error
+                          ? activityInfo.error.type === 'rate_limit'
+                            ? 'Rate limited'
+                            : activityInfo.error.type === 'auth_error'
+                              ? 'Authentication error'
+                              : activityInfo.error.type === 'billing_error'
+                                ? 'Billing error'
+                                : 'Error'
+                          : 'Error';
 
                         return (
                           <div
                             key={task.id}
-                            className={`group/task relative flex items-center gap-2 pl-3.5 pr-2 py-[6px] rounded-md text-[13px] cursor-pointer transition-all duration-150 ${
+                            className={`group/task relative flex flex-col pl-3.5 pr-2 py-[6px] rounded-md text-[13px] cursor-pointer transition-all duration-150 ${
                               isActiveTask
                                 ? 'bg-primary/10 text-foreground font-medium'
                                 : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
                             }`}
                             onClick={() => onSelectTask(project.id, task.id)}
                           >
-                            {/* Status indicator */}
-                            {activity === 'waiting' ? (
-                              <Tooltip content="Waiting for user">
-                                <div className="w-[6px] h-[6px] rounded-full bg-orange-500 flex-shrink-0" />
-                              </Tooltip>
-                            ) : activity === 'busy' ? (
-                              <Tooltip content="Claude is working">
-                                <div className="w-[6px] h-[6px] rounded-full bg-amber-400 status-pulse flex-shrink-0" />
-                              </Tooltip>
-                            ) : activity === 'idle' && unseenTaskIds?.has(task.id) ? (
-                              <Tooltip content="Done (unseen)">
-                                <div className="w-[6px] h-[6px] rounded-full bg-blue-400 flex-shrink-0" />
-                              </Tooltip>
-                            ) : activity === 'idle' ? (
-                              <Tooltip content="Idle">
-                                <div className="w-[6px] h-[6px] rounded-full bg-emerald-400 flex-shrink-0" />
-                              </Tooltip>
-                            ) : null}
-                            {remoteControlStates[task.id] && (
-                              <Globe
-                                size={10}
-                                strokeWidth={2}
-                                className="text-primary flex-shrink-0 -ml-0.5"
-                              />
-                            )}
-
-                            <span className="truncate flex-1">{task.name}</span>
-
-                            {/* Right slot: branch icon by default, actions on hover */}
-                            <div className="flex items-center gap-0.5 flex-shrink-0">
-                              {isActiveTask && (
-                                <GitBranch
-                                  size={11}
-                                  className="text-foreground/50 group-hover/task:hidden"
+                            <div className="flex items-center gap-2">
+                              {/* Status indicator */}
+                              {activityState === 'error' ? (
+                                <Tooltip content={errorTooltip}>
+                                  <div className="w-[6px] h-[6px] rounded-full bg-destructive flex-shrink-0" />
+                                </Tooltip>
+                              ) : activityState === 'waiting' ? (
+                                <Tooltip content="Waiting for user">
+                                  <div className="w-[6px] h-[6px] rounded-full bg-orange-500 flex-shrink-0" />
+                                </Tooltip>
+                              ) : activityState === 'busy' ? (
+                                <Tooltip content={busyTooltip}>
+                                  <div className="w-[6px] h-[6px] rounded-full bg-amber-400 status-pulse flex-shrink-0" />
+                                </Tooltip>
+                              ) : activityState === 'idle' && unseenTaskIds?.has(task.id) ? (
+                                <Tooltip content="Done (unseen)">
+                                  <div className="w-[6px] h-[6px] rounded-full bg-blue-400 flex-shrink-0" />
+                                </Tooltip>
+                              ) : activityState === 'idle' ? (
+                                <Tooltip content="Idle">
+                                  <div className="w-[6px] h-[6px] rounded-full bg-emerald-400 flex-shrink-0" />
+                                </Tooltip>
+                              ) : null}
+                              {remoteControlStates[task.id] && (
+                                <Globe
+                                  size={10}
                                   strokeWidth={2}
+                                  className="text-primary flex-shrink-0 -ml-0.5"
                                 />
                               )}
-                              <div className="hidden group-hover/task:flex gap-0.5">
-                                <IconButton
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onArchiveTask(task.id);
-                                  }}
-                                  title="Archive task"
-                                  size="sm"
+
+                              <span className="truncate flex-1">{task.name}</span>
+
+                              {/* Context percentage (visible when data available, hidden on hover to show actions) */}
+                              {ctx && ctx.percentage > 0 && (
+                                <span
+                                  className={`text-[9px] tabular-nums flex-shrink-0 group-hover/task:hidden ${
+                                    ctx.percentage >= 80
+                                      ? 'text-red-400 font-medium'
+                                      : usageTextColor(ctx.percentage)
+                                  }`}
                                 >
-                                  <Archive size={12} strokeWidth={1.8} />
-                                </IconButton>
-                                <IconButton
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onDeleteTask(task.id);
-                                  }}
-                                  title="Delete task"
-                                  variant="destructive"
-                                  size="sm"
-                                >
-                                  <Trash2 size={12} strokeWidth={1.8} />
-                                </IconButton>
+                                  {Math.round(ctx.percentage)}%
+                                </span>
+                              )}
+
+                              {/* Right slot: branch icon by default, actions on hover */}
+                              <div className="flex items-center gap-0.5 flex-shrink-0">
+                                {isActiveTask && !ctx && (
+                                  <GitBranch
+                                    size={11}
+                                    className="text-foreground/50 group-hover/task:hidden"
+                                    strokeWidth={2}
+                                  />
+                                )}
+                                <div className="hidden group-hover/task:flex gap-0.5">
+                                  <IconButton
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onArchiveTask(task.id);
+                                    }}
+                                    title="Archive task"
+                                    size="sm"
+                                  >
+                                    <Archive size={12} strokeWidth={1.8} />
+                                  </IconButton>
+                                  <IconButton
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onDeleteTask(task.id);
+                                    }}
+                                    title="Delete task"
+                                    variant="destructive"
+                                    size="sm"
+                                  >
+                                    <Trash2 size={12} strokeWidth={1.8} />
+                                  </IconButton>
+                                </div>
                               </div>
                             </div>
+
+                            {/* Context usage bar */}
+                            {ctx && ctx.percentage > 0 && (
+                              <UsageBarInline
+                                percentage={ctx.percentage}
+                                height={2}
+                                width="auto"
+                                className="ml-[14px] mt-1"
+                                title={`Context: ${ctx.used.toLocaleString()} / ${ctx.total.toLocaleString()} tokens (${Math.round(ctx.percentage)}%)`}
+                              />
+                            )}
                           </div>
                         );
                       })}

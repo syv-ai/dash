@@ -114,6 +114,81 @@ export interface TerminalSnapshot {
   data: string;
 }
 
+// ── Context Usage Types ─────────────────────────────────────
+
+export interface ContextUsage {
+  used: number;
+  total: number;
+  /** Always equals Math.min(100, Math.max(0, total > 0 ? (used / total) * 100 : 0)).
+   *  Pre-computed for rendering convenience; derived from used/total at creation time. */
+  percentage: number;
+}
+
+export interface SessionCost {
+  totalCostUsd: number;
+  totalDurationMs: number;
+  totalApiDurationMs: number;
+  totalLinesAdded: number;
+  totalLinesRemoved: number;
+}
+
+export interface RateLimitInfo {
+  usedPercentage: number;
+  /** When this rate limit window resets. Epoch seconds (NOT milliseconds). */
+  resetsAt: number;
+}
+
+export interface RateLimits {
+  fiveHour?: RateLimitInfo;
+  sevenDay?: RateLimitInfo;
+}
+
+export interface StatusLineData {
+  contextUsage: ContextUsage;
+  cost?: SessionCost;
+  rateLimits?: RateLimits;
+  model?: string;
+  updatedAt: number; // epoch ms
+}
+
+export interface UsageThresholds {
+  /** Warn when context window usage exceeds this percentage (0-100), or null to disable. */
+  contextPercentage: number | null;
+  /** Warn when 5-hour rate limit usage exceeds this percentage (0-100), or null to disable. */
+  fiveHourPercentage: number | null;
+  /** Warn when 7-day rate limit usage exceeds this percentage (0-100), or null to disable. */
+  sevenDayPercentage: number | null;
+}
+
+// ── Activity Types ──────────────────────────────────────────
+
+export type ActivityState = 'busy' | 'idle' | 'waiting' | 'error';
+
+/** Human-readable label for the current tool, derived from PreToolUse hook data. */
+export interface ToolActivity {
+  /** Raw tool name from Claude Code (e.g. "Bash", "Edit", "Grep", "Agent"). */
+  toolName: string;
+  /** Short human-readable description (e.g. "Running command", "Editing main.ts"). */
+  label: string;
+}
+
+/** Error info from StopFailure hook. */
+export interface ActivityError {
+  type: 'rate_limit' | 'auth_error' | 'billing_error' | 'unknown';
+  message?: string;
+}
+
+/** Rich activity info emitted to the renderer for each PTY. */
+export interface ActivityInfo {
+  state: ActivityState;
+  /** Current tool being executed (set by PreToolUse, cleared by PostToolUse/Stop). */
+  tool?: ToolActivity;
+  /** Error details when state is 'error'. */
+  error?: ActivityError;
+  /** True while Claude Code is compacting context. */
+  compacting?: boolean;
+}
+
 // ── Branch Types ─────────────────────────────────────────────
 
 export interface BranchInfo {

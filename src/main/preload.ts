@@ -63,8 +63,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Activity monitor
   ptyGetAllActivity: () => ipcRenderer.invoke('pty:activity:getAll'),
-  onPtyActivity: (callback: (data: Record<string, 'busy' | 'idle' | 'waiting'>) => void) => {
-    const handler = (_event: unknown, data: Record<string, 'busy' | 'idle' | 'waiting'>) =>
+  onPtyActivity: (
+    callback: (data: Record<string, import('@shared/types').ActivityInfo>) => void,
+  ) => {
+    const handler = (_event: unknown, data: Record<string, import('@shared/types').ActivityInfo>) =>
       callback(data);
     ipcRenderer.on('pty:activity', handler);
     return () => {
@@ -85,6 +87,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('rc:stateChanged', handler);
     return () => {
       ipcRenderer.removeListener('rc:stateChanged', handler);
+    };
+  },
+
+  // Status line data (context + cost + rate limits)
+  ptyGetAllStatusLine: () => ipcRenderer.invoke('pty:statusLine:getAll'),
+  onPtyStatusLine: (
+    callback: (data: Record<string, import('@shared/types').StatusLineData>) => void,
+  ) => {
+    const handler = (
+      _event: unknown,
+      data: Record<string, import('@shared/types').StatusLineData>,
+    ) => callback(data);
+    ipcRenderer.on('pty:statusLine', handler);
+    return () => {
+      ipcRenderer.removeListener('pty:statusLine', handler);
     };
   },
 

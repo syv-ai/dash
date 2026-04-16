@@ -53,14 +53,33 @@ function getLineNumber(line: DiffLine): number {
 function getLanguageFromPath(filePath: string): string {
   const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
   const langMap: Record<string, string> = {
-    ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx',
-    py: 'python', rb: 'ruby', go: 'go', rs: 'rust',
-    java: 'java', kt: 'kotlin', swift: 'swift',
-    css: 'css', scss: 'scss', html: 'html',
-    json: 'json', yaml: 'yaml', yml: 'yaml',
-    md: 'markdown', sql: 'sql', sh: 'bash',
-    c: 'c', cpp: 'cpp', h: 'c', hpp: 'cpp',
-    cs: 'csharp', php: 'php', lua: 'lua',
+    ts: 'typescript',
+    tsx: 'tsx',
+    js: 'javascript',
+    jsx: 'jsx',
+    py: 'python',
+    rb: 'ruby',
+    go: 'go',
+    rs: 'rust',
+    java: 'java',
+    kt: 'kotlin',
+    swift: 'swift',
+    css: 'css',
+    scss: 'scss',
+    html: 'html',
+    json: 'json',
+    yaml: 'yaml',
+    yml: 'yaml',
+    md: 'markdown',
+    sql: 'sql',
+    sh: 'bash',
+    c: 'c',
+    cpp: 'cpp',
+    h: 'c',
+    hpp: 'cpp',
+    cs: 'csharp',
+    php: 'php',
+    lua: 'lua',
   };
   return langMap[ext] || ext || '';
 }
@@ -110,6 +129,46 @@ function collectLines(
   return result;
 }
 
+// ── Scrollbar minimap types ─────────────────────────────────
+
+interface ChangeMarker {
+  /** 0–1 start position within the total line count */
+  position: number;
+  /** 0–1 span (at least 1 line tall) */
+  span: number;
+  type: 'add' | 'delete';
+}
+
+/** Merge consecutive same-type changed lines into single markers */
+function buildChangeMarkers(hunks: DiffHunk[]): ChangeMarker[] {
+  let totalLines = 0;
+  for (const hunk of hunks) {
+    totalLines += 1 + hunk.lines.length;
+  }
+  if (totalLines === 0) return [];
+
+  const markers: ChangeMarker[] = [];
+  let lineIdx = 0;
+  for (const hunk of hunks) {
+    lineIdx += 1; // hunk header
+    for (const line of hunk.lines) {
+      if (line.type === 'add' || line.type === 'delete') {
+        const prev = markers[markers.length - 1];
+        const pos = lineIdx / totalLines;
+        const oneLine = 1 / totalLines;
+        // Merge into previous marker if same type and adjacent
+        if (prev && prev.type === line.type && Math.abs(prev.position + prev.span - pos) < 1e-9) {
+          prev.span += oneLine;
+        } else {
+          markers.push({ position: pos, span: oneLine, type: line.type });
+        }
+      }
+      lineIdx++;
+    }
+  }
+  return markers;
+}
+
 // ── Component ───────────────────────────────────────────────
 
 interface DiffViewerProps {
@@ -130,6 +189,11 @@ export function DiffViewer({ diff, loading, activeTaskId, onClose }: DiffViewerP
 
   const lineIndex = useMemo(
     () => (diff?.hunks ? buildLineIndex(diff.hunks) : new Map<string, number>()),
+    [diff?.hunks],
+  );
+
+  const changeMarkers = useMemo(
+    () => (diff?.hunks ? buildChangeMarkers(diff.hunks) : []),
     [diff?.hunks],
   );
 
@@ -404,162 +468,202 @@ export function DiffViewer({ diff, loading, activeTaskId, onClose }: DiffViewerP
         </div>
 
         {/* Content */}
-        <div ref={contentRef} className="flex-1 overflow-auto font-mono text-[12px] leading-[20px] relative">
-          {loading && (
-            <div className="flex items-center justify-center h-full">
-              <div className="flex items-center gap-3">
-                <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                <span className="text-[13px] text-muted-foreground/50">Loading diff...</span>
-              </div>
-            </div>
-          )}
-
-          {diff?.isBinary && (
-            <div className="flex items-center justify-center h-full">
-              <span className="text-[13px] text-muted-foreground/40">
-                Binary file — cannot display diff
-              </span>
-            </div>
-          )}
-
-          {diff && !diff.isBinary && diff.hunks.length === 0 && (
-            <div className="flex items-center justify-center h-full">
-              <span className="text-[13px] text-muted-foreground/40">No differences</span>
-            </div>
-          )}
-
-          {diff &&
-            !diff.isBinary &&
-            diff.hunks.map((hunk, hi) => (
-              <div key={hi}>
-                {/* Hunk header */}
-                <div className="diff-hunk px-5 py-1.5 text-[hsl(var(--git-renamed))]/70 border-y border-border/20 sticky top-0 backdrop-blur-sm text-[11px]">
-                  {hunk.header}
+        <div className="flex-1 relative overflow-hidden">
+          <div
+            ref={contentRef}
+            className="h-full overflow-auto font-mono text-[12px] leading-[20px] relative"
+          >
+            {loading && (
+              <div className="flex items-center justify-center h-full">
+                <div className="flex items-center gap-3">
+                  <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                  <span className="text-[13px] text-muted-foreground/50">Loading diff...</span>
                 </div>
+              </div>
+            )}
 
-                {/* Lines */}
-                {hunk.lines.map((line, li) => {
-                  const isAdd = line.type === 'add';
-                  const isDel = line.type === 'delete';
-                  const selected = isLineInSelection(hi, li);
-                  const commented = isLineCommented(hi, li);
-                  const commentStart = isFirstLineOfComment(hi, li);
+            {diff?.isBinary && (
+              <div className="flex items-center justify-center h-full">
+                <span className="text-[13px] text-muted-foreground/40">
+                  Binary file — cannot display diff
+                </span>
+              </div>
+            )}
 
-                  return (
-                    <div
-                      key={`${hi}-${li}`}
-                      data-hunk={hi}
-                      data-line={li}
-                      className={[
-                        'flex',
-                        selected
-                          ? 'diff-line-selected'
-                          : isAdd
-                            ? 'diff-add'
-                            : isDel
-                              ? 'diff-delete'
-                              : '',
-                        commented && !selected ? 'diff-line-commented' : '',
-                        'transition-colors duration-75',
-                      ].join(' ')}
-                    >
-                      {/* Comment indicator */}
-                      {commentStart && !selected && (
-                        <span className="w-0 relative">
-                          <MessageSquare
-                            size={10}
-                            strokeWidth={2}
-                            className="absolute -left-0.5 top-[5px] text-primary/60"
-                          />
-                        </span>
-                      )}
+            {diff && !diff.isBinary && diff.hunks.length === 0 && (
+              <div className="flex items-center justify-center h-full">
+                <span className="text-[13px] text-muted-foreground/40">No differences</span>
+              </div>
+            )}
 
-                      {/* Old line number */}
-                      <span
-                        className="w-14 flex-shrink-0 text-right pr-3 text-muted-foreground/20 select-none border-r border-border/10 tabular-nums diff-gutter-clickable"
-                        onMouseDown={(e) => handleGutterMouseDown(e, hi, li)}
-                      >
-                        {line.oldLineNumber ?? ''}
-                      </span>
-                      {/* New line number */}
-                      <span
-                        className="w-14 flex-shrink-0 text-right pr-3 text-muted-foreground/20 select-none border-r border-border/10 tabular-nums diff-gutter-clickable"
-                        onMouseDown={(e) => handleGutterMouseDown(e, hi, li)}
-                      >
-                        {line.newLineNumber ?? ''}
-                      </span>
-                      {/* Marker */}
-                      <span
-                        className={`w-8 flex-shrink-0 text-center select-none ${
-                          isAdd
-                            ? 'text-[hsl(var(--git-added))]/60'
-                            : isDel
-                              ? 'text-[hsl(var(--git-deleted))]/60'
-                              : 'text-muted-foreground/15'
-                        }`}
-                      >
-                        {isAdd ? '+' : isDel ? '-' : ' '}
-                      </span>
-                      {/* Content */}
-                      <span
-                        className={`flex-1 pr-5 whitespace-pre ${
-                          isAdd
-                            ? 'text-[hsl(var(--git-added))]/80'
-                            : isDel
-                              ? 'text-[hsl(var(--git-deleted))]/80'
-                              : 'text-foreground/70'
-                        }`}
-                      >
-                        {line.content}
-                      </span>
+            {diff && !diff.isBinary && diff.hunks.length > 0 && (
+              <div className="inline-block min-w-full">
+                {diff.hunks.map((hunk, hi) => (
+                  <div key={hi}>
+                    {/* Hunk header */}
+                    <div className="diff-hunk px-5 py-1.5 text-[hsl(var(--git-renamed))]/70 border-y border-border/20 sticky top-0 backdrop-blur-sm text-[11px]">
+                      {hunk.header}
                     </div>
-                  );
-                })}
-              </div>
-            ))}
 
-          {/* Comment popover */}
-          {popover && (
-            <div
-              ref={popoverRef}
-              className="absolute z-10 w-[320px] bg-card border border-border/60 rounded-lg shadow-xl shadow-black/30 overflow-hidden animate-scale-in"
-              style={{ top: popover.top, left: Math.max(8, popover.left) }}
-            >
-              <div className="p-3">
-                <textarea
-                  ref={textareaRef}
-                  value={popoverText}
-                  onChange={(e) => setPopoverText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && e.metaKey) {
-                      e.preventDefault();
-                      handleAddComment();
-                    }
-                    if (e.key === 'Escape') {
-                      e.preventDefault();
-                      handleCancelComment();
-                    }
-                  }}
-                  placeholder="Add a comment..."
-                  rows={3}
-                  className="w-full text-[12px] bg-background/60 border border-border/60 rounded-md px-2.5 py-1.5 resize-none placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/40 font-sans"
-                />
-                <div className="flex gap-2 justify-end mt-2">
-                  <button
-                    onClick={handleCancelComment}
-                    className="px-3 py-1.5 rounded-md text-[11px] text-muted-foreground/60 hover:text-foreground hover:bg-accent/60 transition-all duration-150"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleAddComment}
-                    disabled={!popoverText.trim()}
-                    className="px-3 py-1.5 rounded-md text-[11px] font-medium bg-primary/15 text-primary hover:bg-primary/25 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
-                  >
-                    Add comment
-                  </button>
+                    {/* Lines */}
+                    {hunk.lines.map((line, li) => {
+                      const isAdd = line.type === 'add';
+                      const isDel = line.type === 'delete';
+                      const selected = isLineInSelection(hi, li);
+                      const commented = isLineCommented(hi, li);
+                      const commentStart = isFirstLineOfComment(hi, li);
+
+                      return (
+                        <div
+                          key={`${hi}-${li}`}
+                          data-hunk={hi}
+                          data-line={li}
+                          className={[
+                            'flex',
+                            selected
+                              ? 'diff-line-selected'
+                              : isAdd
+                                ? 'diff-add'
+                                : isDel
+                                  ? 'diff-delete'
+                                  : '',
+                            commented && !selected ? 'diff-line-commented' : '',
+                            'transition-colors duration-75',
+                          ].join(' ')}
+                        >
+                          {/* Comment indicator */}
+                          {commentStart && !selected && (
+                            <span className="w-0 relative">
+                              <MessageSquare
+                                size={10}
+                                strokeWidth={2}
+                                className="absolute -left-0.5 top-[5px] text-primary/60"
+                              />
+                            </span>
+                          )}
+
+                          {/* Old line number */}
+                          <span
+                            className="w-14 flex-shrink-0 text-right pr-3 text-muted-foreground/20 select-none border-r border-border/10 tabular-nums diff-gutter-clickable"
+                            onMouseDown={(e) => handleGutterMouseDown(e, hi, li)}
+                          >
+                            {line.oldLineNumber ?? ''}
+                          </span>
+                          {/* New line number */}
+                          <span
+                            className="w-14 flex-shrink-0 text-right pr-3 text-muted-foreground/20 select-none border-r border-border/10 tabular-nums diff-gutter-clickable"
+                            onMouseDown={(e) => handleGutterMouseDown(e, hi, li)}
+                          >
+                            {line.newLineNumber ?? ''}
+                          </span>
+                          {/* Marker */}
+                          <span
+                            className={`w-8 flex-shrink-0 text-center select-none ${
+                              isAdd
+                                ? 'text-[hsl(var(--git-added))]/60'
+                                : isDel
+                                  ? 'text-[hsl(var(--git-deleted))]/60'
+                                  : 'text-muted-foreground/15'
+                            }`}
+                          >
+                            {isAdd ? '+' : isDel ? '-' : ' '}
+                          </span>
+                          {/* Content */}
+                          <span
+                            className={`flex-1 pr-5 whitespace-pre ${
+                              isAdd
+                                ? 'text-[hsl(var(--git-added))]/80'
+                                : isDel
+                                  ? 'text-[hsl(var(--git-deleted))]/80'
+                                  : 'text-foreground/70'
+                            }`}
+                          >
+                            {line.content}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Comment popover */}
+            {popover && (
+              <div
+                ref={popoverRef}
+                className="absolute z-10 w-[320px] bg-card border border-border/60 rounded-lg shadow-xl shadow-black/30 overflow-hidden animate-scale-in"
+                style={{ top: popover.top, left: Math.max(8, popover.left) }}
+              >
+                <div className="p-3">
+                  <textarea
+                    ref={textareaRef}
+                    value={popoverText}
+                    onChange={(e) => setPopoverText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && e.metaKey) {
+                        e.preventDefault();
+                        handleAddComment();
+                      }
+                      if (e.key === 'Escape') {
+                        e.preventDefault();
+                        handleCancelComment();
+                      }
+                    }}
+                    placeholder="Add a comment..."
+                    rows={3}
+                    className="w-full text-[12px] bg-background/60 border border-border/60 rounded-md px-2.5 py-1.5 resize-none placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/40 font-sans"
+                  />
+                  <div className="flex gap-2 justify-end mt-2">
+                    <button
+                      onClick={handleCancelComment}
+                      className="px-3 py-1.5 rounded-md text-[11px] text-muted-foreground/60 hover:text-foreground hover:bg-accent/60 transition-all duration-150"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleAddComment}
+                      disabled={!popoverText.trim()}
+                      className="px-3 py-1.5 rounded-md text-[11px] font-medium bg-primary/15 text-primary hover:bg-primary/25 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
+                    >
+                      Add comment
+                    </button>
+                  </div>
                 </div>
               </div>
+            )}
+          </div>
+
+          {/* Scrollbar change minimap */}
+          {diff && !diff.isBinary && changeMarkers.length > 0 && (
+            <div
+              className="absolute right-0 top-0 bottom-0 w-[8px] z-20 pointer-events-auto"
+              onClick={(e) => {
+                if (!contentRef.current) return;
+                const rect = e.currentTarget.getBoundingClientRect();
+                const ratio = (e.clientY - rect.top) / rect.height;
+                contentRef.current.scrollTop =
+                  ratio * (contentRef.current.scrollHeight - contentRef.current.clientHeight);
+              }}
+            >
+              {changeMarkers.map((marker, i) => (
+                <div
+                  key={i}
+                  className={
+                    marker.type === 'add'
+                      ? 'bg-[hsl(var(--git-added))]'
+                      : 'bg-[hsl(var(--git-deleted))]'
+                  }
+                  style={{
+                    position: 'absolute',
+                    top: `${marker.position * 100}%`,
+                    left: 0,
+                    right: 0,
+                    height: `max(2px, ${marker.span * 100}%)`,
+                    opacity: 0.7,
+                  }}
+                />
+              ))}
             </div>
           )}
         </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   PanelGroup,
   Panel,
@@ -19,9 +19,12 @@ import { RemoteControlModal } from './components/RemoteControlModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ProjectSettingsModal } from './components/ProjectSettingsModal';
 import { AdoSetupModal } from './components/AdoSetupModal';
+import { RateLimitsWidget } from './components/RateLimitsWidget';
 import { parseAdoRemote } from '../shared/urls';
 import { ToastContainer } from './components/Toast';
 import { toast } from 'sonner';
+import { useStatusLine } from './hooks/useStatusLine';
+import { useThresholdAlerts } from './hooks/useThresholdAlerts';
 import type {
   Project,
   Task,
@@ -30,6 +33,8 @@ import type {
   LinkedGithubIssue,
   LinkedAdoWorkItem,
   RemoteControlState,
+  UsageThresholds,
+  ActivityInfo,
   PixelAgentsConfig,
   PixelAgentsStatus,
 } from '../shared/types';
@@ -163,13 +168,37 @@ export function App() {
   }, [effortLevel, customClaudeEnvVars]);
 
   // Activity state — keys are PTY IDs that have active sessions
-  const [taskActivity, setTaskActivity] = useState<Record<string, 'busy' | 'idle' | 'waiting'>>({});
+  const [taskActivity, setTaskActivity] = useState<Record<string, ActivityInfo>>({});
 
   // Remote control state
   const [remoteControlStates, setRemoteControlStates] = useState<
     Record<string, RemoteControlState>
   >({});
   const [remoteControlModalPtyId, setRemoteControlModalPtyId] = useState<string | null>(null);
+
+  // Status line data (context + cost + rate limits) — derived contextUsage & latestRateLimits
+  const { statusLineData, contextUsage, latestRateLimits } = useStatusLine();
+
+  // Usage thresholds for popup notifications
+  const [usageThresholds, setUsageThresholds] = useState<UsageThresholds>(() => {
+    try {
+      const stored = localStorage.getItem('usageThresholds');
+      return stored
+        ? JSON.parse(stored)
+        : {
+            contextPercentage: 80,
+            fiveHourPercentage: null,
+            sevenDayPercentage: null,
+          };
+    } catch (err) {
+      console.warn('Failed to parse usageThresholds from localStorage, resetting:', err);
+      return {
+        contextPercentage: 80,
+        fiveHourPercentage: null,
+        sevenDayPercentage: null,
+      };
+    }
+  });
 
   const notificationSoundRef = useRef(notificationSound);
   useEffect(() => {
@@ -206,6 +235,14 @@ export function App() {
     });
   }, [activeTaskId]);
 
+  // Show inline usage bars in sidebar and header
+  const [showUsageInline, setShowUsageInline] = useState(
+    () => localStorage.getItem('showUsageInline') !== 'false',
+  );
+  useEffect(() => {
+    localStorage.setItem('showUsageInline', String(showUsageInline));
+  }, [showUsageInline]);
+
   // Rotation — tasks the user cycles through with Ctrl+Tab
   const [showActiveTasksSection, setShowActiveTasksSection] = useState(
     () => localStorage.getItem('showActiveTasksSection') !== 'false',
@@ -218,7 +255,8 @@ export function App() {
     try {
       const stored = localStorage.getItem('rotationExclusions');
       return stored ? new Set(JSON.parse(stored)) : new Set();
-    } catch {
+    } catch (err) {
+      console.warn('Failed to parse rotationExclusions from localStorage:', err);
       return new Set();
     }
   });
@@ -304,7 +342,7 @@ export function App() {
 
   // Activity monitor — subscribe first, then query to avoid race
   useEffect(() => {
-    const prevActivity: Record<string, 'busy' | 'idle' | 'waiting'> = {};
+    const prevState: Record<string, string> = {};
     // Track PTYs that have been idle at least once, so we skip the initial
     // busy→idle transition that fires when a direct-spawn PTY first registers.
     const hasBeenIdle = new Set<string>();
@@ -316,8 +354,8 @@ export function App() {
     const unsubscribe = window.electronAPI.onPtyActivity((newActivity) => {
       // Peon mode: detect idle→busy transitions (user submits query)
       if (notificationSoundRef.current === 'peon') {
-        for (const [id, state] of Object.entries(newActivity)) {
-          if (prevActivity[id] === 'idle' && state === 'busy' && hasBeenIdle.has(id)) {
+        for (const [id, info] of Object.entries(newActivity)) {
+          if (prevState[id] === 'idle' && info.state === 'busy' && hasBeenIdle.has(id)) {
             playPeonSound('yes');
             break;
           }
@@ -327,8 +365,8 @@ export function App() {
       // Skip transitions from 'waiting' — those are not task completions
       // Skip brief busy flashes (< 3s) — these are startup artifacts, not real work
       const newlyDoneIds: string[] = [];
-      for (const [id, state] of Object.entries(newActivity)) {
-        if (prevActivity[id] === 'busy' && state === 'idle' && hasBeenIdle.has(id)) {
+      for (const [id, info] of Object.entries(newActivity)) {
+        if (prevState[id] === 'busy' && info.state === 'idle' && hasBeenIdle.has(id)) {
           const elapsed = Date.now() - (busySince[id] ?? Date.now());
           if (elapsed >= MIN_BUSY_DURATION_MS) {
             newlyDoneIds.push(id);
@@ -337,10 +375,10 @@ export function App() {
       }
 
       // Track busy start times (after detection, so busySince is still available above)
-      for (const [id, state] of Object.entries(newActivity)) {
-        if (state === 'busy' && prevActivity[id] !== 'busy') {
+      for (const [id, info] of Object.entries(newActivity)) {
+        if (info.state === 'busy' && prevState[id] !== 'busy') {
           busySince[id] = Date.now();
-        } else if (state !== 'busy') {
+        } else if (info.state !== 'busy') {
           delete busySince[id];
         }
       }
@@ -353,25 +391,27 @@ export function App() {
         }
       }
       // Mark PTYs that have reached idle (so the *next* busy→idle triggers)
-      for (const [id, state] of Object.entries(newActivity)) {
-        if (state === 'idle') hasBeenIdle.add(id);
+      for (const [id, info] of Object.entries(newActivity)) {
+        if (info.state === 'idle') hasBeenIdle.add(id);
       }
       // Clean up removed PTYs
       for (const id of hasBeenIdle) {
         if (!(id in newActivity)) hasBeenIdle.delete(id);
       }
-      // Update previous state (shallow copy)
-      Object.keys(prevActivity).forEach((k) => delete prevActivity[k]);
-      Object.assign(prevActivity, newActivity);
+      // Update previous state (shallow copy of states only)
+      for (const k of Object.keys(prevState)) delete prevState[k];
+      for (const [id, info] of Object.entries(newActivity)) {
+        prevState[id] = info.state;
+      }
 
       setTaskActivity(newActivity);
     });
 
     window.electronAPI.ptyGetAllActivity().then((resp) => {
       if (resp.success && resp.data) {
-        Object.assign(prevActivity, resp.data);
-        for (const [id, state] of Object.entries(resp.data)) {
-          if (state === 'idle') hasBeenIdle.add(id);
+        for (const [id, info] of Object.entries(resp.data)) {
+          prevState[id] = info.state;
+          if (info.state === 'idle') hasBeenIdle.add(id);
         }
         setTaskActivity(resp.data);
       }
@@ -401,6 +441,23 @@ export function App() {
 
     return unsubscribe;
   }, []);
+
+  // Task name lookup (used for threshold alerts and settings)
+  const taskNames = useMemo(() => {
+    const names: Record<string, string> = {};
+    for (const tasks of Object.values(tasksByProject)) {
+      for (const t of tasks) names[t.id] = t.name;
+    }
+    return names;
+  }, [tasksByProject]);
+
+  // Threshold alerts — fires toast notifications when usage exceeds thresholds
+  useThresholdAlerts(statusLineData, usageThresholds, taskNames);
+
+  // Persist usage thresholds
+  useEffect(() => {
+    localStorage.setItem('usageThresholds', JSON.stringify(usageThresholds));
+  }, [usageThresholds]);
 
   // Persist selection to localStorage (survives CMD+R reload)
   useEffect(() => {
@@ -727,12 +784,21 @@ export function App() {
   async function loadProjects() {
     const resp = await window.electronAPI.getProjects();
     if (resp.success && resp.data) {
-      setProjects(applyProjectOrder(resp.data));
-      if (resp.data.length > 0) {
+      // On Windows, older projects may have been saved with the full path as the name.
+      // Derive the folder name from the path so the sidebar shows short names.
+      const projects = resp.data.map((p) => {
+        const looksLikePath = p.name.includes('\\') || p.name.includes('/');
+        if (looksLikePath) {
+          return { ...p, name: p.name.split(/[\\/]/).pop() || p.name };
+        }
+        return p;
+      });
+      setProjects(applyProjectOrder(projects));
+      if (projects.length > 0) {
         // Only default to first project if no valid selection exists
         setActiveProjectId((prev) => {
-          if (prev && resp.data!.some((p) => p.id === prev)) return prev;
-          return resp.data![0].id;
+          if (prev && projects.some((p) => p.id === prev)) return prev;
+          return projects[0].id;
         });
       }
     }
@@ -778,7 +844,7 @@ export function App() {
     const resp = await window.electronAPI.showOpenDialog();
     if (resp.success && resp.data && resp.data.length > 0) {
       const folderPath = resp.data[0];
-      const name = folderPath.split('/').pop() || 'Untitled';
+      const name = folderPath.split(/[\\/]/).pop() || 'Untitled';
 
       const gitResp = await window.electronAPI.detectGit(folderPath);
       const gitInfo = gitResp.success ? gitResp.data : null;
@@ -1266,6 +1332,7 @@ export function App() {
               taskActivity={taskActivity}
               unseenTaskIds={unseenTaskIds}
               remoteControlStates={remoteControlStates}
+              contextUsage={showUsageInline ? contextUsage : {}}
               onReorderProjects={handleReorderProjects}
               pixelAgentsConnectedCount={
                 Object.values(pixelAgentsStatus.offices).filter(
@@ -1314,6 +1381,7 @@ export function App() {
               taskActivity={taskActivity}
               unseenTaskIds={unseenTaskIds}
               remoteControlStates={remoteControlStates}
+              contextUsage={showUsageInline ? contextUsage : {}}
               onSelectTask={setActiveTaskId}
               onEnableRemoteControl={(taskId) => setRemoteControlModalPtyId(taskId)}
               onNewTask={() => activeProjectId && handleNewTask(activeProjectId)}
@@ -1364,43 +1432,50 @@ export function App() {
                 setTimeout(() => setChangesAnimating(false), 200);
               }}
             >
-              <ShellDrawerWrapper
-                enabled={
-                  shellDrawerEnabled && shellDrawerPosition === 'right' && !changesPanelCollapsed
-                }
-                taskId={activeTask?.id ?? null}
-                cwd={activeTask?.path ?? null}
-                collapsed={shellDrawerCollapsed}
-                panelRef={shellDrawerPanelRef}
-                animating={shellDrawerAnimating}
-                onAnimate={() => setShellDrawerAnimating(true)}
-                onCollapse={() => {
-                  setShellDrawerCollapsed(true);
-                  localStorage.setItem('shellDrawerCollapsed', 'true');
-                  setTimeout(() => setShellDrawerAnimating(false), 200);
-                }}
-                onExpand={() => {
-                  setShellDrawerCollapsed(false);
-                  localStorage.setItem('shellDrawerCollapsed', 'false');
-                  setTimeout(() => setShellDrawerAnimating(false), 200);
-                }}
-              >
-                <FileChangesPanel
-                  gitStatus={gitStatus}
-                  loading={gitLoading}
-                  onStageFile={handleStageFile}
-                  onUnstageFile={handleUnstageFile}
-                  onStageAll={handleStageAll}
-                  onUnstageAll={handleUnstageAll}
-                  onDiscardFile={handleDiscardFile}
-                  onViewDiff={handleViewDiff}
-                  onCommit={handleCommit}
-                  onPush={handlePush}
-                  collapsed={changesPanelCollapsed}
-                  onToggleCollapse={toggleChangesPanel}
-                  onShowCommitGraph={() => setShowCommitGraph(true)}
-                />
-              </ShellDrawerWrapper>
+              <div className="h-full flex flex-col overflow-hidden">
+                {!changesPanelCollapsed &&
+                  latestRateLimits &&
+                  (latestRateLimits.fiveHour || latestRateLimits.sevenDay) && (
+                    <RateLimitsWidget rateLimits={latestRateLimits} />
+                  )}
+                <ShellDrawerWrapper
+                  enabled={
+                    shellDrawerEnabled && shellDrawerPosition === 'right' && !changesPanelCollapsed
+                  }
+                  taskId={activeTask?.id ?? null}
+                  cwd={activeTask?.path ?? null}
+                  collapsed={shellDrawerCollapsed}
+                  panelRef={shellDrawerPanelRef}
+                  animating={shellDrawerAnimating}
+                  onAnimate={() => setShellDrawerAnimating(true)}
+                  onCollapse={() => {
+                    setShellDrawerCollapsed(true);
+                    localStorage.setItem('shellDrawerCollapsed', 'true');
+                    setTimeout(() => setShellDrawerAnimating(false), 200);
+                  }}
+                  onExpand={() => {
+                    setShellDrawerCollapsed(false);
+                    localStorage.setItem('shellDrawerCollapsed', 'false');
+                    setTimeout(() => setShellDrawerAnimating(false), 200);
+                  }}
+                >
+                  <FileChangesPanel
+                    gitStatus={gitStatus}
+                    loading={gitLoading}
+                    onStageFile={handleStageFile}
+                    onUnstageFile={handleUnstageFile}
+                    onStageAll={handleStageAll}
+                    onUnstageAll={handleUnstageAll}
+                    onDiscardFile={handleDiscardFile}
+                    onViewDiff={handleViewDiff}
+                    onCommit={handleCommit}
+                    onPush={handlePush}
+                    collapsed={changesPanelCollapsed}
+                    onToggleCollapse={toggleChangesPanel}
+                    onShowCommitGraph={() => setShowCommitGraph(true)}
+                  />
+                </ShellDrawerWrapper>
+              </div>
             </Panel>
           </>
         )}
@@ -1490,6 +1565,8 @@ export function App() {
             localStorage.setItem('theme', t);
             sessionRegistry.setAllTerminalThemes(terminalTheme, t === 'dark');
           }}
+          showUsageInline={showUsageInline}
+          onShowUsageInlineChange={setShowUsageInline}
           showActiveTasksSection={showActiveTasksSection}
           onShowActiveTasksSectionChange={setShowActiveTasksSection}
           shellDrawerEnabled={shellDrawerEnabled}
@@ -1573,6 +1650,11 @@ export function App() {
             window.electronAPI.pixelAgentsSaveConfig(config);
           }}
           pixelAgentsStatus={pixelAgentsStatus}
+          statusLineData={statusLineData}
+          taskNames={taskNames}
+          latestRateLimits={latestRateLimits}
+          usageThresholds={usageThresholds}
+          onUsageThresholdsChange={setUsageThresholds}
           onClose={() => setShowSettings(false)}
         />
       )}

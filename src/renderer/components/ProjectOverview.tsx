@@ -13,7 +13,7 @@ import {
   ChevronDown,
   ArchiveRestore,
 } from 'lucide-react';
-import type { Project, Task } from '../../shared/types';
+import type { Project, Task, ActivityInfo } from '../../shared/types';
 import { linkedItemUrl } from '../../shared/urls';
 import { IconButton } from './ui/IconButton';
 import { Tooltip } from './ui/Tooltip';
@@ -22,7 +22,7 @@ interface ProjectOverviewProps {
   project: Project;
   tasks: Task[];
   archivedTasks: Task[];
-  taskActivity: Record<string, 'busy' | 'idle' | 'waiting'>;
+  taskActivity: Record<string, ActivityInfo>;
   onSelectTask: (id: string) => void;
   onNewTask: () => void;
   onProjectSettings: () => void;
@@ -44,22 +44,39 @@ function timeAgo(dateStr: string): string {
   return `${days}d ago`;
 }
 
-function ActivityDot({ activity }: { activity?: 'busy' | 'idle' | 'waiting' }) {
-  if (activity === 'waiting') {
+function ActivityDot({ info }: { info?: ActivityInfo }) {
+  const state = info?.state;
+  if (state === 'error') {
+    const label =
+      info?.error?.type === 'rate_limit'
+        ? 'Rate limited'
+        : info?.error?.type === 'auth_error'
+          ? 'Auth error'
+          : 'Error';
+    return (
+      <Tooltip content={label}>
+        <div className="w-2 h-2 rounded-full bg-destructive" />
+      </Tooltip>
+    );
+  }
+  if (state === 'waiting') {
     return (
       <Tooltip content="Waiting for user">
         <div className="w-2 h-2 rounded-full bg-orange-500" />
       </Tooltip>
     );
   }
-  if (activity === 'busy') {
+  if (state === 'busy') {
+    const label = info?.compacting
+      ? 'Compacting context...'
+      : info?.tool?.label || 'Claude is working';
     return (
-      <Tooltip content="Claude is working">
+      <Tooltip content={label}>
         <div className="w-2 h-2 rounded-full bg-amber-400 status-pulse" />
       </Tooltip>
     );
   }
-  if (activity === 'idle') {
+  if (state === 'idle') {
     return (
       <Tooltip content="Idle">
         <div className="w-2 h-2 rounded-full bg-emerald-400" />
@@ -92,9 +109,10 @@ export function ProjectOverview({
   onRestoreTask,
 }: ProjectOverviewProps) {
   const [showArchived, setShowArchived] = useState(false);
-  const busyCount = tasks.filter((t) => taskActivity[t.id] === 'busy').length;
-  const waitingCount = tasks.filter((t) => taskActivity[t.id] === 'waiting').length;
-  const idleCount = tasks.filter((t) => taskActivity[t.id] === 'idle').length;
+  const busyCount = tasks.filter((t) => taskActivity[t.id]?.state === 'busy').length;
+  const waitingCount = tasks.filter((t) => taskActivity[t.id]?.state === 'waiting').length;
+  const errorCount = tasks.filter((t) => taskActivity[t.id]?.state === 'error').length;
+  const idleCount = tasks.filter((t) => taskActivity[t.id]?.state === 'idle').length;
 
   return (
     <div className="h-full flex flex-col bg-background">
@@ -183,6 +201,12 @@ export function ProjectOverview({
                   {waitingCount} waiting
                 </span>
               )}
+              {errorCount > 0 && (
+                <span className="flex items-center gap-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-destructive" />
+                  {errorCount} error
+                </span>
+              )}
               {idleCount > 0 && (
                 <span className="flex items-center gap-1.5">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
@@ -222,7 +246,7 @@ export function ProjectOverview({
                   <button
                     key={task.id}
                     onClick={() => onSelectTask(task.id)}
-                    className="relative flex flex-col p-4 rounded-xl border border-border bg-[hsl(var(--surface-2))] hover:bg-[hsl(var(--surface-3))] hover:border-foreground/20 transition-all duration-150 text-left group"
+                    className="relative flex flex-col p-4 rounded-xl border border-border bg-[hsl(var(--surface-2))] hover:bg-[hsl(var(--surface-3))] hover:border-foreground/20 transition-all duration-150 text-left group overflow-hidden min-w-0"
                   >
                     {/* Open in IDE — top right */}
                     <Tooltip content="Open in IDE">
@@ -245,9 +269,9 @@ export function ProjectOverview({
                     </Tooltip>
 
                     {/* Task name + status */}
-                    <div className="flex items-start gap-2.5 mb-3 pr-6">
+                    <div className="flex items-start gap-2.5 mb-3 pr-6 min-w-0">
                       <div className="mt-1.5 flex-shrink-0">
-                        <ActivityDot activity={activity} />
+                        <ActivityDot info={activity} />
                       </div>
                       <span className="text-[13px] font-medium text-foreground flex-1 min-w-0 break-words">
                         {task.name}
@@ -255,19 +279,19 @@ export function ProjectOverview({
                     </div>
 
                     {/* Details */}
-                    <div className="flex flex-col gap-1.5 flex-1 text-[11px]">
+                    <div className="flex flex-col gap-1.5 flex-1 text-[11px] w-full overflow-hidden">
                       {task.branch && (
-                        <div className="flex items-center gap-1.5 text-muted-foreground">
-                          <span className="flex-shrink-0 text-muted-foreground/70">Branch:</span>
-                          <span className="truncate">{task.branch}</span>
+                        <div className="text-muted-foreground truncate">
+                          <span className="text-muted-foreground/70">Branch: </span>
+                          {task.branch}
                         </div>
                       )}
 
                       {task.useWorktree && task.path && (
-                        <div className="flex items-center gap-1.5 text-muted-foreground">
-                          <span className="flex-shrink-0 text-muted-foreground/70">Worktree:</span>
-                          <span className="truncate font-mono text-[10px]">
-                            {task.path.split('/').slice(-2).join('/')}
+                        <div className="text-muted-foreground truncate">
+                          <span className="text-muted-foreground/70">Worktree: </span>
+                          <span className="font-mono text-[10px]">
+                            {task.path.split(/[\\/]/).slice(-2).join('/')}
                           </span>
                         </div>
                       )}

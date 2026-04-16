@@ -15,11 +15,15 @@ import type {
   Task,
   LinkedItem,
   RemoteControlState,
+  ContextUsage,
   PullRequestInfo,
   GitStatus,
 } from '../../shared/types';
 import { linkedItemUrl, isAdoRemote, branchUrl } from '../../shared/urls';
 import { Tooltip } from './ui/Tooltip';
+
+import { formatTokens } from '../../shared/format';
+import { UsageBarInline, usageTextColor } from './ui/UsageBar';
 
 function LinkedItemBadges({
   items,
@@ -74,9 +78,10 @@ interface MainContentProps {
   sidebarCollapsed?: boolean;
   tasks?: Task[];
   activeTaskId?: string | null;
-  taskActivity?: Record<string, 'busy' | 'idle' | 'waiting'>;
+  taskActivity?: Record<string, import('../../shared/types').ActivityInfo>;
   unseenTaskIds?: Set<string>;
   remoteControlStates?: Record<string, RemoteControlState>;
+  contextUsage?: Record<string, ContextUsage>;
   onSelectTask?: (id: string) => void;
   onEnableRemoteControl?: (taskId: string) => void;
   onNewTask?: () => void;
@@ -99,6 +104,7 @@ export function MainContent({
   taskActivity = {},
   unseenTaskIds,
   remoteControlStates = {},
+  contextUsage = {},
   onSelectTask,
   onEnableRemoteControl,
   onNewTask,
@@ -197,6 +203,7 @@ export function MainContent({
       : null;
 
   const branchTooltip = gitStatus?.hasUpstream ? 'Branch' : 'Branch (no upstream detected)';
+  const BranchIcon = activeTask.useWorktree ? FolderGit2 : GitBranch;
 
   const branchLabel = currentBranchUrl ? (
     <a
@@ -210,6 +217,18 @@ export function MainContent({
   ) : (
     <span className="text-[11px] font-mono truncate">{currentBranch}</span>
   );
+
+  const branchBadge = (
+    <Tooltip content={branchTooltip}>
+      <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
+        <BranchIcon size={11} strokeWidth={2} className="flex-shrink-0" />
+        {branchLabel}
+      </div>
+    </Tooltip>
+  );
+
+  const activeCtxRaw = activeTask ? contextUsage[activeTask.id] : undefined;
+  const activeCtx = activeCtxRaw && activeCtxRaw.percentage > 0 ? activeCtxRaw : undefined;
 
   const taskHeader = (
     <div
@@ -231,15 +250,17 @@ export function MainContent({
               >
                 <span
                   className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                    taskActivity[task.id] === 'waiting'
-                      ? 'bg-orange-500'
-                      : taskActivity[task.id] === 'busy'
-                        ? 'bg-amber-400 animate-pulse'
-                        : taskActivity[task.id] === 'idle' && unseenTaskIds?.has(task.id)
-                          ? 'bg-blue-400'
-                          : taskActivity[task.id] === 'idle'
-                            ? 'bg-green-400'
-                            : 'bg-muted-foreground/30'
+                    taskActivity[task.id]?.state === 'error'
+                      ? 'bg-destructive'
+                      : taskActivity[task.id]?.state === 'waiting'
+                        ? 'bg-orange-500'
+                        : taskActivity[task.id]?.state === 'busy'
+                          ? 'bg-amber-400 animate-pulse'
+                          : taskActivity[task.id]?.state === 'idle' && unseenTaskIds?.has(task.id)
+                            ? 'bg-blue-400'
+                            : taskActivity[task.id]?.state === 'idle'
+                              ? 'bg-green-400'
+                              : 'bg-muted-foreground/30'
                   }`}
                 />
                 <span className="truncate max-w-[140px]">{task.name}</span>
@@ -256,21 +277,7 @@ export function MainContent({
               </button>
             ))}
           </div>
-          {activeTask.useWorktree ? (
-            <Tooltip content={branchTooltip}>
-              <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
-                <FolderGit2 size={11} strokeWidth={2} className="flex-shrink-0" />
-                {branchLabel}
-              </div>
-            </Tooltip>
-          ) : (
-            <Tooltip content={branchTooltip}>
-              <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
-                <GitBranch size={11} strokeWidth={2} className="flex-shrink-0" />
-                {branchLabel}
-              </div>
-            </Tooltip>
-          )}
+          {branchBadge}
         </>
       ) : (
         <>
@@ -287,21 +294,25 @@ export function MainContent({
             />
           )}
           <div className="ml-auto flex items-center gap-1.5">
-            {activeTask.useWorktree ? (
-              <Tooltip content={branchTooltip}>
-                <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
-                  <FolderGit2 size={11} strokeWidth={2} className="flex-shrink-0" />
-                  {branchLabel}
-                </div>
-              </Tooltip>
-            ) : (
-              <Tooltip content={branchTooltip}>
-                <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
-                  <GitBranch size={11} strokeWidth={2} className="flex-shrink-0" />
-                  {branchLabel}
-                </div>
-              </Tooltip>
+            {/* Context usage indicator */}
+            {activeCtx && (
+              <div
+                className="flex items-center gap-1.5"
+                title={`Context: ${activeCtx.used.toLocaleString()} / ${activeCtx.total.toLocaleString()} tokens (${Math.round(activeCtx.percentage)}%)`}
+              >
+                <UsageBarInline percentage={activeCtx.percentage} />
+                <span
+                  className={`text-[10px] tabular-nums ${
+                    activeCtx.percentage >= 80
+                      ? 'text-red-400 font-medium'
+                      : usageTextColor(activeCtx.percentage)
+                  }`}
+                >
+                  {formatTokens(activeCtx.used)}/{formatTokens(activeCtx.total)}
+                </span>
+              </div>
             )}
+            {branchBadge}
             {taskActivity[activeTask.id] && (
               <Tooltip content="Remote control">
                 <button

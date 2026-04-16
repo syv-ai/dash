@@ -3,13 +3,19 @@ import { BrowserWindow, Notification } from 'electron';
 import { eq } from 'drizzle-orm';
 import { activityMonitor } from './ActivityMonitor';
 import { DatabaseService } from './DatabaseService';
+import { contextUsageService } from './ContextUsageService';
 import { getDb } from '../db/client';
 import { tasks } from '../db/schema';
+
+/** Maximum JSON body size for hook payloads (64KB). */
+const MAX_HOOK_BODY_BYTES = 65_536;
 
 class HookServerImpl {
   private server: http.Server | null = null;
   private _port: number = 0;
   private _desktopNotificationEnabled = false;
+  // Permissive default until setPtyValidator is called during boot
+  private _hasPty: (id: string) => boolean = () => true;
 
   get port(): number {
     return this._port;
@@ -17,6 +23,10 @@ class HookServerImpl {
 
   setDesktopNotification(opts: { enabled: boolean }): void {
     this._desktopNotificationEnabled = opts.enabled;
+  }
+
+  setPtyValidator(fn: (id: string) => boolean): void {
+    this._hasPty = fn;
   }
 
   private showDesktopNotification(ptyId: string, body?: string): void {
@@ -36,7 +46,7 @@ class HookServerImpl {
             body = `${task.name} finished`;
           }
         } catch (err) {
-          console.error('[HookServer] DB lookup for notification body failed:', err);
+          console.warn('[HookServer] DB lookup for notification body failed:', err);
         }
       }
       const n = new Notification({
@@ -62,31 +72,61 @@ class HookServerImpl {
       const task = db.select({ name: tasks.name }).from(tasks).where(eq(tasks.id, ptyId)).get();
       return task?.name || 'A task';
     } catch (err) {
-      console.error('[HookServer] getTaskName failed for ptyId', ptyId, err);
+      console.warn('[HookServer] DB lookup for task name failed:', err);
       return 'A task';
     }
   }
 
-  /** Parse a POST request body as JSON. */
-  private parsePostBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
-    return new Promise((resolve) => {
-      let body = '';
-      req.on('data', (chunk: Buffer) => {
-        body += chunk.toString();
-      });
-      req.on('end', () => {
-        try {
-          resolve(JSON.parse(body));
-        } catch (err) {
-          console.error(
-            '[HookServer] Failed to parse POST body:',
-            err,
-            '| raw:',
-            body.slice(0, 200),
-          );
-          resolve({});
-        }
-      });
+  /** Read and parse a JSON POST body, enforcing a size limit. */
+  private readJsonBody(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    maxBytes: number,
+    callback: (data: Record<string, unknown>) => void,
+  ): void {
+    let body = '';
+    let overflow = false;
+    req.on('data', (chunk: Buffer) => {
+      body += chunk.toString();
+      if (body.length > maxBytes) {
+        overflow = true;
+        req.destroy();
+      }
+    });
+    req.on('error', () => {
+      if (!res.headersSent) {
+        res.writeHead(400);
+        res.end();
+      }
+    });
+    req.on('end', () => {
+      if (res.headersSent) return;
+      if (overflow) {
+        res.writeHead(413);
+        res.end('payload too large');
+        return;
+      }
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(body);
+      } catch (err) {
+        console.error('[HookServer] Failed to parse JSON body:', err);
+        res.writeHead(400);
+        res.end('bad request');
+        return;
+      }
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        res.writeHead(400);
+        res.end('expected JSON object');
+        return;
+      }
+      try {
+        callback(parsed);
+      } catch (err) {
+        console.error('[HookServer] Callback error:', err);
+        res.writeHead(500);
+        res.end();
+      }
     });
   }
 
@@ -94,45 +134,62 @@ class HookServerImpl {
     if (this.server) return this._port;
 
     return new Promise((resolve, reject) => {
-      this.server = http.createServer(async (req, res) => {
-        const url = new URL(req.url || '', `http://127.0.0.1:${this._port}`);
-        const ptyId = url.searchParams.get('ptyId');
-
-        if (!ptyId) {
-          res.writeHead(400);
-          res.end();
-          return;
-        }
-
-        // GET endpoints (legacy)
-        if (req.method === 'GET') {
-          if (url.pathname === '/hook/busy') {
-            activityMonitor.setBusy(ptyId);
-            res.writeHead(200);
-            res.end('ok');
+      this.server = http.createServer((req, res) => {
+        try {
+          if (req.method !== 'POST') {
+            res.writeHead(405);
+            res.end();
             return;
           }
-        }
 
-        // POST endpoints
-        if (req.method === 'POST') {
-          const payload = await this.parsePostBody(req);
+          const url = new URL(req.url || '', `http://127.0.0.1:${this._port}`);
+          const ptyId = url.searchParams.get('ptyId');
 
-          switch (url.pathname) {
-            case '/hook/stop': {
+          if (!ptyId) {
+            res.writeHead(400);
+            res.end('missing ptyId');
+            return;
+          }
+
+          if (!this._hasPty(ptyId)) {
+            res.writeHead(404);
+            res.end();
+            return;
+          }
+
+          const pathname = url.pathname;
+
+          // Hooks are POST — drain the JSON body before responding.
+          // IMPORTANT: Response must have an empty body (not 'ok') to avoid
+          // injecting text into Claude's conversation context.
+
+          if (pathname === '/hook/stop') {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
               activityMonitor.setIdle(ptyId);
               this.showDesktopNotification(ptyId);
               res.writeHead(200);
-              res.end('ok');
-              return;
-            }
+              res.end();
+            });
+            return;
+          }
 
-            case '/hook/session-start': {
-              // Claude sends the real session_id on stdin for every SessionStart
-              // event (startup, resume, compact, clear). Persist it per task so
-              // the next spawn can resume the correct session even if Claude
-              // forked or the filename doesn't match task.id.
-              const sessionId = payload.session_id as string | undefined;
+          if (pathname === '/hook/busy') {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
+              activityMonitor.setBusy(ptyId);
+              res.writeHead(200);
+              res.end();
+            });
+            return;
+          }
+
+          if (pathname === '/hook/session-start') {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
+              // Claude POSTs the real session_id for every SessionStart event
+              // (startup, resume, compact, clear). Persist it per task so the
+              // next spawn can resume the correct session even if Claude forked
+              // or the filename doesn't match task.id.
+              const sessionId =
+                typeof payload.session_id === 'string' ? payload.session_id : undefined;
               if (sessionId) {
                 try {
                   DatabaseService.setTaskLastSessionId(ptyId, sessionId);
@@ -141,13 +198,16 @@ class HookServerImpl {
                 }
               }
               res.writeHead(200);
-              res.end('ok');
-              return;
-            }
+              res.end();
+            });
+            return;
+          }
 
-            case '/hook/notification': {
-              const notificationType = payload.notification_type as string;
-              const message = payload.message as string | undefined;
+          if (pathname === '/hook/notification') {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
+              const notificationType =
+                typeof payload.notification_type === 'string' ? payload.notification_type : '';
+              const message = typeof payload.message === 'string' ? payload.message : undefined;
 
               if (notificationType === 'permission_prompt') {
                 activityMonitor.setWaitingForPermission(ptyId);
@@ -160,18 +220,94 @@ class HookServerImpl {
                 activityMonitor.setIdle(ptyId);
                 this.showDesktopNotification(ptyId);
               }
-              res.writeHead(200);
-              res.end('ok');
-              return;
-            }
 
-            default:
-              break;
+              res.writeHead(200);
+              res.end();
+            });
+            return;
+          }
+
+          // StatusLine data (context usage) — uses type:"command" + curl, not type:"http"
+          if (pathname === '/hook/context') {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (data) => {
+              contextUsageService.updateFromStatusLine(ptyId, data);
+              activityMonitor.noteStatusLine(ptyId);
+              res.writeHead(200);
+              res.end();
+            });
+            return;
+          }
+
+          if (pathname === '/hook/tool-start') {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
+              const toolName =
+                typeof payload.tool_name === 'string' ? payload.tool_name : 'unknown';
+              const toolInput =
+                payload.tool_input && typeof payload.tool_input === 'object'
+                  ? (payload.tool_input as Record<string, unknown>)
+                  : undefined;
+              activityMonitor.setToolStart(ptyId, toolName, toolInput);
+              res.writeHead(200);
+              res.end();
+            });
+            return;
+          }
+
+          if (pathname === '/hook/tool-end') {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
+              activityMonitor.setToolEnd(ptyId);
+              res.writeHead(200);
+              res.end();
+            });
+            return;
+          }
+
+          if (pathname === '/hook/stop-failure') {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
+              const errorType =
+                typeof payload.error_type === 'string' ? payload.error_type : 'unknown';
+              const message = typeof payload.error === 'string' ? payload.error : undefined;
+              console.error(`[HookServer] StopFailure for ptyId=${ptyId} type=${errorType}`);
+              activityMonitor.setError(ptyId, errorType, message);
+
+              if (errorType === 'rate_limit') {
+                const taskName = this.getTaskName(ptyId);
+                this.showDesktopNotification(ptyId, `${taskName} hit rate limit`);
+              }
+
+              res.writeHead(200);
+              res.end();
+            });
+            return;
+          }
+
+          if (pathname === '/hook/compact-start') {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
+              activityMonitor.setCompacting(ptyId, true);
+              res.writeHead(200);
+              res.end();
+            });
+            return;
+          }
+
+          if (pathname === '/hook/compact-end') {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
+              activityMonitor.setCompacting(ptyId, false);
+              res.writeHead(200);
+              res.end();
+            });
+            return;
+          }
+
+          res.writeHead(404);
+          res.end();
+        } catch (err) {
+          console.error('[HookServer] Request handler error:', err);
+          if (!res.headersSent) {
+            res.writeHead(500);
+            res.end();
           }
         }
-
-        res.writeHead(404);
-        res.end();
       });
 
       this.server.listen(0, '127.0.0.1', () => {
