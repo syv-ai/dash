@@ -784,12 +784,21 @@ export function App() {
   async function loadProjects() {
     const resp = await window.electronAPI.getProjects();
     if (resp.success && resp.data) {
-      setProjects(applyProjectOrder(resp.data));
-      if (resp.data.length > 0) {
+      // On Windows, older projects may have been saved with the full path as the name.
+      // Derive the folder name from the path so the sidebar shows short names.
+      const projects = resp.data.map((p) => {
+        const looksLikePath = p.name.includes('\\') || p.name.includes('/');
+        if (looksLikePath) {
+          return { ...p, name: p.name.split(/[\\/]/).pop() || p.name };
+        }
+        return p;
+      });
+      setProjects(applyProjectOrder(projects));
+      if (projects.length > 0) {
         // Only default to first project if no valid selection exists
         setActiveProjectId((prev) => {
-          if (prev && resp.data!.some((p) => p.id === prev)) return prev;
-          return resp.data![0].id;
+          if (prev && projects.some((p) => p.id === prev)) return prev;
+          return projects[0].id;
         });
       }
     }
@@ -835,7 +844,7 @@ export function App() {
     const resp = await window.electronAPI.showOpenDialog();
     if (resp.success && resp.data && resp.data.length > 0) {
       const folderPath = resp.data[0];
-      const name = folderPath.split('/').pop() || 'Untitled';
+      const name = folderPath.split(/[\\/]/).pop() || 'Untitled';
 
       const gitResp = await window.electronAPI.detectGit(folderPath);
       const gitInfo = gitResp.success ? gitResp.data : null;

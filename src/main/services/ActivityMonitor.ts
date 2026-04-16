@@ -38,7 +38,8 @@ interface PtyActivity {
   pendingBusyTimer: ReturnType<typeof setTimeout> | null;
 }
 
-const POLL_INTERVAL = 2000;
+// PowerShell is heavier than ps, so poll less frequently on Windows
+const POLL_INTERVAL = process.platform === 'win32' ? 5000 : 2000;
 
 /** Hard safety valve: if no child processes for this long while busy/waiting,
  *  force idle. The primary busy→idle signal is the Stop hook — this only
@@ -498,16 +499,40 @@ class ActivityMonitorImpl {
   private async buildChildMap(): Promise<Map<number, number[]>> {
     const map = new Map<number, number[]>();
     try {
-      const { stdout } = await execFileAsync('ps', ['-eo', 'pid=,ppid='], {
-        timeout: 2000,
-      });
-      for (const line of stdout.split('\n')) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        const parts = trimmed.split(/\s+/);
-        if (parts.length < 2) continue;
-        const pid = parseInt(parts[0], 10);
-        const ppid = parseInt(parts[1], 10);
+      let pidPpidPairs: Array<[number, number]> = [];
+
+      if (process.platform === 'win32') {
+        // Windows: PowerShell Get-CimInstance returns the same data as ps -eo
+        const { stdout } = await execFileAsync(
+          'powershell.exe',
+          [
+            '-NoProfile',
+            '-Command',
+            'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId | ConvertTo-Csv -NoTypeInformation',
+          ],
+          { timeout: 5000 },
+        );
+        const lines = stdout.split(/\r?\n/);
+        // Skip CSV header
+        for (let i = 1; i < lines.length; i++) {
+          const match = lines[i].trim().match(/^"?(\d+)"?,"?(\d+)"?$/);
+          if (!match) continue;
+          pidPpidPairs.push([parseInt(match[1], 10), parseInt(match[2], 10)]);
+        }
+      } else {
+        const { stdout } = await execFileAsync('ps', ['-eo', 'pid=,ppid='], {
+          timeout: 2000,
+        });
+        pidPpidPairs = stdout
+          .split('\n')
+          .map((l) => l.trim())
+          .filter(Boolean)
+          .map((l) => l.split(/\s+/))
+          .filter((parts) => parts.length >= 2)
+          .map((parts) => [parseInt(parts[0], 10), parseInt(parts[1], 10)] as [number, number]);
+      }
+
+      for (const [pid, ppid] of pidPpidPairs) {
         if (isNaN(pid) || isNaN(ppid)) continue;
         let siblings = map.get(ppid);
         if (!siblings) {
@@ -517,7 +542,7 @@ class ActivityMonitorImpl {
         siblings.push(pid);
       }
     } catch {
-      // ps failed — return empty map, all PTYs will show idle
+      // ps/powershell failed — return empty map, all PTYs will show idle
     }
     return map;
   }

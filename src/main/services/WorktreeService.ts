@@ -400,7 +400,7 @@ export class WorktreeService {
   }
 
   getWorktreesDir(projectPath: string): string {
-    return path.join(path.dirname(projectPath), 'worktrees');
+    return path.join(path.dirname(path.resolve(projectPath)), 'worktrees');
   }
 
   slugify(name: string): string {

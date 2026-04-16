@@ -157,8 +157,44 @@ jobs:
             release/*.yml
           if-no-files-found: error
 
+  build-windows:
+    if: github.event_name != 'pull_request'
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Rebuild native modules for Electron
+        run: pnpm exec electron-rebuild -f -w node-pty,better-sqlite3
+
+      - name: Build
+        run: pnpm build
+
+      - name: Package
+        run: pnpm exec electron-builder --win --x64 --publish never
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: Dash-windows-x64
+          path: |
+            release/*.exe
+          if-no-files-found: error
+
   release:
-    needs: [build-mac, build-linux]
+    needs: [build-mac, build-linux, build-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write

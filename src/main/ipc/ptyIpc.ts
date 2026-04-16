@@ -160,11 +160,11 @@ function hasClaudeSession(cwd: string): boolean {
     if (fs.existsSync(path.join(projectsDir, cwdHash))) return true;
 
     // Check path-based directory name (slashes replaced with hyphens)
-    const pathBasedName = cwd.replace(/\//g, '-');
+    const pathBasedName = cwd.replace(/[\\/]+/g, '-');
     if (fs.existsSync(path.join(projectsDir, pathBasedName))) return true;
 
     // Scan for partial path match (last 3 segments)
-    const cwdParts = cwd.split('/').filter((p) => p.length > 0);
+    const cwdParts = cwd.split(/[\\/]+/).filter((p) => p.length > 0);
     const lastParts = cwdParts.slice(-3).join('-');
     const dirs = fs.readdirSync(projectsDir);
     return dirs.some((dir) => dir.includes(lastParts));
