@@ -238,21 +238,7 @@ export class WorktreeService {
     try {
       // createLinkedBranch creates the branch on the remote AND links it to the issue.
       // Must happen before push so the branch doesn't already exist on the remote.
-      for (const num of issueNumbers) {
-        try {
-          const issueUrl = await GithubService.linkBranch(cwd, num, branch);
-          for (const win of BrowserWindow.getAllWindows()) {
-            if (!win.isDestroyed()) {
-              win.webContents.send('app:toast', {
-                message: `Issue #${num} linked to branch '${branch}'`,
-                url: issueUrl,
-              });
-            }
-          }
-        } catch {
-          // Best effort — gh may not be available
-        }
-      }
+      await this.linkIssuesAsync(cwd, branch, issueNumbers);
       // Set upstream tracking (branch already exists on remote from createLinkedBranch)
       await execFileAsync('git', ['branch', '--set-upstream-to', `origin/${branch}`, branch], {
         cwd,

@@ -440,41 +440,21 @@ export class GitService {
     cwd: string,
     branch: string,
   ): Promise<{ hasUpstream: boolean; ahead: number; behind: number }> {
-    // Try configured upstream first
-    try {
-      const out = await git(cwd, [
-        'rev-list',
-        '--left-right',
-        '--count',
-        `${branch}@{upstream}...${branch}`,
-      ]);
-      const parts = out.trim().split(/\s+/);
-      return {
-        hasUpstream: true,
-        behind: parseInt(parts[0], 10) || 0,
-        ahead: parseInt(parts[1], 10) || 0,
-      };
-    } catch {
-      // No configured upstream — fall through
+    // Try configured upstream first, then fall back to origin/<branch>
+    for (const ref of [`${branch}@{upstream}`, `origin/${branch}`]) {
+      try {
+        const out = await git(cwd, ['rev-list', '--left-right', '--count', `${ref}...${branch}`]);
+        const parts = out.trim().split(/\s+/);
+        return {
+          hasUpstream: true,
+          behind: parseInt(parts[0], 10) || 0,
+          ahead: parseInt(parts[1], 10) || 0,
+        };
+      } catch {
+        // Try next ref
+      }
     }
-
-    // Fall back to origin/<branch> if it exists
-    try {
-      const out = await git(cwd, [
-        'rev-list',
-        '--left-right',
-        '--count',
-        `origin/${branch}...${branch}`,
-      ]);
-      const parts = out.trim().split(/\s+/);
-      return {
-        hasUpstream: true,
-        behind: parseInt(parts[0], 10) || 0,
-        ahead: parseInt(parts[1], 10) || 0,
-      };
-    } catch {
-      return { hasUpstream: false, ahead: 0, behind: 0 };
-    }
+    return { hasUpstream: false, ahead: 0, behind: 0 };
   }
 
   /**

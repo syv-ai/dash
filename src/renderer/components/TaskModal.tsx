@@ -390,8 +390,8 @@ export function TaskModal({
             </div>
           )}
 
-          {/* Branch selector — shown for worktree mode AND non-worktree git repos */}
-          {(useWorktree || gitReady) && (
+          {/* Branch selector */}
+          {gitReady && (
             <div className="mb-4" ref={dropdownRef}>
               <label className="block text-[12px] font-medium text-muted-foreground/70 mb-2">
                 {useWorktree && createNewBranch ? 'Base branch' : 'Branch'}

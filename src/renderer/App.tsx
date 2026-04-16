@@ -14,7 +14,6 @@ import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
 import { TaskModal } from './components/TaskModal';
 import { AddProjectModal } from './components/AddProjectModal';
 import { DeleteTaskModal } from './components/DeleteTaskModal';
-import { BranchBehindModal } from './components/BranchBehindModal';
 import { DeleteProjectModal, type DeleteProjectOptions } from './components/DeleteProjectModal';
 import { RemoteControlModal } from './components/RemoteControlModal';
 import { SettingsModal } from './components/SettingsModal';
@@ -67,11 +66,6 @@ export function App() {
     error: null,
   });
   const [deleteTaskTarget, setDeleteTaskTarget] = useState<Task | null>(null);
-  const [branchBehindConfirm, setBranchBehindConfirm] = useState<{
-    branch: string;
-    behind: number;
-    resolve: (shouldPull: boolean) => void;
-  } | null>(null);
   const [deleteProjectTarget, setDeleteProjectTarget] = useState<Project | null>(null);
   const [projectSettingsTarget, setProjectSettingsTarget] = useState<Project | null>(null);
   const [adoSetup, setAdoSetup] = useState<{
@@ -1529,15 +1523,16 @@ export function App() {
       {showTaskModal &&
         (() => {
           const modalProjectId = taskModalProjectId || activeProjectId;
+          const modalProject = projects.find((p) => p.id === modalProjectId);
           const modalTasks = modalProjectId ? (tasksByProject[modalProjectId] ?? []) : [];
           const existingNonWorktreeTask =
             modalTasks.find((t) => !t.useWorktree && !t.archivedAt) ?? null;
           return (
             <TaskModal
-              projectPath={projects.find((p) => p.id === modalProjectId)?.path ?? ''}
+              projectPath={modalProject?.path ?? ''}
               projectId={modalProjectId || undefined}
-              isGitRepo={projects.find((p) => p.id === modalProjectId)?.isGitRepo ?? false}
-              gitRemote={projects.find((p) => p.id === modalProjectId)?.gitRemote ?? null}
+              isGitRepo={modalProject?.isGitRepo ?? false}
+              gitRemote={modalProject?.gitRemote ?? null}
               existingNonWorktreeTask={
                 existingNonWorktreeTask
                   ? { id: existingNonWorktreeTask.id, name: existingNonWorktreeTask.name }
@@ -1546,13 +1541,11 @@ export function App() {
               onClose={() => setShowTaskModal(false)}
               onCreate={handleCreateTask}
               onGitInit={() => {
-                const pid = taskModalProjectId || activeProjectId;
-                const proj = projects.find((p) => p.id === pid);
-                if (proj) {
-                  window.electronAPI.detectGit(proj.path).then(async (gitResp) => {
+                if (modalProject) {
+                  window.electronAPI.detectGit(modalProject.path).then(async (gitResp) => {
                     const gitInfo = gitResp.success ? gitResp.data : null;
                     await window.electronAPI.saveProject({
-                      ...proj,
+                      ...modalProject,
                       isGitRepo: gitInfo?.isGitRepo ?? true,
                       gitRemote: gitInfo?.remote ?? null,
                       gitBranch: gitInfo?.branch ?? null,
@@ -1704,15 +1697,6 @@ export function App() {
           task={deleteTaskTarget}
           onClose={() => setDeleteTaskTarget(null)}
           onConfirm={handleDeleteTaskConfirm}
-        />
-      )}
-
-      {branchBehindConfirm && (
-        <BranchBehindModal
-          branch={branchBehindConfirm.branch}
-          behind={branchBehindConfirm.behind}
-          onUpdate={() => branchBehindConfirm.resolve(true)}
-          onSkip={() => branchBehindConfirm.resolve(false)}
         />
       )}
 
