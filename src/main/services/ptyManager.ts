@@ -46,6 +46,17 @@ function hasSessionForId(cwd: string, sessionId: string): boolean {
   return fs.existsSync(path.join(projDir, `${sessionId}.jsonl`));
 }
 
+/** Check whether Claude has any jsonl history for this cwd. */
+function hasAnySessionForCwd(cwd: string): boolean {
+  const projDir = findClaudeProjectDir(cwd);
+  if (!projDir) return false;
+  try {
+    return fs.readdirSync(projDir).some((f) => f.endsWith('.jsonl'));
+  } catch {
+    return false;
+  }
+}
+
 interface PtyRecord {
   proc: any; // IPty from node-pty
   cwd: string;
@@ -543,13 +554,16 @@ export async function startDirectPty(options: {
   } else if (
     task &&
     task.lastSessionId === null &&
-    DatabaseService.countTasksAtPath(options.cwd) === 1
+    DatabaseService.countTasksAtPath(options.cwd) === 1 &&
+    hasAnySessionForCwd(options.cwd)
   ) {
     // Legacy task created before session pinning: its jsonl is named with a
     // Claude-generated UUID, not task.id, so we can't resume by id. Safe to
     // fall back to `-c -r` only when this is the sole task at its cwd — no
-    // other task's session to hijack. The SessionStart hook will capture the
-    // real session_id on this spawn, so future spawns pin correctly.
+    // other task's session to hijack — AND jsonl history actually exists,
+    // otherwise Claude exits with "No conversation found to continue".
+    // The SessionStart hook will capture the real session_id on this spawn,
+    // so future spawns pin correctly.
     args.push('-c', '-r');
   } else {
     args.push('--session-id', options.id);
