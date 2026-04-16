@@ -3,11 +3,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { type WebContents, app } from 'electron';
+import { type WebContents, app, BrowserWindow } from 'electron';
 import { activityMonitor } from './ActivityMonitor';
 import { hookServer } from './HookServer';
 import { contextUsageService } from './ContextUsageService';
 import { DatabaseService } from './DatabaseService';
+import { terminalSnapshotService } from './TerminalSnapshotService';
 
 const execFileAsync = promisify(execFile);
 
@@ -530,17 +531,40 @@ export async function startDirectPty(options: {
   // Pin each task to its own Claude session so tasks sharing the same cwd
   // (e.g. multiple tasks in the main worktree) never resume each other.
   // Prefer the hook-captured lastSessionId (Claude may fork on /clear or
-  // /compact, so the live session id can drift from task.id). Never fall
-  // back to `-c -r`: in a shared cwd that would hijack another task's
-  // most-recent session.
+  // /compact, so the live session id can drift from task.id).
   const task = DatabaseService.getTask(options.id);
   const resumeId = task?.lastSessionId ?? options.id;
+  const hadPriorUse =
+    task?.lastSessionId != null || terminalSnapshotService.hasSnapshot(options.id);
   if (hasSessionForId(options.cwd, resumeId)) {
     args.push('-r', resumeId);
   } else if (resumeId !== options.id && hasSessionForId(options.cwd, options.id)) {
     args.push('-r', options.id);
+  } else if (
+    task &&
+    task.lastSessionId === null &&
+    DatabaseService.countTasksAtPath(options.cwd) === 1
+  ) {
+    // Legacy task created before session pinning: its jsonl is named with a
+    // Claude-generated UUID, not task.id, so we can't resume by id. Safe to
+    // fall back to `-c -r` only when this is the sole task at its cwd — no
+    // other task's session to hijack. The SessionStart hook will capture the
+    // real session_id on this spawn, so future spawns pin correctly.
+    args.push('-c', '-r');
   } else {
     args.push('--session-id', options.id);
+    // Task had prior use (snapshot or captured session id) but we couldn't
+    // link any existing session — notify the user so they can recover via
+    // Claude's /resume command. Jsonl history is still on disk.
+    if (hadPriorUse && task) {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send('app:toast', {
+            message: `Couldn't link previous Claude session for "${task.name}" — use /resume in the terminal to find it.`,
+          });
+        }
+      }
+    }
   }
 
   if (options.autoApprove) {
