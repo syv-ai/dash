@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { TerminalPane } from './TerminalPane';
 import { ProjectOverview } from './ProjectOverview';
+import { openInIde } from '../lib/openInIde';
 import {
   FolderOpen,
   GitBranch,
@@ -329,11 +330,7 @@ export function MainContent({
             )}
             <Tooltip content="Open in IDE">
               <button
-                onClick={() => {
-                  const stored = localStorage.getItem('preferredIDE');
-                  const ide = stored === 'cursor' || stored === 'code' ? stored : undefined;
-                  window.electronAPI.openInIDE({ folderPath: activeTask.path, ide });
-                }}
+                onClick={() => openInIde(activeTask.path)}
                 className="p-1 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-accent/60"
               >
                 <Code2 size={14} strokeWidth={1.8} />
