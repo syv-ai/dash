@@ -3,11 +3,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { type WebContents, app } from 'electron';
+import { type WebContents, app, BrowserWindow } from 'electron';
 import { activityMonitor } from './ActivityMonitor';
 import { hookServer } from './HookServer';
 import { contextUsageService } from './ContextUsageService';
 import { DatabaseService } from './DatabaseService';
+import { terminalSnapshotService } from './TerminalSnapshotService';
 
 const execFileAsync = promisify(execFile);
 
@@ -355,9 +356,19 @@ function writeHookSettings(cwd: string, ptyId: string): void {
     PostCompact: [{ matcher: '*', hooks: [httpHook('/hook/compact-end', true)] }],
   };
 
-  // Inject task context via SessionStart hook. Fires on startup (new session),
-  // and re-injects after compact/clear so Claude retains issue awareness.
+  // SessionStart hook fires on: startup (new session), resume (reattach by id),
+  // compact (auto/manual compaction), clear (/clear command). We use it for two
+  // purposes:
+  //   1. Capture Claude's real session_id (all 4 matchers) so the next spawn
+  //      can resume the correct session even if Claude forked or the filename
+  //      doesn't match task.id.
+  //   2. Re-inject task context (linked issue/work-item prompt) on startup,
+  //      compact, and clear — NOT resume, since resumed sessions already have
+  //      context in history.
+  const captureHook = httpHook('/hook/session-start');
+
   const contextPrompt = getTaskContextPrompt(ptyId);
+  let contextHook: { type: 'command'; command: string } | null = null;
   if (contextPrompt) {
     const hookPayload = JSON.stringify({
       hookSpecificOutput: {
@@ -374,19 +385,16 @@ function writeHookSettings(cwd: string, ptyId: string): void {
       process.platform === 'win32'
         ? `powershell.exe -NoProfile -Command "[Console]::Out.Write([System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64}')))"`
         : `echo '${b64}' | base64 ${process.platform === 'darwin' ? '-D' : '-d'}`;
-    const sessionStartHook = {
-      hooks: [
-        {
-          type: 'command',
-          command: decodeCmd,
-        },
-      ],
-    };
-    hookSettings.SessionStart = ['startup', 'compact', 'clear'].map((matcher) => ({
-      matcher,
-      ...sessionStartHook,
-    }));
+    contextHook = { type: 'command', command: decodeCmd };
   }
+
+  hookSettings.SessionStart = ['startup', 'resume', 'compact', 'clear'].map((matcher) => {
+    const hooks: unknown[] = [captureHook];
+    if (contextHook && matcher !== 'resume') {
+      hooks.push(contextHook);
+    }
+    return { matcher, hooks };
+  });
 
   try {
     if (!fs.existsSync(claudeDir)) {
@@ -491,7 +499,6 @@ export async function startDirectPty(options: {
   cols: number;
   rows: number;
   autoApprove?: boolean;
-  resume?: boolean;
   isDark?: boolean;
   sender?: WebContents;
 }): Promise<{
@@ -523,15 +530,41 @@ export async function startDirectPty(options: {
 
   // Pin each task to its own Claude session so tasks sharing the same cwd
   // (e.g. multiple tasks in the main worktree) never resume each other.
-  if (options.resume && hasSessionForId(options.cwd, options.id)) {
-    // Session was created with --session-id; resume it by ID.
+  // Prefer the hook-captured lastSessionId (Claude may fork on /clear or
+  // /compact, so the live session id can drift from task.id).
+  const task = DatabaseService.getTask(options.id);
+  const resumeId = task?.lastSessionId ?? options.id;
+  const hadPriorUse =
+    task?.lastSessionId != null || terminalSnapshotService.hasSnapshot(options.id);
+  if (hasSessionForId(options.cwd, resumeId)) {
+    args.push('-r', resumeId);
+  } else if (resumeId !== options.id && hasSessionForId(options.cwd, options.id)) {
     args.push('-r', options.id);
-  } else if (options.resume) {
-    // Legacy task created before session pinning — fall back to most recent.
+  } else if (
+    task &&
+    task.lastSessionId === null &&
+    DatabaseService.countTasksAtPath(options.cwd) === 1
+  ) {
+    // Legacy task created before session pinning: its jsonl is named with a
+    // Claude-generated UUID, not task.id, so we can't resume by id. Safe to
+    // fall back to `-c -r` only when this is the sole task at its cwd — no
+    // other task's session to hijack. The SessionStart hook will capture the
+    // real session_id on this spawn, so future spawns pin correctly.
     args.push('-c', '-r');
   } else {
-    // New session: create with deterministic UUID tied to this task.
     args.push('--session-id', options.id);
+    // Task had prior use (snapshot or captured session id) but we couldn't
+    // link any existing session — notify the user so they can recover via
+    // Claude's /resume command. Jsonl history is still on disk.
+    if (hadPriorUse && task) {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send('app:toast', {
+            message: `Couldn't link previous Claude session for "${task.name}" — use /resume in the terminal to find it.`,
+          });
+        }
+      }
+    }
   }
 
   if (options.autoApprove) {
