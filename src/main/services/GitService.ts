@@ -101,6 +101,9 @@ export class GitService {
         });
       }
 
+      // Enrich top branches with ahead/behind counts (limit to avoid slowness)
+      await this.enrichBranchesWithAheadBehind(cwd, branches, 20);
+
       return branches;
     }
 
@@ -127,6 +130,8 @@ export class GitService {
           relativeDate: dateParts.join('\t') || '',
         });
       }
+
+      await this.enrichBranchesWithAheadBehind(cwd, branches, 20);
 
       return branches;
     } catch {
@@ -425,6 +430,103 @@ export class GitService {
    */
   static async push(cwd: string): Promise<void> {
     await git(cwd, ['push']);
+  }
+
+  /**
+   * Check ahead/behind counts for a specific branch relative to its upstream.
+   * First tries the configured upstream, then falls back to origin/<branch>.
+   */
+  static async getBranchAheadBehind(
+    cwd: string,
+    branch: string,
+  ): Promise<{ hasUpstream: boolean; ahead: number; behind: number }> {
+    // Try configured upstream first
+    try {
+      const out = await git(cwd, [
+        'rev-list',
+        '--left-right',
+        '--count',
+        `${branch}@{upstream}...${branch}`,
+      ]);
+      const parts = out.trim().split(/\s+/);
+      return {
+        hasUpstream: true,
+        behind: parseInt(parts[0], 10) || 0,
+        ahead: parseInt(parts[1], 10) || 0,
+      };
+    } catch {
+      // No configured upstream — fall through
+    }
+
+    // Fall back to origin/<branch> if it exists
+    try {
+      const out = await git(cwd, [
+        'rev-list',
+        '--left-right',
+        '--count',
+        `origin/${branch}...${branch}`,
+      ]);
+      const parts = out.trim().split(/\s+/);
+      return {
+        hasUpstream: true,
+        behind: parseInt(parts[0], 10) || 0,
+        ahead: parseInt(parts[1], 10) || 0,
+      };
+    } catch {
+      return { hasUpstream: false, ahead: 0, behind: 0 };
+    }
+  }
+
+  /**
+   * Enrich a list of branches with ahead/behind counts (best-effort, in-place).
+   */
+  private static async enrichBranchesWithAheadBehind(
+    cwd: string,
+    branches: BranchInfo[],
+    limit: number,
+  ): Promise<void> {
+    const slice = branches.slice(0, limit);
+    const results = await Promise.allSettled(
+      slice.map((b) => this.getBranchAheadBehind(cwd, b.name)),
+    );
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
+      if (r.status === 'fulfilled' && r.value.hasUpstream) {
+        slice[i].ahead = r.value.ahead;
+        slice[i].behind = r.value.behind;
+      }
+    }
+  }
+
+  /**
+   * Checkout a branch in the working directory.
+   */
+  static async checkoutBranch(cwd: string, branch: string): Promise<void> {
+    try {
+      await git(cwd, ['checkout', branch]);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes('Your local changes') || msg.includes('would be overwritten')) {
+        throw new Error(
+          'Cannot switch branches: you have uncommitted changes that would be overwritten. Commit or stash them first.',
+        );
+      }
+      if (msg.includes('pathspec') && msg.includes('did not match')) {
+        throw new Error(`Branch '${branch}' not found`);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Fast-forward a local branch to match its remote tracking branch.
+   * Works without checking out the branch. Fails if not fast-forwardable.
+   */
+  static async pullBranch(cwd: string, branch: string): Promise<void> {
+    await execFileAsync('git', ['fetch', 'origin', `${branch}:${branch}`], {
+      cwd,
+      timeout: 30000,
+    });
   }
 
   static async remoteBranchExists(cwd: string, branch: string): Promise<boolean> {

@@ -9,6 +9,8 @@ import {
   Search,
   Upload,
   FolderGit2,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import { SearchableMultiSelect } from './SearchableMultiSelect';
 import type { BranchInfo, GithubIssue, AzureDevOpsWorkItem, LinkedItem } from '../../shared/types';
@@ -21,7 +23,7 @@ export interface CreateTaskOptions {
   baseRef?: string;
   pushRemote?: boolean;
   linkedItems?: LinkedItem[];
-  useExistingBranch?: boolean;
+  createNewBranch?: boolean; // true = create new branch from base; false/undefined = use existing
 }
 
 interface TaskModalProps {
@@ -29,6 +31,7 @@ interface TaskModalProps {
   projectId?: string;
   isGitRepo: boolean;
   gitRemote: string | null;
+  existingNonWorktreeTask?: { id: string; name: string } | null;
   onClose: () => void;
   onCreate: (options: CreateTaskOptions) => Promise<void>;
   onGitInit?: () => void;
@@ -91,17 +94,19 @@ export function TaskModal({
   projectId,
   isGitRepo,
   gitRemote,
+  existingNonWorktreeTask,
   onClose,
   onCreate,
   onGitInit,
 }: TaskModalProps) {
   const [name, setName] = useState('');
   const [gitReady, setGitReady] = useState(isGitRepo);
-  const [useWorktree, setUseWorktree] = useState(isGitRepo);
+  const worktreeForced = !!existingNonWorktreeTask;
+  const [useWorktree, setUseWorktree] = useState(isGitRepo || worktreeForced);
   const [autoApprove, setAutoApprove] = useState(() => localStorage.getItem('yoloMode') === 'true');
   const [pushRemote, setPushRemote] = useState(true);
   const [gitInitLoading, setGitInitLoading] = useState(false);
-  const [useExistingBranch, setUseExistingBranch] = useState(false);
+  const [createNewBranch, setCreateNewBranch] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
 
   // Branch selector state
@@ -138,10 +143,10 @@ export function TaskModal({
     }
   }, [isAdo, gitRemote, projectId]);
 
-  // Fetch branches when worktree is enabled
+  // Fetch branches when git is ready (needed for both worktree and non-worktree modes)
   useEffect(() => {
-    if (useWorktree) fetchBranches();
-  }, [useWorktree, projectPath]);
+    if (gitReady) fetchBranches();
+  }, [gitReady, projectPath]);
 
   // Close branch dropdown on click outside
   useEffect(() => {
@@ -211,10 +216,12 @@ export function TaskModal({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (name.trim() && !isCreating) {
-      // For existing branch mode, pass branch name (not full ref) for git worktree add
+      // For existing branch / non-worktree, pass branch name; for new worktree, pass full ref
       let baseRef: string | undefined;
       if (useWorktree) {
-        baseRef = useExistingBranch ? selectedBranch?.name : selectedBranch?.ref;
+        baseRef = createNewBranch ? selectedBranch?.ref : selectedBranch?.name;
+      } else if (gitReady) {
+        baseRef = selectedBranch?.name;
       }
 
       // Build unified linkedItems from both providers
@@ -247,9 +254,9 @@ export function TaskModal({
           useWorktree,
           autoApprove,
           baseRef,
-          pushRemote: useWorktree && !useExistingBranch ? pushRemote : undefined,
+          pushRemote: useWorktree && createNewBranch ? pushRemote : undefined,
           linkedItems: allLinkedItems.length > 0 ? allLinkedItems : undefined,
-          useExistingBranch: useWorktree ? useExistingBranch : undefined,
+          createNewBranch: useWorktree ? createNewBranch : undefined,
         });
         onClose();
       } finally {
@@ -310,12 +317,17 @@ export function TaskModal({
           {/* Worktree toggle */}
           {gitReady ? (
             <div className="mb-4">
-              <label className="flex items-center gap-3 cursor-pointer group">
+              <label
+                className={`flex items-center gap-3 group ${worktreeForced ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+              >
                 <div className="relative">
                   <input
                     type="checkbox"
                     checked={useWorktree}
-                    onChange={(e) => setUseWorktree(e.target.checked)}
+                    onChange={(e) => {
+                      if (!worktreeForced) setUseWorktree(e.target.checked);
+                    }}
+                    disabled={worktreeForced}
                     className="sr-only peer"
                   />
                   <div className="w-8 h-[18px] rounded-full bg-accent peer-checked:bg-primary/80 transition-colors duration-200" />
@@ -327,6 +339,14 @@ export function TaskModal({
                   <span className="text-[11px] text-muted-foreground/40">isolated branch</span>
                 </div>
               </label>
+              {worktreeForced && (
+                <p className="ml-[44px] mt-1 text-[11px] text-muted-foreground/50">
+                  A non-worktree task already exists:{' '}
+                  <span className="font-medium text-foreground/60">
+                    {existingNonWorktreeTask.name}
+                  </span>
+                </p>
+              )}
             </div>
           ) : (
             <div className="mb-4 flex items-center gap-2 px-3 py-2.5 rounded-lg bg-surface-1 border border-border/40">
@@ -352,9 +372,9 @@ export function TaskModal({
                 <div className="relative">
                   <input
                     type="checkbox"
-                    checked={useExistingBranch}
+                    checked={createNewBranch}
                     onChange={(e) => {
-                      setUseExistingBranch(e.target.checked);
+                      setCreateNewBranch(e.target.checked);
                       setSelectedBranch(null);
                     }}
                     className="sr-only peer"
@@ -364,17 +384,17 @@ export function TaskModal({
                 </div>
                 <div className="flex items-center gap-2">
                   <GitBranch size={13} className="text-muted-foreground/40" strokeWidth={1.8} />
-                  <span className="text-[13px] text-foreground/80">Use existing branch</span>
+                  <span className="text-[13px] text-foreground/80">Create new branch</span>
                 </div>
               </label>
             </div>
           )}
 
-          {/* Branch selector */}
-          {useWorktree && (
+          {/* Branch selector — shown for worktree mode AND non-worktree git repos */}
+          {(useWorktree || gitReady) && (
             <div className="mb-4" ref={dropdownRef}>
               <label className="block text-[12px] font-medium text-muted-foreground/70 mb-2">
-                {useExistingBranch ? 'Branch' : 'Base branch'}
+                {useWorktree && createNewBranch ? 'Base branch' : 'Branch'}
               </label>
 
               {branchError ? (
@@ -460,6 +480,18 @@ export function TaskModal({
                               <span className="flex-1 truncate text-[12px] text-foreground/80">
                                 {branch.name}
                               </span>
+                              {(branch.ahead ?? 0) > 0 && (
+                                <span className="flex items-center gap-0.5 text-[10px] text-emerald-500 font-mono shrink-0">
+                                  <ArrowUp size={9} strokeWidth={2.5} />
+                                  {branch.ahead}
+                                </span>
+                              )}
+                              {(branch.behind ?? 0) > 0 && (
+                                <span className="flex items-center gap-0.5 text-[10px] text-amber-500 font-mono shrink-0">
+                                  <ArrowDown size={9} strokeWidth={2.5} />
+                                  {branch.behind}
+                                </span>
+                              )}
                               <span className="text-[10px] text-muted-foreground/40 font-mono shrink-0">
                                 {branch.shortHash}
                               </span>
@@ -474,6 +506,63 @@ export function TaskModal({
                   )}
                 </div>
               )}
+
+              {/* Branch status banner */}
+              {selectedBranch &&
+                !dropdownOpen &&
+                !branchError &&
+                (() => {
+                  const behind = selectedBranch.behind ?? 0;
+                  const ahead = selectedBranch.ahead ?? 0;
+                  // Direct checkout modes: existing branch or non-worktree
+                  const isDirectCheckout = !createNewBranch || !useWorktree;
+
+                  if (behind > 0 && isDirectCheckout) {
+                    return (
+                      <div className="mt-2 flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px]">
+                        <ArrowDown
+                          size={12}
+                          strokeWidth={2}
+                          className="text-amber-500 shrink-0 mt-0.5"
+                        />
+                        <span className="text-amber-200/80">
+                          <span className="font-medium text-amber-500">
+                            {behind} commit{behind !== 1 ? 's' : ''} behind
+                          </span>{' '}
+                          remote. The local state of this branch will be used.
+                        </span>
+                      </div>
+                    );
+                  }
+                  if (behind > 0) {
+                    return (
+                      <p className="mt-1.5 text-[11px] text-muted-foreground/50">
+                        Base branch is{' '}
+                        <span className="text-amber-500 font-medium">
+                          {behind} commit{behind !== 1 ? 's' : ''} behind
+                        </span>{' '}
+                        remote
+                        {ahead > 0 && (
+                          <>
+                            {', '}
+                            <span className="text-emerald-500 font-medium">{ahead} ahead</span>
+                          </>
+                        )}
+                      </p>
+                    );
+                  }
+                  if (ahead > 0) {
+                    return (
+                      <p className="mt-1.5 text-[11px] text-muted-foreground/50">
+                        <span className="text-emerald-500 font-medium">
+                          {ahead} commit{ahead !== 1 ? 's' : ''} ahead
+                        </span>{' '}
+                        of remote
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
             </div>
           )}
 
@@ -519,7 +608,7 @@ export function TaskModal({
           )}
 
           {/* Push remote branch toggle */}
-          {useWorktree && !useExistingBranch && (
+          {useWorktree && createNewBranch && (
             <div className="mb-4">
               <label className="flex items-center gap-3 cursor-pointer group">
                 <div className="relative">

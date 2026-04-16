@@ -14,6 +14,7 @@ import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
 import { TaskModal } from './components/TaskModal';
 import { AddProjectModal } from './components/AddProjectModal';
 import { DeleteTaskModal } from './components/DeleteTaskModal';
+import { BranchBehindModal } from './components/BranchBehindModal';
 import { DeleteProjectModal, type DeleteProjectOptions } from './components/DeleteProjectModal';
 import { RemoteControlModal } from './components/RemoteControlModal';
 import { SettingsModal } from './components/SettingsModal';
@@ -66,6 +67,11 @@ export function App() {
     error: null,
   });
   const [deleteTaskTarget, setDeleteTaskTarget] = useState<Task | null>(null);
+  const [branchBehindConfirm, setBranchBehindConfirm] = useState<{
+    branch: string;
+    behind: number;
+    resolve: (shouldPull: boolean) => void;
+  } | null>(null);
   const [deleteProjectTarget, setDeleteProjectTarget] = useState<Project | null>(null);
   const [projectSettingsTarget, setProjectSettingsTarget] = useState<Project | null>(null);
   const [adoSetup, setAdoSetup] = useState<{
@@ -952,7 +958,7 @@ export function App() {
   }
 
   async function handleCreateTask(options: CreateTaskOptions) {
-    const { name, useWorktree, autoApprove, baseRef, pushRemote, linkedItems, useExistingBranch } =
+    const { name, useWorktree, autoApprove, baseRef, pushRemote, linkedItems, createNewBranch } =
       options;
 
     const targetProjectId = taskModalProjectId || activeProjectId;
@@ -971,27 +977,8 @@ export function App() {
       const ghIssueNumbers = ghItems.map((i) => i.id);
 
       if (useWorktree) {
-        if (useExistingBranch && !baseRef) {
-          toast.error('Please select a branch');
-          return;
-        }
-
-        if (useExistingBranch && baseRef) {
-          // Existing branch: skip reserve pool, create worktree directly
-          const createResp = await window.electronAPI.worktreeCreateFromExisting({
-            projectPath: targetProject.path,
-            taskName: name,
-            branch: baseRef,
-            projectId: targetProject.id,
-            linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
-          });
-          if (createResp.success && createResp.data) {
-            worktreeInfo = { branch: createResp.data.branch, path: createResp.data.path };
-          } else {
-            toast.error(createResp.error || 'Failed to create worktree from existing branch');
-            return;
-          }
-        } else {
+        if (createNewBranch) {
+          // New branch: try reserve pool, fall back to direct creation
           const claimResp = await window.electronAPI.worktreeClaimReserve({
             projectId: targetProject.id,
             taskName: name,
@@ -1018,10 +1005,34 @@ export function App() {
               return;
             }
           }
+        } else if (baseRef) {
+          // Existing branch: skip reserve pool, create worktree directly
+          const createResp = await window.electronAPI.worktreeCreateFromExisting({
+            projectPath: targetProject.path,
+            taskName: name,
+            branch: baseRef,
+            projectId: targetProject.id,
+          });
+          if (createResp.success && createResp.data) {
+            worktreeInfo = { branch: createResp.data.branch, path: createResp.data.path };
+          } else {
+            toast.error(createResp.error || 'Failed to create worktree from existing branch');
+            return;
+          }
+        }
+      } else if (baseRef) {
+        // Non-worktree: checkout the selected branch in the project directory
+        const checkoutResp = await window.electronAPI.gitCheckoutBranch({
+          cwd: targetProject.path,
+          branch: baseRef,
+        });
+        if (!checkoutResp.success) {
+          toast.error(checkoutResp.error || 'Failed to checkout branch');
+          return;
         }
       }
 
-      const branch = worktreeInfo?.branch ?? 'main';
+      const branch = worktreeInfo?.branch ?? baseRef ?? 'main';
       const taskPath = worktreeInfo?.path ?? targetProject.path;
 
       const saveResp = await window.electronAPI.saveTask({
@@ -1033,7 +1044,7 @@ export function App() {
         autoApprove,
         // Existing branches weren't created by Dash — mark false to prevent
         // automatic deletion of the local/remote branch on task removal.
-        branchCreatedByDash: useWorktree && !!worktreeInfo && !useExistingBranch,
+        branchCreatedByDash: useWorktree && !!worktreeInfo && !!createNewBranch,
         linkedItems: linkedItems ?? null,
       });
 
@@ -1515,40 +1526,44 @@ export function App() {
         />
       )}
 
-      {showTaskModal && (
-        <TaskModal
-          projectPath={
-            projects.find((p) => p.id === (taskModalProjectId || activeProjectId))?.path ?? ''
-          }
-          projectId={taskModalProjectId || activeProjectId || undefined}
-          isGitRepo={
-            projects.find((p) => p.id === (taskModalProjectId || activeProjectId))?.isGitRepo ??
-            false
-          }
-          gitRemote={
-            projects.find((p) => p.id === (taskModalProjectId || activeProjectId))?.gitRemote ??
-            null
-          }
-          onClose={() => setShowTaskModal(false)}
-          onCreate={handleCreateTask}
-          onGitInit={() => {
-            const pid = taskModalProjectId || activeProjectId;
-            const proj = projects.find((p) => p.id === pid);
-            if (proj) {
-              window.electronAPI.detectGit(proj.path).then(async (gitResp) => {
-                const gitInfo = gitResp.success ? gitResp.data : null;
-                await window.electronAPI.saveProject({
-                  ...proj,
-                  isGitRepo: gitInfo?.isGitRepo ?? true,
-                  gitRemote: gitInfo?.remote ?? null,
-                  gitBranch: gitInfo?.branch ?? null,
-                });
-                loadProjects();
-              });
-            }
-          }}
-        />
-      )}
+      {showTaskModal &&
+        (() => {
+          const modalProjectId = taskModalProjectId || activeProjectId;
+          const modalTasks = modalProjectId ? (tasksByProject[modalProjectId] ?? []) : [];
+          const existingNonWorktreeTask =
+            modalTasks.find((t) => !t.useWorktree && !t.archivedAt) ?? null;
+          return (
+            <TaskModal
+              projectPath={projects.find((p) => p.id === modalProjectId)?.path ?? ''}
+              projectId={modalProjectId || undefined}
+              isGitRepo={projects.find((p) => p.id === modalProjectId)?.isGitRepo ?? false}
+              gitRemote={projects.find((p) => p.id === modalProjectId)?.gitRemote ?? null}
+              existingNonWorktreeTask={
+                existingNonWorktreeTask
+                  ? { id: existingNonWorktreeTask.id, name: existingNonWorktreeTask.name }
+                  : null
+              }
+              onClose={() => setShowTaskModal(false)}
+              onCreate={handleCreateTask}
+              onGitInit={() => {
+                const pid = taskModalProjectId || activeProjectId;
+                const proj = projects.find((p) => p.id === pid);
+                if (proj) {
+                  window.electronAPI.detectGit(proj.path).then(async (gitResp) => {
+                    const gitInfo = gitResp.success ? gitResp.data : null;
+                    await window.electronAPI.saveProject({
+                      ...proj,
+                      isGitRepo: gitInfo?.isGitRepo ?? true,
+                      gitRemote: gitInfo?.remote ?? null,
+                      gitBranch: gitInfo?.branch ?? null,
+                    });
+                    loadProjects();
+                  });
+                }
+              }}
+            />
+          );
+        })()}
 
       {adoSetup && (
         <AdoSetupModal
@@ -1689,6 +1704,15 @@ export function App() {
           task={deleteTaskTarget}
           onClose={() => setDeleteTaskTarget(null)}
           onConfirm={handleDeleteTaskConfirm}
+        />
+      )}
+
+      {branchBehindConfirm && (
+        <BranchBehindModal
+          branch={branchBehindConfirm.branch}
+          behind={branchBehindConfirm.behind}
+          onUpdate={() => branchBehindConfirm.resolve(true)}
+          onSkip={() => branchBehindConfirm.resolve(false)}
         />
       )}
 

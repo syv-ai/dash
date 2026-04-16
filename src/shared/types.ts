@@ -196,6 +196,8 @@ export interface BranchInfo {
   ref: string; // "origin/main", "origin/develop"
   shortHash: string; // "a1b2c3d"
   relativeDate: string; // "2 days ago"
+  ahead?: number; // commits ahead of remote
+  behind?: number; // commits behind remote
 }
 
 // ── Git Types ────────────────────────────────────────────────
