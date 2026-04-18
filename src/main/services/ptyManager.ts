@@ -95,14 +95,36 @@ const RESERVED_ENV_KEYS = new Set([
 
 export function setCommitAttribution(value: string | undefined): void {
   commitAttributionSetting = value;
-  refreshActivePtyHooks();
+  const { failures } = refreshActivePtyHooks();
+  if (failures.length > 0) {
+    console.warn(`[setCommitAttribution] hook write failed for ${failures.length} active task(s)`);
+  }
 }
 
-/** Claude Code re-reads settings.local.json per tool call, so rewriting it flips hooks live. */
-export function refreshActivePtyHooks(): void {
+export interface RefreshFailure {
+  settingsPath: string;
+  error: string;
+}
+
+export interface RefreshResult {
+  failures: RefreshFailure[];
+}
+
+/**
+ * Rewrite settings.local.json for every active PTY. Claude Code re-reads
+ * settings per tool call, so this flips hooks live. Returns per-task write
+ * failures so callers (IPC handlers) can surface a "saved, but N tasks
+ * didn't pick it up" message instead of silently returning success.
+ */
+export function refreshActivePtyHooks(): RefreshResult {
+  const failures: RefreshFailure[] = [];
   for (const [id, rec] of ptys) {
-    writeHookSettings(rec.cwd, id);
+    const result = writeHookSettings(rec.cwd, id);
+    if (!result.ok) {
+      failures.push({ settingsPath: result.settingsPath, error: result.error });
+    }
   }
+  return { failures };
 }
 
 export function setDesktopNotification(opts: { enabled: boolean }): void {
@@ -362,6 +384,8 @@ function prependUnique(dir: string, basePath: string, sep: string): string {
   return `${dir}${sep}${basePath}`;
 }
 
+type HookWriteResult = { ok: true } | { ok: false; settingsPath: string; error: string };
+
 /**
  * Write .claude/settings.local.json with Dash-owned hooks for activity
  * monitoring, tool tracking, error detection, context usage, and optional
@@ -369,9 +393,11 @@ function prependUnique(dir: string, basePath: string, sep: string): string {
  * HookServer); statusLine and hooks that need local binaries (RTK, base64
  * context injection) use type: "command".
  */
-function writeHookSettings(cwd: string, ptyId: string): void {
+function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
   const port = hookServer.port;
-  if (port === 0) return;
+  // Hook server not yet bound (startup transient) — treat as a no-op, not a
+  // failure. Callers that later refresh will succeed once the server is up.
+  if (port === 0) return { ok: true };
 
   const claudeDir = path.join(cwd, '.claude');
   const settingsPath = path.join(claudeDir, 'settings.local.json');
@@ -486,7 +512,11 @@ function writeHookSettings(cwd: string, ptyId: string): void {
               });
             }
           }
-          return;
+          return {
+            ok: false,
+            settingsPath,
+            error: `corrupt settings.local.json; backup rename failed: ${renameErr instanceof Error ? renameErr.message : String(renameErr)}`,
+          };
         }
       }
     }
@@ -528,6 +558,7 @@ function writeHookSettings(cwd: string, ptyId: string): void {
 
     fs.writeFileSync(settingsPath, JSON.stringify(merged, null, 2) + '\n');
     writtenSettingsPaths.add(settingsPath);
+    return { ok: true };
   } catch (err) {
     console.error('[writeHookSettings] Failed:', err);
     // Without settings, all Dash-owned hooks silently don't run — notify the user.
@@ -538,6 +569,11 @@ function writeHookSettings(cwd: string, ptyId: string): void {
         });
       }
     }
+    return {
+      ok: false,
+      settingsPath,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 

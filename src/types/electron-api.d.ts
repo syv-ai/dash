@@ -261,7 +261,7 @@ export interface ElectronAPI {
 
   // RTK (Rust Token Killer)
   rtkGetStatus: () => Promise<IpcResponse<RtkStatus>>;
-  rtkSetEnabled: (enabled: boolean) => Promise<IpcResponse<void>>;
+  rtkSetEnabled: (enabled: boolean) => Promise<IpcResponse<{ warning?: string }>>;
   rtkDownload: () => Promise<IpcResponse<void>>;
   rtkTest: () => Promise<IpcResponse<RtkTestResult>>;
   onRtkDownloadProgress: (callback: (progress: RtkDownloadProgress) => void) => () => void;

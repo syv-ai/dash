@@ -1763,6 +1763,13 @@ export function App() {
                   if (s.success && s.data) setRtkStatus(s.data);
                   else console.error('[rtk:getStatus after setEnabled failure]', s.error);
                 });
+                return;
+              }
+              // Flag saved but some tasks couldn't be refreshed live — the
+              // setting is persisted and next-spawn will pick it up; flag the
+              // partial state without rolling back.
+              if (resp.data?.warning) {
+                toast.warning(resp.data.warning);
               }
             });
           }}
