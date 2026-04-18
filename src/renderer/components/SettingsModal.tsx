@@ -1020,7 +1020,10 @@ function RtkSection({
   onDownload: () => void;
   progress: RtkDownloadProgress | null;
 }) {
-  const installing = progress?.phase === 'downloading' || progress?.phase === 'extracting';
+  const installing =
+    progress?.phase === 'downloading' ||
+    progress?.phase === 'extracting' ||
+    progress?.phase === 'verifying';
   const loading = !status;
 
   const [testing, setTesting] = useState(false);
@@ -1040,8 +1043,8 @@ function RtkSection({
 
   let installLabel = 'Install RTK';
   if (progress?.phase === 'extracting') installLabel = 'Extracting…';
-  else if (progress?.phase === 'downloading')
-    installLabel = `Downloading… ${progress.percent ?? 0}%`;
+  else if (progress?.phase === 'verifying') installLabel = 'Verifying…';
+  else if (progress?.phase === 'downloading') installLabel = `Downloading… ${progress.percent}%`;
 
   return (
     <div className="space-y-6">
@@ -1174,7 +1177,35 @@ function RtkTestResultCard({ result }: { result: RtkTestResult }) {
     );
   }
 
-  if (result.wouldCompress) {
+  if (result.blocked) {
+    return (
+      <div
+        className="mt-3 flex items-start gap-3 p-3 rounded-lg border border-[hsl(var(--git-modified))]/40"
+        style={{ background: 'hsl(var(--git-modified) / 0.06)' }}
+      >
+        <AlertCircle
+          size={14}
+          className="text-[hsl(var(--git-modified))] mt-0.5"
+          strokeWidth={1.8}
+        />
+        <div className="min-w-0 flex-1 space-y-1">
+          <p className="text-[11px] font-medium text-foreground">
+            rtk blocked this command (exit 2).
+          </p>
+          {result.blocked.stderr && (
+            <p className="text-[11px] text-foreground/70 font-mono break-all">
+              {result.blocked.stderr}
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const wouldCompress =
+    result.rewrittenCommand !== null && result.rewrittenCommand !== result.testedCommand;
+
+  if (wouldCompress) {
     return (
       <div
         className="mt-3 flex items-start gap-3 p-3 rounded-lg border border-[hsl(var(--git-added))]/40"

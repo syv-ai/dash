@@ -376,48 +376,35 @@ export interface PixelAgentsStatus {
 
 // ── RTK (Rust Token Killer) Types ───────────────────────────
 
-/** Where the rtk binary was resolved from. */
 export type RtkSource = 'path' | 'managed' | 'none';
 
 export interface RtkStatus {
-  /** Whether an rtk binary is resolvable right now. */
   installed: boolean;
-  /** Version string from `rtk --version`, if resolvable. */
   version: string | null;
-  /** Absolute path to the resolved binary, or null. */
   path: string | null;
-  /** 'path' = user-installed on $PATH, 'managed' = downloaded by Dash, 'none' = not installed. */
   source: RtkSource;
-  /** User has flipped the "inject RTK hook per task" toggle on. */
   enabled: boolean;
-  /** Whether Dash can auto-download rtk for this platform (no Windows release upstream). */
   downloadable: boolean;
 }
 
-export type RtkDownloadPhase = 'idle' | 'downloading' | 'extracting' | 'done' | 'error';
+export type RtkDownloadProgress =
+  | { phase: 'idle' }
+  | { phase: 'downloading'; percent: number }
+  | { phase: 'verifying' }
+  | { phase: 'extracting' }
+  | { phase: 'done'; version: string }
+  | { phase: 'error'; error: string };
 
-export interface RtkDownloadProgress {
-  phase: RtkDownloadPhase;
-  /** 0–100 for 'downloading', undefined otherwise. */
-  percent?: number;
-  /** Set when phase === 'error'. */
-  error?: string;
-  /** Resolved tag (e.g. "v0.42.0") when phase === 'done'. */
-  version?: string;
-}
+export type RtkDownloadPhase = RtkDownloadProgress['phase'];
 
-/** Result of invoking `rtk hook claude` against a synthetic PreToolUse payload. */
-export interface RtkTestResult {
-  /** Whether rtk ran without crashing — even "no rewrite" is a valid pass. */
-  ok: boolean;
-  /** Command we fed rtk (shown in UI so the user knows what was tested). */
-  testedCommand?: string;
-  /** Command rtk would substitute in, or null if it chose pass-through. */
-  rewrittenCommand?: string | null;
-  /** True when rtk actually emitted a rewrite directive (proof of compression). */
-  wouldCompress?: boolean;
-  /** Trimmed stdout for the debug disclosure. Max ~2 KB. */
-  rawOutput?: string;
-  /** Populated on crash / missing binary / stderr panic. */
-  error?: string;
-}
+export type RtkTestResult =
+  | { ok: false; testedCommand?: string; error: string }
+  | {
+      ok: true;
+      testedCommand: string;
+      rewrittenCommand: string | null;
+      rawOutput: string;
+      // rtk hooks use exit 2 to *block* a command (never the health case for us,
+      // but surface it so the UI can explain the state rather than say "works").
+      blocked?: { stderr: string };
+    };

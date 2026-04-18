@@ -98,12 +98,7 @@ export function setCommitAttribution(value: string | undefined): void {
   refreshActivePtyHooks();
 }
 
-/**
- * Re-write settings.local.json for every active PTY. Use when a setting that
- * participates in the hook JSON has changed (commit attribution, RTK toggle,
- * etc.) — Claude Code re-reads settings.local.json on each tool invocation,
- * so running sessions pick up the change without needing to be restarted.
- */
+/** Claude Code re-reads settings.local.json per tool call, so rewriting it flips hooks live. */
 export function refreshActivePtyHooks(): void {
   for (const [id, rec] of ptys) {
     writeHookSettings(rec.cwd, id);
@@ -234,7 +229,7 @@ function buildDirectEnv(isDark: boolean): Record<string, string> {
   const rtkBinDir = RtkService.getManagedBinDirForPath();
   const pathSep = isWin ? ';' : ':';
   const basePath = process.env.PATH || '';
-  const mergedPath = rtkBinDir ? `${rtkBinDir}${pathSep}${basePath}` : basePath;
+  const mergedPath = rtkBinDir ? prependUnique(rtkBinDir, basePath, pathSep) : basePath;
 
   const env: Record<string, string> = {
     ...base,
@@ -339,18 +334,32 @@ const DASH_HOOK_EVENTS = [
 ] as const;
 
 type HttpHook = { type: 'http'; url: string; async?: boolean };
-type HookEntry = { matcher: string; hooks: unknown[] };
+type CommandHook = { type: 'command'; command: string };
+type Hook = (HttpHook | CommandHook) & { __dash?: true };
+type HookEntry = { matcher: string; hooks: Hook[] };
 
-/** PreToolUse = Dash tool-start tracker, plus optional RTK Bash rewriter when enabled. */
 function buildPreToolUseHooks(
   httpHook: (endpoint: string, async?: boolean) => HttpHook,
 ): HookEntry[] {
-  const entries: HookEntry[] = [{ matcher: '*', hooks: [httpHook('/hook/tool-start', true)] }];
+  const entries: HookEntry[] = [
+    { matcher: '*', hooks: [tagDash(httpHook('/hook/tool-start', true))] },
+  ];
   const rtkCmd = RtkService.isEnabled() ? RtkService.getHookCommand() : null;
   if (rtkCmd) {
-    entries.push({ matcher: 'Bash', hooks: [{ type: 'command', command: rtkCmd }] });
+    entries.push({ matcher: 'Bash', hooks: [tagDash({ type: 'command', command: rtkCmd })] });
   }
   return entries;
+}
+
+function tagDash<T extends HttpHook | CommandHook>(hook: T): T & { __dash: true } {
+  return { ...hook, __dash: true };
+}
+
+function prependUnique(dir: string, basePath: string, sep: string): string {
+  if (!basePath) return dir;
+  const parts = basePath.split(sep);
+  if (parts.includes(dir)) return basePath;
+  return `${dir}${sep}${basePath}`;
 }
 
 /**
@@ -369,35 +378,26 @@ function writeHookSettings(cwd: string, ptyId: string): void {
   const settingsPath = path.join(claudeDir, 'settings.local.json');
   const base = `http://127.0.0.1:${port}`;
 
-  /** Shorthand: build an HTTP hook entry. */
-  const httpHook = (endpoint: string, async?: boolean) => ({
+  const httpHook = (endpoint: string, async?: boolean): HttpHook => ({
     type: 'http' as const,
     url: `${base}${endpoint}?ptyId=${ptyId}`,
     ...(async ? { async: true } : {}),
   });
 
-  const hookSettings: Record<string, unknown[]> = {
-    // ── Activity state signals ──────────────────────────────
-    Stop: [{ hooks: [httpHook('/hook/stop')] }],
-    UserPromptSubmit: [{ hooks: [httpHook('/hook/busy')] }],
+  const dashHttp = (endpoint: string, async?: boolean) => tagDash(httpHook(endpoint, async));
 
-    // ── Notification (permission prompt, idle) ──────────────
+  const dashEntries: Record<string, HookEntry[]> = {
+    Stop: [{ matcher: '', hooks: [dashHttp('/hook/stop')] }],
+    UserPromptSubmit: [{ matcher: '', hooks: [dashHttp('/hook/busy')] }],
     Notification: [
-      { matcher: 'permission_prompt', hooks: [httpHook('/hook/notification')] },
-      { matcher: 'idle_prompt', hooks: [httpHook('/hook/notification')] },
+      { matcher: 'permission_prompt', hooks: [dashHttp('/hook/notification')] },
+      { matcher: 'idle_prompt', hooks: [dashHttp('/hook/notification')] },
     ],
-
-    // ── Tool activity tracking ──────────────────────────────
-    // PreToolUse also carries the optional RTK Bash-rewrite hook when enabled.
     PreToolUse: buildPreToolUseHooks(httpHook),
-    PostToolUse: [{ matcher: '*', hooks: [httpHook('/hook/tool-end', true)] }],
-
-    // ── Error detection ─────────────────────────────────────
-    StopFailure: [{ matcher: '*', hooks: [httpHook('/hook/stop-failure')] }],
-
-    // ── Context compaction ──────────────────────────────────
-    PreCompact: [{ matcher: '*', hooks: [httpHook('/hook/compact-start', true)] }],
-    PostCompact: [{ matcher: '*', hooks: [httpHook('/hook/compact-end', true)] }],
+    PostToolUse: [{ matcher: '*', hooks: [dashHttp('/hook/tool-end', true)] }],
+    StopFailure: [{ matcher: '*', hooks: [dashHttp('/hook/stop-failure')] }],
+    PreCompact: [{ matcher: '*', hooks: [dashHttp('/hook/compact-start', true)] }],
+    PostCompact: [{ matcher: '*', hooks: [dashHttp('/hook/compact-end', true)] }],
   };
 
   // SessionStart hook fires on: startup (new session), resume (reattach by id),
@@ -432,10 +432,10 @@ function writeHookSettings(cwd: string, ptyId: string): void {
     contextHook = { type: 'command', command: decodeCmd };
   }
 
-  hookSettings.SessionStart = ['startup', 'resume', 'compact', 'clear'].map((matcher) => {
-    const hooks: unknown[] = [captureHook];
+  dashEntries.SessionStart = ['startup', 'resume', 'compact', 'clear'].map((matcher) => {
+    const hooks: Hook[] = [tagDash(captureHook)];
     if (contextHook && matcher !== 'resume') {
-      hooks.push(contextHook);
+      hooks.push(tagDash(contextHook));
     }
     return { matcher, hooks };
   });
@@ -445,56 +445,96 @@ function writeHookSettings(cwd: string, ptyId: string): void {
       fs.mkdirSync(claudeDir, { recursive: true });
     }
 
-    // Merge with existing settings to preserve non-hook config
+    // Merge with existing settings to preserve user content.
     let existing: Record<string, unknown> = {};
     if (fs.existsSync(settingsPath)) {
       try {
         existing = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
       } catch (err) {
-        console.error(
-          '[writeHookSettings] Corrupted settings.local.json at',
-          settingsPath,
-          '— overwriting:',
-          err,
-        );
+        // Back up the corrupt file before overwriting so the user can recover.
+        const backupPath = `${settingsPath}.corrupt-${Date.now()}.bak`;
+        try {
+          fs.renameSync(settingsPath, backupPath);
+          console.error(
+            `[writeHookSettings] settings.local.json corrupt at ${settingsPath}; backed up to ${backupPath}`,
+            err,
+          );
+          for (const win of BrowserWindow.getAllWindows()) {
+            if (!win.isDestroyed()) {
+              win.webContents.send('app:toast', {
+                message: `settings.local.json was unreadable — backed up to ${path.basename(backupPath)} and rewritten.`,
+              });
+            }
+          }
+        } catch (renameErr) {
+          console.error('[writeHookSettings] Failed to back up corrupt file:', renameErr);
+        }
       }
+    }
+
+    const existingHooks =
+      existing.hooks && typeof existing.hooks === 'object'
+        ? (existing.hooks as Record<string, HookEntry[] | undefined>)
+        : {};
+
+    const mergedHooks: Record<string, HookEntry[]> = {};
+    const dashEventSet = new Set<string>(DASH_HOOK_EVENTS);
+    for (const [event, userEntries] of Object.entries(existingHooks)) {
+      if (!Array.isArray(userEntries)) continue;
+      // For events Dash manages: keep only user-authored entries (ones we
+      // didn't tag). For other events: keep the user's entries as-is.
+      mergedHooks[event] = dashEventSet.has(event)
+        ? userEntries.filter((e) => !entryIsDashOwned(e))
+        : userEntries;
+    }
+    for (const [event, entries] of Object.entries(dashEntries)) {
+      const preserved = mergedHooks[event] ?? [];
+      mergedHooks[event] = [...preserved, ...entries];
     }
 
     const merged: Record<string, unknown> = {
       ...existing,
-      hooks: {
-        ...(existing.hooks && typeof existing.hooks === 'object'
-          ? (existing.hooks as Record<string, unknown>)
-          : {}),
-        ...hookSettings,
-      },
+      hooks: mergedHooks,
     };
 
-    // statusLine: command that pipes Claude Code's JSON context data to our hook server
     const contextUrl = `${base}/hook/context?ptyId=${ptyId}`;
     merged.statusLine = {
       type: 'command',
       command: `curl -s --connect-timeout 2 -X POST -H "Content-Type: application/json" -d @- "${contextUrl}" >/dev/null 2>&1`,
     };
 
-    // Commit attribution: undefined = Dash default, '' = suppress, other = custom.
     const effectiveAttribution =
       commitAttributionSetting === undefined ? DASH_DEFAULT_ATTRIBUTION : commitAttributionSetting;
     merged.attribution = { commit: effectiveAttribution };
 
     fs.writeFileSync(settingsPath, JSON.stringify(merged, null, 2) + '\n');
     writtenSettingsPaths.add(settingsPath);
-    console.error(
-      `[writeHookSettings] Wrote ${settingsPath} (attribution: ${commitAttributionSetting === undefined ? 'default' : commitAttributionSetting || 'none'})`,
-    );
   } catch (err) {
     console.error('[writeHookSettings] Failed:', err);
+    // If hooks aren't written, Dash's activity monitor, context metering, and
+    // the RTK rewriter are all silently absent — notify the user.
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('app:toast', {
+          message: `Could not write ${path.basename(settingsPath)} — hooks are off for this task.`,
+        });
+      }
+    }
   }
+}
+
+function entryIsDashOwned(entry: unknown): boolean {
+  if (!entry || typeof entry !== 'object') return false;
+  const hooks = (entry as { hooks?: unknown }).hooks;
+  if (!Array.isArray(hooks)) return false;
+  return hooks.some(
+    (h) => !!h && typeof h === 'object' && (h as { __dash?: unknown }).__dash === true,
+  );
 }
 
 /**
  * Remove Dash-written hooks and attribution from all settings.local.json files
- * that were written during this session. Called on app quit to prevent stale hooks.
+ * that were written during this session. Preserves user-authored entries.
  */
 export function cleanupHookSettings(): void {
   for (const settingsPath of writtenSettingsPaths) {
@@ -506,25 +546,24 @@ export function cleanupHookSettings(): void {
 
       if (hooks && typeof hooks === 'object') {
         for (const key of DASH_HOOK_EVENTS) {
-          delete hooks[key];
+          const entries = hooks[key];
+          if (!Array.isArray(entries)) continue;
+          const userOnly = entries.filter((e) => !entryIsDashOwned(e));
+          if (userOnly.length === 0) delete hooks[key];
+          else hooks[key] = userOnly;
         }
-        // Remove hooks object entirely if empty
         if (Object.keys(hooks).length === 0) {
           delete raw.hooks;
         }
       }
 
-      // Remove Dash statusLine and attribution
       delete raw.statusLine;
       delete raw.attribution;
 
-      // If nothing meaningful remains, delete the file
       if (Object.keys(raw).length === 0) {
         fs.unlinkSync(settingsPath);
-        console.error(`[cleanupHookSettings] Removed empty ${settingsPath}`);
       } else {
         fs.writeFileSync(settingsPath, JSON.stringify(raw, null, 2) + '\n');
-        console.error(`[cleanupHookSettings] Cleaned hooks from ${settingsPath}`);
       }
     } catch (err) {
       console.error(`[cleanupHookSettings] Failed for ${settingsPath}:`, err);

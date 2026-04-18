@@ -144,11 +144,12 @@ app.whenReady().then(async () => {
     PixelAgentsService.start();
   }
 
-  // Warm RTK binary resolution so ptyManager's writeHookSettings can grab
-  // the absolute path synchronously on spawn.
+  // Resolve rtk synchronously at startup; getHookCommand() is called on PTY spawn.
   const { RtkService } = await import('./services/RtkService');
   RtkService.setSender(mainWindow.webContents);
-  RtkService.warmUp();
+  await RtkService.warmUp().catch((err) => {
+    console.error('[RtkService.warmUp]', err);
+  });
 
   // Cleanup orphaned reserve worktrees (background, non-blocking)
   setTimeout(async () => {

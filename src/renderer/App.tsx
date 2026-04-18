@@ -203,7 +203,6 @@ export function App() {
     });
     return window.electronAPI.onRtkDownloadProgress((progress) => {
       setRtkDownloadProgress(progress);
-      // When the download finishes, refresh status so the toggle becomes usable
       if (progress.phase === 'done') {
         window.electronAPI.rtkGetStatus().then((resp) => {
           if (resp.success && resp.data) setRtkStatus(resp.data);
@@ -1754,7 +1753,14 @@ export function App() {
           rtkStatus={rtkStatus}
           onRtkEnabledChange={(enabled) => {
             setRtkStatus((prev) => (prev ? { ...prev, enabled } : prev));
-            window.electronAPI.rtkSetEnabled(enabled);
+            window.electronAPI.rtkSetEnabled(enabled).then((resp) => {
+              if (!resp.success) {
+                // Roll back the optimistic toggle and reflect the real state.
+                window.electronAPI.rtkGetStatus().then((s) => {
+                  if (s.success && s.data) setRtkStatus(s.data);
+                });
+              }
+            });
           }}
           onRtkDownload={() => {
             setRtkDownloadProgress({ phase: 'downloading', percent: 0 });
