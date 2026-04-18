@@ -493,25 +493,17 @@ function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
             `[writeHookSettings] settings.local.json corrupt at ${settingsPath}; backed up to ${backupPath}`,
             err,
           );
-          for (const win of BrowserWindow.getAllWindows()) {
-            if (!win.isDestroyed()) {
-              win.webContents.send('app:toast', {
-                message: `settings.local.json was unreadable — backed up to ${path.basename(backupPath)} and rewritten.`,
-              });
-            }
-          }
+          broadcastToast(
+            `settings.local.json was unreadable — backed up to ${path.basename(backupPath)} and rewritten.`,
+          );
         } catch (renameErr) {
           console.error(
             '[writeHookSettings] Failed to back up corrupt file; leaving on-disk file intact:',
             renameErr,
           );
-          for (const win of BrowserWindow.getAllWindows()) {
-            if (!win.isDestroyed()) {
-              win.webContents.send('app:toast', {
-                message: `settings.local.json is corrupt and could not be backed up — hooks are off for this task. Fix or remove ${path.basename(settingsPath)} manually.`,
-              });
-            }
-          }
+          broadcastToast(
+            `settings.local.json is corrupt and could not be backed up — hooks are off for this task. Fix or remove ${path.basename(settingsPath)} manually.`,
+          );
           return {
             ok: false,
             settingsPath,
@@ -562,13 +554,7 @@ function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
   } catch (err) {
     console.error('[writeHookSettings] Failed:', err);
     // Without settings, all Dash-owned hooks silently don't run — notify the user.
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) {
-        win.webContents.send('app:toast', {
-          message: `Could not write ${path.basename(settingsPath)} — hooks are off for this task.`,
-        });
-      }
-    }
+    broadcastToast(`Could not write ${path.basename(settingsPath)} — hooks are off for this task.`);
     return {
       ok: false,
       settingsPath,
@@ -584,6 +570,14 @@ function entryIsDashOwned(entry: unknown): boolean {
   return hooks.some(
     (h) => !!h && typeof h === 'object' && (h as { __dash?: unknown }).__dash === true,
   );
+}
+
+function broadcastToast(message: string): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('app:toast', { message });
+    }
+  }
 }
 
 /**

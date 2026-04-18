@@ -587,17 +587,17 @@ function extractRewrittenCommand(stdout: string): ExtractResult {
   // Claude Code's hook JSON schema has evolved; accept both historical and
   // current field names so version skew between rtk releases and Dash's
   // expectations doesn't silently render as "pass-through".
-  const paths: Array<(v: Record<string, unknown>) => unknown> = [
-    (v) => (isObject(v.hookSpecificOutput) ? v.hookSpecificOutput.updatedInput : undefined),
-    (v) => (isObject(v.hookSpecificOutput) ? v.hookSpecificOutput.modifiedToolInput : undefined),
-    (v) => (isObject(v.hookSpecificOutput) ? v.hookSpecificOutput.updatedToolInput : undefined),
-    (v) => v.updatedInput,
-    (v) => v.modifiedToolInput,
-    (v) => v.updatedToolInput,
-    (v) => v.tool_input,
+  const hso = isObject(parsed.hookSpecificOutput) ? parsed.hookSpecificOutput : null;
+  const candidates: unknown[] = [
+    hso?.updatedInput,
+    hso?.modifiedToolInput,
+    hso?.updatedToolInput,
+    parsed.updatedInput,
+    parsed.modifiedToolInput,
+    parsed.updatedToolInput,
+    parsed.tool_input,
   ];
-  for (const get of paths) {
-    const node = get(parsed);
+  for (const node of candidates) {
     if (isObject(node) && typeof node.command === 'string') {
       return { ok: true, command: node.command };
     }
