@@ -966,6 +966,49 @@ function ClaudeCodeTab({
   );
 }
 
+function RtkStatusCardBody({ status }: { status: RtkStatus | null }) {
+  if (!status) {
+    return <p className="text-[11px] text-foreground/60">Checking…</p>;
+  }
+  if (status.installed) {
+    return (
+      <div className="space-y-0.5">
+        <p className="text-[11px] text-foreground/60 font-mono">
+          {status.version ?? 'installed'}
+          <span className="ml-2 text-foreground/40">
+            ({status.source === 'managed' ? 'managed by Dash' : 'on $PATH'})
+          </span>
+        </p>
+        {status.path && (
+          <p className="text-[11px] text-foreground/40 font-mono truncate">{status.path}</p>
+        )}
+      </div>
+    );
+  }
+  if (status.downloadable) {
+    return (
+      <p className="text-[11px] text-foreground/60 leading-relaxed">
+        Not installed. Dash can fetch the latest release directly — no sudo, no global $PATH
+        changes, binary stays scoped to this app.
+      </p>
+    );
+  }
+  return (
+    <p className="text-[11px] text-foreground/60 leading-relaxed">
+      Not installed, and no prebuilt release is available for this platform. Install manually from{' '}
+      <a
+        href="https://github.com/rtk-ai/rtk"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-primary hover:underline"
+      >
+        github.com/rtk-ai/rtk
+      </a>
+      .
+    </p>
+  );
+}
+
 function RtkSection({
   status,
   onEnabledChange,
@@ -1038,40 +1081,7 @@ function RtkSection({
           )}
         </div>
         <div className="min-w-0 flex-1">
-          {loading ? (
-            <p className="text-[11px] text-foreground/60">Checking…</p>
-          ) : status?.installed ? (
-            <div className="space-y-0.5">
-              <p className="text-[11px] text-foreground/60 font-mono">
-                {status.version ?? 'installed'}
-                <span className="ml-2 text-foreground/40">
-                  ({status.source === 'managed' ? 'managed by Dash' : 'on $PATH'})
-                </span>
-              </p>
-              {status.path && (
-                <p className="text-[11px] text-foreground/40 font-mono truncate">{status.path}</p>
-              )}
-            </div>
-          ) : status?.downloadable ? (
-            <p className="text-[11px] text-foreground/60 leading-relaxed">
-              Not installed. Dash can fetch the latest release directly — no sudo, no global $PATH
-              changes, binary stays scoped to this app.
-            </p>
-          ) : (
-            <p className="text-[11px] text-foreground/60 leading-relaxed">
-              Not installed, and no prebuilt release is available for this platform. Install
-              manually from{' '}
-              <a
-                href="https://github.com/rtk-ai/rtk"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline"
-              >
-                github.com/rtk-ai/rtk
-              </a>
-              .
-            </p>
-          )}
+          <RtkStatusCardBody status={status} />
         </div>
       </div>
 

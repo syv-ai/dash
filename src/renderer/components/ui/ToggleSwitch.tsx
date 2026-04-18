@@ -13,7 +13,7 @@ export function ToggleSwitch({
 }) {
   return (
     <button
-      onClick={() => !disabled && onToggle(!enabled)}
+      onClick={() => onToggle(!enabled)}
       disabled={disabled}
       className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg text-[13px] border transition-all duration-150 ${
         disabled ? 'opacity-50 cursor-not-allowed' : ''

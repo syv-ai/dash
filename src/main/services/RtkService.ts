@@ -123,26 +123,13 @@ export class RtkService {
     const resolved = await RtkService.resolveBinary();
     RtkService.cachedResolution = resolved;
 
-    const downloadable = RtkService.isPlatformDownloadable();
-
-    if (!resolved) {
-      return {
-        installed: false,
-        version: null,
-        path: null,
-        source: 'none',
-        enabled: RtkService.isEnabled(),
-        downloadable,
-      };
-    }
-
     return {
-      installed: true,
-      version: resolved.version,
-      path: resolved.path,
-      source: resolved.source,
+      installed: !!resolved,
+      version: resolved?.version ?? null,
+      path: resolved?.path ?? null,
+      source: resolved?.source ?? 'none',
       enabled: RtkService.isEnabled(),
-      downloadable,
+      downloadable: RtkService.isPlatformDownloadable(),
     };
   }
 
@@ -282,21 +269,12 @@ export class RtkService {
 
   /** Throws if the archive isn't a valid gzip-ed tar — cheap enough to do before extraction. */
   private static async verifyArchive(archivePath: string): Promise<void> {
-    await new Promise<void>((resolve, reject) => {
-      const proc = spawn('tar', ['-tzf', archivePath], { stdio: ['ignore', 'ignore', 'pipe'] });
-      let stderr = '';
-      proc.stderr?.on('data', (d: Buffer) => {
-        stderr += d.toString();
-      });
-      proc.on('error', reject);
-      proc.on('exit', (code) => {
-        if (code === 0) resolve();
-        else
-          reject(
-            new Error(`Archive integrity check failed: ${stderr.trim() || `tar exited ${code}`}`),
-          );
-      });
-    });
+    try {
+      await RtkService.runTar(['-tzf', archivePath]);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new Error(`Archive integrity check failed: ${detail}`);
+    }
   }
 
   private static async extractTarball(archivePath: string, destDir: string): Promise<void> {
