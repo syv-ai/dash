@@ -65,6 +65,16 @@ export class RtkService {
     return join(RtkService.getManagedBinDir(), exe);
   }
 
+  /**
+   * When rtk is Dash-managed, its rewrite output references the bare name
+   * `rtk` — so the PTY needs our managed bin dir on PATH for the rewritten
+   * command to resolve. Returns null when no managed binary is present, in
+   * which case the user's own $PATH is expected to carry it.
+   */
+  static getManagedBinDirForPath(): string | null {
+    return existsSync(RtkService.getManagedBinPath()) ? RtkService.getManagedBinDir() : null;
+  }
+
   private static async resolveBinary(): Promise<{
     path: string;
     source: RtkSource;

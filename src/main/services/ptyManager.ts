@@ -229,11 +229,18 @@ function buildDirectEnv(isDark: boolean): Record<string, string> {
     ? Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => !!e[1]))
     : {};
 
+  // rtk's rewrite output invokes the bare name `rtk`; when the binary is
+  // Dash-managed (userData/bin), prepend that dir so the rewrite resolves.
+  const rtkBinDir = RtkService.getManagedBinDirForPath();
+  const pathSep = isWin ? ';' : ':';
+  const basePath = process.env.PATH || '';
+  const mergedPath = rtkBinDir ? `${rtkBinDir}${pathSep}${basePath}` : basePath;
+
   const env: Record<string, string> = {
     ...base,
     TERM_PROGRAM: 'dash',
     HOME: os.homedir(),
-    PATH: process.env.PATH || '',
+    PATH: mergedPath,
     // Tell CLI apps about terminal background (rxvt convention)
     // Format: "fg;bg" where higher values = lighter colors
     COLORFGBG: isDark ? '15;0' : '0;15',
