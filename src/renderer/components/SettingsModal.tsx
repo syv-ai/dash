@@ -34,6 +34,9 @@ import type {
   PixelAgentsOfficeStatus,
   RateLimits,
   UsageThresholds,
+  RtkStatus,
+  RtkDownloadProgress,
+  RtkTestResult,
 } from '../../shared/types';
 import { formatResetTime } from '../../shared/format';
 import { UsageBar } from './ui/UsageBar';
@@ -47,7 +50,8 @@ type SettingsTab =
   | 'claude-code'
   | 'keybindings'
   | 'usage'
-  | 'pixel-agents';
+  | 'pixel-agents'
+  | 'rtk';
 
 interface SettingsModalProps {
   initialTab?: string;
@@ -92,6 +96,10 @@ interface SettingsModalProps {
   pixelAgentsConfig: PixelAgentsConfig | null;
   onPixelAgentsConfigChange: (config: PixelAgentsConfig) => void;
   pixelAgentsStatus: PixelAgentsStatus;
+  rtkStatus: RtkStatus | null;
+  onRtkEnabledChange: (enabled: boolean) => void;
+  onRtkDownload: () => void;
+  rtkDownloadProgress: RtkDownloadProgress | null;
   latestRateLimits?: RateLimits;
   usageThresholds: UsageThresholds;
   onUsageThresholdsChange: (thresholds: UsageThresholds) => void;
@@ -958,6 +966,251 @@ function ClaudeCodeTab({
   );
 }
 
+function RtkSection({
+  status,
+  onEnabledChange,
+  onDownload,
+  progress,
+}: {
+  status: RtkStatus | null;
+  onEnabledChange: (enabled: boolean) => void;
+  onDownload: () => void;
+  progress: RtkDownloadProgress | null;
+}) {
+  const installing = progress?.phase === 'downloading' || progress?.phase === 'extracting';
+  const loading = !status;
+
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<RtkTestResult | null>(null);
+
+  async function runTest() {
+    setTesting(true);
+    setTestResult(null);
+    const resp = await window.electronAPI.rtkTest();
+    setTesting(false);
+    if (resp.success && resp.data) {
+      setTestResult(resp.data);
+    } else {
+      setTestResult({ ok: false, error: resp.error ?? 'unknown IPC error' });
+    }
+  }
+
+  let installLabel = 'Install RTK';
+  if (progress?.phase === 'extracting') installLabel = 'Extracting…';
+  else if (progress?.phase === 'downloading')
+    installLabel = `Downloading… ${progress.percent ?? 0}%`;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <p className="text-[11px] text-foreground/60 leading-relaxed">
+          RTK compresses common shell-command output (git, ls, test runners, tsc…) before Claude
+          sees it, typically cutting <b>60–90% of tokens</b> per command. When enabled, Dash injects
+          RTK&rsquo;s PreToolUse hook into every task automatically.{' '}
+          <a
+            href="https://github.com/rtk-ai/rtk"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-0.5 text-primary hover:underline"
+          >
+            Learn more
+            <ExternalLink size={9} strokeWidth={1.8} />
+          </a>
+        </p>
+      </div>
+
+      {/* Install status card */}
+      <div
+        className="flex items-start gap-3.5 p-4 rounded-xl border border-border/40"
+        style={{ background: 'hsl(var(--surface-2))' }}
+      >
+        <div
+          className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+            status?.installed
+              ? 'bg-[hsl(var(--git-added)/0.12)]'
+              : 'bg-[hsl(var(--git-modified)/0.12)]'
+          }`}
+        >
+          {status?.installed ? (
+            <Check size={14} className="text-[hsl(var(--git-added))]" strokeWidth={1.8} />
+          ) : (
+            <AlertCircle size={14} className="text-[hsl(var(--git-modified))]" strokeWidth={1.8} />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          {loading ? (
+            <p className="text-[11px] text-foreground/60">Checking…</p>
+          ) : status?.installed ? (
+            <div className="space-y-0.5">
+              <p className="text-[11px] text-foreground/60 font-mono">
+                {status.version ?? 'installed'}
+                <span className="ml-2 text-foreground/40">
+                  ({status.source === 'managed' ? 'managed by Dash' : 'on $PATH'})
+                </span>
+              </p>
+              {status.path && (
+                <p className="text-[11px] text-foreground/40 font-mono truncate">{status.path}</p>
+              )}
+            </div>
+          ) : status?.downloadable ? (
+            <p className="text-[11px] text-foreground/60 leading-relaxed">
+              Not installed. Dash can fetch the latest release directly — no sudo, no global $PATH
+              changes, binary stays scoped to this app.
+            </p>
+          ) : (
+            <p className="text-[11px] text-foreground/60 leading-relaxed">
+              Not installed, and no prebuilt release is available for this platform. Install
+              manually from{' '}
+              <a
+                href="https://github.com/rtk-ai/rtk"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                github.com/rtk-ai/rtk
+              </a>
+              .
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Install button (only when not installed and platform is supported) */}
+      {!loading && !status?.installed && status?.downloadable && (
+        <div>
+          <button
+            onClick={onDownload}
+            disabled={installing}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] border border-primary/40 bg-primary/8 text-foreground hover:bg-primary/12 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download size={12} strokeWidth={1.8} />
+            {installLabel}
+          </button>
+          {progress?.phase === 'error' && (
+            <p className="text-[11px] text-destructive mt-2">{progress.error}</p>
+          )}
+          {progress?.phase === 'done' && (
+            <p className="text-[11px] text-[hsl(var(--git-added))] mt-2">
+              Installed {progress.version ?? ''} — you can enable it below.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Enable toggle (requires install) */}
+      <div>
+        <label className="block text-[12px] font-medium text-foreground mb-3">
+          Inject RTK hook in tasks
+        </label>
+        <ToggleSwitch
+          enabled={!!status?.enabled}
+          onToggle={onEnabledChange}
+          disabled={!status?.installed}
+          label="Compress Bash output via rtk before Claude reads it"
+        />
+        <p className="text-[10px] text-foreground/80 mt-2">
+          Takes effect on the next command in every running task — no restart needed. Dash writes
+          the hook into each task&rsquo;s local settings; your global{' '}
+          <code className="px-1 py-0.5 rounded bg-accent/60 text-[9px] font-mono">
+            ~/.claude/settings.json
+          </code>{' '}
+          is not modified. Do not also run{' '}
+          <code className="px-1 py-0.5 rounded bg-accent/60 text-[9px] font-mono">rtk init -g</code>{' '}
+          or the hook will run twice.
+        </p>
+      </div>
+
+      {/* In-process verification — runs `rtk hook claude` against a synthetic
+          `ls -la /tmp` payload and renders the rewrite it would emit. */}
+      {status?.installed && (
+        <div>
+          <label className="block text-[12px] font-medium text-foreground mb-3">Verify</label>
+          <button
+            onClick={runTest}
+            disabled={testing}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] border border-border/60 text-foreground/80 hover:bg-accent/40 hover:text-foreground transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {testing ? 'Testing…' : 'Test RTK'}
+          </button>
+          <p className="text-[10px] text-foreground/80 mt-2">
+            Pipes a synthetic{' '}
+            <code className="px-1 py-0.5 rounded bg-accent/60 text-[9px] font-mono">
+              git status
+            </code>{' '}
+            through the same rtk binary Dash hands to Claude. Green means rtk rewrote the command —
+            that&rsquo;s the compression path firing.
+          </p>
+
+          {testResult && <RtkTestResultCard result={testResult} />}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RtkTestResultCard({ result }: { result: RtkTestResult }) {
+  if (!result.ok) {
+    return (
+      <div
+        className="mt-3 flex items-start gap-3 p-3 rounded-lg border border-destructive/40"
+        style={{ background: 'hsl(var(--destructive) / 0.06)' }}
+      >
+        <AlertCircle size={14} className="text-destructive mt-0.5" strokeWidth={1.8} />
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-medium text-destructive">Test failed</p>
+          <p className="text-[11px] text-foreground/70 font-mono mt-1 break-all">{result.error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (result.wouldCompress) {
+    return (
+      <div
+        className="mt-3 flex items-start gap-3 p-3 rounded-lg border border-[hsl(var(--git-added))]/40"
+        style={{ background: 'hsl(var(--git-added) / 0.06)' }}
+      >
+        <Check size={14} className="text-[hsl(var(--git-added))] mt-0.5" strokeWidth={1.8} />
+        <div className="min-w-0 flex-1 space-y-1">
+          <p className="text-[11px] font-medium text-foreground">
+            Compression active — rtk would rewrite this command.
+          </p>
+          <div className="text-[11px] text-foreground/70 font-mono space-y-0.5">
+            <div>
+              <span className="text-foreground/40">in: </span>
+              {result.testedCommand}
+            </div>
+            <div>
+              <span className="text-foreground/40">out:</span> {result.rewrittenCommand}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // rtk ran cleanly but chose pass-through for our test command.
+  return (
+    <div
+      className="mt-3 flex items-start gap-3 p-3 rounded-lg border border-border/40"
+      style={{ background: 'hsl(var(--surface-2))' }}
+    >
+      <AlertCircle size={14} className="text-[hsl(var(--git-modified))] mt-0.5" strokeWidth={1.8} />
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-medium text-foreground">
+          rtk ran without crashing, but chose not to rewrite this command.
+        </p>
+        <p className="text-[10px] text-foreground/60 mt-1">
+          That&rsquo;s valid — rtk only compresses commands in its rewrite list. The hook plumbing
+          is working; it would compress commands like{' '}
+          <code className="text-foreground/80">git status</code> or{' '}
+          <code className="text-foreground/80">cargo test</code> during real use.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function SettingsModal({
   initialTab,
   theme,
@@ -1001,6 +1254,10 @@ export function SettingsModal({
   pixelAgentsConfig,
   onPixelAgentsConfigChange,
   pixelAgentsStatus,
+  rtkStatus,
+  onRtkEnabledChange,
+  onRtkDownload,
+  rtkDownloadProgress,
   latestRateLimits,
   usageThresholds,
   onUsageThresholdsChange,
@@ -1129,6 +1386,7 @@ export function SettingsModal({
               { id: 'keybindings', label: 'Keybindings' },
               { id: 'claude-code', label: 'Claude' },
               { id: 'usage', label: 'Usage' },
+              { id: 'rtk', label: 'RTK' },
               { id: 'pixel-agents', label: 'Pixel Agents' },
             ] as const
           ).map((t) => (
@@ -1669,6 +1927,17 @@ export function SettingsModal({
                 config={pixelAgentsConfig}
                 onChange={onPixelAgentsConfigChange}
                 status={pixelAgentsStatus}
+              />
+            </div>
+          )}
+
+          {tab === 'rtk' && (
+            <div className="space-y-6 animate-fade-in">
+              <RtkSection
+                status={rtkStatus}
+                onEnabledChange={onRtkEnabledChange}
+                onDownload={onRtkDownload}
+                progress={rtkDownloadProgress}
               />
             </div>
           )}

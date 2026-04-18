@@ -9,6 +9,7 @@ import { hookServer } from './HookServer';
 import { contextUsageService } from './ContextUsageService';
 import { DatabaseService } from './DatabaseService';
 import { terminalSnapshotService } from './TerminalSnapshotService';
+import { RtkService } from './RtkService';
 
 const execFileAsync = promisify(execFile);
 
@@ -94,7 +95,16 @@ const RESERVED_ENV_KEYS = new Set([
 
 export function setCommitAttribution(value: string | undefined): void {
   commitAttributionSetting = value;
-  // Re-write settings.local.json for all active PTYs so the change takes effect immediately
+  refreshActivePtyHooks();
+}
+
+/**
+ * Re-write settings.local.json for every active PTY. Use when a setting that
+ * participates in the hook JSON has changed (commit attribution, RTK toggle,
+ * etc.) — Claude Code re-reads settings.local.json on each tool invocation,
+ * so running sessions pick up the change without needing to be restarted.
+ */
+export function refreshActivePtyHooks(): void {
   for (const [id, rec] of ptys) {
     writeHookSettings(rec.cwd, id);
   }
@@ -321,6 +331,21 @@ const DASH_HOOK_EVENTS = [
   'SessionStart',
 ] as const;
 
+type HttpHook = { type: 'http'; url: string; async?: boolean };
+type HookEntry = { matcher: string; hooks: unknown[] };
+
+/** PreToolUse = Dash tool-start tracker, plus optional RTK Bash rewriter when enabled. */
+function buildPreToolUseHooks(
+  httpHook: (endpoint: string, async?: boolean) => HttpHook,
+): HookEntry[] {
+  const entries: HookEntry[] = [{ matcher: '*', hooks: [httpHook('/hook/tool-start', true)] }];
+  const rtkCmd = RtkService.isEnabled() ? RtkService.getHookCommand() : null;
+  if (rtkCmd) {
+    entries.push({ matcher: 'Bash', hooks: [{ type: 'command', command: rtkCmd }] });
+  }
+  return entries;
+}
+
 /**
  * Write .claude/settings.local.json with hooks for activity monitoring,
  * tool tracking, error detection, and context usage.
@@ -356,7 +381,8 @@ function writeHookSettings(cwd: string, ptyId: string): void {
     ],
 
     // ── Tool activity tracking ──────────────────────────────
-    PreToolUse: [{ matcher: '*', hooks: [httpHook('/hook/tool-start', true)] }],
+    // PreToolUse also carries the optional RTK Bash-rewrite hook when enabled.
+    PreToolUse: buildPreToolUseHooks(httpHook),
     PostToolUse: [{ matcher: '*', hooks: [httpHook('/hook/tool-end', true)] }],
 
     // ── Error detection ─────────────────────────────────────

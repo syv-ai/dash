@@ -19,6 +19,9 @@ import type {
   PixelAgentsConfig,
   PixelAgentsStatus,
   ActivityInfo,
+  RtkStatus,
+  RtkDownloadProgress,
+  RtkTestResult,
 } from '../shared/types';
 
 export interface ElectronAPI {
@@ -255,6 +258,13 @@ export interface ElectronAPI {
   pixelAgentsStart: () => Promise<IpcResponse<void>>;
   pixelAgentsStop: () => Promise<IpcResponse<void>>;
   onPixelAgentsStatusChanged: (callback: (status: PixelAgentsStatus) => void) => () => void;
+
+  // RTK (Rust Token Killer)
+  rtkGetStatus: () => Promise<IpcResponse<RtkStatus>>;
+  rtkSetEnabled: (enabled: boolean) => Promise<IpcResponse<void>>;
+  rtkDownload: () => Promise<IpcResponse<void>>;
+  rtkTest: () => Promise<IpcResponse<RtkTestResult>>;
+  onRtkDownloadProgress: (callback: (progress: RtkDownloadProgress) => void) => () => void;
 
   // Telemetry
   telemetryCapture: (event: string, properties?: Record<string, unknown>) => Promise<void>;

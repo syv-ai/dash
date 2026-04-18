@@ -37,6 +37,8 @@ import type {
   ActivityInfo,
   PixelAgentsConfig,
   PixelAgentsStatus,
+  RtkStatus,
+  RtkDownloadProgress,
 } from '../shared/types';
 import type { CreateTaskOptions } from './components/TaskModal';
 import { formatTaskContextPrompt } from '../shared/taskContext';
@@ -188,6 +190,25 @@ export function App() {
     });
     return window.electronAPI.onPixelAgentsStatusChanged((status) => {
       setPixelAgentsStatus(status);
+    });
+  }, []);
+
+  // RTK state
+  const [rtkStatus, setRtkStatus] = useState<RtkStatus | null>(null);
+  const [rtkDownloadProgress, setRtkDownloadProgress] = useState<RtkDownloadProgress | null>(null);
+
+  useEffect(() => {
+    window.electronAPI.rtkGetStatus().then((resp) => {
+      if (resp.success && resp.data) setRtkStatus(resp.data);
+    });
+    return window.electronAPI.onRtkDownloadProgress((progress) => {
+      setRtkDownloadProgress(progress);
+      // When the download finishes, refresh status so the toggle becomes usable
+      if (progress.phase === 'done') {
+        window.electronAPI.rtkGetStatus().then((resp) => {
+          if (resp.success && resp.data) setRtkStatus(resp.data);
+        });
+      }
     });
   }, []);
 
@@ -1730,6 +1751,16 @@ export function App() {
             window.electronAPI.pixelAgentsSaveConfig(config);
           }}
           pixelAgentsStatus={pixelAgentsStatus}
+          rtkStatus={rtkStatus}
+          onRtkEnabledChange={(enabled) => {
+            setRtkStatus((prev) => (prev ? { ...prev, enabled } : prev));
+            window.electronAPI.rtkSetEnabled(enabled);
+          }}
+          onRtkDownload={() => {
+            setRtkDownloadProgress({ phase: 'downloading', percent: 0 });
+            window.electronAPI.rtkDownload();
+          }}
+          rtkDownloadProgress={rtkDownloadProgress}
           latestRateLimits={latestRateLimits}
           usageThresholds={usageThresholds}
           onUsageThresholdsChange={setUsageThresholds}
