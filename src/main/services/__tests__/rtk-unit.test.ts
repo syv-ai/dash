@@ -1,55 +1,21 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+// RtkService imports `app` from electron for userData paths, which isn't
+// available in the vitest Node env. The helpers we test don't touch it.
+vi.mock('electron', () => ({ default: {}, app: {} }));
+
+import { __test__ } from '../RtkService';
 
 // These unit tests exercise the URL allowlist, archive-member safety checks,
-// and JSON-extraction helpers in RtkService. The helpers are module-private;
-// we re-implement them here by re-exporting them from the service when needed.
-// The goal is invariants — not integration — so no binary is required.
+// and JSON-extraction helpers. Imported from RtkService's __test__ export so
+// the real module code is what's being verified — no re-implementation drift.
 
-import { resolve as pathResolve, sep } from 'node:path';
-
-// ---------------------------------------------------------------------------
-// Re-implementations that must stay in sync with RtkService's private helpers.
-// If either changes, these tests should fail loudly.
-// ---------------------------------------------------------------------------
-
-function assertTrustedDownloadUrl(raw: string): void {
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    throw new Error(`Refusing malformed asset URL: ${raw}`);
-  }
-  if (url.protocol !== 'https:') {
-    throw new Error(`Refusing non-HTTPS asset URL: ${raw}`);
-  }
-  const host = url.hostname.toLowerCase();
-  const allowed =
-    host === 'github.com' ||
-    host === 'api.github.com' ||
-    host === 'objects.githubusercontent.com' ||
-    host.endsWith('.githubusercontent.com');
-  if (!allowed) {
-    throw new Error(`Refusing asset URL outside GitHub: ${raw}`);
-  }
-}
-
-function assertSafeArchiveMember(entry: string, destDir: string): void {
-  if (entry.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(entry)) {
-    throw new Error(`Archive contains absolute path: ${entry}`);
-  }
-  const normalized = entry.replace(/\\/g, '/');
-  const resolved = pathResolve(destDir, normalized);
-  const base = pathResolve(destDir) + sep;
-  if (resolved !== pathResolve(destDir) && !resolved.startsWith(base)) {
-    throw new Error(`Archive member escapes destDir: ${entry}`);
-  }
-}
-
-function shellQuoteUnix(s: string): string {
-  return `'${s.replace(/'/g, "'\\''")}'`;
-}
-
-// ---------------------------------------------------------------------------
+const {
+  assertTrustedDownloadUrl,
+  assertSafeArchiveMember,
+  shellQuoteUnix,
+  extractRewrittenCommand,
+} = __test__;
 
 describe('assertTrustedDownloadUrl', () => {
   it('accepts canonical github.com release URLs', () => {
@@ -123,6 +89,14 @@ describe('assertSafeArchiveMember', () => {
   it('rejects mixed traversal paths', () => {
     expect(() => assertSafeArchiveMember('subdir/../../../etc/evil', dest)).toThrow(/escapes/);
   });
+
+  it('rejects backslash-traversal (Windows-style) on any OS', () => {
+    // Regression guard: without normalize-to-forward-slashes in the real
+    // helper, POSIX pathResolve would treat the backslashes as literal
+    // filename chars and this entry would land inside destDir as a file
+    // literally named "..\\..\\etc\\passwd" — a security-sensitive false pass.
+    expect(() => assertSafeArchiveMember('..\\..\\etc\\passwd', dest)).toThrow(/escapes|absolute/);
+  });
 });
 
 describe('shellQuoteUnix', () => {
@@ -174,6 +148,38 @@ function entryIsDashOwned(entry: unknown): boolean {
     (h) => !!h && typeof h === 'object' && (h as { __dash?: unknown }).__dash === true,
   );
 }
+
+describe('extractRewrittenCommand', () => {
+  it('returns a null command for empty stdout (rtk pass-through)', () => {
+    const r = extractRewrittenCommand('');
+    expect(r).toEqual({ ok: true, command: null });
+  });
+
+  it('returns ok:false on unparseable JSON', () => {
+    const r = extractRewrittenCommand('<<not json>>');
+    expect(r.ok).toBe(false);
+  });
+
+  it('extracts from hookSpecificOutput.updatedInput.command (current schema)', () => {
+    const payload = JSON.stringify({
+      hookSpecificOutput: { updatedInput: { command: 'rtk-wrapped git status' } },
+    });
+    expect(extractRewrittenCommand(payload)).toEqual({
+      ok: true,
+      command: 'rtk-wrapped git status',
+    });
+  });
+
+  it('extracts from legacy modifiedToolInput at payload root', () => {
+    const payload = JSON.stringify({ modifiedToolInput: { command: 'legacy-shape' } });
+    expect(extractRewrittenCommand(payload)).toEqual({ ok: true, command: 'legacy-shape' });
+  });
+
+  it('returns command:null when the JSON is valid but matches no known path', () => {
+    const payload = JSON.stringify({ unknownField: { command: 'ignored' } });
+    expect(extractRewrittenCommand(payload)).toEqual({ ok: true, command: null });
+  });
+});
 
 describe('settings.local.json merge safety (entryIsDashOwned)', () => {
   it('recognises a tagged Dash entry', () => {

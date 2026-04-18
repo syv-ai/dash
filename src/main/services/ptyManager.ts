@@ -363,12 +363,11 @@ function prependUnique(dir: string, basePath: string, sep: string): string {
 }
 
 /**
- * Write .claude/settings.local.json with hooks for activity monitoring,
- * tool tracking, error detection, and context usage.
- *
- * Hooks use type: "http" — Claude Code POSTs the hook JSON body directly
- * to our local HookServer. The statusLine uses type: "command" with curl
- * (http type is not supported for statusLine).
+ * Write .claude/settings.local.json with Dash-owned hooks for activity
+ * monitoring, tool tracking, error detection, context usage, and optional
+ * RTK rewrite. Uses type: "http" where supported (Claude POSTs directly to
+ * HookServer); statusLine and hooks that need local binaries (RTK, base64
+ * context injection) use type: "command".
  */
 function writeHookSettings(cwd: string, ptyId: string): void {
   const port = hookServer.port;
@@ -449,9 +448,18 @@ function writeHookSettings(cwd: string, ptyId: string): void {
     let existing: Record<string, unknown> = {};
     if (fs.existsSync(settingsPath)) {
       try {
-        existing = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+        const parsed = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) as unknown;
+        // JSON.parse succeeds on "null", "42", "[]", etc. Only plain objects
+        // can be spread and merged safely; anything else is treated as corrupt.
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          existing = parsed as Record<string, unknown>;
+        } else {
+          throw new Error(`settings.local.json is not a JSON object (got ${typeof parsed})`);
+        }
       } catch (err) {
         // Back up the corrupt file before overwriting so the user can recover.
+        // If the backup rename fails, we MUST NOT proceed to overwrite — that
+        // would destroy the user's on-disk file with no copy left.
         const backupPath = `${settingsPath}.corrupt-${Date.now()}.bak`;
         try {
           fs.renameSync(settingsPath, backupPath);
@@ -467,7 +475,18 @@ function writeHookSettings(cwd: string, ptyId: string): void {
             }
           }
         } catch (renameErr) {
-          console.error('[writeHookSettings] Failed to back up corrupt file:', renameErr);
+          console.error(
+            '[writeHookSettings] Failed to back up corrupt file; leaving on-disk file intact:',
+            renameErr,
+          );
+          for (const win of BrowserWindow.getAllWindows()) {
+            if (!win.isDestroyed()) {
+              win.webContents.send('app:toast', {
+                message: `settings.local.json is corrupt and could not be backed up — hooks are off for this task. Fix or remove ${path.basename(settingsPath)} manually.`,
+              });
+            }
+          }
+          return;
         }
       }
     }
@@ -511,8 +530,7 @@ function writeHookSettings(cwd: string, ptyId: string): void {
     writtenSettingsPaths.add(settingsPath);
   } catch (err) {
     console.error('[writeHookSettings] Failed:', err);
-    // If hooks aren't written, Dash's activity monitor, context metering, and
-    // the RTK rewriter are all silently absent — notify the user.
+    // Without settings, all Dash-owned hooks silently don't run — notify the user.
     for (const win of BrowserWindow.getAllWindows()) {
       if (!win.isDestroyed()) {
         win.webContents.send('app:toast', {

@@ -200,12 +200,14 @@ export function App() {
   useEffect(() => {
     window.electronAPI.rtkGetStatus().then((resp) => {
       if (resp.success && resp.data) setRtkStatus(resp.data);
+      else console.error('[rtk:getStatus]', resp.error);
     });
     return window.electronAPI.onRtkDownloadProgress((progress) => {
       setRtkDownloadProgress(progress);
       if (progress.phase === 'done') {
         window.electronAPI.rtkGetStatus().then((resp) => {
           if (resp.success && resp.data) setRtkStatus(resp.data);
+          else console.error('[rtk:getStatus after download]', resp.error);
         });
       }
     });
@@ -1755,16 +1757,25 @@ export function App() {
             setRtkStatus((prev) => (prev ? { ...prev, enabled } : prev));
             window.electronAPI.rtkSetEnabled(enabled).then((resp) => {
               if (!resp.success) {
+                toast.error(resp.error ?? 'Failed to toggle RTK');
                 // Roll back the optimistic toggle and reflect the real state.
                 window.electronAPI.rtkGetStatus().then((s) => {
                   if (s.success && s.data) setRtkStatus(s.data);
+                  else console.error('[rtk:getStatus after setEnabled failure]', s.error);
                 });
               }
             });
           }}
           onRtkDownload={() => {
             setRtkDownloadProgress({ phase: 'downloading', percent: 0 });
-            window.electronAPI.rtkDownload();
+            window.electronAPI.rtkDownload().then((resp) => {
+              // doDownload emits phase:'error' on its own failures, but any
+              // throw outside that loop (IPC plumbing, refreshActivePtyHooks)
+              // bypasses the progress stream — surface it here too.
+              if (!resp.success) {
+                setRtkDownloadProgress({ phase: 'error', error: resp.error ?? 'download failed' });
+              }
+            });
           }}
           rtkDownloadProgress={rtkDownloadProgress}
           latestRateLimits={latestRateLimits}

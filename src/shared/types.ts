@@ -376,26 +376,29 @@ export interface PixelAgentsStatus {
 
 // ── RTK (Rust Token Killer) Types ───────────────────────────
 
-export type RtkSource = 'path' | 'managed' | 'none';
+export type RtkSource = 'path' | 'managed';
 
-export interface RtkStatus {
-  installed: boolean;
-  version: string | null;
-  path: string | null;
-  source: RtkSource;
-  enabled: boolean;
-  downloadable: boolean;
-}
+export type RtkStatus =
+  | {
+      installed: true;
+      version: string;
+      path: string;
+      source: RtkSource;
+      enabled: boolean;
+      downloadable: boolean;
+    }
+  | {
+      installed: false;
+      enabled: boolean;
+      downloadable: boolean;
+    };
 
 export type RtkDownloadProgress =
-  | { phase: 'idle' }
   | { phase: 'downloading'; percent: number }
   | { phase: 'verifying' }
   | { phase: 'extracting' }
   | { phase: 'done'; version: string }
   | { phase: 'error'; error: string };
-
-export type RtkDownloadPhase = RtkDownloadProgress['phase'];
 
 export type RtkTestResult =
   | { ok: false; testedCommand?: string; error: string }
@@ -404,7 +407,7 @@ export type RtkTestResult =
       testedCommand: string;
       rewrittenCommand: string | null;
       rawOutput: string;
-      // rtk hooks use exit 2 to *block* a command (never the health case for us,
-      // but surface it so the UI can explain the state rather than say "works").
+      // rtk uses exit 2 to *block* a tool call — surface it so the UI can
+      // explain the state rather than collapse to a binary ok/fail.
       blocked?: { stderr: string };
     };

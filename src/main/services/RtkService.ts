@@ -17,19 +17,28 @@ import { createHash } from 'node:crypto';
 import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import { app } from 'electron';
 import type { WebContents } from 'electron';
-import type { RtkStatus, RtkDownloadProgress, RtkSource, RtkTestResult } from '@shared/types';
+import type { RtkStatus, RtkDownloadProgress, RtkTestResult } from '@shared/types';
 
 const execFileAsync = promisify(execFile);
+
+// Cap download phases so a hung CDN cannot leave the single-flight promise
+// pending forever — subsequent download() calls would await the dead promise.
+const FETCH_API_TIMEOUT_MS = 60_000;
+const FETCH_BODY_TIMEOUT_MS = 300_000;
+const TAR_TIMEOUT_MS = 120_000;
 
 /** Managed-bin resolution wins over $PATH so uninstalling Dash leaves no orphan binary. */
 export class RtkService {
   private static sender: WebContents | null = null;
   private static cachedResolution: {
     path: string;
-    source: RtkSource;
-    version: string | null;
+    source: 'path' | 'managed';
+    version: string;
   } | null = null;
   private static downloadInFlight: Promise<void> | null = null;
+  // Mirrors the on-disk rtk-config.json flag; saves a disk read per hook write.
+  // null = not yet loaded; hydrated on first isEnabled() call and after setEnabled().
+  private static enabledCache: boolean | null = null;
 
   static setSender(sender: WebContents): void {
     RtkService.sender = sender;
@@ -40,24 +49,44 @@ export class RtkService {
   }
 
   static isEnabled(): boolean {
+    if (RtkService.enabledCache !== null) return RtkService.enabledCache;
     const p = RtkService.getConfigPath();
-    if (!existsSync(p)) return false;
+    if (!existsSync(p)) {
+      RtkService.enabledCache = false;
+      return false;
+    }
     try {
       const raw = JSON.parse(readFileSync(p, 'utf-8')) as { enabled?: unknown };
-      return raw.enabled === true;
+      const value = raw.enabled === true;
+      if (raw.enabled !== undefined && typeof raw.enabled !== 'boolean') {
+        console.warn(
+          '[RtkService.isEnabled] rtk-config.json "enabled" is not a boolean; treating as false.',
+        );
+      }
+      RtkService.enabledCache = value;
+      return value;
     } catch (err) {
       console.error(
         '[RtkService.isEnabled] rtk-config.json unreadable, treating as disabled:',
         err,
       );
+      RtkService.enabledCache = false;
       return false;
     }
   }
 
+  /**
+   * Enforces the "installed before enabled" invariant at the data layer so
+   * callers outside the IPC handler can't write a config that lies about state.
+   */
   static setEnabled(enabled: boolean): void {
+    if (enabled && !RtkService.cachedResolution) {
+      throw new Error('rtk is not installed');
+    }
     const p = RtkService.getConfigPath();
     mkdirSync(dirname(p), { recursive: true });
     writeFileSync(p, JSON.stringify({ enabled }, null, 2));
+    RtkService.enabledCache = enabled;
   }
 
   private static getManagedBinDir(): string {
@@ -69,14 +98,19 @@ export class RtkService {
     return join(RtkService.getManagedBinDir(), exe);
   }
 
+  /**
+   * Returns the managed bin dir ONLY when a probed-good binary is there.
+   * Gating on cachedResolution (not just existsSync) prevents poisoning the
+   * PTY PATH with a dir whose binary failed --version.
+   */
   static getManagedBinDirForPath(): string | null {
-    return existsSync(RtkService.getManagedBinPath()) ? RtkService.getManagedBinDir() : null;
+    return RtkService.cachedResolution?.source === 'managed' ? RtkService.getManagedBinDir() : null;
   }
 
   private static async resolveBinary(): Promise<{
     path: string;
-    source: RtkSource;
-    version: string | null;
+    source: 'path' | 'managed';
+    version: string;
   } | null> {
     const managed = RtkService.getManagedBinPath();
     if (existsSync(managed)) {
@@ -101,10 +135,12 @@ export class RtkService {
         return { path: resolved, source: 'path', version };
       }
     } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      // `which` exits 1 when not found; `where.exe` also signals "not found" via non-zero.
-      // Everything else (EACCES, EMFILE, `which` binary missing) is worth surfacing.
-      if (code !== 'ENOENT' && !/exited.*1/i.test(String((err as Error).message ?? ''))) {
+      // Node's execFile rejects with an Error decorated with `code`: the
+      // string 'ENOENT' for a missing `which` binary, or the numeric exit
+      // code for a non-zero exit. Exit 1 from `which`/`where.exe` is the
+      // "not found" signal — not noise.
+      const code = (err as { code?: unknown }).code;
+      if (code !== 'ENOENT' && code !== 1) {
         console.warn('[RtkService] which/where.exe lookup failed unexpectedly:', err);
       }
     }
@@ -135,14 +171,19 @@ export class RtkService {
     const resolved = await RtkService.resolveBinary();
     RtkService.cachedResolution = resolved;
 
-    return {
-      installed: !!resolved,
-      version: resolved?.version ?? null,
-      path: resolved?.path ?? null,
-      source: resolved?.source ?? 'none',
-      enabled: RtkService.isEnabled(),
-      downloadable: RtkService.isPlatformDownloadable(),
-    };
+    const enabled = RtkService.isEnabled();
+    const downloadable = RtkService.isPlatformDownloadable();
+    if (resolved) {
+      return {
+        installed: true,
+        version: resolved.version,
+        path: resolved.path,
+        source: resolved.source,
+        enabled,
+        downloadable,
+      };
+    }
+    return { installed: false, enabled, downloadable };
   }
 
   /** Populates cachedResolution so getHookCommand() is synchronous later. */
@@ -199,9 +240,13 @@ export class RtkService {
     try {
       RtkService.emitProgress({ phase: 'downloading', percent: 0 });
 
-      const apiRes = await fetch('https://api.github.com/repos/rtk-ai/rtk/releases/latest', {
-        headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'dash-rtk-installer' },
-      });
+      const apiRes = await fetchWithTimeout(
+        'https://api.github.com/repos/rtk-ai/rtk/releases/latest',
+        {
+          headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'dash-rtk-installer' },
+        },
+        FETCH_API_TIMEOUT_MS,
+      );
       if (!apiRes.ok) {
         throw new Error(`GitHub API ${apiRes.status}: ${apiRes.statusText}`);
       }
@@ -288,7 +333,7 @@ export class RtkService {
   }
 
   private static async fetchExpectedSha256(url: string, assetName: string): Promise<string> {
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url, {}, FETCH_API_TIMEOUT_MS);
     if (!res.ok) throw new Error(`Failed to fetch checksums.txt: ${res.status} ${res.statusText}`);
     const body = await res.text();
     // checksums.txt format: "<hex-sha256>  <filename>" per line.
@@ -311,28 +356,34 @@ export class RtkService {
   }
 
   private static async fetchToFile(url: string, dest: string): Promise<void> {
-    const dlRes = await fetch(url);
-    if (!dlRes.ok || !dlRes.body) {
-      throw new Error(`Download failed: ${dlRes.status} ${dlRes.statusText}`);
-    }
-    const total = Number(dlRes.headers.get('content-length') || '0');
-    let transferred = 0;
-
-    const source = Readable.fromWeb(dlRes.body as unknown as WebReadableStream<Uint8Array>);
-    source.on('data', (chunk: Buffer) => {
-      transferred += chunk.length;
-      if (total > 0) {
-        RtkService.emitProgress({
-          phase: 'downloading',
-          percent: Math.min(99, Math.round((transferred / total) * 100)),
-        });
+    const controller = new AbortController();
+    const wallTimer = setTimeout(() => controller.abort(), FETCH_BODY_TIMEOUT_MS);
+    try {
+      const dlRes = await fetch(url, { signal: controller.signal });
+      if (!dlRes.ok || !dlRes.body) {
+        throw new Error(`Download failed: ${dlRes.status} ${dlRes.statusText}`);
       }
-    });
-    await pipeline(source, createWriteStream(dest));
-    if (total > 0 && transferred !== total) {
-      throw new Error(`Truncated download: expected ${total} bytes, got ${transferred}.`);
+      const total = Number(dlRes.headers.get('content-length') || '0');
+      let transferred = 0;
+
+      const source = Readable.fromWeb(dlRes.body as unknown as WebReadableStream<Uint8Array>);
+      source.on('data', (chunk: Buffer) => {
+        transferred += chunk.length;
+        if (total > 0) {
+          RtkService.emitProgress({
+            phase: 'downloading',
+            percent: Math.min(99, Math.round((transferred / total) * 100)),
+          });
+        }
+      });
+      await pipeline(source, createWriteStream(dest));
+      if (total > 0 && transferred !== total) {
+        throw new Error(`Truncated download: expected ${total} bytes, got ${transferred}.`);
+      }
+      RtkService.emitProgress({ phase: 'downloading', percent: 100 });
+    } finally {
+      clearTimeout(wallTimer);
     }
-    RtkService.emitProgress({ phase: 'downloading', percent: 100 });
   }
 
   private static async verifyArchive(archivePath: string): Promise<void> {
@@ -369,7 +420,10 @@ export class RtkService {
 
   private static listTarball(archivePath: string): Promise<string[]> {
     return new Promise((resolveP, rejectP) => {
-      const proc = spawn('tar', ['-tzf', archivePath], { stdio: ['ignore', 'pipe', 'pipe'] });
+      const proc = spawn('tar', ['-tzf', archivePath], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: TAR_TIMEOUT_MS,
+      });
       let stdout = '';
       let stderr = '';
       proc.stdout.on('data', (d: Buffer) => {
@@ -385,8 +439,9 @@ export class RtkService {
           rejectP(err);
         }
       });
-      proc.on('exit', (code) => {
-        if (code === 0) resolveP(stdout.split(/\r?\n/).filter(Boolean));
+      proc.on('exit', (code, signal) => {
+        if (signal) rejectP(new Error(`tar -tzf killed by signal ${signal} (timed out?)`));
+        else if (code === 0) resolveP(stdout.split(/\r?\n/).filter(Boolean));
         else rejectP(new Error(`tar -tzf exited ${code}: ${stderr.trim()}`));
       });
     });
@@ -394,7 +449,10 @@ export class RtkService {
 
   private static runTar(args: string[]): Promise<void> {
     return new Promise((resolveP, rejectP) => {
-      const proc = spawn('tar', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+      const proc = spawn('tar', args, {
+        stdio: ['ignore', 'ignore', 'pipe'],
+        timeout: TAR_TIMEOUT_MS,
+      });
       let stderr = '';
       proc.stderr?.on('data', (d: Buffer) => {
         stderr += d.toString();
@@ -406,8 +464,9 @@ export class RtkService {
           rejectP(err);
         }
       });
-      proc.on('exit', (code) => {
-        if (code === 0) resolveP();
+      proc.on('exit', (code, signal) => {
+        if (signal) rejectP(new Error(`tar killed by signal ${signal} (timed out?)`));
+        else if (code === 0) resolveP();
         else rejectP(new Error(`tar exited ${code}: ${stderr.trim()}`));
       });
     });
@@ -452,6 +511,7 @@ export class RtkService {
           error: `rtk killed by signal ${signal ?? 'unknown'} (likely timeout)`,
         };
       }
+      // rtk exits 2 to signal "block this tool call" — a valid hook result, not an error.
       if (code !== 0 && code !== 2) {
         return {
           ok: false,
@@ -460,19 +520,19 @@ export class RtkService {
         };
       }
 
-      const rewritten = extractRewrittenCommand(stdout);
-      if (rewritten instanceof Error) {
+      const extracted = extractRewrittenCommand(stdout);
+      if (!extracted.ok) {
         return {
           ok: false,
           testedCommand,
-          error: `rtk produced unparsable output: ${rewritten.message}`,
+          error: `rtk produced unparsable output: ${extracted.reason}`,
         };
       }
 
       return {
         ok: true,
         testedCommand,
-        rewrittenCommand: rewritten,
+        rewrittenCommand: extracted.command,
         rawOutput: stdout.slice(0, 2000),
         ...(code === 2 ? { blocked: { stderr: stderr.trim().slice(0, 400) } } : {}),
       };
@@ -501,7 +561,11 @@ function pipeStdin(
       stderr += c.toString();
     });
     // rtk may exit before reading stdin; EPIPE must not become unhandled.
-    proc.stdin.on('error', () => {});
+    proc.stdin.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code !== 'EPIPE') {
+        console.warn('[RtkService.pipeStdin] unexpected stdin error:', err);
+      }
+    });
     proc.on('error', rejectP);
     proc.on('close', (code, signal) => resolveP({ code, signal, stdout, stderr }));
     proc.stdin.write(stdin);
@@ -509,15 +573,20 @@ function pipeStdin(
   });
 }
 
-function extractRewrittenCommand(stdout: string): string | null | Error {
+type ExtractResult = { ok: true; command: string | null } | { ok: false; reason: string };
+
+function extractRewrittenCommand(stdout: string): ExtractResult {
   const trimmed = stdout.trim();
-  if (!trimmed) return null;
+  if (!trimmed) return { ok: true, command: null };
   let parsed: Record<string, unknown>;
   try {
     parsed = JSON.parse(trimmed) as Record<string, unknown>;
   } catch (err) {
-    return err instanceof Error ? err : new Error(String(err));
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
   }
+  // Claude Code's hook JSON schema has evolved; accept both historical and
+  // current field names so version skew between rtk releases and Dash's
+  // expectations doesn't silently render as "pass-through".
   const paths: Array<(v: Record<string, unknown>) => unknown> = [
     (v) => (isObject(v.hookSpecificOutput) ? v.hookSpecificOutput.updatedInput : undefined),
     (v) => (isObject(v.hookSpecificOutput) ? v.hookSpecificOutput.modifiedToolInput : undefined),
@@ -530,10 +599,10 @@ function extractRewrittenCommand(stdout: string): string | null | Error {
   for (const get of paths) {
     const node = get(parsed);
     if (isObject(node) && typeof node.command === 'string') {
-      return node.command;
+      return { ok: true, command: node.command };
     }
   }
-  return null;
+  return { ok: true, command: null };
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {
@@ -581,13 +650,44 @@ function assertTrustedDownloadUrl(raw: string): void {
 }
 
 function assertSafeArchiveMember(entry: string, destDir: string): void {
-  // Reject absolute paths and any entry whose resolved location escapes destDir.
+  // Reject absolute paths. The Windows-drive regex runs on every platform by
+  // design: a tarball authored on Windows can reach any OS, so we refuse
+  // `C:\...` entries regardless of where extraction happens.
   if (entry.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(entry)) {
     throw new Error(`Archive contains absolute path: ${entry}`);
   }
-  const resolved = resolve(destDir, normalize(entry));
+  // Normalize backslashes to forward slashes before resolve(). On POSIX,
+  // path.resolve treats `\` as a literal filename character, so `..\\evil`
+  // would not be recognised as a parent-traversal attempt without this step.
+  const normalized = normalize(entry.replace(/\\/g, '/'));
+  const resolved = resolve(destDir, normalized);
   const base = resolve(destDir) + sep;
   if (resolved !== resolve(destDir) && !resolved.startsWith(base)) {
     throw new Error(`Archive member escapes destDir: ${entry}`);
   }
 }
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Test-only exports of module-private helpers. Importing from here keeps the
+ * unit tests exercising the real code instead of a drifting re-implementation.
+ */
+export const __test__ = {
+  assertTrustedDownloadUrl,
+  assertSafeArchiveMember,
+  shellQuoteUnix,
+  extractRewrittenCommand,
+};

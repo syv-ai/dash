@@ -974,14 +974,12 @@ function RtkStatusCardBody({ status }: { status: RtkStatus | null }) {
     return (
       <div className="space-y-0.5">
         <p className="text-[11px] text-foreground/60 font-mono">
-          {status.version ?? 'installed'}
+          {status.version}
           <span className="ml-2 text-foreground/40">
             ({status.source === 'managed' ? 'managed by Dash' : 'on $PATH'})
           </span>
         </p>
-        {status.path && (
-          <p className="text-[11px] text-foreground/40 font-mono truncate">{status.path}</p>
-        )}
+        <p className="text-[11px] text-foreground/40 font-mono truncate">{status.path}</p>
       </div>
     );
   }
@@ -1009,6 +1007,29 @@ function RtkStatusCardBody({ status }: { status: RtkStatus | null }) {
   );
 }
 
+function labelForProgress(progress: RtkDownloadProgress | null): {
+  installing: boolean;
+  installLabel: string;
+} {
+  if (!progress) return { installing: false, installLabel: 'Install RTK' };
+  switch (progress.phase) {
+    case 'downloading':
+      return { installing: true, installLabel: `Downloading… ${progress.percent}%` };
+    case 'verifying':
+      return { installing: true, installLabel: 'Verifying…' };
+    case 'extracting':
+      return { installing: true, installLabel: 'Extracting…' };
+    case 'done':
+    case 'error':
+      return { installing: false, installLabel: 'Install RTK' };
+    default: {
+      const _exhaustive: never = progress;
+      void _exhaustive;
+      return { installing: false, installLabel: 'Install RTK' };
+    }
+  }
+}
+
 function RtkSection({
   status,
   onEnabledChange,
@@ -1020,10 +1041,6 @@ function RtkSection({
   onDownload: () => void;
   progress: RtkDownloadProgress | null;
 }) {
-  const installing =
-    progress?.phase === 'downloading' ||
-    progress?.phase === 'extracting' ||
-    progress?.phase === 'verifying';
   const loading = !status;
 
   const [testing, setTesting] = useState(false);
@@ -1041,10 +1058,7 @@ function RtkSection({
     }
   }
 
-  let installLabel = 'Install RTK';
-  if (progress?.phase === 'extracting') installLabel = 'Extracting…';
-  else if (progress?.phase === 'verifying') installLabel = 'Verifying…';
-  else if (progress?.phase === 'downloading') installLabel = `Downloading… ${progress.percent}%`;
+  const { installing, installLabel } = labelForProgress(progress);
 
   return (
     <div className="space-y-6">
@@ -1311,6 +1325,7 @@ export function SettingsModal({
     'keybindings',
     'usage',
     'pixel-agents',
+    'rtk',
   ];
   const [tab, setTab] = useState<SettingsTab>(
     initialTab && validTabs.includes(initialTab as SettingsTab)

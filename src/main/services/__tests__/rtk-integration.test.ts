@@ -1,15 +1,6 @@
-/**
- * End-to-end integration tests for the RTK PreToolUse hook.
- *
- * These tests confirm two separate things:
- *   A) rtk itself compresses commands (hook-only test, no API key).
- *   B) Dash's full integration works end-to-end — the injected hook fires
- *      during a real `claude -p` session and rtk emits its rewrite directive
- *      (e2e test, costs API tokens, gated on ANTHROPIC_API_KEY).
- *
- * Each describe block auto-skips if its prerequisites are missing, so
- * `pnpm test` is safe to run anywhere.
- */
+// Two suites: (A) rtk's hook output alone (no API); (B) full Dash+Claude e2e
+// (gated on ANTHROPIC_API_KEY). Auto-skips when prerequisites are missing so
+// `pnpm test` is safe to run anywhere.
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { execFile, execSync, spawn } from 'node:child_process';
@@ -21,12 +12,7 @@ import { join } from 'node:path';
 
 const execFileAsync = promisify(execFile);
 
-/**
- * Mirror Dash's runtime resolution: prefer the managed binary inside
- * Electron's userData dir (same path RtkService uses), fall back to $PATH.
- * Without this the test skips on machines where rtk was installed via
- * Dash's UI (which never touches $PATH).
- */
+/** Prefer Dash's managed binary (where the UI installs it) over $PATH. */
 function dashManagedRtkPath(): string | null {
   const exe = process.platform === 'win32' ? 'rtk.exe' : 'rtk';
   const candidates =
@@ -76,6 +62,18 @@ async function fileExists(p: string): Promise<boolean> {
   }
 }
 
+/** Pull the rewritten Bash command out of rtk's JSON advice. */
+function extractCommand(rtkStdout: string): string {
+  const parsed = JSON.parse(rtkStdout) as {
+    hookSpecificOutput?: { updatedInput?: { command?: string } };
+  };
+  const cmd = parsed.hookSpecificOutput?.updatedInput?.command;
+  if (typeof cmd !== 'string') {
+    throw new Error(`rtk output missing hookSpecificOutput.updatedInput.command: ${rtkStdout}`);
+  }
+  return cmd;
+}
+
 /** Run a binary with stdin piped in; resolve with exit code, stdout, stderr. */
 function runWithStdin(
   cmd: string,
@@ -123,13 +121,17 @@ describe.runIf(!!resolvedRtkPath)('rtk hook output (no API)', () => {
     const { code, stdout, stderr } = await runWithStdin(rtkPath, ['hook', 'claude'], input);
 
     expect(stderr).not.toMatch(/panic|unwrap|segfault/i);
-    expect(code === 0 || code === 2).toBe(true); // 0=allow(+modify), 2=block; never a crash
+    expect(code).toBe(0); // 0 = allow (with modification); a rewrite must not block.
     expect(stdout.trim().length).toBeGreaterThan(0);
 
-    // The rewrite directive must reference rtk so the follow-up Bash tool call
-    // actually invokes the compression pipeline instead of raw ls.
-    const parsed = JSON.parse(stdout) as unknown;
-    expect(JSON.stringify(parsed)).toMatch(/\brtk\b/);
+    // Assert on the exact field carrying the rewritten command — a broad
+    // /rtk/ match would also hit field names and thus pass under schema drift.
+    const parsed = JSON.parse(stdout) as {
+      hookSpecificOutput?: { updatedInput?: { command?: string } };
+    };
+    const rewritten = parsed.hookSpecificOutput?.updatedInput?.command;
+    expect(typeof rewritten).toBe('string');
+    expect(rewritten).toMatch(/\brtk\b/);
   });
 
   it('returns cleanly on a command rtk does not rewrite (echo)', async () => {
@@ -173,10 +175,9 @@ describe.runIf(canRunE2E)('RTK end-to-end with Claude Code', () => {
     const claudeDir = join(cwd, '.claude');
     await mkdir(claudeDir, { recursive: true });
 
-    // Wrap the hook with tee on both sides so we can verify rtk actually
-    // processed Claude's tool-use payload. The shape of `hooks[0].hooks[0]`
-    // still matches buildPreToolUseHooks() in ptyManager — only the
-    // `command` string differs (adding the tee wrappers).
+    // Wrap the hook with tee so we can capture stdin/stdout. The JSON shape
+    // matches what Dash writes at runtime — drift here means this test no
+    // longer represents production.
     const q = (s: string): string => (s.includes(' ') ? `"${s}"` : s);
     const hookCommand = `sh -c 'tee -a ${q(hookInLog)} | ${q(rtkPath)} hook claude | tee -a ${q(hookOutLog)}'`;
 
@@ -196,10 +197,17 @@ describe.runIf(canRunE2E)('RTK end-to-end with Claude Code', () => {
       `Then use the Bash tool again to run: echo done > "${marker}". ` +
       `Finally reply with the single word: done`;
 
+    // Pass only the env vars claude actually needs; don't leak the developer's
+    // full shell env (local RTK_* overrides, test-affecting vars, etc.) in.
+    const hermeticEnv: NodeJS.ProcessEnv = {
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
+      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+    };
     const { stdout } = await execFileAsync(
       claudePath,
       ['-p', prompt, '--dangerously-skip-permissions'],
-      { cwd, timeout: 180_000, env: process.env, maxBuffer: 4 * 1024 * 1024 },
+      { cwd, timeout: 180_000, env: hermeticEnv, maxBuffer: 4 * 1024 * 1024 },
     );
 
     // 1. The hook was invoked at least once — input log has content.
@@ -208,12 +216,13 @@ describe.runIf(canRunE2E)('RTK end-to-end with Claude Code', () => {
     expect(inLog).toMatch(/PreToolUse/);
     expect(inLog).toMatch(/"tool_name":\s*"Bash"/);
 
-    // 2. rtk wrote back a rewrite directive — output log references rtk,
-    //    proving it intended to compress the command.
+    // 2. rtk wrote back a rewrite directive — assert on the exact command
+    //    field, not a broad /rtk/ match that would also hit field names.
     expect(await fileExists(hookOutLog)).toBe(true);
     const outLog = await readFile(hookOutLog, 'utf-8');
     expect(outLog.trim().length).toBeGreaterThan(0);
-    expect(outLog).toMatch(/\brtk\b/);
+    const rewritten = extractCommand(outLog);
+    expect(rewritten).toMatch(/\brtk\b/);
 
     // 3. The second Bash tool call ran to completion after the hook.
     expect(await fileExists(marker)).toBe(true);
