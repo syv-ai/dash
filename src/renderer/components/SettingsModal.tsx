@@ -1220,26 +1220,52 @@ function RtkTestResultCard({ result }: { result: RtkTestResult }) {
     result.rewrittenCommand !== null && result.rewrittenCommand !== result.testedCommand;
 
   if (wouldCompress) {
+    const diff = result.execDiff;
+    const savedBytes = diff ? diff.rawBytes - diff.compressedBytes : 0;
+    const savedPct = diff && diff.rawBytes > 0 ? Math.round((savedBytes / diff.rawBytes) * 100) : 0;
+
     return (
       <div
-        className="mt-3 flex items-start gap-3 p-3 rounded-lg border border-[hsl(var(--git-added))]/40"
+        className="mt-3 p-3 rounded-lg border border-[hsl(var(--git-added))]/40 space-y-3"
         style={{ background: 'hsl(var(--git-added) / 0.06)' }}
       >
-        <Check size={14} className="text-[hsl(var(--git-added))] mt-0.5" strokeWidth={1.8} />
-        <div className="min-w-0 flex-1 space-y-1">
-          <p className="text-[11px] font-medium text-foreground">
-            Compression active — rtk would rewrite this command.
-          </p>
-          <div className="text-[11px] text-foreground/70 font-mono space-y-0.5">
-            <div>
-              <span className="text-foreground/40">in: </span>
-              {result.testedCommand}
-            </div>
-            <div>
-              <span className="text-foreground/40">out:</span> {result.rewrittenCommand}
+        <div className="flex items-start gap-3">
+          <Check size={14} className="text-[hsl(var(--git-added))] mt-0.5" strokeWidth={1.8} />
+          <div className="min-w-0 flex-1 space-y-1">
+            <p className="text-[11px] font-medium text-foreground">
+              Compression active — rtk would rewrite this command.
+            </p>
+            <div className="text-[11px] text-foreground/70 font-mono space-y-0.5">
+              <div>
+                <span className="text-foreground/40">in: </span>
+                {result.testedCommand}
+              </div>
+              <div>
+                <span className="text-foreground/40">out:</span> {result.rewrittenCommand}
+              </div>
             </div>
           </div>
         </div>
+
+        {diff && (
+          <div className="space-y-2 pt-2 border-t border-border/40">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-foreground/60">
+                Actual output diff
+              </span>
+              {diff.rawBytes > 0 && (
+                <span className="text-[10px] font-mono text-[hsl(var(--git-added))]">
+                  {diff.rawBytes} → {diff.compressedBytes} bytes
+                  {savedBytes > 0 && ` (−${savedPct}%)`}
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <OutputPanel label="raw" body={diff.rawStdout} />
+              <OutputPanel label="via rtk" body={diff.compressedStdout} accented />
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1262,6 +1288,39 @@ function RtkTestResultCard({ result }: { result: RtkTestResult }) {
           <code className="text-foreground/80">cargo test</code> during real use.
         </p>
       </div>
+    </div>
+  );
+}
+
+function OutputPanel({
+  label,
+  body,
+  accented,
+}: {
+  label: string;
+  body: string;
+  accented?: boolean;
+}) {
+  const displayBody = body.trim().length > 0 ? body : '(empty)';
+  return (
+    <div
+      className={`rounded-md border text-[10px] font-mono leading-[1.35] overflow-hidden ${
+        accented ? 'border-[hsl(var(--git-added))]/40' : 'border-border/50'
+      }`}
+      style={{ background: 'hsl(var(--surface-1))' }}
+    >
+      <div
+        className={`px-2 py-1 text-[9px] font-sans uppercase tracking-wide ${
+          accented
+            ? 'text-[hsl(var(--git-added))] bg-[hsl(var(--git-added))]/5'
+            : 'text-foreground/50 bg-[hsl(var(--surface-2))]'
+        }`}
+      >
+        {label}
+      </div>
+      <pre className="px-2 py-1.5 max-h-48 overflow-auto whitespace-pre-wrap break-words text-foreground/80">
+        {displayBody}
+      </pre>
     </div>
   );
 }

@@ -8,7 +8,9 @@ import {
   chmodSync,
   rmSync,
 } from 'node:fs';
-import { dirname, join, normalize, resolve, sep } from 'node:path';
+import { mkdtemp, writeFile, mkdir, rm } from 'node:fs/promises';
+import { delimiter, dirname, join, normalize, resolve, sep } from 'node:path';
+import { tmpdir } from 'node:os';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { pipeline } from 'node:stream/promises';
@@ -529,20 +531,121 @@ export class RtkService {
         };
       }
 
+      // Only attempt real execution when rtk actually rewrote the command AND
+      // didn't block it — otherwise the diff would be empty or meaningless.
+      const execDiff =
+        extracted.command && extracted.command !== testedCommand && code !== 2
+          ? await RtkService.captureExecDiff(testedCommand, extracted.command)
+          : null;
+
       return {
         ok: true,
         testedCommand,
         rewrittenCommand: extracted.command,
         rawOutput: stdout.slice(0, 2000),
         ...(code === 2 ? { blocked: { stderr: stderr.trim().slice(0, 400) } } : {}),
+        ...(execDiff ? { execDiff } : {}),
       };
     } catch (err) {
       return { ok: false, testedCommand, error: err instanceof Error ? err.message : String(err) };
     }
   }
+
+  /**
+   * Execute both the raw and rtk-rewritten commands inside a throwaway git
+   * repo populated with enough untracked files to make `git status` verbose.
+   * Returns null on any failure — this is a best-effort visualization, not a
+   * correctness check. The rewrite-directive check above already proved rtk
+   * is working; this just makes the compression visible to the user.
+   */
+  private static async captureExecDiff(
+    rawCommand: string,
+    rewrittenCommand: string,
+  ): Promise<import('@shared/types').RtkExecDiff | null> {
+    const dir = await mkdtemp(join(tmpdir(), 'dash-rtk-verify-'));
+    try {
+      // Give `git status` something non-trivial to emit — multiple files
+      // across a few directories so rtk's grouping/dedup filters have work.
+      await Promise.all([
+        writeFile(join(dir, 'package.json'), '{}\n'),
+        writeFile(join(dir, 'README.md'), '# test\n'),
+        writeFile(join(dir, 'config.toml'), '[section]\nvalue = 1\n'),
+        mkdir(join(dir, 'src')).then(() =>
+          Promise.all([
+            writeFile(join(dir, 'src', 'index.ts'), 'export {};\n'),
+            writeFile(join(dir, 'src', 'lib.ts'), 'export {};\n'),
+            writeFile(join(dir, 'src', 'types.ts'), 'export {};\n'),
+          ]),
+        ),
+        mkdir(join(dir, 'tests')).then(() =>
+          Promise.all([
+            writeFile(join(dir, 'tests', 'a.test.ts'), 'test\n'),
+            writeFile(join(dir, 'tests', 'b.test.ts'), 'test\n'),
+          ]),
+        ),
+      ]);
+
+      await runShell('git init -q', dir);
+
+      // Make sure rtk resolves from the rewritten command even when the user
+      // never installed it on the system PATH — prepend our managed bin dir.
+      const managedDir = RtkService.getManagedBinDirForPath();
+      const pathWithRtk = [managedDir, process.env.PATH].filter(Boolean).join(delimiter);
+      const env = { ...process.env, PATH: pathWithRtk };
+
+      const [rawRes, rewrittenRes] = await Promise.all([
+        runShell(rawCommand, dir, env),
+        runShell(rewrittenCommand, dir, env),
+      ]);
+
+      // Trim IPC payload but report the TRUE byte counts so savings math stays honest.
+      const DISPLAY_CAP = 8 * 1024;
+      return {
+        rawStdout: rawRes.stdout.slice(0, DISPLAY_CAP),
+        compressedStdout: rewrittenRes.stdout.slice(0, DISPLAY_CAP),
+        rawBytes: Buffer.byteLength(rawRes.stdout),
+        compressedBytes: Buffer.byteLength(rewrittenRes.stdout),
+      };
+    } catch (err) {
+      console.warn('[RtkService.captureExecDiff] non-fatal:', err);
+      return null;
+    } finally {
+      await rm(dir, { recursive: true, force: true }).catch(() => {});
+    }
+  }
 }
 
 // ── Helpers (module-private) ───────────────────────────────────────────────
+
+/**
+ * Run a shell string and capture its stdout/stderr up to a hard cap. Used by
+ * the Test RTK flow to exec both the raw command (e.g. `git status`) and the
+ * rtk-rewritten version (e.g. `rtk git status`) in a controlled environment.
+ */
+const RUN_SHELL_OUTPUT_CAP = 64 * 1024;
+
+function runShell(
+  cmd: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv = process.env,
+  timeoutMs = 15_000,
+): Promise<{ stdout: string; stderr: string; code: number | null }> {
+  return new Promise((resolveP, rejectP) => {
+    const shell = process.platform === 'win32' ? 'cmd.exe' : 'sh';
+    const args = process.platform === 'win32' ? ['/c', cmd] : ['-c', cmd];
+    const proc = spawn(shell, args, { cwd, env, timeout: timeoutMs });
+    let stdout = '';
+    let stderr = '';
+    proc.stdout.on('data', (c: Buffer) => {
+      if (stdout.length < RUN_SHELL_OUTPUT_CAP) stdout += c.toString();
+    });
+    proc.stderr.on('data', (c: Buffer) => {
+      if (stderr.length < RUN_SHELL_OUTPUT_CAP) stderr += c.toString();
+    });
+    proc.on('error', rejectP);
+    proc.on('close', (code) => resolveP({ stdout, stderr, code }));
+  });
+}
 
 function pipeStdin(
   cmd: string,

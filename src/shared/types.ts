@@ -400,6 +400,16 @@ export type RtkDownloadProgress =
   | { phase: 'done'; version: string }
   | { phase: 'error'; error: string };
 
+export interface RtkExecDiff {
+  /** Stdout of the raw tested command, capped for IPC payload size. */
+  rawStdout: string;
+  /** Stdout of the rtk-rewritten command, capped for IPC payload size. */
+  compressedStdout: string;
+  /** Untruncated byte counts, so the UI can show honest savings math. */
+  rawBytes: number;
+  compressedBytes: number;
+}
+
 export type RtkTestResult =
   | { ok: false; testedCommand?: string; error: string }
   | {
@@ -410,4 +420,6 @@ export type RtkTestResult =
       // rtk uses exit 2 to *block* a tool call — surface it so the UI can
       // explain the state rather than collapse to a binary ok/fail.
       blocked?: { stderr: string };
+      /** Real before/after captured by actually running both commands. */
+      execDiff?: RtkExecDiff;
     };
