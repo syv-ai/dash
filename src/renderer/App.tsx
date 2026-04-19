@@ -982,7 +982,7 @@ export function App() {
           branch: task.branch,
           options: {
             deleteWorktreeDir: options.deleteWorktreeDirs,
-            deleteLocalBranch: options.deleteLocalBranches,
+            deleteLocalBranch: options.deleteLocalBranches && task.branchCreatedByDash,
             deleteRemoteBranch: options.deleteRemoteBranches && task.branchCreatedByDash,
           },
         });
@@ -1023,7 +1023,8 @@ export function App() {
   }
 
   async function handleCreateTask(options: CreateTaskOptions) {
-    const { name, useWorktree, autoApprove, baseRef, pushRemote, linkedItems } = options;
+    const { name, useWorktree, autoApprove, baseRef, pushRemote, linkedItems, createNewBranch } =
+      options;
 
     const targetProjectId = taskModalProjectId || activeProjectId;
     const targetProject = projects.find((p) => p.id === targetProjectId);
@@ -1041,32 +1042,62 @@ export function App() {
       const ghIssueNumbers = ghItems.map((i) => i.id);
 
       if (useWorktree) {
-        const claimResp = await window.electronAPI.worktreeClaimReserve({
-          projectId: targetProject.id,
-          taskName: name,
-          baseRef,
-          linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
-          pushRemote,
-        });
-
-        if (claimResp.success && claimResp.data) {
-          worktreeInfo = { branch: claimResp.data.branch, path: claimResp.data.path };
-        } else {
-          const createResp = await window.electronAPI.worktreeCreate({
-            projectPath: targetProject.path,
+        if (createNewBranch) {
+          // New branch: try reserve pool, fall back to direct creation
+          const claimResp = await window.electronAPI.worktreeClaimReserve({
+            projectId: targetProject.id,
             taskName: name,
             baseRef,
-            projectId: targetProject.id,
             linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
             pushRemote,
           });
+
+          if (claimResp.success && claimResp.data) {
+            worktreeInfo = { branch: claimResp.data.branch, path: claimResp.data.path };
+          } else {
+            const createResp = await window.electronAPI.worktreeCreate({
+              projectPath: targetProject.path,
+              taskName: name,
+              baseRef,
+              projectId: targetProject.id,
+              linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
+              pushRemote,
+            });
+            if (createResp.success && createResp.data) {
+              worktreeInfo = { branch: createResp.data.branch, path: createResp.data.path };
+            } else {
+              toast.error(createResp.error || 'Failed to create worktree');
+              return;
+            }
+          }
+        } else if (baseRef) {
+          // Existing branch: skip reserve pool, create worktree directly
+          const createResp = await window.electronAPI.worktreeCreateFromExisting({
+            projectPath: targetProject.path,
+            taskName: name,
+            branch: baseRef,
+            projectId: targetProject.id,
+          });
           if (createResp.success && createResp.data) {
             worktreeInfo = { branch: createResp.data.branch, path: createResp.data.path };
+          } else {
+            toast.error(createResp.error || 'Failed to create worktree from existing branch');
+            return;
           }
+        }
+      } else if (baseRef) {
+        // Non-worktree: checkout the selected branch in the project directory
+        const checkoutResp = await window.electronAPI.gitCheckoutBranch({
+          cwd: targetProject.path,
+          branch: baseRef,
+        });
+        if (!checkoutResp.success) {
+          toast.error(checkoutResp.error || 'Failed to checkout branch');
+          return;
         }
       }
 
-      const branch = worktreeInfo?.branch ?? 'main';
+      const branch = worktreeInfo?.branch ?? baseRef ?? 'main';
       const taskPath = worktreeInfo?.path ?? targetProject.path;
 
       const saveResp = await window.electronAPI.saveTask({
@@ -1076,7 +1107,9 @@ export function App() {
         path: taskPath,
         useWorktree,
         autoApprove,
-        branchCreatedByDash: useWorktree && !!worktreeInfo,
+        // Existing branches weren't created by Dash — mark false to prevent
+        // automatic deletion of the local/remote branch on task removal.
+        branchCreatedByDash: useWorktree && !!worktreeInfo && !!createNewBranch,
         linkedItems: linkedItems ?? null,
       });
 
@@ -1180,7 +1213,13 @@ export function App() {
             projectPath: project.path,
             worktreePath: task.path,
             branch: task.branch,
-            options,
+            options: options
+              ? {
+                  deleteWorktreeDir: options.deleteWorktreeDir,
+                  deleteLocalBranch: options.deleteLocalBranch && task.branchCreatedByDash,
+                  deleteRemoteBranch: options.deleteRemoteBranch && task.branchCreatedByDash,
+                }
+              : undefined,
           });
         }
       }
@@ -1556,40 +1595,43 @@ export function App() {
         />
       )}
 
-      {showTaskModal && (
-        <TaskModal
-          projectPath={
-            projects.find((p) => p.id === (taskModalProjectId || activeProjectId))?.path ?? ''
-          }
-          projectId={taskModalProjectId || activeProjectId || undefined}
-          isGitRepo={
-            projects.find((p) => p.id === (taskModalProjectId || activeProjectId))?.isGitRepo ??
-            false
-          }
-          gitRemote={
-            projects.find((p) => p.id === (taskModalProjectId || activeProjectId))?.gitRemote ??
-            null
-          }
-          onClose={() => setShowTaskModal(false)}
-          onCreate={handleCreateTask}
-          onGitInit={() => {
-            const pid = taskModalProjectId || activeProjectId;
-            const proj = projects.find((p) => p.id === pid);
-            if (proj) {
-              window.electronAPI.detectGit(proj.path).then(async (gitResp) => {
-                const gitInfo = gitResp.success ? gitResp.data : null;
-                await window.electronAPI.saveProject({
-                  ...proj,
-                  isGitRepo: gitInfo?.isGitRepo ?? true,
-                  gitRemote: gitInfo?.remote ?? null,
-                  gitBranch: gitInfo?.branch ?? null,
-                });
-                loadProjects();
-              });
-            }
-          }}
-        />
-      )}
+      {showTaskModal &&
+        (() => {
+          const modalProjectId = taskModalProjectId || activeProjectId;
+          const modalProject = projects.find((p) => p.id === modalProjectId);
+          const modalTasks = modalProjectId ? (tasksByProject[modalProjectId] ?? []) : [];
+          const existingNonWorktreeTask =
+            modalTasks.find((t) => !t.useWorktree && !t.archivedAt) ?? null;
+          return (
+            <TaskModal
+              projectPath={modalProject?.path ?? ''}
+              projectId={modalProjectId || undefined}
+              isGitRepo={modalProject?.isGitRepo ?? false}
+              gitRemote={modalProject?.gitRemote ?? null}
+              existingNonWorktreeTask={
+                existingNonWorktreeTask
+                  ? { id: existingNonWorktreeTask.id, name: existingNonWorktreeTask.name }
+                  : null
+              }
+              onClose={() => setShowTaskModal(false)}
+              onCreate={handleCreateTask}
+              onGitInit={() => {
+                if (modalProject) {
+                  window.electronAPI.detectGit(modalProject.path).then(async (gitResp) => {
+                    const gitInfo = gitResp.success ? gitResp.data : null;
+                    await window.electronAPI.saveProject({
+                      ...modalProject,
+                      isGitRepo: gitInfo?.isGitRepo ?? true,
+                      gitRemote: gitInfo?.remote ?? null,
+                      gitBranch: gitInfo?.branch ?? null,
+                    });
+                    loadProjects();
+                  });
+                }
+              }}
+            />
+          );
+        })()}
 
       {adoSetup && (
         <AdoSetupModal
