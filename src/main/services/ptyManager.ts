@@ -9,6 +9,7 @@ import { hookServer } from './HookServer';
 import { contextUsageService } from './ContextUsageService';
 import { DatabaseService } from './DatabaseService';
 import { terminalSnapshotService } from './TerminalSnapshotService';
+import { RtkService } from './RtkService';
 
 const execFileAsync = promisify(execFile);
 
@@ -94,10 +95,36 @@ const RESERVED_ENV_KEYS = new Set([
 
 export function setCommitAttribution(value: string | undefined): void {
   commitAttributionSetting = value;
-  // Re-write settings.local.json for all active PTYs so the change takes effect immediately
-  for (const [id, rec] of ptys) {
-    writeHookSettings(rec.cwd, id);
+  const { failures } = refreshActivePtyHooks();
+  if (failures.length > 0) {
+    console.warn(`[setCommitAttribution] hook write failed for ${failures.length} active task(s)`);
   }
+}
+
+export interface RefreshFailure {
+  settingsPath: string;
+  error: string;
+}
+
+export interface RefreshResult {
+  failures: RefreshFailure[];
+}
+
+/**
+ * Rewrite settings.local.json for every active PTY. Claude Code re-reads
+ * settings per tool call, so this flips hooks live. Returns per-task write
+ * failures so callers (IPC handlers) can surface a "saved, but N tasks
+ * didn't pick it up" message instead of silently returning success.
+ */
+export function refreshActivePtyHooks(): RefreshResult {
+  const failures: RefreshFailure[] = [];
+  for (const [id, rec] of ptys) {
+    const result = writeHookSettings(rec.cwd, id);
+    if (!result.ok) {
+      failures.push({ settingsPath: result.settingsPath, error: result.error });
+    }
+  }
+  return { failures };
 }
 
 export function setDesktopNotification(opts: { enabled: boolean }): void {
@@ -219,11 +246,18 @@ function buildDirectEnv(isDark: boolean): Record<string, string> {
     ? Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => !!e[1]))
     : {};
 
+  // rtk's rewrite output invokes the bare name `rtk`; when the binary is
+  // Dash-managed (userData/bin), prepend that dir so the rewrite resolves.
+  const rtkBinDir = RtkService.getManagedBinDirForPath();
+  const pathSep = isWin ? ';' : ':';
+  const basePath = process.env.PATH || '';
+  const mergedPath = rtkBinDir ? prependUnique(rtkBinDir, basePath, pathSep) : basePath;
+
   const env: Record<string, string> = {
     ...base,
     TERM_PROGRAM: 'dash',
     HOME: os.homedir(),
-    PATH: process.env.PATH || '',
+    PATH: mergedPath,
     // Tell CLI apps about terminal background (rxvt convention)
     // Format: "fg;bg" where higher values = lighter colors
     COLORFGBG: isDark ? '15;0' : '0;15',
@@ -321,50 +355,74 @@ const DASH_HOOK_EVENTS = [
   'SessionStart',
 ] as const;
 
+type HttpHook = { type: 'http'; url: string; async?: boolean };
+type CommandHook = { type: 'command'; command: string };
+type Hook = (HttpHook | CommandHook) & { __dash?: true };
+type HookEntry = { matcher: string; hooks: Hook[] };
+
+function buildPreToolUseHooks(
+  httpHook: (endpoint: string, async?: boolean) => HttpHook,
+): HookEntry[] {
+  const entries: HookEntry[] = [
+    { matcher: '*', hooks: [tagDash(httpHook('/hook/tool-start', true))] },
+  ];
+  const rtkCmd = RtkService.isEnabled() ? RtkService.getHookCommand() : null;
+  if (rtkCmd) {
+    entries.push({ matcher: 'Bash', hooks: [tagDash({ type: 'command', command: rtkCmd })] });
+  }
+  return entries;
+}
+
+function tagDash<T extends HttpHook | CommandHook>(hook: T): T & { __dash: true } {
+  return { ...hook, __dash: true };
+}
+
+function prependUnique(dir: string, basePath: string, sep: string): string {
+  if (!basePath) return dir;
+  const parts = basePath.split(sep);
+  if (parts.includes(dir)) return basePath;
+  return `${dir}${sep}${basePath}`;
+}
+
+type HookWriteResult = { ok: true } | { ok: false; settingsPath: string; error: string };
+
 /**
- * Write .claude/settings.local.json with hooks for activity monitoring,
- * tool tracking, error detection, and context usage.
- *
- * Hooks use type: "http" — Claude Code POSTs the hook JSON body directly
- * to our local HookServer. The statusLine uses type: "command" with curl
- * (http type is not supported for statusLine).
+ * Write .claude/settings.local.json with Dash-owned hooks for activity
+ * monitoring, tool tracking, error detection, context usage, and optional
+ * RTK rewrite. Uses type: "http" where supported (Claude POSTs directly to
+ * HookServer); statusLine and hooks that need local binaries (RTK, base64
+ * context injection) use type: "command".
  */
-function writeHookSettings(cwd: string, ptyId: string): void {
+function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
   const port = hookServer.port;
-  if (port === 0) return;
+  // Hook server not yet bound (startup transient) — treat as a no-op, not a
+  // failure. Callers that later refresh will succeed once the server is up.
+  if (port === 0) return { ok: true };
 
   const claudeDir = path.join(cwd, '.claude');
   const settingsPath = path.join(claudeDir, 'settings.local.json');
   const base = `http://127.0.0.1:${port}`;
 
-  /** Shorthand: build an HTTP hook entry. */
-  const httpHook = (endpoint: string, async?: boolean) => ({
+  const httpHook = (endpoint: string, async?: boolean): HttpHook => ({
     type: 'http' as const,
     url: `${base}${endpoint}?ptyId=${ptyId}`,
     ...(async ? { async: true } : {}),
   });
 
-  const hookSettings: Record<string, unknown[]> = {
-    // ── Activity state signals ──────────────────────────────
-    Stop: [{ hooks: [httpHook('/hook/stop')] }],
-    UserPromptSubmit: [{ hooks: [httpHook('/hook/busy')] }],
+  const dashHttp = (endpoint: string, async?: boolean) => tagDash(httpHook(endpoint, async));
 
-    // ── Notification (permission prompt, idle) ──────────────
+  const dashEntries: Record<string, HookEntry[]> = {
+    Stop: [{ matcher: '', hooks: [dashHttp('/hook/stop')] }],
+    UserPromptSubmit: [{ matcher: '', hooks: [dashHttp('/hook/busy')] }],
     Notification: [
-      { matcher: 'permission_prompt', hooks: [httpHook('/hook/notification')] },
-      { matcher: 'idle_prompt', hooks: [httpHook('/hook/notification')] },
+      { matcher: 'permission_prompt', hooks: [dashHttp('/hook/notification')] },
+      { matcher: 'idle_prompt', hooks: [dashHttp('/hook/notification')] },
     ],
-
-    // ── Tool activity tracking ──────────────────────────────
-    PreToolUse: [{ matcher: '*', hooks: [httpHook('/hook/tool-start', true)] }],
-    PostToolUse: [{ matcher: '*', hooks: [httpHook('/hook/tool-end', true)] }],
-
-    // ── Error detection ─────────────────────────────────────
-    StopFailure: [{ matcher: '*', hooks: [httpHook('/hook/stop-failure')] }],
-
-    // ── Context compaction ──────────────────────────────────
-    PreCompact: [{ matcher: '*', hooks: [httpHook('/hook/compact-start', true)] }],
-    PostCompact: [{ matcher: '*', hooks: [httpHook('/hook/compact-end', true)] }],
+    PreToolUse: buildPreToolUseHooks(httpHook),
+    PostToolUse: [{ matcher: '*', hooks: [dashHttp('/hook/tool-end', true)] }],
+    StopFailure: [{ matcher: '*', hooks: [dashHttp('/hook/stop-failure')] }],
+    PreCompact: [{ matcher: '*', hooks: [dashHttp('/hook/compact-start', true)] }],
+    PostCompact: [{ matcher: '*', hooks: [dashHttp('/hook/compact-end', true)] }],
   };
 
   // SessionStart hook fires on: startup (new session), resume (reattach by id),
@@ -399,10 +457,10 @@ function writeHookSettings(cwd: string, ptyId: string): void {
     contextHook = { type: 'command', command: decodeCmd };
   }
 
-  hookSettings.SessionStart = ['startup', 'resume', 'compact', 'clear'].map((matcher) => {
-    const hooks: unknown[] = [captureHook];
+  dashEntries.SessionStart = ['startup', 'resume', 'compact', 'clear'].map((matcher) => {
+    const hooks: Hook[] = [tagDash(captureHook)];
     if (contextHook && matcher !== 'resume') {
-      hooks.push(contextHook);
+      hooks.push(tagDash(contextHook));
     }
     return { matcher, hooks };
   });
@@ -412,56 +470,119 @@ function writeHookSettings(cwd: string, ptyId: string): void {
       fs.mkdirSync(claudeDir, { recursive: true });
     }
 
-    // Merge with existing settings to preserve non-hook config
+    // Merge with existing settings to preserve user content.
     let existing: Record<string, unknown> = {};
     if (fs.existsSync(settingsPath)) {
       try {
-        existing = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+        const parsed = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) as unknown;
+        // JSON.parse succeeds on "null", "42", "[]", etc. Only plain objects
+        // can be spread and merged safely; anything else is treated as corrupt.
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          existing = parsed as Record<string, unknown>;
+        } else {
+          throw new Error(`settings.local.json is not a JSON object (got ${typeof parsed})`);
+        }
       } catch (err) {
-        console.error(
-          '[writeHookSettings] Corrupted settings.local.json at',
-          settingsPath,
-          '— overwriting:',
-          err,
-        );
+        // Back up the corrupt file before overwriting so the user can recover.
+        // If the backup rename fails, we MUST NOT proceed to overwrite — that
+        // would destroy the user's on-disk file with no copy left.
+        const backupPath = `${settingsPath}.corrupt-${Date.now()}.bak`;
+        try {
+          fs.renameSync(settingsPath, backupPath);
+          console.error(
+            `[writeHookSettings] settings.local.json corrupt at ${settingsPath}; backed up to ${backupPath}`,
+            err,
+          );
+          broadcastToast(
+            `settings.local.json was unreadable — backed up to ${path.basename(backupPath)} and rewritten.`,
+          );
+        } catch (renameErr) {
+          console.error(
+            '[writeHookSettings] Failed to back up corrupt file; leaving on-disk file intact:',
+            renameErr,
+          );
+          broadcastToast(
+            `settings.local.json is corrupt and could not be backed up — hooks are off for this task. Fix or remove ${path.basename(settingsPath)} manually.`,
+          );
+          return {
+            ok: false,
+            settingsPath,
+            error: `corrupt settings.local.json; backup rename failed: ${renameErr instanceof Error ? renameErr.message : String(renameErr)}`,
+          };
+        }
       }
+    }
+
+    const existingHooks =
+      existing.hooks && typeof existing.hooks === 'object'
+        ? (existing.hooks as Record<string, HookEntry[] | undefined>)
+        : {};
+
+    const mergedHooks: Record<string, HookEntry[]> = {};
+    const dashEventSet = new Set<string>(DASH_HOOK_EVENTS);
+    for (const [event, userEntries] of Object.entries(existingHooks)) {
+      if (!Array.isArray(userEntries)) continue;
+      // For events Dash manages: keep only user-authored entries (ones we
+      // didn't tag). For other events: keep the user's entries as-is.
+      mergedHooks[event] = dashEventSet.has(event)
+        ? userEntries.filter((e) => !entryIsDashOwned(e))
+        : userEntries;
+    }
+    for (const [event, entries] of Object.entries(dashEntries)) {
+      const preserved = mergedHooks[event] ?? [];
+      mergedHooks[event] = [...preserved, ...entries];
     }
 
     const merged: Record<string, unknown> = {
       ...existing,
-      hooks: {
-        ...(existing.hooks && typeof existing.hooks === 'object'
-          ? (existing.hooks as Record<string, unknown>)
-          : {}),
-        ...hookSettings,
-      },
+      hooks: mergedHooks,
     };
 
-    // statusLine: command that pipes Claude Code's JSON context data to our hook server
     const contextUrl = `${base}/hook/context?ptyId=${ptyId}`;
     merged.statusLine = {
       type: 'command',
       command: `curl -s --connect-timeout 2 -X POST -H "Content-Type: application/json" -d @- "${contextUrl}" >/dev/null 2>&1`,
     };
 
-    // Commit attribution: undefined = Dash default, '' = suppress, other = custom.
     const effectiveAttribution =
       commitAttributionSetting === undefined ? DASH_DEFAULT_ATTRIBUTION : commitAttributionSetting;
     merged.attribution = { commit: effectiveAttribution };
 
     fs.writeFileSync(settingsPath, JSON.stringify(merged, null, 2) + '\n');
     writtenSettingsPaths.add(settingsPath);
-    console.error(
-      `[writeHookSettings] Wrote ${settingsPath} (attribution: ${commitAttributionSetting === undefined ? 'default' : commitAttributionSetting || 'none'})`,
-    );
+    return { ok: true };
   } catch (err) {
     console.error('[writeHookSettings] Failed:', err);
+    // Without settings, all Dash-owned hooks silently don't run — notify the user.
+    broadcastToast(`Could not write ${path.basename(settingsPath)} — hooks are off for this task.`);
+    return {
+      ok: false,
+      settingsPath,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+function entryIsDashOwned(entry: unknown): boolean {
+  if (!entry || typeof entry !== 'object') return false;
+  const hooks = (entry as { hooks?: unknown }).hooks;
+  if (!Array.isArray(hooks)) return false;
+  return hooks.some(
+    (h) => !!h && typeof h === 'object' && (h as { __dash?: unknown }).__dash === true,
+  );
+}
+
+function broadcastToast(message: string): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('app:toast', { message });
+    }
   }
 }
 
 /**
  * Remove Dash-written hooks and attribution from all settings.local.json files
- * that were written during this session. Called on app quit to prevent stale hooks.
+ * that were written during this session. Preserves user-authored entries.
  */
 export function cleanupHookSettings(): void {
   for (const settingsPath of writtenSettingsPaths) {
@@ -473,25 +594,24 @@ export function cleanupHookSettings(): void {
 
       if (hooks && typeof hooks === 'object') {
         for (const key of DASH_HOOK_EVENTS) {
-          delete hooks[key];
+          const entries = hooks[key];
+          if (!Array.isArray(entries)) continue;
+          const userOnly = entries.filter((e) => !entryIsDashOwned(e));
+          if (userOnly.length === 0) delete hooks[key];
+          else hooks[key] = userOnly;
         }
-        // Remove hooks object entirely if empty
         if (Object.keys(hooks).length === 0) {
           delete raw.hooks;
         }
       }
 
-      // Remove Dash statusLine and attribution
       delete raw.statusLine;
       delete raw.attribution;
 
-      // If nothing meaningful remains, delete the file
       if (Object.keys(raw).length === 0) {
         fs.unlinkSync(settingsPath);
-        console.error(`[cleanupHookSettings] Removed empty ${settingsPath}`);
       } else {
         fs.writeFileSync(settingsPath, JSON.stringify(raw, null, 2) + '\n');
-        console.error(`[cleanupHookSettings] Cleaned hooks from ${settingsPath}`);
       }
     } catch (err) {
       console.error(`[cleanupHookSettings] Failed for ${settingsPath}:`, err);

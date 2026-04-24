@@ -42,6 +42,11 @@ export class TerminalSessionManager {
   private savedViewportY: number | null = null;
   readonly shellOnly: boolean;
   private themeId: string;
+  // Claude Code's TUI rewrites cells continuously, which causes xterm to drop
+  // the visible selection before the user can press the copy shortcut. Cache
+  // the last non-empty selection on every change so Ctrl+Shift+C / Cmd+C can
+  // still copy it even after xterm has cleared the highlight.
+  private lastSelection = '';
   constructor(opts: {
     id: string;
     cwd: string;
@@ -108,6 +113,13 @@ export class TerminalSessionManager {
       ),
     );
 
+    // Cache selection on every change — Claude Code's TUI rewrites cells as the
+    // user drags, which clears xterm's selection before the copy shortcut fires.
+    this.terminal.onSelectionChange(() => {
+      const sel = this.terminal.getSelection();
+      if (sel) this.lastSelection = sel;
+    });
+
     // Track cwd via OSC 7 (emitted by zsh on macOS by default)
     this.terminal.parser.registerOscHandler(7, (data) => {
       try {
@@ -130,29 +142,36 @@ export class TerminalSessionManager {
 
       const isMac = navigator.userAgent.includes('Mac');
 
-      // Copy: Cmd+C (macOS) or Ctrl+Shift+C (Linux) — copy terminal selection
+      // Match by physical key (e.code) so alternate keyboard layouts where
+      // Ctrl+Shift+C reports e.key as something other than 'C' still work.
+      const isKeyC = e.code === 'KeyC';
+      const isKeyV = e.code === 'KeyV';
+
+      // Copy: Cmd+C (macOS) or Ctrl+Shift+C (Linux) — copy terminal selection.
       // Also Ctrl+C on any platform when there's an active selection (matches
-      // native terminal behaviour: Ctrl+C copies when selected, sends SIGINT otherwise)
-      if (
-        (isMac && e.metaKey && e.key === 'c') ||
-        (!isMac && e.ctrlKey && e.shiftKey && e.key === 'C') ||
-        (e.ctrlKey && !e.shiftKey && e.key === 'c' && this.terminal.hasSelection())
-      ) {
-        const sel = this.terminal.getSelection();
+      // native terminal behaviour: Ctrl+C copies when selected, sends SIGINT
+      // otherwise). Explicit shortcuts fall back to lastSelection so users can
+      // still copy after the TUI has cleared xterm's highlight.
+      const isExplicitCopy =
+        (isMac && e.metaKey && isKeyC && !e.ctrlKey) ||
+        (!isMac && e.ctrlKey && e.shiftKey && isKeyC);
+      const isPlainCtrlC = e.ctrlKey && !e.shiftKey && isKeyC && this.terminal.hasSelection();
+      if (isExplicitCopy || isPlainCtrlC) {
+        const sel = this.terminal.getSelection() || (isExplicitCopy ? this.lastSelection : '');
         if (sel) {
           e.preventDefault();
-          navigator.clipboard.writeText(sel);
+          window.electronAPI.clipboardWriteText(sel);
           return false;
         }
       }
 
       // Paste: Cmd+V (macOS) or Ctrl+Shift+V (Linux)
       if (
-        (isMac && e.metaKey && e.key === 'v') ||
-        (!isMac && e.ctrlKey && e.shiftKey && e.key === 'V')
+        (isMac && e.metaKey && isKeyV && !e.ctrlKey) ||
+        (!isMac && e.ctrlKey && e.shiftKey && isKeyV)
       ) {
         e.preventDefault();
-        navigator.clipboard.readText().then((text) => {
+        window.electronAPI.clipboardReadText().then((text) => {
           if (text) window.electronAPI.ptyInput({ id: this.id, data: text });
         });
         return false;

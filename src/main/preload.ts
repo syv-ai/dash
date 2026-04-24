@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Dialogs
   showOpenDialog: () => ipcRenderer.invoke('app:showOpenDialog'),
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
+  clipboardWriteText: (text: string) => ipcRenderer.send('app:clipboardWriteText', text),
+  clipboardReadText: () => ipcRenderer.invoke('app:clipboardReadText'),
   openInEditor: (args: { cwd: string; filePath: string; line?: number; col?: number }) =>
     ipcRenderer.invoke('app:openInEditor', args),
   openInIDE: (args: {
@@ -239,6 +241,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('pixelAgents:statusChanged', handler);
     return () => {
       ipcRenderer.removeListener('pixelAgents:statusChanged', handler);
+    };
+  },
+
+  // RTK (Rust Token Killer)
+  rtkGetStatus: () => ipcRenderer.invoke('rtk:getStatus'),
+  rtkSetEnabled: (enabled: boolean) => ipcRenderer.invoke('rtk:setEnabled', enabled),
+  rtkDownload: () => ipcRenderer.invoke('rtk:download'),
+  rtkTest: () => ipcRenderer.invoke('rtk:test'),
+  onRtkDownloadProgress: (
+    callback: (progress: import('@shared/types').RtkDownloadProgress) => void,
+  ) => {
+    const handler = (_event: unknown, progress: import('@shared/types').RtkDownloadProgress) =>
+      callback(progress);
+    ipcRenderer.on('rtk:downloadProgress', handler);
+    return () => {
+      ipcRenderer.removeListener('rtk:downloadProgress', handler);
     };
   },
 

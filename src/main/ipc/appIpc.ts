@@ -1,4 +1,4 @@
-import { ipcMain, dialog, app, shell, BrowserWindow, Notification } from 'electron';
+import { ipcMain, dialog, app, shell, BrowserWindow, Notification, clipboard } from 'electron';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { existsSync, readFileSync } from 'fs';
@@ -159,6 +159,16 @@ export function registerAppIpc(): void {
 
   ipcMain.handle('app:openExternal', async (_event, url: string) => {
     await shell.openExternal(url);
+  });
+
+  // Electron's clipboard module bypasses the web clipboard API, which is
+  // unreliable on Linux (Wayland permission prompts, silent failures when
+  // the page loses focus between keydown and the async write).
+  ipcMain.on('app:clipboardWriteText', (_event, text: string) => {
+    clipboard.writeText(text);
+  });
+  ipcMain.handle('app:clipboardReadText', () => {
+    return clipboard.readText();
   });
 
   ipcMain.handle('app:showOpenDialog', async () => {

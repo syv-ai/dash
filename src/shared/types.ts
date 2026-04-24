@@ -373,3 +373,53 @@ export interface PixelAgentsStatus {
   running: boolean;
   offices: Record<string, PixelAgentsOfficeStatus>;
 }
+
+// ── RTK (Rust Token Killer) Types ───────────────────────────
+
+export type RtkSource = 'path' | 'managed';
+
+export type RtkStatus =
+  | {
+      installed: true;
+      version: string;
+      path: string;
+      source: RtkSource;
+      enabled: boolean;
+      downloadable: boolean;
+    }
+  | {
+      installed: false;
+      enabled: boolean;
+      downloadable: boolean;
+    };
+
+export type RtkDownloadProgress =
+  | { phase: 'downloading'; percent: number }
+  | { phase: 'verifying' }
+  | { phase: 'extracting' }
+  | { phase: 'done'; version: string }
+  | { phase: 'error'; error: string };
+
+export interface RtkExecDiff {
+  /** Stdout of the raw tested command, capped for IPC payload size. */
+  rawStdout: string;
+  /** Stdout of the rtk-rewritten command, capped for IPC payload size. */
+  compressedStdout: string;
+  /** Untruncated byte counts, so the UI can show honest savings math. */
+  rawBytes: number;
+  compressedBytes: number;
+}
+
+export type RtkTestResult =
+  | { ok: false; testedCommand?: string; error: string }
+  | {
+      ok: true;
+      testedCommand: string;
+      rewrittenCommand: string | null;
+      rawOutput: string;
+      // rtk uses exit 2 to *block* a tool call — surface it so the UI can
+      // explain the state rather than collapse to a binary ok/fail.
+      blocked?: { stderr: string };
+      /** Real before/after captured by actually running both commands. */
+      execDiff?: RtkExecDiff;
+    };
