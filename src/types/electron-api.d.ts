@@ -32,6 +32,8 @@ export interface ElectronAPI {
   // Dialogs
   showOpenDialog: () => Promise<IpcResponse<string[]>>;
   openExternal: (url: string) => Promise<void>;
+  clipboardWriteText: (text: string) => void;
+  clipboardReadText: () => Promise<string>;
   openInEditor: (args: {
     cwd: string;
     filePath: string;
