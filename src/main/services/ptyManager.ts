@@ -3,57 +3,77 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { type WebContents, app, BrowserWindow } from 'electron';
+import { type WebContents, app } from 'electron';
 import { activityMonitor } from './ActivityMonitor';
 import { hookServer } from './HookServer';
 import { contextUsageService } from './ContextUsageService';
 import { DatabaseService } from './DatabaseService';
-import { terminalSnapshotService } from './TerminalSnapshotService';
 
 const execFileAsync = promisify(execFile);
 
 /**
- * Locate the Claude projects directory for a given cwd.
- * Claude stores sessions under ~/.claude/projects/<encoded-cwd>/.
+ * Find the first resumable session ID from a list of candidates by checking
+ * whether a JSONL exists for each under ~/.claude/projects/. Searches all
+ * project subdirectories so no path-encoding is required — Claude resolves
+ * the encoded directory name internally when given --resume <id>.
+ * Returns the first candidate ID whose JSONL is found, or null if none exist.
  */
-function findClaudeProjectDir(cwd: string): string | null {
+function findResumableSession(candidateIds: string[]): string | null {
   try {
     const projectsDir = path.join(os.homedir(), '.claude', 'projects');
     if (!fs.existsSync(projectsDir)) return null;
-
-    // Path-based: slashes → hyphens (the primary naming scheme)
-    const pathBased = path.join(projectsDir, cwd.replace(/\//g, '-'));
-    if (fs.existsSync(pathBased)) return pathBased;
-
-    // Partial match: last 3 path segments
-    const parts = cwd.split('/').filter((p) => p.length > 0);
-    const suffix = parts.slice(-3).join('-');
-    const dirs = fs.readdirSync(projectsDir);
-    const match = dirs.find((d) => d.endsWith(suffix));
-    if (match) return path.join(projectsDir, match);
-
-    return null;
-  } catch (err) {
-    console.error('[findClaudeProjectDir] Failed to scan projects dir:', err);
-    return null;
-  }
-}
-
-/** Check whether Claude has a session file for the given UUID in this cwd. */
-function hasSessionForId(cwd: string, sessionId: string): boolean {
-  const projDir = findClaudeProjectDir(cwd);
-  if (!projDir) return false;
-  return fs.existsSync(path.join(projDir, `${sessionId}.jsonl`));
-}
-
-/** Check whether Claude has any jsonl history for this cwd. */
-function hasAnySessionForCwd(cwd: string): boolean {
-  const projDir = findClaudeProjectDir(cwd);
-  if (!projDir) return false;
-  try {
-    return fs.readdirSync(projDir).some((f) => f.endsWith('.jsonl'));
+    for (const dir of fs.readdirSync(projectsDir)) {
+      for (const id of candidateIds) {
+        if (fs.existsSync(path.join(projectsDir, dir, `${id}.jsonl`))) return id;
+      }
+    }
   } catch {
-    return false;
+    // Best effort
+  }
+  return null;
+}
+
+/**
+ * Remove session claims before spawning. Claude tracks active sessions in two places:
+ *   1. ~/.claude/sessions/<pid>.json — a registry entry per running process
+ *   2. ~/.claude/tasks/<sessionId>/.lock — a lock directory per session
+ * Both are abandoned when the process is killed. We unconditionally remove any registry
+ * entry matching the session ID — if Dash is spawning a session, there should be no other
+ * live Claude process with that ID (Dash owns all spawns via the ptys Map).
+ * Note: process.kill(pid, 0) is unreliable on Windows (silently succeeds for dead PIDs),
+ * so we skip the PID liveness check entirely.
+ */
+function clearStaleSessionClaims(sessionId: string): void {
+  // 1. Sessions registry: remove any <pid>.json whose sessionId matches
+  try {
+    const sessionsDir = path.join(os.homedir(), '.claude', 'sessions');
+    if (fs.existsSync(sessionsDir)) {
+      for (const file of fs.readdirSync(sessionsDir)) {
+        if (!file.endsWith('.json')) continue;
+        try {
+          const filePath = path.join(sessionsDir, file);
+          const entry = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+          if (entry.sessionId !== sessionId) continue;
+          fs.unlinkSync(filePath);
+          console.error(`[clearStaleSessionClaims] Removed session registry ${file}`);
+        } catch {
+          // Skip unreadable or malformed files
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[clearStaleSessionClaims] sessions scan failed:', err);
+  }
+
+  // 2. Task lock directory: ~/.claude/tasks/<sessionId>/.lock
+  try {
+    const lockPath = path.join(os.homedir(), '.claude', 'tasks', sessionId, '.lock');
+    if (fs.existsSync(lockPath)) {
+      fs.rmSync(lockPath, { recursive: true, force: true });
+      console.error(`[clearStaleSessionClaims] Removed stale lock for ${sessionId}`);
+    }
+  } catch (err) {
+    console.error('[clearStaleSessionClaims] lock removal failed:', err);
   }
 }
 
@@ -539,47 +559,22 @@ export async function startDirectPty(options: {
 
   const args: string[] = [];
 
-  // Pin each task to its own Claude session so tasks sharing the same cwd
-  // (e.g. multiple tasks in the main worktree) never resume each other.
-  // Prefer the hook-captured lastSessionId (Claude may fork on /clear or
-  // /compact, so the live session id can drift from task.id).
+  // Resume only when we can confirm the session JSONL exists on disk.
+  // lastSessionId is set by the SessionStart hook on every spawn, but Claude writes
+  // the JSONL lazily (only after the first message), so a task that was opened but
+  // never messaged has lastSessionId set with no file yet. Spawning with no flags
+  // starts a fresh session in that case; SessionStart will update lastSessionId.
+  // Build candidate list: prefer lastSessionId (most recent after /clear or /compact),
+  // fall back to task.id (session created by original --session-id spawns).
   const task = DatabaseService.getTask(options.id);
-  const resumeId = task?.lastSessionId ?? options.id;
-  const hadPriorUse =
-    task?.lastSessionId != null || terminalSnapshotService.hasSnapshot(options.id);
-  if (hasSessionForId(options.cwd, resumeId)) {
-    args.push('-r', resumeId);
-  } else if (resumeId !== options.id && hasSessionForId(options.cwd, options.id)) {
-    args.push('-r', options.id);
-  } else if (
-    task &&
-    task.lastSessionId === null &&
-    DatabaseService.countTasksAtPath(options.cwd) === 1 &&
-    hasAnySessionForCwd(options.cwd)
-  ) {
-    // Legacy task created before session pinning: its jsonl is named with a
-    // Claude-generated UUID, not task.id, so we can't resume by id. Safe to
-    // fall back to `-c -r` only when this is the sole task at its cwd — no
-    // other task's session to hijack — AND jsonl history actually exists,
-    // otherwise Claude exits with "No conversation found to continue".
-    // The SessionStart hook will capture the real session_id on this spawn,
-    // so future spawns pin correctly.
-    args.push('-c', '-r');
-  } else {
-    args.push('--session-id', options.id);
-    // Task had prior use (snapshot or captured session id) but we couldn't
-    // link any existing session — notify the user so they can recover via
-    // Claude's /resume command. Jsonl history is still on disk.
-    if (hadPriorUse && task) {
-      for (const win of BrowserWindow.getAllWindows()) {
-        if (!win.isDestroyed()) {
-          win.webContents.send('app:toast', {
-            message: `Couldn't link previous Claude session for "${task.name}" — use /resume in the terminal to find it.`,
-          });
-        }
-      }
-    }
+  const candidates = [task?.lastSessionId, options.id].filter((id): id is string => !!id);
+  const sessionToResume = findResumableSession(candidates);
+
+  if (sessionToResume) {
+    clearStaleSessionClaims(sessionToResume);
+    args.push('--resume', sessionToResume);
   }
+  // No session flags: Claude starts a fresh interactive session.
 
   if (options.autoApprove) {
     args.push('--dangerously-skip-permissions');

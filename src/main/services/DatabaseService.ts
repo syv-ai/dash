@@ -1,4 +1,4 @@
-import { eq, desc, sql } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { initDb, getDb } from '../db/client';
 import { runMigrations } from '../db/migrate';
@@ -124,22 +124,6 @@ export class DatabaseService {
     const db = getDb();
     const row = db.select().from(tasks).where(eq(tasks.id, id)).get();
     return row ? this.mapTask(row) : undefined;
-  }
-
-  /**
-   * Count tasks (including archived) that share a given working directory.
-   * Used to gate the legacy `-c -r` resume fallback: safe only when the task
-   * is the sole occupant of its cwd, otherwise we could hijack another task's
-   * session.
-   */
-  static countTasksAtPath(path: string): number {
-    const db = getDb();
-    const row = db
-      .select({ count: sql<number>`count(*)` })
-      .from(tasks)
-      .where(eq(tasks.path, path))
-      .get();
-    return row?.count ?? 0;
   }
 
   static setTaskContextPrompt(id: string, prompt: string): void {
