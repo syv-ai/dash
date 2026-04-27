@@ -1,6 +1,7 @@
 import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
+import { randomUUID } from 'crypto';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { type WebContents, app, BrowserWindow } from 'electron';
@@ -56,6 +57,96 @@ function hasAnySessionForCwd(cwd: string): boolean {
   } catch {
     return false;
   }
+}
+
+type ForkResult = { kind: 'no-clear' } | { kind: 'forked'; newId: string } | { kind: 'clear-only' };
+
+const CLEAR_MARKER = '<command-name>/clear</command-name>';
+
+/**
+ * Claude does not start a new session on /clear — it keeps appending to the
+ * same jsonl. Resuming with `claude -r` therefore replays pre-clear chat,
+ * which is not what the user expects after running /clear and reopening Dash.
+ *
+ * Walk the jsonl, find the LAST /clear user entry, and write a forked jsonl
+ * containing only entries after it (with sessionId rewritten and the new
+ * first entry's parentUuid reset to null). Returns:
+ *   - 'forked' (with new id) when post-clear entries exist
+ *   - 'clear-only' when /clear is the last interaction (caller should start
+ *     a fresh session instead of resuming)
+ *   - 'no-clear' when no /clear is present (caller should resume normally)
+ */
+function forkJsonlAtLastClear(cwd: string, sessionId: string): ForkResult {
+  const projDir = findClaudeProjectDir(cwd);
+  if (!projDir) return { kind: 'no-clear' };
+  const jsonlPath = path.join(projDir, `${sessionId}.jsonl`);
+
+  let raw: string;
+  try {
+    raw = fs.readFileSync(jsonlPath, 'utf-8');
+  } catch (err) {
+    console.error('[forkJsonlAtLastClear] read failed:', err);
+    return { kind: 'no-clear' };
+  }
+  const lines = raw.split('\n').filter((l) => l.length > 0);
+
+  let lastClearIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (!lines[i].includes(CLEAR_MARKER)) continue;
+    try {
+      const obj = JSON.parse(lines[i]);
+      const content = obj?.message?.content;
+      if (obj.type === 'user' && typeof content === 'string' && content.includes(CLEAR_MARKER)) {
+        lastClearIdx = i;
+      }
+    } catch {
+      /* ignore unparseable line */
+    }
+  }
+  if (lastClearIdx < 0) return { kind: 'no-clear' };
+
+  // Drop the local_command system response that immediately follows /clear,
+  // so the forked file doesn't start with an orphan response.
+  let startIdx = lastClearIdx + 1;
+  if (startIdx < lines.length) {
+    try {
+      const next = JSON.parse(lines[startIdx]);
+      if (next.type === 'system' && next.subtype === 'local_command') {
+        startIdx++;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  if (startIdx >= lines.length) return { kind: 'clear-only' };
+
+  const newId = randomUUID();
+  const rewritten: string[] = [];
+  let parentReset = false;
+  for (let i = startIdx; i < lines.length; i++) {
+    let obj: Record<string, unknown>;
+    try {
+      obj = JSON.parse(lines[i]);
+    } catch {
+      continue;
+    }
+    if ('sessionId' in obj) obj.sessionId = newId;
+    if (!parentReset && 'parentUuid' in obj) {
+      obj.parentUuid = null;
+      parentReset = true;
+    }
+    rewritten.push(JSON.stringify(obj));
+  }
+  if (rewritten.length === 0) return { kind: 'clear-only' };
+
+  const newPath = path.join(projDir, `${newId}.jsonl`);
+  try {
+    fs.writeFileSync(newPath, rewritten.join('\n') + '\n');
+  } catch (err) {
+    console.error('[forkJsonlAtLastClear] write failed:', err);
+    return { kind: 'no-clear' };
+  }
+  return { kind: 'forked', newId };
 }
 
 interface PtyRecord {
@@ -664,14 +755,37 @@ export async function startDirectPty(options: {
   // Prefer the hook-captured lastSessionId (Claude may fork on /clear or
   // /compact, so the live session id can drift from task.id).
   const task = DatabaseService.getTask(options.id);
-  const resumeId = task?.lastSessionId ?? options.id;
+  let resumeId = task?.lastSessionId ?? options.id;
   const hadPriorUse =
     task?.lastSessionId != null || terminalSnapshotService.hasSnapshot(options.id);
-  if (hasSessionForId(options.cwd, resumeId)) {
+
+  // If the resumable jsonl contains a /clear, fork past it (or skip resume
+  // entirely if /clear was the last interaction). Otherwise `claude -r` would
+  // reload pre-clear messages.
+  let skipResume = false;
+  const candidateIds = [resumeId, options.id].filter((id, i, arr) => id && arr.indexOf(id) === i);
+  for (const id of candidateIds) {
+    if (!hasSessionForId(options.cwd, id)) continue;
+    const fork = forkJsonlAtLastClear(options.cwd, id);
+    if (fork.kind === 'forked') {
+      resumeId = fork.newId;
+      try {
+        DatabaseService.setTaskLastSessionId(options.id, fork.newId);
+      } catch (err) {
+        console.error('[spawnDirectClaude] persist forked session id failed:', err);
+      }
+    } else if (fork.kind === 'clear-only') {
+      skipResume = true;
+    }
+    break;
+  }
+
+  if (!skipResume && hasSessionForId(options.cwd, resumeId)) {
     args.push('-r', resumeId);
-  } else if (resumeId !== options.id && hasSessionForId(options.cwd, options.id)) {
+  } else if (!skipResume && resumeId !== options.id && hasSessionForId(options.cwd, options.id)) {
     args.push('-r', options.id);
   } else if (
+    !skipResume &&
     task &&
     task.lastSessionId === null &&
     DatabaseService.countTasksAtPath(options.cwd) === 1 &&
@@ -686,11 +800,21 @@ export async function startDirectPty(options: {
     // so future spawns pin correctly.
     args.push('-c', '-r');
   } else {
-    args.push('--session-id', options.id);
-    // Task had prior use (snapshot or captured session id) but we couldn't
-    // link any existing session — notify the user so they can recover via
-    // Claude's /resume command. Jsonl history is still on disk.
-    if (hadPriorUse && task) {
+    // When skipping resume because /clear was the last interaction, mint a
+    // fresh UUID so we don't reuse the jsonl that contains the /clear, and
+    // persist it so future restarts pin to this new session.
+    const newSessionId = skipResume ? randomUUID() : options.id;
+    args.push('--session-id', newSessionId);
+    if (skipResume) {
+      try {
+        DatabaseService.setTaskLastSessionId(options.id, newSessionId);
+      } catch (err) {
+        console.error('[spawnDirectClaude] persist post-clear session id failed:', err);
+      }
+    } else if (hadPriorUse && task) {
+      // Task had prior use (snapshot or captured session id) but we couldn't
+      // link any existing session — notify the user so they can recover via
+      // Claude's /resume command. Jsonl history is still on disk.
       for (const win of BrowserWindow.getAllWindows()) {
         if (!win.isDestroyed()) {
           win.webContents.send('app:toast', {

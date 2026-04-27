@@ -779,12 +779,18 @@ export class TerminalSessionManager {
     if (this.disposed || !this.opened) return;
     try {
       const data = this.serializeAddon.serialize();
+      // Skip empty serializations — happens when detach() fires while the
+      // container is un-laid-out. Writing "" would clobber the good snapshot
+      // and the pane would look blank on re-open.
+      if (!data) return;
       const dims = this.fitAddon.proposeDimensions();
+      const cols = Number.isFinite(dims?.cols) ? (dims!.cols as number) : 120;
+      const rows = Number.isFinite(dims?.rows) ? (dims!.rows as number) : 30;
       const snapshot: TerminalSnapshot = {
         version: 1,
         createdAt: new Date().toISOString(),
-        cols: dims?.cols ?? 120,
-        rows: dims?.rows ?? 30,
+        cols,
+        rows,
         data,
       };
       window.electronAPI.ptySaveSnapshot(this.id, snapshot);
