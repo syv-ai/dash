@@ -49,7 +49,6 @@ export interface Task {
   branchCreatedByDash: boolean;
   linkedItems: LinkedItem[] | null;
   contextPrompt: string | null;
-  lastSessionId: string | null;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
