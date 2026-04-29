@@ -561,6 +561,48 @@ export function App() {
     }
   }, [projects, activeProjectId]);
 
+  // Detect pre-existing duplicate non-worktree tasks at the same cwd and warn
+  // the user once per app session. The new resume strategy (`claude --continue`)
+  // assumes one active task per cwd; duplicates from before the constraint
+  // existed will cross-resume each other's sessions until manually resolved.
+  const duplicateWarningFiredRef = useRef(false);
+  useEffect(() => {
+    if (duplicateWarningFiredRef.current) return;
+    if (Object.keys(tasksByProject).length < projects.length) return;
+
+    const offenders: { projectName: string; path: string; tasks: string[] }[] = [];
+    for (const [projectId, tasks] of Object.entries(tasksByProject)) {
+      const groups = new Map<string, Task[]>();
+      for (const t of tasks) {
+        if (t.useWorktree || t.archivedAt) continue;
+        const list = groups.get(t.path) ?? [];
+        list.push(t);
+        groups.set(t.path, list);
+      }
+      for (const [path, group] of groups) {
+        if (group.length > 1) {
+          const project = projects.find((p) => p.id === projectId);
+          offenders.push({
+            projectName: project?.name ?? projectId,
+            path,
+            tasks: group.map((t) => t.name),
+          });
+        }
+      }
+    }
+
+    if (offenders.length === 0) return;
+    duplicateWarningFiredRef.current = true;
+
+    const summary = offenders
+      .map((o) => `"${o.projectName}": ${o.tasks.map((n) => `"${n}"`).join(', ')}`)
+      .join('; ');
+    toast.error(
+      `Multiple tasks share the same directory and may cross-resume each other's Claude sessions. Archive duplicates to fix: ${summary}`,
+      { duration: 20_000 },
+    );
+  }, [tasksByProject, projects]);
+
   // Theme
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
