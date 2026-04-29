@@ -57,17 +57,20 @@ export function registerRtkIpc(): void {
     try {
       await RtkService.download();
       // Refresh hook JSON in active PTYs so a download while the toggle is
-      // already on starts rewriting immediately. Failures here are informational:
-      // the binary installed fine and next-task-spawn writes settings anew, so
-      // the refresh is best-effort and we don't fail the download IPC.
+      // already on starts rewriting immediately. Failures are surfaced via
+      // a `warning` field (matching rtk:setEnabled): the install itself
+      // succeeded, but the user has running tasks that won't pick up the
+      // new hook until they restart, and they should know.
       const { failures } = refreshActivePtyHooks();
       if (failures.length > 0) {
-        console.warn(
-          `[rtk:download] install succeeded but hook refresh failed for ${failures.length} task(s):`,
-          failures,
-        );
+        return {
+          success: true,
+          data: {
+            warning: `Installed. ${summarizeFailures(failures)} — restart those tasks to start compressing.`,
+          },
+        };
       }
-      return { success: true };
+      return { success: true, data: undefined };
     } catch (error) {
       console.error('[rtk:download]', error);
       return { success: false, error: errorMessage(error) };

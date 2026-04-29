@@ -1221,8 +1221,11 @@ function RtkTestResultCard({ result }: { result: RtkTestResult }) {
 
   if (wouldCompress) {
     const diff = result.execDiff;
-    const savedBytes = diff ? diff.rawBytes - diff.compressedBytes : 0;
-    const savedPct = diff && diff.rawBytes > 0 ? Math.round((savedBytes / diff.rawBytes) * 100) : 0;
+    const okDiff = diff && diff.kind === 'ok' ? diff : null;
+    const failedDiff = diff && diff.kind === 'failed' ? diff : null;
+    const savedBytes = okDiff ? okDiff.rawBytes - okDiff.compressedBytes : 0;
+    const savedPct =
+      okDiff && okDiff.rawBytes > 0 ? Math.round((savedBytes / okDiff.rawBytes) * 100) : 0;
 
     return (
       <div
@@ -1247,23 +1250,44 @@ function RtkTestResultCard({ result }: { result: RtkTestResult }) {
           </div>
         </div>
 
-        {diff && (
+        {okDiff && (
           <div className="space-y-2 pt-2 border-t border-border/40">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-medium uppercase tracking-wide text-foreground/60">
                 Actual output diff
               </span>
-              {diff.rawBytes > 0 && (
+              {okDiff.rawBytes > 0 && (
                 <span className="text-[10px] font-mono text-[hsl(var(--git-added))]">
-                  {diff.rawBytes} → {diff.compressedBytes} bytes
+                  {okDiff.rawBytes} → {okDiff.compressedBytes} bytes
                   {savedBytes > 0 && ` (−${savedPct}%)`}
+                  {okDiff.truncated && ' · truncated'}
                 </span>
               )}
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <OutputPanel label="raw" body={diff.rawStdout} />
-              <OutputPanel label="via rtk" body={diff.compressedStdout} accented />
+              <OutputPanel label="raw" body={okDiff.rawStdout} />
+              <OutputPanel label="via rtk" body={okDiff.compressedStdout} accented />
             </div>
+          </div>
+        )}
+
+        {failedDiff && (
+          // The rewrite-directive check still passed, so rtk's hook plumbing
+          // is fine — but we couldn't capture the before/after. Surface it as
+          // a warning rather than the green "all good" pass-through banner.
+          <div
+            className="space-y-1 pt-2 border-t border-border/40"
+            style={{ borderColor: 'hsl(var(--git-modified) / 0.3)' }}
+          >
+            <span className="text-[10px] font-medium uppercase tracking-wide text-[hsl(var(--git-modified))]">
+              Couldn&rsquo;t capture diff
+            </span>
+            <p className="text-[11px] text-foreground/70">{failedDiff.reason}</p>
+            {failedDiff.stderr && (
+              <pre className="text-[10px] text-foreground/50 font-mono whitespace-pre-wrap break-words">
+                {failedDiff.stderr}
+              </pre>
+            )}
           </div>
         )}
       </div>

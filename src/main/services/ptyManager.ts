@@ -59,7 +59,15 @@ function hasAnySessionForCwd(cwd: string): boolean {
   }
 }
 
-type ForkResult = { kind: 'no-clear' } | { kind: 'forked'; newId: string } | { kind: 'clear-only' };
+type ForkResult =
+  | { kind: 'no-clear' }
+  | { kind: 'forked'; newId: string }
+  | { kind: 'clear-only' }
+  // Fork detected a /clear but couldn't produce a clean post-clear jsonl
+  // (write failed, or post-clear lines were corrupt). Caller MUST treat this
+  // as "skip resume" — falling back to the unforked jsonl would replay the
+  // pre-clear chat the user explicitly asked to forget.
+  | { kind: 'fork-failed'; error: string };
 
 const CLEAR_MARKER = '<command-name>/clear</command-name>';
 
@@ -75,6 +83,9 @@ const CLEAR_MARKER = '<command-name>/clear</command-name>';
  *   - 'clear-only' when /clear is the last interaction (caller should start
  *     a fresh session instead of resuming)
  *   - 'no-clear' when no /clear is present (caller should resume normally)
+ *   - 'fork-failed' when a /clear was found but we couldn't fork past it
+ *     (caller MUST skip resume — falling back to the original jsonl would
+ *     resurrect the pre-clear chat the user asked to forget)
  */
 function forkJsonlAtLastClear(cwd: string, sessionId: string): ForkResult {
   const projDir = findClaudeProjectDir(cwd);
@@ -100,7 +111,7 @@ function forkJsonlAtLastClear(cwd: string, sessionId: string): ForkResult {
         lastClearIdx = i;
       }
     } catch {
-      /* ignore unparseable line */
+      /* ignore unparseable line — best-effort scan for the marker */
     }
   }
   if (lastClearIdx < 0) return { kind: 'no-clear' };
@@ -123,11 +134,13 @@ function forkJsonlAtLastClear(cwd: string, sessionId: string): ForkResult {
   const newId = randomUUID();
   const rewritten: string[] = [];
   let parentReset = false;
+  let parseFailures = 0;
   for (let i = startIdx; i < lines.length; i++) {
     let obj: Record<string, unknown>;
     try {
       obj = JSON.parse(lines[i]);
     } catch {
+      parseFailures++;
       continue;
     }
     if ('sessionId' in obj) obj.sessionId = newId;
@@ -137,14 +150,36 @@ function forkJsonlAtLastClear(cwd: string, sessionId: string): ForkResult {
     }
     rewritten.push(JSON.stringify(obj));
   }
+  // Silently dropping corrupt lines from the rewritten transcript would mutate
+  // the user's history. Abort the fork — caller will skip resume and start
+  // fresh, which is safer than producing a quietly-edited transcript.
+  if (parseFailures > 0) {
+    console.error(
+      `[forkJsonlAtLastClear] ${parseFailures} unparseable post-clear line(s); aborting fork`,
+    );
+    return {
+      kind: 'fork-failed',
+      error: `${parseFailures} unparseable jsonl line(s) after /clear`,
+    };
+  }
   if (rewritten.length === 0) return { kind: 'clear-only' };
 
   const newPath = path.join(projDir, `${newId}.jsonl`);
   try {
-    fs.writeFileSync(newPath, rewritten.join('\n') + '\n');
+    // Atomic write: tmp + rename so a crash mid-write can't leave a half-
+    // forked jsonl behind that a future resume would happily load.
+    const tmpPath = `${newPath}.tmp-${process.pid}`;
+    fs.writeFileSync(tmpPath, rewritten.join('\n') + '\n');
+    fs.renameSync(tmpPath, newPath);
   } catch (err) {
     console.error('[forkJsonlAtLastClear] write failed:', err);
-    return { kind: 'no-clear' };
+    // Critical: do NOT fall back to 'no-clear'. The caller resuming the
+    // original jsonl would replay the user's pre-clear chat — a privacy
+    // regression. Surface the failure so the caller skips resume entirely.
+    return {
+      kind: 'fork-failed',
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
   return { kind: 'forked', newId };
 }
@@ -189,6 +224,12 @@ export function setCommitAttribution(value: string | undefined): void {
   const { failures } = refreshActivePtyHooks();
   if (failures.length > 0) {
     console.warn(`[setCommitAttribution] hook write failed for ${failures.length} active task(s)`);
+    // The IPC handler is fire-and-forget (`ipcMain.on`), so the renderer
+    // never sees the return value. Surface partial failures via toast so
+    // commits from those tasks don't silently use the old attribution.
+    broadcastToast(
+      `Commit attribution updated, but ${failures.length} active task${failures.length === 1 ? '' : 's'} couldn't pick it up — restart them to apply.`,
+    );
   }
 }
 
@@ -639,7 +680,7 @@ function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
       commitAttributionSetting === undefined ? DASH_DEFAULT_ATTRIBUTION : commitAttributionSetting;
     merged.attribution = { commit: effectiveAttribution };
 
-    fs.writeFileSync(settingsPath, JSON.stringify(merged, null, 2) + '\n');
+    atomicWriteFileSync(settingsPath, JSON.stringify(merged, null, 2) + '\n');
     writtenSettingsPaths.add(settingsPath);
     return { ok: true };
   } catch (err) {
@@ -654,13 +695,43 @@ function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
   }
 }
 
+/**
+ * Atomic write: stage to a sibling tmp file then rename over the target.
+ * POSIX rename is atomic, so a crash mid-write can never leave a half-written
+ * file at `target`. Important here because settings.local.json is rewritten
+ * frequently (every PTY spawn, every RTK toggle, every commit-attribution
+ * change) — without atomicity the corrupt-recovery path on the read side has
+ * to handle a wider class of partial-write failures than just user edits.
+ */
+function atomicWriteFileSync(target: string, data: string): void {
+  const tmp = `${target}.tmp-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(tmp, data);
+  fs.renameSync(tmp, target);
+}
+
 function entryIsDashOwned(entry: unknown): boolean {
   if (!entry || typeof entry !== 'object') return false;
   const hooks = (entry as { hooks?: unknown }).hooks;
   if (!Array.isArray(hooks)) return false;
-  return hooks.some(
-    (h) => !!h && typeof h === 'object' && (h as { __dash?: unknown }).__dash === true,
-  );
+  return hooks.some((h) => isDashOwnedHook(h));
+}
+
+function isDashOwnedHook(h: unknown): boolean {
+  if (!h || typeof h !== 'object') return false;
+  // Primary: the explicit __dash brand we wrote.
+  if ((h as { __dash?: unknown }).__dash === true) return true;
+  // Fallback: if the brand was lost in a round-trip (Claude Code or a tool
+  // re-serialising the file may strip unknown fields), recognise hooks
+  // pointing at our HookServer's loopback URL by URL prefix. Without this
+  // fallback, every refresh would append a fresh tagged entry and the file
+  // would accumulate duplicate Dash hooks indefinitely.
+  const port = hookServer.port;
+  if (port > 0) {
+    const dashUrlPrefix = `http://127.0.0.1:${port}/hook/`;
+    const url = (h as { url?: unknown }).url;
+    if (typeof url === 'string' && url.startsWith(dashUrlPrefix)) return true;
+  }
+  return false;
 }
 
 function broadcastToast(message: string): void {
@@ -702,7 +773,7 @@ export function cleanupHookSettings(): void {
       if (Object.keys(raw).length === 0) {
         fs.unlinkSync(settingsPath);
       } else {
-        fs.writeFileSync(settingsPath, JSON.stringify(raw, null, 2) + '\n');
+        atomicWriteFileSync(settingsPath, JSON.stringify(raw, null, 2) + '\n');
       }
     } catch (err) {
       console.error(`[cleanupHookSettings] Failed for ${settingsPath}:`, err);
@@ -763,6 +834,7 @@ export async function startDirectPty(options: {
   // entirely if /clear was the last interaction). Otherwise `claude -r` would
   // reload pre-clear messages.
   let skipResume = false;
+  let forkFailedTaskName: string | null = null;
   const candidateIds = [resumeId, options.id].filter((id, i, arr) => id && arr.indexOf(id) === i);
   for (const id of candidateIds) {
     if (!hasSessionForId(options.cwd, id)) continue;
@@ -774,8 +846,17 @@ export async function startDirectPty(options: {
       } catch (err) {
         console.error('[spawnDirectClaude] persist forked session id failed:', err);
       }
-    } else if (fork.kind === 'clear-only') {
+    } else if (fork.kind === 'clear-only' || fork.kind === 'fork-failed') {
+      // Both states force a fresh session: 'clear-only' because there's
+      // nothing post-clear to resume, 'fork-failed' because resuming the
+      // original jsonl would resurrect the user's pre-clear chat.
       skipResume = true;
+      if (fork.kind === 'fork-failed') {
+        forkFailedTaskName = task?.name ?? options.id;
+        console.error(
+          `[spawnDirectClaude] fork past /clear failed for ${options.id}: ${fork.error}; starting fresh`,
+        );
+      }
     }
     break;
   }
@@ -810,6 +891,14 @@ export async function startDirectPty(options: {
         DatabaseService.setTaskLastSessionId(options.id, newSessionId);
       } catch (err) {
         console.error('[spawnDirectClaude] persist post-clear session id failed:', err);
+      }
+      if (forkFailedTaskName) {
+        // Privacy-relevant: the previous jsonl was kept on disk but we refuse
+        // to resume it. Tell the user so they're not surprised by the fresh
+        // session and can recover via /resume if needed.
+        broadcastToast(
+          `Couldn't fork past /clear for "${forkFailedTaskName}" — starting fresh. Previous chat is still on disk; use /resume to find it.`,
+        );
       }
     } else if (hadPriorUse && task) {
       // Task had prior use (snapshot or captured session id) but we couldn't

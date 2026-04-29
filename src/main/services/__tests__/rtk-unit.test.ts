@@ -1,4 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
 
 // RtkService imports `app` from electron for userData paths, which isn't
 // available in the vitest Node env. The helpers we test don't touch it.
@@ -13,8 +17,10 @@ import { __test__ } from '../RtkService';
 const {
   assertTrustedDownloadUrl,
   assertSafeArchiveMember,
+  parseTarVerbose,
   shellQuoteUnix,
   extractRewrittenCommand,
+  verifyChecksum,
 } = __test__;
 
 describe('assertTrustedDownloadUrl', () => {
@@ -63,31 +69,65 @@ describe('assertTrustedDownloadUrl', () => {
 
 describe('assertSafeArchiveMember', () => {
   const dest = process.platform === 'win32' ? 'C:\\tmp\\rtk-bin' : '/tmp/rtk-bin';
+  const file = (name: string) => ({ type: 'file' as const, name });
 
   it('accepts a plain file at archive root', () => {
-    expect(() => assertSafeArchiveMember('rtk', dest)).not.toThrow();
+    expect(() => assertSafeArchiveMember(file('rtk'), dest)).not.toThrow();
   });
 
   it('accepts nested-under-directory entries that stay inside dest', () => {
-    expect(() => assertSafeArchiveMember('nested/rtk', dest)).not.toThrow();
+    expect(() => assertSafeArchiveMember(file('nested/rtk'), dest)).not.toThrow();
+  });
+
+  it('accepts directories', () => {
+    expect(() => assertSafeArchiveMember({ type: 'dir', name: 'subdir/' }, dest)).not.toThrow();
+  });
+
+  it('rejects symlinks regardless of target — tar would honor the link at extract time', () => {
+    // A symlink whose name is benign (`./rtk`) but whose target points outside
+    // dest is the canonical defense-in-depth bypass: the entry-name validator
+    // sees nothing wrong, but `tar -xzf` writes through the link.
+    expect(() => assertSafeArchiveMember({ type: 'symlink', name: 'rtk' }, dest)).toThrow(
+      /symlink/,
+    );
+  });
+
+  it('rejects hardlinks for the same reason', () => {
+    expect(() => assertSafeArchiveMember({ type: 'hardlink', name: 'rtk' }, dest)).toThrow(
+      /hardlink/,
+    );
+  });
+
+  it('rejects unsupported member types (sockets, fifos, devices)', () => {
+    expect(() => assertSafeArchiveMember({ type: 'other', name: 'weird' }, dest)).toThrow(
+      /unsupported/,
+    );
+  });
+
+  it('rejects entries with embedded null bytes', () => {
+    // Some libcs truncate at \0; without this check a name like "rtk\0/etc/passwd"
+    // could pass the dest-prefix test then resolve elsewhere downstream.
+    expect(() => assertSafeArchiveMember(file('rtk\0../etc/passwd'), dest)).toThrow(/null byte/);
   });
 
   it('rejects absolute Unix paths', () => {
-    expect(() => assertSafeArchiveMember('/etc/passwd', dest)).toThrow(/absolute/);
+    expect(() => assertSafeArchiveMember(file('/etc/passwd'), dest)).toThrow(/absolute/);
   });
 
   it('rejects absolute Windows paths', () => {
-    expect(() => assertSafeArchiveMember('C:\\Windows\\System32\\evil.exe', dest)).toThrow(
+    expect(() => assertSafeArchiveMember(file('C:\\Windows\\System32\\evil.exe'), dest)).toThrow(
       /absolute/,
     );
   });
 
   it('rejects parent-traversal (..) that escapes dest', () => {
-    expect(() => assertSafeArchiveMember('../../etc/passwd', dest)).toThrow(/escapes/);
+    expect(() => assertSafeArchiveMember(file('../../etc/passwd'), dest)).toThrow(/escapes/);
   });
 
   it('rejects mixed traversal paths', () => {
-    expect(() => assertSafeArchiveMember('subdir/../../../etc/evil', dest)).toThrow(/escapes/);
+    expect(() => assertSafeArchiveMember(file('subdir/../../../etc/evil'), dest)).toThrow(
+      /escapes/,
+    );
   });
 
   it('rejects backslash-traversal (Windows-style) on any OS', () => {
@@ -95,7 +135,9 @@ describe('assertSafeArchiveMember', () => {
     // helper, POSIX pathResolve would treat the backslashes as literal
     // filename chars and this entry would land inside destDir as a file
     // literally named "..\\..\\etc\\passwd" — a security-sensitive false pass.
-    expect(() => assertSafeArchiveMember('..\\..\\etc\\passwd', dest)).toThrow(/escapes|absolute/);
+    expect(() => assertSafeArchiveMember(file('..\\..\\etc\\passwd'), dest)).toThrow(
+      /escapes|absolute/,
+    );
   });
 });
 
@@ -210,5 +252,105 @@ describe('settings.local.json merge safety (entryIsDashOwned)', () => {
       ],
     };
     expect(entryIsDashOwned(entry)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Archive integrity: SHA-256 verification is one of the load-bearing security
+// claims of the install flow ("Refusing to install" on mismatch). A regression
+// (e.g. truncated comparison, swapped operator) needs to fail this test, not
+// silently let a corrupt/swapped binary onto disk.
+// ---------------------------------------------------------------------------
+
+describe('verifyChecksum', () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'rtk-unit-'));
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  function writeFixture(name: string, body: string): { path: string; sha: string } {
+    const p = join(dir, name);
+    writeFileSync(p, body);
+    const sha = createHash('sha256').update(body).digest('hex');
+    return { path: p, sha };
+  }
+
+  it('accepts a matching checksum', async () => {
+    const { path, sha } = writeFixture('ok.bin', 'rtk binary contents');
+    await expect(verifyChecksum(path, sha)).resolves.toBeUndefined();
+  });
+
+  it('rejects a one-character-off checksum (the canonical regression)', async () => {
+    // A truncated comparison (`actual.startsWith(expected.slice(0, 8))`) or a
+    // swapped operator (`===` → `!==`) would let this through. Mutating one
+    // hex char makes the assertion pinpoint the equality check itself.
+    const { path, sha } = writeFixture('mismatch.bin', 'rtk binary contents');
+    const tampered = sha.slice(0, -1) + (sha.endsWith('a') ? 'b' : 'a');
+    await expect(verifyChecksum(path, tampered)).rejects.toThrow(
+      /Checksum mismatch.*Refusing to install/,
+    );
+  });
+
+  it('rejects when the file content is mutated post-write', async () => {
+    // Computes sha against original bytes, then writes different bytes — the
+    // streaming hash should pick up the change.
+    const { path, sha } = writeFixture('orig.bin', 'original content');
+    writeFileSync(path, 'tampered content');
+    await expect(verifyChecksum(path, sha)).rejects.toThrow(/Checksum mismatch/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tar verbose-output parsing: type-char detection is the only thing standing
+// between a malicious symlink-bearing tarball and chmod-following the link
+// out of dest. Both BSD (macOS) and GNU tar prefix entries with the mode
+// string, so the first column is the file type ('-', 'd', 'l', 'h', ...).
+// ---------------------------------------------------------------------------
+
+describe('parseTarVerbose', () => {
+  it('parses BSD-style (macOS) verbose lines', () => {
+    const out = parseTarVerbose(
+      [
+        '-rwxr-xr-x  0 root  wheel  1234567 Jan  1 00:00 rtk',
+        'drwxr-xr-x  0 root  wheel        0 Jan  1 00:00 doc/',
+      ].join('\n'),
+    );
+    expect(out).toEqual([
+      { type: 'file', name: 'rtk' },
+      { type: 'dir', name: 'doc/' },
+    ]);
+  });
+
+  it('parses GNU-style verbose lines', () => {
+    const out = parseTarVerbose(
+      [
+        '-rwxr-xr-x user/group  1234567 2024-01-01 00:00 rtk',
+        'lrwxrwxrwx user/group        0 2024-01-01 00:00 evil -> /etc/passwd',
+      ].join('\n'),
+    );
+    expect(out).toEqual([
+      { type: 'file', name: 'rtk' },
+      { type: 'symlink', name: 'evil' },
+    ]);
+  });
+
+  it('strips " -> target" from symlink lines so name validation only sees the entry path', () => {
+    const out = parseTarVerbose('lrwxrwxrwx user 0 date evil -> /etc/passwd');
+    expect(out).toHaveLength(1);
+    expect(out[0]).toEqual({ type: 'symlink', name: 'evil' });
+  });
+
+  it('classifies hardlinks as hardlink', () => {
+    const out = parseTarVerbose('hrw-r--r-- user 1234 date hardlink');
+    expect(out[0].type).toBe('hardlink');
+  });
+
+  it('falls back to "other" for unknown type chars', () => {
+    const out = parseTarVerbose('crw-r--r-- user 0 date weird-device');
+    expect(out[0].type).toBe('other');
   });
 });

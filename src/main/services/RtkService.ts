@@ -6,6 +6,8 @@ import {
   createReadStream,
   createWriteStream,
   chmodSync,
+  lstatSync,
+  renameSync,
   rmSync,
 } from 'node:fs';
 import { mkdtemp, writeFile, mkdir, rm } from 'node:fs/promises';
@@ -19,7 +21,7 @@ import { createHash } from 'node:crypto';
 import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import { app } from 'electron';
 import type { WebContents } from 'electron';
-import type { RtkStatus, RtkDownloadProgress, RtkTestResult } from '@shared/types';
+import type { RtkStatus, RtkSource, RtkDownloadProgress, RtkTestResult } from '@shared/types';
 
 const execFileAsync = promisify(execFile);
 
@@ -34,13 +36,16 @@ export class RtkService {
   private static sender: WebContents | null = null;
   private static cachedResolution: {
     path: string;
-    source: 'path' | 'managed';
+    source: RtkSource;
     version: string;
   } | null = null;
   private static downloadInFlight: Promise<void> | null = null;
   // Mirrors the on-disk rtk-config.json flag; saves a disk read per hook write.
   // null = not yet loaded; hydrated on first isEnabled() call and after setEnabled().
   private static enabledCache: boolean | null = null;
+  // Track whether we've already toasted a corrupt-config warning, so we don't
+  // spam the user once per hook write — they only need to see it once.
+  private static corruptConfigToasted = false;
 
   static setSender(sender: WebContents): void {
     RtkService.sender = sender;
@@ -64,6 +69,9 @@ export class RtkService {
         console.warn(
           '[RtkService.isEnabled] rtk-config.json "enabled" is not a boolean; treating as false.',
         );
+        RtkService.notifyCorruptConfig(
+          'RTK config has an invalid "enabled" value — RTK is off until you re-toggle it in Settings.',
+        );
       }
       RtkService.enabledCache = value;
       return value;
@@ -72,8 +80,24 @@ export class RtkService {
         '[RtkService.isEnabled] rtk-config.json unreadable, treating as disabled:',
         err,
       );
+      // The user toggled RTK on at some point; a corrupt config now silently
+      // means hooks stop firing in every spawn. Surface it instead of letting
+      // the toggle keep showing ON while reality says OFF.
+      RtkService.notifyCorruptConfig(
+        `RTK config is unreadable (${err instanceof Error ? err.message : String(err)}) — RTK is off until you re-toggle it in Settings.`,
+      );
       RtkService.enabledCache = false;
       return false;
+    }
+  }
+
+  /** Toast a corrupt-config warning once per process lifetime. */
+  private static notifyCorruptConfig(message: string): void {
+    if (RtkService.corruptConfigToasted) return;
+    RtkService.corruptConfigToasted = true;
+    const sender = RtkService.sender;
+    if (sender && !sender.isDestroyed()) {
+      sender.send('app:toast', { message });
     }
   }
 
@@ -87,8 +111,16 @@ export class RtkService {
     }
     const p = RtkService.getConfigPath();
     mkdirSync(dirname(p), { recursive: true });
-    writeFileSync(p, JSON.stringify({ enabled }, null, 2));
+    // Atomic write: tmp + rename so a crash here can never leave a half-
+    // flushed JSON file that isEnabled() would treat as corrupt and silently
+    // disable RTK on the next launch.
+    const tmp = `${p}.tmp-${process.pid}-${Date.now()}`;
+    writeFileSync(tmp, JSON.stringify({ enabled }, null, 2));
+    renameSync(tmp, p);
     RtkService.enabledCache = enabled;
+    // A successful write means the file is good. Clear the "we already toasted"
+    // latch so a later re-corruption (manual edit, disk error) toasts again.
+    RtkService.corruptConfigToasted = false;
   }
 
   private static getManagedBinDir(): string {
@@ -111,7 +143,7 @@ export class RtkService {
 
   private static async resolveBinary(): Promise<{
     path: string;
-    source: 'path' | 'managed';
+    source: RtkSource;
     version: string;
   } | null> {
     const managed = RtkService.getManagedBinPath();
@@ -171,16 +203,23 @@ export class RtkService {
 
   static async getStatus(): Promise<RtkStatus> {
     const resolved = await RtkService.resolveBinary();
-    RtkService.cachedResolution = resolved;
+    // Only update the cache on a positive resolution. A transient failure
+    // (probe timeout, `which` flake) used to clobber a previously-good entry,
+    // which made getHookCommand() silently return null while isEnabled() on
+    // disk still said the toggle was ON — the UI would lie about RTK firing.
+    if (resolved) {
+      RtkService.cachedResolution = resolved;
+    }
 
     const enabled = RtkService.isEnabled();
     const downloadable = RtkService.isPlatformDownloadable();
-    if (resolved) {
+    const effective = resolved ?? RtkService.cachedResolution;
+    if (effective) {
       return {
         installed: true,
-        version: resolved.version,
-        path: resolved.path,
-        source: resolved.source,
+        version: effective.version,
+        path: effective.path,
+        source: effective.source,
         enabled,
         downloadable,
       };
@@ -190,7 +229,18 @@ export class RtkService {
 
   /** Populates cachedResolution so getHookCommand() is synchronous later. */
   static async warmUp(): Promise<void> {
-    RtkService.cachedResolution = await RtkService.resolveBinary();
+    const resolved = await RtkService.resolveBinary();
+    if (resolved) RtkService.cachedResolution = resolved;
+  }
+
+  /**
+   * Force-clear the cached resolution. Call when the binary has been removed
+   * from disk (uninstall flow) — there is no read-only path to "the binary is
+   * gone" elsewhere, so without this, stale cache could keep getHookCommand()
+   * returning a path that no longer exists.
+   */
+  static invalidateCache(): void {
+    RtkService.cachedResolution = null;
   }
 
   // No Windows native release exists upstream — manual-install guidance only there.
@@ -315,6 +365,14 @@ export class RtkService {
       if (!existsSync(binPath)) {
         throw new Error(`Archive did not contain expected binary at ${binPath}`);
       }
+      // Defense-in-depth: even though verifyArchive rejected symlinks/hardlinks
+      // at preflight, lstat the extracted binary before chmod. chmodSync on a
+      // symlink would follow the link and modify the target instead of binPath.
+      const stat = lstatSync(binPath);
+      if (!stat.isFile()) {
+        rmSync(binPath, { force: true });
+        throw new Error(`Extracted binary is not a regular file at ${binPath}`);
+      }
       // Must chmod before the probeVersion spawn below; tar on some systems drops +x.
       chmodSync(binPath, 0o755);
 
@@ -346,15 +404,8 @@ export class RtkService {
     throw new Error(`checksums.txt does not list ${assetName}`);
   }
 
-  private static async verifyChecksum(filePath: string, expectedSha: string): Promise<void> {
-    const hash = createHash('sha256');
-    await pipeline(createReadStream(filePath), hash);
-    const actual = hash.digest('hex');
-    if (actual !== expectedSha) {
-      throw new Error(
-        `Checksum mismatch: expected ${expectedSha}, got ${actual}. Refusing to install.`,
-      );
-    }
+  private static verifyChecksum(filePath: string, expectedSha: string): Promise<void> {
+    return verifyChecksum(filePath, expectedSha);
   }
 
   private static async fetchToFile(url: string, dest: string): Promise<void> {
@@ -390,8 +441,10 @@ export class RtkService {
 
   private static async verifyArchive(archivePath: string): Promise<void> {
     try {
-      // Also validates every member is relative and stays inside dest (prevents
-      // path-traversal via crafted archives).
+      // Validates every member is relative, stays inside dest, AND is a
+      // regular file or directory — symlinks/hardlinks are refused outright
+      // because tar honors their targets at extract time, which would let a
+      // crafted archive write outside dest even though the entry name is safe.
       const entries = await RtkService.listTarball(archivePath);
       const dest = RtkService.getManagedBinDir();
       for (const entry of entries) {
@@ -420,9 +473,13 @@ export class RtkService {
     ]);
   }
 
-  private static listTarball(archivePath: string): Promise<string[]> {
+  private static listTarball(archivePath: string): Promise<TarEntry[]> {
     return new Promise((resolveP, rejectP) => {
-      const proc = spawn('tar', ['-tzf', archivePath], {
+      // -tvf prints "<mode> <owner> <size> <mtime> <name>[ -> target]" per entry.
+      // The first char of the mode column is the file type ('-' regular, 'd'
+      // directory, 'l' symlink, 'h' hardlink); we use it to reject link types
+      // before extraction. Both BSD (macOS) and GNU tar use this format.
+      const proc = spawn('tar', ['-tvzf', archivePath], {
         stdio: ['ignore', 'pipe', 'pipe'],
         timeout: TAR_TIMEOUT_MS,
       });
@@ -442,9 +499,9 @@ export class RtkService {
         }
       });
       proc.on('exit', (code, signal) => {
-        if (signal) rejectP(new Error(`tar -tzf killed by signal ${signal} (timed out?)`));
-        else if (code === 0) resolveP(stdout.split(/\r?\n/).filter(Boolean));
-        else rejectP(new Error(`tar -tzf exited ${code}: ${stderr.trim()}`));
+        if (signal) rejectP(new Error(`tar -tvzf killed by signal ${signal} (timed out?)`));
+        else if (code === 0) resolveP(parseTarVerbose(stdout));
+        else rejectP(new Error(`tar -tvzf exited ${code}: ${stderr.trim()}`));
       });
     });
   }
@@ -545,6 +602,9 @@ export class RtkService {
         rawOutput: stdout.slice(0, 2000),
         ...(code === 2 ? { blocked: { stderr: stderr.trim().slice(0, 400) } } : {}),
         ...(execDiff ? { execDiff } : {}),
+        // execDiff `kind: 'failed'` is forwarded as-is; the renderer renders
+        // it as a "couldn't capture diff" warning rather than the green
+        // pass-through banner that null used to produce.
       };
     } catch (err) {
       return { ok: false, testedCommand, error: err instanceof Error ? err.message : String(err) };
@@ -554,15 +614,25 @@ export class RtkService {
   /**
    * Execute both the raw and rtk-rewritten commands inside a throwaway git
    * repo populated with enough untracked files to make `git status` verbose.
-   * Returns null on any failure — this is a best-effort visualization, not a
-   * correctness check. The rewrite-directive check above already proved rtk
-   * is working; this just makes the compression visible to the user.
+   * Returns a `failed` variant on any error rather than null — the previous
+   * null-on-error meant the UI rendered the green "rtk chose pass-through"
+   * card for genuine failures (missing git, EACCES on tmpdir, rtk panic).
    */
   private static async captureExecDiff(
     rawCommand: string,
     rewrittenCommand: string,
-  ): Promise<import('@shared/types').RtkExecDiff | null> {
-    const dir = await mkdtemp(join(tmpdir(), 'dash-rtk-verify-'));
+  ): Promise<import('@shared/types').RtkExecDiff> {
+    let dir: string;
+    try {
+      dir = await mkdtemp(join(tmpdir(), 'dash-rtk-verify-'));
+    } catch (err) {
+      return {
+        kind: 'failed',
+        stage: 'setup',
+        reason: `Couldn't create temp dir: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+
     try {
       // Give `git status` something non-trivial to emit — multiple files
       // across a few directories so rtk's grouping/dedup filters have work.
@@ -585,7 +655,16 @@ export class RtkService {
         ),
       ]);
 
-      await runShell('git init -q', dir);
+      const initRes = await runShell('git init -q', dir);
+      if (initRes.code !== 0) {
+        return {
+          kind: 'failed',
+          stage: 'setup',
+          exitCode: initRes.code ?? undefined,
+          stderr: initRes.stderr.slice(0, 400),
+          reason: `git init failed (exit ${initRes.code ?? 'null'}). Is git installed?`,
+        };
+      }
 
       // Make sure rtk resolves from the rewritten command even when the user
       // never installed it on the system PATH — prepend our managed bin dir.
@@ -598,19 +677,48 @@ export class RtkService {
         runShell(rewrittenCommand, dir, env),
       ]);
 
-      // Trim IPC payload but report the TRUE byte counts so savings math stays honest.
+      if (rawRes.code !== 0) {
+        return {
+          kind: 'failed',
+          stage: 'raw',
+          exitCode: rawRes.code ?? undefined,
+          stderr: rawRes.stderr.slice(0, 400),
+          reason: `Raw command exited ${rawRes.code ?? 'null'}: ${rawCommand}`,
+        };
+      }
+      if (rewrittenRes.code !== 0) {
+        return {
+          kind: 'failed',
+          stage: 'rewritten',
+          exitCode: rewrittenRes.code ?? undefined,
+          stderr: rewrittenRes.stderr.slice(0, 400),
+          reason: `Rewritten command exited ${rewrittenRes.code ?? 'null'}: ${rewrittenCommand}`,
+        };
+      }
+
+      // Trim IPC payload. When stdout hit the cap, byte counts reflect the
+      // truncated buffer (we stopped reading) — surface that via `truncated`
+      // so the UI can warn instead of advertising a misleading savings %.
       const DISPLAY_CAP = 8 * 1024;
       return {
+        kind: 'ok',
         rawStdout: rawRes.stdout.slice(0, DISPLAY_CAP),
         compressedStdout: rewrittenRes.stdout.slice(0, DISPLAY_CAP),
         rawBytes: Buffer.byteLength(rawRes.stdout),
         compressedBytes: Buffer.byteLength(rewrittenRes.stdout),
+        truncated: rawRes.truncated || rewrittenRes.truncated,
       };
     } catch (err) {
-      console.warn('[RtkService.captureExecDiff] non-fatal:', err);
-      return null;
+      console.warn('[RtkService.captureExecDiff] unexpected:', err);
+      return {
+        kind: 'failed',
+        stage: 'unknown',
+        reason: err instanceof Error ? err.message : String(err),
+      };
     } finally {
-      await rm(dir, { recursive: true, force: true }).catch(() => {});
+      await rm(dir, { recursive: true, force: true }).catch((err) => {
+        console.warn('[RtkService.captureExecDiff] tmpdir cleanup failed:', err);
+      });
     }
   }
 }
@@ -629,21 +737,24 @@ function runShell(
   cwd: string,
   env: NodeJS.ProcessEnv = process.env,
   timeoutMs = 15_000,
-): Promise<{ stdout: string; stderr: string; code: number | null }> {
+): Promise<{ stdout: string; stderr: string; code: number | null; truncated: boolean }> {
   return new Promise((resolveP, rejectP) => {
     const shell = process.platform === 'win32' ? 'cmd.exe' : 'sh';
     const args = process.platform === 'win32' ? ['/c', cmd] : ['-c', cmd];
     const proc = spawn(shell, args, { cwd, env, timeout: timeoutMs });
     let stdout = '';
     let stderr = '';
+    let truncated = false;
     proc.stdout.on('data', (c: Buffer) => {
       if (stdout.length < RUN_SHELL_OUTPUT_CAP) stdout += c.toString();
+      else truncated = true;
     });
     proc.stderr.on('data', (c: Buffer) => {
       if (stderr.length < RUN_SHELL_OUTPUT_CAP) stderr += c.toString();
+      else truncated = true;
     });
     proc.on('error', rejectP);
-    proc.on('close', (code) => resolveP({ stdout, stderr, code }));
+    proc.on('close', (code) => resolveP({ stdout, stderr, code, truncated }));
   });
 }
 
@@ -752,21 +863,94 @@ function assertTrustedDownloadUrl(raw: string): void {
   }
 }
 
-function assertSafeArchiveMember(entry: string, destDir: string): void {
+type TarMemberType = 'file' | 'dir' | 'symlink' | 'hardlink' | 'other';
+
+interface TarEntry {
+  /** First char of the mode column from `tar -tvf` (`-`, `d`, `l`, `h`, ...). */
+  type: TarMemberType;
+  name: string;
+}
+
+function parseTarVerbose(stdout: string): TarEntry[] {
+  const out: TarEntry[] = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    if (!line) continue;
+    // Lines start with the mode string; first char encodes the file type.
+    const typeChar = line[0];
+    let type: TarMemberType;
+    switch (typeChar) {
+      case '-':
+        type = 'file';
+        break;
+      case 'd':
+        type = 'dir';
+        break;
+      case 'l':
+        type = 'symlink';
+        break;
+      case 'h':
+        type = 'hardlink';
+        break;
+      default:
+        type = 'other';
+    }
+    // Strip "<name> -> <target>" tail so name validation only sees the entry path.
+    // The target itself doesn't need validation: we reject symlinks/hardlinks outright.
+    const arrow = line.indexOf(' -> ');
+    const trail = arrow >= 0 ? line.slice(0, arrow) : line;
+    // Name is the last whitespace-delimited token (mode/owner/size/date have
+    // varying field counts between BSD and GNU tar; the name is always last).
+    const tokens = trail.split(/\s+/);
+    const name = tokens[tokens.length - 1];
+    if (name) out.push({ type, name });
+  }
+  return out;
+}
+
+function assertSafeArchiveMember(entry: TarEntry, destDir: string): void {
+  // Refuse symlinks/hardlinks outright. `tar -xzf` honors their targets at
+  // extract time, so a crafted archive with `rtk -> /etc/passwd` would let
+  // chmod/exec follow the link out of dest even though the entry name is
+  // benign. Defense-in-depth: SHA-256 + URL allowlist already make this hard
+  // to reach, but the link types themselves are never legitimate in an rtk
+  // release tarball.
+  if (entry.type === 'symlink' || entry.type === 'hardlink') {
+    throw new Error(`Archive contains ${entry.type}, which is not allowed: ${entry.name}`);
+  }
+  if (entry.type === 'other') {
+    throw new Error(`Archive contains unsupported member type: ${entry.name}`);
+  }
+  // Reject embedded null bytes — tar entries should never contain them, and
+  // some libcs truncate at \0 which could let a malicious entry name slip
+  // past a downstream check.
+  if (entry.name.includes('\0')) {
+    throw new Error(`Archive member contains null byte: ${JSON.stringify(entry.name)}`);
+  }
   // Reject absolute paths. The Windows-drive regex runs on every platform by
   // design: a tarball authored on Windows can reach any OS, so we refuse
   // `C:\...` entries regardless of where extraction happens.
-  if (entry.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(entry)) {
-    throw new Error(`Archive contains absolute path: ${entry}`);
+  if (entry.name.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(entry.name)) {
+    throw new Error(`Archive contains absolute path: ${entry.name}`);
   }
   // Normalize backslashes to forward slashes before resolve(). On POSIX,
   // path.resolve treats `\` as a literal filename character, so `..\\evil`
   // would not be recognised as a parent-traversal attempt without this step.
-  const normalized = normalize(entry.replace(/\\/g, '/'));
+  const normalized = normalize(entry.name.replace(/\\/g, '/'));
   const resolved = resolve(destDir, normalized);
   const base = resolve(destDir) + sep;
   if (resolved !== resolve(destDir) && !resolved.startsWith(base)) {
-    throw new Error(`Archive member escapes destDir: ${entry}`);
+    throw new Error(`Archive member escapes destDir: ${entry.name}`);
+  }
+}
+
+async function verifyChecksum(filePath: string, expectedSha: string): Promise<void> {
+  const hash = createHash('sha256');
+  await pipeline(createReadStream(filePath), hash);
+  const actual = hash.digest('hex');
+  if (actual !== expectedSha) {
+    throw new Error(
+      `Checksum mismatch: expected ${expectedSha}, got ${actual}. Refusing to install.`,
+    );
   }
 }
 
@@ -791,6 +975,8 @@ async function fetchWithTimeout(
 export const __test__ = {
   assertTrustedDownloadUrl,
   assertSafeArchiveMember,
+  parseTarVerbose,
   shellQuoteUnix,
   extractRewrittenCommand,
+  verifyChecksum,
 };

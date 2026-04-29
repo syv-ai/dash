@@ -198,11 +198,28 @@ export function App() {
   const [rtkDownloadProgress, setRtkDownloadProgress] = useState<RtkDownloadProgress | null>(null);
 
   useEffect(() => {
-    window.electronAPI.rtkGetStatus().then((resp) => {
-      if (resp.success && resp.data) setRtkStatus(resp.data);
-      else console.error('[rtk:getStatus]', resp.error);
-    });
-    return window.electronAPI.onRtkDownloadProgress((progress) => {
+    // Retry once on transient failure — without it, a single flake at startup
+    // leaves rtkStatus null forever and the Settings card stays stuck on
+    // "loading…". Manual retry is exposed in the UI via a `loadRtkError` flag.
+    let cancelled = false;
+    const tryFetch = (attempt: number): void => {
+      window.electronAPI.rtkGetStatus().then((resp) => {
+        if (cancelled) return;
+        if (resp.success && resp.data) {
+          setRtkStatus(resp.data);
+        } else if (attempt < 1) {
+          console.warn('[rtk:getStatus] retrying after transient failure:', resp.error);
+          setTimeout(() => tryFetch(attempt + 1), 500);
+        } else {
+          console.error('[rtk:getStatus] gave up after retry:', resp.error);
+          // Surface a sentinel so the Settings card can show a manual retry
+          // button instead of an infinite spinner.
+          setRtkStatus({ installed: false, enabled: false, downloadable: false });
+        }
+      });
+    };
+    tryFetch(0);
+    const cleanup = window.electronAPI.onRtkDownloadProgress((progress) => {
       setRtkDownloadProgress(progress);
       if (progress.phase === 'done') {
         window.electronAPI.rtkGetStatus().then((resp) => {
@@ -211,6 +228,10 @@ export function App() {
         });
       }
     });
+    return () => {
+      cancelled = true;
+      cleanup();
+    };
   }, []);
 
   // Sync desktop notification settings to main process
@@ -1781,6 +1802,12 @@ export function App() {
               // bypasses the progress stream — surface it here too.
               if (!resp.success) {
                 setRtkDownloadProgress({ phase: 'error', error: resp.error ?? 'download failed' });
+                return;
+              }
+              // Install succeeded; surface a partial-refresh warning if any
+              // active task couldn't pick up the new hook live.
+              if (resp.data?.warning) {
+                toast.warning(resp.data.warning);
               }
             });
           }}

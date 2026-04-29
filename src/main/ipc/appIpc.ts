@@ -163,8 +163,11 @@ export function registerAppIpc(): void {
 
   // Electron's clipboard module bypasses the web clipboard API, which is
   // unreliable on Linux (Wayland permission prompts, silent failures when
-  // the page loses focus between keydown and the async write).
-  ipcMain.on('app:clipboardWriteText', (_event, text: string) => {
+  // the page loses focus between keydown and the async write). Both write
+  // and read use `handle` so the renderer can `await` and surface failures —
+  // a fire-and-forget write would mean a wedged main process leaves the user
+  // pasting stale content elsewhere with no signal.
+  ipcMain.handle('app:clipboardWriteText', (_event, text: string) => {
     clipboard.writeText(text);
   });
   ipcMain.handle('app:clipboardReadText', () => {

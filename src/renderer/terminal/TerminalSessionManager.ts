@@ -160,7 +160,11 @@ export class TerminalSessionManager {
         const sel = this.terminal.getSelection() || (isExplicitCopy ? this.lastSelection : '');
         if (sel) {
           e.preventDefault();
-          window.electronAPI.clipboardWriteText(sel);
+          // Surface clipboard write failures — fire-and-forget would let the
+          // user paste stale content elsewhere with no signal that copy failed.
+          window.electronAPI.clipboardWriteText(sel).catch((err: unknown) => {
+            console.warn('[terminal] clipboardWriteText failed:', err);
+          });
           return false;
         }
       }
@@ -171,9 +175,16 @@ export class TerminalSessionManager {
         (!isMac && e.ctrlKey && e.shiftKey && isKeyV)
       ) {
         e.preventDefault();
-        window.electronAPI.clipboardReadText().then((text) => {
-          if (text) window.electronAPI.ptyInput({ id: this.id, data: text });
-        });
+        window.electronAPI
+          .clipboardReadText()
+          .then((text) => {
+            if (text) window.electronAPI.ptyInput({ id: this.id, data: text });
+          })
+          .catch((err: unknown) => {
+            // Without this catch the rejection becomes an unhandled promise
+            // and the user sees "paste did nothing" with no diagnostic.
+            console.warn('[terminal] clipboardReadText failed:', err);
+          });
         return false;
       }
 

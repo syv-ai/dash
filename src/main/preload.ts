@@ -8,7 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Dialogs
   showOpenDialog: () => ipcRenderer.invoke('app:showOpenDialog'),
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
-  clipboardWriteText: (text: string) => ipcRenderer.send('app:clipboardWriteText', text),
+  clipboardWriteText: (text: string) => ipcRenderer.invoke('app:clipboardWriteText', text),
   clipboardReadText: () => ipcRenderer.invoke('app:clipboardReadText'),
   openInEditor: (args: { cwd: string; filePath: string; line?: number; col?: number }) =>
     ipcRenderer.invoke('app:openInEditor', args),

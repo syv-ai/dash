@@ -32,7 +32,7 @@ export interface ElectronAPI {
   // Dialogs
   showOpenDialog: () => Promise<IpcResponse<string[]>>;
   openExternal: (url: string) => Promise<void>;
-  clipboardWriteText: (text: string) => void;
+  clipboardWriteText: (text: string) => Promise<void>;
   clipboardReadText: () => Promise<string>;
   openInEditor: (args: {
     cwd: string;
@@ -264,7 +264,7 @@ export interface ElectronAPI {
   // RTK (Rust Token Killer)
   rtkGetStatus: () => Promise<IpcResponse<RtkStatus>>;
   rtkSetEnabled: (enabled: boolean) => Promise<IpcResponse<{ warning?: string }>>;
-  rtkDownload: () => Promise<IpcResponse<void>>;
+  rtkDownload: () => Promise<IpcResponse<{ warning?: string } | undefined>>;
   rtkTest: () => Promise<IpcResponse<RtkTestResult>>;
   onRtkDownloadProgress: (callback: (progress: RtkDownloadProgress) => void) => () => void;
 

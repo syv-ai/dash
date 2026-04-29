@@ -400,15 +400,35 @@ export type RtkDownloadProgress =
   | { phase: 'done'; version: string }
   | { phase: 'error'; error: string };
 
-export interface RtkExecDiff {
-  /** Stdout of the raw tested command, capped for IPC payload size. */
-  rawStdout: string;
-  /** Stdout of the rtk-rewritten command, capped for IPC payload size. */
-  compressedStdout: string;
-  /** Untruncated byte counts, so the UI can show honest savings math. */
-  rawBytes: number;
-  compressedBytes: number;
-}
+export type RtkExecDiff =
+  | {
+      kind: 'ok';
+      /** Stdout of the raw tested command, capped for IPC payload size. */
+      rawStdout: string;
+      /** Stdout of the rtk-rewritten command, capped for IPC payload size. */
+      compressedStdout: string;
+      /** Untruncated byte counts, so the UI can show honest savings math. */
+      rawBytes: number;
+      compressedBytes: number;
+      /** True when stdout was truncated at the runShell cap; bytes counts
+       *  reflect the truncated buffer in that case (we stop reading). */
+      truncated: boolean;
+    }
+  | {
+      /** Diff capture itself failed — distinct from "rtk chose pass-through".
+       *  UI must NOT render this as a successful no-op rewrite. */
+      kind: 'failed';
+      /** Which stage broke: `setup` (mkdtemp/git init), `raw` (the original
+       *  command), `rewritten` (the rtk-rewritten command), or `unknown`. */
+      stage: 'setup' | 'raw' | 'rewritten' | 'unknown';
+      /** Exit code when the command exited non-zero; absent when the failure
+       *  happened before spawn (mkdtemp, git init, etc.). */
+      exitCode?: number;
+      /** Truncated stderr for the failed stage, when available. */
+      stderr?: string;
+      /** Human-readable reason — what to show in the UI. */
+      reason: string;
+    };
 
 export type RtkTestResult =
   | { ok: false; testedCommand?: string; error: string }
