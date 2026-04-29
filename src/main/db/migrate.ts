@@ -127,6 +127,8 @@ export function runMigrations(): void {
     }
   }
 
+  // Deprecated since 0.9.9 — kept so existing DBs don't break, but no longer
+  // read or written. See schema.ts for rationale. Do not remove this migration.
   try {
     rawDb.exec(`ALTER TABLE tasks ADD COLUMN last_session_id TEXT`);
   } catch {

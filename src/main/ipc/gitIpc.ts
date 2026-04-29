@@ -171,54 +171,29 @@ export function registerGitIpc(): void {
     },
   );
 
-  // Check ahead/behind for a specific branch
-  ipcMain.handle(
-    'git:getBranchAheadBehind',
-    async (_event, args: { cwd: string; branch: string }) => {
-      try {
-        const data = await GitService.getBranchAheadBehind(args.cwd, args.branch);
-        return { success: true, data };
-      } catch (error) {
-        return { success: false, error: String(error) };
-      }
-    },
-  );
-
-  // Fast-forward a branch to match its remote
-  ipcMain.handle('git:pullBranch', async (_event, args: { cwd: string; branch: string }) => {
-    try {
-      await GitService.pullBranch(args.cwd, args.branch);
-      return { success: true };
-    } catch (error) {
-      const err = error as { stderr?: string };
-      const stderr = err.stderr || String(error);
-      if (/non-fast-forward/i.test(stderr) || /rejected/i.test(stderr)) {
-        return {
-          success: false,
-          error: `Branch '${args.branch}' has diverged from remote and cannot be fast-forwarded. Please resolve this manually.`,
-        };
-      }
-      return { success: false, error: stderr.split('\n')[0].trim() || String(error) };
-    }
-  });
-
-  // Checkout a branch
   ipcMain.handle('git:checkoutBranch', async (_event, args: { cwd: string; branch: string }) => {
     try {
       await GitService.checkoutBranch(args.cwd, args.branch);
       return { success: true };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
   });
 
-  // List remote branches (fetch + list)
   ipcMain.handle('git:listBranches', async (_event, cwd: string) => {
     try {
       const branches = await GitService.fetchAndListBranches(cwd);
       return { success: true, data: branches };
     } catch (error) {
-      return { success: false, error: String(error) };
+      const err = error as { stderr?: string };
+      const stderr = err.stderr?.split('\n')[0]?.trim();
+      return {
+        success: false,
+        error: stderr || (error instanceof Error ? error.message : String(error)),
+      };
     }
   });
 

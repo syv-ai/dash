@@ -94,6 +94,7 @@ export interface ElectronAPI {
     taskName: string;
     branch: string;
     projectId: string;
+    linkedIssueNumbers?: number[];
   }) => Promise<IpcResponse<WorktreeInfo>>;
   worktreeEnsureReserve: (args: {
     projectId: string;
@@ -238,12 +239,6 @@ export interface ElectronAPI {
   gitPush: (cwd: string) => Promise<IpcResponse<void>>;
   gitRemoteBranchExists: (args: { cwd: string; branch: string }) => Promise<IpcResponse<boolean>>;
 
-  // Branch operations
-  gitGetBranchAheadBehind: (args: {
-    cwd: string;
-    branch: string;
-  }) => Promise<IpcResponse<{ hasUpstream: boolean; ahead: number; behind: number }>>;
-  gitPullBranch: (args: { cwd: string; branch: string }) => Promise<IpcResponse<void>>;
   gitCheckoutBranch: (args: { cwd: string; branch: string }) => Promise<IpcResponse<void>>;
 
   // Commit graph

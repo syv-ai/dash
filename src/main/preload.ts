@@ -210,11 +210,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   gitRemoteBranchExists: (args: { cwd: string; branch: string }) =>
     ipcRenderer.invoke('git:remoteBranchExists', args),
 
-  // Branch operations
-  gitGetBranchAheadBehind: (args: { cwd: string; branch: string }) =>
-    ipcRenderer.invoke('git:getBranchAheadBehind', args),
-  gitPullBranch: (args: { cwd: string; branch: string }) =>
-    ipcRenderer.invoke('git:pullBranch', args),
   gitCheckoutBranch: (args: { cwd: string; branch: string }) =>
     ipcRenderer.invoke('git:checkoutBranch', args),
 

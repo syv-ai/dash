@@ -129,7 +129,10 @@ export function registerWorktreeIpc(): void {
         TelemetryService.capture('worktree_created_existing_branch');
         return { success: true, data };
       } catch (error) {
-        return { success: false, error: String(error) };
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
       }
     },
   );

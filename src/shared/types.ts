@@ -195,8 +195,9 @@ export interface BranchInfo {
   ref: string; // "origin/main", "origin/develop"
   shortHash: string; // "a1b2c3d"
   relativeDate: string; // "2 days ago"
-  ahead?: number; // commits ahead of remote
-  behind?: number; // commits behind remote
+  // Present iff the branch tracks a remote and we successfully measured.
+  // Both fields move together — never one without the other.
+  upstream?: { ahead: number; behind: number };
 }
 
 // ── Git Types ────────────────────────────────────────────────

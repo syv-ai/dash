@@ -12,28 +12,19 @@ import { DatabaseService } from './DatabaseService';
 const execFileAsync = promisify(execFile);
 
 /**
- * Locate the Claude projects directory for a given cwd.
- * Claude stores sessions under ~/.claude/projects/<encoded-cwd>/.
+ * Locate the Claude projects directory for a given cwd by exact path encoding.
+ * Claude stores sessions under ~/.claude/projects/<slashes-replaced-by-hyphens>/.
+ * Exact match only — a partial-match fallback would risk returning a foreign
+ * project's dir when two paths share trailing segments (e.g. branch slugs reused
+ * across projects), causing claude --continue to act on the wrong session set.
  */
 function findClaudeProjectDir(cwd: string): string | null {
   try {
     const projectsDir = path.join(os.homedir(), '.claude', 'projects');
-    if (!fs.existsSync(projectsDir)) return null;
-
-    // Path-based: slashes → hyphens (the primary naming scheme)
     const pathBased = path.join(projectsDir, cwd.replace(/\//g, '-'));
-    if (fs.existsSync(pathBased)) return pathBased;
-
-    // Partial match: last 3 path segments
-    const parts = cwd.split('/').filter((p) => p.length > 0);
-    const suffix = parts.slice(-3).join('-');
-    const dirs = fs.readdirSync(projectsDir);
-    const match = dirs.find((d) => d.endsWith(suffix));
-    if (match) return path.join(projectsDir, match);
-
-    return null;
+    return fs.existsSync(pathBased) ? pathBased : null;
   } catch (err) {
-    console.error('[findClaudeProjectDir] Failed to scan projects dir:', err);
+    console.error('[findClaudeProjectDir] Failed to check projects dir:', err);
     return null;
   }
 }
@@ -518,10 +509,16 @@ export async function startDirectPty(options: {
 
   const args: string[] = [];
 
-  // Each task has a unique cwd (worktree per task; non-worktree tasks are
-  // capped at one per project). Claude tracks its own latest session in the
-  // cwd, so `--continue` always picks the right one — including across
-  // /clear and /compact forks.
+  // Resume strategy depends on a load-bearing invariant: each task has a
+  // unique cwd. Worktree tasks get their own dir by construction; non-worktree
+  // tasks are capped at one per project (enforced in DatabaseService.saveTask /
+  // restoreTask, with UI gating in TaskModal as a first line). Because cwd is
+  // unique, Claude's own "most recent jsonl in this dir" pick is always the
+  // right session — including across /clear and /compact forks.
+  //
+  // DO NOT relax the one-non-worktree-task cap without reintroducing per-task
+  // session pinning; see git history at 32bcdb6 for the previous implementation
+  // and the issues that drove its removal.
   if (hasAnySessionForCwd(options.cwd)) {
     args.push('--continue');
   }

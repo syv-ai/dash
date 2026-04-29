@@ -36,6 +36,9 @@ export const tasks = sqliteTable(
     linkedItems: text('linked_items'),
     contextPrompt: text('context_prompt'),
     branchCreatedByDash: integer('branch_created_by_dash', { mode: 'boolean' }).default(false),
+    // Deprecated since 0.9.9: was used to pin Claude session_id captured by a
+    // SessionStart hook before we switched to `claude --continue`. Column kept
+    // to avoid a destructive migration. Do not read or write.
     lastSessionId: text('last_session_id'),
     archivedAt: text('archived_at'),
     createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),

@@ -32,6 +32,24 @@ async function git(cwd: string, args: string[]): Promise<string> {
   return stdout;
 }
 
+/** Pull stderr off a node child-process error, falling back to message. */
+function gitStderr(error: unknown): string {
+  if (error && typeof error === 'object') {
+    const e = error as { stderr?: unknown; message?: unknown };
+    if (typeof e.stderr === 'string' && e.stderr) return e.stderr;
+    if (typeof e.message === 'string') return e.message;
+  }
+  return String(error);
+}
+
+/** Wrap a translated message around the original error, preserving stderr/stack. */
+function wrapGitError(message: string, cause: unknown): Error {
+  const err = new Error(message);
+  // ES2022 has Error.cause built-in, but we target ES2020 — assign manually.
+  (err as Error & { cause?: unknown }).cause = cause;
+  return err;
+}
+
 export class GitService {
   /**
    * Fetch from remote and list remote branches sorted by most recent commit.
@@ -441,7 +459,6 @@ export class GitService {
     cwd: string,
     branch: string,
   ): Promise<{ hasUpstream: boolean; ahead: number; behind: number }> {
-    // Try configured upstream first, then fall back to origin/<branch>
     for (const ref of [`${branch}@{upstream}`, `origin/${branch}`]) {
       try {
         const out = await git(cwd, ['rev-list', '--left-right', '--count', `${ref}...${branch}`]);
@@ -451,8 +468,18 @@ export class GitService {
           behind: parseInt(parts[0], 10) || 0,
           ahead: parseInt(parts[1], 10) || 0,
         };
-      } catch {
-        // Try next ref
+      } catch (error) {
+        // Expected when this ref isn't a valid upstream (no tracking branch,
+        // or origin/<branch> doesn't exist). Anything else is unexpected and
+        // worth surfacing — timeouts, missing git binary, repo corruption.
+        const stderr = gitStderr(error);
+        const expected =
+          /unknown revision/i.test(stderr) ||
+          /bad revision/i.test(stderr) ||
+          /ambiguous argument/i.test(stderr);
+        if (!expected) {
+          console.error('[GitService.getBranchAheadBehind] unexpected error', { branch, stderr });
+        }
       }
     }
     return { hasUpstream: false, ahead: 0, behind: 0 };
@@ -473,41 +500,46 @@ export class GitService {
     for (let i = 0; i < results.length; i++) {
       const r = results[i];
       if (r.status === 'fulfilled' && r.value.hasUpstream) {
-        slice[i].ahead = r.value.ahead;
-        slice[i].behind = r.value.behind;
+        slice[i].upstream = { ahead: r.value.ahead, behind: r.value.behind };
+      } else if (r.status === 'rejected') {
+        console.error('[GitService.enrichBranchesWithAheadBehind] rejected', {
+          branch: slice[i].name,
+          reason: r.reason,
+        });
       }
     }
   }
 
   /**
-   * Checkout a branch in the working directory.
+   * Checkout a branch in the working directory. Translates common git errors
+   * into user-facing messages while preserving the original via Error.cause
+   * and a console.error log for debugging.
    */
   static async checkoutBranch(cwd: string, branch: string): Promise<void> {
     try {
       await git(cwd, ['checkout', branch]);
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
-      if (msg.includes('Your local changes') || msg.includes('would be overwritten')) {
-        throw new Error(
-          'Cannot switch branches: you have uncommitted changes that would be overwritten. Commit or stash them first.',
+      const stderr = gitStderr(error);
+      console.error('[GitService.checkoutBranch] failed', { branch, stderr });
+      // The two "would be overwritten" cases need different advice — committed
+      // changes can be stashed; untracked files cannot.
+      if (/untracked working tree files would be overwritten/i.test(stderr)) {
+        throw wrapGitError(
+          `Cannot switch branches: untracked files in the working tree would be overwritten. Move or remove them first.`,
+          error,
         );
       }
-      if (msg.includes('pathspec') && msg.includes('did not match')) {
-        throw new Error(`Branch '${branch}' not found`);
+      if (/Your local changes to the following files would be overwritten/i.test(stderr)) {
+        throw wrapGitError(
+          'Cannot switch branches: you have uncommitted changes that would be overwritten. Commit or stash them first.',
+          error,
+        );
+      }
+      if (/pathspec .* did not match/i.test(stderr)) {
+        throw wrapGitError(`Branch '${branch}' not found`, error);
       }
       throw error;
     }
-  }
-
-  /**
-   * Fast-forward a local branch to match its remote tracking branch.
-   * Works without checking out the branch. Fails if not fast-forwardable.
-   */
-  static async pullBranch(cwd: string, branch: string): Promise<void> {
-    await execFileAsync('git', ['fetch', 'origin', `${branch}:${branch}`], {
-      cwd,
-      timeout: 30000,
-    });
   }
 
   static async remoteBranchExists(cwd: string, branch: string): Promise<boolean> {
