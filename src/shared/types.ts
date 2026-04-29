@@ -378,6 +378,10 @@ export interface PixelAgentsStatus {
 
 export type RtkSource = 'path' | 'managed';
 
+// `enabled` only makes sense when a binary is installed — RtkService.setEnabled
+// throws if you try to enable without resolution. Encoding the rule in the
+// type means TS prevents the impossible state at construction; the IPC
+// pre-flight check that previously enforced it at runtime can be dropped.
 export type RtkStatus =
   | {
       installed: true;
@@ -387,11 +391,7 @@ export type RtkStatus =
       enabled: boolean;
       downloadable: boolean;
     }
-  | {
-      installed: false;
-      enabled: boolean;
-      downloadable: boolean;
-    };
+  | { installed: false; downloadable: boolean };
 
 export type RtkDownloadProgress =
   | { phase: 'downloading'; percent: number }
@@ -430,16 +430,24 @@ export type RtkExecDiff =
       reason: string;
     };
 
+// Three orthogonal optionals (`rewrittenCommand: string | null`, `blocked?`,
+// `execDiff?`) admitted impossible combinations in production code (e.g.
+// blocked AND rewritten). A nested outcome discriminant collapses them so
+// the renderer's three branches map 1:1 to representable states.
 export type RtkTestResult =
   | { ok: false; testedCommand?: string; error: string }
   | {
       ok: true;
       testedCommand: string;
-      rewrittenCommand: string | null;
       rawOutput: string;
-      // rtk uses exit 2 to *block* a tool call — surface it so the UI can
-      // explain the state rather than collapse to a binary ok/fail.
-      blocked?: { stderr: string };
-      /** Real before/after captured by actually running both commands. */
-      execDiff?: RtkExecDiff;
+      outcome: RtkTestOutcome;
     };
+
+export type RtkTestOutcome =
+  // rtk ran cleanly and chose pass-through (no rewrite for this command).
+  | { kind: 'pass-through' }
+  // rtk used exit 2 to block the tool call. Distinct from a failure.
+  | { kind: 'blocked'; stderr: string }
+  // rtk emitted a rewrite. execDiff is best-effort visualization, not a
+  // correctness signal — its absence/failure does not invalidate the rewrite.
+  | { kind: 'rewritten'; rewrittenCommand: string; execDiff?: RtkExecDiff };

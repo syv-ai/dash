@@ -1130,7 +1130,7 @@ function RtkSection({
           Inject RTK hook in tasks
         </label>
         <ToggleSwitch
-          enabled={!!status?.enabled}
+          enabled={status?.installed ? status.enabled : false}
           onToggle={onEnabledChange}
           disabled={!status?.installed}
           label="Compress Bash output via rtk before Claude reads it"
@@ -1191,129 +1191,134 @@ function RtkTestResultCard({ result }: { result: RtkTestResult }) {
     );
   }
 
-  if (result.blocked) {
-    return (
-      <div
-        className="mt-3 flex items-start gap-3 p-3 rounded-lg border border-[hsl(var(--git-modified))]/40"
-        style={{ background: 'hsl(var(--git-modified) / 0.06)' }}
-      >
-        <AlertCircle
-          size={14}
-          className="text-[hsl(var(--git-modified))] mt-0.5"
-          strokeWidth={1.8}
-        />
-        <div className="min-w-0 flex-1 space-y-1">
-          <p className="text-[11px] font-medium text-foreground">
-            rtk blocked this command (exit 2).
-          </p>
-          {result.blocked.stderr && (
-            <p className="text-[11px] text-foreground/70 font-mono break-all">
-              {result.blocked.stderr}
-            </p>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  const wouldCompress =
-    result.rewrittenCommand !== null && result.rewrittenCommand !== result.testedCommand;
-
-  if (wouldCompress) {
-    const diff = result.execDiff;
-    const okDiff = diff && diff.kind === 'ok' ? diff : null;
-    const failedDiff = diff && diff.kind === 'failed' ? diff : null;
-    const savedBytes = okDiff ? okDiff.rawBytes - okDiff.compressedBytes : 0;
-    const savedPct =
-      okDiff && okDiff.rawBytes > 0 ? Math.round((savedBytes / okDiff.rawBytes) * 100) : 0;
-
-    return (
-      <div
-        className="mt-3 p-3 rounded-lg border border-[hsl(var(--git-added))]/40 space-y-3"
-        style={{ background: 'hsl(var(--git-added) / 0.06)' }}
-      >
-        <div className="flex items-start gap-3">
-          <Check size={14} className="text-[hsl(var(--git-added))] mt-0.5" strokeWidth={1.8} />
+  switch (result.outcome.kind) {
+    case 'blocked':
+      return (
+        <div
+          className="mt-3 flex items-start gap-3 p-3 rounded-lg border border-[hsl(var(--git-modified))]/40"
+          style={{ background: 'hsl(var(--git-modified) / 0.06)' }}
+        >
+          <AlertCircle
+            size={14}
+            className="text-[hsl(var(--git-modified))] mt-0.5"
+            strokeWidth={1.8}
+          />
           <div className="min-w-0 flex-1 space-y-1">
             <p className="text-[11px] font-medium text-foreground">
-              Compression active — rtk would rewrite this command.
+              rtk blocked this command (exit 2).
             </p>
-            <div className="text-[11px] text-foreground/70 font-mono space-y-0.5">
-              <div>
-                <span className="text-foreground/40">in: </span>
-                {result.testedCommand}
-              </div>
-              <div>
-                <span className="text-foreground/40">out:</span> {result.rewrittenCommand}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {okDiff && (
-          <div className="space-y-2 pt-2 border-t border-border/40">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-medium uppercase tracking-wide text-foreground/60">
-                Actual output diff
-              </span>
-              {okDiff.rawBytes > 0 && (
-                <span className="text-[10px] font-mono text-[hsl(var(--git-added))]">
-                  {okDiff.rawBytes} → {okDiff.compressedBytes} bytes
-                  {savedBytes > 0 && ` (−${savedPct}%)`}
-                  {okDiff.truncated && ' · truncated'}
-                </span>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <OutputPanel label="raw" body={okDiff.rawStdout} />
-              <OutputPanel label="via rtk" body={okDiff.compressedStdout} accented />
-            </div>
-          </div>
-        )}
-
-        {failedDiff && (
-          // The rewrite-directive check still passed, so rtk's hook plumbing
-          // is fine — but we couldn't capture the before/after. Surface it as
-          // a warning rather than the green "all good" pass-through banner.
-          <div
-            className="space-y-1 pt-2 border-t border-border/40"
-            style={{ borderColor: 'hsl(var(--git-modified) / 0.3)' }}
-          >
-            <span className="text-[10px] font-medium uppercase tracking-wide text-[hsl(var(--git-modified))]">
-              Couldn&rsquo;t capture diff
-            </span>
-            <p className="text-[11px] text-foreground/70">{failedDiff.reason}</p>
-            {failedDiff.stderr && (
-              <pre className="text-[10px] text-foreground/50 font-mono whitespace-pre-wrap break-words">
-                {failedDiff.stderr}
-              </pre>
+            {result.outcome.stderr && (
+              <p className="text-[11px] text-foreground/70 font-mono break-all">
+                {result.outcome.stderr}
+              </p>
             )}
           </div>
-        )}
-      </div>
-    );
-  }
+        </div>
+      );
 
-  // rtk ran cleanly but chose pass-through for our test command.
-  return (
-    <div
-      className="mt-3 flex items-start gap-3 p-3 rounded-lg border border-border/40"
-      style={{ background: 'hsl(var(--surface-2))' }}
-    >
-      <AlertCircle size={14} className="text-[hsl(var(--git-modified))] mt-0.5" strokeWidth={1.8} />
-      <div className="min-w-0 flex-1">
-        <p className="text-[11px] font-medium text-foreground">
-          rtk ran without crashing, but chose not to rewrite this command.
-        </p>
-        <p className="text-[10px] text-foreground/60 mt-1">
-          That&rsquo;s valid — rtk only compresses commands in its rewrite list. The hook plumbing
-          is working; it would compress commands like{' '}
-          <code className="text-foreground/80">git status</code> or{' '}
-          <code className="text-foreground/80">cargo test</code> during real use.
-        </p>
-      </div>
-    </div>
-  );
+    case 'rewritten': {
+      const diff = result.outcome.execDiff;
+      const okDiff = diff && diff.kind === 'ok' ? diff : null;
+      const failedDiff = diff && diff.kind === 'failed' ? diff : null;
+      const savedBytes = okDiff ? okDiff.rawBytes - okDiff.compressedBytes : 0;
+      const savedPct =
+        okDiff && okDiff.rawBytes > 0 ? Math.round((savedBytes / okDiff.rawBytes) * 100) : 0;
+
+      return (
+        <div
+          className="mt-3 p-3 rounded-lg border border-[hsl(var(--git-added))]/40 space-y-3"
+          style={{ background: 'hsl(var(--git-added) / 0.06)' }}
+        >
+          <div className="flex items-start gap-3">
+            <Check size={14} className="text-[hsl(var(--git-added))] mt-0.5" strokeWidth={1.8} />
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="text-[11px] font-medium text-foreground">
+                Compression active — rtk would rewrite this command.
+              </p>
+              <div className="text-[11px] text-foreground/70 font-mono space-y-0.5">
+                <div>
+                  <span className="text-foreground/40">in: </span>
+                  {result.testedCommand}
+                </div>
+                <div>
+                  <span className="text-foreground/40">out:</span> {result.outcome.rewrittenCommand}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {okDiff && (
+            <div className="space-y-2 pt-2 border-t border-border/40">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-medium uppercase tracking-wide text-foreground/60">
+                  Actual output diff
+                </span>
+                {okDiff.rawBytes > 0 && (
+                  <span className="text-[10px] font-mono text-[hsl(var(--git-added))]">
+                    {okDiff.rawBytes} → {okDiff.compressedBytes} bytes
+                    {savedBytes > 0 && ` (−${savedPct}%)`}
+                    {okDiff.truncated && ' · truncated'}
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <OutputPanel label="raw" body={okDiff.rawStdout} />
+                <OutputPanel label="via rtk" body={okDiff.compressedStdout} accented />
+              </div>
+            </div>
+          )}
+
+          {failedDiff && (
+            <div
+              className="space-y-1 pt-2 border-t border-border/40"
+              style={{ borderColor: 'hsl(var(--git-modified) / 0.3)' }}
+            >
+              <span className="text-[10px] font-medium uppercase tracking-wide text-[hsl(var(--git-modified))]">
+                Couldn&rsquo;t capture diff
+              </span>
+              <p className="text-[11px] text-foreground/70">{failedDiff.reason}</p>
+              {failedDiff.stderr && (
+                <pre className="text-[10px] text-foreground/50 font-mono whitespace-pre-wrap break-words">
+                  {failedDiff.stderr}
+                </pre>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    case 'pass-through':
+      return (
+        <div
+          className="mt-3 flex items-start gap-3 p-3 rounded-lg border border-border/40"
+          style={{ background: 'hsl(var(--surface-2))' }}
+        >
+          <AlertCircle
+            size={14}
+            className="text-[hsl(var(--git-modified))] mt-0.5"
+            strokeWidth={1.8}
+          />
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-medium text-foreground">
+              rtk ran without crashing, but chose not to rewrite this command.
+            </p>
+            <p className="text-[10px] text-foreground/60 mt-1">
+              That&rsquo;s valid — rtk only compresses commands in its rewrite list. The hook
+              plumbing is working; it would compress commands like{' '}
+              <code className="text-foreground/80">git status</code> or{' '}
+              <code className="text-foreground/80">cargo test</code> during real use.
+            </p>
+          </div>
+        </div>
+      );
+
+    default: {
+      const _exhaustive: never = result.outcome;
+      void _exhaustive;
+      return null;
+    }
+  }
 }
 
 function OutputPanel({

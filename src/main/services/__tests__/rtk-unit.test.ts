@@ -173,24 +173,6 @@ describe('shellQuoteUnix', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Settings-merge safety: user-authored hook entries must survive
-// write → cleanup round-trips. We build the same dash-tagged shapes the
-// ptyManager emits and exercise the filter logic directly.
-// ---------------------------------------------------------------------------
-
-type Hook = { type: string; __dash?: true } & Record<string, unknown>;
-type HookEntry = { matcher: string; hooks: Hook[] };
-
-function entryIsDashOwned(entry: unknown): boolean {
-  if (!entry || typeof entry !== 'object') return false;
-  const hooks = (entry as { hooks?: unknown }).hooks;
-  if (!Array.isArray(hooks)) return false;
-  return hooks.some(
-    (h) => !!h && typeof h === 'object' && (h as { __dash?: unknown }).__dash === true,
-  );
-}
-
 describe('extractRewrittenCommand', () => {
   it('returns a null command for empty stdout (rtk pass-through)', () => {
     const r = extractRewrittenCommand('');
@@ -220,38 +202,6 @@ describe('extractRewrittenCommand', () => {
   it('returns command:null when the JSON is valid but matches no known path', () => {
     const payload = JSON.stringify({ unknownField: { command: 'ignored' } });
     expect(extractRewrittenCommand(payload)).toEqual({ ok: true, command: null });
-  });
-});
-
-describe('settings.local.json merge safety (entryIsDashOwned)', () => {
-  it('recognises a tagged Dash entry', () => {
-    const entry: HookEntry = {
-      matcher: '*',
-      hooks: [{ type: 'http', url: 'x', __dash: true }],
-    };
-    expect(entryIsDashOwned(entry)).toBe(true);
-  });
-
-  it('ignores a user-authored entry without the tag', () => {
-    const entry: HookEntry = {
-      matcher: '*',
-      hooks: [{ type: 'command', command: 'echo hi' }],
-    };
-    expect(entryIsDashOwned(entry)).toBe(false);
-  });
-
-  it('considers entries with a mixed bag as Dash-owned (leaves conservative trail)', () => {
-    // If any hook is tagged, we treat the entry as ours; users shouldn't
-    // mix their hooks into a Dash entry, but if they do, cleanup erring on
-    // "remove" is safer than leaving a mystery tagged hook behind.
-    const entry: HookEntry = {
-      matcher: '*',
-      hooks: [
-        { type: 'command', command: 'user-thing' },
-        { type: 'http', url: 'x', __dash: true },
-      ],
-    };
-    expect(entryIsDashOwned(entry)).toBe(true);
   });
 });
 

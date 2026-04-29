@@ -211,7 +211,6 @@ export class RtkService {
       RtkService.cachedResolution = resolved;
     }
 
-    const enabled = RtkService.isEnabled();
     const downloadable = RtkService.isPlatformDownloadable();
     const effective = resolved ?? RtkService.cachedResolution;
     if (effective) {
@@ -220,11 +219,14 @@ export class RtkService {
         version: effective.version,
         path: effective.path,
         source: effective.source,
-        enabled,
+        enabled: RtkService.isEnabled(),
         downloadable,
       };
     }
-    return { installed: false, enabled, downloadable };
+    // No binary resolved → enabled is omitted by construction; isEnabled()'s
+    // disk flag stays put so the toggle restores correctly once a binary
+    // becomes available again.
+    return { installed: false, downloadable };
   }
 
   /** Populates cachedResolution so getHookCommand() is synchronous later. */
@@ -396,8 +398,9 @@ export class RtkService {
     const res = await fetchWithTimeout(url, {}, FETCH_API_TIMEOUT_MS);
     if (!res.ok) throw new Error(`Failed to fetch checksums.txt: ${res.status} ${res.statusText}`);
     const body = await res.text();
-    // checksums.txt format: "<hex-sha256>  <filename>" per line.
     for (const line of body.split(/\r?\n/)) {
+      // The `\*?` accepts the BSD "binary mode" marker some sha256sum
+      // implementations emit; without it those releases would fail to match.
       const match = line.match(/^([a-f0-9]{64})\s+\*?(.+?)\s*$/i);
       if (match && match[2] === assetName) return match[1]!.toLowerCase();
     }
@@ -588,24 +591,34 @@ export class RtkService {
         };
       }
 
-      // Only attempt real execution when rtk actually rewrote the command AND
-      // didn't block it — otherwise the diff would be empty or meaningless.
-      const execDiff =
-        extracted.command && extracted.command !== testedCommand && code !== 2
-          ? await RtkService.captureExecDiff(testedCommand, extracted.command)
-          : null;
+      const rawOutput = stdout.slice(0, 2000);
 
-      return {
-        ok: true,
-        testedCommand,
-        rewrittenCommand: extracted.command,
-        rawOutput: stdout.slice(0, 2000),
-        ...(code === 2 ? { blocked: { stderr: stderr.trim().slice(0, 400) } } : {}),
-        ...(execDiff ? { execDiff } : {}),
-        // execDiff `kind: 'failed'` is forwarded as-is; the renderer renders
-        // it as a "couldn't capture diff" warning rather than the green
-        // pass-through banner that null used to produce.
-      };
+      // exit 2 → blocked, regardless of any rewrite payload.
+      if (code === 2) {
+        return {
+          ok: true,
+          testedCommand,
+          rawOutput,
+          outcome: { kind: 'blocked', stderr: stderr.trim().slice(0, 400) },
+        };
+      }
+
+      const rewriteCmd = extracted.command;
+      const isRewrite = rewriteCmd !== null && rewriteCmd !== testedCommand;
+      if (isRewrite) {
+        // execDiff is best-effort visualization; capture failures are
+        // forwarded as `kind: 'failed'` so the UI can warn instead of
+        // collapsing to "rtk chose pass-through".
+        const execDiff = await RtkService.captureExecDiff(testedCommand, rewriteCmd);
+        return {
+          ok: true,
+          testedCommand,
+          rawOutput,
+          outcome: { kind: 'rewritten', rewrittenCommand: rewriteCmd, execDiff },
+        };
+      }
+
+      return { ok: true, testedCommand, rawOutput, outcome: { kind: 'pass-through' } };
     } catch (err) {
       return { ok: false, testedCommand, error: err instanceof Error ? err.message : String(err) };
     }
@@ -824,7 +837,6 @@ function isObject(v: unknown): v is Record<string, unknown> {
 }
 
 function shellQuoteUnix(s: string): string {
-  // POSIX sh single-quote escape: close quote, inject escaped ', reopen.
   return `'${s.replace(/'/g, "'\\''")}'`;
 }
 

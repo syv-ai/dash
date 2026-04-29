@@ -113,8 +113,6 @@ export class TerminalSessionManager {
       ),
     );
 
-    // Cache selection on every change — Claude Code's TUI rewrites cells as the
-    // user drags, which clears xterm's selection before the copy shortcut fires.
     this.terminal.onSelectionChange(() => {
       const sel = this.terminal.getSelection();
       if (sel) this.lastSelection = sel;
@@ -330,8 +328,11 @@ export class TerminalSessionManager {
           if (snapshotResp.success && snapshotResp.data) {
             existingSnapshot = snapshotResp.data;
           }
-        } catch {
-          // Best effort
+        } catch (err) {
+          // Snapshot fetch via IPC: legitimate "no snapshot" arrives as a
+          // success with empty data, so reaching the catch means IPC itself
+          // misbehaved — log so a permanently broken bridge is debuggable.
+          console.warn('[terminal] ptyGetSnapshot failed:', err);
         }
         if (gen !== this.attachGeneration) return;
 
@@ -349,8 +350,11 @@ export class TerminalSessionManager {
         if (existingSnapshot && !reattached) {
           try {
             this.terminal.write(existingSnapshot.data);
-          } catch {
-            // Best effort
+          } catch (err) {
+            // xterm rejected the buffered bytes — usually a corrupt or
+            // malformed control sequence in the snapshot. Without logging,
+            // the user just sees a half-rendered terminal with no clue why.
+            console.warn('[terminal] writing snapshot to xterm failed:', err);
           }
         }
       } else {
@@ -363,8 +367,11 @@ export class TerminalSessionManager {
           if (snapshotResp.success && snapshotResp.data) {
             existingSnapshot = snapshotResp.data;
           }
-        } catch {
-          // Best effort
+        } catch (err) {
+          // Snapshot fetch via IPC: legitimate "no snapshot" arrives as a
+          // success with empty data, so reaching the catch means IPC itself
+          // misbehaved — log so a permanently broken bridge is debuggable.
+          console.warn('[terminal] ptyGetSnapshot failed:', err);
         }
         if (gen !== this.attachGeneration) return;
 
@@ -398,8 +405,11 @@ export class TerminalSessionManager {
         if (existingSnapshot && !result.reattached) {
           try {
             this.terminal.write(existingSnapshot.data);
-          } catch {
-            // Best effort
+          } catch (err) {
+            // xterm rejected the buffered bytes — usually a corrupt or
+            // malformed control sequence in the snapshot. Without logging,
+            // the user just sees a half-rendered terminal with no clue why.
+            console.warn('[terminal] writing snapshot to xterm failed:', err);
           }
         }
       }
@@ -806,8 +816,10 @@ export class TerminalSessionManager {
       };
       window.electronAPI.ptySaveSnapshot(this.id, snapshot);
       this.snapshotDirty = false;
-    } catch {
-      // Best effort
+    } catch (err) {
+      // Serialize / IPC failure. If snapshots are silently broken, the user
+      // sees a blank terminal on next reload with no way to attribute it.
+      console.warn('[terminal] saveSnapshot failed:', err);
     }
   }
 
@@ -818,8 +830,8 @@ export class TerminalSessionManager {
         this.terminal.write(resp.data.data);
         return true;
       }
-    } catch {
-      // Best effort
+    } catch (err) {
+      console.warn('[terminal] restoreSnapshot failed:', err);
     }
     return false;
   }

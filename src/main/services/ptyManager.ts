@@ -11,6 +11,15 @@ import { contextUsageService } from './ContextUsageService';
 import { DatabaseService } from './DatabaseService';
 import { terminalSnapshotService } from './TerminalSnapshotService';
 import { RtkService } from './RtkService';
+import {
+  type Hook,
+  type HookEntry,
+  type HttpHook,
+  type CommandHook,
+  DASH_HOOK_EVENTS,
+  entryIsDashOwned as entryIsDashOwnedPure,
+  mergeHookEntries as mergeHookEntriesPure,
+} from './hookSettingsMerge';
 
 const execFileAsync = promisify(execFile);
 
@@ -23,11 +32,11 @@ function findClaudeProjectDir(cwd: string): string | null {
     const projectsDir = path.join(os.homedir(), '.claude', 'projects');
     if (!fs.existsSync(projectsDir)) return null;
 
-    // Path-based: slashes → hyphens (the primary naming scheme)
+    // Claude varies between full-path-with-hyphens and a truncated-suffix
+    // directory name across versions; check both shapes.
     const pathBased = path.join(projectsDir, cwd.replace(/\//g, '-'));
     if (fs.existsSync(pathBased)) return pathBased;
 
-    // Partial match: last 3 path segments
     const parts = cwd.split('/').filter((p) => p.length > 0);
     const suffix = parts.slice(-3).join('-');
     const dirs = fs.readdirSync(projectsDir);
@@ -471,27 +480,6 @@ function getTaskContextPrompt(taskId: string): string | null {
   }
 }
 
-/**
- * All hook event names that Dash writes to settings.local.json.
- * Used by both writeHookSettings and cleanupHookSettings.
- */
-const DASH_HOOK_EVENTS = [
-  'Stop',
-  'UserPromptSubmit',
-  'Notification',
-  'PreToolUse',
-  'PostToolUse',
-  'StopFailure',
-  'PreCompact',
-  'PostCompact',
-  'SessionStart',
-] as const;
-
-type HttpHook = { type: 'http'; url: string; async?: boolean };
-type CommandHook = { type: 'command'; command: string };
-type Hook = (HttpHook | CommandHook) & { __dash?: true };
-type HookEntry = { matcher: string; hooks: Hook[] };
-
 function buildPreToolUseHooks(
   httpHook: (endpoint: string, async?: boolean) => HttpHook,
 ): HookEntry[] {
@@ -602,7 +590,6 @@ function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
       fs.mkdirSync(claudeDir, { recursive: true });
     }
 
-    // Merge with existing settings to preserve user content.
     let existing: Record<string, unknown> = {};
     if (fs.existsSync(settingsPath)) {
       try {
@@ -650,20 +637,7 @@ function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
         ? (existing.hooks as Record<string, HookEntry[] | undefined>)
         : {};
 
-    const mergedHooks: Record<string, HookEntry[]> = {};
-    const dashEventSet = new Set<string>(DASH_HOOK_EVENTS);
-    for (const [event, userEntries] of Object.entries(existingHooks)) {
-      if (!Array.isArray(userEntries)) continue;
-      // For events Dash manages: keep only user-authored entries (ones we
-      // didn't tag). For other events: keep the user's entries as-is.
-      mergedHooks[event] = dashEventSet.has(event)
-        ? userEntries.filter((e) => !entryIsDashOwned(e))
-        : userEntries;
-    }
-    for (const [event, entries] of Object.entries(dashEntries)) {
-      const preserved = mergedHooks[event] ?? [];
-      mergedHooks[event] = [...preserved, ...entries];
-    }
+    const mergedHooks = mergeHookEntriesPure(existingHooks, dashEntries, dashHookUrlPrefix());
 
     const merged: Record<string, unknown> = {
       ...existing,
@@ -709,29 +683,15 @@ function atomicWriteFileSync(target: string, data: string): void {
   fs.renameSync(tmp, target);
 }
 
-function entryIsDashOwned(entry: unknown): boolean {
-  if (!entry || typeof entry !== 'object') return false;
-  const hooks = (entry as { hooks?: unknown }).hooks;
-  if (!Array.isArray(hooks)) return false;
-  return hooks.some((h) => isDashOwnedHook(h));
+/** Returns the Dash hook URL prefix once the HookServer has bound a port. */
+function dashHookUrlPrefix(): string | null {
+  const port = hookServer.port;
+  return port > 0 ? `http://127.0.0.1:${port}/hook/` : null;
 }
 
-function isDashOwnedHook(h: unknown): boolean {
-  if (!h || typeof h !== 'object') return false;
-  // Primary: the explicit __dash brand we wrote.
-  if ((h as { __dash?: unknown }).__dash === true) return true;
-  // Fallback: if the brand was lost in a round-trip (Claude Code or a tool
-  // re-serialising the file may strip unknown fields), recognise hooks
-  // pointing at our HookServer's loopback URL by URL prefix. Without this
-  // fallback, every refresh would append a fresh tagged entry and the file
-  // would accumulate duplicate Dash hooks indefinitely.
-  const port = hookServer.port;
-  if (port > 0) {
-    const dashUrlPrefix = `http://127.0.0.1:${port}/hook/`;
-    const url = (h as { url?: unknown }).url;
-    if (typeof url === 'string' && url.startsWith(dashUrlPrefix)) return true;
-  }
-  return false;
+/** Wrapper that closes over the live HookServer port for cleanup-time filtering. */
+function entryIsDashOwned(entry: unknown): boolean {
+  return entryIsDashOwnedPure(entry, dashHookUrlPrefix());
 }
 
 function broadcastToast(message: string): void {

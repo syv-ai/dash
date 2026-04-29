@@ -30,14 +30,10 @@ export function registerRtkIpc(): void {
 
   ipcMain.handle('rtk:setEnabled', async (_event, enabled: boolean) => {
     try {
-      if (enabled) {
-        // Refuse to enable without a resolvable binary; otherwise the toggle
-        // would show "on" while buildPreToolUseHooks silently omits the entry.
-        const status = await RtkService.getStatus();
-        if (!status.installed) {
-          return { success: false, error: 'rtk is not installed' };
-        }
-      }
+      // RtkService.setEnabled throws "rtk is not installed" if no binary is
+      // resolved; we surface it via the IPC error envelope. The wire-type
+      // (RtkStatus) makes "enabled while not installed" unrepresentable, so
+      // a redundant pre-flight check would only widen the race window.
       RtkService.setEnabled(enabled);
       const { failures } = refreshActivePtyHooks();
       // Flag persisted to disk either way. When refresh partially failed,

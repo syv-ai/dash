@@ -213,8 +213,9 @@ export function App() {
         } else {
           console.error('[rtk:getStatus] gave up after retry:', resp.error);
           // Surface a sentinel so the Settings card can show a manual retry
-          // button instead of an infinite spinner.
-          setRtkStatus({ installed: false, enabled: false, downloadable: false });
+          // button instead of an infinite spinner. `enabled` is unrepresentable
+          // on the not-installed arm by design.
+          setRtkStatus({ installed: false, downloadable: false });
         }
       });
     };
@@ -1775,7 +1776,10 @@ export function App() {
           pixelAgentsStatus={pixelAgentsStatus}
           rtkStatus={rtkStatus}
           onRtkEnabledChange={(enabled) => {
-            setRtkStatus((prev) => (prev ? { ...prev, enabled } : prev));
+            // Optimistic update only applies to the installed arm — the type
+            // forbids `enabled` on { installed: false }, and the toggle UI is
+            // disabled in that case anyway.
+            setRtkStatus((prev) => (prev?.installed ? { ...prev, enabled } : prev));
             window.electronAPI.rtkSetEnabled(enabled).then((resp) => {
               if (!resp.success) {
                 toast.error(resp.error ?? 'Failed to toggle RTK');
