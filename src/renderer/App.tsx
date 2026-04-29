@@ -536,7 +536,7 @@ export function App() {
   }, [tasksByProject]);
 
   // Threshold alerts — fires toast notifications when usage exceeds thresholds
-  useThresholdAlerts(statusLineData, usageThresholds, taskNames);
+  useThresholdAlerts(statusLineData, latestRateLimits, usageThresholds, taskNames);
 
   // Persist usage thresholds
   useEffect(() => {
