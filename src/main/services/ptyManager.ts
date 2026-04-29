@@ -3,47 +3,30 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { type WebContents, app, BrowserWindow } from 'electron';
+import { type WebContents, app } from 'electron';
 import { activityMonitor } from './ActivityMonitor';
 import { hookServer } from './HookServer';
 import { contextUsageService } from './ContextUsageService';
 import { DatabaseService } from './DatabaseService';
-import { terminalSnapshotService } from './TerminalSnapshotService';
 
 const execFileAsync = promisify(execFile);
 
 /**
- * Locate the Claude projects directory for a given cwd.
- * Claude stores sessions under ~/.claude/projects/<encoded-cwd>/.
+ * Locate the Claude projects directory for a given cwd by exact path encoding.
+ * Claude stores sessions under ~/.claude/projects/<slashes-replaced-by-hyphens>/.
+ * Exact match only — a partial-match fallback would risk returning a foreign
+ * project's dir when two paths share trailing segments (e.g. branch slugs reused
+ * across projects), causing claude --continue to act on the wrong session set.
  */
 function findClaudeProjectDir(cwd: string): string | null {
   try {
     const projectsDir = path.join(os.homedir(), '.claude', 'projects');
-    if (!fs.existsSync(projectsDir)) return null;
-
-    // Path-based: slashes → hyphens (the primary naming scheme)
     const pathBased = path.join(projectsDir, cwd.replace(/\//g, '-'));
-    if (fs.existsSync(pathBased)) return pathBased;
-
-    // Partial match: last 3 path segments
-    const parts = cwd.split('/').filter((p) => p.length > 0);
-    const suffix = parts.slice(-3).join('-');
-    const dirs = fs.readdirSync(projectsDir);
-    const match = dirs.find((d) => d.endsWith(suffix));
-    if (match) return path.join(projectsDir, match);
-
-    return null;
+    return fs.existsSync(pathBased) ? pathBased : null;
   } catch (err) {
-    console.error('[findClaudeProjectDir] Failed to scan projects dir:', err);
+    console.error('[findClaudeProjectDir] Failed to check projects dir:', err);
     return null;
   }
-}
-
-/** Check whether Claude has a session file for the given UUID in this cwd. */
-function hasSessionForId(cwd: string, sessionId: string): boolean {
-  const projDir = findClaudeProjectDir(cwd);
-  if (!projDir) return false;
-  return fs.existsSync(path.join(projDir, `${sessionId}.jsonl`));
 }
 
 /** Check whether Claude has any jsonl history for this cwd. */
@@ -367,19 +350,10 @@ function writeHookSettings(cwd: string, ptyId: string): void {
     PostCompact: [{ matcher: '*', hooks: [httpHook('/hook/compact-end', true)] }],
   };
 
-  // SessionStart hook fires on: startup (new session), resume (reattach by id),
-  // compact (auto/manual compaction), clear (/clear command). We use it for two
-  // purposes:
-  //   1. Capture Claude's real session_id (all 4 matchers) so the next spawn
-  //      can resume the correct session even if Claude forked or the filename
-  //      doesn't match task.id.
-  //   2. Re-inject task context (linked issue/work-item prompt) on startup,
-  //      compact, and clear — NOT resume, since resumed sessions already have
-  //      context in history.
-  const captureHook = httpHook('/hook/session-start');
-
+  // SessionStart hook re-injects task context (linked issue/work-item prompt)
+  // on startup, compact, and clear — NOT resume, since resumed sessions
+  // already have context in history.
   const contextPrompt = getTaskContextPrompt(ptyId);
-  let contextHook: { type: 'command'; command: string } | null = null;
   if (contextPrompt) {
     const hookPayload = JSON.stringify({
       hookSpecificOutput: {
@@ -396,16 +370,12 @@ function writeHookSettings(cwd: string, ptyId: string): void {
       process.platform === 'win32'
         ? `powershell.exe -NoProfile -Command "[Console]::Out.Write([System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64}')))"`
         : `echo '${b64}' | base64 ${process.platform === 'darwin' ? '-D' : '-d'}`;
-    contextHook = { type: 'command', command: decodeCmd };
+    const contextHook = { type: 'command', command: decodeCmd };
+    hookSettings.SessionStart = ['startup', 'compact', 'clear'].map((matcher) => ({
+      matcher,
+      hooks: [contextHook],
+    }));
   }
-
-  hookSettings.SessionStart = ['startup', 'resume', 'compact', 'clear'].map((matcher) => {
-    const hooks: unknown[] = [captureHook];
-    if (contextHook && matcher !== 'resume') {
-      hooks.push(contextHook);
-    }
-    return { matcher, hooks };
-  });
 
   try {
     if (!fs.existsSync(claudeDir)) {
@@ -539,46 +509,18 @@ export async function startDirectPty(options: {
 
   const args: string[] = [];
 
-  // Pin each task to its own Claude session so tasks sharing the same cwd
-  // (e.g. multiple tasks in the main worktree) never resume each other.
-  // Prefer the hook-captured lastSessionId (Claude may fork on /clear or
-  // /compact, so the live session id can drift from task.id).
-  const task = DatabaseService.getTask(options.id);
-  const resumeId = task?.lastSessionId ?? options.id;
-  const hadPriorUse =
-    task?.lastSessionId != null || terminalSnapshotService.hasSnapshot(options.id);
-  if (hasSessionForId(options.cwd, resumeId)) {
-    args.push('-r', resumeId);
-  } else if (resumeId !== options.id && hasSessionForId(options.cwd, options.id)) {
-    args.push('-r', options.id);
-  } else if (
-    task &&
-    task.lastSessionId === null &&
-    DatabaseService.countTasksAtPath(options.cwd) === 1 &&
-    hasAnySessionForCwd(options.cwd)
-  ) {
-    // Legacy task created before session pinning: its jsonl is named with a
-    // Claude-generated UUID, not task.id, so we can't resume by id. Safe to
-    // fall back to `-c -r` only when this is the sole task at its cwd — no
-    // other task's session to hijack — AND jsonl history actually exists,
-    // otherwise Claude exits with "No conversation found to continue".
-    // The SessionStart hook will capture the real session_id on this spawn,
-    // so future spawns pin correctly.
-    args.push('-c', '-r');
-  } else {
-    args.push('--session-id', options.id);
-    // Task had prior use (snapshot or captured session id) but we couldn't
-    // link any existing session — notify the user so they can recover via
-    // Claude's /resume command. Jsonl history is still on disk.
-    if (hadPriorUse && task) {
-      for (const win of BrowserWindow.getAllWindows()) {
-        if (!win.isDestroyed()) {
-          win.webContents.send('app:toast', {
-            message: `Couldn't link previous Claude session for "${task.name}" — use /resume in the terminal to find it.`,
-          });
-        }
-      }
-    }
+  // Resume strategy depends on a load-bearing invariant: each task has a
+  // unique cwd. Worktree tasks get their own dir by construction; non-worktree
+  // tasks are capped at one per project (enforced in DatabaseService.saveTask /
+  // restoreTask, with UI gating in TaskModal as a first line). Because cwd is
+  // unique, Claude's own "most recent jsonl in this dir" pick is always the
+  // right session — including across /clear and /compact forks.
+  //
+  // DO NOT relax the one-non-worktree-task cap without reintroducing per-task
+  // session pinning; see git history at 32bcdb6 for the previous implementation
+  // and the issues that drove its removal.
+  if (hasAnySessionForCwd(options.cwd)) {
+    args.push('--continue');
   }
 
   if (options.autoApprove) {

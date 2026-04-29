@@ -39,6 +39,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   worktreeCreate: (args: unknown) => ipcRenderer.invoke('worktree:create', args),
   worktreeRemove: (args: unknown) => ipcRenderer.invoke('worktree:remove', args),
   worktreeClaimReserve: (args: unknown) => ipcRenderer.invoke('worktree:claimReserve', args),
+  worktreeCreateFromExisting: (args: unknown) =>
+    ipcRenderer.invoke('worktree:createFromExisting', args),
   worktreeEnsureReserve: (args: unknown) => ipcRenderer.invoke('worktree:ensureReserve', args),
   worktreeHasReserve: (projectId: string) => ipcRenderer.invoke('worktree:hasReserve', projectId),
 
@@ -207,6 +209,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   gitPush: (cwd: string) => ipcRenderer.invoke('git:push', cwd),
   gitRemoteBranchExists: (args: { cwd: string; branch: string }) =>
     ipcRenderer.invoke('git:remoteBranchExists', args),
+
+  gitCheckoutBranch: (args: { cwd: string; branch: string }) =>
+    ipcRenderer.invoke('git:checkoutBranch', args),
 
   // Branch listing
   gitListBranches: (cwd: string) => ipcRenderer.invoke('git:listBranches', cwd),

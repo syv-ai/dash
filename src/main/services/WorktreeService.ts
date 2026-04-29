@@ -236,30 +236,49 @@ export class WorktreeService {
     issueNumbers: number[],
   ): Promise<void> {
     try {
-      // createLinkedBranch creates the branch on the remote AND links it to the issue.
-      // Must happen before push so the branch doesn't already exist on the remote.
-      for (const num of issueNumbers) {
-        try {
-          const issueUrl = await GithubService.linkBranch(cwd, num, branch);
-          for (const win of BrowserWindow.getAllWindows()) {
-            if (!win.isDestroyed()) {
-              win.webContents.send('app:toast', {
-                message: `Issue #${num} linked to branch '${branch}'`,
-                url: issueUrl,
-              });
-            }
-          }
-        } catch {
-          // Best effort — gh may not be available
-        }
-      }
-      // Set upstream tracking (branch already exists on remote from createLinkedBranch)
+      // linkIssuesAsync ultimately calls GitHub's createLinkedBranch, which
+      // creates the branch on the remote AND links it to the issue. Must run
+      // before any explicit push, otherwise the branch already exists remotely
+      // and the create-link call fails.
+      await this.linkIssuesAsync(cwd, branch, issueNumbers);
+      // The branch now exists on origin (via createLinkedBranch); set tracking.
       await execFileAsync('git', ['branch', '--set-upstream-to', `origin/${branch}`, branch], {
         cwd,
       });
     } catch {
       // Fallback: just push normally if linking failed
       this.pushBranchAsync(cwd, branch);
+    }
+  }
+
+  private async linkIssuesAsync(
+    cwd: string,
+    branch: string,
+    issueNumbers: number[],
+  ): Promise<void> {
+    for (const num of issueNumbers) {
+      try {
+        const issueUrl = await GithubService.linkBranch(cwd, num, branch);
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send('app:toast', {
+              message: `Issue #${num} linked to branch '${branch}'`,
+              url: issueUrl,
+            });
+          }
+        }
+      } catch {
+        // Best effort — gh may not be available
+      }
+    }
+  }
+
+  private async refExists(cwd: string, ref: string): Promise<boolean> {
+    try {
+      await execFileAsync('git', ['rev-parse', '--verify', '--quiet', ref], { cwd });
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -311,6 +330,121 @@ export class WorktreeService {
         }
       }
     })();
+  }
+
+  /**
+   * Create a git worktree for an existing branch (no new branch created).
+   */
+  async createWorktreeFromExistingBranch(
+    projectPath: string,
+    taskName: string,
+    branch: string,
+    options: { projectId: string; linkedIssueNumbers?: number[] },
+  ): Promise<WorktreeInfo> {
+    // eslint-disable-next-line no-control-regex
+    const hasControlChars = /[\x00-\x1f\x7f]/.test(branch);
+    if (
+      !branch ||
+      branch.startsWith('-') ||
+      hasControlChars ||
+      /[ ~^:?*\\[\]@{]/.test(branch) ||
+      branch.includes('..') ||
+      branch.endsWith('.lock') ||
+      branch.endsWith('/')
+    ) {
+      throw new Error(`Invalid branch name: '${branch}'`);
+    }
+
+    const dirSlug = this.slugify(branch);
+    const hash = this.generateShortHash();
+    const worktreesDir = this.getWorktreesDir(projectPath);
+
+    if (!fs.existsSync(worktreesDir)) {
+      fs.mkdirSync(worktreesDir, { recursive: true });
+    }
+
+    const worktreePath = path.join(worktreesDir, `${dirSlug}-${hash}`);
+
+    // Resolve whether the branch exists locally or only on origin. `git worktree
+    // add <path> <branch>` only works for local branches; remote-only branches
+    // need `-b <branch> --track origin/<branch>` to create the local tracking
+    // ref alongside the worktree.
+    const localExists = await this.refExists(projectPath, branch);
+    const worktreeArgs = localExists
+      ? ['worktree', 'add', worktreePath, branch]
+      : (await this.refExists(projectPath, `origin/${branch}`))
+        ? ['worktree', 'add', '-b', branch, '--track', worktreePath, `origin/${branch}`]
+        : ['worktree', 'add', worktreePath, branch]; // let git emit "invalid reference"
+
+    try {
+      await execFileAsync('git', worktreeArgs, {
+        cwd: projectPath,
+      });
+    } catch (error: unknown) {
+      const stderr =
+        error && typeof error === 'object' && 'stderr' in error
+          ? String((error as { stderr: unknown }).stderr)
+          : error instanceof Error
+            ? error.message
+            : String(error);
+      console.error('[WorktreeService.createWorktreeFromExistingBranch] failed', {
+        branch,
+        worktreePath,
+        stderr,
+      });
+      if (/already checked out/i.test(stderr)) {
+        const err = new Error(`Branch '${branch}' is already checked out in another worktree`);
+        (err as Error & { cause?: unknown }).cause = error;
+        throw err;
+      }
+      if (/pathspec .* did not match/i.test(stderr) || /invalid reference/i.test(stderr)) {
+        const err = new Error(`Branch '${branch}' not found`);
+        (err as Error & { cause?: unknown }).cause = error;
+        throw err;
+      }
+      throw error;
+    }
+
+    try {
+      await this.preserveFiles(projectPath, worktreePath);
+    } catch (error) {
+      // preserveFiles failed after the worktree was registered — roll back so
+      // the branch isn't left half-checked-out and blocking future creates.
+      console.error('[WorktreeService.createWorktreeFromExistingBranch] preserve failed', {
+        worktreePath,
+        error,
+      });
+      try {
+        await execFileAsync('git', ['worktree', 'remove', '--force', worktreePath], {
+          cwd: projectPath,
+        });
+      } catch (cleanupError) {
+        console.error(
+          '[WorktreeService.createWorktreeFromExistingBranch] cleanup failed',
+          cleanupError,
+        );
+      }
+      throw error;
+    }
+
+    // For existing branches, only link issues — do not push, since the branch
+    // already exists and the user manages its remote state.
+    if (options.linkedIssueNumbers && options.linkedIssueNumbers.length > 0) {
+      this.linkIssuesAsync(worktreePath, branch, options.linkedIssueNumbers);
+    }
+
+    this.runSetupScriptAsync(options.projectId, worktreePath, branch, projectPath);
+
+    const id = this.stableIdFromPath(worktreePath);
+    return {
+      id,
+      name: taskName,
+      branch,
+      path: worktreePath,
+      projectId: options.projectId,
+      status: 'active',
+      createdAt: new Date().toISOString(),
+    };
   }
 
   getWorktreesDir(projectPath: string): string {

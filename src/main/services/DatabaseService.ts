@@ -1,4 +1,4 @@
-import { eq, desc, sql } from 'drizzle-orm';
+import { eq, desc, and, isNull, ne } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { initDb, getDb } from '../db/client';
 import { runMigrations } from '../db/migrate';
@@ -79,12 +79,48 @@ export class DatabaseService {
     return rows.map(this.mapTask);
   }
 
+  /**
+   * Resume strategy in ptyManager (`claude --continue`) is correct only because
+   * each task has a unique cwd: worktree tasks get their own dir by construction,
+   * and non-worktree tasks must be unique per project path. UI gating in TaskModal
+   * is best-effort; this is the load-bearing check.
+   */
+  private static findActiveNonWorktreeTaskAt(
+    projectId: string,
+    path: string,
+    excludeId?: string,
+  ): { id: string; name: string } | null {
+    const db = getDb();
+    const conditions = [
+      eq(tasks.projectId, projectId),
+      eq(tasks.path, path),
+      eq(tasks.useWorktree, false),
+      isNull(tasks.archivedAt),
+    ];
+    if (excludeId) conditions.push(ne(tasks.id, excludeId));
+    const row = db
+      .select({ id: tasks.id, name: tasks.name })
+      .from(tasks)
+      .where(and(...conditions))
+      .get();
+    return row ?? null;
+  }
+
   static saveTask(
     data: Partial<Task> & { projectId: string; name: string; branch: string; path: string },
   ): Task {
     const db = getDb();
     const id = data.id || randomUUID();
     const now = new Date().toISOString();
+
+    if (data.useWorktree === false) {
+      const conflict = this.findActiveNonWorktreeTaskAt(data.projectId, data.path, id);
+      if (conflict) {
+        throw new Error(
+          `Cannot save non-worktree task at "${data.path}": active task "${conflict.name}" already occupies this directory. Archive it first.`,
+        );
+      }
+    }
 
     const linkedItemsJson = data.linkedItems ? JSON.stringify(data.linkedItems) : null;
 
@@ -126,40 +162,12 @@ export class DatabaseService {
     return row ? this.mapTask(row) : undefined;
   }
 
-  /**
-   * Count tasks (including archived) that share a given working directory.
-   * Used to gate the legacy `-c -r` resume fallback: safe only when the task
-   * is the sole occupant of its cwd, otherwise we could hijack another task's
-   * session.
-   */
-  static countTasksAtPath(path: string): number {
-    const db = getDb();
-    const row = db
-      .select({ count: sql<number>`count(*)` })
-      .from(tasks)
-      .where(eq(tasks.path, path))
-      .get();
-    return row?.count ?? 0;
-  }
-
   static setTaskContextPrompt(id: string, prompt: string): void {
     const db = getDb();
     db.update(tasks)
       .set({ contextPrompt: prompt, updatedAt: new Date().toISOString() })
       .where(eq(tasks.id, id))
       .run();
-  }
-
-  static setTaskLastSessionId(id: string, sessionId: string): void {
-    const db = getDb();
-    const result = db
-      .update(tasks)
-      .set({ lastSessionId: sessionId, updatedAt: new Date().toISOString() })
-      .where(eq(tasks.id, id))
-      .run();
-    if (result.changes === 0) {
-      console.warn(`[DatabaseService] setTaskLastSessionId: no task found for id=${id}`);
-    }
   }
 
   static deleteTask(id: string): void {
@@ -177,6 +185,16 @@ export class DatabaseService {
 
   static restoreTask(id: string): void {
     const db = getDb();
+    const target = db.select().from(tasks).where(eq(tasks.id, id)).get();
+    if (!target) return;
+    if (!target.useWorktree) {
+      const conflict = this.findActiveNonWorktreeTaskAt(target.projectId, target.path, id);
+      if (conflict) {
+        throw new Error(
+          `Cannot restore "${target.name}": active task "${conflict.name}" already occupies "${target.path}". Archive it first.`,
+        );
+      }
+    }
     db.update(tasks)
       .set({ archivedAt: null, updatedAt: new Date().toISOString() })
       .where(eq(tasks.id, id))
@@ -259,7 +277,6 @@ export class DatabaseService {
       branchCreatedByDash: row.branchCreatedByDash ?? false,
       linkedItems,
       contextPrompt: row.contextPrompt ?? null,
-      lastSessionId: row.lastSessionId ?? null,
       archivedAt: row.archivedAt,
       createdAt: row.createdAt ?? '',
       updatedAt: row.updatedAt ?? '',

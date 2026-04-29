@@ -171,13 +171,29 @@ export function registerGitIpc(): void {
     },
   );
 
-  // List remote branches (fetch + list)
+  ipcMain.handle('git:checkoutBranch', async (_event, args: { cwd: string; branch: string }) => {
+    try {
+      await GitService.checkoutBranch(args.cwd, args.branch);
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
+
   ipcMain.handle('git:listBranches', async (_event, cwd: string) => {
     try {
       const branches = await GitService.fetchAndListBranches(cwd);
       return { success: true, data: branches };
     } catch (error) {
-      return { success: false, error: String(error) };
+      const err = error as { stderr?: string };
+      const stderr = err.stderr?.split('\n')[0]?.trim();
+      return {
+        success: false,
+        error: stderr || (error instanceof Error ? error.message : String(error)),
+      };
     }
   });
 
