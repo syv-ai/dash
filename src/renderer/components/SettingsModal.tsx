@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { toast } from 'sonner';
 import {
   X,
   Check,
@@ -11,6 +12,8 @@ import {
   Trash2,
   Plus,
   ExternalLink,
+  HelpCircle,
+  FolderOpen,
 } from 'lucide-react';
 import { Tooltip } from './ui/Tooltip';
 import { ToggleSwitch } from './ui/ToggleSwitch';
@@ -29,11 +32,10 @@ import type {
   PixelAgentsStatus,
   PixelAgentsOffice,
   PixelAgentsOfficeStatus,
-  StatusLineData,
   RateLimits,
   UsageThresholds,
 } from '../../shared/types';
-import { formatTokens, formatDuration, formatResetTime } from '../../shared/format';
+import { formatResetTime } from '../../shared/format';
 import { UsageBar } from './ui/UsageBar';
 
 const DASH_DEFAULT_ATTRIBUTION =
@@ -57,8 +59,12 @@ interface SettingsModalProps {
   onNotificationSoundChange: (value: NotificationSound) => void;
   desktopNotification: boolean;
   onDesktopNotificationChange: (value: boolean) => void;
+  showRateLimits: boolean;
+  onShowRateLimitsChange: (value: boolean) => void;
   showUsageInline: boolean;
   onShowUsageInlineChange: (value: boolean) => void;
+  showContextUsageOnTaskCards: boolean;
+  onShowContextUsageOnTaskCardsChange: (value: boolean) => void;
   showActiveTasksSection: boolean;
   onShowActiveTasksSectionChange: (value: boolean) => void;
   shellDrawerEnabled: boolean;
@@ -67,8 +73,11 @@ interface SettingsModalProps {
   onShellDrawerPositionChange: (value: 'left' | 'main' | 'right') => void;
   terminalTheme: string;
   onTerminalThemeChange: (id: string) => void;
-  preferredIDE: 'cursor' | 'code' | 'auto';
-  onPreferredIDEChange: (value: 'cursor' | 'code' | 'auto') => void;
+  preferredIDE: string;
+  onPreferredIDEChange: (value: string) => void;
+  availableIDEs: Array<{ id: string; label: string }>;
+  customIDE: { path: string; args: string[] };
+  onCustomIDEChange: (value: { path: string; args: string[] }) => void;
   commitAttribution: string | undefined;
   onCommitAttributionChange: (value: string | undefined) => void;
   effortLevel: string;
@@ -83,8 +92,6 @@ interface SettingsModalProps {
   pixelAgentsConfig: PixelAgentsConfig | null;
   onPixelAgentsConfigChange: (config: PixelAgentsConfig) => void;
   pixelAgentsStatus: PixelAgentsStatus;
-  statusLineData: Record<string, StatusLineData>;
-  taskNames: Record<string, string>;
   latestRateLimits?: RateLimits;
   usageThresholds: UsageThresholds;
   onUsageThresholdsChange: (thresholds: UsageThresholds) => void;
@@ -558,6 +565,7 @@ function ThresholdInput({
         <input
           type="number"
           min={0}
+          max={100}
           step={5}
           value={value ?? ''}
           onChange={(e) => {
@@ -566,8 +574,7 @@ function ThresholdInput({
             onChange(raw === '' || !Number.isFinite(n) || n < 0 ? null : Math.min(100, n));
           }}
           placeholder={placeholder ?? 'Off'}
-          className="w-[72px] px-2 py-1 rounded-md text-[12px] text-right tabular-nums border border-border/40 text-foreground placeholder:text-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary/40"
-          style={{ background: 'hsl(var(--surface-2))' }}
+          className="w-[88px] px-3 py-1.5 rounded-md text-[12px] text-right tabular-nums border border-border/60 bg-transparent text-foreground placeholder:text-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
         />
         {suffix && <span className="text-[11px] text-foreground/40">{suffix}</span>}
       </div>
@@ -575,25 +582,66 @@ function ThresholdInput({
   );
 }
 
+function ToggleRow({
+  label,
+  description,
+  enabled,
+  onToggle,
+  indent = 0,
+}: {
+  label: string;
+  description?: string;
+  enabled: boolean;
+  onToggle: (v: boolean) => void;
+  indent?: number;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(!enabled)}
+      className="flex items-center justify-between w-full gap-3 py-3 pr-4 text-left"
+      style={{ paddingLeft: 16 + indent * 20 }}
+    >
+      <div className="flex-1 min-w-0">
+        <div className="text-[12px] text-foreground">{label}</div>
+        {description && <div className="text-[10px] text-foreground/40 mt-0.5">{description}</div>}
+      </div>
+      <div
+        className={`w-8 h-[18px] rounded-full relative transition-colors duration-150 flex-shrink-0 ${
+          enabled ? 'bg-primary' : 'bg-border'
+        }`}
+      >
+        <div
+          className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-transform duration-150 ${
+            enabled ? 'translate-x-[16px]' : 'translate-x-[2px]'
+          }`}
+        />
+      </div>
+    </button>
+  );
+}
+
 function UsageSection({
-  statusLineData,
-  taskNames,
   latestRateLimits,
   thresholds,
   onThresholdsChange,
+  showRateLimits,
+  onShowRateLimitsChange,
   showUsageInline,
   onShowUsageInlineChange,
+  showContextUsageOnTaskCards,
+  onShowContextUsageOnTaskCardsChange,
 }: {
-  statusLineData: Record<string, StatusLineData>;
-  taskNames: Record<string, string>;
   latestRateLimits?: RateLimits;
   thresholds: UsageThresholds;
   onThresholdsChange: (t: UsageThresholds) => void;
+  showRateLimits: boolean;
+  onShowRateLimitsChange: (value: boolean) => void;
   showUsageInline: boolean;
   onShowUsageInlineChange: (value: boolean) => void;
+  showContextUsageOnTaskCards: boolean;
+  onShowContextUsageOnTaskCardsChange: (value: boolean) => void;
 }) {
-  const entries = Object.entries(statusLineData);
-
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Account-wide rate limits */}
@@ -640,60 +688,7 @@ function UsageSection({
         )}
       </div>
 
-      {/* Per-session context usage */}
-      <div>
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground/60">
-            Sessions
-          </span>
-          <div className="flex-1 h-px bg-border/30" />
-        </div>
-
-        {entries.length === 0 ? (
-          <p className="text-[12px] text-foreground/40 py-4 text-center">No active sessions</p>
-        ) : (
-          <div className="space-y-3">
-            {entries.map(([ptyId, sl]) => (
-              <div
-                key={ptyId}
-                className="rounded-xl border border-border/40 p-4 space-y-3"
-                style={{ background: 'hsl(var(--surface-2))' }}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12px] font-medium text-foreground/80 truncate">
-                    {taskNames[ptyId] || 'Unknown task'}
-                  </span>
-                  <span className="text-[10px] text-foreground/40 flex-shrink-0">
-                    {sl.model ?? 'Claude'}
-                  </span>
-                </div>
-
-                <UsageBar
-                  label="Context"
-                  percentage={sl.contextUsage.percentage}
-                  detail={`${formatTokens(sl.contextUsage.used)} / ${formatTokens(sl.contextUsage.total)}`}
-                />
-
-                {sl.cost && (
-                  <div className="flex items-center gap-4 pt-1 text-[10px] text-foreground/40">
-                    <span>API: {formatDuration(sl.cost.totalApiDurationMs)}</span>
-                    <span>Wall: {formatDuration(sl.cost.totalDurationMs)}</span>
-                    {(sl.cost.totalLinesAdded > 0 || sl.cost.totalLinesRemoved > 0) && (
-                      <span>
-                        <span className="text-emerald-400">+{sl.cost.totalLinesAdded}</span>
-                        {' / '}
-                        <span className="text-red-400">-{sl.cost.totalLinesRemoved}</span>
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Inline Usage Display */}
+      {/* Display */}
       <div>
         <div className="flex items-center gap-2 mb-3">
           <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground/60">
@@ -701,14 +696,29 @@ function UsageSection({
           </span>
           <div className="flex-1 h-px bg-border/30" />
         </div>
-        <ToggleSwitch
-          enabled={showUsageInline}
-          onToggle={onShowUsageInlineChange}
-          label="Show context usage in sidebar and header"
-        />
-        <p className="text-[10px] text-foreground/40 mt-2">
-          Display context window percentage and progress bars next to tasks.
-        </p>
+        <div
+          className="rounded-xl border border-border/40 divide-y divide-border/20 overflow-hidden"
+          style={{ background: 'hsl(var(--surface-2))' }}
+        >
+          <ToggleRow
+            label="Show rate limits"
+            description="Display the 5-hour and 7-day account rate limit bars in the right sidebar."
+            enabled={showRateLimits}
+            onToggle={onShowRateLimitsChange}
+          />
+          <ToggleRow
+            label="Show context usage"
+            description="Display the current session's context window usage in the right sidebar."
+            enabled={showUsageInline}
+            onToggle={onShowUsageInlineChange}
+          />
+          <ToggleRow
+            label="Show progress bar on task cards"
+            description="Adds a thin context usage bar under each task in the left sidebar."
+            enabled={showContextUsageOnTaskCards}
+            onToggle={onShowContextUsageOnTaskCardsChange}
+          />
+        </div>
       </div>
 
       {/* Threshold Alerts */}
@@ -958,8 +968,12 @@ export function SettingsModal({
   onNotificationSoundChange,
   desktopNotification,
   onDesktopNotificationChange,
+  showRateLimits,
+  onShowRateLimitsChange,
   showUsageInline,
   onShowUsageInlineChange,
+  showContextUsageOnTaskCards,
+  onShowContextUsageOnTaskCardsChange,
   showActiveTasksSection,
   onShowActiveTasksSectionChange,
   shellDrawerEnabled,
@@ -970,6 +984,9 @@ export function SettingsModal({
   onTerminalThemeChange,
   preferredIDE,
   onPreferredIDEChange,
+  availableIDEs,
+  customIDE,
+  onCustomIDEChange,
   commitAttribution,
   onCommitAttributionChange,
   effortLevel,
@@ -984,8 +1001,6 @@ export function SettingsModal({
   pixelAgentsConfig,
   onPixelAgentsConfigChange,
   pixelAgentsStatus,
-  statusLineData,
-  taskNames,
   latestRateLimits,
   usageThresholds,
   onUsageThresholdsChange,
@@ -1127,18 +1142,12 @@ export function SettingsModal({
               }`}
             >
               {t.label}
-              {t.id === 'pixel-agents' && (
-                <>
-                  {Object.values(pixelAgentsStatus.offices).some(
-                    (s) => s === 'connected' || s === 'registered',
-                  ) && (
-                    <span className="ml-1.5 w-2 h-2 rounded-full bg-[hsl(var(--git-added))] inline-block" />
-                  )}
-                  <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-primary/15 text-primary leading-none">
-                    Experimental
-                  </span>
-                </>
-              )}
+              {t.id === 'pixel-agents' &&
+                Object.values(pixelAgentsStatus.offices).some(
+                  (s) => s === 'connected' || s === 'registered',
+                ) && (
+                  <span className="ml-1.5 w-2 h-2 rounded-full bg-[hsl(var(--git-added))] inline-block" />
+                )}
             </button>
           ))}
         </div>
@@ -1219,22 +1228,6 @@ export function SettingsModal({
                 </p>
               </div>
 
-              {/* Inline Usage */}
-              <div>
-                <label className="block text-[12px] font-medium text-foreground mb-3">
-                  Inline Usage
-                </label>
-                <ToggleSwitch
-                  enabled={showUsageInline}
-                  onToggle={onShowUsageInlineChange}
-                  label="Show context usage in sidebar and header"
-                />
-                <p className="text-[10px] text-foreground/80 mt-2">
-                  Display context window percentage and progress bars next to tasks. Detailed stats
-                  are always available in the Usage tab.
-                </p>
-              </div>
-
               {/* Active Tasks Section */}
               <div>
                 <label className="block text-[12px] font-medium text-foreground mb-3">
@@ -1292,18 +1285,17 @@ export function SettingsModal({
                   Preferred IDE
                 </label>
                 <div className="grid grid-cols-3 gap-2">
-                  {(
-                    [
-                      { value: 'auto' as const, label: 'Auto-detect' },
-                      { value: 'cursor' as const, label: 'Cursor' },
-                      { value: 'code' as const, label: 'VS Code' },
-                    ] as const
-                  ).map(({ value, label }) => {
-                    const isActive = preferredIDE === value;
+                  {[
+                    ...(availableIDEs.length > 0
+                      ? [{ id: 'auto', label: 'Auto-detect' }, ...availableIDEs]
+                      : []),
+                    { id: 'custom', label: 'Custom' },
+                  ].map(({ id, label }) => {
+                    const isActive = preferredIDE === id;
                     return (
                       <button
-                        key={value}
-                        onClick={() => onPreferredIDEChange(value)}
+                        key={id}
+                        onClick={() => onPreferredIDEChange(id)}
                         className={`px-3 py-2.5 rounded-lg text-[12px] border transition-all duration-150 ${
                           isActive
                             ? 'border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20 font-medium'
@@ -1315,9 +1307,84 @@ export function SettingsModal({
                     );
                   })}
                 </div>
+                {availableIDEs.length === 0 && (
+                  <p className="text-[11px] text-foreground/70 mt-2">
+                    No supported IDE auto-detected. Install Cursor, VS Code, Windsurf, Antigravity,
+                    or Zed — or configure a Custom IDE below.
+                  </p>
+                )}
                 <p className="text-[10px] text-foreground/80 mt-2">
-                  IDE used when opening a task from the header
+                  IDE used when opening a task from the header. Only installed IDEs are shown.
                 </p>
+
+                {preferredIDE === 'custom' && (
+                  <div className="mt-4 space-y-3 p-3 rounded-lg border border-border/40 bg-accent/20">
+                    <Tooltip content="Launch any editor Dash doesn't detect natively. Point at an executable and pass flags — use {path} to place the folder anywhere in the command, or it's appended at the end.">
+                      <div className="inline-flex items-center gap-1.5 cursor-help">
+                        <span className="text-[11px] font-medium text-foreground">
+                          Custom IDE command
+                        </span>
+                        <HelpCircle size={12} strokeWidth={1.8} className="text-foreground/60" />
+                      </div>
+                    </Tooltip>
+
+                    <div>
+                      <label className="block text-[10px] text-foreground/70 mb-1">
+                        Executable path
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={customIDE.path}
+                          onChange={(e) =>
+                            onCustomIDEChange({ ...customIDE, path: e.target.value })
+                          }
+                          placeholder="/Applications/MyIDE.app/Contents/MacOS/myide"
+                          className="flex-1 px-2.5 py-1.5 text-[11px] rounded-md border border-border/60 bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-1 focus:ring-primary/40"
+                        />
+                        <button
+                          onClick={async () => {
+                            const res = await window.electronAPI.pickExecutable();
+                            if (!res.success) {
+                              toast.error(res.error || 'Failed to open file picker');
+                              return;
+                            }
+                            if (res.data) {
+                              onCustomIDEChange({ ...customIDE, path: res.data });
+                            }
+                          }}
+                          className="px-2.5 py-1.5 text-[11px] rounded-md border border-border/60 text-foreground/80 hover:bg-accent/40 hover:text-foreground flex items-center gap-1"
+                        >
+                          <FolderOpen size={12} strokeWidth={1.8} />
+                          Browse
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] text-foreground/70 mb-1">
+                        Arguments (optional, one per line)
+                      </label>
+                      <textarea
+                        value={customIDE.args.join('\n')}
+                        onChange={(e) =>
+                          onCustomIDEChange({
+                            ...customIDE,
+                            args: e.target.value.split('\n').filter((line) => line.length > 0),
+                          })
+                        }
+                        rows={3}
+                        placeholder={'--new-window\n{path}'}
+                        className="w-full px-2.5 py-1.5 text-[11px] rounded-md border border-border/60 bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-1 focus:ring-primary/40 font-mono resize-y"
+                      />
+                      <p className="text-[10px] text-foreground/60 mt-1">
+                        One argument per line — spaces inside a line are preserved. Use{' '}
+                        <code>{'{path}'}</code> to place the folder anywhere; otherwise it's
+                        appended at the end.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Commit Attribution */}
@@ -1608,13 +1675,15 @@ export function SettingsModal({
 
           {tab === 'usage' && (
             <UsageSection
-              statusLineData={statusLineData}
-              taskNames={taskNames}
               latestRateLimits={latestRateLimits}
               thresholds={usageThresholds}
               onThresholdsChange={onUsageThresholdsChange}
+              showRateLimits={showRateLimits}
+              onShowRateLimitsChange={onShowRateLimitsChange}
               showUsageInline={showUsageInline}
               onShowUsageInlineChange={onShowUsageInlineChange}
+              showContextUsageOnTaskCards={showContextUsageOnTaskCards}
+              onShowContextUsageOnTaskCardsChange={onShowContextUsageOnTaskCardsChange}
             />
           )}
 

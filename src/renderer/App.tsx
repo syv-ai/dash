@@ -19,7 +19,7 @@ import { RemoteControlModal } from './components/RemoteControlModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ProjectSettingsModal } from './components/ProjectSettingsModal';
 import { AdoSetupModal } from './components/AdoSetupModal';
-import { RateLimitsWidget } from './components/RateLimitsWidget';
+import { UsageWidget } from './components/UsageWidget';
 import { parseAdoRemote } from '../shared/urls';
 import { ToastContainer } from './components/Toast';
 import { toast } from 'sonner';
@@ -47,6 +47,7 @@ import { playNotificationSound, playPeonSound } from './sounds';
 import type { NotificationSound } from './sounds';
 
 const GIT_POLL_INTERVAL = 5000;
+const EMPTY_CONTEXT_USAGE: Record<string, import('../shared/types').ContextUsage> = {};
 
 export function App() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -103,9 +104,53 @@ export function App() {
   const [terminalTheme, setTerminalTheme] = useState(() => {
     return localStorage.getItem('terminalTheme') || 'default';
   });
-  const [preferredIDE, setPreferredIDE] = useState<'cursor' | 'code' | 'auto'>(() => {
-    return (localStorage.getItem('preferredIDE') as 'cursor' | 'code' | 'auto') || 'auto';
+  const [preferredIDE, setPreferredIDE] = useState<string>(() => {
+    const stored = localStorage.getItem('preferredIDE');
+    if (!stored) return 'auto';
+    // Migrate legacy 'code' → 'vscode'
+    if (stored === 'code') {
+      localStorage.setItem('preferredIDE', 'vscode');
+      return 'vscode';
+    }
+    return stored;
   });
+  const [customIDE, setCustomIDE] = useState<{ path: string; args: string[] }>(() => {
+    const raw = localStorage.getItem('customIDE');
+    if (!raw) return { path: '', args: [] };
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.path === 'string' && Array.isArray(parsed.args)) {
+        return parsed;
+      }
+      console.warn('[openInIDE] customIDE has unexpected shape, resetting');
+    } catch (err) {
+      console.warn('[openInIDE] Failed to parse customIDE from localStorage:', err);
+    }
+    return { path: '', args: [] };
+  });
+  const [availableIDEs, setAvailableIDEs] = useState<Array<{ id: string; label: string }>>([]);
+  useEffect(() => {
+    let cancelled = false;
+    window.electronAPI.detectAvailableIDEs().then((res) => {
+      if (cancelled) return;
+      if (!res.success || !res.data) {
+        console.warn('[openInIDE] Failed to detect available IDEs:', res.error);
+        return;
+      }
+      setAvailableIDEs(res.data);
+      // Self-heal: if the stored IDE was uninstalled, fall back to auto so
+      // Settings doesn't show a phantom selection and clicks don't 404.
+      setPreferredIDE((current) => {
+        if (current === 'auto' || current === 'custom') return current;
+        if (res.data!.some((d) => d.id === current)) return current;
+        localStorage.removeItem('preferredIDE');
+        return 'auto';
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [commitAttribution, setCommitAttribution] = useState<string | undefined>(() => {
     const stored = localStorage.getItem('commitAttribution');
     if (stored === null) return undefined; // "default" — key absent
@@ -235,13 +280,29 @@ export function App() {
     });
   }, [activeTaskId]);
 
-  // Show inline usage bars in sidebar and header
+  // Right-sidebar: 5-hour / 7-day rate limit bars
+  const [showRateLimits, setShowRateLimits] = useState(
+    () => localStorage.getItem('showRateLimits') !== 'false',
+  );
+  useEffect(() => {
+    localStorage.setItem('showRateLimits', String(showRateLimits));
+  }, [showRateLimits]);
+
+  // Right-sidebar: current session (context) usage bar
   const [showUsageInline, setShowUsageInline] = useState(
     () => localStorage.getItem('showUsageInline') !== 'false',
   );
   useEffect(() => {
     localStorage.setItem('showUsageInline', String(showUsageInline));
   }, [showUsageInline]);
+
+  // Left-sidebar task cards: context progress bar under each task
+  const [showContextUsageOnTaskCards, setShowContextUsageOnTaskCards] = useState(
+    () => localStorage.getItem('showContextUsageOnTaskCards') !== 'false',
+  );
+  useEffect(() => {
+    localStorage.setItem('showContextUsageOnTaskCards', String(showContextUsageOnTaskCards));
+  }, [showContextUsageOnTaskCards]);
 
   // Rotation — tasks the user cycles through with Ctrl+Tab
   const [showActiveTasksSection, setShowActiveTasksSection] = useState(
@@ -256,7 +317,8 @@ export function App() {
       const stored = localStorage.getItem('rotationExclusions');
       return stored ? new Set(JSON.parse(stored)) : new Set();
     } catch (err) {
-      console.warn('Failed to parse rotationExclusions from localStorage:', err);
+      console.error('Failed to parse rotationExclusions from localStorage, resetting:', err);
+      localStorage.removeItem('rotationExclusions');
       return new Set();
     }
   });
@@ -1371,7 +1433,7 @@ export function App() {
               taskActivity={taskActivity}
               unseenTaskIds={unseenTaskIds}
               remoteControlStates={remoteControlStates}
-              contextUsage={showUsageInline ? contextUsage : {}}
+              contextUsage={showContextUsageOnTaskCards ? contextUsage : EMPTY_CONTEXT_USAGE}
               onReorderProjects={handleReorderProjects}
               pixelAgentsConnectedCount={
                 Object.values(pixelAgentsStatus.offices).filter(
@@ -1420,7 +1482,6 @@ export function App() {
               taskActivity={taskActivity}
               unseenTaskIds={unseenTaskIds}
               remoteControlStates={remoteControlStates}
-              contextUsage={showUsageInline ? contextUsage : {}}
               onSelectTask={setActiveTaskId}
               onEnableRemoteControl={(taskId) => setRemoteControlModalPtyId(taskId)}
               onNewTask={() => activeProjectId && handleNewTask(activeProjectId)}
@@ -1473,10 +1534,15 @@ export function App() {
             >
               <div className="h-full flex flex-col overflow-hidden">
                 {!changesPanelCollapsed &&
-                  latestRateLimits &&
-                  (latestRateLimits.fiveHour || latestRateLimits.sevenDay) && (
-                    <RateLimitsWidget rateLimits={latestRateLimits} />
-                  )}
+                  (() => {
+                    const rawCtx = activeTask ? contextUsage[activeTask.id] : undefined;
+                    const activeCtx = showUsageInline ? rawCtx : undefined;
+                    const rateLimits = showRateLimits && latestRateLimits ? latestRateLimits : {};
+                    const hasRateLimits = rateLimits.fiveHour || rateLimits.sevenDay;
+                    const hasCtx = activeCtx && activeCtx.percentage > 0;
+                    if (!hasRateLimits && !hasCtx) return null;
+                    return <UsageWidget rateLimits={rateLimits} contextUsage={activeCtx} />;
+                  })()}
                 <ShellDrawerWrapper
                   enabled={
                     shellDrawerEnabled && shellDrawerPosition === 'right' && !changesPanelCollapsed
@@ -1607,8 +1673,12 @@ export function App() {
             localStorage.setItem('theme', t);
             sessionRegistry.setAllTerminalThemes(terminalTheme, t === 'dark');
           }}
+          showRateLimits={showRateLimits}
+          onShowRateLimitsChange={setShowRateLimits}
           showUsageInline={showUsageInline}
           onShowUsageInlineChange={setShowUsageInline}
+          showContextUsageOnTaskCards={showContextUsageOnTaskCards}
+          onShowContextUsageOnTaskCardsChange={setShowContextUsageOnTaskCards}
           showActiveTasksSection={showActiveTasksSection}
           onShowActiveTasksSectionChange={setShowActiveTasksSection}
           shellDrawerEnabled={shellDrawerEnabled}
@@ -1653,6 +1723,16 @@ export function App() {
               localStorage.setItem('preferredIDE', v);
             }
           }}
+          availableIDEs={availableIDEs}
+          customIDE={customIDE}
+          onCustomIDEChange={(v) => {
+            setCustomIDE(v);
+            if (!v.path && v.args.length === 0) {
+              localStorage.removeItem('customIDE');
+            } else {
+              localStorage.setItem('customIDE', JSON.stringify(v));
+            }
+          }}
           commitAttribution={commitAttribution}
           onCommitAttributionChange={(v) => {
             setCommitAttribution(v);
@@ -1692,8 +1772,6 @@ export function App() {
             window.electronAPI.pixelAgentsSaveConfig(config);
           }}
           pixelAgentsStatus={pixelAgentsStatus}
-          statusLineData={statusLineData}
-          taskNames={taskNames}
           latestRateLimits={latestRateLimits}
           usageThresholds={usageThresholds}
           onUsageThresholdsChange={setUsageThresholds}

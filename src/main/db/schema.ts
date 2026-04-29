@@ -36,6 +36,7 @@ export const tasks = sqliteTable(
     linkedItems: text('linked_items'),
     contextPrompt: text('context_prompt'),
     branchCreatedByDash: integer('branch_created_by_dash', { mode: 'boolean' }).default(false),
+    lastSessionId: text('last_session_id'),
     archivedAt: text('archived_at'),
     createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),

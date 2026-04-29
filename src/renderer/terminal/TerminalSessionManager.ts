@@ -324,31 +324,27 @@ export class TerminalSessionManager {
           }
         }
       } else {
-        // Claude Code mode: try direct spawn, fall back to shell
-        let resume = false;
+        // Claude Code mode: try direct spawn, fall back to shell.
+        // Main process decides whether to resume (by checking if this task's
+        // own Claude session file exists) — renderer no longer gates on it.
         let existingSnapshot: TerminalSnapshot | null = null;
         try {
           const snapshotResp = await window.electronAPI.ptyGetSnapshot(this.id);
           if (snapshotResp.success && snapshotResp.data) {
             existingSnapshot = snapshotResp.data;
-            // Only check for session if we have a snapshot (nothing to resume without one)
-            const sessionResp = await window.electronAPI.ptyHasClaudeSession(this.cwd);
-            if (sessionResp.success && sessionResp.data) {
-              resume = true;
-            }
           }
         } catch {
           // Best effort
         }
         if (gen !== this.attachGeneration) return;
 
-        let result = await this.startPty(resume);
+        let result = await this.startPty();
         if (gen !== this.attachGeneration) return;
 
         // If we reattached to an existing direct-spawn PTY (e.g. after CMD+R),
-        // kill it and spawn fresh with resume. Ink's internal cursor state can't
-        // be recovered via SIGWINCH, but a fresh Claude Code process with
-        // --continue --resume preserves the session and gives a clean TUI init.
+        // kill it and spawn fresh. Ink's internal cursor state can't be
+        // recovered via SIGWINCH, but a fresh Claude Code process with `-r`
+        // pointed at this task's session file gives a clean TUI init.
         if (result.reattached && result.isDirectSpawn) {
           this._isRestarting = true;
           this.readyFired = false;
@@ -357,7 +353,7 @@ export class TerminalSessionManager {
           this.dataBuffer = [];
           window.electronAPI.ptyKill(this.id);
           this.ptyStarted = false;
-          result = await this.startPty(resume);
+          result = await this.startPty();
           if (gen !== this.attachGeneration) return;
 
           // Fallback: hide overlay after 10s even if no data arrives
@@ -614,7 +610,7 @@ export class TerminalSessionManager {
     }
   }
 
-  private async startPty(resume: boolean = false): Promise<{
+  private async startPty(): Promise<{
     reattached: boolean;
     isDirectSpawn: boolean;
   }> {
@@ -630,7 +626,6 @@ export class TerminalSessionManager {
       cols,
       rows,
       autoApprove: this.autoApprove,
-      resume,
       isDark: this.isDark,
     });
 

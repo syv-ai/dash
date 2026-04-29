@@ -1,4 +1,4 @@
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, sql } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { initDb, getDb } from '../db/client';
 import { runMigrations } from '../db/migrate';
@@ -126,12 +126,40 @@ export class DatabaseService {
     return row ? this.mapTask(row) : undefined;
   }
 
+  /**
+   * Count tasks (including archived) that share a given working directory.
+   * Used to gate the legacy `-c -r` resume fallback: safe only when the task
+   * is the sole occupant of its cwd, otherwise we could hijack another task's
+   * session.
+   */
+  static countTasksAtPath(path: string): number {
+    const db = getDb();
+    const row = db
+      .select({ count: sql<number>`count(*)` })
+      .from(tasks)
+      .where(eq(tasks.path, path))
+      .get();
+    return row?.count ?? 0;
+  }
+
   static setTaskContextPrompt(id: string, prompt: string): void {
     const db = getDb();
     db.update(tasks)
       .set({ contextPrompt: prompt, updatedAt: new Date().toISOString() })
       .where(eq(tasks.id, id))
       .run();
+  }
+
+  static setTaskLastSessionId(id: string, sessionId: string): void {
+    const db = getDb();
+    const result = db
+      .update(tasks)
+      .set({ lastSessionId: sessionId, updatedAt: new Date().toISOString() })
+      .where(eq(tasks.id, id))
+      .run();
+    if (result.changes === 0) {
+      console.warn(`[DatabaseService] setTaskLastSessionId: no task found for id=${id}`);
+    }
   }
 
   static deleteTask(id: string): void {
@@ -231,6 +259,7 @@ export class DatabaseService {
       branchCreatedByDash: row.branchCreatedByDash ?? false,
       linkedItems,
       contextPrompt: row.contextPrompt ?? null,
+      lastSessionId: row.lastSessionId ?? null,
       archivedAt: row.archivedAt,
       createdAt: row.createdAt ?? '',
       updatedAt: row.updatedAt ?? '',

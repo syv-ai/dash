@@ -53,6 +53,10 @@ class TerminalSnapshotServiceImpl {
     }
   }
 
+  hasSnapshot(id: string): boolean {
+    return fs.existsSync(this.getFilePath(id));
+  }
+
   private getFilePath(id: string): string {
     // Sanitize id for filesystem
     const sanitized = id.replace(/[^a-zA-Z0-9_-]/g, '_');

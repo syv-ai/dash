@@ -35,8 +35,13 @@ export interface ElectronAPI {
     line?: number;
     col?: number;
   }) => Promise<IpcResponse<null>>;
-  openInIDE: (args: { folderPath: string; ide?: 'cursor' | 'code' }) => Promise<IpcResponse<null>>;
-  detectAvailableIDEs: () => Promise<IpcResponse<string[]>>;
+  openInIDE: (args: {
+    folderPath: string;
+    ide?: string;
+    customCommand?: { path: string; args: string[] };
+  }) => Promise<IpcResponse<null>>;
+  detectAvailableIDEs: () => Promise<IpcResponse<Array<{ id: string; label: string }>>>;
+  pickExecutable: () => Promise<IpcResponse<string | null>>;
 
   // Database - Projects
   getProjects: () => Promise<IpcResponse<Project[]>>;
@@ -103,7 +108,6 @@ export interface ElectronAPI {
     cols: number;
     rows: number;
     autoApprove?: boolean;
-    resume?: boolean;
     isDark?: boolean;
   }) => Promise<
     IpcResponse<{
@@ -145,9 +149,6 @@ export interface ElectronAPI {
   ptyGetSnapshot: (id: string) => Promise<IpcResponse<TerminalSnapshot | null>>;
   ptySaveSnapshot: (id: string, payload: TerminalSnapshot) => void;
   ptyClearSnapshot: (id: string) => Promise<IpcResponse<void>>;
-
-  // Session detection
-  ptyHasClaudeSession: (cwd: string) => Promise<IpcResponse<boolean>>;
 
   // Task context for SessionStart hook
   ptyWriteTaskContext: (args: { taskId: string; prompt: string }) => Promise<IpcResponse<void>>;
