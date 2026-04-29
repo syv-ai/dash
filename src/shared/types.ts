@@ -50,6 +50,7 @@ export interface Task {
   linkedItems: LinkedItem[] | null;
   contextPrompt: string | null;
   lastSessionId: string | null;
+  hadMessages: boolean;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;

@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { type WebContents, app } from 'electron';
+import { type WebContents, app, BrowserWindow } from 'electron';
 import { activityMonitor } from './ActivityMonitor';
 import { hookServer } from './HookServer';
 import { contextUsageService } from './ContextUsageService';
@@ -22,59 +22,14 @@ function findResumableSession(candidateIds: string[]): string | null {
   try {
     const projectsDir = path.join(os.homedir(), '.claude', 'projects');
     if (!fs.existsSync(projectsDir)) return null;
-    for (const dir of fs.readdirSync(projectsDir)) {
-      for (const id of candidateIds) {
-        if (fs.existsSync(path.join(projectsDir, dir, `${id}.jsonl`))) return id;
-      }
+    const dirs = fs.readdirSync(projectsDir);
+    for (const id of candidateIds) {
+      if (dirs.some((d) => fs.existsSync(path.join(projectsDir, d, `${id}.jsonl`)))) return id;
     }
   } catch {
     // Best effort
   }
   return null;
-}
-
-/**
- * Remove session claims before spawning. Claude tracks active sessions in two places:
- *   1. ~/.claude/sessions/<pid>.json — a registry entry per running process
- *   2. ~/.claude/tasks/<sessionId>/.lock — a lock directory per session
- * Both are abandoned when the process is killed. We unconditionally remove any registry
- * entry matching the session ID — if Dash is spawning a session, there should be no other
- * live Claude process with that ID (Dash owns all spawns via the ptys Map).
- * Note: process.kill(pid, 0) is unreliable on Windows (silently succeeds for dead PIDs),
- * so we skip the PID liveness check entirely.
- */
-function clearStaleSessionClaims(sessionId: string): void {
-  // 1. Sessions registry: remove any <pid>.json whose sessionId matches
-  try {
-    const sessionsDir = path.join(os.homedir(), '.claude', 'sessions');
-    if (fs.existsSync(sessionsDir)) {
-      for (const file of fs.readdirSync(sessionsDir)) {
-        if (!file.endsWith('.json')) continue;
-        try {
-          const filePath = path.join(sessionsDir, file);
-          const entry = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-          if (entry.sessionId !== sessionId) continue;
-          fs.unlinkSync(filePath);
-          console.error(`[clearStaleSessionClaims] Removed session registry ${file}`);
-        } catch {
-          // Skip unreadable or malformed files
-        }
-      }
-    }
-  } catch (err) {
-    console.error('[clearStaleSessionClaims] sessions scan failed:', err);
-  }
-
-  // 2. Task lock directory: ~/.claude/tasks/<sessionId>/.lock
-  try {
-    const lockPath = path.join(os.homedir(), '.claude', 'tasks', sessionId, '.lock');
-    if (fs.existsSync(lockPath)) {
-      fs.rmSync(lockPath, { recursive: true, force: true });
-      console.error(`[clearStaleSessionClaims] Removed stale lock for ${sessionId}`);
-    }
-  } catch (err) {
-    console.error('[clearStaleSessionClaims] lock removal failed:', err);
-  }
 }
 
 interface PtyRecord {
@@ -559,22 +514,37 @@ export async function startDirectPty(options: {
 
   const args: string[] = [];
 
-  // Resume only when we can confirm the session JSONL exists on disk.
-  // lastSessionId is set by the SessionStart hook on every spawn, but Claude writes
-  // the JSONL lazily (only after the first message), so a task that was opened but
-  // never messaged has lastSessionId set with no file yet. Spawning with no flags
-  // starts a fresh session in that case; SessionStart will update lastSessionId.
-  // Build candidate list: prefer lastSessionId (most recent after /clear or /compact),
-  // fall back to task.id (session created by original --session-id spawns).
+  // Decide how to spawn based on whether a prior session JSONL exists on disk.
+  // Claude writes JNSONLs lazily — only after the first message — so we check
+  // before using --resume (which fails hard if the JSONL is absent).
+  //
+  // Candidate priority:
+  //   1. lastSessionId — most recent session after /clear or /compact
+  //   2. options.id    — migration shim: pre-refactor Dash used --session-id task.id,
+  //                      so legacy JNSONLs are named after the task UUID
   const task = DatabaseService.getTask(options.id);
   const candidates = [task?.lastSessionId, options.id].filter((id): id is string => !!id);
   const sessionToResume = findResumableSession(candidates);
 
   if (sessionToResume) {
-    clearStaleSessionClaims(sessionToResume);
     args.push('--resume', sessionToResume);
+  } else if (!task?.lastSessionId) {
+    // Truly new task: claim task.id as the session ID so task.id === session.id.
+    // SessionStart hook will capture it as lastSessionId after first spawn.
+    args.push('--session-id', options.id);
+  } else {
+    // lastSessionId is set but no JSONL found — session history is gone (wiped ~/.claude,
+    // migrated machine, etc.). Start fresh and notify the user if they had real history.
+    if (task.hadMessages) {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send('app:toast', {
+            message: `Couldn't resume previous session for "${task.name}" — history may have been cleared. Starting fresh.`,
+          });
+        }
+      }
+    }
   }
-  // No session flags: Claude starts a fresh interactive session.
 
   if (options.autoApprove) {
     args.push('--dangerously-skip-permissions');

@@ -1,4 +1,5 @@
-import { existsSync } from 'fs';
+import { existsSync, readdirSync } from 'fs';
+import { homedir } from 'os';
 import { join } from 'path';
 import { getRawDb } from './client';
 
@@ -131,6 +132,38 @@ export function runMigrations(): void {
     rawDb.exec(`ALTER TABLE tasks ADD COLUMN last_session_id TEXT`);
   } catch {
     /* already exists */
+  }
+
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN had_messages INTEGER DEFAULT 0`);
+  } catch {
+    /* already exists */
+  }
+
+  // Backfill last_session_id for pre-refactor tasks: old Dash spawned with
+  // --session-id task.id, so the JSONL is named after task.id. If lastSessionId
+  // is still null but we can confirm the JSONL exists, pin it now so future
+  // spawns use --resume rather than falling back to the task.id shim.
+  try {
+    const nullSessionTasks = rawDb
+      .prepare(`SELECT id FROM tasks WHERE last_session_id IS NULL`)
+      .all() as { id: string }[];
+    if (nullSessionTasks.length > 0) {
+      const projectsDir = join(homedir(), '.claude', 'projects');
+      if (existsSync(projectsDir)) {
+        const dirs = readdirSync(projectsDir);
+        for (const task of nullSessionTasks) {
+          const jsonlExists = dirs.some((d) =>
+            existsSync(join(projectsDir, d, `${task.id}.jsonl`)),
+          );
+          if (jsonlExists) {
+            rawDb.prepare(`UPDATE tasks SET last_session_id = id WHERE id = ?`).run(task.id);
+          }
+        }
+      }
+    }
+  } catch {
+    /* best effort */
   }
 
   // Backfill: sync is_git_repo with actual filesystem state

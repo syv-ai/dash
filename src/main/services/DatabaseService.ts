@@ -134,6 +134,14 @@ export class DatabaseService {
       .run();
   }
 
+  static setTaskHadMessages(id: string): void {
+    const db = getDb();
+    db.update(tasks)
+      .set({ hadMessages: true, updatedAt: new Date().toISOString() })
+      .where(eq(tasks.id, id))
+      .run();
+  }
+
   static setTaskLastSessionId(id: string, sessionId: string): void {
     const db = getDb();
     const result = db
@@ -244,6 +252,7 @@ export class DatabaseService {
       linkedItems,
       contextPrompt: row.contextPrompt ?? null,
       lastSessionId: row.lastSessionId ?? null,
+      hadMessages: row.hadMessages ?? false,
       archivedAt: row.archivedAt,
       createdAt: row.createdAt ?? '',
       updatedAt: row.updatedAt ?? '',

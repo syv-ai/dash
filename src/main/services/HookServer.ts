@@ -176,6 +176,11 @@ class HookServerImpl {
           if (pathname === '/hook/busy') {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
               activityMonitor.setBusy(ptyId);
+              try {
+                DatabaseService.setTaskHadMessages(ptyId);
+              } catch (err) {
+                console.warn('[HookServer] setTaskHadMessages failed:', err);
+              }
               res.writeHead(200);
               res.end();
             });
