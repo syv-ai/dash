@@ -305,6 +305,35 @@ const DASH_HOOK_EVENTS = [
 ] as const;
 
 /**
+ * Claude Code rejects an entire settings.local.json if any top-level hook key
+ * is unknown to the running CLI version. Newer hook events must be gated so
+ * older Claude Code installs don't lose ALL Dash hooks (see GH #127).
+ *
+ * Returns false when the version is unknown, which keeps the new keys out of
+ * the file — the safer default. main.ts populates claudeCliCache after the
+ * async --version probe; by the time a PTY spawns, it's almost always set.
+ */
+function isClaudeVersionAtLeast(major: number, minor: number, patch: number): boolean {
+  let version: string | null = null;
+  try {
+    // Lazy require to avoid the circular import that a static import of main.ts
+    // would create (main → ptyManager → main). At call time, main is fully loaded.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+    const main = require('../main') as typeof import('../main');
+    version = main.claudeCliCache.version;
+  } catch {
+    return false;
+  }
+  if (!version) return false;
+  const m = version.match(/^(\d+)\.(\d+)\.(\d+)/);
+  if (!m) return false;
+  const [a, b, c] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  if (a !== major) return a > major;
+  if (b !== minor) return b > minor;
+  return c >= patch;
+}
+
+/**
  * Write .claude/settings.local.json with hooks for activity monitoring,
  * tool tracking, error detection, and context usage.
  *
@@ -342,13 +371,20 @@ function writeHookSettings(cwd: string, ptyId: string): void {
     PreToolUse: [{ matcher: '*', hooks: [httpHook('/hook/tool-start', true)] }],
     PostToolUse: [{ matcher: '*', hooks: [httpHook('/hook/tool-end', true)] }],
 
-    // ── Error detection ─────────────────────────────────────
-    StopFailure: [{ matcher: '*', hooks: [httpHook('/hook/stop-failure')] }],
-
     // ── Context compaction ──────────────────────────────────
     PreCompact: [{ matcher: '*', hooks: [httpHook('/hook/compact-start', true)] }],
-    PostCompact: [{ matcher: '*', hooks: [httpHook('/hook/compact-end', true)] }],
   };
+
+  // PostCompact added in Claude Code 2.1.76; older CLIs reject the key and
+  // skip the entire settings file (GH #127), losing all Dash hooks.
+  if (isClaudeVersionAtLeast(2, 1, 76)) {
+    hookSettings.PostCompact = [{ matcher: '*', hooks: [httpHook('/hook/compact-end', true)] }];
+  }
+
+  // StopFailure added in Claude Code 2.1.78.
+  if (isClaudeVersionAtLeast(2, 1, 78)) {
+    hookSettings.StopFailure = [{ matcher: '*', hooks: [httpHook('/hook/stop-failure')] }];
+  }
 
   // SessionStart hook re-injects task context (linked issue/work-item prompt)
   // on startup, compact, and clear — NOT resume, since resumed sessions
@@ -397,12 +433,22 @@ function writeHookSettings(cwd: string, ptyId: string): void {
       }
     }
 
+    // Drop any prior Dash-written hook keys before merging. A previous Dash
+    // version may have written events the current Claude Code CLI doesn't
+    // recognize (e.g. PostCompact pre-2.1.76), which would cause Claude to
+    // reject the entire settings file.
+    const existingHooks: Record<string, unknown> =
+      existing.hooks && typeof existing.hooks === 'object'
+        ? { ...(existing.hooks as Record<string, unknown>) }
+        : {};
+    for (const key of DASH_HOOK_EVENTS) {
+      delete existingHooks[key];
+    }
+
     const merged: Record<string, unknown> = {
       ...existing,
       hooks: {
-        ...(existing.hooks && typeof existing.hooks === 'object'
-          ? (existing.hooks as Record<string, unknown>)
-          : {}),
+        ...existingHooks,
         ...hookSettings,
       },
     };

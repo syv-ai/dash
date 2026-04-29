@@ -160,6 +160,16 @@ export class ConnectionConfigService {
     this.writeConfig(config);
   }
 
+  /**
+   * Office IDs that have a stored token, without touching safeStorage.
+   * Used for presence checks on startup so we don't trigger an OS keychain
+   * prompt just to populate token placeholders (GH #127).
+   */
+  static getPixelAgentsTokenIds(): Set<string> {
+    const config = this.readConfig();
+    return new Set((config.pixelAgentsTokens || []).map((t) => t.officeId));
+  }
+
   static getAllPixelAgentsTokens(): Record<string, string> {
     const config = this.readConfig();
     const result: Record<string, string> = {};
