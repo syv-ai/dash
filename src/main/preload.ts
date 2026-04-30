@@ -249,6 +249,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 
+  // RTK (Rust Token Killer)
+  rtkGetStatus: () => ipcRenderer.invoke('rtk:getStatus'),
+  rtkSetEnabled: (enabled: boolean) => ipcRenderer.invoke('rtk:setEnabled', enabled),
+  rtkDownload: () => ipcRenderer.invoke('rtk:download'),
+  rtkTest: () => ipcRenderer.invoke('rtk:test'),
+  onRtkDownloadProgress: (
+    callback: (progress: import('@shared/types').RtkDownloadProgress) => void,
+  ) => {
+    const handler = (_event: unknown, progress: import('@shared/types').RtkDownloadProgress) =>
+      callback(progress);
+    ipcRenderer.on('rtk:downloadProgress', handler);
+    return () => {
+      ipcRenderer.removeListener('rtk:downloadProgress', handler);
+    };
+  },
+
   // Telemetry
   telemetryCapture: (event: string, properties?: Record<string, unknown>) =>
     ipcRenderer.invoke('telemetry:capture', { event, properties }),

@@ -8,6 +8,7 @@ import { activityMonitor } from './ActivityMonitor';
 import { hookServer } from './HookServer';
 import { contextUsageService } from './ContextUsageService';
 import { DatabaseService } from './DatabaseService';
+import { RtkService } from './RtkService';
 import {
   type Hook,
   type HookEntry,
@@ -88,10 +89,34 @@ const RESERVED_ENV_KEYS = new Set([
 
 export function setCommitAttribution(value: string | undefined): void {
   commitAttributionSetting = value;
-  // Re-write settings.local.json for all active PTYs so the change takes effect immediately
+  refreshActivePtyHooks();
+}
+
+export interface RefreshFailure {
+  settingsPath: string;
+  error: string;
+}
+
+export interface RefreshResult {
+  failures: RefreshFailure[];
+}
+
+/**
+ * Rewrite settings.local.json for every active PTY. Claude Code re-reads
+ * settings per tool call, so this flips hooks live. Returns per-task write
+ * failures so callers (RTK toggle, attribution change) can surface a
+ * "saved, but N tasks didn't pick it up" message instead of silently
+ * returning success.
+ */
+export function refreshActivePtyHooks(): RefreshResult {
+  const failures: RefreshFailure[] = [];
   for (const [id, rec] of ptys) {
-    writeHookSettings(rec.cwd, id);
+    const result = writeHookSettings(rec.cwd, id);
+    if (!result.ok) {
+      failures.push({ settingsPath: result.settingsPath, error: result.error });
+    }
   }
+  return { failures };
 }
 
 export function setDesktopNotification(opts: { enabled: boolean }): void {
@@ -213,11 +238,18 @@ function buildDirectEnv(isDark: boolean): Record<string, string> {
     ? Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => !!e[1]))
     : {};
 
+  // rtk's rewrite output invokes the bare name `rtk`; when the binary is
+  // Dash-managed (userData/bin), prepend that dir so the rewrite resolves.
+  const rtkBinDir = RtkService.getManagedBinDirForPath();
+  const pathSep = isWin ? ';' : ':';
+  const basePath = process.env.PATH || '';
+  const mergedPath = rtkBinDir ? prependUnique(rtkBinDir, basePath, pathSep) : basePath;
+
   const env: Record<string, string> = {
     ...base,
     TERM_PROGRAM: 'dash',
     HOME: os.homedir(),
-    PATH: process.env.PATH || '',
+    PATH: mergedPath,
     // Tell CLI apps about terminal background (rxvt convention)
     // Format: "fg;bg" where higher values = lighter colors
     COLORFGBG: isDark ? '15;0' : '0;15',
@@ -338,6 +370,36 @@ function tagDash<T extends HttpHook | CommandHook>(hook: T): T & { __dash: true 
 }
 
 /**
+ * Prepend `dir` to a path-like string, but only if it isn't already there
+ * (case-sensitive on Unix, case-sensitive on Windows is wrong but matches
+ * what users actually do). Used when injecting Dash-managed binary
+ * directories into the spawned process's PATH.
+ */
+function prependUnique(dir: string, basePath: string, sep: string): string {
+  if (!basePath) return dir;
+  const parts = basePath.split(sep);
+  if (parts.includes(dir)) return basePath;
+  return `${dir}${sep}${basePath}`;
+}
+
+/**
+ * Build the PreToolUse hook entries. `*` matcher always points at our
+ * tool-start endpoint; when RTK is enabled, also add a `Bash`-matcher
+ * entry that runs RTK's hook command to rewrite verbose Bash output
+ * before Claude consumes it.
+ */
+function buildPreToolUseHooks(
+  httpHook: (endpoint: DashHookEndpoint, async?: boolean) => HttpHook,
+): HookEntry[] {
+  const entries: HookEntry[] = [{ matcher: '*', hooks: [tagDash(httpHook('tool-start', true))] }];
+  const rtkCmd = RtkService.isEnabled() ? RtkService.getHookCommand() : null;
+  if (rtkCmd) {
+    entries.push({ matcher: 'Bash', hooks: [tagDash({ type: 'command', command: rtkCmd })] });
+  }
+  return entries;
+}
+
+/**
  * Atomic write: stage to a sibling tmp file then rename over the target.
  * POSIX rename is atomic, so a crash mid-write can never leave a half-
  * written file at `target`. Important here because settings.local.json is
@@ -374,6 +436,8 @@ function broadcastToast(message: string): void {
   }
 }
 
+type HookWriteResult = { ok: true } | { ok: false; settingsPath: string; error: string };
+
 /**
  * Write .claude/settings.local.json with hooks for activity monitoring,
  * tool tracking, error detection, and context usage.
@@ -386,10 +450,10 @@ function broadcastToast(message: string): void {
  * URL-shape detector, so users can have their own hooks under managed
  * events without losing them on every rewrite.
  *
- * Failure surfacing happens inside via console.error + broadcastToast.
- * Callers don't need to act on the result.
+ * Returns a result so refreshActivePtyHooks can aggregate failures across
+ * tasks; toasts and console.error are still emitted inline regardless.
  */
-function writeHookSettings(cwd: string, ptyId: string): void {
+function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
   const port = hookServer.port;
   const claudeDir = path.join(cwd, '.claude');
   const settingsPath = path.join(claudeDir, 'settings.local.json');
@@ -406,7 +470,7 @@ function writeHookSettings(cwd: string, ptyId: string): void {
     broadcastToast(
       `Hook server not ready — task hooks couldn't be written for ${path.basename(cwd)}. Restart Dash to recover.`,
     );
-    return;
+    return { ok: false, settingsPath, error: 'HookServer port not bound' };
   }
 
   const base = `http://127.0.0.1:${port}`;
@@ -431,7 +495,7 @@ function writeHookSettings(cwd: string, ptyId: string): void {
       { matcher: 'permission_prompt', hooks: [dashHttp('notification')] },
       { matcher: 'idle_prompt', hooks: [dashHttp('notification')] },
     ],
-    PreToolUse: [{ matcher: '*', hooks: [dashHttp('tool-start', true)] }],
+    PreToolUse: buildPreToolUseHooks(httpHook),
     PostToolUse: [{ matcher: '*', hooks: [dashHttp('tool-end', true)] }],
     PreCompact: [{ matcher: '*', hooks: [dashHttp('compact-start', true)] }],
   };
@@ -512,7 +576,11 @@ function writeHookSettings(cwd: string, ptyId: string): void {
           broadcastToast(
             `settings.local.json is corrupt and could not be backed up — hooks are off for this task. Fix or remove ${path.basename(settingsPath)} manually.`,
           );
-          return;
+          return {
+            ok: false,
+            settingsPath,
+            error: `corrupt settings.local.json; backup rename failed: ${renameErr instanceof Error ? renameErr.message : String(renameErr)}`,
+          };
         }
       }
     }
@@ -541,9 +609,15 @@ function writeHookSettings(cwd: string, ptyId: string): void {
 
     atomicWriteFileSync(settingsPath, JSON.stringify(merged, null, 2) + '\n');
     writtenSettingsPaths.add(settingsPath);
+    return { ok: true };
   } catch (err) {
     console.error('[writeHookSettings] Failed:', err);
     broadcastToast(`Could not write ${path.basename(settingsPath)} — hooks are off for this task.`);
+    return {
+      ok: false,
+      settingsPath,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 

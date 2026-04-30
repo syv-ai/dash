@@ -375,3 +375,81 @@ export interface PixelAgentsStatus {
   running: boolean;
   offices: Record<string, PixelAgentsOfficeStatus>;
 }
+
+// ── RTK (Rust Token Killer) Types ───────────────────────────
+
+export type RtkSource = 'path' | 'managed';
+
+// `enabled` only makes sense when a binary is installed — RtkService.setEnabled
+// throws if you try to enable without resolution. Encoding the rule in the
+// type means TS prevents the impossible state at construction; the IPC
+// pre-flight check that previously enforced it at runtime can be dropped.
+export type RtkStatus =
+  | {
+      installed: true;
+      version: string;
+      path: string;
+      source: RtkSource;
+      enabled: boolean;
+      downloadable: boolean;
+    }
+  | { installed: false; downloadable: boolean };
+
+export type RtkDownloadProgress =
+  | { phase: 'downloading'; percent: number }
+  | { phase: 'verifying' }
+  | { phase: 'extracting' }
+  | { phase: 'done'; version: string }
+  | { phase: 'error'; error: string };
+
+export type RtkExecDiff =
+  | {
+      kind: 'ok';
+      /** Stdout of the raw tested command, capped for IPC payload size. */
+      rawStdout: string;
+      /** Stdout of the rtk-rewritten command, capped for IPC payload size. */
+      compressedStdout: string;
+      /** Untruncated byte counts, so the UI can show honest savings math. */
+      rawBytes: number;
+      compressedBytes: number;
+      /** True when stdout was truncated at the runShell cap; bytes counts
+       *  reflect the truncated buffer in that case (we stop reading). */
+      truncated: boolean;
+    }
+  | {
+      /** Diff capture itself failed — distinct from "rtk chose pass-through".
+       *  UI must NOT render this as a successful no-op rewrite. */
+      kind: 'failed';
+      /** Which stage broke: `setup` (mkdtemp/git init), `raw` (the original
+       *  command), `rewritten` (the rtk-rewritten command), or `unknown`. */
+      stage: 'setup' | 'raw' | 'rewritten' | 'unknown';
+      /** Exit code when the command exited non-zero; absent when the failure
+       *  happened before spawn (mkdtemp, git init, etc.). */
+      exitCode?: number;
+      /** Truncated stderr for the failed stage, when available. */
+      stderr?: string;
+      /** Human-readable reason — what to show in the UI. */
+      reason: string;
+    };
+
+// Three orthogonal optionals (`rewrittenCommand: string | null`, `blocked?`,
+// `execDiff?`) admitted impossible combinations in production code (e.g.
+// blocked AND rewritten). A nested outcome discriminant collapses them so
+// the renderer's three branches map 1:1 to representable states.
+export type RtkTestResult =
+  | { ok: false; testedCommand?: string; error: string }
+  | {
+      ok: true;
+      testedCommand: string;
+      rawOutput: string;
+      outcome: RtkTestOutcome;
+    };
+
+export type RtkTestOutcome =
+  // rtk ran cleanly and chose pass-through (no rewrite for this command).
+  | { kind: 'pass-through' }
+  // rtk used exit 2 to block the tool call. Distinct from a failure.
+  | { kind: 'blocked'; stderr: string }
+  // rtk emitted a rewrite. execDiff is best-effort visualization, not a
+  // correctness signal — its absence/failure does not invalidate the rewrite.
+  | { kind: 'rewritten'; rewrittenCommand: string; execDiff?: RtkExecDiff };
