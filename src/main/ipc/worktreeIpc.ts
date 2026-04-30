@@ -104,6 +104,39 @@ export function registerWorktreeIpc(): void {
     },
   );
 
+  ipcMain.handle(
+    'worktree:createFromExisting',
+    async (
+      _event,
+      args: {
+        projectPath: string;
+        taskName: string;
+        branch: string;
+        projectId: string;
+        linkedIssueNumbers?: number[];
+      },
+    ) => {
+      try {
+        const data = await worktreeService.createWorktreeFromExistingBranch(
+          args.projectPath,
+          args.taskName,
+          args.branch,
+          {
+            projectId: args.projectId,
+            linkedIssueNumbers: args.linkedIssueNumbers,
+          },
+        );
+        TelemetryService.capture('worktree_created_existing_branch');
+        return { success: true, data };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    },
+  );
+
   ipcMain.handle('worktree:hasReserve', async (_event, projectId: string) => {
     try {
       return { success: true, data: worktreePoolService.hasReserve(projectId) };

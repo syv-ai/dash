@@ -30,7 +30,9 @@ export class PixelAgentsService {
     try {
       if (!existsSync(getConfigPath())) return null;
       const raw = JSON.parse(readFileSync(getConfigPath(), 'utf-8'));
-      const encryptedTokens = ConnectionConfigService.getAllPixelAgentsTokens();
+      // Presence-only check — decrypting here would trigger a macOS keychain
+      // prompt on every startup for users who configured tokens (GH #127).
+      const tokenIds = ConnectionConfigService.getPixelAgentsTokenIds();
       return {
         name: raw.name || '',
         palette: raw.palette,
@@ -40,8 +42,7 @@ export class PixelAgentsService {
           (o: { id: string; url: string; token?: string; enabled: boolean }) => ({
             id: o.id,
             url: o.url,
-            // Check encrypted storage for token presence (file may have been scrubbed)
-            token: encryptedTokens[o.id] ? '••••••••' : null,
+            token: tokenIds.has(o.id) ? '••••••••' : null,
             enabled: o.enabled,
           }),
         ),

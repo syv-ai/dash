@@ -176,32 +176,6 @@ class HookServerImpl {
           if (pathname === '/hook/busy') {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
               activityMonitor.setBusy(ptyId);
-              try {
-                DatabaseService.setTaskHadMessages(ptyId);
-              } catch (err) {
-                console.warn('[HookServer] setTaskHadMessages failed:', err);
-              }
-              res.writeHead(200);
-              res.end();
-            });
-            return;
-          }
-
-          if (pathname === '/hook/session-start') {
-            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
-              // Claude POSTs the real session_id for every SessionStart event
-              // (startup, resume, compact, clear). Persist it per task so the
-              // next spawn can resume the correct session even if Claude forked
-              // or the filename doesn't match task.id.
-              const sessionId =
-                typeof payload.session_id === 'string' ? payload.session_id : undefined;
-              if (sessionId) {
-                try {
-                  DatabaseService.setTaskLastSessionId(ptyId, sessionId);
-                } catch (err) {
-                  console.error('[HookServer] setTaskLastSessionId failed:', err);
-                }
-              }
               res.writeHead(200);
               res.end();
             });

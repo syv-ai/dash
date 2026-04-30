@@ -12,24 +12,32 @@ import { DatabaseService } from './DatabaseService';
 const execFileAsync = promisify(execFile);
 
 /**
- * Find the first resumable session ID from a list of candidates by checking
- * whether a JSONL exists for each under ~/.claude/projects/. Searches all
- * project subdirectories so no path-encoding is required — Claude resolves
- * the encoded directory name internally when given --resume <id>.
- * Returns the first candidate ID whose JSONL is found, or null if none exist.
+ * Locate the Claude projects directory for a given cwd by exact path encoding.
+ * Claude stores sessions under ~/.claude/projects/<slashes-replaced-by-hyphens>/.
+ * Exact match only — a partial-match fallback would risk returning a foreign
+ * project's dir when two paths share trailing segments (e.g. branch slugs reused
+ * across projects), causing claude --continue to act on the wrong session set.
  */
-function findResumableSession(candidateIds: string[]): string | null {
+function findClaudeProjectDir(cwd: string): string | null {
   try {
     const projectsDir = path.join(os.homedir(), '.claude', 'projects');
-    if (!fs.existsSync(projectsDir)) return null;
-    const dirs = fs.readdirSync(projectsDir);
-    for (const id of candidateIds) {
-      if (dirs.some((d) => fs.existsSync(path.join(projectsDir, d, `${id}.jsonl`)))) return id;
-    }
-  } catch {
-    // Best effort
+    const pathBased = path.join(projectsDir, cwd.replace(/\//g, '-'));
+    return fs.existsSync(pathBased) ? pathBased : null;
+  } catch (err) {
+    console.error('[findClaudeProjectDir] Failed to check projects dir:', err);
+    return null;
   }
-  return null;
+}
+
+/** Check whether Claude has any jsonl history for this cwd. */
+function hasAnySessionForCwd(cwd: string): boolean {
+  const projDir = findClaudeProjectDir(cwd);
+  if (!projDir) return false;
+  try {
+    return fs.readdirSync(projDir).some((f) => f.endsWith('.jsonl'));
+  } catch {
+    return false;
+  }
 }
 
 interface PtyRecord {
@@ -297,6 +305,35 @@ const DASH_HOOK_EVENTS = [
 ] as const;
 
 /**
+ * Claude Code rejects an entire settings.local.json if any top-level hook key
+ * is unknown to the running CLI version. Newer hook events must be gated so
+ * older Claude Code installs don't lose ALL Dash hooks (see GH #127).
+ *
+ * Returns false when the version is unknown, which keeps the new keys out of
+ * the file — the safer default. main.ts populates claudeCliCache after the
+ * async --version probe; by the time a PTY spawns, it's almost always set.
+ */
+function isClaudeVersionAtLeast(major: number, minor: number, patch: number): boolean {
+  let version: string | null = null;
+  try {
+    // Lazy require to avoid the circular import that a static import of main.ts
+    // would create (main → ptyManager → main). At call time, main is fully loaded.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+    const main = require('../main') as typeof import('../main');
+    version = main.claudeCliCache.version;
+  } catch {
+    return false;
+  }
+  if (!version) return false;
+  const m = version.match(/^(\d+)\.(\d+)\.(\d+)/);
+  if (!m) return false;
+  const [a, b, c] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  if (a !== major) return a > major;
+  if (b !== minor) return b > minor;
+  return c >= patch;
+}
+
+/**
  * Write .claude/settings.local.json with hooks for activity monitoring,
  * tool tracking, error detection, and context usage.
  *
@@ -334,27 +371,25 @@ function writeHookSettings(cwd: string, ptyId: string): void {
     PreToolUse: [{ matcher: '*', hooks: [httpHook('/hook/tool-start', true)] }],
     PostToolUse: [{ matcher: '*', hooks: [httpHook('/hook/tool-end', true)] }],
 
-    // ── Error detection ─────────────────────────────────────
-    StopFailure: [{ matcher: '*', hooks: [httpHook('/hook/stop-failure')] }],
-
     // ── Context compaction ──────────────────────────────────
     PreCompact: [{ matcher: '*', hooks: [httpHook('/hook/compact-start', true)] }],
-    PostCompact: [{ matcher: '*', hooks: [httpHook('/hook/compact-end', true)] }],
   };
 
-  // SessionStart hook fires on: startup (new session), resume (reattach by id),
-  // compact (auto/manual compaction), clear (/clear command). We use it for two
-  // purposes:
-  //   1. Capture Claude's real session_id (all 4 matchers) so the next spawn
-  //      can resume the correct session even if Claude forked or the filename
-  //      doesn't match task.id.
-  //   2. Re-inject task context (linked issue/work-item prompt) on startup,
-  //      compact, and clear — NOT resume, since resumed sessions already have
-  //      context in history.
-  const captureHook = httpHook('/hook/session-start');
+  // PostCompact added in Claude Code 2.1.76; older CLIs reject the key and
+  // skip the entire settings file (GH #127), losing all Dash hooks.
+  if (isClaudeVersionAtLeast(2, 1, 76)) {
+    hookSettings.PostCompact = [{ matcher: '*', hooks: [httpHook('/hook/compact-end', true)] }];
+  }
 
+  // StopFailure added in Claude Code 2.1.78.
+  if (isClaudeVersionAtLeast(2, 1, 78)) {
+    hookSettings.StopFailure = [{ matcher: '*', hooks: [httpHook('/hook/stop-failure')] }];
+  }
+
+  // SessionStart hook re-injects task context (linked issue/work-item prompt)
+  // on startup, compact, and clear — NOT resume, since resumed sessions
+  // already have context in history.
   const contextPrompt = getTaskContextPrompt(ptyId);
-  let contextHook: { type: 'command'; command: string } | null = null;
   if (contextPrompt) {
     const hookPayload = JSON.stringify({
       hookSpecificOutput: {
@@ -371,16 +406,12 @@ function writeHookSettings(cwd: string, ptyId: string): void {
       process.platform === 'win32'
         ? `powershell.exe -NoProfile -Command "[Console]::Out.Write([System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64}')))"`
         : `echo '${b64}' | base64 ${process.platform === 'darwin' ? '-D' : '-d'}`;
-    contextHook = { type: 'command', command: decodeCmd };
+    const contextHook = { type: 'command', command: decodeCmd };
+    hookSettings.SessionStart = ['startup', 'compact', 'clear'].map((matcher) => ({
+      matcher,
+      hooks: [contextHook],
+    }));
   }
-
-  hookSettings.SessionStart = ['startup', 'resume', 'compact', 'clear'].map((matcher) => {
-    const hooks: unknown[] = [captureHook];
-    if (contextHook && matcher !== 'resume') {
-      hooks.push(contextHook);
-    }
-    return { matcher, hooks };
-  });
 
   try {
     if (!fs.existsSync(claudeDir)) {
@@ -402,12 +433,22 @@ function writeHookSettings(cwd: string, ptyId: string): void {
       }
     }
 
+    // Drop any prior Dash-written hook keys before merging. A previous Dash
+    // version may have written events the current Claude Code CLI doesn't
+    // recognize (e.g. PostCompact pre-2.1.76), which would cause Claude to
+    // reject the entire settings file.
+    const existingHooks: Record<string, unknown> =
+      existing.hooks && typeof existing.hooks === 'object'
+        ? { ...(existing.hooks as Record<string, unknown>) }
+        : {};
+    for (const key of DASH_HOOK_EVENTS) {
+      delete existingHooks[key];
+    }
+
     const merged: Record<string, unknown> = {
       ...existing,
       hooks: {
-        ...(existing.hooks && typeof existing.hooks === 'object'
-          ? (existing.hooks as Record<string, unknown>)
-          : {}),
+        ...existingHooks,
         ...hookSettings,
       },
     };
@@ -514,34 +555,35 @@ export async function startDirectPty(options: {
 
   const args: string[] = [];
 
-  // Decide how to spawn based on whether a prior session JSONL exists on disk.
-  // Claude writes JNSONLs lazily — only after the first message — so we check
-  // before using --resume (which fails hard if the JSONL is absent).
+  // Resume strategy depends on a load-bearing invariant: each task has a
+  // unique cwd. Worktree tasks get their own dir by construction; non-worktree
+  // tasks are capped at one per project (enforced in DatabaseService.saveTask /
+  // restoreTask, with UI gating in TaskModal as a first line). Because cwd is
+  // unique, Claude's own "most recent jsonl in this dir" pick is always the
+  // right session — including across /clear and /compact forks.
   //
-  // Candidate priority:
-  //   1. lastSessionId — most recent session after /clear or /compact
-  //   2. options.id    — migration shim: pre-refactor Dash used --session-id task.id,
-  //                      so legacy JNSONLs are named after the task UUID
+  // DO NOT relax the one-non-worktree-task cap without reintroducing per-task
+  // session pinning; see git history at 32bcdb6 for the previous implementation
+  // and the issues that drove its removal.
   const task = DatabaseService.getTask(options.id);
-  const candidates = [task?.lastSessionId, options.id].filter((id): id is string => !!id);
-  const sessionToResume = findResumableSession(candidates);
-
-  if (sessionToResume) {
-    args.push('--resume', sessionToResume);
-  } else if (!task?.lastSessionId) {
-    // Truly new task: claim task.id as the session ID so task.id === session.id.
-    // SessionStart hook will capture it as lastSessionId after first spawn.
-    args.push('--session-id', options.id);
-  } else {
-    // lastSessionId is set but no JSONL found — session history is gone (wiped ~/.claude,
-    // migrated machine, etc.). Start fresh and notify the user if they had real history.
-    if (task.hadMessages) {
-      for (const win of BrowserWindow.getAllWindows()) {
-        if (!win.isDestroyed()) {
-          win.webContents.send('app:toast', {
-            message: `Couldn't resume previous session for "${task.name}" — history may have been cleared. Starting fresh.`,
-          });
-        }
+  if (hasAnySessionForCwd(options.cwd)) {
+    args.push('--continue');
+    // Record that real history exists so we can detect future history loss.
+    if (!task?.hadMessages) {
+      try {
+        DatabaseService.setTaskHadMessages(options.id);
+      } catch {
+        // Best effort
+      }
+    }
+  } else if (task?.hadMessages) {
+    // History was previously confirmed but is no longer found — externally cleared.
+    // Notify the user so they're not confused by the empty terminal.
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('app:toast', {
+          message: `Couldn't resume previous session for "${task.name}" — history may have been cleared. Starting fresh.`,
+        });
       }
     }
   }
