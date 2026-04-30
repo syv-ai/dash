@@ -14,6 +14,7 @@ import {
   type HttpHook,
   type CommandHook,
   type DashHookEndpoint,
+  type DashHookEvent,
   DASH_HOOK_EVENTS,
   entryIsDashOwned,
   mergeHookEntries,
@@ -343,11 +344,26 @@ function tagDash<T extends HttpHook | CommandHook>(hook: T): T & { __dash: true 
  * rewritten frequently (every PTY spawn, every commit-attribution change)
  * and the corrupt-recovery path on the read side would otherwise have to
  * handle a wider class of partial-write failures than just user edits.
+ *
+ * On failure (write error mid-data, or rename error after a successful
+ * write), unlink the tmp file best-effort before rethrowing so failed
+ * writes don't accumulate orphan `*.tmp-<pid>-<ts>` files alongside the
+ * user's settings.
  */
 function atomicWriteFileSync(target: string, data: string): void {
   const tmp = `${target}.tmp-${process.pid}-${Date.now()}`;
-  fs.writeFileSync(tmp, data);
-  fs.renameSync(tmp, target);
+  try {
+    fs.writeFileSync(tmp, data);
+    fs.renameSync(tmp, target);
+  } catch (err) {
+    try {
+      fs.unlinkSync(tmp);
+    } catch {
+      // best-effort: tmp may not exist if writeFileSync failed before
+      // creating the file, or unlink may race with another process.
+    }
+    throw err;
+  }
 }
 
 function broadcastToast(message: string): void {
@@ -357,8 +373,6 @@ function broadcastToast(message: string): void {
     }
   }
 }
-
-type HookWriteResult = { ok: true } | { ok: false; settingsPath: string; error: string };
 
 /**
  * Write .claude/settings.local.json with hooks for activity monitoring,
@@ -371,8 +385,11 @@ type HookWriteResult = { ok: true } | { ok: false; settingsPath: string; error: 
  * Merging preserves user-authored entries via the merge module's brand-or-
  * URL-shape detector, so users can have their own hooks under managed
  * events without losing them on every rewrite.
+ *
+ * Failure surfacing happens inside via console.error + broadcastToast.
+ * Callers don't need to act on the result.
  */
-function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
+function writeHookSettings(cwd: string, ptyId: string): void {
   const port = hookServer.port;
   const claudeDir = path.join(cwd, '.claude');
   const settingsPath = path.join(claudeDir, 'settings.local.json');
@@ -389,11 +406,7 @@ function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
     broadcastToast(
       `Hook server not ready — task hooks couldn't be written for ${path.basename(cwd)}. Restart Dash to recover.`,
     );
-    return {
-      ok: false,
-      settingsPath,
-      error: 'HookServer port not bound',
-    };
+    return;
   }
 
   const base = `http://127.0.0.1:${port}`;
@@ -408,7 +421,10 @@ function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
   const dashHttp = (endpoint: DashHookEndpoint, async?: boolean) =>
     tagDash(httpHook(endpoint, async));
 
-  const dashEntries: Record<string, HookEntry[]> = {
+  // Typed against DashHookEvent so a typo'd event key (e.g. 'PreToolUze')
+  // fails the build, matching the drift-prevention DashHookEndpoint gives
+  // us for endpoints.
+  const dashEntries: Partial<Record<DashHookEvent, HookEntry[]>> = {
     Stop: [{ matcher: '', hooks: [dashHttp('stop')] }],
     UserPromptSubmit: [{ matcher: '', hooks: [dashHttp('busy')] }],
     Notification: [
@@ -496,11 +512,7 @@ function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
           broadcastToast(
             `settings.local.json is corrupt and could not be backed up — hooks are off for this task. Fix or remove ${path.basename(settingsPath)} manually.`,
           );
-          return {
-            ok: false,
-            settingsPath,
-            error: `corrupt settings.local.json; backup rename failed: ${renameErr instanceof Error ? renameErr.message : String(renameErr)}`,
-          };
+          return;
         }
       }
     }
@@ -529,15 +541,9 @@ function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
 
     atomicWriteFileSync(settingsPath, JSON.stringify(merged, null, 2) + '\n');
     writtenSettingsPaths.add(settingsPath);
-    return { ok: true };
   } catch (err) {
     console.error('[writeHookSettings] Failed:', err);
     broadcastToast(`Could not write ${path.basename(settingsPath)} — hooks are off for this task.`);
-    return {
-      ok: false,
-      settingsPath,
-      error: err instanceof Error ? err.message : String(err),
-    };
   }
 }
 

@@ -94,6 +94,35 @@ describe('isDashOwnedHook', () => {
     );
   });
 
+  it('does not match when the Dash URL appears as a substring inside a longer url field', () => {
+    // The url-field check is anchored to the full string. A user hook
+    // whose url field is a sentence that happens to contain a Dash URL
+    // must not be classified as Dash-owned (otherwise their hook gets
+    // silently deleted on the next merge).
+    const url = 'http://other-server.example.com http://127.0.0.1:9999/hook/stop';
+    expect(isDashOwnedHook({ type: 'http', url })).toBe(false);
+  });
+
+  it('matches a Dash URL with the typical ?ptyId= query string', () => {
+    // The URL Dash actually writes — anchor allowing the query suffix.
+    const url = 'http://127.0.0.1:55123/hook/tool-start?ptyId=abc-def';
+    expect(isDashOwnedHook({ type: 'http', url })).toBe(true);
+  });
+
+  it('matches a mixed-case Dash URL (case-insensitive)', () => {
+    // Regex carries the /i flag — pin the behavior so a future "tighten
+    // the regex" cleanup can't silently change classification.
+    const url = 'HTTP://127.0.0.1:55123/Hook/Tool-Start';
+    expect(isDashOwnedHook({ type: 'http', url })).toBe(true);
+  });
+
+  it('matches a non-curl command that contains a Dash URL substring', () => {
+    // Command strings legitimately wrap Dash URLs in larger invocations
+    // (curl, but also node -e, wget, etc.) — substring match is required.
+    const command = `node -e "fetch('http://127.0.0.1:9/hook/tool-start?ptyId=x')"`;
+    expect(isDashOwnedHook({ type: 'command', command })).toBe(true);
+  });
+
   it('treats command hooks without a Dash URL as user-owned', () => {
     expect(isDashOwnedHook({ type: 'command', command: 'echo hi' })).toBe(false);
   });
@@ -150,6 +179,43 @@ describe('mergeHookEntries — user content preservation', () => {
     expect(merged.PreToolUse[0]).toEqual(userHook);
     // Dash entry appended after.
     expect(merged.PreToolUse[1].hooks[0]).toMatchObject({ __dash: true });
+  });
+
+  it('drops a mixed entry (user hook + Dash hook spliced together) wholesale', () => {
+    // entryIsDashOwned is conservative: if any hook in the entry is Dash-
+    // owned, the whole entry is dropped. This is the only path where merge
+    // legitimately deletes user content; pin the consequence end-to-end so
+    // a future "be less aggressive" change doesn't silently change it.
+    const mixed: HookEntry = {
+      matcher: '*',
+      hooks: [
+        { type: 'command', command: 'echo my-thing' },
+        { type: 'http', url: 'http://127.0.0.1:9/hook/tool-start', __dash: true },
+      ],
+    };
+    const existing = { PreToolUse: [mixed] };
+    const dash = { PreToolUse: [dashHttp('tool-start')] };
+
+    const merged = mergeHookEntries(existing, dash);
+
+    // Mixed entry gone; only the fresh Dash entry remains.
+    expect(merged.PreToolUse).toHaveLength(1);
+    expect(merged.PreToolUse[0].hooks[0]).toMatchObject({ __dash: true });
+  });
+
+  it('passes a brand-tagged hook through unchanged on a non-Dash event', () => {
+    // Dash only filters events listed in DASH_HOOK_EVENTS. A __dash-tagged
+    // hook accidentally landing on a non-managed event (e.g. CustomEvent)
+    // must not be filtered — we don't claim ownership of unrelated events.
+    const tagged: HookEntry = {
+      matcher: '*',
+      hooks: [{ type: 'http', url: 'http://127.0.0.1:9/hook/tool-start', __dash: true }],
+    };
+    const existing = { CustomEvent: [tagged] };
+
+    const merged = mergeHookEntries(existing, {});
+
+    expect(merged.CustomEvent).toEqual([tagged]);
   });
 
   it('drops Dash-owned entries from existing so refreshes don’t accumulate duplicates', () => {

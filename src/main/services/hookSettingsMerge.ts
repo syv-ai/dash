@@ -78,7 +78,18 @@ export type DashHookEndpoint = (typeof DASH_HOOK_ENDPOINTS)[number];
 
 const DASH_ENDPOINT_SET: ReadonlySet<string> = new Set(DASH_HOOK_ENDPOINTS);
 
-const DASH_URL_RE = /https?:\/\/127\.0\.0\.1:\d+\/hook\/([a-z-]+)/i;
+/**
+ * Anchored match: the entire string is a Dash hook URL. Use this for HTTP
+ * hook `url` fields, where the value is meant to be exactly the URL.
+ *
+ * The unanchored variant below is for `command` strings, where a Dash URL
+ * legitimately appears as a substring inside curl invocations. Splitting
+ * the two prevents a user-authored `url: "http://127.0.0.1:9999/hook/stop"`
+ * (their own dev server happening to expose `/hook/stop`) from being
+ * silently classified as Dash-owned and deleted on the next merge.
+ */
+const DASH_URL_FULL_RE = /^https?:\/\/127\.0\.0\.1:\d+\/hook\/([a-z-]+)(\?|$)/i;
+const DASH_URL_SUBSTR_RE = /https?:\/\/127\.0\.0\.1:\d+\/hook\/([a-z-]+)/i;
 
 /**
  * Pre-brand Dash versions wrote SessionStart context-injection hooks as a
@@ -88,22 +99,25 @@ const DASH_URL_RE = /https?:\/\/127\.0\.0\.1:\d+\/hook\/([a-z-]+)/i;
  * fallback, the old untagged commands would be preserved as "user content"
  * on the first merge and persist alongside the new tagged versions).
  *
- * The patterns are anchored / specific enough to make false-positive
- * collisions with user-authored hooks vanishingly unlikely:
+ * Both branches are anchored both ends. False-positive collisions with
+ * user-authored hooks are vanishingly unlikely:
  *  - macOS / Linux: `echo '<base64>' | base64 -D` (or `-d`)
- *  - Windows: `powershell.exe -NoProfile -Command "[Console]::Out.Write...
- *             ::FromBase64String(...`
+ *  - Windows: `powershell.exe -NoProfile -Command "[Console]::Out.Write
+ *             ([System.Text.Encoding]::UTF8.GetString(
+ *             [Convert]::FromBase64String('<base64>')))"`
  */
 const DASH_BASE64_DECODE_RE =
-  /^echo '[A-Za-z0-9+/=]*' \| base64 -[Dd]$|^powershell\.exe -NoProfile -Command "\[Console\]::Out\.Write/;
+  /^echo '[A-Za-z0-9+/=]*' \| base64 -[Dd]$|^powershell\.exe -NoProfile -Command "\[Console\]::Out\.Write\(\[System\.Text\.Encoding\]::UTF8\.GetString\(\[Convert\]::FromBase64String\('[A-Za-z0-9+/=]*'\)\)\)"$/;
 
-function urlMatchesDashEndpoint(s: string): boolean {
-  const m = s.match(DASH_URL_RE);
+function urlFieldIsDashEndpoint(url: string): boolean {
+  const m = url.match(DASH_URL_FULL_RE);
   return m !== null && DASH_ENDPOINT_SET.has(m[1].toLowerCase());
 }
 
 function commandLooksLikeDash(s: string): boolean {
-  return urlMatchesDashEndpoint(s) || DASH_BASE64_DECODE_RE.test(s);
+  const m = s.match(DASH_URL_SUBSTR_RE);
+  if (m !== null && DASH_ENDPOINT_SET.has(m[1].toLowerCase())) return true;
+  return DASH_BASE64_DECODE_RE.test(s);
 }
 
 /**
@@ -112,16 +126,17 @@ function commandLooksLikeDash(s: string): boolean {
  * case where a round-trip through another tool stripped the unknown field
  * AND for entries written by Dash versions predating the brand.
  *
- * The fallback matches the structural shape `http://127.0.0.1:<port>/hook/<ep>`
- * (any port, any known endpoint) plus the SessionStart base64-decode shape
- * so prior-session URLs and context hooks still get cleaned up.
+ * The URL fallback is anchored on the `url` field (a user's local dev
+ * server hosting a same-named path must NOT be reclassified as Dash) and
+ * unanchored inside command strings (a curl-to-Dash-endpoint legitimately
+ * appears as a substring of a longer command).
  */
 export function isDashOwnedHook(h: unknown): boolean {
   if (!h || typeof h !== 'object') return false;
   if ((h as { __dash?: unknown }).__dash === true) return true;
 
   const url = (h as { url?: unknown }).url;
-  if (typeof url === 'string' && urlMatchesDashEndpoint(url)) return true;
+  if (typeof url === 'string' && urlFieldIsDashEndpoint(url)) return true;
 
   const command = (h as { command?: unknown }).command;
   if (typeof command === 'string' && commandLooksLikeDash(command)) return true;
@@ -149,17 +164,29 @@ export function entryIsDashOwned(entry: unknown): boolean {
  */
 export function mergeHookEntries(
   existing: Record<string, HookEntry[] | undefined>,
-  dash: Record<string, HookEntry[]>,
+  dash: Record<string, HookEntry[] | undefined>,
 ): Record<string, HookEntry[]> {
   const merged: Record<string, HookEntry[]> = {};
   const dashEventSet = new Set<string>(DASH_HOOK_EVENTS);
   for (const [event, userEntries] of Object.entries(existing)) {
-    if (!Array.isArray(userEntries)) continue;
+    if (userEntries === undefined) continue;
+    if (!Array.isArray(userEntries)) {
+      // Hand-edited settings.local.json with a malformed event value (e.g.
+      // an object or string instead of an array). Claude Code rejects this
+      // shape too, so the value is already non-functional — but the user's
+      // edit gets overwritten on the next write, which is data loss they
+      // should at least see in logs.
+      console.warn(
+        `[hookSettingsMerge] Skipping non-array value for event "${event}" — overwriting on next write.`,
+      );
+      continue;
+    }
     merged[event] = dashEventSet.has(event)
       ? userEntries.filter((e) => !entryIsDashOwned(e))
       : userEntries;
   }
   for (const [event, entries] of Object.entries(dash)) {
+    if (!entries) continue;
     const preserved = merged[event] ?? [];
     merged[event] = [...preserved, ...entries];
   }
