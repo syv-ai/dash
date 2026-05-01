@@ -144,6 +144,13 @@ app.whenReady().then(async () => {
     PixelAgentsService.start();
   }
 
+  // Resolve rtk synchronously at startup; getHookCommand() is called on PTY spawn.
+  const { RtkService } = await import('./services/RtkService');
+  RtkService.setSender(mainWindow.webContents);
+  await RtkService.warmUp().catch((err) => {
+    console.error('[RtkService.warmUp]', err);
+  });
+
   // Cleanup orphaned reserve worktrees (background, non-blocking)
   setTimeout(async () => {
     try {
@@ -210,6 +217,8 @@ app.on('activate', async () => {
     remoteControlService.setSender(mainWindow.webContents);
     const { PixelAgentsService } = await import('./services/PixelAgentsService');
     PixelAgentsService.setSender(mainWindow.webContents);
+    const { RtkService } = await import('./services/RtkService');
+    RtkService.setSender(mainWindow.webContents);
     const { contextUsageService } = await import('./services/ContextUsageService');
     contextUsageService.setSender(mainWindow.webContents);
 

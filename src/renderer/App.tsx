@@ -37,6 +37,8 @@ import type {
   ActivityInfo,
   PixelAgentsConfig,
   PixelAgentsStatus,
+  RtkStatus,
+  RtkDownloadProgress,
 } from '../shared/types';
 import type { CreateTaskOptions } from './components/TaskModal';
 import { formatTaskContextPrompt } from '../shared/taskContext';
@@ -189,6 +191,47 @@ export function App() {
     return window.electronAPI.onPixelAgentsStatusChanged((status) => {
       setPixelAgentsStatus(status);
     });
+  }, []);
+
+  // RTK state
+  const [rtkStatus, setRtkStatus] = useState<RtkStatus | null>(null);
+  const [rtkDownloadProgress, setRtkDownloadProgress] = useState<RtkDownloadProgress | null>(null);
+
+  useEffect(() => {
+    // Retry once on transient failure — without it, a single flake at startup
+    // leaves rtkStatus null forever and the Settings card stays stuck on
+    // "loading…".
+    let cancelled = false;
+    const tryFetch = (attempt: number): void => {
+      window.electronAPI.rtkGetStatus().then((resp) => {
+        if (cancelled) return;
+        if (resp.success && resp.data) {
+          setRtkStatus(resp.data);
+        } else if (attempt < 1) {
+          console.warn('[rtk:getStatus] retrying after transient failure:', resp.error);
+          setTimeout(() => tryFetch(attempt + 1), 500);
+        } else {
+          console.error('[rtk:getStatus] gave up after retry:', resp.error);
+          // Sentinel so the Settings card stops spinning. `enabled` is
+          // unrepresentable on the not-installed arm by design.
+          setRtkStatus({ installed: false, downloadable: false });
+        }
+      });
+    };
+    tryFetch(0);
+    const cleanup = window.electronAPI.onRtkDownloadProgress((progress) => {
+      setRtkDownloadProgress(progress);
+      if (progress.phase === 'done') {
+        window.electronAPI.rtkGetStatus().then((resp) => {
+          if (resp.success && resp.data) setRtkStatus(resp.data);
+          else console.error('[rtk:getStatus after download]', resp.error);
+        });
+      }
+    });
+    return () => {
+      cancelled = true;
+      cleanup();
+    };
   }, []);
 
   // Sync desktop notification settings to main process
@@ -1479,7 +1522,7 @@ export function App() {
                 setShowSettings(true);
               }}
               onOpenPixelAgents={() => {
-                setSettingsInitialTab('pixel-agents');
+                setSettingsInitialTab('add-ons');
                 setShowSettings(true);
               }}
               onShowCommitGraph={(projectId) => {
@@ -1830,6 +1873,41 @@ export function App() {
             window.electronAPI.pixelAgentsSaveConfig(config);
           }}
           pixelAgentsStatus={pixelAgentsStatus}
+          rtkStatus={rtkStatus}
+          onRtkEnabledChange={(enabled) => {
+            // Optimistic update only applies to the installed arm — the type
+            // forbids `enabled` on { installed: false }.
+            setRtkStatus((prev) => (prev?.installed ? { ...prev, enabled } : prev));
+            window.electronAPI.rtkSetEnabled(enabled).then((resp) => {
+              if (!resp.success) {
+                toast.error(resp.error ?? 'Failed to toggle RTK');
+                window.electronAPI.rtkGetStatus().then((s) => {
+                  if (s.success && s.data) setRtkStatus(s.data);
+                  else console.error('[rtk:getStatus after setEnabled failure]', s.error);
+                });
+                return;
+              }
+              if (resp.data?.warning) {
+                toast.warning(resp.data.warning);
+              }
+            });
+          }}
+          onRtkDownload={() => {
+            setRtkDownloadProgress({ phase: 'downloading', percent: 0 });
+            window.electronAPI.rtkDownload().then((resp) => {
+              if (!resp.success) {
+                setRtkDownloadProgress({
+                  phase: 'error',
+                  error: resp.error ?? 'download failed',
+                });
+                return;
+              }
+              if (resp.data?.warning) {
+                toast.warning(resp.data.warning);
+              }
+            });
+          }}
+          rtkDownloadProgress={rtkDownloadProgress}
           latestRateLimits={latestRateLimits}
           usageThresholds={usageThresholds}
           onUsageThresholdsChange={setUsageThresholds}
