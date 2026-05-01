@@ -572,8 +572,8 @@ export async function startDirectPty(options: {
     if (!task?.hadMessages) {
       try {
         DatabaseService.setTaskHadMessages(options.id);
-      } catch {
-        // Best effort
+      } catch (err) {
+        console.error('[startDirectPty] Failed to set hadMessages for task', options.id, err);
       }
     }
   } else if (task?.hadMessages) {

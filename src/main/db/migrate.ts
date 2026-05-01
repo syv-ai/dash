@@ -137,8 +137,11 @@ export function runMigrations(): void {
 
   try {
     rawDb.exec(`ALTER TABLE tasks ADD COLUMN had_messages INTEGER DEFAULT 0`);
-  } catch {
-    /* already exists */
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!msg.includes('duplicate column')) {
+      console.error('[migrate] Failed to add had_messages column:', err);
+    }
   }
 
   // Backfill: sync is_git_repo with actual filesystem state
