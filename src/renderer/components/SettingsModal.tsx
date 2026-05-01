@@ -44,14 +44,7 @@ import { UsageBar } from './ui/UsageBar';
 const DASH_DEFAULT_ATTRIBUTION =
   '\n\nCo-Authored-By: Claude <noreply@anthropic.com> via Dash <dash@syv.ai>';
 
-type SettingsTab =
-  | 'general'
-  | 'appearance'
-  | 'claude-code'
-  | 'keybindings'
-  | 'usage'
-  | 'pixel-agents'
-  | 'rtk';
+type SettingsTab = 'general' | 'appearance' | 'claude-code' | 'keybindings' | 'usage' | 'add-ons';
 
 interface SettingsModalProps {
   initialTab?: string;
@@ -1024,8 +1017,7 @@ export function SettingsModal({
     'claude-code',
     'keybindings',
     'usage',
-    'pixel-agents',
-    'rtk',
+    'add-ons',
   ];
   const [tab, setTab] = useState<SettingsTab>(
     initialTab && validTabs.includes(initialTab as SettingsTab)
@@ -1142,8 +1134,7 @@ export function SettingsModal({
               { id: 'keybindings', label: 'Keybindings' },
               { id: 'claude-code', label: 'Claude' },
               { id: 'usage', label: 'Usage' },
-              { id: 'rtk', label: 'RTK' },
-              { id: 'pixel-agents', label: 'Pixel Agents' },
+              { id: 'add-ons', label: 'Add-ons' },
             ] as const
           ).map((t) => (
             <button
@@ -1156,7 +1147,7 @@ export function SettingsModal({
               }`}
             >
               {t.label}
-              {t.id === 'pixel-agents' &&
+              {t.id === 'add-ons' &&
                 Object.values(pixelAgentsStatus.offices).some(
                   (s) => s === 'connected' || s === 'registered',
                 ) && (
@@ -1677,24 +1668,23 @@ export function SettingsModal({
             />
           )}
 
-          {tab === 'pixel-agents' && (
-            <div className="space-y-6 animate-fade-in">
-              <PixelAgentsSection
-                config={pixelAgentsConfig}
-                onChange={onPixelAgentsConfigChange}
-                status={pixelAgentsStatus}
-              />
-            </div>
-          )}
-
-          {tab === 'rtk' && (
-            <div className="space-y-6 animate-fade-in">
-              <RtkSection
-                status={rtkStatus}
-                onEnabledChange={onRtkEnabledChange}
-                onDownload={onRtkDownload}
-                progress={rtkDownloadProgress}
-              />
+          {tab === 'add-ons' && (
+            <div className="space-y-8 animate-fade-in">
+              <AddOnSection title="RTK">
+                <RtkSection
+                  status={rtkStatus}
+                  onEnabledChange={onRtkEnabledChange}
+                  onDownload={onRtkDownload}
+                  progress={rtkDownloadProgress}
+                />
+              </AddOnSection>
+              <AddOnSection title="Pixel Agents">
+                <PixelAgentsSection
+                  config={pixelAgentsConfig}
+                  onChange={onPixelAgentsConfigChange}
+                  status={pixelAgentsStatus}
+                />
+              </AddOnSection>
             </div>
           )}
 
@@ -1889,6 +1879,20 @@ function labelForProgress(progress: RtkDownloadProgress | null): {
       return { installing: false, installLabel: 'Install RTK' };
     }
   }
+}
+
+function AddOnSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-foreground/60">
+          {title}
+        </span>
+        <div className="flex-1 h-px bg-border/30" />
+      </div>
+      {children}
+    </section>
+  );
 }
 
 function RtkSection({

@@ -1522,7 +1522,7 @@ export function App() {
                 setShowSettings(true);
               }}
               onOpenPixelAgents={() => {
-                setSettingsInitialTab('pixel-agents');
+                setSettingsInitialTab('add-ons');
                 setShowSettings(true);
               }}
               onShowCommitGraph={(projectId) => {
