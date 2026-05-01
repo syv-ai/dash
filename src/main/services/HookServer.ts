@@ -13,8 +13,8 @@ class HookServerImpl {
   private server: http.Server | null = null;
   private _port: number = 0;
   private _desktopNotificationEnabled = false;
-  // Permissive default until setPtyValidator is called during boot
-  private _hasPty: (id: string) => boolean = () => true;
+  // Fail-closed default — setPtyValidator is called in main.ts before the server starts
+  private _hasPty: (id: string) => boolean = () => false;
 
   get port(): number {
     return this._port;

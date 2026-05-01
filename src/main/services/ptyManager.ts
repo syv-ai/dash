@@ -638,8 +638,27 @@ export async function startDirectPty(options: {
   // DO NOT relax the one-non-worktree-task cap without reintroducing per-task
   // session pinning; see git history at 32bcdb6 for the previous implementation
   // and the issues that drove its removal.
+  const task = DatabaseService.getTask(options.id);
   if (hasAnySessionForCwd(options.cwd)) {
     args.push('--continue');
+    // Record that real history exists so we can detect future history loss.
+    if (!task?.hadMessages) {
+      try {
+        DatabaseService.setTaskHadMessages(options.id);
+      } catch (err) {
+        console.error('[startDirectPty] Failed to set hadMessages for task', options.id, err);
+      }
+    }
+  } else if (task?.hadMessages) {
+    // History was previously confirmed but is no longer found — externally cleared.
+    // Notify the user so they're not confused by the empty terminal.
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('app:toast', {
+          message: `Couldn't resume previous session for "${task.name}" — history may have been cleared. Starting fresh.`,
+        });
+      }
+    }
   }
 
   if (options.autoApprove) {

@@ -135,6 +135,15 @@ export function runMigrations(): void {
     /* already exists */
   }
 
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN had_messages INTEGER DEFAULT 0`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!msg.includes('duplicate column')) {
+      console.error('[migrate] Failed to add had_messages column:', err);
+    }
+  }
+
   // Backfill: sync is_git_repo with actual filesystem state
   try {
     const allProjects = rawDb.prepare(`SELECT id, path FROM projects`).all() as {

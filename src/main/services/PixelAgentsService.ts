@@ -131,17 +131,32 @@ export class PixelAgentsService {
 
     // In packaged builds, the watcher lives in app.asar.unpacked and can't be
     // executed directly. Use Electron as a plain Node process via ELECTRON_RUN_AS_NODE.
-    const args = app.isPackaged
-      ? [binPath, '--config', getConfigPath()]
-      : ['--config', getConfigPath()];
-    const cmd = app.isPackaged ? process.execPath : binPath;
+    // In dev on Windows, .cmd shims and .cjs scripts also can't be executed directly.
+    const isCjsScript = binPath.endsWith('.cjs');
+    const isCmdScript = binPath.endsWith('.cmd');
+
+    let cmd: string;
+    let args: string[];
+    let extraEnv: Record<string, string> = {};
+
+    if (app.isPackaged || isCjsScript) {
+      cmd = process.execPath;
+      args = [binPath, '--config', getConfigPath()];
+      extraEnv = { ELECTRON_RUN_AS_NODE: '1' };
+    } else if (isCmdScript) {
+      cmd = 'cmd.exe';
+      args = ['/c', binPath, '--config', getConfigPath()];
+    } else {
+      cmd = binPath;
+      args = ['--config', getConfigPath()];
+    }
 
     const child = spawn(cmd, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
         NODE_NO_WARNINGS: '1',
-        ...(app.isPackaged ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
+        ...extraEnv,
       },
     });
 
@@ -162,6 +177,17 @@ export class PixelAgentsService {
         console.error(`[pixel-agents] ${line}`);
       });
     }
+
+    child.on('error', (err) => {
+      console.error(`[pixel-agents] Spawn error (cmd=${cmd}):`, err);
+      PixelAgentsService.child = null;
+      if (PixelAgentsService.running) {
+        PixelAgentsService.respawnTimer = setTimeout(() => {
+          console.log('[pixel-agents] Respawning after spawn error...');
+          PixelAgentsService.start();
+        }, RESPAWN_DELAY);
+      }
+    });
 
     child.on('exit', (code, signal) => {
       console.log(`[pixel-agents] Watcher exited (code=${code}, signal=${signal})`);
@@ -286,15 +312,20 @@ export class PixelAgentsService {
   }
 
   private static resolveBinPath(): string | null {
-    // In dev: node_modules/.bin/pixel-agents-watcher (shell wrapper)
-    const devPath = join(app.getAppPath(), 'node_modules', '.bin', 'pixel-agents-watcher');
-    if (existsSync(devPath)) return devPath;
+    // In dev: node_modules/.bin/pixel-agents-watcher (shell wrapper on Unix, .cmd on Windows)
+    // Check .cmd first on Windows — pnpm creates both the extensionless wrapper and a .cmd
+    // shim, and the extensionless file cannot be executed directly on Windows.
+    const devBase = join(app.getAppPath(), 'node_modules', '.bin', 'pixel-agents-watcher');
+    if (process.platform === 'win32' && existsSync(devBase + '.cmd')) return devBase + '.cmd';
+    if (existsSync(devBase)) return devBase;
 
-    // Packaged app: resolve the bundled CJS file from asarUnpack
+    // Packaged app: resolve the bundled CJS file from asarUnpack so it can execute outside the archive.
+    // Also used as a dev fallback when no bin shim is present.
     try {
       const resolved = require.resolve('@syv-ai/pixel-agents-watcher/dist/watcher.cjs');
       return resolved.replace('app.asar', 'app.asar.unpacked');
-    } catch {
+    } catch (err) {
+      console.error('[pixel-agents] require.resolve failed for watcher.cjs:', err);
       return null;
     }
   }
