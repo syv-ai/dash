@@ -1,5 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import {
+  writeFileSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  readlinkSync,
+  lstatSync,
+  existsSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
@@ -21,6 +30,7 @@ const {
   shellQuoteUnix,
   extractRewrittenCommand,
   verifyChecksum,
+  ensureUserBinSymlink,
 } = __test__;
 
 describe('assertTrustedDownloadUrl', () => {
@@ -302,5 +312,61 @@ describe('parseTarVerbose', () => {
   it('falls back to "other" for unknown type chars', () => {
     const out = parseTarVerbose('crw-r--r-- user 0 date weird-device');
     expect(out[0].type).toBe('other');
+  });
+});
+
+describe('ensureUserBinSymlink', () => {
+  let tmpRoot: string;
+  let target: string;
+
+  beforeEach(() => {
+    tmpRoot = mkdtempSync(join(tmpdir(), 'rtk-symlink-'));
+    mkdirSync(join(tmpRoot, 'managed'));
+    mkdirSync(join(tmpRoot, 'bin'));
+    target = join(tmpRoot, 'managed', 'rtk');
+    writeFileSync(target, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  });
+
+  afterEach(() => {
+    rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  it('creates the symlink and intermediate dirs', () => {
+    const linkPath = join(tmpRoot, 'home', '.local', 'bin', 'rtk');
+    ensureUserBinSymlink(target, linkPath);
+    expect(lstatSync(linkPath).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(linkPath)).toBe(target);
+  });
+
+  it('refreshes a stale symlink to the new target', () => {
+    const linkPath = join(tmpRoot, 'bin', 'rtk');
+    const oldTarget = join(tmpRoot, 'old-rtk');
+    writeFileSync(oldTarget, 'old');
+    symlinkSync(oldTarget, linkPath);
+    ensureUserBinSymlink(target, linkPath);
+    expect(readlinkSync(linkPath)).toBe(target);
+  });
+
+  it('leaves a non-symlink in place (does not clobber a real file)', () => {
+    const linkPath = join(tmpRoot, 'bin', 'rtk');
+    writeFileSync(linkPath, 'user-installed-rtk');
+    ensureUserBinSymlink(target, linkPath);
+    expect(lstatSync(linkPath).isSymbolicLink()).toBe(false);
+  });
+
+  it('is a no-op when the link already points at the target', () => {
+    const linkPath = join(tmpRoot, 'bin', 'rtk');
+    symlinkSync(target, linkPath);
+    const before = lstatSync(linkPath).ctimeMs;
+    ensureUserBinSymlink(target, linkPath);
+    expect(lstatSync(linkPath).ctimeMs).toBe(before);
+  });
+
+  it('does not throw when the parent dir cannot be created', () => {
+    const blocker = join(tmpRoot, 'blocker');
+    writeFileSync(blocker, 'not a dir');
+    const linkPath = join(blocker, 'bin', 'rtk');
+    expect(() => ensureUserBinSymlink(target, linkPath)).not.toThrow();
+    expect(existsSync(linkPath)).toBe(false);
   });
 });

@@ -7,12 +7,14 @@ import {
   createWriteStream,
   chmodSync,
   lstatSync,
+  readlinkSync,
   renameSync,
   rmSync,
+  symlinkSync,
 } from 'node:fs';
 import { mkdtemp, writeFile, mkdir, rm } from 'node:fs/promises';
 import { delimiter, dirname, join, normalize, resolve, sep } from 'node:path';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { pipeline } from 'node:stream/promises';
@@ -133,6 +135,24 @@ export class RtkService {
   }
 
   /**
+   * Path to a `~/.local/bin/rtk` symlink pointing at the managed binary.
+   * RTK's hook rewrites `git status` → `rtk git status`, so `rtk` must resolve
+   * via $PATH wherever Claude Code's Bash tool runs the rewritten command —
+   * not just inside Dash's PTYs (whose PATH we control). `~/.local/bin` is on
+   * $PATH by default on Linux and harmless on macOS. Returns null on Windows
+   * because no native release exists upstream.
+   */
+  private static getUserPathSymlinkPath(): string | null {
+    if (process.platform === 'win32') return null;
+    return join(homedir(), '.local', 'bin', 'rtk');
+  }
+
+  private static ensureUserBinSymlink(target: string): void {
+    const linkPath = RtkService.getUserPathSymlinkPath();
+    if (linkPath) ensureUserBinSymlink(target, linkPath);
+  }
+
+  /**
    * Returns the managed bin dir ONLY when a probed-good binary is there.
    * Gating on cachedResolution (not just existsSync) prevents poisoning the
    * PTY PATH with a dir whose binary failed --version.
@@ -232,7 +252,11 @@ export class RtkService {
   /** Populates cachedResolution so getHookCommand() is synchronous later. */
   static async warmUp(): Promise<void> {
     const resolved = await RtkService.resolveBinary();
-    if (resolved) RtkService.cachedResolution = resolved;
+    if (resolved) {
+      RtkService.cachedResolution = resolved;
+      // Backfill the symlink for installs that predate this fix.
+      if (resolved.source === 'managed') RtkService.ensureUserBinSymlink(resolved.path);
+    }
   }
 
   /**
@@ -383,6 +407,7 @@ export class RtkService {
         rmSync(binPath, { force: true });
         throw new Error('Installed binary failed to report --version; removed.');
       }
+      RtkService.ensureUserBinSymlink(RtkService.cachedResolution.path);
 
       RtkService.emitProgress({ phase: 'done', version: release.tag_name });
     } catch (err) {
@@ -981,6 +1006,27 @@ async function fetchWithTimeout(
 }
 
 /**
+ * Best-effort: create or refresh a symlink at `linkPath` pointing at `target`.
+ * Never throws; install must not fail because the symlink could not be made.
+ * Refuses to overwrite a non-symlink at the destination so a user-installed
+ * `rtk` (e.g. via cargo) is not clobbered.
+ */
+function ensureUserBinSymlink(target: string, linkPath: string): void {
+  try {
+    mkdirSync(dirname(linkPath), { recursive: true });
+    if (existsSync(linkPath)) {
+      const stat = lstatSync(linkPath);
+      if (!stat.isSymbolicLink()) return;
+      if (readlinkSync(linkPath) === target) return;
+      rmSync(linkPath);
+    }
+    symlinkSync(target, linkPath);
+  } catch (err) {
+    console.warn('[RtkService] could not create user-bin symlink:', err);
+  }
+}
+
+/**
  * Test-only exports of module-private helpers. Importing from here keeps the
  * unit tests exercising the real code instead of a drifting re-implementation.
  */
@@ -991,4 +1037,5 @@ export const __test__ = {
   shellQuoteUnix,
   extractRewrittenCommand,
   verifyChecksum,
+  ensureUserBinSymlink,
 };
