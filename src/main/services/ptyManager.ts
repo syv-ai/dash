@@ -8,6 +8,17 @@ import { activityMonitor } from './ActivityMonitor';
 import { hookServer } from './HookServer';
 import { contextUsageService } from './ContextUsageService';
 import { DatabaseService } from './DatabaseService';
+import {
+  type Hook,
+  type HookEntry,
+  type HttpHook,
+  type CommandHook,
+  type DashHookEndpoint,
+  type DashHookEvent,
+  DASH_HOOK_EVENTS,
+  entryIsDashOwned,
+  mergeHookEntries,
+} from './hookSettingsMerge';
 
 const execFileAsync = promisify(execFile);
 
@@ -289,22 +300,6 @@ function getTaskContextPrompt(taskId: string): string | null {
 }
 
 /**
- * All hook event names that Dash writes to settings.local.json.
- * Used by both writeHookSettings and cleanupHookSettings.
- */
-const DASH_HOOK_EVENTS = [
-  'Stop',
-  'UserPromptSubmit',
-  'Notification',
-  'PreToolUse',
-  'PostToolUse',
-  'StopFailure',
-  'PreCompact',
-  'PostCompact',
-  'SessionStart',
-] as const;
-
-/**
  * Claude Code rejects an entire settings.local.json if any top-level hook key
  * is unknown to the running CLI version. Newer hook events must be gated so
  * older Claude Code installs don't lose ALL Dash hooks (see GH #127).
@@ -334,56 +329,122 @@ function isClaudeVersionAtLeast(major: number, minor: number, patch: number): bo
 }
 
 /**
+ * Mark a hook as Dash-authored. The brand lets the merge module recognize
+ * it on the next rewrite without falling back to URL/command-shape pattern
+ * matching.
+ */
+function tagDash<T extends HttpHook | CommandHook>(hook: T): T & { __dash: true } {
+  return { ...hook, __dash: true };
+}
+
+/**
+ * Atomic write: stage to a sibling tmp file then rename over the target.
+ * POSIX rename is atomic, so a crash mid-write can never leave a half-
+ * written file at `target`. Important here because settings.local.json is
+ * rewritten frequently (every PTY spawn, every commit-attribution change)
+ * and the corrupt-recovery path on the read side would otherwise have to
+ * handle a wider class of partial-write failures than just user edits.
+ *
+ * On failure (write error mid-data, or rename error after a successful
+ * write), unlink the tmp file best-effort before rethrowing so failed
+ * writes don't accumulate orphan `*.tmp-<pid>-<ts>` files alongside the
+ * user's settings.
+ */
+function atomicWriteFileSync(target: string, data: string): void {
+  const tmp = `${target}.tmp-${process.pid}-${Date.now()}`;
+  try {
+    fs.writeFileSync(tmp, data);
+    fs.renameSync(tmp, target);
+  } catch (err) {
+    try {
+      fs.unlinkSync(tmp);
+    } catch {
+      // best-effort: tmp may not exist if writeFileSync failed before
+      // creating the file, or unlink may race with another process.
+    }
+    throw err;
+  }
+}
+
+function broadcastToast(message: string): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('app:toast', { message });
+    }
+  }
+}
+
+/**
  * Write .claude/settings.local.json with hooks for activity monitoring,
  * tool tracking, error detection, and context usage.
  *
  * Hooks use type: "http" — Claude Code POSTs the hook JSON body directly
  * to our local HookServer. The statusLine uses type: "command" with curl
  * (http type is not supported for statusLine).
+ *
+ * Merging preserves user-authored entries via the merge module's brand-or-
+ * URL-shape detector, so users can have their own hooks under managed
+ * events without losing them on every rewrite.
+ *
+ * Failure surfacing happens inside via console.error + broadcastToast.
+ * Callers don't need to act on the result.
  */
 function writeHookSettings(cwd: string, ptyId: string): void {
   const port = hookServer.port;
-  if (port === 0) return;
-
   const claudeDir = path.join(cwd, '.claude');
   const settingsPath = path.join(claudeDir, 'settings.local.json');
-  const base = `http://127.0.0.1:${port}`;
 
-  /** Shorthand: build an HTTP hook entry. */
-  const httpHook = (endpoint: string, async?: boolean) => ({
+  // The await order in main.ts (`await hookServer.start()` before IPC
+  // registration) makes this branch unreachable in normal startup; if we hit
+  // it, something has invoked writeHookSettings outside the IPC entry path.
+  // Surface it loudly rather than leaving stale on-disk hooks unchanged.
+  if (port === 0) {
+    console.error(
+      '[writeHookSettings] HookServer port not bound — settings.local.json not updated. ' +
+        `Likely a startup-ordering bug (caller invoked before hookServer.start() resolved). cwd=${cwd}`,
+    );
+    broadcastToast(
+      `Hook server not ready — task hooks couldn't be written for ${path.basename(cwd)}. Restart Dash to recover.`,
+    );
+    return;
+  }
+
+  const base = `http://127.0.0.1:${port}`;
+  const buildHookUrl = (endpoint: DashHookEndpoint) => `${base}/hook/${endpoint}?ptyId=${ptyId}`;
+
+  const httpHook = (endpoint: DashHookEndpoint, async?: boolean): HttpHook => ({
     type: 'http' as const,
-    url: `${base}${endpoint}?ptyId=${ptyId}`,
+    url: buildHookUrl(endpoint),
     ...(async ? { async: true } : {}),
   });
 
-  const hookSettings: Record<string, unknown[]> = {
-    // ── Activity state signals ──────────────────────────────
-    Stop: [{ hooks: [httpHook('/hook/stop')] }],
-    UserPromptSubmit: [{ hooks: [httpHook('/hook/busy')] }],
+  const dashHttp = (endpoint: DashHookEndpoint, async?: boolean) =>
+    tagDash(httpHook(endpoint, async));
 
-    // ── Notification (permission prompt, idle) ──────────────
+  // Typed against DashHookEvent so a typo'd event key (e.g. 'PreToolUze')
+  // fails the build, matching the drift-prevention DashHookEndpoint gives
+  // us for endpoints.
+  const dashEntries: Partial<Record<DashHookEvent, HookEntry[]>> = {
+    Stop: [{ matcher: '', hooks: [dashHttp('stop')] }],
+    UserPromptSubmit: [{ matcher: '', hooks: [dashHttp('busy')] }],
     Notification: [
-      { matcher: 'permission_prompt', hooks: [httpHook('/hook/notification')] },
-      { matcher: 'idle_prompt', hooks: [httpHook('/hook/notification')] },
+      { matcher: 'permission_prompt', hooks: [dashHttp('notification')] },
+      { matcher: 'idle_prompt', hooks: [dashHttp('notification')] },
     ],
-
-    // ── Tool activity tracking ──────────────────────────────
-    PreToolUse: [{ matcher: '*', hooks: [httpHook('/hook/tool-start', true)] }],
-    PostToolUse: [{ matcher: '*', hooks: [httpHook('/hook/tool-end', true)] }],
-
-    // ── Context compaction ──────────────────────────────────
-    PreCompact: [{ matcher: '*', hooks: [httpHook('/hook/compact-start', true)] }],
+    PreToolUse: [{ matcher: '*', hooks: [dashHttp('tool-start', true)] }],
+    PostToolUse: [{ matcher: '*', hooks: [dashHttp('tool-end', true)] }],
+    PreCompact: [{ matcher: '*', hooks: [dashHttp('compact-start', true)] }],
   };
 
   // PostCompact added in Claude Code 2.1.76; older CLIs reject the key and
   // skip the entire settings file (GH #127), losing all Dash hooks.
   if (isClaudeVersionAtLeast(2, 1, 76)) {
-    hookSettings.PostCompact = [{ matcher: '*', hooks: [httpHook('/hook/compact-end', true)] }];
+    dashEntries.PostCompact = [{ matcher: '*', hooks: [dashHttp('compact-end', true)] }];
   }
 
   // StopFailure added in Claude Code 2.1.78.
   if (isClaudeVersionAtLeast(2, 1, 78)) {
-    hookSettings.StopFailure = [{ matcher: '*', hooks: [httpHook('/hook/stop-failure')] }];
+    dashEntries.StopFailure = [{ matcher: '*', hooks: [dashHttp('stop-failure')] }];
   }
 
   // SessionStart hook re-injects task context (linked issue/work-item prompt)
@@ -406,10 +467,10 @@ function writeHookSettings(cwd: string, ptyId: string): void {
       process.platform === 'win32'
         ? `powershell.exe -NoProfile -Command "[Console]::Out.Write([System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64}')))"`
         : `echo '${b64}' | base64 ${process.platform === 'darwin' ? '-D' : '-d'}`;
-    const contextHook = { type: 'command', command: decodeCmd };
-    hookSettings.SessionStart = ['startup', 'compact', 'clear'].map((matcher) => ({
+    const contextHook: CommandHook = { type: 'command', command: decodeCmd };
+    dashEntries.SessionStart = ['startup', 'compact', 'clear'].map((matcher) => ({
       matcher,
-      hooks: [contextHook],
+      hooks: [tagDash(contextHook)],
     }));
   }
 
@@ -418,66 +479,79 @@ function writeHookSettings(cwd: string, ptyId: string): void {
       fs.mkdirSync(claudeDir, { recursive: true });
     }
 
-    // Merge with existing settings to preserve non-hook config
     let existing: Record<string, unknown> = {};
     if (fs.existsSync(settingsPath)) {
       try {
-        existing = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+        const parsed = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) as unknown;
+        // JSON.parse succeeds on "null", "42", "[]", etc. Only plain objects
+        // can be spread and merged safely; anything else is treated as corrupt.
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          existing = parsed as Record<string, unknown>;
+        } else {
+          throw new Error(`settings.local.json is not a JSON object (got ${typeof parsed})`);
+        }
       } catch (err) {
-        console.error(
-          '[writeHookSettings] Corrupted settings.local.json at',
-          settingsPath,
-          '— overwriting:',
-          err,
-        );
+        // Back up the corrupt file before overwriting so the user can recover.
+        // If the backup rename fails, we MUST NOT proceed to overwrite — that
+        // would destroy the user's on-disk file with no copy left.
+        const backupPath = `${settingsPath}.corrupt-${Date.now()}.bak`;
+        try {
+          fs.renameSync(settingsPath, backupPath);
+          console.error(
+            `[writeHookSettings] settings.local.json corrupt at ${settingsPath}; backed up to ${backupPath}`,
+            err,
+          );
+          broadcastToast(
+            `settings.local.json was unreadable — backed up to ${path.basename(backupPath)} and rewritten.`,
+          );
+        } catch (renameErr) {
+          console.error(
+            '[writeHookSettings] Failed to back up corrupt file; leaving on-disk file intact:',
+            renameErr,
+          );
+          broadcastToast(
+            `settings.local.json is corrupt and could not be backed up — hooks are off for this task. Fix or remove ${path.basename(settingsPath)} manually.`,
+          );
+          return;
+        }
       }
     }
 
-    // Drop any prior Dash-written hook keys before merging. A previous Dash
-    // version may have written events the current Claude Code CLI doesn't
-    // recognize (e.g. PostCompact pre-2.1.76), which would cause Claude to
-    // reject the entire settings file.
-    const existingHooks: Record<string, unknown> =
+    const existingHooks =
       existing.hooks && typeof existing.hooks === 'object'
-        ? { ...(existing.hooks as Record<string, unknown>) }
+        ? (existing.hooks as Record<string, HookEntry[] | undefined>)
         : {};
-    for (const key of DASH_HOOK_EVENTS) {
-      delete existingHooks[key];
-    }
+
+    const mergedHooks = mergeHookEntries(existingHooks, dashEntries);
 
     const merged: Record<string, unknown> = {
       ...existing,
-      hooks: {
-        ...existingHooks,
-        ...hookSettings,
-      },
+      hooks: mergedHooks,
     };
 
-    // statusLine: command that pipes Claude Code's JSON context data to our hook server
-    const contextUrl = `${base}/hook/context?ptyId=${ptyId}`;
+    const contextUrl = buildHookUrl('context');
     merged.statusLine = {
       type: 'command',
       command: `curl -s --connect-timeout 2 -X POST -H "Content-Type: application/json" -d @- "${contextUrl}" >/dev/null 2>&1`,
     };
 
-    // Commit attribution: undefined = Dash default, '' = suppress, other = custom.
     const effectiveAttribution =
       commitAttributionSetting === undefined ? DASH_DEFAULT_ATTRIBUTION : commitAttributionSetting;
     merged.attribution = { commit: effectiveAttribution };
 
-    fs.writeFileSync(settingsPath, JSON.stringify(merged, null, 2) + '\n');
+    atomicWriteFileSync(settingsPath, JSON.stringify(merged, null, 2) + '\n');
     writtenSettingsPaths.add(settingsPath);
-    console.error(
-      `[writeHookSettings] Wrote ${settingsPath} (attribution: ${commitAttributionSetting === undefined ? 'default' : commitAttributionSetting || 'none'})`,
-    );
   } catch (err) {
     console.error('[writeHookSettings] Failed:', err);
+    broadcastToast(`Could not write ${path.basename(settingsPath)} — hooks are off for this task.`);
   }
 }
 
 /**
  * Remove Dash-written hooks and attribution from all settings.local.json files
- * that were written during this session. Called on app quit to prevent stale hooks.
+ * that were written during this session. Preserves user-authored entries
+ * by filtering against the merge module's Dash-owned detector instead of
+ * deleting the entire managed-event keys.
  */
 export function cleanupHookSettings(): void {
   for (const settingsPath of writtenSettingsPaths) {
@@ -489,25 +563,24 @@ export function cleanupHookSettings(): void {
 
       if (hooks && typeof hooks === 'object') {
         for (const key of DASH_HOOK_EVENTS) {
-          delete hooks[key];
+          const entries = hooks[key];
+          if (!Array.isArray(entries)) continue;
+          const userOnly = entries.filter((e) => !entryIsDashOwned(e));
+          if (userOnly.length === 0) delete hooks[key];
+          else hooks[key] = userOnly;
         }
-        // Remove hooks object entirely if empty
         if (Object.keys(hooks).length === 0) {
           delete raw.hooks;
         }
       }
 
-      // Remove Dash statusLine and attribution
       delete raw.statusLine;
       delete raw.attribution;
 
-      // If nothing meaningful remains, delete the file
       if (Object.keys(raw).length === 0) {
         fs.unlinkSync(settingsPath);
-        console.error(`[cleanupHookSettings] Removed empty ${settingsPath}`);
       } else {
-        fs.writeFileSync(settingsPath, JSON.stringify(raw, null, 2) + '\n');
-        console.error(`[cleanupHookSettings] Cleaned hooks from ${settingsPath}`);
+        atomicWriteFileSync(settingsPath, JSON.stringify(raw, null, 2) + '\n');
       }
     } catch (err) {
       console.error(`[cleanupHookSettings] Failed for ${settingsPath}:`, err);
