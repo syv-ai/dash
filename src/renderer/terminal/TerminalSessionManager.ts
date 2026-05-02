@@ -140,21 +140,24 @@ export class TerminalSessionManager {
     this.terminal.attachCustomKeyEventHandler((e) => {
       if (e.type !== 'keydown') return true;
 
-      const isMac = navigator.userAgent.includes('Mac');
+      const platform = window.electronAPI.getPlatform();
+      const isMac = platform === 'darwin';
+      const isWin = platform === 'win32';
 
       // Match by physical key (e.code) so alternate keyboard layouts where
       // Ctrl+Shift+C reports e.key as something other than 'C' still work.
       const isKeyC = e.code === 'KeyC';
       const isKeyV = e.code === 'KeyV';
 
-      // Copy: Cmd+C (macOS) or Ctrl+Shift+C (Linux) — copy terminal selection.
+      // Copy: Cmd+C (macOS), Ctrl+Shift+C (Linux), Ctrl+C (Windows).
       // Also Ctrl+C on any platform when there's an active selection (matches
       // native terminal behaviour: Ctrl+C copies when selected, sends SIGINT
       // otherwise). Explicit shortcuts fall back to lastSelection so users can
       // still copy after the TUI has cleared xterm's highlight.
       const isExplicitCopy =
         (isMac && e.metaKey && isKeyC && !e.ctrlKey) ||
-        (!isMac && e.ctrlKey && e.shiftKey && isKeyC);
+        (isWin && e.ctrlKey && !e.shiftKey && isKeyC && this.terminal.hasSelection()) ||
+        (!isMac && !isWin && e.ctrlKey && e.shiftKey && isKeyC);
       const isPlainCtrlC = e.ctrlKey && !e.shiftKey && isKeyC && this.terminal.hasSelection();
       if (isExplicitCopy || isPlainCtrlC) {
         const sel = this.terminal.getSelection() || (isExplicitCopy ? this.lastSelection : '');
@@ -165,14 +168,15 @@ export class TerminalSessionManager {
         }
       }
 
-      // Paste: Cmd+V (macOS) or Ctrl+Shift+V (Linux)
+      // Paste: Cmd+V (macOS), Ctrl+V (Windows), Ctrl+Shift+V (Linux)
       if (
         (isMac && e.metaKey && isKeyV && !e.ctrlKey) ||
-        (!isMac && e.ctrlKey && e.shiftKey && isKeyV)
+        (isWin && e.ctrlKey && isKeyV) ||
+        (!isMac && !isWin && e.ctrlKey && e.shiftKey && isKeyV)
       ) {
         e.preventDefault();
         window.electronAPI.clipboardReadText().then((text) => {
-          if (text) window.electronAPI.ptyInput({ id: this.id, data: text });
+          if (text) this.writePasteData(text);
         });
         return false;
       }
@@ -523,6 +527,10 @@ export class TerminalSessionManager {
       clearTimeout(this.fitDebounceTimer);
       this.fitDebounceTimer = null;
     }
+    if (this.pasteTimer) {
+      clearTimeout(this.pasteTimer);
+      this.pasteTimer = null;
+    }
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
@@ -549,6 +557,34 @@ export class TerminalSessionManager {
 
   writeInput(data: string) {
     window.electronAPI.ptyInput({ id: this.id, data });
+  }
+
+  private pasteTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Write pasted text in chunks to avoid overflowing the PTY input buffer
+  // (conpty on Windows drops data beyond ~4 KB written in a single call).
+  private writePasteData(text: string) {
+    if (this.pasteTimer) {
+      clearTimeout(this.pasteTimer);
+      this.pasteTimer = null;
+    }
+    const CHUNK = 4096;
+    if (text.length <= CHUNK) {
+      window.electronAPI.ptyInput({ id: this.id, data: text });
+      return;
+    }
+    let offset = 0;
+    const writeNext = () => {
+      if (offset >= text.length || this.disposed) {
+        this.pasteTimer = null;
+        return;
+      }
+      const end = Math.min(offset + CHUNK, text.length);
+      window.electronAPI.ptyInput({ id: this.id, data: text.slice(offset, end) });
+      offset = end;
+      this.pasteTimer = setTimeout(writeNext, 12);
+    };
+    writeNext();
   }
 
   focus() {
