@@ -250,27 +250,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // Skills
-  skillsFetchRegistry: (args?: { forceRefresh?: boolean }) =>
-    ipcRenderer.invoke('skills:fetchRegistry', args),
-  skillsSearch: (args: { query: string; category?: string; limit?: number; offset?: number }) =>
+  skillsRefresh: (args?: { force?: boolean }) => ipcRenderer.invoke('skills:refresh', args),
+  skillsGetMeta: () => ipcRenderer.invoke('skills:getMeta'),
+  skillsGetCategories: () => ipcRenderer.invoke('skills:getCategories'),
+  skillsSearch: (args: import('@shared/types').SkillsSearchArgs) =>
     ipcRenderer.invoke('skills:search', args),
-  skillsGetContent: (args: { repo: string; path: string; branch: string }) =>
+  skillsGetContent: (args: import('@shared/types').SkillRef) =>
     ipcRenderer.invoke('skills:getContent', args),
-  skillsInstall: (args: {
-    repo: string;
-    path: string;
-    branch: string;
-    skillName: string;
-    target: 'global' | 'project';
-    projectPath?: string;
-  }) => ipcRenderer.invoke('skills:install', args),
-  skillsCheckInstalled: (args: { skillName: string; projectPaths: string[] }) =>
+  skillsReadLocalSkillMd: (args: { skillName: string; installLocation: string }) =>
+    ipcRenderer.invoke('skills:readLocalSkillMd', args),
+  skillsInstall: (args: import('@shared/types').SkillInstallArgs) =>
+    ipcRenderer.invoke('skills:install', args),
+  skillsCheckInstalled: (args: { skillName: string; probePaths: string[] }) =>
     ipcRenderer.invoke('skills:checkInstalled', args),
-  skillsUninstall: (args: {
-    skillName: string;
-    target: 'global' | 'project';
-    projectPath?: string;
-  }) => ipcRenderer.invoke('skills:uninstall', args),
+  skillsListInstalled: (args: { probePaths: string[] }) =>
+    ipcRenderer.invoke('skills:listInstalled', args),
+  skillsUninstall: (args: import('@shared/types').SkillUninstallArgs) =>
+    ipcRenderer.invoke('skills:uninstall', args),
 
   // Telemetry
   telemetryCapture: (event: string, properties?: Record<string, unknown>) =>

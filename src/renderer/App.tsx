@@ -368,6 +368,33 @@ export function App() {
     ? (tasksByProject[activeProjectId] || []).filter((t) => !t.archivedAt)
     : [];
 
+  // Memoized props for SkillsBrowserModal. Without these, App.tsx re-renders (terminal
+  // activity, git polls, PTY events) hand the modal new array references every time,
+  // and the modal's loadInstalled useCallback re-fires its refetch effect — flickering
+  // the list back to a loading state on every unrelated re-render.
+  const skillsModalProjects = useMemo(
+    () => projects.map((p) => ({ id: p.id, name: p.name, path: p.path })),
+    [projects],
+  );
+  const skillsModalActiveTasks = useMemo(
+    () =>
+      projects.flatMap((p) => {
+        const tasks = tasksByProject[p.id] ?? [];
+        // Only worktree-backed, non-archived tasks: a task without a worktree shares the
+        // project root, so installing there would just be a project install.
+        return tasks
+          .filter((t) => t.useWorktree && !t.archivedAt)
+          .map((t) => ({
+            taskId: t.id,
+            taskName: t.name,
+            worktreePath: t.path,
+            projectId: p.id,
+            projectName: p.name,
+          }));
+      }),
+    [projects, tasksByProject],
+  );
+
   // Rotation: all tasks with activity, minus exclusions
   const rotationTasks = React.useMemo(() => {
     const tasks: Task[] = [];
@@ -1891,8 +1918,10 @@ export function App() {
 
       {showSkillsBrowser && (
         <SkillsBrowserModal
-          projects={projects.map((p) => ({ id: p.id, name: p.name, path: p.path }))}
+          projects={skillsModalProjects}
           activeProjectId={activeProjectId ?? undefined}
+          activeTasks={skillsModalActiveTasks}
+          currentTaskId={activeTaskId ?? undefined}
           onClose={() => setShowSkillsBrowser(false)}
         />
       )}

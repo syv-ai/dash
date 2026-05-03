@@ -19,9 +19,14 @@ import type {
   PixelAgentsConfig,
   PixelAgentsStatus,
   ActivityInfo,
-  RegistrySkill,
   SkillsSearchResult,
   SkillInstallStatus,
+  SkillRef,
+  SkillInstallArgs,
+  SkillUninstallArgs,
+  SkillsSearchArgs,
+  SkillsRegistryMeta,
+  InstalledSkill,
 } from '../shared/types';
 
 export interface ElectronAPI {
@@ -271,35 +276,23 @@ export interface ElectronAPI {
   onPixelAgentsStatusChanged: (callback: (status: PixelAgentsStatus) => void) => () => void;
 
   // Skills
-  skillsFetchRegistry: (args?: { forceRefresh?: boolean }) => Promise<IpcResponse<RegistrySkill[]>>;
-  skillsSearch: (args: {
-    query: string;
-    category?: string;
-    limit?: number;
-    offset?: number;
-  }) => Promise<IpcResponse<SkillsSearchResult>>;
-  skillsGetContent: (args: {
-    repo: string;
-    path: string;
-    branch: string;
-  }) => Promise<IpcResponse<string>>;
-  skillsInstall: (args: {
-    repo: string;
-    path: string;
-    branch: string;
+  skillsRefresh: (args?: { force?: boolean }) => Promise<IpcResponse<SkillsRegistryMeta>>;
+  skillsGetMeta: () => Promise<IpcResponse<SkillsRegistryMeta>>;
+  skillsGetCategories: () => Promise<IpcResponse<string[]>>;
+  skillsSearch: (args: SkillsSearchArgs) => Promise<IpcResponse<SkillsSearchResult>>;
+  skillsGetContent: (args: SkillRef) => Promise<IpcResponse<string>>;
+  skillsReadLocalSkillMd: (args: {
     skillName: string;
-    target: 'global' | 'project';
-    projectPath?: string;
-  }) => Promise<IpcResponse<void>>;
+    /** 'global' for ~/.claude/skills, otherwise an absolute project/worktree path. */
+    installLocation: string;
+  }) => Promise<IpcResponse<string>>;
+  skillsInstall: (args: SkillInstallArgs) => Promise<IpcResponse<void>>;
   skillsCheckInstalled: (args: {
     skillName: string;
-    projectPaths: string[];
+    probePaths: string[];
   }) => Promise<IpcResponse<SkillInstallStatus>>;
-  skillsUninstall: (args: {
-    skillName: string;
-    target: 'global' | 'project';
-    projectPath?: string;
-  }) => Promise<IpcResponse<void>>;
+  skillsListInstalled: (args: { probePaths: string[] }) => Promise<IpcResponse<InstalledSkill[]>>;
+  skillsUninstall: (args: SkillUninstallArgs) => Promise<IpcResponse<void>>;
 
   // Telemetry
   telemetryCapture: (event: string, properties?: Record<string, unknown>) => Promise<void>;

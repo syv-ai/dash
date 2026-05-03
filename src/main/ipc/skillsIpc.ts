@@ -1,83 +1,128 @@
 import { ipcMain } from 'electron';
 import { SkillsService } from '../services/SkillsService';
+import type {
+  SkillRef,
+  SkillInstallArgs,
+  SkillUninstallArgs,
+  SkillsSearchArgs,
+} from '@shared/types';
+
+function describe(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function fail(errorId: string, err: unknown, ctx?: Record<string, unknown>) {
+  console.error(`[skillsIpc.${errorId}]`, { message: describe(err), ...ctx });
+  return { success: false, error: describe(err) };
+}
 
 export function registerSkillsIpc(): void {
-  ipcMain.handle('skills:fetchRegistry', async (_event, args?: { forceRefresh?: boolean }) => {
+  // Refreshes the SQLite cache from the upstream registry. Returns the new meta only —
+  // the renderer never receives the 155k-row catalog; it pages via skills:search.
+  ipcMain.handle('skills:refresh', async (_event, args?: { force?: boolean }) => {
     try {
-      const data = await SkillsService.fetchRegistry(args?.forceRefresh);
+      const meta = await SkillsService.ensureRegistry(args?.force === true);
+      return { success: true, data: meta };
+    } catch (error) {
+      return fail('SKILLS_REFRESH', error, { force: args?.force });
+    }
+  });
+
+  ipcMain.handle('skills:getMeta', () => {
+    try {
+      return { success: true, data: SkillsService.getMeta() };
+    } catch (error) {
+      return fail('SKILLS_GET_META', error);
+    }
+  });
+
+  ipcMain.handle('skills:getCategories', () => {
+    try {
+      return { success: true, data: SkillsService.getCategories() };
+    } catch (error) {
+      return fail('SKILLS_GET_CATEGORIES', error);
+    }
+  });
+
+  ipcMain.handle('skills:search', (_event, args: SkillsSearchArgs) => {
+    try {
+      const data = SkillsService.search(args);
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return fail('SKILLS_SEARCH', error, {
+        query: args?.query,
+        category: args?.category,
+      });
+    }
+  });
+
+  ipcMain.handle('skills:getContent', async (_event, args: SkillRef) => {
+    try {
+      const data = await SkillsService.getSkillContent(args);
+      return { success: true, data };
+    } catch (error) {
+      return fail('SKILLS_GET_CONTENT', error, { repo: args?.repo, path: args?.path });
     }
   });
 
   ipcMain.handle(
-    'skills:search',
-    async (_event, args: { query: string; category?: string; limit?: number; offset?: number }) => {
+    'skills:readLocalSkillMd',
+    (_event, args: { skillName: string; installLocation: string }) => {
       try {
-        const data = await SkillsService.search(args.query, args.category, args.limit, args.offset);
+        const data = SkillsService.readLocalSkillMd(args);
         return { success: true, data };
       } catch (error) {
-        return { success: false, error: String(error) };
+        return fail('SKILLS_READ_LOCAL', error, {
+          skillName: args?.skillName,
+          installLocation: args?.installLocation,
+        });
       }
     },
   );
 
-  ipcMain.handle(
-    'skills:getContent',
-    async (_event, args: { repo: string; path: string; branch: string }) => {
-      try {
-        const data = await SkillsService.getSkillContent(args.repo, args.path, args.branch);
-        return { success: true, data };
-      } catch (error) {
-        return { success: false, error: String(error) };
-      }
-    },
-  );
+  ipcMain.handle('skills:install', async (_event, args: SkillInstallArgs) => {
+    try {
+      await SkillsService.installSkill(args);
+      return { success: true };
+    } catch (error) {
+      return fail('SKILLS_INSTALL', error, {
+        repo: args?.ref?.repo,
+        skillName: args?.skillName,
+        target: args?.target?.kind,
+      });
+    }
+  });
 
-  ipcMain.handle(
-    'skills:install',
-    async (
-      _event,
-      args: {
-        repo: string;
-        path: string;
-        branch: string;
-        skillName: string;
-        target: 'global' | 'project';
-        projectPath?: string;
-      },
-    ) => {
-      try {
-        await SkillsService.installSkill(args);
-        return { success: true };
-      } catch (error) {
-        return { success: false, error: String(error) };
-      }
-    },
-  );
+  ipcMain.handle('skills:listInstalled', (_event, args: { probePaths: string[] }) => {
+    try {
+      const data = SkillsService.listInstalled(args?.probePaths ?? []);
+      return { success: true, data };
+    } catch (error) {
+      return fail('SKILLS_LIST_INSTALLED', error);
+    }
+  });
 
   ipcMain.handle(
     'skills:checkInstalled',
-    (_event, args: { skillName: string; projectPaths: string[] }) => {
+    (_event, args: { skillName: string; probePaths: string[] }) => {
       try {
-        const data = SkillsService.checkInstalled(args.skillName, args.projectPaths);
+        const data = SkillsService.checkInstalled(args.skillName, args.probePaths);
         return { success: true, data };
       } catch (error) {
-        return { success: false, error: String(error) };
+        return fail('SKILLS_CHECK_INSTALLED', error, { skillName: args?.skillName });
       }
     },
   );
 
-  ipcMain.handle(
-    'skills:uninstall',
-    (_event, args: { skillName: string; target: 'global' | 'project'; projectPath?: string }) => {
-      try {
-        SkillsService.uninstallSkill(args);
-        return { success: true };
-      } catch (error) {
-        return { success: false, error: String(error) };
-      }
-    },
-  );
+  ipcMain.handle('skills:uninstall', (_event, args: SkillUninstallArgs) => {
+    try {
+      SkillsService.uninstallSkill(args);
+      return { success: true };
+    } catch (error) {
+      return fail('SKILLS_UNINSTALL', error, {
+        skillName: args?.skillName,
+        target: args?.target?.kind,
+      });
+    }
+  });
 }
