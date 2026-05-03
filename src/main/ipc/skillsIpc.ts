@@ -5,6 +5,7 @@ import type {
   SkillInstallArgs,
   SkillUninstallArgs,
   SkillsSearchArgs,
+  SkillInstallTarget,
 } from '@shared/types';
 
 function describe(err: unknown): string {
@@ -17,8 +18,6 @@ function fail(errorId: string, err: unknown, ctx?: Record<string, unknown>) {
 }
 
 export function registerSkillsIpc(): void {
-  // Refreshes the SQLite cache from the upstream registry. Returns the new meta only —
-  // the renderer never receives the 155k-row catalog; it pages via skills:search.
   ipcMain.handle('skills:refresh', async (_event, args?: { force?: boolean }) => {
     try {
       const meta = await SkillsService.ensureRegistry(args?.force === true);
@@ -67,14 +66,14 @@ export function registerSkillsIpc(): void {
 
   ipcMain.handle(
     'skills:readLocalSkillMd',
-    (_event, args: { skillName: string; installLocation: string }) => {
+    (_event, args: { skillName: string; target: SkillInstallTarget }) => {
       try {
         const data = SkillsService.readLocalSkillMd(args);
         return { success: true, data };
       } catch (error) {
         return fail('SKILLS_READ_LOCAL', error, {
           skillName: args?.skillName,
-          installLocation: args?.installLocation,
+          targetKind: args?.target?.kind,
         });
       }
     },
@@ -113,6 +112,15 @@ export function registerSkillsIpc(): void {
       }
     },
   );
+
+  ipcMain.handle('skills:resetCache', async () => {
+    try {
+      const meta = await SkillsService.resetCache();
+      return { success: true, data: meta };
+    } catch (error) {
+      return fail('SKILLS_RESET_CACHE', error);
+    }
+  });
 
   ipcMain.handle('skills:uninstall', (_event, args: SkillUninstallArgs) => {
     try {

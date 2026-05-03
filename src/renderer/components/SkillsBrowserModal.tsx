@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   X,
   Blocks,
@@ -21,6 +21,7 @@ import type {
   SkillInstallTarget,
   SkillsRegistryMeta,
   InstalledSkill,
+  ProbeFailure,
 } from '../../shared/types';
 import { Tooltip } from './ui/Tooltip';
 
@@ -102,7 +103,9 @@ function friendlyError(raw: string | undefined, fallback: string): string {
   ) {
     return 'Network error reaching GitHub.';
   }
-  if (lower.includes('invalid')) return raw;
+  // Whitelist specific user-actionable validation messages instead of returning every
+  // 'invalid' error verbatim — the latter leaks internal paths/JSON snippets.
+  if (lower.includes('invalid skill name') || lower.includes('invalid repo')) return raw;
   return fallback;
 }
 
@@ -172,7 +175,9 @@ function categorySlot(category: string): number {
   for (let i = 0; i < category.length; i++) {
     h = ((h << 5) + h) ^ category.charCodeAt(i);
   }
-  return Math.abs(h) % CATEGORY_PALETTE.length;
+  // `>>> 0` coerces to unsigned 32-bit so the modulo is non-negative even on the
+  // INT32_MIN boundary where Math.abs(-2147483648) is still negative.
+  return (h >>> 0) % CATEGORY_PALETTE.length;
 }
 
 function CategoryBadge({ category }: { category: string }) {
@@ -202,9 +207,6 @@ interface LocationChipsProps {
   activeTasks: ActiveTaskInfo[];
 }
 
-// Renders one chip per install location for an installed skill row. Each chip carries
-// an icon hinting the scope (global / project / task) and a label, so users can see
-// at a glance where a skill lives without opening the detail pane.
 function LocationChips({ entry, projects, activeTasks }: LocationChipsProps) {
   type Chip = { key: string; kind: 'global' | 'project' | 'task'; label: string };
   const chips: Chip[] = [];
@@ -252,22 +254,25 @@ export function SkillsBrowserModal({
   const [resultTotal, setResultTotal] = useState(0);
   const [pageOffset, setPageOffset] = useState(0);
   const [searching, setSearching] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Split per surface so a successful search doesn't clear an installed-list error
+  // (and vice versa). searchError covers the "all" view's runSearch/refresh/reset/open
+  // lifecycle; installedError covers loadInstalled and the installed-view click handler.
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [installedError, setInstalledError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string>('');
-  // 'all' searches the registry cache; 'installed' lists only what's on disk and joins
-  // back to the cache for metadata.
   const [view, setView] = useState<'all' | 'installed'>('all');
   const [installedList, setInstalledList] = useState<InstalledSkill[]>([]);
+  const [installedProbeFailures, setInstalledProbeFailures] = useState<ProbeFailure[]>([]);
   const [loadingInstalled, setLoadingInstalled] = useState(false);
   const [categories, setCategories] = useState<string[]>([]);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
   const [selectedSkill, setSelectedSkill] = useState<RegistrySkill | null>(null);
   // When non-null, the currently-selected skill is a local-only install (no catalog entry),
   // so SKILL.md must be read from this on-disk location instead of fetched from GitHub.
-  // Carries 'global' or an absolute project/worktree path — same shape skills:readLocalSkillMd
-  // expects on the IPC. The companion `customInstalled` keeps the original entry around so
-  // we can render the "Installed in" panel correctly without re-running checkInstalled.
-  const [localReadLocation, setLocalReadLocation] = useState<string | null>(null);
+  // The companion `customInstalled` keeps the original entry around so we can render the
+  // "Installed in" panel correctly without re-running checkInstalled.
+  const [localReadTarget, setLocalReadTarget] = useState<SkillInstallTarget | null>(null);
   const [customInstalled, setCustomInstalled] = useState<InstalledSkill | null>(null);
   const [skillContent, setSkillContent] = useState<string | null>(null);
   const [skillContentError, setSkillContentError] = useState<string | null>(null);
@@ -277,6 +282,10 @@ export function SkillsBrowserModal({
   const [installError, setInstallError] = useState<string | null>(null);
   const [showInstallDropdown, setShowInstallDropdown] = useState(false);
   const [installStatus, setInstallStatus] = useState<SkillInstallStatus | null>(null);
+  // Distinct from probeFailures inside installStatus: this is the "we couldn't even ask"
+  // state, signalling the user can't trust the absence of an "Installed in" panel as
+  // proof the skill isn't installed.
+  const [installStatusError, setInstallStatusError] = useState<string | null>(null);
   const [uninstalling, setUninstalling] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -293,7 +302,6 @@ export function SkillsBrowserModal({
     setClosing(true);
   }, []);
 
-  // Escape to close
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') handleClose();
@@ -302,7 +310,6 @@ export function SkillsBrowserModal({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [handleClose]);
 
-  // Focus search on open
   useEffect(() => {
     setTimeout(() => searchRef.current?.focus(), 100);
   }, []);
@@ -316,7 +323,7 @@ export function SkillsBrowserModal({
     ): Promise<void> => {
       const token = ++searchTokenRef.current;
       setSearching(true);
-      setError(null);
+      setSearchError(null);
       try {
         const result = await window.electronAPI.skillsSearch({
           query: nextQuery,
@@ -331,12 +338,12 @@ export function SkillsBrowserModal({
           setPageOffset(offset);
         } else {
           console.error('[SkillsBrowserModal.runSearch] failed', { error: result.error });
-          setError(friendlyError(result.error, 'Search failed'));
+          setSearchError(friendlyError(result.error, 'Search failed'));
         }
       } catch (err) {
         if (token !== searchTokenRef.current) return;
         console.error('[SkillsBrowserModal.runSearch] threw', err);
-        setError(friendlyError(String(err), 'Search failed'));
+        setSearchError(friendlyError(String(err), 'Search failed'));
       } finally {
         if (token === searchTokenRef.current) setSearching(false);
       }
@@ -347,7 +354,7 @@ export function SkillsBrowserModal({
   const refreshRegistry = useCallback(
     async (force: boolean): Promise<SkillsRegistryMeta | null> => {
       setRefreshing(true);
-      setError(null);
+      setSearchError(null);
       try {
         const result = await window.electronAPI.skillsRefresh(force ? { force: true } : undefined);
         if (result.success && result.data) {
@@ -355,11 +362,11 @@ export function SkillsBrowserModal({
           return result.data;
         }
         console.error('[SkillsBrowserModal.refreshRegistry] failed', { error: result.error });
-        setError(friendlyError(result.error, 'Failed to refresh skills registry'));
+        setSearchError(friendlyError(result.error, 'Failed to refresh skills registry'));
         return null;
       } catch (err) {
         console.error('[SkillsBrowserModal.refreshRegistry] threw', err);
-        setError(friendlyError(String(err), 'Failed to refresh skills registry'));
+        setSearchError(friendlyError(String(err), 'Failed to refresh skills registry'));
         return null;
       } finally {
         setRefreshing(false);
@@ -368,24 +375,45 @@ export function SkillsBrowserModal({
     [],
   );
 
+  const handleResetCache = useCallback(async () => {
+    setRefreshing(true);
+    setSearchError(null);
+    try {
+      const result = await window.electronAPI.skillsResetCache();
+      if (result.success && result.data) {
+        setMeta(result.data);
+        await runSearch(query, category, 0, false);
+      } else {
+        console.error('[SkillsBrowserModal.handleResetCache] failed', { error: result.error });
+        setSearchError(friendlyError(result.error, 'Failed to reset skills cache'));
+      }
+    } catch (err) {
+      console.error('[SkillsBrowserModal.handleResetCache] threw', err);
+      setSearchError(friendlyError(String(err), 'Failed to reset skills cache'));
+    } finally {
+      setRefreshing(false);
+    }
+  }, [query, category, runSearch]);
+
   const loadCategories = useCallback(async () => {
     try {
       const result = await window.electronAPI.skillsGetCategories();
       if (result.success && result.data) {
         setCategories(result.data);
+        setCategoriesError(null);
       } else {
-        // Non-fatal: dropdown shows only "All categories" if this fails. Log so we'd
-        // notice the regression rather than silently shipping a broken filter list.
         console.error('[SkillsBrowserModal.loadCategories] failed', { error: result.error });
+        setCategoriesError(friendlyError(result.error, 'Could not load categories'));
       }
     } catch (err) {
       console.error('[SkillsBrowserModal.loadCategories] threw', err);
+      setCategoriesError('Could not load categories');
     }
   }, []);
 
   const loadInstalled = useCallback(async () => {
     setLoadingInstalled(true);
-    setError(null);
+    setInstalledError(null);
     try {
       const probePaths = [
         ...projects.map((p) => p.path),
@@ -393,14 +421,17 @@ export function SkillsBrowserModal({
       ];
       const result = await window.electronAPI.skillsListInstalled({ probePaths });
       if (result.success && result.data) {
-        setInstalledList(result.data);
+        setInstalledList(result.data.skills);
+        setInstalledProbeFailures(result.data.probeFailures);
       } else {
+        // Don't yank the prior list on failure — keep showing what we had and surface
+        // the error as a banner so the user keeps their context.
         console.error('[SkillsBrowserModal.loadInstalled] failed', { error: result.error });
-        setError(friendlyError(result.error, 'Failed to list installed skills'));
+        setInstalledError(friendlyError(result.error, 'Failed to list installed skills'));
       }
     } catch (err) {
       console.error('[SkillsBrowserModal.loadInstalled] threw', err);
-      setError(friendlyError(String(err), 'Failed to list installed skills'));
+      setInstalledError(friendlyError(String(err), 'Failed to list installed skills'));
     } finally {
       setLoadingInstalled(false);
     }
@@ -413,7 +444,6 @@ export function SkillsBrowserModal({
     loadInstalled();
   }, [view, loadInstalled]);
 
-  // First-open lifecycle: read meta, refresh if missing/stale, then load categories + run an empty search.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -423,9 +453,8 @@ export function SkillsBrowserModal({
         const current = metaResp.success && metaResp.data ? metaResp.data : null;
         const stale =
           !current ||
-          current.totalCount === 0 ||
-          current.fetchedAt === null ||
-          Date.now() - current.fetchedAt > STALE_AFTER_MS;
+          current.status === 'never-fetched' ||
+          (current.status === 'fresh' && Date.now() - current.fetchedAt > STALE_AFTER_MS);
         const metaToUse = stale ? await refreshRegistry(false) : current;
         if (cancelled) return;
         if (metaToUse) setMeta(metaToUse);
@@ -438,7 +467,7 @@ export function SkillsBrowserModal({
         // (e.g. preload mis-binding) so the modal isn't left wedged in `refreshing` state.
         if (cancelled) return;
         console.error('[SkillsBrowserModal] open-lifecycle threw', err);
-        setError(friendlyError(String(err), 'Failed to open Skills Browser'));
+        setSearchError(friendlyError(String(err), 'Failed to open Skills Browser'));
         setRefreshing(false);
       }
     })();
@@ -479,13 +508,13 @@ export function SkillsBrowserModal({
     setSkillContentError(null);
     try {
       // Custom (local-only) skills aren't in the registry and have no repo to fetch from —
-      // read the SKILL.md off the local filesystem instead. localReadLocation is captured
-      // up-front so a switch-back to a registry skill mid-await is still tied to the right token.
-      const localLoc = localReadLocation;
-      const result = localLoc
+      // read the SKILL.md off the local filesystem instead. The target is captured up-front
+      // so a switch-back to a registry skill mid-await is still tied to the right token.
+      const target = localReadTarget;
+      const result = target
         ? await window.electronAPI.skillsReadLocalSkillMd({
             skillName: deriveInstallSkillName(skill) || skill.name,
-            installLocation: localLoc,
+            target,
           })
         : await window.electronAPI.skillsGetContent({
             repo: skill.repo,
@@ -531,16 +560,21 @@ export function SkillsBrowserModal({
         if (token !== selectionTokenRef.current) return;
         if (result.success && result.data) {
           setInstallStatus(result.data);
+          setInstallStatusError(null);
         } else {
           console.error('[SkillsBrowserModal.checkInstallStatus] failed', {
             error: result.error,
           });
           setInstallStatus(null);
+          setInstallStatusError(
+            friendlyError(result.error, 'Could not check whether this skill is installed'),
+          );
         }
       } catch (err) {
         if (token !== selectionTokenRef.current) return;
         console.error('[SkillsBrowserModal.checkInstallStatus] threw', err);
         setInstallStatus(null);
+        setInstallStatusError('Could not check whether this skill is installed');
       }
     },
     [projects, activeTasks],
@@ -556,7 +590,8 @@ export function SkillsBrowserModal({
     setInstallSuccess(null);
     setInstallError(null);
     setInstallStatus(null);
-    setLocalReadLocation(null);
+    setInstallStatusError(null);
+    setLocalReadTarget(null);
     setCustomInstalled(null);
     checkInstallStatus(skill);
   }
@@ -566,13 +601,28 @@ export function SkillsBrowserModal({
   // GitHub, and skip the registry-driven install flow (the skill is already on disk).
   function handleSelectCustom(entry: InstalledSkill) {
     selectionTokenRef.current += 1;
-    // Pick a deterministic location to read from: prefer global, otherwise the first
-    // probe path we know it's installed in. Both reads return the same SKILL.md content
-    // unless the user has divergent copies — acceptable trade-off vs. UI complexity.
-    const installLocation = entry.globalInstalled ? 'global' : entry.installedPaths[0];
-    if (!installLocation) {
-      // Defensive: listInstalled wouldn't surface an entry with neither global nor
-      // probe-path installs, but a stale render could. Skip silently.
+    // Pick a deterministic location: prefer global, otherwise the first probe path we
+    // know it's installed in, mapped back to the right kind by matching against the
+    // projects/activeTasks props. A path that matches neither means the install lives
+    // outside any known scope — refuse to read rather than guess.
+    const target: SkillInstallTarget | null = entry.globalInstalled
+      ? { kind: 'global' }
+      : (() => {
+          const p = entry.installedPaths[0];
+          if (!p) return null;
+          if (projects.some((proj) => proj.path === p)) {
+            return { kind: 'project', projectPath: p };
+          }
+          if (activeTasks.some((t) => t.worktreePath === p)) {
+            return { kind: 'task', worktreePath: p };
+          }
+          return null;
+        })();
+    if (!target) {
+      console.error('[SkillsBrowserModal.handleSelectCustom] entry has no resolvable target', {
+        skillName: entry.skillName,
+      });
+      setInstalledError('Skill data is stale. Refresh the installed list and try again.');
       return;
     }
     const stub: RegistrySkill = {
@@ -590,24 +640,18 @@ export function SkillsBrowserModal({
     setSkillContentError(null);
     setInstallSuccess(null);
     setInstallError(null);
-    // Synthesize the install status from the entry we already have — no IPC needed.
     setInstallStatus({
       global: entry.globalInstalled,
       installedPaths: entry.installedPaths,
     });
-    setLocalReadLocation(installLocation);
+    setLocalReadTarget(target);
     setCustomInstalled(entry);
-    // Custom skills have no description/stars/repo — the SKILL.md body is the only useful
-    // surface. Kick off the read immediately so users don't have to click "View SKILL.md".
-    // Note: loadSkillContent reads localReadLocation off state at call time, so we pass the
-    // synthesized location explicitly via a closure-captured variable to avoid the stale-state
-    // race (setState is async; the fetch would otherwise see localReadLocation=null).
-    void loadSkillContentFromLocal(stub, installLocation);
+    // setState is async; pass the target explicitly so the fetch doesn't see a null
+    // localReadTarget on the first render after click.
+    void loadSkillContentFromLocal(stub, target);
   }
 
-  // Twin of loadSkillContent that takes the install location as an explicit arg, used by
-  // handleSelectCustom to avoid waiting for setLocalReadLocation to flush before reading.
-  async function loadSkillContentFromLocal(skill: RegistrySkill, installLocation: string) {
+  async function loadSkillContentFromLocal(skill: RegistrySkill, target: SkillInstallTarget) {
     const token = selectionTokenRef.current;
     setLoadingContent(true);
     setSkillContent(null);
@@ -615,7 +659,7 @@ export function SkillsBrowserModal({
     try {
       const result = await window.electronAPI.skillsReadLocalSkillMd({
         skillName: deriveInstallSkillName(skill) || skill.name,
-        installLocation,
+        target,
       });
       if (token !== selectionTokenRef.current) return;
       if (result.success && result.data) {
@@ -635,7 +679,6 @@ export function SkillsBrowserModal({
     }
   }
 
-  // Human-readable destination label for install/uninstall toasts.
   function targetLabel(target: SkillInstallTarget, skillName: string, label?: string): string {
     switch (target.kind) {
       case 'global':
@@ -663,8 +706,7 @@ export function SkillsBrowserModal({
       if (result.success) {
         setInstallSuccess(`Removed from ${targetLabel(target, skillName, label)}`);
         checkInstallStatus(selectedSkill);
-        // Keep the Installed list in sync when the user is viewing it; otherwise the
-        // card they just removed would linger until they switch tabs.
+        // Keep the Installed list in sync so the just-removed card disappears immediately.
         if (view === 'installed') loadInstalled();
       } else {
         setInstallError(friendlyError(result.error, 'Removal failed'));
@@ -702,8 +744,7 @@ export function SkillsBrowserModal({
       if (result.success) {
         setInstallSuccess(`Installed to ${targetLabel(target, skillName, label)}`);
         checkInstallStatus(selectedSkill);
-        // Keep the Installed list in sync when the user is viewing it; otherwise the
-        // card they just removed would linger until they switch tabs.
+        // Keep the Installed list in sync so the card just installed appears immediately.
         if (view === 'installed') loadInstalled();
       } else {
         setInstallError(friendlyError(result.error, 'Installation failed'));
@@ -725,10 +766,10 @@ export function SkillsBrowserModal({
   const isInitialLoad = refreshing && results.length === 0;
   const hasActiveFilter = query.trim().length > 0 || category.length > 0;
 
-  // Client-side filter for the Installed view. The list is small (anything a user has
-  // actually installed) so doing this in JS is fine and avoids round-tripping to main
-  // for every keystroke.
-  const filteredInstalled = (() => {
+  // Client-side filter for the Installed view. Memoized because the IIFE form ran on
+  // every render — even unrelated state churn (PTY/git ticks bubbling via context) —
+  // and the list is read by both the count chip and the row map.
+  const filteredInstalled = useMemo(() => {
     if (view !== 'installed') return [];
     const q = query.trim().toLowerCase();
     return installedList.filter((entry) => {
@@ -743,7 +784,7 @@ export function SkillsBrowserModal({
       ];
       return haystacks.some((h) => typeof h === 'string' && h.toLowerCase().includes(q));
     });
-  })();
+  }, [view, query, category, installedList]);
 
   return (
     <div
@@ -826,13 +867,13 @@ export function SkillsBrowserModal({
         </div>
 
         {/* Stale-cache banner */}
-        {meta?.stale && meta.totalCount > 0 && (
+        {meta?.status === 'stale' && (
           <div className="flex items-center gap-2 px-4 py-2 border-b border-border/40 bg-destructive/10 text-[11px] text-destructive">
             <AlertCircle size={ICON_SIZE} strokeWidth={ICON_STROKE} className="flex-shrink-0" />
             <span className="flex-1">
-              Refresh failed; showing cached results
-              {meta.fetchedAt ? ` from ${new Date(meta.fetchedAt).toLocaleString()}` : ''}.
-              {meta.refreshError ? ` (${friendlyError(meta.refreshError, 'Network error')})` : ''}
+              Refresh failed; showing cached results from{' '}
+              {new Date(meta.fetchedAt).toLocaleString()} (
+              {friendlyError(meta.refreshError, 'Network error')}).
             </span>
             <button
               onClick={handleManualRefresh}
@@ -870,7 +911,7 @@ export function SkillsBrowserModal({
             )}
           </div>
 
-          {/* View toggle: All catalog vs only what's installed on disk */}
+          {/* View toggle */}
           <div className="flex rounded-lg border border-border/60 overflow-hidden text-[12px]">
             <button
               onClick={() => setView('all')}
@@ -903,11 +944,21 @@ export function SkillsBrowserModal({
               <span className="truncate">
                 {category ? CATEGORY_LABELS[category] || category : 'All categories'}
               </span>
-              <ChevronDown
-                size={ICON_SIZE}
-                strokeWidth={ICON_STROKE}
-                className="text-muted-foreground flex-shrink-0"
-              />
+              {categoriesError ? (
+                <Tooltip content={categoriesError}>
+                  <AlertCircle
+                    size={ICON_SIZE}
+                    strokeWidth={ICON_STROKE}
+                    className="text-destructive flex-shrink-0"
+                  />
+                </Tooltip>
+              ) : (
+                <ChevronDown
+                  size={ICON_SIZE}
+                  strokeWidth={ICON_STROKE}
+                  className="text-muted-foreground flex-shrink-0"
+                />
+              )}
             </button>
 
             {showCategoryDropdown && (
@@ -949,111 +1000,147 @@ export function SkillsBrowserModal({
           {/* Skill list */}
           <div className="w-[55%] border-r border-border/40 overflow-y-auto">
             {view === 'installed' ? (
-              loadingInstalled ? (
-                <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
-                  <Loader2 size={20} className="animate-spin" />
-                  <span className="text-[12px]">Scanning installed skills...</span>
-                </div>
-              ) : error ? (
-                <div className="flex flex-col items-center justify-center h-full gap-3 px-8">
-                  <AlertCircle size={20} strokeWidth={ICON_STROKE} className="text-destructive" />
-                  <span className="text-[12px] text-destructive text-center">{error}</span>
-                  <button
-                    onClick={loadInstalled}
-                    className="px-3 py-1.5 rounded-md text-[12px] bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-                  >
-                    Retry
-                  </button>
-                </div>
-              ) : filteredInstalled.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground px-8 text-center">
-                  <Search size={20} strokeWidth={ICON_STROKE} />
-                  <span className="text-[12px]">
-                    {installedList.length === 0
-                      ? 'No skills installed yet. Switch to All to browse and install one.'
-                      : 'No installed skills match your filters.'}
-                  </span>
-                </div>
-              ) : (
-                <div className="divide-y divide-border/30">
-                  {filteredInstalled.map((entry) => {
-                    const cat = entry.catalog;
-                    const isCustom = !cat;
-                    // Selection match: registry skills compare by skillKey; custom skills
-                    // are tracked separately via customInstalled.skillName so we can highlight
-                    // the right row even though the synthetic stub has no real repo+path.
-                    const isSelected = isCustom
-                      ? customInstalled?.skillName === entry.skillName
-                      : selectedSkill !== null && skillKey(cat) === skillKey(selectedSkill);
-                    return (
-                      <button
-                        key={entry.skillName}
-                        onClick={() => {
-                          if (cat) handleSelectSkill(cat);
-                          else handleSelectCustom(entry);
-                        }}
-                        // Precedence: selection > custom > default. The selection class is
-                        // applied last so it wins over the custom-row tint when both apply.
-                        // Custom rows get full surface-3 (not 40%) so the tint is actually
-                        // visible against the card body.
-                        className={`w-full text-left px-4 py-3 transition-colors hover:bg-accent/40 ${
-                          isCustom ? 'bg-[hsl(var(--surface-3))]' : ''
-                        } ${isSelected ? 'bg-accent/60' : ''}`}
-                      >
-                        <div className="flex flex-col min-w-0">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <span className="text-[12px] font-medium text-foreground truncate">
-                              {cat ? displaySkillName(cat) : entry.skillName}
-                            </span>
-                            {cat?.repo === 'anthropics/skills' && (
-                              <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-primary/15 text-primary leading-none flex-shrink-0">
-                                Official
+              <>
+                {/* Installed view: error/probe-failure banners ride above the list so a
+                    fresh failure doesn't blow away the data the user was looking at. */}
+                {installedError && (
+                  <div className="flex items-center gap-2 px-4 py-2 border-b border-border/40 bg-destructive/10 text-[11px] text-destructive">
+                    <AlertCircle
+                      size={ICON_SIZE}
+                      strokeWidth={ICON_STROKE}
+                      className="flex-shrink-0"
+                    />
+                    <span className="flex-1">{installedError}</span>
+                    <button
+                      onClick={loadInstalled}
+                      className="px-2 py-0.5 rounded text-[11px] font-medium bg-destructive/15 hover:bg-destructive/25 transition-colors"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
+                {installedProbeFailures.length > 0 && (
+                  <div className="flex items-start gap-2 px-4 py-2 border-b border-border/40 bg-destructive/10 text-[11px] text-destructive">
+                    <AlertCircle
+                      size={ICON_SIZE}
+                      strokeWidth={ICON_STROKE}
+                      className="flex-shrink-0 mt-px"
+                    />
+                    <div className="flex-1">
+                      <div className="font-medium">List may be incomplete:</div>
+                      <ul className="mt-0.5 space-y-0.5">
+                        {installedProbeFailures.map((f) => (
+                          <li key={`${f.scope}|${f.code}`} className="font-mono">
+                            {f.scope === 'global' ? '~/.claude/skills' : f.scope} ({f.code})
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+                {loadingInstalled ? (
+                  <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
+                    <Loader2 size={20} className="animate-spin" />
+                    <span className="text-[12px]">Scanning installed skills...</span>
+                  </div>
+                ) : filteredInstalled.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground px-8 text-center">
+                    <Search size={20} strokeWidth={ICON_STROKE} />
+                    <span className="text-[12px]">
+                      {installedList.length === 0
+                        ? 'No skills installed yet. Switch to All to browse and install one.'
+                        : 'No installed skills match your filters.'}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border/30">
+                    {filteredInstalled.map((entry) => {
+                      const cat = entry.catalog;
+                      const isCustom = !cat;
+                      // Selection match: registry skills compare by skillKey; custom skills
+                      // are tracked separately via customInstalled.skillName so we can highlight
+                      // the right row even though the synthetic stub has no real repo+path.
+                      const isSelected = isCustom
+                        ? customInstalled?.skillName === entry.skillName
+                        : selectedSkill !== null && skillKey(cat) === skillKey(selectedSkill);
+                      return (
+                        <button
+                          key={entry.skillName}
+                          onClick={() => {
+                            if (cat) handleSelectSkill(cat);
+                            else handleSelectCustom(entry);
+                          }}
+                          // Precedence: selection > custom > default. The selection class is
+                          // applied last so it wins over the custom-row tint when both apply.
+                          // Custom rows get full surface-3 (not 40%) so the tint is actually
+                          // visible against the card body.
+                          className={`w-full text-left px-4 py-3 transition-colors hover:bg-accent/40 ${
+                            isCustom ? 'bg-[hsl(var(--surface-3))]' : ''
+                          } ${isSelected ? 'bg-accent/60' : ''}`}
+                        >
+                          <div className="flex flex-col min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <span className="text-[12px] font-medium text-foreground truncate">
+                                {cat ? displaySkillName(cat) : entry.skillName}
                               </span>
-                            )}
-                            {cat && <RestrictedBadge skill={cat} />}
-                            {cat?.category && <CategoryBadge category={cat.category} />}
-                            {isCustom && (
-                              <Tooltip content="Installed locally but not present in the cached registry. Refresh, or it may live outside the top 10K by stars.">
-                                <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-accent/60 text-muted-foreground leading-none flex-shrink-0">
-                                  Custom
+                              {cat?.repo === 'anthropics/skills' && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-primary/15 text-primary leading-none flex-shrink-0">
+                                  Official
                                 </span>
-                              </Tooltip>
+                              )}
+                              {cat && <RestrictedBadge skill={cat} />}
+                              {cat?.category && <CategoryBadge category={cat.category} />}
+                              {isCustom && (
+                                <Tooltip content="Installed locally but not present in the cached registry. Refresh, or it may live outside the top 10K by stars.">
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-accent/60 text-muted-foreground leading-none flex-shrink-0">
+                                    Custom
+                                  </span>
+                                </Tooltip>
+                              )}
+                            </div>
+                            {cat?.description && (
+                              <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                                {cat.description}
+                              </p>
                             )}
-                          </div>
-                          {cat?.description && (
-                            <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
-                              {cat.description}
-                            </p>
-                          )}
-                          {/* Location chips replace the old right-side count + the
+                            {/* Location chips replace the old right-side count + the
                               "Installed in N locations" fallback text — now you can see
                               where the skill lives at a glance, including for custom ones. */}
-                          <LocationChips
-                            entry={entry}
-                            projects={projects}
-                            activeTasks={activeTasks}
-                          />
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )
+                            <LocationChips
+                              entry={entry}
+                              projects={projects}
+                              activeTasks={activeTasks}
+                            />
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             ) : isInitialLoad ? (
               <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
                 <Loader2 size={20} className="animate-spin" />
                 <span className="text-[12px]">Building skills index...</span>
               </div>
-            ) : error ? (
+            ) : searchError ? (
               <div className="flex flex-col items-center justify-center h-full gap-3 px-8">
                 <AlertCircle size={20} strokeWidth={ICON_STROKE} className="text-destructive" />
-                <span className="text-[12px] text-destructive text-center">{error}</span>
-                <button
-                  onClick={handleManualRefresh}
-                  className="px-3 py-1.5 rounded-md text-[12px] bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-                >
-                  Retry
-                </button>
+                <span className="text-[12px] text-destructive text-center">{searchError}</span>
+                <div className="flex flex-col items-center gap-2">
+                  <button
+                    onClick={handleManualRefresh}
+                    className="px-3 py-1.5 rounded-md text-[12px] bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                  >
+                    Retry
+                  </button>
+                  <button
+                    onClick={handleResetCache}
+                    className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+                  >
+                    Reset cache and refetch
+                  </button>
+                </div>
               </div>
             ) : results.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
@@ -1211,9 +1298,9 @@ export function SkillsBrowserModal({
                   )}
                 </div>
 
-                {/* Probe error: at least one path couldn't be read (e.g. EACCES). The user
+                {/* Probe failures: paths that couldn't be read (e.g. EACCES). The user
                     should know their "not installed" view may be a false negative. */}
-                {installStatus?.probeError && (
+                {installStatus?.probeFailures && installStatus.probeFailures.length > 0 && (
                   <div className="px-5 py-2 border-t border-border/40 flex-shrink-0">
                     <div className="flex items-start gap-1.5 text-[11px] text-destructive">
                       <AlertCircle
@@ -1221,7 +1308,31 @@ export function SkillsBrowserModal({
                         strokeWidth={ICON_STROKE}
                         className="flex-shrink-0 mt-px"
                       />
-                      <span>{installStatus.probeError}</span>
+                      <div className="flex-1">
+                        <div className="font-medium">Could not check install status:</div>
+                        <ul className="mt-0.5 space-y-0.5">
+                          {installStatus.probeFailures.map((f) => (
+                            <li key={`${f.scope}|${f.code}`} className="font-mono">
+                              {f.scope === 'global' ? '~/.claude/skills' : f.scope} ({f.code})
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* IPC-level failure on the install check itself: distinct from per-path
+                    probe failures, because here we don't even have a status to show. */}
+                {installStatusError && (
+                  <div className="px-5 py-2 border-t border-border/40 flex-shrink-0">
+                    <div className="flex items-start gap-1.5 text-[11px] text-destructive">
+                      <AlertCircle
+                        size={ICON_SIZE}
+                        strokeWidth={ICON_STROKE}
+                        className="flex-shrink-0 mt-px"
+                      />
+                      <span className="flex-1">{installStatusError}</span>
                     </div>
                   </div>
                 )}
@@ -1386,12 +1497,11 @@ export function SkillsBrowserModal({
                                 <div className="border-t border-border/30 mt-1 pt-1">
                                   <div className="px-3 py-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider flex items-center justify-between">
                                     <span>Tasks</span>
-                                    <span
-                                      className="font-normal normal-case tracking-normal text-muted-foreground/70"
-                                      title="Files written here are uncommitted changes in the task's worktree."
-                                    >
-                                      uncommitted
-                                    </span>
+                                    <Tooltip content="Files written here are uncommitted changes in the task's worktree.">
+                                      <span className="font-normal normal-case tracking-normal text-muted-foreground/70">
+                                        uncommitted
+                                      </span>
+                                    </Tooltip>
                                   </div>
                                   {activeTasks.map((t) => (
                                     <button

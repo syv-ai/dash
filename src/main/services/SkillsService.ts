@@ -21,20 +21,58 @@ import type {
   SkillInstallTarget,
   SkillsRegistryMeta,
   InstalledSkill,
+  InstalledSkillsResult,
+  ProbeFailure,
 } from '@shared/types';
 import { SkillsCache } from './skillsCache';
 
+// Trust boundary: this third-party GitHub repo is effectively Dash's package registry.
+// Pinning to a specific repo+branch+filename is a deliberate choice; changing this
+// constant changes who can ship code to every Dash user.
 const REGISTRY_URL =
   'https://raw.githubusercontent.com/majiayu000/claude-skill-registry/main/registry.json';
+
+// 24h matches the registry's typical update cadence (daily refresh of GitHub stars).
+// Shorter would just hammer raw.githubusercontent.com without surfacing newer data;
+// longer would let users sit on stale popularity rankings.
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-// The registry's long tail is dominated by abandoned/duplicate entries; top-N-by-stars
-// keeps the on-disk cache compact while covering any skill users are realistically after.
+
+// The registry's long tail is dominated by abandoned/duplicate entries. 10K covers
+// every skill with non-trivial star counts at current registry sizes (~150K total),
+// keeps the SQLite file under ~30 MB, and bounds the buffered JSON parse memory.
 const MAX_SKILLS = 10_000;
+
+// 60s is generous for a ~10 MB JSON payload over a slow connection. Short enough that
+// a hung server fails the open-lifecycle within the user's patience window.
 const REGISTRY_FETCH_TIMEOUT_MS = 60_000;
+
+// Per-file timeout for SKILL.md and sibling assets. 15s covers slow connections
+// without making a stuck connection block the install for minutes.
 const FILE_FETCH_TIMEOUT_MS = 15_000;
+
+// Wall-clock cap on a single install. Without this, a pathological skill (50 files,
+// each hanging until FILE_FETCH_TIMEOUT_MS) keeps the user staring at a spinner for
+// >12 min. In-flight fetches still drain on their own timers; this only fails the
+// user-facing op.
+const INSTALL_TIMEOUT_MS = 120_000;
+
+// SKILL.md files in the registry are <100 KB in practice; 2 MB allows for the rare
+// long-form skill while bounding the worst-case download per file. Also caps the
+// readFileSync we do on local installs.
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
+
+// Largest legitimate skill in the registry has ~10 files. 50 is a defensive cap
+// against a malicious registry entry pointing at a bloated directory; combined with
+// MAX_FILE_BYTES it bounds total install download to ~100 MB.
 const MAX_FILES_PER_SKILL = 50;
+
+// Skills are flat or one level deep in observed registry data; 3 is permissive but
+// still rejects pathological recursive trees.
 const MAX_RECURSION_DEPTH = 3;
+
+// Pinned host for content downloads. Anything outside this prefix is refused even if
+// the GitHub contents API points us there — defense in depth against a compromised
+// registry that supplies attacker-hosted download_url values.
 const RAW_GITHUB_PREFIX = 'https://raw.githubusercontent.com/';
 
 const SKILL_NAME_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -42,7 +80,7 @@ const REPO_RE = /^[\w.-]+\/[\w.-]+$/;
 const BRANCH_RE = /^[\w./-]+$/;
 const ENTRY_NAME_RE = /^[\w.][\w.-]*$/;
 
-function assertSkillName(name: string): void {
+export function assertSkillName(name: string): void {
   if (!SKILL_NAME_RE.test(name)) {
     throw new Error(`Invalid skill name: ${JSON.stringify(name)}`);
   }
@@ -52,7 +90,7 @@ function assertSkillName(name: string): void {
 // could break the URL we'll build (`?`, `#`, whitespace) or escape the directory.
 const PATH_SEGMENT_RE = /^[\w.][\w.-]*$/;
 
-function assertRef(ref: SkillRef): void {
+export function assertRef(ref: SkillRef): void {
   if (!REPO_RE.test(ref.repo)) {
     throw new Error(`Invalid repo: ${JSON.stringify(ref.repo)}`);
   }
@@ -76,15 +114,13 @@ function resolveSkillsBaseDir(target: SkillInstallTarget): string {
     case 'task':
       return path.join(target.worktreePath, '.claude', 'skills');
     default: {
-      // Forces a compile error if a future SkillInstallTarget variant is added without
-      // updating this switch — we'd rather break the build than silently default to global.
       const _exhaustive: never = target;
       throw new Error(`Unhandled install target: ${JSON.stringify(_exhaustive)}`);
     }
   }
 }
 
-function resolveInstallDir(target: SkillInstallTarget, skillName: string): string {
+export function resolveInstallDir(target: SkillInstallTarget, skillName: string): string {
   assertSkillName(skillName);
   const base = resolveSkillsBaseDir(target);
   const installDir = path.resolve(base, skillName);
@@ -95,7 +131,7 @@ function resolveInstallDir(target: SkillInstallTarget, skillName: string): strin
   return installDir;
 }
 
-function resolveChildPath(baseDir: string, name: string): string {
+export function resolveChildPath(baseDir: string, name: string): string {
   if (!ENTRY_NAME_RE.test(name)) {
     throw new Error(`Invalid file/directory name from registry: ${JSON.stringify(name)}`);
   }
@@ -107,8 +143,6 @@ function resolveChildPath(baseDir: string, name: string): string {
   return child;
 }
 
-/** Specialized error so callers can branch on the HTTP status (e.g. 403 = rate limit,
- *  404 = path moved). The message is human-readable; the `status` is for matching. */
 class FetchHttpError extends Error {
   constructor(
     public readonly url: string,
@@ -148,6 +182,11 @@ interface RawSkill {
 
 // A handful of registry entries ship malformed values (e.g. description as ["需要填写描述"]),
 // which would otherwise blow up SQLite bindings. Coerce defensively at the boundary.
+function clampInt(v: number | undefined, fallback: number, min: number, max: number): number {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return fallback;
+  return Math.min(Math.max(Math.trunc(v), min), max);
+}
+
 function asString(v: unknown): string {
   if (typeof v === 'string') return v;
   if (v == null) return '';
@@ -175,12 +214,9 @@ function normalizeSkill(s: RawSkill): RegistrySkill | null {
   };
 }
 
-/**
- * Downloads the registry, normalizes each skill, and replaces the SQLite cache atomically.
- * We previously tried stream-json for low-memory parsing, but the pipeline silently yielded
- * 0 rows in our setup (likely a Buffer/Uint8Array mismatch between Readable.fromWeb and
- * fixUtf8Stream). Buffered parse is reliable and trades ~200 MB transient memory for that.
- */
+// Buffered parse rather than stream-json: a Buffer/Uint8Array mismatch between
+// Readable.fromWeb and fixUtf8Stream silently yielded 0 rows in our setup. Cost is
+// ~200 MB transient memory during the JSON.parse.
 async function downloadAndStoreRegistry(): Promise<{ inserted: number }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REGISTRY_FETCH_TIMEOUT_MS);
@@ -237,6 +273,10 @@ async function downloadAndStoreRegistry(): Promise<{ inserted: number }> {
   }
 }
 
+// Per-installDir lock: two clicks on "Install" (e.g. dropdown re-open) would otherwise
+// race the rmSync+renameSync swap and either stomp each other or fail with ENOTEMPTY.
+const installsInFlight = new Set<string>();
+
 export class SkillsService {
   static getMeta(): SkillsRegistryMeta {
     return SkillsCache.getMeta();
@@ -246,17 +286,10 @@ export class SkillsService {
     return SkillsCache.getCategories();
   }
 
-  /**
-   * If the cache is missing or older than CACHE_TTL_MS, refresh it from the registry.
-   * forceRefresh bypasses the TTL. Returns the post-refresh meta. When a refresh attempt
-   * fails but we have a non-empty cache, returns that cache with `stale: true` and a
-   * human-readable `refreshError` so the UI can show the user why fresh data isn't here.
-   */
   static async ensureRegistry(forceRefresh = false): Promise<SkillsRegistryMeta> {
     const meta = SkillsCache.getMeta();
-    const fresh =
-      meta.fetchedAt !== null && meta.totalCount > 0 && Date.now() - meta.fetchedAt < CACHE_TTL_MS;
-    if (fresh && !forceRefresh) return meta;
+    const isFresh = meta.status === 'fresh' && Date.now() - meta.fetchedAt < CACHE_TTL_MS;
+    if (isFresh && !forceRefresh) return meta;
 
     try {
       await downloadAndStoreRegistry();
@@ -265,12 +298,17 @@ export class SkillsService {
       // anything cached, but we MUST signal this to the renderer so the user knows their
       // results are old. Silently returning stale data caused users to sit on weeks-old
       // caches without realising refresh had been broken.
-      if (meta.totalCount > 0) {
+      if (meta.status !== 'never-fetched') {
         const message = err instanceof Error ? err.message : String(err);
         console.error('[SkillsService.ensureRegistry] using stale cache after fetch failure', {
           message,
         });
-        return { ...meta, stale: true, refreshError: message };
+        return {
+          status: 'stale',
+          totalCount: meta.totalCount,
+          fetchedAt: meta.fetchedAt,
+          refreshError: message,
+        };
       }
       throw err;
     }
@@ -278,13 +316,17 @@ export class SkillsService {
   }
 
   static search(args: SkillsSearchArgs): SkillsSearchResult {
-    const result = SkillsCache.search({
+    // Clamp to defend against negative or wildly-large values from a misbehaving caller —
+    // SQLite happily accepts a negative LIMIT but the result is a confused empty page,
+    // not a clear error.
+    const limit = clampInt(args.limit, 50, 1, 200);
+    const offset = clampInt(args.offset, 0, 0, Number.MAX_SAFE_INTEGER);
+    return SkillsCache.search({
       query: args.query ?? '',
       category: args.category,
-      limit: args.limit ?? 50,
-      offset: args.offset ?? 0,
+      limit,
+      offset,
     });
-    return result;
   }
 
   static async getSkillContent(ref: SkillRef): Promise<string> {
@@ -302,20 +344,10 @@ export class SkillsService {
 
   /** Reads SKILL.md for a skill installed locally — used when the catalog has no entry
    *  (custom/long-tail skills) and we therefore can't pull from raw.githubusercontent.com.
-   *  installLocation must be either the special string 'global' (resolved to ~/.claude/skills)
-   *  or an absolute path that the renderer already validated as a known project/worktree path. */
-  static readLocalSkillMd(args: { skillName: string; installLocation: string }): string {
-    assertSkillName(args.skillName);
-    const baseDir =
-      args.installLocation === 'global'
-        ? path.join(os.homedir(), '.claude', 'skills')
-        : path.join(args.installLocation, '.claude', 'skills');
-    // Defense in depth: same escape check we use on writes.
-    const skillDir = path.resolve(baseDir, args.skillName);
-    const rel = path.relative(baseDir, skillDir);
-    if (rel.startsWith('..') || path.isAbsolute(rel)) {
-      throw new Error(`Resolved skill dir escapes base: ${skillDir}`);
-    }
+   *  Takes the same SkillInstallTarget union as install/uninstall so the base dir is
+   *  resolved through the same closed switch. */
+  static readLocalSkillMd(args: { skillName: string; target: SkillInstallTarget }): string {
+    const skillDir = resolveInstallDir(args.target, args.skillName);
     const file = path.join(skillDir, 'SKILL.md');
     const stat = statSync(file); // throws ENOENT cleanly if missing
     if (stat.size > MAX_FILE_BYTES) {
@@ -329,23 +361,44 @@ export class SkillsService {
     assertRef(ref);
     const installDir = resolveInstallDir(target, skillName);
 
+    if (installsInFlight.has(installDir)) {
+      throw new Error(
+        `An install for ${skillName} at this location is already in progress. Wait for it to finish.`,
+      );
+    }
+    installsInFlight.add(installDir);
+
     // Stage into a sibling temp dir so a mid-install failure (rate limit, network drop,
     // file-count cap, etc.) can't leave a half-populated skill that checkInstalled would
     // still report as "installed" because SKILL.md happens to exist.
     const stagingDir = `${installDir}.tmp-${process.pid}-${Date.now()}`;
     mkdirSync(stagingDir, { recursive: true });
 
+    let timeoutHandle: NodeJS.Timeout | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(
+        () => reject(new Error(`Install timed out after ${INSTALL_TIMEOUT_MS / 1000}s`)),
+        INSTALL_TIMEOUT_MS,
+      );
+    });
+
     try {
-      const content = await this.getSkillContent(ref);
-      writeFileSync(path.join(stagingDir, 'SKILL.md'), content, 'utf-8');
+      await Promise.race([
+        (async () => {
+          const content = await this.getSkillContent(ref);
+          writeFileSync(path.join(stagingDir, 'SKILL.md'), content, 'utf-8');
 
-      const counter = { count: 1 };
-      await this.fetchSkillDirectory(ref, stagingDir, MAX_RECURSION_DEPTH, counter);
+          const counter = { count: 1 };
+          await this.fetchSkillDirectory(ref, stagingDir, MAX_RECURSION_DEPTH, counter);
 
-      // Atomic-ish swap: remove any pre-existing install, then rename. rename within the
-      // same directory is atomic on POSIX; the prior rmSync is the small race window.
-      rmSync(installDir, { recursive: true, force: true });
-      renameSync(stagingDir, installDir);
+          // Atomic-ish swap: remove any pre-existing install, then rename. rename within
+          // the same directory is atomic on POSIX; the in-flight lock above guards
+          // against concurrent installs racing rmSync+renameSync.
+          rmSync(installDir, { recursive: true, force: true });
+          renameSync(stagingDir, installDir);
+        })(),
+        timeoutPromise,
+      ]);
     } catch (err) {
       // Best-effort cleanup of the partial staging tree; never mask the original failure.
       try {
@@ -357,6 +410,9 @@ export class SkillsService {
         });
       }
       throw err;
+    } finally {
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+      installsInFlight.delete(installDir);
     }
   }
 
@@ -407,7 +463,15 @@ export class SkillsService {
       clearTimeout(timeout);
     }
 
-    if (!Array.isArray(parsed)) return;
+    if (!Array.isArray(parsed)) {
+      // GitHub returns an object (not an array) when the path resolves to a single file
+      // or to an error envelope (e.g. `{ message: "Not Found" }`). The previous behavior
+      // silently skipped this — install would report success after copying SKILL.md only.
+      // Fail loudly so users see the upstream weirdness instead of an incomplete install.
+      throw new Error(
+        `GitHub contents API returned non-array shape for ${ref.repo}/${dirPath}; the upstream may have moved or rate-limited.`,
+      );
+    }
 
     const entries = parsed as Array<{
       name: string;
@@ -454,35 +518,30 @@ export class SkillsService {
   static checkInstalled(skillName: string, probePaths: string[]): SkillInstallStatus {
     assertSkillName(skillName);
     const home = os.homedir();
-    const probeErrors: string[] = [];
+    const probeFailures: ProbeFailure[] = [];
 
     const globalProbe = skillFilePresence(
       path.join(home, '.claude', 'skills', skillName, 'SKILL.md'),
     );
-    if (globalProbe.error) probeErrors.push(`global (${globalProbe.error})`);
+    if (globalProbe.error) probeFailures.push({ scope: 'global', code: globalProbe.error });
 
     const installedPaths: string[] = [];
     for (const pp of probePaths) {
       const probe = skillFilePresence(path.join(pp, '.claude', 'skills', skillName, 'SKILL.md'));
-      if (probe.error) probeErrors.push(`${pp} (${probe.error})`);
+      if (probe.error) probeFailures.push({ scope: pp, code: probe.error });
       if (probe.present) installedPaths.push(pp);
     }
 
     const status: SkillInstallStatus = { global: globalProbe.present, installedPaths };
-    if (probeErrors.length > 0) {
-      status.probeError = `Could not check install status for ${probeErrors.join(', ')}`;
-    }
+    if (probeFailures.length > 0) status.probeFailures = probeFailures;
     return status;
   }
 
-  /** Lists every skill installed on disk across global + the supplied probePaths.
-   *  Joins each found folder name back to the registry cache when possible so the UI
-   *  can render full cards; skills installed but not in the cached top-N come back
-   *  with `catalog: null`. */
-  static listInstalled(probePaths: string[]): InstalledSkill[] {
+  static listInstalled(probePaths: string[]): InstalledSkillsResult {
     const home = os.homedir();
     type Entry = { installedPaths: string[]; globalInstalled: boolean };
     const found = new Map<string, Entry>();
+    const probeFailures: ProbeFailure[] = [];
 
     function record(skillName: string, scope: 'global' | string): void {
       // Defensive: a folder name that wouldn't pass our install validator is suspicious
@@ -495,19 +554,16 @@ export class SkillsService {
       found.set(skillName, entry);
     }
 
-    for (const name of listSkillFolders(path.join(home, '.claude', 'skills'))) {
-      record(name, 'global');
-    }
+    const globalProbe = listSkillFolders(path.join(home, '.claude', 'skills'));
+    for (const name of globalProbe.names) record(name, 'global');
+    if (globalProbe.error) probeFailures.push({ scope: 'global', code: globalProbe.error });
+
     for (const pp of probePaths) {
-      for (const name of listSkillFolders(path.join(pp, '.claude', 'skills'))) {
-        record(name, pp);
-      }
+      const probe = listSkillFolders(path.join(pp, '.claude', 'skills'));
+      for (const name of probe.names) record(name, pp);
+      if (probe.error) probeFailures.push({ scope: pp, code: probe.error });
     }
 
-    // Build a lookup from sanitized install-name → catalog row so we can attach
-    // metadata to each installed entry. One pass over the cache keeps this O(N) in the
-    // catalog size; per-name SQL would be cheaper but the sanitization rules are awkward
-    // to express in SQL. First wins on collisions.
     const catalogByInstallName = new Map<string, RegistrySkill>();
     for (const s of SkillsCache.allSkills()) {
       const installName = deriveInstallNameFromCatalog(s);
@@ -516,17 +572,26 @@ export class SkillsService {
       }
     }
 
-    const result: InstalledSkill[] = [];
+    const skills: InstalledSkill[] = [];
     for (const [skillName, info] of found) {
-      result.push({
+      skills.push({
         skillName,
         globalInstalled: info.globalInstalled,
         installedPaths: info.installedPaths,
         catalog: catalogByInstallName.get(skillName) ?? null,
       });
     }
-    result.sort((a, b) => a.skillName.localeCompare(b.skillName));
-    return result;
+    skills.sort((a, b) => a.skillName.localeCompare(b.skillName));
+    return { skills, probeFailures };
+  }
+
+  /** Wipes the on-disk cache and refetches the registry. Last-resort recovery for when
+   *  the SQLite cache has corrupted in a way that the auto-retry on read methods can't
+   *  fix on its own. */
+  static async resetCache(): Promise<SkillsRegistryMeta> {
+    SkillsCache.resetCache();
+    await downloadAndStoreRegistry();
+    return SkillsCache.getMeta();
   }
 
   static uninstallSkill(args: SkillUninstallArgs): void {
@@ -546,17 +611,18 @@ export class SkillsService {
   }
 }
 
-/** Lists subdirectories of a `.claude/skills/` directory that contain a SKILL.md file.
- *  Returns [] if the directory doesn't exist; logs other errors and returns []. */
-function listSkillFolders(skillsDir: string): string[] {
+// Returns the SKILL.md-bearing folders under a `.claude/skills/` dir. ENOENT collapses
+// to "empty"; any other errno (EACCES, EIO, …) is reported via `error` so the caller
+// can surface the truncation to the user instead of silently returning [].
+function listSkillFolders(skillsDir: string): { names: string[]; error?: string } {
   let entries: Dirent[];
   try {
     entries = readdirSync(skillsDir, { withFileTypes: true }) as Dirent[];
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') return [];
+    if (code === 'ENOENT') return { names: [] };
     console.error('[SkillsService.listSkillFolders] readdir failed', { skillsDir, code });
-    return [];
+    return { names: [], error: code || 'unknown' };
   }
   const names: string[] = [];
   for (const e of entries) {
@@ -567,7 +633,7 @@ function listSkillFolders(skillsDir: string): string[] {
       names.push(e.name);
     }
   }
-  return names;
+  return { names };
 }
 
 /** Mirrors the renderer's `deriveInstallSkillName` so we can map a catalog row back
@@ -593,8 +659,8 @@ function lastPathSegment(p: string): string {
   return last;
 }
 
-/** Probes whether a SKILL.md exists. Distinguishes "not present" from "couldn't read"
- *  so the caller can warn the user when ENOENT is masked by EACCES/EIO etc. */
+// Distinguishes "not present" from "couldn't read" so callers can warn the user when
+// ENOENT is masked by EACCES/EIO etc.
 function skillFilePresence(filePath: string): { present: boolean; error?: string } {
   try {
     statSync(filePath);

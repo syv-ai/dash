@@ -23,10 +23,11 @@ import type {
   SkillInstallStatus,
   SkillRef,
   SkillInstallArgs,
+  SkillInstallTarget,
   SkillUninstallArgs,
   SkillsSearchArgs,
   SkillsRegistryMeta,
-  InstalledSkill,
+  InstalledSkillsResult,
 } from '../shared/types';
 
 export interface ElectronAPI {
@@ -283,16 +284,18 @@ export interface ElectronAPI {
   skillsGetContent: (args: SkillRef) => Promise<IpcResponse<string>>;
   skillsReadLocalSkillMd: (args: {
     skillName: string;
-    /** 'global' for ~/.claude/skills, otherwise an absolute project/worktree path. */
-    installLocation: string;
+    target: SkillInstallTarget;
   }) => Promise<IpcResponse<string>>;
   skillsInstall: (args: SkillInstallArgs) => Promise<IpcResponse<void>>;
   skillsCheckInstalled: (args: {
     skillName: string;
     probePaths: string[];
   }) => Promise<IpcResponse<SkillInstallStatus>>;
-  skillsListInstalled: (args: { probePaths: string[] }) => Promise<IpcResponse<InstalledSkill[]>>;
+  skillsListInstalled: (args: {
+    probePaths: string[];
+  }) => Promise<IpcResponse<InstalledSkillsResult>>;
   skillsUninstall: (args: SkillUninstallArgs) => Promise<IpcResponse<void>>;
+  skillsResetCache: () => Promise<IpcResponse<SkillsRegistryMeta>>;
 
   // Telemetry
   telemetryCapture: (event: string, properties?: Record<string, unknown>) => Promise<void>;

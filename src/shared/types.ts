@@ -381,16 +381,15 @@ export interface RegistrySkill {
   distribution?: 'compatible' | 'restricted';
 }
 
-export interface SkillsRegistryMeta {
-  /** Epoch ms when the cache was last refreshed from upstream; null if never. */
-  fetchedAt: number | null;
-  /** Number of skills currently held in the local cache. */
-  totalCount: number;
-  /** True iff the most recent refresh attempt failed and we're returning the prior cache. */
-  stale?: boolean;
-  /** Human-readable reason the latest refresh failed; only set when `stale` is true. */
-  refreshError?: string;
-}
+/**
+ * Tagged union so renderers can't confuse "no cache yet" with "stale cache" — the
+ * earlier optional-fields shape made it easy to render an empty browser silently when
+ * a refresh failure replaced a populated cache.
+ */
+export type SkillsRegistryMeta =
+  | { status: 'never-fetched'; totalCount: 0; fetchedAt: null }
+  | { status: 'fresh'; totalCount: number; fetchedAt: number }
+  | { status: 'stale'; totalCount: number; fetchedAt: number; refreshError: string };
 
 export interface SkillsSearchArgs {
   query: string;
@@ -417,19 +416,32 @@ export interface InstalledSkill {
   catalog: RegistrySkill | null;
 }
 
+export interface InstalledSkillsResult {
+  skills: InstalledSkill[];
+  /** Paths that couldn't be enumerated (EACCES, EIO etc.) — those probes silently
+   *  truncated prior to this field, so the UI now warns the user that the list may
+   *  be incomplete instead of misrepresenting "not found" results. */
+  probeFailures: ProbeFailure[];
+}
+
+export interface ProbeFailure {
+  /** 'global' for the home dir probe, otherwise an absolute project/worktree path. */
+  scope: 'global' | string;
+  /** errno code (EACCES, EIO, etc.) or 'unknown'. */
+  code: string;
+}
+
 export interface SkillInstallStatus {
   global: boolean;
   /** Subset of the input probe paths where the skill is currently installed. The caller
    *  passes both project roots and task worktree paths; the renderer maps them back. */
   installedPaths: string[];
-  /** Non-ENOENT errors encountered while probing — e.g. EACCES on a path means we don't
-   *  actually know whether the skill is installed there. UI should warn the user rather
-   *  than treat a probe failure as "not installed". */
-  probeError?: string;
+  /** Non-ENOENT errors per probe path — e.g. EACCES on /Users/foo/proj means we can't tell
+   *  whether the skill is installed there. UI should treat any of these as "unknown"
+   *  rather than "not installed", and ideally list each affected path inline. */
+  probeFailures?: ProbeFailure[];
 }
 
-/** Where a skill should be installed/uninstalled. Discriminated so the relevant path
- *  can never be missing, and so the renderer can label the result correctly. */
 export type SkillInstallTarget =
   | { kind: 'global' }
   | { kind: 'project'; projectPath: string }

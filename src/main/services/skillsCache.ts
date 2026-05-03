@@ -1,23 +1,60 @@
 import { app } from 'electron';
 import Database from 'better-sqlite3';
 import path from 'path';
-import { mkdirSync } from 'fs';
+import { mkdirSync, rmSync } from 'fs';
 import type { RegistrySkill, SkillsRegistryMeta } from '@shared/types';
 
 const CACHE_FILENAME = 'skills-cache.db';
 
 let db: Database.Database | null = null;
 
-function getDb(): Database.Database {
-  if (db) return db;
+function dbFilePath(): string {
   const dir = app.getPath('userData');
   mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, CACHE_FILENAME);
-  db = new Database(file);
+  return path.join(dir, CACHE_FILENAME);
+}
+
+function getDb(): Database.Database {
+  if (db) return db;
+  db = new Database(dbFilePath());
   db.pragma('journal_mode = WAL');
   db.pragma('synchronous = NORMAL');
   ensureSchema(db);
   return db;
+}
+
+function closeDb(): void {
+  if (!db) return;
+  try {
+    db.close();
+  } catch (err) {
+    console.error('[SkillsCache.closeDb] close failed', { message: String(err) });
+  }
+  db = null;
+}
+
+// better-sqlite3 throws a `SqliteError` (extends Error with a `code` like SQLITE_CORRUPT,
+// SQLITE_NOTADB, etc). Match by name/code so we don't swallow unrelated bugs.
+function isSqliteError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if (err.name === 'SqliteError') return true;
+  return typeof (err as { code?: unknown }).code === 'string';
+}
+
+// SQLite ops that hit corruption leave the memoized handle in a possibly-bad state.
+// Drop it and retry once on the failing op; if it still throws, surface to the caller
+// so the UI can offer the manual `resetCache` affordance.
+function withRetry<T>(op: (d: Database.Database) => T): T {
+  try {
+    return op(getDb());
+  } catch (err) {
+    if (!isSqliteError(err)) throw err;
+    console.error('[SkillsCache.withRetry] sqlite op failed; resetting handle', {
+      message: err instanceof Error ? err.message : String(err),
+    });
+    closeDb();
+    return op(getDb());
+  }
 }
 
 function ensureSchema(d: Database.Database): void {
@@ -137,75 +174,106 @@ function buildFtsQuery(raw: string): string {
   return tokens.map((t) => `"${t}"*`).join(' ');
 }
 
+function searchImpl(d: Database.Database, args: SearchArgs): SearchResult {
+  const ftsQuery = buildFtsQuery(args.query);
+  const filters: string[] = [];
+  const params: Record<string, unknown> = {
+    limit: args.limit,
+    offset: args.offset,
+  };
+  if (args.category) {
+    filters.push('s.category = @category');
+    params.category = args.category;
+  }
+
+  const officialOrder = `CASE WHEN s.repo = 'anthropics/skills' THEN 0 ELSE 1 END`;
+
+  let whereSql = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
+  let fromSql = `FROM skills s`;
+  let orderSql = `ORDER BY ${officialOrder}, s.stars DESC`;
+
+  if (ftsQuery) {
+    fromSql = `FROM skills_fts JOIN skills s ON s.rowid = skills_fts.rowid`;
+    const matchClause = `skills_fts MATCH @match`;
+    whereSql =
+      filters.length > 0
+        ? `WHERE ${matchClause} AND ${filters.join(' AND ')}`
+        : `WHERE ${matchClause}`;
+    params.match = ftsQuery;
+    orderSql = `ORDER BY ${officialOrder}, bm25(skills_fts), s.stars DESC`;
+  }
+
+  const totalRow = d.prepare(`SELECT COUNT(*) as n ${fromSql} ${whereSql}`).get(params) as {
+    n: number;
+  };
+  const rows = d
+    .prepare(`SELECT s.* ${fromSql} ${whereSql} ${orderSql} LIMIT @limit OFFSET @offset`)
+    .all(params) as SkillRow[];
+
+  return { skills: rows.map(rowToSkill), total: totalRow.n };
+}
+
 export const SkillsCache = {
   getMeta(): SkillsRegistryMeta {
-    const d = getDb();
-    const row = d.prepare(`SELECT value FROM meta WHERE key = 'fetchedAt'`).get() as
-      | { value: string }
-      | undefined;
-    const fetchedAt = row ? Number(row.value) : null;
-    const total = d.prepare(`SELECT COUNT(*) as n FROM skills`).get() as { n: number };
-    return { fetchedAt: Number.isFinite(fetchedAt) ? fetchedAt : null, totalCount: total.n };
+    return withRetry((d) => {
+      const row = d.prepare(`SELECT value FROM meta WHERE key = 'fetchedAt'`).get() as
+        | { value: string }
+        | undefined;
+      const rawFetchedAt = row ? Number(row.value) : NaN;
+      const fetchedAt = Number.isFinite(rawFetchedAt) ? rawFetchedAt : null;
+      const total = (d.prepare(`SELECT COUNT(*) as n FROM skills`).get() as { n: number }).n;
+      // The cache is meaningful only when both timestamp and rows are present. Any other
+      // combination (rows without timestamp, timestamp without rows) is treated as
+      // never-fetched; replaceAll guarantees both stamp together on success.
+      if (fetchedAt === null || total === 0) {
+        return { status: 'never-fetched', totalCount: 0, fetchedAt: null };
+      }
+      return { status: 'fresh', totalCount: total, fetchedAt };
+    });
   },
 
   getCategories(): string[] {
-    const d = getDb();
-    const rows = d
-      .prepare(
-        `SELECT DISTINCT category FROM skills WHERE category != '' ORDER BY category COLLATE NOCASE`,
-      )
-      .all() as Array<{ category: string }>;
-    return rows.map((r) => r.category);
+    return withRetry((d) => {
+      const rows = d
+        .prepare(
+          `SELECT DISTINCT category FROM skills WHERE category != '' ORDER BY category COLLATE NOCASE`,
+        )
+        .all() as Array<{ category: string }>;
+      return rows.map((r) => r.category);
+    });
   },
 
   /** Returns every cached skill row. Used by listInstalled to map filesystem folder names
-   *  back to catalog entries — at 10K rows the load is ~5 ms and beats a per-name SQL
-   *  fuzzy match given the sanitization rules. */
+   *  back to catalog entries. */
   allSkills(): RegistrySkill[] {
-    const d = getDb();
-    const rows = d.prepare(`SELECT * FROM skills`).all() as SkillRow[];
-    return rows.map(rowToSkill);
+    return withRetry((d) => {
+      const rows = d.prepare(`SELECT * FROM skills`).all() as SkillRow[];
+      return rows.map(rowToSkill);
+    });
   },
 
   search(args: SearchArgs): SearchResult {
-    const d = getDb();
-    const ftsQuery = buildFtsQuery(args.query);
-    const filters: string[] = [];
-    const params: Record<string, unknown> = {
-      limit: args.limit,
-      offset: args.offset,
-    };
-    if (args.category) {
-      filters.push('s.category = @category');
-      params.category = args.category;
+    return withRetry((d) => searchImpl(d, args));
+  },
+
+  /** Last-resort recovery: close the handle and delete the on-disk cache file plus its
+   *  WAL/SHM siblings. The next call to any SkillsCache method will recreate the schema
+   *  from scratch; the caller is then responsible for refetching the registry. */
+  resetCache(): void {
+    closeDb();
+    const file = dbFilePath();
+    for (const p of [file, `${file}-wal`, `${file}-shm`]) {
+      try {
+        rmSync(p, { force: true });
+      } catch (err) {
+        console.error('[SkillsCache.resetCache] rm failed', { path: p, message: String(err) });
+      }
     }
+  },
 
-    // Pin anthropics/skills entries first, then by FTS rank (when searching) or stars.
-    const officialOrder = `CASE WHEN s.repo = 'anthropics/skills' THEN 0 ELSE 1 END`;
-
-    let whereSql = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
-    let fromSql = `FROM skills s`;
-    let orderSql = `ORDER BY ${officialOrder}, s.stars DESC`;
-
-    if (ftsQuery) {
-      fromSql = `FROM skills_fts JOIN skills s ON s.rowid = skills_fts.rowid`;
-      const matchClause = `skills_fts MATCH @match`;
-      whereSql =
-        filters.length > 0
-          ? `WHERE ${matchClause} AND ${filters.join(' AND ')}`
-          : `WHERE ${matchClause}`;
-      params.match = ftsQuery;
-      orderSql = `ORDER BY ${officialOrder}, bm25(skills_fts), s.stars DESC`;
-    }
-
-    const totalRow = d.prepare(`SELECT COUNT(*) as n ${fromSql} ${whereSql}`).get(params) as {
-      n: number;
-    };
-    const rows = d
-      .prepare(`SELECT s.* ${fromSql} ${whereSql} ${orderSql} LIMIT @limit OFFSET @offset`)
-      .all(params) as SkillRow[];
-
-    return { skills: rows.map(rowToSkill), total: totalRow.n };
+  /** Closes the database handle. Used by tests; also safe to call on app shutdown. */
+  close(): void {
+    closeDb();
   },
 
   /**
@@ -265,7 +333,6 @@ export const SkillsCache = {
     txn(Object.entries(values).map(([k, v]) => [k, String(v)]));
   },
 
-  // For tests / dev: returns the underlying DB. Not exported through the service.
   _db(): Database.Database {
     return getDb();
   },

@@ -257,8 +257,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('skills:search', args),
   skillsGetContent: (args: import('@shared/types').SkillRef) =>
     ipcRenderer.invoke('skills:getContent', args),
-  skillsReadLocalSkillMd: (args: { skillName: string; installLocation: string }) =>
-    ipcRenderer.invoke('skills:readLocalSkillMd', args),
+  skillsReadLocalSkillMd: (args: {
+    skillName: string;
+    target: import('@shared/types').SkillInstallTarget;
+  }) => ipcRenderer.invoke('skills:readLocalSkillMd', args),
   skillsInstall: (args: import('@shared/types').SkillInstallArgs) =>
     ipcRenderer.invoke('skills:install', args),
   skillsCheckInstalled: (args: { skillName: string; probePaths: string[] }) =>
@@ -267,6 +269,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('skills:listInstalled', args),
   skillsUninstall: (args: import('@shared/types').SkillUninstallArgs) =>
     ipcRenderer.invoke('skills:uninstall', args),
+  skillsResetCache: () => ipcRenderer.invoke('skills:resetCache'),
 
   // Telemetry
   telemetryCapture: (event: string, properties?: Record<string, unknown>) =>
