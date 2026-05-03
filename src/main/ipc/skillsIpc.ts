@@ -103,9 +103,13 @@ export function registerSkillsIpc(): void {
 
   ipcMain.handle(
     'skills:checkInstalled',
-    (_event, args: { skillName: string; probePaths: string[] }) => {
+    (_event, args: { skillName: string; probePaths: string[]; ref?: SkillRef | null }) => {
       try {
-        const data = SkillsService.checkInstalled(args.skillName, args.probePaths);
+        const data = SkillsService.checkInstalled(
+          args.skillName,
+          args.probePaths,
+          args.ref ?? null,
+        );
         return { success: true, data };
       } catch (error) {
         return fail('SKILLS_CHECK_INSTALLED', error, { skillName: args?.skillName });

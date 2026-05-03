@@ -263,8 +263,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }) => ipcRenderer.invoke('skills:readLocalSkillMd', args),
   skillsInstall: (args: import('@shared/types').SkillInstallArgs) =>
     ipcRenderer.invoke('skills:install', args),
-  skillsCheckInstalled: (args: { skillName: string; probePaths: string[] }) =>
-    ipcRenderer.invoke('skills:checkInstalled', args),
+  skillsCheckInstalled: (args: {
+    skillName: string;
+    probePaths: string[];
+    ref?: import('@shared/types').SkillRef | null;
+  }) => ipcRenderer.invoke('skills:checkInstalled', args),
   skillsListInstalled: (args: { probePaths: string[] }) =>
     ipcRenderer.invoke('skills:listInstalled', args),
   skillsUninstall: (args: import('@shared/types').SkillUninstallArgs) =>

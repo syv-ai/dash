@@ -1,7 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest';
 import os from 'os';
 import path from 'path';
-import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync, writeFileSync } from 'fs';
+import {
+  mkdtempSync,
+  rmSync,
+  existsSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+  mkdirSync,
+} from 'fs';
 
 // Verifies the install pipeline's load-bearing invariants:
 //   - atomic staging swap (mid-install failures don't leave half-installed skills)
@@ -117,11 +125,23 @@ describe('installSkill — happy path', () => {
 
 describe('installSkill — staging cleanup on failure', () => {
   it('removes the staging dir and preserves a prior install when the SKILL.md fetch fails', async () => {
-    // Pre-existing install we expect to survive
+    // Pre-existing install we expect to survive. Tag it with a Dash marker so the
+    // install precondition allows the swap path to be exercised — without a marker
+    // the install would refuse before any fetch happens (covered separately below).
     const prior = installDir();
-    const fs = await import('fs');
-    fs.mkdirSync(prior, { recursive: true });
+    mkdirSync(prior, { recursive: true });
     writeFileSync(path.join(prior, 'SKILL.md'), 'OLD CONTENT', 'utf-8');
+    writeFileSync(
+      path.join(prior, '.dash-skill.json'),
+      JSON.stringify({
+        version: 1,
+        repo: 'owner/repo',
+        branch: 'main',
+        path: 'skills/demo',
+        installedAt: 0,
+      }),
+      'utf-8',
+    );
 
     setRoute(
       (u) => u.includes('/SKILL.md'),
@@ -322,5 +342,159 @@ describe('installSkill — security guards', () => {
 
     resolveSkill!();
     await first;
+  });
+});
+
+describe('installSkill — marker / custom-skill protection', () => {
+  it('refuses to overwrite an existing dir that has no Dash marker', async () => {
+    // User's pre-existing custom skill: a SKILL.md, no marker file.
+    const prior = installDir();
+    mkdirSync(prior, { recursive: true });
+    writeFileSync(path.join(prior, 'SKILL.md'), 'CUSTOM USER CONTENT', 'utf-8');
+
+    await expect(
+      SkillsService.installSkill({ ref: validRef, skillName: 'demo', target: projectTarget() }),
+    ).rejects.toThrow(/not installed by Dash/);
+
+    // The user's data must survive untouched.
+    expect(readFileSync(path.join(prior, 'SKILL.md'), 'utf-8')).toBe('CUSTOM USER CONTENT');
+    // No fetches should have happened — we refused before any network call.
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('writes a marker carrying the registry coordinates after a successful install', async () => {
+    setRoute(
+      (u) => u.endsWith('/SKILL.md'),
+      () => ({ body: '# Demo' }),
+    );
+    setRoute(
+      (u) => u.startsWith('https://api.github.com/'),
+      () => ({ body: JSON.stringify([]) }),
+    );
+
+    await SkillsService.installSkill({ ref: validRef, skillName: 'demo', target: projectTarget() });
+
+    const markerText = readFileSync(path.join(installDir(), '.dash-skill.json'), 'utf-8');
+    const marker = JSON.parse(markerText);
+    expect(marker.version).toBe(1);
+    expect(marker.repo).toBe(validRef.repo);
+    expect(marker.path).toBe(validRef.path);
+    expect(marker.branch).toBe(validRef.branch);
+    expect(typeof marker.installedAt).toBe('number');
+  });
+
+  it('allows reinstalling over an existing Dash install (marker present)', async () => {
+    const prior = installDir();
+    mkdirSync(prior, { recursive: true });
+    writeFileSync(path.join(prior, 'SKILL.md'), 'OLD', 'utf-8');
+    writeFileSync(
+      path.join(prior, '.dash-skill.json'),
+      JSON.stringify({
+        version: 1,
+        repo: 'owner/repo',
+        branch: 'main',
+        path: 'skills/demo',
+        installedAt: 0,
+      }),
+      'utf-8',
+    );
+
+    setRoute(
+      (u) => u.endsWith('/SKILL.md'),
+      () => ({ body: '# NEW' }),
+    );
+    setRoute(
+      (u) => u.startsWith('https://api.github.com/'),
+      () => ({ body: JSON.stringify([]) }),
+    );
+
+    await SkillsService.installSkill({ ref: validRef, skillName: 'demo', target: projectTarget() });
+
+    expect(readFileSync(path.join(installDir(), 'SKILL.md'), 'utf-8')).toBe('# NEW');
+    // Fresh marker should have been written (installedAt > 0).
+    const marker = JSON.parse(readFileSync(path.join(installDir(), '.dash-skill.json'), 'utf-8'));
+    expect(marker.installedAt).toBeGreaterThan(0);
+  });
+});
+
+describe('checkInstalled — marker matching', () => {
+  function setupCustomSkill() {
+    // Mimic the user's custom skill: bare SKILL.md, no marker, in the project's scope.
+    const customDir = path.join(tmpRoot, '.claude', 'skills', 'validate');
+    mkdirSync(customDir, { recursive: true });
+    writeFileSync(path.join(customDir, 'SKILL.md'), '# User custom validate', 'utf-8');
+    return customDir;
+  }
+
+  it('does NOT report a registry skill as installed when a same-named custom folder exists', () => {
+    setupCustomSkill();
+
+    const status = SkillsService.checkInstalled(
+      'validate',
+      [tmpRoot],
+      // Registry coordinates for some "validate" skill from anywhere
+      { repo: 'someone/skills', branch: 'main', path: 'skills/validate' },
+    );
+
+    expect(status.global).toBe(false);
+    expect(status.installedPaths).toEqual([]);
+  });
+
+  it('reports a registry skill as installed when the marker matches the ref', () => {
+    const dir = path.join(tmpRoot, '.claude', 'skills', 'validate');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, 'SKILL.md'), '# Registry', 'utf-8');
+    writeFileSync(
+      path.join(dir, '.dash-skill.json'),
+      JSON.stringify({
+        version: 1,
+        repo: 'someone/skills',
+        branch: 'main',
+        path: 'skills/validate',
+        installedAt: 1,
+      }),
+      'utf-8',
+    );
+
+    const status = SkillsService.checkInstalled('validate', [tmpRoot], {
+      repo: 'someone/skills',
+      branch: 'main',
+      path: 'skills/validate',
+    });
+
+    expect(status.installedPaths).toEqual([tmpRoot]);
+  });
+
+  it('does NOT report installed when the marker is for a different registry skill', () => {
+    const dir = path.join(tmpRoot, '.claude', 'skills', 'validate');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, 'SKILL.md'), '# Different', 'utf-8');
+    writeFileSync(
+      path.join(dir, '.dash-skill.json'),
+      JSON.stringify({
+        version: 1,
+        repo: 'other/skills',
+        branch: 'main',
+        path: 'skills/validate',
+        installedAt: 1,
+      }),
+      'utf-8',
+    );
+
+    const status = SkillsService.checkInstalled('validate', [tmpRoot], {
+      repo: 'someone/skills',
+      branch: 'main',
+      path: 'skills/validate',
+    });
+
+    expect(status.installedPaths).toEqual([]);
+  });
+
+  it('falls back to presence-only when no ref is provided (legacy callers)', () => {
+    setupCustomSkill();
+
+    const status = SkillsService.checkInstalled('validate', [tmpRoot]);
+
+    expect(status.installedPaths).toEqual([tmpRoot]);
   });
 });

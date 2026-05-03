@@ -75,6 +75,51 @@ const MAX_RECURSION_DEPTH = 3;
 // registry that supplies attacker-hosted download_url values.
 const RAW_GITHUB_PREFIX = 'https://raw.githubusercontent.com/';
 
+// Dash-owned marker dropped into every install dir so we can distinguish skills
+// installed via Dash (and from which registry entry) from a user's pre-existing folder
+// of the same name. Without this, a registry skill named "validate" silently overwrites
+// a user's custom ~/.claude/skills/validate, and the installed-list view conflates the
+// two by sanitized-name fuzzy match.
+const MARKER_FILENAME = '.dash-skill.json';
+const MARKER_VERSION = 1;
+
+interface SkillMarker {
+  version: number;
+  repo: string;
+  branch: string;
+  path: string;
+  installedAt: number;
+}
+
+function writeSkillMarker(skillDir: string, ref: SkillRef): void {
+  const marker: SkillMarker = {
+    version: MARKER_VERSION,
+    repo: ref.repo,
+    branch: ref.branch,
+    path: ref.path,
+    installedAt: Date.now(),
+  };
+  writeFileSync(path.join(skillDir, MARKER_FILENAME), JSON.stringify(marker), 'utf-8');
+}
+
+function readSkillMarker(skillDir: string): SkillMarker | null {
+  try {
+    const text = readFileSync(path.join(skillDir, MARKER_FILENAME), 'utf-8');
+    const parsed = JSON.parse(text) as Partial<SkillMarker>;
+    if (
+      parsed.version !== MARKER_VERSION ||
+      typeof parsed.repo !== 'string' ||
+      typeof parsed.path !== 'string' ||
+      typeof parsed.branch !== 'string'
+    ) {
+      return null;
+    }
+    return parsed as SkillMarker;
+  } catch {
+    return null;
+  }
+}
+
 const SKILL_NAME_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const REPO_RE = /^[\w.-]+\/[\w.-]+$/;
 const BRANCH_RE = /^[\w./-]+$/;
@@ -366,6 +411,25 @@ export class SkillsService {
         `An install for ${skillName} at this location is already in progress. Wait for it to finish.`,
       );
     }
+
+    // Refuse to overwrite a directory that wasn't installed by Dash. Without this guard,
+    // installing a registry skill whose name collides with a user's existing folder
+    // (e.g. a custom "validate" skill) would silently rmSync their data on the swap.
+    // ENOENT and any other unexpected stat error are deferred to the swap itself.
+    try {
+      const stat = statSync(installDir);
+      if (stat.isDirectory() && !readSkillMarker(installDir)) {
+        throw new Error(
+          `${installDir} already exists but was not installed by Dash. Refusing to overwrite — rename or remove the existing folder first if you want to install this skill here.`,
+        );
+      }
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      // Allow ENOENT (the install dir simply doesn't exist yet); rethrow our own
+      // refusal error and any unexpected errno (EACCES on the parent etc).
+      if (code !== 'ENOENT') throw err;
+    }
+
     installsInFlight.add(installDir);
 
     // Stage into a sibling temp dir so a mid-install failure (rate limit, network drop,
@@ -391,9 +455,16 @@ export class SkillsService {
           const counter = { count: 1 };
           await this.fetchSkillDirectory(ref, stagingDir, MAX_RECURSION_DEPTH, counter);
 
+          // Write the marker last so it overwrites any registry-supplied .dash-skill.json
+          // (we own this filename). The marker carries the registry coordinates so the
+          // installed-list view and checkInstalled can match by (repo, path) instead of
+          // sanitized folder name.
+          writeSkillMarker(stagingDir, ref);
+
           // Atomic-ish swap: remove any pre-existing install, then rename. rename within
           // the same directory is atomic on POSIX; the in-flight lock above guards
-          // against concurrent installs racing rmSync+renameSync.
+          // against concurrent installs racing rmSync+renameSync. The precondition
+          // above guarantees we only rmSync a Dash-installed dir.
           rmSync(installDir, { recursive: true, force: true });
           renameSync(stagingDir, installDir);
         })(),
@@ -515,19 +586,23 @@ export class SkillsService {
     }
   }
 
-  static checkInstalled(skillName: string, probePaths: string[]): SkillInstallStatus {
+  static checkInstalled(
+    skillName: string,
+    probePaths: string[],
+    ref: SkillRef | null = null,
+  ): SkillInstallStatus {
     assertSkillName(skillName);
+    if (ref) assertRef(ref);
     const home = os.homedir();
     const probeFailures: ProbeFailure[] = [];
 
-    const globalProbe = skillFilePresence(
-      path.join(home, '.claude', 'skills', skillName, 'SKILL.md'),
-    );
+    const globalDir = path.join(home, '.claude', 'skills', skillName);
+    const globalProbe = scopeMatchesRef(globalDir, ref);
     if (globalProbe.error) probeFailures.push({ scope: 'global', code: globalProbe.error });
 
     const installedPaths: string[] = [];
     for (const pp of probePaths) {
-      const probe = skillFilePresence(path.join(pp, '.claude', 'skills', skillName, 'SKILL.md'));
+      const probe = scopeMatchesRef(path.join(pp, '.claude', 'skills', skillName), ref);
       if (probe.error) probeFailures.push({ scope: pp, code: probe.error });
       if (probe.present) installedPaths.push(pp);
     }
@@ -564,12 +639,29 @@ export class SkillsService {
       if (probe.error) probeFailures.push({ scope: pp, code: probe.error });
     }
 
-    const catalogByInstallName = new Map<string, RegistrySkill>();
+    // Catalog join is keyed by (repo, path) read from each install's marker file.
+    // The previous sanitized-folder-name fuzzy match conflated unrelated skills that
+    // happened to share a name (e.g. user's custom "validate" → registry "validate").
+    // Folders without a marker — pre-existing custom skills, or older Dash installs
+    // from before markers existed — fall through with catalog: null and render as Custom.
+    const catalogByRepoPath = new Map<string, RegistrySkill>();
     for (const s of SkillsCache.allSkills()) {
-      const installName = deriveInstallNameFromCatalog(s);
-      if (installName && !catalogByInstallName.has(installName)) {
-        catalogByInstallName.set(installName, s);
+      catalogByRepoPath.set(`${s.repo}|${s.path}`, s);
+    }
+
+    function lookupCatalog(skillName: string, info: Entry): RegistrySkill | null {
+      const candidates: string[] = [];
+      if (info.globalInstalled) {
+        candidates.push(path.join(home, '.claude', 'skills', skillName));
       }
+      for (const pp of info.installedPaths) {
+        candidates.push(path.join(pp, '.claude', 'skills', skillName));
+      }
+      for (const dir of candidates) {
+        const marker = readSkillMarker(dir);
+        if (marker) return catalogByRepoPath.get(`${marker.repo}|${marker.path}`) ?? null;
+      }
+      return null;
     }
 
     const skills: InstalledSkill[] = [];
@@ -578,7 +670,7 @@ export class SkillsService {
         skillName,
         globalInstalled: info.globalInstalled,
         installedPaths: info.installedPaths,
-        catalog: catalogByInstallName.get(skillName) ?? null,
+        catalog: lookupCatalog(skillName, info),
       });
     }
     skills.sort((a, b) => a.skillName.localeCompare(b.skillName));
@@ -636,27 +728,23 @@ function listSkillFolders(skillsDir: string): { names: string[]; error?: string 
   return { names };
 }
 
-/** Mirrors the renderer's `deriveInstallSkillName` so we can map a catalog row back
- *  to the folder name `installSkill` would use for it. Keep these in sync. */
-function deriveInstallNameFromCatalog(skill: RegistrySkill): string {
-  const candidates = [skill.name, lastPathSegment(skill.path)];
-  for (const c of candidates) {
-    if (!c) continue;
-    const sanitized = c
-      .toLowerCase()
-      .replace(/[^a-z0-9-]/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-+|-+$/g, '');
-    if (sanitized && sanitized !== 'unknown' && /^[a-z0-9]/.test(sanitized)) return sanitized;
+// "Is this skill dir an install of `expectedRef`?" — when expectedRef is null, falls
+// back to "does SKILL.md exist". When expectedRef is supplied, requires the Dash marker
+// to be present AND match (repo, path), so a user's custom folder of the same name
+// doesn't get reported as the registry skill being installed.
+function scopeMatchesRef(
+  skillDir: string,
+  expectedRef: SkillRef | null,
+): { present: boolean; error?: string } {
+  const presence = skillFilePresence(path.join(skillDir, 'SKILL.md'));
+  if (!presence.present) return presence;
+  if (!expectedRef) return presence;
+  const marker = readSkillMarker(skillDir);
+  if (!marker) return { present: false };
+  if (marker.repo !== expectedRef.repo || marker.path !== expectedRef.path) {
+    return { present: false };
   }
-  return '';
-}
-
-function lastPathSegment(p: string): string {
-  const segs = p.split('/').filter(Boolean);
-  const last = segs[segs.length - 1] ?? '';
-  if (last.toLowerCase() === 'skill.md') return segs[segs.length - 2] ?? '';
-  return last;
+  return { present: true };
 }
 
 // Distinguishes "not present" from "couldn't read" so callers can warn the user when

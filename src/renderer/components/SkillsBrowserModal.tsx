@@ -556,6 +556,10 @@ export function SkillsBrowserModal({
         const result = await window.electronAPI.skillsCheckInstalled({
           skillName,
           probePaths,
+          // Carry the registry coordinates so main verifies the install marker matches
+          // — without this, a user's custom `<skillName>` folder gets reported as the
+          // registry skill being installed.
+          ref: { repo: skill.repo, branch: skill.branch, path: skill.path },
         });
         if (token !== selectionTokenRef.current) return;
         if (result.success && result.data) {

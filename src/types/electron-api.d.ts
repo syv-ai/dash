@@ -290,6 +290,9 @@ export interface ElectronAPI {
   skillsCheckInstalled: (args: {
     skillName: string;
     probePaths: string[];
+    /** Provide for registry skills so the marker file is checked; omit for legacy
+     *  presence-only checks. */
+    ref?: SkillRef | null;
   }) => Promise<IpcResponse<SkillInstallStatus>>;
   skillsListInstalled: (args: {
     probePaths: string[];
