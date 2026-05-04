@@ -32,6 +32,8 @@ vi.mock('better-sqlite3', () => ({
 }));
 
 import { SkillsService } from '../SkillsService';
+import { SkillsCache } from '../skillsCache';
+import type { RegistrySkill } from '@shared/types';
 
 const RAW = 'https://raw.githubusercontent.com';
 const validRef = { repo: 'owner/repo', branch: 'main', path: 'skills/demo' };
@@ -496,5 +498,92 @@ describe('checkInstalled — marker matching', () => {
     const status = SkillsService.checkInstalled('validate', [tmpRoot]);
 
     expect(status.installedPaths).toEqual([tmpRoot]);
+  });
+});
+
+describe('listInstalled — legacy marker backfill', () => {
+  // Catalog rows the backfill will see. SkillsCache.allSkills is module-level and
+  // returns [] under our better-sqlite3 mock, so we override per-test.
+  function stubCatalog(skills: RegistrySkill[]) {
+    return vi.spyOn(SkillsCache, 'allSkills').mockReturnValue(skills);
+  }
+
+  function makeRegistrySkill(over: Partial<RegistrySkill> = {}): RegistrySkill {
+    return {
+      name: 'demo',
+      description: '',
+      repo: 'someone/skills',
+      path: 'skills/demo',
+      branch: 'main',
+      category: '',
+      tags: [],
+      stars: 0,
+      ...over,
+    };
+  }
+
+  function legacyInstall(folderName: string, content: string) {
+    const dir = path.join(tmpRoot, '.claude', 'skills', folderName);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, 'SKILL.md'), content, 'utf-8');
+    return dir;
+  }
+
+  it('backfills the marker when SKILL.md matches the unique registry candidate', async () => {
+    stubCatalog([makeRegistrySkill({ name: 'demo' })]);
+    const dir = legacyInstall('demo', '# Demo content');
+
+    setRoute(
+      (u) => u.endsWith('/SKILL.md'),
+      () => ({ body: '# Demo content' }),
+    );
+
+    const result = await SkillsService.listInstalled([tmpRoot]);
+
+    const marker = JSON.parse(readFileSync(path.join(dir, '.dash-skill.json'), 'utf-8'));
+    expect(marker.repo).toBe('someone/skills');
+    expect(marker.path).toBe('skills/demo');
+    expect(result.skills[0].catalog?.repo).toBe('someone/skills');
+  });
+
+  it('leaves the install Custom when SKILL.md differs from the registry candidate', async () => {
+    stubCatalog([makeRegistrySkill({ name: 'demo' })]);
+    const dir = legacyInstall('demo', '# I edited this');
+
+    setRoute(
+      (u) => u.endsWith('/SKILL.md'),
+      () => ({ body: '# Different upstream content' }),
+    );
+
+    const result = await SkillsService.listInstalled([tmpRoot]);
+
+    expect(existsSync(path.join(dir, '.dash-skill.json'))).toBe(false);
+    expect(result.skills[0].catalog).toBeNull();
+  });
+
+  it('does not backfill when multiple registry skills match the folder name', async () => {
+    // Two registry skills both derive to "demo" — ambiguous, can't safely guess.
+    stubCatalog([
+      makeRegistrySkill({ repo: 'one/skills', path: 'skills/demo' }),
+      makeRegistrySkill({ repo: 'two/skills', path: 'demo' }),
+    ]);
+    const dir = legacyInstall('demo', 'whatever');
+
+    const result = await SkillsService.listInstalled([tmpRoot]);
+
+    expect(existsSync(path.join(dir, '.dash-skill.json'))).toBe(false);
+    expect(result.skills[0].catalog).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not backfill when no registry candidate matches', async () => {
+    stubCatalog([makeRegistrySkill({ name: 'pdf-extract' })]);
+    const dir = legacyInstall('validate', '# user custom skill');
+
+    const result = await SkillsService.listInstalled([tmpRoot]);
+
+    expect(existsSync(path.join(dir, '.dash-skill.json'))).toBe(false);
+    expect(result.skills[0].catalog).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
