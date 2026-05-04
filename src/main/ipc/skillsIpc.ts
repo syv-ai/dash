@@ -92,9 +92,9 @@ export function registerSkillsIpc(): void {
     }
   });
 
-  ipcMain.handle('skills:listInstalled', async (_event, args: { probePaths: string[] }) => {
+  ipcMain.handle('skills:listInstalled', (_event, args: { probePaths: string[] }) => {
     try {
-      const data = await SkillsService.listInstalled(args?.probePaths ?? []);
+      const data = SkillsService.listInstalled(args?.probePaths ?? []);
       return { success: true, data };
     } catch (error) {
       return fail('SKILLS_LIST_INSTALLED', error);

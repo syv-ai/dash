@@ -612,9 +612,10 @@ export class SkillsService {
     return status;
   }
 
-  static async listInstalled(probePaths: string[]): Promise<InstalledSkillsResult> {
+  static listInstalled(probePaths: string[]): InstalledSkillsResult {
     const home = os.homedir();
-    const found = new Map<string, InstalledEntry>();
+    type Entry = { installedPaths: string[]; globalInstalled: boolean };
+    const found = new Map<string, Entry>();
     const probeFailures: ProbeFailure[] = [];
 
     function record(skillName: string, scope: 'global' | string): void {
@@ -638,20 +639,17 @@ export class SkillsService {
       if (probe.error) probeFailures.push({ scope: pp, code: probe.error });
     }
 
-    // Backfill markers on legacy installs (from before the marker contract existed).
-    // Runs before the catalog join so freshly-written markers are picked up below.
-    await backfillOrphanMarkers(found, home);
-
     // Catalog join is keyed by (repo, path) read from each install's marker file.
     // The previous sanitized-folder-name fuzzy match conflated unrelated skills that
     // happened to share a name (e.g. user's custom "validate" → registry "validate").
-    // Folders without a marker fall through with catalog: null and render as Custom.
+    // Folders without a marker — pre-existing custom skills, or older Dash installs
+    // from before markers existed — fall through with catalog: null and render as Custom.
     const catalogByRepoPath = new Map<string, RegistrySkill>();
     for (const s of SkillsCache.allSkills()) {
       catalogByRepoPath.set(`${s.repo}|${s.path}`, s);
     }
 
-    function lookupCatalog(skillName: string, info: InstalledEntry): RegistrySkill | null {
+    function lookupCatalog(skillName: string, info: Entry): RegistrySkill | null {
       const candidates: string[] = [];
       if (info.globalInstalled) {
         candidates.push(path.join(home, '.claude', 'skills', skillName));
@@ -728,109 +726,6 @@ function listSkillFolders(skillsDir: string): { names: string[]; error?: string 
     }
   }
   return { names };
-}
-
-interface InstalledEntry {
-  installedPaths: string[];
-  globalInstalled: boolean;
-}
-
-// Mirrors the renderer's `deriveInstallSkillName` so we can map a catalog row back to
-// the folder name `installSkill` would use for it. Used now only by the legacy backfill
-// to find candidate registry matches for marker-less install dirs — keep these in sync.
-function deriveInstallNameFromCatalog(skill: RegistrySkill): string {
-  const candidates = [skill.name, lastPathSegment(skill.path)];
-  for (const c of candidates) {
-    if (!c) continue;
-    const sanitized = c
-      .toLowerCase()
-      .replace(/[^a-z0-9-]/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-+|-+$/g, '');
-    if (sanitized && sanitized !== 'unknown' && /^[a-z0-9]/.test(sanitized)) return sanitized;
-  }
-  return '';
-}
-
-function lastPathSegment(p: string): string {
-  const segs = p.split('/').filter(Boolean);
-  const last = segs[segs.length - 1] ?? '';
-  if (last.toLowerCase() === 'skill.md') return segs[segs.length - 2] ?? '';
-  return last;
-}
-
-// In-memory memo of (dir, repo|path) pairs we've already attempted to verify. A skill
-// folder whose SKILL.md doesn't match the registry candidate is likely truly custom;
-// retrying the fetch every time the user opens the modal is wasteful. Cleared on app
-// restart, which is cheap because the work is bounded by orphan-folder count.
-const backfillTried = new Set<string>();
-
-// Best-effort migration for installs from before the marker contract existed (PR
-// 0.9.13 and earlier). For each marker-less folder, look up the unique registry skill
-// whose sanitized install-name matches the folder name; fetch its SKILL.md; if local
-// content is byte-equal, write the marker. On ambiguity (multiple candidates) or any
-// difference, the folder stays Custom — we don't guess. Skips already-marked dirs.
-async function backfillOrphanMarkers(
-  found: Map<string, InstalledEntry>,
-  home: string,
-): Promise<void> {
-  const candidatesByName = new Map<string, RegistrySkill[]>();
-  for (const s of SkillsCache.allSkills()) {
-    const name = deriveInstallNameFromCatalog(s);
-    if (!name) continue;
-    const arr = candidatesByName.get(name) ?? [];
-    arr.push(s);
-    candidatesByName.set(name, arr);
-  }
-
-  await Promise.all(
-    Array.from(found.entries()).map(async ([skillName, info]) => {
-      const candidates = candidatesByName.get(skillName) ?? [];
-      if (candidates.length !== 1) return; // Ambiguous or no candidate → leave as Custom.
-      const ref = candidates[0];
-      const refKey = `${ref.repo}|${ref.path}`;
-
-      const dirs: string[] = [];
-      if (info.globalInstalled) dirs.push(path.join(home, '.claude', 'skills', skillName));
-      for (const pp of info.installedPaths) {
-        dirs.push(path.join(pp, '.claude', 'skills', skillName));
-      }
-
-      const orphans = dirs.filter((d) => {
-        if (backfillTried.has(`${d}|${refKey}`)) return false;
-        return readSkillMarker(d) === null;
-      });
-      if (orphans.length === 0) return;
-
-      orphans.forEach((d) => backfillTried.add(`${d}|${refKey}`));
-
-      let registryContent: string;
-      try {
-        registryContent = await SkillsService.getSkillContent(ref);
-      } catch (err) {
-        console.warn('[SkillsService.backfill] could not fetch registry SKILL.md', {
-          repo: ref.repo,
-          path: ref.path,
-          message: err instanceof Error ? err.message : String(err),
-        });
-        return;
-      }
-
-      for (const dir of orphans) {
-        try {
-          const localContent = readFileSync(path.join(dir, 'SKILL.md'), 'utf-8');
-          if (localContent === registryContent) {
-            writeSkillMarker(dir, ref);
-          }
-        } catch (err) {
-          console.warn('[SkillsService.backfill] could not read local SKILL.md', {
-            dir,
-            message: err instanceof Error ? err.message : String(err),
-          });
-        }
-      }
-    }),
-  );
 }
 
 // "Is this skill dir an install of `expectedRef`?" — when expectedRef is null, falls
