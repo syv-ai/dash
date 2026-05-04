@@ -207,6 +207,10 @@ interface LocationChipsProps {
   activeTasks: ActiveTaskInfo[];
 }
 
+// Cap on chips before collapsing the tail into a "+N others" badge. Three is enough to
+// convey common scopes (global + project + task) without crowding out the skill name.
+const LOCATION_CHIP_LIMIT = 3;
+
 function LocationChips({ entry, projects, activeTasks }: LocationChipsProps) {
   type Chip = { key: string; kind: 'global' | 'project' | 'task'; label: string };
   const chips: Chip[] = [];
@@ -221,9 +225,14 @@ function LocationChips({ entry, projects, activeTasks }: LocationChipsProps) {
     chips.push({ key: pp, kind: 'project', label: matchedProject?.name ?? pp });
   }
   if (chips.length === 0) return null;
+
+  const visible = chips.slice(0, LOCATION_CHIP_LIMIT);
+  const overflow = chips.slice(LOCATION_CHIP_LIMIT);
+  const overflowTooltip = overflow.map((c) => c.label).join(', ');
+
   return (
     <div className="flex items-center gap-1 flex-wrap mt-1">
-      {chips.map((c) => (
+      {visible.map((c) => (
         <span
           key={c.key}
           className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-accent/60 text-muted-foreground leading-none"
@@ -236,6 +245,13 @@ function LocationChips({ entry, projects, activeTasks }: LocationChipsProps) {
           <span className="truncate max-w-[140px]">{c.label}</span>
         </span>
       ))}
+      {overflow.length > 0 && (
+        <Tooltip content={overflowTooltip}>
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-accent/60 text-muted-foreground leading-none">
+            +{overflow.length} {overflow.length === 1 ? 'other' : 'others'}
+          </span>
+        </Tooltip>
+      )}
     </div>
   );
 }
@@ -545,6 +561,10 @@ export function SkillsBrowserModal({
         setInstallStatus(null);
         return;
       }
+      // Custom stub: no remote ref to verify against, install status is already
+      // synthesized by handleSelectCustom. Calling main with an empty ref would trip
+      // assertRef and surface a confusing "Invalid repo: \"\"" message to the user.
+      if (!skill.repo) return;
       // Include every active worktree task path so the "Installed in" section can show
       // task-scoped installs alongside global/project ones. The backend just probes paths;
       // the renderer figures out which is which when rendering.
@@ -648,6 +668,7 @@ export function SkillsBrowserModal({
       global: entry.globalInstalled,
       installedPaths: entry.installedPaths,
     });
+    setInstallStatusError(null);
     setLocalReadTarget(target);
     setCustomInstalled(entry);
     // setState is async; pass the target explicitly so the fetch doesn't see a null
@@ -709,7 +730,26 @@ export function SkillsBrowserModal({
       const result = await window.electronAPI.skillsUninstall({ skillName, target });
       if (result.success) {
         setInstallSuccess(`Removed from ${targetLabel(target, skillName, label)}`);
-        checkInstallStatus(selectedSkill);
+        if (customInstalled) {
+          // Custom skill: re-derive install status locally instead of round-tripping to
+          // checkInstalled with the synthetic stub (which has no real repo and would
+          // trip assertRef on the main side).
+          setInstallStatus((prev) => {
+            if (!prev) return null;
+            const next: SkillInstallStatus = {
+              global: target.kind === 'global' ? false : prev.global,
+              installedPaths: prev.installedPaths.filter((p) => {
+                if (target.kind === 'project') return p !== target.projectPath;
+                if (target.kind === 'task') return p !== target.worktreePath;
+                return true;
+              }),
+            };
+            if (prev.probeFailures) next.probeFailures = prev.probeFailures;
+            return next;
+          });
+        } else {
+          checkInstallStatus(selectedSkill);
+        }
         // Keep the Installed list in sync so the just-removed card disappears immediately.
         if (view === 'installed') loadInstalled();
       } else {
@@ -1057,13 +1097,10 @@ export function SkillsBrowserModal({
                     </span>
                   </div>
                 ) : (
-                  <div className="divide-y divide-border/30">
+                  <div className="flex flex-col gap-2 px-3 py-3">
                     {filteredInstalled.map((entry) => {
                       const cat = entry.catalog;
                       const isCustom = !cat;
-                      // Selection match: registry skills compare by skillKey; custom skills
-                      // are tracked separately via customInstalled.skillName so we can highlight
-                      // the right row even though the synthetic stub has no real repo+path.
                       const isSelected = isCustom
                         ? customInstalled?.skillName === entry.skillName
                         : selectedSkill !== null && skillKey(cat) === skillKey(selectedSkill);
@@ -1074,13 +1111,15 @@ export function SkillsBrowserModal({
                             if (cat) handleSelectSkill(cat);
                             else handleSelectCustom(entry);
                           }}
-                          // Precedence: selection > custom > default. The selection class is
-                          // applied last so it wins over the custom-row tint when both apply.
-                          // Custom rows get full surface-3 (not 40%) so the tint is actually
-                          // visible against the card body.
-                          className={`w-full text-left px-4 py-3 transition-colors hover:bg-accent/40 ${
-                            isCustom ? 'bg-[hsl(var(--surface-3))]' : ''
-                          } ${isSelected ? 'bg-accent/60' : ''}`}
+                          // Card-style row: each install gets its own bordered surface so
+                          // adjacent rows don't blur together. Selection > custom > default
+                          // for the bg, applied last so selection wins. The wrapper uses
+                          // gap-2 instead of divide-y to give every row distinct edges.
+                          className={`w-full text-left px-3 py-2.5 rounded-md border border-border/40 transition-colors hover:bg-accent/40 hover:border-border/70 ${
+                            isCustom
+                              ? 'bg-[hsl(var(--surface-2))]/50'
+                              : 'bg-[hsl(var(--surface-1))]/40'
+                          } ${isSelected ? 'bg-accent/60 border-primary/50' : ''}`}
                         >
                           <div className="flex flex-col min-w-0">
                             <div className="flex items-center gap-2 mb-0.5">
