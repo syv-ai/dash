@@ -424,12 +424,12 @@ export interface InstalledSkillsResult {
   probeFailures: ProbeFailure[];
 }
 
-export interface ProbeFailure {
-  /** 'global' for the home dir probe, otherwise an absolute project/worktree path. */
-  scope: 'global' | string;
-  /** errno code (EACCES, EIO, etc.) or 'unknown'. */
-  code: string;
-}
+/** Structured probe failure so the renderer can render the right label per scope without
+ *  string-sniffing. `code` is either an errno (EACCES, EIO, …) or a Dash-internal sentinel
+ *  ('marker-corrupt') so the UI can offer the matching recovery action. */
+export type ProbeFailure =
+  | { scope: 'global'; code: string }
+  | { scope: 'path'; path: string; code: string };
 
 export interface SkillInstallStatus {
   global: boolean;

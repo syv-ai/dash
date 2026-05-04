@@ -25,6 +25,7 @@ import type {
   InstalledSkillsResult,
   ProbeFailure,
 } from '@shared/types';
+import { deriveSkillFolderName } from '@shared/skills';
 import { SkillsCache } from './skillsCache';
 
 // Trust boundary: this third-party GitHub repo is effectively Dash's package registry.
@@ -85,12 +86,22 @@ const MARKER_FILENAME = '.dash-skill.json';
 const MARKER_VERSION = 1;
 
 interface SkillMarker {
-  version: number;
+  version: 1;
   repo: string;
   branch: string;
   path: string;
   installedAt: number;
 }
+
+// Discriminated union so callers can distinguish "no marker" (legitimate custom-skill
+// folder) from "marker present but unreadable" (truncated, schema-mismatched, or hit by
+// AV). The earlier null-on-any-failure shape collapsed those modes, leading to:
+// checkInstalled saying "not installed" while installSkill refused with "already exists
+// but was not installed by Dash" — two contradictory truths from the same FS state.
+type MarkerReadResult =
+  | { kind: 'absent' }
+  | { kind: 'present'; marker: SkillMarker }
+  | { kind: 'corrupt'; reason: string };
 
 function writeSkillMarker(skillDir: string, ref: SkillRef): void {
   const marker: SkillMarker = {
@@ -103,40 +114,65 @@ function writeSkillMarker(skillDir: string, ref: SkillRef): void {
   writeFileSync(path.join(skillDir, MARKER_FILENAME), JSON.stringify(marker), 'utf-8');
 }
 
-function readSkillMarker(skillDir: string): SkillMarker | null {
+function readSkillMarker(skillDir: string): MarkerReadResult {
+  const file = path.join(skillDir, MARKER_FILENAME);
+  let text: string;
   try {
-    const text = readFileSync(path.join(skillDir, MARKER_FILENAME), 'utf-8');
-    const parsed = JSON.parse(text) as Partial<SkillMarker>;
-    if (
-      parsed.version !== MARKER_VERSION ||
-      typeof parsed.repo !== 'string' ||
-      typeof parsed.path !== 'string' ||
-      typeof parsed.branch !== 'string'
-    ) {
-      return null;
-    }
-    return parsed as SkillMarker;
-  } catch {
-    return null;
+    text = readFileSync(file, 'utf-8');
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return { kind: 'absent' };
+    console.error('[SkillsService.readSkillMarker] read failed', { file, code });
+    return { kind: 'corrupt', reason: code || 'read-failed' };
   }
+  let parsed: Partial<SkillMarker>;
+  try {
+    parsed = JSON.parse(text) as Partial<SkillMarker>;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[SkillsService.readSkillMarker] parse failed', { file, message });
+    return { kind: 'corrupt', reason: 'parse-error' };
+  }
+  if (
+    parsed.version !== MARKER_VERSION ||
+    typeof parsed.repo !== 'string' ||
+    typeof parsed.path !== 'string' ||
+    typeof parsed.branch !== 'string'
+  ) {
+    console.error('[SkillsService.readSkillMarker] schema mismatch', {
+      file,
+      version: parsed.version,
+    });
+    return { kind: 'corrupt', reason: 'schema-mismatch' };
+  }
+  return { kind: 'present', marker: parsed as SkillMarker };
 }
 
 // Negative-cache sentinel: when content-match against the unique registry candidate
 // fails for an orphan folder, we record the local SKILL.md hash at check time. Future
 // listInstalled calls skip the fetch as long as the local content hasn't changed.
 // Editing the skill invalidates the sentinel naturally (different hash); a new install
-// via Dash overwrites both files atomically.
+// via Dash replaces the whole skill directory in the staging swap, so any stale sentinel
+// goes with it.
 const VERIFIED_CUSTOM_FILENAME = '.dash-skill-checked.json';
 const VERIFIED_CUSTOM_VERSION = 1;
 
 interface VerifiedCustomRecord {
-  version: number;
+  version: 1;
   checkedAt: number;
   /** SHA-256 of the local SKILL.md at the time we checked. The cache is invalid once
    *  the user edits the file, so we re-check and (potentially) bind to a registry
    *  entry that now matches. */
   contentSha256: string;
 }
+
+// Same three-state shape as MarkerReadResult so backfill can tell the difference between
+// "never checked" (absent) and "stale sentinel" (corrupt) — the latter must trigger a
+// re-fetch, not be treated as if the user has never opted in.
+type VerifiedCustomReadResult =
+  | { kind: 'absent' }
+  | { kind: 'present'; record: VerifiedCustomRecord }
+  | { kind: 'corrupt'; reason: string };
 
 function sha256(s: string): string {
   return createHash('sha256').update(s).digest('hex');
@@ -151,21 +187,37 @@ function writeVerifiedCustom(skillDir: string, contentSha256: string): void {
   writeFileSync(path.join(skillDir, VERIFIED_CUSTOM_FILENAME), JSON.stringify(record), 'utf-8');
 }
 
-function readVerifiedCustom(skillDir: string): VerifiedCustomRecord | null {
+function readVerifiedCustom(skillDir: string): VerifiedCustomReadResult {
+  const file = path.join(skillDir, VERIFIED_CUSTOM_FILENAME);
+  let text: string;
   try {
-    const text = readFileSync(path.join(skillDir, VERIFIED_CUSTOM_FILENAME), 'utf-8');
-    const parsed = JSON.parse(text) as Partial<VerifiedCustomRecord>;
-    if (
-      parsed.version !== VERIFIED_CUSTOM_VERSION ||
-      typeof parsed.contentSha256 !== 'string' ||
-      typeof parsed.checkedAt !== 'number'
-    ) {
-      return null;
-    }
-    return parsed as VerifiedCustomRecord;
-  } catch {
-    return null;
+    text = readFileSync(file, 'utf-8');
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return { kind: 'absent' };
+    console.error('[SkillsService.readVerifiedCustom] read failed', { file, code });
+    return { kind: 'corrupt', reason: code || 'read-failed' };
   }
+  let parsed: Partial<VerifiedCustomRecord>;
+  try {
+    parsed = JSON.parse(text) as Partial<VerifiedCustomRecord>;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[SkillsService.readVerifiedCustom] parse failed', { file, message });
+    return { kind: 'corrupt', reason: 'parse-error' };
+  }
+  if (
+    parsed.version !== VERIFIED_CUSTOM_VERSION ||
+    typeof parsed.contentSha256 !== 'string' ||
+    typeof parsed.checkedAt !== 'number'
+  ) {
+    console.error('[SkillsService.readVerifiedCustom] schema mismatch', {
+      file,
+      version: parsed.version,
+    });
+    return { kind: 'corrupt', reason: 'schema-mismatch' };
+  }
+  return { kind: 'present', record: parsed as VerifiedCustomRecord };
 }
 
 const SKILL_NAME_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -466,10 +518,21 @@ export class SkillsService {
     // ENOENT and any other unexpected stat error are deferred to the swap itself.
     try {
       const stat = statSync(installDir);
-      if (stat.isDirectory() && !readSkillMarker(installDir)) {
-        throw new Error(
-          `${installDir} already exists but was not installed by Dash. Refusing to overwrite — rename or remove the existing folder first if you want to install this skill here.`,
-        );
+      if (stat.isDirectory()) {
+        const markerResult = readSkillMarker(installDir);
+        if (markerResult.kind === 'absent') {
+          throw new Error(
+            `${installDir} already exists but was not installed by Dash. Refusing to overwrite — rename or remove the existing folder first if you want to install this skill here.`,
+          );
+        }
+        if (markerResult.kind === 'corrupt') {
+          // Corrupt-but-Dash-managed: don't silently overwrite, but give an error a user
+          // can act on (uninstall via Dash, then install). Without this branch the user
+          // hit "already exists but was not installed by Dash" and had to rm -rf manually.
+          throw new Error(
+            `Install marker for ${skillName} at ${installDir} is corrupt (${markerResult.reason}). Click Uninstall to remove the folder, then Install again.`,
+          );
+        }
       }
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
@@ -503,16 +566,17 @@ export class SkillsService {
           const counter = { count: 1 };
           await this.fetchSkillDirectory(ref, stagingDir, MAX_RECURSION_DEPTH, counter);
 
-          // Write the marker last so it overwrites any registry-supplied .dash-skill.json
-          // (we own this filename). The marker carries the registry coordinates so the
-          // installed-list view and checkInstalled can match by (repo, path) instead of
-          // sanitized folder name.
+          // Write the marker last. The fetch loop skips entries named SKILL.md, but
+          // .dash-skill.json isn't on that allow-list — a registry that ships its own
+          // file by that name would otherwise leave a stale marker on disk after the
+          // recursive copy. Writing here guarantees we own the final bytes.
           writeSkillMarker(stagingDir, ref);
 
-          // Atomic-ish swap: remove any pre-existing install, then rename. rename within
-          // the same directory is atomic on POSIX; the in-flight lock above guards
-          // against concurrent installs racing rmSync+renameSync. The precondition
-          // above guarantees we only rmSync a Dash-installed dir.
+          // Atomic-ish swap: remove any pre-existing install, then rename the whole
+          // staging directory in. rename within the same parent is atomic on POSIX; the
+          // in-flight lock above guards against concurrent installs racing
+          // rmSync+renameSync. The precondition above guarantees we only rmSync a
+          // Dash-installed dir.
           rmSync(installDir, { recursive: true, force: true });
           renameSync(stagingDir, installDir);
         })(),
@@ -651,7 +715,7 @@ export class SkillsService {
     const installedPaths: string[] = [];
     for (const pp of probePaths) {
       const probe = scopeMatchesRef(path.join(pp, '.claude', 'skills', skillName), ref);
-      if (probe.error) probeFailures.push({ scope: pp, code: probe.error });
+      if (probe.error) probeFailures.push({ scope: 'path', path: pp, code: probe.error });
       if (probe.present) installedPaths.push(pp);
     }
 
@@ -683,7 +747,7 @@ export class SkillsService {
     for (const pp of probePaths) {
       const probe = listSkillFolders(path.join(pp, '.claude', 'skills'));
       for (const name of probe.names) record(name, pp);
-      if (probe.error) probeFailures.push({ scope: pp, code: probe.error });
+      if (probe.error) probeFailures.push({ scope: 'path', path: pp, code: probe.error });
     }
 
     // Recognise externally-installed registry skills (skills.sh, Claude Code native
@@ -709,8 +773,10 @@ export class SkillsService {
         candidates.push(path.join(pp, '.claude', 'skills', skillName));
       }
       for (const dir of candidates) {
-        const marker = readSkillMarker(dir);
-        if (marker) return catalogByRepoPath.get(`${marker.repo}|${marker.path}`) ?? null;
+        const result = readSkillMarker(dir);
+        if (result.kind === 'present') {
+          return catalogByRepoPath.get(`${result.marker.repo}|${result.marker.path}`) ?? null;
+        }
       }
       return null;
     }
@@ -784,30 +850,6 @@ interface InstalledEntry {
   globalInstalled: boolean;
 }
 
-// Mirrors the renderer's `deriveInstallSkillName` so backfill can map a catalog row to
-// the folder name `installSkill` would use for it. Used to find candidate registry
-// matches for marker-less install dirs — keep these in sync.
-function deriveInstallNameFromCatalog(skill: RegistrySkill): string {
-  const candidates = [skill.name, lastPathSegment(skill.path)];
-  for (const c of candidates) {
-    if (!c) continue;
-    const sanitized = c
-      .toLowerCase()
-      .replace(/[^a-z0-9-]/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-+|-+$/g, '');
-    if (sanitized && sanitized !== 'unknown' && /^[a-z0-9]/.test(sanitized)) return sanitized;
-  }
-  return '';
-}
-
-function lastPathSegment(p: string): string {
-  const segs = p.split('/').filter(Boolean);
-  const last = segs[segs.length - 1] ?? '';
-  if (last.toLowerCase() === 'skill.md') return segs[segs.length - 2] ?? '';
-  return last;
-}
-
 // Recognises skill folders installed outside Dash (via skills.sh, Claude Code's native
 // skills system, manual clone, etc.) that match a registry entry byte-for-byte. For
 // each marker-less folder with a unique name-matching candidate, fetches the registry
@@ -820,83 +862,114 @@ async function backfillExternalInstalls(
 ): Promise<void> {
   const candidatesByName = new Map<string, RegistrySkill[]>();
   for (const s of SkillsCache.allSkills()) {
-    const name = deriveInstallNameFromCatalog(s);
+    const name = deriveSkillFolderName(s);
     if (!name) continue;
     const arr = candidatesByName.get(name) ?? [];
     arr.push(s);
     candidatesByName.set(name, arr);
   }
 
+  // Per-skill try/catch so one failure (EACCES on a single mount, network glitch, JSON
+  // parse error in a sentinel) doesn't reject the whole Promise.all and blank the
+  // installed list. Backfill is best-effort — a failure here just means the affected
+  // folder shows up as "Custom" until the next listInstalled call retries it.
   await Promise.all(
     Array.from(found.entries()).map(async ([skillName, info]) => {
-      const candidates = candidatesByName.get(skillName) ?? [];
-      // Ambiguous name (multiple candidates) or no candidate at all → leave as Custom
-      // and don't write a sentinel: there's nothing to learn from a fetch we wouldn't
-      // do, and a future registry refresh might disambiguate.
-      if (candidates.length !== 1) return;
-      const ref = candidates[0];
-
-      const dirs: string[] = [];
-      if (info.globalInstalled) dirs.push(path.join(home, '.claude', 'skills', skillName));
-      for (const pp of info.installedPaths) {
-        dirs.push(path.join(pp, '.claude', 'skills', skillName));
-      }
-
-      // Filter to dirs that are still orphan candidates: no marker (so not already
-      // bound) AND no matching verified-custom sentinel (so we haven't already shown
-      // the local content doesn't match this registry entry).
-      const orphans = dirs.filter((d) => {
-        if (readSkillMarker(d) !== null) return false;
-        const sentinel = readVerifiedCustom(d);
-        if (!sentinel) return true;
-        let local: string;
-        try {
-          local = readFileSync(path.join(d, 'SKILL.md'), 'utf-8');
-        } catch {
-          return false;
-        }
-        // Re-check if user edited the file since the sentinel was written.
-        return sha256(local) !== sentinel.contentSha256;
-      });
-      if (orphans.length === 0) return;
-
-      let registryContent: string;
       try {
-        registryContent = await SkillsService.getSkillContent(ref);
+        await tryBackfillOne(skillName, info, candidatesByName, home);
       } catch (err) {
-        console.warn('[SkillsService.backfill] could not fetch registry SKILL.md', {
-          repo: ref.repo,
-          path: ref.path,
+        console.warn('[SkillsService.backfill] skill-level failure', {
+          skillName,
           message: err instanceof Error ? err.message : String(err),
         });
-        return;
-      }
-
-      for (const dir of orphans) {
-        let localContent: string;
-        try {
-          localContent = readFileSync(path.join(dir, 'SKILL.md'), 'utf-8');
-        } catch (err) {
-          console.warn('[SkillsService.backfill] could not read local SKILL.md', {
-            dir,
-            message: err instanceof Error ? err.message : String(err),
-          });
-          continue;
-        }
-        if (localContent === registryContent) {
-          writeSkillMarker(dir, ref);
-        } else {
-          writeVerifiedCustom(dir, sha256(localContent));
-        }
       }
     }),
   );
 }
 
+async function tryBackfillOne(
+  skillName: string,
+  info: InstalledEntry,
+  candidatesByName: Map<string, RegistrySkill[]>,
+  home: string,
+): Promise<void> {
+  const candidates = candidatesByName.get(skillName) ?? [];
+  // Ambiguous name (multiple candidates) or no candidate at all → leave as Custom
+  // and don't write a sentinel: there's nothing to learn from a fetch we wouldn't
+  // do, and a future registry refresh might disambiguate.
+  if (candidates.length !== 1) return;
+  const ref = candidates[0];
+
+  const dirs: string[] = [];
+  if (info.globalInstalled) dirs.push(path.join(home, '.claude', 'skills', skillName));
+  for (const pp of info.installedPaths) {
+    dirs.push(path.join(pp, '.claude', 'skills', skillName));
+  }
+
+  // Filter to dirs that are still orphan candidates: no marker (so not already bound),
+  // and either no sentinel or a stale sentinel (the user has edited the SKILL.md or
+  // the previous record is unreadable, so we should re-check). A `corrupt` marker is
+  // *not* treated as orphan — the install precondition errors will guide the user to
+  // uninstall+reinstall instead.
+  const orphans = dirs.filter((d) => {
+    const marker = readSkillMarker(d);
+    if (marker.kind === 'present' || marker.kind === 'corrupt') return false;
+    const sentinel = readVerifiedCustom(d);
+    if (sentinel.kind === 'absent' || sentinel.kind === 'corrupt') return true;
+    let local: string;
+    try {
+      local = readFileSync(path.join(d, 'SKILL.md'), 'utf-8');
+    } catch {
+      return false;
+    }
+    // Re-check if user edited the file since the sentinel was written.
+    return sha256(local) !== sentinel.record.contentSha256;
+  });
+  if (orphans.length === 0) return;
+
+  let registryContent: string;
+  try {
+    registryContent = await SkillsService.getSkillContent(ref);
+  } catch (err) {
+    console.warn('[SkillsService.backfill] could not fetch registry SKILL.md', {
+      repo: ref.repo,
+      path: ref.path,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return;
+  }
+
+  for (const dir of orphans) {
+    let localContent: string;
+    try {
+      localContent = readFileSync(path.join(dir, 'SKILL.md'), 'utf-8');
+    } catch (err) {
+      console.warn('[SkillsService.backfill] could not read local SKILL.md', {
+        dir,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      continue;
+    }
+    try {
+      if (localContent === registryContent) {
+        writeSkillMarker(dir, ref);
+      } else {
+        writeVerifiedCustom(dir, sha256(localContent));
+      }
+    } catch (err) {
+      console.warn('[SkillsService.backfill] could not write marker/sentinel', {
+        dir,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+}
+
 // "Is this skill dir an install of `expectedRef`?" — when expectedRef is null, falls
 // back to "does SKILL.md exist". When expectedRef is supplied, requires the Dash marker
-// to be present AND match (repo, path), so a user's custom folder of the same name
-// doesn't get reported as the registry skill being installed.
+// to be present AND match (repo, path). A corrupt marker is surfaced as an error so the
+// UI can show "marker-corrupt" in probe failures rather than reporting the same FS
+// state as both "not installed" (here) and "already exists but not Dash" (install path).
 function scopeMatchesRef(
   skillDir: string,
   expectedRef: SkillRef | null,
@@ -904,9 +977,10 @@ function scopeMatchesRef(
   const presence = skillFilePresence(path.join(skillDir, 'SKILL.md'));
   if (!presence.present) return presence;
   if (!expectedRef) return presence;
-  const marker = readSkillMarker(skillDir);
-  if (!marker) return { present: false };
-  if (marker.repo !== expectedRef.repo || marker.path !== expectedRef.path) {
+  const result = readSkillMarker(skillDir);
+  if (result.kind === 'absent') return { present: false };
+  if (result.kind === 'corrupt') return { present: false, error: 'marker-corrupt' };
+  if (result.marker.repo !== expectedRef.repo || result.marker.path !== expectedRef.path) {
     return { present: false };
   }
   return { present: true };

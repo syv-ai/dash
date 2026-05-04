@@ -638,3 +638,168 @@ describe('listInstalled — externally-installed registry skills', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
+
+// Marker corruption is its own failure mode: ENOENT means "user's custom skill", but a
+// truncated/parse-failing/version-mismatched marker means "Dash install gone wrong".
+// The earlier null-on-any-failure shape collapsed the two, leading to contradictory UX
+// (checkInstalled said "not installed" but installSkill refused with "already exists").
+describe('installSkill — corrupt marker handling', () => {
+  function writeMarker(skillDir: string, raw: string) {
+    writeFileSync(path.join(skillDir, '.dash-skill.json'), raw, 'utf-8');
+  }
+
+  it.each([
+    ['truncated json', 'not-json'],
+    ['version mismatch', JSON.stringify({ version: 999, repo: 'a/b', branch: 'main', path: 'p' })],
+    [
+      'missing field',
+      JSON.stringify({ version: 1, repo: 'a/b', branch: 'main' /* path missing */ }),
+    ],
+  ])('rejects install with a clear message when marker is %s', async (_label, body) => {
+    const prior = installDir();
+    mkdirSync(prior, { recursive: true });
+    writeFileSync(path.join(prior, 'SKILL.md'), 'OLD', 'utf-8');
+    writeMarker(prior, body);
+
+    await expect(
+      SkillsService.installSkill({ ref: validRef, skillName: 'demo', target: projectTarget() }),
+    ).rejects.toThrow(/marker.*corrupt|Click Uninstall/i);
+
+    // Untouched: the precondition aborted before the staging swap.
+    expect(readFileSync(path.join(prior, 'SKILL.md'), 'utf-8')).toBe('OLD');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('checkInstalled — corrupt marker surfaces probe failure', () => {
+  it('reports marker-corrupt when the ref is supplied and the marker is unparseable', () => {
+    const dir = path.join(tmpRoot, '.claude', 'skills', 'demo');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, 'SKILL.md'), '# whatever', 'utf-8');
+    writeFileSync(path.join(dir, '.dash-skill.json'), 'not-json', 'utf-8');
+
+    const status = SkillsService.checkInstalled('demo', [tmpRoot], {
+      repo: 'owner/repo',
+      branch: 'main',
+      path: 'skills/demo',
+    });
+
+    expect(status.installedPaths).toEqual([]);
+    expect(status.probeFailures).toBeDefined();
+    expect(status.probeFailures?.[0]).toMatchObject({
+      scope: 'path',
+      path: tmpRoot,
+      code: 'marker-corrupt',
+    });
+  });
+
+  it('reports marker-corrupt under global scope when the global marker is bad', () => {
+    // Drive the home dir to tmpRoot so we don't touch the real user's filesystem.
+    const homeSpy = vi.spyOn(os, 'homedir').mockReturnValue(tmpRoot);
+    try {
+      const dir = path.join(tmpRoot, '.claude', 'skills', 'demo');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(path.join(dir, 'SKILL.md'), '# whatever', 'utf-8');
+      writeFileSync(
+        path.join(dir, '.dash-skill.json'),
+        JSON.stringify({ version: 99, repo: 'a/b', branch: 'main', path: 'p' }),
+        'utf-8',
+      );
+
+      const status = SkillsService.checkInstalled('demo', [], {
+        repo: 'owner/repo',
+        branch: 'main',
+        path: 'skills/demo',
+      });
+
+      expect(status.global).toBe(false);
+      expect(status.probeFailures?.[0]).toEqual({ scope: 'global', code: 'marker-corrupt' });
+    } finally {
+      homeSpy.mockRestore();
+    }
+  });
+});
+
+describe('listInstalled — corrupt sentinel re-fetches and rewrites', () => {
+  function stubCatalog(skills: RegistrySkill[]) {
+    return vi.spyOn(SkillsCache, 'allSkills').mockReturnValue(skills);
+  }
+
+  function makeRegistrySkill(over: Partial<RegistrySkill> = {}): RegistrySkill {
+    return {
+      name: 'demo',
+      description: '',
+      repo: 'someone/skills',
+      path: 'skills/demo',
+      branch: 'main',
+      category: '',
+      tags: [],
+      stars: 0,
+      ...over,
+    };
+  }
+
+  it('re-checks an orphan with an unparseable sentinel and rewrites it', async () => {
+    stubCatalog([makeRegistrySkill({ name: 'demo' })]);
+    const dir = path.join(tmpRoot, '.claude', 'skills', 'demo');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, 'SKILL.md'), '# user custom', 'utf-8');
+    writeFileSync(path.join(dir, '.dash-skill-checked.json'), 'broken-sentinel{', 'utf-8');
+
+    setRoute(
+      (u) => u.endsWith('/SKILL.md'),
+      () => ({ body: '# upstream different' }),
+    );
+
+    await SkillsService.listInstalled([tmpRoot]);
+
+    // The sentinel was unreadable, so we should have re-fetched and rewritten it.
+    expect(fetchSpy).toHaveBeenCalled();
+    const sentinel = JSON.parse(readFileSync(path.join(dir, '.dash-skill-checked.json'), 'utf-8'));
+    expect(sentinel.version).toBe(1);
+    expect(typeof sentinel.contentSha256).toBe('string');
+  });
+
+  it('one slow/failing skill does not blank the entire installed list', async () => {
+    // Two distinct catalog entries → two parallel orphans. The first errors mid-fetch;
+    // the second must still complete and its row must come back bound.
+    // Drive home to tmpRoot so we don't pick up the developer's real ~/.claude/skills.
+    const homeSpy = vi.spyOn(os, 'homedir').mockReturnValue(tmpRoot);
+    try {
+      stubCatalog([
+        makeRegistrySkill({ name: 'demo', path: 'skills/demo' }),
+        makeRegistrySkill({ name: 'other', repo: 'someone/skills', path: 'skills/other' }),
+      ]);
+      const demoDir = path.join(tmpRoot, '.claude', 'skills', 'demo');
+      const otherDir = path.join(tmpRoot, '.claude', 'skills', 'other');
+      mkdirSync(demoDir, { recursive: true });
+      mkdirSync(otherDir, { recursive: true });
+      writeFileSync(path.join(demoDir, 'SKILL.md'), '# demo content', 'utf-8');
+      writeFileSync(path.join(otherDir, 'SKILL.md'), '# other content', 'utf-8');
+
+      setRoute(
+        (u) => u.includes('skills/demo/SKILL.md'),
+        () => ({ status: 503, body: 'oops' }),
+      );
+      setRoute(
+        (u) => u.includes('skills/other/SKILL.md'),
+        () => ({ body: '# other content' }),
+      );
+
+      // Pass tmpRoot as a project probe AND lean on the homedir mock for global probe —
+      // both rows show up but without the user's real installed skills bleeding in.
+      const result = await SkillsService.listInstalled([tmpRoot]);
+
+      // Both skills appear in the result; the failing one falls through to Custom.
+      const demo = result.skills.find((s) => s.skillName === 'demo');
+      const other = result.skills.find((s) => s.skillName === 'other');
+      expect(demo).toBeDefined();
+      expect(other).toBeDefined();
+      expect(other?.catalog?.repo).toBe('someone/skills');
+      // Marker present for the one that succeeded.
+      expect(existsSync(path.join(otherDir, '.dash-skill.json'))).toBe(true);
+    } finally {
+      homeSpy.mockRestore();
+    }
+  });
+});

@@ -23,6 +23,7 @@ import type {
   InstalledSkill,
   ProbeFailure,
 } from '../../shared/types';
+import { deriveSkillFolderName } from '../../shared/skills';
 import { Tooltip } from './ui/Tooltip';
 
 const ICON_SIZE = 14;
@@ -109,6 +110,14 @@ function friendlyError(raw: string | undefined, fallback: string): string {
   return fallback;
 }
 
+function probeFailureKey(f: ProbeFailure): string {
+  return f.scope === 'global' ? `global|${f.code}` : `${f.path}|${f.code}`;
+}
+
+function probeFailureLabel(f: ProbeFailure): string {
+  return f.scope === 'global' ? '~/.claude/skills' : f.path;
+}
+
 function pathSegmentName(skillPath: string): string {
   const segments = skillPath.split('/').filter(Boolean);
   const last = segments[segments.length - 1] ?? '';
@@ -116,29 +125,11 @@ function pathSegmentName(skillPath: string): string {
   return last;
 }
 
-function sanitizeForFilesystem(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
 function displaySkillName(skill: RegistrySkill): string {
   const raw = (skill.name ?? '').trim();
   if (raw && raw.toLowerCase() !== 'unknown') return raw;
   const fromPath = pathSegmentName(skill.path);
   return fromPath || raw || '(unnamed skill)';
-}
-
-function deriveInstallSkillName(skill: RegistrySkill): string {
-  const candidates = [skill.name, pathSegmentName(skill.path)];
-  for (const c of candidates) {
-    if (!c) continue;
-    const sanitized = sanitizeForFilesystem(c);
-    if (sanitized && sanitized !== 'unknown' && /^[a-z0-9]/.test(sanitized)) return sanitized;
-  }
-  return '';
 }
 
 function skillKey(skill: RegistrySkill): string {
@@ -529,7 +520,7 @@ export function SkillsBrowserModal({
       const target = localReadTarget;
       const result = target
         ? await window.electronAPI.skillsReadLocalSkillMd({
-            skillName: deriveInstallSkillName(skill) || skill.name,
+            skillName: deriveSkillFolderName(skill) || skill.name,
             target,
           })
         : await window.electronAPI.skillsGetContent({
@@ -538,7 +529,10 @@ export function SkillsBrowserModal({
             branch: skill.branch,
           });
       if (token !== selectionTokenRef.current) return;
-      if (result.success && result.data) {
+      // Empty SKILL.md is a legitimate (if unusual) result; checking for `result.data`
+      // truthily would route the empty-string case into the error branch with no error
+      // to display.
+      if (result.success && typeof result.data === 'string') {
         setSkillContent(result.data);
       } else {
         console.error('[SkillsBrowserModal.loadSkillContent] failed', { error: result.error });
@@ -556,7 +550,7 @@ export function SkillsBrowserModal({
   const checkInstallStatus = useCallback(
     async (skill: RegistrySkill) => {
       const token = selectionTokenRef.current;
-      const skillName = deriveInstallSkillName(skill);
+      const skillName = deriveSkillFolderName(skill);
       if (!skillName) {
         setInstallStatus(null);
         return;
@@ -683,11 +677,12 @@ export function SkillsBrowserModal({
     setSkillContentError(null);
     try {
       const result = await window.electronAPI.skillsReadLocalSkillMd({
-        skillName: deriveInstallSkillName(skill) || skill.name,
+        skillName: deriveSkillFolderName(skill) || skill.name,
         target,
       });
       if (token !== selectionTokenRef.current) return;
-      if (result.success && result.data) {
+      // Empty SKILL.md is legal — see loadSkillContent for the same rationale.
+      if (result.success && typeof result.data === 'string') {
         setSkillContent(result.data);
       } else {
         console.error('[SkillsBrowserModal.loadSkillContentFromLocal] failed', {
@@ -717,7 +712,7 @@ export function SkillsBrowserModal({
 
   async function handleUninstall(target: SkillInstallTarget, label?: string) {
     if (!selectedSkill) return;
-    const skillName = deriveInstallSkillName(selectedSkill);
+    const skillName = deriveSkillFolderName(selectedSkill);
     if (!skillName) {
       setInstallError('Cannot derive a valid skill name to remove.');
       return;
@@ -765,7 +760,7 @@ export function SkillsBrowserModal({
 
   async function handleInstall(target: SkillInstallTarget, label?: string) {
     if (!selectedSkill) return;
-    const skillName = deriveInstallSkillName(selectedSkill);
+    const skillName = deriveSkillFolderName(selectedSkill);
     if (!skillName) {
       setInstallError('Cannot derive a valid skill name to install.');
       return;
@@ -1074,8 +1069,8 @@ export function SkillsBrowserModal({
                       <div className="font-medium">List may be incomplete:</div>
                       <ul className="mt-0.5 space-y-0.5">
                         {installedProbeFailures.map((f) => (
-                          <li key={`${f.scope}|${f.code}`} className="font-mono">
-                            {f.scope === 'global' ? '~/.claude/skills' : f.scope} ({f.code})
+                          <li key={probeFailureKey(f)} className="font-mono">
+                            {probeFailureLabel(f)} ({f.code})
                           </li>
                         ))}
                       </ul>
@@ -1146,9 +1141,6 @@ export function SkillsBrowserModal({
                                 {cat.description}
                               </p>
                             )}
-                            {/* Location chips replace the old right-side count + the
-                              "Installed in N locations" fallback text — now you can see
-                              where the skill lives at a glance, including for custom ones. */}
                             <LocationChips
                               entry={entry}
                               projects={projects}
@@ -1355,8 +1347,8 @@ export function SkillsBrowserModal({
                         <div className="font-medium">Could not check install status:</div>
                         <ul className="mt-0.5 space-y-0.5">
                           {installStatus.probeFailures.map((f) => (
-                            <li key={`${f.scope}|${f.code}`} className="font-mono">
-                              {f.scope === 'global' ? '~/.claude/skills' : f.scope} ({f.code})
+                            <li key={probeFailureKey(f)} className="font-mono">
+                              {probeFailureLabel(f)} ({f.code})
                             </li>
                           ))}
                         </ul>
