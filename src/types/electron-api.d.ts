@@ -19,6 +19,15 @@ import type {
   PixelAgentsConfig,
   PixelAgentsStatus,
   ActivityInfo,
+  SkillsSearchResult,
+  SkillInstallStatus,
+  SkillRef,
+  SkillInstallArgs,
+  SkillInstallTarget,
+  SkillUninstallArgs,
+  SkillsSearchArgs,
+  SkillsRegistryMeta,
+  InstalledSkillsResult,
 } from '../shared/types';
 
 export interface ElectronAPI {
@@ -266,6 +275,30 @@ export interface ElectronAPI {
   pixelAgentsStart: () => Promise<IpcResponse<void>>;
   pixelAgentsStop: () => Promise<IpcResponse<void>>;
   onPixelAgentsStatusChanged: (callback: (status: PixelAgentsStatus) => void) => () => void;
+
+  // Skills
+  skillsRefresh: (args?: { force?: boolean }) => Promise<IpcResponse<SkillsRegistryMeta>>;
+  skillsGetMeta: () => Promise<IpcResponse<SkillsRegistryMeta>>;
+  skillsGetCategories: () => Promise<IpcResponse<string[]>>;
+  skillsSearch: (args: SkillsSearchArgs) => Promise<IpcResponse<SkillsSearchResult>>;
+  skillsGetContent: (args: SkillRef) => Promise<IpcResponse<string>>;
+  skillsReadLocalSkillMd: (args: {
+    skillName: string;
+    target: SkillInstallTarget;
+  }) => Promise<IpcResponse<string>>;
+  skillsInstall: (args: SkillInstallArgs) => Promise<IpcResponse<void>>;
+  skillsCheckInstalled: (args: {
+    skillName: string;
+    probePaths: string[];
+    /** Provide for registry skills so the marker file is checked; omit for legacy
+     *  presence-only checks. */
+    ref?: SkillRef | null;
+  }) => Promise<IpcResponse<SkillInstallStatus>>;
+  skillsListInstalled: (args: {
+    probePaths: string[];
+  }) => Promise<IpcResponse<InstalledSkillsResult>>;
+  skillsUninstall: (args: SkillUninstallArgs) => Promise<IpcResponse<void>>;
+  skillsResetCache: () => Promise<IpcResponse<SkillsRegistryMeta>>;
 
   // Telemetry
   telemetryCapture: (event: string, properties?: Record<string, unknown>) => Promise<void>;

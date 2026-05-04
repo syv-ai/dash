@@ -11,6 +11,7 @@ import { FileChangesPanel } from './components/FileChangesPanel';
 import { ShellDrawerWrapper } from './components/ShellDrawerWrapper';
 import { DiffViewer } from './components/DiffViewer';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
+import { SkillsBrowserModal } from './components/SkillsBrowserModal';
 import { TaskModal } from './components/TaskModal';
 import { AddProjectModal } from './components/AddProjectModal';
 import { DeleteTaskModal } from './components/DeleteTaskModal';
@@ -75,6 +76,7 @@ export function App() {
     project: string;
   } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showSkillsBrowser, setShowSkillsBrowser] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>();
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('theme') as 'light' | 'dark') || 'dark';
@@ -365,6 +367,33 @@ export function App() {
   const activeProjectTasks = activeProjectId
     ? (tasksByProject[activeProjectId] || []).filter((t) => !t.archivedAt)
     : [];
+
+  // Memoized props for SkillsBrowserModal. Without these, App.tsx re-renders (terminal
+  // activity, git polls, PTY events) hand the modal new array references every time,
+  // and the modal's loadInstalled useCallback re-fires its refetch effect — flickering
+  // the list back to a loading state on every unrelated re-render.
+  const skillsModalProjects = useMemo(
+    () => projects.map((p) => ({ id: p.id, name: p.name, path: p.path })),
+    [projects],
+  );
+  const skillsModalActiveTasks = useMemo(
+    () =>
+      projects.flatMap((p) => {
+        const tasks = tasksByProject[p.id] ?? [];
+        // Only worktree-backed, non-archived tasks: a task without a worktree shares the
+        // project root, so installing there would just be a project install.
+        return tasks
+          .filter((t) => t.useWorktree && !t.archivedAt)
+          .map((t) => ({
+            taskId: t.id,
+            taskName: t.name,
+            worktreePath: t.path,
+            projectId: p.id,
+            projectName: p.name,
+          }));
+      }),
+    [projects, tasksByProject],
+  );
 
   // Rotation: all tasks with activity, minus exclusions
   const rotationTasks = React.useMemo(() => {
@@ -758,6 +787,9 @@ export function App() {
         } else if (showCommitGraph) {
           e.preventDefault();
           setShowCommitGraph(false);
+        } else if (showSkillsBrowser) {
+          e.preventDefault();
+          setShowSkillsBrowser(false);
         } else if (showSettings) {
           e.preventDefault();
           setShowSettings(false);
@@ -813,6 +845,7 @@ export function App() {
     deleteProjectTarget,
     showDiff,
     showCommitGraph,
+    showSkillsBrowser,
     showSettings,
     showTaskModal,
     showAddProjectModal,
@@ -1502,6 +1535,7 @@ export function App() {
               onRemoveFromRotation={removeFromRotation}
               showActiveTasksSection={showActiveTasksSection}
               onToggleActiveTasksSection={() => setShowActiveTasksSection((v) => !v)}
+              onOpenSkillsBrowser={() => setShowSkillsBrowser(true)}
             />
           </ShellDrawerWrapper>
         </Panel>
@@ -1879,6 +1913,16 @@ export function App() {
             setActiveTaskId(taskId);
             setShowCommitGraph(false);
           }}
+        />
+      )}
+
+      {showSkillsBrowser && (
+        <SkillsBrowserModal
+          projects={skillsModalProjects}
+          activeProjectId={activeProjectId ?? undefined}
+          activeTasks={skillsModalActiveTasks}
+          currentTaskId={activeTaskId ?? undefined}
+          onClose={() => setShowSkillsBrowser(false)}
         />
       )}
 

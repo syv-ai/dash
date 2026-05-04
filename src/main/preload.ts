@@ -249,6 +249,31 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 
+  // Skills
+  skillsRefresh: (args?: { force?: boolean }) => ipcRenderer.invoke('skills:refresh', args),
+  skillsGetMeta: () => ipcRenderer.invoke('skills:getMeta'),
+  skillsGetCategories: () => ipcRenderer.invoke('skills:getCategories'),
+  skillsSearch: (args: import('@shared/types').SkillsSearchArgs) =>
+    ipcRenderer.invoke('skills:search', args),
+  skillsGetContent: (args: import('@shared/types').SkillRef) =>
+    ipcRenderer.invoke('skills:getContent', args),
+  skillsReadLocalSkillMd: (args: {
+    skillName: string;
+    target: import('@shared/types').SkillInstallTarget;
+  }) => ipcRenderer.invoke('skills:readLocalSkillMd', args),
+  skillsInstall: (args: import('@shared/types').SkillInstallArgs) =>
+    ipcRenderer.invoke('skills:install', args),
+  skillsCheckInstalled: (args: {
+    skillName: string;
+    probePaths: string[];
+    ref?: import('@shared/types').SkillRef | null;
+  }) => ipcRenderer.invoke('skills:checkInstalled', args),
+  skillsListInstalled: (args: { probePaths: string[] }) =>
+    ipcRenderer.invoke('skills:listInstalled', args),
+  skillsUninstall: (args: import('@shared/types').SkillUninstallArgs) =>
+    ipcRenderer.invoke('skills:uninstall', args),
+  skillsResetCache: () => ipcRenderer.invoke('skills:resetCache'),
+
   // Telemetry
   telemetryCapture: (event: string, properties?: Record<string, unknown>) =>
     ipcRenderer.invoke('telemetry:capture', { event, properties }),
