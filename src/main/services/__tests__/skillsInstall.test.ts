@@ -31,7 +31,10 @@ vi.mock('better-sqlite3', () => ({
   })),
 }));
 
+import { createHash } from 'crypto';
 import { SkillsService } from '../SkillsService';
+import { SkillsCache } from '../skillsCache';
+import type { RegistrySkill } from '@shared/types';
 
 const RAW = 'https://raw.githubusercontent.com';
 const validRef = { repo: 'owner/repo', branch: 'main', path: 'skills/demo' };
@@ -496,5 +499,142 @@ describe('checkInstalled — marker matching', () => {
     const status = SkillsService.checkInstalled('validate', [tmpRoot]);
 
     expect(status.installedPaths).toEqual([tmpRoot]);
+  });
+});
+
+describe('listInstalled — externally-installed registry skills', () => {
+  function stubCatalog(skills: RegistrySkill[]) {
+    return vi.spyOn(SkillsCache, 'allSkills').mockReturnValue(skills);
+  }
+
+  function makeRegistrySkill(over: Partial<RegistrySkill> = {}): RegistrySkill {
+    return {
+      name: 'demo',
+      description: '',
+      repo: 'someone/skills',
+      path: 'skills/demo',
+      branch: 'main',
+      category: '',
+      tags: [],
+      stars: 0,
+      ...over,
+    };
+  }
+
+  function externalInstall(folderName: string, content: string) {
+    const dir = path.join(tmpRoot, '.claude', 'skills', folderName);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, 'SKILL.md'), content, 'utf-8');
+    return dir;
+  }
+
+  function sha256(s: string): string {
+    return createHash('sha256').update(s).digest('hex');
+  }
+
+  it('binds the marker when SKILL.md byte-matches the unique registry candidate', async () => {
+    stubCatalog([makeRegistrySkill({ name: 'demo' })]);
+    const dir = externalInstall('demo', '# Demo content');
+
+    setRoute(
+      (u) => u.endsWith('/SKILL.md'),
+      () => ({ body: '# Demo content' }),
+    );
+
+    const result = await SkillsService.listInstalled([tmpRoot]);
+
+    const marker = JSON.parse(readFileSync(path.join(dir, '.dash-skill.json'), 'utf-8'));
+    expect(marker.repo).toBe('someone/skills');
+    expect(marker.path).toBe('skills/demo');
+    expect(result.skills[0].catalog?.repo).toBe('someone/skills');
+    // No verified-custom sentinel when we bound successfully.
+    expect(existsSync(path.join(dir, '.dash-skill-checked.json'))).toBe(false);
+  });
+
+  it('writes a verified-custom sentinel keyed by content hash on no-match', async () => {
+    stubCatalog([makeRegistrySkill({ name: 'demo' })]);
+    const localContent = '# I edited this';
+    const dir = externalInstall('demo', localContent);
+
+    setRoute(
+      (u) => u.endsWith('/SKILL.md'),
+      () => ({ body: '# Different upstream content' }),
+    );
+
+    const result = await SkillsService.listInstalled([tmpRoot]);
+
+    expect(existsSync(path.join(dir, '.dash-skill.json'))).toBe(false);
+    expect(result.skills[0].catalog).toBeNull();
+
+    const sentinel = JSON.parse(readFileSync(path.join(dir, '.dash-skill-checked.json'), 'utf-8'));
+    expect(sentinel.contentSha256).toBe(sha256(localContent));
+  });
+
+  it('skips the fetch on later listInstalled calls when the sentinel hash still matches', async () => {
+    stubCatalog([makeRegistrySkill({ name: 'demo' })]);
+    externalInstall('demo', '# user custom');
+
+    setRoute(
+      (u) => u.endsWith('/SKILL.md'),
+      () => ({ body: '# different upstream' }),
+    );
+
+    await SkillsService.listInstalled([tmpRoot]);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    // Second call must NOT refetch — sentinel says we already checked this content.
+    fetchSpy.mockClear();
+    await SkillsService.listInstalled([tmpRoot]);
+    expect(fetchSpy).toHaveBeenCalledTimes(0);
+  });
+
+  it('re-checks when the user has edited the local SKILL.md since the sentinel was written', async () => {
+    stubCatalog([makeRegistrySkill({ name: 'demo' })]);
+    const dir = externalInstall('demo', '# v1 user content');
+
+    // First pass: registry returns something different → sentinel written for v1 hash.
+    setRoute(
+      (u) => u.endsWith('/SKILL.md'),
+      () => ({ body: '# upstream' }),
+    );
+    await SkillsService.listInstalled([tmpRoot]);
+    expect(existsSync(path.join(dir, '.dash-skill-checked.json'))).toBe(true);
+
+    // User edits the file. Sentinel hash no longer matches local content.
+    writeFileSync(path.join(dir, 'SKILL.md'), '# upstream', 'utf-8');
+
+    // Second pass: registry happens to match the new local content → bind.
+    fetchSpy.mockClear();
+    await SkillsService.listInstalled([tmpRoot]);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(existsSync(path.join(dir, '.dash-skill.json'))).toBe(true);
+  });
+
+  it('does not bind when multiple registry skills derive to the same name', async () => {
+    stubCatalog([
+      makeRegistrySkill({ repo: 'one/skills', path: 'skills/demo' }),
+      makeRegistrySkill({ repo: 'two/skills', path: 'demo' }),
+    ]);
+    const dir = externalInstall('demo', 'whatever');
+
+    const result = await SkillsService.listInstalled([tmpRoot]);
+
+    expect(existsSync(path.join(dir, '.dash-skill.json'))).toBe(false);
+    expect(existsSync(path.join(dir, '.dash-skill-checked.json'))).toBe(false);
+    expect(result.skills[0].catalog).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not bind or fetch when no registry candidate matches the folder name', async () => {
+    stubCatalog([makeRegistrySkill({ name: 'pdf-extract' })]);
+    const dir = externalInstall('validate', '# user custom');
+
+    const result = await SkillsService.listInstalled([tmpRoot]);
+
+    expect(existsSync(path.join(dir, '.dash-skill.json'))).toBe(false);
+    expect(existsSync(path.join(dir, '.dash-skill-checked.json'))).toBe(false);
+    expect(result.skills[0].catalog).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

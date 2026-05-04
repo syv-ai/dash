@@ -8,6 +8,7 @@ import {
   readdirSync,
   type Dirent,
 } from 'fs';
+import { createHash } from 'crypto';
 import path from 'path';
 import os from 'os';
 import type {
@@ -115,6 +116,53 @@ function readSkillMarker(skillDir: string): SkillMarker | null {
       return null;
     }
     return parsed as SkillMarker;
+  } catch {
+    return null;
+  }
+}
+
+// Negative-cache sentinel: when content-match against the unique registry candidate
+// fails for an orphan folder, we record the local SKILL.md hash at check time. Future
+// listInstalled calls skip the fetch as long as the local content hasn't changed.
+// Editing the skill invalidates the sentinel naturally (different hash); a new install
+// via Dash overwrites both files atomically.
+const VERIFIED_CUSTOM_FILENAME = '.dash-skill-checked.json';
+const VERIFIED_CUSTOM_VERSION = 1;
+
+interface VerifiedCustomRecord {
+  version: number;
+  checkedAt: number;
+  /** SHA-256 of the local SKILL.md at the time we checked. The cache is invalid once
+   *  the user edits the file, so we re-check and (potentially) bind to a registry
+   *  entry that now matches. */
+  contentSha256: string;
+}
+
+function sha256(s: string): string {
+  return createHash('sha256').update(s).digest('hex');
+}
+
+function writeVerifiedCustom(skillDir: string, contentSha256: string): void {
+  const record: VerifiedCustomRecord = {
+    version: VERIFIED_CUSTOM_VERSION,
+    checkedAt: Date.now(),
+    contentSha256,
+  };
+  writeFileSync(path.join(skillDir, VERIFIED_CUSTOM_FILENAME), JSON.stringify(record), 'utf-8');
+}
+
+function readVerifiedCustom(skillDir: string): VerifiedCustomRecord | null {
+  try {
+    const text = readFileSync(path.join(skillDir, VERIFIED_CUSTOM_FILENAME), 'utf-8');
+    const parsed = JSON.parse(text) as Partial<VerifiedCustomRecord>;
+    if (
+      parsed.version !== VERIFIED_CUSTOM_VERSION ||
+      typeof parsed.contentSha256 !== 'string' ||
+      typeof parsed.checkedAt !== 'number'
+    ) {
+      return null;
+    }
+    return parsed as VerifiedCustomRecord;
   } catch {
     return null;
   }
@@ -612,10 +660,9 @@ export class SkillsService {
     return status;
   }
 
-  static listInstalled(probePaths: string[]): InstalledSkillsResult {
+  static async listInstalled(probePaths: string[]): Promise<InstalledSkillsResult> {
     const home = os.homedir();
-    type Entry = { installedPaths: string[]; globalInstalled: boolean };
-    const found = new Map<string, Entry>();
+    const found = new Map<string, InstalledEntry>();
     const probeFailures: ProbeFailure[] = [];
 
     function record(skillName: string, scope: 'global' | string): void {
@@ -639,17 +686,21 @@ export class SkillsService {
       if (probe.error) probeFailures.push({ scope: pp, code: probe.error });
     }
 
+    // Recognise externally-installed registry skills (skills.sh, Claude Code native
+    // skills, manual installs) by content match. Runs before the catalog join so any
+    // freshly-written markers are picked up below. The persistent verified-custom
+    // sentinel means each truly-custom folder pays the fetch cost at most once.
+    await backfillExternalInstalls(found, home);
+
     // Catalog join is keyed by (repo, path) read from each install's marker file.
-    // The previous sanitized-folder-name fuzzy match conflated unrelated skills that
-    // happened to share a name (e.g. user's custom "validate" → registry "validate").
-    // Folders without a marker — pre-existing custom skills, or older Dash installs
-    // from before markers existed — fall through with catalog: null and render as Custom.
+    // Folders without a marker — user's own custom skills, ambiguous name matches —
+    // fall through with catalog: null and render as Custom.
     const catalogByRepoPath = new Map<string, RegistrySkill>();
     for (const s of SkillsCache.allSkills()) {
       catalogByRepoPath.set(`${s.repo}|${s.path}`, s);
     }
 
-    function lookupCatalog(skillName: string, info: Entry): RegistrySkill | null {
+    function lookupCatalog(skillName: string, info: InstalledEntry): RegistrySkill | null {
       const candidates: string[] = [];
       if (info.globalInstalled) {
         candidates.push(path.join(home, '.claude', 'skills', skillName));
@@ -726,6 +777,120 @@ function listSkillFolders(skillsDir: string): { names: string[]; error?: string 
     }
   }
   return { names };
+}
+
+interface InstalledEntry {
+  installedPaths: string[];
+  globalInstalled: boolean;
+}
+
+// Mirrors the renderer's `deriveInstallSkillName` so backfill can map a catalog row to
+// the folder name `installSkill` would use for it. Used to find candidate registry
+// matches for marker-less install dirs — keep these in sync.
+function deriveInstallNameFromCatalog(skill: RegistrySkill): string {
+  const candidates = [skill.name, lastPathSegment(skill.path)];
+  for (const c of candidates) {
+    if (!c) continue;
+    const sanitized = c
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    if (sanitized && sanitized !== 'unknown' && /^[a-z0-9]/.test(sanitized)) return sanitized;
+  }
+  return '';
+}
+
+function lastPathSegment(p: string): string {
+  const segs = p.split('/').filter(Boolean);
+  const last = segs[segs.length - 1] ?? '';
+  if (last.toLowerCase() === 'skill.md') return segs[segs.length - 2] ?? '';
+  return last;
+}
+
+// Recognises skill folders installed outside Dash (via skills.sh, Claude Code's native
+// skills system, manual clone, etc.) that match a registry entry byte-for-byte. For
+// each marker-less folder with a unique name-matching candidate, fetches the registry
+// SKILL.md and compares; on match writes the marker so the catalog metadata renders.
+// On no match, writes a sentinel keyed by the local content hash so the same folder
+// isn't refetched until the user edits the file.
+async function backfillExternalInstalls(
+  found: Map<string, InstalledEntry>,
+  home: string,
+): Promise<void> {
+  const candidatesByName = new Map<string, RegistrySkill[]>();
+  for (const s of SkillsCache.allSkills()) {
+    const name = deriveInstallNameFromCatalog(s);
+    if (!name) continue;
+    const arr = candidatesByName.get(name) ?? [];
+    arr.push(s);
+    candidatesByName.set(name, arr);
+  }
+
+  await Promise.all(
+    Array.from(found.entries()).map(async ([skillName, info]) => {
+      const candidates = candidatesByName.get(skillName) ?? [];
+      // Ambiguous name (multiple candidates) or no candidate at all → leave as Custom
+      // and don't write a sentinel: there's nothing to learn from a fetch we wouldn't
+      // do, and a future registry refresh might disambiguate.
+      if (candidates.length !== 1) return;
+      const ref = candidates[0];
+
+      const dirs: string[] = [];
+      if (info.globalInstalled) dirs.push(path.join(home, '.claude', 'skills', skillName));
+      for (const pp of info.installedPaths) {
+        dirs.push(path.join(pp, '.claude', 'skills', skillName));
+      }
+
+      // Filter to dirs that are still orphan candidates: no marker (so not already
+      // bound) AND no matching verified-custom sentinel (so we haven't already shown
+      // the local content doesn't match this registry entry).
+      const orphans = dirs.filter((d) => {
+        if (readSkillMarker(d) !== null) return false;
+        const sentinel = readVerifiedCustom(d);
+        if (!sentinel) return true;
+        let local: string;
+        try {
+          local = readFileSync(path.join(d, 'SKILL.md'), 'utf-8');
+        } catch {
+          return false;
+        }
+        // Re-check if user edited the file since the sentinel was written.
+        return sha256(local) !== sentinel.contentSha256;
+      });
+      if (orphans.length === 0) return;
+
+      let registryContent: string;
+      try {
+        registryContent = await SkillsService.getSkillContent(ref);
+      } catch (err) {
+        console.warn('[SkillsService.backfill] could not fetch registry SKILL.md', {
+          repo: ref.repo,
+          path: ref.path,
+          message: err instanceof Error ? err.message : String(err),
+        });
+        return;
+      }
+
+      for (const dir of orphans) {
+        let localContent: string;
+        try {
+          localContent = readFileSync(path.join(dir, 'SKILL.md'), 'utf-8');
+        } catch (err) {
+          console.warn('[SkillsService.backfill] could not read local SKILL.md', {
+            dir,
+            message: err instanceof Error ? err.message : String(err),
+          });
+          continue;
+        }
+        if (localContent === registryContent) {
+          writeSkillMarker(dir, ref);
+        } else {
+          writeVerifiedCustom(dir, sha256(localContent));
+        }
+      }
+    }),
+  );
 }
 
 // "Is this skill dir an install of `expectedRef`?" — when expectedRef is null, falls
