@@ -95,6 +95,14 @@ export function App() {
   const [desktopNotification, setDesktopNotification] = useState(() => {
     return localStorage.getItem('desktopNotification') === 'true';
   });
+  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(() => {
+    const stored = localStorage.getItem('autoUpdateEnabled');
+    return stored === null ? true : stored === 'true';
+  });
+  const [updateNotificationsEnabled, setUpdateNotificationsEnabled] = useState(() => {
+    const stored = localStorage.getItem('updateNotificationsEnabled');
+    return stored === null ? true : stored === 'true';
+  });
   const [shellDrawerEnabled, setShellDrawerEnabled] = useState(() => {
     const stored = localStorage.getItem('shellDrawerEnabled');
     return stored === null ? true : stored === 'true';
@@ -242,6 +250,26 @@ export function App() {
       enabled: desktopNotification,
     });
   }, [desktopNotification]);
+
+  // Hydrate auto-update preference from main (file is source of truth) on mount
+  useEffect(() => {
+    let cancelled = false;
+    window.electronAPI.autoUpdateGetEnabled?.().then((res) => {
+      if (cancelled) return;
+      if (res.success && typeof res.data === 'boolean') {
+        setAutoUpdateEnabled(res.data);
+        localStorage.setItem('autoUpdateEnabled', String(res.data));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Sync auto-update enabled to main process
+  useEffect(() => {
+    window.electronAPI.autoUpdateSetEnabled?.(autoUpdateEnabled);
+  }, [autoUpdateEnabled]);
   // Sync commit attribution to main process
   useEffect(() => {
     window.electronAPI.setCommitAttribution?.(commitAttribution);
@@ -1848,6 +1876,16 @@ export function App() {
             setDesktopNotification(v);
             localStorage.setItem('desktopNotification', String(v));
           }}
+          autoUpdateEnabled={autoUpdateEnabled}
+          onAutoUpdateEnabledChange={(v) => {
+            setAutoUpdateEnabled(v);
+            localStorage.setItem('autoUpdateEnabled', String(v));
+          }}
+          updateNotificationsEnabled={updateNotificationsEnabled}
+          onUpdateNotificationsEnabledChange={(v) => {
+            setUpdateNotificationsEnabled(v);
+            localStorage.setItem('updateNotificationsEnabled', String(v));
+          }}
           activeProjectPath={activeProject?.path}
           preferredIDE={preferredIDE}
           onPreferredIDEChange={(v) => {
@@ -2016,7 +2054,7 @@ export function App() {
         />
       )}
 
-      <ToastContainer />
+      <ToastContainer updateNotificationsEnabled={updateNotificationsEnabled} />
     </div>
   );
 }

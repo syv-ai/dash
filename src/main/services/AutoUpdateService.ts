@@ -1,5 +1,7 @@
 import { autoUpdater, type UpdateInfo, type ProgressInfo } from 'electron-updater';
-import { dialog } from 'electron';
+import { app, dialog } from 'electron';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { BrowserWindow } from 'electron';
 import type { IpcResponse } from '@shared/types';
 
@@ -15,6 +17,10 @@ const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
 const INITIAL_DELAY_MS = 10 * 1000; // 10 seconds
 const CHECK_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 
+function getPreferencePath(): string {
+  return join(app.getPath('userData'), 'update-preferences.json');
+}
+
 function send(channel: string, ...args: unknown[]): void {
   try {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -25,18 +31,55 @@ function send(channel: string, ...args: unknown[]): void {
   }
 }
 
+function clearTimers(): void {
+  if (checkInterval) {
+    clearInterval(checkInterval);
+    checkInterval = null;
+  }
+  if (initialCheckTimer) {
+    clearTimeout(initialCheckTimer);
+    initialCheckTimer = null;
+  }
+}
+
+function startTimers(): void {
+  clearTimers();
+  initialCheckTimer = setTimeout(() => {
+    initialCheckTimer = null;
+    autoUpdater.checkForUpdates().catch(() => {});
+  }, INITIAL_DELAY_MS);
+  checkInterval = setInterval(() => {
+    autoUpdater.checkForUpdates().catch(() => {});
+  }, CHECK_INTERVAL_MS);
+}
+
 export class AutoUpdateService {
+  static readPreference(): boolean {
+    try {
+      const path = getPreferencePath();
+      if (!existsSync(path)) return true;
+      const raw = JSON.parse(readFileSync(path, 'utf-8'));
+      return raw?.autoUpdateEnabled !== false;
+    } catch {
+      return true;
+    }
+  }
+
+  static writePreference(enabled: boolean): void {
+    try {
+      writeFileSync(
+        getPreferencePath(),
+        JSON.stringify({ autoUpdateEnabled: enabled }, null, 2),
+        'utf-8',
+      );
+    } catch (err) {
+      console.error('[AutoUpdate] Failed to persist preference:', err);
+    }
+  }
+
   static initialize(window: BrowserWindow): void {
-    // Clean up any previous listeners to prevent duplicates
     autoUpdater.removeAllListeners();
-    if (checkInterval) {
-      clearInterval(checkInterval);
-      checkInterval = null;
-    }
-    if (initialCheckTimer) {
-      clearTimeout(initialCheckTimer);
-      initialCheckTimer = null;
-    }
+    clearTimers();
 
     mainWindow = window;
     state = 'idle';
@@ -79,20 +122,25 @@ export class AutoUpdateService {
       });
     });
 
-    // Initial check after delay
-    initialCheckTimer = setTimeout(() => {
-      initialCheckTimer = null;
-      autoUpdater.checkForUpdates().catch(() => {});
-    }, INITIAL_DELAY_MS);
-
-    // Periodic checks
-    checkInterval = setInterval(() => {
-      autoUpdater.checkForUpdates().catch(() => {});
-    }, CHECK_INTERVAL_MS);
+    if (AutoUpdateService.readPreference()) {
+      startTimers();
+    }
   }
 
   static setWindow(window: BrowserWindow): void {
     mainWindow = window;
+  }
+
+  static setEnabled(enabled: boolean): IpcResponse<void> {
+    AutoUpdateService.writePreference(enabled);
+    if (enabled) {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        startTimers();
+      }
+    } else {
+      clearTimers();
+    }
+    return { success: true };
   }
 
   static async checkForUpdates(): Promise<IpcResponse<void>> {
@@ -154,14 +202,7 @@ export class AutoUpdateService {
   }
 
   static cleanup(): void {
-    if (checkInterval) {
-      clearInterval(checkInterval);
-      checkInterval = null;
-    }
-    if (initialCheckTimer) {
-      clearTimeout(initialCheckTimer);
-      initialCheckTimer = null;
-    }
+    clearTimers();
     autoUpdater.removeAllListeners();
     mainWindow = null;
   }

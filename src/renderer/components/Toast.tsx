@@ -1,7 +1,16 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Toaster, toast } from 'sonner';
 
-export function ToastContainer() {
+interface ToastContainerProps {
+  updateNotificationsEnabled: boolean;
+}
+
+export function ToastContainer({ updateNotificationsEnabled }: ToastContainerProps) {
+  const updateNotificationsRef = useRef(updateNotificationsEnabled);
+  useEffect(() => {
+    updateNotificationsRef.current = updateNotificationsEnabled;
+  }, [updateNotificationsEnabled]);
+
   useEffect(() => {
     return window.electronAPI.onToast((data) => {
       if (data.url) {
@@ -21,6 +30,7 @@ export function ToastContainer() {
   // Auto-update: update available
   useEffect(() => {
     return window.electronAPI.onAutoUpdateAvailable((info) => {
+      if (!updateNotificationsRef.current) return;
       toast(`Update v${info.version} available`, {
         duration: Infinity,
         action: {
@@ -36,6 +46,7 @@ export function ToastContainer() {
   // Auto-update: download complete
   useEffect(() => {
     return window.electronAPI.onAutoUpdateDownloaded(() => {
+      if (!updateNotificationsRef.current) return;
       toast('Update ready to install', {
         duration: Infinity,
         action: {
@@ -51,6 +62,7 @@ export function ToastContainer() {
   // Auto-update: error
   useEffect(() => {
     return window.electronAPI.onAutoUpdateError((info) => {
+      if (!updateNotificationsRef.current) return;
       toast.error(`${info.message}. ${info.detail}`, {
         duration: 10000,
         action: {

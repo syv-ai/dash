@@ -56,6 +56,10 @@ interface SettingsModalProps {
   onNotificationSoundChange: (value: NotificationSound) => void;
   desktopNotification: boolean;
   onDesktopNotificationChange: (value: boolean) => void;
+  autoUpdateEnabled: boolean;
+  onAutoUpdateEnabledChange: (value: boolean) => void;
+  updateNotificationsEnabled: boolean;
+  onUpdateNotificationsEnabledChange: (value: boolean) => void;
   showRateLimits: boolean;
   onShowRateLimitsChange: (value: boolean) => void;
   showUsageInline: boolean;
@@ -969,6 +973,10 @@ export function SettingsModal({
   onNotificationSoundChange,
   desktopNotification,
   onDesktopNotificationChange,
+  autoUpdateEnabled,
+  onAutoUpdateEnabledChange,
+  updateNotificationsEnabled,
+  onUpdateNotificationsEnabledChange,
   showRateLimits,
   onShowRateLimitsChange,
   showUsageInline,
@@ -1457,6 +1465,25 @@ export function SettingsModal({
                 <label className="block text-[12px] font-medium text-foreground mb-3">
                   Updates
                 </label>
+                <div className="space-y-3 mb-4">
+                  <ToggleSwitch
+                    enabled={autoUpdateEnabled}
+                    onToggle={onAutoUpdateEnabledChange}
+                    label="Check for updates automatically"
+                  />
+                  <p className="text-[10px] text-foreground/80 -mt-1">
+                    When off, Dash won't check for updates in the background. You can still check
+                    manually below.
+                  </p>
+                  <ToggleSwitch
+                    enabled={updateNotificationsEnabled}
+                    onToggle={onUpdateNotificationsEnabledChange}
+                    label="Show update notifications"
+                  />
+                  <p className="text-[10px] text-foreground/80 -mt-1">
+                    Toast popups when an update is available, downloaded, or fails.
+                  </p>
+                </div>
                 <div className="flex items-center gap-3">
                   <p className="text-[13px] text-foreground/80 font-mono">{appVersion || '...'}</p>
                   {updateStatus === 'ready' ? (
