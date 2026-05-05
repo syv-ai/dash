@@ -41,6 +41,17 @@
     --git-renamed: 217 91% 60%;
     --git-untracked: 0 0% 50%;
     --git-conflicted: 25 95% 53%;
+
+    /* Category palette — hashed category names map deterministically to a slot 1..8.
+       Hues spread evenly around the wheel so adjacent slots stay distinguishable. */
+    --cat-1: 210 70% 48%; /* blue */
+    --cat-2: 142 55% 40%; /* green */
+    --cat-3: 25 85% 50%; /* orange */
+    --cat-4: 280 55% 55%; /* purple */
+    --cat-5: 340 65% 50%; /* pink */
+    --cat-6: 175 55% 38%; /* teal */
+    --cat-7: 45 80% 45%; /* gold */
+    --cat-8: 245 55% 58%; /* indigo */
   }
 
   .dark {
@@ -77,6 +88,16 @@
     --git-renamed: 217 91% 60%;
     --git-untracked: 0 0% 56%;
     --git-conflicted: 25 95% 53%;
+
+    /* Category palette (dark) — bumped lightness so badges stay legible on dark surfaces. */
+    --cat-1: 210 75% 65%;
+    --cat-2: 142 50% 55%;
+    --cat-3: 25 85% 62%;
+    --cat-4: 280 60% 70%;
+    --cat-5: 340 65% 65%;
+    --cat-6: 175 55% 55%;
+    --cat-7: 45 80% 60%;
+    --cat-8: 245 65% 72%;
   }
 }
 

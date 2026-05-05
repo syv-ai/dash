@@ -361,6 +361,112 @@ export interface PixelAgentsOffice {
   enabled: boolean;
 }
 
+// ── Skills Registry Types ──────────────────────────────────
+
+/**
+ * Slim card-and-search shape persisted in the local SQLite cache. We deliberately drop
+ * registry fields we don't display (license, permissionNote, sourceUrl, author, source)
+ * — users who want license details click through to GitHub.
+ */
+export interface RegistrySkill {
+  name: string;
+  description: string;
+  repo: string;
+  path: string;
+  branch: string;
+  category: string;
+  tags: string[];
+  stars: number;
+  /** "compatible" → safe to install, "restricted" → license requires verification before reuse. */
+  distribution?: 'compatible' | 'restricted';
+}
+
+/**
+ * Tagged union so renderers can't confuse "no cache yet" with "stale cache" — the
+ * earlier optional-fields shape made it easy to render an empty browser silently when
+ * a refresh failure replaced a populated cache.
+ */
+export type SkillsRegistryMeta =
+  | { status: 'never-fetched'; totalCount: 0; fetchedAt: null }
+  | { status: 'fresh'; totalCount: number; fetchedAt: number }
+  | { status: 'stale'; totalCount: number; fetchedAt: number; refreshError: string };
+
+export interface SkillsSearchArgs {
+  query: string;
+  category?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface SkillsSearchResult {
+  skills: RegistrySkill[];
+  total: number;
+}
+
+/** A skill found on disk by `listInstalled`. The catalog field carries the registry
+ *  metadata when the skill is also in our cached top-N — null otherwise (e.g. user
+ *  installed a long-tail skill, or a skill from outside the registry). */
+export interface InstalledSkill {
+  /** Folder name under .claude/skills/. */
+  skillName: string;
+  /** True iff installed at ~/.claude/skills/<skillName>/. */
+  globalInstalled: boolean;
+  /** Subset of probePaths where the skill is installed. */
+  installedPaths: string[];
+  catalog: RegistrySkill | null;
+}
+
+export interface InstalledSkillsResult {
+  skills: InstalledSkill[];
+  /** Paths that couldn't be enumerated (EACCES, EIO etc.) — those probes silently
+   *  truncated prior to this field, so the UI now warns the user that the list may
+   *  be incomplete instead of misrepresenting "not found" results. */
+  probeFailures: ProbeFailure[];
+}
+
+/** Structured probe failure so the renderer can render the right label per scope without
+ *  string-sniffing. `code` is either an errno (EACCES, EIO, …) or a Dash-internal sentinel
+ *  ('marker-corrupt') so the UI can offer the matching recovery action. */
+export type ProbeFailure =
+  | { scope: 'global'; code: string }
+  | { scope: 'path'; path: string; code: string };
+
+export interface SkillInstallStatus {
+  global: boolean;
+  /** Subset of the input probe paths where the skill is currently installed. The caller
+   *  passes both project roots and task worktree paths; the renderer maps them back. */
+  installedPaths: string[];
+  /** Non-ENOENT errors per probe path — e.g. EACCES on /Users/foo/proj means we can't tell
+   *  whether the skill is installed there. UI should treat any of these as "unknown"
+   *  rather than "not installed", and ideally list each affected path inline. */
+  probeFailures?: ProbeFailure[];
+}
+
+export type SkillInstallTarget =
+  | { kind: 'global' }
+  | { kind: 'project'; projectPath: string }
+  /** A task lives in its own worktree directory; installing here writes uncommitted
+   *  files into that worktree only — invisible to other tasks and to the project root. */
+  | { kind: 'task'; worktreePath: string };
+
+/** Identifies a remote skill in the registry. */
+export interface SkillRef {
+  repo: string;
+  path: string;
+  branch: string;
+}
+
+export interface SkillInstallArgs {
+  ref: SkillRef;
+  skillName: string;
+  target: SkillInstallTarget;
+}
+
+export interface SkillUninstallArgs {
+  skillName: string;
+  target: SkillInstallTarget;
+}
+
 export interface PixelAgentsConfig {
   name: string;
   palette?: number;

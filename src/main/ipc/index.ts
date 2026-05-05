@@ -9,6 +9,7 @@ import { registerAzureDevOpsIpc } from './azureDevOpsIpc';
 import { registerPixelAgentsIpc } from './pixelAgentsIpc';
 import { registerRtkIpc } from './rtkIpc';
 import { registerTelemetryIpc } from './telemetryIpc';
+import { registerSkillsIpc } from './skillsIpc';
 
 export function registerAllIpc(): void {
   registerAppIpc();
@@ -22,4 +23,5 @@ export function registerAllIpc(): void {
   registerPixelAgentsIpc();
   registerRtkIpc();
   registerTelemetryIpc();
+  registerSkillsIpc();
 }
