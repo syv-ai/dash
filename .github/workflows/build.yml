@@ -159,7 +159,9 @@ jobs:
 
   build-windows:
     if: github.event_name != 'pull_request'
-    runs-on: windows-latest
+    # Pinned to windows-2022 because windows-latest/windows-2025 ships VS2026 (v18),
+    # which node-gyp can't detect — electron-rebuild fails on node-pty/better-sqlite3.
+    runs-on: windows-2022
 
     steps:
       - uses: actions/checkout@v5
