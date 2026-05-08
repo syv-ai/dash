@@ -245,7 +245,7 @@ export function MainContent({
                     taskActivity[task.id]?.state === 'error'
                       ? 'bg-destructive'
                       : taskActivity[task.id]?.state === 'waiting'
-                        ? 'bg-orange-500'
+                        ? 'bg-blue-400 status-pulse-waiting'
                         : taskActivity[task.id]?.state === 'busy'
                           ? 'bg-amber-400 animate-pulse'
                           : taskActivity[task.id]?.state === 'idle' && unseenTaskIds?.has(task.id)

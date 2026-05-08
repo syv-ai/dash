@@ -122,7 +122,7 @@ function RotationSection({
               {activity === 'error' ? (
                 <div className="w-[6px] h-[6px] rounded-full bg-destructive flex-shrink-0" />
               ) : activity === 'waiting' ? (
-                <div className="w-[6px] h-[6px] rounded-full bg-orange-500 flex-shrink-0" />
+                <div className="w-[6px] h-[6px] rounded-full bg-blue-400 status-pulse-waiting flex-shrink-0" />
               ) : activity === 'busy' ? (
                 <div className="w-[6px] h-[6px] rounded-full bg-amber-400 status-pulse flex-shrink-0" />
               ) : activity === 'idle' && unseenTaskIds?.has(task.id) ? (
@@ -356,7 +356,7 @@ export function LeftSidebar({
                           activity === 'error'
                             ? 'bg-destructive'
                             : activity === 'waiting'
-                              ? 'bg-orange-500'
+                              ? 'bg-blue-400 status-pulse-waiting'
                               : activity === 'busy'
                                 ? 'bg-amber-400 status-pulse'
                                 : 'bg-emerald-400'
@@ -614,7 +614,7 @@ export function LeftSidebar({
                                 </Tooltip>
                               ) : activityState === 'waiting' ? (
                                 <Tooltip content="Waiting for user">
-                                  <div className="w-[6px] h-[6px] rounded-full bg-orange-500 flex-shrink-0" />
+                                  <div className="w-[6px] h-[6px] rounded-full bg-blue-400 status-pulse-waiting flex-shrink-0" />
                                 </Tooltip>
                               ) : activityState === 'busy' ? (
                                 <Tooltip content={busyTooltip}>

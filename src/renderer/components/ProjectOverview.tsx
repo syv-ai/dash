@@ -63,7 +63,7 @@ function ActivityDot({ info }: { info?: ActivityInfo }) {
   if (state === 'waiting') {
     return (
       <Tooltip content="Waiting for user">
-        <div className="w-2 h-2 rounded-full bg-orange-500" />
+        <div className="w-2 h-2 rounded-full bg-blue-400 status-pulse-waiting" />
       </Tooltip>
     );
   }
@@ -198,7 +198,7 @@ export function ProjectOverview({
               )}
               {waitingCount > 0 && (
                 <span className="flex items-center gap-1.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+                  <div className="w-1.5 h-1.5 rounded-full bg-blue-400 status-pulse-waiting" />
                   {waitingCount} waiting
                 </span>
               )}
