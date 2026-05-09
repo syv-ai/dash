@@ -18,9 +18,7 @@ export function EditViewer({ exec, taskPath }: EditViewerProps) {
 
   return (
     <div className="space-y-2 min-w-0">
-      <div className="min-w-0">
-        <FilePathLink filePath={filePath} taskPath={taskPath} className="block" />
-      </div>
+      <FilePathLink filePath={filePath} taskPath={taskPath} className="block" />
 
       {(oldLines.length > 0 || newLines.length > 0) && (
         <div className="rounded border border-border/30 overflow-hidden bg-surface-1">

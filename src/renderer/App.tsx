@@ -1757,24 +1757,17 @@ export function App() {
                       showStructuredView
                         ? {
                             options: [
-                              { id: 'tool-use', label: 'Tool use' },
+                              { id: 'structured', label: 'Tool use' },
                               { id: 'changes', label: 'Changes' },
                             ],
-                            activeId:
-                              rightPanelTab === 'structured' && !changesPanelCollapsed
-                                ? 'tool-use'
-                                : 'changes',
+                            activeId: changesPanelCollapsed ? 'changes' : rightPanelTab,
                             onChange: (id) => {
-                              const next = id === 'tool-use' ? 'structured' : 'changes';
+                              const next = id === 'structured' ? 'structured' : 'changes';
                               setRightPanelTab(next);
                               localStorage.setItem('rightPanelTab', next);
                             },
                           }
-                        : {
-                            options: [{ id: 'changes', label: 'Changes' }],
-                            activeId: 'changes',
-                            onChange: () => {},
-                          }
+                        : undefined
                     }
                     alternateBody={
                       showStructuredView && activeTask ? (

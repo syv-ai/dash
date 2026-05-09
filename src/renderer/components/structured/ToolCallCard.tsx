@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   ChevronRight,
@@ -73,6 +73,9 @@ const TOOL_ICONS: Record<string, LucideIcon> = {
   WebSearch: Globe,
   WebFetch: Globe,
 };
+
+/** Matches the duration of the expand animation (Tailwind `duration-200`). */
+const EXPAND_MS = 200;
 
 /** Returns a human duration, or null when the call was too short to be worth surfacing (<2s). */
 function formatDuration(ms: number): string | null {
@@ -156,6 +159,7 @@ interface ToolCallCardProps {
 export function ToolCallCard({ exec, taskPath, hideToolLabel = false }: ToolCallCardProps) {
   const [expanded, setExpanded] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef<number | null>(null);
   const { toolCall, result, durationMs } = exec;
 
   const category = TOOL_CATEGORY[toolCall.name] ?? 'default';
@@ -164,20 +168,32 @@ export function ToolCallCard({ exec, taskPath, hideToolLabel = false }: ToolCall
   const summary = getToolSummary(exec);
   const duration = durationMs != null ? formatDuration(durationMs) : null;
 
+  // Cancel any in-flight scroll loop on unmount.
+  useEffect(() => {
+    return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
+
   // Track the growing card edge in real time during the expand animation.
   // `block: 'nearest'` no-ops if the card is already fully visible and scrolls
   // the minimum amount otherwise — so the parent scroll follows the bottom
   // edge as it descends, finishing exactly when the expand finishes.
   const toggle = () => {
+    if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
     const willExpand = !expanded;
     setExpanded(willExpand);
     if (!willExpand) return;
     const start = performance.now();
     const tick = (now: number) => {
-      cardRef.current?.scrollIntoView({ block: 'nearest' });
-      if (now - start < 220) requestAnimationFrame(tick);
+      if (!cardRef.current) {
+        rafRef.current = null;
+        return;
+      }
+      cardRef.current.scrollIntoView({ block: 'nearest' });
+      rafRef.current = now - start < EXPAND_MS + 20 ? requestAnimationFrame(tick) : null;
     };
-    requestAnimationFrame(tick);
+    rafRef.current = requestAnimationFrame(tick);
   };
 
   return (
@@ -191,16 +207,14 @@ export function ToolCallCard({ exec, taskPath, hideToolLabel = false }: ToolCall
           strokeWidth={2.5}
           className={`text-muted-foreground/30 transition-transform flex-shrink-0 ${expanded ? 'rotate-90' : ''}`}
         />
-        <Icon
-          size={12}
-          strokeWidth={1.8}
-          className={`flex-shrink-0 ${styles.icon} ${hideToolLabel ? 'invisible' : ''}`}
-        />
         <span
-          className={`text-[10px] font-semibold ${styles.icon} flex-shrink-0 ${hideToolLabel ? 'invisible' : ''}`}
+          className={`flex items-center gap-1.5 flex-shrink-0 ${hideToolLabel ? 'invisible' : ''}`}
           aria-hidden={hideToolLabel}
         >
-          {getToolLabel(toolCall.name)}
+          <Icon size={12} strokeWidth={1.8} className={styles.icon} />
+          <span className={`text-[10px] font-semibold ${styles.icon}`}>
+            {getToolLabel(toolCall.name)}
+          </span>
         </span>
         {summary && (
           <span className="text-[10px] text-muted-foreground/50 truncate min-w-0 flex-1 font-mono">

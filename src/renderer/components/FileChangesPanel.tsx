@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import type { FileChange, FileChangeStatus, GitStatus } from '../../shared/types';
 
-export interface RightPanelTab {
+interface RightPanelTab {
   id: string;
   label: string;
 }
@@ -345,24 +345,22 @@ export function FileChangesPanel({
               </button>
             </Tooltip>
           )}
-          {!showingAlternate &&
-            gitStatus?.branch &&
-            (gitStatus.ahead > 0 || gitStatus.behind > 0) && (
-              <div className="flex items-center gap-1 text-muted-foreground/40 mr-1">
-                {gitStatus.ahead > 0 && (
-                  <span className="flex items-center gap-0.5 text-[9px] text-[hsl(var(--git-added))]">
-                    <ArrowUp size={8} strokeWidth={2.5} />
-                    {gitStatus.ahead}
-                  </span>
-                )}
-                {gitStatus.behind > 0 && (
-                  <span className="flex items-center gap-0.5 text-[9px] text-[hsl(var(--git-deleted))]">
-                    <ArrowDown size={8} strokeWidth={2.5} />
-                    {gitStatus.behind}
-                  </span>
-                )}
-              </div>
-            )}
+          {!showingAlternate && gitStatus && (gitStatus.ahead > 0 || gitStatus.behind > 0) && (
+            <div className="flex items-center gap-1 text-muted-foreground/40 mr-1">
+              {gitStatus.ahead > 0 && (
+                <span className="flex items-center gap-0.5 text-[9px] text-[hsl(var(--git-added))]">
+                  <ArrowUp size={8} strokeWidth={2.5} />
+                  {gitStatus.ahead}
+                </span>
+              )}
+              {gitStatus.behind > 0 && (
+                <span className="flex items-center gap-0.5 text-[9px] text-[hsl(var(--git-deleted))]">
+                  <ArrowDown size={8} strokeWidth={2.5} />
+                  {gitStatus.behind}
+                </span>
+              )}
+            </div>
+          )}
           {!showingAlternate && !allStaged && unstagedFiles.length > 0 && (
             <Tooltip content="Stage all">
               <button
