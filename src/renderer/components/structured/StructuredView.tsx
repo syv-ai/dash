@@ -25,7 +25,7 @@ function extractThinking(content: ContentBlock[] | string): string[] {
     .map((b) => b.thinking);
 }
 
-function buildAssistantTurns(messages: ParsedSessionMessage[]): AssistantTurnData[] {
+export function buildAssistantTurns(messages: ParsedSessionMessage[]): AssistantTurnData[] {
   const resultMap = new Map<string, { result: ToolResultInfo; timestamp: string }>();
   for (const msg of messages) {
     if (msg.type === 'user' && msg.toolResults.length > 0) {

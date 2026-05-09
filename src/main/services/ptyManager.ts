@@ -24,14 +24,8 @@ import { encodeProjectPath } from '../utils/jsonlParser';
 
 const execFileAsync = promisify(execFile);
 
-/**
- * Locate the Claude projects directory for a given cwd by exact path encoding.
- * Claude stores sessions under ~/.claude/projects/<encoded>/. See
- * `encodeProjectPath` for the per-platform encoding rules. Exact match only —
- * a partial-match fallback would risk returning a foreign project's dir when
- * two paths share trailing segments (e.g. branch slugs reused across projects),
- * causing claude --continue to act on the wrong session set.
- */
+/** Exact-match-only project dir lookup. See SessionWatcherService.findProjectDir
+ *  for the rationale (PR #117/#124) and `encodeProjectPath` for the platform rules. */
 function findClaudeProjectDir(cwd: string): string | null {
   try {
     const projectsDir = path.join(os.homedir(), '.claude', 'projects');

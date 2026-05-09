@@ -7,14 +7,24 @@ interface FilePathLinkProps {
   className?: string;
 }
 
+/** U+200E LEFT-TO-RIGHT MARK — forces neutral chars (slashes, dots) to render
+ *  LTR inside the dir="rtl" button. Do not delete; see render comment. */
+const LRM = '‎';
+
 /**
  * Render `filePath` shortened to "<task-parent>/<task-name>/<rel>" when it lives
  * inside the task worktree. Paths outside the task fall back to the absolute
  * form. The full absolute path is always passed to openInEditor.
  */
-function shortenPath(absPath: string, taskPath: string): string {
+export function shortenPath(absPath: string, taskPath: string): string {
   if (!taskPath || !absPath.startsWith(taskPath)) return absPath;
-  const rel = absPath.slice(taskPath.length).replace(/^[/\\]/, '');
+  // Normalize separators in the rel portion so Windows paths don't render
+  // as `worktrees/abc/src\main.ts`. The absolute path still uses native
+  // separators for openInEditor.
+  const rel = absPath
+    .slice(taskPath.length)
+    .replace(/^[/\\]/, '')
+    .replace(/\\/g, '/');
   const segments = taskPath.split(/[/\\]/).filter(Boolean);
   const taskName = segments[segments.length - 1] ?? '';
   const parent = segments[segments.length - 2] ?? '';
@@ -42,13 +52,12 @@ export function FilePathLink({ filePath, taskPath, className = '' }: FilePathLin
               console.warn('[FilePathLink] openInEditor error:', err);
             });
         }}
-        // RTL container with LTR content keeps the path readable but truncates from the
-        // start, so the filename (the part users care about) is always visible. The
-        // U+200E LRM prefix forces neutral chars (slashes, dots) to render LTR.
+        // RTL container truncates from the start so the filename stays visible;
+        // the LRM prefix keeps the path text rendering LTR. See `LRM` constant.
         dir="rtl"
         className={`text-[11px] font-mono text-primary/80 truncate hover:text-primary hover:underline underline-offset-2 cursor-pointer max-w-full ${className}`}
       >
-        {'‎' + display}
+        {LRM + display}
       </button>
     </Tooltip>
   );

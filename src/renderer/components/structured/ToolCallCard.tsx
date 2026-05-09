@@ -74,11 +74,12 @@ const TOOL_ICONS: Record<string, LucideIcon> = {
   WebFetch: Globe,
 };
 
-/** Matches the duration of the expand animation (Tailwind `duration-200`). */
+/** Animation duration for the expand/collapse transition. Single source of
+ *  truth — both the CSS transition and the post-expand RAF cutoff use it. */
 const EXPAND_MS = 200;
 
 /** Returns a human duration, or null when the call was too short to be worth surfacing (<2s). */
-function formatDuration(ms: number): string | null {
+export function formatDuration(ms: number): string | null {
   if (ms < 2000) return null;
   if (ms < 60_000) return `${(ms / 1000).toFixed(0)}s`;
   const minutes = Math.floor(ms / 60_000);
@@ -234,8 +235,11 @@ export function ToolCallCard({ exec, taskPath, hideToolLabel = false }: ToolCall
         </div>
       </button>
       <div
-        className="grid transition-[grid-template-rows] duration-200 ease-out"
-        style={{ gridTemplateRows: expanded ? '1fr' : '0fr' }}
+        className="grid transition-[grid-template-rows] ease-out"
+        style={{
+          gridTemplateRows: expanded ? '1fr' : '0fr',
+          transitionDuration: `${EXPAND_MS}ms`,
+        }}
         aria-hidden={!expanded}
       >
         <div className="overflow-hidden">
