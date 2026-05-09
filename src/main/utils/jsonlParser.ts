@@ -9,8 +9,17 @@ import {
   type TokenUsage,
 } from '../../shared/sessionTypes';
 
-/** Claude Code encodes project dirs as the absolute cwd with slashes → hyphens. */
+/**
+ * Encode a cwd to the directory name Claude Code uses under ~/.claude/projects/.
+ * macOS/Linux: only `/` is a path separator, so just hyphenate it.
+ * Windows: replace `\`, `/`, AND the drive-letter colon — `C:\Users\foo` becomes
+ * `C--Users-foo`. (POSIX paths can technically contain `:`, but stripping it on
+ * non-Windows would diverge from Claude Code's encoding for those edge cases.)
+ */
 export function encodeProjectPath(absolutePath: string): string {
+  if (process.platform === 'win32') {
+    return absolutePath.replace(/[\\/:]/g, '-');
+  }
   return absolutePath.replace(/\//g, '-');
 }
 

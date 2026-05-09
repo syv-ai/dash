@@ -96,7 +96,7 @@ function getToolSummary(exec: LinkedToolExecution): string {
     case 'MultiTool::CreateFile':
       return (
         String(input.file_path ?? input.filePath ?? '')
-          .split('/')
+          .split(/[/\\]/)
           .pop() ?? ''
       );
     case 'Bash':
