@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   ChevronRight,
@@ -164,22 +164,27 @@ export function ToolCallCard({ exec, taskPath, hideToolLabel = false }: ToolCall
   const summary = getToolSummary(exec);
   const duration = durationMs != null ? formatDuration(durationMs) : null;
 
-  // After the expand animation completes, ensure the card's bottom edge is in
-  // view. `block: 'nearest'` no-ops if already visible, otherwise scrolls the
-  // minimum distance to reveal the new content.
-  useEffect(() => {
-    if (!expanded) return;
-    const t = setTimeout(() => {
-      cardRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    }, 220);
-    return () => clearTimeout(t);
-  }, [expanded]);
+  // Track the growing card edge in real time during the expand animation.
+  // `block: 'nearest'` no-ops if the card is already fully visible and scrolls
+  // the minimum amount otherwise — so the parent scroll follows the bottom
+  // edge as it descends, finishing exactly when the expand finishes.
+  const toggle = () => {
+    const willExpand = !expanded;
+    setExpanded(willExpand);
+    if (!willExpand) return;
+    const start = performance.now();
+    const tick = (now: number) => {
+      cardRef.current?.scrollIntoView({ block: 'nearest' });
+      if (now - start < 220) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  };
 
   return (
     <div ref={cardRef} className={`rounded ${styles.bg}`}>
       <button
         className="w-full flex items-center gap-1.5 px-2 py-1 text-left hover:bg-foreground/[0.03] transition-colors"
-        onClick={() => setExpanded(!expanded)}
+        onClick={toggle}
       >
         <ChevronRight
           size={10}
