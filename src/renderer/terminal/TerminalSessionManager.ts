@@ -149,11 +149,13 @@ export class TerminalSessionManager {
       const isKeyC = e.code === 'KeyC';
       const isKeyV = e.code === 'KeyV';
 
-      // Copy: Cmd+C (macOS), Ctrl+Shift+C (Linux), Ctrl+C (Windows).
+      // Copy: Cmd+C (macOS), Ctrl+Shift+C (Linux), Ctrl+C (Windows, only when text is selected).
       // Also Ctrl+C on any platform when there's an active selection (matches
       // native terminal behaviour: Ctrl+C copies when selected, sends SIGINT
-      // otherwise). Explicit shortcuts fall back to lastSelection so users can
-      // still copy after the TUI has cleared xterm's highlight.
+      // otherwise). macOS and Linux explicit shortcuts fall back to lastSelection
+      // so users can still copy after the TUI has cleared xterm's highlight.
+      // Windows does not use lastSelection — Ctrl+C without a live selection
+      // should always send SIGINT.
       const isExplicitCopy =
         (isMac && e.metaKey && isKeyC && !e.ctrlKey) ||
         (isWin && e.ctrlKey && !e.shiftKey && isKeyC && this.terminal.hasSelection()) ||
@@ -175,9 +177,14 @@ export class TerminalSessionManager {
         (!isMac && !isWin && e.ctrlKey && e.shiftKey && isKeyV)
       ) {
         e.preventDefault();
-        window.electronAPI.clipboardReadText().then((text) => {
-          if (text) this.writePasteData(text);
-        });
+        window.electronAPI
+          .clipboardReadText()
+          .then((text) => {
+            if (text) this.writePasteData(text);
+          })
+          .catch((err) => {
+            console.warn('[terminal] clipboardReadText failed:', err);
+          });
         return false;
       }
 
@@ -564,6 +571,7 @@ export class TerminalSessionManager {
   // Write pasted text in chunks to avoid overflowing the PTY input buffer
   // (conpty on Windows drops data beyond ~4 KB written in a single call).
   private writePasteData(text: string) {
+    if (this.disposed) return;
     if (this.pasteTimer) {
       clearTimeout(this.pasteTimer);
       this.pasteTimer = null;
