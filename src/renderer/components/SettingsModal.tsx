@@ -592,12 +592,14 @@ function ThresholdInput({
 function ToggleRow({
   label,
   description,
+  tooltip,
   enabled,
   onToggle,
   indent = 0,
 }: {
   label: string;
   description?: string;
+  tooltip?: string;
   enabled: boolean;
   onToggle: (v: boolean) => void;
   indent?: number;
@@ -610,7 +612,19 @@ function ToggleRow({
       style={{ paddingLeft: 16 + indent * 20 }}
     >
       <div className="flex-1 min-w-0">
-        <div className="text-[12px] text-foreground">{label}</div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[12px] text-foreground">{label}</span>
+          {tooltip && (
+            <Tooltip content={tooltip}>
+              <span
+                className="inline-flex cursor-help text-foreground/40 hover:text-foreground/70"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <HelpCircle size={12} strokeWidth={1.8} />
+              </span>
+            </Tooltip>
+          )}
+        </div>
         {description && <div className="text-[10px] text-foreground/40 mt-0.5">{description}</div>}
       </div>
       <div
@@ -731,7 +745,8 @@ function UsageSection({
           />
           <ToggleRow
             label="Show structured session view"
-            description="Adds a Structured tab to the right panel that renders Claude Code's tool calls as compact, color-coded cards."
+            description="Adds a Structured tab to the right panel showing Claude Code's tool calls as cards."
+            tooltip="Reads the active task's Claude Code session file (~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl) and renders each tool execution as a compact card — color-coded by category (read/write/shell/search/agent/web), with status, duration, and per-tool expanded views (diffs for Edit, file content for Write/Read, command + output for Bash). Updates live as the session progresses."
             enabled={showStructuredView}
             onToggle={onShowStructuredViewChange}
           />
