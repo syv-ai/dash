@@ -55,6 +55,10 @@ const VALID_TYPES = new Set<MessageType>([
   'queue-operation',
 ]);
 
+/** Tracks unknown entry types we've already warned about so a Claude Code
+ *  schema change is logged once per session, not on every line. */
+const warnedUnknownTypes = new Set<string>();
+
 interface ChatHistoryEntry {
   uuid?: string;
   parentUuid?: string;
@@ -82,14 +86,28 @@ export function parseJsonlLine(line: string): ParsedSessionMessage | null {
   let entry: ChatHistoryEntry;
   try {
     entry = JSON.parse(trimmed);
-  } catch {
+  } catch (err) {
+    // Lines that look JSON-shaped but fail to parse are likely a real bug
+    // (interrupted writes). Lines that are obviously not JSON are common
+    // (trailing newlines etc.) and not worth surfacing.
+    if (trimmed.startsWith('{')) {
+      console.warn('[jsonlParser] failed to parse JSON-shaped line', { err });
+    }
     return null;
   }
 
   if (!entry.uuid) return null;
 
   const type = entry.type as MessageType;
-  if (!VALID_TYPES.has(type)) return null;
+  if (!VALID_TYPES.has(type)) {
+    if (entry.type && !warnedUnknownTypes.has(entry.type)) {
+      warnedUnknownTypes.add(entry.type);
+      console.warn('[jsonlParser] unknown entry type — Claude Code schema may have changed', {
+        type: entry.type,
+      });
+    }
+    return null;
+  }
 
   let content: ContentBlock[] | string = '';
   let role: string | undefined;

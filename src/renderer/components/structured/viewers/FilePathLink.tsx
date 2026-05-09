@@ -12,7 +12,16 @@ export function FilePathLink({ filePath, className = '' }: FilePathLinkProps) {
       type="button"
       onClick={(e) => {
         e.stopPropagation();
-        window.electronAPI.openInEditor({ cwd: '', filePath });
+        window.electronAPI
+          .openInEditor({ cwd: '', filePath })
+          .then((res) => {
+            if (!res.success) {
+              console.warn('[FilePathLink] openInEditor failed:', res.error);
+            }
+          })
+          .catch((err) => {
+            console.warn('[FilePathLink] openInEditor error:', err);
+          });
       }}
       title={`Open ${filePath}`}
       className={`text-[11px] font-mono text-primary/80 truncate hover:text-primary hover:underline underline-offset-2 cursor-pointer text-left ${className}`}

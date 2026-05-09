@@ -1,18 +1,19 @@
 import { ipcMain } from 'electron';
-import {
-  startWatching,
-  stopWatching,
-  getSessionData,
-  getSubagentData,
-} from '../services/SessionWatcherService';
+import { startWatching, stopWatching, getSessionData } from '../services/SessionWatcherService';
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
 
 export function registerSessionIpc(): void {
   ipcMain.handle('session:watch', async (_event, args: { taskId: string; taskPath: string }) => {
     try {
-      startWatching(args.taskId, args.taskPath);
+      const result = startWatching(args.taskId, args.taskPath);
+      if (!result.ok) return { success: false, error: result.error };
       return { success: true };
-    } catch (error) {
-      return { success: false, error: String(error) };
+    } catch (err) {
+      console.error('[sessionIpc.watch]', { args, err });
+      return { success: false, error: errorMessage(err) };
     }
   });
 
@@ -20,29 +21,18 @@ export function registerSessionIpc(): void {
     try {
       stopWatching(taskId);
       return { success: true };
-    } catch (error) {
-      return { success: false, error: String(error) };
+    } catch (err) {
+      console.error('[sessionIpc.unwatch]', { taskId, err });
+      return { success: false, error: errorMessage(err) };
     }
   });
 
   ipcMain.handle('session:getMessages', async (_event, taskId: string) => {
     try {
-      const data = getSessionData(taskId);
-      return { success: true, data };
-    } catch (error) {
-      return { success: false, error: String(error) };
+      return { success: true, data: getSessionData(taskId) };
+    } catch (err) {
+      console.error('[sessionIpc.getMessages]', { taskId, err });
+      return { success: false, error: errorMessage(err) };
     }
   });
-
-  ipcMain.handle(
-    'session:getSubagent',
-    async (_event, args: { taskId: string; agentId: string }) => {
-      try {
-        const data = getSubagentData(args.taskId, args.agentId);
-        return { success: true, data };
-      } catch (error) {
-        return { success: false, error: String(error) };
-      }
-    },
-  );
 }

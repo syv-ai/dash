@@ -317,10 +317,6 @@ export interface ElectronAPI {
   sessionGetMessages: (
     taskId: string,
   ) => Promise<IpcResponse<{ messages: ParsedSessionMessage[]; metrics: SessionMetrics } | null>>;
-  sessionGetSubagent: (args: {
-    taskId: string;
-    agentId: string;
-  }) => Promise<IpcResponse<{ messages: ParsedSessionMessage[]; metrics: SessionMetrics } | null>>;
   onSessionUpdate: (callback: (data: SessionUpdate) => void) => () => void;
 
   // Telemetry

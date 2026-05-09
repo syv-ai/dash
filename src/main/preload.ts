@@ -295,8 +295,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('session:watch', args),
   sessionUnwatch: (taskId: string) => ipcRenderer.invoke('session:unwatch', taskId),
   sessionGetMessages: (taskId: string) => ipcRenderer.invoke('session:getMessages', taskId),
-  sessionGetSubagent: (args: { taskId: string; agentId: string }) =>
-    ipcRenderer.invoke('session:getSubagent', args),
   onSessionUpdate: (callback: (data: unknown) => void) => {
     const handler = (_event: unknown, data: unknown) => callback(data);
     ipcRenderer.on('session:update', handler);

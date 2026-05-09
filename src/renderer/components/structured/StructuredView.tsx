@@ -114,6 +114,7 @@ interface StructuredViewProps {
 export function StructuredView({ taskId, taskPath }: StructuredViewProps) {
   const [messages, setMessages] = useState<ParsedSessionMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -121,15 +122,39 @@ export function StructuredView({ taskId, taskPath }: StructuredViewProps) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    window.electronAPI.sessionWatch({ taskId, taskPath });
+    setError(null);
 
-    window.electronAPI.sessionGetMessages(taskId).then((res) => {
-      if (cancelled) return;
-      if (res.success && res.data) {
-        setMessages(res.data.messages);
-      }
-      setLoading(false);
-    });
+    window.electronAPI
+      .sessionWatch({ taskId, taskPath })
+      .then((res) => {
+        if (cancelled) return;
+        if (!res.success) {
+          setError(res.error ?? 'Failed to start session watcher');
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : String(err));
+        setLoading(false);
+      });
+
+    window.electronAPI
+      .sessionGetMessages(taskId)
+      .then((res) => {
+        if (cancelled) return;
+        if (!res.success) {
+          setError(res.error ?? 'Failed to load session messages');
+        } else if (res.data) {
+          setMessages(res.data.messages);
+        }
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : String(err));
+        setLoading(false);
+      });
 
     return () => {
       cancelled = true;
@@ -138,8 +163,9 @@ export function StructuredView({ taskId, taskPath }: StructuredViewProps) {
   }, [taskId, taskPath]);
 
   useEffect(() => {
-    return window.electronAPI.onSessionUpdate((update: SessionUpdate) => {
-      if (update.taskId !== taskId) return;
+    let cancelled = false;
+    const unsubscribe = window.electronAPI.onSessionUpdate((update: SessionUpdate) => {
+      if (cancelled || update.taskId !== taskId) return;
       if (update.isIncremental) {
         setMessages((prev) => [...prev, ...update.messages]);
       } else {
@@ -147,6 +173,10 @@ export function StructuredView({ taskId, taskPath }: StructuredViewProps) {
       }
       setLoading(false);
     });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [taskId]);
 
   useEffect(() => {
@@ -175,6 +205,15 @@ export function StructuredView({ taskId, taskPath }: StructuredViewProps) {
     () => buildAssistantTurns(messages).filter((t) => t.toolExecutions.length > 0),
     [messages],
   );
+
+  if (error && messages.length === 0) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center text-muted-foreground gap-2 px-4 text-center">
+        <span className="text-[12px] text-destructive">Couldn't load session</span>
+        <span className="text-[10px] text-muted-foreground/60">{error}</span>
+      </div>
+    );
+  }
 
   if (loading && messages.length === 0) {
     return (
