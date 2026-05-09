@@ -1756,23 +1756,7 @@ export function App() {
                       </div>
                     )}
                     <div className="flex-1 min-h-0">
-                      {rightPanelTab === 'changes' ? (
-                        <FileChangesPanel
-                          gitStatus={gitStatus}
-                          loading={gitLoading}
-                          onStageFile={handleStageFile}
-                          onUnstageFile={handleUnstageFile}
-                          onStageAll={handleStageAll}
-                          onUnstageAll={handleUnstageAll}
-                          onDiscardFile={handleDiscardFile}
-                          onViewDiff={handleViewDiff}
-                          onCommit={handleCommit}
-                          onPush={handlePush}
-                          collapsed={changesPanelCollapsed}
-                          onToggleCollapse={toggleChangesPanel}
-                          onShowCommitGraph={() => setShowCommitGraph(true)}
-                        />
-                      ) : changesPanelCollapsed ? (
+                      {rightPanelTab === 'changes' || changesPanelCollapsed ? (
                         <FileChangesPanel
                           gitStatus={gitStatus}
                           loading={gitLoading}

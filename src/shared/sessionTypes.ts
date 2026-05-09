@@ -1,7 +1,3 @@
-// =============================================================================
-// Content Blocks (from Claude Code JSONL entries)
-// =============================================================================
-
 export interface TextContent {
   type: 'text';
   text: string;
@@ -38,20 +34,12 @@ export type ContentBlock =
   | ToolResultContent
   | ImageContent;
 
-// =============================================================================
-// Token Usage
-// =============================================================================
-
 export interface TokenUsage {
   input_tokens: number;
   output_tokens: number;
   cache_read_input_tokens?: number;
   cache_creation_input_tokens?: number;
 }
-
-// =============================================================================
-// Message Types
-// =============================================================================
 
 export type MessageType =
   | 'user'
@@ -61,15 +49,10 @@ export type MessageType =
   | 'file-history-snapshot'
   | 'queue-operation';
 
-// =============================================================================
-// Parsed Session Message (sent over IPC)
-// =============================================================================
-
 export interface ToolCallInfo {
   id: string;
   name: string;
   input: Record<string, unknown>;
-  isTask: boolean;
 }
 
 export interface ToolResultInfo {
@@ -82,7 +65,7 @@ export interface ParsedSessionMessage {
   uuid: string;
   parentUuid: string | null;
   type: MessageType;
-  timestamp: string; // ISO string for IPC serialization
+  timestamp: string;
   role?: string;
   content: ContentBlock[] | string;
   usage?: TokenUsage;
@@ -97,10 +80,6 @@ export interface ParsedSessionMessage {
   requestId?: string;
 }
 
-// =============================================================================
-// Session Metrics
-// =============================================================================
-
 export interface SessionMetrics {
   durationMs: number;
   totalTokens: number;
@@ -110,9 +89,14 @@ export interface SessionMetrics {
   messageCount: number;
 }
 
-// =============================================================================
-// Session Update (pushed to renderer via IPC)
-// =============================================================================
+export const EMPTY_METRICS: SessionMetrics = {
+  durationMs: 0,
+  totalTokens: 0,
+  inputTokens: 0,
+  outputTokens: 0,
+  cacheReadTokens: 0,
+  messageCount: 0,
+};
 
 export interface SessionUpdate {
   sessionId: string;
@@ -121,10 +105,6 @@ export interface SessionUpdate {
   metrics: SessionMetrics;
   isIncremental: boolean;
 }
-
-// =============================================================================
-// Display types (used in renderer for grouping)
-// =============================================================================
 
 export interface LinkedToolExecution {
   toolCall: ToolCallInfo;
@@ -143,7 +123,3 @@ export interface AssistantTurnData {
   model?: string;
   timestamp: string;
 }
-
-export type DisplayItem =
-  | { type: 'user'; message: ParsedSessionMessage }
-  | { type: 'assistant-turn'; turn: AssistantTurnData };

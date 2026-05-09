@@ -20,7 +20,6 @@ import { WriteViewer } from './viewers/WriteViewer';
 import { TaskViewer } from './viewers/TaskViewer';
 import { DefaultViewer } from './viewers/DefaultViewer';
 
-// Tool category colors (left accent + icon tint)
 type ToolCategory = 'read' | 'write' | 'shell' | 'search' | 'agent' | 'web' | 'default';
 
 const TOOL_CATEGORY: Record<string, ToolCategory> = {
@@ -45,36 +44,12 @@ const TOOL_CATEGORY: Record<string, ToolCategory> = {
 };
 
 const CATEGORY_STYLES: Record<ToolCategory, { border: string; icon: string; bg: string }> = {
-  read: {
-    border: 'border-l-blue-400',
-    icon: 'text-blue-400',
-    bg: 'bg-blue-400/5',
-  },
-  write: {
-    border: 'border-l-amber-400',
-    icon: 'text-amber-400',
-    bg: 'bg-amber-400/5',
-  },
-  shell: {
-    border: 'border-l-green-400',
-    icon: 'text-green-400',
-    bg: 'bg-green-400/5',
-  },
-  search: {
-    border: 'border-l-purple-400',
-    icon: 'text-purple-400',
-    bg: 'bg-purple-400/5',
-  },
-  agent: {
-    border: 'border-l-cyan-400',
-    icon: 'text-cyan-400',
-    bg: 'bg-cyan-400/5',
-  },
-  web: {
-    border: 'border-l-rose-400',
-    icon: 'text-rose-400',
-    bg: 'bg-rose-400/5',
-  },
+  read: { border: 'border-l-blue-400', icon: 'text-blue-400', bg: 'bg-blue-400/5' },
+  write: { border: 'border-l-amber-400', icon: 'text-amber-400', bg: 'bg-amber-400/5' },
+  shell: { border: 'border-l-green-400', icon: 'text-green-400', bg: 'bg-green-400/5' },
+  search: { border: 'border-l-purple-400', icon: 'text-purple-400', bg: 'bg-purple-400/5' },
+  agent: { border: 'border-l-cyan-400', icon: 'text-cyan-400', bg: 'bg-cyan-400/5' },
+  web: { border: 'border-l-rose-400', icon: 'text-rose-400', bg: 'bg-rose-400/5' },
   default: {
     border: 'border-l-muted-foreground/40',
     icon: 'text-muted-foreground/60',
@@ -148,103 +123,8 @@ function getToolSummary(exec: LinkedToolExecution): string {
   }
 }
 
-const MAX_LINES = 15;
-
-function extractResultText(exec: LinkedToolExecution): string {
-  const rc = exec.result?.content;
-  if (!rc) return '';
-  if (typeof rc === 'string') return rc;
-  return (rc as Array<{ type: string; text?: string }>)
-    .filter((b) => b.type === 'text' && b.text)
-    .map((b) => b.text!)
-    .join('\n');
-}
-
-function CodeBlock({
-  text,
-  children,
-  className = '',
-}: {
-  text: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  const lines = text.split('\n');
-  const truncated = lines.length > MAX_LINES;
-
-  return (
-    <div className={`rounded border border-border/30 overflow-hidden ${className}`}>
-      <pre className="text-[10px] font-mono leading-[1.6] whitespace-pre-wrap px-2 py-1.5 max-h-52 overflow-y-auto">
-        {truncated ? <span>{lines.slice(0, MAX_LINES).join('\n')}</span> : children}
-      </pre>
-      {truncated && (
-        <div className="px-2 py-0.5 border-t border-border/20 text-[9px] text-muted-foreground/40">
-          +{lines.length - MAX_LINES} more lines
-        </div>
-      )}
-    </div>
-  );
-}
-
-function getExpandedContent(exec: LinkedToolExecution): React.ReactNode {
-  const { toolCall } = exec;
-  const input = toolCall.input;
-
-  switch (toolCall.name) {
-    case 'Edit':
-    case 'MultiTool::EditFile': {
-      const oldStr = String(input.old_string ?? input.oldString ?? '').trim();
-      const newStr = String(input.new_string ?? input.newString ?? '').trim();
-      if (!oldStr && !newStr) return null;
-      return (
-        <div className="space-y-1">
-          {oldStr && (
-            <CodeBlock text={oldStr} className="bg-red-500/[0.04]">
-              <span className="text-red-400/80">{oldStr}</span>
-            </CodeBlock>
-          )}
-          {newStr && (
-            <CodeBlock text={newStr} className="bg-green-500/[0.04]">
-              <span className="text-green-400/80">{newStr}</span>
-            </CodeBlock>
-          )}
-        </div>
-      );
-    }
-    case 'Write':
-    case 'MultiTool::CreateFile': {
-      const content = String(input.content ?? '').trim();
-      if (!content) return null;
-      return (
-        <CodeBlock text={content} className="bg-green-500/[0.04]">
-          <span className="text-foreground/70">{content}</span>
-        </CodeBlock>
-      );
-    }
-    case 'Read':
-    case 'MultiTool::ReadFile': {
-      const text = extractResultText(exec).trim();
-      if (!text) return null;
-      return (
-        <CodeBlock text={text} className="bg-surface-1">
-          <span className="text-foreground/70">{text}</span>
-        </CodeBlock>
-      );
-    }
-    default:
-      return null;
-  }
-}
-
-function getToolLabel(name: string): string {
-  // Strip MultiTool:: prefix for display
-  return name.replace('MultiTool::', '');
-}
-
 function getViewer(exec: LinkedToolExecution): React.ReactNode {
-  const { toolCall } = exec;
-
-  switch (toolCall.name) {
+  switch (exec.toolCall.name) {
     case 'Bash':
     case 'MultiTool::BashCommand':
       return <BashViewer exec={exec} />;
@@ -263,6 +143,10 @@ function getViewer(exec: LinkedToolExecution): React.ReactNode {
     default:
       return <DefaultViewer exec={exec} />;
   }
+}
+
+function getToolLabel(name: string): string {
+  return name.replace('MultiTool::', '');
 }
 
 interface ToolCallCardProps {
@@ -314,9 +198,7 @@ export function ToolCallCard({ exec }: ToolCallCardProps) {
         </div>
       </button>
       {expanded && (
-        <div className="border-t border-border/20 px-2 py-1.5">
-          {getExpandedContent(exec) || <div className="text-[11px]">{getViewer(exec)}</div>}
-        </div>
+        <div className="border-t border-border/20 px-2 py-1.5 text-[11px]">{getViewer(exec)}</div>
       )}
     </div>
   );

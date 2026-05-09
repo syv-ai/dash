@@ -1,20 +1,8 @@
 import React, { useState } from 'react';
 import type { LinkedToolExecution } from '../../../../shared/sessionTypes';
+import { extractResultText } from './extractResultText';
 
 const MAX_LINES = 30;
-
-function extractResultText(exec: LinkedToolExecution): string {
-  if (!exec.result) return '';
-  const content = exec.result.content;
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content
-      .filter((b): b is { type: 'text'; text: string } => (b as { type: string }).type === 'text')
-      .map((b) => b.text)
-      .join('\n');
-  }
-  return '';
-}
 
 interface WriteViewerProps {
   exec: LinkedToolExecution;
@@ -40,7 +28,7 @@ export function WriteViewer({ exec }: WriteViewerProps) {
 
       {fileContent && (
         <div className="bg-surface-1 rounded border border-border/30 overflow-hidden">
-          <pre className="text-[11px] font-mono text-foreground/80 leading-relaxed whitespace-pre-wrap px-2.5 py-2 bg-green-500/3 max-h-96 overflow-y-auto">
+          <pre className="text-[11px] font-mono text-foreground/80 leading-relaxed whitespace-pre-wrap px-2.5 py-2 bg-green-500/[0.03] max-h-96 overflow-y-auto">
             {displayLines.join('\n')}
           </pre>
           {truncated && (

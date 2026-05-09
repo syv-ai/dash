@@ -1,20 +1,8 @@
 import React, { useState } from 'react';
 import type { LinkedToolExecution } from '../../../../shared/sessionTypes';
+import { extractResultText } from './extractResultText';
 
 const MAX_LINES = 50;
-
-function extractResultText(exec: LinkedToolExecution): string {
-  if (!exec.result) return '';
-  const content = exec.result.content;
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content
-      .filter((b): b is { type: 'text'; text: string } => (b as { type: string }).type === 'text')
-      .map((b) => b.text)
-      .join('\n');
-  }
-  return '';
-}
 
 interface ReadViewerProps {
   exec: LinkedToolExecution;

@@ -1,7 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import * as crypto from 'crypto';
 import { BrowserWindow } from 'electron';
 import type {
   ParsedSessionMessage,
@@ -31,52 +30,23 @@ interface WatchEntry {
 
 const watchers = new Map<string, WatchEntry>();
 
-// =============================================================================
-// Session File Discovery
-// =============================================================================
-
 function getProjectsDir(): string {
   return path.join(os.homedir(), '.claude', 'projects');
 }
 
 /**
- * Find the Claude projects directory for a given working directory path.
- * Tries multiple encoding strategies matching Claude Code's behavior.
+ * Resolve Claude's project dir for a cwd by exact path encoding only.
+ * SHA-prefix and partial-segment fallbacks were intentionally removed (PR #117/#124):
+ * shared trailing segments across worktrees would otherwise return a foreign
+ * project's dir and surface another task's sessions.
  */
 function findProjectDir(taskPath: string): string | null {
   const projectsDir = getProjectsDir();
   if (!fs.existsSync(projectsDir)) return null;
-
-  // Strategy 1: path-based directory name (slashes replaced with hyphens)
-  const pathBasedName = encodeProjectPath(taskPath);
-  const pathBased = path.join(projectsDir, pathBasedName);
-  if (fs.existsSync(pathBased)) return pathBased;
-
-  // Strategy 2: SHA-256 hash prefix
-  const cwdHash = crypto.createHash('sha256').update(taskPath).digest('hex').slice(0, 16);
-  const hashBased = path.join(projectsDir, cwdHash);
-  if (fs.existsSync(hashBased)) return hashBased;
-
-  // Strategy 3: Partial path match (last 3 segments)
-  const cwdParts = taskPath.split('/').filter((p) => p.length > 0);
-  const lastParts = cwdParts.slice(-3).join('-');
-  try {
-    const dirs = fs.readdirSync(projectsDir);
-    for (const dir of dirs) {
-      if (dir.includes(lastParts)) {
-        return path.join(projectsDir, dir);
-      }
-    }
-  } catch {
-    // Ignore
-  }
-
-  return null;
+  const pathBased = path.join(projectsDir, encodeProjectPath(taskPath));
+  return fs.existsSync(pathBased) ? pathBased : null;
 }
 
-/**
- * Find the most recently modified .jsonl session file in a project directory.
- */
 function findLatestSessionFile(projectDir: string): string | null {
   try {
     const entries = fs.readdirSync(projectDir);
@@ -102,10 +72,6 @@ function findLatestSessionFile(projectDir: string): string | null {
     return null;
   }
 }
-
-// =============================================================================
-// Parsing
-// =============================================================================
 
 function parseFullFile(filePath: string): { messages: ParsedSessionMessage[]; bytesRead: number } {
   try {
@@ -163,10 +129,6 @@ function parseIncrementalBytes(entry: WatchEntry): ParsedSessionMessage[] {
   }
 }
 
-// =============================================================================
-// Notification
-// =============================================================================
-
 function notifyRenderers(update: SessionUpdate): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
@@ -189,10 +151,6 @@ function buildUpdate(
     isIncremental,
   };
 }
-
-// =============================================================================
-// File Watching
-// =============================================================================
 
 function startFileWatcher(entry: WatchEntry): void {
   if (!entry.sessionFilePath) return;
@@ -302,10 +260,6 @@ function startDirWatcher(entry: WatchEntry): void {
   }
 }
 
-// =============================================================================
-// Public API
-// =============================================================================
-
 export function startWatching(taskId: string, taskPath: string): void {
   // Don't double-watch
   if (watchers.has(taskId)) return;
@@ -347,7 +301,6 @@ export function startWatching(taskId: string, taskPath: string): void {
               entry.dirWatcher = null;
             }
 
-            // Look for session files
             const sessionFile = findLatestSessionFile(entry.projectDir);
             if (sessionFile) {
               entry.sessionFilePath = sessionFile;
@@ -368,7 +321,6 @@ export function startWatching(taskId: string, taskPath: string): void {
     return;
   }
 
-  // Find latest session file
   const sessionFile = findLatestSessionFile(projectDir);
   if (sessionFile) {
     entry.sessionFilePath = sessionFile;
@@ -378,11 +330,7 @@ export function startWatching(taskId: string, taskPath: string): void {
     startFileWatcher(entry);
   }
 
-  // Also watch directory for new session files
   startDirWatcher(entry);
-
-  // Send initial data
-  notifyRenderers(buildUpdate(entry, [], false));
 }
 
 export function stopWatching(taskId: string): void {

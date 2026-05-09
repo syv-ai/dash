@@ -1,28 +1,18 @@
-import type {
-  ContentBlock,
-  MessageType,
-  ParsedSessionMessage,
-  SessionMetrics,
-  ToolCallInfo,
-  ToolResultInfo,
-  TokenUsage,
+import {
+  EMPTY_METRICS,
+  type ContentBlock,
+  type MessageType,
+  type ParsedSessionMessage,
+  type SessionMetrics,
+  type ToolCallInfo,
+  type ToolResultInfo,
+  type TokenUsage,
 } from '../../shared/sessionTypes';
 
-// =============================================================================
-// Path Encoding
-// =============================================================================
-
-/**
- * Encode an absolute path to the format Claude Code uses for project directories.
- * e.g. /Users/foo/bar → -Users-foo-bar
- */
+/** Claude Code encodes project dirs as the absolute cwd with slashes → hyphens. */
 export function encodeProjectPath(absolutePath: string): string {
   return absolutePath.replace(/\//g, '-');
 }
-
-// =============================================================================
-// Tool Extraction
-// =============================================================================
 
 export function extractToolCalls(content: ContentBlock[] | string): ToolCallInfo[] {
   if (typeof content === 'string') return [];
@@ -34,7 +24,6 @@ export function extractToolCalls(content: ContentBlock[] | string): ToolCallInfo
         id: block.id,
         name: block.name,
         input: block.input ?? {},
-        isTask: block.name === 'Task' || block.name === 'Agent',
       });
     }
   }
@@ -56,10 +45,6 @@ export function extractToolResults(content: ContentBlock[] | string): ToolResult
   }
   return results;
 }
-
-// =============================================================================
-// Line Parsing
-// =============================================================================
 
 const VALID_TYPES = new Set<MessageType>([
   'user',
@@ -90,10 +75,6 @@ interface ChatHistoryEntry {
   userType?: string;
 }
 
-/**
- * Parse a single JSONL line into a ParsedSessionMessage.
- * Returns null for invalid or unsupported entries.
- */
 export function parseJsonlLine(line: string): ParsedSessionMessage | null {
   const trimmed = line.trim();
   if (!trimmed) return null;
@@ -147,14 +128,9 @@ export function parseJsonlLine(line: string): ParsedSessionMessage | null {
   };
 }
 
-// =============================================================================
-// Deduplication
-// =============================================================================
-
 /**
- * Deduplicate streaming assistant entries by requestId.
- * Claude Code writes multiple entries per API response during streaming,
- * each with the same requestId. Only the last entry per requestId has final token counts.
+ * Claude Code streams multiple assistant entries per API response, all sharing
+ * one requestId. Only the last entry has final token counts — keep that one.
  */
 export function deduplicateByRequestId(messages: ParsedSessionMessage[]): ParsedSessionMessage[] {
   const lastIndexByRequestId = new Map<string, number>();
@@ -173,42 +149,22 @@ export function deduplicateByRequestId(messages: ParsedSessionMessage[]): Parsed
   });
 }
 
-// =============================================================================
-// Metrics Calculation
-// =============================================================================
-
-const EMPTY_METRICS: SessionMetrics = {
-  durationMs: 0,
-  totalTokens: 0,
-  inputTokens: 0,
-  outputTokens: 0,
-  cacheReadTokens: 0,
-  messageCount: 0,
-};
-
+/** Caller is expected to pass already-deduped messages (see {@link deduplicateByRequestId}). */
 export function calculateMetrics(messages: ParsedSessionMessage[]): SessionMetrics {
   if (messages.length === 0) return { ...EMPTY_METRICS };
-
-  const deduped = deduplicateByRequestId(messages);
 
   let inputTokens = 0;
   let outputTokens = 0;
   let cacheReadTokens = 0;
+  let minTime = Infinity;
+  let maxTime = -Infinity;
 
-  const timestamps = messages.map((m) => new Date(m.timestamp).getTime()).filter((t) => !isNaN(t));
-
-  let minTime = 0;
-  let maxTime = 0;
-  if (timestamps.length > 0) {
-    minTime = timestamps[0];
-    maxTime = timestamps[0];
-    for (let i = 1; i < timestamps.length; i++) {
-      if (timestamps[i] < minTime) minTime = timestamps[i];
-      if (timestamps[i] > maxTime) maxTime = timestamps[i];
+  for (const msg of messages) {
+    const t = new Date(msg.timestamp).getTime();
+    if (!isNaN(t)) {
+      if (t < minTime) minTime = t;
+      if (t > maxTime) maxTime = t;
     }
-  }
-
-  for (const msg of deduped) {
     if (msg.usage) {
       inputTokens += msg.usage.input_tokens ?? 0;
       outputTokens += msg.usage.output_tokens ?? 0;
@@ -217,7 +173,7 @@ export function calculateMetrics(messages: ParsedSessionMessage[]): SessionMetri
   }
 
   return {
-    durationMs: maxTime - minTime,
+    durationMs: maxTime > minTime ? maxTime - minTime : 0,
     totalTokens: inputTokens + cacheReadTokens + outputTokens,
     inputTokens,
     outputTokens,
