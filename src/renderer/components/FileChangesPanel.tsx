@@ -387,9 +387,11 @@ export function FileChangesPanel({
       </div>
 
       {showingAlternate ? (
-        <div className="flex-1 min-h-0 overflow-hidden">{alternateBody}</div>
+        <div key="alt" className="flex-1 min-h-0 overflow-hidden animate-fade-in">
+          {alternateBody}
+        </div>
       ) : (
-        <>
+        <div key="changes" className="flex-1 min-h-0 flex flex-col animate-fade-in">
           {/* File list */}
           <div className="flex-1 overflow-y-auto">
             {totalChanges === 0 && (
@@ -485,7 +487,7 @@ export function FileChangesPanel({
               )}
             </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   );

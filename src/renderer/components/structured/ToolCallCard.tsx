@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   ChevronRight,
@@ -155,6 +155,7 @@ interface ToolCallCardProps {
 
 export function ToolCallCard({ exec, taskPath, hideToolLabel = false }: ToolCallCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
   const { toolCall, result, durationMs } = exec;
 
   const category = TOOL_CATEGORY[toolCall.name] ?? 'default';
@@ -163,8 +164,19 @@ export function ToolCallCard({ exec, taskPath, hideToolLabel = false }: ToolCall
   const summary = getToolSummary(exec);
   const duration = durationMs != null ? formatDuration(durationMs) : null;
 
+  // After the expand animation completes, ensure the card's bottom edge is in
+  // view. `block: 'nearest'` no-ops if already visible, otherwise scrolls the
+  // minimum distance to reveal the new content.
+  useEffect(() => {
+    if (!expanded) return;
+    const t = setTimeout(() => {
+      cardRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }, 220);
+    return () => clearTimeout(t);
+  }, [expanded]);
+
   return (
-    <div className={`rounded ${styles.bg}`}>
+    <div ref={cardRef} className={`rounded ${styles.bg}`}>
       <button
         className="w-full flex items-center gap-1.5 px-2 py-1 text-left hover:bg-foreground/[0.03] transition-colors"
         onClick={() => setExpanded(!expanded)}
@@ -202,11 +214,17 @@ export function ToolCallCard({ exec, taskPath, hideToolLabel = false }: ToolCall
           )}
         </div>
       </button>
-      {expanded && (
-        <div className="border-t border-border/20 px-2 py-1.5 text-[11px]">
-          {getViewer(exec, taskPath)}
+      <div
+        className="grid transition-[grid-template-rows] duration-200 ease-out"
+        style={{ gridTemplateRows: expanded ? '1fr' : '0fr' }}
+        aria-hidden={!expanded}
+      >
+        <div className="overflow-hidden">
+          <div className="border-t border-border/20 px-2 py-1.5 text-[11px]">
+            {getViewer(exec, taskPath)}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
