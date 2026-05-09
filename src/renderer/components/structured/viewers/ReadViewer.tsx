@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { LinkedToolExecution } from '../../../../shared/sessionTypes';
 import { extractResultText } from './extractResultText';
+import { FilePathLink } from './FilePathLink';
 
 const MAX_LINES = 50;
 
@@ -20,8 +21,8 @@ export function ReadViewer({ exec }: ReadViewerProps) {
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <span className="text-[11px] font-mono text-primary/80 truncate">{filePath}</span>
+      <div className="flex items-center gap-2 min-w-0">
+        <FilePathLink filePath={filePath} />
         {offset != null && (
           <span className="text-[10px] text-muted-foreground/50">
             L{offset}

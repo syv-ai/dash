@@ -194,7 +194,10 @@ export function ToolCallCard({ exec }: ToolCallCardProps) {
               {formatDuration(durationMs)}
             </span>
           )}
-          <div className={`w-1.5 h-1.5 rounded-full ${statusDot}`} />
+          <div
+            className={`w-2 h-2 rounded-full ring-1 ring-foreground/10 ${statusDot}`}
+            aria-label={!result ? 'in progress' : result.isError ? 'error' : 'success'}
+          />
         </div>
       </button>
       {expanded && (

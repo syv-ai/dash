@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { LinkedToolExecution } from '../../../../shared/sessionTypes';
 import { extractResultText } from './extractResultText';
+import { FilePathLink } from './FilePathLink';
 
 const MAX_LINES = 30;
 
@@ -19,16 +20,16 @@ export function WriteViewer({ exec }: WriteViewerProps) {
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <span className="text-[11px] font-mono text-primary/80 truncate">{filePath}</span>
-        <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/10 text-green-500 font-medium">
+      <div className="flex items-center gap-2 min-w-0">
+        <FilePathLink filePath={filePath} />
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[hsl(var(--git-added)/0.12)] text-[hsl(var(--git-added))] font-medium flex-shrink-0">
           Created
         </span>
       </div>
 
       {fileContent && (
         <div className="bg-surface-1 rounded border border-border/30 overflow-hidden">
-          <pre className="text-[11px] font-mono text-foreground/80 leading-relaxed whitespace-pre-wrap px-2.5 py-2 bg-green-500/[0.03] max-h-96 overflow-y-auto">
+          <pre className="text-[11px] font-mono text-foreground/80 leading-relaxed whitespace-pre-wrap px-2.5 py-2 bg-[hsl(var(--git-added)/0.04)] max-h-96 overflow-y-auto">
             {displayLines.join('\n')}
           </pre>
           {truncated && (
