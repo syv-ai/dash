@@ -328,7 +328,7 @@ export function FileChangesPanel({
               Changes
             </span>
           )}
-          {!showingAlternate && totalChanges > 0 && (
+          {totalChanges > 0 && (
             <span className="min-w-[18px] h-[16px] flex items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary tabular-nums px-1">
               {totalChanges}
             </span>

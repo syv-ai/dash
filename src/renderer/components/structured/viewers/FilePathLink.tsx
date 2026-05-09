@@ -41,9 +41,13 @@ export function FilePathLink({ filePath, taskPath, className = '' }: FilePathLin
           });
       }}
       title={filePath}
-      className={`text-[11px] font-mono text-primary/80 truncate hover:text-primary hover:underline underline-offset-2 cursor-pointer text-left max-w-full ${className}`}
+      // RTL container with LTR content keeps the path readable but truncates from the
+      // start, so the filename (the part users care about) is always visible. The
+      // U+200E LRM prefix forces neutral chars (slashes, dots) to render LTR.
+      dir="rtl"
+      className={`text-[11px] font-mono text-primary/80 truncate hover:text-primary hover:underline underline-offset-2 cursor-pointer max-w-full ${className}`}
     >
-      {display}
+      {'‎' + display}
     </button>
   );
 }

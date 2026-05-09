@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState, useMemo } from 'react';
 import { Loader2, ArrowDown } from 'lucide-react';
 import type {
   ParsedSessionMessage,
@@ -179,10 +179,12 @@ export function StructuredView({ taskId, taskPath }: StructuredViewProps) {
     };
   }, [taskId]);
 
-  useEffect(() => {
-    if (autoScroll && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+  // Synchronous scroll-to-bottom after DOM mutates so users never see a brief
+  // "stuck near top" flicker when new tool calls stream in.
+  useLayoutEffect(() => {
+    if (!autoScroll || !scrollRef.current) return;
+    const el = scrollRef.current;
+    el.scrollTop = el.scrollHeight;
   }, [messages, autoScroll]);
 
   const handleScroll = () => {

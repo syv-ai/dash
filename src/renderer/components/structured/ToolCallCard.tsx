@@ -174,14 +174,17 @@ export function ToolCallCard({ exec, taskPath, hideToolLabel = false }: ToolCall
           strokeWidth={2.5}
           className={`text-muted-foreground/30 transition-transform flex-shrink-0 ${expanded ? 'rotate-90' : ''}`}
         />
-        {!hideToolLabel && (
-          <>
-            <Icon size={12} strokeWidth={1.8} className={`flex-shrink-0 ${styles.icon}`} />
-            <span className={`text-[10px] font-semibold ${styles.icon} flex-shrink-0`}>
-              {getToolLabel(toolCall.name)}
-            </span>
-          </>
-        )}
+        <Icon
+          size={12}
+          strokeWidth={1.8}
+          className={`flex-shrink-0 ${styles.icon} ${hideToolLabel ? 'invisible' : ''}`}
+        />
+        <span
+          className={`text-[10px] font-semibold ${styles.icon} flex-shrink-0 ${hideToolLabel ? 'invisible' : ''}`}
+          aria-hidden={hideToolLabel}
+        >
+          {getToolLabel(toolCall.name)}
+        </span>
         {summary && (
           <span className="text-[10px] text-muted-foreground/50 truncate min-w-0 flex-1 font-mono">
             {summary}
