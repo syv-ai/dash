@@ -8,7 +8,7 @@ import type {
   ToolResultInfo,
   ContentBlock,
 } from '../../../shared/sessionTypes';
-import { AssistantTurn } from './AssistantTurn';
+import { ToolCallCard } from './ToolCallCard';
 
 function extractText(content: ContentBlock[] | string): string {
   if (typeof content === 'string') return content;
@@ -203,8 +203,8 @@ export function StructuredView({ taskId, taskPath }: StructuredViewProps) {
     }
   };
 
-  const turns = useMemo(
-    () => buildAssistantTurns(messages).filter((t) => t.toolExecutions.length > 0),
+  const execs = useMemo(
+    () => buildAssistantTurns(messages).flatMap((t) => t.toolExecutions),
     [messages],
   );
 
@@ -244,9 +244,18 @@ export function StructuredView({ taskId, taskPath }: StructuredViewProps) {
         className="flex-1 overflow-y-auto px-2 py-1.5 space-y-0.5"
         onScroll={handleScroll}
       >
-        {turns.map((turn) => (
-          <AssistantTurn key={turn.id} turn={turn} taskPath={taskPath} />
-        ))}
+        {execs.map((exec, i) => {
+          const prev = i > 0 ? execs[i - 1] : null;
+          const hideToolLabel = prev?.toolCall.name === exec.toolCall.name;
+          return (
+            <ToolCallCard
+              key={exec.toolCall.id}
+              exec={exec}
+              taskPath={taskPath}
+              hideToolLabel={hideToolLabel}
+            />
+          );
+        })}
       </div>
 
       {showScrollButton && (
