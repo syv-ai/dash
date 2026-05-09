@@ -66,6 +66,8 @@ interface SettingsModalProps {
   onShowUsageInlineChange: (value: boolean) => void;
   showContextUsageOnTaskCards: boolean;
   onShowContextUsageOnTaskCardsChange: (value: boolean) => void;
+  showStructuredView: boolean;
+  onShowStructuredViewChange: (value: boolean) => void;
   showActiveTasksSection: boolean;
   onShowActiveTasksSectionChange: (value: boolean) => void;
   shellDrawerEnabled: boolean;
@@ -636,6 +638,8 @@ function UsageSection({
   onShowUsageInlineChange,
   showContextUsageOnTaskCards,
   onShowContextUsageOnTaskCardsChange,
+  showStructuredView,
+  onShowStructuredViewChange,
 }: {
   latestRateLimits?: RateLimits;
   thresholds: UsageThresholds;
@@ -646,6 +650,8 @@ function UsageSection({
   onShowUsageInlineChange: (value: boolean) => void;
   showContextUsageOnTaskCards: boolean;
   onShowContextUsageOnTaskCardsChange: (value: boolean) => void;
+  showStructuredView: boolean;
+  onShowStructuredViewChange: (value: boolean) => void;
 }) {
   return (
     <div className="space-y-6 animate-fade-in">
@@ -722,6 +728,12 @@ function UsageSection({
             description="Adds a thin context usage bar under each task in the left sidebar."
             enabled={showContextUsageOnTaskCards}
             onToggle={onShowContextUsageOnTaskCardsChange}
+          />
+          <ToggleRow
+            label="Show structured session view"
+            description="Adds a Structured tab to the right panel that renders Claude Code's tool calls as compact, color-coded cards."
+            enabled={showStructuredView}
+            onToggle={onShowStructuredViewChange}
           />
         </div>
       </div>
@@ -983,6 +995,8 @@ export function SettingsModal({
   onShowUsageInlineChange,
   showContextUsageOnTaskCards,
   onShowContextUsageOnTaskCardsChange,
+  showStructuredView,
+  onShowStructuredViewChange,
   showActiveTasksSection,
   onShowActiveTasksSectionChange,
   shellDrawerEnabled,
@@ -1726,6 +1740,8 @@ export function SettingsModal({
               onShowUsageInlineChange={onShowUsageInlineChange}
               showContextUsageOnTaskCards={showContextUsageOnTaskCards}
               onShowContextUsageOnTaskCardsChange={onShowContextUsageOnTaskCardsChange}
+              showStructuredView={showStructuredView}
+              onShowStructuredViewChange={onShowStructuredViewChange}
             />
           )}
 
