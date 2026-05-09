@@ -20,6 +20,11 @@ import {
 } from 'lucide-react';
 import type { FileChange, FileChangeStatus, GitStatus } from '../../shared/types';
 
+export interface RightPanelTab {
+  id: string;
+  label: string;
+}
+
 interface FileChangesPanelProps {
   gitStatus: GitStatus | null;
   loading: boolean;
@@ -34,6 +39,16 @@ interface FileChangesPanelProps {
   collapsed?: boolean;
   onToggleCollapse?: () => void;
   onShowCommitGraph?: () => void;
+  /** Tabs in the header. When omitted, the title is the static "Changes" label. */
+  tabs?: {
+    options: RightPanelTab[];
+    activeId: string;
+    onChange: (id: string) => void;
+  };
+  /** When set AND `tabs.activeId !== 'changes'`, this replaces the file list / commit area
+   *  and the changes-specific actions hide. Lets the parent host an alternate panel
+   *  body (e.g., the structured tool-use view) under the same unified header. */
+  alternateBody?: React.ReactNode;
 }
 
 const STATUS_COLORS: Record<FileChangeStatus, string> = {
@@ -184,6 +199,8 @@ export function FileChangesPanel({
   collapsed,
   onToggleCollapse,
   onShowCommitGraph,
+  tabs,
+  alternateBody,
 }: FileChangesPanelProps) {
   const [commitMsg, setCommitMsg] = useState('');
   const [committing, setCommitting] = useState(false);
@@ -240,7 +257,9 @@ export function FileChangesPanel({
     );
   }
 
-  if (!gitStatus) {
+  const showingAlternate = !!alternateBody && tabs != null && tabs.activeId !== 'changes';
+
+  if (!gitStatus && !showingAlternate) {
     return (
       <div
         className="h-full flex items-center justify-center"
@@ -253,8 +272,8 @@ export function FileChangesPanel({
     );
   }
 
-  const stagedFiles = gitStatus.files.filter((f) => f.staged);
-  const unstagedFiles = gitStatus.files.filter((f) => !f.staged);
+  const stagedFiles = gitStatus?.files.filter((f) => f.staged) ?? [];
+  const unstagedFiles = gitStatus?.files.filter((f) => !f.staged) ?? [];
   const allStaged = unstagedFiles.length === 0 && stagedFiles.length > 0;
   const noneStaged = stagedFiles.length === 0;
 
@@ -291,7 +310,7 @@ export function FileChangesPanel({
     >
       {/* Header */}
       <div className="flex items-center justify-between px-3 h-10 flex-shrink-0 border-b border-border/60">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
           {onToggleCollapse && (
             <Tooltip content="Collapse changes panel">
               <button
@@ -302,10 +321,14 @@ export function FileChangesPanel({
               </button>
             </Tooltip>
           )}
-          <span className="text-[11px] font-semibold uppercase text-foreground/80 tracking-[0.08em]">
-            Changes
-          </span>
-          {totalChanges > 0 && (
+          {tabs ? (
+            <TabHeader tabs={tabs} />
+          ) : (
+            <span className="text-[11px] font-semibold uppercase text-foreground/80 tracking-[0.08em]">
+              Changes
+            </span>
+          )}
+          {!showingAlternate && totalChanges > 0 && (
             <span className="min-w-[18px] h-[16px] flex items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary tabular-nums px-1">
               {totalChanges}
             </span>
@@ -322,23 +345,25 @@ export function FileChangesPanel({
               </button>
             </Tooltip>
           )}
-          {gitStatus.branch && (gitStatus.ahead > 0 || gitStatus.behind > 0) && (
-            <div className="flex items-center gap-1 text-muted-foreground/40 mr-1">
-              {gitStatus.ahead > 0 && (
-                <span className="flex items-center gap-0.5 text-[9px] text-[hsl(var(--git-added))]">
-                  <ArrowUp size={8} strokeWidth={2.5} />
-                  {gitStatus.ahead}
-                </span>
-              )}
-              {gitStatus.behind > 0 && (
-                <span className="flex items-center gap-0.5 text-[9px] text-[hsl(var(--git-deleted))]">
-                  <ArrowDown size={8} strokeWidth={2.5} />
-                  {gitStatus.behind}
-                </span>
-              )}
-            </div>
-          )}
-          {!allStaged && unstagedFiles.length > 0 && (
+          {!showingAlternate &&
+            gitStatus?.branch &&
+            (gitStatus.ahead > 0 || gitStatus.behind > 0) && (
+              <div className="flex items-center gap-1 text-muted-foreground/40 mr-1">
+                {gitStatus.ahead > 0 && (
+                  <span className="flex items-center gap-0.5 text-[9px] text-[hsl(var(--git-added))]">
+                    <ArrowUp size={8} strokeWidth={2.5} />
+                    {gitStatus.ahead}
+                  </span>
+                )}
+                {gitStatus.behind > 0 && (
+                  <span className="flex items-center gap-0.5 text-[9px] text-[hsl(var(--git-deleted))]">
+                    <ArrowDown size={8} strokeWidth={2.5} />
+                    {gitStatus.behind}
+                  </span>
+                )}
+              </div>
+            )}
+          {!showingAlternate && !allStaged && unstagedFiles.length > 0 && (
             <Tooltip content="Stage all">
               <button
                 onClick={() => onStageAll()}
@@ -348,7 +373,7 @@ export function FileChangesPanel({
               </button>
             </Tooltip>
           )}
-          {stagedFiles.length > 0 && (
+          {!showingAlternate && stagedFiles.length > 0 && (
             <Tooltip content="Unstage all">
               <button
                 onClick={() => onUnstageAll()}
@@ -361,101 +386,138 @@ export function FileChangesPanel({
         </div>
       </div>
 
-      {/* File list */}
-      <div className="flex-1 overflow-y-auto">
-        {totalChanges === 0 && (
-          <div className="flex flex-col items-center justify-center h-full gap-2">
-            <div className="w-8 h-8 rounded-xl bg-accent/40 flex items-center justify-center">
-              <FileDiff size={14} className="text-foreground/50" strokeWidth={1.5} />
-            </div>
-            <p className="text-[11px] text-foreground/60">No changes</p>
-            {gitStatus && gitStatus.ahead > 0 && (
-              <p className="text-[10px] text-muted-foreground/40">
-                {gitStatus.ahead} commit{gitStatus.ahead !== 1 ? 's' : ''} ahead
-              </p>
+      {showingAlternate ? (
+        <div className="flex-1 min-h-0 overflow-hidden">{alternateBody}</div>
+      ) : (
+        <>
+          {/* File list */}
+          <div className="flex-1 overflow-y-auto">
+            {totalChanges === 0 && (
+              <div className="flex flex-col items-center justify-center h-full gap-2">
+                <div className="w-8 h-8 rounded-xl bg-accent/40 flex items-center justify-center">
+                  <FileDiff size={14} className="text-foreground/50" strokeWidth={1.5} />
+                </div>
+                <p className="text-[11px] text-foreground/60">No changes</p>
+                {gitStatus && gitStatus.ahead > 0 && (
+                  <p className="text-[10px] text-muted-foreground/40">
+                    {gitStatus.ahead} commit{gitStatus.ahead !== 1 ? 's' : ''} ahead
+                  </p>
+                )}
+              </div>
+            )}
+
+            {totalChanges > 0 && (
+              <div className="px-1 py-1">
+                {/* Staged files first, then unstaged */}
+                {stagedFiles.map((file) => (
+                  <FileItem
+                    key={`staged-${file.path}`}
+                    file={file}
+                    isNew={newFileKeysRef.current.has(`s-${file.path}`)}
+                    onStage={() => {}}
+                    onUnstage={() => onUnstageFile(file.path)}
+                    onDiscard={() => {}}
+                    onViewDiff={() => onViewDiff(file.path, true)}
+                  />
+                ))}
+                {unstagedFiles.map((file) => (
+                  <FileItem
+                    key={`unstaged-${file.path}`}
+                    file={file}
+                    isNew={newFileKeysRef.current.has(`u-${file.path}`)}
+                    onStage={() => onStageFile(file.path)}
+                    onUnstage={() => {}}
+                    onDiscard={() => onDiscardFile(file.path)}
+                    onViewDiff={() => onViewDiff(file.path, false)}
+                  />
+                ))}
+              </div>
             )}
           </div>
-        )}
 
-        {totalChanges > 0 && (
-          <div className="px-1 py-1">
-            {/* Staged files first, then unstaged */}
-            {stagedFiles.map((file) => (
-              <FileItem
-                key={`staged-${file.path}`}
-                file={file}
-                isNew={newFileKeysRef.current.has(`s-${file.path}`)}
-                onStage={() => {}}
-                onUnstage={() => onUnstageFile(file.path)}
-                onDiscard={() => {}}
-                onViewDiff={() => onViewDiff(file.path, true)}
-              />
-            ))}
-            {unstagedFiles.map((file) => (
-              <FileItem
-                key={`unstaged-${file.path}`}
-                file={file}
-                isNew={newFileKeysRef.current.has(`u-${file.path}`)}
-                onStage={() => onStageFile(file.path)}
-                onUnstage={() => {}}
-                onDiscard={() => onDiscardFile(file.path)}
-                onViewDiff={() => onViewDiff(file.path, false)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Commit area — always rendered to preserve textarea focus & state across git refreshes */}
-      <div
-        className="flex-shrink-0 border-t border-border/60 p-2 flex flex-col gap-1.5"
-        style={totalChanges === 0 ? { display: 'none' } : undefined}
-      >
-        {error && (
-          <p className="text-[11px] text-destructive bg-destructive/10 rounded px-2 py-1 break-words">
-            {error}
-          </p>
-        )}
-        <textarea
-          value={commitMsg}
-          onChange={(e) => {
-            setCommitMsg(e.target.value);
-            setError(null);
-          }}
-          onKeyDown={(e) => {
-            // Prevent global keyboard shortcuts from firing while typing
-            e.stopPropagation();
-            if (e.key === 'Enter' && e.metaKey) {
-              e.preventDefault();
-              handleCommit();
-            }
-          }}
-          placeholder={noneStaged ? 'Stage files to commit...' : 'Commit message'}
-          disabled={noneStaged}
-          rows={2}
-          className="w-full text-[12px] bg-background/60 border border-border/60 rounded-md px-2.5 py-1.5 resize-none placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/40 disabled:opacity-40 disabled:cursor-not-allowed"
-        />
-        <div className="flex gap-1.5">
-          <button
-            onClick={handleCommit}
-            disabled={!commitMsg.trim() || noneStaged || committing}
-            className="flex-1 flex items-center justify-center gap-1.5 h-7 rounded-md text-[11px] font-medium transition-colors bg-primary/15 text-primary hover:bg-primary/25 disabled:opacity-30 disabled:cursor-not-allowed"
+          {/* Commit area — always rendered to preserve textarea focus & state across git refreshes */}
+          <div
+            className="flex-shrink-0 border-t border-border/60 p-2 flex flex-col gap-1.5"
+            style={totalChanges === 0 ? { display: 'none' } : undefined}
           >
-            <Check size={11} strokeWidth={2.5} />
-            {committing ? 'Committing...' : 'Commit'}
+            {error && (
+              <p className="text-[11px] text-destructive bg-destructive/10 rounded px-2 py-1 break-words">
+                {error}
+              </p>
+            )}
+            <textarea
+              value={commitMsg}
+              onChange={(e) => {
+                setCommitMsg(e.target.value);
+                setError(null);
+              }}
+              onKeyDown={(e) => {
+                // Prevent global keyboard shortcuts from firing while typing
+                e.stopPropagation();
+                if (e.key === 'Enter' && e.metaKey) {
+                  e.preventDefault();
+                  handleCommit();
+                }
+              }}
+              placeholder={noneStaged ? 'Stage files to commit...' : 'Commit message'}
+              disabled={noneStaged}
+              rows={2}
+              className="w-full text-[12px] bg-background/60 border border-border/60 rounded-md px-2.5 py-1.5 resize-none placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/40 disabled:opacity-40 disabled:cursor-not-allowed"
+            />
+            <div className="flex gap-1.5">
+              <button
+                onClick={handleCommit}
+                disabled={!commitMsg.trim() || noneStaged || committing}
+                className="flex-1 flex items-center justify-center gap-1.5 h-7 rounded-md text-[11px] font-medium transition-colors bg-primary/15 text-primary hover:bg-primary/25 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <Check size={11} strokeWidth={2.5} />
+                {committing ? 'Committing...' : 'Commit'}
+              </button>
+              {gitStatus && gitStatus.ahead > 0 && (
+                <button
+                  onClick={handlePush}
+                  disabled={pushing}
+                  className="flex items-center justify-center gap-1.5 h-7 px-3 rounded-md text-[11px] font-medium transition-colors bg-accent hover:bg-accent/80 text-foreground/80 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <Upload size={10} strokeWidth={2.5} />
+                  {pushing ? 'Pushing...' : 'Push'}
+                </button>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function TabHeader({ tabs }: { tabs: NonNullable<FileChangesPanelProps['tabs']> }) {
+  if (tabs.options.length <= 1) {
+    const sole = tabs.options[0];
+    return (
+      <span className="text-[11px] font-semibold uppercase text-foreground/80 tracking-[0.08em] px-1.5">
+        {sole?.label ?? ''}
+      </span>
+    );
+  }
+  return (
+    <div className="flex items-center gap-0.5">
+      {tabs.options.map((tab) => {
+        const active = tabs.activeId === tab.id;
+        return (
+          <button
+            key={tab.id}
+            onClick={() => tabs.onChange(tab.id)}
+            className={`px-2 py-0.5 rounded text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors ${
+              active
+                ? 'bg-primary/15 text-foreground'
+                : 'text-muted-foreground/70 hover:text-foreground hover:bg-accent/40'
+            }`}
+          >
+            {tab.label}
           </button>
-          {gitStatus.ahead > 0 && (
-            <button
-              onClick={handlePush}
-              disabled={pushing}
-              className="flex items-center justify-center gap-1.5 h-7 px-3 rounded-md text-[11px] font-medium transition-colors bg-accent hover:bg-accent/80 text-foreground/80 disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              <Upload size={10} strokeWidth={2.5} />
-              {pushing ? 'Pushing...' : 'Push'}
-            </button>
-          )}
-        </div>
-      </div>
+        );
+      })}
     </div>
   );
 }

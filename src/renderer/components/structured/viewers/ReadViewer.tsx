@@ -7,9 +7,10 @@ const MAX_LINES = 50;
 
 interface ReadViewerProps {
   exec: LinkedToolExecution;
+  taskPath: string;
 }
 
-export function ReadViewer({ exec }: ReadViewerProps) {
+export function ReadViewer({ exec, taskPath }: ReadViewerProps) {
   const [showAll, setShowAll] = useState(false);
   const filePath = String(exec.toolCall.input.file_path ?? exec.toolCall.input.filePath ?? '');
   const offset = exec.toolCall.input.offset as number | undefined;
@@ -20,9 +21,9 @@ export function ReadViewer({ exec }: ReadViewerProps) {
   const displayLines = truncated ? lines.slice(0, MAX_LINES) : lines;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 min-w-0">
       <div className="flex items-center gap-2 min-w-0">
-        <FilePathLink filePath={filePath} />
+        <FilePathLink filePath={filePath} taskPath={taskPath} />
         {offset != null && (
           <span className="text-[10px] text-muted-foreground/50">
             L{offset}

@@ -243,7 +243,7 @@ export function StructuredView({ taskId, taskPath }: StructuredViewProps) {
         onScroll={handleScroll}
       >
         {turns.map((turn) => (
-          <AssistantTurn key={turn.id} turn={turn} />
+          <AssistantTurn key={turn.id} turn={turn} taskPath={taskPath} />
         ))}
       </div>
 

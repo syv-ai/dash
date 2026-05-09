@@ -5,20 +5,22 @@ import { FilePathLink } from './FilePathLink';
 
 interface EditViewerProps {
   exec: LinkedToolExecution;
+  taskPath: string;
 }
 
-export function EditViewer({ exec }: EditViewerProps) {
+export function EditViewer({ exec, taskPath }: EditViewerProps) {
   const filePath = String(exec.toolCall.input.file_path ?? exec.toolCall.input.filePath ?? '');
   const oldString = String(exec.toolCall.input.old_string ?? exec.toolCall.input.oldString ?? '');
   const newString = String(exec.toolCall.input.new_string ?? exec.toolCall.input.newString ?? '');
-  const resultText = extractResultText(exec);
 
   const oldLines = oldString ? oldString.split('\n') : [];
   const newLines = newString ? newString.split('\n') : [];
 
   return (
-    <div className="space-y-2">
-      <FilePathLink filePath={filePath} className="block" />
+    <div className="space-y-2 min-w-0">
+      <div className="min-w-0">
+        <FilePathLink filePath={filePath} taskPath={taskPath} className="block" />
+      </div>
 
       {(oldLines.length > 0 || newLines.length > 0) && (
         <div className="rounded border border-border/30 overflow-hidden bg-surface-1">
@@ -45,11 +47,9 @@ export function EditViewer({ exec }: EditViewerProps) {
         </div>
       )}
 
-      {resultText && <div className="text-[10px] text-muted-foreground/60">{resultText}</div>}
-
       {exec.result?.isError && (
         <div className="text-[10px] text-destructive font-medium">
-          {resultText || 'Error editing file'}
+          {extractResultText(exec) || 'Error editing file'}
         </div>
       )}
     </div>
