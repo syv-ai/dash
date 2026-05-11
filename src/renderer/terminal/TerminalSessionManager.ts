@@ -37,6 +37,7 @@ export class TerminalSessionManager {
   private _currentCwd: string;
   private onCwdChangeCallback: ((cwd: string) => void) | null = null;
   private fitDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private isPasting = false;
   private lastPtyCols = 0;
   private lastPtyRows = 0;
   private savedViewportY: number | null = null;
@@ -171,18 +172,39 @@ export class TerminalSessionManager {
       }
 
       // Paste: Cmd+V (macOS), Ctrl+V (Windows), Ctrl+Shift+V (Linux)
+      // We read via Electron's native clipboard API rather than relying on the
+      // paste DOM event's e.clipboardData, which Chromium on Windows returns
+      // empty when the clipboard content hasn't changed between pastes (same
+      // sequence number). Bracketed paste mode is applied manually so Claude Code
+      // still sees the \x1b[200~...\x1b[201~ markers it uses for the paste indicator.
       if (
         (isMac && e.metaKey && isKeyV && !e.ctrlKey) ||
         (isWin && e.ctrlKey && isKeyV) ||
         (!isMac && !isWin && e.ctrlKey && e.shiftKey && isKeyV)
       ) {
         e.preventDefault();
+        this.isPasting = true;
         window.electronAPI
           .clipboardReadText()
           .then((text) => {
-            if (text) this.writePasteData(text);
+            if (!text) {
+              this.isPasting = false;
+              return;
+            }
+            // Strip \r from paste content: ConPTY on Windows handles \r inside
+            // bracketed-paste blocks inconsistently (see github.com/remcovolmer/
+            // command/pull/118). Keep \n as the line separator inside BPM brackets.
+            const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '');
+            window.electronAPI.ptyInput({
+              id: this.id,
+              data: `\x1b[200~${normalized}\x1b[201~`,
+            });
+            setTimeout(() => {
+              this.isPasting = false;
+            }, 0);
           })
           .catch((err) => {
+            this.isPasting = false;
             console.warn('[terminal] clipboardReadText failed:', err);
           });
         return false;
@@ -220,8 +242,10 @@ export class TerminalSessionManager {
       return true;
     });
 
-    // Send input to PTY
+    // Send input to PTY. Guard against the native paste DOM event also reaching
+    // xterm.js while our clipboardReadText path is already handling the same paste.
     this.terminal.onData((data) => {
+      if (this.isPasting) return;
       window.electronAPI.ptyInput({ id: this.id, data });
     });
   }
@@ -534,10 +558,6 @@ export class TerminalSessionManager {
       clearTimeout(this.fitDebounceTimer);
       this.fitDebounceTimer = null;
     }
-    if (this.pasteTimer) {
-      clearTimeout(this.pasteTimer);
-      this.pasteTimer = null;
-    }
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
@@ -564,35 +584,6 @@ export class TerminalSessionManager {
 
   writeInput(data: string) {
     window.electronAPI.ptyInput({ id: this.id, data });
-  }
-
-  private pasteTimer: ReturnType<typeof setTimeout> | null = null;
-
-  // Write pasted text in chunks to avoid overflowing the PTY input buffer
-  // (conpty on Windows drops data beyond ~4 KB written in a single call).
-  private writePasteData(text: string) {
-    if (this.disposed) return;
-    if (this.pasteTimer) {
-      clearTimeout(this.pasteTimer);
-      this.pasteTimer = null;
-    }
-    const CHUNK = 4096;
-    if (text.length <= CHUNK) {
-      window.electronAPI.ptyInput({ id: this.id, data: text });
-      return;
-    }
-    let offset = 0;
-    const writeNext = () => {
-      if (offset >= text.length || this.disposed) {
-        this.pasteTimer = null;
-        return;
-      }
-      const end = Math.min(offset + CHUNK, text.length);
-      window.electronAPI.ptyInput({ id: this.id, data: text.slice(offset, end) });
-      offset = end;
-      this.pasteTimer = setTimeout(writeNext, 12);
-    };
-    writeNext();
   }
 
   focus() {
