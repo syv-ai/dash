@@ -77,6 +77,18 @@ export function registerDbIpc(): void {
     }
   });
 
+  ipcMain.handle(
+    'db:reorderTasks',
+    (_event, args: { projectId: string; orderedTaskIds: string[] }) => {
+      try {
+        DatabaseService.reorderTasks(args.projectId, args.orderedTaskIds);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: String(error) };
+      }
+    },
+  );
+
   ipcMain.handle('db:restoreTask', (_event, id: string) => {
     try {
       DatabaseService.restoreTask(id);

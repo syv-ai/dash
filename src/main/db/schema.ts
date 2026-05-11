@@ -41,6 +41,7 @@ export const tasks = sqliteTable(
     // to avoid a destructive migration. Do not read or write.
     lastSessionId: text('last_session_id'),
     archivedAt: text('archived_at'),
+    sortOrder: integer('sort_order').notNull().default(0),
     createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
   },
