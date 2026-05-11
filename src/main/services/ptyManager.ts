@@ -708,8 +708,20 @@ export async function startDirectPty(options: {
   // DO NOT relax the one-non-worktree-task cap without reintroducing per-task
   // session pinning; see git history at 32bcdb6 for the previous implementation
   // and the issues that drove its removal.
+  const task = DatabaseService.getTask(options.id);
   if (hasAnySessionForCwd(options.cwd)) {
     args.push('--continue');
+    if (task && !task.hadMessages) {
+      try {
+        DatabaseService.setTaskHadMessages(options.id);
+      } catch (err) {
+        console.error('[ptyManager] Failed to set hadMessages:', err);
+      }
+    }
+  } else if (task?.hadMessages) {
+    broadcastToast(
+      `Couldn't resume previous session for "${task.name}" — history may have been cleared. Starting fresh.`,
+    );
   }
 
   if (options.autoApprove) {

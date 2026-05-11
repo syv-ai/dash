@@ -177,6 +177,14 @@ export class DatabaseService {
     return row ? this.mapTask(row) : undefined;
   }
 
+  static setTaskHadMessages(id: string): void {
+    const db = getDb();
+    db.update(tasks)
+      .set({ hadMessages: true, updatedAt: new Date().toISOString() })
+      .where(eq(tasks.id, id))
+      .run();
+  }
+
   static setTaskContextPrompt(id: string, prompt: string): void {
     const db = getDb();
     db.update(tasks)
@@ -304,6 +312,7 @@ export class DatabaseService {
       autoApprove: row.autoApprove ?? false,
       branchCreatedByDash: row.branchCreatedByDash ?? false,
       linkedItems,
+      hadMessages: row.hadMessages ?? false,
       contextPrompt: row.contextPrompt ?? null,
       archivedAt: row.archivedAt,
       sortOrder: row.sortOrder,

@@ -176,5 +176,14 @@ export function runMigrations(): void {
     /* best effort */
   }
 
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN had_messages INTEGER DEFAULT 0`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!msg.includes('duplicate column')) {
+      console.error('[migrate] Failed to add had_messages column:', err);
+    }
+  }
+
   rawDb.pragma('foreign_keys = ON');
 }
