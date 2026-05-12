@@ -1,5 +1,8 @@
+import { eq } from 'drizzle-orm';
 import type { WebContents } from 'electron';
 import type { ContextUsage, StatusLineData, SessionCost, RateLimits } from '@shared/types';
+import { getDb } from '../db/client';
+import { tasks } from '../db/schema';
 
 const EMIT_DEBOUNCE_MS = 500;
 
@@ -34,6 +37,8 @@ class ContextUsageServiceImpl {
   private statusLineData = new Map<string, StatusLineData>();
   private sender: WebContents | null = null;
   private emitTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Underlying task ids we've already warned about a stale `shell:*` hook for. */
+  private warnedStaleHookTaskIds = new Set<string>();
 
   setSender(sender: WebContents): void {
     this.sender = sender;
@@ -44,6 +49,16 @@ class ContextUsageServiceImpl {
    * Called by HookServer when the status line script POSTs data.
    */
   updateFromStatusLine(ptyId: string, data: RawStatusLinePayload): void {
+    // Shell-tab PTYs use ids like `shell:<taskId>[:t<ts>]` and never represent
+    // a real Claude task. A stale `.claude/settings.local.json` (older Dash
+    // versions clobbered it with a shell ptyId via refreshActivePtyHooks)
+    // can keep posting statusLine under that id; ignore so we don't grow a
+    // ghost entry the renderer has no task row for, and warn the user once
+    // per task so they know a restart is needed to heal the file.
+    if (ptyId.startsWith('shell:')) {
+      this.warnStaleShellHook(ptyId);
+      return;
+    }
     const cw = data.context_window;
     if (!cw) {
       console.warn('[ContextUsageService] No context_window in statusLine data for ptyId=', ptyId);
@@ -146,7 +161,29 @@ class ContextUsageServiceImpl {
       this.emitTimer = null;
     }
     this.statusLineData.clear();
+    this.warnedStaleHookTaskIds.clear();
     this.sender = null;
+  }
+
+  private warnStaleShellHook(shellPtyId: string): void {
+    // Shell ptyId format is `shell:<taskId>` or `shell:<taskId>:t<ts>`.
+    const taskId = shellPtyId.split(':')[1];
+    if (!taskId || this.warnedStaleHookTaskIds.has(taskId)) return;
+    this.warnedStaleHookTaskIds.add(taskId);
+
+    if (!this.sender || this.sender.isDestroyed()) return;
+
+    let taskName = 'A task';
+    try {
+      const row = getDb().select({ name: tasks.name }).from(tasks).where(eq(tasks.id, taskId)).get();
+      if (row?.name) taskName = row.name;
+    } catch (err) {
+      console.warn('[ContextUsageService] DB lookup for stale-hook task failed:', err);
+    }
+
+    this.sender.send('app:toast', {
+      message: `${taskName}: context tracking is stale (settings point to a closed shell). Restart Dash or this task to heal.`,
+    });
   }
 
   private scheduleEmit(): void {

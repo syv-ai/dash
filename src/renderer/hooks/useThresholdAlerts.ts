@@ -35,14 +35,18 @@ export function useThresholdAlerts(
 
     // Context window is per-session, so check each PTY independently.
     for (const [ptyId, sl] of Object.entries(statusLineData)) {
+      // Skip ghost entries (e.g. a leaked `shell:<taskId>` ptyId from a stale
+      // settings.local.json). The UI keys by task.id, so a ptyId without a
+      // matching task name would fire a bare toast the user can't trace.
       const taskName = taskNames[ptyId];
+      if (!taskName) continue;
       const pct = Math.round(sl.contextUsage.percentage);
       const base = `Context window at ${pct}%`;
       fire(
         `${ptyId}:context`,
         sl.contextUsage.percentage,
         usageThresholds.contextPercentage,
-        taskName ? `${taskName}: ${base}` : base,
+        `${taskName}: ${base}`,
       );
     }
 

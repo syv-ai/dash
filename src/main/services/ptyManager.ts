@@ -107,6 +107,12 @@ export interface RefreshResult {
 export function refreshActivePtyHooks(): RefreshResult {
   const failures: RefreshFailure[] = [];
   for (const [id, rec] of ptys) {
+    // Shell-tab PTYs (id = `shell:<taskId>[:t<ts>]`) share a cwd with the
+    // task's main Claude PTY, so writing hook settings for them would clobber
+    // `.claude/settings.local.json` with a non-task ptyId — any Claude
+    // process in that cwd then posts statusLine under the shell id, which
+    // doesn't match any `task.id` in the renderer (ghost 81% toasts, GH bug).
+    if (!rec.isDirectSpawn) continue;
     const result = writeHookSettings(rec.cwd, id);
     if (!result.ok) {
       failures.push({ settingsPath: result.settingsPath, error: result.error });
