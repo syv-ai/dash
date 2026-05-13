@@ -31,6 +31,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteTask: (id: string) => ipcRenderer.invoke('db:deleteTask', id),
   archiveTask: (id: string) => ipcRenderer.invoke('db:archiveTask', id),
   restoreTask: (id: string) => ipcRenderer.invoke('db:restoreTask', id),
+  reorderTasks: (projectId: string, orderedTaskIds: string[]) =>
+    ipcRenderer.invoke('db:reorderTasks', { projectId, orderedTaskIds }),
 
   // Database - Conversations
   getConversations: (taskId: string) => ipcRenderer.invoke('db:getConversations', taskId),
@@ -290,6 +292,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('skills:uninstall', args),
   skillsResetCache: () => ipcRenderer.invoke('skills:resetCache'),
 
+  // Session (structured view)
+  sessionWatch: (args: { taskId: string; taskPath: string }) =>
+    ipcRenderer.invoke('session:watch', args),
+  sessionUnwatch: (taskId: string) => ipcRenderer.invoke('session:unwatch', taskId),
+  sessionGetMessages: (taskId: string) => ipcRenderer.invoke('session:getMessages', taskId),
+  onSessionUpdate: (callback: (data: unknown) => void) => {
+    const handler = (_event: unknown, data: unknown) => callback(data);
+    ipcRenderer.on('session:update', handler);
+    return () => {
+      ipcRenderer.removeListener('session:update', handler);
+    };
+  },
+
   // Telemetry
   telemetryCapture: (event: string, properties?: Record<string, unknown>) =>
     ipcRenderer.invoke('telemetry:capture', { event, properties }),
@@ -301,8 +316,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   autoUpdateDownload: () => ipcRenderer.invoke('autoUpdate:download'),
   autoUpdateQuitAndInstall: () => ipcRenderer.invoke('autoUpdate:quitAndInstall'),
   autoUpdateGetEnabled: () => ipcRenderer.invoke('autoUpdate:getEnabled'),
-  autoUpdateSetEnabled: (enabled: boolean) =>
-    ipcRenderer.invoke('autoUpdate:setEnabled', enabled),
+  autoUpdateSetEnabled: (enabled: boolean) => ipcRenderer.invoke('autoUpdate:setEnabled', enabled),
   onAutoUpdateAvailable: (callback: (info: { version: string }) => void) => {
     const handler = (_event: unknown, info: { version: string }) => callback(info);
     ipcRenderer.on('autoUpdate:available', handler);

@@ -50,6 +50,7 @@ export interface Task {
   linkedItems: LinkedItem[] | null;
   contextPrompt: string | null;
   archivedAt: string | null;
+  sortOrder: number;
   createdAt: string;
   updatedAt: string;
 }

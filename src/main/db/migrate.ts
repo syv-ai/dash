@@ -107,6 +107,31 @@ export function runMigrations(): void {
     /* already exists */
   }
   try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`);
+  } catch {
+    /* column already exists — skip ALTER and backfill */
+  }
+
+  // Backfill sort_order if all values are still the default (0)
+  const needsBackfill = rawDb
+    .prepare(`SELECT COUNT(*) as cnt FROM tasks WHERE sort_order != 0`)
+    .get() as { cnt: number };
+  if (needsBackfill.cnt === 0) {
+    const backfillTxn = rawDb.transaction(() => {
+      const rows = rawDb
+        .prepare(`SELECT id, project_id FROM tasks ORDER BY project_id, created_at DESC`)
+        .all() as { id: string; project_id: string }[];
+      const counters = new Map<string, number>();
+      const update = rawDb.prepare(`UPDATE tasks SET sort_order = ? WHERE id = ?`);
+      for (const r of rows) {
+        const n = counters.get(r.project_id) ?? 0;
+        update.run(n, r.id);
+        counters.set(r.project_id, n + 1);
+      }
+    });
+    backfillTxn();
+  }
+  try {
     rawDb.exec(`ALTER TABLE projects ADD COLUMN worktree_setup_script TEXT`);
   } catch {
     /* already exists */
