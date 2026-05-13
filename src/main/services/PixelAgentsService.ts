@@ -151,7 +151,11 @@ export class PixelAgentsService {
 
     const child = spawn(cmd, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, NODE_NO_WARNINGS: '1', ...extraEnv },
+      env: {
+        ...process.env,
+        NODE_NO_WARNINGS: '1',
+        ...extraEnv,
+      },
     });
 
     PixelAgentsService.child = child;
