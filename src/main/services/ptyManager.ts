@@ -962,14 +962,74 @@ export function sendRemoteControl(id: string): void {
   setTimeout(() => writePty(id, '\r'), 100);
 }
 
+// ConPTY on Windows silently drops writes that overflow its input pipe before the
+// VT parser can drain it (node-pty ignores Socket.write()'s backpressure signal).
+// Fix: each PTY has a shared write buffer that drains at 1 KB / 20 ms. All writes
+// for the same PTY are serialized through the buffer so that concurrent pastes
+// (which carry bracketed-paste escape sequences) never interleave and corrupt each
+// other. Typed characters are written immediately when no drain is active.
+const WIN_CHUNK = 1024;
+const WIN_CHUNK_DELAY_MS = 20;
+const ptyWriteBuffers = new Map<string, string>();
+const ptyWriteTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function drainPtyWriteBuffer(id: string): void {
+  ptyWriteTimers.delete(id);
+  const buffer = ptyWriteBuffers.get(id);
+  if (!buffer) return;
+  const record = ptys.get(id);
+  if (!record) {
+    ptyWriteBuffers.delete(id);
+    return;
+  }
+  record.proc.write(buffer.slice(0, WIN_CHUNK));
+  const remaining = buffer.slice(WIN_CHUNK);
+  if (remaining.length > 0) {
+    ptyWriteBuffers.set(id, remaining);
+    ptyWriteTimers.set(
+      id,
+      setTimeout(() => drainPtyWriteBuffer(id), WIN_CHUNK_DELAY_MS),
+    );
+  } else {
+    ptyWriteBuffers.delete(id);
+  }
+}
+
+function clearPtyWriteBuffer(id: string): void {
+  const timer = ptyWriteTimers.get(id);
+  if (timer !== undefined) clearTimeout(timer);
+  ptyWriteTimers.delete(id);
+  ptyWriteBuffers.delete(id);
+}
+
 /**
  * Send data to a PTY.
  */
 export function writePty(id: string, data: string): void {
   const record = ptys.get(id);
-  if (record) {
+  if (!record) return;
+
+  if (process.platform !== 'win32') {
     record.proc.write(data);
+    return;
   }
+
+  const existing = ptyWriteBuffers.get(id);
+  if (existing !== undefined) {
+    // A chunked drain is already running — append so writes stay serialized.
+    ptyWriteBuffers.set(id, existing + data);
+    return;
+  }
+
+  if (data.length <= WIN_CHUNK) {
+    // No active drain and small enough to write directly.
+    record.proc.write(data);
+    return;
+  }
+
+  // Large write with no active drain — start one.
+  ptyWriteBuffers.set(id, data);
+  drainPtyWriteBuffer(id);
 }
 
 /**
@@ -994,6 +1054,7 @@ export function killPty(id: string): void {
   if (record) {
     // Delete first so the guarded onExit handler becomes a no-op
     ptys.delete(id);
+    clearPtyWriteBuffer(id);
     activityMonitor.unregister(id);
     remoteControlService.unregister(id);
     contextUsageService.unregister(id);

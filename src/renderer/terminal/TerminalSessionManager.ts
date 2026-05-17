@@ -37,6 +37,7 @@ export class TerminalSessionManager {
   private _currentCwd: string;
   private onCwdChangeCallback: ((cwd: string) => void) | null = null;
   private fitDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private isPasting = false;
   private lastPtyCols = 0;
   private lastPtyRows = 0;
   private savedViewportY: number | null = null;
@@ -140,21 +141,26 @@ export class TerminalSessionManager {
     this.terminal.attachCustomKeyEventHandler((e) => {
       if (e.type !== 'keydown') return true;
 
-      const isMac = navigator.userAgent.includes('Mac');
+      const platform = window.electronAPI.getPlatform();
+      const isMac = platform === 'darwin';
+      const isWin = platform === 'win32';
 
       // Match by physical key (e.code) so alternate keyboard layouts where
       // Ctrl+Shift+C reports e.key as something other than 'C' still work.
       const isKeyC = e.code === 'KeyC';
       const isKeyV = e.code === 'KeyV';
 
-      // Copy: Cmd+C (macOS) or Ctrl+Shift+C (Linux) — copy terminal selection.
+      // Copy: Cmd+C (macOS), Ctrl+Shift+C (Linux), Ctrl+C (Windows, only when text is selected).
       // Also Ctrl+C on any platform when there's an active selection (matches
       // native terminal behaviour: Ctrl+C copies when selected, sends SIGINT
-      // otherwise). Explicit shortcuts fall back to lastSelection so users can
-      // still copy after the TUI has cleared xterm's highlight.
+      // otherwise). macOS and Linux explicit shortcuts fall back to lastSelection
+      // so users can still copy after the TUI has cleared xterm's highlight.
+      // Windows does not use lastSelection — Ctrl+C without a live selection
+      // should always send SIGINT.
       const isExplicitCopy =
         (isMac && e.metaKey && isKeyC && !e.ctrlKey) ||
-        (!isMac && e.ctrlKey && e.shiftKey && isKeyC);
+        (isWin && e.ctrlKey && !e.shiftKey && isKeyC && this.terminal.hasSelection()) ||
+        (!isMac && !isWin && e.ctrlKey && e.shiftKey && isKeyC);
       const isPlainCtrlC = e.ctrlKey && !e.shiftKey && isKeyC && this.terminal.hasSelection();
       if (isExplicitCopy || isPlainCtrlC) {
         const sel = this.terminal.getSelection() || (isExplicitCopy ? this.lastSelection : '');
@@ -165,15 +171,42 @@ export class TerminalSessionManager {
         }
       }
 
-      // Paste: Cmd+V (macOS) or Ctrl+Shift+V (Linux)
+      // Paste: Cmd+V (macOS), Ctrl+V (Windows), Ctrl+Shift+V (Linux)
+      // We read via Electron's native clipboard API rather than relying on the
+      // paste DOM event's e.clipboardData, which Chromium on Windows returns
+      // empty when the clipboard content hasn't changed between pastes (same
+      // sequence number). Bracketed paste mode is applied manually so Claude Code
+      // still sees the \x1b[200~...\x1b[201~ markers it uses for the paste indicator.
       if (
         (isMac && e.metaKey && isKeyV && !e.ctrlKey) ||
-        (!isMac && e.ctrlKey && e.shiftKey && isKeyV)
+        (isWin && e.ctrlKey && isKeyV) ||
+        (!isMac && !isWin && e.ctrlKey && e.shiftKey && isKeyV)
       ) {
         e.preventDefault();
-        window.electronAPI.clipboardReadText().then((text) => {
-          if (text) window.electronAPI.ptyInput({ id: this.id, data: text });
-        });
+        this.isPasting = true;
+        window.electronAPI
+          .clipboardReadText()
+          .then((text) => {
+            if (!text) {
+              this.isPasting = false;
+              return;
+            }
+            // Strip \r from paste content: ConPTY on Windows handles \r inside
+            // bracketed-paste blocks inconsistently (see github.com/remcovolmer/
+            // command/pull/118). Keep \n as the line separator inside BPM brackets.
+            const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '');
+            window.electronAPI.ptyInput({
+              id: this.id,
+              data: `\x1b[200~${normalized}\x1b[201~`,
+            });
+            setTimeout(() => {
+              this.isPasting = false;
+            }, 0);
+          })
+          .catch((err) => {
+            this.isPasting = false;
+            console.warn('[terminal] clipboardReadText failed:', err);
+          });
         return false;
       }
 
@@ -209,8 +242,10 @@ export class TerminalSessionManager {
       return true;
     });
 
-    // Send input to PTY
+    // Send input to PTY. Guard against the native paste DOM event also reaching
+    // xterm.js while our clipboardReadText path is already handling the same paste.
     this.terminal.onData((data) => {
+      if (this.isPasting) return;
       window.electronAPI.ptyInput({ id: this.id, data });
     });
   }
