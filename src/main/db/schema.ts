@@ -40,6 +40,7 @@ export const tasks = sqliteTable(
     // SessionStart hook before we switched to `claude --continue`. Column kept
     // to avoid a destructive migration. Do not read or write.
     lastSessionId: text('last_session_id'),
+    hadMessages: integer('had_messages', { mode: 'boolean' }).default(false),
     archivedAt: text('archived_at'),
     sortOrder: integer('sort_order').notNull().default(0),
     createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
