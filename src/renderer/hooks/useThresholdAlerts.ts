@@ -35,14 +35,16 @@ export function useThresholdAlerts(
 
     // Context window is per-session, so check each PTY independently.
     for (const [ptyId, sl] of Object.entries(statusLineData)) {
+      // No task name means the user can't tell which task the toast is about —
+      // skip rather than fire an unattributable "Context window at X%".
       const taskName = taskNames[ptyId];
+      if (!taskName) continue;
       const pct = Math.round(sl.contextUsage.percentage);
-      const base = `Context window at ${pct}%`;
       fire(
         `${ptyId}:context`,
         sl.contextUsage.percentage,
         usageThresholds.contextPercentage,
-        taskName ? `${taskName}: ${base}` : base,
+        `${taskName}: Context window at ${pct}%`,
       );
     }
 

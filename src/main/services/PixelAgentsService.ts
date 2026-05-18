@@ -129,19 +129,32 @@ export class PixelAgentsService {
     PixelAgentsService.running = true;
     PixelAgentsService.officeStatuses = {};
 
-    // In packaged builds, the watcher lives in app.asar.unpacked and can't be
-    // executed directly. Use Electron as a plain Node process via ELECTRON_RUN_AS_NODE.
-    const args = app.isPackaged
-      ? [binPath, '--config', getConfigPath()]
-      : ['--config', getConfigPath()];
-    const cmd = app.isPackaged ? process.execPath : binPath;
+    const isCjs = binPath.endsWith('.cjs');
+    const isCmd = binPath.endsWith('.cmd');
+
+    let cmd: string;
+    let args: string[];
+    const extraEnv: Record<string, string> = {};
+
+    if (app.isPackaged || isCjs) {
+      // Packaged builds and .cjs scripts run under Electron as a plain Node process
+      cmd = process.execPath;
+      args = [binPath, '--config', getConfigPath()];
+      extraEnv.ELECTRON_RUN_AS_NODE = '1';
+    } else if (isCmd) {
+      cmd = 'cmd.exe';
+      args = ['/c', binPath, '--config', getConfigPath()];
+    } else {
+      cmd = binPath;
+      args = ['--config', getConfigPath()];
+    }
 
     const child = spawn(cmd, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
         NODE_NO_WARNINGS: '1',
-        ...(app.isPackaged ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
+        ...extraEnv,
       },
     });
 
@@ -178,6 +191,17 @@ export class PixelAgentsService {
         PixelAgentsService.respawnTimer = setTimeout(() => {
           console.log('[pixel-agents] Respawning watcher...');
           PixelAgentsService.child = null;
+          PixelAgentsService.start();
+        }, RESPAWN_DELAY);
+      }
+    });
+
+    child.on('error', (err) => {
+      console.error(`[pixel-agents] Spawn error for ${cmd}:`, err);
+      PixelAgentsService.child = null;
+      if (PixelAgentsService.running) {
+        PixelAgentsService.respawnTimer = setTimeout(() => {
+          console.log('[pixel-agents] Respawning after spawn error...');
           PixelAgentsService.start();
         }, RESPAWN_DELAY);
       }
@@ -286,15 +310,14 @@ export class PixelAgentsService {
   }
 
   private static resolveBinPath(): string | null {
-    // In dev: node_modules/.bin/pixel-agents-watcher (shell wrapper)
-    const devPath = join(app.getAppPath(), 'node_modules', '.bin', 'pixel-agents-watcher');
-    if (existsSync(devPath)) return devPath;
-
-    // Packaged app: resolve the bundled CJS file from asarUnpack
+    const devBase = join(app.getAppPath(), 'node_modules', '.bin', 'pixel-agents-watcher');
+    if (process.platform === 'win32' && existsSync(devBase + '.cmd')) return devBase + '.cmd';
+    if (existsSync(devBase)) return devBase;
     try {
       const resolved = require.resolve('@syv-ai/pixel-agents-watcher/dist/watcher.cjs');
       return resolved.replace('app.asar', 'app.asar.unpacked');
-    } catch {
+    } catch (err) {
+      console.error('[pixel-agents] require.resolve failed for watcher.cjs:', err);
       return null;
     }
   }
