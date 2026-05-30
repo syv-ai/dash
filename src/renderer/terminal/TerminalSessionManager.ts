@@ -4,7 +4,8 @@ import { SerializeAddon } from '@xterm/addon-serialize';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import type { TerminalSnapshot } from '../../shared/types';
 import { FilePathLinkProvider } from './FilePathLinkProvider';
-import { darkTheme, lightTheme, resolveTheme } from './terminalThemes';
+import type { ITheme } from 'xterm';
+import { darkTheme, lightTheme, resolveTheme, resolveShellBackground } from './terminalThemes';
 
 const SNAPSHOT_DEBOUNCE_MS = 10_000;
 const MEMORY_LIMIT_BYTES = 128 * 1024 * 1024; // 128MB soft limit
@@ -68,7 +69,7 @@ export class TerminalSessionManager {
       fontSize: 13,
       lineHeight: 1.2,
       allowProposedApi: true,
-      theme: resolveTheme(this.themeId, this.isDark),
+      theme: this.effectiveTheme(resolveTheme(this.themeId, this.isDark)),
       cursorBlink: true,
       linkHandler: {
         activate: (_event, uri) => {
@@ -253,7 +254,7 @@ export class TerminalSessionManager {
       this.terminal.open(container);
       this.opened = true;
       // Sync .xterm background so padding gutters match the theme
-      const bg = resolveTheme(this.themeId, this.isDark).background;
+      const bg = this.effectiveTheme(resolveTheme(this.themeId, this.isDark)).background;
       if (this.terminal.element && bg) {
         this.terminal.element.style.backgroundColor = bg;
       }
@@ -567,10 +568,22 @@ export class TerminalSessionManager {
     this.setTerminalTheme(this.themeId, isDark);
   }
 
+  /**
+   * Shell-only sessions (the sidebar terminal) paint over the slate `--surface-1`
+   * card rather than the active PTY theme background, so the xterm canvas blends
+   * with the surrounding sidebar chrome.
+   */
+  private effectiveTheme(theme: ITheme): ITheme {
+    if (!this.shellOnly) return theme;
+    const bg = resolveShellBackground();
+    if (!bg) return theme;
+    return { ...theme, background: bg, cursorAccent: bg };
+  }
+
   setTerminalTheme(themeId: string, isDark: boolean) {
     this.themeId = themeId;
     this.isDark = isDark;
-    const theme = resolveTheme(themeId, isDark);
+    const theme = this.effectiveTheme(resolveTheme(themeId, isDark));
     try {
       this.terminal.options.theme = theme;
     } catch {
