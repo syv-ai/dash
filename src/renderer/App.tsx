@@ -1809,7 +1809,10 @@ export function App() {
 
         {activeTask && (
           <>
-            <PanelResizeHandle disabled={changesPanelCollapsed} className="w-[1px] bg-border/40" />
+            <PanelResizeHandle
+              disabled={changesPanelCollapsed}
+              className="w-[1px] bg-transparent"
+            />
             <Panel
               ref={changesPanelRef}
               className={changesAnimating ? 'panel-transition' : ''}
