@@ -1834,7 +1834,13 @@ export function App() {
                 setTimeout(() => setChangesAnimating(false), 200);
               }}
             >
-              <div className="h-full flex flex-col overflow-hidden">
+              <div
+                className={
+                  changesPanelCollapsed
+                    ? 'h-full flex flex-col overflow-hidden'
+                    : 'h-full flex flex-col overflow-hidden rounded-[10px] bg-[hsl(var(--surface-1))] shadow-[var(--shadow-card)]'
+                }
+              >
                 <ShellDrawerWrapper
                   enabled={
                     shellDrawerEnabled && shellDrawerPosition === 'right' && !changesPanelCollapsed
