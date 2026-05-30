@@ -91,8 +91,8 @@ export function FolderRow({
     >
       <Checkbox checked={agg.stageState} onChange={onToggleStage} />
       {Array.from({ length: indent }, (_, i) => (
-        <span key={i} className="w-2 h-full relative inline-block flex-shrink-0">
-          <span className="absolute left-[3px] top-[-2px] bottom-[-2px] w-px bg-[hsl(var(--border)/0.5)]" />
+        <span key={i} className="w-1 h-full relative inline-block flex-shrink-0">
+          <span className="absolute left-[1px] top-[-2px] bottom-[-2px] w-px bg-[hsl(var(--border)/0.5)]" />
         </span>
       ))}
       <span
@@ -112,18 +112,22 @@ export function FolderRow({
       <span className="min-w-[18px] h-[16px] flex items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary tabular-nums px-1 flex-shrink-0">
         {agg.count}
       </span>
-      <span className="font-mono text-[10px] flex gap-1.5 flex-shrink-0 group-hover:invisible">
-        {agg.add || agg.del ? (
-          <>
-            {agg.add ? <span className="text-[hsl(var(--git-added)/0.75)]">+{agg.add}</span> : null}
-            {agg.del ? (
-              <span className="text-[hsl(var(--git-deleted)/0.75)]">−{agg.del}</span>
-            ) : null}
-          </>
-        ) : agg.untrackedAdd ? (
-          <span className="text-muted-foreground/70">+{agg.untrackedAdd}</span>
-        ) : null}
-      </span>
+      {!open && (
+        <span className="font-mono text-[10px] flex gap-1.5 flex-shrink-0 group-hover:invisible">
+          {agg.add || agg.del ? (
+            <>
+              {agg.add ? (
+                <span className="text-[hsl(var(--git-added)/0.75)]">+{agg.add}</span>
+              ) : null}
+              {agg.del ? (
+                <span className="text-[hsl(var(--git-deleted)/0.75)]">−{agg.del}</span>
+              ) : null}
+            </>
+          ) : agg.untrackedAdd ? (
+            <span className="text-muted-foreground/70">+{agg.untrackedAdd}</span>
+          ) : null}
+        </span>
+      )}
       {(canDiscard || canIgnore) && (
         <div
           className={`absolute right-2 top-1/2 -translate-y-1/2 items-center gap-1 ${

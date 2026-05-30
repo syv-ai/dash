@@ -69,7 +69,7 @@ export function RightInspector({
       <UsageStrip rateLimits={rateLimits} contextUsage={contextUsage} />
 
       {/* Control row */}
-      <div className="flex items-center gap-2 px-3 py-1.5">
+      <div className="flex items-center gap-2 px-3 pt-3 pb-1.5">
         {fileCount > 0 && (
           <span className="min-w-[18px] h-[16px] flex items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary tabular-nums px-1 shrink-0">
             {fileCount}

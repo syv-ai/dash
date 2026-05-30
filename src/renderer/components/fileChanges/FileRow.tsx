@@ -68,8 +68,8 @@ export function FileRow({
     >
       <Checkbox checked={file.staged} onChange={() => onToggleStage(file)} />
       {Array.from({ length: indent }, (_, i) => (
-        <span key={i} className="w-2 h-full relative inline-block flex-shrink-0">
-          <span className="absolute left-[3px] top-[-2px] bottom-[-2px] w-px bg-[hsl(var(--border)/0.5)]" />
+        <span key={i} className="w-1 h-full relative inline-block flex-shrink-0">
+          <span className="absolute left-[1px] top-[-2px] bottom-[-2px] w-px bg-[hsl(var(--border)/0.5)]" />
         </span>
       ))}
       <span
