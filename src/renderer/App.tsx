@@ -1816,7 +1816,7 @@ export function App() {
               style={
                 changesPanelCollapsed
                   ? { background: terminalBg }
-                  : { background: terminalBg, padding: '14px 14px 14px 14px' }
+                  : { background: terminalBg, padding: '14px 14px 14px 0' }
               }
               defaultSize={changesPanelCollapsed ? 3 : 22}
               minSize={12}
