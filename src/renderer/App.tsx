@@ -1821,11 +1821,11 @@ export function App() {
                   ? { background: terminalBg }
                   : { background: terminalBg, padding: '14px 14px 14px 0' }
               }
-              defaultSize={changesPanelCollapsed ? 3 : 22}
+              defaultSize={changesPanelCollapsed ? 0.5 : 22}
               minSize={12}
               maxSize={40}
               collapsible
-              collapsedSize={3}
+              collapsedSize={0.5}
               onCollapse={() => {
                 setChangesPanelCollapsed(true);
                 localStorage.setItem('changesPanelCollapsed', 'true');
