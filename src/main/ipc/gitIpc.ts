@@ -6,9 +6,12 @@ import { join } from 'path';
 import { randomBytes } from 'crypto';
 import { homedir } from 'os';
 import { GitService } from '../services/GitService';
+import type { ParserEvent } from '../services/preCommitParser';
 import { startWatching, stopWatching } from '../services/FileWatcherService';
 
 const execFileAsync = promisify(execFile);
+
+const activeCommits = new Map<string, { cancel: () => void }>();
 
 export function registerGitIpc(): void {
   // Clone a git repository
@@ -88,10 +91,10 @@ export function registerGitIpc(): void {
     },
   );
 
-  // Stage a file
-  ipcMain.handle('git:stageFile', async (_event, args: { cwd: string; filePath: string }) => {
+  // Stage one or more files in a single git invocation
+  ipcMain.handle('git:stageFiles', async (_event, args: { cwd: string; filePaths: string[] }) => {
     try {
-      await GitService.stageFile(args.cwd, args.filePath);
+      await GitService.stageFiles(args.cwd, args.filePaths);
       return { success: true };
     } catch (error) {
       return { success: false, error: String(error) };
@@ -108,10 +111,10 @@ export function registerGitIpc(): void {
     }
   });
 
-  // Unstage a file
-  ipcMain.handle('git:unstageFile', async (_event, args: { cwd: string; filePath: string }) => {
+  // Unstage one or more files in a single git invocation
+  ipcMain.handle('git:unstageFiles', async (_event, args: { cwd: string; filePaths: string[] }) => {
     try {
-      await GitService.unstageFile(args.cwd, args.filePath);
+      await GitService.unstageFiles(args.cwd, args.filePaths);
       return { success: true };
     } catch (error) {
       return { success: false, error: String(error) };
@@ -128,10 +131,10 @@ export function registerGitIpc(): void {
     }
   });
 
-  // Discard changes to a file
-  ipcMain.handle('git:discardFile', async (_event, args: { cwd: string; filePath: string }) => {
+  // Discard changes (tracked checkout + untracked unlinks) for one or more files
+  ipcMain.handle('git:discardFiles', async (_event, args: { cwd: string; filePaths: string[] }) => {
     try {
-      await GitService.discardFile(args.cwd, args.filePath);
+      await GitService.discardFiles(args.cwd, args.filePaths);
       return { success: true };
     } catch (error) {
       return { success: false, error: String(error) };
@@ -139,13 +142,69 @@ export function registerGitIpc(): void {
   });
 
   // Commit staged changes
-  ipcMain.handle('git:commit', async (_event, args: { cwd: string; message: string }) => {
+  ipcMain.handle(
+    'git:commit',
+    async (_event, args: { cwd: string; message: string; allowEmpty?: boolean }) => {
+      try {
+        await GitService.commit(args.cwd, args.message, { allowEmpty: args.allowEmpty });
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: String(error) };
+      }
+    },
+  );
+
+  // Start a streamed commit run. Parsed pre-commit/prek events arrive on
+  // `git:commitEvent` keyed by requestId; the final event has `type: 'close'`.
+  ipcMain.handle(
+    'git:commitStart',
+    async (event, args: { cwd: string; message: string; allowEmpty?: boolean }) => {
+      try {
+        const requestId = randomBytes(8).toString('hex');
+        const wc = event.sender;
+        const handle = GitService.commitStreamed(
+          args.cwd,
+          args.message,
+          { allowEmpty: args.allowEmpty },
+          (parserEvent: ParserEvent) => {
+            if (!wc.isDestroyed()) {
+              wc.send('git:commitEvent', { requestId, event: parserEvent });
+            }
+          },
+          (closeResult) => {
+            activeCommits.delete(requestId);
+            if (!wc.isDestroyed()) {
+              wc.send('git:commitEvent', {
+                requestId,
+                event: { type: 'close', ...closeResult },
+              });
+            }
+          },
+        );
+        activeCommits.set(requestId, handle);
+        return { success: true, data: { requestId } };
+      } catch (error) {
+        return { success: false, error: String(error) };
+      }
+    },
+  );
+
+  // Append a path to the repo's .gitignore (creates the file if missing).
+  ipcMain.handle('git:gitignoreAdd', async (_event, args: { cwd: string; filePath: string }) => {
     try {
-      await GitService.commit(args.cwd, args.message);
+      await GitService.addToGitignore(args.cwd, args.filePath);
       return { success: true };
     } catch (error) {
       return { success: false, error: String(error) };
     }
+  });
+
+  // Cancel an in-flight streamed commit (sends SIGTERM to the git child).
+  ipcMain.handle('git:commitCancel', async (_event, args: { requestId: string }) => {
+    const handle = activeCommits.get(args.requestId);
+    if (!handle) return { success: false, error: 'No active commit with that id' };
+    handle.cancel();
+    return { success: true };
   });
 
   // Push to remote

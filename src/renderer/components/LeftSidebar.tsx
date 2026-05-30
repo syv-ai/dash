@@ -159,7 +159,7 @@ function RotationSection({
                 </span>
               )}
               {project && (
-                <span className="text-muted-foreground/40 text-[11px] whitespace-nowrap overflow-hidden flex-shrink min-w-0">
+                <span className="text-muted-foreground/40 text-[11px] whitespace-nowrap overflow-hidden flex-shrink min-w-0 group-hover/rot:invisible">
                   {project.name}
                 </span>
               )}
@@ -171,7 +171,7 @@ function RotationSection({
                 }}
                 title="Remove from rotation"
                 size="sm"
-                className="opacity-0 group-hover/rot:opacity-100 flex-shrink-0"
+                className="hidden group-hover/rot:flex absolute right-2 top-1/2 -translate-y-1/2 flex-shrink-0"
               >
                 <X size={12} strokeWidth={1.8} />
               </IconButton>
@@ -316,20 +316,16 @@ export function LeftSidebar({
 
   /* ── Collapsed ──────────────────────────────────────────── */
 
+  const isMac = window.electronAPI.getPlatform() === 'darwin';
+
   if (collapsed) {
     return (
       <div
-        className="h-full flex flex-col items-center py-3 gap-1"
+        className="h-full flex flex-col items-center gap-1"
         style={{ background: 'hsl(var(--surface-1))' }}
       >
-        <Tooltip content="Expand sidebar">
-          <button
-            onClick={onToggleCollapse}
-            className="p-1.5 rounded-md hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
-          >
-            <PanelLeftOpen size={18} strokeWidth={1.5} />
-          </button>
-        </Tooltip>
+        {isMac && <div className="h-[28px] w-full flex-shrink-0 titlebar-drag" />}
+        <div className="h-2" />
 
         <Tooltip content="Add project">
           <button
@@ -444,24 +440,7 @@ export function LeftSidebar({
 
   return (
     <div className="h-full flex flex-col" style={{ background: 'hsl(var(--surface-1))' }}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-3 pb-1">
-        <span className="text-sm font-medium text-muted-foreground/50 select-none">
-          {showActiveTasksSection && rotationTasks.length > 0 ? 'Dash' : 'Projects'}
-        </span>
-        <div className="flex items-center gap-1">
-          <IconButton onClick={onOpenFolder} title="Add project" className="titlebar-no-drag">
-            <FolderOpen size={15} strokeWidth={1.8} />
-          </IconButton>
-          <IconButton
-            onClick={onToggleCollapse}
-            title="Collapse sidebar"
-            className="titlebar-no-drag"
-          >
-            <PanelLeftClose size={15} strokeWidth={1.8} />
-          </IconButton>
-        </div>
-      </div>
+      {isMac && <div className="h-[28px] flex-shrink-0 titlebar-drag" />}
 
       {/* Rotation section */}
       {showActiveTasksSection && rotationTasks.length > 0 && (
@@ -480,11 +459,19 @@ export function LeftSidebar({
 
       {/* Project list */}
       <div className="flex-1 overflow-y-auto px-2 pb-2 pt-1">
-        {showActiveTasksSection && rotationTasks.length > 0 && projects.length > 0 && (
-          <span className="block px-2 pb-1 pt-0.5 text-[11px] font-medium text-muted-foreground/50 select-none tracking-wide uppercase">
+        <div className="flex items-center justify-between px-2 pb-1 pt-0.5">
+          <span className="text-[11px] font-medium text-muted-foreground/50 select-none tracking-wide uppercase">
             Projects
           </span>
-        )}
+          <Tooltip content="Create project">
+            <button
+              onClick={onOpenFolder}
+              className="p-[3px] rounded text-muted-foreground/60 hover:text-foreground hover:bg-foreground/5 transition-colors titlebar-no-drag"
+            >
+              <Plus size={13} strokeWidth={2} />
+            </button>
+          </Tooltip>
+        </div>
         {projects.length === 0 && (
           <div className="px-2 py-10 text-center">
             <p className="text-[13px] text-muted-foreground/40 leading-relaxed">

@@ -201,15 +201,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('git:getDiff', args),
   gitGetDiffUntracked: (args: { cwd: string; filePath: string; contextLines?: number }) =>
     ipcRenderer.invoke('git:getDiffUntracked', args),
-  gitStageFile: (args: { cwd: string; filePath: string }) =>
-    ipcRenderer.invoke('git:stageFile', args),
+  gitStageFiles: (args: { cwd: string; filePaths: string[] }) =>
+    ipcRenderer.invoke('git:stageFiles', args),
   gitStageAll: (cwd: string) => ipcRenderer.invoke('git:stageAll', cwd),
-  gitUnstageFile: (args: { cwd: string; filePath: string }) =>
-    ipcRenderer.invoke('git:unstageFile', args),
+  gitUnstageFiles: (args: { cwd: string; filePaths: string[] }) =>
+    ipcRenderer.invoke('git:unstageFiles', args),
   gitUnstageAll: (cwd: string) => ipcRenderer.invoke('git:unstageAll', cwd),
-  gitDiscardFile: (args: { cwd: string; filePath: string }) =>
-    ipcRenderer.invoke('git:discardFile', args),
-  gitCommit: (args: { cwd: string; message: string }) => ipcRenderer.invoke('git:commit', args),
+  gitDiscardFiles: (args: { cwd: string; filePaths: string[] }) =>
+    ipcRenderer.invoke('git:discardFiles', args),
+  gitignoreAdd: (args: { cwd: string; filePath: string }) =>
+    ipcRenderer.invoke('git:gitignoreAdd', args),
+  gitCommit: (args: { cwd: string; message: string; allowEmpty?: boolean }) =>
+    ipcRenderer.invoke('git:commit', args),
+  gitCommitStart: (args: { cwd: string; message: string; allowEmpty?: boolean }) =>
+    ipcRenderer.invoke('git:commitStart', args),
+  gitCommitCancel: (requestId: string) => ipcRenderer.invoke('git:commitCancel', { requestId }),
+  onCommitEvent: (cb: (msg: { requestId: string; event: unknown }) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, msg: { requestId: string; event: unknown }) =>
+      cb(msg);
+    ipcRenderer.on('git:commitEvent', listener);
+    return () => ipcRenderer.removeListener('git:commitEvent', listener);
+  },
   gitPush: (cwd: string) => ipcRenderer.invoke('git:push', cwd),
   gitRemoteBranchExists: (args: { cwd: string; branch: string }) =>
     ipcRenderer.invoke('git:remoteBranchExists', args),

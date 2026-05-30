@@ -8,32 +8,35 @@
 
 @layer base {
   :root {
-    /* Light — matches terminal lightTheme (#ffffff bg, #383a42 fg) */
-    --background: 0 0% 100%;
-    --foreground: 228 8% 24%;
+    /* Light — warm paper + deep moonlight. Matches refined terminal lightTheme. */
+    --background: 40 38% 96%; /* #faf8f3 warm paper */
+    --foreground: 36 11% 10%; /* #1c1b18 deep warm graphite */
     --card: 0 0% 100%;
-    --card-foreground: 228 8% 24%;
+    --card-foreground: 36 11% 10%;
     --popover: 0 0% 100%;
-    --popover-foreground: 228 8% 24%;
-    --primary: 32 95% 52%;
+    --popover-foreground: 36 11% 10%;
+    --primary: 218 34% 35%; /* #3b5078 deep moonlight */
     --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 95%;
-    --secondary-foreground: 228 8% 24%;
-    --muted: 0 0% 95%;
-    --muted-foreground: 0 0% 45%;
-    --accent: 0 0% 93%;
-    --accent-foreground: 228 8% 24%;
-    --destructive: 0 72% 51%;
+    --secondary: 40 30% 94%;
+    --secondary-foreground: 36 11% 10%;
+    --muted: 40 30% 94%;
+    --muted-foreground: 36 11% 42%;
+    --accent: 40 30% 92%;
+    --accent-foreground: 36 11% 10%;
+    --destructive: 0 72% 51%; /* bright red */
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 89%;
+    --border: 0 0% 89%; /* kept — consumers use /alpha */
     --input: 0 0% 89%;
-    --ring: 32 95% 52%;
+    --ring: 218 34% 35%;
     --radius: 0.5rem;
 
     --surface-0: 0 0% 100%;
-    --surface-1: 0 0% 98%;
-    --surface-2: 0 0% 96%;
-    --surface-3: 0 0% 93%;
+    --surface-1: 40 38% 98%; /* off-paper for sidebar */
+    --surface-2: 40 30% 93%;
+    --surface-3: 38 30% 88%; /* #ece6d5 */
+
+    --warn: 38 92% 50%; /* bright amber */
+    --warn-foreground: 0 0% 100%;
 
     --git-added: 142 71% 45%;
     --git-modified: 38 92% 50%;
@@ -55,39 +58,42 @@
   }
 
   .dark {
-    /* Dark — matches terminal darkTheme (#1a1a1a bg, #d4d4d4 fg) */
-    --background: 0 0% 10%;
-    --foreground: 0 0% 83%;
-    --card: 0 0% 12%;
-    --card-foreground: 0 0% 83%;
-    --popover: 0 0% 13%;
-    --popover-foreground: 0 0% 83%;
-    --primary: 36 100% 57%;
-    --primary-foreground: 0 0% 6%;
-    --secondary: 0 0% 14%;
-    --secondary-foreground: 0 0% 83%;
-    --muted: 0 0% 14%;
-    --muted-foreground: 0 0% 63%;
-    --accent: 0 0% 16%;
-    --accent-foreground: 0 0% 83%;
-    --destructive: 0 63% 45%;
-    --destructive-foreground: 0 0% 95%;
-    --border: 0 0% 16%;
-    --input: 0 0% 18%;
-    --ring: 36 100% 57%;
+    /* Dark — graphite + moonlight. Matches refined terminal darkTheme (#0d0d11 bg, #f1eee5 fg). */
+    --background: 240 7% 7%; /* #0d0d11 */
+    --foreground: 40 18% 92%; /* #f1eee5 warm off-white */
+    --card: 240 8% 9%; /* #14141a */
+    --card-foreground: 40 18% 92%;
+    --popover: 240 7% 10%;
+    --popover-foreground: 40 18% 92%;
+    --primary: 220 35% 80%; /* #b8c5e0 moonlight */
+    --primary-foreground: 240 10% 5%;
+    --secondary: 240 7% 12%;
+    --secondary-foreground: 40 18% 92%;
+    --muted: 240 7% 12%;
+    --muted-foreground: 40 12% 62%;
+    --accent: 240 7% 14%;
+    --accent-foreground: 40 18% 92%;
+    --destructive: 0 72% 56%; /* bright red — vivid for delete / error */
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 16%; /* kept — consumers use /alpha */
+    --input: 240 7% 16%;
+    --ring: 220 35% 80%;
     --radius: 0.5rem;
 
-    --surface-0: 0 0% 10%;
-    --surface-1: 0 0% 12%;
-    --surface-2: 0 0% 15%;
-    --surface-3: 0 0% 18%;
+    --surface-0: 240 7% 6%; /* #0d0d11 */
+    --surface-1: 240 8% 9%; /* #14141a */
+    --surface-2: 240 7% 12%; /* #1c1c22 */
+    --surface-3: 240 8% 15%; /* #24242c */
 
-    --git-added: 142 71% 45%;
-    --git-modified: 38 92% 50%;
-    --git-deleted: 0 72% 56%;
-    --git-renamed: 217 91% 60%;
+    --warn: 42 95% 60%; /* bright amber for usage warn tier */
+    --warn-foreground: 240 10% 5%;
+
+    --git-added: 142 71% 45%; /* bright green — vivid */
+    --git-modified: 38 92% 50%; /* bright amber */
+    --git-deleted: 0 72% 56%; /* bright red */
+    --git-renamed: 217 91% 60%; /* bright blue */
     --git-untracked: 0 0% 56%;
-    --git-conflicted: 25 95% 53%;
+    --git-conflicted: 25 95% 53%; /* bright orange */
 
     /* Category palette (dark) — bumped lightness so badges stay legible on dark surfaces. */
     --cat-1: 210 75% 65%;
@@ -292,6 +298,17 @@
 }
 .animate-scale-in {
   animation: scaleIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes popoverIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-popover-in {
+  animation: popoverIn 140ms ease-out;
 }
 @keyframes slideInRight {
   from {

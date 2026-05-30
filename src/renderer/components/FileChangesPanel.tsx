@@ -1,5 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Tooltip } from './ui/Tooltip';
+import { Popover, PopoverTrigger, PopoverContent, PopoverArrow } from './ui/Popover';
+import { CircleCheck } from './ui/CircleCheck';
+import { FileTreeView } from './fileChanges/FileTreeView';
+import {
+  commitRunReducer,
+  initialRunningState,
+  type CommitRunState,
+  type CommitRunEvent,
+} from './fileChanges/commitRunReducer';
+import { CommitRunView } from './fileChanges/CommitRunView';
 import {
   Plus,
   Minus,
@@ -17,38 +27,30 @@ import {
   PanelRightOpen,
   PanelRightClose,
   GitBranch,
+  X,
 } from 'lucide-react';
 import type { FileChange, FileChangeStatus, GitStatus } from '../../shared/types';
 
-interface RightPanelTab {
-  id: string;
-  label: string;
-}
-
 interface FileChangesPanelProps {
+  cwd: string;
   gitStatus: GitStatus | null;
   loading: boolean;
-  onStageFile: (filePath: string) => void;
-  onUnstageFile: (filePath: string) => void;
+  onStageFiles: (filePaths: string[]) => void;
+  onUnstageFiles: (filePaths: string[]) => void;
   onStageAll: () => void;
   onUnstageAll: () => void;
-  onDiscardFile: (filePath: string) => void;
+  onDiscardFiles: (filePaths: string[]) => void;
+  onAddToGitignore: (filePath: string) => void;
   onViewDiff: (filePath: string, staged: boolean) => void;
-  onCommit: (message: string) => Promise<void>;
+  onCommit: (message: string, options?: { allowEmpty?: boolean }) => Promise<void>;
   onPush: () => Promise<void>;
+  onCommitFinished?: () => void;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
   onShowCommitGraph?: () => void;
-  /** Tabs in the header. When omitted, the title is the static "Changes" label. */
-  tabs?: {
-    options: RightPanelTab[];
-    activeId: string;
-    onChange: (id: string) => void;
-  };
-  /** When set AND `tabs.activeId !== 'changes'`, this replaces the file list / commit area
-   *  and the changes-specific actions hide. Lets the parent host an alternate panel
-   *  body (e.g., the structured tool-use view) under the same unified header. */
-  alternateBody?: React.ReactNode;
+  /** When true, force-close transient surfaces (commit popover). Used by the
+   *  RightInspector when switching to the Structured tab. */
+  paused?: boolean;
 }
 
 const STATUS_COLORS: Record<FileChangeStatus, string> = {
@@ -117,7 +119,7 @@ function FileItem({
 
   return (
     <div
-      className={`group flex items-center gap-2 px-2 py-[5px] rounded-md text-[13px] cursor-pointer hover:bg-accent/50 transition-all duration-150 ${isNew ? 'file-item-enter' : ''}`}
+      className={`group relative flex items-center gap-2 px-2 py-[5px] rounded-md text-[13px] cursor-pointer hover:bg-accent/50 transition-all duration-150 ${isNew ? 'file-item-enter' : ''}`}
       onClick={onViewDiff}
     >
       {/* Staged checkbox */}
@@ -158,54 +160,99 @@ function FileItem({
         </span>
       )}
 
-      {/* Status badge */}
+      {/* Status badge — hidden (but width preserved) on hover when discard will overlay it */}
       <span
-        className={`w-[18px] h-[16px] rounded flex items-center justify-center text-[9px] font-bold flex-shrink-0 ${STATUS_BADGE_COLORS[file.status]}`}
+        className={`w-[18px] h-[16px] rounded flex items-center justify-center text-[9px] font-bold flex-shrink-0 ${STATUS_BADGE_COLORS[file.status]} ${
+          !file.staged ? 'group-hover:invisible' : ''
+        }`}
       >
         {STATUS_LABELS[file.status]}
       </span>
 
-      {/* Hover discard action (unstaged only) */}
+      {/* Hover discard action (unstaged only) — overlays the status badge slot */}
       {!file.staged && (
-        <div className="opacity-0 group-hover:opacity-100 flex gap-px flex-shrink-0 transition-all duration-150">
-          <Tooltip content="Discard changes">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDiscard();
-              }}
-              className="p-[3px] rounded hover:bg-destructive/15 text-muted-foreground/50 hover:text-destructive"
-            >
-              <Undo2 size={11} strokeWidth={2} />
-            </button>
-          </Tooltip>
-        </div>
+        <Tooltip content="Discard changes">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDiscard();
+            }}
+            className="hidden group-hover:flex absolute right-2 top-1/2 -translate-y-1/2 p-[3px] rounded hover:bg-destructive/15 text-muted-foreground/50 hover:text-destructive"
+          >
+            <Undo2 size={11} strokeWidth={2} />
+          </button>
+        </Tooltip>
       )}
     </div>
   );
 }
 
 export function FileChangesPanel({
+  cwd,
   gitStatus,
   loading,
-  onStageFile,
-  onUnstageFile,
+  onStageFiles,
+  onUnstageFiles,
   onStageAll,
   onUnstageAll,
-  onDiscardFile,
+  onDiscardFiles,
+  onAddToGitignore,
   onViewDiff,
   onCommit,
   onPush,
+  onCommitFinished,
   collapsed,
   onToggleCollapse,
   onShowCommitGraph,
-  tabs,
-  alternateBody,
+  paused = false,
 }: FileChangesPanelProps) {
   const [commitMsg, setCommitMsg] = useState('');
   const [committing, setCommitting] = useState(false);
   const [pushing, setPushing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [commitOpen, setCommitOpen] = useState(false);
+  const [allowEmpty, setAllowEmpty] = useState(false);
+  const commitTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [commitRun, setCommitRun] = useState<CommitRunState>({ status: 'idle' });
+  const prevStagedRef = useRef<string[]>([]);
+  const lastMessageRef = useRef('');
+  const lastAllowEmptyRef = useRef(false);
+
+  useEffect(() => {
+    if (commitOpen) {
+      const id = setTimeout(() => commitTextareaRef.current?.focus(), 30);
+      return () => clearTimeout(id);
+    }
+  }, [commitOpen]);
+
+  // Subscribe to commit events while running. The reducer ignores events
+  // once we've left the running state.
+  useEffect(() => {
+    if (commitRun.status !== 'running') return;
+    const runningRequestId = commitRun.requestId;
+    const off = window.electronAPI.onCommitEvent((msg) => {
+      if (msg.requestId !== runningRequestId) return;
+      setCommitRun((s) =>
+        s.status === 'running' ? commitRunReducer(s, msg.event as CommitRunEvent) : s,
+      );
+    });
+    return off;
+  }, [commitRun.status, commitRun.status === 'running' ? commitRun.requestId : null]);
+
+  // After success: refresh status (parent will swap files into the tree),
+  // then linger briefly before returning the panel to the idle tree view.
+  useEffect(() => {
+    if (commitRun.status !== 'success') return;
+    onCommitFinished?.();
+    const id = setTimeout(() => setCommitRun({ status: 'idle' }), 600);
+    return () => clearTimeout(id);
+  }, [commitRun.status, onCommitFinished]);
+
+  // Close the commit popover when the parent signals a major focus shift —
+  // tab change to Structured, panel collapse, etc.
+  useEffect(() => {
+    if (paused) setCommitOpen(false);
+  }, [paused]);
 
   // Track previous file keys to detect newly added files
   const prevFileKeysRef = useRef<Set<string>>(new Set());
@@ -232,17 +279,9 @@ export function FileChangesPanel({
   if (collapsed) {
     return (
       <div
-        className="h-full flex flex-col items-center py-2 gap-2"
+        className="h-full flex flex-col items-center py-3 gap-2"
         style={{ background: 'hsl(var(--surface-1))' }}
       >
-        <Tooltip content="Expand changes panel">
-          <button
-            onClick={onToggleCollapse}
-            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <PanelRightOpen size={18} strokeWidth={1.5} />
-          </button>
-        </Tooltip>
         <div className="flex flex-col items-center gap-1">
           <div className="w-8 h-8 rounded-lg bg-accent/40 flex items-center justify-center">
             <FileDiff size={14} className="text-muted-foreground" strokeWidth={1.5} />
@@ -257,9 +296,7 @@ export function FileChangesPanel({
     );
   }
 
-  const showingAlternate = !!alternateBody && tabs != null && tabs.activeId !== 'changes';
-
-  if (!gitStatus && !showingAlternate) {
+  if (!gitStatus) {
     return (
       <div
         className="h-full flex items-center justify-center"
@@ -276,14 +313,40 @@ export function FileChangesPanel({
   const unstagedFiles = gitStatus?.files.filter((f) => !f.staged) ?? [];
   const allStaged = unstagedFiles.length === 0 && stagedFiles.length > 0;
   const noneStaged = stagedFiles.length === 0;
+  const totalAdds = stagedFiles.reduce((acc, f) => acc + (f.additions ?? 0), 0);
+  const totalDels = stagedFiles.reduce((acc, f) => acc + (f.deletions ?? 0), 0);
+
+  // Files that were staged before this commit and are now unstaged — those are
+  // the auto-fixes a hook applied. Only meaningful in the `failed` state.
+  const autoFixPaths = (() => {
+    if (commitRun.status !== 'failed' || !gitStatus) return [] as string[];
+    const nowUnstaged = new Set(gitStatus.files.filter((f) => !f.staged).map((f) => f.path));
+    return prevStagedRef.current.filter((p) => nowUnstaged.has(p));
+  })();
+  const showingRunView =
+    commitRun.status === 'running' ||
+    commitRun.status === 'failed' ||
+    commitRun.status === 'cancelled';
 
   async function handleCommit() {
     if (!commitMsg.trim() || stagedFiles.length === 0) return;
     setCommitting(true);
     setError(null);
+    const trimmed = commitMsg.trim();
+    prevStagedRef.current = stagedFiles.map((f) => f.path);
+    lastMessageRef.current = trimmed;
+    lastAllowEmptyRef.current = allowEmpty;
     try {
-      await onCommit(commitMsg.trim());
+      const res = await window.electronAPI.gitCommitStart({
+        cwd,
+        message: trimmed,
+        allowEmpty,
+      });
+      if (!res.success || !res.data) throw new Error(res.error || 'Commit failed');
+      setCommitRun(initialRunningState(res.data.requestId));
       setCommitMsg('');
+      setAllowEmpty(false);
+      setCommitOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -311,23 +374,9 @@ export function FileChangesPanel({
       {/* Header */}
       <div className="flex items-center justify-between px-3 h-10 flex-shrink-0 border-b border-border/60">
         <div className="flex items-center gap-1.5 min-w-0">
-          {onToggleCollapse && (
-            <Tooltip content="Collapse changes panel">
-              <button
-                onClick={onToggleCollapse}
-                className="p-[3px] -ml-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <PanelRightClose size={15} strokeWidth={1.8} />
-              </button>
-            </Tooltip>
-          )}
-          {tabs ? (
-            <TabHeader tabs={tabs} />
-          ) : (
-            <span className="text-[11px] font-semibold uppercase text-foreground/80 tracking-[0.08em]">
-              Changes
-            </span>
-          )}
+          <span className="text-[11px] font-semibold uppercase text-foreground/80 tracking-[0.08em]">
+            Changes
+          </span>
           {totalChanges > 0 && (
             <span className="min-w-[18px] h-[16px] flex items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary tabular-nums px-1">
               {totalChanges}
@@ -345,7 +394,7 @@ export function FileChangesPanel({
               </button>
             </Tooltip>
           )}
-          {!showingAlternate && gitStatus && (gitStatus.ahead > 0 || gitStatus.behind > 0) && (
+          {gitStatus && (gitStatus.ahead > 0 || gitStatus.behind > 0) && (
             <div className="flex items-center gap-1 text-muted-foreground/40 mr-1">
               {gitStatus.ahead > 0 && (
                 <span className="flex items-center gap-0.5 text-[9px] text-[hsl(var(--git-added))]">
@@ -361,7 +410,7 @@ export function FileChangesPanel({
               )}
             </div>
           )}
-          {!showingAlternate && !allStaged && unstagedFiles.length > 0 && (
+          {!allStaged && unstagedFiles.length > 0 && (
             <Tooltip content="Stage all">
               <button
                 onClick={() => onStageAll()}
@@ -371,7 +420,7 @@ export function FileChangesPanel({
               </button>
             </Tooltip>
           )}
-          {!showingAlternate && stagedFiles.length > 0 && (
+          {stagedFiles.length > 0 && (
             <Tooltip content="Unstage all">
               <button
                 onClick={() => onUnstageAll()}
@@ -384,9 +433,33 @@ export function FileChangesPanel({
         </div>
       </div>
 
-      {showingAlternate ? (
-        <div key="alt" className="flex-1 min-h-0 overflow-hidden animate-fade-in">
-          {alternateBody}
+      {showingRunView ? (
+        <div key="run" className="flex-1 min-h-0 flex flex-col animate-fade-in">
+          <CommitRunView
+            state={commitRun as Exclude<CommitRunState, { status: 'idle' } | { status: 'success' }>}
+            autoFixCount={autoFixPaths.length}
+            onCancel={() => {
+              if (commitRun.status === 'running') {
+                window.electronAPI.gitCommitCancel(commitRun.requestId);
+              }
+            }}
+            onBackToFiles={() => setCommitRun({ status: 'idle' })}
+            onStageFixesAndRetry={async () => {
+              await window.electronAPI.gitStageFiles({ cwd, filePaths: autoFixPaths });
+              prevStagedRef.current = [...new Set([...prevStagedRef.current, ...autoFixPaths])];
+              const res = await window.electronAPI.gitCommitStart({
+                cwd,
+                message: lastMessageRef.current,
+                allowEmpty: lastAllowEmptyRef.current,
+              });
+              if (!res.success || !res.data) {
+                setError(res.error || 'Retry failed');
+                setCommitRun({ status: 'idle' });
+                return;
+              }
+              setCommitRun(initialRunningState(res.data.requestId));
+            }}
+          />
         </div>
       ) : (
         <div key="changes" className="flex-1 min-h-0 flex flex-col animate-fade-in">
@@ -407,117 +480,167 @@ export function FileChangesPanel({
             )}
 
             {totalChanges > 0 && (
-              <div className="px-1 py-1">
-                {/* Staged files first, then unstaged */}
-                {stagedFiles.map((file) => (
-                  <FileItem
-                    key={`staged-${file.path}`}
-                    file={file}
-                    isNew={newFileKeysRef.current.has(`s-${file.path}`)}
-                    onStage={() => {}}
-                    onUnstage={() => onUnstageFile(file.path)}
-                    onDiscard={() => {}}
-                    onViewDiff={() => onViewDiff(file.path, true)}
-                  />
-                ))}
-                {unstagedFiles.map((file) => (
-                  <FileItem
-                    key={`unstaged-${file.path}`}
-                    file={file}
-                    isNew={newFileKeysRef.current.has(`u-${file.path}`)}
-                    onStage={() => onStageFile(file.path)}
-                    onUnstage={() => {}}
-                    onDiscard={() => onDiscardFile(file.path)}
-                    onViewDiff={() => onViewDiff(file.path, false)}
-                  />
-                ))}
+              <div className="py-1">
+                {stagedFiles.length > 0 && (
+                  <div className="flex flex-col">
+                    <div className="px-3 pt-2 pb-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Staged · {stagedFiles.length}
+                    </div>
+                    <FileTreeView
+                      files={stagedFiles}
+                      onToggleFileStage={(f) => onUnstageFiles([f.path])}
+                      onToggleFolderStage={onUnstageFiles}
+                      onViewDiff={(f) => onViewDiff(f.path, true)}
+                      onDiscard={(f) => onDiscardFiles([f.path])}
+                      onDiscardMany={onDiscardFiles}
+                      onAddToGitignore={onAddToGitignore}
+                    />
+                  </div>
+                )}
+                {unstagedFiles.length > 0 && (
+                  <div className="flex flex-col">
+                    <div className="px-3 pt-2 pb-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Unstaged · {unstagedFiles.length}
+                    </div>
+                    <FileTreeView
+                      files={unstagedFiles}
+                      onToggleFileStage={(f) => onStageFiles([f.path])}
+                      onToggleFolderStage={onStageFiles}
+                      onViewDiff={(f) => onViewDiff(f.path, false)}
+                      onDiscard={(f) => onDiscardFiles([f.path])}
+                      onDiscardMany={onDiscardFiles}
+                      onAddToGitignore={onAddToGitignore}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </div>
 
           {/* Commit area — always rendered to preserve textarea focus & state across git refreshes */}
-          <div
-            className="flex-shrink-0 border-t border-border/60 p-2 flex flex-col gap-1.5"
-            style={totalChanges === 0 ? { display: 'none' } : undefined}
-          >
-            {error && (
-              <p className="text-[11px] text-destructive bg-destructive/10 rounded px-2 py-1 break-words">
-                {error}
-              </p>
-            )}
-            <textarea
-              value={commitMsg}
-              onChange={(e) => {
-                setCommitMsg(e.target.value);
-                setError(null);
-              }}
-              onKeyDown={(e) => {
-                // Prevent global keyboard shortcuts from firing while typing
-                e.stopPropagation();
-                if (e.key === 'Enter' && e.metaKey) {
-                  e.preventDefault();
-                  handleCommit();
-                }
-              }}
-              placeholder={noneStaged ? 'Stage files to commit...' : 'Commit message'}
-              disabled={noneStaged}
-              rows={2}
-              className="w-full text-[12px] bg-background/60 border border-border/60 rounded-md px-2.5 py-1.5 resize-none placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/40 disabled:opacity-40 disabled:cursor-not-allowed"
-            />
-            <div className="flex gap-1.5">
-              <button
-                onClick={handleCommit}
-                disabled={!commitMsg.trim() || noneStaged || committing}
-                className="flex-1 flex items-center justify-center gap-1.5 h-7 rounded-md text-[11px] font-medium transition-colors bg-primary/15 text-primary hover:bg-primary/25 disabled:opacity-30 disabled:cursor-not-allowed"
+          {stagedFiles.length > 0 && (
+            <div className="flex-shrink-0 border-t border-border/60 p-2">
+              <Popover
+                open={commitOpen}
+                onOpenChange={(open) => {
+                  setCommitOpen(open);
+                  if (!open) setError(null);
+                }}
               >
-                <Check size={11} strokeWidth={2.5} />
-                {committing ? 'Committing...' : 'Commit'}
-              </button>
-              {gitStatus && gitStatus.ahead > 0 && (
-                <button
-                  onClick={handlePush}
-                  disabled={pushing}
-                  className="flex items-center justify-center gap-1.5 h-7 px-3 rounded-md text-[11px] font-medium transition-colors bg-accent hover:bg-accent/80 text-foreground/80 disabled:opacity-30 disabled:cursor-not-allowed"
+                <Tooltip content="Commit staged changes">
+                  <PopoverTrigger asChild>
+                    <button className="w-full flex items-center justify-center gap-1.5 h-8 rounded-md text-[12px] font-medium transition-colors bg-primary/15 text-primary hover:bg-primary/25">
+                      <Check size={12} strokeWidth={2.5} />
+                      Commit
+                      <span className="text-primary/70 font-normal tabular-nums">
+                        {stagedFiles.length} {stagedFiles.length === 1 ? 'file' : 'files'}
+                      </span>
+                    </button>
+                  </PopoverTrigger>
+                </Tooltip>
+
+                <PopoverContent
+                  side="left"
+                  align="end"
+                  sideOffset={12}
+                  onInteractOutside={(e) => e.preventDefault()}
+                  className="w-[400px] h-[440px] p-3.5 flex flex-col gap-2.5"
                 >
-                  <Upload size={10} strokeWidth={2.5} />
-                  {pushing ? 'Pushing...' : 'Push'}
-                </button>
-              )}
+                  <div className="flex items-baseline justify-between flex-shrink-0">
+                    <h4 className="text-[12px] font-semibold text-foreground tracking-tight">
+                      Commit{' '}
+                      <span className="text-primary tabular-nums">
+                        {stagedFiles.length} {stagedFiles.length === 1 ? 'file' : 'files'}
+                      </span>
+                    </h4>
+                    <span className="font-mono text-[10px] text-muted-foreground tabular-nums">
+                      <span className="text-[hsl(var(--git-added))]">+{totalAdds}</span>
+                      <span className="mx-1 text-foreground/20">·</span>
+                      <span className="text-[hsl(var(--git-deleted))]">−{totalDels}</span>
+                    </span>
+                  </div>
+                  {error && (
+                    <div className="text-[11px] text-destructive bg-destructive/10 rounded px-2 py-1.5 flex items-start gap-1.5 flex-shrink-0">
+                      <span className="break-words flex-1 min-w-0">{error}</span>
+                      <button
+                        onClick={() => setError(null)}
+                        aria-label="Dismiss error"
+                        className="flex-shrink-0 -mr-0.5 -mt-0.5 p-0.5 rounded hover:bg-destructive/20 transition-colors"
+                      >
+                        <X size={11} strokeWidth={2.5} />
+                      </button>
+                    </div>
+                  )}
+                  <textarea
+                    ref={commitTextareaRef}
+                    value={commitMsg}
+                    onChange={(e) => {
+                      setCommitMsg(e.target.value);
+                      setError(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Escape') e.stopPropagation();
+                      if (e.key === 'Enter' && e.metaKey) {
+                        e.preventDefault();
+                        handleCommit();
+                      }
+                    }}
+                    placeholder="Describe the change…"
+                    className="flex-1 min-h-0 w-full text-[12.5px] leading-relaxed bg-background/60 border border-border/60 rounded-md px-3 py-2 resize-none placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/40"
+                  />
+                  <CircleCheck
+                    checked={allowEmpty}
+                    onChange={setAllowEmpty}
+                    label={
+                      <span className="flex items-center gap-1.5">
+                        Allow empty commit
+                        <Tooltip content="Pass --allow-empty to git. Useful for marker / sync commits.">
+                          <span className="text-[10px] text-muted-foreground/40 cursor-help">
+                            ⓘ
+                          </span>
+                        </Tooltip>
+                      </span>
+                    }
+                    className="flex-shrink-0"
+                  />
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="text-[10.5px] text-muted-foreground/70 font-mono">
+                      <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-foreground/5 text-foreground/70">
+                        ⌘
+                      </kbd>
+                      <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-foreground/5 text-foreground/70 ml-1">
+                        ↵
+                      </kbd>
+                      <span className="ml-1.5">to commit</span>
+                    </span>
+                    <div className="flex gap-1.5 ml-auto">
+                      {gitStatus && gitStatus.ahead > 0 && (
+                        <button
+                          onClick={handlePush}
+                          disabled={pushing}
+                          className="flex items-center justify-center gap-1.5 h-8 px-3 rounded-md text-[11.5px] font-medium transition-colors bg-accent hover:bg-accent/80 text-foreground/80 disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <Upload size={11} strokeWidth={2.5} />
+                          {pushing ? 'Pushing…' : `Push ${gitStatus.ahead}`}
+                        </button>
+                      )}
+                      <button
+                        onClick={handleCommit}
+                        disabled={!commitMsg.trim() || committing}
+                        className="flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-md text-[11.5px] font-medium transition-colors bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        <Check size={11} strokeWidth={2.5} />
+                        {committing ? 'Committing…' : 'Commit'}
+                      </button>
+                    </div>
+                  </div>
+                  <PopoverArrow />
+                </PopoverContent>
+              </Popover>
             </div>
-          </div>
+          )}
         </div>
       )}
-    </div>
-  );
-}
-
-function TabHeader({ tabs }: { tabs: NonNullable<FileChangesPanelProps['tabs']> }) {
-  if (tabs.options.length <= 1) {
-    const sole = tabs.options[0];
-    return (
-      <span className="text-[11px] font-semibold uppercase text-foreground/80 tracking-[0.08em] px-1.5">
-        {sole?.label ?? ''}
-      </span>
-    );
-  }
-  return (
-    <div className="flex items-center gap-0.5">
-      {tabs.options.map((tab) => {
-        const active = tabs.activeId === tab.id;
-        return (
-          <button
-            key={tab.id}
-            onClick={() => tabs.onChange(tab.id)}
-            className={`px-2 py-0.5 rounded text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors ${
-              active
-                ? 'bg-primary/15 text-foreground'
-                : 'text-muted-foreground/70 hover:text-foreground hover:bg-accent/40'
-            }`}
-          >
-            {tab.label}
-          </button>
-        );
-      })}
     </div>
   );
 }

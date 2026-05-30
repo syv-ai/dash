@@ -44,12 +44,12 @@ const TOOL_CATEGORY: Record<string, ToolCategory> = {
 };
 
 const CATEGORY_STYLES: Record<ToolCategory, { icon: string; bg: string }> = {
-  read: { icon: 'text-blue-400', bg: 'bg-blue-400/5' },
-  write: { icon: 'text-amber-400', bg: 'bg-amber-400/5' },
-  shell: { icon: 'text-green-400', bg: 'bg-green-400/5' },
-  search: { icon: 'text-purple-400', bg: 'bg-purple-400/5' },
-  agent: { icon: 'text-cyan-400', bg: 'bg-cyan-400/5' },
-  web: { icon: 'text-rose-400', bg: 'bg-rose-400/5' },
+  read: { icon: 'text-[hsl(var(--cat-1))]', bg: 'bg-[hsl(var(--cat-1)/0.06)]' },
+  write: { icon: 'text-[hsl(var(--cat-7))]', bg: 'bg-[hsl(var(--cat-7)/0.06)]' },
+  shell: { icon: 'text-[hsl(var(--cat-2))]', bg: 'bg-[hsl(var(--cat-2)/0.06)]' },
+  search: { icon: 'text-[hsl(var(--cat-4))]', bg: 'bg-[hsl(var(--cat-4)/0.06)]' },
+  agent: { icon: 'text-[hsl(var(--cat-6))]', bg: 'bg-[hsl(var(--cat-6)/0.06)]' },
+  web: { icon: 'text-[hsl(var(--cat-5))]', bg: 'bg-[hsl(var(--cat-5)/0.06)]' },
   default: { icon: 'text-muted-foreground/60', bg: 'bg-surface-0' },
 };
 

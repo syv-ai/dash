@@ -26,7 +26,7 @@ import {
 } from '../keybindings';
 import { NOTIFICATION_SOUNDS, SOUND_LABELS } from '../sounds';
 import type { NotificationSound } from '../sounds';
-import { TERMINAL_THEMES } from '../terminal/terminalThemes';
+import { TERMINAL_THEMES, darkTheme, lightTheme } from '../terminal/terminalThemes';
 import type {
   PixelAgentsConfig,
   PixelAgentsStatus,
@@ -66,8 +66,6 @@ interface SettingsModalProps {
   onShowUsageInlineChange: (value: boolean) => void;
   showContextUsageOnTaskCards: boolean;
   onShowContextUsageOnTaskCardsChange: (value: boolean) => void;
-  showStructuredView: boolean;
-  onShowStructuredViewChange: (value: boolean) => void;
   showActiveTasksSection: boolean;
   onShowActiveTasksSectionChange: (value: boolean) => void;
   shellDrawerEnabled: boolean;
@@ -652,8 +650,6 @@ function UsageSection({
   onShowUsageInlineChange,
   showContextUsageOnTaskCards,
   onShowContextUsageOnTaskCardsChange,
-  showStructuredView,
-  onShowStructuredViewChange,
 }: {
   latestRateLimits?: RateLimits;
   thresholds: UsageThresholds;
@@ -664,8 +660,6 @@ function UsageSection({
   onShowUsageInlineChange: (value: boolean) => void;
   showContextUsageOnTaskCards: boolean;
   onShowContextUsageOnTaskCardsChange: (value: boolean) => void;
-  showStructuredView: boolean;
-  onShowStructuredViewChange: (value: boolean) => void;
 }) {
   return (
     <div className="space-y-6 animate-fade-in">
@@ -742,13 +736,6 @@ function UsageSection({
             description="Adds a thin context usage bar under each task in the left sidebar."
             enabled={showContextUsageOnTaskCards}
             onToggle={onShowContextUsageOnTaskCardsChange}
-          />
-          <ToggleRow
-            label="Show structured session view"
-            description="Adds a Structured tab to the right panel showing Claude Code's tool calls as cards."
-            tooltip="Reads the active task's Claude Code session file (~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl) and renders each tool execution as a compact card — color-coded by category (read/write/shell/search/agent/web), with status, duration, and per-tool expanded views (diffs for Edit, file content for Write/Read, command + output for Bash). Updates live as the session progresses."
-            enabled={showStructuredView}
-            onToggle={onShowStructuredViewChange}
           />
         </div>
       </div>
@@ -1010,8 +997,6 @@ export function SettingsModal({
   onShowUsageInlineChange,
   showContextUsageOnTaskCards,
   onShowContextUsageOnTaskCardsChange,
-  showStructuredView,
-  onShowStructuredViewChange,
   showActiveTasksSection,
   onShowActiveTasksSectionChange,
   shellDrawerEnabled,
@@ -1662,8 +1647,8 @@ export function SettingsModal({
                     const bg =
                       t.id === 'default'
                         ? theme === 'dark'
-                          ? '#1f1f1f'
-                          : '#fafafa'
+                          ? (darkTheme.background ?? '#0d0d11')
+                          : (lightTheme.background ?? '#faf8f3')
                         : t.theme.background || '#000';
                     const colors = [
                       t.theme.red || '#f00',
@@ -1755,8 +1740,6 @@ export function SettingsModal({
               onShowUsageInlineChange={onShowUsageInlineChange}
               showContextUsageOnTaskCards={showContextUsageOnTaskCards}
               onShowContextUsageOnTaskCardsChange={onShowContextUsageOnTaskCardsChange}
-              showStructuredView={showStructuredView}
-              onShowStructuredViewChange={onShowStructuredViewChange}
             />
           )}
 

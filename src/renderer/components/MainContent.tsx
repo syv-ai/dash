@@ -1,85 +1,47 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { TerminalPane } from './TerminalPane';
 import { ProjectOverview } from './ProjectOverview';
-import { openInIde } from '../lib/openInIde';
 import {
   FolderOpen,
+  Code2,
   GitBranch,
   FolderGit2,
-  Globe,
   GitPullRequest,
   GitMerge,
-  Code2,
+  Globe,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
 } from 'lucide-react';
 import type {
   Project,
   Task,
-  LinkedItem,
-  RemoteControlState,
-  PullRequestInfo,
   GitStatus,
+  PullRequestInfo,
+  RemoteControlState,
+  ActivityInfo,
 } from '../../shared/types';
-import { linkedItemUrl, isAdoRemote, branchUrl } from '../../shared/urls';
+import { branchUrl } from '../../shared/urls';
 import { Tooltip } from './ui/Tooltip';
-
-function LinkedItemBadges({
-  items,
-  gitRemote,
-  max = 3,
-}: {
-  items: LinkedItem[];
-  gitRemote: string | null;
-  max?: number;
-}) {
-  const visible = items.slice(0, max);
-  const overflow = items.length - max;
-  return (
-    <div className="flex items-center gap-1">
-      {visible.map((item) => {
-        const url = linkedItemUrl(item, gitRemote);
-        const key = `${item.provider}-${item.id}`;
-        const badge = url ? (
-          <a
-            key={key}
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium hover:bg-primary/20 transition-colors"
-          >
-            #{item.id}
-          </a>
-        ) : (
-          <span
-            key={key}
-            className="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium"
-          >
-            #{item.id}
-          </span>
-        );
-        return item.title ? (
-          <Tooltip key={key} content={item.title}>
-            {badge}
-          </Tooltip>
-        ) : (
-          badge
-        );
-      })}
-      {overflow > 0 && <span className="text-[10px] text-muted-foreground">+{overflow} more</span>}
-    </div>
-  );
-}
 
 interface MainContentProps {
   activeTask: Task | null;
   activeProject: Project | null;
-  sidebarCollapsed?: boolean;
   tasks?: Task[];
-  activeTaskId?: string | null;
-  taskActivity?: Record<string, import('../../shared/types').ActivityInfo>;
-  unseenTaskIds?: Set<string>;
-  remoteControlStates?: Record<string, RemoteControlState>;
+  taskActivity?: Record<string, ActivityInfo>;
+  gitStatus?: GitStatus | null;
+  prInfo?: PullRequestInfo | null;
+  remoteControlState?: RemoteControlState | null;
+  isMac?: boolean;
+  terminalBg?: string;
+  sidebarCollapsed?: boolean;
+  changesPanelCollapsed?: boolean;
+  onToggleSidebar?: () => void;
+  onToggleChangesPanel?: () => void;
   onSelectTask?: (id: string) => void;
-  onEnableRemoteControl?: (taskId: string) => void;
+  onEnableRemoteControl?: () => void;
+  onOpenIde?: () => void;
   onNewTask?: () => void;
   onProjectSettings?: () => void;
   onShowCommitGraph?: () => void;
@@ -88,20 +50,25 @@ interface MainContentProps {
   onDeleteTask?: (id: string) => void;
   onArchiveTask?: (id: string) => void;
   onRestoreTask?: (id: string) => void;
-  gitStatus?: GitStatus | null;
 }
 
 export function MainContent({
   activeTask,
   activeProject,
-  sidebarCollapsed,
   tasks = [],
-  activeTaskId,
   taskActivity = {},
-  unseenTaskIds,
-  remoteControlStates = {},
+  gitStatus = null,
+  prInfo = null,
+  remoteControlState = null,
+  isMac = false,
+  terminalBg,
+  sidebarCollapsed = false,
+  changesPanelCollapsed = false,
+  onToggleSidebar,
+  onToggleChangesPanel,
   onSelectTask,
   onEnableRemoteControl,
+  onOpenIde,
   onNewTask,
   onProjectSettings,
   onShowCommitGraph,
@@ -110,241 +77,175 @@ export function MainContent({
   onDeleteTask,
   onArchiveTask,
   onRestoreTask,
-  gitStatus,
 }: MainContentProps) {
-  const [prInfo, setPrInfo] = useState<PullRequestInfo | null>(null);
-  useEffect(() => {
-    setPrInfo(null);
-
-    const liveBranch = gitStatus?.branch;
-    const defaultBranch = activeProject?.baseRef || activeProject?.gitBranch || 'main';
-    if (!liveBranch || !activeProject || liveBranch === defaultBranch) {
-      return;
-    }
-
-    let cancelled = false;
-    const remote = activeProject.gitRemote;
-
-    async function fetchPr() {
-      try {
-        let pr: PullRequestInfo | null = null;
-
-        if (remote && isAdoRemote(remote)) {
-          const resp = await window.electronAPI.adoGetPrForBranch(
-            liveBranch!,
-            remote,
-            activeProject!.id,
-          );
-          if (!cancelled && resp.success) pr = resp.data ?? null;
-        } else {
-          const cwd = activeTask?.path || activeProject!.path;
-          const resp = await window.electronAPI.githubGetPrForBranch(cwd, liveBranch!);
-          if (!cancelled && resp.success) pr = resp.data ?? null;
-        }
-
-        if (!cancelled) setPrInfo(pr);
-      } catch {
-        if (!cancelled) setPrInfo(null);
-      }
-    }
-
-    fetchPr();
-    const interval = setInterval(fetchPr, 30_000);
-
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [activeTask?.id, activeProject?.id, activeProject?.gitRemote, gitStatus?.branch]);
-
   if (!activeProject) {
     return (
-      <div className="h-full flex items-center justify-center bg-background">
-        <div className="text-center animate-fade-in">
-          <div className="w-14 h-14 rounded-2xl bg-accent/60 flex items-center justify-center mx-auto mb-4">
-            <FolderOpen size={22} className="text-muted-foreground/40" strokeWidth={1.5} />
+      <div className="h-full flex flex-col bg-background">
+        {isMac && <div className="h-[28px] flex-shrink-0 titlebar-drag" />}
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center animate-fade-in">
+            <div className="w-14 h-14 rounded-2xl bg-accent/60 flex items-center justify-center mx-auto mb-4">
+              <FolderOpen size={22} className="text-muted-foreground/40" strokeWidth={1.5} />
+            </div>
+            <h2 className="text-[15px] font-semibold text-foreground/80 mb-1.5">Dash</h2>
+            <p className="text-[13px] text-muted-foreground/60">Open a folder to get started</p>
           </div>
-          <h2 className="text-[15px] font-semibold text-foreground/80 mb-1.5">Dash</h2>
-          <p className="text-[13px] text-muted-foreground/60">Open a folder to get started</p>
         </div>
       </div>
     );
   }
 
-  if (!activeTask) {
-    return (
-      <ProjectOverview
-        project={activeProject}
-        tasks={tasks}
-        archivedTasks={archivedTasks}
-        taskActivity={taskActivity}
-        onSelectTask={(id) => onSelectTask?.(id)}
-        onNewTask={() => onNewTask?.()}
-        onProjectSettings={() => onProjectSettings?.()}
-        onShowCommitGraph={() => onShowCommitGraph?.()}
-        onDeleteProject={() => onDeleteProject?.()}
-        onDeleteTask={(id) => onDeleteTask?.(id)}
-        onArchiveTask={(id) => onArchiveTask?.(id)}
-        onRestoreTask={(id) => onRestoreTask?.(id)}
-      />
-    );
-  }
+  // Strip — always rendered when there's a project, holds left toggle + (optional crumb)
+  // + (optional controls) + right toggle.
 
   const currentBranch = gitStatus?.branch || activeTask?.branch;
   const currentBranchUrl =
     currentBranch && activeProject?.gitRemote && gitStatus?.hasUpstream
       ? branchUrl(activeProject.gitRemote, currentBranch)
       : null;
+  const branchTooltip = gitStatus?.hasUpstream
+    ? activeTask?.useWorktree
+      ? 'Worktree branch'
+      : 'Branch'
+    : 'Branch (no upstream)';
+  const BranchIcon = activeTask?.useWorktree ? FolderGit2 : GitBranch;
+  const LeftToggleIcon = sidebarCollapsed ? PanelLeftOpen : PanelLeftClose;
+  const RightToggleIcon = changesPanelCollapsed ? PanelRightOpen : PanelRightClose;
+  const ghostBtn =
+    'w-7 h-7 rounded-md inline-flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-foreground/5 transition-colors';
 
-  const branchTooltip = gitStatus?.hasUpstream ? 'Branch' : 'Branch (no upstream detected)';
-  const BranchIcon = activeTask.useWorktree ? FolderGit2 : GitBranch;
-
-  const branchLabel = currentBranchUrl ? (
-    <a
-      href={currentBranchUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-[11px] font-mono hover:underline truncate"
-    >
-      {currentBranch}
-    </a>
-  ) : (
-    <span className="text-[11px] font-mono truncate">{currentBranch}</span>
-  );
-
-  const branchBadge = (
-    <Tooltip content={branchTooltip}>
-      <div className="flex items-center gap-1.5 text-foreground/60 min-w-0 flex-shrink max-w-[180px]">
-        <BranchIcon size={11} strokeWidth={2} className="flex-shrink-0" />
-        {branchLabel}
-      </div>
-    </Tooltip>
-  );
-
-  const taskHeader = (
+  const strip = (
     <div
-      className="flex items-center gap-3 px-4 h-10 flex-shrink-0 border-b border-border/60"
-      style={{ background: 'hsl(var(--surface-1))' }}
+      className={`flex-shrink-0 flex items-center justify-between gap-3 px-4 titlebar-drag ${
+        isMac ? 'h-[56px]' : 'h-[52px]'
+      }`}
+      style={terminalBg ? { background: terminalBg } : undefined}
     >
-      {sidebarCollapsed && tasks.length > 0 ? (
-        <>
-          <div className="flex items-center gap-0.5 overflow-x-auto scrollbar-none flex-1 min-w-0">
-            {tasks.map((task, i) => (
-              <button
-                key={task.id}
-                onClick={() => onSelectTask?.(task.id)}
-                className={`flex items-center gap-1.5 px-2.5 h-[28px] rounded text-xs whitespace-nowrap flex-shrink-0 transition-colors ${
-                  task.id === activeTaskId
-                    ? 'bg-primary/15 text-foreground'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                }`}
-              >
-                <span
-                  className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                    taskActivity[task.id]?.state === 'error'
-                      ? 'bg-destructive'
-                      : taskActivity[task.id]?.state === 'waiting'
-                        ? 'bg-orange-500'
-                        : taskActivity[task.id]?.state === 'busy'
-                          ? 'bg-amber-400 animate-pulse'
-                          : taskActivity[task.id]?.state === 'idle' && unseenTaskIds?.has(task.id)
-                            ? 'bg-blue-400'
-                            : taskActivity[task.id]?.state === 'idle'
-                              ? 'bg-green-400'
-                              : 'bg-muted-foreground/30'
-                  }`}
-                />
-                <span className="truncate max-w-[140px]">{task.name}</span>
-                {i < 9 && (
-                  <div className="flex items-center gap-[2px] ml-1">
-                    <kbd className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-[3px] text-[9px] font-medium leading-none border border-border/80 bg-gradient-to-b from-white/[0.06] to-transparent text-foreground/50 shadow-[0_0.5px_0_0.5px_hsl(var(--border)/0.4),inset_0_0.5px_0_hsl(var(--foreground)/0.04)] font-mono">
-                      ⌘
-                    </kbd>
-                    <kbd className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-[3px] text-[9px] font-medium leading-none border border-border/80 bg-gradient-to-b from-white/[0.06] to-transparent text-foreground/50 shadow-[0_0.5px_0_0.5px_hsl(var(--border)/0.4),inset_0_0.5px_0_hsl(var(--foreground)/0.04)] font-mono">
-                      {i + 1}
-                    </kbd>
-                  </div>
-                )}
-              </button>
-            ))}
-          </div>
-          {branchBadge}
-        </>
-      ) : (
-        <>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <div className="w-[7px] h-[7px] rounded-full bg-[hsl(var(--git-added))] status-pulse flex-shrink-0" />
-            <span className="text-[13px] font-medium text-foreground whitespace-nowrap">
+      {/* Left cluster: left-sidebar toggle + crumb */}
+      <div className="inline-flex items-center gap-3 min-w-0 titlebar-no-drag">
+        <Tooltip content={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+          <button onClick={onToggleSidebar} className={ghostBtn}>
+            <LeftToggleIcon size={15} strokeWidth={1.8} />
+          </button>
+        </Tooltip>
+        {activeTask && (
+          <div className="inline-flex items-center gap-2 font-mono text-[11px] text-muted-foreground min-w-0">
+            <span className="truncate max-w-[200px]">{activeProject.name}</span>
+            <span className="text-foreground/30">›</span>
+            <span className="text-foreground font-medium truncate max-w-[260px]">
               {activeTask.name}
             </span>
           </div>
-          {activeTask.linkedItems && activeTask.linkedItems.length > 0 && (
-            <LinkedItemBadges
-              items={activeTask.linkedItems}
-              gitRemote={activeProject?.gitRemote ?? null}
-            />
-          )}
-          <div className="ml-auto flex items-center gap-1.5">
-            {branchBadge}
-            {taskActivity[activeTask.id] && (
-              <Tooltip content="Remote control">
-                <button
-                  onClick={() => onEnableRemoteControl?.(activeTask.id)}
-                  className={`p-1 rounded-md transition-colors ${
-                    remoteControlStates[activeTask.id]
-                      ? 'text-primary hover:bg-primary/10'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/60'
-                  }`}
-                >
-                  <Globe size={14} strokeWidth={1.8} />
-                </button>
-              </Tooltip>
-            )}
-            <Tooltip content="Open in IDE">
-              <button
-                onClick={() => openInIde(activeTask.path)}
-                className="p-1 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-accent/60"
+        )}
+      </div>
+
+      {/* Right cluster: controls + right-inspector toggle */}
+      <div className="inline-flex items-center gap-1.5 flex-shrink-0 titlebar-no-drag">
+        {activeTask && currentBranch && (
+          <Tooltip content={branchTooltip}>
+            {currentBranchUrl ? (
+              <a
+                href={currentBranchUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-2 py-[3px] rounded bg-foreground/5 hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition-colors font-mono text-[11px]"
               >
-                <Code2 size={14} strokeWidth={1.8} />
-              </button>
-            </Tooltip>
-            {prInfo && prInfo.state !== 'closed' && (
-              <Tooltip content={`${prInfo.title} (${prInfo.state})`}>
-                <a
-                  href={prInfo.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium transition-colors ${
-                    prInfo.state === 'merged'
-                      ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20'
-                      : 'bg-green-500/10 text-green-600 dark:text-green-400 hover:bg-green-500/20'
-                  }`}
-                >
-                  {prInfo.state === 'merged' ? (
-                    <GitMerge size={10} strokeWidth={2} />
-                  ) : (
-                    <GitPullRequest size={10} strokeWidth={2} />
-                  )}
-                  PR #{prInfo.number}
-                </a>
-              </Tooltip>
+                <BranchIcon size={11} strokeWidth={2} />
+                <span className="truncate max-w-[160px]">{currentBranch}</span>
+              </a>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2 py-[3px] rounded bg-foreground/5 text-muted-foreground font-mono text-[11px]">
+                <BranchIcon size={11} strokeWidth={2} />
+                <span className="truncate max-w-[160px]">{currentBranch}</span>
+              </span>
             )}
-          </div>
-        </>
-      )}
+          </Tooltip>
+        )}
+
+        {activeTask && prInfo && prInfo.state !== 'closed' && (
+          <Tooltip content={`${prInfo.title} (${prInfo.state})`}>
+            <a
+              href={prInfo.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`inline-flex items-center gap-1 px-2 py-[3px] rounded font-mono text-[11px] transition-colors ${
+                prInfo.state === 'merged'
+                  ? 'bg-primary/10 text-primary hover:bg-primary/20'
+                  : 'bg-[hsl(var(--git-added))]/10 text-[hsl(var(--git-added))] hover:bg-[hsl(var(--git-added))]/20'
+              }`}
+            >
+              {prInfo.state === 'merged' ? (
+                <GitMerge size={11} strokeWidth={2} />
+              ) : (
+                <GitPullRequest size={11} strokeWidth={2} />
+              )}
+              PR #{prInfo.number}
+            </a>
+          </Tooltip>
+        )}
+
+        {activeTask && (
+          <Tooltip content="Remote control">
+            <button
+              onClick={onEnableRemoteControl}
+              className={`w-6 h-6 rounded inline-flex items-center justify-center transition-colors ${
+                remoteControlState
+                  ? 'bg-primary/10 text-primary hover:bg-primary/20'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-foreground/5'
+              }`}
+            >
+              <Globe size={13} strokeWidth={1.8} />
+            </button>
+          </Tooltip>
+        )}
+
+        {activeTask && (
+          <Tooltip content="Open in IDE">
+            <button
+              onClick={onOpenIde}
+              className="w-6 h-6 rounded inline-flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-foreground/5 transition-colors"
+            >
+              <Code2 size={13} strokeWidth={1.8} />
+            </button>
+          </Tooltip>
+        )}
+
+        <Tooltip content={changesPanelCollapsed ? 'Show inspector' : 'Hide inspector'}>
+          <button onClick={onToggleChangesPanel} className={ghostBtn}>
+            <RightToggleIcon size={15} strokeWidth={1.8} />
+          </button>
+        </Tooltip>
+      </div>
     </div>
   );
 
   return (
     <div className="h-full flex flex-col bg-background">
-      {taskHeader}
+      {strip}
       <div className="flex-1 min-h-0 relative">
-        <TerminalPane
-          key={activeTask.id}
-          id={activeTask.id}
-          cwd={activeTask.path}
-          autoApprove={activeTask.autoApprove}
-        />
+        {activeTask ? (
+          <TerminalPane
+            key={activeTask.id}
+            id={activeTask.id}
+            cwd={activeTask.path}
+            autoApprove={activeTask.autoApprove}
+          />
+        ) : (
+          <ProjectOverview
+            project={activeProject}
+            tasks={tasks}
+            archivedTasks={archivedTasks}
+            taskActivity={taskActivity}
+            onSelectTask={(id) => onSelectTask?.(id)}
+            onNewTask={() => onNewTask?.()}
+            onProjectSettings={() => onProjectSettings?.()}
+            onShowCommitGraph={() => onShowCommitGraph?.()}
+            onDeleteProject={() => onDeleteProject?.()}
+            onDeleteTask={(id) => onDeleteTask?.(id)}
+            onArchiveTask={(id) => onArchiveTask?.(id)}
+            onRestoreTask={(id) => onRestoreTask?.(id)}
+          />
+        )}
       </div>
     </div>
   );

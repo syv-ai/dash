@@ -1,5 +1,6 @@
-import { execFile } from 'child_process';
-import { unlinkSync } from 'fs';
+import { execFile, spawn } from 'child_process';
+import { createParser, type ParserEvent } from './preCommitParser';
+import { unlinkSync, promises as fsPromises } from 'fs';
 import { join } from 'path';
 import { promisify } from 'util';
 import type {
@@ -208,7 +209,7 @@ export class GitService {
 
     // Get staged + unstaged changes via porcelain v2
     try {
-      const out = await git(cwd, ['status', '--porcelain=v2', '--untracked-files=normal']);
+      const out = await git(cwd, ['status', '--porcelain=v2', '--untracked-files=all']);
       const lines = out.split('\n').filter(Boolean);
 
       for (const line of lines) {
@@ -286,19 +287,48 @@ export class GitService {
     }
 
     // Filter out Dash-managed hook files (not user content).
-    // Git may report individual files or the whole .claude/ directory
-    // (when untracked with --untracked-files=normal).
-    const dashManagedFiles = new Set([
-      '.claude/',
-      '.claude/settings.local.json',
-      '.claude/task-context.json',
-    ]);
-    const filtered = files.filter((f) => !dashManagedFiles.has(f.path));
+    // With --untracked-files=all git lists each file individually under .claude/,
+    // so prefix-match catches them whether tracked or untracked.
+    const filtered = files.filter((f) => !f.path.startsWith('.claude/'));
 
     // Get numstat for addition/deletion counts
     await this.enrichWithNumstat(cwd, filtered);
+    // Count lines in untracked files (numstat doesn't cover them)
+    await this.enrichUntrackedLineCounts(cwd, filtered);
 
     return filtered;
+  }
+
+  /**
+   * For untracked files, populate `additions` with the file's total line count
+   * (since `git diff --numstat` doesn't cover them). Skips files over 1 MB and
+   * silently caps if there are too many untracked entries to keep getStatus
+   * snappy on repos with huge unignored vendor dumps.
+   */
+  private static async enrichUntrackedLineCounts(cwd: string, files: FileChange[]): Promise<void> {
+    const UNTRACKED_ENRICHMENT_CAP = 500;
+    const UNTRACKED_FILE_SIZE_CAP = 1024 * 1024;
+    const untracked = files.filter((f) => f.status === 'untracked');
+    if (untracked.length === 0 || untracked.length > UNTRACKED_ENRICHMENT_CAP) return;
+    await Promise.all(
+      untracked.map(async (file) => {
+        try {
+          const abs = join(cwd, file.path);
+          const stats = await fsPromises.stat(abs);
+          if (!stats.isFile()) return;
+          if (stats.size > UNTRACKED_FILE_SIZE_CAP) return;
+          const buffer = await fsPromises.readFile(abs);
+          let count = 0;
+          for (let i = 0; i < buffer.length; i++) {
+            if (buffer[i] === 0x0a) count++;
+          }
+          if (buffer.length > 0 && buffer[buffer.length - 1] !== 0x0a) count++;
+          file.additions = count;
+        } catch {
+          // File vanished, unreadable, or permission denied — leave 0.
+        }
+      }),
+    );
   }
 
   /**
@@ -396,52 +426,151 @@ export class GitService {
   }
 
   /**
-   * Stage a file.
+   * Stage one or more files in a single git invocation. Atomic — either all
+   * paths are added or none are, and we don't race on `.git/index.lock`.
    */
-  static async stageFile(cwd: string, filePath: string): Promise<void> {
-    await git(cwd, ['add', '--', filePath]);
+  static async stageFiles(cwd: string, filePaths: string[]): Promise<void> {
+    if (filePaths.length === 0) return;
+    await git(cwd, ['add', '--', ...filePaths]);
   }
 
   /**
-   * Stage all files.
+   * Stage every changed file in the working tree.
    */
   static async stageAll(cwd: string): Promise<void> {
     await git(cwd, ['add', '-A']);
   }
 
   /**
-   * Unstage a file.
+   * Unstage one or more files in a single git invocation.
    */
-  static async unstageFile(cwd: string, filePath: string): Promise<void> {
-    await git(cwd, ['reset', 'HEAD', '--', filePath]);
+  static async unstageFiles(cwd: string, filePaths: string[]): Promise<void> {
+    if (filePaths.length === 0) return;
+    await git(cwd, ['reset', 'HEAD', '--', ...filePaths]);
   }
 
   /**
-   * Unstage all files.
+   * Unstage everything currently in the index.
    */
   static async unstageAll(cwd: string): Promise<void> {
     await git(cwd, ['reset', 'HEAD']);
   }
 
   /**
-   * Discard changes to a file (restore from HEAD).
+   * Discard changes for one or more files. Splits the input into tracked vs.
+   * untracked via a single status call so the tracked side becomes one
+   * `git checkout` invocation and the untracked side becomes plain unlinks.
    */
-  static async discardFile(cwd: string, filePath: string): Promise<void> {
-    // First check if it's untracked
-    const out = await git(cwd, ['status', '--porcelain', '--', filePath]);
-    if (out.trimStart().startsWith('??')) {
-      // Untracked — remove it
-      unlinkSync(join(cwd, filePath));
-    } else {
-      await git(cwd, ['checkout', 'HEAD', '--', filePath]);
+  static async discardFiles(cwd: string, filePaths: string[]): Promise<void> {
+    if (filePaths.length === 0) return;
+    const statusOut = await git(cwd, ['status', '--porcelain', '--', ...filePaths]);
+    const untracked = new Set<string>();
+    for (const line of statusOut.split('\n')) {
+      if (line.startsWith('?? ')) {
+        untracked.add(line.slice(3).trim());
+      }
+    }
+    const tracked = filePaths.filter((p) => !untracked.has(p));
+    if (tracked.length > 0) {
+      await git(cwd, ['checkout', 'HEAD', '--', ...tracked]);
+    }
+    for (const p of untracked) {
+      try {
+        unlinkSync(join(cwd, p));
+      } catch {
+        // Already gone or unwritable — keep going.
+      }
     }
   }
 
   /**
    * Commit staged changes.
    */
-  static async commit(cwd: string, message: string): Promise<void> {
-    await git(cwd, ['commit', '-m', message]);
+  static async commit(
+    cwd: string,
+    message: string,
+    options: { allowEmpty?: boolean } = {},
+  ): Promise<void> {
+    const args = ['commit'];
+    if (options.allowEmpty) args.push('--allow-empty');
+    args.push('-m', message);
+    await git(cwd, args);
+  }
+
+  /**
+   * Append a path to the repo's root `.gitignore`. Creates the file if it
+   * doesn't exist. No-ops if the path already appears as a literal entry.
+   */
+  static async addToGitignore(cwd: string, relPath: string): Promise<void> {
+    const gitignorePath = join(cwd, '.gitignore');
+    let existing = '';
+    try {
+      existing = await fsPromises.readFile(gitignorePath, 'utf8');
+    } catch {
+      // Doesn't exist yet — we'll create it.
+    }
+    const lines = existing.split('\n');
+    const trimmed = lines.map((l) => l.trim());
+    if (trimmed.includes(relPath)) return;
+    const needsLeadingNewline = existing.length > 0 && !existing.endsWith('\n');
+    const next = `${existing}${needsLeadingNewline ? '\n' : ''}${relPath}\n`;
+    await fsPromises.writeFile(gitignorePath, next, 'utf8');
+  }
+
+  /**
+   * Spawn `git commit` and stream parsed pre-commit/prek events.
+   * Returns a cancel function that sends SIGTERM to the child.
+   * `onClose` is called exactly once after the child exits.
+   */
+  static commitStreamed(
+    cwd: string,
+    message: string,
+    options: { allowEmpty?: boolean },
+    onEvent: (event: ParserEvent) => void,
+    onClose: (result: { exitCode: number | null; signal: NodeJS.Signals | null }) => void,
+  ): { cancel: () => void } {
+    const args = ['commit'];
+    if (options.allowEmpty) args.push('--allow-empty');
+    args.push('-m', message);
+
+    const child = spawn('git', args, { cwd });
+    const parser = createParser();
+
+    let outBuf = '';
+    let errBuf = '';
+    function pumpLines(chunk: Buffer, kind: 'out' | 'err') {
+      const ref = kind === 'out' ? outBuf : errBuf;
+      const combined = ref + chunk.toString('utf8');
+      const parts = combined.split('\n');
+      const tail = parts.pop() ?? '';
+      if (kind === 'out') outBuf = tail;
+      else errBuf = tail;
+      for (const line of parts) {
+        for (const ev of parser.feed(line)) onEvent(ev);
+      }
+    }
+
+    child.stdout.on('data', (c: Buffer) => pumpLines(c, 'out'));
+    child.stderr.on('data', (c: Buffer) => pumpLines(c, 'err'));
+    child.on('close', (exitCode, signal) => {
+      for (const tail of [outBuf, errBuf]) {
+        if (tail.length > 0) {
+          for (const ev of parser.feed(tail)) onEvent(ev);
+        }
+      }
+      for (const ev of parser.flush()) onEvent(ev);
+      onClose({ exitCode, signal });
+    });
+
+    return {
+      cancel: () => {
+        try {
+          child.kill('SIGTERM');
+        } catch {
+          // Process may already be gone; close handler will fire regardless.
+        }
+      },
+    };
   }
 
   /**

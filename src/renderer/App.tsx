@@ -7,10 +7,10 @@ import {
 } from 'react-resizable-panels';
 import { LeftSidebar } from './components/LeftSidebar';
 import { MainContent } from './components/MainContent';
-import { FileChangesPanel } from './components/FileChangesPanel';
-import { StructuredView } from './components/structured/StructuredView';
-import { ShellDrawerWrapper } from './components/ShellDrawerWrapper';
+import { openInIde } from './lib/openInIde';
+import { RightInspector } from './components/rightInspector/RightInspector';
 import { DiffViewer } from './components/DiffViewer';
+import { ShellDrawerWrapper } from './components/ShellDrawerWrapper';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
 import { SkillsBrowserModal } from './components/SkillsBrowserModal';
 import { TaskModal } from './components/TaskModal';
@@ -21,8 +21,7 @@ import { RemoteControlModal } from './components/RemoteControlModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ProjectSettingsModal } from './components/ProjectSettingsModal';
 import { AdoSetupModal } from './components/AdoSetupModal';
-import { UsageWidget } from './components/UsageWidget';
-import { parseAdoRemote } from '../shared/urls';
+import { parseAdoRemote, isAdoRemote } from '../shared/urls';
 import { ToastContainer } from './components/Toast';
 import { toast } from 'sonner';
 import { useStatusLine } from './hooks/useStatusLine';
@@ -39,6 +38,7 @@ import type {
   ActivityInfo,
   PixelAgentsConfig,
   PixelAgentsStatus,
+  PullRequestInfo,
   RtkStatus,
   RtkDownloadProgress,
 } from '../shared/types';
@@ -47,6 +47,7 @@ import { formatTaskContextPrompt } from '../shared/taskContext';
 import { loadKeybindings, saveKeybindings, matchesBinding } from './keybindings';
 import type { KeyBindingMap } from './keybindings';
 import { sessionRegistry } from './terminal/SessionRegistry';
+import { resolveTheme } from './terminal/terminalThemes';
 import { playNotificationSound, playPeonSound } from './sounds';
 import type { NotificationSound } from './sounds';
 
@@ -378,14 +379,6 @@ export function App() {
     localStorage.setItem('showContextUsageOnTaskCards', String(showContextUsageOnTaskCards));
   }, [showContextUsageOnTaskCards]);
 
-  // Right-panel: structured session view (opt-in, off by default)
-  const [showStructuredView, setShowStructuredView] = useState(
-    () => localStorage.getItem('showStructuredView') === 'true',
-  );
-  useEffect(() => {
-    localStorage.setItem('showStructuredView', String(showStructuredView));
-  }, [showStructuredView]);
-
   // Rotation — tasks the user cycles through with Ctrl+Tab
   const [showActiveTasksSection, setShowActiveTasksSection] = useState(
     () => localStorage.getItem('showActiveTasksSection') !== 'false',
@@ -442,7 +435,7 @@ export function App() {
   const [gitLoading, setGitLoading] = useState(false);
   const [diffResult, setDiffResult] = useState<DiffResult | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
-  const [showDiff, setShowDiff] = useState(false);
+  const [prInfo, setPrInfo] = useState<PullRequestInfo | null>(null);
   const [showCommitGraph, setShowCommitGraph] = useState(false);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -450,9 +443,6 @@ export function App() {
   });
   const [changesPanelCollapsed, setChangesPanelCollapsed] = useState(() => {
     return localStorage.getItem('changesPanelCollapsed') === 'true';
-  });
-  const [rightPanelTab, setRightPanelTab] = useState<'changes' | 'structured'>(() => {
-    return (localStorage.getItem('rightPanelTab') as 'changes' | 'structured') || 'structured';
   });
 
   const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
@@ -464,6 +454,13 @@ export function App() {
   const fileWatcherCleanup = useRef<(() => void) | null>(null);
   const gitPollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null;
+
+  // Color of the active terminal bg — used to make the main-pane header strip
+  // blend with whatever palette the user has selected (default / Dracula / Tokyo Night / …)
+  const terminalBg = useMemo(
+    () => resolveTheme(terminalTheme, theme === 'dark').background || undefined,
+    [terminalTheme, theme],
+  );
 
   // Find activeTask across all projects
   const activeTask = (() => {
@@ -802,6 +799,45 @@ export function App() {
     };
   }, [activeTask?.id, activeTask?.path]);
 
+  // PR detection (consumed by Topbar)
+  useEffect(() => {
+    setPrInfo(null);
+
+    const liveBranch = gitStatus?.branch;
+    const defaultBranch = activeProject?.baseRef || activeProject?.gitBranch || 'main';
+    if (!liveBranch || !activeProject || liveBranch === defaultBranch) return;
+
+    let cancelled = false;
+    const remote = activeProject.gitRemote;
+    const projectId = activeProject.id;
+    const projectPath = activeProject.path;
+    const taskPath = activeTask?.path ?? null;
+
+    async function fetchPr() {
+      try {
+        let pr: PullRequestInfo | null = null;
+        if (remote && isAdoRemote(remote)) {
+          const resp = await window.electronAPI.adoGetPrForBranch(liveBranch!, remote, projectId);
+          if (!cancelled && resp.success) pr = resp.data ?? null;
+        } else {
+          const cwd = taskPath || projectPath;
+          const resp = await window.electronAPI.githubGetPrForBranch(cwd, liveBranch!);
+          if (!cancelled && resp.success) pr = resp.data ?? null;
+        }
+        if (!cancelled) setPrInfo(pr);
+      } catch {
+        if (!cancelled) setPrInfo(null);
+      }
+    }
+
+    fetchPr();
+    const interval = setInterval(fetchPr, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [activeTask?.id, activeTask?.path, activeProject, gitStatus?.branch]);
+
   const cycleTask = useCallback(
     (direction: 1 | -1) => {
       if (activeProjectTasks.length === 0) return;
@@ -900,9 +936,8 @@ export function App() {
         } else if (deleteProjectTarget) {
           e.preventDefault();
           setDeleteProjectTarget(null);
-        } else if (showDiff) {
+        } else if (diffResult) {
           e.preventDefault();
-          setShowDiff(false);
           setDiffResult(null);
         } else if (showCommitGraph) {
           e.preventDefault();
@@ -963,7 +998,7 @@ export function App() {
     remoteControlModalPtyId,
     deleteTaskTarget,
     deleteProjectTarget,
-    showDiff,
+    diffResult,
     showCommitGraph,
     showSkillsBrowser,
     showSettings,
@@ -1511,15 +1546,15 @@ export function App() {
 
   // ── Git Handlers ─────────────────────────────────────────
 
-  async function handleStageFile(filePath: string) {
-    if (!activeTask) return;
-    await window.electronAPI.gitStageFile({ cwd: activeTask.path, filePath });
+  async function handleStageFiles(filePaths: string[]) {
+    if (!activeTask || filePaths.length === 0) return;
+    await window.electronAPI.gitStageFiles({ cwd: activeTask.path, filePaths });
     refreshGitStatus(activeTask.path);
   }
 
-  async function handleUnstageFile(filePath: string) {
-    if (!activeTask) return;
-    await window.electronAPI.gitUnstageFile({ cwd: activeTask.path, filePath });
+  async function handleUnstageFiles(filePaths: string[]) {
+    if (!activeTask || filePaths.length === 0) return;
+    await window.electronAPI.gitUnstageFiles({ cwd: activeTask.path, filePaths });
     refreshGitStatus(activeTask.path);
   }
 
@@ -1535,9 +1570,13 @@ export function App() {
     refreshGitStatus(activeTask.path);
   }
 
-  async function handleCommit(message: string) {
+  async function handleCommit(message: string, options: { allowEmpty?: boolean } = {}) {
     if (!activeTask) return;
-    const res = await window.electronAPI.gitCommit({ cwd: activeTask.path, message });
+    const res = await window.electronAPI.gitCommit({
+      cwd: activeTask.path,
+      message,
+      allowEmpty: options.allowEmpty,
+    });
     if (!res.success) throw new Error(res.error || 'Commit failed');
     refreshGitStatus(activeTask.path);
   }
@@ -1549,15 +1588,23 @@ export function App() {
     refreshGitStatus(activeTask.path);
   }
 
-  async function handleDiscardFile(filePath: string) {
+  async function handleDiscardFiles(filePaths: string[]) {
+    if (!activeTask || filePaths.length === 0) return;
+    await window.electronAPI.gitDiscardFiles({ cwd: activeTask.path, filePaths });
+    refreshGitStatus(activeTask.path);
+  }
+
+  async function handleAddToGitignore(filePath: string) {
     if (!activeTask) return;
-    await window.electronAPI.gitDiscardFile({ cwd: activeTask.path, filePath });
+    const res = await window.electronAPI.gitignoreAdd({ cwd: activeTask.path, filePath });
+    if (!res.success) {
+      console.error('[gitignore] add failed', res.error);
+    }
     refreshGitStatus(activeTask.path);
   }
 
   async function handleViewDiff(filePath: string, staged: boolean) {
     if (!activeTask) return;
-    setShowDiff(true);
     setDiffLoading(true);
     setDiffResult(null);
 
@@ -1594,13 +1641,6 @@ export function App() {
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden">
-      {window.electronAPI.getPlatform() === 'darwin' && (
-        <div
-          className="titlebar-drag h-[38px] flex-shrink-0 border-b border-border/40"
-          style={{ background: 'hsl(var(--surface-1))' }}
-        />
-      )}
-
       <PanelGroup direction="horizontal" className="flex-1">
         <Panel
           ref={sidebarPanelRef}
@@ -1728,14 +1768,20 @@ export function App() {
             <MainContent
               activeTask={activeTask}
               activeProject={activeProject}
-              sidebarCollapsed={sidebarCollapsed}
               tasks={activeProjectTasks}
-              activeTaskId={activeTaskId}
               taskActivity={taskActivity}
-              unseenTaskIds={unseenTaskIds}
-              remoteControlStates={remoteControlStates}
+              gitStatus={gitStatus}
+              prInfo={prInfo}
+              remoteControlState={activeTask ? (remoteControlStates[activeTask.id] ?? null) : null}
+              isMac={window.electronAPI.getPlatform() === 'darwin'}
+              terminalBg={terminalBg}
+              sidebarCollapsed={sidebarCollapsed}
+              changesPanelCollapsed={changesPanelCollapsed}
+              onToggleSidebar={toggleSidebar}
+              onToggleChangesPanel={toggleChangesPanel}
               onSelectTask={setActiveTaskId}
-              onEnableRemoteControl={(taskId) => setRemoteControlModalPtyId(taskId)}
+              onEnableRemoteControl={() => activeTask && setRemoteControlModalPtyId(activeTask.id)}
+              onOpenIde={() => activeTask && openInIde(activeTask.path)}
               onNewTask={() => activeProjectId && handleNewTask(activeProjectId)}
               onProjectSettings={() => {
                 if (activeProject) setProjectSettingsTarget(activeProject);
@@ -1757,7 +1803,6 @@ export function App() {
               onDeleteTask={handleDeleteTask}
               onArchiveTask={handleArchiveTask}
               onRestoreTask={handleRestoreTask}
-              gitStatus={gitStatus}
             />
           </ShellDrawerWrapper>
         </Panel>
@@ -1785,16 +1830,6 @@ export function App() {
               }}
             >
               <div className="h-full flex flex-col overflow-hidden">
-                {!changesPanelCollapsed &&
-                  (() => {
-                    const rawCtx = activeTask ? contextUsage[activeTask.id] : undefined;
-                    const activeCtx = showUsageInline ? rawCtx : undefined;
-                    const rateLimits = showRateLimits && latestRateLimits ? latestRateLimits : {};
-                    const hasRateLimits = rateLimits.fiveHour || rateLimits.sevenDay;
-                    const hasCtx = activeCtx && activeCtx.percentage > 0;
-                    if (!hasRateLimits && !hasCtx) return null;
-                    return <UsageWidget rateLimits={rateLimits} contextUsage={activeCtx} />;
-                  })()}
                 <ShellDrawerWrapper
                   enabled={
                     shellDrawerEnabled && shellDrawerPosition === 'right' && !changesPanelCollapsed
@@ -1816,46 +1851,30 @@ export function App() {
                     setTimeout(() => setShellDrawerAnimating(false), 200);
                   }}
                 >
-                  <FileChangesPanel
-                    gitStatus={gitStatus}
-                    loading={gitLoading}
-                    onStageFile={handleStageFile}
-                    onUnstageFile={handleUnstageFile}
-                    onStageAll={handleStageAll}
-                    onUnstageAll={handleUnstageAll}
-                    onDiscardFile={handleDiscardFile}
-                    onViewDiff={handleViewDiff}
-                    onCommit={handleCommit}
-                    onPush={handlePush}
-                    collapsed={changesPanelCollapsed}
-                    onToggleCollapse={toggleChangesPanel}
-                    onShowCommitGraph={() => setShowCommitGraph(true)}
-                    tabs={
-                      showStructuredView
-                        ? {
-                            options: [
-                              { id: 'structured', label: 'Tool use' },
-                              { id: 'changes', label: 'Changes' },
-                            ],
-                            activeId: changesPanelCollapsed ? 'changes' : rightPanelTab,
-                            onChange: (id) => {
-                              const next = id === 'structured' ? 'structured' : 'changes';
-                              setRightPanelTab(next);
-                              localStorage.setItem('rightPanelTab', next);
-                            },
-                          }
-                        : undefined
-                    }
-                    alternateBody={
-                      showStructuredView && activeTask ? (
-                        <StructuredView
-                          key={`structured-${activeTask.id}`}
-                          taskId={activeTask.id}
-                          taskPath={activeTask.path}
-                        />
-                      ) : null
-                    }
-                  />
+                  {!changesPanelCollapsed && (
+                    <RightInspector
+                      activeTask={activeTask}
+                      gitStatus={gitStatus}
+                      gitLoading={gitLoading}
+                      rateLimits={showRateLimits && latestRateLimits ? latestRateLimits : {}}
+                      contextUsage={
+                        showUsageInline && activeTask ? contextUsage[activeTask.id] : undefined
+                      }
+                      onViewDiff={handleViewDiff}
+                      onStageFiles={handleStageFiles}
+                      onUnstageFiles={handleUnstageFiles}
+                      onStageAll={handleStageAll}
+                      onUnstageAll={handleUnstageAll}
+                      onDiscardFiles={handleDiscardFiles}
+                      onAddToGitignore={handleAddToGitignore}
+                      onCommit={handleCommit}
+                      onPush={handlePush}
+                      onCommitFinished={() => activeTask && refreshGitStatus(activeTask.path)}
+                      onShowCommitGraph={() => setShowCommitGraph(true)}
+                      collapsed={changesPanelCollapsed}
+                      onToggleCollapse={toggleChangesPanel}
+                    />
+                  )}
                 </ShellDrawerWrapper>
               </div>
             </Panel>
@@ -1956,8 +1975,6 @@ export function App() {
           onShowUsageInlineChange={setShowUsageInline}
           showContextUsageOnTaskCards={showContextUsageOnTaskCards}
           onShowContextUsageOnTaskCardsChange={setShowContextUsageOnTaskCards}
-          showStructuredView={showStructuredView}
-          onShowStructuredViewChange={setShowStructuredView}
           showActiveTasksSection={showActiveTasksSection}
           onShowActiveTasksSectionChange={setShowActiveTasksSection}
           shellDrawerEnabled={shellDrawerEnabled}
@@ -2158,15 +2175,12 @@ export function App() {
         />
       )}
 
-      {showDiff && (
+      {(diffResult || diffLoading) && (
         <DiffViewer
           diff={diffResult}
           loading={diffLoading}
           activeTaskId={activeTaskId}
-          onClose={() => {
-            setShowDiff(false);
-            setDiffResult(null);
-          }}
+          onClose={() => setDiffResult(null)}
         />
       )}
 

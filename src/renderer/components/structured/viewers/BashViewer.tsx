@@ -24,7 +24,7 @@ export function BashViewer({ exec }: BashViewerProps) {
       )}
       <div className="bg-surface-1 rounded border border-border/30 px-2.5 py-2">
         <div className="flex items-center gap-1.5 mb-1">
-          <span className="text-[10px] text-green-500 font-mono">$</span>
+          <span className="text-[10px] text-[hsl(var(--cat-2))] font-mono">$</span>
           <pre className="text-[11px] font-mono text-foreground/90 whitespace-pre-wrap break-all">
             {command}
           </pre>

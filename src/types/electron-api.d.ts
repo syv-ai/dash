@@ -246,12 +246,38 @@ export interface ElectronAPI {
     filePath: string;
     contextLines?: number;
   }) => Promise<IpcResponse<DiffResult>>;
-  gitStageFile: (args: { cwd: string; filePath: string }) => Promise<IpcResponse<void>>;
+  gitStageFiles: (args: { cwd: string; filePaths: string[] }) => Promise<IpcResponse<void>>;
   gitStageAll: (cwd: string) => Promise<IpcResponse<void>>;
-  gitUnstageFile: (args: { cwd: string; filePath: string }) => Promise<IpcResponse<void>>;
+  gitUnstageFiles: (args: { cwd: string; filePaths: string[] }) => Promise<IpcResponse<void>>;
   gitUnstageAll: (cwd: string) => Promise<IpcResponse<void>>;
-  gitDiscardFile: (args: { cwd: string; filePath: string }) => Promise<IpcResponse<void>>;
-  gitCommit: (args: { cwd: string; message: string }) => Promise<IpcResponse<void>>;
+  gitDiscardFiles: (args: { cwd: string; filePaths: string[] }) => Promise<IpcResponse<void>>;
+  gitignoreAdd: (args: { cwd: string; filePath: string }) => Promise<IpcResponse<void>>;
+  gitCommit: (args: {
+    cwd: string;
+    message: string;
+    allowEmpty?: boolean;
+  }) => Promise<IpcResponse<void>>;
+  gitCommitStart: (args: {
+    cwd: string;
+    message: string;
+    allowEmpty?: boolean;
+  }) => Promise<IpcResponse<{ requestId: string }>>;
+  gitCommitCancel: (requestId: string) => Promise<IpcResponse<void>>;
+  onCommitEvent: (
+    cb: (msg: {
+      requestId: string;
+      event:
+        | { type: 'hookResult'; name: string; status: 'Passed' | 'Failed' | 'Skipped' }
+        | {
+            type: 'hookMeta';
+            key: 'id' | 'exit' | 'duration' | 'modified';
+            value: string | number | true;
+          }
+        | { type: 'hookDiagnostic'; text: string }
+        | { type: 'rawOutput'; text: string }
+        | { type: 'close'; exitCode: number | null; signal: NodeJS.Signals | null };
+    }) => void,
+  ) => () => void;
   gitPush: (cwd: string) => Promise<IpcResponse<void>>;
   gitRemoteBranchExists: (args: { cwd: string; branch: string }) => Promise<IpcResponse<boolean>>;
 
