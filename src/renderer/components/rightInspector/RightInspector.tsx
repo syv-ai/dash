@@ -65,7 +65,7 @@ export function RightInspector({
   const showBehind = !!gitStatus && gitStatus.behind > 0;
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-[hsl(var(--surface-1))]">
+    <div className="h-full flex flex-col overflow-hidden">
       <UsageStrip rateLimits={rateLimits} contextUsage={contextUsage} />
 
       {/* Control row */}
