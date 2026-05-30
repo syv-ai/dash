@@ -90,7 +90,7 @@ export function UsageStrip({ rateLimits, contextUsage }: UsageStripProps) {
       )}
       {ctx && (
         <Row
-          label="Current session"
+          label="Session"
           pct={ctx.percentage}
           detail={{ value: `${formatTokens(ctx.used)} / ${formatTokens(ctx.total)}` }}
         />
