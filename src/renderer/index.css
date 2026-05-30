@@ -250,6 +250,11 @@
   background: hsl(var(--primary) / 0.5);
 }
 
+/* Floating-card pane handle: inset the active strip to align with the card. */
+[data-panel-group-direction='horizontal'] > .resize-handle-floating::after {
+  inset: 14px 0;
+}
+
 /* ── Animations ───────────────────────────────────────────── */
 
 @keyframes fadeIn {

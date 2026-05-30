@@ -1811,7 +1811,7 @@ export function App() {
           <>
             <PanelResizeHandle
               disabled={changesPanelCollapsed}
-              className="w-[1px] bg-transparent"
+              className="resize-handle-floating w-[1px] bg-transparent"
             />
             <Panel
               ref={changesPanelRef}
