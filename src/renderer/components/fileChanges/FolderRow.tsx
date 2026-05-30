@@ -87,7 +87,7 @@ export function FolderRow({
           onToggleOpen();
         }
       }}
-      className="group relative flex items-center gap-2 px-2 py-1 rounded-md text-[12.5px] cursor-pointer hover:bg-[hsl(var(--surface-2)/0.6)] min-h-[24px]"
+      className="group relative flex items-center gap-2 px-2 py-1 rounded-md text-[12.5px] cursor-pointer hover:bg-[hsl(var(--surface-2)/0.6)] min-h-[24px] transition-colors duration-150"
     >
       <Checkbox checked={agg.stageState} onChange={onToggleStage} />
       {Array.from({ length: indent }, (_, i) => (

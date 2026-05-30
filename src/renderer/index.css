@@ -502,21 +502,6 @@
     flex-shrink 200ms ease-out;
 }
 
-/* ── File Item Enter Animation ───────────────────────────── */
-@keyframes file-item-enter {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.file-item-enter {
-  animation: file-item-enter 200ms ease-out;
-}
-
 /* Settings button: swap "1 office" ↔ "1" based on container width */
 .settings-btn {
   container-type: inline-size;

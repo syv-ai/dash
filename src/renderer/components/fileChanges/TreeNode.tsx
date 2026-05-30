@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { FolderRow } from './FolderRow';
 import { FileRow } from './FileRow';
 import { compressedDisplay, type TreeNode } from './buildTree';
+import { ROW_TRANSITION, rowEnterExit } from './motionConfig';
 import type { FileChange } from '../../../shared/types';
 
 const SMART_COLLAPSE_THRESHOLD = 20;
@@ -35,9 +37,11 @@ export function TreeNodeView({ node, indent, ...callbacks }: TreeNodeProps) {
   const files = [...node.files].sort((a, b) => a.path.localeCompare(b.path));
   return (
     <>
-      {children.map((child) => (
-        <DirNode key={child.path} node={child} indent={indent} {...callbacks} />
-      ))}
+      <AnimatePresence initial={false}>
+        {children.map((child) => (
+          <DirNode key={child.path} node={child} indent={indent} {...callbacks} />
+        ))}
+      </AnimatePresence>
       <FileSection
         files={files}
         indent={indent}
@@ -59,7 +63,13 @@ function DirNode({ node, indent, ...callbacks }: TreeNodeProps) {
   // content would suddenly ignore those too, which is rarely what the user wants.
   const canIgnore = terminal.agg.status === 'untracked';
   return (
-    <>
+    <motion.div
+      layout
+      {...rowEnterExit}
+      transition={ROW_TRANSITION}
+      style={{ overflow: 'hidden' }}
+      className="flex flex-col gap-0.5"
+    >
       <FolderRow
         displayName={display}
         agg={terminal.agg}
@@ -77,8 +87,17 @@ function DirNode({ node, indent, ...callbacks }: TreeNodeProps) {
           if (folderPath) callbacks.onAddToGitignore(folderPath);
         }}
       />
-      {open && <TreeNodeView node={terminal} indent={indent + 1} {...callbacks} />}
-    </>
+      <div
+        className="grid transition-[grid-template-rows] duration-200 ease-in-out"
+        style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
+      >
+        <div className="overflow-hidden">
+          <div className="flex flex-col gap-0.5">
+            <TreeNodeView node={terminal} indent={indent + 1} {...callbacks} />
+          </div>
+        </div>
+      </div>
+    </motion.div>
   );
 }
 
@@ -98,11 +117,10 @@ function FileSection({
   onAddToGitignore,
 }: FileSectionProps) {
   const [showAll, setShowAll] = useState(false);
-  if (files.length === 0) return null;
   const truncate = bigFolder && !showAll && files.length > FOLDER_TRUNCATION_CAP;
   const visible = truncate ? files.slice(0, FOLDER_TRUNCATION_CAP) : files;
   return (
-    <>
+    <AnimatePresence initial={false}>
       {visible.map((f) => (
         <FileRow
           key={f.path}
@@ -115,7 +133,14 @@ function FileSection({
         />
       ))}
       {truncate && (
-        <div className="flex items-center gap-2 px-2 py-1.5 text-[11px] text-muted-foreground italic">
+        <motion.div
+          key="__more__"
+          layout
+          {...rowEnterExit}
+          transition={ROW_TRANSITION}
+          style={{ overflow: 'hidden' }}
+          className="flex items-center gap-2 px-2 py-1.5 text-[11px] text-muted-foreground italic"
+        >
           <span className="flex-1">
             +{files.length - FOLDER_TRUNCATION_CAP} more in this folder
           </span>
@@ -125,8 +150,8 @@ function FileSection({
           >
             Show all
           </button>
-        </div>
+        </motion.div>
       )}
-    </>
+    </AnimatePresence>
   );
 }

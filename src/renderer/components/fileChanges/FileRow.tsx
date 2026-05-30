@@ -1,6 +1,8 @@
 import React from 'react';
+import { motion } from 'motion/react';
 import { Undo2, EyeOff } from 'lucide-react';
 import { Tooltip } from '../ui/Tooltip';
+import { ROW_TRANSITION, rowEnterExit } from './motionConfig';
 import type { FileChange, FileChangeStatus } from '../../../shared/types';
 
 interface FileRowProps {
@@ -47,7 +49,11 @@ export function FileRow({
   const canDiscard = !file.staged && file.status !== 'deleted';
   const canIgnore = file.status === 'untracked';
   return (
-    <div
+    <motion.div
+      layout
+      {...rowEnterExit}
+      transition={ROW_TRANSITION}
+      style={{ overflow: 'hidden' }}
       role="button"
       tabIndex={0}
       onClick={() => onViewDiff(file)}
@@ -58,7 +64,7 @@ export function FileRow({
         }
       }}
       title="Click to open diff"
-      className="group relative flex items-center gap-2 px-2 py-1 rounded-md text-[12.5px] cursor-pointer hover:bg-[hsl(var(--surface-2)/0.6)] min-h-[24px]"
+      className="group relative flex items-center gap-2 px-2 py-1 rounded-md text-[12.5px] cursor-pointer hover:bg-[hsl(var(--surface-2)/0.6)] min-h-[24px] transition-colors duration-150"
     >
       <Checkbox checked={file.staged} onChange={() => onToggleStage(file)} />
       {Array.from({ length: indent }, (_, i) => (
@@ -98,7 +104,7 @@ export function FileRow({
                   onAddToGitignore(file.path);
                 }}
                 aria-label="Add to .gitignore"
-                className="flex items-center justify-center w-[22px] h-[22px] rounded-md bg-[hsl(var(--surface-3))] border border-[hsl(var(--border)/0.5)] text-muted-foreground hover:bg-[hsl(var(--git-untracked)/0.18)] hover:border-[hsl(var(--git-untracked)/0.5)] hover:text-foreground"
+                className="flex items-center justify-center w-[22px] h-[22px] rounded-md bg-[hsl(var(--surface-3))] border border-[hsl(var(--border)/0.5)] text-muted-foreground hover:bg-[hsl(var(--git-untracked)/0.18)] hover:border-[hsl(var(--git-untracked)/0.5)] hover:text-foreground transition-colors duration-150"
               >
                 <EyeOff size={11} strokeWidth={2.4} />
               </button>
@@ -112,7 +118,7 @@ export function FileRow({
                   onDiscard(file);
                 }}
                 aria-label="Discard changes"
-                className="flex items-center justify-center w-[22px] h-[22px] rounded-md bg-[hsl(var(--surface-3))] border border-[hsl(var(--border)/0.5)] text-muted-foreground hover:bg-destructive/12 hover:border-destructive/50 hover:text-destructive"
+                className="flex items-center justify-center w-[22px] h-[22px] rounded-md bg-[hsl(var(--surface-3))] border border-[hsl(var(--border)/0.5)] text-muted-foreground hover:bg-destructive/12 hover:border-destructive/50 hover:text-destructive transition-colors duration-150"
               >
                 <Undo2 size={11} strokeWidth={2.4} />
               </button>
@@ -120,7 +126,7 @@ export function FileRow({
           )}
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
