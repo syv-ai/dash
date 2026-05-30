@@ -255,6 +255,24 @@
   inset: 14px 0;
 }
 
+/* ── Usage Strip Responsive Detail ────────────────────────── */
+
+.usage-strip {
+  container-type: inline-size;
+  container-name: usage;
+}
+
+@container usage (max-width: 220px) {
+  .usage-detail-prefix {
+    display: none;
+  }
+}
+@container usage (max-width: 160px) {
+  .usage-detail {
+    display: none;
+  }
+}
+
 /* ── Animations ───────────────────────────────────────────── */
 
 @keyframes fadeIn {

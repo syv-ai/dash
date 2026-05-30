@@ -14,12 +14,22 @@ const TIER_FILL: Record<UsageTier, string> = {
   danger: 'bg-destructive shadow-[0_0_8px_hsl(var(--destructive)/0.5)]',
 };
 
-function Row({ label, pct, detail }: { label: string; pct: number; detail?: string }) {
+interface Detail {
+  /** Shown first; dropped first when narrow (e.g. "reset in "). */
+  prefix?: string;
+  /** Shown together with prefix; dropped last when very narrow. */
+  value: string;
+}
+
+function Row({ label, pct, detail }: { label: string; pct: number; detail?: Detail }) {
   const tier = usageTier(pct);
   const width = Math.min(100, Math.max(0, pct));
+  const fullTitle = detail
+    ? `${Math.round(pct)}% · ${detail.prefix ?? ''}${detail.value}`
+    : `${Math.round(pct)}%`;
   return (
     <div className="grid grid-rows-[auto_3px] gap-[5px]">
-      <div className="flex items-baseline justify-between gap-x-2 gap-y-1 flex-wrap min-w-0">
+      <div className="flex items-baseline justify-between gap-x-2 min-w-0">
         <span
           className="font-mono text-[9.5px] tracking-[0.18em] uppercase text-muted-foreground/70 font-medium truncate min-w-0"
           title={label}
@@ -27,11 +37,17 @@ function Row({ label, pct, detail }: { label: string; pct: number; detail?: stri
           {label}
         </span>
         <span
-          className="font-mono text-[10px] text-muted-foreground tabular-nums truncate min-w-0"
-          title={detail ? `${Math.round(pct)}% · ${detail}` : `${Math.round(pct)}%`}
+          className="font-mono text-[10px] text-muted-foreground tabular-nums whitespace-nowrap shrink-0"
+          title={fullTitle}
         >
           <span className="text-foreground font-semibold">{Math.round(pct)}%</span>
-          {detail ? <> · {detail}</> : null}
+          {detail ? (
+            <span className="usage-detail">
+              {' · '}
+              {detail.prefix ? <span className="usage-detail-prefix">{detail.prefix}</span> : null}
+              {detail.value}
+            </span>
+          ) : null}
         </span>
       </div>
       <div className="h-[3px] rounded-sm bg-foreground/5 overflow-hidden relative">
@@ -44,39 +60,39 @@ function Row({ label, pct, detail }: { label: string; pct: number; detail?: stri
   );
 }
 
+function resetDetail(epochSeconds?: number): Detail | undefined {
+  if (!epochSeconds) return undefined;
+  const t = formatResetTime(epochSeconds);
+  if (!t) return undefined;
+  if (t.startsWith('in ')) return { prefix: 'reset in ', value: t.slice(3) };
+  return { prefix: 'reset ', value: t };
+}
+
 export function UsageStrip({ rateLimits, contextUsage }: UsageStripProps) {
   const ctx = contextUsage && contextUsage.percentage > 0 ? contextUsage : null;
   if (!rateLimits.fiveHour && !rateLimits.sevenDay && !ctx) return null;
 
   return (
-    <div className="px-[18px] pt-[22px] pb-[20px] border-b border-border/60 flex flex-col gap-[14px]">
+    <div className="usage-strip px-[18px] pt-[22px] pb-[20px] border-b border-border/60 flex flex-col gap-[14px]">
       {rateLimits.fiveHour && (
         <Row
           label="5-hour limit"
           pct={rateLimits.fiveHour.usedPercentage}
-          detail={
-            rateLimits.fiveHour.resetsAt
-              ? `reset ${formatResetTime(rateLimits.fiveHour.resetsAt)}`
-              : undefined
-          }
+          detail={resetDetail(rateLimits.fiveHour.resetsAt)}
         />
       )}
       {rateLimits.sevenDay && (
         <Row
           label="7-day limit"
           pct={rateLimits.sevenDay.usedPercentage}
-          detail={
-            rateLimits.sevenDay.resetsAt
-              ? `reset ${formatResetTime(rateLimits.sevenDay.resetsAt)}`
-              : undefined
-          }
+          detail={resetDetail(rateLimits.sevenDay.resetsAt)}
         />
       )}
       {ctx && (
         <Row
           label="Current session"
           pct={ctx.percentage}
-          detail={`${formatTokens(ctx.used)} / ${formatTokens(ctx.total)}`}
+          detail={{ value: `${formatTokens(ctx.used)} / ${formatTokens(ctx.total)}` }}
         />
       )}
     </div>
