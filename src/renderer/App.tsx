@@ -1645,11 +1645,12 @@ export function App() {
         <Panel
           ref={sidebarPanelRef}
           className={sidebarAnimating ? 'panel-transition' : ''}
-          defaultSize={sidebarCollapsed ? 3 : 18}
+          defaultSize={sidebarCollapsed ? 5 : 18}
           minSize={12}
           maxSize={28}
           collapsible
-          collapsedSize={3}
+          collapsedSize={5}
+          style={{ overflow: 'visible', position: 'relative', zIndex: 1 }}
           onCollapse={() => {
             setSidebarCollapsed(true);
             localStorage.setItem('sidebarCollapsed', 'true');

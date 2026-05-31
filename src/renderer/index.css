@@ -409,6 +409,68 @@
   animation: pulse-glow 2s ease-in-out infinite;
 }
 
+/* ── Sidebar atmosphere (A1 · Soft Pill) ─────────────────── */
+
+.sidebar-shell {
+  position: relative;
+  background: linear-gradient(
+    180deg,
+    hsl(var(--surface-1)) 0%,
+    hsl(var(--surface-1) / 0.94) 60%,
+    hsl(var(--background)) 100%
+  );
+}
+.sidebar-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    hsl(0 0% 100% / 0.06) 30%,
+    hsl(0 0% 100% / 0.06) 70%,
+    transparent
+  );
+  pointer-events: none;
+}
+
+.sidebar-pill-active {
+  background: linear-gradient(180deg, hsl(var(--primary) / 0.14), hsl(var(--primary) / 0.08));
+}
+
+.sidebar-row-hover:hover {
+  background:
+    radial-gradient(120% 80% at 0% 50%, hsl(var(--foreground) / 0.06), transparent 70%),
+    hsl(var(--accent) / 0.5);
+}
+
+/* Status dots with soft colored halos. `status-pulse` (busy) already animates its glow. */
+.status-dot-idle {
+  background: rgb(52 211 153);
+  box-shadow:
+    0 0 0 1px rgb(52 211 153 / 0.4),
+    0 0 10px rgb(52 211 153 / 0.55);
+}
+.status-dot-wait {
+  background: rgb(249 115 22);
+  box-shadow:
+    0 0 0 1px rgb(249 115 22 / 0.4),
+    0 0 10px rgb(249 115 22 / 0.6);
+}
+.status-dot-unseen {
+  background: rgb(96 165 250);
+  box-shadow:
+    0 0 0 1px rgb(96 165 250 / 0.4),
+    0 0 10px rgb(96 165 250 / 0.55);
+}
+.status-dot-err {
+  background: hsl(var(--destructive));
+  box-shadow:
+    0 0 0 1px hsl(var(--destructive) / 0.4),
+    0 0 10px hsl(var(--destructive) / 0.55);
+}
+
 /* ── Status Bar Pulse (left-edge indicator) ──────────────── */
 
 @keyframes bar-pulse {

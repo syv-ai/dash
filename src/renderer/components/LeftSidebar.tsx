@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useDragReorder } from '../hooks/useDragReorder';
 import { UsageBarInline, usageTextColor } from './ui/UsageBar';
 import {
-  FolderOpen,
   Plus,
   Trash2,
   Archive,
@@ -95,7 +94,7 @@ function RotationSection({
   }, [activeTaskId, rotationTasks]);
 
   return (
-    <div className="px-2 pt-1 pb-1.5 mb-0.5 border-b border-border">
+    <div className="px-2 pt-3 pb-1.5 mb-0.5 border-b border-border">
       <Tooltip content="Cycle with Ctrl+Tab">
         <span className="block px-2 pb-1 text-[11px] font-medium text-muted-foreground/50 select-none tracking-wide uppercase">
           Active tasks
@@ -105,7 +104,7 @@ function RotationSection({
         {/* Sliding highlight */}
         {highlight && (
           <div
-            className="absolute left-0 right-0 bg-primary/10 rounded-md pointer-events-none"
+            className="sidebar-pill-active absolute left-0 right-0 rounded-md pointer-events-none"
             style={{
               top: highlight.top,
               height: highlight.height,
@@ -128,21 +127,21 @@ function RotationSection({
               className={`group/rot relative flex items-center gap-2 pl-3.5 pr-2 py-[5px] rounded-md text-[13px] cursor-pointer transition-colors duration-150 ${
                 isActiveTask
                   ? 'text-foreground font-medium'
-                  : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+                  : 'sidebar-row-hover text-muted-foreground hover:text-foreground'
               } ${draggingRotId === task.id ? 'opacity-40' : ''}`}
               onClick={() => onSelectTask(task.projectId, task.id)}
             >
               {/* Status indicator */}
               {activity === 'error' ? (
-                <div className="w-[6px] h-[6px] rounded-full bg-destructive flex-shrink-0" />
+                <div className="status-dot-err w-[6px] h-[6px] rounded-full flex-shrink-0" />
               ) : activity === 'waiting' ? (
-                <div className="w-[6px] h-[6px] rounded-full bg-orange-500 flex-shrink-0" />
+                <div className="status-dot-wait w-[6px] h-[6px] rounded-full flex-shrink-0" />
               ) : activity === 'busy' ? (
                 <div className="w-[6px] h-[6px] rounded-full bg-amber-400 status-pulse flex-shrink-0" />
               ) : activity === 'idle' && unseenTaskIds?.has(task.id) ? (
-                <div className="w-[6px] h-[6px] rounded-full bg-blue-400 flex-shrink-0" />
+                <div className="status-dot-unseen w-[6px] h-[6px] rounded-full flex-shrink-0" />
               ) : activity === 'idle' ? (
-                <div className="w-[6px] h-[6px] rounded-full bg-emerald-400 flex-shrink-0" />
+                <div className="status-dot-idle w-[6px] h-[6px] rounded-full flex-shrink-0" />
               ) : null}
 
               <span className="truncate flex-1">{task.name}</span>
@@ -319,93 +318,139 @@ export function LeftSidebar({
   const isMac = window.electronAPI.getPlatform() === 'darwin';
 
   if (collapsed) {
+    const showRotation = showActiveTasksSection && rotationTasks.length > 0;
+
     return (
-      <div
-        className="h-full flex flex-col items-center gap-1"
-        style={{ background: 'hsl(var(--surface-1))' }}
-      >
+      <div className="sidebar-shell h-full flex flex-col items-center gap-1">
         {isMac && <div className="h-[28px] w-full flex-shrink-0 titlebar-drag" />}
         <div className="h-2" />
 
-        <Tooltip content="Add project">
+        {showRotation && (
+          <>
+            <div className="flex flex-col items-center gap-1 w-full">
+              {rotationTasks.map((task) => {
+                const activity = taskActivity[task.id]?.state;
+                const isActiveTask = task.id === activeTaskId;
+                return (
+                  <div key={task.id} className="relative flex items-center justify-center w-full">
+                    <Tooltip content={task.name}>
+                      <button
+                        onClick={() => onSelectTask(task.projectId, task.id)}
+                        className={`w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 text-[11px] font-medium transition-colors titlebar-no-drag ${
+                          isActiveTask
+                            ? 'sidebar-pill-active text-primary'
+                            : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
+                        }`}
+                      >
+                        {task.name.charAt(0).toUpperCase()}
+                      </button>
+                    </Tooltip>
+                    {activity === 'error' ? (
+                      <div className="status-dot-err absolute -right-1 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full" />
+                    ) : activity === 'waiting' ? (
+                      <div className="status-dot-wait absolute -right-1 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full" />
+                    ) : activity === 'busy' ? (
+                      <div className="absolute -right-1 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-amber-400 status-pulse" />
+                    ) : activity === 'idle' && unseenTaskIds?.has(task.id) ? (
+                      <div className="status-dot-unseen absolute -right-1 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full" />
+                    ) : activity === 'idle' ? (
+                      <div className="status-dot-idle absolute -right-1 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full" />
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="w-6 border-t border-border/30 my-1" />
+          </>
+        )}
+
+        <Tooltip content="Create project">
           <button
             onClick={onOpenFolder}
-            className="p-1.5 rounded-md hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
+            className="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0 hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
           >
-            <FolderOpen size={18} strokeWidth={1.5} />
+            <Plus size={18} strokeWidth={1.8} />
           </button>
         </Tooltip>
 
         <div className="w-6 border-t border-border/30 my-1" />
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col items-center gap-1 w-full px-1.5">
+        <div
+          className="flex-1 min-h-0 flex flex-col items-center gap-1 w-full"
+          style={{
+            overflow: 'clip',
+            overflowClipMargin: '8px',
+          }}
+        >
           {projects.map((project) => {
             const isActive = project.id === activeProjectId;
             const activity = projectActivity(project.id);
+            const activityLabel =
+              activity === 'error'
+                ? 'Error'
+                : activity === 'waiting'
+                  ? 'Waiting for user'
+                  : activity === 'busy'
+                    ? 'Claude is working'
+                    : 'Idle';
 
             return (
-              <Tooltip content={project.name}>
-                <button
-                  key={project.id}
-                  draggable
-                  onDragStart={(e) => {
-                    dragIdRef.current = project.id;
-                    setDraggingId(project.id);
-                    e.dataTransfer.effectAllowed = 'move';
-                  }}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'move';
-                    const fromId = dragIdRef.current;
-                    if (!fromId || fromId === project.id) return;
-                    const fromIdx = projects.findIndex((p) => p.id === fromId);
-                    const toIdx = projects.findIndex((p) => p.id === project.id);
-                    if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
-                    const reordered = [...projects];
-                    const [moved] = reordered.splice(fromIdx, 1);
-                    reordered.splice(toIdx, 0, moved);
-                    onReorderProjects?.(reordered);
-                  }}
-                  onDrop={(e) => e.preventDefault()}
-                  onDragEnd={() => {
-                    dragIdRef.current = null;
-                    setDraggingId(null);
-                  }}
-                  onClick={() => onSelectProject(project.id)}
-                  className={`relative w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-medium transition-transform duration-200 ease-in-out titlebar-no-drag ${
-                    isActive
-                      ? 'bg-primary/15 text-primary'
-                      : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
-                  } ${draggingId === project.id ? 'opacity-40' : ''}`}
-                >
-                  {project.name.charAt(0).toUpperCase()}
-                  {activity && (
-                    <Tooltip
-                      content={
+              <div
+                key={project.id}
+                className={`relative flex items-center justify-center w-full ${draggingId === project.id ? 'opacity-40' : ''}`}
+              >
+                <Tooltip content={project.name}>
+                  <button
+                    draggable
+                    onDragStart={(e) => {
+                      dragIdRef.current = project.id;
+                      setDraggingId(project.id);
+                      e.dataTransfer.effectAllowed = 'move';
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                      const fromId = dragIdRef.current;
+                      if (!fromId || fromId === project.id) return;
+                      const fromIdx = projects.findIndex((p) => p.id === fromId);
+                      const toIdx = projects.findIndex((p) => p.id === project.id);
+                      if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
+                      const reordered = [...projects];
+                      const [moved] = reordered.splice(fromIdx, 1);
+                      reordered.splice(toIdx, 0, moved);
+                      onReorderProjects?.(reordered);
+                    }}
+                    onDrop={(e) => e.preventDefault()}
+                    onDragEnd={() => {
+                      dragIdRef.current = null;
+                      setDraggingId(null);
+                    }}
+                    onClick={() => onSelectProject(project.id)}
+                    className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-medium transition-transform duration-200 ease-in-out titlebar-no-drag ${
+                      isActive
+                        ? 'sidebar-pill-active text-primary'
+                        : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
+                    }`}
+                  >
+                    {project.name.charAt(0).toUpperCase() + project.name.charAt(1).toLowerCase()}
+                  </button>
+                </Tooltip>
+                {activity && (
+                  <Tooltip content={activityLabel}>
+                    <div
+                      className={`absolute -right-1 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full ${
                         activity === 'error'
-                          ? 'Error'
+                          ? 'status-dot-err'
                           : activity === 'waiting'
-                            ? 'Waiting for user'
+                            ? 'status-dot-wait'
                             : activity === 'busy'
-                              ? 'Claude is working'
-                              : 'Idle'
-                      }
-                    >
-                      <div
-                        className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border-2 border-[hsl(var(--surface-1))] ${
-                          activity === 'error'
-                            ? 'bg-destructive'
-                            : activity === 'waiting'
-                              ? 'bg-orange-500'
-                              : activity === 'busy'
-                                ? 'bg-amber-400 status-pulse'
-                                : 'bg-emerald-400'
-                        }`}
-                      />
-                    </Tooltip>
-                  )}
-                </button>
-              </Tooltip>
+                              ? 'bg-amber-400 status-pulse'
+                              : 'status-dot-idle'
+                      }`}
+                    />
+                  </Tooltip>
+                )}
+              </div>
             );
           })}
         </div>
@@ -415,20 +460,31 @@ export function LeftSidebar({
         <Tooltip content="Skills">
           <button
             onClick={onOpenSkillsBrowser}
-            className="p-2 rounded-md hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
+            className="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0 hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
           >
             <Blocks size={18} strokeWidth={1.5} />
           </button>
         </Tooltip>
 
-        <Tooltip content="Settings">
+        <Tooltip
+          content={
+            pixelAgentsConnectedCount > 0
+              ? `Settings · ${pixelAgentsConnectedCount} ${pixelAgentsConnectedCount === 1 ? 'office' : 'offices'}`
+              : 'Settings'
+          }
+        >
           <button
             onClick={onOpenSettings}
-            className="relative p-2 rounded-md hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
+            className="relative w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0 hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
           >
             <Settings size={18} strokeWidth={1.5} />
             {pixelAgentsConnectedCount > 0 && (
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[hsl(var(--git-added))]" />
+              <span
+                className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-1 rounded-full text-[9px] font-semibold leading-none tabular-nums flex items-center justify-center text-[hsl(var(--git-added))] bg-[hsl(var(--surface-2))] border-2 border-[hsl(var(--surface-1))]"
+                style={{ boxShadow: '0 0 8px hsl(var(--git-added) / 0.4)' }}
+              >
+                {pixelAgentsConnectedCount}
+              </span>
             )}
           </button>
         </Tooltip>
@@ -439,7 +495,7 @@ export function LeftSidebar({
   /* ── Expanded ───────────────────────────────────────────── */
 
   return (
-    <div className="h-full flex flex-col" style={{ background: 'hsl(var(--surface-1))' }}>
+    <div className="sidebar-shell h-full flex flex-col">
       {isMac && <div className="h-[28px] flex-shrink-0 titlebar-drag" />}
 
       {/* Rotation section */}
@@ -480,7 +536,7 @@ export function LeftSidebar({
           </div>
         )}
 
-        <div className="space-y-0.5">
+        <div className="space-y-1.5">
           {projects.map((project) => {
             const isActive = project.id === activeProjectId;
             const isProjectCollapsed = collapsedProjects.has(project.id);
@@ -635,8 +691,8 @@ export function LeftSidebar({
                             {...getTaskDragHandlers(task.id, projectTasks, project.id)}
                             className={`group/task relative flex flex-col pl-3.5 pr-2 py-[6px] rounded-md text-[13px] cursor-pointer transition-all duration-150 ${
                               isActiveTask
-                                ? 'bg-primary/10 text-foreground font-medium'
-                                : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+                                ? 'sidebar-pill-active text-foreground font-medium'
+                                : 'sidebar-row-hover text-muted-foreground hover:text-foreground'
                             } ${draggingTaskId === task.id ? 'opacity-40' : ''}`}
                             onClick={() => onSelectTask(project.id, task.id)}
                           >
@@ -644,11 +700,11 @@ export function LeftSidebar({
                               {/* Status indicator */}
                               {activityState === 'error' ? (
                                 <Tooltip content={errorTooltip}>
-                                  <div className="w-[6px] h-[6px] rounded-full bg-destructive flex-shrink-0" />
+                                  <div className="status-dot-err w-[6px] h-[6px] rounded-full flex-shrink-0" />
                                 </Tooltip>
                               ) : activityState === 'waiting' ? (
                                 <Tooltip content="Waiting for user">
-                                  <div className="w-[6px] h-[6px] rounded-full bg-orange-500 flex-shrink-0" />
+                                  <div className="status-dot-wait w-[6px] h-[6px] rounded-full flex-shrink-0" />
                                 </Tooltip>
                               ) : activityState === 'busy' ? (
                                 <Tooltip content={busyTooltip}>
@@ -656,11 +712,11 @@ export function LeftSidebar({
                                 </Tooltip>
                               ) : activityState === 'idle' && unseenTaskIds?.has(task.id) ? (
                                 <Tooltip content="Done (unseen)">
-                                  <div className="w-[6px] h-[6px] rounded-full bg-blue-400 flex-shrink-0" />
+                                  <div className="status-dot-unseen w-[6px] h-[6px] rounded-full flex-shrink-0" />
                                 </Tooltip>
                               ) : activityState === 'idle' ? (
                                 <Tooltip content="Idle">
-                                  <div className="w-[6px] h-[6px] rounded-full bg-emerald-400 flex-shrink-0" />
+                                  <div className="status-dot-idle w-[6px] h-[6px] rounded-full flex-shrink-0" />
                                 </Tooltip>
                               ) : null}
                               {remoteControlStates[task.id] && (
