@@ -22,10 +22,11 @@ export function Tooltip({ content, side = 'top', delay = 150, children }: Toolti
     timeoutRef.current = setTimeout(() => {
       if (!triggerRef.current) return;
       const rect = triggerRef.current.getBoundingClientRect();
-      // On Windows there's no titlebar inset, so top-side tooltips near the
-      // top of the viewport render off-screen. Flip to bottom in that case.
-      const isWin = window.electronAPI?.getPlatform() === 'win32';
-      const resolved = side === 'top' && isWin && rect.top < 40 ? 'bottom' : side;
+      // Top-side tooltips render above the trigger; flip to bottom when the
+      // trigger sits too close to the viewport top to fit the popup above.
+      // The top strip in MainContent doubles as the macOS titlebar drag region,
+      // so buttons there are within the first ~40px of the viewport.
+      const resolved = side === 'top' && rect.top < 40 ? 'bottom' : side;
       setEffectiveSide(resolved);
       setCoords({
         x: rect.left + rect.width / 2,
