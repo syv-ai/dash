@@ -43,7 +43,8 @@ import {
 import { NOTIFICATION_SOUNDS, SOUND_LABELS } from '../sounds';
 import type { NotificationSound } from '../sounds';
 import { TERMINAL_THEMES, darkTheme, lightTheme } from '../terminal/terminalThemes';
-import { TERMINAL_FONTS } from '../terminal/terminalFonts';
+import { TERMINAL_FONTS, resolveTerminalFontValue } from '../terminal/terminalFonts';
+import { Select } from './ui/Select';
 import type {
   PixelAgentsConfig,
   PixelAgentsStatus,
@@ -1975,17 +1976,16 @@ export function SettingsModal({
 
                     <SettingsCard title="Terminal font" hint="Main pane and shell drawer">
                       <SettingsBlock>
-                        <select
+                        <Select
                           value={terminalFontFamily}
-                          onChange={(e) => onTerminalFontFamilyChange(e.target.value)}
-                          className="w-full px-3 py-2 rounded-md text-[12px] border border-border/60 bg-transparent text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40"
-                        >
-                          {TERMINAL_FONTS.map((f) => (
-                            <option key={f.id} value={f.id}>
-                              {f.label}
-                            </option>
-                          ))}
-                        </select>
+                          onValueChange={onTerminalFontFamilyChange}
+                          options={TERMINAL_FONTS.map((f) => ({ value: f.id, label: f.label }))}
+                          renderOption={(opt) => (
+                            <span style={{ fontFamily: resolveTerminalFontValue(opt.value) }}>
+                              {opt.label}
+                            </span>
+                          )}
+                        />
                       </SettingsBlock>
                     </SettingsCard>
                   </SettingsPane>
