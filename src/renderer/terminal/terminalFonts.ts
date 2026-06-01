@@ -26,3 +26,11 @@ export function resolveTerminalFontValue(id: string): string {
   if (!entry || entry.family === null) return DEFAULT_FONT_MONO_STACK;
   return `${quoteIfNeeded(entry.family)}, ${DEFAULT_FONT_MONO_STACK}`;
 }
+
+// Read the current --font-mono value off :root. Falls back to the default stack
+// if the var is empty (e.g. during very early boot before CSS applies).
+export function getFontMono(): string {
+  if (typeof document === 'undefined') return DEFAULT_FONT_MONO_STACK;
+  const value = getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim();
+  return value || DEFAULT_FONT_MONO_STACK;
+}
