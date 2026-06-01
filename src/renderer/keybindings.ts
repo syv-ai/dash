@@ -2,10 +2,10 @@ export interface KeyBinding {
   id: string;
   label: string;
   category: string;
-  mod: boolean;      // Cmd (mac) / Ctrl (win/linux)
+  mod: boolean; // Cmd (mac) / Ctrl (win/linux)
   shift: boolean;
   alt: boolean;
-  key: string;        // lowercase key value
+  key: string; // lowercase key value
 }
 
 export type KeyBindingMap = Record<string, KeyBinding>;
@@ -115,6 +115,16 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
     alt: false,
     key: 'j',
   },
+  // ── Editor ──
+  saveFile: {
+    id: 'saveFile',
+    label: 'Save File',
+    category: 'Editor',
+    mod: true,
+    shift: false,
+    alt: false,
+    key: 's',
+  },
 };
 
 const STORAGE_KEY = 'keybindings';
@@ -131,7 +141,9 @@ export function loadKeybindings(): KeyBindingMap {
       }
       return merged;
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return { ...DEFAULT_KEYBINDINGS };
 }
 
@@ -140,7 +152,7 @@ export function saveKeybindings(bindings: KeyBindingMap): void {
 }
 
 export function matchesBinding(e: KeyboardEvent, binding: KeyBinding): boolean {
-  const modMatch = binding.mod ? (e.metaKey || e.ctrlKey) : (!e.metaKey && !e.ctrlKey);
+  const modMatch = binding.mod ? e.metaKey || e.ctrlKey : !e.metaKey && !e.ctrlKey;
   const shiftMatch = binding.shift ? e.shiftKey : !e.shiftKey;
   const altMatch = binding.alt ? e.altKey : !e.altKey;
   const keyMatch = e.key.toLowerCase() === binding.key.toLowerCase();
@@ -177,7 +189,9 @@ export function formatBinding(binding: KeyBinding): string {
   return getBindingKeys(binding).join(isMac ? '' : '+');
 }
 
-export function bindingFromEvent(e: KeyboardEvent): Omit<KeyBinding, 'id' | 'label' | 'category'> | null {
+export function bindingFromEvent(
+  e: KeyboardEvent,
+): Omit<KeyBinding, 'id' | 'label' | 'category'> | null {
   // Ignore bare modifier presses
   if (['Meta', 'Control', 'Shift', 'Alt'].includes(e.key)) return null;
 
@@ -190,7 +204,9 @@ export function bindingFromEvent(e: KeyboardEvent): Omit<KeyBinding, 'id' | 'lab
 }
 
 /** Group bindings by category, preserving definition order */
-export function groupByCategory(bindings: KeyBindingMap): { category: string; items: KeyBinding[] }[] {
+export function groupByCategory(
+  bindings: KeyBindingMap,
+): { category: string; items: KeyBinding[] }[] {
   const groups: { category: string; items: KeyBinding[] }[] = [];
   const seen = new Set<string>();
 
