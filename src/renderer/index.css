@@ -736,3 +736,18 @@
     display: inline;
   }
 }
+
+/* Monaco inline-comment decorations (FileEditorView) */
+.monaco-comment-line {
+  background-color: hsl(var(--primary) / 0.08);
+}
+.monaco-comment-glyph::before {
+  content: '•';
+  color: hsl(var(--primary));
+  font-size: 14px;
+  position: relative;
+  left: 4px;
+}
+.monaco-select-line {
+  background-color: hsl(var(--primary) / 0.15);
+}
