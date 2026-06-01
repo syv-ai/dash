@@ -48,6 +48,7 @@ import { loadKeybindings, saveKeybindings, matchesBinding } from './keybindings'
 import type { KeyBindingMap } from './keybindings';
 import { sessionRegistry } from './terminal/SessionRegistry';
 import { resolveTheme } from './terminal/terminalThemes';
+import { resolveTerminalFontValue } from './terminal/terminalFonts';
 import { playNotificationSound, playPeonSound } from './sounds';
 import type { NotificationSound } from './sounds';
 
@@ -119,6 +120,9 @@ export function App() {
   });
   const [terminalTheme, setTerminalTheme] = useState(() => {
     return localStorage.getItem('terminalTheme') || 'default';
+  });
+  const [terminalFontFamily, setTerminalFontFamily] = useState(() => {
+    return localStorage.getItem('terminalFontFamily') || 'system';
   });
   const [preferredIDE, setPreferredIDE] = useState<string>(() => {
     const stored = localStorage.getItem('preferredIDE');
@@ -753,6 +757,12 @@ export function App() {
     document.documentElement.classList.toggle('light', theme === 'light');
     sessionRegistry.setAllTerminalThemes(terminalTheme, theme === 'dark');
   }, [theme, terminalTheme]);
+
+  useEffect(() => {
+    const resolved = resolveTerminalFontValue(terminalFontFamily);
+    document.documentElement.style.setProperty('--font-mono', resolved);
+    sessionRegistry.setAllTerminalFonts(resolved);
+  }, [terminalFontFamily]);
 
   // Git: watch active task directory + poll
   useEffect(() => {
@@ -2011,6 +2021,11 @@ export function App() {
             setTerminalTheme(id);
             localStorage.setItem('terminalTheme', id);
             sessionRegistry.setAllTerminalThemes(id, theme === 'dark');
+          }}
+          terminalFontFamily={terminalFontFamily}
+          onTerminalFontFamilyChange={(id) => {
+            setTerminalFontFamily(id);
+            localStorage.setItem('terminalFontFamily', id);
           }}
           diffContextLines={diffContextLines}
           onDiffContextLinesChange={(v) => {
