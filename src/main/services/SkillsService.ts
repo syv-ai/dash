@@ -31,8 +31,20 @@ import { SkillsCache } from './skillsCache';
 // Trust boundary: this third-party GitHub repo is effectively Dash's package registry.
 // Pinning to a specific repo+branch+filename is a deliberate choice; changing this
 // constant changes who can ship code to every Dash user.
-const REGISTRY_URL =
-  'https://raw.githubusercontent.com/majiayu000/claude-skill-registry/main/registry.json';
+const REGISTRY_BASE_URL =
+  'https://raw.githubusercontent.com/majiayu000/claude-skill-registry/main/';
+const REGISTRY_URL = `${REGISTRY_BASE_URL}registry.json`;
+const REGISTRY_MANIFEST_URL = `${REGISTRY_BASE_URL}registry-manifest.json`;
+
+// In mid-2026 the upstream registry moved the skills payload from a single
+// registry.json into 256 sharded files under registry-shards/, indexed by
+// registry-manifest.json. The legacy file now ships a deprecation stub. We
+// detect that and fall back to fetching shards in parallel.
+const SHARD_CONCURRENCY = 8;
+// A shard path from the manifest must be a relative path under registry-shards/
+// to a .json file — no absolute URLs, no traversal. A compromised manifest must
+// not be able to redirect us off raw.githubusercontent.com.
+const SHARD_PATH_RE = /^registry-shards\/[\w./-]+\.json$/;
 
 // 24h matches the registry's typical update cadence (daily refresh of GitHub stars).
 // Shorter would just hammer raw.githubusercontent.com without surfacing newer data;
@@ -44,9 +56,10 @@ const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 // keeps the SQLite file under ~30 MB, and bounds the buffered JSON parse memory.
 const MAX_SKILLS = 10_000;
 
-// 60s is generous for a ~10 MB JSON payload over a slow connection. Short enough that
-// a hung server fails the open-lifecycle within the user's patience window.
-const REGISTRY_FETCH_TIMEOUT_MS = 60_000;
+// 120s is the wall-clock cap on the entire refresh. The legacy single-file path
+// finishes well within this; the sharded path fetches 256 files at SHARD_CONCURRENCY
+// in parallel and needs more headroom on slow connections.
+const REGISTRY_FETCH_TIMEOUT_MS = 120_000;
 
 // Per-file timeout for SKILL.md and sibling assets. 15s covers slow connections
 // without making a stuck connection block the install for minutes.
@@ -359,6 +372,67 @@ function normalizeSkill(s: RawSkill): RegistrySkill | null {
   };
 }
 
+async function fetchShardedRegistry(signal: AbortSignal): Promise<RawSkill[]> {
+  const manifestResp = await fetch(REGISTRY_MANIFEST_URL, {
+    headers: { 'Accept-Encoding': 'gzip' },
+    signal,
+  });
+  if (!manifestResp.ok) {
+    throw new Error(
+      `Registry manifest fetch failed: ${manifestResp.status} ${manifestResp.statusText}`,
+    );
+  }
+  const manifestText = await manifestResp.text();
+  let manifest: { shards?: unknown };
+  try {
+    manifest = JSON.parse(manifestText) as { shards?: unknown };
+  } catch (err) {
+    throw new Error(`Registry manifest returned non-JSON body: ${String(err)}`);
+  }
+  if (!Array.isArray(manifest.shards) || manifest.shards.length === 0) {
+    throw new Error('Registry manifest has no shards');
+  }
+
+  const shardPaths: string[] = [];
+  for (const entry of manifest.shards as Array<{ path?: unknown }>) {
+    const p = entry?.path;
+    if (typeof p !== 'string' || !SHARD_PATH_RE.test(p)) {
+      throw new Error(`Refusing shard path from manifest: ${JSON.stringify(p)}`);
+    }
+    shardPaths.push(p);
+  }
+
+  const all: RawSkill[] = [];
+  // Process in capped batches so peak memory stays bounded (~SHARD_CONCURRENCY × ~500 KB
+  // uncompressed per shard) while we still saturate the network on slow connections.
+  for (let i = 0; i < shardPaths.length; i += SHARD_CONCURRENCY) {
+    const batch = shardPaths.slice(i, i + SHARD_CONCURRENCY);
+    const results = await Promise.all(
+      batch.map(async (relPath) => {
+        const resp = await fetch(`${REGISTRY_BASE_URL}${relPath}`, {
+          headers: { 'Accept-Encoding': 'gzip' },
+          signal,
+        });
+        if (!resp.ok) {
+          throw new Error(`Shard ${relPath} fetch failed: ${resp.status} ${resp.statusText}`);
+        }
+        const text = await resp.text();
+        let parsed: { skills?: unknown };
+        try {
+          parsed = JSON.parse(text) as { skills?: unknown };
+        } catch (err) {
+          throw new Error(`Shard ${relPath} returned non-JSON body: ${String(err)}`);
+        }
+        return Array.isArray(parsed.skills) ? (parsed.skills as RawSkill[]) : [];
+      }),
+    );
+    for (const shardSkills of results) {
+      all.push(...shardSkills);
+    }
+  }
+  return all;
+}
+
 // Buffered parse rather than stream-json: a Buffer/Uint8Array mismatch between
 // Readable.fromWeb and fixUtf8Stream silently yielded 0 rows in our setup. Cost is
 // ~200 MB transient memory during the JSON.parse.
@@ -376,17 +450,28 @@ async function downloadAndStoreRegistry(): Promise<{ inserted: number }> {
     }
 
     const text = await resp.text();
-    let parsed: { skills?: unknown };
+    let parsed: { skills?: unknown; deprecated_full_payload?: unknown };
     try {
-      parsed = JSON.parse(text) as { skills?: unknown };
+      parsed = JSON.parse(text) as { skills?: unknown; deprecated_full_payload?: unknown };
     } catch (err) {
       throw new Error(`Registry returned non-JSON body (${text.length} bytes): ${String(err)}`);
     }
 
-    // Registry is delivered sorted by stars descending, so a head-slice is "top N by stars".
-    const rawSkills = Array.isArray(parsed.skills)
-      ? (parsed.skills as RawSkill[]).slice(0, MAX_SKILLS)
-      : [];
+    // Upstream may serve either the legacy flat payload or a deprecation stub pointing
+    // at the sharded layout. Both reach the same merged-and-sorted list below.
+    let rawSkills: RawSkill[];
+    if (parsed.deprecated_full_payload === true || !Array.isArray(parsed.skills)) {
+      rawSkills = await fetchShardedRegistry(controller.signal);
+    } else {
+      rawSkills = parsed.skills as RawSkill[];
+    }
+
+    // Sharded delivery is keyed by an install-branch hash, not by popularity, so we
+    // must sort across the union before head-slicing. The legacy path arrives pre-sorted
+    // by stars desc; sorting again is idempotent and cheap at this size.
+    rawSkills.sort((a, b) => (b.stars ?? 0) - (a.stars ?? 0));
+    if (rawSkills.length > MAX_SKILLS) rawSkills = rawSkills.slice(0, MAX_SKILLS);
+
     const normalized: RegistrySkill[] = [];
     let skipped = 0;
     for (const raw of rawSkills) {
@@ -406,9 +491,7 @@ async function downloadAndStoreRegistry(): Promise<{ inserted: number }> {
     }
 
     if (normalized.length === 0) {
-      throw new Error(
-        `Registry parsed but yielded 0 valid skills (raw: ${rawSkills.length}, body: ${text.length} bytes)`,
-      );
+      throw new Error(`Registry parsed but yielded 0 valid skills (raw: ${rawSkills.length})`);
     }
 
     // Atomic replace: previous cache survives if this throws mid-transaction.

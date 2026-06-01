@@ -33,6 +33,7 @@ import type { LucideIcon } from 'lucide-react';
 import { Tooltip } from './ui/Tooltip';
 import { ToggleSwitch } from './ui/ToggleSwitch';
 import { Switch } from './ui/Switch';
+import { Modal, useModalClose } from './ui/Modal';
 import type { KeyBindingMap, KeyBinding } from '../keybindings';
 import {
   getBindingKeys,
@@ -947,844 +948,827 @@ export function SettingsModal({
     }
   }, [tab]);
 
-  // ESC closes the modal (capture phase, so it wins over xterm/pty listeners)
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handler, true);
-    return () => window.removeEventListener('keydown', handler, true);
-  }, [onClose]);
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop animate-fade-in"
-      onClick={onClose}
-    >
-      <div
-        className="bg-card border border-border/60 rounded-xl shadow-2xl shadow-black/40 w-[1040px] max-w-[94vw] h-[86vh] max-h-[820px] flex flex-col animate-slide-up overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Sidebar + Content */}
-        <div className="flex-1 flex min-h-0">
-          {/* Sidebar */}
-          <nav
-            className="sidebar-shell w-[224px] flex-shrink-0 flex flex-col border-r border-border/40"
-            aria-label="Settings sections"
-          >
-            <div className="px-5 pt-5 pb-3 flex items-center justify-between">
-              <h2 className="text-[13px] font-semibold text-foreground tracking-tight">Settings</h2>
-              <button
-                onClick={onClose}
-                className="p-1 rounded-md hover:bg-accent text-foreground/50 hover:text-foreground transition-all duration-150"
-                aria-label="Close settings"
-              >
-                <X size={13} strokeWidth={2} />
-              </button>
-            </div>
+    <Modal onClose={onClose} size="w-[1040px] max-w-[94vw] h-[86vh] max-h-[820px]">
+      {/* Sidebar + Content */}
+      <div className="flex-1 flex min-h-0">
+        {/* Sidebar */}
+        <nav
+          className="sidebar-shell w-[224px] flex-shrink-0 flex flex-col border-r border-border/40"
+          aria-label="Settings sections"
+        >
+          <div className="px-5 pt-5 pb-3 flex items-center justify-between">
+            <h2 className="text-[13px] font-semibold text-foreground tracking-tight">Settings</h2>
+            <SettingsCloseButton />
+          </div>
 
-            <div ref={navContainerRef} className="flex-1 overflow-y-auto px-2 pb-3 relative">
-              {/* Sliding highlight pill — sits OUTSIDE the space-y wrapper so it doesn't
+          <div ref={navContainerRef} className="flex-1 overflow-y-auto px-2 pb-3 relative">
+            {/* Sliding highlight pill — sits OUTSIDE the space-y wrapper so it doesn't
                   add a margin to the first group when it mounts. */}
-              {navHighlight && (
-                <div
-                  className="sidebar-pill-active absolute left-2 right-2 rounded-lg pointer-events-none"
-                  style={{
-                    top: navHighlight.top,
-                    height: navHighlight.height,
-                    transition: navHasAnimated.current
-                      ? 'top 220ms cubic-bezier(0.16, 1, 0.3, 1), height 220ms cubic-bezier(0.16, 1, 0.3, 1)'
-                      : 'none',
-                  }}
-                />
-              )}
-              <div className="space-y-4">
-                {NAV_GROUPS.map((group) => (
-                  <div key={group.label}>
-                    <div className="px-3 pt-2 pb-1.5">
-                      <span className="text-[9.5px] font-semibold tracking-[0.14em] uppercase text-muted-foreground/70 select-none">
-                        {group.label}
-                      </span>
-                    </div>
-                    <ul className="space-y-[2px]">
-                      {group.ids.map((id) => {
-                        const item = NAV_ITEMS.find((n) => n.id === id);
-                        if (!item) return null;
-                        const active = tab === item.id;
-                        const showDot = item.id === 'about' && updateAvailable;
-                        return (
-                          <li key={item.id}>
-                            <button
-                              ref={(el) => {
-                                if (el) navItemRefs.current.set(item.id, el);
-                                else navItemRefs.current.delete(item.id);
-                              }}
-                              onClick={() => setTab(item.id)}
-                              className={`group relative w-full flex items-center gap-2.5 pl-3 pr-2.5 py-[7px] rounded-lg text-[12.5px] transition-colors duration-150 ${
-                                active
-                                  ? 'text-foreground font-medium'
-                                  : 'text-muted-foreground hover:text-foreground sidebar-row-hover'
-                              }`}
-                            >
-                              <item.Icon
-                                size={13}
-                                strokeWidth={1.8}
-                                className={`flex-shrink-0 transition-colors duration-150 ${
-                                  active
-                                    ? 'text-primary'
-                                    : 'text-muted-foreground/70 group-hover:text-foreground/80'
-                                }`}
-                              />
-                              <span className="flex-1 text-left truncate">{item.label}</span>
-                              {showDot && (
-                                <span className="w-[6px] h-[6px] rounded-full bg-[hsl(var(--git-added))] shadow-[0_0_6px_hsl(var(--git-added)/0.6)] flex-shrink-0" />
-                              )}
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
+            {navHighlight && (
+              <div
+                className="sidebar-pill-active absolute left-2 right-2 rounded-lg pointer-events-none"
+                style={{
+                  top: navHighlight.top,
+                  height: navHighlight.height,
+                  transition: navHasAnimated.current
+                    ? 'top 220ms cubic-bezier(0.16, 1, 0.3, 1), height 220ms cubic-bezier(0.16, 1, 0.3, 1)'
+                    : 'none',
+                }}
+              />
+            )}
+            <div className="space-y-4">
+              {NAV_GROUPS.map((group) => (
+                <div key={group.label}>
+                  <div className="px-3 pt-2 pb-1.5">
+                    <span className="text-[9.5px] font-semibold tracking-[0.14em] uppercase text-muted-foreground/70 select-none">
+                      {group.label}
+                    </span>
                   </div>
-                ))}
-              </div>
-            </div>
-            <div className="px-5 py-3 border-t border-border/30 flex items-center justify-between">
-              <span className="text-[10px] font-medium tracking-[0.1em] uppercase text-muted-foreground/45">
-                Dash
-              </span>
-              <span className="text-[10px] font-mono text-muted-foreground/55">
-                {appVersion ? `v${appVersion}` : '…'}
-              </span>
-            </div>
-          </nav>
-
-          {/* Content */}
-          <div className="flex-1 min-w-0 flex flex-col">
-            <div className="overflow-y-auto flex-1">
-              <div className="px-8 py-7">
-                {/* Section header */}
-                <div className="mb-6 animate-fade-in" key={`hdr-${tab}`}>
-                  <h3 className="text-[19px] font-semibold text-foreground tracking-tight leading-tight">
-                    {activeNav.label}
-                  </h3>
-                  <p className="text-[12.5px] text-foreground/50 mt-1.5 leading-relaxed">
-                    {activeNav.description}
-                  </p>
-                </div>
-
-                {tab === 'sidebar' && (
-                  <SettingsPane key={`pane-${tab}`}>
-                    <SettingsCard title="Active tasks">
-                      <SettingsRow
-                        label="Show active tasks"
-                        description="Quick-switch between running tasks with Ctrl+Tab."
-                        control={
-                          <Switch
-                            enabled={showActiveTasksSection}
-                            onToggle={onShowActiveTasksSectionChange}
-                          />
-                        }
-                      />
-                    </SettingsCard>
-                  </SettingsPane>
-                )}
-
-                {tab === 'attribution' && (
-                  <SettingsPane key={`pane-${tab}`}>
-                    <SettingsCard title="Commit attribution">
-                      <SettingsRow
-                        label="Mode"
-                        description="Appended to git commits Claude makes on your behalf."
-                        align="start"
-                        control={
-                          <Segmented
-                            fullWidth={false}
-                            size="sm"
-                            value={commitAttribution === undefined ? 'default' : 'custom'}
-                            options={[
-                              { value: 'default', label: 'Default' },
-                              { value: 'custom', label: 'Custom' },
-                            ]}
-                            onChange={(v) => {
-                              if (v === 'default') {
-                                onCommitAttributionChange(undefined);
-                              } else {
-                                onCommitAttributionChange(
-                                  commitAttribution ?? DASH_DEFAULT_ATTRIBUTION,
-                                );
-                              }
-                            }}
-                          />
-                        }
-                      />
-                      <SettingsBlock description="Clear the field to disable attribution entirely.">
-                        <textarea
-                          value={
-                            commitAttribution === undefined
-                              ? (claudeDefaultAttribution ?? DASH_DEFAULT_ATTRIBUTION)
-                              : commitAttribution
-                          }
-                          onChange={(e) => onCommitAttributionChange(e.target.value)}
-                          readOnly={commitAttribution === undefined}
-                          rows={3}
-                          className={`w-full px-3 py-2.5 rounded-lg text-[12px] font-mono border bg-transparent resize-none ${
-                            commitAttribution === undefined
-                              ? 'border-border/40 text-foreground/40 cursor-default'
-                              : 'border-border/60 text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40'
-                          }`}
-                        />
-                      </SettingsBlock>
-                    </SettingsCard>
-                  </SettingsPane>
-                )}
-
-                {tab === 'diff' && (
-                  <SettingsPane key={`pane-${tab}`}>
-                    <SettingsCard title="Context">
-                      <SettingsRow
-                        label="Context lines"
-                        description="Unchanged lines shown around each change."
-                        align="start"
-                        control={
-                          <Segmented
-                            fullWidth={false}
-                            size="sm"
-                            value={diffContextLines === null ? 'full' : String(diffContextLines)}
-                            options={[
-                              { value: 'full', label: 'Full' },
-                              { value: '3', label: '3' },
-                              { value: '10', label: '10' },
-                              { value: '50', label: '50' },
-                            ]}
-                            onChange={(v) =>
-                              onDiffContextLinesChange(v === 'full' ? null : Number(v))
-                            }
-                          />
-                        }
-                      />
-                    </SettingsCard>
-                  </SettingsPane>
-                )}
-
-                {tab === 'terminal' && (
-                  <SettingsPane key={`pane-${tab}`}>
-                    <SettingsCard title="Shell drawer" hint="Cmd+J">
-                      <SettingsRow
-                        label="Show shell drawer"
-                        description="Run git, npm, and other commands alongside Claude."
-                        control={
-                          <Switch
-                            enabled={shellDrawerEnabled}
-                            onToggle={onShellDrawerEnabledChange}
-                          />
-                        }
-                      />
-                      {shellDrawerEnabled && (
-                        <SettingsBlock label="Position">
-                          <Segmented
-                            value={shellDrawerPosition}
-                            options={[
-                              { value: 'main', label: 'Main' },
-                              { value: 'right', label: 'Right' },
-                            ]}
-                            onChange={onShellDrawerPositionChange}
-                          />
-                        </SettingsBlock>
-                      )}
-                    </SettingsCard>
-                  </SettingsPane>
-                )}
-
-                {tab === 'ide' && (
-                  <SettingsPane key={`pane-${tab}`}>
-                    <SettingsCard title="Preferred IDE">
-                      <SettingsBlock
-                        description={
-                          availableIDEs.length === 0
-                            ? 'No supported IDE detected. Install Cursor, VS Code, Windsurf, Antigravity, or Zed — or configure a Custom IDE below.'
-                            : 'Used when opening a task from the header. Only installed IDEs are shown.'
-                        }
-                      >
-                        <Segmented
-                          value={preferredIDE}
-                          options={[
-                            ...(availableIDEs.length > 0
-                              ? [
-                                  { value: 'auto', label: 'Auto' },
-                                  ...availableIDEs.map((i) => ({ value: i.id, label: i.label })),
-                                ]
-                              : []),
-                            { value: 'custom', label: 'Custom' },
-                          ]}
-                          onChange={onPreferredIDEChange}
-                        />
-                      </SettingsBlock>
-                      {preferredIDE === 'custom' && (
-                        <SettingsBlock label="Custom IDE command">
-                          <div className="space-y-3">
-                            <div>
-                              <label className="block text-[10.5px] text-foreground/55 mb-1.5">
-                                Executable path
-                              </label>
-                              <div className="flex gap-2">
-                                <input
-                                  type="text"
-                                  value={customIDE.path}
-                                  onChange={(e) =>
-                                    onCustomIDEChange({ ...customIDE, path: e.target.value })
-                                  }
-                                  placeholder="/Applications/MyIDE.app/Contents/MacOS/myide"
-                                  className="flex-1 px-3 py-2 text-[11.5px] rounded-md border border-border/60 bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-1 focus:ring-primary/40 font-mono"
-                                />
-                                <button
-                                  onClick={async () => {
-                                    const res = await window.electronAPI.pickExecutable();
-                                    if (!res.success) {
-                                      toast.error(res.error || 'Failed to open file picker');
-                                      return;
-                                    }
-                                    if (res.data) {
-                                      onCustomIDEChange({ ...customIDE, path: res.data });
-                                    }
-                                  }}
-                                  className="px-3 py-2 text-[11.5px] rounded-md border border-border/60 text-foreground/80 hover:bg-accent/40 hover:text-foreground flex items-center gap-1.5"
-                                >
-                                  <FolderOpen size={12} strokeWidth={1.8} />
-                                  Browse
-                                </button>
-                              </div>
-                            </div>
-                            <div>
-                              <label className="block text-[10.5px] text-foreground/55 mb-1.5">
-                                Arguments (one per line)
-                              </label>
-                              <textarea
-                                value={customIDE.args.join('\n')}
-                                onChange={(e) =>
-                                  onCustomIDEChange({
-                                    ...customIDE,
-                                    args: e.target.value
-                                      .split('\n')
-                                      .filter((line) => line.length > 0),
-                                  })
-                                }
-                                rows={3}
-                                placeholder={'--new-window\n{path}'}
-                                className="w-full px-3 py-2 text-[11.5px] rounded-md border border-border/60 bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-1 focus:ring-primary/40 font-mono resize-y"
-                              />
-                              <p className="text-[10.5px] text-foreground/45 mt-1.5 leading-relaxed">
-                                Use <code className="text-foreground/65">{'{path}'}</code> to place
-                                the folder anywhere; otherwise it&apos;s appended.
-                              </p>
-                            </div>
-                          </div>
-                        </SettingsBlock>
-                      )}
-                    </SettingsCard>
-                  </SettingsPane>
-                )}
-
-                {tab === 'notifications' && (
-                  <SettingsPane key={`pane-${tab}`}>
-                    <SettingsCard title="When a task finishes">
-                      <SettingsRow
-                        label="Desktop notification"
-                        description="Includes the task name."
-                        control={
-                          <Switch
-                            enabled={desktopNotification}
-                            onToggle={onDesktopNotificationChange}
-                          />
-                        }
-                      />
-                      <SettingsBlock label="Sound">
-                        <div className="flex flex-wrap gap-2">
-                          {NOTIFICATION_SOUNDS.map((sound) => {
-                            const isActive = notificationSound === sound;
-                            return (
-                              <button
-                                key={sound}
-                                onClick={() => onNotificationSoundChange(sound)}
-                                className={`px-3 py-1.5 rounded-md text-[11.5px] border transition-all duration-150 ${
-                                  isActive
-                                    ? 'border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20 font-medium'
-                                    : 'border-border/60 text-foreground/60 hover:bg-accent/40 hover:text-foreground'
-                                }`}
-                              >
-                                {SOUND_LABELS[sound]}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </SettingsBlock>
-                    </SettingsCard>
-                  </SettingsPane>
-                )}
-
-                {tab === 'about' && (
-                  <SettingsPane key={`pane-${tab}`}>
-                    <div
-                      className="relative overflow-hidden rounded-xl border border-border/40 p-5"
-                      style={{
-                        background:
-                          'linear-gradient(135deg, hsl(var(--surface-2)) 0%, hsl(var(--surface-1)) 100%)',
-                      }}
-                    >
-                      <div
-                        aria-hidden
-                        className="absolute -top-12 -right-12 w-40 h-40 rounded-full opacity-30 blur-3xl"
-                        style={{ background: 'hsl(var(--primary) / 0.35)' }}
-                      />
-                      <div className="relative flex items-center gap-4">
-                        <div className="w-11 h-11 rounded-xl flex items-center justify-center bg-primary/12 ring-1 ring-primary/25 shadow-[inset_0_1px_0_hsl(0_0%_100%/0.08)]">
-                          <Sparkles size={20} strokeWidth={1.5} className="text-primary" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[14px] font-semibold text-foreground tracking-tight">
-                            Dash
-                          </p>
-                          <p className="text-[11.5px] text-muted-foreground font-mono mt-0.5">
-                            {appVersion ? `v${appVersion}` : 'version loading…'}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    <p className="text-[11.5px] text-muted-foreground leading-relaxed px-1">
-                      A multi-task desktop for Claude Code, built by{' '}
-                      <a
-                        href="https://syv.ai"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline"
-                      >
-                        syv.ai
-                      </a>
-                      .
-                    </p>
-                  </SettingsPane>
-                )}
-
-                {tab === 'updates' && (
-                  <SettingsPane key={`pane-${tab}`}>
-                    <SettingsCard title="Status">
-                      <div className="flex items-center gap-3 px-4 py-3.5">
-                        <div
-                          className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                            updateStatus === 'ready' || updateStatus === 'available'
-                              ? 'bg-[hsl(var(--git-added)/0.12)] ring-1 ring-[hsl(var(--git-added))/0.25]'
-                              : 'bg-[hsl(var(--surface-3))] ring-1 ring-border/40'
-                          }`}
-                        >
-                          {updateStatus === 'ready' || updateStatus === 'available' ? (
-                            <Download
-                              size={15}
-                              className="text-[hsl(var(--git-added))]"
-                              strokeWidth={1.8}
-                            />
-                          ) : (
-                            <Check size={15} className="text-muted-foreground" strokeWidth={1.8} />
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[12.5px] font-medium text-foreground">
-                            {updateStatus === 'ready'
-                              ? `Update ready${updateVersion ? ` — v${updateVersion}` : ''}`
-                              : updateStatus === 'available'
-                                ? `Update available${updateVersion ? ` — v${updateVersion}` : ''}`
-                                : updateStatus === 'downloading'
-                                  ? 'Downloading update…'
-                                  : updateStatus === 'checking'
-                                    ? 'Checking for updates…'
-                                    : 'You’re up to date'}
-                          </p>
-                          <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
-                            {appVersion ? `Current v${appVersion}` : 'Loading…'}
-                          </p>
-                        </div>
-                        {updateStatus === 'ready' ? (
-                          <button
-                            onClick={() => window.electronAPI.autoUpdateQuitAndInstall()}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium border border-primary/40 bg-primary/10 text-foreground ring-1 ring-primary/20 hover:bg-primary/15 transition-all duration-150"
-                          >
-                            <Download size={12} strokeWidth={2} />
-                            Restart
-                          </button>
-                        ) : updateStatus === 'available' ? (
-                          <button
-                            onClick={() => {
-                              setUpdateStatus('downloading');
-                              window.electronAPI.autoUpdateDownload();
-                            }}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium border border-primary/40 bg-primary/10 text-foreground ring-1 ring-primary/20 hover:bg-primary/15 transition-all duration-150"
-                          >
-                            <Download size={12} strokeWidth={2} />
-                            Download
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              setUpdateStatus('checking');
-                              window.electronAPI.autoUpdateCheck().then((resp) => {
-                                if (!resp.success) setUpdateStatus('idle');
-                              });
-                            }}
-                            disabled={updateStatus === 'checking' || updateStatus === 'downloading'}
-                            className="px-3 py-2 rounded-lg text-[12px] border border-border/60 text-muted-foreground hover:bg-accent/40 hover:text-foreground transition-all duration-150 disabled:opacity-50"
-                          >
-                            Check
-                          </button>
-                        )}
-                      </div>
-                    </SettingsCard>
-
-                    <SettingsCard title="Behavior">
-                      <SettingsRow
-                        label="Check automatically"
-                        description="When off, Dash won't check in the background."
-                        control={
-                          <Switch
-                            enabled={autoUpdateEnabled}
-                            onToggle={onAutoUpdateEnabledChange}
-                          />
-                        }
-                      />
-                      <SettingsRow
-                        label="Show update notifications"
-                        description="Toast popups when an update is available, downloaded, or fails."
-                        control={
-                          <Switch
-                            enabled={updateNotificationsEnabled}
-                            onToggle={onUpdateNotificationsEnabledChange}
-                          />
-                        }
-                      />
-                    </SettingsCard>
-                  </SettingsPane>
-                )}
-
-                {tab === 'privacy' && (
-                  <SettingsPane key={`pane-${tab}`}>
-                    <SettingsCard title="Telemetry">
-                      <SettingsRow
-                        label="Send anonymous usage data"
-                        description="Helps us understand how Dash is used so we can improve it."
-                        align="start"
-                        control={
-                          <Switch
-                            enabled={telemetryEnabled && !telemetryEnvDisabled}
-                            disabled={telemetryEnvDisabled}
-                            onToggle={(next) => {
-                              setTelemetryEnabled(next);
-                              window.electronAPI.telemetrySetEnabled(next);
-                            }}
-                          />
-                        }
-                      />
-                      <SettingsBlock>
-                        <div className="text-[11px] text-muted-foreground leading-relaxed space-y-1.5">
-                          <p>
-                            <span className="font-medium text-foreground/80">What we collect:</span>{' '}
-                            app start/close, session duration, daily active usage, project and task
-                            counts, worktree and terminal usage, app version, platform, and
-                            architecture.
-                          </p>
-                          <p>
-                            <span className="font-medium text-foreground/80">
-                              What we never collect:
-                            </span>{' '}
-                            no code, file paths, prompts, IP addresses, device identifiers, MAC
-                            addresses, or any personal information.
-                          </p>
-                          {telemetryEnvDisabled && (
-                            <p className="flex items-center gap-1 text-[hsl(var(--git-modified))]">
-                              <AlertCircle size={11} strokeWidth={2} />
-                              Disabled via TELEMETRY_ENABLED env var
-                            </p>
-                          )}
-                        </div>
-                      </SettingsBlock>
-                    </SettingsCard>
-                  </SettingsPane>
-                )}
-
-                {tab === 'appearance' && (
-                  <SettingsPane key={`pane-${tab}`}>
-                    <SettingsCard title="App theme">
-                      <SettingsBlock>
-                        <Segmented
-                          value={theme}
-                          options={[
-                            {
-                              value: 'light',
-                              label: 'Light',
-                              icon: <Sun size={13} strokeWidth={1.8} />,
-                            },
-                            {
-                              value: 'dark',
-                              label: 'Dark',
-                              icon: <Moon size={13} strokeWidth={1.8} />,
-                            },
-                          ]}
-                          onChange={onThemeChange}
-                        />
-                      </SettingsBlock>
-                    </SettingsCard>
-
-                    <SettingsCard title="Terminal palette" hint="Main pane only">
-                      <div className="p-4">
-                        <div className="grid grid-cols-3 gap-2.5">
-                          {TERMINAL_THEMES.map((t) => {
-                            const isActive = terminalTheme === t.id;
-                            const bg =
-                              t.id === 'default'
-                                ? theme === 'dark'
-                                  ? (darkTheme.background ?? '#0d0d11')
-                                  : (lightTheme.background ?? '#faf8f3')
-                                : t.theme.background || '#000';
-                            const colors = [
-                              t.theme.red || '#f00',
-                              t.theme.green || '#0f0',
-                              t.theme.blue || '#00f',
-                              t.theme.yellow || '#ff0',
-                              t.theme.magenta || '#f0f',
-                              t.theme.cyan || '#0ff',
-                            ];
-                            return (
-                              <button
-                                key={t.id}
-                                onClick={() => onTerminalThemeChange(t.id)}
-                                className={`group flex flex-col gap-2 p-2.5 rounded-lg border transition-all duration-150 ${
-                                  isActive
-                                    ? 'border-primary/45 ring-1 ring-primary/25 bg-[hsl(var(--surface-3))]'
-                                    : 'border-border/50 hover:border-border hover:bg-[hsl(var(--surface-3)/0.5)]'
-                                }`}
-                              >
-                                <div
-                                  className="w-full h-7 rounded-md flex items-center gap-[4px] px-2 shadow-inner"
-                                  style={{ background: bg }}
-                                >
-                                  {colors.map((c, i) => (
-                                    <span
-                                      key={i}
-                                      className="w-[7px] h-[7px] rounded-full"
-                                      style={{
-                                        background: c,
-                                        boxShadow: `0 0 4px ${c}66`,
-                                      }}
-                                    />
-                                  ))}
-                                </div>
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="text-[10.5px] font-medium truncate text-foreground/85">
-                                    {t.name}
-                                  </span>
-                                  {t.id === 'default' && (
-                                    <span className="text-[9px] text-foreground/40 font-mono uppercase tracking-wide">
-                                      auto
-                                    </span>
-                                  )}
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </SettingsCard>
-
-                    <SettingsCard title="Terminal font" hint="Main pane and shell drawer">
-                      <SettingsBlock>
-                        <Select
-                          value={terminalFontFamily}
-                          onValueChange={onTerminalFontFamilyChange}
-                          options={TERMINAL_FONTS.map((f) => ({ value: f.id, label: f.label }))}
-                          renderOption={(opt) => (
-                            <span style={{ fontFamily: resolveTerminalFontValue(opt.value) }}>
-                              {opt.label}
-                            </span>
-                          )}
-                        />
-                      </SettingsBlock>
-                    </SettingsCard>
-                  </SettingsPane>
-                )}
-
-                {tab === 'claude-code' && (
-                  <ClaudeCodeTab
-                    effortLevel={effortLevel}
-                    onEffortLevelChange={onEffortLevelChange}
-                    syncShellEnv={syncShellEnv}
-                    onSyncShellEnvChange={onSyncShellEnvChange}
-                    customEnvVars={customClaudeEnvVars}
-                    onCustomEnvVarsChange={onCustomClaudeEnvVarsChange}
-                    claudeInfo={claudeInfo}
-                  />
-                )}
-
-                {tab === 'add-ons' && (
-                  <SettingsPane key={`pane-${tab}`}>
-                    <AddOnAccordion
-                      title="RTK"
-                      subtitle="Compress common shell-command output before Claude reads it."
-                      status={
-                        !rtkStatus
-                          ? 'inactive'
-                          : rtkStatus.installed && rtkStatus.enabled
-                            ? 'active'
-                            : rtkStatus.installed
-                              ? 'pending'
-                              : 'inactive'
-                      }
-                      statusLabel={
-                        !rtkStatus
-                          ? 'Checking…'
-                          : rtkStatus.installed && rtkStatus.enabled
-                            ? 'Active'
-                            : rtkStatus.installed
-                              ? 'Installed · off'
-                              : 'Not installed'
-                      }
-                    >
-                      <RtkSection
-                        status={rtkStatus}
-                        onEnabledChange={onRtkEnabledChange}
-                        onDownload={onRtkDownload}
-                        progress={rtkDownloadProgress}
-                      />
-                    </AddOnAccordion>
-                  </SettingsPane>
-                )}
-
-                {tab === 'usage' && (
-                  <UsageSection
-                    latestRateLimits={latestRateLimits}
-                    thresholds={usageThresholds}
-                    onThresholdsChange={onUsageThresholdsChange}
-                    showRateLimits={showRateLimits}
-                    onShowRateLimitsChange={onShowRateLimitsChange}
-                    showUsageInline={showUsageInline}
-                    onShowUsageInlineChange={onShowUsageInlineChange}
-                    showContextUsageOnTaskCards={showContextUsageOnTaskCards}
-                    onShowContextUsageOnTaskCardsChange={onShowContextUsageOnTaskCardsChange}
-                  />
-                )}
-
-                {tab === 'keybindings' && (
-                  <SettingsPane key={`pane-${tab}`}>
-                    {(() => {
-                      const modifiedCount = Object.values(keybindings).filter(isModified).length;
+                  <ul className="space-y-[2px]">
+                    {group.ids.map((id) => {
+                      const item = NAV_ITEMS.find((n) => n.id === id);
+                      if (!item) return null;
+                      const active = tab === item.id;
+                      const showDot = item.id === 'about' && updateAvailable;
                       return (
-                        <div className="flex items-center justify-between -mt-1">
-                          <p className="text-[11.5px] text-muted-foreground">
-                            Click a shortcut to record a new binding.
-                            {modifiedCount > 0 && (
-                              <span className="ml-2 text-primary/85 font-medium">
-                                {modifiedCount} modified
-                              </span>
-                            )}
-                          </p>
+                        <li key={item.id}>
                           <button
-                            onClick={handleResetAll}
-                            disabled={modifiedCount === 0}
-                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] transition-all duration-150 ${
-                              modifiedCount === 0
-                                ? 'text-foreground/25 cursor-default'
-                                : 'text-foreground/65 hover:text-foreground hover:bg-accent/50'
+                            ref={(el) => {
+                              if (el) navItemRefs.current.set(item.id, el);
+                              else navItemRefs.current.delete(item.id);
+                            }}
+                            onClick={() => setTab(item.id)}
+                            className={`group relative w-full flex items-center gap-2.5 pl-3 pr-2.5 py-[7px] rounded-lg text-[12.5px] transition-colors duration-150 ${
+                              active
+                                ? 'text-foreground font-medium'
+                                : 'text-muted-foreground hover:text-foreground sidebar-row-hover'
                             }`}
                           >
-                            <RotateCcw size={10} strokeWidth={2} />
-                            Reset all
+                            <item.Icon
+                              size={13}
+                              strokeWidth={1.8}
+                              className={`flex-shrink-0 transition-colors duration-150 ${
+                                active
+                                  ? 'text-primary'
+                                  : 'text-muted-foreground/70 group-hover:text-foreground/80'
+                              }`}
+                            />
+                            <span className="flex-1 text-left truncate">{item.label}</span>
+                            {showDot && (
+                              <span className="w-[6px] h-[6px] rounded-full bg-[hsl(var(--git-added))] shadow-[0_0_6px_hsl(var(--git-added)/0.6)] flex-shrink-0" />
+                            )}
                           </button>
-                        </div>
+                        </li>
                       );
-                    })()}
+                    })}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="px-5 py-3 border-t border-border/30 flex items-center justify-between">
+            <span className="text-[10px] font-medium tracking-[0.1em] uppercase text-muted-foreground/45">
+              Dash
+            </span>
+            <span className="text-[10px] font-mono text-muted-foreground/55">
+              {appVersion ? `v${appVersion}` : '…'}
+            </span>
+          </div>
+        </nav>
 
-                    {groups.map((group) => (
-                      <SettingsCard key={group.category} title={group.category}>
-                        {group.items.map((binding) => {
-                          const modified = isModified(binding);
+        {/* Content */}
+        <div className="flex-1 min-w-0 flex flex-col">
+          <div className="overflow-y-auto flex-1">
+            <div className="px-8 py-7">
+              {/* Section header */}
+              <div className="mb-6 animate-fade-in" key={`hdr-${tab}`}>
+                <h3 className="text-[19px] font-semibold text-foreground tracking-tight leading-tight">
+                  {activeNav.label}
+                </h3>
+                <p className="text-[12.5px] text-foreground/50 mt-1.5 leading-relaxed">
+                  {activeNav.description}
+                </p>
+              </div>
+
+              {tab === 'sidebar' && (
+                <SettingsPane key={`pane-${tab}`}>
+                  <SettingsCard title="Active tasks">
+                    <SettingsRow
+                      label="Show active tasks"
+                      description="Quick-switch between running tasks with Ctrl+Tab."
+                      control={
+                        <Switch
+                          enabled={showActiveTasksSection}
+                          onToggle={onShowActiveTasksSectionChange}
+                        />
+                      }
+                    />
+                  </SettingsCard>
+                </SettingsPane>
+              )}
+
+              {tab === 'attribution' && (
+                <SettingsPane key={`pane-${tab}`}>
+                  <SettingsCard title="Commit attribution">
+                    <SettingsRow
+                      label="Mode"
+                      description="Appended to git commits Claude makes on your behalf."
+                      align="start"
+                      control={
+                        <Segmented
+                          fullWidth={false}
+                          size="sm"
+                          value={commitAttribution === undefined ? 'default' : 'custom'}
+                          options={[
+                            { value: 'default', label: 'Default' },
+                            { value: 'custom', label: 'Custom' },
+                          ]}
+                          onChange={(v) => {
+                            if (v === 'default') {
+                              onCommitAttributionChange(undefined);
+                            } else {
+                              onCommitAttributionChange(
+                                commitAttribution ?? DASH_DEFAULT_ATTRIBUTION,
+                              );
+                            }
+                          }}
+                        />
+                      }
+                    />
+                    <SettingsBlock description="Clear the field to disable attribution entirely.">
+                      <textarea
+                        value={
+                          commitAttribution === undefined
+                            ? (claudeDefaultAttribution ?? DASH_DEFAULT_ATTRIBUTION)
+                            : commitAttribution
+                        }
+                        onChange={(e) => onCommitAttributionChange(e.target.value)}
+                        readOnly={commitAttribution === undefined}
+                        rows={3}
+                        className={`w-full px-3 py-2.5 rounded-lg text-[12px] font-mono border bg-transparent resize-none ${
+                          commitAttribution === undefined
+                            ? 'border-border/40 text-foreground/40 cursor-default'
+                            : 'border-border/60 text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40'
+                        }`}
+                      />
+                    </SettingsBlock>
+                  </SettingsCard>
+                </SettingsPane>
+              )}
+
+              {tab === 'diff' && (
+                <SettingsPane key={`pane-${tab}`}>
+                  <SettingsCard title="Context">
+                    <SettingsRow
+                      label="Context lines"
+                      description="Unchanged lines shown around each change."
+                      align="start"
+                      control={
+                        <Segmented
+                          fullWidth={false}
+                          size="sm"
+                          value={diffContextLines === null ? 'full' : String(diffContextLines)}
+                          options={[
+                            { value: 'full', label: 'Full' },
+                            { value: '3', label: '3' },
+                            { value: '10', label: '10' },
+                            { value: '50', label: '50' },
+                          ]}
+                          onChange={(v) =>
+                            onDiffContextLinesChange(v === 'full' ? null : Number(v))
+                          }
+                        />
+                      }
+                    />
+                  </SettingsCard>
+                </SettingsPane>
+              )}
+
+              {tab === 'terminal' && (
+                <SettingsPane key={`pane-${tab}`}>
+                  <SettingsCard title="Shell drawer" hint="Cmd+J">
+                    <SettingsRow
+                      label="Show shell drawer"
+                      description="Run git, npm, and other commands alongside Claude."
+                      control={
+                        <Switch
+                          enabled={shellDrawerEnabled}
+                          onToggle={onShellDrawerEnabledChange}
+                        />
+                      }
+                    />
+                    {shellDrawerEnabled && (
+                      <SettingsBlock label="Position">
+                        <Segmented
+                          value={shellDrawerPosition}
+                          options={[
+                            { value: 'main', label: 'Main' },
+                            { value: 'right', label: 'Right' },
+                          ]}
+                          onChange={onShellDrawerPositionChange}
+                        />
+                      </SettingsBlock>
+                    )}
+                  </SettingsCard>
+                </SettingsPane>
+              )}
+
+              {tab === 'ide' && (
+                <SettingsPane key={`pane-${tab}`}>
+                  <SettingsCard title="Preferred IDE">
+                    <SettingsBlock
+                      description={
+                        availableIDEs.length === 0
+                          ? 'No supported IDE detected. Install Cursor, VS Code, Windsurf, Antigravity, or Zed — or configure a Custom IDE below.'
+                          : 'Used when opening a task from the header. Only installed IDEs are shown.'
+                      }
+                    >
+                      <Segmented
+                        value={preferredIDE}
+                        options={[
+                          ...(availableIDEs.length > 0
+                            ? [
+                                { value: 'auto', label: 'Auto' },
+                                ...availableIDEs.map((i) => ({ value: i.id, label: i.label })),
+                              ]
+                            : []),
+                          { value: 'custom', label: 'Custom' },
+                        ]}
+                        onChange={onPreferredIDEChange}
+                      />
+                    </SettingsBlock>
+                    {preferredIDE === 'custom' && (
+                      <SettingsBlock label="Custom IDE command">
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-[10.5px] text-foreground/55 mb-1.5">
+                              Executable path
+                            </label>
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={customIDE.path}
+                                onChange={(e) =>
+                                  onCustomIDEChange({ ...customIDE, path: e.target.value })
+                                }
+                                placeholder="/Applications/MyIDE.app/Contents/MacOS/myide"
+                                className="flex-1 px-3 py-2 text-[11.5px] rounded-md border border-border/60 bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-1 focus:ring-primary/40 font-mono"
+                              />
+                              <button
+                                onClick={async () => {
+                                  const res = await window.electronAPI.pickExecutable();
+                                  if (!res.success) {
+                                    toast.error(res.error || 'Failed to open file picker');
+                                    return;
+                                  }
+                                  if (res.data) {
+                                    onCustomIDEChange({ ...customIDE, path: res.data });
+                                  }
+                                }}
+                                className="px-3 py-2 text-[11.5px] rounded-md border border-border/60 text-foreground/80 hover:bg-accent/40 hover:text-foreground flex items-center gap-1.5"
+                              >
+                                <FolderOpen size={12} strokeWidth={1.8} />
+                                Browse
+                              </button>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-[10.5px] text-foreground/55 mb-1.5">
+                              Arguments (one per line)
+                            </label>
+                            <textarea
+                              value={customIDE.args.join('\n')}
+                              onChange={(e) =>
+                                onCustomIDEChange({
+                                  ...customIDE,
+                                  args: e.target.value
+                                    .split('\n')
+                                    .filter((line) => line.length > 0),
+                                })
+                              }
+                              rows={3}
+                              placeholder={'--new-window\n{path}'}
+                              className="w-full px-3 py-2 text-[11.5px] rounded-md border border-border/60 bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-1 focus:ring-primary/40 font-mono resize-y"
+                            />
+                            <p className="text-[10.5px] text-foreground/45 mt-1.5 leading-relaxed">
+                              Use <code className="text-foreground/65">{'{path}'}</code> to place
+                              the folder anywhere; otherwise it&apos;s appended.
+                            </p>
+                          </div>
+                        </div>
+                      </SettingsBlock>
+                    )}
+                  </SettingsCard>
+                </SettingsPane>
+              )}
+
+              {tab === 'notifications' && (
+                <SettingsPane key={`pane-${tab}`}>
+                  <SettingsCard title="When a task finishes">
+                    <SettingsRow
+                      label="Desktop notification"
+                      description="Includes the task name."
+                      control={
+                        <Switch
+                          enabled={desktopNotification}
+                          onToggle={onDesktopNotificationChange}
+                        />
+                      }
+                    />
+                    <SettingsBlock label="Sound">
+                      <div className="flex flex-wrap gap-2">
+                        {NOTIFICATION_SOUNDS.map((sound) => {
+                          const isActive = notificationSound === sound;
                           return (
-                            <div
-                              key={binding.id}
-                              className={`relative group flex items-center justify-between gap-3 px-4 py-2 transition-colors duration-150 ${
-                                modified
-                                  ? 'bg-primary/[0.04] hover:bg-primary/[0.07]'
-                                  : 'hover:bg-accent/20'
+                            <button
+                              key={sound}
+                              onClick={() => onNotificationSoundChange(sound)}
+                              className={`px-3 py-1.5 rounded-md text-[11.5px] border transition-all duration-150 ${
+                                isActive
+                                  ? 'border-primary/40 bg-primary/8 text-foreground ring-1 ring-primary/20 font-medium'
+                                  : 'border-border/60 text-foreground/60 hover:bg-accent/40 hover:text-foreground'
                               }`}
                             >
-                              {modified && (
-                                <span
-                                  aria-hidden
-                                  className="absolute left-0 top-1/2 -translate-y-1/2 h-[18px] w-[2px] rounded-r-full bg-primary shadow-[0_0_6px_hsl(var(--primary)/0.5)]"
-                                />
-                              )}
-                              <div className="flex items-center gap-2 min-w-0 flex-1">
-                                <span className="text-[12.5px] text-foreground/85 truncate">
-                                  {binding.label}
+                              {SOUND_LABELS[sound]}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </SettingsBlock>
+                  </SettingsCard>
+                </SettingsPane>
+              )}
+
+              {tab === 'about' && (
+                <SettingsPane key={`pane-${tab}`}>
+                  <div
+                    className="relative overflow-hidden rounded-xl border border-border/40 p-5"
+                    style={{
+                      background:
+                        'linear-gradient(135deg, hsl(var(--surface-2)) 0%, hsl(var(--surface-1)) 100%)',
+                    }}
+                  >
+                    <div
+                      aria-hidden
+                      className="absolute -top-12 -right-12 w-40 h-40 rounded-full opacity-30 blur-3xl"
+                      style={{ background: 'hsl(var(--primary) / 0.35)' }}
+                    />
+                    <div className="relative flex items-center gap-4">
+                      <div className="w-11 h-11 rounded-xl flex items-center justify-center bg-primary/12 ring-1 ring-primary/25 shadow-[inset_0_1px_0_hsl(0_0%_100%/0.08)]">
+                        <Sparkles size={20} strokeWidth={1.5} className="text-primary" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[14px] font-semibold text-foreground tracking-tight">
+                          Dash
+                        </p>
+                        <p className="text-[11.5px] text-muted-foreground font-mono mt-0.5">
+                          {appVersion ? `v${appVersion}` : 'version loading…'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-[11.5px] text-muted-foreground leading-relaxed px-1">
+                    A multi-task desktop for Claude Code, built by{' '}
+                    <a
+                      href="https://syv.ai"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      syv.ai
+                    </a>
+                    .
+                  </p>
+                </SettingsPane>
+              )}
+
+              {tab === 'updates' && (
+                <SettingsPane key={`pane-${tab}`}>
+                  <SettingsCard title="Status">
+                    <div className="flex items-center gap-3 px-4 py-3.5">
+                      <div
+                        className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                          updateStatus === 'ready' || updateStatus === 'available'
+                            ? 'bg-[hsl(var(--git-added)/0.12)] ring-1 ring-[hsl(var(--git-added))/0.25]'
+                            : 'bg-[hsl(var(--surface-3))] ring-1 ring-border/40'
+                        }`}
+                      >
+                        {updateStatus === 'ready' || updateStatus === 'available' ? (
+                          <Download
+                            size={15}
+                            className="text-[hsl(var(--git-added))]"
+                            strokeWidth={1.8}
+                          />
+                        ) : (
+                          <Check size={15} className="text-muted-foreground" strokeWidth={1.8} />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[12.5px] font-medium text-foreground">
+                          {updateStatus === 'ready'
+                            ? `Update ready${updateVersion ? ` — v${updateVersion}` : ''}`
+                            : updateStatus === 'available'
+                              ? `Update available${updateVersion ? ` — v${updateVersion}` : ''}`
+                              : updateStatus === 'downloading'
+                                ? 'Downloading update…'
+                                : updateStatus === 'checking'
+                                  ? 'Checking for updates…'
+                                  : 'You’re up to date'}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
+                          {appVersion ? `Current v${appVersion}` : 'Loading…'}
+                        </p>
+                      </div>
+                      {updateStatus === 'ready' ? (
+                        <button
+                          onClick={() => window.electronAPI.autoUpdateQuitAndInstall()}
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium border border-primary/40 bg-primary/10 text-foreground ring-1 ring-primary/20 hover:bg-primary/15 transition-all duration-150"
+                        >
+                          <Download size={12} strokeWidth={2} />
+                          Restart
+                        </button>
+                      ) : updateStatus === 'available' ? (
+                        <button
+                          onClick={() => {
+                            setUpdateStatus('downloading');
+                            window.electronAPI.autoUpdateDownload();
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium border border-primary/40 bg-primary/10 text-foreground ring-1 ring-primary/20 hover:bg-primary/15 transition-all duration-150"
+                        >
+                          <Download size={12} strokeWidth={2} />
+                          Download
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setUpdateStatus('checking');
+                            window.electronAPI.autoUpdateCheck().then((resp) => {
+                              if (!resp.success) setUpdateStatus('idle');
+                            });
+                          }}
+                          disabled={updateStatus === 'checking' || updateStatus === 'downloading'}
+                          className="px-3 py-2 rounded-lg text-[12px] border border-border/60 text-muted-foreground hover:bg-accent/40 hover:text-foreground transition-all duration-150 disabled:opacity-50"
+                        >
+                          Check
+                        </button>
+                      )}
+                    </div>
+                  </SettingsCard>
+
+                  <SettingsCard title="Behavior">
+                    <SettingsRow
+                      label="Check automatically"
+                      description="When off, Dash won't check in the background."
+                      control={
+                        <Switch enabled={autoUpdateEnabled} onToggle={onAutoUpdateEnabledChange} />
+                      }
+                    />
+                    <SettingsRow
+                      label="Show update notifications"
+                      description="Toast popups when an update is available, downloaded, or fails."
+                      control={
+                        <Switch
+                          enabled={updateNotificationsEnabled}
+                          onToggle={onUpdateNotificationsEnabledChange}
+                        />
+                      }
+                    />
+                  </SettingsCard>
+                </SettingsPane>
+              )}
+
+              {tab === 'privacy' && (
+                <SettingsPane key={`pane-${tab}`}>
+                  <SettingsCard title="Telemetry">
+                    <SettingsRow
+                      label="Send anonymous usage data"
+                      description="Helps us understand how Dash is used so we can improve it."
+                      align="start"
+                      control={
+                        <Switch
+                          enabled={telemetryEnabled && !telemetryEnvDisabled}
+                          disabled={telemetryEnvDisabled}
+                          onToggle={(next) => {
+                            setTelemetryEnabled(next);
+                            window.electronAPI.telemetrySetEnabled(next);
+                          }}
+                        />
+                      }
+                    />
+                    <SettingsBlock>
+                      <div className="text-[11px] text-muted-foreground leading-relaxed space-y-1.5">
+                        <p>
+                          <span className="font-medium text-foreground/80">What we collect:</span>{' '}
+                          app start/close, session duration, daily active usage, project and task
+                          counts, worktree and terminal usage, app version, platform, and
+                          architecture.
+                        </p>
+                        <p>
+                          <span className="font-medium text-foreground/80">
+                            What we never collect:
+                          </span>{' '}
+                          no code, file paths, prompts, IP addresses, device identifiers, MAC
+                          addresses, or any personal information.
+                        </p>
+                        {telemetryEnvDisabled && (
+                          <p className="flex items-center gap-1 text-[hsl(var(--git-modified))]">
+                            <AlertCircle size={11} strokeWidth={2} />
+                            Disabled via TELEMETRY_ENABLED env var
+                          </p>
+                        )}
+                      </div>
+                    </SettingsBlock>
+                  </SettingsCard>
+                </SettingsPane>
+              )}
+
+              {tab === 'appearance' && (
+                <SettingsPane key={`pane-${tab}`}>
+                  <SettingsCard title="App theme">
+                    <SettingsBlock>
+                      <Segmented
+                        value={theme}
+                        options={[
+                          {
+                            value: 'light',
+                            label: 'Light',
+                            icon: <Sun size={13} strokeWidth={1.8} />,
+                          },
+                          {
+                            value: 'dark',
+                            label: 'Dark',
+                            icon: <Moon size={13} strokeWidth={1.8} />,
+                          },
+                        ]}
+                        onChange={onThemeChange}
+                      />
+                    </SettingsBlock>
+                  </SettingsCard>
+
+                  <SettingsCard title="Terminal palette" hint="Main pane only">
+                    <div className="p-4">
+                      <div className="grid grid-cols-3 gap-2.5">
+                        {TERMINAL_THEMES.map((t) => {
+                          const isActive = terminalTheme === t.id;
+                          const bg =
+                            t.id === 'default'
+                              ? theme === 'dark'
+                                ? (darkTheme.background ?? '#0d0d11')
+                                : (lightTheme.background ?? '#faf8f3')
+                              : t.theme.background || '#000';
+                          const colors = [
+                            t.theme.red || '#f00',
+                            t.theme.green || '#0f0',
+                            t.theme.blue || '#00f',
+                            t.theme.yellow || '#ff0',
+                            t.theme.magenta || '#f0f',
+                            t.theme.cyan || '#0ff',
+                          ];
+                          return (
+                            <button
+                              key={t.id}
+                              onClick={() => onTerminalThemeChange(t.id)}
+                              className={`group flex flex-col gap-2 p-2.5 rounded-lg border transition-all duration-150 ${
+                                isActive
+                                  ? 'border-primary/45 ring-1 ring-primary/25 bg-[hsl(var(--surface-3))]'
+                                  : 'border-border/50 hover:border-border hover:bg-[hsl(var(--surface-3)/0.5)]'
+                              }`}
+                            >
+                              <div
+                                className="w-full h-7 rounded-md flex items-center gap-[4px] px-2 shadow-inner"
+                                style={{ background: bg }}
+                              >
+                                {colors.map((c, i) => (
+                                  <span
+                                    key={i}
+                                    className="w-[7px] h-[7px] rounded-full"
+                                    style={{
+                                      background: c,
+                                      boxShadow: `0 0 4px ${c}66`,
+                                    }}
+                                  />
+                                ))}
+                              </div>
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[10.5px] font-medium truncate text-foreground/85">
+                                  {t.name}
                                 </span>
-                                {modified && (
-                                  <span className="text-[9.5px] font-medium tracking-[0.08em] uppercase text-primary/90 px-1.5 py-0.5 rounded-md bg-primary/10 border border-primary/20 flex-shrink-0">
-                                    Modified
+                                {t.id === 'default' && (
+                                  <span className="text-[9px] text-foreground/40 font-mono uppercase tracking-wide">
+                                    auto
                                   </span>
                                 )}
                               </div>
-                              <div className="flex items-center gap-1 flex-shrink-0">
-                                <KeyRecorder
-                                  binding={binding}
-                                  modified={modified}
-                                  onChange={(updated) => handleBindingChange(binding.id, updated)}
-                                />
-                                <Tooltip content={modified ? 'Reset to default' : 'No changes'}>
-                                  <button
-                                    onClick={() => handleResetOne(binding.id)}
-                                    disabled={!modified}
-                                    className={`p-1.5 rounded-md transition-all duration-150 ${
-                                      modified
-                                        ? 'text-primary/70 hover:text-primary hover:bg-primary/10'
-                                        : 'text-foreground/20 cursor-default'
-                                    }`}
-                                  >
-                                    <RotateCcw size={11} strokeWidth={2} />
-                                  </button>
-                                </Tooltip>
-                              </div>
-                            </div>
+                            </button>
                           );
                         })}
-                      </SettingsCard>
-                    ))}
+                      </div>
+                    </div>
+                  </SettingsCard>
 
-                    <SettingsCard title="Active tasks" hint="Not rebindable">
-                      {[
-                        { label: 'Next active task', keys: ['Ctrl', '⇥'] },
-                        { label: 'Previous active task', keys: ['Ctrl', '⇧', '⇥'] },
-                      ].map(({ label, keys }) => (
-                        <div key={label} className="flex items-center justify-between px-4 py-2.5">
-                          <span className="text-[12.5px] text-foreground/80">{label}</span>
-                          <div className="flex items-center gap-[3px]">
-                            {keys.map((k) => (
-                              <kbd
-                                key={k}
-                                className="min-w-[22px] h-[22px] flex items-center justify-center rounded-md bg-accent/60 text-[11px] text-foreground/70 font-mono px-1.5"
-                              >
-                                {k}
-                              </kbd>
-                            ))}
+                  <SettingsCard title="Terminal font" hint="Main pane and shell drawer">
+                    <SettingsBlock>
+                      <Select
+                        value={terminalFontFamily}
+                        onValueChange={onTerminalFontFamilyChange}
+                        options={TERMINAL_FONTS.map((f) => ({ value: f.id, label: f.label }))}
+                        renderOption={(opt) => (
+                          <span style={{ fontFamily: resolveTerminalFontValue(opt.value) }}>
+                            {opt.label}
+                          </span>
+                        )}
+                      />
+                    </SettingsBlock>
+                  </SettingsCard>
+                </SettingsPane>
+              )}
+
+              {tab === 'claude-code' && (
+                <ClaudeCodeTab
+                  effortLevel={effortLevel}
+                  onEffortLevelChange={onEffortLevelChange}
+                  syncShellEnv={syncShellEnv}
+                  onSyncShellEnvChange={onSyncShellEnvChange}
+                  customEnvVars={customClaudeEnvVars}
+                  onCustomEnvVarsChange={onCustomClaudeEnvVarsChange}
+                  claudeInfo={claudeInfo}
+                />
+              )}
+
+              {tab === 'add-ons' && (
+                <SettingsPane key={`pane-${tab}`}>
+                  <AddOnAccordion
+                    title="RTK"
+                    subtitle="Compress common shell-command output before Claude reads it."
+                    status={
+                      !rtkStatus
+                        ? 'inactive'
+                        : rtkStatus.installed && rtkStatus.enabled
+                          ? 'active'
+                          : rtkStatus.installed
+                            ? 'pending'
+                            : 'inactive'
+                    }
+                    statusLabel={
+                      !rtkStatus
+                        ? 'Checking…'
+                        : rtkStatus.installed && rtkStatus.enabled
+                          ? 'Active'
+                          : rtkStatus.installed
+                            ? 'Installed · off'
+                            : 'Not installed'
+                    }
+                  >
+                    <RtkSection
+                      status={rtkStatus}
+                      onEnabledChange={onRtkEnabledChange}
+                      onDownload={onRtkDownload}
+                      progress={rtkDownloadProgress}
+                    />
+                  </AddOnAccordion>
+                </SettingsPane>
+              )}
+
+              {tab === 'usage' && (
+                <UsageSection
+                  latestRateLimits={latestRateLimits}
+                  thresholds={usageThresholds}
+                  onThresholdsChange={onUsageThresholdsChange}
+                  showRateLimits={showRateLimits}
+                  onShowRateLimitsChange={onShowRateLimitsChange}
+                  showUsageInline={showUsageInline}
+                  onShowUsageInlineChange={onShowUsageInlineChange}
+                  showContextUsageOnTaskCards={showContextUsageOnTaskCards}
+                  onShowContextUsageOnTaskCardsChange={onShowContextUsageOnTaskCardsChange}
+                />
+              )}
+
+              {tab === 'keybindings' && (
+                <SettingsPane key={`pane-${tab}`}>
+                  {(() => {
+                    const modifiedCount = Object.values(keybindings).filter(isModified).length;
+                    return (
+                      <div className="flex items-center justify-between -mt-1">
+                        <p className="text-[11.5px] text-muted-foreground">
+                          Click a shortcut to record a new binding.
+                          {modifiedCount > 0 && (
+                            <span className="ml-2 text-primary/85 font-medium">
+                              {modifiedCount} modified
+                            </span>
+                          )}
+                        </p>
+                        <button
+                          onClick={handleResetAll}
+                          disabled={modifiedCount === 0}
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] transition-all duration-150 ${
+                            modifiedCount === 0
+                              ? 'text-foreground/25 cursor-default'
+                              : 'text-foreground/65 hover:text-foreground hover:bg-accent/50'
+                          }`}
+                        >
+                          <RotateCcw size={10} strokeWidth={2} />
+                          Reset all
+                        </button>
+                      </div>
+                    );
+                  })()}
+
+                  {groups.map((group) => (
+                    <SettingsCard key={group.category} title={group.category}>
+                      {group.items.map((binding) => {
+                        const modified = isModified(binding);
+                        return (
+                          <div
+                            key={binding.id}
+                            className={`relative group flex items-center justify-between gap-3 px-4 py-2 transition-colors duration-150 ${
+                              modified
+                                ? 'bg-primary/[0.04] hover:bg-primary/[0.07]'
+                                : 'hover:bg-accent/20'
+                            }`}
+                          >
+                            {modified && (
+                              <span
+                                aria-hidden
+                                className="absolute left-0 top-1/2 -translate-y-1/2 h-[18px] w-[2px] rounded-r-full bg-primary shadow-[0_0_6px_hsl(var(--primary)/0.5)]"
+                              />
+                            )}
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <span className="text-[12.5px] text-foreground/85 truncate">
+                                {binding.label}
+                              </span>
+                              {modified && (
+                                <span className="text-[9.5px] font-medium tracking-[0.08em] uppercase text-primary/90 px-1.5 py-0.5 rounded-md bg-primary/10 border border-primary/20 flex-shrink-0">
+                                  Modified
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <KeyRecorder
+                                binding={binding}
+                                modified={modified}
+                                onChange={(updated) => handleBindingChange(binding.id, updated)}
+                              />
+                              <Tooltip content={modified ? 'Reset to default' : 'No changes'}>
+                                <button
+                                  onClick={() => handleResetOne(binding.id)}
+                                  disabled={!modified}
+                                  className={`p-1.5 rounded-md transition-all duration-150 ${
+                                    modified
+                                      ? 'text-primary/70 hover:text-primary hover:bg-primary/10'
+                                      : 'text-foreground/20 cursor-default'
+                                  }`}
+                                >
+                                  <RotateCcw size={11} strokeWidth={2} />
+                                </button>
+                              </Tooltip>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </SettingsCard>
-                  </SettingsPane>
-                )}
-              </div>
+                  ))}
+
+                  <SettingsCard title="Active tasks" hint="Not rebindable">
+                    {[
+                      { label: 'Next active task', keys: ['Ctrl', '⇥'] },
+                      { label: 'Previous active task', keys: ['Ctrl', '⇧', '⇥'] },
+                    ].map(({ label, keys }) => (
+                      <div key={label} className="flex items-center justify-between px-4 py-2.5">
+                        <span className="text-[12.5px] text-foreground/80">{label}</span>
+                        <div className="flex items-center gap-[3px]">
+                          {keys.map((k) => (
+                            <kbd
+                              key={k}
+                              className="min-w-[22px] h-[22px] flex items-center justify-center rounded-md bg-accent/60 text-[11px] text-foreground/70 font-mono px-1.5"
+                            >
+                              {k}
+                            </kbd>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </SettingsCard>
+                </SettingsPane>
+              )}
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </Modal>
+  );
+}
+
+function SettingsCloseButton() {
+  const close = useModalClose();
+  return (
+    <button
+      onClick={close}
+      className="p-1 rounded-md hover:bg-accent text-foreground/50 hover:text-foreground transition-all duration-150"
+      aria-label="Close settings"
+    >
+      <X size={13} strokeWidth={2} />
+    </button>
   );
 }
 

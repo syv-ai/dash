@@ -136,4 +136,78 @@ describe('ensureRegistry', () => {
     await expect(SkillsService.ensureRegistry(false)).rejects.toThrow(/0 valid skills/);
     expect(replaceAllSpy).not.toHaveBeenCalled();
   });
+
+  it('falls back to sharded fetch when registry.json is the deprecation stub', async () => {
+    // Mid-2026 upstream change: registry.json now ships only this deprecation marker
+    // and the real payload lives under registry-shards/, indexed by registry-manifest.json.
+    // Pre-2026 the legacy flat payload path was the only path; this test pins the
+    // fallback so a future revert doesn't silently leave users on a stale cache again.
+    getMetaSpy.mockReturnValue(emptyMeta());
+    fetchSpy
+      // 1) registry.json — deprecation stub
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ deprecated_full_payload: true }), {
+          status: 200,
+        }) as unknown as Response,
+      )
+      // 2) registry-manifest.json
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            shards: [{ path: 'registry-shards/00.json' }, { path: 'registry-shards/01.json' }],
+          }),
+          { status: 200 },
+        ) as unknown as Response,
+      )
+      // 3) shard 00
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            skills: [{ name: 'low', repo: 'o/r1', path: 'p1', stars: 5 }],
+          }),
+          { status: 200 },
+        ) as unknown as Response,
+      )
+      // 4) shard 01
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            skills: [{ name: 'high', repo: 'o/r2', path: 'p2', stars: 999 }],
+          }),
+          { status: 200 },
+        ) as unknown as Response,
+      );
+    replaceAllSpy.mockReturnValue({ inserted: 2 });
+
+    await SkillsService.ensureRegistry(false);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
+    // Sharded delivery is hash-bucketed, not star-sorted, so the merge step must
+    // sort across the union — the "high" entry should land first regardless of shard order.
+    const inserted = replaceAllSpy.mock.calls[0]?.[0] ?? [];
+    expect(inserted.map((s) => s.name)).toEqual(['high', 'low']);
+  });
+
+  it('rejects a manifest with an off-base shard path', async () => {
+    // Defense in depth: a compromised manifest must not be able to redirect us off
+    // raw.githubusercontent.com via an absolute URL or path-traversal entry.
+    getMetaSpy.mockReturnValue(emptyMeta());
+    fetchSpy
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ deprecated_full_payload: true }), {
+          status: 200,
+        }) as unknown as Response,
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            shards: [{ path: 'https://evil.example/steal.json' }],
+          }),
+          { status: 200 },
+        ) as unknown as Response,
+      );
+
+    await expect(SkillsService.ensureRegistry(false)).rejects.toThrow(/Refusing shard path/);
+    expect(replaceAllSpy).not.toHaveBeenCalled();
+  });
 });

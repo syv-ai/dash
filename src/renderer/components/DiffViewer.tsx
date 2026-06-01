@@ -2,6 +2,7 @@ import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react'
 import { X, FileText, MessageSquare, Send } from 'lucide-react';
 import type { DiffResult, DiffLine, DiffHunk } from '../../shared/types';
 import { sessionRegistry } from '../terminal/SessionRegistry';
+import { Modal, useCloseHandler } from './ui/Modal';
 
 // ── Internal Types ──────────────────────────────────────────
 
@@ -180,13 +181,23 @@ interface DiffViewerProps {
   inline?: boolean;
 }
 
-export function DiffViewer({
-  diff,
-  loading,
-  activeTaskId,
-  onClose,
-  inline = false,
-}: DiffViewerProps) {
+export function DiffViewer(props: DiffViewerProps) {
+  if (props.inline) {
+    return (
+      <div className="bg-[hsl(var(--surface-1))] flex flex-col h-full overflow-hidden">
+        <DiffViewerBody {...props} />
+      </div>
+    );
+  }
+  return (
+    <Modal onClose={props.onClose} size="w-[92vw] max-w-5xl h-[85vh]">
+      <DiffViewerBody {...props} />
+    </Modal>
+  );
+}
+
+function DiffViewerBody({ diff, loading, activeTaskId, onClose }: DiffViewerProps) {
+  const close = useCloseHandler(onClose);
   const [comments, setComments] = useState<DiffComment[]>([]);
   const [selection, setSelection] = useState<SelectionState | null>(null);
   const [popover, setPopover] = useState<PopoverState | null>(null);
@@ -413,25 +424,12 @@ export function DiffViewer({
     onClose();
   }
 
-  // ── Close on backdrop click ─────────────────────────────
-
-  function handleBackdropClick(e: React.MouseEvent) {
-    if (e.target === e.currentTarget) onClose();
-  }
-
   if (!diff && !loading) return null;
 
-  const innerClassName = inline
-    ? 'bg-[hsl(var(--surface-1))] flex flex-col h-full overflow-hidden'
-    : 'bg-card border border-border/60 rounded-xl shadow-2xl shadow-black/40 w-[92vw] max-w-5xl h-[85vh] flex flex-col animate-scale-in overflow-hidden';
-
-  const body = (
-    <div className={innerClassName} onClick={(e) => e.stopPropagation()}>
+  return (
+    <>
       {/* Header */}
-      <div
-        className="flex items-center justify-between px-5 h-12 border-b border-border/60 flex-shrink-0"
-        style={{ background: 'hsl(var(--surface-2))' }}
-      >
+      <div className="flex items-center justify-between px-5 h-12 border-b border-border/40 flex-shrink-0">
         <div className="flex items-center gap-3 min-w-0">
           <FileText
             size={14}
@@ -464,7 +462,7 @@ export function DiffViewer({
             </button>
           )}
           <button
-            onClick={onClose}
+            onClick={close}
             className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground/50 hover:text-foreground transition-all duration-150"
           >
             <X size={14} strokeWidth={2} />
@@ -672,17 +670,6 @@ export function DiffViewer({
           </div>
         )}
       </div>
-    </div>
-  );
-
-  if (inline) return body;
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop animate-fade-in"
-      onClick={handleBackdropClick}
-    >
-      {body}
-    </div>
+    </>
   );
 }
