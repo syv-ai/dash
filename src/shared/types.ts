@@ -353,15 +353,6 @@ export interface RemoteControlState {
   active: boolean;
 }
 
-// ── Pixel Agents Types ──────────────────────────────────────
-
-export interface PixelAgentsOffice {
-  id: string;
-  url: string;
-  token: string | null;
-  enabled: boolean;
-}
-
 // ── Skills Registry Types ──────────────────────────────────
 
 /**
@@ -466,21 +457,6 @@ export interface SkillInstallArgs {
 export interface SkillUninstallArgs {
   skillName: string;
   target: SkillInstallTarget;
-}
-
-export interface PixelAgentsConfig {
-  name: string;
-  palette?: number;
-  hueShift?: number;
-  phrases?: string[];
-  offices: PixelAgentsOffice[];
-}
-
-export type PixelAgentsOfficeStatus = 'connected' | 'registered' | 'disconnected' | 'unknown';
-
-export interface PixelAgentsStatus {
-  running: boolean;
-  offices: Record<string, PixelAgentsOfficeStatus>;
 }
 
 // ── RTK (Rust Token Killer) Types ───────────────────────────

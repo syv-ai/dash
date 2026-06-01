@@ -36,8 +36,6 @@ import type {
   RemoteControlState,
   UsageThresholds,
   ActivityInfo,
-  PixelAgentsConfig,
-  PixelAgentsStatus,
   PullRequestInfo,
   RtkStatus,
   RtkDownloadProgress,
@@ -191,26 +189,6 @@ export function App() {
       return {};
     }
   });
-  // Pixel Agents state
-  const [pixelAgentsConfig, setPixelAgentsConfig] = useState<PixelAgentsConfig | null>(null);
-  const [pixelAgentsStatus, setPixelAgentsStatus] = useState<PixelAgentsStatus>({
-    running: false,
-    offices: {},
-  });
-
-  // Load pixel agents config on mount + subscribe to status changes
-  useEffect(() => {
-    window.electronAPI.pixelAgentsGetConfig().then((resp) => {
-      if (resp.success && resp.data) setPixelAgentsConfig(resp.data);
-    });
-    window.electronAPI.pixelAgentsGetStatus().then((resp) => {
-      if (resp.success && resp.data) setPixelAgentsStatus(resp.data);
-    });
-    return window.electronAPI.onPixelAgentsStatusChanged((status) => {
-      setPixelAgentsStatus(status);
-    });
-  }, []);
-
   // RTK state
   const [rtkStatus, setRtkStatus] = useState<RtkStatus | null>(null);
   const [rtkDownloadProgress, setRtkDownloadProgress] = useState<RtkDownloadProgress | null>(null);
@@ -1721,10 +1699,6 @@ export function App() {
               setSettingsInitialTab(undefined);
               setShowSettings(true);
             }}
-            onOpenPixelAgents={() => {
-              setSettingsInitialTab('add-ons');
-              setShowSettings(true);
-            }}
             onShowCommitGraph={(projectId) => {
               setActiveProjectId(projectId);
               setShowCommitGraph(true);
@@ -1738,11 +1712,6 @@ export function App() {
             onReorderProjects={handleReorderProjects}
             onReorderTasks={handleReorderTasks}
             onReorderTasksCommit={handleReorderTasksCommit}
-            pixelAgentsConnectedCount={
-              Object.values(pixelAgentsStatus.offices).filter(
-                (s) => s === 'connected' || s === 'registered',
-              ).length
-            }
             rotationTasks={rotationTasks}
             onReorderRotation={handleReorderRotation}
             onRemoveFromRotation={removeFromRotation}
@@ -2106,12 +2075,6 @@ export function App() {
             setKeybindings(b);
             saveKeybindings(b);
           }}
-          pixelAgentsConfig={pixelAgentsConfig}
-          onPixelAgentsConfigChange={(config) => {
-            setPixelAgentsConfig(config);
-            window.electronAPI.pixelAgentsSaveConfig(config);
-          }}
-          pixelAgentsStatus={pixelAgentsStatus}
           rtkStatus={rtkStatus}
           onRtkEnabledChange={(enabled) => {
             // Optimistic update only applies to the installed arm — the type

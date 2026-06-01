@@ -253,7 +253,6 @@ interface LeftSidebarProps {
   onRestoreTask: (id: string) => void;
   onCloseTask: (id: string) => void;
   onOpenSettings: () => void;
-  onOpenPixelAgents?: () => void;
   onShowCommitGraph: (projectId: string) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
@@ -264,7 +263,6 @@ interface LeftSidebarProps {
   onReorderProjects?: (reordered: Project[]) => void;
   onReorderTasks?: (projectId: string, reordered: Task[]) => void;
   onReorderTasksCommit?: (projectId: string, reordered: Task[]) => void;
-  pixelAgentsConnectedCount?: number;
   rotationTasks?: Task[];
   onReorderRotation?: (reordered: Task[]) => void;
   onRemoveFromRotation?: (taskId: string) => void;
@@ -289,7 +287,6 @@ export function LeftSidebar({
   onRestoreTask,
   onCloseTask,
   onOpenSettings,
-  onOpenPixelAgents,
   onShowCommitGraph,
   collapsed,
   onToggleCollapse,
@@ -300,7 +297,6 @@ export function LeftSidebar({
   onReorderProjects,
   onReorderTasks,
   onReorderTasksCommit,
-  pixelAgentsConnectedCount = 0,
   rotationTasks = [],
   onReorderRotation,
   onRemoveFromRotation,
@@ -538,26 +534,12 @@ export function LeftSidebar({
           </button>
         </Tooltip>
 
-        <Tooltip
-          content={
-            pixelAgentsConnectedCount > 0
-              ? `Settings · ${pixelAgentsConnectedCount} ${pixelAgentsConnectedCount === 1 ? 'office' : 'offices'}`
-              : 'Settings'
-          }
-        >
+        <Tooltip content="Settings">
           <button
             onClick={onOpenSettings}
             className="relative w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0 hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
           >
             <Settings size={16} strokeWidth={1.5} />
-            {pixelAgentsConnectedCount > 0 && (
-              <span
-                className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-1 rounded-full text-[9px] font-semibold leading-none tabular-nums flex items-center justify-center text-[hsl(var(--git-added))] bg-[hsl(var(--surface-2))] border-2 border-[hsl(var(--surface-1))]"
-                style={{ boxShadow: '0 0 8px hsl(var(--git-added) / 0.4)' }}
-              >
-                {pixelAgentsConnectedCount}
-              </span>
-            )}
           </button>
         </Tooltip>
         <div className="h-3 flex-shrink-0" />
@@ -1011,25 +993,6 @@ export function LeftSidebar({
         >
           <Settings size={14} strokeWidth={1.8} />
           <span>Settings</span>
-          {pixelAgentsConnectedCount > 0 && (
-            <Tooltip content="Pixel Agents streaming to office">
-              <span
-                className="ml-auto flex items-center gap-1.5 text-[12px] text-[hsl(var(--git-added))] hover:underline"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenPixelAgents?.();
-                }}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--git-added))] flex-shrink-0" />
-                <span className="office-label">
-                  {pixelAgentsConnectedCount === 1
-                    ? '1 office'
-                    : `${pixelAgentsConnectedCount} offices`}
-                </span>
-                <span className="office-count">{pixelAgentsConnectedCount}</span>
-              </span>
-            </Tooltip>
-          )}
         </button>
       </div>
     </div>

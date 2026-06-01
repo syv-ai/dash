@@ -16,8 +16,6 @@ import type {
   StatusLineData,
   RemoteControlState,
   PullRequestInfo,
-  PixelAgentsConfig,
-  PixelAgentsStatus,
   ActivityInfo,
   RtkStatus,
   RtkDownloadProgress,
@@ -298,14 +296,6 @@ export interface ElectronAPI {
   gitWatch: (args: { id: string; cwd: string }) => Promise<IpcResponse<void>>;
   gitUnwatch: (id: string) => Promise<IpcResponse<void>>;
   onGitFileChanged: (callback: (id: string) => void) => () => void;
-
-  // Pixel Agents
-  pixelAgentsGetConfig: () => Promise<IpcResponse<PixelAgentsConfig | null>>;
-  pixelAgentsSaveConfig: (config: PixelAgentsConfig) => Promise<IpcResponse<void>>;
-  pixelAgentsGetStatus: () => Promise<IpcResponse<PixelAgentsStatus>>;
-  pixelAgentsStart: () => Promise<IpcResponse<void>>;
-  pixelAgentsStop: () => Promise<IpcResponse<void>>;
-  onPixelAgentsStatusChanged: (callback: (status: PixelAgentsStatus) => void) => () => void;
 
   // RTK (Rust Token Killer)
   rtkGetStatus: () => Promise<IpcResponse<RtkStatus>>;

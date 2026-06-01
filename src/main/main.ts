@@ -136,14 +136,6 @@ app.whenReady().then(async () => {
     AutoUpdateService.initialize(mainWindow);
   }
 
-  // Start pixel-agents watcher if configured
-  const { PixelAgentsService } = await import('./services/PixelAgentsService');
-  PixelAgentsService.setSender(mainWindow.webContents);
-  const paConfig = PixelAgentsService.readConfig();
-  if (paConfig?.name && paConfig.offices.some((o) => o.enabled)) {
-    PixelAgentsService.start();
-  }
-
   // Resolve rtk synchronously at startup; getHookCommand() is called on PTY spawn.
   const { RtkService } = await import('./services/RtkService');
   RtkService.setSender(mainWindow.webContents);
@@ -215,8 +207,6 @@ app.on('activate', async () => {
     activityMonitor.start(mainWindow.webContents);
     const { remoteControlService } = await import('./services/remoteControlService');
     remoteControlService.setSender(mainWindow.webContents);
-    const { PixelAgentsService } = await import('./services/PixelAgentsService');
-    PixelAgentsService.setSender(mainWindow.webContents);
     const { RtkService } = await import('./services/RtkService');
     RtkService.setSender(mainWindow.webContents);
     const { contextUsageService } = await import('./services/ContextUsageService');
@@ -296,14 +286,6 @@ app.on('before-quit', async () => {
   try {
     const { stopAll: stopSessionWatchers } = await import('./services/SessionWatcherService');
     stopSessionWatchers();
-  } catch {
-    // Best effort
-  }
-
-  // Stop pixel-agents watcher
-  try {
-    const { PixelAgentsService } = await import('./services/PixelAgentsService');
-    PixelAgentsService.stop();
   } catch {
     // Best effort
   }
