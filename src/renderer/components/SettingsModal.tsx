@@ -43,6 +43,7 @@ import {
 import { NOTIFICATION_SOUNDS, SOUND_LABELS } from '../sounds';
 import type { NotificationSound } from '../sounds';
 import { TERMINAL_THEMES, darkTheme, lightTheme } from '../terminal/terminalThemes';
+import { TERMINAL_FONTS } from '../terminal/terminalFonts';
 import type {
   PixelAgentsConfig,
   PixelAgentsStatus,
@@ -203,6 +204,8 @@ interface SettingsModalProps {
   onShellDrawerPositionChange: (value: 'main' | 'right') => void;
   terminalTheme: string;
   onTerminalThemeChange: (id: string) => void;
+  terminalFontFamily: string;
+  onTerminalFontFamilyChange: (id: string) => void;
   preferredIDE: string;
   onPreferredIDEChange: (value: string) => void;
   availableIDEs: Array<{ id: string; label: string }>;
@@ -1178,6 +1181,8 @@ export function SettingsModal({
   onShellDrawerPositionChange,
   terminalTheme,
   onTerminalThemeChange,
+  terminalFontFamily,
+  onTerminalFontFamilyChange,
   preferredIDE,
   onPreferredIDEChange,
   availableIDEs,
@@ -1966,6 +1971,22 @@ export function SettingsModal({
                           })}
                         </div>
                       </div>
+                    </SettingsCard>
+
+                    <SettingsCard title="Terminal font" hint="Main pane and shell drawer">
+                      <SettingsBlock>
+                        <select
+                          value={terminalFontFamily}
+                          onChange={(e) => onTerminalFontFamilyChange(e.target.value)}
+                          className="w-full px-3 py-2 rounded-md text-[12px] border border-border/60 bg-transparent text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40"
+                        >
+                          {TERMINAL_FONTS.map((f) => (
+                            <option key={f.id} value={f.id}>
+                              {f.label}
+                            </option>
+                          ))}
+                        </select>
+                      </SettingsBlock>
                     </SettingsCard>
                   </SettingsPane>
                 )}
