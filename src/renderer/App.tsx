@@ -1823,7 +1823,7 @@ export function App() {
                 className={
                   changesPanelCollapsed
                     ? 'h-full flex flex-col overflow-hidden'
-                    : 'h-full flex flex-col overflow-hidden rounded-[10px] bg-[hsl(var(--surface-1))] shadow-[var(--shadow-card)]'
+                    : 'h-full flex flex-col overflow-hidden rounded-[14px] bg-[linear-gradient(180deg,hsl(0_0%_100%/0.12)_0%,hsl(var(--surface-2)/0.55)_30%,hsl(var(--surface-1)/0.82)_100%)] backdrop-blur-2xl backdrop-saturate-[1.8] ring-1 ring-white/[0.12] shadow-[inset_0_1px_0_0_hsl(0_0%_100%/0.22),inset_0_0_0_1px_hsl(0_0%_100%/0.04),inset_0_-1px_0_0_hsl(0_0%_0%/0.28),0_24px_50px_-18px_hsl(0_0%_0%/0.55)]'
                 }
               >
                 <ShellDrawerWrapper

@@ -142,6 +142,7 @@ export function RightInspector({
           onViewDiff={onViewDiff}
           onPush={onPush}
           onCommitFinished={onCommitFinished}
+          onShowCommitGraph={onShowCommitGraph}
           collapsed={collapsed}
         />
       </div>

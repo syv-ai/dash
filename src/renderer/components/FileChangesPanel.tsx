@@ -24,6 +24,7 @@ interface FileChangesPanelProps {
   onViewDiff: (filePath: string, staged: boolean) => void;
   onPush: () => Promise<void>;
   onCommitFinished?: () => void;
+  onShowCommitGraph?: () => void;
   collapsed?: boolean;
 }
 
@@ -38,6 +39,7 @@ export function FileChangesPanel({
   onViewDiff,
   onPush,
   onCommitFinished,
+  onShowCommitGraph,
   collapsed,
 }: FileChangesPanelProps) {
   const [commitMsg, setCommitMsg] = useState('');
@@ -86,10 +88,7 @@ export function FileChangesPanel({
 
   if (collapsed) {
     return (
-      <div
-        className="h-full flex flex-col items-center py-3 gap-2"
-        style={{ background: 'hsl(var(--surface-1))' }}
-      >
+      <div className="h-full flex flex-col items-center py-3 gap-2">
         <div className="flex flex-col items-center gap-1">
           <div className="w-8 h-8 rounded-lg bg-accent/40 flex items-center justify-center">
             <FileDiff size={14} className="text-muted-foreground" strokeWidth={1.5} />
@@ -106,10 +105,7 @@ export function FileChangesPanel({
 
   if (!gitStatus) {
     return (
-      <div
-        className="h-full flex items-center justify-center"
-        style={{ background: 'hsl(var(--surface-1))' }}
-      >
+      <div className="h-full flex items-center justify-center">
         <p className="text-[11px] text-muted-foreground/40">
           {loading ? 'Loading...' : 'No task selected'}
         </p>
@@ -173,10 +169,7 @@ export function FileChangesPanel({
   }
 
   return (
-    <div
-      className="h-full flex flex-col overflow-hidden"
-      style={{ background: 'hsl(var(--surface-1))' }}
-    >
+    <div className="h-full flex flex-col overflow-hidden">
       {showingRunView ? (
         <div key="run" className="flex-1 min-h-0 flex flex-col animate-fade-in">
           <CommitRunView
@@ -215,11 +208,21 @@ export function FileChangesPanel({
                   <FileDiff size={14} className="text-foreground/50" strokeWidth={1.5} />
                 </div>
                 <p className="text-[11px] text-foreground/60">No changes</p>
-                {gitStatus && gitStatus.ahead > 0 && (
-                  <p className="text-[10px] text-muted-foreground/40">
-                    {gitStatus.ahead} commit{gitStatus.ahead !== 1 ? 's' : ''} ahead
-                  </p>
-                )}
+                {gitStatus &&
+                  gitStatus.ahead > 0 &&
+                  (onShowCommitGraph ? (
+                    <button
+                      type="button"
+                      onClick={onShowCommitGraph}
+                      className="text-[10px] text-muted-foreground/30 hover:text-muted-foreground/70 hover:underline underline-offset-2 transition-colors"
+                    >
+                      {gitStatus.ahead} commit{gitStatus.ahead !== 1 ? 's' : ''} ahead
+                    </button>
+                  ) : (
+                    <p className="text-[10px] text-muted-foreground/30">
+                      {gitStatus.ahead} commit{gitStatus.ahead !== 1 ? 's' : ''} ahead
+                    </p>
+                  ))}
               </div>
             )}
 
