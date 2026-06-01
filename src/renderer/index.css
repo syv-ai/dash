@@ -451,14 +451,14 @@
   background: linear-gradient(
     180deg,
     hsl(0 0% 100% / 0.1) 0%,
-    hsl(var(--surface-2) / 0.55) 30%,
-    hsl(var(--surface-1) / 0.82) 100%
+    hsl(var(--surface-2) / 0.5) 40%,
+    hsl(var(--surface-1) / 0.72) 100%
   );
   backdrop-filter: blur(24px) saturate(1.8);
   -webkit-backdrop-filter: blur(24px) saturate(1.8);
   box-shadow:
     inset 0 1px 0 0 hsl(0 0% 100% / 0.18),
-    inset 0 -1px 0 0 hsl(0 0% 0% / 0.18);
+    inset 0 -1px 0 0 hsl(0 0% 0% / 0.22);
 }
 .sidebar-shell::before {
   content: '';

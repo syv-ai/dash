@@ -1665,7 +1665,13 @@ export function App() {
           maxSize={28}
           collapsible
           collapsedSize={5}
-          style={{ overflow: 'visible', position: 'relative', zIndex: 1, minWidth: 0 }}
+          style={{
+            overflow: 'visible',
+            position: 'relative',
+            zIndex: 1,
+            minWidth: 0,
+            background: terminalBg,
+          }}
           onCollapse={() => {
             setSidebarCollapsed(true);
             localStorage.setItem('sidebarCollapsed', 'true');

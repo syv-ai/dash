@@ -123,7 +123,7 @@ function RotationSection({
   return (
     <div className="px-2 pt-3 pb-1.5 mb-0.5">
       <Tooltip content="Cycle with Ctrl+Tab">
-        <span className="block px-2 pb-1 text-[11px] font-medium text-muted-foreground/50 select-none tracking-wide uppercase">
+        <span className="block px-2 pb-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground/70 select-none">
           Active tasks
         </span>
       </Tooltip>
@@ -433,7 +433,7 @@ export function LeftSidebar({
                 );
               })}
             </div>
-            <div className="w-6 border-t border-border/30 my-1" />
+            <div className="glass-hairline w-6 my-1" />
           </>
         )}
 
@@ -446,7 +446,7 @@ export function LeftSidebar({
           </button>
         </Tooltip>
 
-        <div className="w-6 border-t border-border/30 my-1" />
+        <div className="glass-hairline w-6 my-1" />
 
         <div
           className="flex-1 min-h-0 flex flex-col items-center gap-1 w-full"
@@ -528,7 +528,7 @@ export function LeftSidebar({
           })}
         </div>
 
-        <div className="w-6 border-t border-border/30 my-1" />
+        <div className="glass-hairline w-6 my-1" />
 
         <Tooltip content="Skills">
           <button
@@ -594,7 +594,7 @@ export function LeftSidebar({
           pinned to the top while the list scrolls. */}
       <div className="flex-1 min-h-0 flex flex-col mr-[5px]">
         <div className="flex items-center justify-between pl-4 pr-1.5 pt-1.5 pb-1">
-          <span className="text-[11px] font-medium text-muted-foreground/50 select-none tracking-wide uppercase">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/70 select-none">
             Projects
           </span>
           <Tooltip content="Create project">
@@ -997,7 +997,7 @@ export function LeftSidebar({
       </div>
 
       {/* Skills & Settings */}
-      <div className="px-2 py-2 border-t border-border/30 space-y-0.5">
+      <div className="glass-hairline-t px-2 py-2 space-y-0.5">
         <button
           onClick={onOpenSkillsBrowser}
           className="flex items-center gap-2 px-2.5 py-[7px] w-full rounded-md text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-all duration-150 titlebar-no-drag"
