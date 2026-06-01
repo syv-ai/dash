@@ -205,6 +205,32 @@
   display: none;
 }
 
+/* Slim hover-only scrollbar with a backdrop-blur track so whatever sits
+   beneath the thumb reads as frosted glass. */
+.scrollbar-thin-hover::-webkit-scrollbar {
+  width: 3px;
+  height: 3px;
+}
+.scrollbar-thin-hover::-webkit-scrollbar-track {
+  background: transparent;
+  transition: backdrop-filter 150ms ease;
+}
+.scrollbar-thin-hover::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 2px;
+  transition: background-color 150ms ease;
+}
+.scrollbar-thin-hover:hover::-webkit-scrollbar-track {
+  backdrop-filter: blur(8px) saturate(1.3);
+  -webkit-backdrop-filter: blur(8px) saturate(1.3);
+}
+.scrollbar-thin-hover:hover::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+}
+.scrollbar-thin-hover:hover::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.45);
+}
+
 /* ── Panel Resize Handle ──────────────────────────────────── */
 
 /* Horizontal (vertical layout) resize handles */
@@ -253,6 +279,15 @@
 /* Floating-card pane handle: inset the active strip to align with the card. */
 [data-panel-group-direction='horizontal'] > .resize-handle-floating::after {
   inset: 14px 0;
+}
+/* Quiet handles: suppress the brand-color hover/drag strip. The chrome doesn't
+   need a flashy affordance, and the strip reads as noise next to the sidebars. */
+[data-panel-group-direction='horizontal'] > .resize-handle-floating:hover::after,
+[data-panel-group-direction='horizontal']
+  > .resize-handle-floating[data-resize-handle-active]::after,
+[data-panel-group-direction='horizontal'] > .resize-handle-quiet:hover::after,
+[data-panel-group-direction='horizontal'] > .resize-handle-quiet[data-resize-handle-active]::after {
+  background: transparent;
 }
 
 /* ── Usage Strip Responsive Detail ────────────────────────── */

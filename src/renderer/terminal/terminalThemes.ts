@@ -436,14 +436,3 @@ export function resolveTheme(themeId: string, isDark: boolean): ITheme {
   const def = TERMINAL_THEMES.find((t) => t.id === themeId);
   return def ? def.theme : isDark ? darkTheme : lightTheme;
 }
-
-/**
- * Read the slate sidebar surface color (`--surface-1`) at call time so shell
- * terminals embedded in the sidebar card can blend with the surrounding chrome
- * instead of painting the active PTY theme background.
- */
-export function resolveShellBackground(): string {
-  if (typeof document === 'undefined') return '';
-  const raw = getComputedStyle(document.documentElement).getPropertyValue('--surface-1').trim();
-  return raw ? `hsl(${raw})` : '';
-}

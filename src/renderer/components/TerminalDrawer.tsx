@@ -112,18 +112,14 @@ export function TerminalDrawer({
       {collapsed ? (
         <button
           onClick={onExpand}
-          className="h-full w-full flex items-center gap-2 px-4 text-foreground/80 hover:text-foreground transition-colors"
-          style={{ background: 'hsl(var(--surface-1))' }}
+          className="h-full w-full flex items-center gap-2 px-4 text-foreground/80 hover:text-foreground transition-colors border-t border-white/[0.08] hover:bg-white/[0.04]"
         >
           <Terminal size={12} strokeWidth={1.8} />
           <span className="text-[11px] font-semibold uppercase tracking-[0.08em]">{label}</span>
           <ChevronUp size={12} strokeWidth={1.8} className="ml-auto" />
         </button>
       ) : (
-        <div
-          className="flex items-center h-8 flex-shrink-0 border-b border-border/40"
-          style={{ background: 'hsl(var(--surface-1))' }}
-        >
+        <div className="flex items-center h-8 flex-shrink-0 border-t border-white/[0.08]">
           <Terminal
             size={12}
             strokeWidth={1.8}

@@ -41,7 +41,7 @@ export function ShellDrawerWrapper({
   return (
     <PanelGroup direction="vertical" className="h-full">
       <Panel minSize={20}>{children}</Panel>
-      <PanelResizeHandle disabled={collapsed} className="h-[1px] bg-border" />
+      <PanelResizeHandle disabled={collapsed} className="h-[1px] bg-transparent" />
       <Panel
         ref={panelRef}
         className={animating ? 'panel-transition' : ''}

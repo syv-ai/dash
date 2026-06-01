@@ -570,8 +570,11 @@ export function LeftSidebar({
         />
       )}
 
-      {/* Project list */}
-      <div className="flex-1 overflow-y-auto px-2 pb-2 pt-1">
+      {/* Project list — rows extend to the full sidebar width on the right
+          (no reserved gutter). When content overflows, the scrollbar takes
+          its slot at the right edge and rows shift to the same 8→W-8 range
+          as the active-tasks rows; otherwise rows fill 8→W with no gap. */}
+      <div className="scrollbar-thin-hover flex-1 min-h-0 overflow-y-auto pl-2 pt-1 pb-2 mr-[5px]">
         <div className="flex items-center justify-between px-2 pb-1 pt-0.5">
           <span className="text-[11px] font-medium text-muted-foreground/50 select-none tracking-wide uppercase">
             Projects
@@ -680,8 +683,11 @@ export function LeftSidebar({
                     </span>
                   )}
 
-                  {/* Action buttons — overlay from right on hover */}
-                  <div className="absolute right-1 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center gap-0.5 bg-[hsl(var(--surface-1))] rounded-md pl-1">
+                  {/* Action buttons — overlay from right on hover. The 24px
+                      fade region matches `pl-6`, so the gradient is fully
+                      opaque under the buttons (masking truncated titles) and
+                      transparent to their left (no visible box edge). */}
+                  <div className="absolute right-1 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center gap-0.5 pl-6 bg-[linear-gradient(to_right,transparent,hsl(var(--surface-1))_24px)]">
                     <IconButton
                       onClick={(e) => {
                         e.stopPropagation();
