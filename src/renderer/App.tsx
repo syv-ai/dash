@@ -447,6 +447,11 @@ export function App() {
     () => resolveTheme(terminalTheme, theme === 'dark').background || undefined,
     [terminalTheme, theme],
   );
+  // Full ITheme passed to the file editor so its Monaco view matches the terminal.
+  const resolvedTerminalTheme = useMemo(
+    () => resolveTheme(terminalTheme, theme === 'dark'),
+    [terminalTheme, theme],
+  );
 
   // Find activeTask across all projects
   const activeTask = (() => {
@@ -2152,6 +2157,7 @@ export function App() {
             filePath={diffFile.filePath}
             staged={diffFile.staged}
             activeTaskId={activeTaskId}
+            terminalTheme={resolvedTerminalTheme}
             isDark={theme === 'dark'}
             onClose={() => setDiffFile(null)}
           />

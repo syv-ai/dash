@@ -16,10 +16,10 @@ export function useModalClose(): () => void {
   return ctx;
 }
 
-/** Like useModalClose, but for components that render in both modal and non-modal
- *  contexts (DiffViewer's inline-vs-modal split). Returns the animated close fn when
- *  inside <Modal>, otherwise the supplied fallback (typically the parent's onClose
- *  prop, which dismisses immediately). */
+/** Like useModalClose, but for components that may render in both modal and
+ *  non-modal contexts. Returns the animated close fn when inside <Modal>,
+ *  otherwise the supplied fallback (typically the parent's onClose prop,
+ *  which dismisses immediately). */
 export function useCloseHandler(fallback: () => void): () => void {
   return useContext(ModalCloseContext) ?? fallback;
 }

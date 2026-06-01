@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DiffEditor } from '@monaco-editor/react';
 import type { editor as monacoEditor } from 'monaco-editor';
-import { X, FileText } from 'lucide-react';
+import type { ITheme as XtermTheme } from 'xterm';
+import { X, FileText, WrapText } from 'lucide-react';
 import { Modal, useCloseHandler } from './ui/Modal';
 import type { ReadFileForEditResult } from '../../shared/types';
 import '../monaco-workers';
+
+const WORDWRAP_KEY = 'fileEditor.wordWrap';
+const MONACO_THEME_DARK = 'dash-terminal-dark';
+const MONACO_THEME_LIGHT = 'dash-terminal-light';
 
 interface FileEditorViewProps {
   cwd: string | null;
@@ -12,6 +17,8 @@ interface FileEditorViewProps {
   /** When true, the original side is the staged index; otherwise it is HEAD. */
   staged: boolean;
   activeTaskId: string | null;
+  /** Resolved terminal theme so the editor matches the terminal exactly. */
+  terminalTheme: XtermTheme;
   isDark: boolean;
   onClose: () => void;
 }
@@ -32,6 +39,30 @@ interface StaleInfo {
   currentSizeBytes: number;
 }
 
+function defineMonacoThemeFromTerminal(
+  monaco: typeof import('monaco-editor'),
+  themeName: string,
+  isDark: boolean,
+  t: XtermTheme,
+): void {
+  monaco.editor.defineTheme(themeName, {
+    base: isDark ? 'vs-dark' : 'vs',
+    inherit: true,
+    rules: [],
+    colors: {
+      'editor.background': t.background ?? (isDark ? '#0d0d11' : '#faf8f3'),
+      'editor.foreground': t.foreground ?? (isDark ? '#f1eee5' : '#1c1b18'),
+      'editor.selectionBackground': t.selectionBackground ?? (isDark ? '#2a2f3c' : '#dde2f0'),
+      'editor.lineHighlightBackground': isDark ? '#ffffff08' : '#00000008',
+      'editorCursor.foreground': t.cursor ?? t.foreground ?? '#b8c5e0',
+      'editorLineNumber.foreground': isDark ? '#5c607080' : '#4a484280',
+      'editorLineNumber.activeForeground': t.foreground ?? '#f1eee5',
+      'editorWidget.background': t.background ?? (isDark ? '#0d0d11' : '#faf8f3'),
+      'editorGutter.background': t.background ?? (isDark ? '#0d0d11' : '#faf8f3'),
+    },
+  });
+}
+
 export function FileEditorView(props: FileEditorViewProps) {
   return (
     <Modal onClose={props.onClose} size="w-[92vw] max-w-5xl h-[85vh]">
@@ -45,12 +76,12 @@ function FileEditorBody({
   filePath,
   staged,
   activeTaskId,
+  terminalTheme,
   isDark,
   onClose,
 }: FileEditorViewProps) {
   const close = useCloseHandler(onClose);
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
-  const [mode, setMode] = useState<'read' | 'edit'>('read');
   const [draft, setDraft] = useState<string>('');
   const [loadedWorking, setLoadedWorking] = useState<string>('');
   const [mtimeMs, setMtimeMs] = useState<number>(0);
@@ -60,6 +91,9 @@ function FileEditorBody({
   const [stale, setStale] = useState<StaleInfo | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [pendingRange, setPendingRange] = useState<{ start: number; end: number } | null>(null);
+  const [wordWrap, setWordWrap] = useState<boolean>(() => {
+    return localStorage.getItem(WORDWRAP_KEY) === 'on';
+  });
 
   const editorRef = useRef<monacoEditor.IStandaloneDiffEditor | null>(null);
   const monacoRef = useRef<typeof import('monaco-editor') | null>(null);
@@ -69,11 +103,12 @@ function FileEditorBody({
   const saveCmdRef = useRef<(() => void) | null>(null);
 
   const dirty = draft !== loadedWorking;
-  const canEdit =
+  const editable =
     state.kind === 'loaded' &&
     !state.data.isBinary &&
     !state.data.isLargeFile &&
     state.data.workingContent !== null;
+  const themeName = isDark ? MONACO_THEME_DARK : MONACO_THEME_LIGHT;
 
   // ── Load file ────────────────────────────────────────────
   useEffect(() => {
@@ -96,7 +131,6 @@ function FileEditorBody({
       setDraft(resp.data.workingContent ?? '');
       setMtimeMs(resp.data.mtimeMs);
       setSizeBytes(resp.data.sizeBytes);
-      setMode('read');
       setComments([]);
       setPendingRange(null);
     }
@@ -105,6 +139,19 @@ function FileEditorBody({
       cancelled = true;
     };
   }, [cwd, filePath, staged]);
+
+  // ── Re-define Monaco theme when the terminal theme changes ──────
+  useEffect(() => {
+    const monaco = monacoRef.current;
+    if (!monaco) return;
+    defineMonacoThemeFromTerminal(monaco, themeName, isDark, terminalTheme);
+    monaco.editor.setTheme(themeName);
+  }, [themeName, isDark, terminalTheme]);
+
+  // ── Persist word-wrap preference ────────────────────────
+  useEffect(() => {
+    localStorage.setItem(WORDWRAP_KEY, wordWrap ? 'on' : 'off');
+  }, [wordWrap]);
 
   // ── Save flow ───────────────────────────────────────────
   const save = useCallback(async () => {
@@ -169,7 +216,6 @@ function FileEditorBody({
     setMtimeMs(stale.currentMtimeMs);
     setSizeBytes(stale.currentSizeBytes);
     setStale(null);
-    // Defer save() until state updates flush.
     setTimeout(() => void save(), 0);
   }, [stale, save]);
 
@@ -180,6 +226,10 @@ function FileEditorBody({
   ) {
     editorRef.current = editor;
     monacoRef.current = monaco;
+
+    defineMonacoThemeFromTerminal(monaco, themeName, isDark, terminalTheme);
+    monaco.editor.setTheme(themeName);
+
     const modified = editor.getModifiedEditor();
 
     modified.onDidChangeModelContent(() => {
@@ -190,7 +240,6 @@ function FileEditorBody({
       saveCmdRef.current?.();
     });
 
-    // Gutter-drag selection for comments.
     modified.onMouseDown((e) => {
       const t = e.target;
       if (
@@ -317,7 +366,7 @@ function FileEditorBody({
   }
 
   function handleClose() {
-    if (mode === 'edit' && dirty) {
+    if (dirty) {
       if (!window.confirm('Discard unsaved changes?')) return;
     }
     close();
@@ -335,7 +384,7 @@ function FileEditorBody({
           <span className="text-[13px] font-medium text-foreground truncate">
             {filePath ?? 'Loading...'}
           </span>
-          {mode === 'edit' && (
+          {editable && (
             <span
               className={`text-[11px] tabular-nums ${
                 dirty ? 'text-primary' : 'text-muted-foreground/40'
@@ -358,23 +407,19 @@ function FileEditorBody({
               Add {comments.length} comment{comments.length !== 1 ? 's' : ''} to prompt
             </button>
           )}
-          {canEdit && mode === 'read' && (
-            <button
-              onClick={() => setMode('edit')}
-              className="px-3 py-1.5 rounded-md text-[11px] font-medium bg-accent hover:bg-accent/80 text-foreground/80"
-            >
-              Edit
-            </button>
-          )}
-          {canEdit && mode === 'edit' && (
+          <button
+            onClick={() => setWordWrap((w) => !w)}
+            title={wordWrap ? 'Disable word wrap' : 'Enable word wrap'}
+            className={`p-1.5 rounded-md transition-colors ${
+              wordWrap
+                ? 'bg-primary/15 text-primary'
+                : 'text-muted-foreground/60 hover:text-foreground hover:bg-accent/60'
+            }`}
+          >
+            <WrapText size={14} strokeWidth={1.8} />
+          </button>
+          {editable && (
             <>
-              <button
-                onClick={() => setDraft(loadedWorking)}
-                disabled={!dirty}
-                className="px-3 py-1.5 rounded-md text-[11px] text-muted-foreground/60 hover:text-foreground hover:bg-accent/60 disabled:opacity-30"
-              >
-                Cancel
-              </button>
               <button
                 onClick={() => void save()}
                 disabled={!dirty || saving}
@@ -459,18 +504,19 @@ function FileEditorBody({
         {state.kind === 'loaded' && !state.data.isBinary && !state.data.isLargeFile && (
           <DiffEditor
             original={state.data.headContent}
-            modified={mode === 'edit' ? draft : loadedWorking}
+            modified={draft}
             language={state.data.language || undefined}
-            theme={isDark ? 'vs-dark' : 'vs'}
+            theme={themeName}
             options={{
               originalEditable: false,
-              readOnly: mode === 'read',
+              readOnly: false,
               renderSideBySide: false,
               minimap: { enabled: false },
               automaticLayout: true,
               fontSize: 12,
               lineNumbers: 'on',
               glyphMargin: true,
+              wordWrap: wordWrap ? 'on' : 'off',
             }}
             onMount={handleMount}
           />
