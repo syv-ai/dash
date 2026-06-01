@@ -597,7 +597,7 @@ export function LeftSidebar({
             </div>
           )}
 
-          <div className="space-y-1.5">
+          <div>
             {projects.map((project) => {
               const isActive = project.id === activeProjectId;
               const isProjectCollapsed = !expandedProjects.has(project.id);
@@ -739,7 +739,7 @@ export function LeftSidebar({
                     style={{ gridTemplateRows: isProjectCollapsed ? '0fr' : '1fr' }}
                   >
                     <div className="overflow-hidden">
-                      <div className="ml-4 mr-1 mt-0.5 space-y-px">
+                      <div className="ml-4 mr-1 mt-0.5 pb-2 space-y-px">
                         {projectTasks.map((task) => {
                           const activityInfo = taskActivity[task.id];
                           const activityState = activityInfo?.state;
