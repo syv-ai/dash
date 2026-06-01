@@ -221,6 +221,10 @@ export function MainContent({
 
   return (
     <div className="h-full flex flex-col bg-background">
+      <div
+        className="h-[16px] flex-shrink-0 titlebar-drag"
+        style={terminalBg ? { background: terminalBg } : undefined}
+      />
       {strip}
       <div className="flex-1 min-h-0 relative">
         {activeTask ? (

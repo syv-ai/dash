@@ -544,6 +544,7 @@ export function LeftSidebar({
             const projectTasks = allTasks.filter((t) => !t.archivedAt);
             const archivedTasks = allTasks.filter((t) => t.archivedAt);
             const isArchivedCollapsed = !collapsedArchived.has(project.id);
+            const hasActiveTask = projectTasks.some((t) => !!taskActivity[t.id]?.state);
 
             return (
               <div key={project.id}>
@@ -601,7 +602,20 @@ export function LeftSidebar({
                     )}
                   </button>
 
-                  <span className="truncate flex-1">{project.name}</span>
+                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                    <span
+                      className={`truncate ${
+                        isProjectCollapsed && !hasActiveTask ? 'opacity-50' : ''
+                      }`}
+                    >
+                      {project.name}
+                    </span>
+                    {isProjectCollapsed && hasActiveTask && (
+                      <Tooltip content="Active task in this project">
+                        <div className="status-dot-idle w-[6px] h-[6px] rounded-full flex-shrink-0" />
+                      </Tooltip>
+                    )}
+                  </div>
 
                   {projectTasks.length > 0 && (
                     <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0 mr-0.5 leading-none group-hover:invisible">
@@ -661,7 +675,7 @@ export function LeftSidebar({
                   style={{ gridTemplateRows: isProjectCollapsed ? '0fr' : '1fr' }}
                 >
                   <div className="overflow-hidden">
-                    <div className="ml-6 mr-1 mt-0.5 space-y-px">
+                    <div className="ml-4 mr-1 mt-0.5 space-y-px">
                       {projectTasks.map((task) => {
                         const activityInfo = taskActivity[task.id];
                         const activityState = activityInfo?.state;
@@ -684,41 +698,48 @@ export function LeftSidebar({
                                 : 'Error'
                           : 'Error';
 
+                        const statusDot: { tooltip: string; className: string } | null =
+                          activityState === 'error'
+                            ? { tooltip: errorTooltip, className: 'status-dot-err' }
+                            : activityState === 'waiting'
+                              ? { tooltip: 'Waiting for user', className: 'status-dot-wait' }
+                              : activityState === 'busy'
+                                ? {
+                                    tooltip: busyTooltip,
+                                    className: 'bg-amber-400 status-pulse',
+                                  }
+                                : activityState === 'idle'
+                                  ? unseenTaskIds?.has(task.id)
+                                    ? { tooltip: 'Done (unseen)', className: 'status-dot-unseen' }
+                                    : { tooltip: 'Idle', className: 'status-dot-idle' }
+                                  : null;
+
                         return (
                           <div
                             key={task.id}
                             draggable
                             {...getTaskDragHandlers(task.id, projectTasks, project.id)}
-                            className={`group/task relative flex flex-col pl-3.5 pr-2 py-[6px] rounded-md text-[13px] cursor-pointer transition-all duration-150 ${
+                            className={`group/task grid grid-cols-[14px_1fr] pr-2 py-[6px] rounded-md text-[13px] cursor-pointer transition-all duration-150 ${
                               isActiveTask
                                 ? 'sidebar-pill-active text-foreground font-medium'
                                 : 'sidebar-row-hover text-muted-foreground hover:text-foreground'
                             } ${draggingTaskId === task.id ? 'opacity-40' : ''}`}
                             onClick={() => onSelectTask(project.id, task.id)}
                           >
-                            <div className="flex items-center gap-2">
-                              {/* Status indicator */}
-                              {activityState === 'error' ? (
-                                <Tooltip content={errorTooltip}>
-                                  <div className="status-dot-err w-[6px] h-[6px] rounded-full flex-shrink-0" />
+                            {/* Status dot column — reserved so the title column always
+                                starts at the same x whether a dot is shown or not. */}
+                            <div className="row-start-1 col-start-1 self-center pt-[3px]">
+                              {statusDot && (
+                                <Tooltip content={statusDot.tooltip}>
+                                  <div
+                                    className={`${statusDot.className} w-[6px] h-[6px] rounded-full`}
+                                  />
                                 </Tooltip>
-                              ) : activityState === 'waiting' ? (
-                                <Tooltip content="Waiting for user">
-                                  <div className="status-dot-wait w-[6px] h-[6px] rounded-full flex-shrink-0" />
-                                </Tooltip>
-                              ) : activityState === 'busy' ? (
-                                <Tooltip content={busyTooltip}>
-                                  <div className="w-[6px] h-[6px] rounded-full bg-amber-400 status-pulse flex-shrink-0" />
-                                </Tooltip>
-                              ) : activityState === 'idle' && unseenTaskIds?.has(task.id) ? (
-                                <Tooltip content="Done (unseen)">
-                                  <div className="status-dot-unseen w-[6px] h-[6px] rounded-full flex-shrink-0" />
-                                </Tooltip>
-                              ) : activityState === 'idle' ? (
-                                <Tooltip content="Idle">
-                                  <div className="status-dot-idle w-[6px] h-[6px] rounded-full flex-shrink-0" />
-                                </Tooltip>
-                              ) : null}
+                              )}
+                            </div>
+
+                            {/* Main row */}
+                            <div className="row-start-1 col-start-2 flex items-center gap-2 min-w-0">
                               {remoteControlStates[task.id] && (
                                 <Globe
                                   size={10}
@@ -727,7 +748,13 @@ export function LeftSidebar({
                                 />
                               )}
 
-                              <span className="truncate flex-1">{task.name}</span>
+                              <span
+                                className={`truncate flex-1 ${
+                                  !isActiveTask && !activityState ? 'opacity-50' : ''
+                                }`}
+                              >
+                                {task.name}
+                              </span>
 
                               {/* Context percentage (visible when data available, hidden on hover to show actions) */}
                               {ctx && ctx.percentage > 0 && (
@@ -777,13 +804,14 @@ export function LeftSidebar({
                               </div>
                             </div>
 
-                            {/* Context usage bar */}
+                            {/* Context usage bar — sits in the title column, naturally
+                                aligned with the title above. */}
                             {ctx && ctx.percentage > 0 && (
                               <UsageBarInline
                                 percentage={ctx.percentage}
                                 height={2}
                                 width="auto"
-                                className="ml-[14px] mt-1"
+                                className="row-start-2 col-start-2 mt-1"
                                 title={`Context: ${ctx.used.toLocaleString()} / ${ctx.total.toLocaleString()} tokens (${Math.round(ctx.percentage)}%)`}
                               />
                             )}
