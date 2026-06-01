@@ -419,15 +419,15 @@ export function LeftSidebar({
                       </button>
                     </Tooltip>
                     {activity === 'error' ? (
-                      <div className="status-dot-err absolute -right-1 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full" />
+                      <div className="status-dot-err absolute -right-1 top-1/2 -mt-[3px] w-2 h-2 rounded-full" />
                     ) : activity === 'waiting' ? (
-                      <div className="status-dot-wait absolute -right-1 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full" />
+                      <div className="status-dot-wait absolute -right-1 top-1/2 -mt-[3px] w-2 h-2 rounded-full" />
                     ) : activity === 'busy' ? (
-                      <div className="absolute -right-1 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-amber-400 status-pulse" />
+                      <div className="absolute -right-1 top-1/2 -mt-[3px] w-2 h-2 rounded-full bg-amber-400 status-pulse" />
                     ) : activity === 'idle' && unseenTaskIds?.has(task.id) ? (
-                      <div className="status-dot-unseen absolute -right-1 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full" />
+                      <div className="status-dot-unseen absolute -right-1 top-1/2 -mt-[3px] w-2 h-2 rounded-full" />
                     ) : activity === 'idle' ? (
-                      <div className="status-dot-idle absolute -right-1 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full" />
+                      <div className="status-dot-idle absolute -right-1 top-1/2 -mt-[3px] w-2 h-2 rounded-full" />
                     ) : null}
                   </div>
                 );
@@ -511,7 +511,7 @@ export function LeftSidebar({
                 {activity && (
                   <Tooltip content={activityLabel}>
                     <div
-                      className={`absolute -right-1 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full ${
+                      className={`absolute -right-1 top-1/2 -mt-[3px] w-2 h-2 rounded-full ${
                         activity === 'error'
                           ? 'status-dot-err'
                           : activity === 'waiting'
