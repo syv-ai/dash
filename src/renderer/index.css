@@ -57,6 +57,12 @@
     --cat-6: 175 55% 38%; /* teal */
     --cat-7: 45 80% 45%; /* gold */
     --cat-8: 245 55% 58%; /* indigo */
+
+    --font-sans:
+      'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --font-mono:
+      ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+      monospace;
   }
 
   .dark {
@@ -117,13 +123,7 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family:
-      'SF Pro Text',
-      -apple-system,
-      BlinkMacSystemFont,
-      'Segoe UI',
-      system-ui,
-      sans-serif;
+    font-family: var(--font-sans);
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
