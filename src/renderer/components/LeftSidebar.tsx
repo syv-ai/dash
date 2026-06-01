@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { useDragReorder } from '../hooks/useDragReorder';
 import { UsageBarInline, usageTextColor } from './ui/UsageBar';
 import {
@@ -70,7 +71,7 @@ function RotationSection({
     else rowRefs.current.delete(taskId);
   }, []);
 
-  useEffect(() => {
+  const measureHighlight = useCallback(() => {
     if (!activeTaskId || !containerRef.current) {
       setHighlight(null);
       return;
@@ -80,19 +81,44 @@ function RotationSection({
       setHighlight(null);
       return;
     }
-    const containerRect = containerRef.current.getBoundingClientRect();
-    const rowRect = row.getBoundingClientRect();
+    // Use offsetTop/offsetHeight (transform-agnostic) instead of
+    // getBoundingClientRect — rows have an entry/exit motion animation and
+    // the bounding rect captures the in-flight transform, which would place
+    // the pill below its resting position until a later re-render corrects it.
     setHighlight({
-      top: rowRect.top - containerRect.top,
-      height: rowRect.height,
+      top: row.offsetTop,
+      height: row.offsetHeight,
     });
-    // Enable transitions after first measurement
+  }, [activeTaskId]);
+
+  // While the rotation list is animating, we re-measure on every ResizeObserver
+  // tick — and we don't want the pill's own transition to play catch-up against
+  // those changes, since that would feel laggy. The pill snaps during the
+  // animation and smoothly slides only for inter-row jumps (active task changes
+  // between rows that are already at their resting size).
+  const [isRotating, setIsRotating] = useState(false);
+  useEffect(() => {
+    measureHighlight();
     if (!hasAnimated.current) {
       requestAnimationFrame(() => {
         hasAnimated.current = true;
       });
     }
-  }, [activeTaskId, rotationTasks]);
+    setIsRotating(true);
+    const t = setTimeout(() => setIsRotating(false), 700);
+    return () => clearTimeout(t);
+  }, [measureHighlight, rotationTasks]);
+
+  // Keep the highlight glued to the active row while motion animates the
+  // surrounding rows' heights — the container resizes as rows open/close,
+  // so the pill needs to re-measure on every layout shift.
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node) return;
+    const observer = new ResizeObserver(() => measureHighlight());
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [measureHighlight]);
 
   return (
     <div className="px-2 pt-3 pb-1.5 mb-0.5 border-b border-border">
@@ -109,75 +135,103 @@ function RotationSection({
             style={{
               top: highlight.top,
               height: highlight.height,
-              transition: hasAnimated.current ? 'top 200ms ease, height 200ms ease' : 'none',
+              transition:
+                hasAnimated.current && !isRotating ? 'top 200ms ease, height 200ms ease' : 'none',
             }}
           />
         )}
-        {rotationTasks.map((task) => {
-          const activity = taskActivity[task.id]?.state;
-          const isActiveTask = task.id === activeTaskId;
-          const project = projects.find((p) => p.id === task.projectId);
-          const ctx = contextUsage[task.id];
+        <AnimatePresence initial={false}>
+          {rotationTasks.map((task) => {
+            const activity = taskActivity[task.id]?.state;
+            const isActiveTask = task.id === activeTaskId;
+            const project = projects.find((p) => p.id === task.projectId);
+            const ctx = contextUsage[task.id];
 
-          return (
-            <div
-              key={task.id}
-              ref={(el) => setRowRef(task.id, el)}
-              draggable
-              {...getRotDragHandlers(task.id, rotationTasks)}
-              className={`group/rot relative flex items-center gap-2 pl-3.5 pr-2 py-[5px] rounded-md text-[13px] cursor-pointer transition-colors duration-150 ${
-                isActiveTask
-                  ? 'text-foreground font-medium'
-                  : 'sidebar-row-hover text-muted-foreground hover:text-foreground'
-              } ${draggingRotId === task.id ? 'opacity-40' : ''}`}
-              onClick={() => onSelectTask(task.projectId, task.id)}
-            >
-              {/* Status indicator */}
-              {activity === 'error' ? (
-                <div className="status-dot-err w-[6px] h-[6px] rounded-full flex-shrink-0" />
-              ) : activity === 'waiting' ? (
-                <div className="status-dot-wait w-[6px] h-[6px] rounded-full flex-shrink-0" />
-              ) : activity === 'busy' ? (
-                <div className="w-[6px] h-[6px] rounded-full bg-amber-400 status-pulse flex-shrink-0" />
-              ) : activity === 'idle' && unseenTaskIds?.has(task.id) ? (
-                <div className="status-dot-unseen w-[6px] h-[6px] rounded-full flex-shrink-0" />
-              ) : activity === 'idle' ? (
-                <div className="status-dot-idle w-[6px] h-[6px] rounded-full flex-shrink-0" />
-              ) : null}
-
-              <span className="truncate flex-1">{task.name}</span>
-              {ctx && ctx.percentage > 0 && (
-                <span
-                  className={`text-[9px] tabular-nums flex-shrink-0 ${
-                    ctx.percentage >= 80
-                      ? 'text-red-400 font-medium'
-                      : usageTextColor(ctx.percentage)
-                  }`}
-                  title={`Context: ${ctx.used.toLocaleString()} / ${ctx.total.toLocaleString()} tokens (${Math.round(ctx.percentage)}%)`}
-                >
-                  {Math.round(ctx.percentage)}%
-                </span>
-              )}
-              {project && (
-                <span className="text-muted-foreground/40 text-[11px] whitespace-nowrap overflow-hidden flex-shrink min-w-0 group-hover/rot:invisible">
-                  {project.name}
-                </span>
-              )}
-
-              <IconButton
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemoveFromRotation?.(task.id);
+            return (
+              <motion.div
+                key={task.id}
+                ref={(el) => setRowRef(task.id, el)}
+                initial={{ opacity: 0, height: 0 }}
+                animate={{
+                  opacity: 1,
+                  height: 'auto',
+                  transition: {
+                    height: { duration: 0.4, ease: [0.16, 1, 0.3, 1] },
+                    opacity: { duration: 0.2, delay: 0.2 },
+                  },
                 }}
-                title="Remove from rotation"
-                size="sm"
-                className="hidden group-hover/rot:flex absolute right-2 top-1/2 -translate-y-1/2 flex-shrink-0"
+                exit={{
+                  opacity: 0,
+                  height: 0,
+                  transition: {
+                    opacity: { duration: 0.18 },
+                    height: { duration: 0.35, ease: [0.16, 1, 0.3, 1], delay: 0.12 },
+                  },
+                }}
+                style={{ overflow: 'hidden' }}
               >
-                <X size={12} strokeWidth={1.8} />
-              </IconButton>
-            </div>
-          );
-        })}
+                <div
+                  draggable
+                  {...getRotDragHandlers(task.id, rotationTasks)}
+                  className={`group/rot relative flex items-start gap-2 min-w-0 pl-3.5 pr-2 py-[6px] rounded-md text-[13px] cursor-pointer transition-colors duration-150 ${
+                    isActiveTask
+                      ? 'text-foreground font-medium'
+                      : 'sidebar-row-hover text-muted-foreground hover:text-foreground'
+                  } ${draggingRotId === task.id ? 'opacity-40' : ''}`}
+                  onClick={() => onSelectTask(task.projectId, task.id)}
+                >
+                  {/* Status indicator — nudged down to align with title baseline */}
+                  {activity === 'error' ? (
+                    <div className="status-dot-err w-[6px] h-[6px] rounded-full flex-shrink-0 mt-[7px]" />
+                  ) : activity === 'waiting' ? (
+                    <div className="status-dot-wait w-[6px] h-[6px] rounded-full flex-shrink-0 mt-[7px]" />
+                  ) : activity === 'busy' ? (
+                    <div className="w-[6px] h-[6px] rounded-full bg-amber-400 status-pulse flex-shrink-0 mt-[7px]" />
+                  ) : activity === 'idle' && unseenTaskIds?.has(task.id) ? (
+                    <div className="status-dot-unseen w-[6px] h-[6px] rounded-full flex-shrink-0 mt-[7px]" />
+                  ) : activity === 'idle' ? (
+                    <div className="status-dot-idle w-[6px] h-[6px] rounded-full flex-shrink-0 mt-[7px]" />
+                  ) : null}
+
+                  <div className="flex flex-col flex-1 min-w-0 leading-tight">
+                    <span className="truncate">{task.name}</span>
+                    {project && (
+                      <span className="truncate text-[10px] text-muted-foreground/50 font-normal mt-0.5">
+                        {project.name}
+                      </span>
+                    )}
+                  </div>
+
+                  {ctx && ctx.percentage > 0 && (
+                    <span
+                      className={`text-[9px] tabular-nums flex-shrink-0 mt-[8px] group-hover/rot:hidden ${
+                        ctx.percentage >= 80
+                          ? 'text-red-400 font-medium'
+                          : usageTextColor(ctx.percentage)
+                      }`}
+                      title={`Context: ${ctx.used.toLocaleString()} / ${ctx.total.toLocaleString()} tokens (${Math.round(ctx.percentage)}%)`}
+                    >
+                      {Math.round(ctx.percentage)}%
+                    </span>
+                  )}
+
+                  <div className="hidden group-hover/rot:flex gap-0.5 flex-shrink-0 self-center">
+                    <IconButton
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemoveFromRotation?.(task.id);
+                      }}
+                      title="Remove from rotation"
+                      size="sm"
+                    >
+                      <X size={12} strokeWidth={1.8} />
+                    </IconButton>
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -498,7 +552,7 @@ export function LeftSidebar({
   /* ── Expanded ───────────────────────────────────────────── */
 
   return (
-    <div className="sidebar-shell h-full flex flex-col">
+    <div className="sidebar-shell h-full min-w-0 flex flex-col">
       {isMac && <div className="h-[28px] flex-shrink-0 titlebar-drag" />}
 
       {/* Rotation section */}
@@ -607,7 +661,7 @@ export function LeftSidebar({
 
                   <div className="flex items-center gap-1.5 min-w-0 flex-1">
                     <span
-                      className={`truncate ${
+                      className={`truncate flex-1 min-w-0 ${
                         isProjectCollapsed && !hasActiveTask ? 'opacity-50' : ''
                       }`}
                     >
@@ -722,9 +776,11 @@ export function LeftSidebar({
                             key={task.id}
                             draggable
                             {...getTaskDragHandlers(task.id, projectTasks, project.id)}
-                            className={`group/task grid grid-cols-[14px_1fr] pr-2 py-[6px] rounded-md text-[13px] cursor-pointer transition-all duration-150 ${
+                            className={`group/task task-row-pill ${
+                              isActiveTask ? 'is-active' : ''
+                            } grid grid-cols-[14px_minmax(0,1fr)] -ml-2 pl-2 pr-2 py-[6px] rounded-md text-[13px] cursor-pointer transition-colors duration-200 ${
                               isActiveTask
-                                ? 'sidebar-pill-active text-foreground font-medium'
+                                ? 'text-foreground font-medium'
                                 : 'sidebar-row-hover text-muted-foreground hover:text-foreground'
                             } ${draggingTaskId === task.id ? 'opacity-40' : ''}`}
                             onClick={() => onSelectTask(project.id, task.id)}
@@ -752,7 +808,7 @@ export function LeftSidebar({
                               )}
 
                               <span
-                                className={`truncate flex-1 ${
+                                className={`truncate flex-1 min-w-0 ${
                                   !isActiveTask && !activityState ? 'opacity-50' : ''
                                 }`}
                               >
@@ -820,16 +876,28 @@ export function LeftSidebar({
                             </div>
 
                             {/* Context usage bar — sits in the title column, naturally
-                                aligned with the title above. */}
-                            {ctx && ctx.percentage > 0 && (
-                              <UsageBarInline
-                                percentage={ctx.percentage}
-                                height={2}
-                                width="auto"
-                                className="row-start-2 col-start-2 mt-1"
-                                title={`Context: ${ctx.used.toLocaleString()} / ${ctx.total.toLocaleString()} tokens (${Math.round(ctx.percentage)}%)`}
-                              />
-                            )}
+                                aligned with the title above. Wrapped in a grid-template-rows
+                                animator so it opens/closes smoothly when ctx becomes
+                                available or goes away. */}
+                            <div
+                              className="row-start-2 col-start-2 grid transition-[grid-template-rows,opacity] duration-200 ease-out"
+                              style={{
+                                gridTemplateRows: ctx && ctx.percentage > 0 ? '1fr' : '0fr',
+                                opacity: ctx && ctx.percentage > 0 ? 1 : 0,
+                              }}
+                            >
+                              <div className="overflow-hidden">
+                                {ctx && ctx.percentage > 0 && (
+                                  <UsageBarInline
+                                    percentage={ctx.percentage}
+                                    height={2}
+                                    width="auto"
+                                    className="mt-1.5 mb-[3px]"
+                                    title={`Context: ${ctx.used.toLocaleString()} / ${ctx.total.toLocaleString()} tokens (${Math.round(ctx.percentage)}%)`}
+                                  />
+                                )}
+                              </div>
+                            </div>
                           </div>
                         );
                       })}
@@ -868,7 +936,7 @@ export function LeftSidebar({
                                     key={task.id}
                                     className="group/archived flex items-center gap-2 pl-3.5 pr-2 py-[6px] rounded-md text-[13px] text-muted-foreground/50"
                                   >
-                                    <span className="truncate flex-1">{task.name}</span>
+                                    <span className="truncate flex-1 min-w-0">{task.name}</span>
                                     <div className="hidden group-hover/archived:flex gap-0.5 flex-shrink-0">
                                       <IconButton
                                         onClick={() => onRestoreTask(task.id)}

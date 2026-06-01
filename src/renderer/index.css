@@ -444,6 +444,30 @@
   background: linear-gradient(180deg, hsl(var(--primary) / 0.14), hsl(var(--primary) / 0.08));
 }
 
+/* Task row "pill" — same gradient as .sidebar-pill-active, but the alpha is
+   driven by a custom property so the active state can transition smoothly
+   without resorting to an absolutely-positioned overlay (which gets clipped
+   by the row's grid layout). */
+@property --pill-opacity {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+.task-row-pill {
+  --pill-opacity: 0;
+  background: linear-gradient(
+    180deg,
+    hsl(var(--primary) / calc(0.14 * var(--pill-opacity))),
+    hsl(var(--primary) / calc(0.08 * var(--pill-opacity)))
+  );
+  transition:
+    --pill-opacity 200ms ease,
+    color 200ms ease;
+}
+.task-row-pill.is-active {
+  --pill-opacity: 1;
+}
+
 .sidebar-row-hover:hover {
   background:
     radial-gradient(120% 80% at 0% 50%, hsl(var(--foreground) / 0.06), transparent 70%),
