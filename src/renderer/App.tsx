@@ -1536,6 +1536,19 @@ export function App() {
     }
   }
 
+  // "Close" a task — tear down its PTY and shell sessions so it becomes
+  // inactive again. Task remains in the list and can be re-opened later.
+  function handleCloseTask(id: string) {
+    sessionRegistry.dispose(id);
+    sessionRegistry.dispose(`shell:${id}`);
+    sessionRegistry.disposeByPrefix(`shell:${id}:`);
+    window.electronAPI.ptyKill(id);
+    window.electronAPI.ptyClearSnapshot(id);
+    if (activeTaskId === id) {
+      setActiveTaskId(null);
+    }
+  }
+
   async function handleRestoreTask(id: string) {
     await window.electronAPI.restoreTask(id);
     for (const [projectId, tasks] of Object.entries(tasksByProject)) {
@@ -1687,6 +1700,7 @@ export function App() {
             onDeleteTask={handleDeleteTask}
             onArchiveTask={handleArchiveTask}
             onRestoreTask={handleRestoreTask}
+            onCloseTask={handleCloseTask}
             onOpenSettings={() => {
               setSettingsInitialTab(undefined);
               setShowSettings(true);

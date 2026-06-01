@@ -16,6 +16,7 @@ import {
   PanelLeftOpen,
   Blocks,
   X,
+  Power,
 } from 'lucide-react';
 import type {
   Project,
@@ -196,6 +197,7 @@ interface LeftSidebarProps {
   onDeleteTask: (id: string) => void;
   onArchiveTask: (id: string) => void;
   onRestoreTask: (id: string) => void;
+  onCloseTask: (id: string) => void;
   onOpenSettings: () => void;
   onOpenPixelAgents?: () => void;
   onShowCommitGraph: (projectId: string) => void;
@@ -231,6 +233,7 @@ export function LeftSidebar({
   onDeleteTask,
   onArchiveTask,
   onRestoreTask,
+  onCloseTask,
   onOpenSettings,
   onOpenPixelAgents,
   onShowCommitGraph,
@@ -779,6 +782,18 @@ export function LeftSidebar({
                                   />
                                 )}
                                 <div className="hidden group-hover/task:flex gap-0.5">
+                                  {activityState && (
+                                    <IconButton
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onCloseTask(task.id);
+                                      }}
+                                      title="Close task"
+                                      size="sm"
+                                    >
+                                      <Power size={12} strokeWidth={1.8} />
+                                    </IconButton>
+                                  )}
                                   <IconButton
                                     onClick={(e) => {
                                       e.stopPropagation();
