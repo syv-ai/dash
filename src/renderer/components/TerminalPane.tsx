@@ -8,9 +8,10 @@ interface TerminalPaneProps {
   id: string;
   cwd: string;
   autoApprove?: boolean;
+  terminalBg?: string;
 }
 
-export function TerminalPane({ id, cwd, autoApprove }: TerminalPaneProps) {
+export function TerminalPane({ id, cwd, autoApprove, terminalBg }: TerminalPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [showOverlay, setShowOverlay] = useState(false);
@@ -80,8 +81,9 @@ export function TerminalPane({ id, cwd, autoApprove }: TerminalPaneProps) {
       <div ref={containerRef} className="terminal-container w-full h-full" />
       {showOverlay && (
         <div
-          className="absolute inset-0 z-10 pointer-events-none dark:bg-[#1f1f1f] bg-[#fafafa] flex flex-col items-center justify-center gap-4"
+          className="absolute inset-0 z-10 pointer-events-none flex flex-col items-center justify-center gap-4"
           style={{
+            background: terminalBg,
             opacity: overlayVisible ? 1 : 0,
             transition: `opacity ${OVERLAY_FADE_MS}ms ease-out`,
           }}

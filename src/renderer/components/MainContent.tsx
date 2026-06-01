@@ -233,6 +233,7 @@ export function MainContent({
             id={activeTask.id}
             cwd={activeTask.path}
             autoApprove={activeTask.autoApprove}
+            terminalBg={terminalBg}
           />
         ) : (
           <ProjectOverview
