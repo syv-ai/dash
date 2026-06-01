@@ -29,6 +29,8 @@ import type {
   SkillsSearchArgs,
   SkillsRegistryMeta,
   InstalledSkillsResult,
+  ReadFileForEditResult,
+  WriteFileWorkingCopyResult,
 } from '../shared/types';
 import type { ParsedSessionMessage, SessionMetrics, SessionUpdate } from '../shared/sessionTypes';
 
@@ -296,6 +298,20 @@ export interface ElectronAPI {
   gitWatch: (args: { id: string; cwd: string }) => Promise<IpcResponse<void>>;
   gitUnwatch: (id: string) => Promise<IpcResponse<void>>;
   onGitFileChanged: (callback: (id: string) => void) => () => void;
+
+  // Files (read/write through main process for the inline editor)
+  readFileForEdit: (args: {
+    cwd: string;
+    filePath: string;
+    ref: 'HEAD' | 'index';
+  }) => Promise<IpcResponse<ReadFileForEditResult>>;
+  writeFileWorkingCopy: (args: {
+    cwd: string;
+    filePath: string;
+    content: string;
+    expectedMtimeMs: number;
+    expectedSizeBytes: number;
+  }) => Promise<IpcResponse<WriteFileWorkingCopyResult>>;
 
   // RTK (Rust Token Killer)
   rtkGetStatus: () => Promise<IpcResponse<RtkStatus>>;
