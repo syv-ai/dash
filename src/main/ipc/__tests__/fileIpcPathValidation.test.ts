@@ -1,8 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import path from 'path';
 import os from 'os';
-import { promises as fs } from 'fs';
+import { promises as fs, realpathSync } from 'fs';
 import { resolveInsideCwd } from '../fileIpc';
+
+function realpathOrSelf(p: string): string {
+  try {
+    return realpathSync(p);
+  } catch {
+    return p;
+  }
+}
 
 // Path validation is the entire defence between renderer-controlled file paths
 // and arbitrary disk writes. A regression here lets a malicious payload write
@@ -15,7 +23,7 @@ describe('resolveInsideCwd', () => {
   it('accepts simple relative paths', async () => {
     await fs.mkdir(cwd, { recursive: true });
     const result = resolveInsideCwd(cwd, 'src/foo.ts');
-    expect(result).toBe(path.resolve(cwd, 'src/foo.ts'));
+    expect(result).toBe(path.join(realpathOrSelf(cwd), 'src/foo.ts'));
   });
 
   it('rejects the cwd itself ("." relative path)', () => {
@@ -36,7 +44,8 @@ describe('resolveInsideCwd', () => {
 
   it('accepts absolute paths that resolve back inside the cwd', () => {
     const inside = path.resolve(cwd, 'src/foo.ts');
-    expect(resolveInsideCwd(cwd, inside)).toBe(inside);
+    const expected = path.join(realpathOrSelf(cwd), 'src/foo.ts');
+    expect(resolveInsideCwd(cwd, inside)).toBe(expected);
   });
 
   it('rejects null bytes', () => {
