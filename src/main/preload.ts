@@ -249,6 +249,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 
+  // Files (read/write through main process for the inline editor)
+  readFileForEdit: (args: { cwd: string; filePath: string; ref: 'HEAD' | 'index' }) =>
+    ipcRenderer.invoke('files:readForEdit', args),
+  writeFileWorkingCopy: (args: {
+    cwd: string;
+    filePath: string;
+    content: string;
+    expectedMtimeMs: number;
+    expectedSizeBytes: number;
+  }) => ipcRenderer.invoke('files:writeWorkingCopy', args),
+
   // RTK (Rust Token Killer)
   rtkGetStatus: () => ipcRenderer.invoke('rtk:getStatus'),
   rtkSetEnabled: (enabled: boolean) => ipcRenderer.invoke('rtk:setEnabled', enabled),
