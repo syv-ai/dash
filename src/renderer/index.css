@@ -20,7 +20,7 @@
     --secondary: 40 30% 94%;
     --secondary-foreground: 36 11% 10%;
     --muted: 40 30% 94%;
-    --muted-foreground: 36 11% 42%;
+    --muted-foreground: 36 11% 36%;
     --accent: 40 30% 92%;
     --accent-foreground: 36 11% 10%;
     --destructive: 0 72% 51%; /* bright red */
@@ -72,7 +72,7 @@
     --secondary: 240 7% 12%;
     --secondary-foreground: 40 18% 92%;
     --muted: 240 7% 12%;
-    --muted-foreground: 40 12% 62%;
+    --muted-foreground: 40 12% 70%;
     --accent: 240 7% 14%;
     --accent-foreground: 40 18% 92%;
     --destructive: 0 72% 56%; /* bright red — vivid for delete / error */

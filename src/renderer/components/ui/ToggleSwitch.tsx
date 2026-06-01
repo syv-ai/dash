@@ -1,5 +1,10 @@
 import React from 'react';
+import { Switch } from './Switch';
 
+/**
+ * Full-row button-style toggle. The whole row is clickable.
+ * For inline switches inside settings rows, use `Switch` directly.
+ */
 export function ToggleSwitch({
   enabled,
   onToggle,
@@ -23,17 +28,7 @@ export function ToggleSwitch({
           : 'border-border/60 text-foreground/60 hover:bg-accent/40 hover:text-foreground'
       }`}
     >
-      <div
-        className={`w-8 h-[18px] rounded-full relative transition-colors duration-150 flex-shrink-0 ${
-          enabled ? 'bg-primary' : 'bg-border'
-        }`}
-      >
-        <div
-          className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-transform duration-150 ${
-            enabled ? 'translate-x-[16px]' : 'translate-x-[2px]'
-          }`}
-        />
-      </div>
+      <Switch enabled={enabled} onToggle={onToggle} disabled={disabled} />
       {label}
     </button>
   );
