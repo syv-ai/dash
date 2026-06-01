@@ -561,6 +561,7 @@ export function LeftSidebar({
             )}
           </button>
         </Tooltip>
+        <div className="h-3 flex-shrink-0" />
       </div>
     );
   }
@@ -997,17 +998,17 @@ export function LeftSidebar({
       </div>
 
       {/* Skills & Settings */}
-      <div className="glass-hairline-t px-2 py-2 space-y-0.5">
+      <div className="glass-hairline-t px-2 pt-4 pb-4 space-y-0.5">
         <button
           onClick={onOpenSkillsBrowser}
-          className="flex items-center gap-2 px-2.5 py-[7px] w-full rounded-md text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-all duration-150 titlebar-no-drag"
+          className="flex items-center gap-2 px-2.5 py-[7px] w-full rounded-md text-xs text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-all duration-150 titlebar-no-drag"
         >
           <Blocks size={14} strokeWidth={1.8} />
           <span>Skills</span>
         </button>
         <button
           onClick={onOpenSettings}
-          className="settings-btn flex items-center gap-2 px-2.5 py-[7px] w-full rounded-md text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-all duration-150 titlebar-no-drag"
+          className="settings-btn flex items-center gap-2 px-2.5 py-[7px] w-full rounded-md text-xs text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-all duration-150 titlebar-no-drag"
         >
           <Settings size={14} strokeWidth={1.8} />
           <span>Settings</span>
