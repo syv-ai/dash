@@ -1,16 +1,22 @@
-import { realpathSync } from 'fs';
+import { ipcMain } from 'electron';
+import { promises as fs, realpathSync } from 'fs';
+import { execFile } from 'child_process';
 import path from 'path';
+import { promisify } from 'util';
+import type {
+  FileRef,
+  IpcResponse,
+  ReadFileForEditResult,
+  WriteFileWorkingCopyResult,
+} from '@shared/types';
+
+const execFileAsync = promisify(execFile);
+const LARGE_FILE_BYTES = 5 * 1024 * 1024; // 5 MB
 
 function safeRealpath(p: string): string {
   return realpathSync.native ? realpathSync.native(p) : realpathSync(p);
 }
 
-/**
- * Realpath the target if it exists; otherwise walk up to the deepest existing
- * ancestor, realpath that, and reattach the missing tail. This lets us safely
- * validate paths whose target (or whose parent dirs) don't exist yet, while
- * still catching any symlink in the chain that points outside.
- */
 function resolveTargetReal(target: string): string {
   try {
     return safeRealpath(target);
@@ -32,14 +38,6 @@ function resolveTargetReal(target: string): string {
   }
 }
 
-/**
- * Resolve a renderer-supplied filePath to an absolute path strictly inside the
- * supplied cwd (the task's worktree). Throws on any escape: parent traversal,
- * absolute paths outside cwd, null bytes, or symlinks pointing outside.
- *
- * Returns the realpath-resolved absolute path so symlinks inside the worktree
- * are followed (matching git's view), but symlinks pointing outside are caught.
- */
 export function resolveInsideCwd(cwd: string, filePath: string): string {
   if (filePath.includes('\0')) {
     throw new Error('Invalid filePath: contains null byte');
@@ -50,7 +48,6 @@ export function resolveInsideCwd(cwd: string, filePath: string): string {
   if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
     throw new Error(`Resolved path escapes cwd: ${target}`);
   }
-  // Realpath both sides so /tmp vs /private/tmp on macOS doesn't trip the check.
   let cwdReal: string;
   try {
     cwdReal = safeRealpath(cwdAbs);
@@ -66,7 +63,6 @@ export function resolveInsideCwd(cwd: string, filePath: string): string {
   return real;
 }
 
-/** NUL-byte heuristic over a sample buffer. Mirrors git's binary check. */
 export function isBinaryBuffer(buf: Buffer): boolean {
   const limit = Math.min(buf.length, 8000);
   for (let i = 0; i < limit; i++) {
@@ -75,7 +71,6 @@ export function isBinaryBuffer(buf: Buffer): boolean {
   return false;
 }
 
-/** Map common extensions to Monaco language ids. '' falls back to plain text. */
 export function detectLanguage(filePath: string): string {
   const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
   const map: Record<string, string> = {
@@ -108,4 +103,151 @@ export function detectLanguage(filePath: string): string {
     lua: 'lua',
   };
   return map[ext] || '';
+}
+
+async function gitShow(cwd: string, ref: FileRef, relPath: string): Promise<string> {
+  const spec = ref === 'HEAD' ? `HEAD:${relPath}` : `:0:${relPath}`;
+  try {
+    const { stdout } = await execFileAsync('git', ['show', spec], {
+      cwd,
+      maxBuffer: LARGE_FILE_BYTES * 2,
+      timeout: 15000,
+    });
+    return stdout;
+  } catch {
+    // Untracked or new file — no HEAD/index version.
+    return '';
+  }
+}
+
+export function registerFileIpc(): void {
+  ipcMain.handle(
+    'files:readForEdit',
+    async (
+      _event,
+      args: { cwd: string; filePath: string; ref: FileRef },
+    ): Promise<IpcResponse<ReadFileForEditResult>> => {
+      try {
+        const abs = resolveInsideCwd(args.cwd, args.filePath);
+        const cwdAbs = path.resolve(args.cwd);
+        let cwdReal = cwdAbs;
+        try {
+          cwdReal = safeRealpath(cwdAbs);
+        } catch {
+          /* cwdAbs is fine */
+        }
+        const relForGit = path.relative(cwdReal, abs);
+
+        const headContent = await gitShow(args.cwd, args.ref, relForGit);
+
+        let workingContent: string | null = null;
+        let mtimeMs = 0;
+        let sizeBytes = 0;
+        let isBinary = false;
+        let isLargeFile = false;
+
+        try {
+          const stat = await fs.stat(abs);
+          mtimeMs = stat.mtimeMs;
+          sizeBytes = stat.size;
+          if (stat.size > LARGE_FILE_BYTES) {
+            isLargeFile = true;
+          } else {
+            const buf = await fs.readFile(abs);
+            if (isBinaryBuffer(buf)) {
+              isBinary = true;
+            } else {
+              workingContent = buf.toString('utf8');
+            }
+          }
+        } catch (err: unknown) {
+          if ((err as { code?: string }).code !== 'ENOENT') throw err;
+          // workingContent stays null — file deleted on disk.
+        }
+
+        return {
+          success: true,
+          data: {
+            headContent,
+            workingContent,
+            mtimeMs,
+            sizeBytes,
+            isBinary,
+            isLargeFile,
+            language: detectLanguage(args.filePath),
+          },
+        };
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'files:writeWorkingCopy',
+    async (
+      _event,
+      args: {
+        cwd: string;
+        filePath: string;
+        content: string;
+        expectedMtimeMs: number;
+        expectedSizeBytes: number;
+      },
+    ): Promise<IpcResponse<WriteFileWorkingCopyResult>> => {
+      try {
+        const abs = resolveInsideCwd(args.cwd, args.filePath);
+
+        try {
+          const stat = await fs.stat(abs);
+          if (stat.mtimeMs !== args.expectedMtimeMs || stat.size !== args.expectedSizeBytes) {
+            return {
+              success: true,
+              data: {
+                ok: false,
+                stale: true,
+                currentMtimeMs: stat.mtimeMs,
+                currentSizeBytes: stat.size,
+              },
+            };
+          }
+        } catch (err: unknown) {
+          if ((err as { code?: string }).code !== 'ENOENT') throw err;
+          // File didn't exist when caller loaded it (mtime=0, size=0): allow
+          // the write only if the caller indicated that explicitly.
+          if (args.expectedMtimeMs !== 0 || args.expectedSizeBytes !== 0) {
+            return {
+              success: true,
+              data: {
+                ok: false,
+                stale: true,
+                currentMtimeMs: 0,
+                currentSizeBytes: 0,
+              },
+            };
+          }
+        }
+
+        const dir = path.dirname(abs);
+        const base = path.basename(abs);
+        const rand = Math.floor(Math.random() * 0xffffffff).toString(16);
+        const tmp = path.join(dir, `.${base}.dash-tmp-${rand}`);
+        await fs.writeFile(tmp, args.content, { encoding: 'utf8', mode: 0o644 });
+        try {
+          await fs.rename(tmp, abs);
+        } catch (err) {
+          await fs.unlink(tmp).catch(() => {});
+          throw err;
+        }
+
+        const stat = await fs.stat(abs);
+        return {
+          success: true,
+          data: { ok: true, mtimeMs: stat.mtimeMs, sizeBytes: stat.size },
+        };
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    },
+  );
 }
