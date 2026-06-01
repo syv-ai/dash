@@ -536,3 +536,22 @@ export type RtkTestOutcome =
   // rtk emitted a rewrite. execDiff is best-effort visualization, not a
   // correctness signal — its absence/failure does not invalidate the rewrite.
   | { kind: 'rewritten'; rewrittenCommand: string; execDiff?: RtkExecDiff };
+
+// ── File editor IPC ───────────────────────────────────────────
+
+/** Reference for the "original" side of the diff: HEAD or staged index. */
+export type FileRef = 'HEAD' | 'index';
+
+export interface ReadFileForEditResult {
+  headContent: string; // '' for untracked / new files
+  workingContent: string | null; // null when the file is deleted on disk
+  mtimeMs: number; // 0 when working file is absent
+  sizeBytes: number; // 0 when working file is absent
+  isBinary: boolean; // true → both content fields are ''
+  isLargeFile: boolean; // true → both content fields are ''
+  language: string; // detected from extension; '' fallback
+}
+
+export type WriteFileWorkingCopyResult =
+  | { ok: true; mtimeMs: number; sizeBytes: number }
+  | { ok: false; stale: true; currentMtimeMs: number; currentSizeBytes: number };
