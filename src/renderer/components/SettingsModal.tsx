@@ -199,8 +199,8 @@ interface SettingsModalProps {
   onShowActiveTasksSectionChange: (value: boolean) => void;
   shellDrawerEnabled: boolean;
   onShellDrawerEnabledChange: (value: boolean) => void;
-  shellDrawerPosition: 'left' | 'main' | 'right';
-  onShellDrawerPositionChange: (value: 'left' | 'main' | 'right') => void;
+  shellDrawerPosition: 'main' | 'right';
+  onShellDrawerPositionChange: (value: 'main' | 'right') => void;
   terminalTheme: string;
   onTerminalThemeChange: (id: string) => void;
   preferredIDE: string;
@@ -1561,7 +1561,6 @@ export function SettingsModal({
                           <Segmented
                             value={shellDrawerPosition}
                             options={[
-                              { value: 'left', label: 'Left' },
                               { value: 'main', label: 'Main' },
                               { value: 'right', label: 'Right' },
                             ]}

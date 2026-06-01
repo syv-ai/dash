@@ -112,8 +112,10 @@ export function App() {
   const [shellDrawerCollapsed, setShellDrawerCollapsed] = useState(() => {
     return localStorage.getItem('shellDrawerCollapsed') === 'true';
   });
-  const [shellDrawerPosition, setShellDrawerPosition] = useState<'left' | 'main' | 'right'>(() => {
-    return (localStorage.getItem('shellDrawerPosition') as 'left' | 'main' | 'right') || 'right';
+  const [shellDrawerPosition, setShellDrawerPosition] = useState<'main' | 'right'>(() => {
+    const stored = localStorage.getItem('shellDrawerPosition');
+    if (stored === 'main' || stored === 'right') return stored;
+    return 'right';
   });
   const [terminalTheme, setTerminalTheme] = useState(() => {
     return localStorage.getItem('terminalTheme') || 'default';
@@ -1662,83 +1664,62 @@ export function App() {
             setTimeout(() => setSidebarAnimating(false), 200);
           }}
         >
-          <ShellDrawerWrapper
-            enabled={shellDrawerEnabled && shellDrawerPosition === 'left' && !sidebarCollapsed}
-            taskId={activeTask?.id ?? null}
-            cwd={activeTask?.path ?? null}
-            collapsed={shellDrawerCollapsed}
-            label={activeTask?.useWorktree ? 'Worktree' : 'Terminal'}
-            panelRef={shellDrawerPanelRef}
-            animating={shellDrawerAnimating}
-            onAnimate={() => setShellDrawerAnimating(true)}
-            onCollapse={() => {
-              setShellDrawerCollapsed(true);
-              localStorage.setItem('shellDrawerCollapsed', 'true');
-              setTimeout(() => setShellDrawerAnimating(false), 200);
+          <LeftSidebar
+            projects={projects}
+            activeProjectId={activeProjectId}
+            onSelectProject={(id) => {
+              setActiveProjectId(id);
+              setActiveTaskId(null);
             }}
-            onExpand={() => {
-              setShellDrawerCollapsed(false);
-              localStorage.setItem('shellDrawerCollapsed', 'false');
-              setTimeout(() => setShellDrawerAnimating(false), 200);
+            onOpenFolder={() => {
+              setCloneStatus({ loading: false, error: null });
+              setShowAddProjectModal(true);
             }}
-          >
-            <LeftSidebar
-              projects={projects}
-              activeProjectId={activeProjectId}
-              onSelectProject={(id) => {
-                setActiveProjectId(id);
-                setActiveTaskId(null);
-              }}
-              onOpenFolder={() => {
-                setCloneStatus({ loading: false, error: null });
-                setShowAddProjectModal(true);
-              }}
-              onDeleteProject={handleDeleteProject}
-              onProjectSettings={(id) => {
-                const p = projects.find((proj) => proj.id === id);
-                if (p) setProjectSettingsTarget(p);
-              }}
-              tasksByProject={tasksByProject}
-              activeTaskId={activeTaskId}
-              onSelectTask={handleSelectTask}
-              onNewTask={handleNewTask}
-              onDeleteTask={handleDeleteTask}
-              onArchiveTask={handleArchiveTask}
-              onRestoreTask={handleRestoreTask}
-              onOpenSettings={() => {
-                setSettingsInitialTab(undefined);
-                setShowSettings(true);
-              }}
-              onOpenPixelAgents={() => {
-                setSettingsInitialTab('add-ons');
-                setShowSettings(true);
-              }}
-              onShowCommitGraph={(projectId) => {
-                setActiveProjectId(projectId);
-                setShowCommitGraph(true);
-              }}
-              collapsed={sidebarCollapsed}
-              onToggleCollapse={toggleSidebar}
-              taskActivity={taskActivity}
-              unseenTaskIds={unseenTaskIds}
-              remoteControlStates={remoteControlStates}
-              contextUsage={showContextUsageOnTaskCards ? contextUsage : EMPTY_CONTEXT_USAGE}
-              onReorderProjects={handleReorderProjects}
-              onReorderTasks={handleReorderTasks}
-              onReorderTasksCommit={handleReorderTasksCommit}
-              pixelAgentsConnectedCount={
-                Object.values(pixelAgentsStatus.offices).filter(
-                  (s) => s === 'connected' || s === 'registered',
-                ).length
-              }
-              rotationTasks={rotationTasks}
-              onReorderRotation={handleReorderRotation}
-              onRemoveFromRotation={removeFromRotation}
-              showActiveTasksSection={showActiveTasksSection}
-              onToggleActiveTasksSection={() => setShowActiveTasksSection((v) => !v)}
-              onOpenSkillsBrowser={() => setShowSkillsBrowser(true)}
-            />
-          </ShellDrawerWrapper>
+            onDeleteProject={handleDeleteProject}
+            onProjectSettings={(id) => {
+              const p = projects.find((proj) => proj.id === id);
+              if (p) setProjectSettingsTarget(p);
+            }}
+            tasksByProject={tasksByProject}
+            activeTaskId={activeTaskId}
+            onSelectTask={handleSelectTask}
+            onNewTask={handleNewTask}
+            onDeleteTask={handleDeleteTask}
+            onArchiveTask={handleArchiveTask}
+            onRestoreTask={handleRestoreTask}
+            onOpenSettings={() => {
+              setSettingsInitialTab(undefined);
+              setShowSettings(true);
+            }}
+            onOpenPixelAgents={() => {
+              setSettingsInitialTab('add-ons');
+              setShowSettings(true);
+            }}
+            onShowCommitGraph={(projectId) => {
+              setActiveProjectId(projectId);
+              setShowCommitGraph(true);
+            }}
+            collapsed={sidebarCollapsed}
+            onToggleCollapse={toggleSidebar}
+            taskActivity={taskActivity}
+            unseenTaskIds={unseenTaskIds}
+            remoteControlStates={remoteControlStates}
+            contextUsage={showContextUsageOnTaskCards ? contextUsage : EMPTY_CONTEXT_USAGE}
+            onReorderProjects={handleReorderProjects}
+            onReorderTasks={handleReorderTasks}
+            onReorderTasksCommit={handleReorderTasksCommit}
+            pixelAgentsConnectedCount={
+              Object.values(pixelAgentsStatus.offices).filter(
+                (s) => s === 'connected' || s === 'registered',
+              ).length
+            }
+            rotationTasks={rotationTasks}
+            onReorderRotation={handleReorderRotation}
+            onRemoveFromRotation={removeFromRotation}
+            showActiveTasksSection={showActiveTasksSection}
+            onToggleActiveTasksSection={() => setShowActiveTasksSection((v) => !v)}
+            onOpenSkillsBrowser={() => setShowSkillsBrowser(true)}
+          />
         </Panel>
         <PanelResizeHandle disabled={sidebarCollapsed} className="w-[1px] bg-border/40" />
 
@@ -1820,7 +1801,7 @@ export function App() {
               style={
                 changesPanelCollapsed
                   ? { background: terminalBg }
-                  : { background: terminalBg, padding: '14px 14px 14px 0' }
+                  : { background: terminalBg, padding: '24px 24px 24px 0' }
               }
               defaultSize={changesPanelCollapsed ? 0.5 : 22}
               minSize={12}
