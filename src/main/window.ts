@@ -16,7 +16,9 @@ export function createWindow(): BrowserWindow {
       webviewTag: false,
       preload: path.join(__dirname, 'preload.js'),
     },
-    ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const } : {}),
+    ...(process.platform === 'darwin'
+      ? { titleBarStyle: 'customButtonsOnHover' as const, frame: false }
+      : {}),
     show: false,
   });
 

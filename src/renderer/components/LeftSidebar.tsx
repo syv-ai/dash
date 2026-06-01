@@ -121,7 +121,7 @@ function RotationSection({
   }, [measureHighlight]);
 
   return (
-    <div className="px-2 pt-3 pb-1.5 mb-0.5">
+    <div className="px-2 pt-1.5 pb-1.5 mb-0.5">
       <Tooltip content="Cycle with Ctrl+Tab">
         <span className="block px-2 pb-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground/70 select-none">
           Active tasks
@@ -396,7 +396,6 @@ export function LeftSidebar({
     return (
       <div className="sidebar-shell h-full flex flex-col items-center gap-1">
         {isMac && <div className="h-[28px] w-full flex-shrink-0 titlebar-drag" />}
-        <div className="h-2" />
 
         {showRotation && (
           <>
