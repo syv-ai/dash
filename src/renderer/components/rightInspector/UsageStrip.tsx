@@ -73,7 +73,7 @@ export function UsageStrip({ rateLimits, contextUsage }: UsageStripProps) {
   if (!rateLimits.fiveHour && !rateLimits.sevenDay && !ctx) return null;
 
   return (
-    <div className="usage-strip px-[18px] pt-[22px] pb-[20px] border-b border-border/60 flex flex-col gap-[14px]">
+    <div className="usage-strip glass-hairline-b px-[18px] pt-[22px] pb-[20px] flex flex-col gap-[14px]">
       {rateLimits.fiveHour && (
         <Row
           label="5-hour limit"

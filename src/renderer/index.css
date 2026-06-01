@@ -475,6 +475,69 @@
   pointer-events: none;
 }
 
+/* ── Right inspector glass card ──────────────────────────── */
+
+.right-inspector-shell {
+  position: relative;
+  background: linear-gradient(
+    180deg,
+    hsl(0 0% 100% / 0.1) 0%,
+    hsl(var(--surface-2) / 0.5) 40%,
+    hsl(var(--surface-1) / 0.72) 100%
+  );
+  backdrop-filter: blur(24px) saturate(1.8);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  box-shadow:
+    inset 0 1px 0 0 hsl(0 0% 100% / 0.18),
+    inset 0 -1px 0 0 hsl(0 0% 0% / 0.22),
+    0 20px 40px -20px hsl(0 0% 0% / 0.5);
+  outline: 1px solid hsl(0 0% 100% / 0.1);
+  outline-offset: -1px;
+}
+
+/* Soft horizontal hairline used inside the inspector to separate sections
+   without breaking the glass surface. Use via `.glass-hairline` on a 1px
+   element, or `.glass-hairline-b` / `.glass-hairline-t` as a border substitute. */
+.glass-hairline {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    hsl(0 0% 100% / 0.1) 30%,
+    hsl(0 0% 100% / 0.1) 70%,
+    transparent
+  );
+  pointer-events: none;
+}
+.glass-hairline-b {
+  position: relative;
+}
+.glass-hairline-b::after,
+.glass-hairline-t::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    hsl(0 0% 100% / 0.1) 30%,
+    hsl(0 0% 100% / 0.1) 70%,
+    transparent
+  );
+  pointer-events: none;
+}
+.glass-hairline-b::after {
+  bottom: 0;
+}
+.glass-hairline-t {
+  position: relative;
+}
+.glass-hairline-t::before {
+  top: 0;
+}
+
 .sidebar-pill-active {
   background: linear-gradient(180deg, hsl(var(--primary) / 0.14), hsl(var(--primary) / 0.08));
 }

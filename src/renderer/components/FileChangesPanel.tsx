@@ -204,7 +204,7 @@ export function FileChangesPanel({
           <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable]">
             {totalChanges === 0 && (
               <div className="flex flex-col items-center justify-center h-full gap-2">
-                <div className="w-8 h-8 rounded-xl bg-accent/40 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-xl bg-foreground/[0.05] flex items-center justify-center">
                   <FileDiff size={14} className="text-foreground/50" strokeWidth={1.5} />
                 </div>
                 <p className="text-[11px] text-foreground/60">No changes</p>
@@ -266,7 +266,7 @@ export function FileChangesPanel({
 
           {/* Commit area — always rendered to preserve textarea focus & state across git refreshes */}
           {stagedFiles.length > 0 && (
-            <div className="flex-shrink-0 border-t border-border/60 p-2">
+            <div className="flex-shrink-0 glass-hairline-t p-2">
               <Popover
                 open={commitOpen}
                 onOpenChange={(open) => {
@@ -333,7 +333,7 @@ export function FileChangesPanel({
                       }
                     }}
                     placeholder="Describe the change…"
-                    className="flex-1 min-h-0 w-full text-[12.5px] leading-relaxed bg-background/60 border border-border/60 rounded-md px-3 py-2 resize-none placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/40"
+                    className="flex-1 min-h-0 w-full text-[12.5px] leading-relaxed bg-foreground/[0.04] border border-white/[0.08] rounded-md px-3 py-2 resize-none placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/40"
                   />
                   <CircleCheck
                     checked={allowEmpty}
