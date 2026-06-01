@@ -27,10 +27,12 @@ export function resolveTerminalFontValue(id: string): string {
   return `${quoteIfNeeded(entry.family)}, ${DEFAULT_FONT_MONO_STACK}`;
 }
 
-// Read the current --font-mono value off :root. Falls back to the default stack
-// if the var is empty (e.g. during very early boot before CSS applies).
-export function getFontMono(): string {
+// Read the current --terminal-font value off :root. Falls back to the default
+// mono stack if the var is empty (e.g. during very early boot before CSS applies).
+export function getTerminalFont(): string {
   if (typeof document === 'undefined') return DEFAULT_FONT_MONO_STACK;
-  const value = getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim();
+  const value = getComputedStyle(document.documentElement)
+    .getPropertyValue('--terminal-font')
+    .trim();
   return value || DEFAULT_FONT_MONO_STACK;
 }

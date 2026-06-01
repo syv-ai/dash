@@ -63,6 +63,9 @@
     --font-mono:
       ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
       monospace;
+    /* Terminal-only override. Defaults to --font-mono so xterm stays aligned with
+       font-mono UI chrome until the user picks something specific in Settings. */
+    --terminal-font: var(--font-mono);
   }
 
   .dark {

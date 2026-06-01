@@ -760,7 +760,7 @@ export function App() {
 
   useEffect(() => {
     const resolved = resolveTerminalFontValue(terminalFontFamily);
-    document.documentElement.style.setProperty('--font-mono', resolved);
+    document.documentElement.style.setProperty('--terminal-font', resolved);
     sessionRegistry.setAllTerminalFonts(resolved);
   }, [terminalFontFamily]);
 

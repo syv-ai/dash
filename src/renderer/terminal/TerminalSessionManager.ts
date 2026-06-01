@@ -6,7 +6,7 @@ import type { TerminalSnapshot } from '../../shared/types';
 import { FilePathLinkProvider } from './FilePathLinkProvider';
 import type { ITheme } from 'xterm';
 import { darkTheme, lightTheme, resolveTheme } from './terminalThemes';
-import { getFontMono } from './terminalFonts';
+import { getTerminalFont } from './terminalFonts';
 
 const SNAPSHOT_DEBOUNCE_MS = 10_000;
 const MEMORY_LIMIT_BYTES = 128 * 1024 * 1024; // 128MB soft limit
@@ -68,7 +68,7 @@ export class TerminalSessionManager {
     this.terminal = new Terminal({
       scrollback: 100_000,
       fontSize: 13,
-      fontFamily: getFontMono(),
+      fontFamily: getTerminalFont(),
       lineHeight: 1.2,
       allowProposedApi: true,
       // Shell-only sessions sit on the floating right-pane glass — render
