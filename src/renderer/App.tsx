@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense, lazy } from 'react';
 import {
   PanelGroup,
   Panel,
@@ -9,7 +9,7 @@ import { LeftSidebar } from './components/LeftSidebar';
 import { MainContent } from './components/MainContent';
 import { openInIde } from './lib/openInIde';
 import { RightInspector } from './components/rightInspector/RightInspector';
-import { DiffViewer } from './components/DiffViewer';
+const FileEditorView = lazy(() => import('./components/FileEditorView'));
 import { ShellDrawerWrapper } from './components/ShellDrawerWrapper';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
 import { SkillsBrowserModal } from './components/SkillsBrowserModal';
@@ -30,7 +30,6 @@ import type {
   Project,
   Task,
   GitStatus,
-  DiffResult,
   LinkedGithubIssue,
   LinkedAdoWorkItem,
   RemoteControlState,
@@ -417,8 +416,11 @@ export function App() {
   // Git state
   const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
   const [gitLoading, setGitLoading] = useState(false);
-  const [diffResult, setDiffResult] = useState<DiffResult | null>(null);
-  const [diffLoading, setDiffLoading] = useState(false);
+  const [diffFile, setDiffFile] = useState<{
+    cwd: string;
+    filePath: string;
+    staged: boolean;
+  } | null>(null);
   const [prInfo, setPrInfo] = useState<PullRequestInfo | null>(null);
   const [showCommitGraph, setShowCommitGraph] = useState(false);
 
@@ -926,9 +928,9 @@ export function App() {
         } else if (deleteProjectTarget) {
           e.preventDefault();
           setDeleteProjectTarget(null);
-        } else if (diffResult) {
+        } else if (diffFile) {
           e.preventDefault();
-          setDiffResult(null);
+          setDiffFile(null);
         } else if (showCommitGraph) {
           e.preventDefault();
           setShowCommitGraph(false);
@@ -988,7 +990,7 @@ export function App() {
     remoteControlModalPtyId,
     deleteTaskTarget,
     deleteProjectTarget,
-    diffResult,
+    diffFile,
     showCommitGraph,
     showSkillsBrowser,
     showSettings,
@@ -1606,40 +1608,11 @@ export function App() {
     refreshGitStatus(activeTask.path);
   }
 
-  async function handleViewDiff(filePath: string, staged: boolean) {
+  function handleViewDiff(filePath: string, staged: boolean) {
     if (!activeTask) return;
-    setDiffLoading(true);
-    setDiffResult(null);
-
-    try {
-      const file = gitStatus?.files.find((f) => f.path === filePath && !f.staged);
-      let resp;
-      const ctx = diffContextLines ?? undefined;
-      if (file?.status === 'untracked' || file?.status === 'conflicted') {
-        // For conflicted files, `git diff` produces a combined-diff format that
-        // our parser doesn't understand. Show the working-tree file (with the
-        // conflict markers) as additions, the same way we render untracked files.
-        resp = await window.electronAPI.gitGetDiffUntracked({
-          cwd: activeTask.path,
-          filePath,
-          contextLines: ctx,
-        });
-      } else {
-        resp = await window.electronAPI.gitGetDiff({
-          cwd: activeTask.path,
-          filePath,
-          staged,
-          contextLines: ctx,
-        });
-      }
-      if (resp.success && resp.data) {
-        setDiffResult(resp.data);
-      }
-    } catch {
-      // Ignore
-    } finally {
-      setDiffLoading(false);
-    }
+    // Monaco loads HEAD/index + working copy itself via files:readForEdit;
+    // App.tsx just opens the modal with the file identity.
+    setDiffFile({ cwd: activeTask.path, filePath, staged });
   }
 
   return (
@@ -2172,13 +2145,17 @@ export function App() {
         />
       )}
 
-      {(diffResult || diffLoading) && (
-        <DiffViewer
-          diff={diffResult}
-          loading={diffLoading}
-          activeTaskId={activeTaskId}
-          onClose={() => setDiffResult(null)}
-        />
+      {diffFile && (
+        <Suspense fallback={null}>
+          <FileEditorView
+            cwd={diffFile.cwd}
+            filePath={diffFile.filePath}
+            staged={diffFile.staged}
+            activeTaskId={activeTaskId}
+            isDark={theme === 'dark'}
+            onClose={() => setDiffFile(null)}
+          />
+        </Suspense>
       )}
 
       <ToastContainer updateNotificationsEnabled={updateNotificationsEnabled} />
