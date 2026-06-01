@@ -440,9 +440,9 @@ export function LeftSidebar({
         <Tooltip content="Create project">
           <button
             onClick={onOpenFolder}
-            className="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0 hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
+            className="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0 hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
           >
-            <Plus size={18} strokeWidth={1.8} />
+            <Plus size={16} strokeWidth={1.8} />
           </button>
         </Tooltip>
 
@@ -499,7 +499,7 @@ export function LeftSidebar({
                       setDraggingId(null);
                     }}
                     onClick={() => onSelectProject(project.id)}
-                    className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-medium transition-transform duration-200 ease-in-out titlebar-no-drag ${
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-medium transition-transform duration-200 ease-in-out titlebar-no-drag ${
                       isActive
                         ? 'sidebar-pill-active text-primary'
                         : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
@@ -533,9 +533,9 @@ export function LeftSidebar({
         <Tooltip content="Skills">
           <button
             onClick={onOpenSkillsBrowser}
-            className="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0 hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
+            className="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0 hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
           >
-            <Blocks size={18} strokeWidth={1.5} />
+            <Blocks size={16} strokeWidth={1.5} />
           </button>
         </Tooltip>
 
@@ -548,9 +548,9 @@ export function LeftSidebar({
         >
           <button
             onClick={onOpenSettings}
-            className="relative w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0 hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
+            className="relative w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0 hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
           >
-            <Settings size={18} strokeWidth={1.5} />
+            <Settings size={16} strokeWidth={1.5} />
             {pixelAgentsConnectedCount > 0 && (
               <span
                 className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-1 rounded-full text-[9px] font-semibold leading-none tabular-nums flex items-center justify-center text-[hsl(var(--git-added))] bg-[hsl(var(--surface-2))] border-2 border-[hsl(var(--surface-1))]"

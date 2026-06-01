@@ -1660,11 +1660,11 @@ export function App() {
         <Panel
           ref={sidebarPanelRef}
           className={sidebarAnimating ? 'panel-transition' : ''}
-          defaultSize={sidebarCollapsed ? 5 : 18}
+          defaultSize={sidebarCollapsed ? 3 : 18}
           minSize={12}
           maxSize={28}
           collapsible
-          collapsedSize={5}
+          collapsedSize={3}
           style={{
             overflow: 'visible',
             position: 'relative',
