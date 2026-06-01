@@ -613,6 +613,18 @@ export class TerminalSessionManager {
     }
   }
 
+  setTerminalFont(fontFamily: string) {
+    this.terminal.options.fontFamily = fontFamily;
+    // Cell metrics change when the font does; refit so the PTY's row/col
+    // dimensions match the new glyph size.
+    try {
+      this.fitAddon.fit();
+    } catch {
+      // Fit can throw if the terminal isn't attached yet; safe to ignore —
+      // the next attach() will fit anyway.
+    }
+  }
+
   /** Public wrapper for saving snapshot (used by SessionRegistry on app quit). */
   async forceSaveSnapshot(): Promise<void> {
     await this.saveSnapshot();
