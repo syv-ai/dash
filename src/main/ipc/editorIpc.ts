@@ -4,14 +4,19 @@ import { execFile } from 'child_process';
 import path from 'path';
 import { promisify } from 'util';
 import type {
-  FileRef,
+  CommitNode,
+  EditorReadCommitResult,
+  EditorReadWorkingResult,
+  EditorWriteResult,
+  FileChange,
+  FileChangeStatus,
   IpcResponse,
-  ReadFileForEditResult,
-  WriteFileWorkingCopyResult,
+  WorkingRef,
 } from '@shared/types';
 
 const execFileAsync = promisify(execFile);
 const LARGE_FILE_BYTES = 5 * 1024 * 1024; // 5 MB
+const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
 function safeRealpath(p: string): string {
   return realpathSync.native ? realpathSync.native(p) : realpathSync(p);
@@ -105,28 +110,38 @@ export function detectLanguage(filePath: string): string {
   return map[ext] || '';
 }
 
-async function gitShow(cwd: string, ref: FileRef, relPath: string): Promise<string> {
-  const spec = ref === 'HEAD' ? `HEAD:${relPath}` : `:0:${relPath}`;
+/** Read a file at a git revision. Returns '' when missing (untracked / new file
+ *  in the working tree, or absent from the parent of an added commit). */
+async function gitShow(cwd: string, revisionPath: string): Promise<string> {
   try {
-    const { stdout } = await execFileAsync('git', ['show', spec], {
+    const { stdout } = await execFileAsync('git', ['show', revisionPath], {
       cwd,
       maxBuffer: LARGE_FILE_BYTES * 2,
       timeout: 15000,
     });
     return stdout;
   } catch {
-    // Untracked or new file — no HEAD/index version.
     return '';
   }
 }
 
-export function registerFileIpc(): void {
+function statusFromGitCode(code: string): FileChangeStatus {
+  // git diff-tree --name-status emits A, M, D, R<score>, C<score>, T.
+  if (code.startsWith('A')) return 'added';
+  if (code.startsWith('D')) return 'deleted';
+  if (code.startsWith('R')) return 'renamed';
+  if (code.startsWith('C')) return 'renamed'; // treat copy like rename for UX
+  return 'modified';
+}
+
+export function registerEditorIpc(): void {
+  // ── editor:readWorking ────────────────────────────────────────
   ipcMain.handle(
-    'files:readForEdit',
+    'editor:readWorking',
     async (
       _event,
-      args: { cwd: string; filePath: string; ref: FileRef },
-    ): Promise<IpcResponse<ReadFileForEditResult>> => {
+      args: { cwd: string; filePath: string; ref: WorkingRef },
+    ): Promise<IpcResponse<EditorReadWorkingResult>> => {
       try {
         const abs = resolveInsideCwd(args.cwd, args.filePath);
         const cwdAbs = path.resolve(args.cwd);
@@ -137,8 +152,8 @@ export function registerFileIpc(): void {
           /* cwdAbs is fine */
         }
         const relForGit = path.relative(cwdReal, abs);
-
-        const headContent = await gitShow(args.cwd, args.ref, relForGit);
+        const spec = args.ref === 'HEAD' ? `HEAD:${relForGit}` : `:0:${relForGit}`;
+        const originalContent = await gitShow(args.cwd, spec);
 
         let workingContent: string | null = null;
         let mtimeMs = 0;
@@ -168,7 +183,7 @@ export function registerFileIpc(): void {
         return {
           success: true,
           data: {
-            headContent,
+            originalContent,
             workingContent,
             mtimeMs,
             sizeBytes,
@@ -183,8 +198,52 @@ export function registerFileIpc(): void {
     },
   );
 
+  // ── editor:readCommit ─────────────────────────────────────────
   ipcMain.handle(
-    'files:writeWorkingCopy',
+    'editor:readCommit',
+    async (
+      _event,
+      args: { cwd: string; filePath: string; hash: string },
+    ): Promise<IpcResponse<EditorReadCommitResult>> => {
+      try {
+        const abs = resolveInsideCwd(args.cwd, args.filePath);
+        const cwdAbs = path.resolve(args.cwd);
+        let cwdReal = cwdAbs;
+        try {
+          cwdReal = safeRealpath(cwdAbs);
+        } catch {
+          /* cwdAbs is fine */
+        }
+        const relForGit = path.relative(cwdReal, abs);
+
+        // Try parent for original. If the hash has no parent (root commit),
+        // gitShow falls through to '' — every file is then an addition.
+        const original = await gitShow(args.cwd, `${args.hash}~1:${relForGit}`);
+        const modified = await gitShow(args.cwd, `${args.hash}:${relForGit}`);
+
+        const modifiedBuf = Buffer.from(modified, 'utf8');
+        const isLargeFile = modifiedBuf.length > LARGE_FILE_BYTES;
+        const isBinary = !isLargeFile && isBinaryBuffer(modifiedBuf);
+
+        return {
+          success: true,
+          data: {
+            originalContent: original,
+            modifiedContent: modified,
+            isBinary,
+            isLargeFile,
+            language: detectLanguage(args.filePath),
+          },
+        };
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    },
+  );
+
+  // ── editor:writeWorking ───────────────────────────────────────
+  ipcMain.handle(
+    'editor:writeWorking',
     async (
       _event,
       args: {
@@ -194,7 +253,7 @@ export function registerFileIpc(): void {
         expectedMtimeMs: number;
         expectedSizeBytes: number;
       },
-    ): Promise<IpcResponse<WriteFileWorkingCopyResult>> => {
+    ): Promise<IpcResponse<EditorWriteResult>> => {
       try {
         const abs = resolveInsideCwd(args.cwd, args.filePath);
 
@@ -213,8 +272,6 @@ export function registerFileIpc(): void {
           }
         } catch (err: unknown) {
           if ((err as { code?: string }).code !== 'ENOENT') throw err;
-          // File didn't exist when caller loaded it (mtime=0, size=0): allow
-          // the write only if the caller indicated that explicitly.
           if (args.expectedMtimeMs !== 0 || args.expectedSizeBytes !== 0) {
             return {
               success: true,
@@ -245,6 +302,107 @@ export function registerFileIpc(): void {
           success: true,
           data: { ok: true, mtimeMs: stat.mtimeMs, sizeBytes: stat.size },
         };
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    },
+  );
+
+  // ── editor:listCommits ────────────────────────────────────────
+  ipcMain.handle(
+    'editor:listCommits',
+    async (_event, args: { cwd: string; limit?: number }): Promise<IpcResponse<CommitNode[]>> => {
+      try {
+        const limit = args.limit ?? 50;
+        const format = '%H%x00%h%x00%P%x00%an%x00%at%x00%s';
+        const { stdout } = await execFileAsync(
+          'git',
+          ['log', `--max-count=${limit}`, `--format=${format}`, 'HEAD'],
+          { cwd: args.cwd, maxBuffer: 5 * 1024 * 1024, timeout: 15000 },
+        );
+        const commits: CommitNode[] = [];
+        for (const line of stdout.split('\n')) {
+          if (!line.trim()) continue;
+          const parts = line.split('\0');
+          commits.push({
+            hash: parts[0],
+            shortHash: parts[1],
+            parents: parts[2] ? parts[2].split(' ').filter(Boolean) : [],
+            authorName: parts[3] || '',
+            authorDate: parseInt(parts[4], 10) || 0,
+            subject: parts[5] || '',
+            refs: [],
+          });
+        }
+        return { success: true, data: commits };
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    },
+  );
+
+  // ── editor:listFilesInCommit ──────────────────────────────────
+  ipcMain.handle(
+    'editor:listFilesInCommit',
+    async (_event, args: { cwd: string; hash: string }): Promise<IpcResponse<FileChange[]>> => {
+      try {
+        let base = `${args.hash}~1`;
+        try {
+          await execFileAsync('git', ['rev-parse', '--verify', `${args.hash}~1`], {
+            cwd: args.cwd,
+            timeout: 5000,
+          });
+        } catch {
+          base = EMPTY_TREE;
+        }
+
+        const nameStatusOut = (
+          await execFileAsync(
+            'git',
+            ['diff-tree', '--no-commit-id', '-r', '--name-status', base, args.hash],
+            { cwd: args.cwd, maxBuffer: 5 * 1024 * 1024, timeout: 15000 },
+          )
+        ).stdout;
+
+        const numStatOut = (
+          await execFileAsync(
+            'git',
+            ['diff-tree', '--no-commit-id', '-r', '--numstat', base, args.hash],
+            { cwd: args.cwd, maxBuffer: 5 * 1024 * 1024, timeout: 15000 },
+          )
+        ).stdout;
+
+        const stats = new Map<string, { additions: number; deletions: number }>();
+        for (const line of numStatOut.split('\n')) {
+          if (!line.trim()) continue;
+          const [adds, dels, ...pathParts] = line.split('\t');
+          const p = pathParts.join('\t');
+          if (!p) continue;
+          stats.set(p, {
+            additions: adds === '-' ? 0 : parseInt(adds, 10) || 0,
+            deletions: dels === '-' ? 0 : parseInt(dels, 10) || 0,
+          });
+        }
+
+        const files: FileChange[] = [];
+        for (const line of nameStatusOut.split('\n')) {
+          if (!line.trim()) continue;
+          const parts = line.split('\t');
+          const code = parts[0];
+          const status = statusFromGitCode(code);
+          const filePath = parts[parts.length - 1];
+          const oldPath = code.startsWith('R') || code.startsWith('C') ? parts[1] : undefined;
+          const stat = stats.get(filePath) ?? { additions: 0, deletions: 0 };
+          files.push({
+            path: filePath,
+            status,
+            staged: true,
+            additions: stat.additions,
+            deletions: stat.deletions,
+            oldPath,
+          });
+        }
+        return { success: true, data: files };
       } catch (err) {
         return { success: false, error: err instanceof Error ? err.message : String(err) };
       }
