@@ -72,12 +72,12 @@ export function FileRow({
           <span className="absolute left-[1px] top-[-2px] bottom-[-2px] w-px bg-[hsl(var(--border)/0.5)]" />
         </span>
       ))}
+      {/* Slot where the folder's chevron sits — kept empty so file names
+          align with folder names at the same indent. */}
+      <span className="w-[14px] flex-shrink-0" />
       <span
-        className={`font-mono text-[10px] font-semibold w-3.5 text-center flex-shrink-0 ${STATUS_CLASS[file.status]}`}
+        className={`flex-1 min-w-0 font-mono text-[11.5px] truncate ${STATUS_CLASS[file.status]}`}
       >
-        {STATUS_LABEL[file.status]}
-      </span>
-      <span className="flex-1 min-w-0 font-mono text-[11.5px] truncate text-foreground">
         {basename(file.path)}
       </span>
       <span className="font-mono text-[10.5px] flex gap-1.5 flex-shrink-0 group-hover:invisible">
@@ -93,6 +93,11 @@ export function FileRow({
         {file.deletions ? (
           <span className="text-[hsl(var(--git-deleted))]">−{file.deletions}</span>
         ) : null}
+      </span>
+      <span
+        className={`font-mono text-[10px] font-semibold w-3 text-center flex-shrink-0 group-hover:invisible ${STATUS_CLASS[file.status]}`}
+      >
+        {STATUS_LABEL[file.status]}
       </span>
       {(canDiscard || canIgnore) && (
         <div className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center gap-1">

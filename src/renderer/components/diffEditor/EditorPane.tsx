@@ -393,7 +393,10 @@ export function EditorPane({
 
   return (
     <div className="h-full flex flex-col min-w-0 min-h-0">
-      <div className="flex items-center justify-between px-5 h-12 border-b border-border/40 flex-shrink-0">
+      <div
+        className="flex items-center justify-between px-3 h-7 border-b border-white/[0.06] flex-shrink-0"
+        style={{ background: terminalTheme.background ?? (isDark ? '#0d0d11' : '#faf8f3') }}
+      >
         <div className="flex items-center gap-3 min-w-0">
           <FileText
             size={14}

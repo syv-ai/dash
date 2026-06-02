@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
-import { ChevronDown, ChevronRight, Folder, FolderOpen, GitCommit, History } from 'lucide-react';
+import { ChevronDown, ChevronRight, GitCommit, History } from 'lucide-react';
 import type { FileChange, FileChangeStatus } from '../../../shared/types';
 import type { CommitSummary, EditorView } from './types';
 
@@ -27,7 +27,7 @@ export function EditorSidebar(props: EditorSidebarProps) {
   const initialDrawerSize = parseInitial(localStorage.getItem(COMMITS_DRAWER_KEY), 35);
 
   return (
-    <div className="h-full min-h-0 flex flex-col rounded-l-[14px] overflow-hidden right-inspector-shell">
+    <div className="h-full min-h-0 flex flex-col rounded-[14px] overflow-hidden right-inspector-shell">
       <PanelGroup
         direction="vertical"
         autoSaveId="diff-editor-sidebar"
@@ -264,6 +264,12 @@ function FolderContents({ node, indent, selectedPath, onSelectFile }: FolderCont
   );
 }
 
+// Width of the leading icon column. Folders fill it with a chevron; files
+// leave it empty so file names align with folder names at the same indent
+// (chevron column = name's left edge).
+const ICON_SLOT = 12;
+const INDENT_STEP = 10; // px per nesting level (Tailwind gap-1 = 4px is used inside rows)
+
 function FolderEntry({
   folder,
   indent,
@@ -277,44 +283,37 @@ function FolderEntry({
 }) {
   // Default-open if any descendant is the current selection or changed.
   const [open, setOpen] = useState<boolean>(() => folder.changedCount > 0);
-  const tint = folder.dominantStatus
-    ? FOLDER_TINT[folder.dominantStatus]
-    : 'text-muted-foreground/75';
+  const tint = folder.dominantStatus ? FOLDER_TINT[folder.dominantStatus] : 'text-foreground/90';
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="w-full group flex items-center gap-1.5 py-1 rounded-md text-[12px] hover:bg-[hsl(var(--surface-2)/0.6)] transition-colors"
-        style={{ paddingLeft: 8 + indent * 12, paddingRight: 8 }}
+        className="w-full group flex items-center gap-1 py-0.5 rounded-md text-[12px] hover:bg-[hsl(var(--surface-2)/0.6)] transition-colors"
+        style={{ paddingLeft: 4 + indent * INDENT_STEP, paddingRight: 8 }}
       >
-        {open ? (
-          <ChevronDown
-            size={11}
-            strokeWidth={1.8}
-            className="text-muted-foreground/50 flex-shrink-0"
-          />
-        ) : (
-          <ChevronRight
-            size={11}
-            strokeWidth={1.8}
-            className="text-muted-foreground/50 flex-shrink-0"
-          />
-        )}
         <span
-          className={`flex-shrink-0 w-[14px] h-[14px] inline-flex items-center justify-center ${tint}`}
+          className="flex-shrink-0 inline-flex items-center justify-center"
+          style={{ width: ICON_SLOT }}
         >
           {open ? (
-            <FolderOpen size={13} strokeWidth={1.8} />
+            <ChevronDown size={11} strokeWidth={1.8} className="text-muted-foreground/55" />
           ) : (
-            <Folder size={13} strokeWidth={1.8} />
+            <ChevronRight size={11} strokeWidth={1.8} className="text-muted-foreground/55" />
           )}
         </span>
-        <span className="flex-1 min-w-0 font-mono text-[11.5px] truncate text-foreground/90 text-left">
-          {folder.name}
+        <span className={`flex-1 min-w-0 font-mono text-[11.5px] truncate text-left ${tint}`}>
+          {folder.name}/
         </span>
         {folder.changedCount > 0 && (
-          <span className="min-w-[18px] h-[16px] flex items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary tabular-nums px-1 flex-shrink-0">
+          <span
+            className={`flex-shrink-0 font-mono text-[10px] font-semibold tabular-nums ${
+              folder.dominantStatus
+                ? STATUS_TEXT[folder.dominantStatus]
+                : 'text-muted-foreground/70'
+            }`}
+            aria-label={`${folder.changedCount} changed`}
+          >
             {folder.changedCount}
           </span>
         )}
@@ -343,35 +342,25 @@ function FileEntry({
   onClick: () => void;
 }) {
   const change = file.change;
-  const isUnchanged = !change;
+  const tint = selected
+    ? 'text-primary'
+    : change
+      ? STATUS_TEXT[change.status]
+      : 'text-foreground/80';
   return (
     <button
       type="button"
       onClick={onClick}
       title={file.fullPath}
-      style={{ paddingLeft: 8 + indent * 12, paddingRight: 8 }}
-      className={`w-full group flex items-center gap-2 py-1 rounded-md text-[12px] transition-colors ${
-        selected
-          ? 'bg-primary/15 text-primary'
-          : 'text-foreground/85 hover:bg-[hsl(var(--surface-2)/0.6)]'
+      style={{ paddingLeft: 4 + indent * INDENT_STEP, paddingRight: 8 }}
+      className={`w-full group flex items-center gap-1 py-0.5 rounded-md text-[12px] transition-colors ${
+        selected ? 'bg-primary/15' : 'hover:bg-[hsl(var(--surface-2)/0.6)]'
       }`}
     >
-      {/* Indent guide */}
-      <span className="w-[14px] flex-shrink-0" />
-      {change ? (
-        <span
-          className={`font-mono text-[10px] font-semibold w-3.5 text-center flex-shrink-0 ${STATUS_TEXT[change.status]}`}
-        >
-          {STATUS_LABEL[change.status]}
-        </span>
-      ) : (
-        <span className="w-3.5 flex-shrink-0" />
-      )}
-      <span
-        className={`flex-1 min-w-0 font-mono text-[11.5px] truncate text-left ${
-          isUnchanged && !selected ? 'text-muted-foreground/60' : ''
-        }`}
-      >
+      {/* Empty icon slot keeps file names aligned with folder names at the
+          same indent (the chevron column for folders). */}
+      <span className="flex-shrink-0" style={{ width: ICON_SLOT }} />
+      <span className={`flex-1 min-w-0 font-mono text-[11.5px] truncate text-left ${tint}`}>
         {file.name}
       </span>
       {change && (change.additions > 0 || change.deletions > 0) && (
@@ -390,6 +379,15 @@ function FileEntry({
           {change.deletions > 0 && (
             <span className="text-[hsl(var(--git-deleted))]">−{change.deletions}</span>
           )}
+        </span>
+      )}
+      {change && (
+        <span
+          className={`font-mono text-[10px] font-semibold w-3 text-center flex-shrink-0 ${
+            selected ? 'text-primary' : STATUS_TEXT[change.status]
+          }`}
+        >
+          {STATUS_LABEL[change.status]}
         </span>
       )}
     </button>

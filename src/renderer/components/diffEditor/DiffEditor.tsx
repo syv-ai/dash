@@ -159,35 +159,39 @@ function DiffEditorBody({
     setView(next);
   }
 
+  const bg = terminalTheme.background ?? (isDark ? '#0d0d11' : '#faf8f3');
+
   return (
-    <PanelGroup direction="horizontal" autoSaveId="diff-editor-shell" className="h-full">
-      <Panel defaultSize={22} minSize={14} maxSize={45}>
-        <EditorSidebar
-          allPaths={repoPaths}
-          changedFiles={changedFiles}
-          filesLoading={repoPathsLoading || changedFilesLoading}
-          selectedPath={selectedPath}
-          onSelectFile={setSelectedPath}
-          commits={commits}
-          commitsLoading={commitsLoading}
-          showWorkingTreeRow={workingFiles.length > 0}
-          view={view}
-          onSelectView={changeView}
-        />
-      </Panel>
-      <PanelResizeHandle className="w-px bg-[hsl(var(--border)/0.5)] hover:bg-[hsl(var(--border))] transition-colors" />
-      <Panel minSize={40}>
-        <EditorPane
-          cwd={cwd}
-          filePath={selectedPath}
-          view={view}
-          activeTaskId={activeTaskId}
-          terminalTheme={terminalTheme}
-          isDark={isDark}
-          onClose={onClose}
-        />
-      </Panel>
-    </PanelGroup>
+    <div className="h-full w-full p-4 rounded-2xl overflow-hidden" style={{ background: bg }}>
+      <PanelGroup direction="horizontal" autoSaveId="diff-editor-shell" className="h-full">
+        <Panel defaultSize={22} minSize={14} maxSize={45}>
+          <EditorSidebar
+            allPaths={repoPaths}
+            changedFiles={changedFiles}
+            filesLoading={repoPathsLoading || changedFilesLoading}
+            selectedPath={selectedPath}
+            onSelectFile={setSelectedPath}
+            commits={commits}
+            commitsLoading={commitsLoading}
+            showWorkingTreeRow={workingFiles.length > 0}
+            view={view}
+            onSelectView={changeView}
+          />
+        </Panel>
+        <PanelResizeHandle className="w-3 bg-transparent hover:bg-transparent transition-colors" />
+        <Panel minSize={40}>
+          <EditorPane
+            cwd={cwd}
+            filePath={selectedPath}
+            view={view}
+            activeTaskId={activeTaskId}
+            terminalTheme={terminalTheme}
+            isDark={isDark}
+            onClose={onClose}
+          />
+        </Panel>
+      </PanelGroup>
+    </div>
   );
 }
 

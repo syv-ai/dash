@@ -41,7 +41,7 @@
     --warn-foreground: 0 0% 100%;
 
     --git-added: 142 71% 45%;
-    --git-modified: 38 92% 50%;
+    --git-modified: 38 80% 62%;
     --git-deleted: 0 84% 60%;
     --git-renamed: 217 91% 60%;
     --git-untracked: 0 0% 50%;
@@ -102,7 +102,7 @@
     --warn-foreground: 240 10% 5%;
 
     --git-added: 142 71% 45%; /* bright green — vivid */
-    --git-modified: 38 92% 50%; /* bright amber */
+    --git-modified: 38 80% 68%; /* light amber */
     --git-deleted: 0 72% 56%; /* bright red */
     --git-renamed: 217 91% 60%; /* bright blue */
     --git-untracked: 0 0% 56%;
@@ -750,4 +750,28 @@
 }
 .monaco-select-line {
   background-color: hsl(var(--primary) / 0.15);
+}
+
+/* Monaco diff editor: kill the tint on the right-side overview ruler / diff-
+ * decoration strip / scrollbar shadow so the editor blends edge-to-edge with
+ * whatever background the theme sets. Monaco sets some of these via inline
+ * `background-color` styles which beat regular CSS, so we use `!important`.
+ * Targeting both the parent ruler element AND its inner canvas covers the
+ * variants the diff editor renders in inline mode. */
+.monaco-editor .decorationsOverviewRuler,
+.monaco-editor canvas.decorationsOverviewRuler,
+.monaco-editor [class*='OverviewRuler'],
+.monaco-diff-editor .decorationsOverviewRuler,
+.monaco-diff-editor canvas.decorationsOverviewRuler,
+.monaco-diff-editor [class*='OverviewRuler'] {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+.monaco-editor .scroll-decoration,
+.monaco-diff-editor .scroll-decoration {
+  box-shadow: none !important;
+}
+.monaco-editor .monaco-scrollable-element > .shadow,
+.monaco-diff-editor .monaco-scrollable-element > .shadow {
+  display: none !important;
 }

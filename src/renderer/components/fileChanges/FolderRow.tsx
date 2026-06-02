@@ -1,30 +1,11 @@
 import React, { useState } from 'react';
-import { Folder, FolderOpen, Undo2, EyeOff } from 'lucide-react';
+import { ChevronDown, ChevronRight, Undo2, EyeOff } from 'lucide-react';
 import { Tooltip } from '../ui/Tooltip';
 import { Popover, PopoverTrigger, PopoverContent, PopoverArrow } from '../ui/Popover';
 import { Checkbox } from './FileRow';
 import { DiscardFolderConfirm } from './DiscardFolderConfirm';
 import type { NodeAggregate } from './buildTree';
 import type { FileChangeStatus } from '../../../shared/types';
-
-function FolderUntracked({ size = 13 }: { size?: number }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      width={size}
-      height={size}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.7}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M3.5 6.25A2.25 2.25 0 0 1 5.75 4h4.1l1.7 1.75h6.7A2.25 2.25 0 0 1 20.5 8v9.75A2.25 2.25 0 0 1 18.25 20H5.75A2.25 2.25 0 0 1 3.5 17.75z" />
-      <path d="M9 9v5.7a3 3 0 0 0 6 0V9" />
-    </svg>
-  );
-}
 
 interface FolderRowProps {
   displayName: string;
@@ -67,15 +48,9 @@ export function FolderRow({
   onAddToGitignore,
 }: FolderRowProps) {
   const [discardOpen, setDiscardOpen] = useState(false);
-  const allUntracked = agg.status === 'untracked';
-  // Folder icon color follows the aggregate status (untracked stays grey,
-  // added stays green, etc.). Mixed-status folders fall back to neutral.
-  // Open vs closed is signalled by the icon shape + indented children, not
-  // by a separate tint, so the status color is preserved when expanded.
-  const folderTint = agg.status !== 'mixed' ? FOLDER_TINT[agg.status] : 'text-muted-foreground/75';
-  const nameClass = allUntracked
-    ? 'text-[hsl(var(--git-untracked))]' + (open ? '' : ' italic')
-    : 'text-foreground';
+  // Folder name color follows the aggregate status (modified → orange,
+  // added → green, etc.). Mixed-status folders fall back to neutral foreground.
+  const nameTint = agg.status !== 'mixed' ? FOLDER_TINT[agg.status] : 'text-foreground';
   return (
     <div
       role="button"
@@ -95,21 +70,21 @@ export function FolderRow({
           <span className="absolute left-[1px] top-[-2px] bottom-[-2px] w-px bg-[hsl(var(--border)/0.5)]" />
         </span>
       ))}
-      <span
-        className={`flex-shrink-0 w-[14px] h-[14px] inline-flex items-center justify-center ${folderTint}`}
-      >
-        {allUntracked ? (
-          <FolderUntracked size={13} />
-        ) : open ? (
-          <FolderOpen size={13} strokeWidth={1.8} />
+      <span className="flex-shrink-0 w-[14px] h-[14px] inline-flex items-center justify-center text-muted-foreground/55">
+        {open ? (
+          <ChevronDown size={12} strokeWidth={1.8} />
         ) : (
-          <Folder size={13} strokeWidth={1.8} />
+          <ChevronRight size={12} strokeWidth={1.8} />
         )}
       </span>
-      <span className={`flex-1 min-w-0 font-mono text-[11.5px] truncate font-medium ${nameClass}`}>
+      <span className={`flex-1 min-w-0 font-mono text-[11.5px] truncate font-medium ${nameTint}`}>
         {displayName}/
       </span>
-      <span className="min-w-[18px] h-[16px] flex items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary tabular-nums px-1 flex-shrink-0">
+      <span
+        className={`font-mono text-[10px] font-semibold tabular-nums flex-shrink-0 ${
+          agg.status !== 'mixed' ? FOLDER_TINT[agg.status] : 'text-muted-foreground/70'
+        }`}
+      >
         {agg.count}
       </span>
       {!open && (

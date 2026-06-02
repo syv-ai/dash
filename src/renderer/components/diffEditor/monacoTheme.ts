@@ -1,7 +1,11 @@
 import type { ITheme as XtermTheme } from 'xterm';
 
-export const MONACO_THEME_DARK = 'dash-terminal-dark';
-export const MONACO_THEME_LIGHT = 'dash-terminal-light';
+// Bump the version suffix whenever defineMonacoThemeFromTerminal's output
+// changes — Monaco caches themes by name, and the EditorPane's theme effect
+// only re-applies when `themeName` actually changes, so renaming forces a
+// fresh defineTheme + setTheme on already-open editors.
+export const MONACO_THEME_DARK = 'dash-terminal-dark-v2';
+export const MONACO_THEME_LIGHT = 'dash-terminal-light-v2';
 
 /** Define a Monaco theme that mirrors the xterm.js terminal palette. Keeps
  *  the diff editor visually consistent with whichever palette the user
@@ -14,6 +18,12 @@ export function defineMonacoThemeFromTerminal(
 ): void {
   const bg = t.background ?? (isDark ? '#0d0d11' : '#faf8f3');
   const fg = t.foreground ?? (isDark ? '#f1eee5' : '#1c1b18');
+  // Subtle scrollbar slider that stays readable on the editor bg without
+  // introducing a separate background color for the scrollbar track.
+  const sliderBg = isDark ? '#ffffff14' : '#0000001a';
+  const sliderHover = isDark ? '#ffffff22' : '#00000028';
+  const sliderActive = isDark ? '#ffffff33' : '#00000033';
+
   monaco.editor.defineTheme(themeName, {
     base: isDark ? 'vs-dark' : 'vs',
     inherit: true,
@@ -27,14 +37,24 @@ export function defineMonacoThemeFromTerminal(
       'editorLineNumber.foreground': isDark ? '#5c607080' : '#4a484280',
       'editorLineNumber.activeForeground': fg,
       'editorWidget.background': bg,
-      // Gutter and overview ruler share the editor's background so there's no
-      // visible strip behind line numbers or the right-side diff minimap.
-      'editorGutter.background': bg,
-      'editorOverviewRuler.background': bg,
+      // Gutter and overview ruler — fully transparent so the right-side diff
+      // strip and the line-number gutter both blend into editor.background.
+      'editorGutter.background': '#00000000',
+      'editorOverviewRuler.background': '#00000000',
       'editorOverviewRuler.border': '#00000000',
       'editorGutter.commentRangeForeground': bg,
-      // Soften the diff-only colors a touch but keep them readable.
+      // Scrollbar track inherits editor.background; slider becomes a faint
+      // overlay rather than a distinct tinted strip.
+      'scrollbar.shadow': '#00000000',
+      'scrollbarSlider.background': sliderBg,
+      'scrollbarSlider.hoverBackground': sliderHover,
+      'scrollbarSlider.activeBackground': sliderActive,
+      // Diff-specific decorations: drop the diagonal fill and any tinted
+      // borders so the diff editor doesn't sprout its own backdrop.
       'diffEditor.diagonalFill': '#00000000',
+      'diffEditor.border': '#00000000',
+      'diffEditorOverview.insertedForeground': isDark ? '#3fb95080' : '#2da14480',
+      'diffEditorOverview.removedForeground': isDark ? '#f8504980' : '#cf222e80',
     },
   });
 }
