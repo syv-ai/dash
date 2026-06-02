@@ -60,20 +60,13 @@ function DiffEditorBody({
       .editorListFilesInCommit({ cwd, hash: view.hash })
       .then((resp) => {
         if (cancelled) return;
-        if (resp.success && resp.data) {
-          setCommitFiles(resp.data);
-          if (resp.data.length > 0 && !resp.data.some((f) => f.path === selectedPath)) {
-            setSelectedPath(resp.data[0].path);
-          }
-        } else {
-          setCommitFiles([]);
-        }
+        setCommitFiles(resp.success && resp.data ? resp.data : []);
       })
       .finally(() => !cancelled && setCommitFilesLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [view, cwd, selectedPath]);
+  }, [view, cwd]);
 
   const workingFiles: FileChange[] = useMemo(() => gitStatus?.files ?? [], [gitStatus]);
   const changedFiles = view.kind === 'working' ? workingFiles : commitFiles;
@@ -145,14 +138,26 @@ function DiffEditorBody({
     };
   }, [cwd]);
 
-  // When the view changes to working, ensure the selected file is in the tree.
+  // Auto-pick the first changed file ONLY when nothing is selected. User
+  // clicks must stay sticky — even on an unchanged file. Resetting on every
+  // changedFiles update would snap the selection back on each git refresh
+  // and lock the user out of the rest of the repo tree.
   useEffect(() => {
-    if (view.kind !== 'working') return;
-    if (changedFiles.length === 0) return;
-    setSelectedPath((cur) =>
-      changedFiles.some((f) => f.path === cur) ? cur : changedFiles[0].path,
-    );
-  }, [view.kind, changedFiles]);
+    if (selectedPath !== '') return;
+    if (view.kind === 'working') {
+      if (workingFiles.length > 0) setSelectedPath(workingFiles[0].path);
+    } else if (commitFiles.length > 0) {
+      setSelectedPath(commitFiles[0].path);
+    }
+  }, [selectedPath, view.kind, workingFiles, commitFiles]);
+
+  // Switching commits/working should restart "first changed file" selection.
+  // Passing this to the sidebar instead of raw setView keeps the auto-pick
+  // logic in one place.
+  function changeView(next: EditorView) {
+    setSelectedPath('');
+    setView(next);
+  }
 
   return (
     <PanelGroup direction="horizontal" autoSaveId="diff-editor-shell" className="h-full">
@@ -167,7 +172,7 @@ function DiffEditorBody({
           commitsLoading={commitsLoading}
           showWorkingTreeRow={workingFiles.length > 0}
           view={view}
-          onSelectView={setView}
+          onSelectView={changeView}
         />
       </Panel>
       <PanelResizeHandle className="w-px bg-[hsl(var(--border)/0.5)] hover:bg-[hsl(var(--border))] transition-colors" />
