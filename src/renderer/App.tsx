@@ -1847,6 +1847,18 @@ export function App() {
                       onPush={handlePush}
                       onCommitFinished={() => activeTask && refreshGitStatus(activeTask.path)}
                       onShowCommitGraph={() => setShowCommitGraph(true)}
+                      onOpenEditor={() => {
+                        if (!activeTask) return;
+                        const files = gitStatus?.files ?? [];
+                        if (files.length === 0) return;
+                        // Prefer the first unstaged file; otherwise first staged.
+                        const target = files.find((f) => !f.staged) ?? files[0];
+                        setDiffFile({
+                          cwd: activeTask.path,
+                          filePath: target.path,
+                          staged: target.staged,
+                        });
+                      }}
                       collapsed={changesPanelCollapsed}
                       onToggleCollapse={toggleChangesPanel}
                     />

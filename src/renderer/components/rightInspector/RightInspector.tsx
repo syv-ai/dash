@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { ArrowDown, ArrowUp, GitBranch, Minus, Plus } from 'lucide-react';
+import { ArrowDown, ArrowUp, GitBranch, Maximize2, Minus, Plus } from 'lucide-react';
 import { FileChangesPanel } from '../FileChangesPanel';
 import { Tooltip } from '../ui/Tooltip';
 import { UsageStrip } from './UsageStrip';
@@ -22,6 +22,8 @@ interface RightInspectorProps {
   onPush: () => Promise<void>;
   onCommitFinished?: () => void;
   onShowCommitGraph: () => void;
+  /** Open the diff editor on the first changed file. */
+  onOpenEditor: () => void;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
 }
@@ -42,6 +44,7 @@ export function RightInspector({
   onPush,
   onCommitFinished,
   onShowCommitGraph,
+  onOpenEditor,
   collapsed,
 }: RightInspectorProps) {
   const { adds, dels, fileCount, stagedCount, unstagedCount } = useMemo(() => {
@@ -127,6 +130,15 @@ export function RightInspector({
             </button>
           </Tooltip>
         )}
+        <Tooltip content={fileCount > 0 ? 'Open in editor' : 'No changes to open'}>
+          <button
+            onClick={onOpenEditor}
+            disabled={fileCount === 0}
+            className="p-[3px] rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+          >
+            <Maximize2 size={11} strokeWidth={2} />
+          </button>
+        </Tooltip>
       </div>
 
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
