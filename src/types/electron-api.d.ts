@@ -325,6 +325,10 @@ export interface ElectronAPI {
     cwd: string;
     hash: string;
   }) => Promise<IpcResponse<FileChange[]>>;
+  editorListRepoFiles: (args: {
+    cwd: string;
+    source: { kind: 'working' } | { kind: 'commit'; hash: string };
+  }) => Promise<IpcResponse<string[]>>;
 
   // RTK (Rust Token Killer)
   rtkGetStatus: () => Promise<IpcResponse<RtkStatus>>;

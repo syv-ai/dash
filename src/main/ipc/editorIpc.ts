@@ -134,6 +134,45 @@ function statusFromGitCode(code: string): FileChangeStatus {
   return 'modified';
 }
 
+async function listWorkingRepoFiles(cwd: string): Promise<string[]> {
+  const tracked = (
+    await execFileAsync('git', ['ls-files', '-z'], {
+      cwd,
+      maxBuffer: 50 * 1024 * 1024,
+      timeout: 15000,
+    })
+  ).stdout
+    .split('\0')
+    .filter(Boolean);
+  let untracked: string[] = [];
+  try {
+    untracked = (
+      await execFileAsync('git', ['ls-files', '-z', '--others', '--exclude-standard'], {
+        cwd,
+        maxBuffer: 50 * 1024 * 1024,
+        timeout: 15000,
+      })
+    ).stdout
+      .split('\0')
+      .filter(Boolean);
+  } catch {
+    /* no untracked */
+  }
+  // Dedup; tracked + untracked are disjoint already, but be defensive.
+  return Array.from(new Set([...tracked, ...untracked])).sort();
+}
+
+async function listCommitRepoFiles(cwd: string, hash: string): Promise<string[]> {
+  const out = (
+    await execFileAsync('git', ['ls-tree', '-r', '-z', '--name-only', hash], {
+      cwd,
+      maxBuffer: 50 * 1024 * 1024,
+      timeout: 15000,
+    })
+  ).stdout;
+  return out.split('\0').filter(Boolean).sort();
+}
+
 export function registerEditorIpc(): void {
   // ── editor:readWorking ────────────────────────────────────────
   ipcMain.handle(
@@ -403,6 +442,28 @@ export function registerEditorIpc(): void {
           });
         }
         return { success: true, data: files };
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    },
+  );
+
+  // ── editor:listRepoFiles ──────────────────────────────────────
+  // Every file in the repo for the given source (used to render a full repo
+  // tree with diff indicators overlaid). Working: tracked + untracked
+  // (excluding gitignored). Commit: every file at that revision.
+  ipcMain.handle(
+    'editor:listRepoFiles',
+    async (
+      _event,
+      args: { cwd: string; source: { kind: 'working' } | { kind: 'commit'; hash: string } },
+    ): Promise<IpcResponse<string[]>> => {
+      try {
+        const paths =
+          args.source.kind === 'working'
+            ? await listWorkingRepoFiles(args.cwd)
+            : await listCommitRepoFiles(args.cwd, args.source.hash);
+        return { success: true, data: paths };
       } catch (err) {
         return { success: false, error: err instanceof Error ? err.message : String(err) };
       }

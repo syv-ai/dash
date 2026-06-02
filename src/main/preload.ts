@@ -265,6 +265,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('editor:listCommits', args),
   editorListFilesInCommit: (args: { cwd: string; hash: string }) =>
     ipcRenderer.invoke('editor:listFilesInCommit', args),
+  editorListRepoFiles: (args: {
+    cwd: string;
+    source: { kind: 'working' } | { kind: 'commit'; hash: string };
+  }) => ipcRenderer.invoke('editor:listRepoFiles', args),
 
   // RTK (Rust Token Killer)
   rtkGetStatus: () => ipcRenderer.invoke('rtk:getStatus'),

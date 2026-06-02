@@ -534,7 +534,9 @@ export function EditorPane({
               fontSize: 12,
               lineNumbers: 'on',
               glyphMargin: true,
+              scrollBeyondLastLine: false,
               wordWrap: wordWrap ? 'on' : 'off',
+              overviewRulerBorder: false,
             }}
             onMount={handleMount}
           />

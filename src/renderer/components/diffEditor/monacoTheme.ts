@@ -12,20 +12,29 @@ export function defineMonacoThemeFromTerminal(
   isDark: boolean,
   t: XtermTheme,
 ): void {
+  const bg = t.background ?? (isDark ? '#0d0d11' : '#faf8f3');
+  const fg = t.foreground ?? (isDark ? '#f1eee5' : '#1c1b18');
   monaco.editor.defineTheme(themeName, {
     base: isDark ? 'vs-dark' : 'vs',
     inherit: true,
     rules: [],
     colors: {
-      'editor.background': t.background ?? (isDark ? '#0d0d11' : '#faf8f3'),
-      'editor.foreground': t.foreground ?? (isDark ? '#f1eee5' : '#1c1b18'),
+      'editor.background': bg,
+      'editor.foreground': fg,
       'editor.selectionBackground': t.selectionBackground ?? (isDark ? '#2a2f3c' : '#dde2f0'),
       'editor.lineHighlightBackground': isDark ? '#ffffff08' : '#00000008',
-      'editorCursor.foreground': t.cursor ?? t.foreground ?? '#b8c5e0',
+      'editorCursor.foreground': t.cursor ?? fg,
       'editorLineNumber.foreground': isDark ? '#5c607080' : '#4a484280',
-      'editorLineNumber.activeForeground': t.foreground ?? '#f1eee5',
-      'editorWidget.background': t.background ?? (isDark ? '#0d0d11' : '#faf8f3'),
-      'editorGutter.background': t.background ?? (isDark ? '#0d0d11' : '#faf8f3'),
+      'editorLineNumber.activeForeground': fg,
+      'editorWidget.background': bg,
+      // Gutter and overview ruler share the editor's background so there's no
+      // visible strip behind line numbers or the right-side diff minimap.
+      'editorGutter.background': bg,
+      'editorOverviewRuler.background': bg,
+      'editorOverviewRuler.border': '#00000000',
+      'editorGutter.commentRangeForeground': bg,
+      // Soften the diff-only colors a touch but keep them readable.
+      'diffEditor.diagonalFill': '#00000000',
     },
   });
 }

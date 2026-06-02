@@ -1,78 +1,222 @@
-import { useMemo, useState } from 'react';
-import { buildTree } from '../fileChanges/buildTree';
-import type { TreeNode } from '../fileChanges/buildTree';
-import { ChevronDown, ChevronRight, FileText, GitCommit, History } from 'lucide-react';
-import type { CommitSummary, EditorFile, EditorView } from './types';
+import { useMemo, useRef, useState, useEffect } from 'react';
+import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
+import { ChevronDown, ChevronRight, Folder, FolderOpen, GitCommit, History } from 'lucide-react';
+import type { FileChange, FileChangeStatus } from '../../../shared/types';
+import type { CommitSummary, EditorView } from './types';
 
 interface EditorSidebarProps {
-  files: EditorFile[];
+  /** All file paths in the current view's source (whole repo, sorted). */
+  allPaths: string[];
+  /** Subset of paths that have a diff for this view, with status + line stats. */
+  changedFiles: FileChange[];
   filesLoading: boolean;
-  selectedPath: string | null;
+  selectedPath: string;
   onSelectFile: (path: string) => void;
 
   commits: CommitSummary[];
   commitsLoading: boolean;
+  /** Whether to surface the "Working tree" pinned entry in the commits drawer. */
+  showWorkingTreeRow: boolean;
   view: EditorView;
   onSelectView: (view: EditorView) => void;
 }
 
-export function EditorSidebar({
-  files,
-  filesLoading,
-  selectedPath,
-  onSelectFile,
-  commits,
-  commitsLoading,
-  view,
-  onSelectView,
-}: EditorSidebarProps) {
-  const [drawerOpen, setDrawerOpen] = useState(true);
+const COMMITS_DRAWER_KEY = 'diffEditor.commitsDrawerSize';
+
+export function EditorSidebar(props: EditorSidebarProps) {
+  const initialDrawerSize = parseInitial(localStorage.getItem(COMMITS_DRAWER_KEY), 35);
 
   return (
-    <div className="w-72 flex-shrink-0 flex flex-col border-r border-border/40 bg-[hsl(var(--surface-1))] min-h-0">
-      <FileTreePanel
-        files={files}
-        loading={filesLoading}
-        selectedPath={selectedPath}
-        onSelectFile={onSelectFile}
-      />
-      <CommitsDrawer
-        open={drawerOpen}
-        onToggle={() => setDrawerOpen((v) => !v)}
-        commits={commits}
-        loading={commitsLoading}
-        view={view}
-        onSelectView={onSelectView}
-      />
+    <div className="h-full min-h-0 flex flex-col rounded-l-[14px] overflow-hidden right-inspector-shell">
+      <PanelGroup
+        direction="vertical"
+        autoSaveId="diff-editor-sidebar"
+        onLayout={(sizes) => {
+          if (sizes[1] != null) localStorage.setItem(COMMITS_DRAWER_KEY, String(sizes[1]));
+        }}
+      >
+        <Panel minSize={20}>
+          <FileTreePanel
+            paths={props.allPaths}
+            changedFiles={props.changedFiles}
+            loading={props.filesLoading}
+            selectedPath={props.selectedPath}
+            onSelectFile={props.onSelectFile}
+          />
+        </Panel>
+        <PanelResizeHandle className="h-px bg-[hsl(var(--border)/0.5)] hover:bg-[hsl(var(--border))] transition-colors" />
+        <Panel defaultSize={initialDrawerSize} minSize={10} maxSize={70}>
+          <CommitsDrawer
+            commits={props.commits}
+            loading={props.commitsLoading}
+            showWorkingTreeRow={props.showWorkingTreeRow}
+            view={props.view}
+            onSelectView={props.onSelectView}
+          />
+        </Panel>
+      </PanelGroup>
     </div>
   );
 }
 
+function parseInitial(stored: string | null, fallback: number): number {
+  if (!stored) return fallback;
+  const n = parseFloat(stored);
+  return Number.isFinite(n) && n > 0 && n < 100 ? n : fallback;
+}
+
 // ── File tree ────────────────────────────────────────────────
 
+interface TreeFile {
+  name: string;
+  fullPath: string;
+  change: FileChange | null;
+}
+
+interface TreeFolder {
+  name: string;
+  fullPath: string;
+  children: Map<string, TreeFolder>;
+  files: TreeFile[];
+  changedCount: number;
+  dominantStatus: FileChangeStatus | null;
+}
+
+const STATUS_PRIORITY: FileChangeStatus[] = [
+  'conflicted',
+  'modified',
+  'deleted',
+  'renamed',
+  'added',
+  'untracked',
+];
+
+function newFolder(name: string, fullPath: string): TreeFolder {
+  return {
+    name,
+    fullPath,
+    children: new Map(),
+    files: [],
+    changedCount: 0,
+    dominantStatus: null,
+  };
+}
+
+function buildRepoTree(paths: string[], changedFiles: FileChange[]): TreeFolder {
+  const changedByPath = new Map<string, FileChange>();
+  for (const f of changedFiles) changedByPath.set(f.path, f);
+
+  // Use the union of repo paths and changed paths (e.g. deleted files may not
+  // be in `paths` for the working view but are still in changedFiles).
+  const all = new Set<string>(paths);
+  for (const f of changedFiles) all.add(f.path);
+
+  const root = newFolder('', '');
+  for (const p of Array.from(all).sort()) {
+    const parts = p.split('/');
+    let node = root;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const seg = parts[i];
+      let child = node.children.get(seg);
+      if (!child) {
+        const childPath = node.fullPath ? `${node.fullPath}/${seg}` : seg;
+        child = newFolder(seg, childPath);
+        node.children.set(seg, child);
+      }
+      node = child;
+    }
+    node.files.push({
+      name: parts[parts.length - 1],
+      fullPath: p,
+      change: changedByPath.get(p) ?? null,
+    });
+  }
+
+  function aggregate(node: TreeFolder) {
+    const statuses = new Set<FileChangeStatus>();
+    let changed = 0;
+    for (const file of node.files) {
+      if (file.change) {
+        statuses.add(file.change.status);
+        changed++;
+      }
+    }
+    for (const child of node.children.values()) {
+      aggregate(child);
+      changed += child.changedCount;
+      if (child.dominantStatus) statuses.add(child.dominantStatus);
+    }
+    node.changedCount = changed;
+    node.dominantStatus = pickDominant(statuses);
+  }
+  aggregate(root);
+  return root;
+}
+
+function pickDominant(statuses: Set<FileChangeStatus>): FileChangeStatus | null {
+  if (statuses.size === 0) return null;
+  for (const s of STATUS_PRIORITY) if (statuses.has(s)) return s;
+  return null;
+}
+
+const STATUS_LABEL: Record<FileChangeStatus, string> = {
+  modified: 'M',
+  added: 'A',
+  deleted: 'D',
+  renamed: 'R',
+  untracked: 'U',
+  conflicted: 'C',
+};
+
+const STATUS_TEXT: Record<FileChangeStatus, string> = {
+  modified: 'text-[hsl(var(--git-modified))]',
+  added: 'text-[hsl(var(--git-added))]',
+  deleted: 'text-[hsl(var(--git-deleted))]',
+  renamed: 'text-[hsl(var(--git-renamed))]',
+  untracked: 'text-[hsl(var(--git-untracked))]',
+  conflicted: 'text-[hsl(var(--git-conflicted))]',
+};
+
+const FOLDER_TINT: Record<FileChangeStatus, string> = {
+  modified: 'text-[hsl(var(--git-modified)/0.85)]',
+  added: 'text-[hsl(var(--git-added)/0.85)]',
+  deleted: 'text-[hsl(var(--git-deleted)/0.85)]',
+  renamed: 'text-[hsl(var(--git-renamed)/0.85)]',
+  untracked: 'text-[hsl(var(--git-untracked))]',
+  conflicted: 'text-[hsl(var(--git-conflicted)/0.85)]',
+};
+
 interface FileTreePanelProps {
-  files: EditorFile[];
+  paths: string[];
+  changedFiles: FileChange[];
   loading: boolean;
-  selectedPath: string | null;
+  selectedPath: string;
   onSelectFile: (path: string) => void;
 }
 
-function FileTreePanel({ files, loading, selectedPath, onSelectFile }: FileTreePanelProps) {
-  const tree = useMemo(() => buildTree(files), [files]);
+function FileTreePanel({
+  paths,
+  changedFiles,
+  loading,
+  selectedPath,
+  onSelectFile,
+}: FileTreePanelProps) {
+  const tree = useMemo(() => buildRepoTree(paths, changedFiles), [paths, changedFiles]);
   return (
-    <div className="flex-1 min-h-0 flex flex-col">
-      <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-mono flex items-center justify-between">
+    <div className="h-full min-h-0 flex flex-col">
+      <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-mono flex items-center justify-between flex-shrink-0">
         <span>
-          Files {files.length > 0 && <span className="tabular-nums">· {files.length}</span>}
+          Files{' '}
+          {tree.changedCount > 0 && (
+            <span className="tabular-nums">· {tree.changedCount} changed</span>
+          )}
         </span>
       </div>
-      <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable] pb-2">
-        {loading && files.length === 0 ? (
+      <div className="flex-1 min-h-0 overflow-y-auto [scrollbar-gutter:stable] pb-2 px-1">
+        {loading && paths.length === 0 ? (
           <div className="px-3 py-2 text-[11px] text-muted-foreground/40">Loading…</div>
-        ) : files.length === 0 ? (
-          <div className="px-3 py-2 text-[11px] text-muted-foreground/40">No changes</div>
         ) : (
-          <TreeRows
+          <FolderContents
             node={tree}
             indent={0}
             selectedPath={selectedPath}
@@ -84,159 +228,259 @@ function FileTreePanel({ files, loading, selectedPath, onSelectFile }: FileTreeP
   );
 }
 
-interface TreeRowsProps {
-  node: TreeNode;
+interface FolderContentsProps {
+  node: TreeFolder;
   indent: number;
-  selectedPath: string | null;
+  selectedPath: string;
   onSelectFile: (path: string) => void;
 }
 
-function TreeRows({ node, indent, selectedPath, onSelectFile }: TreeRowsProps) {
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+function FolderContents({ node, indent, selectedPath, onSelectFile }: FolderContentsProps) {
+  const childFolders = Array.from(node.children.values()).sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  const childFiles = node.files;
   return (
     <>
-      {Array.from(node.children.values()).map((child) => {
-        const isCollapsed = !!collapsed[child.name];
-        return (
-          <div key={`d-${child.name}`}>
-            <button
-              type="button"
-              onClick={() => setCollapsed((c) => ({ ...c, [child.name]: !c[child.name] }))}
-              className="w-full flex items-center gap-1 px-2 py-1 text-[12px] text-muted-foreground/70 hover:bg-accent/40"
-              style={{ paddingLeft: 8 + indent * 12 }}
-            >
-              {isCollapsed ? (
-                <ChevronRight size={11} strokeWidth={1.8} />
-              ) : (
-                <ChevronDown size={11} strokeWidth={1.8} />
-              )}
-              <span className="truncate">{child.name}</span>
-            </button>
-            {!isCollapsed && (
-              <TreeRows
-                node={child}
-                indent={indent + 1}
-                selectedPath={selectedPath}
-                onSelectFile={onSelectFile}
-              />
-            )}
-          </div>
-        );
-      })}
-      {node.files.map((file) => {
-        const isSelected = file.path === selectedPath;
-        return (
-          <button
-            key={`f-${file.path}`}
-            type="button"
-            onClick={() => onSelectFile(file.path)}
-            className={`w-full flex items-center gap-1.5 px-2 py-1 text-[12px] text-left ${
-              isSelected ? 'bg-primary/15 text-primary' : 'text-foreground/80 hover:bg-accent/40'
-            }`}
-            style={{ paddingLeft: 8 + indent * 12 }}
-            title={file.path}
-          >
-            <FileText size={11} strokeWidth={1.8} className="flex-shrink-0 opacity-60" />
-            <span className="truncate flex-1">{basename(file.path)}</span>
-            {(file.additions > 0 || file.deletions > 0) && (
-              <span className="text-[10px] font-mono tabular-nums flex-shrink-0">
-                {file.additions > 0 && (
-                  <span className="text-[hsl(var(--git-added))]">+{file.additions}</span>
-                )}
-                {file.deletions > 0 && (
-                  <span className="text-[hsl(var(--git-deleted))] ml-0.5">-{file.deletions}</span>
-                )}
-              </span>
-            )}
-          </button>
-        );
-      })}
+      {childFolders.map((child) => (
+        <FolderEntry
+          key={`d-${child.fullPath}`}
+          folder={child}
+          indent={indent}
+          selectedPath={selectedPath}
+          onSelectFile={onSelectFile}
+        />
+      ))}
+      {childFiles.map((file) => (
+        <FileEntry
+          key={`f-${file.fullPath}`}
+          file={file}
+          indent={indent}
+          selected={file.fullPath === selectedPath}
+          onClick={() => onSelectFile(file.fullPath)}
+        />
+      ))}
     </>
   );
 }
 
-function basename(p: string): string {
-  const idx = p.lastIndexOf('/');
-  return idx === -1 ? p : p.slice(idx + 1);
+function FolderEntry({
+  folder,
+  indent,
+  selectedPath,
+  onSelectFile,
+}: {
+  folder: TreeFolder;
+  indent: number;
+  selectedPath: string;
+  onSelectFile: (path: string) => void;
+}) {
+  // Default-open if any descendant is the current selection or changed.
+  const [open, setOpen] = useState<boolean>(() => folder.changedCount > 0);
+  const tint = folder.dominantStatus
+    ? FOLDER_TINT[folder.dominantStatus]
+    : 'text-muted-foreground/75';
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full group flex items-center gap-1.5 py-1 rounded-md text-[12px] hover:bg-[hsl(var(--surface-2)/0.6)] transition-colors"
+        style={{ paddingLeft: 8 + indent * 12, paddingRight: 8 }}
+      >
+        {open ? (
+          <ChevronDown
+            size={11}
+            strokeWidth={1.8}
+            className="text-muted-foreground/50 flex-shrink-0"
+          />
+        ) : (
+          <ChevronRight
+            size={11}
+            strokeWidth={1.8}
+            className="text-muted-foreground/50 flex-shrink-0"
+          />
+        )}
+        <span
+          className={`flex-shrink-0 w-[14px] h-[14px] inline-flex items-center justify-center ${tint}`}
+        >
+          {open ? (
+            <FolderOpen size={13} strokeWidth={1.8} />
+          ) : (
+            <Folder size={13} strokeWidth={1.8} />
+          )}
+        </span>
+        <span className="flex-1 min-w-0 font-mono text-[11.5px] truncate text-foreground/90 text-left">
+          {folder.name}
+        </span>
+        {folder.changedCount > 0 && (
+          <span className="min-w-[18px] h-[16px] flex items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary tabular-nums px-1 flex-shrink-0">
+            {folder.changedCount}
+          </span>
+        )}
+      </button>
+      {open && (
+        <FolderContents
+          node={folder}
+          indent={indent + 1}
+          selectedPath={selectedPath}
+          onSelectFile={onSelectFile}
+        />
+      )}
+    </>
+  );
+}
+
+function FileEntry({
+  file,
+  indent,
+  selected,
+  onClick,
+}: {
+  file: TreeFile;
+  indent: number;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  const change = file.change;
+  const isUnchanged = !change;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={file.fullPath}
+      style={{ paddingLeft: 8 + indent * 12, paddingRight: 8 }}
+      className={`w-full group flex items-center gap-2 py-1 rounded-md text-[12px] transition-colors ${
+        selected
+          ? 'bg-primary/15 text-primary'
+          : 'text-foreground/85 hover:bg-[hsl(var(--surface-2)/0.6)]'
+      }`}
+    >
+      {/* Indent guide */}
+      <span className="w-[14px] flex-shrink-0" />
+      {change ? (
+        <span
+          className={`font-mono text-[10px] font-semibold w-3.5 text-center flex-shrink-0 ${STATUS_TEXT[change.status]}`}
+        >
+          {STATUS_LABEL[change.status]}
+        </span>
+      ) : (
+        <span className="w-3.5 flex-shrink-0" />
+      )}
+      <span
+        className={`flex-1 min-w-0 font-mono text-[11.5px] truncate text-left ${
+          isUnchanged && !selected ? 'text-muted-foreground/60' : ''
+        }`}
+      >
+        {file.name}
+      </span>
+      {change && (change.additions > 0 || change.deletions > 0) && (
+        <span className="font-mono text-[10.5px] flex gap-1.5 flex-shrink-0">
+          {change.additions > 0 && (
+            <span
+              className={
+                change.status === 'untracked'
+                  ? 'text-muted-foreground'
+                  : 'text-[hsl(var(--git-added))]'
+              }
+            >
+              +{change.additions}
+            </span>
+          )}
+          {change.deletions > 0 && (
+            <span className="text-[hsl(var(--git-deleted))]">−{change.deletions}</span>
+          )}
+        </span>
+      )}
+    </button>
+  );
 }
 
 // ── Commits drawer ───────────────────────────────────────────
 
 interface CommitsDrawerProps {
-  open: boolean;
-  onToggle: () => void;
   commits: CommitSummary[];
   loading: boolean;
+  showWorkingTreeRow: boolean;
   view: EditorView;
   onSelectView: (view: EditorView) => void;
 }
 
 function CommitsDrawer({
-  open,
-  onToggle,
   commits,
   loading,
+  showWorkingTreeRow,
   view,
   onSelectView,
 }: CommitsDrawerProps) {
   const workingActive = view.kind === 'working';
   const activeCommitHash = view.kind === 'commit' ? view.hash : null;
 
+  // Auto-scroll active commit into view when the view changes.
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!listRef.current) return;
+    const el = listRef.current.querySelector('[data-active="true"]') as HTMLElement | null;
+    if (el) el.scrollIntoView({ block: 'nearest' });
+  }, [view]);
+
   return (
-    <div className="flex-shrink-0 border-t border-border/40 bg-[hsl(var(--surface-2))]">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="w-full flex items-center gap-2 px-3 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-mono hover:bg-accent/30"
-      >
-        {open ? (
-          <ChevronDown size={11} strokeWidth={1.8} />
-        ) : (
-          <ChevronRight size={11} strokeWidth={1.8} />
-        )}
+    <div className="h-full min-h-0 flex flex-col bg-[hsl(var(--surface-1)/0.45)]">
+      <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-mono flex items-center gap-1.5 flex-shrink-0">
         <History size={11} strokeWidth={1.8} />
         <span>Commits</span>
         {commits.length > 0 && <span className="ml-auto tabular-nums">{commits.length}</span>}
-      </button>
-      {open && (
-        <div className="max-h-60 overflow-y-auto [scrollbar-gutter:stable] py-1">
+      </div>
+      <div
+        ref={listRef}
+        className="flex-1 min-h-0 overflow-y-auto [scrollbar-gutter:stable] pb-2 px-1"
+      >
+        {showWorkingTreeRow && (
           <button
             type="button"
+            data-active={workingActive}
             onClick={() => onSelectView({ kind: 'working', ref: 'HEAD' })}
-            className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left ${
-              workingActive ? 'bg-primary/15 text-primary' : 'text-foreground/80 hover:bg-accent/40'
+            className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-[12px] text-left transition-colors ${
+              workingActive
+                ? 'bg-primary/15 text-primary'
+                : 'text-foreground/85 hover:bg-[hsl(var(--surface-2)/0.6)]'
             }`}
           >
-            <GitCommit size={11} strokeWidth={1.8} className="opacity-60" />
-            <span className="truncate flex-1">Working tree</span>
+            <GitCommit size={11} strokeWidth={1.8} className="opacity-60 flex-shrink-0" />
+            <span className="truncate flex-1 font-mono text-[11.5px]">Working tree</span>
           </button>
-          {loading && commits.length === 0 && (
-            <div className="px-3 py-2 text-[11px] text-muted-foreground/40">Loading…</div>
-          )}
-          {commits.map((c) => {
-            const active = activeCommitHash === c.hash;
-            return (
-              <button
-                key={c.hash}
-                type="button"
-                onClick={() => onSelectView({ kind: 'commit', hash: c.hash })}
-                title={`${c.shortHash}  ${c.authorName}  ${relativeTime(c.authorDate)}`}
-                className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left ${
-                  active ? 'bg-primary/15 text-primary' : 'text-foreground/80 hover:bg-accent/40'
-                }`}
-              >
-                <span className="text-[10px] font-mono text-muted-foreground/60 tabular-nums flex-shrink-0">
-                  {c.shortHash}
-                </span>
-                <span className="truncate flex-1">{c.subject || '(no subject)'}</span>
-                <span className="text-[10px] text-muted-foreground/40 flex-shrink-0 tabular-nums">
-                  {relativeTime(c.authorDate)}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
+        )}
+        {loading && commits.length === 0 && (
+          <div className="px-3 py-2 text-[11px] text-muted-foreground/40">Loading…</div>
+        )}
+        {commits.map((c) => {
+          const active = activeCommitHash === c.hash;
+          return (
+            <button
+              key={c.hash}
+              type="button"
+              data-active={active}
+              onClick={() => onSelectView({ kind: 'commit', hash: c.hash })}
+              title={`${c.shortHash}  ${c.authorName}  ${relativeTime(c.authorDate)}`}
+              className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-[12px] text-left transition-colors ${
+                active
+                  ? 'bg-primary/15 text-primary'
+                  : 'text-foreground/85 hover:bg-[hsl(var(--surface-2)/0.6)]'
+              }`}
+            >
+              <span className="text-[10px] font-mono text-muted-foreground/60 tabular-nums flex-shrink-0">
+                {c.shortHash}
+              </span>
+              <span className="truncate flex-1 font-mono text-[11.5px]">
+                {c.subject || '(no subject)'}
+              </span>
+              <span className="text-[10px] text-muted-foreground/40 flex-shrink-0 tabular-nums">
+                {relativeTime(c.authorDate)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import type { ITheme as XtermTheme } from 'xterm';
 import { Modal } from '../ui/Modal';
 import type { FileChange, GitStatus } from '../../../shared/types';
@@ -12,8 +13,8 @@ interface DiffEditorProps {
   initialFilePath: string;
   /** Whether the clicked file was the staged version. Used only when initialView is omitted. */
   initialStaged: boolean;
-  /** Initial view. Defaults to working tree at HEAD/index. Pass `{kind:'commit', hash:'HEAD'}` to
-   *  open at the latest commit (the editor resolves the sentinel once commits load). */
+  /** Initial view. Defaults to working tree at HEAD/index. Pass `{kind:'commit', hash:'HEAD'}`
+   *  to open at the latest commit (the editor resolves the sentinel once commits load). */
   initialView?: EditorView;
   /** Working-tree git status the project already has — seeds the sidebar without a round-trip. */
   gitStatus: GitStatus | null;
@@ -47,7 +48,7 @@ function DiffEditorBody({
   );
   const [selectedPath, setSelectedPath] = useState<string>(initialFilePath);
 
-  // ── Files for the current view ──────────────────────────
+  // ── Changed files in the current view ───────────────────
   const [commitFiles, setCommitFiles] = useState<FileChange[]>([]);
   const [commitFilesLoading, setCommitFilesLoading] = useState(false);
 
@@ -61,7 +62,6 @@ function DiffEditorBody({
         if (cancelled) return;
         if (resp.success && resp.data) {
           setCommitFiles(resp.data);
-          // If the current selection is not in this commit, jump to the first.
           if (resp.data.length > 0 && !resp.data.some((f) => f.path === selectedPath)) {
             setSelectedPath(resp.data[0].path);
           }
@@ -73,11 +73,38 @@ function DiffEditorBody({
     return () => {
       cancelled = true;
     };
-  }, [view, cwd]);
+  }, [view, cwd, selectedPath]);
 
   const workingFiles: FileChange[] = useMemo(() => gitStatus?.files ?? [], [gitStatus]);
-  const files = view.kind === 'working' ? workingFiles : commitFiles;
-  const filesLoading = view.kind === 'commit' ? commitFilesLoading : false;
+  const changedFiles = view.kind === 'working' ? workingFiles : commitFiles;
+  const changedFilesLoading = view.kind === 'commit' ? commitFilesLoading : false;
+
+  // ── All repo paths for the current view (for the full tree) ───
+  const [repoPaths, setRepoPaths] = useState<string[]>([]);
+  const [repoPathsLoading, setRepoPathsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRepoPathsLoading(true);
+    const source =
+      view.kind === 'working'
+        ? ({ kind: 'working' } as const)
+        : ({ kind: 'commit', hash: view.hash } as const);
+    void window.electronAPI
+      .editorListRepoFiles({ cwd, source })
+      .then((resp) => {
+        if (cancelled) return;
+        if (resp.success && resp.data) {
+          setRepoPaths(resp.data);
+        } else {
+          setRepoPaths([]);
+        }
+      })
+      .finally(() => !cancelled && setRepoPathsLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [view, cwd]);
 
   // ── Commits list ─────────────────────────────────────────
   const [commits, setCommits] = useState<CommitSummary[]>([]);
@@ -118,36 +145,44 @@ function DiffEditorBody({
     };
   }, [cwd]);
 
-  // When the view changes to working, ensure the selected file still exists in the working tree.
-  // selectedPath intentionally omitted from deps so user clicks don't trigger reselection.
+  // When the view changes to working, ensure the selected file is in the tree.
   useEffect(() => {
     if (view.kind !== 'working') return;
-    if (files.length === 0) return;
-    setSelectedPath((cur) => (files.some((f) => f.path === cur) ? cur : files[0].path));
-  }, [view.kind, files]);
+    if (changedFiles.length === 0) return;
+    setSelectedPath((cur) =>
+      changedFiles.some((f) => f.path === cur) ? cur : changedFiles[0].path,
+    );
+  }, [view.kind, changedFiles]);
 
   return (
-    <div className="flex h-full min-h-0">
-      <EditorSidebar
-        files={files}
-        filesLoading={filesLoading}
-        selectedPath={selectedPath}
-        onSelectFile={setSelectedPath}
-        commits={commits}
-        commitsLoading={commitsLoading}
-        view={view}
-        onSelectView={setView}
-      />
-      <EditorPane
-        cwd={cwd}
-        filePath={selectedPath}
-        view={view}
-        activeTaskId={activeTaskId}
-        terminalTheme={terminalTheme}
-        isDark={isDark}
-        onClose={onClose}
-      />
-    </div>
+    <PanelGroup direction="horizontal" autoSaveId="diff-editor-shell" className="h-full">
+      <Panel defaultSize={22} minSize={14} maxSize={45}>
+        <EditorSidebar
+          allPaths={repoPaths}
+          changedFiles={changedFiles}
+          filesLoading={repoPathsLoading || changedFilesLoading}
+          selectedPath={selectedPath}
+          onSelectFile={setSelectedPath}
+          commits={commits}
+          commitsLoading={commitsLoading}
+          showWorkingTreeRow={workingFiles.length > 0}
+          view={view}
+          onSelectView={setView}
+        />
+      </Panel>
+      <PanelResizeHandle className="w-px bg-[hsl(var(--border)/0.5)] hover:bg-[hsl(var(--border))] transition-colors" />
+      <Panel minSize={40}>
+        <EditorPane
+          cwd={cwd}
+          filePath={selectedPath}
+          view={view}
+          activeTaskId={activeTaskId}
+          terminalTheme={terminalTheme}
+          isDark={isDark}
+          onClose={onClose}
+        />
+      </Panel>
+    </PanelGroup>
   );
 }
 
