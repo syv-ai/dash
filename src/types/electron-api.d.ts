@@ -29,8 +29,11 @@ import type {
   SkillsSearchArgs,
   SkillsRegistryMeta,
   InstalledSkillsResult,
-  ReadFileForEditResult,
-  WriteFileWorkingCopyResult,
+  EditorReadWorkingResult,
+  EditorReadCommitResult,
+  EditorWriteResult,
+  CommitNode,
+  FileChange,
 } from '../shared/types';
 import type { ParsedSessionMessage, SessionMetrics, SessionUpdate } from '../shared/sessionTypes';
 
@@ -299,19 +302,29 @@ export interface ElectronAPI {
   gitUnwatch: (id: string) => Promise<IpcResponse<void>>;
   onGitFileChanged: (callback: (id: string) => void) => () => void;
 
-  // Files (read/write through main process for the inline editor)
-  readFileForEdit: (args: {
+  // Diff editor (read/write through main process; commit browsing)
+  editorReadWorking: (args: {
     cwd: string;
     filePath: string;
     ref: 'HEAD' | 'index';
-  }) => Promise<IpcResponse<ReadFileForEditResult>>;
-  writeFileWorkingCopy: (args: {
+  }) => Promise<IpcResponse<EditorReadWorkingResult>>;
+  editorReadCommit: (args: {
+    cwd: string;
+    filePath: string;
+    hash: string;
+  }) => Promise<IpcResponse<EditorReadCommitResult>>;
+  editorWriteWorking: (args: {
     cwd: string;
     filePath: string;
     content: string;
     expectedMtimeMs: number;
     expectedSizeBytes: number;
-  }) => Promise<IpcResponse<WriteFileWorkingCopyResult>>;
+  }) => Promise<IpcResponse<EditorWriteResult>>;
+  editorListCommits: (args: { cwd: string; limit?: number }) => Promise<IpcResponse<CommitNode[]>>;
+  editorListFilesInCommit: (args: {
+    cwd: string;
+    hash: string;
+  }) => Promise<IpcResponse<FileChange[]>>;
 
   // RTK (Rust Token Killer)
   rtkGetStatus: () => Promise<IpcResponse<RtkStatus>>;

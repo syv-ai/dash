@@ -537,21 +537,31 @@ export type RtkTestOutcome =
   // correctness signal — its absence/failure does not invalidate the rewrite.
   | { kind: 'rewritten'; rewrittenCommand: string; execDiff?: RtkExecDiff };
 
-// ── File editor IPC ───────────────────────────────────────────
+// ── Diff editor IPC ───────────────────────────────────────────
 
-/** Reference for the "original" side of the diff: HEAD or staged index. */
-export type FileRef = 'HEAD' | 'index';
+/** Reference for the "original" side of a working-tree diff: HEAD or staged index. */
+export type WorkingRef = 'HEAD' | 'index';
 
-export interface ReadFileForEditResult {
-  headContent: string; // '' for untracked / new files
+/** Working-tree read: original (HEAD/index) + working copy with disk metadata. */
+export interface EditorReadWorkingResult {
+  originalContent: string; // '' for untracked / new files
   workingContent: string | null; // null when the file is deleted on disk
   mtimeMs: number; // 0 when working file is absent
   sizeBytes: number; // 0 when working file is absent
-  isBinary: boolean; // true → both content fields are ''
-  isLargeFile: boolean; // true → both content fields are ''
-  language: string; // detected from extension; '' fallback
+  isBinary: boolean; // true → content fields are ''
+  isLargeFile: boolean; // true → content fields are ''
+  language: string; // Monaco language id; '' fallback
 }
 
-export type WriteFileWorkingCopyResult =
+/** Commit read: parent (original) vs commit (modified). No disk metadata; read-only. */
+export interface EditorReadCommitResult {
+  originalContent: string; // parent commit's content; '' for root commit / added files
+  modifiedContent: string; // this commit's content; '' for deleted files
+  isBinary: boolean;
+  isLargeFile: boolean;
+  language: string;
+}
+
+export type EditorWriteResult =
   | { ok: true; mtimeMs: number; sizeBytes: number }
   | { ok: false; stale: true; currentMtimeMs: number; currentSizeBytes: number };

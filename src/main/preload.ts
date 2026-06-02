@@ -249,16 +249,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 
-  // Files (read/write through main process for the inline editor)
-  readFileForEdit: (args: { cwd: string; filePath: string; ref: 'HEAD' | 'index' }) =>
-    ipcRenderer.invoke('files:readForEdit', args),
-  writeFileWorkingCopy: (args: {
+  // Diff editor
+  editorReadWorking: (args: { cwd: string; filePath: string; ref: 'HEAD' | 'index' }) =>
+    ipcRenderer.invoke('editor:readWorking', args),
+  editorReadCommit: (args: { cwd: string; filePath: string; hash: string }) =>
+    ipcRenderer.invoke('editor:readCommit', args),
+  editorWriteWorking: (args: {
     cwd: string;
     filePath: string;
     content: string;
     expectedMtimeMs: number;
     expectedSizeBytes: number;
-  }) => ipcRenderer.invoke('files:writeWorkingCopy', args),
+  }) => ipcRenderer.invoke('editor:writeWorking', args),
+  editorListCommits: (args: { cwd: string; limit?: number }) =>
+    ipcRenderer.invoke('editor:listCommits', args),
+  editorListFilesInCommit: (args: { cwd: string; hash: string }) =>
+    ipcRenderer.invoke('editor:listFilesInCommit', args),
 
   // RTK (Rust Token Killer)
   rtkGetStatus: () => ipcRenderer.invoke('rtk:getStatus'),

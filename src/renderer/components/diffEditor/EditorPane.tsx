@@ -1,32 +1,40 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { DiffEditor } from '@monaco-editor/react';
+import { DiffEditor as MonacoDiffEditor } from '@monaco-editor/react';
 import type { editor as monacoEditor } from 'monaco-editor';
 import type { ITheme as XtermTheme } from 'xterm';
 import { X, FileText, WrapText } from 'lucide-react';
-import { Modal, useCloseHandler } from './ui/Modal';
-import type { ReadFileForEditResult } from '../../shared/types';
-import '../monaco-workers';
+import { defineMonacoThemeFromTerminal, themeNameFor } from './monacoTheme';
+import type { EditorView } from './types';
+import '../../monaco-workers';
 
-const WORDWRAP_KEY = 'fileEditor.wordWrap';
-const MONACO_THEME_DARK = 'dash-terminal-dark';
-const MONACO_THEME_LIGHT = 'dash-terminal-light';
+const WORDWRAP_KEY = 'diffEditor.wordWrap';
 
-interface FileEditorViewProps {
-  cwd: string | null;
-  filePath: string | null;
-  /** When true, the original side is the staged index; otherwise it is HEAD. */
-  staged: boolean;
+interface EditorPaneProps {
+  cwd: string;
+  filePath: string;
+  view: EditorView;
   activeTaskId: string | null;
-  /** Resolved terminal theme so the editor matches the terminal exactly. */
   terminalTheme: XtermTheme;
   isDark: boolean;
   onClose: () => void;
+  /** Confirm-before-close (e.g. if the host has unsaved changes elsewhere). */
+  guardClose?: () => boolean;
 }
 
 type LoadState =
   | { kind: 'loading' }
   | { kind: 'error'; message: string }
-  | { kind: 'loaded'; data: ReadFileForEditResult };
+  | {
+      kind: 'loaded';
+      originalContent: string;
+      modifiedContent: string; // initial buffer for the modified side
+      mtimeMs: number; // 0 in commit view
+      sizeBytes: number; // 0 in commit view
+      isBinary: boolean;
+      isLargeFile: boolean;
+      language: string;
+      modifiedPresent: boolean; // false when file is deleted on disk (working view)
+    };
 
 interface Comment {
   id: string;
@@ -39,61 +47,26 @@ interface StaleInfo {
   currentSizeBytes: number;
 }
 
-function defineMonacoThemeFromTerminal(
-  monaco: typeof import('monaco-editor'),
-  themeName: string,
-  isDark: boolean,
-  t: XtermTheme,
-): void {
-  monaco.editor.defineTheme(themeName, {
-    base: isDark ? 'vs-dark' : 'vs',
-    inherit: true,
-    rules: [],
-    colors: {
-      'editor.background': t.background ?? (isDark ? '#0d0d11' : '#faf8f3'),
-      'editor.foreground': t.foreground ?? (isDark ? '#f1eee5' : '#1c1b18'),
-      'editor.selectionBackground': t.selectionBackground ?? (isDark ? '#2a2f3c' : '#dde2f0'),
-      'editor.lineHighlightBackground': isDark ? '#ffffff08' : '#00000008',
-      'editorCursor.foreground': t.cursor ?? t.foreground ?? '#b8c5e0',
-      'editorLineNumber.foreground': isDark ? '#5c607080' : '#4a484280',
-      'editorLineNumber.activeForeground': t.foreground ?? '#f1eee5',
-      'editorWidget.background': t.background ?? (isDark ? '#0d0d11' : '#faf8f3'),
-      'editorGutter.background': t.background ?? (isDark ? '#0d0d11' : '#faf8f3'),
-    },
-  });
-}
-
-export function FileEditorView(props: FileEditorViewProps) {
-  return (
-    <Modal onClose={props.onClose} size="w-[92vw] max-w-5xl h-[85vh]">
-      <FileEditorBody {...props} />
-    </Modal>
-  );
-}
-
-function FileEditorBody({
+export function EditorPane({
   cwd,
   filePath,
-  staged,
+  view,
   activeTaskId,
   terminalTheme,
   isDark,
   onClose,
-}: FileEditorViewProps) {
-  const close = useCloseHandler(onClose);
+}: EditorPaneProps) {
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [draft, setDraft] = useState<string>('');
-  const [loadedWorking, setLoadedWorking] = useState<string>('');
-  const [mtimeMs, setMtimeMs] = useState<number>(0);
-  const [sizeBytes, setSizeBytes] = useState<number>(0);
+  const [loadedBuffer, setLoadedBuffer] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [savedPill, setSavedPill] = useState(false);
   const [stale, setStale] = useState<StaleInfo | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [pendingRange, setPendingRange] = useState<{ start: number; end: number } | null>(null);
-  const [wordWrap, setWordWrap] = useState<boolean>(() => {
-    return localStorage.getItem(WORDWRAP_KEY) === 'on';
-  });
+  const [wordWrap, setWordWrap] = useState<boolean>(
+    () => localStorage.getItem(WORDWRAP_KEY) === 'on',
+  );
 
   const editorRef = useRef<monacoEditor.IStandaloneDiffEditor | null>(null);
   const monacoRef = useRef<typeof import('monaco-editor') | null>(null);
@@ -102,45 +75,83 @@ function FileEditorBody({
   const dragRef = useRef<{ startLine: number } | null>(null);
   const saveCmdRef = useRef<(() => void) | null>(null);
 
-  const dirty = draft !== loadedWorking;
+  const themeName = themeNameFor(isDark);
+  const isCommitView = view.kind === 'commit';
+  const dirty = !isCommitView && draft !== loadedBuffer;
   const editable =
+    !isCommitView &&
     state.kind === 'loaded' &&
-    !state.data.isBinary &&
-    !state.data.isLargeFile &&
-    state.data.workingContent !== null;
-  const themeName = isDark ? MONACO_THEME_DARK : MONACO_THEME_LIGHT;
+    !state.isBinary &&
+    !state.isLargeFile &&
+    state.modifiedPresent;
 
-  // ── Load file ────────────────────────────────────────────
+  // ── Load file when key changes ───────────────────────────
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      if (!cwd || !filePath) return;
       setState({ kind: 'loading' });
-      const resp = await window.electronAPI.readFileForEdit({
-        cwd,
-        filePath,
-        ref: staged ? 'index' : 'HEAD',
-      });
-      if (cancelled) return;
-      if (!resp.success || !resp.data) {
-        setState({ kind: 'error', message: resp.error ?? 'Failed to load file' });
-        return;
+      if (view.kind === 'working') {
+        const resp = await window.electronAPI.editorReadWorking({
+          cwd,
+          filePath,
+          ref: view.ref,
+        });
+        if (cancelled) return;
+        if (!resp.success || !resp.data) {
+          setState({ kind: 'error', message: resp.error ?? 'Failed to load file' });
+          return;
+        }
+        const modifiedPresent = resp.data.workingContent !== null;
+        const initial = resp.data.workingContent ?? '';
+        setState({
+          kind: 'loaded',
+          originalContent: resp.data.originalContent,
+          modifiedContent: initial,
+          mtimeMs: resp.data.mtimeMs,
+          sizeBytes: resp.data.sizeBytes,
+          isBinary: resp.data.isBinary,
+          isLargeFile: resp.data.isLargeFile,
+          language: resp.data.language,
+          modifiedPresent,
+        });
+        setLoadedBuffer(initial);
+        setDraft(initial);
+      } else {
+        const resp = await window.electronAPI.editorReadCommit({
+          cwd,
+          filePath,
+          hash: view.hash,
+        });
+        if (cancelled) return;
+        if (!resp.success || !resp.data) {
+          setState({ kind: 'error', message: resp.error ?? 'Failed to load file' });
+          return;
+        }
+        setState({
+          kind: 'loaded',
+          originalContent: resp.data.originalContent,
+          modifiedContent: resp.data.modifiedContent,
+          mtimeMs: 0,
+          sizeBytes: 0,
+          isBinary: resp.data.isBinary,
+          isLargeFile: resp.data.isLargeFile,
+          language: resp.data.language,
+          modifiedPresent: true,
+        });
+        setLoadedBuffer(resp.data.modifiedContent);
+        setDraft(resp.data.modifiedContent);
       }
-      setState({ kind: 'loaded', data: resp.data });
-      setLoadedWorking(resp.data.workingContent ?? '');
-      setDraft(resp.data.workingContent ?? '');
-      setMtimeMs(resp.data.mtimeMs);
-      setSizeBytes(resp.data.sizeBytes);
       setComments([]);
       setPendingRange(null);
+      setStale(null);
     }
     void load();
     return () => {
       cancelled = true;
     };
-  }, [cwd, filePath, staged]);
+  }, [cwd, filePath, view]);
 
-  // ── Re-define Monaco theme when the terminal theme changes ──────
+  // ── Re-apply Monaco theme on terminal-theme change ──────
   useEffect(() => {
     const monaco = monacoRef.current;
     if (!monaco) return;
@@ -148,23 +159,22 @@ function FileEditorBody({
     monaco.editor.setTheme(themeName);
   }, [themeName, isDark, terminalTheme]);
 
-  // ── Persist word-wrap preference ────────────────────────
   useEffect(() => {
     localStorage.setItem(WORDWRAP_KEY, wordWrap ? 'on' : 'off');
   }, [wordWrap]);
 
-  // ── Save flow ───────────────────────────────────────────
+  // ── Save flow (working view only) ───────────────────────
   const save = useCallback(async () => {
-    if (!cwd || !filePath) return;
-    if (draft === loadedWorking) return;
+    if (isCommitView || state.kind !== 'loaded') return;
+    if (draft === loadedBuffer) return;
     setSaving(true);
     try {
-      const resp = await window.electronAPI.writeFileWorkingCopy({
+      const resp = await window.electronAPI.editorWriteWorking({
         cwd,
         filePath,
         content: draft,
-        expectedMtimeMs: mtimeMs,
-        expectedSizeBytes: sizeBytes,
+        expectedMtimeMs: state.mtimeMs,
+        expectedSizeBytes: state.sizeBytes,
       });
       if (!resp.success || !resp.data) {
         setStale({ currentMtimeMs: 0, currentSizeBytes: 0 });
@@ -177,47 +187,55 @@ function FileEditorBody({
         });
         return;
       }
-      setLoadedWorking(draft);
-      setMtimeMs(resp.data.mtimeMs);
-      setSizeBytes(resp.data.sizeBytes);
+      setLoadedBuffer(draft);
+      setState({ ...state, mtimeMs: resp.data.mtimeMs, sizeBytes: resp.data.sizeBytes });
       setStale(null);
       setSavedPill(true);
       window.setTimeout(() => setSavedPill(false), 1000);
     } finally {
       setSaving(false);
     }
-  }, [cwd, filePath, draft, loadedWorking, mtimeMs, sizeBytes]);
+  }, [cwd, filePath, draft, loadedBuffer, state, isCommitView]);
 
   useEffect(() => {
     saveCmdRef.current = () => void save();
   });
 
   const reloadFromDisk = useCallback(async () => {
-    if (!cwd || !filePath) return;
-    if (draft !== loadedWorking) {
+    if (isCommitView || view.kind !== 'working') return;
+    if (draft !== loadedBuffer) {
       if (!window.confirm('Discard unsaved changes and reload from disk?')) return;
     }
     setStale(null);
-    const resp = await window.electronAPI.readFileForEdit({
+    const resp = await window.electronAPI.editorReadWorking({
       cwd,
       filePath,
-      ref: staged ? 'index' : 'HEAD',
+      ref: view.ref,
     });
     if (!resp.success || !resp.data) return;
-    setState({ kind: 'loaded', data: resp.data });
-    setLoadedWorking(resp.data.workingContent ?? '');
-    setDraft(resp.data.workingContent ?? '');
-    setMtimeMs(resp.data.mtimeMs);
-    setSizeBytes(resp.data.sizeBytes);
-  }, [cwd, filePath, staged, draft, loadedWorking]);
+    const modifiedPresent = resp.data.workingContent !== null;
+    const initial = resp.data.workingContent ?? '';
+    setState({
+      kind: 'loaded',
+      originalContent: resp.data.originalContent,
+      modifiedContent: initial,
+      mtimeMs: resp.data.mtimeMs,
+      sizeBytes: resp.data.sizeBytes,
+      isBinary: resp.data.isBinary,
+      isLargeFile: resp.data.isLargeFile,
+      language: resp.data.language,
+      modifiedPresent,
+    });
+    setLoadedBuffer(initial);
+    setDraft(initial);
+  }, [cwd, filePath, view, draft, loadedBuffer, isCommitView]);
 
   const overwrite = useCallback(async () => {
-    if (!stale) return;
-    setMtimeMs(stale.currentMtimeMs);
-    setSizeBytes(stale.currentSizeBytes);
+    if (!stale || state.kind !== 'loaded') return;
+    setState({ ...state, mtimeMs: stale.currentMtimeMs, sizeBytes: stale.currentSizeBytes });
     setStale(null);
     setTimeout(() => void save(), 0);
-  }, [stale, save]);
+  }, [stale, save, state]);
 
   // ── Editor mount + selection mechanic ──────────────────
   function handleMount(
@@ -233,7 +251,7 @@ function FileEditorBody({
     const modified = editor.getModifiedEditor();
 
     modified.onDidChangeModelContent(() => {
-      setDraft(modified.getValue());
+      if (!isCommitView) setDraft(modified.getValue());
     });
 
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
@@ -246,9 +264,8 @@ function FileEditorBody({
         t.type !== monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS &&
         t.type !== monaco.editor.MouseTargetType.GUTTER_LINE_DECORATIONS &&
         t.type !== monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN
-      ) {
+      )
         return;
-      }
       const line = t.position?.lineNumber;
       if (!line) return;
       dragRef.current = { startLine: line };
@@ -269,7 +286,7 @@ function FileEditorBody({
     editor.onDidDispose(() => window.removeEventListener('mouseup', onUp));
   }
 
-  // ── Selection decoration refresh ────────────────────────
+  // Selection highlight
   useEffect(() => {
     const editor = editorRef.current?.getModifiedEditor();
     const monaco = monacoRef.current;
@@ -289,7 +306,7 @@ function FileEditorBody({
     ]);
   }, [pendingRange]);
 
-  // ── Comment decoration refresh ──────────────────────────
+  // Comment highlights
   useEffect(() => {
     const editor = editorRef.current?.getModifiedEditor();
     const monaco = monacoRef.current;
@@ -337,13 +354,12 @@ function FileEditorBody({
   }
 
   function buildPromptAndSend() {
-    if (!activeTaskId || !filePath || comments.length === 0) return;
+    if (!activeTaskId || comments.length === 0) return;
     const editor = editorRef.current?.getModifiedEditor();
     const monaco = monacoRef.current;
     const model = editor?.getModel();
     if (!editor || !monaco || !model) return;
-
-    const lang = state.kind === 'loaded' ? state.data.language : '';
+    const lang = state.kind === 'loaded' ? state.language : '';
     const sections = comments.flatMap((c) => {
       const range = model.getDecorationRange(c.decorationId);
       if (!range) return [];
@@ -356,9 +372,8 @@ function FileEditorBody({
       );
       return [`${lineRange}:\n\`\`\`${lang}\n${code}\n\`\`\`\n${c.comment}`];
     });
-
     const prompt = `Comments on file ${filePath}:\n\n${sections.join('\n\n---\n\n')}`;
-    void import('../terminal/SessionRegistry').then(({ sessionRegistry }) => {
+    void import('../../terminal/SessionRegistry').then(({ sessionRegistry }) => {
       const session = sessionRegistry.get(activeTaskId);
       if (session) session.writeInput(prompt);
     });
@@ -366,14 +381,12 @@ function FileEditorBody({
   }
 
   function handleClose() {
-    if (dirty) {
-      if (!window.confirm('Discard unsaved changes?')) return;
-    }
-    close();
+    if (dirty && !window.confirm('Discard unsaved changes?')) return;
+    onClose();
   }
 
   return (
-    <>
+    <div className="flex-1 flex flex-col min-w-0 min-h-0">
       <div className="flex items-center justify-between px-5 h-12 border-b border-border/40 flex-shrink-0">
         <div className="flex items-center gap-3 min-w-0">
           <FileText
@@ -381,9 +394,12 @@ function FileEditorBody({
             className="text-muted-foreground/50 flex-shrink-0"
             strokeWidth={1.8}
           />
-          <span className="text-[13px] font-medium text-foreground truncate">
-            {filePath ?? 'Loading...'}
-          </span>
+          <span className="text-[13px] font-medium text-foreground truncate">{filePath}</span>
+          {isCommitView && (
+            <span className="text-[11px] tabular-nums text-muted-foreground/50 font-mono">
+              {view.hash.slice(0, 7)}
+            </span>
+          )}
           {editable && (
             <span
               className={`text-[11px] tabular-nums ${
@@ -474,42 +490,38 @@ function FileEditorBody({
           <div className="flex items-center justify-center h-full">
             <div className="flex items-center gap-3">
               <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-              <span className="text-[13px] text-muted-foreground/50">Loading file...</span>
+              <span className="text-[13px] text-muted-foreground/50">Loading…</span>
             </div>
           </div>
         )}
-
         {state.kind === 'error' && (
           <div className="flex items-center justify-center h-full">
             <span className="text-[13px] text-destructive">{state.message}</span>
           </div>
         )}
-
-        {state.kind === 'loaded' && state.data.isBinary && (
+        {state.kind === 'loaded' && state.isBinary && (
           <div className="flex items-center justify-center h-full">
             <span className="text-[13px] text-muted-foreground/40">
               Binary file — cannot display diff
             </span>
           </div>
         )}
-
-        {state.kind === 'loaded' && state.data.isLargeFile && (
+        {state.kind === 'loaded' && state.isLargeFile && (
           <div className="flex items-center justify-center h-full">
             <span className="text-[13px] text-muted-foreground/40">
               File too large to preview here (&gt;5 MB).
             </span>
           </div>
         )}
-
-        {state.kind === 'loaded' && !state.data.isBinary && !state.data.isLargeFile && (
-          <DiffEditor
-            original={state.data.headContent}
-            modified={draft}
-            language={state.data.language || undefined}
+        {state.kind === 'loaded' && !state.isBinary && !state.isLargeFile && (
+          <MonacoDiffEditor
+            original={state.originalContent}
+            modified={isCommitView ? state.modifiedContent : draft}
+            language={state.language || undefined}
             theme={themeName}
             options={{
               originalEditable: false,
-              readOnly: false,
+              readOnly: !editable,
               renderSideBySide: false,
               minimap: { enabled: false },
               automaticLayout: true,
@@ -522,9 +534,11 @@ function FileEditorBody({
           />
         )}
       </div>
-    </>
+    </div>
   );
 }
+
+// ── Inline comment input ───────────────────────────────────
 
 function CommentInputBar({
   onSubmit,
@@ -570,5 +584,3 @@ function CommentInputBar({
     </div>
   );
 }
-
-export default FileEditorView;

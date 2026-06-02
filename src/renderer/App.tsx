@@ -9,7 +9,7 @@ import { LeftSidebar } from './components/LeftSidebar';
 import { MainContent } from './components/MainContent';
 import { openInIde } from './lib/openInIde';
 import { RightInspector } from './components/rightInspector/RightInspector';
-const FileEditorView = lazy(() => import('./components/FileEditorView'));
+const DiffEditor = lazy(() => import('./components/diffEditor/DiffEditor'));
 import { ShellDrawerWrapper } from './components/ShellDrawerWrapper';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
 import { SkillsBrowserModal } from './components/SkillsBrowserModal';
@@ -2152,10 +2152,11 @@ export function App() {
 
       {diffFile && (
         <Suspense fallback={null}>
-          <FileEditorView
+          <DiffEditor
             cwd={diffFile.cwd}
-            filePath={diffFile.filePath}
-            staged={diffFile.staged}
+            initialFilePath={diffFile.filePath}
+            initialStaged={diffFile.staged}
+            gitStatus={gitStatus}
             activeTaskId={activeTaskId}
             terminalTheme={resolvedTerminalTheme}
             isDark={theme === 'dark'}
