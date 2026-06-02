@@ -130,11 +130,10 @@ export function RightInspector({
             </button>
           </Tooltip>
         )}
-        <Tooltip content={fileCount > 0 ? 'Open in editor' : 'No changes to open'}>
+        <Tooltip content={fileCount > 0 ? 'Open in editor' : 'Open editor at latest commit'}>
           <button
             onClick={onOpenEditor}
-            disabled={fileCount === 0}
-            className="p-[3px] rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+            className="p-[3px] rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0"
           >
             <Maximize2 size={11} strokeWidth={2} />
           </button>

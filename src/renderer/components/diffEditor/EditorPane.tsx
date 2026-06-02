@@ -89,6 +89,12 @@ export function EditorPane({
   useEffect(() => {
     let cancelled = false;
     async function load() {
+      // Empty path → no file yet. The orchestrator will fill it in once the
+      // file tree loads. Stay on the loading skeleton until then.
+      if (!filePath) {
+        setState({ kind: 'loading' });
+        return;
+      }
       setState({ kind: 'loading' });
       if (view.kind === 'working') {
         const resp = await window.electronAPI.editorReadWorking({

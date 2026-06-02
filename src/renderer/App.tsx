@@ -420,6 +420,7 @@ export function App() {
     cwd: string;
     filePath: string;
     staged: boolean;
+    initialView?: { kind: 'working'; ref: 'HEAD' | 'index' } | { kind: 'commit'; hash: string };
   } | null>(null);
   const [prInfo, setPrInfo] = useState<PullRequestInfo | null>(null);
   const [showCommitGraph, setShowCommitGraph] = useState(false);
@@ -1850,14 +1851,25 @@ export function App() {
                       onOpenEditor={() => {
                         if (!activeTask) return;
                         const files = gitStatus?.files ?? [];
-                        if (files.length === 0) return;
-                        // Prefer the first unstaged file; otherwise first staged.
-                        const target = files.find((f) => !f.staged) ?? files[0];
-                        setDiffFile({
-                          cwd: activeTask.path,
-                          filePath: target.path,
-                          staged: target.staged,
-                        });
+                        if (files.length > 0) {
+                          // Prefer the first unstaged file; otherwise first staged.
+                          const target = files.find((f) => !f.staged) ?? files[0];
+                          setDiffFile({
+                            cwd: activeTask.path,
+                            filePath: target.path,
+                            staged: target.staged,
+                          });
+                        } else {
+                          // No working changes — open at the latest commit.
+                          // The 'HEAD' sentinel resolves to the real sha once
+                          // the editor loads its commit list.
+                          setDiffFile({
+                            cwd: activeTask.path,
+                            filePath: '',
+                            staged: false,
+                            initialView: { kind: 'commit', hash: 'HEAD' },
+                          });
+                        }
                       }}
                       collapsed={changesPanelCollapsed}
                       onToggleCollapse={toggleChangesPanel}
@@ -2168,6 +2180,7 @@ export function App() {
             cwd={diffFile.cwd}
             initialFilePath={diffFile.filePath}
             initialStaged={diffFile.staged}
+            initialView={diffFile.initialView}
             gitStatus={gitStatus}
             activeTaskId={activeTaskId}
             terminalTheme={resolvedTerminalTheme}
