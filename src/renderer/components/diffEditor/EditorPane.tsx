@@ -7,6 +7,7 @@ import { defineMonacoThemeFromTerminal, themeNameFor } from './monacoTheme';
 import type { EditorView } from './types';
 import type { DiffComment, RangeSnapshot } from './comments/types';
 import { useCommentsContext } from './comments/CommentsContext';
+import { useGutterSelection } from './comments/useGutterSelection';
 import {
   Popover,
   PopoverAnchor,
@@ -83,18 +84,12 @@ export function EditorPane({
   const [savedPill, setSavedPill] = useState(false);
   const [stale, setStale] = useState<StaleInfo | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
-  const [pendingRange, setPendingRange] = useState<{ start: number; end: number } | null>(null);
   // When non-empty, the WIP popover opens prefilled with this text. Used by
   // the dbl-click-to-edit flow on a persisted comment widget.
   const [pendingText, setPendingText] = useState<string>('');
   // The id of the comment currently being edited, so the widgets effect can
   // skip rendering it (the WIP popover is taking its place).
   const [editingId, setEditingId] = useState<string | null>(null);
-  // True while the user is dragging on the line-number gutter. The popover
-  // is hidden during the drag — opening it immediately on mouse-down would
-  // steal focus to the textarea and cancel Monaco's drag tracking, so the
-  // range could only ever be a single line.
-  const [dragging, setDragging] = useState(false);
   const [wordWrap, setWordWrap] = useState<boolean>(
     () => localStorage.getItem(WORDWRAP_KEY) === 'on',
   );
@@ -103,8 +98,10 @@ export function EditorPane({
   const monacoRef = useRef<typeof import('monaco-editor') | null>(null);
   const commentDecorations = useRef<monacoEditor.IEditorDecorationsCollection | null>(null);
   const selectionDecorations = useRef<monacoEditor.IEditorDecorationsCollection | null>(null);
-  const dragRef = useRef<{ startLine: number } | null>(null);
   const saveCmdRef = useRef<(() => void) | null>(null);
+  // Bumped from handleMount so hooks that read editorRef/monacoRef see the
+  // post-mount instances on the next render (refs alone don't trigger one).
+  const [mountSeq, setMountSeq] = useState(0);
   const popoverAnchorRef = useRef<HTMLDivElement | null>(null);
   // State (not ref) so the popover's `container` prop sees the actual node
   // after mount — refs alone don't trigger a re-render.
@@ -112,6 +109,16 @@ export function EditorPane({
 
   const themeName = themeNameFor(isDark);
   const isCommitView = view.kind === 'commit';
+
+  // Reference mountSeq so React's dep tracking sees this re-run after every
+  // editor mount — useGutterSelection's deps include the (live) editor
+  // instance, which only becomes non-null on the post-mount render.
+  void mountSeq;
+  const { pendingRange, setPendingRange, dragging } = useGutterSelection(
+    editorRef.current?.getModifiedEditor() ?? null,
+    monacoRef.current,
+    !commentsStore.disabled,
+  );
   const dirty = !isCommitView && draft !== loadedBuffer;
   const editable =
     !isCommitView &&
@@ -453,47 +460,7 @@ export function EditorPane({
       saveCmdRef.current?.();
     });
 
-    modified.onMouseDown((e) => {
-      const t = e.target;
-      if (
-        t.type !== monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS &&
-        t.type !== monaco.editor.MouseTargetType.GUTTER_LINE_DECORATIONS &&
-        t.type !== monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN
-      )
-        return;
-      const line = t.position?.lineNumber;
-      if (!line) return;
-      dragRef.current = { startLine: line };
-      // Drive the line tint via pendingRange but keep the popover closed
-      // (gated on `dragging`) until mouse-up.
-      setDragging(true);
-      setPendingRange({ start: line, end: line });
-    });
-    // Track the drag via a window mousemove (not Monaco's onMouseMove): during
-    // a gutter drag Monaco's own line-select handler captures pointer events
-    // and our editor-level mouse listener may not fire reliably. We resolve
-    // the line under the cursor via `getTargetAtClientPoint`.
-    const onMove = (e: MouseEvent) => {
-      if (!dragRef.current) return;
-      const target = modified.getTargetAtClientPoint(e.clientX, e.clientY);
-      const line = target?.position?.lineNumber;
-      if (!line) return;
-      const start = Math.min(dragRef.current.startLine, line);
-      const end = Math.max(dragRef.current.startLine, line);
-      setPendingRange({ start, end });
-    };
-    window.addEventListener('mousemove', onMove);
-    editor.onDidDispose(() => window.removeEventListener('mousemove', onMove));
-    const onUp = () => {
-      if (dragRef.current) {
-        // Drag complete — release the popover so it can open with the final
-        // range.
-        setDragging(false);
-      }
-      dragRef.current = null;
-    };
-    window.addEventListener('mouseup', onUp);
-    editor.onDidDispose(() => window.removeEventListener('mouseup', onUp));
+    setMountSeq((s) => s + 1);
   }
 
   // Selection highlight
