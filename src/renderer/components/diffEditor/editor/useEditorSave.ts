@@ -33,22 +33,33 @@ interface Args {
   isCommitView: boolean;
 }
 
-export function useEditorSave(args: Args): SaveApi {
+export function useEditorSave({
+  cwd,
+  filePath,
+  workingRef,
+  state,
+  draft,
+  loadedBuffer,
+  setLoadedBuffer,
+  setDraft,
+  patchLoadedState,
+  isCommitView,
+}: Args): SaveApi {
   const [saving, setSaving] = useState(false);
   const [savedPill, setSavedPill] = useState(false);
   const [stale, setStale] = useState<StaleInfo | null>(null);
 
   const save = useCallback(async () => {
-    if (args.isCommitView || args.state.kind !== 'loaded') return;
-    if (args.draft === args.loadedBuffer) return;
+    if (isCommitView || state.kind !== 'loaded') return;
+    if (draft === loadedBuffer) return;
     setSaving(true);
     try {
       const resp = await window.electronAPI.editorWriteWorking({
-        cwd: args.cwd,
-        filePath: args.filePath,
-        content: args.draft,
-        expectedMtimeMs: args.state.mtimeMs,
-        expectedSizeBytes: args.state.sizeBytes,
+        cwd,
+        filePath,
+        content: draft,
+        expectedMtimeMs: state.mtimeMs,
+        expectedSizeBytes: state.sizeBytes,
       });
       if (!resp.success || !resp.data) {
         setStale({ currentMtimeMs: 0, currentSizeBytes: 0 });
@@ -61,31 +72,27 @@ export function useEditorSave(args: Args): SaveApi {
         });
         return;
       }
-      args.setLoadedBuffer(args.draft);
-      args.patchLoadedState({ mtimeMs: resp.data.mtimeMs, sizeBytes: resp.data.sizeBytes });
+      setLoadedBuffer(draft);
+      patchLoadedState({ mtimeMs: resp.data.mtimeMs, sizeBytes: resp.data.sizeBytes });
       setStale(null);
       setSavedPill(true);
       window.setTimeout(() => setSavedPill(false), 1000);
     } finally {
       setSaving(false);
     }
-  }, [args]);
+  }, [cwd, filePath, isCommitView, state, draft, loadedBuffer, setLoadedBuffer, patchLoadedState]);
 
   const reloadFromDisk = useCallback(async () => {
-    if (args.isCommitView) return;
-    if (args.draft !== args.loadedBuffer) {
+    if (isCommitView) return;
+    if (draft !== loadedBuffer) {
       if (!window.confirm('Discard unsaved changes and reload from disk?')) return;
     }
     setStale(null);
-    const resp = await window.electronAPI.editorReadWorking({
-      cwd: args.cwd,
-      filePath: args.filePath,
-      ref: args.workingRef,
-    });
+    const resp = await window.electronAPI.editorReadWorking({ cwd, filePath, ref: workingRef });
     if (!resp.success || !resp.data) return;
     const modifiedPresent = resp.data.workingContent !== null;
     const initial = resp.data.workingContent ?? '';
-    args.patchLoadedState({
+    patchLoadedState({
       originalContent: resp.data.originalContent,
       modifiedContent: initial,
       mtimeMs: resp.data.mtimeMs,
@@ -95,19 +102,26 @@ export function useEditorSave(args: Args): SaveApi {
       language: resp.data.language,
       modifiedPresent,
     });
-    args.setLoadedBuffer(initial);
-    args.setDraft(initial);
-  }, [args]);
+    setLoadedBuffer(initial);
+    setDraft(initial);
+  }, [
+    cwd,
+    filePath,
+    workingRef,
+    isCommitView,
+    draft,
+    loadedBuffer,
+    setLoadedBuffer,
+    setDraft,
+    patchLoadedState,
+  ]);
 
   const overwrite = useCallback(async () => {
-    if (!stale || args.state.kind !== 'loaded') return;
-    args.patchLoadedState({
-      mtimeMs: stale.currentMtimeMs,
-      sizeBytes: stale.currentSizeBytes,
-    });
+    if (!stale || state.kind !== 'loaded') return;
+    patchLoadedState({ mtimeMs: stale.currentMtimeMs, sizeBytes: stale.currentSizeBytes });
     setStale(null);
     setTimeout(() => void save(), 0);
-  }, [stale, save, args]);
+  }, [stale, save, state, patchLoadedState]);
 
   return { saving, savedPill, stale, setStale, save, overwrite, reloadFromDisk };
 }

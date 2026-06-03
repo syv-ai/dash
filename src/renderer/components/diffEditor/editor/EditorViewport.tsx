@@ -1,6 +1,7 @@
 import React from 'react';
 import { DiffEditor as MonacoDiffEditor } from '@monaco-editor/react';
 import type { editor as monacoEditor } from 'monaco-editor';
+import { Loader2 } from 'lucide-react';
 import type { LoadState } from './useFileLoad';
 
 interface Props {
@@ -39,7 +40,7 @@ export function EditorViewport({
       {currentState.kind === 'loading' && displayed.kind !== 'loaded' && (
         <div className="flex items-center justify-center h-full">
           <div className="flex items-center gap-3">
-            <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            <Loader2 size={16} className="animate-spin text-primary" />
             <span className="text-[13px] text-muted-foreground/50">Loading…</span>
           </div>
         </div>

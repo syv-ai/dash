@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronDown, Undo2, X } from 'lucide-react';
 import { Popover, PopoverArrow, PopoverContent, PopoverTrigger } from '../../ui/Popover';
 import type { DiffComment } from './types';
@@ -28,15 +28,23 @@ export function CommentsMenu({
 }: Props) {
   const [open, setOpen] = useState(false);
 
-  // Stable order: current file first, then the rest alphabetically.
-  const groups = Object.entries(commentsByFile)
-    .filter(([, list]) => list.length > 0)
-    .sort(([a], [b]) => {
-      if (a === currentFilePath) return -1;
-      if (b === currentFilePath) return 1;
-      return a.localeCompare(b);
-    });
-  const unsentCount = groups.reduce((sum, [, list]) => sum + list.filter((c) => !c.sent).length, 0);
+  // Memoize: parent re-renders on every draft keystroke, file switch, etc.
+  // — the menu sits in the header bar on every one of those passes.
+  const groups = useMemo(
+    () =>
+      Object.entries(commentsByFile)
+        .filter(([, list]) => list.length > 0)
+        .sort(([a], [b]) => {
+          if (a === currentFilePath) return -1;
+          if (b === currentFilePath) return 1;
+          return a.localeCompare(b);
+        }),
+    [commentsByFile, currentFilePath],
+  );
+  const unsentCount = useMemo(
+    () => groups.reduce((sum, [, list]) => sum + list.filter((c) => !c.sent).length, 0),
+    [groups],
+  );
   const noUnsent = unsentCount === 0;
   const pillLabel = noUnsent
     ? '0 to send'

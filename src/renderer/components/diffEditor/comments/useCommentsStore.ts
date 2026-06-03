@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { commentsReducer, initialCommentsState, type CommentsState } from './commentsReducer';
 import type { DiffComment, RangeSnapshot } from './types';
 
@@ -28,13 +28,29 @@ export interface CommentsStore {
   prune(existingFilePaths: ReadonlySet<string>): Promise<{ deleted: number }>;
 }
 
+/** Build the IPC upsert payload from a comment + optional field overrides.
+ *  Five mutators shared this projection before — keeping it in one place
+ *  removes ~50 lines of duplicated `{ id, taskId, filePath, ... }`. */
+function persist(c: DiffComment, patch: Partial<DiffComment> = {}): void {
+  void window.electronAPI.diffCommentsUpsert({
+    id: c.id,
+    taskId: c.taskId,
+    filePath: c.filePath,
+    startLine: c.startLine,
+    endLine: c.endLine,
+    text: c.text,
+    sent: c.sent,
+    ...patch,
+  });
+}
+
 /** Task-scoped comments store. Optimistic-applies mutations to local state,
  *  fires the IPC for persistence in the background, and ignores IPC errors
  *  (best-effort persistence; the UI source of truth is the local reducer
  *  state so a transient IPC failure doesn't strand the user). */
 export function useCommentsStore(taskId: string | null): CommentsStore {
   const [state, dispatch] = useReducer(commentsReducer, undefined, initialCommentsState);
-  const isReadyRef = useRef(false);
+  const [isReady, setIsReady] = useState(false);
   const disabled = taskId === null;
   // The store's commentsByFile is referenced by mutators that need to look
   // up the existing comment to merge with their patch. Reading from `state`
@@ -44,10 +60,10 @@ export function useCommentsStore(taskId: string | null): CommentsStore {
   stateRef.current = state;
 
   useEffect(() => {
-    isReadyRef.current = false;
+    setIsReady(false);
     if (!taskId) {
       dispatch({ type: 'hydrate', comments: [] });
-      isReadyRef.current = true;
+      setIsReady(true);
       return;
     }
     let cancelled = false;
@@ -55,7 +71,7 @@ export function useCommentsStore(taskId: string | null): CommentsStore {
       if (cancelled) return;
       const list = resp.success && resp.data ? resp.data : [];
       dispatch({ type: 'hydrate', comments: list });
-      isReadyRef.current = true;
+      setIsReady(true);
     });
     return () => {
       cancelled = true;
@@ -86,15 +102,7 @@ export function useCommentsStore(taskId: string | null): CommentsStore {
         updatedAt: now,
       };
       dispatch({ type: 'upsert', comment });
-      void window.electronAPI.diffCommentsUpsert({
-        id: comment.id,
-        taskId: comment.taskId,
-        filePath: comment.filePath,
-        startLine: comment.startLine,
-        endLine: comment.endLine,
-        text: comment.text,
-        sent: comment.sent,
-      });
+      persist(comment);
       return comment;
     },
     [taskId],
@@ -107,15 +115,7 @@ export function useCommentsStore(taskId: string | null): CommentsStore {
       if (!existing) return;
       const next: DiffComment = { ...existing, text, updatedAt: new Date().toISOString() };
       dispatch({ type: 'upsert', comment: next });
-      void window.electronAPI.diffCommentsUpsert({
-        id: next.id,
-        taskId: next.taskId,
-        filePath: next.filePath,
-        startLine: next.startLine,
-        endLine: next.endLine,
-        text: next.text,
-        sent: next.sent,
-      });
+      persist(next);
     },
     [taskId, findById],
   );
@@ -135,16 +135,7 @@ export function useCommentsStore(taskId: string | null): CommentsStore {
       dispatch({ type: 'markSent', ids });
       for (const id of ids) {
         const existing = findById(id);
-        if (!existing) continue;
-        void window.electronAPI.diffCommentsUpsert({
-          id: existing.id,
-          taskId: existing.taskId,
-          filePath: existing.filePath,
-          startLine: existing.startLine,
-          endLine: existing.endLine,
-          text: existing.text,
-          sent: true,
-        });
+        if (existing) persist(existing, { sent: true });
       }
     },
     [taskId, findById],
@@ -155,16 +146,7 @@ export function useCommentsStore(taskId: string | null): CommentsStore {
       if (!taskId) return;
       dispatch({ type: 'markUnsent', id });
       const existing = findById(id);
-      if (!existing) return;
-      void window.electronAPI.diffCommentsUpsert({
-        id: existing.id,
-        taskId: existing.taskId,
-        filePath: existing.filePath,
-        startLine: existing.startLine,
-        endLine: existing.endLine,
-        text: existing.text,
-        sent: false,
-      });
+      if (existing) persist(existing, { sent: false });
     },
     [taskId, findById],
   );
@@ -175,16 +157,7 @@ export function useCommentsStore(taskId: string | null): CommentsStore {
       dispatch({ type: 'snapshotRanges', filePath, snapshots });
       for (const s of snapshots) {
         const existing = findById(s.id);
-        if (!existing) continue;
-        void window.electronAPI.diffCommentsUpsert({
-          id: existing.id,
-          taskId: existing.taskId,
-          filePath: existing.filePath,
-          startLine: s.startLine,
-          endLine: s.endLine,
-          text: existing.text,
-          sent: existing.sent,
-        });
+        if (existing) persist(existing, { startLine: s.startLine, endLine: s.endLine });
       }
     },
     [taskId, findById],
@@ -211,7 +184,7 @@ export function useCommentsStore(taskId: string | null): CommentsStore {
 
   return {
     state,
-    isReady: isReadyRef.current,
+    isReady,
     disabled,
     addComment,
     updateText,

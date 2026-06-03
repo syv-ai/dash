@@ -1,15 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
 import { useCommentsContext } from './CommentsContext';
-import type { LineRange, LiveComment } from './types';
+import type { DiffComment, LineRange, LiveComment } from './types';
+
+// Frozen empty default so render-time `?? []` doesn't allocate a fresh
+// array each pass (the result feeds effect dep arrays).
+const EMPTY_STORED: readonly DiffComment[] = Object.freeze([]);
 
 interface Args {
   filePath: string;
   /** True once the model's content matches `filePath` (i.e. the file is
    *  loaded). Hydration must wait for this to flip. */
   isFileLoaded: boolean;
-  editorRef: React.MutableRefObject<monacoEditor.IStandaloneDiffEditor | null>;
-  monacoRef: React.MutableRefObject<typeof import('monaco-editor') | null>;
+  /** Diff editor instance (state, not ref) — null until mount. Effects
+   *  that need post-mount access get a reactive signal when this flips. */
+  editor: monacoEditor.IStandaloneDiffEditor | null;
+  monaco: typeof import('monaco-editor') | null;
 }
 
 interface Binding {
@@ -31,9 +37,9 @@ interface Binding {
  *  corrupt the snapshot's destination. This is what fixes the phantom-
  *  comment-on-switch bug from the previous filePath-ref-based design. */
 export function useFileCommentsBinding(args: Args): Binding {
-  const { filePath, isFileLoaded, editorRef, monacoRef } = args;
+  const { filePath, isFileLoaded, editor, monaco } = args;
   const store = useCommentsContext();
-  const stored = store.state.byFile[filePath] ?? [];
+  const stored = store.state.byFile[filePath] ?? EMPTY_STORED;
 
   const [liveComments, setLiveComments] = useState<LiveComment[]>([]);
   const liveCommentsRef = useRef<LiveComment[]>([]);
@@ -57,10 +63,9 @@ export function useFileCommentsBinding(args: Args): Binding {
     if (hydratedKeyRef.current === key) return;
     hydratedKeyRef.current = key;
 
-    const ed = editorRef.current?.getModifiedEditor();
-    const monaco = monacoRef.current;
-    const model = ed?.getModel();
-    if (!ed || !monaco || !model) {
+    const modified = editor?.getModifiedEditor();
+    const model = modified?.getModel();
+    if (!modified || !monaco || !model) {
       setLiveComments([]);
       return;
     }
@@ -87,7 +92,7 @@ export function useFileCommentsBinding(args: Args): Binding {
     // `stored` is intentionally excluded from deps: store mutations
     // (add/update/remove) should NOT trigger re-hydration. Reconciliation
     // is handled by the separate effects below.
-  }, [filePath, isFileLoaded, editorRef, monacoRef]);
+  }, [filePath, isFileLoaded, editor, monaco]);
 
   // Reconcile parent-driven removals: if `stored` drops an id, remove the
   // matching local decoration.
@@ -101,7 +106,7 @@ export function useFileCommentsBinding(args: Args): Binding {
       else removed.push(c);
     }
     if (removed.length === 0) return;
-    const model = editorRef.current?.getModifiedEditor().getModel();
+    const model = editor?.getModifiedEditor().getModel();
     if (model) {
       model.deltaDecorations(
         removed.map((c) => c.decorationId),
@@ -109,7 +114,7 @@ export function useFileCommentsBinding(args: Args): Binding {
       );
     }
     setLiveComments(remaining);
-  }, [stored, filePath, editorRef]);
+  }, [stored, filePath, editor]);
 
   // Mirror text/sent edits from the store into liveComments (without
   // touching decorations or ranges). Skip when arrays match by reference.
@@ -134,9 +139,8 @@ export function useFileCommentsBinding(args: Args): Binding {
   useEffect(() => {
     const pathAtMount = filePath;
     return () => {
-      const ed = editorRef.current?.getModifiedEditor();
-      const model = ed?.getModel();
-      if (!ed || !model) return;
+      const model = editor?.getModifiedEditor().getModel();
+      if (!model) return;
       const snapshots = liveCommentsRef.current.flatMap((c) => {
         const r = model.getDecorationRange(c.decorationId);
         if (!r) return [];
@@ -145,15 +149,13 @@ export function useFileCommentsBinding(args: Args): Binding {
       if (snapshots.length === 0) return;
       store.snapshotRanges(pathAtMount, snapshots);
     };
-  }, [filePath, editorRef, store]);
+  }, [filePath, editor, store]);
 
   const addComment = useCallback(
     (range: LineRange, text: string): LiveComment | null => {
-      const ed = editorRef.current?.getModifiedEditor();
-      const monaco = monacoRef.current;
-      if (!ed || !monaco) return null;
-      const model = ed.getModel();
-      if (!model) return null;
+      const modified = editor?.getModifiedEditor();
+      const model = modified?.getModel();
+      if (!modified || !monaco || !model) return null;
       const created = store.addComment({
         filePath,
         startLine: range.start,
@@ -174,7 +176,7 @@ export function useFileCommentsBinding(args: Args): Binding {
       setLiveComments((prev) => [...prev, live]);
       return live;
     },
-    [filePath, editorRef, monacoRef, store],
+    [filePath, editor, monaco, store],
   );
 
   const updateText = useCallback(
@@ -188,13 +190,13 @@ export function useFileCommentsBinding(args: Args): Binding {
     (id: string) => {
       const target = liveCommentsRef.current.find((c) => c.id === id);
       store.remove(id);
-      const model = editorRef.current?.getModifiedEditor().getModel();
+      const model = editor?.getModifiedEditor().getModel();
       if (model && target) {
         model.deltaDecorations([target.decorationId], []);
       }
       setLiveComments((prev) => prev.filter((c) => c.id !== id));
     },
-    [store, editorRef],
+    [store, editor],
   );
 
   return { liveComments, addComment, updateText, remove };

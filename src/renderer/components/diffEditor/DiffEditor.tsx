@@ -185,7 +185,7 @@ function DiffEditorBody({
       if (list.length > 0) map.set(path, list.length);
     }
     return map;
-  }, [store.state]);
+  }, [store.state.byFile]);
 
   // Once the working tree's file list is known, hard-delete any persisted
   // comments whose path no longer exists. Runs once per modal session per

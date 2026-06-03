@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
 import type { ITheme as XtermTheme } from 'xterm';
 import type { EditorView } from './types';
@@ -74,15 +74,15 @@ export function EditorPane({
 
   const isCommitView = view.kind === 'commit';
 
-  const { editorRef, monacoRef, themeName, displayed, mountSeq, handleBeforeMount, handleMount } =
-    useMonacoEditor({
-      isDark,
-      terminalTheme,
-      state,
-      onSave: () => saveCmdRef.current?.(),
-      onDraftChange: (v) => setDraft(v),
-      isCommitView,
-    });
+  const { editor, monaco, themeName, displayed, handleBeforeMount, handleMount } = useMonacoEditor({
+    isDark,
+    terminalTheme,
+    state,
+    onSave: () => saveCmdRef.current?.(),
+    onDraftChange: setDraft,
+    isCommitView,
+  });
+  const modifiedEditor = editor?.getModifiedEditor() ?? null;
 
   // Mutate the load state in-place for save mtime/size updates and reload.
   // useFileLoad owns the state; this just exposes a targeted patch.
@@ -107,13 +107,9 @@ export function EditorPane({
   });
   const { saving, savedPill, stale, setStale, save, overwrite, reloadFromDisk } = saveApi;
 
-  // Reference mountSeq so React's dep tracking sees this re-run after every
-  // editor mount — useGutterSelection's deps include the (live) editor
-  // instance, which only becomes non-null on the post-mount render.
-  void mountSeq;
   const { pendingRange, setPendingRange, dragging } = useGutterSelection(
-    editorRef.current?.getModifiedEditor() ?? null,
-    monacoRef.current,
+    modifiedEditor,
+    monaco,
     !commentsStore.disabled,
   );
   const dirty = !isCommitView && draft !== loadedBuffer;
@@ -145,10 +141,28 @@ export function EditorPane({
   const binding = useFileCommentsBinding({
     filePath,
     isFileLoaded,
-    editorRef,
-    monacoRef,
+    editor,
+    monaco,
   });
   const liveComments = binding.liveComments;
+
+  // Scroll to a live comment + select + focus. Shared by the cross-file
+  // reveal effect and the same-file dropdown navigation. Returns true on a
+  // successful jump so callers can clear handoff tokens conditionally.
+  const revealLive = useCallback(
+    (c: LiveComment): boolean => {
+      if (!modifiedEditor || !monaco) return false;
+      const model = modifiedEditor.getModel();
+      if (!model) return false;
+      const range = model.getDecorationRange(c.decorationId);
+      if (!range) return false;
+      modifiedEditor.revealRangeInCenter(range, monaco.editor.ScrollType.Smooth);
+      modifiedEditor.setSelection(range);
+      modifiedEditor.focus();
+      return true;
+    },
+    [modifiedEditor, monaco],
+  );
 
   // Cross-file navigation from CommentsMenu: when the user clicks a comment
   // that lives in a different file, the parent flips selectedPath + sets
@@ -158,17 +172,8 @@ export function EditorPane({
     if (!revealCommentId) return;
     const target = liveComments.find((c) => c.id === revealCommentId);
     if (!target) return;
-    const ed = editorRef.current?.getModifiedEditor();
-    const monaco = monacoRef.current;
-    const model = ed?.getModel();
-    if (!ed || !monaco || !model) return;
-    const range = model.getDecorationRange(target.decorationId);
-    if (!range) return;
-    ed.revealRangeInCenter(range, monaco.editor.ScrollType.Smooth);
-    ed.setSelection(range);
-    ed.focus();
-    onClearReveal();
-  }, [revealCommentId, liveComments, onClearReveal]);
+    if (revealLive(target)) onClearReveal();
+  }, [revealCommentId, liveComments, revealLive, onClearReveal]);
 
   useEffect(() => {
     localStorage.setItem(WORDWRAP_KEY, wordWrap ? 'on' : 'off');
@@ -183,11 +188,9 @@ export function EditorPane({
 
   // Selection highlight
   useEffect(() => {
-    const editor = editorRef.current?.getModifiedEditor();
-    const monaco = monacoRef.current;
-    if (!editor || !monaco) return;
+    if (!modifiedEditor || !monaco) return;
     if (!selectionDecorations.current) {
-      selectionDecorations.current = editor.createDecorationsCollection();
+      selectionDecorations.current = modifiedEditor.createDecorationsCollection();
     }
     if (!pendingRange) {
       selectionDecorations.current.clear();
@@ -205,7 +208,7 @@ export function EditorPane({
         },
       },
     ]);
-  }, [pendingRange]);
+  }, [pendingRange, modifiedEditor, monaco]);
 
   // Position the comment popover's anchor on the right edge of the editor,
   // vertically aligned with the selection's last line. Popover opens to the
@@ -223,29 +226,26 @@ export function EditorPane({
   // No clamp on top — if the user scrolls the line out of view, the popover
   // scrolls out with it (combined with `avoidCollisions={false}`).
   useEffect(() => {
-    const editor = editorRef.current?.getModifiedEditor();
     const anchor = popoverAnchorRef.current;
-    if (!editor || !anchor || !pendingRange) return;
+    if (!modifiedEditor || !anchor || !pendingRange) return;
     const update = () => {
-      const lineTop = editor.getTopForLineNumber(pendingRange.end + 1);
-      const scrollTop = editor.getScrollTop();
+      const lineTop = modifiedEditor.getTopForLineNumber(pendingRange.end + 1);
+      const scrollTop = modifiedEditor.getScrollTop();
       anchor.style.top = `${lineTop - scrollTop}px`;
       anchor.style.width = anchor.offsetWidth === 1 ? '2px' : '1px';
     };
     update();
-    const sub = editor.onDidScrollChange(update);
+    const sub = modifiedEditor.onDidScrollChange(update);
     return () => sub.dispose();
-  }, [pendingRange]);
+  }, [pendingRange, modifiedEditor]);
 
   // Comment highlights
   useEffect(() => {
-    const editor = editorRef.current?.getModifiedEditor();
-    const monaco = monacoRef.current;
-    if (!editor || !monaco) return;
-    const model = editor.getModel();
+    if (!modifiedEditor || !monaco) return;
+    const model = modifiedEditor.getModel();
     if (!model) return;
     if (!commentDecorations.current) {
-      commentDecorations.current = editor.createDecorationsCollection();
+      commentDecorations.current = modifiedEditor.createDecorationsCollection();
     }
     if (commentsStore.disabled) {
       commentDecorations.current.clear();
@@ -273,15 +273,14 @@ export function EditorPane({
       ];
     });
     commentDecorations.current.set(decos);
-  }, [liveComments, isDark, commentsStore.disabled]);
+  }, [liveComments, isDark, commentsStore.disabled, modifiedEditor, monaco]);
 
   // Latest editComment handler captured in a ref so the widgets effect
   // doesn't re-create DOM nodes when the handler identity changes.
   const editCommentRef = useRef<(c: LiveComment) => void>(() => {});
   editCommentRef.current = (c: LiveComment) => {
-    const editor = editorRef.current?.getModifiedEditor();
-    const model = editor?.getModel();
-    if (!editor || !model) return;
+    const model = modifiedEditor?.getModel();
+    if (!model) return;
     const range = model.getDecorationRange(c.decorationId);
     if (!range) return;
     setEditingId(c.id);
@@ -298,10 +297,9 @@ export function EditorPane({
   // from Monaco's `getTopForLineNumber` on every scroll. The editor area's
   // `overflow: hidden` clips them at the top/bottom edges.
   useEffect(() => {
-    const editor = editorRef.current?.getModifiedEditor();
     const area = editorAreaEl;
-    if (!editor || !area) return;
-    const model = editor.getModel();
+    if (!modifiedEditor || !area) return;
+    const model = modifiedEditor.getModel();
     if (!model) return;
     if (commentsStore.disabled) return;
 
@@ -319,25 +317,25 @@ export function EditorPane({
     }
 
     const update = () => {
-      const scrollTop = editor.getScrollTop();
+      const scrollTop = modifiedEditor.getScrollTop();
       for (const c of visible) {
         const node = nodes.get(c.id);
         if (!node) continue;
         const range = model.getDecorationRange(c.decorationId);
         if (!range) continue;
-        const lineTop = editor.getTopForLineNumber(range.endLineNumber + 1);
+        const lineTop = modifiedEditor.getTopForLineNumber(range.endLineNumber + 1);
         node.style.top = `${lineTop - scrollTop}px`;
       }
     };
     update();
-    const sub = editor.onDidScrollChange(update);
+    const sub = modifiedEditor.onDidScrollChange(update);
     return () => {
       sub.dispose();
       for (const node of nodes.values()) {
         if (node.parentNode === area) area.removeChild(node);
       }
     };
-  }, [liveComments, editorAreaEl, editingId, commentsStore.disabled]);
+  }, [liveComments, editorAreaEl, editingId, commentsStore.disabled, modifiedEditor]);
 
   function addComment(text: string) {
     if (editingId) {
@@ -359,23 +357,9 @@ export function EditorPane({
     setPendingRange(null);
   }
 
-  function navigateToComment(c: LiveComment) {
-    const ed = editorRef.current?.getModifiedEditor();
-    const monaco = monacoRef.current;
-    const model = ed?.getModel();
-    if (!ed || !monaco || !model) return;
-    const range = model.getDecorationRange(c.decorationId);
-    if (!range) return;
-    ed.revealRangeInCenter(range, monaco.editor.ScrollType.Smooth);
-    ed.setSelection(range);
-    ed.focus();
-  }
-
   function buildPromptAndSend() {
     if (!activeTaskId) return;
-    const editor = editorRef.current?.getModifiedEditor();
-    const monaco = monacoRef.current;
-    const model = editor?.getModel();
+    const model = modifiedEditor?.getModel();
     const lang = state.kind === 'loaded' ? state.language : '';
 
     // Only unsent comments contribute to the next prompt. Sent ones are
@@ -399,7 +383,7 @@ export function EditorPane({
         let endLine = sc.endLine;
         // For the current file, prefer live decoration ranges (line shifts
         // from typing) and embed a code excerpt.
-        if (isCurrent && editor && monaco && model) {
+        if (isCurrent && modifiedEditor && monaco && model) {
           const live = liveComments.find((c) => c.id === sc.id);
           if (live) {
             const r = model.getDecorationRange(live.decorationId);
@@ -439,8 +423,13 @@ export function EditorPane({
     onClose();
   }
 
+  const hasAnyComments = useMemo(
+    () => Object.values(commentsByFile).some((list) => list.length > 0),
+    [commentsByFile],
+  );
+
   const commentsSlot =
-    !commentsStore.disabled && Object.values(commentsByFile).some((list) => list.length > 0) ? (
+    !commentsStore.disabled && hasAnyComments ? (
       <CommentsMenu
         commentsByFile={commentsByFile}
         currentFilePath={filePath}
@@ -450,20 +439,20 @@ export function EditorPane({
         getLiveRangeForCurrent={(commentId) => {
           const target = liveComments.find((c) => c.id === commentId);
           if (!target) return null;
-          const model = editorRef.current?.getModifiedEditor().getModel();
+          const model = modifiedEditor?.getModel();
           const r = model?.getDecorationRange(target.decorationId);
           return r ? { start: r.startLineNumber, end: r.endLineNumber } : null;
         }}
         onNavigate={(targetPath, commentId) => {
           if (targetPath === filePath) {
             const target = liveComments.find((c) => c.id === commentId);
-            if (target) navigateToComment(target);
+            if (target) revealLive(target);
           } else {
             onNavigateAcrossFile(targetPath, commentId);
           }
         }}
         onRemove={(_path, id) => commentsStore.remove(id)}
-        onUnsend={(id) => commentsStore.markUnsent(id)}
+        onUnsend={commentsStore.markUnsent}
         onSend={buildPromptAndSend}
       />
     ) : null;

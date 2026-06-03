@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron';
+import type { Database, Statement } from 'better-sqlite3';
 import { getRawDb } from '../db/client';
 import type { DiffComment, DiffCommentInput, IpcResponse } from '@shared/types';
 
@@ -38,20 +39,57 @@ export function computeOrphans(
   return rows.filter((r) => !existing.has(r.file_path)).map((r) => r.id);
 }
 
+const COLS = 'id, task_id, file_path, start_line, end_line, text, sent, created_at, updated_at';
+
+interface Stmts {
+  listByTask: Statement;
+  upsert: Statement;
+  getById: Statement;
+  deleteById: Statement;
+  listPathsByTask: Statement;
+  /** Held so prune's transaction stays bound to the same Database instance. */
+  db: Database;
+}
+
+let stmts: Stmts | null = null;
+
+/** better-sqlite3 caches query plans on `Statement` instances; preparing
+ *  once at first use beats re-parsing SQL on every IPC round-trip. */
+function getStmts(): Stmts {
+  if (stmts) return stmts;
+  const db = getRawDb();
+  if (!db) throw new Error('db unavailable');
+  stmts = {
+    db,
+    listByTask: db.prepare(
+      `SELECT ${COLS} FROM diff_editor_comments
+        WHERE task_id = ? ORDER BY file_path, start_line`,
+    ),
+    upsert: db.prepare(
+      `INSERT INTO diff_editor_comments
+          (${COLS})
+        VALUES (@id, @taskId, @filePath, @startLine, @endLine, @text, @sent, @now, @now)
+        ON CONFLICT(id) DO UPDATE SET
+          file_path  = excluded.file_path,
+          start_line = excluded.start_line,
+          end_line   = excluded.end_line,
+          text       = excluded.text,
+          sent       = excluded.sent,
+          updated_at = excluded.updated_at`,
+    ),
+    getById: db.prepare(`SELECT ${COLS} FROM diff_editor_comments WHERE id = ?`),
+    deleteById: db.prepare(`DELETE FROM diff_editor_comments WHERE id = ?`),
+    listPathsByTask: db.prepare(`SELECT id, file_path FROM diff_editor_comments WHERE task_id = ?`),
+  };
+  return stmts;
+}
+
 export function registerDiffCommentsIpc(): void {
   ipcMain.handle(
     'diffComments:list',
     (_e, args: { taskId: string }): IpcResponse<DiffComment[]> => {
       try {
-        const db = getRawDb();
-        if (!db) throw new Error('db unavailable');
-        const rows = db
-          .prepare(
-            `SELECT id, task_id, file_path, start_line, end_line, text, sent, created_at, updated_at
-               FROM diff_editor_comments WHERE task_id = ?
-              ORDER BY file_path, start_line`,
-          )
-          .all(args.taskId) as DiffCommentRow[];
+        const rows = getStmts().listByTask.all(args.taskId) as DiffCommentRow[];
         return { success: true, data: rows.map(rowToComment) };
       } catch (err) {
         return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -61,36 +99,9 @@ export function registerDiffCommentsIpc(): void {
 
   ipcMain.handle('diffComments:upsert', (_e, c: DiffCommentInput): IpcResponse<DiffComment> => {
     try {
-      const db = getRawDb();
-      if (!db) throw new Error('db unavailable');
-      const now = new Date().toISOString();
-      db.prepare(
-        `INSERT INTO diff_editor_comments
-              (id, task_id, file_path, start_line, end_line, text, sent, created_at, updated_at)
-            VALUES (@id, @task_id, @file_path, @start_line, @end_line, @text, @sent, @now, @now)
-            ON CONFLICT(id) DO UPDATE SET
-              file_path  = excluded.file_path,
-              start_line = excluded.start_line,
-              end_line   = excluded.end_line,
-              text       = excluded.text,
-              sent       = excluded.sent,
-              updated_at = excluded.updated_at`,
-      ).run({
-        id: c.id,
-        task_id: c.taskId,
-        file_path: c.filePath,
-        start_line: c.startLine,
-        end_line: c.endLine,
-        text: c.text,
-        sent: c.sent ? 1 : 0,
-        now,
-      });
-      const row = db
-        .prepare(
-          `SELECT id, task_id, file_path, start_line, end_line, text, sent, created_at, updated_at
-               FROM diff_editor_comments WHERE id = ?`,
-        )
-        .get(c.id) as DiffCommentRow | undefined;
+      const s = getStmts();
+      s.upsert.run({ ...c, sent: c.sent ? 1 : 0, now: new Date().toISOString() });
+      const row = s.getById.get(c.id) as DiffCommentRow | undefined;
       if (!row) throw new Error('row missing after upsert');
       return { success: true, data: rowToComment(row) };
     } catch (err) {
@@ -100,9 +111,7 @@ export function registerDiffCommentsIpc(): void {
 
   ipcMain.handle('diffComments:delete', (_e, args: { id: string }): IpcResponse<void> => {
     try {
-      const db = getRawDb();
-      if (!db) throw new Error('db unavailable');
-      db.prepare(`DELETE FROM diff_editor_comments WHERE id = ?`).run(args.id);
+      getStmts().deleteById.run(args.id);
       return { success: true };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -116,16 +125,15 @@ export function registerDiffCommentsIpc(): void {
       args: { taskId: string; existingFilePaths: string[] },
     ): IpcResponse<{ deleted: number }> => {
       try {
-        const db = getRawDb();
-        if (!db) throw new Error('db unavailable');
-        const rows = db
-          .prepare(`SELECT id, file_path FROM diff_editor_comments WHERE task_id = ?`)
-          .all(args.taskId) as Array<{ id: string; file_path: string }>;
+        const s = getStmts();
+        const rows = s.listPathsByTask.all(args.taskId) as Array<{
+          id: string;
+          file_path: string;
+        }>;
         const orphans = computeOrphans(rows, new Set(args.existingFilePaths));
         if (orphans.length === 0) return { success: true, data: { deleted: 0 } };
-        const stmt = db.prepare(`DELETE FROM diff_editor_comments WHERE id = ?`);
-        const tx = db.transaction((ids: string[]) => {
-          for (const id of ids) stmt.run(id);
+        const tx = s.db.transaction((ids: string[]) => {
+          for (const id of ids) s.deleteById.run(id);
         });
         tx(orphans);
         return { success: true, data: { deleted: orphans.length } };
