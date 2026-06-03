@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import type { ITheme as XtermTheme } from 'xterm';
 import { Modal } from '../ui/Modal';
 import type { FileChange, GitStatus } from '../../../shared/types';
 import { EditorSidebar } from './EditorSidebar';
 import { EditorPane } from './EditorPane';
-import type { CommitSummary, EditorView } from './types';
+import type { CommitSummary, EditorView, StoredComment } from './types';
 
 interface DiffEditorProps {
   cwd: string;
@@ -115,6 +115,7 @@ function DiffEditorBody({
             hash: c.hash,
             shortHash: c.shortHash,
             subject: c.subject,
+            body: c.body,
             authorName: c.authorName,
             authorDate: c.authorDate,
           }));
@@ -159,6 +160,60 @@ function DiffEditorBody({
     setView(next);
   }
 
+  // ── Per-file comments ────────────────────────────────────
+  // Owned here (not in EditorPane) so comments survive file switches. Keyed
+  // by absolute file path within the open project; cleared when the modal
+  // unmounts. Counts feed the sidebar's per-file indicator; the full map
+  // feeds the shared CommentsMenu dropdown so the user can see comments
+  // across every file from anywhere in the modal.
+  const [commentsByFile, setCommentsByFile] = useState<Record<string, StoredComment[]>>({});
+
+  // Cross-file navigation token from the dropdown: when set, the EditorPane
+  // switches to the requested file and reveals the comment with this id
+  // once hydration completes, then clears it via onClearReveal.
+  const [revealCommentId, setRevealCommentId] = useState<string | null>(null);
+
+  const updateCommentsForFile = useCallback((path: string, next: StoredComment[]) => {
+    setCommentsByFile((prev) => {
+      if (next.length === 0) {
+        if (!(path in prev)) return prev;
+        const copy = { ...prev };
+        delete copy[path];
+        return copy;
+      }
+      return { ...prev, [path]: next };
+    });
+  }, []);
+
+  const removeComment = useCallback((path: string, commentId: string) => {
+    setCommentsByFile((prev) => {
+      const list = prev[path];
+      if (!list) return prev;
+      const next = list.filter((c) => c.id !== commentId);
+      if (next.length === 0) {
+        const copy = { ...prev };
+        delete copy[path];
+        return copy;
+      }
+      return { ...prev, [path]: next };
+    });
+  }, []);
+
+  const navigateAcrossFile = useCallback((path: string, commentId: string) => {
+    setSelectedPath(path);
+    setRevealCommentId(commentId);
+  }, []);
+
+  const clearReveal = useCallback(() => setRevealCommentId(null), []);
+
+  const commentCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const [path, list] of Object.entries(commentsByFile)) {
+      if (list.length > 0) map.set(path, list.length);
+    }
+    return map;
+  }, [commentsByFile]);
+
   const bg = terminalTheme.background ?? (isDark ? '#0d0d11' : '#faf8f3');
 
   return (
@@ -171,6 +226,7 @@ function DiffEditorBody({
             filesLoading={repoPathsLoading || changedFilesLoading}
             selectedPath={selectedPath}
             onSelectFile={setSelectedPath}
+            commentCounts={commentCounts}
             commits={commits}
             commitsLoading={commitsLoading}
             showWorkingTreeRow={workingFiles.length > 0}
@@ -187,6 +243,12 @@ function DiffEditorBody({
             activeTaskId={activeTaskId}
             terminalTheme={terminalTheme}
             isDark={isDark}
+            commentsByFile={commentsByFile}
+            revealCommentId={revealCommentId}
+            onCommentsChange={updateCommentsForFile}
+            onRemoveComment={removeComment}
+            onNavigateAcrossFile={navigateAcrossFile}
+            onClearReveal={clearReveal}
             onClose={onClose}
           />
         </Panel>

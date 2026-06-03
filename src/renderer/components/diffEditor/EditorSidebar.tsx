@@ -3,6 +3,7 @@ import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 import { ChevronDown, ChevronRight, GitCommit, History } from 'lucide-react';
 import type { FileChange, FileChangeStatus } from '../../../shared/types';
 import type { CommitSummary, EditorView } from './types';
+import { Popover, PopoverAnchor, PopoverContent } from '../ui/Popover';
 
 interface EditorSidebarProps {
   /** All file paths in the current view's source (whole repo, sorted). */
@@ -12,6 +13,9 @@ interface EditorSidebarProps {
   filesLoading: boolean;
   selectedPath: string;
   onSelectFile: (path: string) => void;
+  /** Per-file comment counts. Files in this map get a small badge in the
+   *  tree; folders aggregate their descendants' counts for the same badge. */
+  commentCounts: Map<string, number>;
 
   commits: CommitSummary[];
   commitsLoading: boolean;
@@ -42,6 +46,7 @@ export function EditorSidebar(props: EditorSidebarProps) {
             loading={props.filesLoading}
             selectedPath={props.selectedPath}
             onSelectFile={props.onSelectFile}
+            commentCounts={props.commentCounts}
           />
         </Panel>
         <PanelResizeHandle className="h-px bg-[hsl(var(--border)/0.5)] hover:bg-[hsl(var(--border))] transition-colors" />
@@ -192,6 +197,7 @@ interface FileTreePanelProps {
   loading: boolean;
   selectedPath: string;
   onSelectFile: (path: string) => void;
+  commentCounts: Map<string, number>;
 }
 
 function FileTreePanel({
@@ -200,6 +206,7 @@ function FileTreePanel({
   loading,
   selectedPath,
   onSelectFile,
+  commentCounts,
 }: FileTreePanelProps) {
   const tree = useMemo(() => buildRepoTree(paths, changedFiles), [paths, changedFiles]);
   return (
@@ -221,6 +228,7 @@ function FileTreePanel({
             indent={0}
             selectedPath={selectedPath}
             onSelectFile={onSelectFile}
+            commentCounts={commentCounts}
           />
         )}
       </div>
@@ -228,14 +236,31 @@ function FileTreePanel({
   );
 }
 
+/** Aggregate comment counts for everything under a folder. Mirrors the
+ *  changed-count walk in buildRepoTree but uses the external commentCounts
+ *  map (which can change without the tree changing). */
+function folderCommentCount(node: TreeFolder, commentCounts: Map<string, number>): number {
+  let total = 0;
+  for (const file of node.files) total += commentCounts.get(file.fullPath) ?? 0;
+  for (const child of node.children.values()) total += folderCommentCount(child, commentCounts);
+  return total;
+}
+
 interface FolderContentsProps {
   node: TreeFolder;
   indent: number;
   selectedPath: string;
   onSelectFile: (path: string) => void;
+  commentCounts: Map<string, number>;
 }
 
-function FolderContents({ node, indent, selectedPath, onSelectFile }: FolderContentsProps) {
+function FolderContents({
+  node,
+  indent,
+  selectedPath,
+  onSelectFile,
+  commentCounts,
+}: FolderContentsProps) {
   const childFolders = Array.from(node.children.values()).sort((a, b) =>
     a.name.localeCompare(b.name),
   );
@@ -249,6 +274,7 @@ function FolderContents({ node, indent, selectedPath, onSelectFile }: FolderCont
           indent={indent}
           selectedPath={selectedPath}
           onSelectFile={onSelectFile}
+          commentCounts={commentCounts}
         />
       ))}
       {childFiles.map((file) => (
@@ -257,6 +283,7 @@ function FolderContents({ node, indent, selectedPath, onSelectFile }: FolderCont
           file={file}
           indent={indent}
           selected={file.fullPath === selectedPath}
+          commentCount={commentCounts.get(file.fullPath) ?? 0}
           onClick={() => onSelectFile(file.fullPath)}
         />
       ))}
@@ -275,15 +302,18 @@ function FolderEntry({
   indent,
   selectedPath,
   onSelectFile,
+  commentCounts,
 }: {
   folder: TreeFolder;
   indent: number;
   selectedPath: string;
   onSelectFile: (path: string) => void;
+  commentCounts: Map<string, number>;
 }) {
   // Default-open if any descendant is the current selection or changed.
   const [open, setOpen] = useState<boolean>(() => folder.changedCount > 0);
   const tint = folder.dominantStatus ? FOLDER_TINT[folder.dominantStatus] : 'text-foreground/90';
+  const commentCount = folderCommentCount(folder, commentCounts);
   return (
     <>
       <button
@@ -303,8 +333,10 @@ function FolderEntry({
           )}
         </span>
         <span className={`flex-1 min-w-0 font-mono text-[11.5px] truncate text-left ${tint}`}>
-          {folder.name}/
+          {folder.name}
+          <span className="text-muted-foreground/40">/</span>
         </span>
+        {commentCount > 0 && <CommentBadge count={commentCount} />}
         {folder.changedCount > 0 && (
           <span
             className={`flex-shrink-0 font-mono text-[10px] font-semibold tabular-nums ${
@@ -324,9 +356,22 @@ function FolderEntry({
           indent={indent + 1}
           selectedPath={selectedPath}
           onSelectFile={onSelectFile}
+          commentCounts={commentCounts}
         />
       )}
     </>
+  );
+}
+
+function CommentBadge({ count }: { count: number }) {
+  return (
+    <span
+      title={`${count} comment${count !== 1 ? 's' : ''}`}
+      aria-label={`${count} comment${count !== 1 ? 's' : ''}`}
+      className="flex-shrink-0 inline-flex items-center justify-center min-w-[14px] h-[14px] px-1 rounded-full font-mono text-[9.5px] font-semibold tabular-nums bg-primary/20 text-primary"
+    >
+      {count}
+    </span>
   );
 }
 
@@ -334,11 +379,13 @@ function FileEntry({
   file,
   indent,
   selected,
+  commentCount,
   onClick,
 }: {
   file: TreeFile;
   indent: number;
   selected: boolean;
+  commentCount: number;
   onClick: () => void;
 }) {
   const change = file.change;
@@ -363,6 +410,7 @@ function FileEntry({
       <span className={`flex-1 min-w-0 font-mono text-[11.5px] truncate text-left ${tint}`}>
         {file.name}
       </span>
+      {commentCount > 0 && <CommentBadge count={commentCount} />}
       {change && (change.additions > 0 || change.deletions > 0) && (
         <span className="font-mono text-[10.5px] flex gap-1.5 flex-shrink-0">
           {change.additions > 0 && (
@@ -454,32 +502,117 @@ function CommitsDrawer({
         {commits.map((c) => {
           const active = activeCommitHash === c.hash;
           return (
-            <button
+            <CommitRow
               key={c.hash}
-              type="button"
-              data-active={active}
-              onClick={() => onSelectView({ kind: 'commit', hash: c.hash })}
-              title={`${c.shortHash}  ${c.authorName}  ${relativeTime(c.authorDate)}`}
-              className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-[12px] text-left transition-colors ${
-                active
-                  ? 'bg-primary/15 text-primary'
-                  : 'text-foreground/85 hover:bg-[hsl(var(--surface-2)/0.6)]'
-              }`}
-            >
-              <span className="text-[10px] font-mono text-muted-foreground/60 tabular-nums flex-shrink-0">
-                {c.shortHash}
-              </span>
-              <span className="truncate flex-1 font-mono text-[11.5px]">
-                {c.subject || '(no subject)'}
-              </span>
-              <span className="text-[10px] text-muted-foreground/40 flex-shrink-0 tabular-nums">
-                {relativeTime(c.authorDate)}
-              </span>
-            </button>
+              commit={c}
+              active={active}
+              onSelect={() => onSelectView({ kind: 'commit', hash: c.hash })}
+            />
           );
         })}
       </div>
     </div>
+  );
+}
+
+interface CommitRowProps {
+  commit: CommitSummary;
+  active: boolean;
+  onSelect: () => void;
+}
+
+function CommitRow({ commit, active, onSelect }: CommitRowProps) {
+  const [hovered, setHovered] = useState(false);
+  const openTimer = useRef<number | null>(null);
+  const closeTimer = useRef<number | null>(null);
+
+  const cancelTimers = () => {
+    if (openTimer.current != null) {
+      window.clearTimeout(openTimer.current);
+      openTimer.current = null;
+    }
+    if (closeTimer.current != null) {
+      window.clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  };
+
+  const scheduleOpen = () => {
+    cancelTimers();
+    openTimer.current = window.setTimeout(() => setHovered(true), 220);
+  };
+
+  const scheduleClose = () => {
+    cancelTimers();
+    closeTimer.current = window.setTimeout(() => setHovered(false), 80);
+  };
+
+  useEffect(() => cancelTimers, []);
+
+  return (
+    <Popover open={hovered}>
+      <PopoverAnchor asChild>
+        <button
+          type="button"
+          data-active={active}
+          onClick={onSelect}
+          onMouseEnter={scheduleOpen}
+          onMouseLeave={scheduleClose}
+          onFocus={scheduleOpen}
+          onBlur={scheduleClose}
+          className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-[12px] text-left transition-colors ${
+            active
+              ? 'bg-primary/15 text-primary'
+              : 'text-foreground/85 hover:bg-[hsl(var(--surface-2)/0.6)]'
+          }`}
+        >
+          <span className="text-[10px] font-mono text-muted-foreground/60 tabular-nums flex-shrink-0">
+            {commit.shortHash}
+          </span>
+          <span className="truncate flex-1 font-mono text-[11.5px]">
+            {commit.subject || '(no subject)'}
+          </span>
+          <span className="text-[10px] text-muted-foreground/40 flex-shrink-0 tabular-nums">
+            {relativeTime(commit.authorDate)}
+          </span>
+        </button>
+      </PopoverAnchor>
+      <PopoverContent
+        side="right"
+        align="start"
+        sideOffset={10}
+        // Pointer events live so the popover stays open while the cursor is on
+        // it; mouseenter/leave on the content cancels the close timer.
+        onMouseEnter={() => {
+          if (closeTimer.current != null) {
+            window.clearTimeout(closeTimer.current);
+            closeTimer.current = null;
+          }
+        }}
+        onMouseLeave={scheduleClose}
+        // Block Radix's auto-focus so the popover doesn't steal focus from the
+        // commit list on hover.
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onCloseAutoFocus={(e) => e.preventDefault()}
+        className="w-[420px] max-h-[440px] overflow-y-auto p-3.5 flex flex-col gap-2.5"
+      >
+        <div className="text-[12.5px] font-medium text-foreground leading-snug">
+          {commit.subject || '(no subject)'}
+        </div>
+        {commit.body && (
+          <div className="text-[11.5px] text-foreground/75 leading-relaxed whitespace-pre-wrap font-mono">
+            {commit.body}
+          </div>
+        )}
+        <div className="flex items-center gap-2 pt-1.5 border-t border-border/40 text-[10.5px] text-muted-foreground/75">
+          <span className="font-mono tabular-nums">{commit.shortHash}</span>
+          <span className="opacity-50">·</span>
+          <span className="truncate">{commit.authorName}</span>
+          <span className="opacity-50">·</span>
+          <span className="tabular-nums">{relativeTime(commit.authorDate)}</span>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 

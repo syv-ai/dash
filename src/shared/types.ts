@@ -565,3 +565,14 @@ export interface EditorReadCommitResult {
 export type EditorWriteResult =
   | { ok: true; mtimeMs: number; sizeBytes: number }
   | { ok: false; stale: true; currentMtimeMs: number; currentSizeBytes: number };
+
+/** Commit summary for the diff editor's commit drawer. Includes the body so
+ *  hover popovers can render the full message without a second IPC. */
+export interface EditorCommitListItem {
+  hash: string;
+  shortHash: string;
+  authorName: string;
+  authorDate: number;
+  subject: string;
+  body: string;
+}

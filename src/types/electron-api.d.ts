@@ -32,7 +32,7 @@ import type {
   EditorReadWorkingResult,
   EditorReadCommitResult,
   EditorWriteResult,
-  CommitNode,
+  EditorCommitListItem,
   FileChange,
 } from '../shared/types';
 import type { ParsedSessionMessage, SessionMetrics, SessionUpdate } from '../shared/sessionTypes';
@@ -320,7 +320,10 @@ export interface ElectronAPI {
     expectedMtimeMs: number;
     expectedSizeBytes: number;
   }) => Promise<IpcResponse<EditorWriteResult>>;
-  editorListCommits: (args: { cwd: string; limit?: number }) => Promise<IpcResponse<CommitNode[]>>;
+  editorListCommits: (args: {
+    cwd: string;
+    limit?: number;
+  }) => Promise<IpcResponse<EditorCommitListItem[]>>;
   editorListFilesInCommit: (args: {
     cwd: string;
     hash: string;

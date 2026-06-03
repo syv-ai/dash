@@ -4,7 +4,7 @@ import { execFile } from 'child_process';
 import path from 'path';
 import { promisify } from 'util';
 import type {
-  CommitNode,
+  EditorCommitListItem,
   EditorReadCommitResult,
   EditorReadWorkingResult,
   EditorWriteResult,
@@ -350,27 +350,33 @@ export function registerEditorIpc(): void {
   // ── editor:listCommits ────────────────────────────────────────
   ipcMain.handle(
     'editor:listCommits',
-    async (_event, args: { cwd: string; limit?: number }): Promise<IpcResponse<CommitNode[]>> => {
+    async (
+      _event,
+      args: { cwd: string; limit?: number },
+    ): Promise<IpcResponse<EditorCommitListItem[]>> => {
       try {
         const limit = args.limit ?? 50;
-        const format = '%H%x00%h%x00%P%x00%an%x00%at%x00%s';
+        // -z separates records with NUL; %x1f is a unit-separator between
+        // fields. Body can contain newlines, so we keep it last and use the
+        // record NUL as its terminator.
+        const format = '%H%x1f%h%x1f%an%x1f%at%x1f%s%x1f%b';
         const { stdout } = await execFileAsync(
           'git',
-          ['log', `--max-count=${limit}`, `--format=${format}`, 'HEAD'],
+          ['log', '-z', `--max-count=${limit}`, `--format=${format}`, 'HEAD'],
           { cwd: args.cwd, maxBuffer: 5 * 1024 * 1024, timeout: 15000 },
         );
-        const commits: CommitNode[] = [];
-        for (const line of stdout.split('\n')) {
-          if (!line.trim()) continue;
-          const parts = line.split('\0');
+        const commits: EditorCommitListItem[] = [];
+        for (const record of stdout.split('\0')) {
+          if (!record) continue;
+          const parts = record.split('\x1f');
+          if (parts.length < 6) continue;
           commits.push({
             hash: parts[0],
             shortHash: parts[1],
-            parents: parts[2] ? parts[2].split(' ').filter(Boolean) : [],
-            authorName: parts[3] || '',
-            authorDate: parseInt(parts[4], 10) || 0,
-            subject: parts[5] || '',
-            refs: [],
+            authorName: parts[2] || '',
+            authorDate: parseInt(parts[3], 10) || 0,
+            subject: parts[4] || '',
+            body: (parts[5] || '').trim(),
           });
         }
         return { success: true, data: commits };
