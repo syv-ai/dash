@@ -11,6 +11,7 @@ import { registerTelemetryIpc } from './telemetryIpc';
 import { registerSkillsIpc } from './skillsIpc';
 import { registerSessionIpc } from './sessionIpc';
 import { registerEditorIpc } from './editorIpc';
+import { registerDiffCommentsIpc } from './diffCommentsIpc';
 
 export function registerAllIpc(): void {
   registerAppIpc();
@@ -26,4 +27,5 @@ export function registerAllIpc(): void {
   registerSkillsIpc();
   registerSessionIpc();
   registerEditorIpc();
+  registerDiffCommentsIpc();
 }
