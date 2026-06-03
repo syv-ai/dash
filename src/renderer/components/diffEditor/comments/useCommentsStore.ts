@@ -22,6 +22,10 @@ export interface CommentsStore {
   markSent(ids: ReadonlyArray<string>): void;
   markUnsent(id: string): void;
   snapshotRanges(filePath: string, snapshots: ReadonlyArray<RangeSnapshot>): void;
+  /** Hard-delete any persisted comment whose filePath is not in the given
+   *  set. Triggered once per modal open after the repo's file list resolves.
+   *  Re-hydrates from SQLite if anything was deleted, so local state matches. */
+  prune(existingFilePaths: ReadonlySet<string>): Promise<{ deleted: number }>;
 }
 
 /** Task-scoped comments store. Optimistic-applies mutations to local state,
@@ -186,6 +190,25 @@ export function useCommentsStore(taskId: string | null): CommentsStore {
     [taskId, findById],
   );
 
+  const prune = useCallback(
+    async (existingFilePaths: ReadonlySet<string>) => {
+      if (!taskId) return { deleted: 0 };
+      const resp = await window.electronAPI.diffCommentsPruneForTask({
+        taskId,
+        existingFilePaths: Array.from(existingFilePaths),
+      });
+      if (!resp.success || !resp.data) return { deleted: 0 };
+      if (resp.data.deleted > 0) {
+        const list = await window.electronAPI.diffCommentsList({ taskId });
+        if (list.success && list.data) {
+          dispatch({ type: 'hydrate', comments: list.data });
+        }
+      }
+      return resp.data;
+    },
+    [taskId],
+  );
+
   return {
     state,
     isReady: isReadyRef.current,
@@ -196,5 +219,6 @@ export function useCommentsStore(taskId: string | null): CommentsStore {
     markSent,
     markUnsent,
     snapshotRanges,
+    prune,
   };
 }

@@ -187,6 +187,16 @@ function DiffEditorBody({
     return map;
   }, [store.state]);
 
+  // Once the working tree's file list is known, hard-delete any persisted
+  // comments whose path no longer exists. Runs once per modal session per
+  // task — the deps trigger a re-run if either changes mid-modal (rare).
+  useEffect(() => {
+    if (!activeTaskId) return;
+    if (repoPathsLoading) return;
+    if (repoPaths.length === 0) return;
+    void store.prune(new Set(repoPaths));
+  }, [activeTaskId, repoPaths, repoPathsLoading, store]);
+
   const bg = terminalTheme.background ?? (isDark ? '#0d0d11' : '#faf8f3');
 
   return (
