@@ -10,6 +10,7 @@ import { useCommentsContext } from './comments/CommentsContext';
 import { useGutterSelection } from './comments/useGutterSelection';
 import { useFileCommentsBinding } from './comments/useFileCommentsBinding';
 import { useFileLoad, type LoadState } from './editor/useFileLoad';
+import { useEditorSave } from './editor/useEditorSave';
 import {
   Popover,
   PopoverAnchor,
@@ -38,11 +39,6 @@ interface EditorPaneProps {
   guardClose?: () => boolean;
 }
 
-interface StaleInfo {
-  currentMtimeMs: number;
-  currentSizeBytes: number;
-}
-
 export function EditorPane({
   cwd,
   filePath,
@@ -60,9 +56,6 @@ export function EditorPane({
   const { state, setState } = useFileLoad(cwd, filePath, view);
   const [draft, setDraft] = useState<string>('');
   const [loadedBuffer, setLoadedBuffer] = useState<string>('');
-  const [saving, setSaving] = useState(false);
-  const [savedPill, setSavedPill] = useState(false);
-  const [stale, setStale] = useState<StaleInfo | null>(null);
   // When non-empty, the WIP popover opens prefilled with this text. Used by
   // the dbl-click-to-edit flow on a persisted comment widget.
   const [pendingText, setPendingText] = useState<string>('');
@@ -88,6 +81,29 @@ export function EditorPane({
 
   const themeName = themeNameFor(isDark);
   const isCommitView = view.kind === 'commit';
+
+  // Mutate the load state in-place for save mtime/size updates and reload.
+  // useFileLoad owns the state; this just exposes a targeted patch.
+  const patchLoadedState = useCallback(
+    (next: Partial<Extract<LoadState, { kind: 'loaded' }>>) => {
+      setState((prev) => (prev.kind === 'loaded' ? { ...prev, ...next } : prev));
+    },
+    [setState],
+  );
+
+  const saveApi = useEditorSave({
+    cwd,
+    filePath,
+    workingRef: view.kind === 'working' ? view.ref : 'HEAD',
+    state,
+    draft,
+    loadedBuffer,
+    setLoadedBuffer,
+    setDraft,
+    patchLoadedState,
+    isCommitView,
+  });
+  const { saving, savedPill, stale, setStale, save, overwrite, reloadFromDisk } = saveApi;
 
   // Reference mountSeq so React's dep tracking sees this re-run after every
   // editor mount — useGutterSelection's deps include the (live) editor
@@ -178,79 +194,10 @@ export function EditorPane({
     localStorage.setItem(WORDWRAP_KEY, wordWrap ? 'on' : 'off');
   }, [wordWrap]);
 
-  // ── Save flow (working view only) ───────────────────────
-  const save = useCallback(async () => {
-    if (isCommitView || state.kind !== 'loaded') return;
-    if (draft === loadedBuffer) return;
-    setSaving(true);
-    try {
-      const resp = await window.electronAPI.editorWriteWorking({
-        cwd,
-        filePath,
-        content: draft,
-        expectedMtimeMs: state.mtimeMs,
-        expectedSizeBytes: state.sizeBytes,
-      });
-      if (!resp.success || !resp.data) {
-        setStale({ currentMtimeMs: 0, currentSizeBytes: 0 });
-        return;
-      }
-      if (resp.data.ok === false) {
-        setStale({
-          currentMtimeMs: resp.data.currentMtimeMs,
-          currentSizeBytes: resp.data.currentSizeBytes,
-        });
-        return;
-      }
-      setLoadedBuffer(draft);
-      setState({ ...state, mtimeMs: resp.data.mtimeMs, sizeBytes: resp.data.sizeBytes });
-      setStale(null);
-      setSavedPill(true);
-      window.setTimeout(() => setSavedPill(false), 1000);
-    } finally {
-      setSaving(false);
-    }
-  }, [cwd, filePath, draft, loadedBuffer, state, isCommitView]);
-
+  // Save flow + stale detection lives in useEditorSave (declared above).
   useEffect(() => {
     saveCmdRef.current = () => void save();
   });
-
-  const reloadFromDisk = useCallback(async () => {
-    if (isCommitView || view.kind !== 'working') return;
-    if (draft !== loadedBuffer) {
-      if (!window.confirm('Discard unsaved changes and reload from disk?')) return;
-    }
-    setStale(null);
-    const resp = await window.electronAPI.editorReadWorking({
-      cwd,
-      filePath,
-      ref: view.ref,
-    });
-    if (!resp.success || !resp.data) return;
-    const modifiedPresent = resp.data.workingContent !== null;
-    const initial = resp.data.workingContent ?? '';
-    setState({
-      kind: 'loaded',
-      originalContent: resp.data.originalContent,
-      modifiedContent: initial,
-      mtimeMs: resp.data.mtimeMs,
-      sizeBytes: resp.data.sizeBytes,
-      isBinary: resp.data.isBinary,
-      isLargeFile: resp.data.isLargeFile,
-      language: resp.data.language,
-      modifiedPresent,
-    });
-    setLoadedBuffer(initial);
-    setDraft(initial);
-  }, [cwd, filePath, view, draft, loadedBuffer, isCommitView]);
-
-  const overwrite = useCallback(async () => {
-    if (!stale || state.kind !== 'loaded') return;
-    setState({ ...state, mtimeMs: stale.currentMtimeMs, sizeBytes: stale.currentSizeBytes });
-    setStale(null);
-    setTimeout(() => void save(), 0);
-  }, [stale, save, state]);
 
   // ── Editor mount + selection mechanic ──────────────────
   // Define the theme *before* Monaco paints. Without this, Monaco's first
