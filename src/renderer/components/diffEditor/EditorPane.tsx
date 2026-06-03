@@ -247,6 +247,10 @@ export function EditorPane({
     if (!commentDecorations.current) {
       commentDecorations.current = editor.createDecorationsCollection();
     }
+    if (commentsStore.disabled) {
+      commentDecorations.current.clear();
+      return;
+    }
     // Concrete primary color for Monaco's minimap / overview ruler (Monaco
     // can't read CSS vars from inside its canvas renderer).
     const commentMarker = isDark ? '#b8c5e0' : '#3b5078';
@@ -269,7 +273,7 @@ export function EditorPane({
       ];
     });
     commentDecorations.current.set(decos);
-  }, [liveComments, isDark]);
+  }, [liveComments, isDark, commentsStore.disabled]);
 
   // Latest editComment handler captured in a ref so the widgets effect
   // doesn't re-create DOM nodes when the handler identity changes.
@@ -299,6 +303,7 @@ export function EditorPane({
     if (!editor || !area) return;
     const model = editor.getModel();
     if (!model) return;
+    if (commentsStore.disabled) return;
 
     const visible = liveComments.filter((c) => c.id !== editingId);
     const nodes = new Map<string, HTMLDivElement>();
@@ -332,7 +337,7 @@ export function EditorPane({
         if (node.parentNode === area) area.removeChild(node);
       }
     };
-  }, [liveComments, editorAreaEl, editingId]);
+  }, [liveComments, editorAreaEl, editingId, commentsStore.disabled]);
 
   function addComment(text: string) {
     if (editingId) {
@@ -434,33 +439,34 @@ export function EditorPane({
     onClose();
   }
 
-  const commentsSlot = Object.values(commentsByFile).some((list) => list.length > 0) ? (
-    <CommentsMenu
-      commentsByFile={commentsByFile}
-      currentFilePath={filePath}
-      // For the current file we pull line ranges live from the model
-      // (so typed line shifts reflect immediately); other files fall
-      // back to their stored line numbers.
-      getLiveRangeForCurrent={(commentId) => {
-        const target = liveComments.find((c) => c.id === commentId);
-        if (!target) return null;
-        const model = editorRef.current?.getModifiedEditor().getModel();
-        const r = model?.getDecorationRange(target.decorationId);
-        return r ? { start: r.startLineNumber, end: r.endLineNumber } : null;
-      }}
-      onNavigate={(targetPath, commentId) => {
-        if (targetPath === filePath) {
+  const commentsSlot =
+    !commentsStore.disabled && Object.values(commentsByFile).some((list) => list.length > 0) ? (
+      <CommentsMenu
+        commentsByFile={commentsByFile}
+        currentFilePath={filePath}
+        // For the current file we pull line ranges live from the model
+        // (so typed line shifts reflect immediately); other files fall
+        // back to their stored line numbers.
+        getLiveRangeForCurrent={(commentId) => {
           const target = liveComments.find((c) => c.id === commentId);
-          if (target) navigateToComment(target);
-        } else {
-          onNavigateAcrossFile(targetPath, commentId);
-        }
-      }}
-      onRemove={(_path, id) => commentsStore.remove(id)}
-      onUnsend={(id) => commentsStore.markUnsent(id)}
-      onSend={buildPromptAndSend}
-    />
-  ) : null;
+          if (!target) return null;
+          const model = editorRef.current?.getModifiedEditor().getModel();
+          const r = model?.getDecorationRange(target.decorationId);
+          return r ? { start: r.startLineNumber, end: r.endLineNumber } : null;
+        }}
+        onNavigate={(targetPath, commentId) => {
+          if (targetPath === filePath) {
+            const target = liveComments.find((c) => c.id === commentId);
+            if (target) navigateToComment(target);
+          } else {
+            onNavigateAcrossFile(targetPath, commentId);
+          }
+        }}
+        onRemove={(_path, id) => commentsStore.remove(id)}
+        onUnsend={(id) => commentsStore.markUnsent(id)}
+        onSend={buildPromptAndSend}
+      />
+    ) : null;
 
   return (
     <div className="h-full flex flex-col min-w-0 min-h-0">
