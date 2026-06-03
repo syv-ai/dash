@@ -576,3 +576,35 @@ export interface EditorCommitListItem {
   subject: string;
   body: string;
 }
+
+// ── Diff editor comments ──────────────────────────────────────
+
+/** A persisted annotation on a working-tree file in the diff editor.
+ *  Modal-session UX, but stored in SQLite so reopens restore prior state.
+ *  Keyed by (taskId, filePath); `sent` is a per-comment flag that excludes
+ *  the comment from the next prompt bundle by default. */
+export interface DiffComment {
+  id: string;
+  taskId: string;
+  filePath: string;
+  /** 1-based, inclusive. */
+  startLine: number;
+  /** 1-based, inclusive. */
+  endLine: number;
+  text: string;
+  sent: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Payload for `diffComments:upsert` from the renderer. The handler stamps
+ *  createdAt/updatedAt and reflects the row back as a full DiffComment. */
+export interface DiffCommentInput {
+  id: string;
+  taskId: string;
+  filePath: string;
+  startLine: number;
+  endLine: number;
+  text: string;
+  sent: boolean;
+}
