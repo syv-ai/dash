@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, X } from 'lucide-react';
+import { ChevronDown, Undo2, X } from 'lucide-react';
 import { Popover, PopoverArrow, PopoverContent, PopoverTrigger } from '../../ui/Popover';
 import type { DiffComment } from './types';
 
@@ -13,6 +13,7 @@ interface Props {
   getLiveRangeForCurrent: (commentId: string) => { start: number; end: number } | null;
   onNavigate: (filePath: string, commentId: string) => void;
   onRemove: (filePath: string, commentId: string) => void;
+  onUnsend: (commentId: string) => void;
   onSend: () => void;
 }
 
@@ -22,6 +23,7 @@ export function CommentsMenu({
   getLiveRangeForCurrent,
   onNavigate,
   onRemove,
+  onUnsend,
   onSend,
 }: Props) {
   const [open, setOpen] = useState(false);
@@ -34,15 +36,23 @@ export function CommentsMenu({
       if (b === currentFilePath) return 1;
       return a.localeCompare(b);
     });
-  const totalCount = groups.reduce((sum, [, list]) => sum + list.length, 0);
+  const unsentCount = groups.reduce((sum, [, list]) => sum + list.filter((c) => !c.sent).length, 0);
+  const noUnsent = unsentCount === 0;
+  const pillLabel = noUnsent
+    ? '0 to send'
+    : `${unsentCount} comment${unsentCount !== 1 ? 's' : ''}`;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button className="flex items-center gap-1 pl-3 pr-2 py-1.5 rounded-full text-[11px] font-medium bg-primary/15 text-primary hover:bg-primary/25 transition-all duration-150">
-          <span>
-            {totalCount} comment{totalCount !== 1 ? 's' : ''}
-          </span>
+        <button
+          className={`flex items-center gap-1 pl-3 pr-2 py-1.5 rounded-full text-[11px] font-medium transition-all duration-150 ${
+            noUnsent
+              ? 'bg-primary/8 text-primary/60 hover:bg-primary/15 hover:text-primary'
+              : 'bg-primary/15 text-primary hover:bg-primary/25'
+          }`}
+        >
+          <span>{pillLabel}</span>
           <ChevronDown size={12} strokeWidth={2} className="opacity-70" />
         </button>
       </PopoverTrigger>
@@ -71,7 +81,7 @@ export function CommentsMenu({
                 return (
                   <div
                     key={c.id}
-                    className="group relative flex flex-col rounded-md hover:bg-[hsl(var(--surface-2)/0.6)] transition-colors"
+                    className={`group relative flex flex-col rounded-md transition-colors hover:bg-[hsl(var(--surface-2)/0.6)] ${c.sent ? 'opacity-60' : ''}`}
                   >
                     <button
                       type="button"
@@ -82,21 +92,39 @@ export function CommentsMenu({
                       title="Jump to this comment"
                       className="flex flex-col gap-1 px-2.5 py-2 text-left w-full rounded-md"
                     >
-                      <span className="font-mono text-[10.5px] text-muted-foreground/70 truncate">
+                      <span className="font-mono text-[10.5px] text-muted-foreground/70 truncate flex items-center gap-1.5">
                         {lineLabel}
+                        {c.sent && (
+                          <span className="text-[9px] uppercase tracking-wider text-primary/70">
+                            sent
+                          </span>
+                        )}
                       </span>
                       <span className="text-[12px] text-foreground/85 leading-relaxed whitespace-pre-wrap">
                         {c.text}
                       </span>
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => onRemove(path, c.id)}
-                      aria-label="Remove comment"
-                      className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 p-0.5 rounded text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition"
-                    >
-                      <X size={11} strokeWidth={2} />
-                    </button>
+                    <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 flex items-center gap-0.5">
+                      {c.sent && (
+                        <button
+                          type="button"
+                          onClick={() => onUnsend(c.id)}
+                          aria-label="Include in next prompt"
+                          title="Include in next prompt"
+                          className="p-0.5 rounded text-muted-foreground/70 hover:text-primary hover:bg-primary/10 transition"
+                        >
+                          <Undo2 size={11} strokeWidth={2} />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => onRemove(path, c.id)}
+                        aria-label="Remove comment"
+                        className="p-0.5 rounded text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition"
+                      >
+                        <X size={11} strokeWidth={2} />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -106,13 +134,14 @@ export function CommentsMenu({
         <div className="flex items-center justify-end gap-2 px-3 py-2 border-t border-border/40">
           <button
             type="button"
+            disabled={noUnsent}
             onClick={() => {
               setOpen(false);
               onSend();
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Add {totalCount} comment{totalCount !== 1 ? 's' : ''} to prompt
+            Add {unsentCount} comment{unsentCount !== 1 ? 's' : ''} to prompt
           </button>
         </div>
         <PopoverArrow />

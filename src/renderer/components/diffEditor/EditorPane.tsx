@@ -368,22 +368,24 @@ export function EditorPane({
 
   function buildPromptAndSend() {
     if (!activeTaskId) return;
-    const totalCount = Object.values(commentsByFile).reduce((n, l) => n + l.length, 0);
-    if (totalCount === 0) return;
-
     const editor = editorRef.current?.getModifiedEditor();
     const monaco = monacoRef.current;
     const model = editor?.getModel();
     const lang = state.kind === 'loaded' ? state.language : '';
 
-    // Sort: current file first, then alphabetical.
+    // Only unsent comments contribute to the next prompt. Sent ones are
+    // archived state — the user has to explicitly un-send (or delete) to
+    // re-include them.
     const fileGroups = Object.entries(commentsByFile)
+      .map(([path, list]) => [path, list.filter((c) => !c.sent)] as const)
       .filter(([, list]) => list.length > 0)
       .sort(([a], [b]) => {
         if (a === filePath) return -1;
         if (b === filePath) return 1;
         return a.localeCompare(b);
       });
+    const totalCount = fileGroups.reduce((n, [, l]) => n + l.length, 0);
+    if (totalCount === 0) return;
 
     const blocks = fileGroups.map(([path, list]) => {
       const isCurrent = path === filePath;
@@ -420,6 +422,10 @@ export function EditorPane({
       const session = sessionRegistry.get(activeTaskId);
       if (session) session.writeInput(prompt);
     });
+    // Flip the bundled ids to `sent` so they're excluded from the next
+    // round by default; the user can un-send to re-include.
+    const idsToMark = fileGroups.flatMap(([, list]) => list.map((c) => c.id));
+    commentsStore.markSent(idsToMark);
     onClose();
   }
 
@@ -451,6 +457,7 @@ export function EditorPane({
         }
       }}
       onRemove={(_path, id) => commentsStore.remove(id)}
+      onUnsend={(id) => commentsStore.markUnsent(id)}
       onSend={buildPromptAndSend}
     />
   ) : null;
