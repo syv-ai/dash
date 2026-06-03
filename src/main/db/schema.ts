@@ -68,3 +68,23 @@ export const conversations = sqliteTable(
     taskIdIdx: index('idx_conversations_task_id').on(table.taskId),
   }),
 );
+
+export const diffEditorComments = sqliteTable(
+  'diff_editor_comments',
+  {
+    id: text('id').primaryKey(),
+    taskId: text('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    filePath: text('file_path').notNull(),
+    startLine: integer('start_line').notNull(),
+    endLine: integer('end_line').notNull(),
+    text: text('text').notNull(),
+    sent: integer('sent', { mode: 'boolean' }).notNull().default(false),
+    createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    taskFileIdx: index('idx_diff_editor_comments_task_file').on(table.taskId, table.filePath),
+  }),
+);
