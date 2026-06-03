@@ -33,6 +33,8 @@ import type {
   EditorReadCommitResult,
   EditorWriteResult,
   EditorCommitListItem,
+  DiffComment,
+  DiffCommentInput,
   FileChange,
 } from '../shared/types';
 import type { ParsedSessionMessage, SessionMetrics, SessionUpdate } from '../shared/sessionTypes';
@@ -332,6 +334,14 @@ export interface ElectronAPI {
     cwd: string;
     source: { kind: 'working' } | { kind: 'commit'; hash: string };
   }) => Promise<IpcResponse<string[]>>;
+
+  diffCommentsList: (args: { taskId: string }) => Promise<IpcResponse<DiffComment[]>>;
+  diffCommentsUpsert: (c: DiffCommentInput) => Promise<IpcResponse<DiffComment>>;
+  diffCommentsDelete: (args: { id: string }) => Promise<IpcResponse<void>>;
+  diffCommentsPruneForTask: (args: {
+    taskId: string;
+    existingFilePaths: string[];
+  }) => Promise<IpcResponse<{ deleted: number }>>;
 
   // RTK (Rust Token Killer)
   rtkGetStatus: () => Promise<IpcResponse<RtkStatus>>;

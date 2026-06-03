@@ -270,6 +270,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     source: { kind: 'working' } | { kind: 'commit'; hash: string };
   }) => ipcRenderer.invoke('editor:listRepoFiles', args),
 
+  // Diff editor comments
+  diffCommentsList: (args: { taskId: string }) => ipcRenderer.invoke('diffComments:list', args),
+  diffCommentsUpsert: (c: import('@shared/types').DiffCommentInput) =>
+    ipcRenderer.invoke('diffComments:upsert', c),
+  diffCommentsDelete: (args: { id: string }) => ipcRenderer.invoke('diffComments:delete', args),
+  diffCommentsPruneForTask: (args: { taskId: string; existingFilePaths: string[] }) =>
+    ipcRenderer.invoke('diffComments:pruneForTask', args),
+
   // RTK (Rust Token Killer)
   rtkGetStatus: () => ipcRenderer.invoke('rtk:getStatus'),
   rtkSetEnabled: (enabled: boolean) => ipcRenderer.invoke('rtk:setEnabled', enabled),
