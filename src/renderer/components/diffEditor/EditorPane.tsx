@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
 import type { ITheme as XtermTheme } from 'xterm';
-import { defineMonacoThemeFromTerminal, themeNameFor } from './monacoTheme';
 import type { EditorView } from './types';
 import type { LiveComment } from './comments/types';
 import { useCommentsContext } from './comments/CommentsContext';
@@ -11,6 +10,7 @@ import { CommentsMenu } from './comments/CommentsMenu';
 import { CommentInputBar } from './comments/CommentInputBar';
 import { useFileLoad, type LoadState } from './editor/useFileLoad';
 import { useEditorSave } from './editor/useEditorSave';
+import { useMonacoEditor } from './editor/useMonacoEditor';
 import { EditorHeader } from './editor/EditorHeader';
 import { EditorViewport } from './editor/EditorViewport';
 import { LoadingPill } from './editor/LoadingPill';
@@ -64,21 +64,25 @@ export function EditorPane({
     () => localStorage.getItem(WORDWRAP_KEY) === 'on',
   );
 
-  const editorRef = useRef<monacoEditor.IStandaloneDiffEditor | null>(null);
-  const monacoRef = useRef<typeof import('monaco-editor') | null>(null);
   const commentDecorations = useRef<monacoEditor.IEditorDecorationsCollection | null>(null);
   const selectionDecorations = useRef<monacoEditor.IEditorDecorationsCollection | null>(null);
   const saveCmdRef = useRef<(() => void) | null>(null);
-  // Bumped from handleMount so hooks that read editorRef/monacoRef see the
-  // post-mount instances on the next render (refs alone don't trigger one).
-  const [mountSeq, setMountSeq] = useState(0);
   const popoverAnchorRef = useRef<HTMLDivElement | null>(null);
   // State (not ref) so the popover's `container` prop sees the actual node
   // after mount — refs alone don't trigger a re-render.
   const [editorAreaEl, setEditorAreaEl] = useState<HTMLDivElement | null>(null);
 
-  const themeName = themeNameFor(isDark);
   const isCommitView = view.kind === 'commit';
+
+  const { editorRef, monacoRef, themeName, displayed, mountSeq, handleBeforeMount, handleMount } =
+    useMonacoEditor({
+      isDark,
+      terminalTheme,
+      state,
+      onSave: () => saveCmdRef.current?.(),
+      onDraftChange: (v) => setDraft(v),
+      isCommitView,
+    });
 
   // Mutate the load state in-place for save mtime/size updates and reload.
   // useFileLoad owns the state; this just exposes a targeted patch.
@@ -119,20 +123,6 @@ export function EditorPane({
     !state.isBinary &&
     !state.isLargeFile &&
     state.modifiedPresent;
-
-  // Holds the most recently loaded file's state so the Monaco editor stays
-  // mounted while the next file loads. Without this the editor would unmount
-  // every time `state` flips to 'loading', causing a perceptible flash on
-  // every file click. Mutating a ref during render is intentional here —
-  // `displayed` is always a recent snapshot of `state` and re-reads on every
-  // render. `draft` updates atomically with `state` in the load effect, so
-  // there's no frame where the editor sees stale `displayed` with a new
-  // `draft`.
-  const lastLoadedRef = useRef<LoadState>({ kind: 'loading' });
-  if (state.kind === 'loaded' || state.kind === 'error') {
-    lastLoadedRef.current = state;
-  }
-  const displayed = lastLoadedRef.current;
 
   // Initialize the editable buffer + saved buffer whenever a new file's
   // content loads. Comment lifecycle / pending range / stale flag are
@@ -180,56 +170,16 @@ export function EditorPane({
     onClearReveal();
   }, [revealCommentId, liveComments, onClearReveal]);
 
-  // ── Re-apply Monaco theme on terminal-theme change ──────
-  useEffect(() => {
-    const monaco = monacoRef.current;
-    if (!monaco) return;
-    defineMonacoThemeFromTerminal(monaco, themeName, isDark, terminalTheme);
-    monaco.editor.setTheme(themeName);
-  }, [themeName, isDark, terminalTheme]);
-
   useEffect(() => {
     localStorage.setItem(WORDWRAP_KEY, wordWrap ? 'on' : 'off');
   }, [wordWrap]);
 
-  // Save flow + stale detection lives in useEditorSave (declared above).
+  // Bridge useEditorSave → useMonacoEditor's ⌘S binding. The hook fires
+  // saveCmdRef.current() from the keybinding; we keep this ref pointed at
+  // the latest save callback so it never goes stale on re-render.
   useEffect(() => {
     saveCmdRef.current = () => void save();
   });
-
-  // ── Editor mount + selection mechanic ──────────────────
-  // Define the theme *before* Monaco paints. Without this, Monaco's first
-  // frame uses the default vs/vs-dark palette and then snaps to our theme
-  // inside handleMount — that's the open/focus flash. `beforeMount` runs
-  // after the monaco module loads but before the editor instance is created,
-  // so the very first paint already uses the right palette.
-  function handleBeforeMount(monaco: typeof import('monaco-editor')) {
-    defineMonacoThemeFromTerminal(monaco, themeName, isDark, terminalTheme);
-    monaco.editor.setTheme(themeName);
-  }
-
-  function handleMount(
-    editor: monacoEditor.IStandaloneDiffEditor,
-    monaco: typeof import('monaco-editor'),
-  ) {
-    editorRef.current = editor;
-    monacoRef.current = monaco;
-
-    defineMonacoThemeFromTerminal(monaco, themeName, isDark, terminalTheme);
-    monaco.editor.setTheme(themeName);
-
-    const modified = editor.getModifiedEditor();
-
-    modified.onDidChangeModelContent(() => {
-      if (!isCommitView) setDraft(modified.getValue());
-    });
-
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-      saveCmdRef.current?.();
-    });
-
-    setMountSeq((s) => s + 1);
-  }
 
   // Selection highlight
   useEffect(() => {
