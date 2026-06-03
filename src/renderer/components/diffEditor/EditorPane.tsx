@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { DiffEditor as MonacoDiffEditor } from '@monaco-editor/react';
 import type { editor as monacoEditor } from 'monaco-editor';
 import type { ITheme as XtermTheme } from 'xterm';
-import { X, FileText, WrapText, ChevronDown } from 'lucide-react';
+import { X, ChevronDown } from 'lucide-react';
 import { defineMonacoThemeFromTerminal, themeNameFor } from './monacoTheme';
 import type { EditorView } from './types';
 import type { DiffComment, LiveComment } from './comments/types';
@@ -11,6 +10,10 @@ import { useGutterSelection } from './comments/useGutterSelection';
 import { useFileCommentsBinding } from './comments/useFileCommentsBinding';
 import { useFileLoad, type LoadState } from './editor/useFileLoad';
 import { useEditorSave } from './editor/useEditorSave';
+import { EditorHeader } from './editor/EditorHeader';
+import { EditorViewport } from './editor/EditorViewport';
+import { LoadingPill } from './editor/LoadingPill';
+import { StaleBanner } from './editor/StaleBanner';
 import {
   Popover,
   PopoverAnchor,
@@ -480,181 +483,65 @@ export function EditorPane({
     onClose();
   }
 
+  const commentsSlot = Object.values(commentsByFile).some((list) => list.length > 0) ? (
+    <CommentsMenu
+      commentsByFile={commentsByFile}
+      currentFilePath={filePath}
+      // For the current file we pull line ranges live from the model
+      // (so typed line shifts reflect immediately); other files fall
+      // back to their stored line numbers.
+      getLiveRangeForCurrent={(commentId) => {
+        const target = liveComments.find((c) => c.id === commentId);
+        if (!target) return null;
+        const model = editorRef.current?.getModifiedEditor().getModel();
+        const r = model?.getDecorationRange(target.decorationId);
+        return r ? { start: r.startLineNumber, end: r.endLineNumber } : null;
+      }}
+      onNavigate={(targetPath, commentId) => {
+        if (targetPath === filePath) {
+          const target = liveComments.find((c) => c.id === commentId);
+          if (target) navigateToComment(target);
+        } else {
+          onNavigateAcrossFile(targetPath, commentId);
+        }
+      }}
+      onRemove={(_path, id) => commentsStore.remove(id)}
+      onSend={buildPromptAndSend}
+    />
+  ) : null;
+
   return (
     <div className="h-full flex flex-col min-w-0 min-h-0">
-      <div
-        className="flex items-center justify-between px-3 h-9 border-b border-white/[0.06] flex-shrink-0"
-        style={{ background: terminalTheme.background ?? (isDark ? '#0d0d11' : '#faf8f3') }}
-      >
-        <div className="flex items-center gap-3 min-w-0">
-          <FileText
-            size={14}
-            className="text-muted-foreground/50 flex-shrink-0"
-            strokeWidth={1.8}
-          />
-          <span className="text-[13px] font-medium text-foreground truncate">{filePath}</span>
-          {isCommitView && (
-            <span className="text-[11px] tabular-nums text-muted-foreground/50 font-mono">
-              {view.hash.slice(0, 7)}
-            </span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          {Object.values(commentsByFile).some((list) => list.length > 0) && (
-            <CommentsMenu
-              commentsByFile={commentsByFile}
-              currentFilePath={filePath}
-              // For the current file we pull line ranges live from the model
-              // (so typed line shifts reflect immediately); other files fall
-              // back to their stored line numbers.
-              getLiveRangeForCurrent={(commentId) => {
-                const target = liveComments.find((c) => c.id === commentId);
-                if (!target) return null;
-                const model = editorRef.current?.getModifiedEditor().getModel();
-                const r = model?.getDecorationRange(target.decorationId);
-                return r ? { start: r.startLineNumber, end: r.endLineNumber } : null;
-              }}
-              onNavigate={(targetPath, commentId) => {
-                if (targetPath === filePath) {
-                  const target = liveComments.find((c) => c.id === commentId);
-                  if (target) navigateToComment(target);
-                } else {
-                  onNavigateAcrossFile(targetPath, commentId);
-                }
-              }}
-              onRemove={(_path, id) => commentsStore.remove(id)}
-              onSend={buildPromptAndSend}
-            />
-          )}
-          <button
-            onClick={() => setWordWrap((w) => !w)}
-            title={wordWrap ? 'Disable word wrap' : 'Enable word wrap'}
-            className={`p-1.5 rounded-md transition-colors ${
-              wordWrap
-                ? 'bg-primary/15 text-primary'
-                : 'text-muted-foreground/60 hover:text-foreground hover:bg-accent/60'
-            }`}
-          >
-            <WrapText size={14} strokeWidth={1.8} />
-          </button>
-          <button
-            onClick={handleClose}
-            className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground/50 hover:text-foreground transition-all duration-150"
-          >
-            <X size={14} strokeWidth={2} />
-          </button>
-        </div>
-      </div>
+      <EditorHeader
+        filePath={filePath}
+        view={view}
+        wordWrap={wordWrap}
+        onToggleWordWrap={() => setWordWrap((w) => !w)}
+        onClose={handleClose}
+        backgroundColor={terminalTheme.background ?? (isDark ? '#0d0d11' : '#faf8f3')}
+        commentsSlot={commentsSlot}
+      />
 
       {stale && (
-        <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-amber-500/40 bg-amber-500/10 text-[11px] flex-shrink-0">
-          <span className="text-amber-700 dark:text-amber-300">
-            This file changed on disk since you opened it.
-          </span>
-          <div className="flex gap-1.5">
-            <button
-              onClick={() => void overwrite()}
-              className="px-2 py-1 rounded-md text-[11px] bg-destructive/15 text-destructive hover:bg-destructive/25"
-            >
-              Overwrite
-            </button>
-            <button
-              onClick={() => void reloadFromDisk()}
-              className="px-2 py-1 rounded-md text-[11px] bg-accent hover:bg-accent/80"
-            >
-              Reload from disk
-            </button>
-            <button
-              onClick={() => setStale(null)}
-              className="px-2 py-1 rounded-md text-[11px] text-muted-foreground/60 hover:text-foreground hover:bg-accent/60"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
+        <StaleBanner
+          onOverwrite={() => void overwrite()}
+          onReload={() => void reloadFromDisk()}
+          onCancel={() => setStale(null)}
+        />
       )}
 
-      <div ref={setEditorAreaEl} className="flex-1 relative overflow-hidden">
-        {/* Initial open with nothing loaded yet — show the full spinner. */}
-        {state.kind === 'loading' && displayed.kind !== 'loaded' && (
-          <div className="flex items-center justify-center h-full">
-            <div className="flex items-center gap-3">
-              <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-              <span className="text-[13px] text-muted-foreground/50">Loading…</span>
-            </div>
-          </div>
-        )}
-        {state.kind === 'error' && (
-          <div className="flex items-center justify-center h-full">
-            <span className="text-[13px] text-destructive">{state.message}</span>
-          </div>
-        )}
-        {displayed.kind === 'loaded' && displayed.isBinary && (
-          <div className="flex items-center justify-center h-full">
-            <span className="text-[13px] text-muted-foreground/40">
-              Binary file — cannot display diff
-            </span>
-          </div>
-        )}
-        {displayed.kind === 'loaded' && displayed.isLargeFile && (
-          <div className="flex items-center justify-center h-full">
-            <span className="text-[13px] text-muted-foreground/40">
-              File too large to preview here (&gt;5 MB).
-            </span>
-          </div>
-        )}
-        {displayed.kind === 'loaded' && !displayed.isBinary && !displayed.isLargeFile && (
-          <MonacoDiffEditor
-            beforeMount={handleBeforeMount}
-            original={displayed.originalContent}
-            modified={isCommitView ? displayed.modifiedContent : draft}
-            language={displayed.language || undefined}
-            theme={themeName}
-            options={{
-              originalEditable: false,
-              readOnly: !editable,
-              renderSideBySide: false,
-              // Inline mode renders the original sub-editor as a leading
-              // gutter column (Monaco's `originalWidth = layoutInfoDecorationsLeft`
-              // in diffEditorWidget.js). compactMode → inlineViewHideOriginalLineNumbers
-              // collapses that column to 0 and lets the modified gutter sit
-              // flush against the left edge.
-              compactMode: true,
-              // Disables the 35px-wide hunk-toolbar column (DiffEditorGutter,
-              // gutterFeature.js — width=35 whenever the toolbar menu has any
-              // actions). Without this, the modified editor starts 35px in.
-              renderGutterMenu: false,
-              // Slim color-block minimap (no characters, narrow column).
-              // Doubles as the scrollbar — the in-editor vertical scrollbar
-              // is hidden below.
-              minimap: {
-                enabled: true,
-                renderCharacters: false,
-                maxColumn: 60,
-                showSlider: 'mouseover',
-                size: 'fit',
-              },
-              automaticLayout: true,
-              fontSize: 12,
-              lineNumbers: 'on',
-              glyphMargin: false,
-              // Min 1 char so the column hugs the actual digit count
-              // (Monaco rounds up to fit the largest line number anyway).
-              lineNumbersMinChars: 1,
-              lineDecorationsWidth: 20,
-              scrollBeyondLastLine: false,
-              wordWrap: wordWrap ? 'on' : 'off',
-              overviewRulerBorder: false,
-              overviewRulerLanes: 0,
-              scrollbar: { vertical: 'hidden', verticalScrollbarSize: 0 },
-              // Active indent guide stays visible even when the editor isn't
-              // focused; the CSS rule above hides the rest.
-              guides: { highlightActiveIndentation: 'always' },
-            }}
-            onMount={handleMount}
-          />
-        )}
+      <EditorViewport
+        displayed={displayed}
+        currentState={state}
+        isCommitView={isCommitView}
+        draft={draft}
+        editable={editable}
+        themeName={themeName}
+        wordWrap={wordWrap}
+        beforeMount={handleBeforeMount}
+        onMount={handleMount}
+        areaRef={setEditorAreaEl}
+      >
         {editable && (dirty || saving || savedPill) && (
           <button
             onClick={() => void save()}
@@ -664,15 +551,7 @@ export function EditorPane({
             {saving ? 'Saving…' : 'Save'}
           </button>
         )}
-        {/* Subtle loading pill that appears in the top-right while the next
-            file loads, instead of replacing the editor with a centered
-            spinner (which is what caused the flash). */}
-        {state.kind === 'loading' && displayed.kind === 'loaded' && (
-          <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 px-2 py-1 rounded-full bg-[hsl(var(--surface-2)/0.85)] backdrop-blur-sm shadow-sm">
-            <div className="w-2.5 h-2.5 border-[1.5px] border-primary/30 border-t-primary rounded-full animate-spin" />
-            <span className="text-[10px] text-muted-foreground/70">Loading</span>
-          </div>
-        )}
+        {state.kind === 'loading' && displayed.kind === 'loaded' && <LoadingPill />}
         <Popover
           open={!!pendingRange && !dragging}
           onOpenChange={(o) => {
@@ -717,7 +596,7 @@ export function EditorPane({
             <PopoverArrow />
           </PopoverContent>
         </Popover>
-      </div>
+      </EditorViewport>
     </div>
   );
 }
