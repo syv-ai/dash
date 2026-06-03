@@ -5,9 +5,10 @@ import type { ITheme as XtermTheme } from 'xterm';
 import { X, FileText, WrapText, ChevronDown } from 'lucide-react';
 import { defineMonacoThemeFromTerminal, themeNameFor } from './monacoTheme';
 import type { EditorView } from './types';
-import type { DiffComment, RangeSnapshot } from './comments/types';
+import type { DiffComment, LiveComment } from './comments/types';
 import { useCommentsContext } from './comments/CommentsContext';
 import { useGutterSelection } from './comments/useGutterSelection';
+import { useFileCommentsBinding } from './comments/useFileCommentsBinding';
 import {
   Popover,
   PopoverAnchor,
@@ -51,12 +52,6 @@ type LoadState =
       modifiedPresent: boolean; // false when file is deleted on disk (working view)
     };
 
-interface Comment {
-  id: string;
-  decorationId: string;
-  comment: string;
-}
-
 interface StaleInfo {
   currentMtimeMs: number;
   currentSizeBytes: number;
@@ -76,14 +71,12 @@ export function EditorPane({
 }: EditorPaneProps) {
   const commentsStore = useCommentsContext();
   const commentsByFile = commentsStore.state.byFile;
-  const storedComments: DiffComment[] = commentsByFile[filePath] ?? [];
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [draft, setDraft] = useState<string>('');
   const [loadedBuffer, setLoadedBuffer] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [savedPill, setSavedPill] = useState(false);
   const [stale, setStale] = useState<StaleInfo | null>(null);
-  const [comments, setComments] = useState<Comment[]>([]);
   // When non-empty, the WIP popover opens prefilled with this text. Used by
   // the dbl-click-to-edit flow on a persisted comment widget.
   const [pendingText, setPendingText] = useState<string>('');
@@ -203,9 +196,8 @@ export function EditorPane({
         setLoadedBuffer(resp.data.modifiedContent);
         setDraft(resp.data.modifiedContent);
       }
-      // Comments are cleared here; the hydration effect re-attaches them
-      // (with fresh decorations) once the new content is in the model.
-      setComments([]);
+      // Comment lifecycle now lives in useFileCommentsBinding; no manual
+      // clear here.
       setPendingRange(null);
       setStale(null);
     }
@@ -215,113 +207,18 @@ export function EditorPane({
     };
   }, [cwd, filePath, view]);
 
-  // ── Comment hydration / snapshot ────────────────────────
-  // Decoration ids are tied to a Monaco model and get wiped when the model's
-  // content swaps. We persist comments in the parent as line ranges; this
-  // block re-creates decorations on the live model after each load and
-  // pushes range/text changes back to the parent.
-  //
-  // Key invariant: hydration must NOT run until the new file's content is
-  // in the model. We key the hydration effect on `state` (object identity,
-  // not on filePath) — every load produces a new state object via
-  // setState(...), and MonacoDiffEditor (a child) has already swapped the
-  // model in its own effect by the time our effect fires.
-  const hydratedStateRef = useRef<LoadState | null>(null);
-  const storedCommentsRef = useRef<DiffComment[]>(storedComments);
-  storedCommentsRef.current = storedComments;
-  const commentsRef = useRef<Comment[]>([]);
-  commentsRef.current = comments;
-  const filePathRef = useRef(filePath);
-  filePathRef.current = filePath;
-
-  // Snapshot helper: read current decoration ranges and push to the store
-  // for the *current* file. Range-only — text edits and adds are pushed
-  // explicitly from addComment. Task 11 will replace this with a binding
-  // hook that scopes the snapshot to its own filePath; here we keep the
-  // existing (still-buggy on file-switch) behavior to keep the data-source
-  // swap minimal.
-  const pushSnapshotForCurrentFile = useCallback(
-    (commentsNow: Comment[]) => {
-      const ed = editorRef.current?.getModifiedEditor();
-      const model = ed?.getModel();
-      if (!ed || !model) return;
-      const snapshots: RangeSnapshot[] = commentsNow.flatMap((c) => {
-        const r = model.getDecorationRange(c.decorationId);
-        if (!r) return [];
-        return [{ id: c.id, startLine: r.startLineNumber, endLine: r.endLineNumber }];
-      });
-      commentsStore.snapshotRanges(filePathRef.current, snapshots);
-    },
-    [commentsStore],
-  );
-
-  useEffect(() => {
-    if (state.kind !== 'loaded') return;
-    if (hydratedStateRef.current === state) return;
-    hydratedStateRef.current = state;
-
-    const ed = editorRef.current?.getModifiedEditor();
-    const monaco = monacoRef.current;
-    const model = ed?.getModel();
-    if (!ed || !monaco || !model) {
-      setComments([]);
-      return;
-    }
-    const stored = storedCommentsRef.current;
-    if (stored.length === 0) {
-      setComments([]);
-      return;
-    }
-    const lineCount = model.getLineCount();
-    const hydrated: Comment[] = stored.flatMap((sc) => {
-      // Stored ranges from a previous session might fall outside the current
-      // content (e.g. file shrunk on disk). Clamp into bounds.
-      const start = Math.min(Math.max(1, sc.startLine), lineCount);
-      const end = Math.min(Math.max(start, sc.endLine), lineCount);
-      const ids = model.deltaDecorations(
-        [],
-        [
-          {
-            range: new monaco.Range(start, 1, end, 1),
-            options: { isWholeLine: true, stickiness: 1 },
-          },
-        ],
-      );
-      return [{ id: sc.id, decorationId: ids[0], comment: sc.text }];
-    });
-    setComments(hydrated);
-  }, [state]);
-
-  // Reconcile parent-driven removals into the local `comments` state and the
-  // Monaco model. The CommentsMenu dropdown removes through the parent (so
-  // removals work uniformly for current and other files); the parent's
-  // storedComments prop then loses an id, and this effect drops the matching
-  // local decoration. Skipped until the current state is hydrated (otherwise
-  // the initial empty `storedComments` for a not-yet-loaded file would
-  // immediately strip everything).
-  useEffect(() => {
-    if (hydratedStateRef.current !== state) return;
-    const storedIds = new Set(storedComments.map((s) => s.id));
-    const remaining: Comment[] = [];
-    const removedDecos: string[] = [];
-    for (const c of comments) {
-      if (storedIds.has(c.id)) remaining.push(c);
-      else removedDecos.push(c.decorationId);
-    }
-    if (removedDecos.length === 0) return;
-    const model = editorRef.current?.getModifiedEditor().getModel();
-    if (model) model.deltaDecorations(removedDecos, []);
-    setComments(remaining);
-  }, [storedComments, state, comments]);
-
-  // Capture line shifts from typing before the file changes — those shifts
-  // never touch `comments`, so the only chance to record them is right
-  // before model.setValue wipes the decorations on the next load.
-  useEffect(() => {
-    return () => {
-      pushSnapshotForCurrentFile(commentsRef.current);
-    };
-  }, [filePath, pushSnapshotForCurrentFile]);
+  // ── Comments binding ────────────────────────────────────
+  // Owns Monaco decoration lifecycle for the current filePath. Hydration
+  // and snapshot are both scoped via closure inside the hook, which kills
+  // the previous file-ref-races (the source of the phantom-comment bug).
+  const isFileLoaded = state.kind === 'loaded';
+  const binding = useFileCommentsBinding({
+    filePath,
+    isFileLoaded,
+    editorRef,
+    monacoRef,
+  });
+  const liveComments = binding.liveComments;
 
   // Cross-file navigation from CommentsMenu: when the user clicks a comment
   // that lives in a different file, the parent flips selectedPath + sets
@@ -329,7 +226,7 @@ export function EditorPane({
   // current file's hydrated `comments`, then reveals and clears the token.
   useEffect(() => {
     if (!revealCommentId) return;
-    const target = comments.find((c) => c.id === revealCommentId);
+    const target = liveComments.find((c) => c.id === revealCommentId);
     if (!target) return;
     const ed = editorRef.current?.getModifiedEditor();
     const monaco = monacoRef.current;
@@ -341,7 +238,7 @@ export function EditorPane({
     ed.setSelection(range);
     ed.focus();
     onClearReveal();
-  }, [revealCommentId, comments, onClearReveal]);
+  }, [revealCommentId, liveComments, onClearReveal]);
 
   // ── Re-apply Monaco theme on terminal-theme change ──────
   useEffect(() => {
@@ -532,7 +429,7 @@ export function EditorPane({
     // Concrete primary color for Monaco's minimap / overview ruler (Monaco
     // can't read CSS vars from inside its canvas renderer).
     const commentMarker = isDark ? '#b8c5e0' : '#3b5078';
-    const decos: monacoEditor.IModelDeltaDecoration[] = comments.flatMap((c) => {
+    const decos: monacoEditor.IModelDeltaDecoration[] = liveComments.flatMap((c) => {
       const range = model.getDecorationRange(c.decorationId);
       if (!range) return [];
       return [
@@ -551,19 +448,19 @@ export function EditorPane({
       ];
     });
     commentDecorations.current.set(decos);
-  }, [comments, isDark]);
+  }, [liveComments, isDark]);
 
   // Latest editComment handler captured in a ref so the widgets effect
   // doesn't re-create DOM nodes when the handler identity changes.
-  const editCommentRef = useRef<(c: Comment) => void>(() => {});
-  editCommentRef.current = (c: Comment) => {
+  const editCommentRef = useRef<(c: LiveComment) => void>(() => {});
+  editCommentRef.current = (c: LiveComment) => {
     const editor = editorRef.current?.getModifiedEditor();
     const model = editor?.getModel();
     if (!editor || !model) return;
     const range = model.getDecorationRange(c.decorationId);
     if (!range) return;
     setEditingId(c.id);
-    setPendingText(c.comment);
+    setPendingText(c.text);
     setPendingRange({ start: range.startLineNumber, end: range.endLineNumber });
   };
 
@@ -582,14 +479,14 @@ export function EditorPane({
     const model = editor.getModel();
     if (!model) return;
 
-    const visible = comments.filter((c) => c.id !== editingId);
+    const visible = liveComments.filter((c) => c.id !== editingId);
     const nodes = new Map<string, HTMLDivElement>();
     for (const c of visible) {
       const range = model.getDecorationRange(c.decorationId);
       if (!range) continue;
       const node = document.createElement('div');
       node.className = 'monaco-comment-widget';
-      node.textContent = c.comment;
+      node.textContent = c.text;
       node.addEventListener('dblclick', () => editCommentRef.current(c));
       area.appendChild(node);
       nodes.set(c.id, node);
@@ -614,44 +511,18 @@ export function EditorPane({
         if (node.parentNode === area) area.removeChild(node);
       }
     };
-  }, [comments, editorAreaEl, editingId]);
+  }, [liveComments, editorAreaEl, editingId]);
 
   function addComment(text: string) {
-    // Editing an existing comment — just replace its text. The stickiness
-    // decoration already tracks the line range.
     if (editingId) {
-      const next = comments.map((c) => (c.id === editingId ? { ...c, comment: text } : c));
-      setComments(next);
-      commentsStore.updateText(editingId, text);
+      binding.updateText(editingId, text);
       setEditingId(null);
       setPendingText('');
       setPendingRange(null);
       return;
     }
-    const editor = editorRef.current?.getModifiedEditor();
-    const monaco = monacoRef.current;
-    if (!editor || !monaco || !pendingRange) return;
-    const model = editor.getModel();
-    if (!model) return;
-    const created = commentsStore.addComment({
-      filePath,
-      startLine: pendingRange.start,
-      endLine: pendingRange.end,
-      text,
-    });
-    if (!created) return;
-    const ids = model.deltaDecorations(
-      [],
-      [
-        {
-          range: new monaco.Range(pendingRange.start, 1, pendingRange.end, 1),
-          options: { isWholeLine: true, stickiness: 1 },
-        },
-      ],
-    );
-    const decorationId = ids[0];
-    const next = [...comments, { id: created.id, decorationId, comment: text }];
-    setComments(next);
+    if (!pendingRange) return;
+    binding.addComment(pendingRange, text);
     setPendingText('');
     setPendingRange(null);
   }
@@ -662,7 +533,7 @@ export function EditorPane({
     setPendingRange(null);
   }
 
-  function navigateToComment(c: Comment) {
+  function navigateToComment(c: LiveComment) {
     const ed = editorRef.current?.getModifiedEditor();
     const monaco = monacoRef.current;
     const model = ed?.getModel();
@@ -701,7 +572,7 @@ export function EditorPane({
         // For the current file, prefer live decoration ranges (line shifts
         // from typing) and embed a code excerpt.
         if (isCurrent && editor && monaco && model) {
-          const live = comments.find((c) => c.id === sc.id);
+          const live = liveComments.find((c) => c.id === sc.id);
           if (live) {
             const r = model.getDecorationRange(live.decorationId);
             if (r) {
@@ -765,7 +636,7 @@ export function EditorPane({
               // (so typed line shifts reflect immediately); other files fall
               // back to their stored line numbers.
               getLiveRangeForCurrent={(commentId) => {
-                const target = comments.find((c) => c.id === commentId);
+                const target = liveComments.find((c) => c.id === commentId);
                 if (!target) return null;
                 const model = editorRef.current?.getModifiedEditor().getModel();
                 const r = model?.getDecorationRange(target.decorationId);
@@ -773,7 +644,7 @@ export function EditorPane({
               }}
               onNavigate={(targetPath, commentId) => {
                 if (targetPath === filePath) {
-                  const target = comments.find((c) => c.id === commentId);
+                  const target = liveComments.find((c) => c.id === commentId);
                   if (target) navigateToComment(target);
                 } else {
                   onNavigateAcrossFile(targetPath, commentId);
