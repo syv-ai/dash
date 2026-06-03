@@ -27,7 +27,7 @@ export function EditorSidebar(props: EditorSidebarProps) {
   const initialDrawerSize = parseInitial(localStorage.getItem(COMMITS_DRAWER_KEY), 35);
 
   return (
-    <div className="h-full min-h-0 flex flex-col rounded-[14px] overflow-hidden right-inspector-shell">
+    <div className="h-full min-h-0 flex flex-col overflow-hidden">
       <PanelGroup
         direction="vertical"
         autoSaveId="diff-editor-sidebar"
@@ -423,7 +423,7 @@ function CommitsDrawer({
   }, [view]);
 
   return (
-    <div className="h-full min-h-0 flex flex-col bg-[hsl(var(--surface-1)/0.45)]">
+    <div className="h-full min-h-0 flex flex-col">
       <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-mono flex items-center gap-1.5 flex-shrink-0">
         <History size={11} strokeWidth={1.8} />
         <span>Commits</span>

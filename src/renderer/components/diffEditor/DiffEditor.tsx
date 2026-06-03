@@ -162,7 +162,7 @@ function DiffEditorBody({
   const bg = terminalTheme.background ?? (isDark ? '#0d0d11' : '#faf8f3');
 
   return (
-    <div className="h-full w-full p-4 rounded-2xl overflow-hidden" style={{ background: bg }}>
+    <div className="h-full w-full overflow-hidden" style={{ background: bg }}>
       <PanelGroup direction="horizontal" autoSaveId="diff-editor-shell" className="h-full">
         <Panel defaultSize={22} minSize={14} maxSize={45}>
           <EditorSidebar

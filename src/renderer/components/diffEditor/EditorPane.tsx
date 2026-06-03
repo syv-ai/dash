@@ -5,6 +5,7 @@ import type { ITheme as XtermTheme } from 'xterm';
 import { X, FileText, WrapText } from 'lucide-react';
 import { defineMonacoThemeFromTerminal, themeNameFor } from './monacoTheme';
 import type { EditorView } from './types';
+import { Popover, PopoverAnchor, PopoverArrow, PopoverContent } from '../ui/Popover';
 import '../../monaco-workers';
 
 const WORDWRAP_KEY = 'diffEditor.wordWrap';
@@ -64,6 +65,17 @@ export function EditorPane({
   const [stale, setStale] = useState<StaleInfo | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [pendingRange, setPendingRange] = useState<{ start: number; end: number } | null>(null);
+  // When non-empty, the WIP popover opens prefilled with this text. Used by
+  // the dbl-click-to-edit flow on a persisted comment widget.
+  const [pendingText, setPendingText] = useState<string>('');
+  // The id of the comment currently being edited, so the widgets effect can
+  // skip rendering it (the WIP popover is taking its place).
+  const [editingId, setEditingId] = useState<string | null>(null);
+  // True while the user is dragging on the line-number gutter. The popover
+  // is hidden during the drag — opening it immediately on mouse-down would
+  // steal focus to the textarea and cancel Monaco's drag tracking, so the
+  // range could only ever be a single line.
+  const [dragging, setDragging] = useState(false);
   const [wordWrap, setWordWrap] = useState<boolean>(
     () => localStorage.getItem(WORDWRAP_KEY) === 'on',
   );
@@ -74,6 +86,10 @@ export function EditorPane({
   const selectionDecorations = useRef<monacoEditor.IEditorDecorationsCollection | null>(null);
   const dragRef = useRef<{ startLine: number } | null>(null);
   const saveCmdRef = useRef<(() => void) | null>(null);
+  const popoverAnchorRef = useRef<HTMLDivElement | null>(null);
+  // State (not ref) so the popover's `container` prop sees the actual node
+  // after mount — refs alone don't trigger a re-render.
+  const [editorAreaEl, setEditorAreaEl] = useState<HTMLDivElement | null>(null);
 
   const themeName = themeNameFor(isDark);
   const isCommitView = view.kind === 'commit';
@@ -275,17 +291,32 @@ export function EditorPane({
       const line = t.position?.lineNumber;
       if (!line) return;
       dragRef.current = { startLine: line };
+      // Drive the line tint via pendingRange but keep the popover closed
+      // (gated on `dragging`) until mouse-up.
+      setDragging(true);
       setPendingRange({ start: line, end: line });
     });
-    modified.onMouseMove((e) => {
+    // Track the drag via a window mousemove (not Monaco's onMouseMove): during
+    // a gutter drag Monaco's own line-select handler captures pointer events
+    // and our editor-level mouse listener may not fire reliably. We resolve
+    // the line under the cursor via `getTargetAtClientPoint`.
+    const onMove = (e: MouseEvent) => {
       if (!dragRef.current) return;
-      const line = e.target.position?.lineNumber;
+      const target = modified.getTargetAtClientPoint(e.clientX, e.clientY);
+      const line = target?.position?.lineNumber;
       if (!line) return;
       const start = Math.min(dragRef.current.startLine, line);
       const end = Math.max(dragRef.current.startLine, line);
       setPendingRange({ start, end });
-    });
+    };
+    window.addEventListener('mousemove', onMove);
+    editor.onDidDispose(() => window.removeEventListener('mousemove', onMove));
     const onUp = () => {
+      if (dragRef.current) {
+        // Drag complete — release the popover so it can open with the final
+        // range.
+        setDragging(false);
+      }
       dragRef.current = null;
     };
     window.addEventListener('mouseup', onUp);
@@ -307,9 +338,45 @@ export function EditorPane({
     selectionDecorations.current.set([
       {
         range: new monaco.Range(pendingRange.start, 1, pendingRange.end, 1),
-        options: { isWholeLine: true, className: 'monaco-select-line' },
+        options: {
+          isWholeLine: true,
+          className: 'monaco-select-line',
+          // Tints the line-number gutter for the selected range so the user
+          // gets feedback that's distinct from a text selection.
+          marginClassName: 'monaco-select-line-margin',
+        },
       },
     ]);
+  }, [pendingRange]);
+
+  // Position the comment popover's anchor on the right edge of the editor,
+  // vertically aligned with the selection's last line. Popover opens to the
+  // *left* of this anchor so it sits on the right portion of the editor
+  // pane — keeping the highlighted code on the left visible.
+  //
+  // Radix Popover uses Floating UI's autoUpdate, which listens to scroll on
+  // *DOM* scroll-ancestors of the anchor + ResizeObserver on the anchor box.
+  // Monaco scrolls internally, so no scroll bubbles up, and changing the
+  // anchor's `top` doesn't change its box → no auto-update fires. We toggle
+  // the anchor's width by 1px on every position update to force the
+  // ResizeObserver to fire, which makes Radix recompute the popover
+  // position. Same mechanism keeps the popover tracking the gutter drag.
+  //
+  // No clamp on top — if the user scrolls the line out of view, the popover
+  // scrolls out with it (combined with `avoidCollisions={false}`).
+  useEffect(() => {
+    const editor = editorRef.current?.getModifiedEditor();
+    const anchor = popoverAnchorRef.current;
+    if (!editor || !anchor || !pendingRange) return;
+    const update = () => {
+      const lineTop = editor.getTopForLineNumber(pendingRange.end + 1);
+      const scrollTop = editor.getScrollTop();
+      anchor.style.top = `${lineTop - scrollTop}px`;
+      anchor.style.width = anchor.offsetWidth === 1 ? '2px' : '1px';
+    };
+    update();
+    const sub = editor.onDidScrollChange(update);
+    return () => sub.dispose();
   }, [pendingRange]);
 
   // Comment highlights
@@ -322,6 +389,9 @@ export function EditorPane({
     if (!commentDecorations.current) {
       commentDecorations.current = editor.createDecorationsCollection();
     }
+    // Concrete primary color for Monaco's minimap / overview ruler (Monaco
+    // can't read CSS vars from inside its canvas renderer).
+    const commentMarker = isDark ? '#b8c5e0' : '#3b5078';
     const decos: monacoEditor.IModelDeltaDecoration[] = comments.flatMap((c) => {
       const range = model.getDecorationRange(c.decorationId);
       if (!range) return [];
@@ -331,15 +401,91 @@ export function EditorPane({
           options: {
             isWholeLine: true,
             className: 'monaco-comment-line',
-            glyphMarginClassName: 'monaco-comment-glyph',
+            minimap: { color: commentMarker, position: monaco.editor.MinimapPosition.Inline },
+            overviewRuler: {
+              color: commentMarker,
+              position: monaco.editor.OverviewRulerLane.Right,
+            },
           },
         },
       ];
     });
     commentDecorations.current.set(decos);
-  }, [comments]);
+  }, [comments, isDark]);
+
+  // Latest editComment handler captured in a ref so the widgets effect
+  // doesn't re-create DOM nodes when the handler identity changes.
+  const editCommentRef = useRef<(c: Comment) => void>(() => {});
+  editCommentRef.current = (c: Comment) => {
+    const editor = editorRef.current?.getModifiedEditor();
+    const model = editor?.getModel();
+    if (!editor || !model) return;
+    const range = model.getDecorationRange(c.decorationId);
+    if (!range) return;
+    setEditingId(c.id);
+    setPendingText(c.comment);
+    setPendingRange({ start: range.startLineNumber, end: range.endLineNumber });
+  };
+
+  // Persistent comment widgets — absolute-positioned divs in the editor
+  // area, right-aligned to match the WIP popover's footprint. We can't use
+  // Monaco's content-widget API for this: content widgets anchor to a
+  // (line, column) text position, so they always sit on the left side and
+  // can't be right-aligned to the editor pane. Instead we append our own
+  // DOM nodes to the editor area (overflow: hidden) and compute their `top`
+  // from Monaco's `getTopForLineNumber` on every scroll. The editor area's
+  // `overflow: hidden` clips them at the top/bottom edges.
+  useEffect(() => {
+    const editor = editorRef.current?.getModifiedEditor();
+    const area = editorAreaEl;
+    if (!editor || !area) return;
+    const model = editor.getModel();
+    if (!model) return;
+
+    const visible = comments.filter((c) => c.id !== editingId);
+    const nodes = new Map<string, HTMLDivElement>();
+    for (const c of visible) {
+      const range = model.getDecorationRange(c.decorationId);
+      if (!range) continue;
+      const node = document.createElement('div');
+      node.className = 'monaco-comment-widget';
+      node.textContent = c.comment;
+      node.addEventListener('dblclick', () => editCommentRef.current(c));
+      area.appendChild(node);
+      nodes.set(c.id, node);
+    }
+
+    const update = () => {
+      const scrollTop = editor.getScrollTop();
+      for (const c of visible) {
+        const node = nodes.get(c.id);
+        if (!node) continue;
+        const range = model.getDecorationRange(c.decorationId);
+        if (!range) continue;
+        const lineTop = editor.getTopForLineNumber(range.endLineNumber + 1);
+        node.style.top = `${lineTop - scrollTop}px`;
+      }
+    };
+    update();
+    const sub = editor.onDidScrollChange(update);
+    return () => {
+      sub.dispose();
+      for (const node of nodes.values()) {
+        if (node.parentNode === area) area.removeChild(node);
+      }
+    };
+  }, [comments, editorAreaEl, editingId]);
 
   function addComment(text: string) {
+    // Editing an existing comment — just replace its text. The stickiness
+    // decoration already tracks the line range.
+    if (editingId) {
+      setComments((prev) => prev.map((c) => (c.id === editingId ? { ...c, comment: text } : c)));
+      setEditingId(null);
+      setPendingText('');
+      setPendingRange(null);
+      return;
+    }
     const editor = editorRef.current?.getModifiedEditor();
     const monaco = monacoRef.current;
     if (!editor || !monaco || !pendingRange) return;
@@ -356,6 +502,13 @@ export function EditorPane({
     );
     const decorationId = ids[0];
     setComments((prev) => [...prev, { id: crypto.randomUUID(), decorationId, comment: text }]);
+    setPendingText('');
+    setPendingRange(null);
+  }
+
+  function cancelComment() {
+    setEditingId(null);
+    setPendingText('');
     setPendingRange(null);
   }
 
@@ -394,7 +547,7 @@ export function EditorPane({
   return (
     <div className="h-full flex flex-col min-w-0 min-h-0">
       <div
-        className="flex items-center justify-between px-3 h-7 border-b border-white/[0.06] flex-shrink-0"
+        className="flex items-center justify-between px-3 h-9 border-b border-white/[0.06] flex-shrink-0"
         style={{ background: terminalTheme.background ?? (isDark ? '#0d0d11' : '#faf8f3') }}
       >
         <div className="flex items-center gap-3 min-w-0">
@@ -409,21 +562,9 @@ export function EditorPane({
               {view.hash.slice(0, 7)}
             </span>
           )}
-          {editable && (
-            <span
-              className={`text-[11px] tabular-nums ${
-                dirty ? 'text-primary' : 'text-muted-foreground/40'
-              }`}
-            >
-              {dirty ? '● Unsaved' : '○ Clean'}
-            </span>
-          )}
         </div>
 
         <div className="flex items-center gap-2">
-          {pendingRange && (
-            <CommentInputBar onSubmit={addComment} onCancel={() => setPendingRange(null)} />
-          )}
           {comments.length > 0 && (
             <button
               onClick={buildPromptAndSend}
@@ -443,20 +584,6 @@ export function EditorPane({
           >
             <WrapText size={14} strokeWidth={1.8} />
           </button>
-          {editable && (
-            <>
-              <button
-                onClick={() => void save()}
-                disabled={!dirty || saving}
-                className="px-3 py-1.5 rounded-md text-[11px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                {saving ? 'Saving…' : 'Save'}
-              </button>
-              {savedPill && (
-                <span className="text-[11px] text-primary/80 animate-fade-in">Saved</span>
-              )}
-            </>
-          )}
           <button
             onClick={handleClose}
             className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground/50 hover:text-foreground transition-all duration-150"
@@ -494,7 +621,7 @@ export function EditorPane({
         </div>
       )}
 
-      <div className="flex-1 relative overflow-hidden">
+      <div ref={setEditorAreaEl} className="flex-1 relative overflow-hidden">
         {state.kind === 'loading' && (
           <div className="flex items-center justify-center h-full">
             <div className="flex items-center gap-3">
@@ -532,18 +659,99 @@ export function EditorPane({
               originalEditable: false,
               readOnly: !editable,
               renderSideBySide: false,
-              minimap: { enabled: false },
+              // Inline mode renders the original sub-editor as a leading
+              // gutter column (Monaco's `originalWidth = layoutInfoDecorationsLeft`
+              // in diffEditorWidget.js). compactMode → inlineViewHideOriginalLineNumbers
+              // collapses that column to 0 and lets the modified gutter sit
+              // flush against the left edge.
+              compactMode: true,
+              // Disables the 35px-wide hunk-toolbar column (DiffEditorGutter,
+              // gutterFeature.js — width=35 whenever the toolbar menu has any
+              // actions). Without this, the modified editor starts 35px in.
+              renderGutterMenu: false,
+              // Slim color-block minimap (no characters, narrow column).
+              // Doubles as the scrollbar — the in-editor vertical scrollbar
+              // is hidden below.
+              minimap: {
+                enabled: true,
+                renderCharacters: false,
+                maxColumn: 60,
+                showSlider: 'mouseover',
+                size: 'fit',
+              },
               automaticLayout: true,
               fontSize: 12,
               lineNumbers: 'on',
-              glyphMargin: true,
+              glyphMargin: false,
+              // Min 1 char so the column hugs the actual digit count
+              // (Monaco rounds up to fit the largest line number anyway).
+              lineNumbersMinChars: 1,
+              lineDecorationsWidth: 20,
               scrollBeyondLastLine: false,
               wordWrap: wordWrap ? 'on' : 'off',
               overviewRulerBorder: false,
+              overviewRulerLanes: 0,
+              scrollbar: { vertical: 'hidden', verticalScrollbarSize: 0 },
+              // Active indent guide stays visible even when the editor isn't
+              // focused; the CSS rule above hides the rest.
+              guides: { highlightActiveIndentation: 'always' },
             }}
             onMount={handleMount}
           />
         )}
+        {editable && (dirty || saving || savedPill) && (
+          <button
+            onClick={() => void save()}
+            disabled={!dirty || saving}
+            className={`absolute bottom-4 right-16 z-10 px-3 py-1.5 rounded-md text-[11px] font-medium bg-primary/70 text-primary-foreground hover:bg-primary/85 disabled:cursor-default backdrop-blur-sm shadow-lg shadow-black/30 transition-opacity ${savedPill ? 'animate-save-flash' : ''}`}
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        )}
+        <Popover
+          open={!!pendingRange && !dragging}
+          onOpenChange={(o) => {
+            if (!o) cancelComment();
+          }}
+        >
+          <PopoverAnchor asChild>
+            <div
+              ref={popoverAnchorRef}
+              style={{
+                position: 'absolute',
+                right: 16,
+                top: 0,
+                width: 1,
+                height: 1,
+                pointerEvents: 'none',
+              }}
+            />
+          </PopoverAnchor>
+          <PopoverContent
+            side="left"
+            align="start"
+            sideOffset={4}
+            avoidCollisions={false}
+            onInteractOutside={(e) => e.preventDefault()}
+            container={editorAreaEl}
+            className="w-[380px] h-[240px] p-3.5 flex flex-col gap-2.5 backdrop-blur-md"
+            style={{
+              // surface-2 sits one step away from the theme background —
+              // a touch lighter in dark mode, a touch darker in light mode.
+              // Low alpha lets the code behind bleed through.
+              background: 'hsl(var(--surface-2) / 0.55)',
+              color: 'hsl(var(--popover-foreground))',
+            }}
+          >
+            <CommentInputBar
+              lineRange={pendingRange}
+              initialText={pendingText}
+              onSubmit={addComment}
+              onCancel={cancelComment}
+            />
+            <PopoverArrow />
+          </PopoverContent>
+        </Popover>
       </div>
     </div>
   );
@@ -552,46 +760,69 @@ export function EditorPane({
 // ── Inline comment input ───────────────────────────────────
 
 function CommentInputBar({
+  lineRange,
+  initialText,
   onSubmit,
   onCancel,
 }: {
+  lineRange: { start: number; end: number } | null;
+  initialText: string;
   onSubmit: (text: string) => void;
   onCancel: () => void;
 }) {
-  const [text, setText] = useState('');
+  const [text, setText] = useState(initialText);
+  const submit = () => {
+    if (text.trim()) onSubmit(text.trim());
+  };
+  const rangeLabel = lineRange
+    ? lineRange.start === lineRange.end
+      ? `Line ${lineRange.start}`
+      : `Lines ${lineRange.start}–${lineRange.end}`
+    : '';
   return (
-    <div className="flex items-center gap-1.5">
-      <input
+    <>
+      <div className="flex-shrink-0 font-mono text-[10px] text-muted-foreground/70 tabular-nums">
+        {rangeLabel}
+      </div>
+      <textarea
         autoFocus
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') {
+          // Stop ALL keys (incl. Escape) from bubbling to the surrounding
+          // Modal — the popover handles its own dismiss via onCancel.
+          e.stopPropagation();
+          if (e.key === 'Enter' && e.metaKey) {
             e.preventDefault();
-            if (text.trim()) onSubmit(text.trim());
+            submit();
           }
           if (e.key === 'Escape') {
             e.preventDefault();
             onCancel();
           }
         }}
-        placeholder="Comment…"
-        className="px-2 py-1 text-[11px] rounded-md bg-background border border-border/60 focus:outline-none focus:border-primary/40 w-48"
+        placeholder="Describe the change…"
+        className="flex-1 min-h-0 w-full text-[12.5px] leading-relaxed bg-transparent px-0 py-0 resize-none placeholder:text-muted-foreground/40 focus:outline-none"
       />
-      <button
-        type="button"
-        onClick={() => text.trim() && onSubmit(text.trim())}
-        className="px-2 py-1 text-[11px] rounded-md bg-primary/15 text-primary hover:bg-primary/25"
-      >
-        Add
-      </button>
-      <button
-        type="button"
-        onClick={onCancel}
-        className="px-2 py-1 text-[11px] rounded-md text-muted-foreground/60 hover:text-foreground hover:bg-accent/60"
-      >
-        Cancel
-      </button>
-    </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <span className="text-[10.5px] text-muted-foreground/70 font-mono">
+          <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-foreground/5 text-foreground/70">
+            ⌘
+          </kbd>
+          <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-foreground/5 text-foreground/70 ml-1">
+            ↵
+          </kbd>
+          <span className="ml-1.5">to add</span>
+        </span>
+        <button
+          type="button"
+          onClick={submit}
+          disabled={!text.trim()}
+          className="ml-auto flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-md text-[11.5px] font-medium transition-colors bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          Add
+        </button>
+      </div>
+    </>
   );
 }

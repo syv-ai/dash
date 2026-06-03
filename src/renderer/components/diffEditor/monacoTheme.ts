@@ -4,8 +4,8 @@ import type { ITheme as XtermTheme } from 'xterm';
 // changes — Monaco caches themes by name, and the EditorPane's theme effect
 // only re-applies when `themeName` actually changes, so renaming forces a
 // fresh defineTheme + setTheme on already-open editors.
-export const MONACO_THEME_DARK = 'dash-terminal-dark-v2';
-export const MONACO_THEME_LIGHT = 'dash-terminal-light-v2';
+export const MONACO_THEME_DARK = 'dash-terminal-dark-v5';
+export const MONACO_THEME_LIGHT = 'dash-terminal-light-v5';
 
 /** Define a Monaco theme that mirrors the xterm.js terminal palette. Keeps
  *  the diff editor visually consistent with whichever palette the user
@@ -53,6 +53,14 @@ export function defineMonacoThemeFromTerminal(
       // borders so the diff editor doesn't sprout its own backdrop.
       'diffEditor.diagonalFill': '#00000000',
       'diffEditor.border': '#00000000',
+      // Subtle insert/remove backgrounds. Monaco's defaults are ~20% alpha
+      // (#9ccc2c33 / #ff000033) which reads as loud highlighter; we dial
+      // text down to ~5% and line down to ~3% so syntax colors stay legible
+      // while still marking the region.
+      'diffEditor.insertedTextBackground': isDark ? '#3fb9501f' : '#2da14424',
+      'diffEditor.removedTextBackground': isDark ? '#f850491f' : '#cf222e24',
+      'diffEditor.insertedLineBackground': isDark ? '#3fb95014' : '#2da14418',
+      'diffEditor.removedLineBackground': isDark ? '#f8504914' : '#cf222e18',
       'diffEditorOverview.insertedForeground': isDark ? '#3fb95080' : '#2da14480',
       'diffEditorOverview.removedForeground': isDark ? '#f8504980' : '#cf222e80',
     },

@@ -5,13 +5,18 @@ export const Popover = PopoverPrimitive.Root;
 export const PopoverTrigger = PopoverPrimitive.Trigger;
 export const PopoverAnchor = PopoverPrimitive.Anchor;
 
-type ContentProps = React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>;
+type ContentProps = React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content> & {
+  /** Portal target. Defaults to body. Pass a positioned, overflow-hidden
+   *  element to clip the popover inside it (useful for scrollable surfaces
+   *  like an editor pane). */
+  container?: HTMLElement | null;
+};
 
 export const PopoverContent = React.forwardRef<
   React.ElementRef<typeof PopoverPrimitive.Content>,
   ContentProps
->(({ className = '', sideOffset = 8, align = 'start', ...props }, ref) => (
-  <PopoverPrimitive.Portal>
+>(({ className = '', sideOffset = 8, align = 'start', container, style, ...props }, ref) => (
+  <PopoverPrimitive.Portal container={container ?? undefined}>
     <PopoverPrimitive.Content
       ref={ref}
       sideOffset={sideOffset}
@@ -20,6 +25,7 @@ export const PopoverContent = React.forwardRef<
       style={{
         background: 'hsl(var(--popover))',
         color: 'hsl(var(--popover-foreground))',
+        ...style,
       }}
       {...props}
     />

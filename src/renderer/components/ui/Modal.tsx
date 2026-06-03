@@ -43,6 +43,12 @@ export function Modal({ onClose, size, overflow = 'hidden', children }: ModalPro
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+        // Let a Radix popover own the Esc when focus is inside it — its
+        // onEscapeKeyDown will close just the popover.
+        const target = e.target as HTMLElement | null;
+        if (target?.closest('[data-radix-popper-content-wrapper]')) {
+          return;
+        }
         e.preventDefault();
         e.stopPropagation();
         requestClose();

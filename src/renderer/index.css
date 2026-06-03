@@ -358,6 +358,25 @@
 .animate-fade-in {
   animation: fadeIn 200ms ease-out;
 }
+
+/* Save-button success flash: brief pulse toward git-added green, soft glow. */
+@keyframes save-flash {
+  0% {
+    background-color: hsl(var(--primary) / 0.7);
+    box-shadow: 0 0 0 0 hsl(var(--git-added) / 0);
+  }
+  30% {
+    background-color: hsl(var(--git-added) / 0.85);
+    box-shadow: 0 0 18px 2px hsl(var(--git-added) / 0.45);
+  }
+  100% {
+    background-color: hsl(var(--primary) / 0.7);
+    box-shadow: 0 0 0 0 hsl(var(--git-added) / 0);
+  }
+}
+.animate-save-flash {
+  animation: save-flash 700ms cubic-bezier(0.16, 1, 0.3, 1);
+}
 .animate-slide-up {
   animation: slideUp 250ms cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -741,15 +760,75 @@
 .monaco-comment-line {
   background-color: hsl(var(--primary) / 0.08);
 }
-.monaco-comment-glyph::before {
-  content: '•';
-  color: hsl(var(--primary));
-  font-size: 14px;
-  position: relative;
-  left: 4px;
-}
 .monaco-select-line {
   background-color: hsl(var(--primary) / 0.15);
+}
+/* Gutter (line-number column) tint for the comment-selection range — visual
+ * feedback distinct from Monaco's own text selection. */
+.monaco-select-line-margin {
+  background-color: hsl(var(--primary) / 0.22);
+}
+
+/* Only render the *active* indent guide — the column for the block the
+ * cursor is currently inside. Inactive guides get hidden. Monaco tags the
+ * active one with `.indent-active` (indentGuides.js); we suppress the
+ * box-shadow that draws the rest. `guides.highlightActiveIndentation` must
+ * stay enabled for the active class to be applied. */
+.monaco-editor .core-guide-indent:not(.indent-active) {
+  box-shadow: none !important;
+}
+
+/* Diff +/- marks sit in the lineDecorations column flush against the
+ * line-number column. Push them a touch right so the number has breathing
+ * room. */
+.monaco-diff-editor .insert-sign,
+.monaco-diff-editor .delete-sign {
+  padding-left: 6px;
+}
+
+/* Persistent comment widget (added comments). Right-aligned but kept
+ * narrow enough to clear the minimap. Very low-alpha surface so the code
+ * behind reads through — distinct from the WIP popover (which is taller
+ * and contains an input). */
+.monaco-comment-widget {
+  position: absolute;
+  right: 56px;
+  width: 320px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: hsl(var(--surface-2) / 0.35);
+  backdrop-filter: blur(8px);
+  color: hsl(var(--foreground) / 0.85);
+  font-size: 12px;
+  line-height: 1.5;
+  box-shadow:
+    0 4px 12px -8px hsl(0 0% 0% / 0.4),
+    0 0 0 1px hsl(var(--border) / 0.3);
+  white-space: pre-wrap;
+  word-break: break-word;
+  z-index: 5;
+  pointer-events: auto;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease;
+  user-select: none;
+}
+.monaco-comment-widget:hover {
+  background: hsl(var(--surface-2) / 0.65);
+  box-shadow:
+    0 8px 18px -8px hsl(0 0% 0% / 0.55),
+    0 0 0 1px hsl(var(--primary) / 0.45);
+  transform: translateY(-1px);
+}
+
+/* Breathing room between the code area and the minimap on the right.
+ * Monaco renders the minimap as an absolutely-positioned sibling of the
+ * scrollable view; shifting it right and clipping the canvas keeps the
+ * visual width unchanged while the column reads as detached from the code. */
+.monaco-diff-editor .minimap {
+  margin-left: 8px;
 }
 
 /* Monaco diff editor: kill the tint on the right-side overview ruler / diff-
