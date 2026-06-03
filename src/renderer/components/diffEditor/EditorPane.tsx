@@ -9,6 +9,7 @@ import type { DiffComment, LiveComment } from './comments/types';
 import { useCommentsContext } from './comments/CommentsContext';
 import { useGutterSelection } from './comments/useGutterSelection';
 import { useFileCommentsBinding } from './comments/useFileCommentsBinding';
+import { useFileLoad, type LoadState } from './editor/useFileLoad';
 import {
   Popover,
   PopoverAnchor,
@@ -37,21 +38,6 @@ interface EditorPaneProps {
   guardClose?: () => boolean;
 }
 
-type LoadState =
-  | { kind: 'loading' }
-  | { kind: 'error'; message: string }
-  | {
-      kind: 'loaded';
-      originalContent: string;
-      modifiedContent: string; // initial buffer for the modified side
-      mtimeMs: number; // 0 in commit view
-      sizeBytes: number; // 0 in commit view
-      isBinary: boolean;
-      isLargeFile: boolean;
-      language: string;
-      modifiedPresent: boolean; // false when file is deleted on disk (working view)
-    };
-
 interface StaleInfo {
   currentMtimeMs: number;
   currentSizeBytes: number;
@@ -71,7 +57,7 @@ export function EditorPane({
 }: EditorPaneProps) {
   const commentsStore = useCommentsContext();
   const commentsByFile = commentsStore.state.byFile;
-  const [state, setState] = useState<LoadState>({ kind: 'loading' });
+  const { state, setState } = useFileLoad(cwd, filePath, view);
   const [draft, setDraft] = useState<string>('');
   const [loadedBuffer, setLoadedBuffer] = useState<string>('');
   const [saving, setSaving] = useState(false);
@@ -134,78 +120,18 @@ export function EditorPane({
   }
   const displayed = lastLoadedRef.current;
 
-  // ── Load file when key changes ───────────────────────────
+  // Initialize the editable buffer + saved buffer whenever a new file's
+  // content loads. Comment lifecycle / pending range / stale flag are
+  // owned by their respective hooks; only the draft/loadedBuffer mirror
+  // lives here because the save hook owns them by reference.
   useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      // Empty path → no file yet. The orchestrator will fill it in once the
-      // file tree loads. Stay on the loading skeleton until then.
-      if (!filePath) {
-        setState({ kind: 'loading' });
-        return;
-      }
-      setState({ kind: 'loading' });
-      if (view.kind === 'working') {
-        const resp = await window.electronAPI.editorReadWorking({
-          cwd,
-          filePath,
-          ref: view.ref,
-        });
-        if (cancelled) return;
-        if (!resp.success || !resp.data) {
-          setState({ kind: 'error', message: resp.error ?? 'Failed to load file' });
-          return;
-        }
-        const modifiedPresent = resp.data.workingContent !== null;
-        const initial = resp.data.workingContent ?? '';
-        setState({
-          kind: 'loaded',
-          originalContent: resp.data.originalContent,
-          modifiedContent: initial,
-          mtimeMs: resp.data.mtimeMs,
-          sizeBytes: resp.data.sizeBytes,
-          isBinary: resp.data.isBinary,
-          isLargeFile: resp.data.isLargeFile,
-          language: resp.data.language,
-          modifiedPresent,
-        });
-        setLoadedBuffer(initial);
-        setDraft(initial);
-      } else {
-        const resp = await window.electronAPI.editorReadCommit({
-          cwd,
-          filePath,
-          hash: view.hash,
-        });
-        if (cancelled) return;
-        if (!resp.success || !resp.data) {
-          setState({ kind: 'error', message: resp.error ?? 'Failed to load file' });
-          return;
-        }
-        setState({
-          kind: 'loaded',
-          originalContent: resp.data.originalContent,
-          modifiedContent: resp.data.modifiedContent,
-          mtimeMs: 0,
-          sizeBytes: 0,
-          isBinary: resp.data.isBinary,
-          isLargeFile: resp.data.isLargeFile,
-          language: resp.data.language,
-          modifiedPresent: true,
-        });
-        setLoadedBuffer(resp.data.modifiedContent);
-        setDraft(resp.data.modifiedContent);
-      }
-      // Comment lifecycle now lives in useFileCommentsBinding; no manual
-      // clear here.
-      setPendingRange(null);
-      setStale(null);
-    }
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [cwd, filePath, view]);
+    if (state.kind !== 'loaded') return;
+    const initial = state.modifiedContent;
+    setLoadedBuffer(initial);
+    setDraft(initial);
+    setPendingRange(null);
+    setStale(null);
+  }, [state, setPendingRange]);
 
   // ── Comments binding ────────────────────────────────────
   // Owns Monaco decoration lifecycle for the current filePath. Hydration
