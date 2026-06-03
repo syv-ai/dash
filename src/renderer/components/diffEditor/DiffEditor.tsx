@@ -5,7 +5,9 @@ import { Modal } from '../ui/Modal';
 import type { FileChange, GitStatus } from '../../../shared/types';
 import { EditorSidebar } from './EditorSidebar';
 import { EditorPane } from './EditorPane';
-import type { CommitSummary, EditorView, StoredComment } from './types';
+import type { CommitSummary, EditorView } from './types';
+import { useCommentsStore } from './comments/useCommentsStore';
+import { CommentsProvider } from './comments/CommentsContext';
 
 interface DiffEditorProps {
   cwd: string;
@@ -160,44 +162,15 @@ function DiffEditorBody({
     setView(next);
   }
 
-  // ── Per-file comments ────────────────────────────────────
-  // Owned here (not in EditorPane) so comments survive file switches. Keyed
-  // by absolute file path within the open project; cleared when the modal
-  // unmounts. Counts feed the sidebar's per-file indicator; the full map
-  // feeds the shared CommentsMenu dropdown so the user can see comments
-  // across every file from anywhere in the modal.
-  const [commentsByFile, setCommentsByFile] = useState<Record<string, StoredComment[]>>({});
+  // ── Comments store ──────────────────────────────────────
+  // Task-scoped, persisted to SQLite. Survives modal close/reopen. When
+  // activeTaskId is null the store is `disabled` and all mutators no-op.
+  const store = useCommentsStore(activeTaskId);
 
   // Cross-file navigation token from the dropdown: when set, the EditorPane
   // switches to the requested file and reveals the comment with this id
   // once hydration completes, then clears it via onClearReveal.
   const [revealCommentId, setRevealCommentId] = useState<string | null>(null);
-
-  const updateCommentsForFile = useCallback((path: string, next: StoredComment[]) => {
-    setCommentsByFile((prev) => {
-      if (next.length === 0) {
-        if (!(path in prev)) return prev;
-        const copy = { ...prev };
-        delete copy[path];
-        return copy;
-      }
-      return { ...prev, [path]: next };
-    });
-  }, []);
-
-  const removeComment = useCallback((path: string, commentId: string) => {
-    setCommentsByFile((prev) => {
-      const list = prev[path];
-      if (!list) return prev;
-      const next = list.filter((c) => c.id !== commentId);
-      if (next.length === 0) {
-        const copy = { ...prev };
-        delete copy[path];
-        return copy;
-      }
-      return { ...prev, [path]: next };
-    });
-  }, []);
 
   const navigateAcrossFile = useCallback((path: string, commentId: string) => {
     setSelectedPath(path);
@@ -208,51 +181,50 @@ function DiffEditorBody({
 
   const commentCounts = useMemo(() => {
     const map = new Map<string, number>();
-    for (const [path, list] of Object.entries(commentsByFile)) {
+    for (const [path, list] of Object.entries(store.state.byFile)) {
       if (list.length > 0) map.set(path, list.length);
     }
     return map;
-  }, [commentsByFile]);
+  }, [store.state]);
 
   const bg = terminalTheme.background ?? (isDark ? '#0d0d11' : '#faf8f3');
 
   return (
     <div className="h-full w-full overflow-hidden" style={{ background: bg }}>
-      <PanelGroup direction="horizontal" autoSaveId="diff-editor-shell" className="h-full">
-        <Panel defaultSize={22} minSize={14} maxSize={45}>
-          <EditorSidebar
-            allPaths={repoPaths}
-            changedFiles={changedFiles}
-            filesLoading={repoPathsLoading || changedFilesLoading}
-            selectedPath={selectedPath}
-            onSelectFile={setSelectedPath}
-            commentCounts={commentCounts}
-            commits={commits}
-            commitsLoading={commitsLoading}
-            showWorkingTreeRow={workingFiles.length > 0}
-            view={view}
-            onSelectView={changeView}
-          />
-        </Panel>
-        <PanelResizeHandle className="w-3 bg-transparent hover:bg-transparent transition-colors" />
-        <Panel minSize={40}>
-          <EditorPane
-            cwd={cwd}
-            filePath={selectedPath}
-            view={view}
-            activeTaskId={activeTaskId}
-            terminalTheme={terminalTheme}
-            isDark={isDark}
-            commentsByFile={commentsByFile}
-            revealCommentId={revealCommentId}
-            onCommentsChange={updateCommentsForFile}
-            onRemoveComment={removeComment}
-            onNavigateAcrossFile={navigateAcrossFile}
-            onClearReveal={clearReveal}
-            onClose={onClose}
-          />
-        </Panel>
-      </PanelGroup>
+      <CommentsProvider value={store}>
+        <PanelGroup direction="horizontal" autoSaveId="diff-editor-shell" className="h-full">
+          <Panel defaultSize={22} minSize={14} maxSize={45}>
+            <EditorSidebar
+              allPaths={repoPaths}
+              changedFiles={changedFiles}
+              filesLoading={repoPathsLoading || changedFilesLoading}
+              selectedPath={selectedPath}
+              onSelectFile={setSelectedPath}
+              commentCounts={commentCounts}
+              commits={commits}
+              commitsLoading={commitsLoading}
+              showWorkingTreeRow={workingFiles.length > 0}
+              view={view}
+              onSelectView={changeView}
+            />
+          </Panel>
+          <PanelResizeHandle className="w-3 bg-transparent hover:bg-transparent transition-colors" />
+          <Panel minSize={40}>
+            <EditorPane
+              cwd={cwd}
+              filePath={selectedPath}
+              view={view}
+              activeTaskId={activeTaskId}
+              terminalTheme={terminalTheme}
+              isDark={isDark}
+              revealCommentId={revealCommentId}
+              onNavigateAcrossFile={navigateAcrossFile}
+              onClearReveal={clearReveal}
+              onClose={onClose}
+            />
+          </Panel>
+        </PanelGroup>
+      </CommentsProvider>
     </div>
   );
 }

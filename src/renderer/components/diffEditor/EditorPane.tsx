@@ -4,7 +4,9 @@ import type { editor as monacoEditor } from 'monaco-editor';
 import type { ITheme as XtermTheme } from 'xterm';
 import { X, FileText, WrapText, ChevronDown } from 'lucide-react';
 import { defineMonacoThemeFromTerminal, themeNameFor } from './monacoTheme';
-import type { EditorView, StoredComment } from './types';
+import type { EditorView } from './types';
+import type { DiffComment, RangeSnapshot } from './comments/types';
+import { useCommentsContext } from './comments/CommentsContext';
 import {
   Popover,
   PopoverAnchor,
@@ -23,15 +25,9 @@ interface EditorPaneProps {
   activeTaskId: string | null;
   terminalTheme: XtermTheme;
   isDark: boolean;
-  /** Full per-file comments map owned by the parent. The CommentsMenu reads
-   *  this to render entries across every file; EditorPane derives the
-   *  current file's list internally and hydrates decorations from it. */
-  commentsByFile: Record<string, StoredComment[]>;
   /** When set, the editor reveals the comment with this id once it lives in
    *  the current file's hydrated decorations, then calls onClearReveal. */
   revealCommentId: string | null;
-  onCommentsChange: (filePath: string, comments: StoredComment[]) => void;
-  onRemoveComment: (filePath: string, commentId: string) => void;
   onNavigateAcrossFile: (filePath: string, commentId: string) => void;
   onClearReveal: () => void;
   onClose: () => void;
@@ -72,15 +68,14 @@ export function EditorPane({
   activeTaskId,
   terminalTheme,
   isDark,
-  commentsByFile,
   revealCommentId,
-  onCommentsChange,
-  onRemoveComment,
   onNavigateAcrossFile,
   onClearReveal,
   onClose,
 }: EditorPaneProps) {
-  const storedComments = commentsByFile[filePath] ?? [];
+  const commentsStore = useCommentsContext();
+  const commentsByFile = commentsStore.state.byFile;
+  const storedComments: DiffComment[] = commentsByFile[filePath] ?? [];
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [draft, setDraft] = useState<string>('');
   const [loadedBuffer, setLoadedBuffer] = useState<string>('');
@@ -225,38 +220,33 @@ export function EditorPane({
   // setState(...), and MonacoDiffEditor (a child) has already swapped the
   // model in its own effect by the time our effect fires.
   const hydratedStateRef = useRef<LoadState | null>(null);
-  const storedCommentsRef = useRef<StoredComment[]>(storedComments);
+  const storedCommentsRef = useRef<DiffComment[]>(storedComments);
   storedCommentsRef.current = storedComments;
-  const onCommentsChangeRef = useRef(onCommentsChange);
-  onCommentsChangeRef.current = onCommentsChange;
   const commentsRef = useRef<Comment[]>([]);
   commentsRef.current = comments;
   const filePathRef = useRef(filePath);
   filePathRef.current = filePath;
 
-  // Snapshot helper: read current decoration ranges + texts and push to the
-  // parent for the *current* file. Called explicitly from add/text-edit and
-  // from the on-switch cleanup. NOT called from hydration (parent already
-  // has that data) and NOT auto-fired on every `comments` change (load's
-  // setComments([]) would clobber parent state before re-hydration).
-  const pushSnapshotForCurrentFile = useCallback((commentsNow: Comment[]) => {
-    const ed = editorRef.current?.getModifiedEditor();
-    const model = ed?.getModel();
-    if (!ed || !model) return;
-    const snapshot: StoredComment[] = commentsNow.flatMap((c) => {
-      const r = model.getDecorationRange(c.decorationId);
-      if (!r) return [];
-      return [
-        {
-          id: c.id,
-          startLine: r.startLineNumber,
-          endLine: r.endLineNumber,
-          text: c.comment,
-        },
-      ];
-    });
-    onCommentsChangeRef.current(filePathRef.current, snapshot);
-  }, []);
+  // Snapshot helper: read current decoration ranges and push to the store
+  // for the *current* file. Range-only — text edits and adds are pushed
+  // explicitly from addComment. Task 11 will replace this with a binding
+  // hook that scopes the snapshot to its own filePath; here we keep the
+  // existing (still-buggy on file-switch) behavior to keep the data-source
+  // swap minimal.
+  const pushSnapshotForCurrentFile = useCallback(
+    (commentsNow: Comment[]) => {
+      const ed = editorRef.current?.getModifiedEditor();
+      const model = ed?.getModel();
+      if (!ed || !model) return;
+      const snapshots: RangeSnapshot[] = commentsNow.flatMap((c) => {
+        const r = model.getDecorationRange(c.decorationId);
+        if (!r) return [];
+        return [{ id: c.id, startLine: r.startLineNumber, endLine: r.endLineNumber }];
+      });
+      commentsStore.snapshotRanges(filePathRef.current, snapshots);
+    },
+    [commentsStore],
+  );
 
   useEffect(() => {
     if (state.kind !== 'loaded') return;
@@ -665,7 +655,7 @@ export function EditorPane({
     if (editingId) {
       const next = comments.map((c) => (c.id === editingId ? { ...c, comment: text } : c));
       setComments(next);
-      pushSnapshotForCurrentFile(next);
+      commentsStore.updateText(editingId, text);
       setEditingId(null);
       setPendingText('');
       setPendingRange(null);
@@ -676,6 +666,13 @@ export function EditorPane({
     if (!editor || !monaco || !pendingRange) return;
     const model = editor.getModel();
     if (!model) return;
+    const created = commentsStore.addComment({
+      filePath,
+      startLine: pendingRange.start,
+      endLine: pendingRange.end,
+      text,
+    });
+    if (!created) return;
     const ids = model.deltaDecorations(
       [],
       [
@@ -686,9 +683,8 @@ export function EditorPane({
       ],
     );
     const decorationId = ids[0];
-    const next = [...comments, { id: crypto.randomUUID(), decorationId, comment: text }];
+    const next = [...comments, { id: created.id, decorationId, comment: text }];
     setComments(next);
-    pushSnapshotForCurrentFile(next);
     setPendingText('');
     setPendingRange(null);
   }
@@ -816,7 +812,7 @@ export function EditorPane({
                   onNavigateAcrossFile(targetPath, commentId);
                 }
               }}
-              onRemove={onRemoveComment}
+              onRemove={(_path, id) => commentsStore.remove(id)}
               onSend={buildPromptAndSend}
             />
           )}
@@ -1025,7 +1021,7 @@ function CommentsMenu({
   onRemove,
   onSend,
 }: {
-  commentsByFile: Record<string, StoredComment[]>;
+  commentsByFile: Record<string, DiffComment[]>;
   currentFilePath: string;
   /** Returns the current model's live range for the given comment id, or
    *  null if the comment isn't in the current file. Lets the dropdown show
