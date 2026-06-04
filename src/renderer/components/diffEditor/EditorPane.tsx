@@ -28,15 +28,6 @@ const WORDWRAP_KEY = 'diffEditor.wordWrap';
 const POPOVER_HEIGHT_PX = 140;
 const POPOVER_FLIP_PADDING_PX = 12;
 
-// Inline SVG markup for the comment-widget chrome. We build widgets via
-// the DOM (not React) so they survive across renders without remount,
-// which means lucide-react icons aren't available — these are the same
-// glyphs (chevron-up, message-square) rendered as static strings.
-const CHEVRON_UP_SVG =
-  '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>';
-const MESSAGE_SQUARE_SVG =
-  '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
-
 interface EditorPaneProps {
   cwd: string;
   filePath: string;
@@ -85,14 +76,6 @@ export function EditorPane({
   const selectionDecorations = useRef<monacoEditor.IEditorDecorationsCollection | null>(null);
   const saveCmdRef = useRef<(() => void) | null>(null);
   const popoverAnchorRef = useRef<HTMLDivElement | null>(null);
-  // Persistent comment widget DOM nodes keyed by comment id. Owned by a
-  // ref (not state) so the widgets effect can diff-update without React
-  // re-runs, and so we can imperatively kick off enter/leave animations.
-  const widgetNodesRef = useRef<Map<string, HTMLDivElement>>(new Map());
-  // Per-comment collapse state for the persistent widget. Local to the
-  // modal session — collapse is a transient view preference, not worth
-  // persisting to SQLite. Default for any comment is *expanded*.
-  const [collapsedWidgets, setCollapsedWidgets] = useState<ReadonlySet<string>>(() => new Set());
   // Fade-on-file-change. Bumped only after the new file's content has
   // actually swapped into the editor — earlier than that and the user
   // sees the OLD content fade in, which feels wrong.
@@ -358,169 +341,6 @@ export function EditorPane({
     }));
     commentDecorations.current.set(decos);
   }, [liveComments, isDark, commentsStore.disabled, modifiedEditor, monaco]);
-
-  // Latest editComment handler captured in a ref so the widgets effect
-  // doesn't re-create DOM nodes when the handler identity changes.
-  const editCommentRef = useRef<(c: LiveComment) => void>(() => {});
-  editCommentRef.current = (c: LiveComment) => {
-    const model = modifiedEditor?.getModel();
-    if (!model) return;
-    const range = model.getDecorationRange(c.decorationId);
-    if (!range) return;
-    setEditingId(c.id);
-    setPendingText(c.text);
-    setPendingRange({ start: range.startLineNumber, end: range.endLineNumber });
-  };
-  // Same ref pattern for toggling collapse on a widget.
-  const toggleCollapseRef = useRef<(id: string) => void>(() => {});
-  toggleCollapseRef.current = (id: string) => {
-    setCollapsedWidgets((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  // Persistent comment widgets — absolute-positioned divs in the editor
-  // area, right-aligned to match the WIP popover's footprint. We can't use
-  // Monaco's content-widget API for this: content widgets anchor to a
-  // (line, column) text position, so they always sit on the left side and
-  // can't be right-aligned to the editor pane.
-  //
-  // Positioning: anchored to the TOP of the commented range with a small
-  // inset (`WIDGET_TOP_INSET_PX`) so the widget visually sits *inside* the
-  // commented band rather than dangling below it. Single-line comments
-  // fall back to "below the line" — the only safe place when the band is
-  // the same height as the widget would cover.
-  //
-  // Lifecycle: we DIFF against `widgetNodesRef` so existing widgets
-  // survive across effect re-runs (file scrolls, sibling state churn),
-  // newly-added comments get an enter animation, and removed comments
-  // play a leave animation before unmount. Rebuilding from scratch each
-  // time — which is what the previous design did — would re-fire the
-  // enter animation on every keystroke.
-  useEffect(() => {
-    const area = editorAreaEl;
-    if (!modifiedEditor || !area) return;
-    const model = modifiedEditor.getModel();
-    if (!model) return;
-
-    const visible = commentsStore.disabled ? [] : liveComments.filter((c) => c.id !== editingId);
-    const visibleIds = new Set(visible.map((c) => c.id));
-    const map = widgetNodesRef.current;
-
-    // Remove widgets whose comments are no longer visible: play the leave
-    // animation, then unmount the node when the keyframe finishes.
-    for (const [id, node] of map) {
-      if (visibleIds.has(id)) continue;
-      map.delete(id);
-      node.classList.remove('monaco-comment-widget-enter');
-      node.classList.add('monaco-comment-widget-leave');
-      node.addEventListener(
-        'animationend',
-        () => {
-          if (node.parentNode) node.remove();
-        },
-        { once: true },
-      );
-    }
-
-    // Add new widgets; sync text + handlers + collapsed class on the rest.
-    // Each widget has three children: a collapsed-state icon, a text body,
-    // and a hover-revealed chevron toggle. CSS handles which is visible.
-    for (const c of visible) {
-      let node = map.get(c.id);
-      if (!node) {
-        node = document.createElement('div');
-        node.className = 'monaco-comment-widget monaco-comment-widget-enter';
-
-        const iconEl = document.createElement('div');
-        iconEl.className = 'monaco-comment-widget-icon';
-        iconEl.innerHTML = MESSAGE_SQUARE_SVG;
-
-        const textEl = document.createElement('div');
-        textEl.className = 'monaco-comment-widget-text';
-
-        const toggleBtn = document.createElement('button');
-        toggleBtn.type = 'button';
-        toggleBtn.className = 'monaco-comment-widget-toggle';
-        toggleBtn.setAttribute('aria-label', 'Collapse comment');
-        toggleBtn.title = 'Collapse';
-        toggleBtn.innerHTML = CHEVRON_UP_SVG;
-
-        node.append(iconEl, textEl, toggleBtn);
-        area.appendChild(node);
-        map.set(c.id, node);
-      }
-
-      const textEl = node.querySelector<HTMLDivElement>('.monaco-comment-widget-text');
-      if (textEl && textEl.textContent !== c.text) textEl.textContent = c.text;
-
-      const toggleBtn = node.querySelector<HTMLButtonElement>('.monaco-comment-widget-toggle');
-      if (toggleBtn) {
-        toggleBtn.onclick = (e) => {
-          // Don't bubble to the widget's click handler (which would
-          // immediately toggle again when in collapsed state).
-          e.stopPropagation();
-          toggleCollapseRef.current(c.id);
-        };
-      }
-
-      // Single click only acts when collapsed (expand). Double-click only
-      // acts when expanded (edit). Stays out of each other's way.
-      node.onclick = () => {
-        if (node && node.classList.contains('collapsed')) {
-          toggleCollapseRef.current(c.id);
-        }
-      };
-      node.ondblclick = () => {
-        if (node && node.classList.contains('collapsed')) return;
-        editCommentRef.current(c);
-      };
-
-      node.classList.toggle('collapsed', collapsedWidgets.has(c.id));
-    }
-
-    const WIDGET_TOP_INSET_PX = 4;
-    const update = () => {
-      const scrollTop = modifiedEditor.getScrollTop();
-      for (const c of visible) {
-        const node = map.get(c.id);
-        if (!node) continue;
-        const range = model.getDecorationRange(c.decorationId);
-        if (!range) continue;
-        const startLine = range.startLineNumber;
-        const endLine = range.endLineNumber;
-        const lineTop =
-          startLine === endLine
-            ? modifiedEditor.getTopForLineNumber(endLine + 1)
-            : modifiedEditor.getTopForLineNumber(startLine) + WIDGET_TOP_INSET_PX;
-        node.style.top = `${lineTop - scrollTop}px`;
-      }
-    };
-    update();
-    const sub = modifiedEditor.onDidScrollChange(update);
-    return () => sub.dispose();
-  }, [
-    liveComments,
-    editorAreaEl,
-    editingId,
-    commentsStore.disabled,
-    modifiedEditor,
-    collapsedWidgets,
-  ]);
-
-  // Final-unmount cleanup: yank any surviving widget nodes. We keep nodes
-  // alive across normal effect re-runs (see above), so this is the only
-  // place that's responsible for removing them on full unmount.
-  useEffect(
-    () => () => {
-      for (const node of widgetNodesRef.current.values()) node.remove();
-      widgetNodesRef.current.clear();
-    },
-    [],
-  );
 
   function addComment(text: string) {
     if (editingId) {
