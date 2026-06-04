@@ -8,6 +8,7 @@ import { useGutterSelection } from './comments/useGutterSelection';
 import { useFileCommentsBinding } from './comments/useFileCommentsBinding';
 import { assignShades } from './comments/shadeAssignment';
 import { computeRowDecorations } from './comments/rowShades';
+import { CommentOverlay } from './comments/CommentOverlay';
 import { CommentsMenu } from './comments/CommentsMenu';
 import { CommentInputBar } from './comments/CommentInputBar';
 import { useFileLoad, type LoadState } from './editor/useFileLoad';
@@ -625,6 +626,23 @@ export function EditorPane({
     [commentsByFile],
   );
 
+  // Used by the React overlay's onDoubleClick → re-opens the WIP popover
+  // prefilled with the chosen comment's text + range. Same behavior the
+  // legacy widget exposed via dbl-click; lives in EditorPane because it
+  // owns editingId / pendingText / pendingRange.
+  const editComment = useCallback(
+    (c: LiveComment) => {
+      const model = modifiedEditor?.getModel();
+      if (!model) return;
+      const range = model.getDecorationRange(c.decorationId);
+      if (!range) return;
+      setEditingId(c.id);
+      setPendingText(c.text);
+      setPendingRange({ start: range.startLineNumber, end: range.endLineNumber });
+    },
+    [modifiedEditor, setPendingRange],
+  );
+
   const commentsSlot =
     !commentsStore.disabled && hasAnyComments ? (
       <CommentsMenu
@@ -698,6 +716,13 @@ export function EditorPane({
           </button>
         )}
         {state.kind === 'loading' && displayed.kind === 'loaded' && <LoadingPill />}
+        <CommentOverlay
+          liveComments={liveComments}
+          modifiedEditor={modifiedEditor}
+          monaco={monaco}
+          area={editorAreaEl}
+          onEditComment={editComment}
+        />
         <Popover
           open={!!pendingRange && !dragging}
           onOpenChange={(o) => {
