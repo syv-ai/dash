@@ -47,6 +47,11 @@
     --git-untracked: 0 0% 50%;
     --git-conflicted: 25 95% 53%;
 
+    /* Diff-comment shade palette. shade-1 is the canonical primary; shade-2
+     * is hue-shifted ~+60° and only kicks in when comments partially overlap. */
+    --shade-1: 218 34% 35%;
+    --shade-2: 278 36% 38%;
+
     /* Category palette — hashed category names map deterministically to a slot 1..8.
        Hues spread evenly around the wheel so adjacent slots stay distinguishable. */
     --cat-1: 210 70% 48%; /* blue */
@@ -107,6 +112,9 @@
     --git-renamed: 217 91% 60%; /* bright blue */
     --git-untracked: 0 0% 56%;
     --git-conflicted: 25 95% 53%; /* bright orange */
+
+    --shade-1: 220 35% 80%;
+    --shade-2: 280 38% 80%;
 
     /* Category palette (dark) — bumped lightness so badges stay legible on dark surfaces. */
     --cat-1: 210 75% 65%;
@@ -386,13 +394,15 @@
 @keyframes popoverIn {
   from {
     opacity: 0;
+    transform: translateY(-4px) scale(0.98);
   }
   to {
     opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 .animate-popover-in {
-  animation: popoverIn 140ms ease-out;
+  animation: popoverIn 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 @keyframes slideInRight {
   from {
@@ -756,17 +766,51 @@
   }
 }
 
-/* Monaco inline-comment decorations (FileEditorView) */
-.monaco-comment-line {
-  background-color: hsl(var(--primary) / 0.08);
+/* Monaco inline-comment decorations. The line band tint is a quiet
+ * primary wash; the widget on top is a denser puddle of the *same*
+ * primary tint. Three alpha steps in one color family — band → widget
+ * → write-popover — so they read as one continuous material at
+ * different densities, not as separate elements. Selection (active
+ * gesture) gets more alpha than the passive comment marker; the gutter
+ * is denser still since the gutter is the drag origin. */
+/* Shade-aware band tints. Single-shade variants are solid washes; the
+ * combined '-12' variant uses a 50/50 vertical gradient so a row owned by
+ * two distinctly-shaded ranges stays legible (top half shade 1, bottom
+ * half shade 2). Monaco renders these via the isWholeLine decoration's
+ * className. */
+.monaco-comment-line-shade-1 {
+  background: hsl(var(--shade-1) / 0.1);
+}
+.monaco-comment-line-shade-2 {
+  background: hsl(var(--shade-2) / 0.1);
+}
+.monaco-comment-line-shade-12 {
+  background: linear-gradient(
+    to bottom,
+    hsl(var(--shade-1) / 0.12) 50%,
+    hsl(var(--shade-2) / 0.12) 50%
+  );
+}
+
+/* Line numbers in commented ranges take the band's shade. Monaco supports
+ * a per-decoration `lineNumberClassName` which we use to apply these. */
+.monaco-comment-ln-shade-1 {
+  color: hsl(var(--shade-1)) !important;
+  font-weight: 600;
+}
+.monaco-comment-ln-shade-2 {
+  color: hsl(var(--shade-2)) !important;
+  font-weight: 600;
+}
+.monaco-comment-ln-shade-12 {
+  color: hsl(var(--primary)) !important;
+  font-weight: 600;
 }
 .monaco-select-line {
-  background-color: hsl(var(--primary) / 0.15);
+  background-color: hsl(var(--primary) / 0.18);
 }
-/* Gutter (line-number column) tint for the comment-selection range — visual
- * feedback distinct from Monaco's own text selection. */
 .monaco-select-line-margin {
-  background-color: hsl(var(--primary) / 0.22);
+  background-color: hsl(var(--primary) / 0.32);
 }
 
 /* Only render the *active* indent guide — the column for the block the
@@ -786,41 +830,180 @@
   padding-left: 6px;
 }
 
-/* Persistent comment widget (added comments). Right-aligned but kept
- * narrow enough to clear the minimap. Very low-alpha surface so the code
- * behind reads through — distinct from the WIP popover (which is taller
- * and contains an input). */
+/* Persistent comment widget. Same color family as the line band tint
+ * (primary, low alpha) so it reads as a continuation of the commented
+ * area rather than a separate floating tooltip. Heavy backdrop-blur
+ * over a tinted-glass mix keeps the code beneath alive but soft.
+ *
+ * Layout is flex: an inline icon (collapsed-state only), the text body
+ * (expanded-state only), and a hover-revealed chevron that toggles
+ * between the two. Width is fixed when expanded; auto when collapsed so
+ * it shrinks to just the icon. */
+/* The widget is a denser patch of the line band — same color, no card
+ * chrome. A border + shadow + heavy radius is what made the previous
+ * pass read as a floating object; this version drops all three so the
+ * widget looks like an extension of the band region rather than a
+ * separate element painted over it. */
 .monaco-comment-widget {
   position: absolute;
   right: 56px;
-  width: 320px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: hsl(var(--surface-2) / 0.35);
-  backdrop-filter: blur(8px);
-  color: hsl(var(--foreground) / 0.85);
+  width: 240px;
+  padding: 6px 10px 7px;
+  border-radius: 3px;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  background: hsl(var(--primary) / 0.16);
+  color: hsl(var(--foreground) / 0.9);
   font-size: 12px;
   line-height: 1.5;
-  box-shadow:
-    0 4px 12px -8px hsl(0 0% 0% / 0.4),
-    0 0 0 1px hsl(var(--border) / 0.3);
+  letter-spacing: -0.005em;
+  border: none;
+  box-shadow: none;
   white-space: pre-wrap;
   word-break: break-word;
   z-index: 5;
   pointer-events: auto;
   cursor: pointer;
   transition:
-    background 120ms ease,
-    box-shadow 120ms ease,
-    transform 120ms ease;
+    background 180ms ease-out,
+    width 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    padding 220ms cubic-bezier(0.16, 1, 0.3, 1);
   user-select: none;
 }
+.dark .monaco-comment-widget {
+  background: hsl(var(--primary) / 0.2);
+}
 .monaco-comment-widget:hover {
-  background: hsl(var(--surface-2) / 0.65);
+  background: hsl(var(--primary) / 0.22);
+}
+.dark .monaco-comment-widget:hover {
+  background: hsl(var(--primary) / 0.28);
+}
+
+/* Inner structure. */
+.monaco-comment-widget-text {
+  flex: 1;
+  min-width: 0;
+}
+.monaco-comment-widget-icon {
+  display: none;
+  align-items: center;
+  color: hsl(var(--primary) / 0.85);
+  flex-shrink: 0;
+}
+.monaco-comment-widget-toggle {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin: -1px -2px 0 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: hsl(var(--muted-foreground) / 0.7);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 150ms ease,
+    background 150ms ease,
+    color 150ms ease;
+}
+.monaco-comment-widget:hover .monaco-comment-widget-toggle {
+  opacity: 1;
+}
+.monaco-comment-widget-toggle:hover {
+  background: hsl(var(--foreground) / 0.06);
+  color: hsl(var(--foreground) / 0.9);
+}
+
+/* Collapsed state — only the icon shows, widget shrinks to a small chip
+ * pinned to the same anchor. The whole widget becomes the click target
+ * (the toggle button is hidden; clicking anywhere expands). */
+.monaco-comment-widget.collapsed {
+  width: auto;
+  padding: 4px 8px;
+  align-items: center;
+}
+.monaco-comment-widget.collapsed .monaco-comment-widget-icon {
+  display: flex;
+}
+.monaco-comment-widget.collapsed .monaco-comment-widget-text,
+.monaco-comment-widget.collapsed .monaco-comment-widget-toggle {
+  display: none;
+}
+@keyframes commentWidgetIn {
+  from {
+    opacity: 0;
+    transform: translateY(-3px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes commentWidgetOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-3px) scale(0.97);
+  }
+}
+.monaco-comment-widget-enter {
+  animation: commentWidgetIn 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.monaco-comment-widget-leave {
+  animation: commentWidgetOut 160ms ease-in forwards;
+  pointer-events: none;
+}
+
+/* Shared glass surface for commenting popovers (WIP input + dropdown).
+ * Overrides the base PopoverContent inline `background` via !important —
+ * the inline default is fine for opaque popovers (settings, project menu)
+ * but we want commenting surfaces to feel like the same vapor as the
+ * persistent comment widget. Coupled with `backdrop-filter`, this reads
+ * as "frosted glass on top of the code" rather than a flat panel. */
+.glass-popover {
+  background:
+    linear-gradient(180deg, hsl(var(--primary) / 0.04), hsl(var(--primary) / 0)),
+    hsl(var(--surface-2) / 0.55) !important;
+  backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  border-color: hsl(var(--border) / 0.4) !important;
   box-shadow:
-    0 8px 18px -8px hsl(0 0% 0% / 0.55),
-    0 0 0 1px hsl(var(--primary) / 0.45);
-  transform: translateY(-1px);
+    0 18px 40px -16px hsl(0 0% 0% / 0.45),
+    inset 0 1px 0 hsl(0 0% 100% / 0.06) !important;
+}
+.dark .glass-popover {
+  background:
+    linear-gradient(180deg, hsl(var(--primary) / 0.05), hsl(var(--primary) / 0)),
+    hsl(var(--surface-2) / 0.6) !important;
+  border-color: hsl(0 0% 100% / 0.08) !important;
+  box-shadow:
+    0 22px 48px -18px hsl(0 0% 0% / 0.65),
+    inset 0 1px 0 hsl(0 0% 100% / 0.08) !important;
+}
+/* WIP popover. Same shape, same chrome, same color family as the
+ * persistent widget — write-mode IS the widget, just denser so the
+ * textarea content reads on top of code. No border, no shadow, same
+ * 3px corner radius as the widget. !important is needed to flatten
+ * the chrome the base PopoverContent applies via class + inline style. */
+.comment-write-surface {
+  background: hsl(var(--primary) / 0.5) !important;
+  border: none !important;
+  border-radius: 3px !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+.dark .comment-write-surface {
+  background: hsl(var(--primary) / 0.55) !important;
 }
 
 /* Breathing room between the code area and the minimap on the right.
