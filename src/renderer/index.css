@@ -792,6 +792,22 @@
   );
 }
 
+/* Highlighted variants — applied to rows owned by the hovered comment so
+ * the bidirectional hover-highlight makes the band visibly pop. */
+.monaco-comment-line-shade-1-hi {
+  background: hsl(var(--shade-1) / 0.2);
+}
+.monaco-comment-line-shade-2-hi {
+  background: hsl(var(--shade-2) / 0.2);
+}
+.monaco-comment-line-shade-12-hi {
+  background: linear-gradient(
+    to bottom,
+    hsl(var(--shade-1) / 0.2) 50%,
+    hsl(var(--shade-2) / 0.2) 50%
+  );
+}
+
 /* Line numbers in commented ranges take the band's shade. Monaco supports
  * a per-decoration `lineNumberClassName` which we use to apply these. */
 .monaco-comment-ln-shade-1 {

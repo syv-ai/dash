@@ -84,6 +84,10 @@ export function EditorPane({
   // State (not ref) so the popover's `container` prop sees the actual node
   // after mount — refs alone don't trigger a re-render.
   const [editorAreaEl, setEditorAreaEl] = useState<HTMLDivElement | null>(null);
+  // Lifted out of CommentOverlay so the band-rendering effect can also
+  // intensify the rows owned by the hovered comment (bidirectional
+  // hover-highlight).
+  const [hoveredCommentId, setHoveredCommentId] = useState<string | null>(null);
 
   const isCommitView = view.kind === 'commit';
 
@@ -326,21 +330,38 @@ export function EditorPane({
     }
     const shades = assignShades(projected);
     const rows = computeRowDecorations(projected, shades);
-    const decos: monacoEditor.IModelDeltaDecoration[] = rows.map((r) => ({
-      range: new monaco.Range(r.startLine, 1, r.endLine, 1),
-      options: {
-        isWholeLine: true,
-        className: `monaco-comment-line-shade-${r.signature}`,
-        lineNumberClassName: `monaco-comment-ln-shade-${r.signature}`,
-        minimap: { color: commentMarker, position: monaco.editor.MinimapPosition.Inline },
-        overviewRuler: {
-          color: commentMarker,
-          position: monaco.editor.OverviewRulerLane.Right,
+    // Build the highlighted-line set from the hovered comment, if any.
+    // A coalesced run is entirely-in or entirely-out of this set because
+    // each run covers lines that share the exact same signature, and the
+    // hovered comment is a single signature contributor.
+    const highlightedLines = new Set<number>();
+    if (hoveredCommentId) {
+      const hovered = projected.find((c) => c.id === hoveredCommentId);
+      if (hovered) {
+        for (let l = hovered.startLine; l <= hovered.endLine; l++) {
+          highlightedLines.add(l);
+        }
+      }
+    }
+    const decos: monacoEditor.IModelDeltaDecoration[] = rows.map((r) => {
+      const hi = highlightedLines.has(r.startLine);
+      const cls = `monaco-comment-line-shade-${r.signature}${hi ? '-hi' : ''}`;
+      return {
+        range: new monaco.Range(r.startLine, 1, r.endLine, 1),
+        options: {
+          isWholeLine: true,
+          className: cls,
+          lineNumberClassName: `monaco-comment-ln-shade-${r.signature}`,
+          minimap: { color: commentMarker, position: monaco.editor.MinimapPosition.Inline },
+          overviewRuler: {
+            color: commentMarker,
+            position: monaco.editor.OverviewRulerLane.Right,
+          },
         },
-      },
-    }));
+      };
+    });
     commentDecorations.current.set(decos);
-  }, [liveComments, isDark, commentsStore.disabled, modifiedEditor, monaco]);
+  }, [liveComments, isDark, commentsStore.disabled, modifiedEditor, monaco, hoveredCommentId]);
 
   function addComment(text: string) {
     if (editingId) {
@@ -541,6 +562,8 @@ export function EditorPane({
           modifiedEditor={modifiedEditor}
           monaco={monaco}
           area={editorAreaEl}
+          hoveredId={hoveredCommentId}
+          onHoveredIdChange={setHoveredCommentId}
           onEditComment={editComment}
         />
         <Popover

@@ -11,6 +11,10 @@ interface Props {
   modifiedEditor: monacoEditor.ICodeEditor | null;
   monaco: typeof import('monaco-editor') | null;
   area: HTMLDivElement | null;
+  /** Hovered comment id, lifted to EditorPane so the band-rendering effect
+   *  can intensify the rows owned by the hovered comment. */
+  hoveredId: string | null;
+  onHoveredIdChange(id: string | null): void;
   /** Dbl-click on a bubble → re-open the WIP popover prefilled with that
    *  comment's text. Owned by EditorPane (sets editingId + pendingText +
    *  pendingRange). */
@@ -38,11 +42,12 @@ export function CommentOverlay({
   modifiedEditor,
   monaco,
   area,
+  hoveredId,
+  onHoveredIdChange,
   onEditComment,
   bubbleWidthFraction = DEFAULT_BUBBLE_FRACTION,
 }: Props) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   // Live-range projection (line numbers track edits via Monaco stickiness).
   const projected = useMemo<LiveComment[]>(() => {
@@ -92,14 +97,14 @@ export function CommentOverlay({
       const line = e.target?.position?.lineNumber;
       if (!line) return;
       const ids = commentIdsAtLine(projected, line);
-      setHoveredId(ids.length === 1 ? ids[0] : null);
+      onHoveredIdChange(ids.length === 1 ? ids[0] : null);
     });
-    const leave = modifiedEditor.onMouseLeave(() => setHoveredId(null));
+    const leave = modifiedEditor.onMouseLeave(() => onHoveredIdChange(null));
     return () => {
       move.dispose();
       leave.dispose();
     };
-  }, [modifiedEditor, projected]);
+  }, [modifiedEditor, projected, onHoveredIdChange]);
 
   const toggleGroup = useCallback((key: string) => {
     setCollapsed((prev) => {
@@ -163,7 +168,7 @@ export function CommentOverlay({
                     shadeById={shadeById}
                     hoveredId={hoveredId}
                     tailLeftPx={tailLeftPx}
-                    onBubbleHover={setHoveredId}
+                    onBubbleHover={onHoveredIdChange}
                     onEdit={onEditComment}
                   />
                 </div>
@@ -183,8 +188,8 @@ export function CommentOverlay({
                 state={isCollapsed ? 'collapsed' : 'expanded'}
                 count={stacked ? comments.length : undefined}
                 onClick={() => toggleGroup(key)}
-                onMouseEnter={() => !stacked && setHoveredId(comments[0].id)}
-                onMouseLeave={() => !stacked && setHoveredId(null)}
+                onMouseEnter={() => !stacked && onHoveredIdChange(comments[0].id)}
+                onMouseLeave={() => !stacked && onHoveredIdChange(null)}
                 title={stacked ? `Toggle ${comments.length} comments` : 'Toggle comment'}
               />
             </div>
