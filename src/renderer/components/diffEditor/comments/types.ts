@@ -22,3 +22,12 @@ export interface RangeSnapshot {
   startLine: number;
   endLine: number;
 }
+
+/** Color slot assigned to a comment for band + bubble rendering. Only used
+ *  when comments partially overlap (share some but not all lines); same-
+ *  anchor stacks reuse one shade. */
+export type Shade = 1 | 2;
+
+/** Per-row band rendering signature. '1' or '2' = one shade only; '12' = a
+ *  row owned by both shades (renders a split linear-gradient). */
+export type RowSignature = '1' | '2' | '12';
