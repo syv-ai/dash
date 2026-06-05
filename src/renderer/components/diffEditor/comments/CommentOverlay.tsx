@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
-import type { LiveComment, Shade } from './types';
+import type { LineRange, LiveComment, Shade } from './types';
 import { assignShades } from './shadeAssignment';
 import { commentIdsAtLine } from './rowShades';
 import { BubbleStack } from './BubbleStack';
 import { CommentIcon } from './CommentIcon';
+import { DraftBubble } from './DraftBubble';
 
 interface Props {
   liveComments: LiveComment[];
@@ -15,10 +16,19 @@ interface Props {
    *  can intensify the rows owned by the hovered comment. */
   hoveredId: string | null;
   onHoveredIdChange(id: string | null): void;
-  /** Dbl-click on a bubble → re-open the WIP popover prefilled with that
-   *  comment's text. Owned by EditorPane (sets editingId + pendingText +
-   *  pendingRange). */
+  /** Dbl-click on a bubble → request EditorPane to open the draft pre-
+   *  filled with that comment's text. */
   onEditComment(comment: LiveComment): void;
+  /** When non-null, the overlay renders a DraftBubble at the range's
+   *  start line — for both fresh creation and editing. */
+  pendingRange: LineRange | null;
+  /** Prefilled text for the draft (empty for new comments). */
+  pendingText: string;
+  /** When set, the persisted bubble for this id is hidden (the draft is
+   *  taking its place). */
+  editingId: string | null;
+  onSubmitDraft(text: string): void;
+  onCancelDraft(): void;
   /** Bubble width as a fraction of the editor's content width. */
   bubbleWidthFraction?: number;
 }
@@ -45,20 +55,28 @@ export function CommentOverlay({
   hoveredId,
   onHoveredIdChange,
   onEditComment,
+  pendingRange,
+  pendingText,
+  editingId,
+  onSubmitDraft,
+  onCancelDraft,
   bubbleWidthFraction = DEFAULT_BUBBLE_FRACTION,
 }: Props) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
 
   // Live-range projection (line numbers track edits via Monaco stickiness).
+  // The comment being edited is filtered out — its DraftBubble takes the
+  // visual slot instead.
   const projected = useMemo<LiveComment[]>(() => {
     const model = modifiedEditor?.getModel();
     if (!modifiedEditor || !model) return [];
     return liveComments.flatMap((c) => {
+      if (c.id === editingId) return [];
       const r = model.getDecorationRange(c.decorationId);
       if (!r) return [];
       return [{ ...c, startLine: r.startLineNumber, endLine: r.endLineNumber }];
     });
-  }, [liveComments, modifiedEditor]);
+  }, [liveComments, modifiedEditor, editingId]);
 
   const shadeById = useMemo<Map<string, Shade>>(() => assignShades(projected), [projected]);
 
@@ -115,7 +133,8 @@ export function CommentOverlay({
     });
   }, []);
 
-  if (!area || !modifiedEditor || !monaco || groups.length === 0) return null;
+  if (!area || !modifiedEditor || !monaco) return null;
+  if (groups.length === 0 && !pendingRange) return null;
   const layout = modifiedEditor.getLayoutInfo();
   const scrollTop = modifiedEditor.getScrollTop();
   const lineHeight = modifiedEditor.getOption(monaco.editor.EditorOption.lineHeight) as number;
@@ -196,6 +215,40 @@ export function CommentOverlay({
           </div>
         );
       })}
+      {pendingRange &&
+        (() => {
+          const draftTop = modifiedEditor.getTopForLineNumber(pendingRange.start) - scrollTop;
+          return (
+            <div
+              className="absolute"
+              style={{
+                top: draftTop - TAIL_OVERHANG_PX,
+                left: 0,
+                right: 0,
+                height: 0,
+                pointerEvents: 'none',
+              }}
+            >
+              <div
+                className="absolute"
+                style={{
+                  bottom: 0,
+                  left: bubbleLeft,
+                  width: bubbleWidth,
+                  pointerEvents: 'auto',
+                }}
+              >
+                <DraftBubble
+                  range={pendingRange}
+                  initialText={pendingText}
+                  tailLeftPx={tailLeftPx}
+                  onSubmit={onSubmitDraft}
+                  onCancel={onCancelDraft}
+                />
+              </div>
+            </div>
+          );
+        })()}
     </>
   );
 }

@@ -10,7 +10,6 @@ import { assignShades } from './comments/shadeAssignment';
 import { computeRowDecorations } from './comments/rowShades';
 import { CommentOverlay } from './comments/CommentOverlay';
 import { CommentsMenu } from './comments/CommentsMenu';
-import { CommentInputBar } from './comments/CommentInputBar';
 import { useFileLoad, type LoadState } from './editor/useFileLoad';
 import { useEditorSave } from './editor/useEditorSave';
 import { useMonacoEditor } from './editor/useMonacoEditor';
@@ -18,15 +17,9 @@ import { EditorHeader } from './editor/EditorHeader';
 import { EditorViewport } from './editor/EditorViewport';
 import { LoadingPill } from './editor/LoadingPill';
 import { StaleBanner } from './editor/StaleBanner';
-import { Popover, PopoverAnchor, PopoverArrow, PopoverContent } from '../ui/Popover';
 import '../../monaco-workers';
 
 const WORDWRAP_KEY = 'diffEditor.wordWrap';
-// The WIP popover's visual height — used to decide whether to flip it
-// upward when the selected range sits near the bottom of the editor area.
-// Kept in sync with the Tailwind `h-[…]` class on the PopoverContent below.
-const POPOVER_HEIGHT_PX = 140;
-const POPOVER_FLIP_PADDING_PX = 12;
 
 interface EditorPaneProps {
   cwd: string;
@@ -75,7 +68,6 @@ export function EditorPane({
   const commentDecorations = useRef<monacoEditor.IEditorDecorationsCollection | null>(null);
   const selectionDecorations = useRef<monacoEditor.IEditorDecorationsCollection | null>(null);
   const saveCmdRef = useRef<(() => void) | null>(null);
-  const popoverAnchorRef = useRef<HTMLDivElement | null>(null);
   // Fade-on-file-change. Bumped only after the new file's content has
   // actually swapped into the editor — earlier than that and the user
   // sees the OLD content fade in, which feels wrong.
@@ -241,63 +233,6 @@ export function EditorPane({
       },
     ]);
   }, [pendingRange, modifiedEditor, monaco]);
-
-  // align="start" → popover top aligns with anchor top → extends DOWN
-  // align="end"   → popover bottom aligns with anchor bottom → extends UP
-  // Flipped when the selected range sits too close to the bottom of the
-  // editor area to fit a downward-opening popover (also handles the
-  // double-click-to-edit reopen, since both paths share this popover).
-  const [popoverAlign, setPopoverAlign] = useState<'start' | 'end'>('start');
-
-  // Position the comment popover's anchor on the right edge of the editor.
-  // The popover opens to the *left* of this anchor so it sits on the right
-  // portion of the editor pane — keeping the highlighted code on the left
-  // visible.
-  //
-  // Radix Popover uses Floating UI's autoUpdate, which listens to scroll on
-  // *DOM* scroll-ancestors of the anchor + ResizeObserver on the anchor box.
-  // Monaco scrolls internally, so no scroll bubbles up, and changing the
-  // anchor's `top` doesn't change its box → no auto-update fires. We toggle
-  // the anchor's width by 1px on every position update to force the
-  // ResizeObserver to fire, which makes Radix recompute the popover
-  // position. Same mechanism keeps the popover tracking the gutter drag.
-  //
-  // Default anchor mirrors the persistent comment widget so editing an
-  // existing comment feels like the widget transforms into the editor
-  // (multi-line → top of first line + inset; single-line → below the line,
-  // same fallback as the widget). When the bottom is too tight, we flip:
-  // anchor at the top of the first line + `align="end"` so the popover
-  // extends UPWARD from just above the selection. Either way the selection
-  // stays uncovered.
-  //
-  // No clamp on top — if the user scrolls the line out of view, the popover
-  // scrolls out with it (combined with `avoidCollisions={false}`).
-  useEffect(() => {
-    const anchor = popoverAnchorRef.current;
-    if (!modifiedEditor || !anchor || !pendingRange) return;
-    const update = () => {
-      const scrollTop = modifiedEditor.getScrollTop();
-      const topFirst = modifiedEditor.getTopForLineNumber(pendingRange.start) - scrollTop;
-      const isSingleLine = pendingRange.start === pendingRange.end;
-      const topDefault = isSingleLine
-        ? modifiedEditor.getTopForLineNumber(pendingRange.end + 1) - scrollTop
-        : topFirst + 4;
-      const areaHeight = editorAreaEl?.clientHeight ?? 0;
-      const bottomSpace = areaHeight - topDefault;
-      // Flip upward only when the bottom is too tight AND we have room
-      // above. If neither side fits we stay "start" so the natural clip is
-      // at the bottom (predictable), not the top.
-      const flipUp =
-        bottomSpace < POPOVER_HEIGHT_PX + POPOVER_FLIP_PADDING_PX &&
-        topFirst >= POPOVER_HEIGHT_PX + POPOVER_FLIP_PADDING_PX;
-      anchor.style.top = `${flipUp ? topFirst : topDefault}px`;
-      anchor.style.width = anchor.offsetWidth === 1 ? '2px' : '1px';
-      setPopoverAlign(flipUp ? 'end' : 'start');
-    };
-    update();
-    const sub = modifiedEditor.onDidScrollChange(update);
-    return () => sub.dispose();
-  }, [pendingRange, modifiedEditor, editorAreaEl]);
 
   // Shade-aware band rendering. Each row gets one of three classNames
   // depending on which comments claim it. Coalesced runs of same-signature
@@ -565,45 +500,12 @@ export function EditorPane({
           hoveredId={hoveredCommentId}
           onHoveredIdChange={setHoveredCommentId}
           onEditComment={editComment}
+          pendingRange={dragging ? null : pendingRange}
+          pendingText={pendingText}
+          editingId={editingId}
+          onSubmitDraft={addComment}
+          onCancelDraft={cancelComment}
         />
-        <Popover
-          open={!!pendingRange && !dragging}
-          onOpenChange={(o) => {
-            if (!o) cancelComment();
-          }}
-        >
-          <PopoverAnchor asChild>
-            <div
-              ref={popoverAnchorRef}
-              style={{
-                position: 'absolute',
-                right: 16,
-                top: 0,
-                width: 1,
-                height: 1,
-                pointerEvents: 'none',
-              }}
-            />
-          </PopoverAnchor>
-          <PopoverContent
-            side="left"
-            align={popoverAlign}
-            sideOffset={4}
-            avoidCollisions={false}
-            onInteractOutside={(e) => e.preventDefault()}
-            container={editorAreaEl}
-            className="comment-write-surface w-[260px] h-[140px] px-2.5 py-2 flex flex-col gap-1.5"
-            style={{ color: 'hsl(var(--popover-foreground))' }}
-          >
-            <CommentInputBar
-              lineRange={pendingRange}
-              initialText={pendingText}
-              onSubmit={addComment}
-              onCancel={cancelComment}
-            />
-            <PopoverArrow />
-          </PopoverContent>
-        </Popover>
       </EditorViewport>
     </div>
   );

@@ -872,23 +872,6 @@
     0 22px 48px -18px hsl(0 0% 0% / 0.65),
     inset 0 1px 0 hsl(0 0% 100% / 0.08) !important;
 }
-/* WIP popover. Same shape, same chrome, same color family as the
- * persistent widget — write-mode IS the widget, just denser so the
- * textarea content reads on top of code. No border, no shadow, same
- * 3px corner radius as the widget. !important is needed to flatten
- * the chrome the base PopoverContent applies via class + inline style. */
-.comment-write-surface {
-  background: hsl(var(--primary) / 0.5) !important;
-  border: none !important;
-  border-radius: 3px !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  box-shadow: none !important;
-}
-.dark .comment-write-surface {
-  background: hsl(var(--primary) / 0.55) !important;
-}
-
 /* Breathing room between the code area and the minimap on the right.
  * Monaco renders the minimap as an absolutely-positioned sibling of the
  * scrollable view; shifting it right and clipping the canvas keeps the
