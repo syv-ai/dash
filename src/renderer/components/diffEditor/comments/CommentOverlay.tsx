@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
 import type { LineRange, LiveComment, Shade } from './types';
 import { assignShades } from './shadeAssignment';
@@ -43,6 +43,11 @@ interface Group {
 const DEFAULT_BUBBLE_FRACTION = 0.4;
 const TAIL_OVERHANG_PX = 7;
 const ICON_HEIGHT_PX = 16;
+// Conservative initial viewzone height before the bubble's actual height
+// is measured. Just needs to be in the right ballpark so the first paint
+// doesn't shift dramatically when ResizeObserver fires.
+const INITIAL_BUBBLE_HEIGHT_PX = 96;
+const INITIAL_DRAFT_HEIGHT_PX = 130;
 
 /** Renders one bubble-stack + one icon per anchor group. Groups are formed
  *  by IDENTICAL (startLine, endLine) — partial overlap does NOT stack;
@@ -102,6 +107,123 @@ export function CommentOverlay({
     return () => {
       s.dispose();
       l.dispose();
+    };
+  }, [modifiedEditor]);
+
+  // ── View-zone management ─────────────────────────────────────────────
+  // Reserve real empty space above each anchor line via Monaco's viewzone
+  // API. Code shifts down to make room; the bubble overlay paints into
+  // that empty space. This is what keeps the bubble from covering code
+  // above and from getting clipped at the top of the editor.
+  //
+  // Each visible group + the draft (if any) maps to one viewzone keyed by
+  // its stable key. Heights are MEASURED via ResizeObserver on the bubble's
+  // wrapper div — the viewzone's heightInPx = measured + TAIL_OVERHANG_PX
+  // so the tail's tip lands exactly at the first character of the anchor
+  // line below.
+  const draftKey = pendingRange ? `draft:${pendingRange.start}:${pendingRange.end}` : null;
+  const measuredHeightsRef = useRef<Map<string, number>>(new Map());
+  const [measureNonce, setMeasureNonce] = useState(0);
+  const observerRef = useRef<ResizeObserver | null>(null);
+
+  useEffect(() => {
+    const observer = new ResizeObserver((entries) => {
+      let changed = false;
+      for (const entry of entries) {
+        const key = (entry.target as HTMLElement).dataset.viewzoneKey;
+        if (!key) continue;
+        const h = Math.ceil(entry.contentRect.height);
+        if (measuredHeightsRef.current.get(key) !== h) {
+          measuredHeightsRef.current.set(key, h);
+          changed = true;
+        }
+      }
+      if (changed) setMeasureNonce((n) => n + 1);
+    });
+    observerRef.current = observer;
+    return () => observer.disconnect();
+  }, []);
+
+  const attachMeasure = useCallback((key: string, el: HTMLDivElement | null) => {
+    if (!el || !observerRef.current) return;
+    el.dataset.viewzoneKey = key;
+    observerRef.current.observe(el);
+  }, []);
+
+  // Refs to live IViewZone objects — we mutate heightInPx and call
+  // accessor.layoutZone(id) for in-place updates so resize doesn't cause a
+  // remove+add flash.
+  type ZoneEntry = { id: string; zone: monacoEditor.IViewZone };
+  const viewzonesRef = useRef<Map<string, ZoneEntry>>(new Map());
+
+  useEffect(() => {
+    if (!modifiedEditor) return;
+    type Req = { key: string; afterLineNumber: number; height: number };
+    const requests: Req[] = [];
+    for (const group of groups) {
+      if (collapsed.has(group.key)) continue;
+      const measured = measuredHeightsRef.current.get(group.key) ?? INITIAL_BUBBLE_HEIGHT_PX;
+      requests.push({
+        key: group.key,
+        afterLineNumber: Math.max(0, group.anchorLine - 1),
+        height: measured + TAIL_OVERHANG_PX,
+      });
+    }
+    if (pendingRange && draftKey) {
+      const measured = measuredHeightsRef.current.get(draftKey) ?? INITIAL_DRAFT_HEIGHT_PX;
+      requests.push({
+        key: draftKey,
+        afterLineNumber: Math.max(0, pendingRange.start - 1),
+        height: measured + TAIL_OVERHANG_PX,
+      });
+    }
+    const requestedKeys = new Set(requests.map((r) => r.key));
+
+    modifiedEditor.changeViewZones((accessor) => {
+      // Remove viewzones whose key is no longer requested.
+      for (const [key, entry] of viewzonesRef.current) {
+        if (!requestedKeys.has(key)) {
+          accessor.removeZone(entry.id);
+          viewzonesRef.current.delete(key);
+        }
+      }
+      // Add / update.
+      for (const req of requests) {
+        const existing = viewzonesRef.current.get(req.key);
+        if (existing) {
+          if (
+            existing.zone.heightInPx !== req.height ||
+            existing.zone.afterLineNumber !== req.afterLineNumber
+          ) {
+            existing.zone.heightInPx = req.height;
+            existing.zone.afterLineNumber = req.afterLineNumber;
+            accessor.layoutZone(existing.id);
+          }
+        } else {
+          const domNode = document.createElement('div');
+          domNode.style.pointerEvents = 'none';
+          const zone: monacoEditor.IViewZone = {
+            afterLineNumber: req.afterLineNumber,
+            heightInPx: req.height,
+            domNode,
+          };
+          const id = accessor.addZone(zone);
+          viewzonesRef.current.set(req.key, { id, zone });
+        }
+      }
+    });
+  }, [modifiedEditor, groups, collapsed, pendingRange, draftKey, measureNonce]);
+
+  // Final cleanup — remove all viewzones on unmount or editor swap.
+  useEffect(() => {
+    return () => {
+      if (!modifiedEditor) return;
+      modifiedEditor.changeViewZones((accessor) => {
+        for (const entry of viewzonesRef.current.values()) {
+          accessor.removeZone(entry.id);
+        }
+        viewzonesRef.current.clear();
+      });
     };
   }, [modifiedEditor]);
 
@@ -174,6 +296,7 @@ export function CommentOverlay({
                 }}
               >
                 <div
+                  ref={(el) => attachMeasure(key, el)}
                   className="absolute"
                   style={{
                     bottom: 0,
@@ -216,6 +339,7 @@ export function CommentOverlay({
         );
       })}
       {pendingRange &&
+        draftKey &&
         (() => {
           const draftTop = modifiedEditor.getTopForLineNumber(pendingRange.start) - scrollTop;
           return (
@@ -230,6 +354,7 @@ export function CommentOverlay({
               }}
             >
               <div
+                ref={(el) => attachMeasure(draftKey, el)}
                 className="absolute"
                 style={{
                   bottom: 0,
