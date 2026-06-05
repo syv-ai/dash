@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { editor as monacoEditor } from 'monaco-editor';
 import type { LineRange, LiveComment, Shade } from './types';
 import { assignShades } from './shadeAssignment';
@@ -122,6 +123,25 @@ export function CommentOverlay({
   // so the tail's tip lands exactly at the first character of the anchor
   // line below.
   const draftKey = pendingRange ? `draft:${pendingRange.start}:${pendingRange.end}` : null;
+
+  // Stable HTMLDivElement per requested viewzone key. Each one is handed
+  // to Monaco as the viewzone's `domNode`, and React's createPortal mounts
+  // the bubble UI INTO it. That way the bubble lives inside Monaco's
+  // layout — scrolls with the editor for free, no scroll-tracking math.
+  const portalNodesRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const getOrCreatePortalNode = (key: string): HTMLDivElement => {
+    let node = portalNodesRef.current.get(key);
+    if (!node) {
+      node = document.createElement('div');
+      // Monaco sets `width: 100%` on the viewzone domNode itself; we make
+      // it positioning context for the bubble (which uses bottom + left).
+      node.style.position = 'relative';
+      node.style.height = '100%';
+      portalNodesRef.current.set(key, node);
+    }
+    return node;
+  };
+
   const measuredHeightsRef = useRef<Map<string, number>>(new Map());
   const [measureNonce, setMeasureNonce] = useState(0);
   const observerRef = useRef<ResizeObserver | null>(null);
@@ -158,7 +178,7 @@ export function CommentOverlay({
 
   useEffect(() => {
     if (!modifiedEditor) return;
-    type Req = { key: string; afterLineNumber: number; height: number };
+    type Req = { key: string; afterLineNumber: number; height: number; domNode: HTMLDivElement };
     const requests: Req[] = [];
     for (const group of groups) {
       if (collapsed.has(group.key)) continue;
@@ -167,6 +187,7 @@ export function CommentOverlay({
         key: group.key,
         afterLineNumber: Math.max(0, group.anchorLine - 1),
         height: measured + TAIL_OVERHANG_PX,
+        domNode: getOrCreatePortalNode(group.key),
       });
     }
     if (pendingRange && draftKey) {
@@ -175,6 +196,7 @@ export function CommentOverlay({
         key: draftKey,
         afterLineNumber: Math.max(0, pendingRange.start - 1),
         height: measured + TAIL_OVERHANG_PX,
+        domNode: getOrCreatePortalNode(draftKey),
       });
     }
     const requestedKeys = new Set(requests.map((r) => r.key));
@@ -185,6 +207,7 @@ export function CommentOverlay({
         if (!requestedKeys.has(key)) {
           accessor.removeZone(entry.id);
           viewzonesRef.current.delete(key);
+          portalNodesRef.current.delete(key);
         }
       }
       // Add / update.
@@ -200,12 +223,10 @@ export function CommentOverlay({
             accessor.layoutZone(existing.id);
           }
         } else {
-          const domNode = document.createElement('div');
-          domNode.style.pointerEvents = 'none';
           const zone: monacoEditor.IViewZone = {
             afterLineNumber: req.afterLineNumber,
             heightInPx: req.height,
-            domNode,
+            domNode: req.domNode,
           };
           const id = accessor.addZone(zone);
           viewzonesRef.current.set(req.key, { id, zone });
@@ -223,6 +244,7 @@ export function CommentOverlay({
           accessor.removeZone(entry.id);
         }
         viewzonesRef.current.clear();
+        portalNodesRef.current.clear();
       });
     };
   }, [modifiedEditor]);
@@ -272,106 +294,98 @@ export function CommentOverlay({
 
   return (
     <>
+      {/* Gutter icons — absolute overlay in editorAreaEl. These track
+          scroll via the bumpLayout-on-scroll re-render; they can't be
+          portaled into the viewzone because they belong on the anchor
+          row itself, not above it. */}
       {groups.map(({ key, anchorLine, comments }) => {
         const anchorTop = modifiedEditor.getTopForLineNumber(anchorLine) - scrollTop;
         const isCollapsed = collapsed.has(key);
         const stacked = comments.length >= 2;
         const iconShade: Shade | null = stacked ? null : (shadeById.get(comments[0].id) ?? 1);
-
         return (
-          <div key={key}>
-            {/* Bubble column — zero-height anchor at (anchorTop - tailOverhang);
-                inner div sits with bottom: 0 so the stack extends UPWARD,
-                bubble-bottom-edge lands at the tail tip's y, and the tail's
-                tip is at anchorTop. */}
-            {!isCollapsed && (
-              <div
-                className="absolute"
-                style={{
-                  top: anchorTop - TAIL_OVERHANG_PX,
-                  left: 0,
-                  right: 0,
-                  height: 0,
-                  pointerEvents: 'none',
-                }}
-              >
-                <div
-                  ref={(el) => attachMeasure(key, el)}
-                  className="absolute"
-                  style={{
-                    bottom: 0,
-                    left: bubbleLeft,
-                    width: bubbleWidth,
-                    pointerEvents: 'auto',
-                  }}
-                >
-                  <BubbleStack
-                    comments={comments}
-                    shadeById={shadeById}
-                    hoveredId={hoveredId}
-                    tailLeftPx={tailLeftPx}
-                    onBubbleHover={onHoveredIdChange}
-                    onEdit={onEditComment}
-                  />
-                </div>
-              </div>
-            )}
-            {/* Trigger icon — vertically centered in the anchor row's gutter. */}
-            <div
-              className="absolute"
-              style={{
-                top: anchorTop + (lineHeight - ICON_HEIGHT_PX) / 2,
-                left: iconLeft,
-                pointerEvents: 'auto',
-              }}
-            >
-              <CommentIcon
-                shade={iconShade}
-                state={isCollapsed ? 'collapsed' : 'expanded'}
-                count={stacked ? comments.length : undefined}
-                onClick={() => toggleGroup(key)}
-                onMouseEnter={() => !stacked && onHoveredIdChange(comments[0].id)}
-                onMouseLeave={() => !stacked && onHoveredIdChange(null)}
-                title={stacked ? `Toggle ${comments.length} comments` : 'Toggle comment'}
-              />
-            </div>
+          <div
+            key={`icon-${key}`}
+            className="absolute"
+            style={{
+              top: anchorTop + (lineHeight - ICON_HEIGHT_PX) / 2,
+              left: iconLeft,
+              pointerEvents: 'auto',
+            }}
+          >
+            <CommentIcon
+              shade={iconShade}
+              state={isCollapsed ? 'collapsed' : 'expanded'}
+              count={stacked ? comments.length : undefined}
+              onClick={() => toggleGroup(key)}
+              onMouseEnter={() => !stacked && onHoveredIdChange(comments[0].id)}
+              onMouseLeave={() => !stacked && onHoveredIdChange(null)}
+              title={stacked ? `Toggle ${comments.length} comments` : 'Toggle comment'}
+            />
           </div>
         );
       })}
+
+      {/* Bubbles — portaled INTO each viewzone's domNode. Positioning is
+          relative to the viewzone (which Monaco places + scrolls), so we
+          don't track scrollTop here. Bottom: TAIL_OVERHANG_PX leaves 7px
+          at the viewzone's bottom edge for the bubble's tail to fill. */}
+      {groups.map(({ key, comments }) => {
+        if (collapsed.has(key)) return null;
+        const portalNode = portalNodesRef.current.get(key);
+        if (!portalNode) return null;
+        return createPortal(
+          <div
+            ref={(el) => attachMeasure(key, el)}
+            className="absolute"
+            style={{
+              bottom: TAIL_OVERHANG_PX,
+              left: bubbleLeft,
+              width: bubbleWidth,
+              pointerEvents: 'auto',
+            }}
+          >
+            <BubbleStack
+              comments={comments}
+              shadeById={shadeById}
+              hoveredId={hoveredId}
+              tailLeftPx={tailLeftPx}
+              onBubbleHover={onHoveredIdChange}
+              onEdit={onEditComment}
+            />
+          </div>,
+          portalNode,
+          key,
+        );
+      })}
+
+      {/* Draft bubble — same portal pattern. */}
       {pendingRange &&
         draftKey &&
         (() => {
-          const draftTop = modifiedEditor.getTopForLineNumber(pendingRange.start) - scrollTop;
-          return (
+          const portalNode = portalNodesRef.current.get(draftKey);
+          if (!portalNode) return null;
+          return createPortal(
             <div
+              ref={(el) => attachMeasure(draftKey, el)}
               className="absolute"
               style={{
-                top: draftTop - TAIL_OVERHANG_PX,
-                left: 0,
-                right: 0,
-                height: 0,
-                pointerEvents: 'none',
+                bottom: TAIL_OVERHANG_PX,
+                left: bubbleLeft,
+                width: bubbleWidth,
+                pointerEvents: 'auto',
               }}
             >
-              <div
-                ref={(el) => attachMeasure(draftKey, el)}
-                className="absolute"
-                style={{
-                  bottom: 0,
-                  left: bubbleLeft,
-                  width: bubbleWidth,
-                  pointerEvents: 'auto',
-                }}
-              >
-                <DraftBubble
-                  range={pendingRange}
-                  initialText={pendingText}
-                  tailLeftPx={tailLeftPx}
-                  onSubmit={onSubmitDraft}
-                  onCancel={onCancelDraft}
-                />
-              </div>
-            </div>
+              <DraftBubble
+                range={pendingRange}
+                initialText={pendingText}
+                tailLeftPx={tailLeftPx}
+                onSubmit={onSubmitDraft}
+                onCancel={onCancelDraft}
+              />
+            </div>,
+            portalNode,
+            draftKey,
           );
         })()}
     </>
