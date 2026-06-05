@@ -326,14 +326,13 @@ export function CommentOverlay({
         );
       })}
 
-      {/* Bubbles — portaled INTO each viewzone's domNode. Positioning is
-          relative to the viewzone (which Monaco places + scrolls), so we
-          don't track scrollTop here. Bottom: TAIL_OVERHANG_PX leaves 7px
-          at the viewzone's bottom edge for the bubble's tail to fill. */}
+      {/* Bubbles — portaled INTO each viewzone's domNode. The portal node
+          is created here (not in the effect) so it exists on the very
+          first render — otherwise the viewzone appears empty for a frame
+          before the bubble catches up. */}
       {groups.map(({ key, comments }) => {
         if (collapsed.has(key)) return null;
-        const portalNode = portalNodesRef.current.get(key);
-        if (!portalNode) return null;
+        const portalNode = getOrCreatePortalNode(key);
         return createPortal(
           <div
             ref={(el) => attachMeasure(key, el)}
@@ -363,8 +362,7 @@ export function CommentOverlay({
       {pendingRange &&
         draftKey &&
         (() => {
-          const portalNode = portalNodesRef.current.get(draftKey);
-          if (!portalNode) return null;
+          const portalNode = getOrCreatePortalNode(draftKey);
           return createPortal(
             <div
               ref={(el) => attachMeasure(draftKey, el)}
