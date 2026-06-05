@@ -135,8 +135,13 @@ export function CommentOverlay({
       node = document.createElement('div');
       // Monaco sets `width: 100%` on the viewzone domNode itself; we make
       // it positioning context for the bubble (which uses bottom + left).
+      // overflow: hidden so the bubble (anchored to portalNode bottom) is
+      // clipped to the viewzone bounds during height animations — without
+      // this, a partially-open viewzone would let the bubble bleed up over
+      // the code line above.
       node.style.position = 'relative';
       node.style.height = '100%';
+      node.style.overflow = 'hidden';
       portalNodesRef.current.set(key, node);
     }
     return node;
@@ -176,64 +181,148 @@ export function CommentOverlay({
   type ZoneEntry = { id: string; zone: monacoEditor.IViewZone };
   const viewzonesRef = useRef<Map<string, ZoneEntry>>(new Map());
 
+  // Per-key animation handles — requestAnimationFrame IDs for the
+  // expand/collapse height tween. Mutating heightInPx + layoutZone every
+  // frame yields smooth code-shift animations.
+  const animationsRef = useRef<Map<string, number>>(new Map());
+
+  const cancelAnimation = useCallback((key: string) => {
+    const raf = animationsRef.current.get(key);
+    if (raf !== undefined) {
+      cancelAnimationFrame(raf);
+      animationsRef.current.delete(key);
+    }
+  }, []);
+
+  const animateHeight = useCallback(
+    (key: string, from: number, to: number) => {
+      if (!modifiedEditor) return;
+      cancelAnimation(key);
+      const start = performance.now();
+      const duration = 280;
+      const ease = (t: number) => 1 - Math.pow(1 - t, 3); // ease-out cubic
+      const tick = (now: number) => {
+        const elapsed = now - start;
+        const progress = Math.min(1, elapsed / duration);
+        const eased = ease(progress);
+        const height = Math.round(from + (to - from) * eased);
+        const entry = viewzonesRef.current.get(key);
+        if (!entry) {
+          animationsRef.current.delete(key);
+          return;
+        }
+        entry.zone.heightInPx = height;
+        modifiedEditor.changeViewZones((accessor) => {
+          accessor.layoutZone(entry.id);
+        });
+        if (progress < 1) {
+          animationsRef.current.set(key, requestAnimationFrame(tick));
+        } else {
+          animationsRef.current.delete(key);
+        }
+      };
+      animationsRef.current.set(key, requestAnimationFrame(tick));
+    },
+    [modifiedEditor, cancelAnimation],
+  );
+
   useEffect(() => {
     if (!modifiedEditor) return;
-    type Req = { key: string; afterLineNumber: number; height: number; domNode: HTMLDivElement };
-    const requests: Req[] = [];
+    type Target = {
+      key: string;
+      afterLineNumber: number;
+      targetHeight: number;
+      domNode: HTMLDivElement;
+      isDraft: boolean;
+    };
+    const targets = new Map<string, Target>();
     for (const group of groups) {
-      if (collapsed.has(group.key)) continue;
       const measured = measuredHeightsRef.current.get(group.key) ?? INITIAL_BUBBLE_HEIGHT_PX;
-      requests.push({
+      const isCollapsed = collapsed.has(group.key);
+      targets.set(group.key, {
         key: group.key,
         afterLineNumber: Math.max(0, group.anchorLine - 1),
-        height: measured + TAIL_OVERHANG_PX,
+        targetHeight: isCollapsed ? 0 : measured + TAIL_OVERHANG_PX,
         domNode: getOrCreatePortalNode(group.key),
+        isDraft: false,
       });
     }
     if (pendingRange && draftKey) {
       const measured = measuredHeightsRef.current.get(draftKey) ?? INITIAL_DRAFT_HEIGHT_PX;
-      requests.push({
+      targets.set(draftKey, {
         key: draftKey,
         afterLineNumber: Math.max(0, pendingRange.start - 1),
-        height: measured + TAIL_OVERHANG_PX,
+        targetHeight: measured + TAIL_OVERHANG_PX,
         domNode: getOrCreatePortalNode(draftKey),
+        isDraft: true,
       });
     }
-    const requestedKeys = new Set(requests.map((r) => r.key));
 
+    // Sync existence + afterLineNumber. New viewzones start at heightInPx
+    // 0 so we can animate them to their target — see height-sync block
+    // below.
     modifiedEditor.changeViewZones((accessor) => {
-      // Remove viewzones whose key is no longer requested.
+      // Remove viewzones whose key is no longer requested (delete event).
       for (const [key, entry] of viewzonesRef.current) {
-        if (!requestedKeys.has(key)) {
+        if (!targets.has(key)) {
           accessor.removeZone(entry.id);
           viewzonesRef.current.delete(key);
           portalNodesRef.current.delete(key);
+          cancelAnimation(key);
         }
       }
-      // Add / update.
-      for (const req of requests) {
-        const existing = viewzonesRef.current.get(req.key);
-        if (existing) {
-          if (
-            existing.zone.heightInPx !== req.height ||
-            existing.zone.afterLineNumber !== req.afterLineNumber
-          ) {
-            existing.zone.heightInPx = req.height;
-            existing.zone.afterLineNumber = req.afterLineNumber;
-            accessor.layoutZone(existing.id);
-          }
-        } else {
-          const zone: monacoEditor.IViewZone = {
-            afterLineNumber: req.afterLineNumber,
-            heightInPx: req.height,
-            domNode: req.domNode,
-          };
-          const id = accessor.addZone(zone);
-          viewzonesRef.current.set(req.key, { id, zone });
+      // Add new viewzones at height 0 — height-sync below will animate them.
+      for (const target of targets.values()) {
+        if (viewzonesRef.current.has(target.key)) continue;
+        const zone: monacoEditor.IViewZone = {
+          afterLineNumber: target.afterLineNumber,
+          heightInPx: target.isDraft ? target.targetHeight : 0,
+          domNode: target.domNode,
+        };
+        const id = accessor.addZone(zone);
+        viewzonesRef.current.set(target.key, { id, zone });
+      }
+      // Update afterLineNumber on existing entries (code shifted, etc).
+      for (const target of targets.values()) {
+        const entry = viewzonesRef.current.get(target.key);
+        if (!entry) continue;
+        if (entry.zone.afterLineNumber !== target.afterLineNumber) {
+          entry.zone.afterLineNumber = target.afterLineNumber;
+          accessor.layoutZone(entry.id);
         }
       }
     });
-  }, [modifiedEditor, groups, collapsed, pendingRange, draftKey, measureNonce]);
+
+    // Height sync (outside changeViewZones): animate persisted comments
+    // through expand/collapse and new-comment arrival; apply instantly for
+    // draft + small adjustments (ResizeObserver natural-resize jiggle).
+    for (const target of targets.values()) {
+      const entry = viewzonesRef.current.get(target.key);
+      if (!entry) continue;
+      const currentHeight = entry.zone.heightInPx ?? 0;
+      if (currentHeight === target.targetHeight) continue;
+      const diff = Math.abs(currentHeight - target.targetHeight);
+      if (target.isDraft || diff <= 24) {
+        // Instant — draft never animates, and small natural-resize tweaks
+        // shouldn't jiggle.
+        entry.zone.heightInPx = target.targetHeight;
+        modifiedEditor.changeViewZones((accessor) => {
+          accessor.layoutZone(entry.id);
+        });
+      } else {
+        animateHeight(target.key, currentHeight, target.targetHeight);
+      }
+    }
+  }, [
+    modifiedEditor,
+    groups,
+    collapsed,
+    pendingRange,
+    draftKey,
+    measureNonce,
+    animateHeight,
+    cancelAnimation,
+  ]);
 
   // Final cleanup — remove all viewzones on unmount or editor swap.
   useEffect(() => {
@@ -285,12 +374,30 @@ export function CommentOverlay({
 
   const iconLeft = layout.decorationsLeft + 4;
   const contentLeft = layout.contentLeft;
-  const bubbleLeft = contentLeft - 10;
+  // Bubble starts at the very left edge of the gutter (lineNumbersLeft is
+  // 0 when there's no glyphMargin, which is our case). Width stays at the
+  // configured fraction of the content area.
+  const bubbleLeft = layout.lineNumbersLeft;
   const bubbleWidth = Math.round(layout.contentWidth * bubbleWidthFraction);
-  // Tail tip x (in editor-area coords) should equal contentLeft (first
-  // char of code). Tip is at the center of a 14px-wide triangle, so the
-  // triangle's left within the bubble is: (contentLeft - bubbleLeft) - 7.
-  const tailLeftPx = contentLeft - bubbleLeft - 7;
+  // Tail tip should land at the first non-whitespace character of the
+  // anchor line below — i.e. where the line's content actually starts
+  // visually, not at indented whitespace. Computed per-anchor since
+  // indentation differs per line. Falls back to contentLeft when the line
+  // is entirely whitespace or getOffsetForColumn fails.
+  const model = modifiedEditor.getModel();
+  const tailLeftForAnchor = (anchorLine: number): number => {
+    let tipX = contentLeft;
+    if (model) {
+      const col = model.getLineFirstNonWhitespaceColumn(anchorLine);
+      if (col > 0) {
+        const offset = modifiedEditor.getOffsetForColumn(anchorLine, col);
+        if (offset > 0) tipX = offset;
+      }
+    }
+    // Triangle is 14px wide; the tip is at its center, so subtract 7 from
+    // the desired tip x to get the triangle's `left` within the bubble.
+    return tipX - bubbleLeft - 7;
+  };
 
   return (
     <>
@@ -326,13 +433,14 @@ export function CommentOverlay({
         );
       })}
 
-      {/* Bubbles — portaled INTO each viewzone's domNode. The portal node
-          is created here (not in the effect) so it exists on the very
-          first render — otherwise the viewzone appears empty for a frame
-          before the bubble catches up. */}
-      {groups.map(({ key, comments }) => {
-        if (collapsed.has(key)) return null;
+      {/* Bubbles — portaled INTO each viewzone's domNode. Always rendered
+          (even when collapsed) so the wrapper stays measured and the
+          height-animation has stable content to tween toward. The bubble
+          becomes invisible automatically when the viewzone shrinks to 0
+          (the portal node has overflow: hidden). */}
+      {groups.map(({ key, anchorLine, comments }) => {
         const portalNode = getOrCreatePortalNode(key);
+        const tailLeftPx = tailLeftForAnchor(anchorLine);
         return createPortal(
           <div
             ref={(el) => attachMeasure(key, el)}
@@ -363,6 +471,7 @@ export function CommentOverlay({
         draftKey &&
         (() => {
           const portalNode = getOrCreatePortalNode(draftKey);
+          const tailLeftPx = tailLeftForAnchor(pendingRange.start);
           return createPortal(
             <div
               ref={(el) => attachMeasure(draftKey, el)}

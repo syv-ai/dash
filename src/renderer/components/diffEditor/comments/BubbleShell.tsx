@@ -37,7 +37,7 @@ export function BubbleShell({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onDoubleClick={onDoubleClick}
-      className="relative rounded-[12px] px-[14px] pt-[9px] pb-[11px] text-[12px] leading-[1.5] tracking-[-0.005em]"
+      className="relative rounded-[12px] px-[16px] pt-[14px] pb-[16px] text-[12px] leading-[1.5] tracking-[-0.005em]"
       style={{
         background: fill,
         color: 'hsl(var(--foreground) / 0.92)',
