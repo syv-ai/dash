@@ -494,6 +494,7 @@ function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
     PreToolUse: buildPreToolUseHooks(httpHook),
     PostToolUse: [{ matcher: '*', hooks: [dashHttp('tool-end', true)] }],
     PreCompact: [{ matcher: '*', hooks: [dashHttp('compact-start', true)] }],
+    SessionEnd: [{ matcher: '*', hooks: [dashHttp('session-end', true)] }],
   };
 
   // PostCompact added in Claude Code 2.1.76; older CLIs reject the key and
@@ -507,9 +508,20 @@ function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
     dashEntries.StopFailure = [{ matcher: '*', hooks: [dashHttp('stop-failure')] }];
   }
 
-  // SessionStart hook re-injects task context (linked issue/work-item prompt)
-  // on startup, compact, and clear — NOT resume, since resumed sessions
-  // already have context in history.
+  // SessionStart(clear|compact) → defensive idle. /clear and auto-compact
+  // reset the session, so any prior busy state on the activity dot is stale.
+  // SessionStart(startup|resume) are NOT wired — register() already initialises
+  // to idle and a resumed session's busy state, if any, will be re-established
+  // by the next UserPromptSubmit / PreToolUse hook.
+  const sessionStartEntries: HookEntry[] = [
+    { matcher: 'clear', hooks: [dashHttp('session-start', true)] },
+    { matcher: 'compact', hooks: [dashHttp('session-start', true)] },
+  ];
+
+  // SessionStart context-injection: re-inject the task context (linked
+  // issue/work-item prompt) on startup, compact, and clear — NOT resume,
+  // since resumed sessions already have context in history. Coexists with
+  // the defensive-idle HTTP hooks on the same clear/compact matchers.
   const contextPrompt = getTaskContextPrompt(ptyId);
   if (contextPrompt) {
     const hookPayload = JSON.stringify({
@@ -528,11 +540,15 @@ function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
         ? `powershell.exe -NoProfile -Command "[Console]::Out.Write([System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64}')))"`
         : `echo '${b64}' | base64 ${process.platform === 'darwin' ? '-D' : '-d'}`;
     const contextHook: CommandHook = { type: 'command', command: decodeCmd };
-    dashEntries.SessionStart = ['startup', 'compact', 'clear'].map((matcher) => ({
-      matcher,
-      hooks: [tagDash(contextHook)],
-    }));
+    for (const entry of sessionStartEntries) {
+      // clear and compact already exist — append the context hook alongside
+      // the idle hook so both fire from the same matcher.
+      entry.hooks.push(tagDash(contextHook));
+    }
+    sessionStartEntries.push({ matcher: 'startup', hooks: [tagDash(contextHook)] });
   }
+
+  dashEntries.SessionStart = sessionStartEntries;
 
   try {
     if (!fs.existsSync(claudeDir)) {
