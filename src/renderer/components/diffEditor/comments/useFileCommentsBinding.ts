@@ -39,6 +39,7 @@ interface Binding {
 export function useFileCommentsBinding(args: Args): Binding {
   const { filePath, isFileLoaded, editor, monaco } = args;
   const store = useCommentsContext();
+  const storeReady = store.isReady;
   const stored = store.state.byFile[filePath] ?? EMPTY_STORED;
 
   const [liveComments, setLiveComments] = useState<LiveComment[]>([]);
@@ -50,11 +51,16 @@ export function useFileCommentsBinding(args: Args): Binding {
   // next loaded-true transition.
   const hydratedKeyRef = useRef<string>('');
 
-  // Hydrate when the new file's content is in the model.
+  // Hydrate when the new file's content is in the model AND the persisted
+  // comments have arrived from SQLite. If we hydrate before the store
+  // resolves, `stored` is empty and the key latches — the dropdown later
+  // shows comments from the resolved store, but their decorations never
+  // get attached because this effect won't re-run.
   useEffect(() => {
-    if (!isFileLoaded) {
-      // File is loading. Drop live state but DO NOT snapshot — there are no
-      // valid decorations to read against the current (still-old) model.
+    if (!isFileLoaded || !storeReady) {
+      // File is loading OR store hasn't resolved yet. Drop live state but
+      // DO NOT snapshot — there are no valid decorations to read against
+      // the current (still-old) model.
       setLiveComments([]);
       hydratedKeyRef.current = '';
       return;
@@ -92,7 +98,7 @@ export function useFileCommentsBinding(args: Args): Binding {
     // `stored` is intentionally excluded from deps: store mutations
     // (add/update/remove) should NOT trigger re-hydration. Reconciliation
     // is handled by the separate effects below.
-  }, [filePath, isFileLoaded, editor, monaco]);
+  }, [filePath, isFileLoaded, storeReady, editor, monaco]);
 
   // Reconcile parent-driven removals: if `stored` drops an id, remove the
   // matching local decoration.

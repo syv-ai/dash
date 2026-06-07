@@ -28,7 +28,7 @@ interface DiffEditorProps {
 
 export function DiffEditor(props: DiffEditorProps) {
   return (
-    <Modal onClose={props.onClose} size="w-[96vw] max-w-7xl h-[88vh]">
+    <Modal onClose={props.onClose} size="w-[92vw] h-[88vh]">
       <DiffEditorBody {...props} />
     </Modal>
   );

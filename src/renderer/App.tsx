@@ -2185,7 +2185,14 @@ export function App() {
             activeTaskId={activeTaskId}
             terminalTheme={resolvedTerminalTheme}
             isDark={theme === 'dark'}
-            onClose={() => setDiffFile(null)}
+            onClose={() => {
+              setDiffFile(null);
+              // Refocus the active task's Claude Code TUI so the user can
+              // keep typing without an extra click. RAF defers past React's
+              // commit so the modal's DOM is gone before xterm grabs focus.
+              const id = activeTaskId;
+              if (id) requestAnimationFrame(() => sessionRegistry.get(id)?.focus());
+            }}
           />
         </Suspense>
       )}
