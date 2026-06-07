@@ -236,7 +236,10 @@ export function App() {
     });
   }, [desktopNotification]);
 
-  // Hydrate auto-update preference from main (file is source of truth) on mount
+  // Hydrate auto-update preference from main (file is source of truth) on mount.
+  // Gate the sync-to-main effect on this so the localStorage-derived initial
+  // value can't overwrite the file before we've read it.
+  const autoUpdateHydratedRef = useRef(false);
   useEffect(() => {
     let cancelled = false;
     window.electronAPI.autoUpdateGetEnabled?.().then((res) => {
@@ -245,14 +248,16 @@ export function App() {
         setAutoUpdateEnabled(res.data);
         localStorage.setItem('autoUpdateEnabled', String(res.data));
       }
+      autoUpdateHydratedRef.current = true;
     });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // Sync auto-update enabled to main process
+  // Sync auto-update enabled to main process (only after hydration)
   useEffect(() => {
+    if (!autoUpdateHydratedRef.current) return;
     window.electronAPI.autoUpdateSetEnabled?.(autoUpdateEnabled);
   }, [autoUpdateEnabled]);
   // Sync commit attribution to main process

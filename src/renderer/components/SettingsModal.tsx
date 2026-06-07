@@ -860,6 +860,15 @@ export function SettingsModal({
   const [telemetryEnvDisabled, setTelemetryEnvDisabled] = useState(false);
 
   useEffect(() => {
+    // Events fire whether or not the modal is mounted, so on open we pull the
+    // current snapshot before subscribing — otherwise we'd show "idle" while
+    // the background check has already surfaced an available update.
+    window.electronAPI.autoUpdateGetStatus?.().then((res) => {
+      if (res?.success && res.data) {
+        setUpdateStatus(res.data.state);
+        setUpdateVersion(res.data.availableVersion);
+      }
+    });
     const cleanups = [
       window.electronAPI.onAutoUpdateAvailable((info) => {
         setUpdateStatus('available');
@@ -1403,8 +1412,20 @@ export function SettingsModal({
                         <button
                           onClick={() => {
                             setUpdateStatus('checking');
-                            window.electronAPI.autoUpdateCheck().then((resp) => {
-                              if (!resp.success) setUpdateStatus('idle');
+                            window.electronAPI.autoUpdateCheck().then(async (resp) => {
+                              if (!resp.success) {
+                                setUpdateStatus('idle');
+                                return;
+                              }
+                              // The check may have short-circuited (already
+                              // downloading/ready, etc.) without firing an
+                              // event. Reconcile from the source of truth so
+                              // the UI never stays stuck on "Checking…".
+                              const status = await window.electronAPI.autoUpdateGetStatus?.();
+                              if (status?.success && status.data) {
+                                setUpdateStatus(status.data.state);
+                                setUpdateVersion(status.data.availableVersion);
+                              }
                             });
                           }}
                           disabled={updateStatus === 'checking' || updateStatus === 'downloading'}

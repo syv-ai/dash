@@ -344,6 +344,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   autoUpdateQuitAndInstall: () => ipcRenderer.invoke('autoUpdate:quitAndInstall'),
   autoUpdateGetEnabled: () => ipcRenderer.invoke('autoUpdate:getEnabled'),
   autoUpdateSetEnabled: (enabled: boolean) => ipcRenderer.invoke('autoUpdate:setEnabled', enabled),
+  autoUpdateGetStatus: () => ipcRenderer.invoke('autoUpdate:getStatus'),
   onAutoUpdateAvailable: (callback: (info: { version: string }) => void) => {
     const handler = (_event: unknown, info: { version: string }) => callback(info);
     ipcRenderer.on('autoUpdate:available', handler);

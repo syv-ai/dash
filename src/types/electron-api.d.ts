@@ -393,6 +393,13 @@ export interface ElectronAPI {
   autoUpdateQuitAndInstall: () => Promise<IpcResponse<void>>;
   autoUpdateGetEnabled: () => Promise<IpcResponse<boolean>>;
   autoUpdateSetEnabled: (enabled: boolean) => Promise<IpcResponse<void>>;
+  autoUpdateGetStatus: () => Promise<
+    IpcResponse<{
+      state: 'idle' | 'checking' | 'available' | 'downloading' | 'ready';
+      availableVersion: string | null;
+      initialized: boolean;
+    }>
+  >;
   onAutoUpdateAvailable: (callback: (info: { version: string }) => void) => () => void;
   onAutoUpdateNotAvailable: (callback: () => void) => () => void;
   onAutoUpdateDownloadProgress: (

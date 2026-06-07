@@ -7,11 +7,20 @@ import type { IpcResponse } from '@shared/types';
 
 type UpdateState = 'idle' | 'checking' | 'available' | 'downloading' | 'ready';
 
+export interface AutoUpdateStatus {
+  state: UpdateState;
+  availableVersion: string | null;
+  /** False when the service hasn't been wired up (dev, Windows, or unsupported platforms). */
+  initialized: boolean;
+}
+
 let mainWindow: BrowserWindow | null = null;
 let checkInterval: ReturnType<typeof setInterval> | null = null;
 let initialCheckTimer: ReturnType<typeof setTimeout> | null = null;
 let lastCheckTime = 0;
 let state: UpdateState = 'idle';
+let availableVersion: string | null = null;
+let initialized = false;
 
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
 const INITIAL_DELAY_MS = 10 * 1000; // 10 seconds
@@ -46,10 +55,12 @@ function startTimers(): void {
   clearTimers();
   initialCheckTimer = setTimeout(() => {
     initialCheckTimer = null;
-    autoUpdater.checkForUpdates().catch(() => {});
+    // Route through the service so state/lastCheckTime stay coherent and
+    // download/ready states aren't disturbed by a background check.
+    AutoUpdateService.checkForUpdates({ source: 'background' }).catch(() => {});
   }, INITIAL_DELAY_MS);
   checkInterval = setInterval(() => {
-    autoUpdater.checkForUpdates().catch(() => {});
+    AutoUpdateService.checkForUpdates({ source: 'background' }).catch(() => {});
   }, CHECK_INTERVAL_MS);
 }
 
@@ -83,18 +94,27 @@ export class AutoUpdateService {
 
     mainWindow = window;
     state = 'idle';
+    availableVersion = null;
+    initialized = true;
 
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = false;
 
     autoUpdater.on('update-available', (info: UpdateInfo) => {
       state = 'available';
+      availableVersion = info.version;
       send('autoUpdate:available', { version: info.version });
     });
 
     autoUpdater.on('update-not-available', () => {
-      state = 'idle';
-      send('autoUpdate:notAvailable');
+      // Only reset if we were the ones who triggered the check. A periodic
+      // background check that races against an in-progress download/ready
+      // state must not wipe that state.
+      if (state === 'checking') {
+        state = 'idle';
+        availableVersion = null;
+        send('autoUpdate:notAvailable');
+      }
     });
 
     autoUpdater.on('download-progress', (progress: ProgressInfo) => {
@@ -114,7 +134,7 @@ export class AutoUpdateService {
     autoUpdater.on('error', (err: Error) => {
       const prevState = state;
       if (state === 'checking') state = 'idle';
-      if (state === 'downloading') state = 'available';
+      else if (state === 'downloading') state = 'available';
       console.error(`[AutoUpdate] Error during ${prevState}:`, err?.message || err);
       send('autoUpdate:error', {
         message: prevState === 'downloading' ? 'Download failed' : 'Update check failed',
@@ -131,8 +151,20 @@ export class AutoUpdateService {
     mainWindow = window;
   }
 
+  static getStatus(): IpcResponse<AutoUpdateStatus> {
+    return {
+      success: true,
+      data: { state, availableVersion, initialized },
+    };
+  }
+
   static setEnabled(enabled: boolean): IpcResponse<void> {
     AutoUpdateService.writePreference(enabled);
+    if (!initialized) {
+      // Persist the preference but don't fail — the next packaged launch
+      // will pick it up when initialize() runs.
+      return { success: true };
+    }
     if (enabled) {
       if (mainWindow && !mainWindow.isDestroyed()) {
         startTimers();
@@ -143,13 +175,23 @@ export class AutoUpdateService {
     return { success: true };
   }
 
-  static async checkForUpdates(): Promise<IpcResponse<void>> {
+  static async checkForUpdates(
+    opts: { source?: 'user' | 'background' } = {},
+  ): Promise<IpcResponse<void>> {
+    if (!initialized) {
+      return { success: false, error: 'Auto-update not available in this build' };
+    }
+    const source = opts.source ?? 'user';
     const now = Date.now();
-    if (now - lastCheckTime < CHECK_COOLDOWN_MS) {
-      return { success: true }; // Silently skip — too soon
+    // Cooldown applies to background checks only. A user-initiated check
+    // should always run — otherwise the UI sits at "Checking…" forever.
+    if (source === 'background' && now - lastCheckTime < CHECK_COOLDOWN_MS) {
+      return { success: true };
     }
     if (state === 'downloading' || state === 'ready') {
-      return { success: true }; // Already have an update
+      // We already have an update in flight; treat as a no-op success so
+      // the renderer can clear any optimistic "checking" UI immediately.
+      return { success: true };
     }
     try {
       lastCheckTime = now;
@@ -163,6 +205,9 @@ export class AutoUpdateService {
   }
 
   static async downloadUpdate(): Promise<IpcResponse<void>> {
+    if (!initialized) {
+      return { success: false, error: 'Auto-update not available in this build' };
+    }
     if (state !== 'available') {
       return { success: false, error: 'No update available to download' };
     }
@@ -177,6 +222,9 @@ export class AutoUpdateService {
   }
 
   static async quitAndInstall(): Promise<IpcResponse<void>> {
+    if (!initialized) {
+      return { success: false, error: 'Auto-update not available in this build' };
+    }
     if (state !== 'ready') {
       return { success: false, error: 'No update ready to install' };
     }
@@ -205,5 +253,6 @@ export class AutoUpdateService {
     clearTimers();
     autoUpdater.removeAllListeners();
     mainWindow = null;
+    initialized = false;
   }
 }
