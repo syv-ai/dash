@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import type { editor as monacoEditor } from 'monaco-editor';
 import type { LineRange, LiveComment, Shade } from './types';
 import { assignShades } from './shadeAssignment';
@@ -124,25 +123,19 @@ export function CommentOverlay({
   // line below.
   const draftKey = pendingRange ? `draft:${pendingRange.start}:${pendingRange.end}` : null;
 
-  // Stable HTMLDivElement per requested viewzone key. Each one is handed
-  // to Monaco as the viewzone's `domNode`, and React's createPortal mounts
-  // the bubble UI INTO it. That way the bubble lives inside Monaco's
-  // layout — scrolls with the editor for free, no scroll-tracking math.
-  const portalNodesRef = useRef<Map<string, HTMLDivElement>>(new Map());
-  const getOrCreatePortalNode = (key: string): HTMLDivElement => {
-    let node = portalNodesRef.current.get(key);
+  // The viewzone needs a DOM node (Monaco appends it into the editor's
+  // internal layer to reserve space). We use a stable empty div per key —
+  // it's just a spacer. The actual bubble UI is rendered as a React
+  // overlay OUTSIDE Monaco's DOM (in editorAreaEl) so it doesn't get
+  // tangled in Monaco's mouse/keyboard handling.
+  const spacerNodesRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const getOrCreateSpacerNode = (key: string): HTMLDivElement => {
+    let node = spacerNodesRef.current.get(key);
     if (!node) {
       node = document.createElement('div');
-      // Monaco sets `width: 100%` on the viewzone domNode itself; we make
-      // it positioning context for the bubble (which uses bottom + left).
-      // overflow: hidden so the bubble (anchored to portalNode bottom) is
-      // clipped to the viewzone bounds during height animations — without
-      // this, a partially-open viewzone would let the bubble bleed up over
-      // the code line above.
-      node.style.position = 'relative';
-      node.style.height = '100%';
-      node.style.overflow = 'hidden';
-      portalNodesRef.current.set(key, node);
+      // Empty spacer — no pointer events; the overlay handles interaction.
+      node.style.pointerEvents = 'none';
+      spacerNodesRef.current.set(key, node);
     }
     return node;
   };
@@ -243,7 +236,7 @@ export function CommentOverlay({
         key: group.key,
         afterLineNumber: Math.max(0, group.anchorLine - 1),
         targetHeight: isCollapsed ? 0 : measured + TAIL_OVERHANG_PX,
-        domNode: getOrCreatePortalNode(group.key),
+        domNode: getOrCreateSpacerNode(group.key),
         isDraft: false,
       });
     }
@@ -253,7 +246,7 @@ export function CommentOverlay({
         key: draftKey,
         afterLineNumber: Math.max(0, pendingRange.start - 1),
         targetHeight: measured + TAIL_OVERHANG_PX,
-        domNode: getOrCreatePortalNode(draftKey),
+        domNode: getOrCreateSpacerNode(draftKey),
         isDraft: true,
       });
     }
@@ -267,7 +260,7 @@ export function CommentOverlay({
         if (!targets.has(key)) {
           accessor.removeZone(entry.id);
           viewzonesRef.current.delete(key);
-          portalNodesRef.current.delete(key);
+          spacerNodesRef.current.delete(key);
           cancelAnimation(key);
         }
       }
@@ -333,7 +326,7 @@ export function CommentOverlay({
           accessor.removeZone(entry.id);
         }
         viewzonesRef.current.clear();
-        portalNodesRef.current.clear();
+        spacerNodesRef.current.clear();
       });
     };
   }, [modifiedEditor]);
@@ -433,66 +426,87 @@ export function CommentOverlay({
         );
       })}
 
-      {/* Bubbles — portaled INTO each viewzone's domNode. Always rendered
-          (even when collapsed) so the wrapper stays measured and the
-          height-animation has stable content to tween toward. The bubble
-          becomes invisible automatically when the viewzone shrinks to 0
-          (the portal node has overflow: hidden). */}
+      {/* Bubbles — rendered as React absolute overlays in editorAreaEl,
+          OUTSIDE Monaco's DOM tree. This keeps interactive content (the
+          draft textarea especially) clear of Monaco's mouse/keyboard
+          handling. The viewzone reserves space; the bubble paints into
+          that space via getTopForLineNumber math. */}
       {groups.map(({ key, anchorLine, comments }) => {
-        const portalNode = getOrCreatePortalNode(key);
+        if (collapsed.has(key)) return null;
+        const anchorTop = modifiedEditor.getTopForLineNumber(anchorLine) - scrollTop;
         const tailLeftPx = tailLeftForAnchor(anchorLine);
-        return createPortal(
+        return (
           <div
-            ref={(el) => attachMeasure(key, el)}
+            key={`bubble-${key}`}
             className="absolute"
             style={{
-              bottom: TAIL_OVERHANG_PX,
-              left: bubbleLeft,
-              width: bubbleWidth,
-              pointerEvents: 'auto',
+              top: anchorTop - TAIL_OVERHANG_PX,
+              left: 0,
+              right: 0,
+              height: 0,
+              pointerEvents: 'none',
             }}
           >
-            <BubbleStack
-              comments={comments}
-              shadeById={shadeById}
-              hoveredId={hoveredId}
-              tailLeftPx={tailLeftPx}
-              onBubbleHover={onHoveredIdChange}
-              onEdit={onEditComment}
-            />
-          </div>,
-          portalNode,
-          key,
-        );
-      })}
-
-      {/* Draft bubble — same portal pattern. */}
-      {pendingRange &&
-        draftKey &&
-        (() => {
-          const portalNode = getOrCreatePortalNode(draftKey);
-          const tailLeftPx = tailLeftForAnchor(pendingRange.start);
-          return createPortal(
             <div
-              ref={(el) => attachMeasure(draftKey, el)}
+              ref={(el) => attachMeasure(key, el)}
               className="absolute"
               style={{
-                bottom: TAIL_OVERHANG_PX,
+                bottom: 0,
                 left: bubbleLeft,
                 width: bubbleWidth,
                 pointerEvents: 'auto',
               }}
             >
-              <DraftBubble
-                range={pendingRange}
-                initialText={pendingText}
+              <BubbleStack
+                comments={comments}
+                shadeById={shadeById}
+                hoveredId={hoveredId}
                 tailLeftPx={tailLeftPx}
-                onSubmit={onSubmitDraft}
-                onCancel={onCancelDraft}
+                onBubbleHover={onHoveredIdChange}
+                onEdit={onEditComment}
               />
-            </div>,
-            portalNode,
-            draftKey,
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Draft bubble — same overlay treatment, anchored to the pending
+          range's start line. */}
+      {pendingRange &&
+        draftKey &&
+        (() => {
+          const draftTop = modifiedEditor.getTopForLineNumber(pendingRange.start) - scrollTop;
+          const tailLeftPx = tailLeftForAnchor(pendingRange.start);
+          return (
+            <div
+              className="absolute"
+              style={{
+                top: draftTop - TAIL_OVERHANG_PX,
+                left: 0,
+                right: 0,
+                height: 0,
+                pointerEvents: 'none',
+              }}
+            >
+              <div
+                ref={(el) => attachMeasure(draftKey, el)}
+                className="absolute"
+                style={{
+                  bottom: 0,
+                  left: bubbleLeft,
+                  width: bubbleWidth,
+                  pointerEvents: 'auto',
+                }}
+              >
+                <DraftBubble
+                  range={pendingRange}
+                  initialText={pendingText}
+                  tailLeftPx={tailLeftPx}
+                  onSubmit={onSubmitDraft}
+                  onCancel={onCancelDraft}
+                />
+              </div>
+            </div>
           );
         })()}
     </>
