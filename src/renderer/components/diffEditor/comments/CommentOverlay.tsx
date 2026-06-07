@@ -430,11 +430,13 @@ export function CommentOverlay({
           OUTSIDE Monaco's DOM tree. This keeps interactive content (the
           draft textarea especially) clear of Monaco's mouse/keyboard
           handling. The viewzone reserves space; the bubble paints into
-          that space via getTopForLineNumber math. */}
+          that space via getTopForLineNumber math. Always rendered (even
+          when collapsed) so the wrapper stays measured and we can fade
+          opacity in sync with the viewzone height animation. */}
       {groups.map(({ key, anchorLine, comments }) => {
-        if (collapsed.has(key)) return null;
         const anchorTop = modifiedEditor.getTopForLineNumber(anchorLine) - scrollTop;
         const tailLeftPx = tailLeftForAnchor(anchorLine);
+        const isCollapsed = collapsed.has(key);
         return (
           <div
             key={`bubble-${key}`}
@@ -454,7 +456,9 @@ export function CommentOverlay({
                 bottom: 0,
                 left: bubbleLeft,
                 width: bubbleWidth,
-                pointerEvents: 'auto',
+                pointerEvents: isCollapsed ? 'none' : 'auto',
+                opacity: isCollapsed ? 0 : 1,
+                transition: 'opacity 220ms cubic-bezier(0.16, 1, 0.3, 1)',
               }}
             >
               <BubbleStack

@@ -37,12 +37,6 @@ export function BubbleShell({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onDoubleClick={onDoubleClick}
-      // Stop Monaco's editor-level mouse listeners from intercepting
-      // clicks inside the bubble. Without this, clicking the WIP
-      // textarea would also fire Monaco's click handler, which steals
-      // focus back to the editor's hidden input → user can't type.
-      onMouseDown={(e) => e.stopPropagation()}
-      onClick={(e) => e.stopPropagation()}
       className="relative rounded-[12px] px-[16px] pt-[14px] pb-[16px] text-[12px] leading-[1.5] tracking-[-0.005em]"
       style={{
         background: fill,
