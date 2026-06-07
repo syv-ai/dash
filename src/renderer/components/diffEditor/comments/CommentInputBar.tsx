@@ -21,11 +21,15 @@ export function CommentInputBar({ lineRange, initialText, onSubmit, onCancel }: 
     : '';
   return (
     <>
-      <div className="flex-shrink-0 font-mono text-[10px] text-muted-foreground/70 tabular-nums">
+      <div className="flex-shrink-0 font-mono text-[10px] text-muted-foreground/60 tabular-nums tracking-tight">
         {rangeLabel}
       </div>
       <textarea
         autoFocus
+        // Marker the surrounding <Modal>'s window-capture Esc handler
+        // looks for — when focus is in here, Esc cancels the draft instead
+        // of closing the modal.
+        data-diff-comment-input="true"
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
@@ -42,14 +46,14 @@ export function CommentInputBar({ lineRange, initialText, onSubmit, onCancel }: 
           }
         }}
         placeholder="Describe the change…"
-        className="flex-1 min-h-0 w-full text-[12.5px] leading-relaxed bg-transparent px-0 py-0 resize-none placeholder:text-muted-foreground/40 focus:outline-none"
+        className="flex-1 min-h-0 w-full text-[12.5px] leading-relaxed tracking-[-0.005em] bg-transparent px-0 py-0 resize-none placeholder:text-muted-foreground/35 focus:outline-none"
       />
       <div className="flex items-center gap-2 flex-shrink-0">
-        <span className="text-[10.5px] text-muted-foreground/70 font-mono">
-          <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-foreground/5 text-foreground/70">
+        <span className="text-[10.5px] text-muted-foreground/65 font-mono">
+          <kbd className="px-1.5 py-0.5 rounded-[5px] border border-foreground/10 bg-foreground/[0.04] text-foreground/70">
             ⌘
           </kbd>
-          <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-foreground/5 text-foreground/70 ml-1">
+          <kbd className="px-1.5 py-0.5 rounded-[5px] border border-foreground/10 bg-foreground/[0.04] text-foreground/70 ml-1">
             ↵
           </kbd>
           <span className="ml-1.5">to add</span>
@@ -58,7 +62,7 @@ export function CommentInputBar({ lineRange, initialText, onSubmit, onCancel }: 
           type="button"
           onClick={submit}
           disabled={!text.trim()}
-          className="ml-auto flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-md text-[11.5px] font-medium transition-colors bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-30 disabled:cursor-not-allowed"
+          className="ml-auto flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-md text-[11.5px] font-medium tracking-tight bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition disabled:opacity-30 disabled:cursor-not-allowed disabled:active:scale-100"
         >
           Add
         </button>

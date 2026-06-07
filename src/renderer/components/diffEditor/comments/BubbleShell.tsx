@@ -30,14 +30,14 @@ export function BubbleShell({
   children,
 }: Props) {
   const shadeVar = shade === 2 ? '--shade-2' : '--shade-1';
-  const baseAlpha = isHighlighted ? 0.34 : 0.22;
+  const baseAlpha = isHighlighted ? 0.14 : 0.08;
   const fill = `hsl(var(${shadeVar}) / ${baseAlpha})`;
   return (
     <div
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onDoubleClick={onDoubleClick}
-      className="relative rounded-[12px] px-[16px] pt-[24px] pb-[24px] text-[12px] leading-[1.5] tracking-[-0.005em]"
+      className="relative rounded-[12px] px-[16px] pt-[20px] pb-[20px] text-[12px] leading-[1.5] tracking-[-0.005em]"
       style={{
         background: fill,
         color: 'hsl(var(--foreground) / 0.92)',

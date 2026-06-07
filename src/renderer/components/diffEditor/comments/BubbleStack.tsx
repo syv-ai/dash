@@ -14,6 +14,8 @@ interface Props {
   /** Dbl-click on a bubble → re-open the WIP popover prefilled with that
    *  comment's text. */
   onEdit(comment: LiveComment): void;
+  /** Click the in-bubble × → delete this comment. */
+  onDelete(id: string): void;
 }
 
 function metaLabel(c: LiveComment): string {
@@ -30,6 +32,7 @@ export function BubbleStack({
   tailLeftPx,
   onBubbleHover,
   onEdit,
+  onDelete,
 }: Props) {
   const stacked = comments.length >= 2;
   return (
@@ -51,6 +54,7 @@ export function BubbleStack({
             onMouseEnter={() => onBubbleHover(c.id)}
             onMouseLeave={() => onBubbleHover(null)}
             onDoubleClick={() => onEdit(c)}
+            onDelete={() => onDelete(c.id)}
           />
         );
       })}

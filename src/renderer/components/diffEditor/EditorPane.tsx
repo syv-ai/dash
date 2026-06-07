@@ -500,6 +500,7 @@ export function EditorPane({
           hoveredId={hoveredCommentId}
           onHoveredIdChange={setHoveredCommentId}
           onEditComment={editComment}
+          onDeleteComment={binding.remove}
           pendingRange={dragging ? null : pendingRange}
           pendingText={pendingText}
           editingId={editingId}

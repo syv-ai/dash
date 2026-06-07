@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
 import type { LineRange, LiveComment, Shade } from './types';
 import { assignShades } from './shadeAssignment';
@@ -19,6 +19,8 @@ interface Props {
   /** Dbl-click on a bubble → request EditorPane to open the draft pre-
    *  filled with that comment's text. */
   onEditComment(comment: LiveComment): void;
+  /** Click the × on a bubble → permanently delete that comment. */
+  onDeleteComment(id: string): void;
   /** When non-null, the overlay renders a DraftBubble at the range's
    *  start line — for both fresh creation and editing. */
   pendingRange: LineRange | null;
@@ -41,8 +43,12 @@ interface Group {
 }
 
 const DEFAULT_BUBBLE_FRACTION = 0.4;
-const TAIL_OVERHANG_PX = 7;
 const ICON_HEIGHT_PX = 16;
+// Vertical padding inside the viewzone — asymmetric so the bubble sits
+// closer to the code line above than to the anchor line below (the tail
+// dangles into the lower pad, so it earns the extra space).
+const VIEWZONE_TOP_PAD_PX = 8;
+const VIEWZONE_BOTTOM_PAD_PX = 16;
 // Conservative initial viewzone height before the bubble's actual height
 // is measured. Just needs to be in the right ballpark so the first paint
 // doesn't shift dramatically when ResizeObserver fires.
@@ -60,6 +66,7 @@ export function CommentOverlay({
   hoveredId,
   onHoveredIdChange,
   onEditComment,
+  onDeleteComment,
   pendingRange,
   pendingText,
   editingId,
@@ -98,15 +105,21 @@ export function CommentOverlay({
       .sort((a, b) => a.anchorLine - b.anchorLine);
   }, [projected]);
 
-  // Re-render on scroll / resize so absolute positions track Monaco.
+  // Re-render on scroll / resize / content-size change so absolute
+  // positions track Monaco. onDidContentSizeChange fires when the editor's
+  // total scrollable height changes — which happens on every viewzone
+  // height mutation — so this is what drives the bubble overlay to follow
+  // the viewzone smoothly during the animation tween.
   const [, bumpLayout] = useState(0);
   useEffect(() => {
     if (!modifiedEditor) return;
     const s = modifiedEditor.onDidScrollChange(() => bumpLayout((n) => n + 1));
     const l = modifiedEditor.onDidLayoutChange(() => bumpLayout((n) => n + 1));
+    const c = modifiedEditor.onDidContentSizeChange(() => bumpLayout((n) => n + 1));
     return () => {
       s.dispose();
       l.dispose();
+      c.dispose();
     };
   }, [modifiedEditor]);
 
@@ -118,10 +131,19 @@ export function CommentOverlay({
   //
   // Each visible group + the draft (if any) maps to one viewzone keyed by
   // its stable key. Heights are MEASURED via ResizeObserver on the bubble's
-  // wrapper div — the viewzone's heightInPx = measured + TAIL_OVERHANG_PX
-  // so the tail's tip lands exactly at the first character of the anchor
-  // line below.
-  const draftKey = pendingRange ? `draft:${pendingRange.start}:${pendingRange.end}` : null;
+  // wrapper div — the viewzone's heightInPx = measured + 2 * vertical pad,
+  // so the bubble ends up vertically centered with equal breathing room
+  // above and below.
+  // When editing an existing comment (editingId set), use the SAME key as
+  // the persisted group's zone — so the draft target reuses the persisted
+  // viewzone instead of triggering a remove+add. No Monaco layout pass with
+  // the zone briefly missing, no flash. For fresh drafts (gutter click, no
+  // editingId), keep a distinct key so a new zone is created.
+  const draftKey = pendingRange
+    ? editingId
+      ? `${pendingRange.start}:${pendingRange.end}`
+      : `draft:${pendingRange.start}:${pendingRange.end}`
+    : null;
 
   // The viewzone needs a DOM node (Monaco appends it into the editor's
   // internal layer to reserve space). We use a stable empty div per key —
@@ -174,6 +196,49 @@ export function CommentOverlay({
   type ZoneEntry = { id: string; zone: monacoEditor.IViewZone };
   const viewzonesRef = useRef<Map<string, ZoneEntry>>(new Map());
 
+  // Layout-callback bookkeeping. `IViewZone.onDomNodeTop` /
+  // `.onComputedHeight` fire from Monaco's layout pass — i.e. the
+  // authoritative moment when the zone's pixel position is known. We
+  // imperatively re-position the bubble's wrapper from these callbacks,
+  // which sidesteps the race where getTopForLineNumber() at React-render
+  // time returns a stale value during an animation tween.
+  //
+  // This is the same pattern VSCode's editor/contrib/zoneWidget and
+  // Theia's monaco-editor-zone-widget use for their inline-comment-style
+  // widgets — viewzone reserves vertical space, an overlay tracks the
+  // zone via the layout callbacks.
+  const zoneTopsRef = useRef<Map<string, number>>(new Map());
+  const zoneHeightsRef = useRef<Map<string, number>>(new Map());
+  const bubbleWrapperRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const bubbleInnerRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  const fullHeightForKey = useCallback((key: string): number => {
+    const measured = measuredHeightsRef.current.get(key) ?? INITIAL_BUBBLE_HEIGHT_PX;
+    return measured + VIEWZONE_TOP_PAD_PX + VIEWZONE_BOTTOM_PAD_PX;
+  }, []);
+
+  const applyBubbleTransform = useCallback(
+    (key: string) => {
+      const wrapper = bubbleWrapperRefs.current.get(key);
+      const top = zoneTopsRef.current.get(key);
+      const height = zoneHeightsRef.current.get(key);
+      if (wrapper && top !== undefined && height !== undefined) {
+        // Wrapper covers the entire viewzone box; the inner div is then
+        // positioned with equal top/bottom padding to vertically center
+        // the bubble inside the zone.
+        wrapper.style.top = `${top}px`;
+        wrapper.style.height = `${height}px`;
+      }
+      const inner = bubbleInnerRefs.current.get(key);
+      if (inner && height !== undefined) {
+        const full = fullHeightForKey(key);
+        const opacity = full > 0 ? Math.max(0, Math.min(1, height / full)) : 0;
+        inner.style.opacity = String(opacity);
+      }
+    },
+    [fullHeightForKey],
+  );
+
   // Per-key animation handles — requestAnimationFrame IDs for the
   // expand/collapse height tween. Mutating heightInPx + layoutZone every
   // frame yields smooth code-shift animations.
@@ -210,6 +275,11 @@ export function CommentOverlay({
         modifiedEditor.changeViewZones((accessor) => {
           accessor.layoutZone(entry.id);
         });
+        // layoutZone() doesn't reliably fire onDidLayoutChange, so the
+        // bubble overlay (which reads heightInPx + getTopForLineNumber at
+        // render-time) would freeze mid-tween. Force a re-render each
+        // frame so opacity + Y position smoothly track the viewzone.
+        bumpLayout((n) => n + 1);
         if (progress < 1) {
           animationsRef.current.set(key, requestAnimationFrame(tick));
         } else {
@@ -221,7 +291,13 @@ export function CommentOverlay({
     [modifiedEditor, cancelAnimation],
   );
 
-  useEffect(() => {
+  // useLayoutEffect (not useEffect) so the viewzone swap commits in the
+  // same frame as the React DOM commit. Otherwise the browser would
+  // paint between commit and useEffect, briefly showing the editor with
+  // the just-unmounted bubble gone but the stale viewzone still
+  // reserving its space — and that gap is what produced the "lines from
+  // above flash overlaid at the comment's position" artifact on edit.
+  useLayoutEffect(() => {
     if (!modifiedEditor) return;
     type Target = {
       key: string;
@@ -237,7 +313,7 @@ export function CommentOverlay({
       targets.set(group.key, {
         key: group.key,
         afterLineNumber: Math.max(0, group.anchorLine - 1),
-        targetHeight: isCollapsed ? 0 : measured + TAIL_OVERHANG_PX,
+        targetHeight: isCollapsed ? 0 : measured + VIEWZONE_TOP_PAD_PX + VIEWZONE_BOTTOM_PAD_PX,
         domNode: getOrCreateSpacerNode(group.key),
         isDraft: false,
       });
@@ -247,35 +323,92 @@ export function CommentOverlay({
       targets.set(draftKey, {
         key: draftKey,
         afterLineNumber: Math.max(0, pendingRange.start - 1),
-        targetHeight: measured + TAIL_OVERHANG_PX,
+        targetHeight: measured + VIEWZONE_TOP_PAD_PX + VIEWZONE_BOTTOM_PAD_PX,
         domNode: getOrCreateSpacerNode(draftKey),
         isDraft: true,
       });
     }
 
-    // Sync existence + afterLineNumber. New viewzones start at heightInPx
-    // 0 so we can animate them to their target — see height-sync block
-    // below.
+    // Sync existence + afterLineNumber. A new persisted viewzone starts
+    // at 0 (and animates up — the "entrance" reveal) UNLESS another
+    // viewzone at the same anchor line was just removed in the same pass:
+    // in that case it inherits that zone's height, so a draft → persisted
+    // swap on submit doesn't replay the entrance animation that already
+    // played when the draft appeared.
     modifiedEditor.changeViewZones((accessor) => {
-      // Remove viewzones whose key is no longer requested (delete event).
+      const handoffHeights = new Map<number, number>();
+      const handoffTops = new Map<number, number>();
       for (const [key, entry] of viewzonesRef.current) {
         if (!targets.has(key)) {
+          handoffHeights.set(entry.zone.afterLineNumber, entry.zone.heightInPx ?? 0);
+          const t = zoneTopsRef.current.get(key);
+          if (t !== undefined) handoffTops.set(entry.zone.afterLineNumber, t);
           accessor.removeZone(entry.id);
           viewzonesRef.current.delete(key);
           spacerNodesRef.current.delete(key);
+          zoneTopsRef.current.delete(key);
+          zoneHeightsRef.current.delete(key);
           cancelAnimation(key);
         }
       }
-      // Add new viewzones at height 0 — height-sync below will animate them.
       for (const target of targets.values()) {
         if (viewzonesRef.current.has(target.key)) continue;
+        const handoff = handoffHeights.get(target.afterLineNumber);
+        const handoffTop = handoffTops.get(target.afterLineNumber);
+        handoffHeights.delete(target.afterLineNumber);
+        handoffTops.delete(target.afterLineNumber);
+        // Drafts always appear at full height (typing into an animating
+        // box feels broken). For persisted: use the handoff when there
+        // is one (skip entrance replay), otherwise start at 0 and let
+        // the height tween reveal the bubble.
+        const startHeight =
+          handoff !== undefined ? handoff : target.isDraft ? target.targetHeight : 0;
+        const zoneKey = target.key;
         const zone: monacoEditor.IViewZone = {
           afterLineNumber: target.afterLineNumber,
-          heightInPx: target.isDraft ? target.targetHeight : 0,
+          heightInPx: startHeight,
           domNode: target.domNode,
+          // Monaco invokes these from its layout pass — the only moment
+          // we can read the zone's real pixel top/height in sync with
+          // what's actually painted. We imperatively position the bubble
+          // overlay from here so it tracks the zone through scroll,
+          // resize, and the animation tween without race conditions.
+          onDomNodeTop: (top) => {
+            zoneTopsRef.current.set(zoneKey, top);
+            applyBubbleTransform(zoneKey);
+          },
+          onComputedHeight: (height) => {
+            zoneHeightsRef.current.set(zoneKey, height);
+            applyBubbleTransform(zoneKey);
+          },
         };
         const id = accessor.addZone(zone);
         viewzonesRef.current.set(target.key, { id, zone });
+        // Seed top/height from the just-removed same-line zone (edit
+        // transitions: persisted → draft, draft → persisted). This way
+        // applyBubbleTransform can position the new wrapper from frame 1
+        // instead of waiting for Monaco's first onDomNodeTop callback —
+        // which is what produced the brief "lines above flash at the
+        // comment's position" on double-click-to-edit. Skipping the CSS
+        // opacity fade-in for this case is also critical: the previous
+        // bubble was at full opacity so the new one must take its spot
+        // visibly at full opacity, no fade-from-zero.
+        if (handoffTop !== undefined) {
+          zoneTopsRef.current.set(zoneKey, handoffTop);
+          zoneHeightsRef.current.set(zoneKey, startHeight);
+          applyBubbleTransform(zoneKey);
+          const inner = bubbleInnerRefs.current.get(zoneKey);
+          if (inner) {
+            const prevTransition = inner.style.transition;
+            inner.style.transition = 'none';
+            inner.style.opacity = '1';
+            // Force a reflow so the no-transition opacity write commits
+            // before we restore the transition — otherwise the browser
+            // collapses both writes and animates anyway.
+            void inner.offsetHeight;
+            inner.style.transition = prevTransition || 'opacity 240ms ease-out';
+          }
+        }
       }
       // Update afterLineNumber on existing entries (code shifted, etc).
       for (const target of targets.values()) {
@@ -297,9 +430,14 @@ export function CommentOverlay({
       const currentHeight = entry.zone.heightInPx ?? 0;
       if (currentHeight === target.targetHeight) continue;
       const diff = Math.abs(currentHeight - target.targetHeight);
-      if (target.isDraft || diff <= 24) {
-        // Instant — draft never animates, and small natural-resize tweaks
-        // shouldn't jiggle.
+      // Animate only for true entrance reveals (0 → full) and collapse
+      // toggles (full → 0). In-place resize of an already-visible zone
+      // (edit transition, ResizeObserver jiggle, draft typing) snaps
+      // instantly — animating those produced the "entrance plays again
+      // on every action" complaint.
+      const isEntranceOrCollapse = currentHeight === 0 || target.targetHeight === 0;
+      const shouldAnimate = isEntranceOrCollapse && diff > 24 && !target.isDraft;
+      if (!shouldAnimate) {
         entry.zone.heightInPx = target.targetHeight;
         modifiedEditor.changeViewZones((accessor) => {
           accessor.layoutZone(entry.id);
@@ -329,6 +467,8 @@ export function CommentOverlay({
         }
         viewzonesRef.current.clear();
         spacerNodesRef.current.clear();
+        zoneTopsRef.current.clear();
+        zoneHeightsRef.current.clear();
       });
     };
   }, [modifiedEditor]);
@@ -429,27 +569,31 @@ export function CommentOverlay({
       })}
 
       {/* Bubbles — rendered as React absolute overlays in editorAreaEl,
-          OUTSIDE Monaco's DOM tree. The bubble's opacity is driven by
-          the current viewzone height (vs the fully-open height) so the
-          bubble is invisible while the viewzone is small and fades in
-          synchronously with the viewzone reaching full size. This is
-          what eliminates the "bubble at wrong position then jumps"
-          artifact — at intermediate positions the bubble is dim/invisible,
-          only reaching full opacity at the final position. */}
+          OUTSIDE Monaco's DOM tree (so they don't tangle in editor mouse
+          / keyboard handling). Position + opacity are imperatively
+          driven by the zone's onDomNodeTop / onComputedHeight callbacks
+          via applyBubbleTransform — see VSCode's editor/contrib/zoneWidget
+          for the same overlay-tracks-viewzone pattern. */}
       {groups.map(({ key, anchorLine, comments }) => {
-        const anchorTop = modifiedEditor.getTopForLineNumber(anchorLine) - scrollTop;
         const tailLeftPx = tailLeftForAnchor(anchorLine);
         const isCollapsed = collapsed.has(key);
-        const fullHeight =
-          (measuredHeightsRef.current.get(key) ?? INITIAL_BUBBLE_HEIGHT_PX) + TAIL_OVERHANG_PX;
-        const currentVzHeight = viewzonesRef.current.get(key)?.zone.heightInPx ?? 0;
-        const opacity = fullHeight > 0 ? Math.max(0, Math.min(1, currentVzHeight / fullHeight)) : 0;
         return (
           <div
             key={`bubble-${key}`}
+            ref={(el) => {
+              if (el) {
+                bubbleWrapperRefs.current.set(key, el);
+                applyBubbleTransform(key);
+              } else {
+                bubbleWrapperRefs.current.delete(key);
+              }
+            }}
             className="absolute"
             style={{
-              top: anchorTop - TAIL_OVERHANG_PX,
+              // top is imperatively driven by onDomNodeTop/onComputedHeight.
+              // Start off-screen so the (briefly position-unknown) wrapper
+              // can't flash in the wrong place on first mount.
+              top: -9999,
               left: 0,
               right: 0,
               height: 0,
@@ -457,14 +601,26 @@ export function CommentOverlay({
             }}
           >
             <div
-              ref={(el) => attachMeasure(key, el)}
+              ref={(el) => {
+                attachMeasure(key, el);
+                if (el) {
+                  bubbleInnerRefs.current.set(key, el);
+                  applyBubbleTransform(key);
+                } else {
+                  bubbleInnerRefs.current.delete(key);
+                }
+              }}
               className="absolute"
               style={{
-                bottom: 0,
+                top: VIEWZONE_TOP_PAD_PX,
                 left: bubbleLeft,
                 width: bubbleWidth,
                 pointerEvents: isCollapsed ? 'none' : 'auto',
-                opacity,
+                // opacity is imperatively driven by onComputedHeight; start
+                // at 0 and the CSS transition smooths the per-frame updates
+                // into a single coherent fade-in.
+                opacity: 0,
+                transition: 'opacity 240ms ease-out',
               }}
             >
               <BubbleStack
@@ -474,6 +630,7 @@ export function CommentOverlay({
                 tailLeftPx={tailLeftPx}
                 onBubbleHover={onHoveredIdChange}
                 onEdit={onEditComment}
+                onDelete={onDeleteComment}
               />
             </div>
           </div>
@@ -485,13 +642,21 @@ export function CommentOverlay({
       {pendingRange &&
         draftKey &&
         (() => {
-          const draftTop = modifiedEditor.getTopForLineNumber(pendingRange.start) - scrollTop;
           const tailLeftPx = tailLeftForAnchor(pendingRange.start);
+          const k = draftKey;
           return (
             <div
+              ref={(el) => {
+                if (el) {
+                  bubbleWrapperRefs.current.set(k, el);
+                  applyBubbleTransform(k);
+                } else {
+                  bubbleWrapperRefs.current.delete(k);
+                }
+              }}
               className="absolute"
               style={{
-                top: draftTop - TAIL_OVERHANG_PX,
+                top: -9999,
                 left: 0,
                 right: 0,
                 height: 0,
@@ -499,13 +664,23 @@ export function CommentOverlay({
               }}
             >
               <div
-                ref={(el) => attachMeasure(draftKey, el)}
+                ref={(el) => {
+                  attachMeasure(k, el);
+                  if (el) {
+                    bubbleInnerRefs.current.set(k, el);
+                    applyBubbleTransform(k);
+                  } else {
+                    bubbleInnerRefs.current.delete(k);
+                  }
+                }}
                 className="absolute"
                 style={{
-                  bottom: 0,
+                  top: VIEWZONE_TOP_PAD_PX,
                   left: bubbleLeft,
                   width: bubbleWidth,
                   pointerEvents: 'auto',
+                  opacity: 0,
+                  transition: 'opacity 240ms ease-out',
                 }}
               >
                 <DraftBubble

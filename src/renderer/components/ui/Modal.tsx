@@ -44,9 +44,13 @@ export function Modal({ onClose, size, overflow = 'hidden', children }: ModalPro
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
         // Let a Radix popover own the Esc when focus is inside it — its
-        // onEscapeKeyDown will close just the popover.
+        // onEscapeKeyDown will close just the popover. Same for the diff-
+        // editor's comment textarea: it handles Esc to cancel the draft.
         const target = e.target as HTMLElement | null;
         if (target?.closest('[data-radix-popper-content-wrapper]')) {
+          return;
+        }
+        if (target?.closest('[data-diff-comment-input]')) {
           return;
         }
         e.preventDefault();
