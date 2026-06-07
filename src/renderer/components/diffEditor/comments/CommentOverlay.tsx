@@ -192,8 +192,10 @@ export function CommentOverlay({
       if (!modifiedEditor) return;
       cancelAnimation(key);
       const start = performance.now();
-      const duration = 280;
-      const ease = (t: number) => 1 - Math.pow(1 - t, 3); // ease-out cubic
+      const duration = 420;
+      // ease-in-out cubic — symmetric, gentle at both ends. Pairs with
+      // the CSS opacity transition on the bubble wrapper below.
+      const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
       const tick = (now: number) => {
         const elapsed = now - start;
         const progress = Math.min(1, elapsed / duration);
@@ -458,7 +460,7 @@ export function CommentOverlay({
                 width: bubbleWidth,
                 pointerEvents: isCollapsed ? 'none' : 'auto',
                 opacity: isCollapsed ? 0 : 1,
-                transition: 'opacity 220ms cubic-bezier(0.16, 1, 0.3, 1)',
+                transition: 'opacity 420ms cubic-bezier(0.65, 0, 0.35, 1)',
               }}
             >
               <BubbleStack
