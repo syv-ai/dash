@@ -15,7 +15,17 @@
 // below — only the languages we actually map in `detectLanguage`.
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
+import { OverviewRulerFeature } from 'monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/overviewRulerFeature';
 import { loader } from '@monaco-editor/react';
+
+// Slim the diff editor's overview ruler. Default is 15px per side (30px total).
+// The class's static constants are read on every layout pass and in the
+// constructor that sets the `.diffOverview` container width, so overwriting
+// here — before any diff editor mounts — narrows both the strip and the
+// content gutter the diff widget reserves for it.
+const SLIM_ONE_OVERVIEW_WIDTH = 6;
+OverviewRulerFeature.ONE_OVERVIEW_WIDTH = SLIM_ONE_OVERVIEW_WIDTH;
+OverviewRulerFeature.ENTIRE_DIFF_OVERVIEW_WIDTH = SLIM_ONE_OVERVIEW_WIDTH * 2;
 
 // Curated basic-language grammars (mirror src/main/ipc/fileIpc.ts#detectLanguage).
 import 'monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution';

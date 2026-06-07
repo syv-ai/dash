@@ -16,3 +16,10 @@ declare module '*.mp3' {
 declare module 'monaco-editor/esm/vs/editor/editor.api' {
   export * from 'monaco-editor';
 }
+
+declare module 'monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/overviewRulerFeature' {
+  export class OverviewRulerFeature {
+    static ONE_OVERVIEW_WIDTH: number;
+    static ENTIRE_DIFF_OVERVIEW_WIDTH: number;
+  }
+}
