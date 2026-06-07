@@ -277,6 +277,27 @@ class HookServerImpl {
             return;
           }
 
+          if (pathname === '/hook/session-end') {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
+              activityMonitor.setIdle(ptyId);
+              res.writeHead(200);
+              res.end();
+            });
+            return;
+          }
+
+          if (pathname === '/hook/session-start') {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
+              // Settings only register this hook for the `clear` and `compact`
+              // matchers, so reaching here means the session was reset and any
+              // prior busy state is stale. Defensive idle.
+              activityMonitor.setIdle(ptyId);
+              res.writeHead(200);
+              res.end();
+            });
+            return;
+          }
+
           res.writeHead(404);
           res.end();
         } catch (err) {
