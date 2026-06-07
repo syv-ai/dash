@@ -398,3 +398,47 @@ describe('mergeHookEntries — user content preservation', () => {
     expect(merged.PostToolUse).toHaveLength(2);
   });
 });
+
+describe('SessionEnd allowlist', () => {
+  it('recognises Dash SessionEnd HTTP hook by URL shape', () => {
+    const entry: HookEntry = {
+      matcher: '*',
+      hooks: [{ type: 'http', url: 'http://127.0.0.1:54321/hook/session-end?ptyId=abc' }],
+    };
+    expect(entryIsDashOwned(entry)).toBe(true);
+  });
+
+  it('treats SessionEnd as a Dash-managed event so stale entries are replaced (not stacked)', () => {
+    // Simulates the "user upgrades Dash and restarts" case: a prior-session
+    // Dash hook is on disk with a dead port. On the next launch, the merger
+    // must drop it and write a fresh one — otherwise stale entries accumulate.
+    const userEntry: HookEntry = {
+      matcher: '*',
+      hooks: [{ type: 'command', command: 'echo user-hook' }],
+    };
+    const staleDash: HookEntry = {
+      matcher: '*',
+      hooks: [{ type: 'http', url: 'http://127.0.0.1:55555/hook/session-end?ptyId=old' }],
+    };
+    const freshDash: HookEntry = {
+      matcher: '*',
+      hooks: [
+        {
+          type: 'http',
+          url: 'http://127.0.0.1:54321/hook/session-end?ptyId=new',
+          __dash: true,
+        },
+      ],
+    };
+    const merged = mergeHookEntries(
+      { SessionEnd: [userEntry, staleDash] },
+      { SessionEnd: [freshDash] },
+    );
+    // Stale Dash entry filtered out; user entry preserved; fresh Dash entry appended.
+    expect(merged.SessionEnd).toHaveLength(2);
+    expect(merged.SessionEnd[0].hooks[0]).toMatchObject({ command: 'echo user-hook' });
+    expect(merged.SessionEnd[1].hooks[0]).toMatchObject({
+      url: expect.stringContaining(':54321/'),
+    });
+  });
+});
