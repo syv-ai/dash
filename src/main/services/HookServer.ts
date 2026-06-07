@@ -223,7 +223,15 @@ class HookServerImpl {
                 payload.tool_input && typeof payload.tool_input === 'object'
                   ? (payload.tool_input as Record<string, unknown>)
                   : undefined;
-              activityMonitor.setToolStart(ptyId, toolName, toolInput);
+              // AskUserQuestion is "user attention required", not "Claude is
+              // working" — mirror the Notification(permission_prompt) path.
+              if (toolName === 'AskUserQuestion') {
+                activityMonitor.setWaitingForPermission(ptyId);
+                const taskName = this.getTaskName(ptyId);
+                this.showDesktopNotification(ptyId, `${taskName} is asking a question`);
+              } else {
+                activityMonitor.setToolStart(ptyId, toolName, toolInput);
+              }
               res.writeHead(200);
               res.end();
             });
@@ -231,8 +239,14 @@ class HookServerImpl {
           }
 
           if (pathname === '/hook/tool-end') {
-            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
-              activityMonitor.setToolEnd(ptyId);
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
+              const toolName = typeof payload.tool_name === 'string' ? payload.tool_name : '';
+              if (toolName === 'AskUserQuestion') {
+                // User answered — back to busy (Claude will resume working).
+                activityMonitor.setBusy(ptyId);
+              } else {
+                activityMonitor.setToolEnd(ptyId);
+              }
               res.writeHead(200);
               res.end();
             });
