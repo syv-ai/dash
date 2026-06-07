@@ -675,7 +675,19 @@ export function CommentOverlay({
             </div>
             {editingComment && pendingRange && (
               <div
-                ref={(el) => attachMeasure(`${key}@draft`, el)}
+                ref={(el) => {
+                  attachMeasure(`${key}@draft`, el);
+                  if (el) {
+                    // Synchronously seed the draft's measured height so the
+                    // first useLayoutEffect after this ref attaches already
+                    // sees the real value. Without this the effect uses
+                    // INITIAL_DRAFT_HEIGHT_PX and the viewzone is briefly
+                    // too short, letting the draft overflow the line below
+                    // until ResizeObserver fires a frame later.
+                    const h = Math.ceil(el.getBoundingClientRect().height);
+                    if (h > 0) measuredHeightsRef.current.set(`${key}@draft`, h);
+                  }
+                }}
                 className="absolute animate-fade-in"
                 style={{
                   top: VIEWZONE_TOP_PAD_PX,
