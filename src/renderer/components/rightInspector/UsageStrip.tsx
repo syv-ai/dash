@@ -71,9 +71,10 @@ function resetDetail(epochSeconds?: number): Detail | undefined {
 export function UsageStrip({ rateLimits, contextUsage }: UsageStripProps) {
   const ctx = contextUsage && contextUsage.percentage > 0 ? contextUsage : null;
   if (!rateLimits.fiveHour && !rateLimits.sevenDay && !ctx) return null;
+  const hasRowAbove = !!(rateLimits.fiveHour || rateLimits.sevenDay);
 
   return (
-    <div className="usage-strip glass-hairline-b px-[18px] pt-[22px] pb-[20px] flex flex-col gap-[14px]">
+    <div className="usage-strip glass-hairline-b px-[18px] pt-[22px] pb-[20px] flex flex-col">
       {rateLimits.fiveHour && (
         <Row
           label="5-hour limit"
@@ -82,19 +83,36 @@ export function UsageStrip({ rateLimits, contextUsage }: UsageStripProps) {
         />
       )}
       {rateLimits.sevenDay && (
-        <Row
-          label="7-day limit"
-          pct={rateLimits.sevenDay.usedPercentage}
-          detail={resetDetail(rateLimits.sevenDay.resetsAt)}
-        />
+        <div className={rateLimits.fiveHour ? 'mt-[14px]' : ''}>
+          <Row
+            label="7-day limit"
+            pct={rateLimits.sevenDay.usedPercentage}
+            detail={resetDetail(rateLimits.sevenDay.resetsAt)}
+          />
+        </div>
       )}
-      {ctx && (
-        <Row
-          label="Session"
-          pct={ctx.percentage}
-          detail={{ value: `${formatTokens(ctx.used)} / ${formatTokens(ctx.total)}` }}
-        />
-      )}
+      {/* Session row appears once context tokens are reported (after the first
+          message). Wrapper is always mounted so the grid-template-rows transition
+          fires; top spacing sits inside overflow:hidden so it collapses with the row. */}
+      <div
+        className="grid transition-[grid-template-rows,opacity] duration-300 ease-out"
+        style={{
+          gridTemplateRows: ctx ? '1fr' : '0fr',
+          opacity: ctx ? 1 : 0,
+        }}
+      >
+        <div className="overflow-hidden">
+          {ctx && (
+            <div className={hasRowAbove ? 'pt-[14px]' : ''}>
+              <Row
+                label="Session"
+                pct={ctx.percentage}
+                detail={{ value: `${formatTokens(ctx.used)} / ${formatTokens(ctx.total)}` }}
+              />
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
