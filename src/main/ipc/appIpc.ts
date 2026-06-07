@@ -152,8 +152,42 @@ async function detectEditor(): Promise<string> {
   return cachedEditor;
 }
 
+// In dev (pnpm dev) we display "{latest-published}.DEV" so the version surface
+// matches what a packaged user would see, plus a clear DEV marker. Cached for
+// the session: GitHub API is rate-limited and the answer doesn't change mid-run.
+let cachedDevVersion: string | null = null;
+
+async function getDevVersion(): Promise<string> {
+  if (cachedDevVersion) return cachedDevVersion;
+  const localVersion = app.getVersion();
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const response = await fetch('https://api.github.com/repos/syv-ai/dash/releases/latest', {
+      headers: { 'User-Agent': 'dash-app', Accept: 'application/vnd.github+json' },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (response.ok) {
+      const data = (await response.json()) as { tag_name?: string };
+      const tag = (data.tag_name || '').replace(/^v/, '').trim();
+      if (tag) {
+        cachedDevVersion = `${tag}.DEV`;
+        return cachedDevVersion;
+      }
+    }
+  } catch {
+    // Best effort — fall through to local version
+  }
+  cachedDevVersion = `${localVersion}.DEV`;
+  return cachedDevVersion;
+}
+
 export function registerAppIpc(): void {
-  ipcMain.handle('app:getVersion', () => {
+  ipcMain.handle('app:getVersion', async () => {
+    if (!app.isPackaged) {
+      return getDevVersion();
+    }
     return app.getVersion();
   });
 
