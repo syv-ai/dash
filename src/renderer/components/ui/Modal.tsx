@@ -33,12 +33,27 @@ interface ModalProps {
    *  dropdown positioned absolutely from inside the modal) needs to escape the
    *  card's rounded bounds. */
   overflow?: 'hidden' | 'visible';
+  /** Inline style merged onto the card div. Use for one-off overrides (e.g.
+   *  a more transparent background) — beats class-based bg utilities. */
+  cardStyle?: React.CSSProperties;
   children: React.ReactNode;
 }
 
-export function Modal({ onClose, size, overflow = 'hidden', children }: ModalProps) {
+// Topmost modal owns Esc. When a modal opens inside another modal, the inner
+// pushes onto this stack so the outer's keydown handler bows out for Esc.
+const modalCloseStack: Array<() => void> = [];
+
+export function Modal({ onClose, size, overflow = 'hidden', cardStyle, children }: ModalProps) {
   const [closing, setClosing] = useState(false);
   const requestClose = useCallback(() => setClosing(true), []);
+
+  useEffect(() => {
+    modalCloseStack.push(requestClose);
+    return () => {
+      const i = modalCloseStack.indexOf(requestClose);
+      if (i >= 0) modalCloseStack.splice(i, 1);
+    };
+  }, [requestClose]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -51,6 +66,11 @@ export function Modal({ onClose, size, overflow = 'hidden', children }: ModalPro
           return;
         }
         if (target?.closest('[data-diff-comment-input]')) {
+          return;
+        }
+        // Only the topmost modal responds — keeps a nested dialog from
+        // cascade-closing its parent.
+        if (modalCloseStack[modalCloseStack.length - 1] !== requestClose) {
           return;
         }
         e.preventDefault();
@@ -79,6 +99,7 @@ export function Modal({ onClose, size, overflow = 'hidden', children }: ModalPro
       >
         <div
           className={`bg-[hsl(var(--surface-2)/0.86)] backdrop-blur-2xl border border-border/40 rounded-xl shadow-2xl shadow-black/50 ${size} flex flex-col ${overflow === 'visible' ? 'overflow-visible' : 'overflow-hidden'} ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
+          style={cardStyle}
           onClick={(e) => e.stopPropagation()}
         >
           {children}

@@ -10,6 +10,7 @@ import { assignShades } from './comments/shadeAssignment';
 import { computeRowDecorations } from './comments/rowShades';
 import { CommentOverlay } from './comments/CommentOverlay';
 import { CommentsMenu } from './comments/CommentsMenu';
+import { EditCommentsModal } from './comments/EditCommentsModal';
 import { useFileLoad, type LoadState } from './editor/useFileLoad';
 import { useEditorSave } from './editor/useEditorSave';
 import { useMonacoEditor } from './editor/useMonacoEditor';
@@ -318,12 +319,14 @@ export function EditorPane({
     setPendingRange(null);
   }
 
-  // Build a prompt block from a specific set of comment ids and write it
-  // into the task's Claude Code TUI. Marks the sent ids in the store so
-  // they don't sneak back into the next bulk send. Used by both the bulk
-  // "Send" (all unsent) and the per-card "Send this one" actions.
-  function sendCommentsToPrompt(idsToSend: ReadonlyArray<string>): boolean {
-    if (!activeTaskId || idsToSend.length === 0) return false;
+  // ── Prompt assembly ────────────────────────────────────
+  // buildPromptText turns a set of comment ids into the path:line: prompt
+  // body. writePromptToTui takes the (potentially edited) text and ships it
+  // to the task, marking the original ids as sent so they don't sneak back
+  // into the next bulk send. They're split so the edit-before-send modal
+  // can build once, let the user mutate the text, then ship the result.
+  function buildPromptText(idsToSend: ReadonlyArray<string>): string | null {
+    if (idsToSend.length === 0) return null;
     const idSet = new Set(idsToSend);
     const model = modifiedEditor?.getModel();
     const lang = state.kind === 'loaded' ? state.language : '';
@@ -336,7 +339,7 @@ export function EditorPane({
         if (b === filePath) return 1;
         return a.localeCompare(b);
       });
-    if (fileGroups.length === 0) return false;
+    if (fileGroups.length === 0) return null;
 
     const sections: string[] = [];
     for (const [path, list] of fileGroups) {
@@ -367,29 +370,62 @@ export function EditorPane({
         );
       }
     }
+    return `Comments:\n\n${sections.join('\n\n')}`;
+  }
 
-    const prompt = `Comments:\n\n${sections.join('\n\n')}`;
+  function writePromptToTui(text: string, idsToMarkSent: ReadonlyArray<string>): void {
+    if (!activeTaskId) return;
     const taskId = activeTaskId;
     void import('../../terminal/SessionRegistry').then(({ sessionRegistry }) => {
       const session = sessionRegistry.get(taskId);
-      if (session) session.writeInput(prompt);
+      if (session) session.writeInput(text);
     });
-    commentsStore.markSent(idsToSend);
+    commentsStore.markSent(idsToMarkSent);
+  }
+
+  function sendCommentsToPrompt(idsToSend: ReadonlyArray<string>): boolean {
+    if (!activeTaskId) return false;
+    const text = buildPromptText(idsToSend);
+    if (text === null) return false;
+    writePromptToTui(text, idsToSend);
     return true;
   }
 
-  function sendAllUnsent() {
+  function collectUnsentIds(): string[] {
     const ids: string[] = [];
     for (const list of Object.values(commentsByFile)) {
       for (const c of list) if (!c.sent) ids.push(c.id);
     }
-    if (sendCommentsToPrompt(ids)) onClose();
+    return ids;
+  }
+
+  function sendAllUnsent() {
+    if (sendCommentsToPrompt(collectUnsentIds())) onClose();
   }
 
   function sendOneComment(id: string) {
     sendCommentsToPrompt([id]);
     // Stay in the modal: the user is browsing the dropdown and likely
     // wants to triage more before leaving.
+  }
+
+  // Edit-before-send modal state. The ids snapshot is captured at open time
+  // so any edits to the text don't change which comments get marked sent.
+  const [editTarget, setEditTarget] = useState<{ ids: string[]; text: string } | null>(null);
+
+  function openEditAndSendModal() {
+    if (!activeTaskId) return;
+    const ids = collectUnsentIds();
+    const text = buildPromptText(ids);
+    if (text === null) return;
+    setEditTarget({ ids, text });
+  }
+
+  function confirmEditAndSend(editedText: string) {
+    if (!editTarget) return;
+    writePromptToTui(editedText, editTarget.ids);
+    setEditTarget(null);
+    onClose();
   }
 
   function handleClose() {
@@ -485,6 +521,7 @@ export function EditorPane({
               onRemove={(_path, id) => commentsStore.remove(id)}
               onUnsend={commentsStore.markUnsent}
               onSend={sendAllUnsent}
+              onEditAndSend={openEditAndSendModal}
               onSendOne={sendOneComment}
             />
           </div>
@@ -506,6 +543,14 @@ export function EditorPane({
           onCancelDraft={cancelComment}
         />
       </EditorViewport>
+      {editTarget && (
+        <EditCommentsModal
+          initialText={editTarget.text}
+          count={editTarget.ids.length}
+          onClose={() => setEditTarget(null)}
+          onSend={confirmEditAndSend}
+        />
+      )}
     </div>
   );
 }

@@ -1,6 +1,15 @@
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { ChevronDown, ChevronRight, ChevronUp, MessageSquare, Send, Undo2, X } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  MessageSquare,
+  Pencil,
+  Send,
+  Undo2,
+  X,
+} from 'lucide-react';
 import { Popover, PopoverArrow, PopoverContent, PopoverTrigger } from '../../ui/Popover';
 import type { DiffComment } from './types';
 
@@ -20,6 +29,8 @@ interface Props {
   onUnsend: (commentId: string) => void;
   /** Send every unsent comment. Closes the modal afterward. */
   onSend: () => void;
+  /** Open the edit-before-send modal pre-filled with every unsent comment. */
+  onEditAndSend: () => void;
   /** Send a single comment. Keeps the dropdown + modal open. */
   onSendOne: (commentId: string) => void;
 }
@@ -59,6 +70,7 @@ export function CommentsMenu({
   onRemove,
   onUnsend,
   onSend,
+  onEditAndSend,
   onSendOne,
 }: Props) {
   const [open, setOpen] = useState(false);
@@ -193,18 +205,33 @@ export function CommentsMenu({
               </>
             )}
           </span>
-          <button
-            type="button"
-            disabled={noUnsent}
-            onClick={() => {
-              setOpen(false);
-              onSend();
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
-          >
-            <Send size={11} strokeWidth={2.2} />
-            <span>Send all</span>
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              disabled={noUnsent}
+              onClick={() => {
+                setOpen(false);
+                onEditAndSend();
+              }}
+              title="Edit the assembled prompt before sending"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium text-muted-foreground/80 hover:text-foreground hover:bg-foreground/[0.06] active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
+            >
+              <Pencil size={11} strokeWidth={2.2} />
+              <span>Edit</span>
+            </button>
+            <button
+              type="button"
+              disabled={noUnsent}
+              onClick={() => {
+                setOpen(false);
+                onSend();
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
+            >
+              <Send size={11} strokeWidth={2.2} />
+              <span>Send all</span>
+            </button>
+          </div>
         </div>
         <PopoverArrow />
       </PopoverContent>
