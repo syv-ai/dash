@@ -338,11 +338,13 @@ export function EditorPane({
       });
     if (fileGroups.length === 0) return false;
 
-    const blocks = fileGroups.map(([path, list]) => {
+    const sections: string[] = [];
+    for (const [path, list] of fileGroups) {
       const isCurrent = path === filePath;
-      const sections = list.map((sc) => {
+      for (const sc of list) {
         let startLine = sc.startLine;
         let endLine = sc.endLine;
+        let code = '';
         // For the current file, prefer live decoration ranges (line shifts
         // from typing) and embed a code excerpt.
         if (isCurrent && modifiedEditor && monaco && model) {
@@ -354,21 +356,19 @@ export function EditorPane({
               endLine = r.endLineNumber;
             }
           }
-          const lineLabel =
-            startLine === endLine ? `Line ${startLine}` : `Lines ${startLine}-${endLine}`;
-          const code = model.getValueInRange(
+          code = model.getValueInRange(
             new monaco.Range(startLine, 1, endLine, model.getLineMaxColumn(endLine)),
           );
-          return `${lineLabel}:\n\`\`\`${lang}\n${code}\n\`\`\`\n${sc.text}`;
         }
-        const lineLabel =
-          startLine === endLine ? `Line ${startLine}` : `Lines ${startLine}-${endLine}`;
-        return `${lineLabel}:\n${sc.text}`;
-      });
-      return `### ${path}\n\n${sections.join('\n\n---\n\n')}`;
-    });
+        const lineRef = startLine === endLine ? `${startLine}` : `${startLine}-${endLine}`;
+        const header = `${path}:${lineRef}:`;
+        sections.push(
+          code ? `${header}\n\`\`\`${lang}\n${code}\n\`\`\`\n${sc.text}` : `${header}\n${sc.text}`,
+        );
+      }
+    }
 
-    const prompt = `Comments:\n\n${blocks.join('\n\n')}`;
+    const prompt = `Comments:\n\n${sections.join('\n\n')}`;
     const taskId = activeTaskId;
     void import('../../terminal/SessionRegistry').then(({ sessionRegistry }) => {
       const session = sessionRegistry.get(taskId);
