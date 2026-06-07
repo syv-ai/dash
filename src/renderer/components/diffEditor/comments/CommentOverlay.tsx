@@ -429,16 +429,21 @@ export function CommentOverlay({
       })}
 
       {/* Bubbles — rendered as React absolute overlays in editorAreaEl,
-          OUTSIDE Monaco's DOM tree. This keeps interactive content (the
-          draft textarea especially) clear of Monaco's mouse/keyboard
-          handling. The viewzone reserves space; the bubble paints into
-          that space via getTopForLineNumber math. Always rendered (even
-          when collapsed) so the wrapper stays measured and we can fade
-          opacity in sync with the viewzone height animation. */}
+          OUTSIDE Monaco's DOM tree. The bubble's opacity is driven by
+          the current viewzone height (vs the fully-open height) so the
+          bubble is invisible while the viewzone is small and fades in
+          synchronously with the viewzone reaching full size. This is
+          what eliminates the "bubble at wrong position then jumps"
+          artifact — at intermediate positions the bubble is dim/invisible,
+          only reaching full opacity at the final position. */}
       {groups.map(({ key, anchorLine, comments }) => {
         const anchorTop = modifiedEditor.getTopForLineNumber(anchorLine) - scrollTop;
         const tailLeftPx = tailLeftForAnchor(anchorLine);
         const isCollapsed = collapsed.has(key);
+        const fullHeight =
+          (measuredHeightsRef.current.get(key) ?? INITIAL_BUBBLE_HEIGHT_PX) + TAIL_OVERHANG_PX;
+        const currentVzHeight = viewzonesRef.current.get(key)?.zone.heightInPx ?? 0;
+        const opacity = fullHeight > 0 ? Math.max(0, Math.min(1, currentVzHeight / fullHeight)) : 0;
         return (
           <div
             key={`bubble-${key}`}
@@ -459,8 +464,7 @@ export function CommentOverlay({
                 left: bubbleLeft,
                 width: bubbleWidth,
                 pointerEvents: isCollapsed ? 'none' : 'auto',
-                opacity: isCollapsed ? 0 : 1,
-                transition: 'opacity 420ms cubic-bezier(0.65, 0, 0.35, 1)',
+                opacity,
               }}
             >
               <BubbleStack
