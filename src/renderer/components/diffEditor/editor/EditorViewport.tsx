@@ -99,6 +99,7 @@ export function EditorViewport({
               renderSideBySide: false,
               compactMode: true,
               renderGutterMenu: false,
+              contextmenu: false,
               minimap: {
                 enabled: true,
                 renderCharacters: false,

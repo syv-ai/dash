@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { ChevronDown, ChevronRight, MessageSquare, Send, Undo2, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronUp, MessageSquare, Send, Undo2, X } from 'lucide-react';
 import { Popover, PopoverArrow, PopoverContent, PopoverTrigger } from '../../ui/Popover';
 import type { DiffComment } from './types';
 
@@ -116,7 +116,7 @@ export function CommentsMenu({
               </>
             )}
           </span>
-          <ChevronDown
+          <ChevronUp
             size={11}
             strokeWidth={2.2}
             className="opacity-60 transition-transform duration-200 ease-out group-data-[state=open]/trigger:rotate-180"
@@ -124,7 +124,7 @@ export function CommentsMenu({
         </button>
       </PopoverTrigger>
       <PopoverContent
-        side="bottom"
+        side="top"
         align="end"
         sideOffset={8}
         className="glass-popover w-[460px] max-h-[520px] flex flex-col p-0 overflow-hidden"

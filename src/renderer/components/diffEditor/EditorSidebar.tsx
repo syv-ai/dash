@@ -219,7 +219,7 @@ function FileTreePanel({
           )}
         </span>
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto [scrollbar-gutter:stable] pb-2 px-1">
+      <div className="flex-1 min-h-0 overflow-y-auto [scrollbar-gutter:stable] scrollbar-thin-hover pb-2 px-1">
         {loading && paths.length === 0 ? (
           <div className="px-3 py-2 text-[11px] text-muted-foreground/40">Loading…</div>
         ) : (
@@ -479,7 +479,7 @@ function CommitsDrawer({
       </div>
       <div
         ref={listRef}
-        className="flex-1 min-h-0 overflow-y-auto [scrollbar-gutter:stable] pb-2 px-1"
+        className="flex-1 min-h-0 overflow-y-auto [scrollbar-gutter:stable] scrollbar-thin-hover pb-2 px-1"
       >
         {showWorkingTreeRow && (
           <button

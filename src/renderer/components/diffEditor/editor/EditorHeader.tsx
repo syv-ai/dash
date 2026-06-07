@@ -1,4 +1,4 @@
-import { FileText, WrapText, X } from 'lucide-react';
+import { WrapText, X } from 'lucide-react';
 import type { EditorView } from '../types';
 
 interface Props {
@@ -7,9 +7,6 @@ interface Props {
   wordWrap: boolean;
   onToggleWordWrap(): void;
   onClose(): void;
-  /** Slot for the comments pill (rendered by EditorPane when commenting is
-   *  enabled — hidden in commit view and the no-task case). */
-  commentsSlot?: React.ReactNode;
   backgroundColor: string;
 }
 
@@ -19,7 +16,6 @@ export function EditorHeader({
   wordWrap,
   onToggleWordWrap,
   onClose,
-  commentsSlot,
   backgroundColor,
 }: Props) {
   const isCommit = view.kind === 'commit';
@@ -29,7 +25,6 @@ export function EditorHeader({
       style={{ background: backgroundColor }}
     >
       <div className="flex items-center gap-3 min-w-0">
-        <FileText size={14} className="text-muted-foreground/50 flex-shrink-0" strokeWidth={1.8} />
         <span className="text-[13px] font-medium text-foreground truncate">{filePath}</span>
         {isCommit && (
           <span className="text-[11px] tabular-nums text-muted-foreground/50 font-mono">
@@ -38,7 +33,6 @@ export function EditorHeader({
         )}
       </div>
       <div className="flex items-center gap-2">
-        {commentsSlot}
         <button
           onClick={onToggleWordWrap}
           title={wordWrap ? 'Disable word wrap' : 'Enable word wrap'}

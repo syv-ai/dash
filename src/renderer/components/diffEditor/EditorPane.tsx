@@ -419,35 +419,7 @@ export function EditorPane({
     [modifiedEditor, setPendingRange],
   );
 
-  const commentsSlot =
-    !commentsStore.disabled && hasAnyComments ? (
-      <CommentsMenu
-        commentsByFile={commentsByFile}
-        currentFilePath={filePath}
-        // For the current file we pull line ranges live from the model
-        // (so typed line shifts reflect immediately); other files fall
-        // back to their stored line numbers.
-        getLiveRangeForCurrent={(commentId) => {
-          const target = liveComments.find((c) => c.id === commentId);
-          if (!target) return null;
-          const model = modifiedEditor?.getModel();
-          const r = model?.getDecorationRange(target.decorationId);
-          return r ? { start: r.startLineNumber, end: r.endLineNumber } : null;
-        }}
-        onNavigate={(targetPath, commentId) => {
-          if (targetPath === filePath) {
-            const target = liveComments.find((c) => c.id === commentId);
-            if (target) revealLive(target);
-          } else {
-            onNavigateAcrossFile(targetPath, commentId);
-          }
-        }}
-        onRemove={(_path, id) => commentsStore.remove(id)}
-        onUnsend={commentsStore.markUnsent}
-        onSend={sendAllUnsent}
-        onSendOne={sendOneComment}
-      />
-    ) : null;
+  const showCommentsMenu = !commentsStore.disabled && hasAnyComments;
 
   return (
     <div className="h-full flex flex-col min-w-0 min-h-0">
@@ -458,7 +430,6 @@ export function EditorPane({
         onToggleWordWrap={() => setWordWrap((w) => !w)}
         onClose={handleClose}
         backgroundColor={terminalTheme.background ?? (isDark ? '#0d0d11' : '#faf8f3')}
-        commentsSlot={commentsSlot}
       />
 
       {stale && (
@@ -486,10 +457,37 @@ export function EditorPane({
           <button
             onClick={() => void save()}
             disabled={!dirty || saving}
-            className={`absolute bottom-4 right-16 z-10 px-3 py-1.5 rounded-md text-[11px] font-medium bg-primary/70 text-primary-foreground hover:bg-primary/85 disabled:cursor-default backdrop-blur-sm shadow-lg shadow-black/30 transition-opacity ${savedPill ? 'animate-save-flash' : ''}`}
+            className={`absolute bottom-16 right-4 z-10 px-3 py-1.5 rounded-md text-[11px] font-medium bg-primary/70 text-primary-foreground hover:bg-primary/85 disabled:cursor-default backdrop-blur-sm shadow-lg shadow-black/30 transition-opacity ${savedPill ? 'animate-save-flash' : ''}`}
           >
             {saving ? 'Saving…' : 'Save'}
           </button>
+        )}
+        {showCommentsMenu && (
+          <div className="absolute bottom-4 right-4 z-10">
+            <CommentsMenu
+              commentsByFile={commentsByFile}
+              currentFilePath={filePath}
+              getLiveRangeForCurrent={(commentId) => {
+                const target = liveComments.find((c) => c.id === commentId);
+                if (!target) return null;
+                const model = modifiedEditor?.getModel();
+                const r = model?.getDecorationRange(target.decorationId);
+                return r ? { start: r.startLineNumber, end: r.endLineNumber } : null;
+              }}
+              onNavigate={(targetPath, commentId) => {
+                if (targetPath === filePath) {
+                  const target = liveComments.find((c) => c.id === commentId);
+                  if (target) revealLive(target);
+                } else {
+                  onNavigateAcrossFile(targetPath, commentId);
+                }
+              }}
+              onRemove={(_path, id) => commentsStore.remove(id)}
+              onUnsend={commentsStore.markUnsent}
+              onSend={sendAllUnsent}
+              onSendOne={sendOneComment}
+            />
+          </div>
         )}
         {state.kind === 'loading' && displayed.kind === 'loaded' && <LoadingPill />}
         <CommentOverlay
