@@ -209,7 +209,6 @@ class HookServerImpl {
           if (pathname === '/hook/context') {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (data) => {
               contextUsageService.updateFromStatusLine(ptyId, data);
-              activityMonitor.noteStatusLine(ptyId);
               res.writeHead(200);
               res.end();
             });

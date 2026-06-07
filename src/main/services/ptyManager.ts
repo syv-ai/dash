@@ -756,7 +756,7 @@ export async function startDirectPty(options: {
   };
 
   ptys.set(options.id, record);
-  activityMonitor.register(options.id, proc.pid, true);
+  activityMonitor.register(options.id, proc.pid);
 
   // Forward output to renderer, replacing the Claude logo with "7" art
   const bannerFilter = createBannerFilter((filtered: string) => {
@@ -946,7 +946,9 @@ export async function startPty(options: {
   };
 
   ptys.set(options.id, record);
-  activityMonitor.register(options.id, proc.pid, false);
+  // Shell PTYs are not tracked by ActivityMonitor — only direct-spawn (Claude)
+  // PTYs surface activity state to the renderer. The unregister() call on
+  // shell PTY exit (below) is a no-op for unknown ids, so it's safe.
 
   proc.onData((data: string) => {
     if (record.owner && !record.owner.isDestroyed()) {
