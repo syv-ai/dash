@@ -77,18 +77,20 @@ export function CommentOverlay({
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
 
   // Live-range projection (line numbers track edits via Monaco stickiness).
-  // The comment being edited is filtered out — its DraftBubble takes the
-  // visual slot instead.
+  // The comment being edited stays in the projection — the persisted bubble
+  // renders with opacity 0 while the DraftBubble crossfades in beside it,
+  // both sharing the same viewzone wrapper. That's what makes the read-only
+  // → editable transition feel like the bubble morphs in place instead of
+  // popping.
   const projected = useMemo<LiveComment[]>(() => {
     const model = modifiedEditor?.getModel();
     if (!modifiedEditor || !model) return [];
     return liveComments.flatMap((c) => {
-      if (c.id === editingId) return [];
       const r = model.getDecorationRange(c.decorationId);
       if (!r) return [];
       return [{ ...c, startLine: r.startLineNumber, endLine: r.endLineNumber }];
     });
-  }, [liveComments, modifiedEditor, editingId]);
+  }, [liveComments, modifiedEditor]);
 
   const shadeById = useMemo<Map<string, Shade>>(() => assignShades(projected), [projected]);
 
@@ -195,6 +197,12 @@ export function CommentOverlay({
   // remove+add flash.
   type ZoneEntry = { id: string; zone: monacoEditor.IViewZone };
   const viewzonesRef = useRef<Map<string, ZoneEntry>>(new Map());
+
+  // Previous editing-group set, used to detect edit ↔ read-only transitions
+  // per group key. Height changes triggered by those transitions get the
+  // smooth tween (so the viewzone visibly grows to accept the draft); other
+  // height changes (submit, ResizeObserver wobble) stay instant.
+  const wasEditingGroupKeysRef = useRef<Set<string>>(new Set());
 
   // Layout-callback bookkeeping. `IViewZone.onDomNodeTop` /
   // `.onComputedHeight` fire from Monaco's layout pass — i.e. the
@@ -307,9 +315,21 @@ export function CommentOverlay({
       isDraft: boolean;
     };
     const targets = new Map<string, Target>();
+    // Per-group: is this the group whose comment is currently being
+    // edited? We expand its viewzone to fit max(persisted, draft) so the
+    // crossfading DraftBubble — which is taller than a short comment —
+    // doesn't overflow into the code line below the anchor.
+    const editingGroupKeys = new Set<string>();
     for (const group of groups) {
-      const measured = measuredHeightsRef.current.get(group.key) ?? INITIAL_BUBBLE_HEIGHT_PX;
+      const persistedMeasured =
+        measuredHeightsRef.current.get(group.key) ?? INITIAL_BUBBLE_HEIGHT_PX;
       const isCollapsed = collapsed.has(group.key);
+      const isEditingGroup = !!editingId && group.comments.some((c) => c.id === editingId);
+      if (isEditingGroup) editingGroupKeys.add(group.key);
+      const draftMeasured = isEditingGroup
+        ? (measuredHeightsRef.current.get(`${group.key}@draft`) ?? INITIAL_DRAFT_HEIGHT_PX)
+        : 0;
+      const measured = Math.max(persistedMeasured, draftMeasured);
       targets.set(group.key, {
         key: group.key,
         afterLineNumber: Math.max(0, group.anchorLine - 1),
@@ -318,7 +338,10 @@ export function CommentOverlay({
         isDraft: false,
       });
     }
-    if (pendingRange && draftKey) {
+    // Only register a separate draft viewzone for the gutter-click case
+    // (new comment, no editingId). Edit drafts piggyback on the persisted
+    // group's existing viewzone — see the crossfade in the JSX below.
+    if (pendingRange && draftKey && !editingId) {
       const measured = measuredHeightsRef.current.get(draftKey) ?? INITIAL_DRAFT_HEIGHT_PX;
       targets.set(draftKey, {
         key: draftKey,
@@ -421,22 +444,31 @@ export function CommentOverlay({
       }
     });
 
-    // Height sync (outside changeViewZones): animate persisted comments
-    // through expand/collapse and new-comment arrival; apply instantly for
-    // draft + small adjustments (ResizeObserver natural-resize jiggle).
+    // Per-key: did the editing state flip this render? That's the cue to
+    // animate the height change (otherwise the viewzone would snap to fit
+    // the larger draft, which looks abrupt — and snap back on save).
+    const editingFlippedKeys = new Set<string>();
+    for (const k of editingGroupKeys) {
+      if (!wasEditingGroupKeysRef.current.has(k)) editingFlippedKeys.add(k);
+    }
+    for (const k of wasEditingGroupKeysRef.current) {
+      if (!editingGroupKeys.has(k)) editingFlippedKeys.add(k);
+    }
+    wasEditingGroupKeysRef.current = editingGroupKeys;
+
+    // Height sync (outside changeViewZones). Animate for the three smooth
+    // transitions: entrance reveal (0 → full), collapse toggle (full → 0),
+    // and edit ↔ read-only height swaps. Everything else (submit, drafts,
+    // ResizeObserver jiggle) snaps instantly.
     for (const target of targets.values()) {
       const entry = viewzonesRef.current.get(target.key);
       if (!entry) continue;
       const currentHeight = entry.zone.heightInPx ?? 0;
       if (currentHeight === target.targetHeight) continue;
       const diff = Math.abs(currentHeight - target.targetHeight);
-      // Animate only for true entrance reveals (0 → full) and collapse
-      // toggles (full → 0). In-place resize of an already-visible zone
-      // (edit transition, ResizeObserver jiggle, draft typing) snaps
-      // instantly — animating those produced the "entrance plays again
-      // on every action" complaint.
       const isEntranceOrCollapse = currentHeight === 0 || target.targetHeight === 0;
-      const shouldAnimate = isEntranceOrCollapse && diff > 24 && !target.isDraft;
+      const isEditFlip = editingFlippedKeys.has(target.key);
+      const shouldAnimate = (isEntranceOrCollapse || isEditFlip) && diff > 24 && !target.isDraft;
       if (!shouldAnimate) {
         entry.zone.heightInPx = target.targetHeight;
         modifiedEditor.changeViewZones((accessor) => {
@@ -577,6 +609,13 @@ export function CommentOverlay({
       {groups.map(({ key, anchorLine, comments }) => {
         const tailLeftPx = tailLeftForAnchor(anchorLine);
         const isCollapsed = collapsed.has(key);
+        // If this group contains the comment being edited, render the
+        // DraftBubble alongside the BubbleStack inside the same wrapper.
+        // The persisted bubble for that comment fades out (CommentBubble's
+        // own opacity transition keyed off `editingId`), the DraftBubble
+        // fades in (CSS `animate-fade-in`), and they overlap at the same
+        // top — read-only morphs into editable in place, no DOM gap.
+        const editingComment = comments.find((c) => c.id === editingId);
         return (
           <div
             key={`bubble-${key}`}
@@ -631,16 +670,39 @@ export function CommentOverlay({
                 onBubbleHover={onHoveredIdChange}
                 onEdit={onEditComment}
                 onDelete={onDeleteComment}
+                editingId={editingId}
               />
             </div>
+            {editingComment && pendingRange && (
+              <div
+                ref={(el) => attachMeasure(`${key}@draft`, el)}
+                className="absolute animate-fade-in"
+                style={{
+                  top: VIEWZONE_TOP_PAD_PX,
+                  left: bubbleLeft,
+                  width: bubbleWidth,
+                  pointerEvents: 'auto',
+                }}
+              >
+                <DraftBubble
+                  range={pendingRange}
+                  initialText={pendingText}
+                  tailLeftPx={tailLeftPx}
+                  onSubmit={onSubmitDraft}
+                  onCancel={onCancelDraft}
+                />
+              </div>
+            )}
           </div>
         );
       })}
 
-      {/* Draft bubble — same overlay treatment, anchored to the pending
-          range's start line. */}
+      {/* Standalone draft bubble — only for the new-comment-via-gutter
+          case. Edit drafts render inside the group's wrapper above so
+          they can crossfade with the persisted bubble. */}
       {pendingRange &&
         draftKey &&
+        !editingId &&
         (() => {
           const tailLeftPx = tailLeftForAnchor(pendingRange.start);
           const k = draftKey;

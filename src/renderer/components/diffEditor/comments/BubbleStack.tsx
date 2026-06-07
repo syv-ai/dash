@@ -16,6 +16,10 @@ interface Props {
   onEdit(comment: LiveComment): void;
   /** Click the in-bubble × → delete this comment. */
   onDelete(id: string): void;
+  /** Id of the comment currently being edited — its persisted card fades
+   *  out as the DraftBubble crossfades in beside it. Null when nothing is
+   *  being edited. */
+  editingId: string | null;
 }
 
 function metaLabel(c: LiveComment): string {
@@ -33,6 +37,7 @@ export function BubbleStack({
   onBubbleHover,
   onEdit,
   onDelete,
+  editingId,
 }: Props) {
   const stacked = comments.length >= 2;
   return (
@@ -55,6 +60,7 @@ export function BubbleStack({
             onMouseLeave={() => onBubbleHover(null)}
             onDoubleClick={() => onEdit(c)}
             onDelete={() => onDelete(c.id)}
+            isFadingOut={c.id === editingId}
           />
         );
       })}
