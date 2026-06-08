@@ -38,6 +38,7 @@ import type {
   PullRequestInfo,
   RtkStatus,
   RtkDownloadProgress,
+  BranchInfo,
 } from '../shared/types';
 import type { CreateTaskOptions } from './components/TaskModal';
 import { formatTaskContextPrompt } from '../shared/taskContext';
@@ -64,6 +65,12 @@ export function App() {
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [isCreatingTask, setIsCreatingTask] = useState(false);
   const [taskModalProjectId, setTaskModalProjectId] = useState<string | null>(null);
+  // Pre-resolved for the TaskModal so the issue picker + branch banner render
+  // at their final size on first paint, instead of popping in mid-mount and
+  // visibly growing the centered dialog.
+  const [ghAvailable, setGhAvailable] = useState(false);
+  const [adoConfiguredById, setAdoConfiguredById] = useState<Record<string, boolean>>({});
+  const [branchesByProject, setBranchesByProject] = useState<Record<string, BranchInfo[]>>({});
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
   const [cloneStatus, setCloneStatus] = useState<{ loading: boolean; error: string | null }>({
     loading: false,
@@ -526,6 +533,39 @@ export function App() {
   useEffect(() => {
     loadProjects();
   }, []);
+
+  // `gh auth status` spawns a subprocess (100-500ms); warm it once so the
+  // TaskModal can read the result synchronously instead of mid-mount.
+  useEffect(() => {
+    window.electronAPI.githubCheckAvailable().then((r) => {
+      if (r.success) setGhAvailable(!!r.data);
+    });
+  }, []);
+
+  // Pre-fetch ADO config + branches for the active project so the TaskModal
+  // opens with its final layout. Narrow deps so unrelated re-renders don't refetch.
+  const activeProjectIdForFetch = activeProject?.id;
+  const activeProjectPathForFetch = activeProject?.path;
+  const activeProjectIsGit = activeProject?.isGitRepo ?? false;
+  useEffect(() => {
+    if (!activeProjectIdForFetch) return;
+    const id = activeProjectIdForFetch;
+    window.electronAPI.adoCheckConfigured(id).then((r) => {
+      if (r.success) {
+        setAdoConfiguredById((prev) =>
+          prev[id] === !!r.data ? prev : { ...prev, [id]: !!r.data },
+        );
+      }
+    });
+    if (activeProjectIsGit && activeProjectPathForFetch) {
+      window.electronAPI.gitListBranches(activeProjectPathForFetch).then((r) => {
+        if (r.success && r.data) {
+          const data = r.data;
+          setBranchesByProject((prev) => ({ ...prev, [id]: data }));
+        }
+      });
+    }
+  }, [activeProjectIdForFetch, activeProjectPathForFetch, activeProjectIsGit]);
 
   // Save all terminal snapshots when app is about to quit
   useEffect(() => {
@@ -1920,6 +1960,9 @@ export function App() {
                   ? { id: existingNonWorktreeTask.id, name: existingNonWorktreeTask.name }
                   : null
               }
+              ghAvailable={ghAvailable}
+              adoConfigured={modalProjectId ? (adoConfiguredById[modalProjectId] ?? false) : false}
+              initialBranches={modalProjectId ? branchesByProject[modalProjectId] : undefined}
               onClose={() => setShowTaskModal(false)}
               onCreate={handleCreateTask}
               onGitInit={() => {

@@ -41,6 +41,11 @@ interface TaskModalProps {
   isGitRepo: boolean;
   gitRemote: string | null;
   existingNonWorktreeTask?: { id: string; name: string } | null;
+  /** Pre-resolved at App-level so the issue picker + branch banner render at
+   *  their final size on first paint, avoiding a visible "settle" as the modal grows. */
+  ghAvailable: boolean;
+  adoConfigured: boolean;
+  initialBranches?: BranchInfo[];
   onClose: () => void;
   onCreate: (options: CreateTaskOptions) => Promise<boolean>;
   onGitInit?: () => void;
@@ -55,6 +60,9 @@ export function TaskModal(props: TaskModalProps) {
         isGitRepo={props.isGitRepo}
         gitRemote={props.gitRemote}
         existingNonWorktreeTask={props.existingNonWorktreeTask}
+        ghAvailable={props.ghAvailable}
+        adoConfigured={props.adoConfigured}
+        initialBranches={props.initialBranches}
         onCreate={props.onCreate}
         onGitInit={props.onGitInit}
       />
@@ -68,6 +76,9 @@ interface TaskModalBodyProps {
   isGitRepo: boolean;
   gitRemote: string | null;
   existingNonWorktreeTask?: { id: string; name: string } | null;
+  ghAvailable: boolean;
+  adoConfigured: boolean;
+  initialBranches?: BranchInfo[];
   onCreate: (options: CreateTaskOptions) => Promise<boolean>;
   onGitInit?: () => void;
 }
@@ -130,6 +141,9 @@ function TaskModalBody({
   isGitRepo,
   gitRemote,
   existingNonWorktreeTask,
+  ghAvailable,
+  adoConfigured,
+  initialBranches,
   onCreate,
   onGitInit,
 }: TaskModalBodyProps) {
@@ -144,43 +158,32 @@ function TaskModalBody({
   const [createNewBranch, setCreateNewBranch] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
 
-  // Branch selector state
-  const [branches, setBranches] = useState<BranchInfo[]>([]);
+  // Seeded from App-level cache when available so the status banner renders
+  // at its final height on first paint.
+  const [branches, setBranches] = useState<BranchInfo[]>(initialBranches ?? []);
   const [branchLoading, setBranchLoading] = useState(false);
   const [branchError, setBranchError] = useState<string | null>(null);
-  const [selectedBranch, setSelectedBranch] = useState<BranchInfo | null>(null);
+  const [selectedBranch, setSelectedBranch] = useState<BranchInfo | null>(
+    initialBranches?.[0] ?? null,
+  );
   const [branchSearch, setBranchSearch] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   // Issue/work item selection — show only the provider matching the remote
   const isAdo = isAdoRemote(gitRemote);
-  const [ghAvailable, setGhAvailable] = useState(false);
-  const [adoAvailable, setAdoAvailable] = useState(false);
   const [selectedIssues, setSelectedIssues] = useState<GithubIssue[]>([]);
   const [selectedWorkItems, setSelectedWorkItems] = useState<AzureDevOpsWorkItem[]>([]);
 
-  const showGithub = !isAdo && ghAvailable;
-  const showAdo = isAdo && adoAvailable;
+  const showGithub = !isAdo && !!gitRemote && ghAvailable;
+  const showAdo = isAdo && adoConfigured;
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Check availability only for the provider matching the remote
+  // Fall back to fetching here when App couldn't pre-fetch — either the modal
+  // opened before App's effect settled, or git was just initialized in this modal.
   useEffect(() => {
-    if (isAdo) {
-      window.electronAPI.adoCheckConfigured(projectId).then((resp) => {
-        if (resp.success && resp.data) setAdoAvailable(true);
-      });
-    } else if (gitRemote) {
-      window.electronAPI.githubCheckAvailable().then((resp) => {
-        if (resp.success && resp.data) setGhAvailable(true);
-      });
-    }
-  }, [isAdo, gitRemote, projectId]);
-
-  // Fetch branches when git is ready (needed for both worktree and non-worktree modes)
-  useEffect(() => {
-    if (gitReady) fetchBranches();
+    if (gitReady && branches.length === 0) fetchBranches();
   }, [gitReady, projectPath]);
 
   // Close branch dropdown on click outside
