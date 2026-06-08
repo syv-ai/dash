@@ -6,6 +6,12 @@ import * as crypto from 'crypto';
 import { BrowserWindow } from 'electron';
 import type { WorktreeInfo, RemoveWorktreeOptions } from '@shared/types';
 import { GithubService } from './GithubService';
+import {
+  loadWorkspaceConfig,
+  resolveSetupCommand,
+  resolveTeardownCommand,
+  buildWorkspaceEnv,
+} from './WorkspaceConfigService';
 
 const execFileAsync = promisify(execFile);
 const execAsync = promisify(exec);
@@ -68,7 +74,7 @@ export class WorktreeService {
     }
 
     // Run worktree setup script (async, non-blocking)
-    this.runSetupScriptAsync(options.projectId, worktreePath, branchName, projectPath);
+    this.runSetupScriptAsync(worktreePath, branchName, projectPath);
 
     const id = this.stableIdFromPath(worktreePath);
     return {
@@ -118,6 +124,9 @@ export class WorktreeService {
       } catch {
         // If list fails, continue with removal anyway
       }
+
+      // Run teardown before removal so the script can still read .dash/* in the worktree.
+      await this.runTeardownAsync(worktreePath, projectPath, branch);
 
       // Remove worktree
       try {
@@ -289,31 +298,72 @@ export class WorktreeService {
   }
 
   /**
-   * Run the project's worktree setup script in the new worktree directory.
+   * Resolve and run workspace teardown in the worktree just before it's removed.
+   *
+   * Sources, in priority order:
+   *   1. `.dash/config.json` teardown commands (joined with ` && `)
+   *   2. `bash <projectPath>/.dash/teardown.sh` if the script exists
+   *
+   * Awaited so cleanup (e.g. `docker compose down`) finishes before files vanish.
+   * Failures are toasted but do not block removal — the user asked for the worktree gone.
+   */
+  async runTeardownAsync(worktreePath: string, projectPath: string, branch: string): Promise<void> {
+    try {
+      const config = loadWorkspaceConfig(worktreePath);
+      const fallbackPath = path.join(projectPath, '.dash', 'teardown.sh');
+      const fallbackScriptPath = fs.existsSync(fallbackPath) ? fallbackPath : null;
+      const command = resolveTeardownCommand({ config, fallbackScriptPath });
+      if (!command) return;
+
+      const env = buildWorkspaceEnv({ worktreePath, projectPath, branch });
+      const cwd = config?.cwd ? path.join(worktreePath, config.cwd) : worktreePath;
+
+      await execAsync(command, {
+        cwd,
+        timeout: 30_000,
+        env: { ...process.env, ...env },
+      });
+    } catch (error: unknown) {
+      const stderr =
+        error && typeof error === 'object' && 'stderr' in error
+          ? String((error as { stderr: unknown }).stderr).trim()
+          : '';
+      const msg = stderr || (error instanceof Error ? error.message : String(error));
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send('app:toast', {
+            message: `Workspace teardown failed: ${msg.slice(0, 200)}`,
+          });
+        }
+      }
+    }
+  }
+
+  /**
+   * Resolve and run workspace setup in the new worktree directory.
+   *
+   * Sources, in priority order:
+   *   1. `.dash/config.json` setup commands (joined with ` && `)
+   *   2. `bash <projectPath>/.dash/setup.sh` if the script exists
+   *
    * Async, non-blocking — sends a toast on failure.
    */
-  runSetupScriptAsync(
-    projectId: string,
-    worktreePath: string,
-    branchName: string,
-    projectPath: string,
-  ): void {
+  runSetupScriptAsync(worktreePath: string, branchName: string, projectPath: string): void {
     (async () => {
       try {
-        const { DatabaseService } = await import('./DatabaseService');
-        const projects = DatabaseService.getProjects();
-        const project = projects.find((p) => p.id === projectId);
-        if (!project?.worktreeSetupScript) return;
+        const config = loadWorkspaceConfig(worktreePath);
+        const fallbackPath = path.join(projectPath, '.dash', 'setup.sh');
+        const fallbackScriptPath = fs.existsSync(fallbackPath) ? fallbackPath : null;
+        const command = resolveSetupCommand({ config, fallbackScriptPath });
+        if (!command) return;
 
-        await execAsync(project.worktreeSetupScript, {
-          cwd: worktreePath,
+        const env = buildWorkspaceEnv({ worktreePath, projectPath, branch: branchName });
+        const cwd = config?.cwd ? path.join(worktreePath, config.cwd) : worktreePath;
+
+        await execAsync(command, {
+          cwd,
           timeout: 60_000,
-          env: {
-            ...process.env,
-            DASH_WORKTREE_PATH: worktreePath,
-            DASH_PROJECT_PATH: projectPath,
-            DASH_BRANCH: branchName,
-          },
+          env: { ...process.env, ...env },
         });
       } catch (error: unknown) {
         const stderr =
@@ -324,7 +374,7 @@ export class WorktreeService {
         for (const win of BrowserWindow.getAllWindows()) {
           if (!win.isDestroyed()) {
             win.webContents.send('app:toast', {
-              message: `Worktree setup script failed: ${msg.slice(0, 200)}`,
+              message: `Workspace setup failed: ${msg.slice(0, 200)}`,
             });
           }
         }
@@ -433,7 +483,7 @@ export class WorktreeService {
       this.linkIssuesAsync(worktreePath, branch, options.linkedIssueNumbers);
     }
 
-    this.runSetupScriptAsync(options.projectId, worktreePath, branch, projectPath);
+    this.runSetupScriptAsync(worktreePath, branch, projectPath);
 
     const id = this.stableIdFromPath(worktreePath);
     return {

@@ -49,7 +49,6 @@ export class DatabaseService {
         gitRemote: data.gitRemote ?? null,
         gitBranch: data.gitBranch ?? null,
         baseRef: data.baseRef ?? null,
-        worktreeSetupScript: data.worktreeSetupScript ?? null,
         createdAt: now,
         updatedAt: now,
       })
@@ -62,7 +61,6 @@ export class DatabaseService {
           gitRemote: data.gitRemote ?? null,
           gitBranch: data.gitBranch ?? null,
           baseRef: data.baseRef ?? null,
-          worktreeSetupScript: data.worktreeSetupScript ?? null,
           updatedAt: now,
         },
       })
@@ -348,7 +346,6 @@ export class DatabaseService {
       gitRemote: row.gitRemote,
       gitBranch: row.gitBranch,
       baseRef: row.baseRef,
-      worktreeSetupScript: row.worktreeSetupScript,
       createdAt: row.createdAt ?? '',
       updatedAt: row.updatedAt ?? '',
     };

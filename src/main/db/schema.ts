@@ -11,6 +11,8 @@ export const projects = sqliteTable(
     gitRemote: text('git_remote'),
     gitBranch: text('git_branch'),
     baseRef: text('base_ref'),
+    // Deprecated since 0.13: replaced by .dash/config.json setup commands.
+    // Column kept so existing DBs don't break; do not read or write.
     worktreeSetupScript: text('worktree_setup_script'),
     createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
