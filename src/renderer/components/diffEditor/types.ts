@@ -3,7 +3,8 @@ import type { FileChange } from '../../../shared/types';
 /** Which slice of history the user is reviewing. */
 export type EditorView =
   | { kind: 'working'; ref: 'HEAD' | 'index' }
-  | { kind: 'commit'; hash: string };
+  | { kind: 'commit'; hash: string }
+  | { kind: 'branch'; base: string };
 
 export interface CommitSummary {
   hash: string;

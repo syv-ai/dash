@@ -269,6 +269,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     cwd: string;
     source: { kind: 'working' } | { kind: 'commit'; hash: string };
   }) => ipcRenderer.invoke('editor:listRepoFiles', args),
+  editorResolveDefaultBase: (args: { cwd: string }) =>
+    ipcRenderer.invoke('editor:resolveDefaultBase', args),
+  editorListFilesAgainstBase: (args: { cwd: string; base: string }) =>
+    ipcRenderer.invoke('editor:listFilesAgainstBase', args),
+  editorReadAgainstBase: (args: { cwd: string; filePath: string; base: string }) =>
+    ipcRenderer.invoke('editor:readAgainstBase', args),
 
   // Diff editor comments
   diffCommentsList: (args: { taskId: string }) => ipcRenderer.invoke('diffComments:list', args),

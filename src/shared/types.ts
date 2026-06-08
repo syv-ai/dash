@@ -562,6 +562,19 @@ export interface EditorReadCommitResult {
   language: string;
 }
 
+/** Branch-diff read: file content at the base branch (original) + working
+ *  copy on disk (modified). Editable, like working-view: disk metadata is
+ *  returned so the existing stale-check + writeWorking path works unchanged. */
+export interface EditorReadBranchResult {
+  originalContent: string; // git show <base>:<path>; '' when missing in base
+  workingContent: string | null; // null when deleted on disk
+  mtimeMs: number; // 0 when working file is absent
+  sizeBytes: number; // 0 when working file is absent
+  isBinary: boolean;
+  isLargeFile: boolean;
+  language: string;
+}
+
 export type EditorWriteResult =
   | { ok: true; mtimeMs: number; sizeBytes: number }
   | { ok: false; stale: true; currentMtimeMs: number; currentSizeBytes: number };

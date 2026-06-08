@@ -31,6 +31,7 @@ import type {
   InstalledSkillsResult,
   EditorReadWorkingResult,
   EditorReadCommitResult,
+  EditorReadBranchResult,
   EditorWriteResult,
   EditorCommitListItem,
   DiffComment,
@@ -334,6 +335,16 @@ export interface ElectronAPI {
     cwd: string;
     source: { kind: 'working' } | { kind: 'commit'; hash: string };
   }) => Promise<IpcResponse<string[]>>;
+  editorResolveDefaultBase: (args: { cwd: string }) => Promise<IpcResponse<string | null>>;
+  editorListFilesAgainstBase: (args: {
+    cwd: string;
+    base: string;
+  }) => Promise<IpcResponse<FileChange[]>>;
+  editorReadAgainstBase: (args: {
+    cwd: string;
+    filePath: string;
+    base: string;
+  }) => Promise<IpcResponse<EditorReadBranchResult>>;
 
   diffCommentsList: (args: { taskId: string }) => Promise<IpcResponse<DiffComment[]>>;
   diffCommentsUpsert: (c: DiffCommentInput) => Promise<IpcResponse<DiffComment>>;

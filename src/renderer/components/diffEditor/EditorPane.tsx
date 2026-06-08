@@ -35,6 +35,11 @@ interface EditorPaneProps {
   onNavigateAcrossFile: (filePath: string, commentId: string) => void;
   onClearReveal: () => void;
   onClose: () => void;
+  /** Branch-view header chip wiring. Owned by parent so the changed-files
+   *  effect can also react to view changes. */
+  onSelectBase: (base: string) => void;
+  onExitBranchView: () => void;
+  defaultBase: string | null;
   /** Confirm-before-close (e.g. if the host has unsaved changes elsewhere). */
   guardClose?: () => boolean;
 }
@@ -50,6 +55,9 @@ export function EditorPane({
   onNavigateAcrossFile,
   onClearReveal,
   onClose,
+  onSelectBase,
+  onExitBranchView,
+  defaultBase,
 }: EditorPaneProps) {
   const commentsStore = useCommentsContext();
   const commentsByFile = commentsStore.state.byFile;
@@ -460,11 +468,15 @@ export function EditorPane({
   return (
     <div className="h-full flex flex-col min-w-0 min-h-0">
       <EditorHeader
+        cwd={cwd}
         filePath={filePath}
         view={view}
         wordWrap={wordWrap}
         onToggleWordWrap={() => setWordWrap((w) => !w)}
         onClose={handleClose}
+        onSelectBase={onSelectBase}
+        onExitBranchView={onExitBranchView}
+        defaultBase={defaultBase}
         backgroundColor={terminalTheme.background ?? (isDark ? '#0d0d11' : '#faf8f3')}
       />
 

@@ -53,6 +53,8 @@ function DiffEditorBody({
   // ── Changed files in the current view ───────────────────
   const [commitFiles, setCommitFiles] = useState<FileChange[]>([]);
   const [commitFilesLoading, setCommitFilesLoading] = useState(false);
+  const [branchFiles, setBranchFiles] = useState<FileChange[]>([]);
+  const [branchFilesLoading, setBranchFilesLoading] = useState(false);
 
   useEffect(() => {
     if (view.kind !== 'commit') return;
@@ -70,9 +72,31 @@ function DiffEditorBody({
     };
   }, [view, cwd]);
 
+  useEffect(() => {
+    if (view.kind !== 'branch') return;
+    let cancelled = false;
+    setBranchFilesLoading(true);
+    void window.electronAPI
+      .editorListFilesAgainstBase({ cwd, base: view.base })
+      .then((resp) => {
+        if (cancelled) return;
+        setBranchFiles(resp.success && resp.data ? resp.data : []);
+      })
+      .finally(() => !cancelled && setBranchFilesLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [view, cwd]);
+
   const workingFiles: FileChange[] = useMemo(() => gitStatus?.files ?? [], [gitStatus]);
-  const changedFiles = view.kind === 'working' ? workingFiles : commitFiles;
-  const changedFilesLoading = view.kind === 'commit' ? commitFilesLoading : false;
+  const changedFiles =
+    view.kind === 'working' ? workingFiles : view.kind === 'commit' ? commitFiles : branchFiles;
+  const changedFilesLoading =
+    view.kind === 'commit'
+      ? commitFilesLoading
+      : view.kind === 'branch'
+        ? branchFilesLoading
+        : false;
 
   // ── All repo paths for the current view (for the full tree) ───
   const [repoPaths, setRepoPaths] = useState<string[]>([]);
@@ -81,10 +105,12 @@ function DiffEditorBody({
   useEffect(() => {
     let cancelled = false;
     setRepoPathsLoading(true);
+    // Branch view: the right side IS the working tree, so the full file
+    // tree comes from the working source — same as 'working' view.
     const source =
-      view.kind === 'working'
-        ? ({ kind: 'working' } as const)
-        : ({ kind: 'commit', hash: view.hash } as const);
+      view.kind === 'commit'
+        ? ({ kind: 'commit', hash: view.hash } as const)
+        : ({ kind: 'working' } as const);
     void window.electronAPI
       .editorListRepoFiles({ cwd, source })
       .then((resp) => {
@@ -149,10 +175,12 @@ function DiffEditorBody({
     if (selectedPath !== '') return;
     if (view.kind === 'working') {
       if (workingFiles.length > 0) setSelectedPath(workingFiles[0].path);
-    } else if (commitFiles.length > 0) {
-      setSelectedPath(commitFiles[0].path);
+    } else if (view.kind === 'commit') {
+      if (commitFiles.length > 0) setSelectedPath(commitFiles[0].path);
+    } else if (view.kind === 'branch') {
+      if (branchFiles.length > 0) setSelectedPath(branchFiles[0].path);
     }
-  }, [selectedPath, view.kind, workingFiles, commitFiles]);
+  }, [selectedPath, view.kind, workingFiles, commitFiles, branchFiles]);
 
   // Switching commits/working should restart "first changed file" selection.
   // Passing this to the sidebar instead of raw setView keeps the auto-pick
@@ -161,6 +189,30 @@ function DiffEditorBody({
     setSelectedPath('');
     setView(next);
   }
+
+  function selectBase(base: string) {
+    changeView({ kind: 'branch', base });
+  }
+
+  function exitBranchView() {
+    changeView({ kind: 'working', ref: 'HEAD' });
+  }
+
+  // ── Default base branch ─────────────────────────────────
+  // Resolved once per modal session. Shown in the header chip as the
+  // resolved name (e.g. "origin/main") before the user has picked anything.
+  // Null when the repo has no remote default and no local main/master.
+  const [defaultBase, setDefaultBase] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void window.electronAPI.editorResolveDefaultBase({ cwd }).then((resp) => {
+      if (cancelled) return;
+      if (resp.success) setDefaultBase(resp.data ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [cwd]);
 
   // ── Comments store ──────────────────────────────────────
   // Task-scoped, persisted to SQLite. Survives modal close/reopen. When
@@ -231,6 +283,9 @@ function DiffEditorBody({
               onNavigateAcrossFile={navigateAcrossFile}
               onClearReveal={clearReveal}
               onClose={onClose}
+              onSelectBase={selectBase}
+              onExitBranchView={exitBranchView}
+              defaultBase={defaultBase}
             />
           </Panel>
         </PanelGroup>
