@@ -1,6 +1,8 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import type { SearchAddon } from '@xterm/addon-search';
 import { sessionRegistry } from '../terminal/SessionRegistry';
 import type { PermissionMode } from '../../shared/types';
+import { TerminalSearch } from './TerminalSearch';
 
 const OVERLAY_MIN_MS = 2000;
 const OVERLAY_FADE_MS = 300;
@@ -17,6 +19,8 @@ export function TerminalPane({ id, cwd, permissionMode, terminalBg }: TerminalPa
   const [isDragOver, setIsDragOver] = useState(false);
   const [showOverlay, setShowOverlay] = useState(false);
   const [overlayVisible, setOverlayVisible] = useState(false);
+  const [searchAddon, setSearchAddon] = useState<SearchAddon | null>(null);
+  const [showSearch, setShowSearch] = useState(false);
 
   const hideOverlay = useCallback(() => {
     // Start fade-out
@@ -47,10 +51,16 @@ export function TerminalPane({ id, cwd, permissionMode, terminalBg }: TerminalPa
       setTimeout(hideOverlay, remaining);
     });
 
+    // Wire find shortcut: xterm consumes keystrokes while focused, so the
+    // intercept lives at the session layer (see TerminalSessionManager).
+    session.setOnFindKey(() => setShowSearch(true));
+    setSearchAddon(session.getSearchAddon());
+
     // Now attach — the async work will call onRestarting/onReady as needed
     session.attach(container);
 
     return () => {
+      session.setOnFindKey(null);
       sessionRegistry.detach(id);
     };
   }, [id, cwd, permissionMode, hideOverlay]);
@@ -80,6 +90,9 @@ export function TerminalPane({ id, cwd, permissionMode, terminalBg }: TerminalPa
       }}
     >
       <div ref={containerRef} className="terminal-container w-full h-full" />
+      {showSearch && searchAddon && (
+        <TerminalSearch searchAddon={searchAddon} onClose={() => setShowSearch(false)} />
+      )}
       {showOverlay && (
         <div
           className="absolute inset-0 z-10 pointer-events-none flex flex-col items-center justify-center gap-4"

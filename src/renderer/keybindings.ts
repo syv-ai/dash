@@ -115,6 +115,16 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
     alt: false,
     key: 'j',
   },
+  // ── Terminal ──
+  findInTerminal: {
+    id: 'findInTerminal',
+    label: 'Find in Terminal',
+    category: 'Terminal',
+    mod: true,
+    shift: false,
+    alt: false,
+    key: 'f',
+  },
   // ── Editor ──
   saveFile: {
     id: 'saveFile',

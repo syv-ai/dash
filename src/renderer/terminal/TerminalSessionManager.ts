@@ -1,7 +1,10 @@
 import { Terminal } from 'xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { SearchAddon } from '@xterm/addon-search';
 import { SerializeAddon } from '@xterm/addon-serialize';
 import { WebLinksAddon } from '@xterm/addon-web-links';
+import { ClipboardAddon } from '@xterm/addon-clipboard';
+import { Utf8Base64 } from './clipboardCodec';
 import type { PermissionMode, TerminalSnapshot } from '../../shared/types';
 import { FilePathLinkProvider } from './FilePathLinkProvider';
 import type { ITheme } from 'xterm';
@@ -17,6 +20,7 @@ export class TerminalSessionManager {
   private terminal: Terminal;
   private fitAddon: FitAddon;
   private serializeAddon: SerializeAddon;
+  private searchAddon: SearchAddon;
   private resizeObserver: ResizeObserver | null = null;
   private snapshotDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private snapshotDirty = false;
@@ -38,6 +42,7 @@ export class TerminalSessionManager {
   private readyFallbackTimer: ReturnType<typeof setTimeout> | null = null;
   private _currentCwd: string;
   private onCwdChangeCallback: ((cwd: string) => void) | null = null;
+  private onFindKey: (() => void) | null = null;
   private fitDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private lastPtyCols = 0;
   private lastPtyRows = 0;
@@ -85,9 +90,12 @@ export class TerminalSessionManager {
 
     this.fitAddon = new FitAddon();
     this.serializeAddon = new SerializeAddon();
+    this.searchAddon = new SearchAddon();
 
     this.terminal.loadAddon(this.fitAddon);
     this.terminal.loadAddon(this.serializeAddon);
+    this.terminal.loadAddon(this.searchAddon);
+    this.terminal.loadAddon(new ClipboardAddon(new Utf8Base64()));
     this.terminal.loadAddon(
       new WebLinksAddon((_event, uri) => {
         window.electronAPI.openExternal(uri);
@@ -180,6 +188,21 @@ export class TerminalSessionManager {
         window.electronAPI.clipboardReadText().then((text) => {
           if (text) window.electronAPI.ptyInput({ id: this.id, data: text });
         });
+        return false;
+      }
+
+      // Find: Cmd+F (macOS) or Ctrl+F (Linux/Win). Intercepted at the xterm
+      // layer so the binding fires even while the terminal owns keyboard
+      // focus. Caller wires this to the in-terminal search overlay.
+      if (
+        this.onFindKey &&
+        e.code === 'KeyF' &&
+        !e.shiftKey &&
+        !e.altKey &&
+        ((isMac && e.metaKey && !e.ctrlKey) || (!isMac && e.ctrlKey && !e.metaKey))
+      ) {
+        e.preventDefault();
+        this.onFindKey();
         return false;
       }
 
@@ -559,6 +582,14 @@ export class TerminalSessionManager {
 
   focus() {
     this.terminal.focus();
+  }
+
+  getSearchAddon(): SearchAddon {
+    return this.searchAddon;
+  }
+
+  setOnFindKey(cb: (() => void) | null): void {
+    this.onFindKey = cb;
   }
 
   get currentCwd(): string {
