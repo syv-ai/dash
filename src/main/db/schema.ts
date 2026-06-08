@@ -32,7 +32,11 @@ export const tasks = sqliteTable(
     path: text('path').notNull(),
     status: text('status').notNull().default('idle'),
     useWorktree: integer('use_worktree', { mode: 'boolean' }).default(true),
+    // Deprecated since 0.10: replaced by permission_mode. Kept so existing DBs
+    // don't break; do not read or write. New rows leave this at default (false).
     autoApprove: integer('auto_approve', { mode: 'boolean' }).default(false),
+    // 'default' | 'acceptEdits' | 'bypassPermissions' — see PermissionMode in shared/types
+    permissionMode: text('permission_mode').notNull().default('default'),
     linkedItems: text('linked_items'),
     contextPrompt: text('context_prompt'),
     branchCreatedByDash: integer('branch_created_by_dash', { mode: 'boolean' }).default(false),

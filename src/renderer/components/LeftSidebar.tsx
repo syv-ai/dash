@@ -292,6 +292,7 @@ interface LeftSidebarProps {
   onArchiveTask: (id: string) => void;
   onRestoreTask: (id: string) => void;
   onCloseTask: (id: string) => void;
+  onTaskSettings: (id: string) => void;
   onOpenSettings: () => void;
   onShowCommitGraph: (projectId: string) => void;
   collapsed: boolean;
@@ -331,6 +332,7 @@ export function LeftSidebar({
   onArchiveTask,
   onRestoreTask,
   onCloseTask,
+  onTaskSettings,
   onOpenSettings,
   onShowCommitGraph,
   collapsed,
@@ -916,6 +918,16 @@ export function LeftSidebar({
                                         <Power size={12} strokeWidth={1.8} />
                                       </IconButton>
                                     )}
+                                    <IconButton
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onTaskSettings(task.id);
+                                      }}
+                                      title="Task settings"
+                                      size="sm"
+                                    >
+                                      <Settings size={12} strokeWidth={1.8} />
+                                    </IconButton>
                                     <IconButton
                                       onClick={(e) => {
                                         e.stopPropagation();

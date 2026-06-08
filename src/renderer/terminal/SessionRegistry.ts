@@ -1,10 +1,11 @@
 import { TerminalSessionManager } from './TerminalSessionManager';
+import type { PermissionMode } from '../../shared/types';
 
 interface AttachOptions {
   id: string;
   cwd: string;
   container: HTMLElement;
-  autoApprove?: boolean;
+  permissionMode?: PermissionMode;
   shellOnly?: boolean;
   themeId?: string;
 }
@@ -20,7 +21,7 @@ class SessionRegistryImpl {
       session = new TerminalSessionManager({
         id: opts.id,
         cwd: opts.cwd,
-        autoApprove: opts.autoApprove,
+        permissionMode: opts.permissionMode,
         isDark: this._isDark,
         shellOnly: opts.shellOnly,
         themeId: opts.themeId ?? this._themeId,

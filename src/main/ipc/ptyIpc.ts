@@ -14,6 +14,7 @@ import { activityMonitor } from '../services/ActivityMonitor';
 import { contextUsageService } from '../services/ContextUsageService';
 import { remoteControlService } from '../services/remoteControlService';
 import { TelemetryService } from '../services/TelemetryService';
+import type { PermissionMode } from '@shared/types';
 
 export function registerPtyIpc(): void {
   ipcMain.handle(
@@ -25,7 +26,7 @@ export function registerPtyIpc(): void {
         cwd: string;
         cols: number;
         rows: number;
-        autoApprove?: boolean;
+        permissionMode?: PermissionMode;
         isDark?: boolean;
       },
     ) => {

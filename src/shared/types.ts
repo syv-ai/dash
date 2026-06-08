@@ -37,6 +37,14 @@ export interface LinkedAdoWorkItem {
 
 export type LinkedItem = LinkedGithubIssue | LinkedAdoWorkItem;
 
+/**
+ * Permission strategy passed to Claude CLI when a task PTY is spawned.
+ * - `default`: prompt for every tool use (no flag)
+ * - `acceptEdits`: auto-accept file edits, still prompt for shell (--permission-mode acceptEdits)
+ * - `bypassPermissions`: skip all permission prompts (--dangerously-skip-permissions)
+ */
+export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions';
+
 export interface Task {
   id: string;
   projectId: string;
@@ -45,7 +53,7 @@ export interface Task {
   path: string;
   status: string;
   useWorktree: boolean;
-  autoApprove: boolean;
+  permissionMode: PermissionMode;
   branchCreatedByDash: boolean;
   linkedItems: LinkedItem[] | null;
   contextPrompt: string | null;
@@ -112,7 +120,7 @@ export interface PtyOptions {
   cwd: string;
   cols: number;
   rows: number;
-  autoApprove?: boolean;
+  permissionMode?: PermissionMode;
 }
 
 export interface TerminalSnapshot {

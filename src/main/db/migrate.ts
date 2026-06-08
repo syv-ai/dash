@@ -195,6 +195,14 @@ export function runMigrations(): void {
     /* best effort */
   }
 
+  // permission_mode replaces auto_approve. Backfill existing yolo'd tasks.
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN permission_mode TEXT NOT NULL DEFAULT 'default'`);
+    rawDb.exec(`UPDATE tasks SET permission_mode = 'bypassPermissions' WHERE auto_approve = 1`);
+  } catch {
+    /* already exists */
+  }
+
   try {
     rawDb.exec(`ALTER TABLE tasks ADD COLUMN total_tokens INTEGER NOT NULL DEFAULT 0`);
   } catch {

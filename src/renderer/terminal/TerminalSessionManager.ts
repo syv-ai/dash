@@ -2,7 +2,7 @@ import { Terminal } from 'xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SerializeAddon } from '@xterm/addon-serialize';
 import { WebLinksAddon } from '@xterm/addon-web-links';
-import type { TerminalSnapshot } from '../../shared/types';
+import type { PermissionMode, TerminalSnapshot } from '../../shared/types';
 import { FilePathLinkProvider } from './FilePathLinkProvider';
 import type { ITheme } from 'xterm';
 import { darkTheme, lightTheme, resolveTheme } from './terminalThemes';
@@ -26,7 +26,7 @@ export class TerminalSessionManager {
   private ptyStarted = false;
   private disposed = false;
   private opened = false;
-  private autoApprove: boolean;
+  private permissionMode: PermissionMode;
   private currentContainer: HTMLElement | null = null;
   private boundBeforeUnload: (() => void) | null = null;
   private attachGeneration = 0;
@@ -52,7 +52,7 @@ export class TerminalSessionManager {
   constructor(opts: {
     id: string;
     cwd: string;
-    autoApprove?: boolean;
+    permissionMode?: PermissionMode;
     isDark?: boolean;
     shellOnly?: boolean;
     themeId?: string;
@@ -60,7 +60,7 @@ export class TerminalSessionManager {
     this.id = opts.id;
     this.cwd = opts.cwd;
     this._currentCwd = opts.cwd;
-    this.autoApprove = opts.autoApprove ?? false;
+    this.permissionMode = opts.permissionMode ?? 'default';
     this.isDark = opts.isDark ?? true;
     this.shellOnly = opts.shellOnly ?? false;
     this.themeId = opts.themeId ?? 'default';
@@ -684,7 +684,7 @@ export class TerminalSessionManager {
       cwd: this.cwd,
       cols,
       rows,
-      autoApprove: this.autoApprove,
+      permissionMode: this.permissionMode,
       isDark: this.isDark,
     });
 

@@ -38,6 +38,7 @@ import type {
   DiffCommentInput,
   FileChange,
   TokenStatsRollup,
+  PermissionMode,
 } from '../shared/types';
 import type { ParsedSessionMessage, SessionMetrics, SessionUpdate } from '../shared/sessionTypes';
 
@@ -142,7 +143,7 @@ export interface ElectronAPI {
     cwd: string;
     cols: number;
     rows: number;
-    autoApprove?: boolean;
+    permissionMode?: PermissionMode;
     isDark?: boolean;
   }) => Promise<
     IpcResponse<{

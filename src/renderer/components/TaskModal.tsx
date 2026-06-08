@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   X,
   GitBranch,
-  Zap,
   ChevronDown,
   Loader2,
   AlertCircle,
@@ -13,9 +12,16 @@ import {
   ArrowDown,
 } from 'lucide-react';
 import { SearchableMultiSelect } from './SearchableMultiSelect';
-import type { BranchInfo, GithubIssue, AzureDevOpsWorkItem, LinkedItem } from '../../shared/types';
+import type {
+  BranchInfo,
+  GithubIssue,
+  AzureDevOpsWorkItem,
+  LinkedItem,
+  PermissionMode,
+} from '../../shared/types';
 import { isAdoRemote } from '../../shared/urls';
 import { Modal, useModalClose } from './ui/Modal';
+import { PermissionModePicker, readInitialPermissionMode } from './PermissionModePicker';
 
 /**
  * Task creation modes. Each variant carries only the fields that are meaningful
@@ -26,7 +32,7 @@ import { Modal, useModalClose } from './ui/Modal';
  */
 export type CreateTaskOptions = {
   name: string;
-  autoApprove: boolean;
+  permissionMode: PermissionMode;
   linkedItems?: LinkedItem[];
 } & (
   | { kind: 'worktree-new-branch'; baseRef: string; pushRemote: boolean }
@@ -152,7 +158,7 @@ function TaskModalBody({
   const [gitReady, setGitReady] = useState(isGitRepo);
   const worktreeForced = !!existingNonWorktreeTask;
   const [useWorktree, setUseWorktree] = useState(isGitRepo || worktreeForced);
-  const [autoApprove, setAutoApprove] = useState(() => localStorage.getItem('yoloMode') === 'true');
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>(readInitialPermissionMode);
   const [pushRemote, setPushRemote] = useState(true);
   const [gitInitLoading, setGitInitLoading] = useState(false);
   const [createNewBranch, setCreateNewBranch] = useState(false);
@@ -279,7 +285,7 @@ function TaskModalBody({
     const allLinkedItems: LinkedItem[] = [...ghItems, ...adoItems];
     const linkedItems = allLinkedItems.length > 0 ? allLinkedItems : undefined;
 
-    const base = { name: name.trim(), autoApprove, linkedItems };
+    const base = { name: name.trim(), permissionMode, linkedItems };
 
     let options: CreateTaskOptions;
     if (useWorktree) {
@@ -660,28 +666,14 @@ function TaskModalBody({
           </div>
         )}
 
-        {/* Yolo mode toggle */}
         <div className="mb-6">
-          <label className="flex items-center gap-3 cursor-pointer group">
-            <div className="relative">
-              <input
-                type="checkbox"
-                checked={autoApprove}
-                onChange={(e) => {
-                  setAutoApprove(e.target.checked);
-                  localStorage.setItem('yoloMode', String(e.target.checked));
-                }}
-                className="sr-only peer"
-              />
-              <div className="w-8 h-[18px] rounded-full bg-accent peer-checked:bg-primary/80 transition-colors duration-200" />
-              <div className="absolute top-[3px] left-[3px] w-3 h-3 rounded-full bg-muted-foreground/40 peer-checked:bg-primary-foreground peer-checked:translate-x-[14px] transition-all duration-200" />
-            </div>
-            <div className="flex items-center gap-2">
-              <Zap size={13} className="text-muted-foreground/40" strokeWidth={1.8} />
-              <span className="text-[13px] text-foreground/80">Yolo mode</span>
-              <span className="text-[11px] text-muted-foreground/40">skip permissions</span>
-            </div>
-          </label>
+          <PermissionModePicker
+            value={permissionMode}
+            onChange={(v) => {
+              setPermissionMode(v);
+              localStorage.setItem('permissionMode', v);
+            }}
+          />
         </div>
 
         {/* Actions */}

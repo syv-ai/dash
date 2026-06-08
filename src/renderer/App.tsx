@@ -20,6 +20,7 @@ import { DeleteProjectModal, type DeleteProjectOptions } from './components/Dele
 import { RemoteControlModal } from './components/RemoteControlModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ProjectSettingsModal } from './components/ProjectSettingsModal';
+import { TaskSettingsModal } from './components/TaskSettingsModal';
 import { AdoSetupModal } from './components/AdoSetupModal';
 import { parseAdoRemote, isAdoRemote } from '../shared/urls';
 import { ToastContainer } from './components/Toast';
@@ -80,6 +81,7 @@ export function App() {
   const [deleteTaskTarget, setDeleteTaskTarget] = useState<Task | null>(null);
   const [deleteProjectTarget, setDeleteProjectTarget] = useState<Project | null>(null);
   const [projectSettingsTarget, setProjectSettingsTarget] = useState<Project | null>(null);
+  const [taskSettingsTarget, setTaskSettingsTarget] = useState<Task | null>(null);
   const [adoSetup, setAdoSetup] = useState<{
     projectId: string;
     organizationUrl: string;
@@ -1418,7 +1420,7 @@ export function App() {
   }
 
   async function handleCreateTask(options: CreateTaskOptions): Promise<boolean> {
-    const { name, autoApprove, linkedItems } = options;
+    const { name, permissionMode, linkedItems } = options;
 
     const targetProjectId = taskModalProjectId || activeProjectId;
     const targetProject = projects.find((p) => p.id === targetProjectId);
@@ -1513,7 +1515,7 @@ export function App() {
         branch,
         path: taskPath,
         useWorktree,
-        autoApprove,
+        permissionMode,
         // Only Dash-created branches should be auto-deleted on task removal.
         branchCreatedByDash: options.kind === 'worktree-new-branch' && !!worktreeInfo,
         linkedItems: linkedItems ?? null,
@@ -1688,6 +1690,38 @@ export function App() {
     }
   }
 
+  function handleTaskSettings(id: string) {
+    for (const tasks of Object.values(tasksByProject)) {
+      const found = tasks.find((t) => t.id === id);
+      if (found) {
+        setTaskSettingsTarget(found);
+        return;
+      }
+    }
+  }
+
+  async function persistTaskUpdate(task: Task, patch: Partial<Task>): Promise<Task | null> {
+    const resp = await window.electronAPI.saveTask({
+      id: task.id,
+      projectId: task.projectId,
+      name: patch.name ?? task.name,
+      branch: task.branch,
+      path: task.path,
+      useWorktree: task.useWorktree,
+      permissionMode: patch.permissionMode ?? task.permissionMode,
+      branchCreatedByDash: task.branchCreatedByDash,
+      linkedItems: task.linkedItems,
+    });
+    if (!resp.success || !resp.data) {
+      toast.error(resp.error || 'Failed to save task');
+      return null;
+    }
+    await loadTasksForProject(task.projectId);
+    const updated = resp.data;
+    setTaskSettingsTarget((prev) => (prev?.id === updated.id ? updated : prev));
+    return updated;
+  }
+
   // ── Git Handlers ─────────────────────────────────────────
 
   async function handleStageFiles(filePaths: string[]) {
@@ -1809,6 +1843,7 @@ export function App() {
             onArchiveTask={handleArchiveTask}
             onRestoreTask={handleRestoreTask}
             onCloseTask={handleCloseTask}
+            onTaskSettings={handleTaskSettings}
             onOpenSettings={() => {
               setSettingsInitialTab(undefined);
               setShowSettings(true);
@@ -2080,6 +2115,22 @@ export function App() {
           organizationUrl={adoSetup.organizationUrl}
           project={adoSetup.project}
           onClose={() => setAdoSetup(null)}
+        />
+      )}
+
+      {taskSettingsTarget && (
+        <TaskSettingsModal
+          task={taskSettingsTarget}
+          hasActiveSession={!!taskActivity[taskSettingsTarget.id]?.state}
+          onClose={() => setTaskSettingsTarget(null)}
+          onRename={async (id, newName) => {
+            if (!taskSettingsTarget || taskSettingsTarget.id !== id) return;
+            await persistTaskUpdate(taskSettingsTarget, { name: newName });
+          }}
+          onPermissionModeChange={async (id, mode) => {
+            if (!taskSettingsTarget || taskSettingsTarget.id !== id) return;
+            await persistTaskUpdate(taskSettingsTarget, { permissionMode: mode });
+          }}
         />
       )}
 

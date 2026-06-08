@@ -238,7 +238,7 @@ export function MainContent({
             key={activeTask.id}
             id={activeTask.id}
             cwd={activeTask.path}
-            autoApprove={activeTask.autoApprove}
+            permissionMode={activeTask.permissionMode}
             terminalBg={terminalBg}
           />
         ) : (

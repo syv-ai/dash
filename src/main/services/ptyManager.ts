@@ -21,6 +21,7 @@ import {
   mergeHookEntries,
 } from './hookSettingsMerge';
 import { encodeProjectPath } from '../utils/jsonlParser';
+import type { PermissionMode } from '@shared/types';
 
 const execFileAsync = promisify(execFile);
 
@@ -690,7 +691,7 @@ export async function startDirectPty(options: {
   cwd: string;
   cols: number;
   rows: number;
-  autoApprove?: boolean;
+  permissionMode?: PermissionMode;
   isDark?: boolean;
   sender?: WebContents;
 }): Promise<{
@@ -734,7 +735,9 @@ export async function startDirectPty(options: {
     args.push('--continue');
   }
 
-  if (options.autoApprove) {
+  if (options.permissionMode === 'acceptEdits') {
+    args.push('--permission-mode', 'acceptEdits');
+  } else if (options.permissionMode === 'bypassPermissions') {
     args.push('--dangerously-skip-permissions');
   }
   const env = buildDirectEnv(options.isDark ?? true);

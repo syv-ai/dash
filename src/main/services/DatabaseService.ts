@@ -3,7 +3,18 @@ import { randomUUID } from 'crypto';
 import { initDb, getDb } from '../db/client';
 import { runMigrations } from '../db/migrate';
 import { projects, tasks, conversations } from '../db/schema';
-import type { Project, Task, Conversation, LinkedItem, TokenStatsRollup } from '@shared/types';
+import type {
+  Project,
+  Task,
+  Conversation,
+  LinkedItem,
+  TokenStatsRollup,
+  PermissionMode,
+} from '@shared/types';
+
+function normalizePermissionMode(value: string | null | undefined): PermissionMode {
+  return value === 'acceptEdits' || value === 'bypassPermissions' ? value : 'default';
+}
 
 export class DatabaseService {
   private static initialized = false;
@@ -146,7 +157,7 @@ export class DatabaseService {
           path: data.path,
           status: data.status ?? 'idle',
           useWorktree: data.useWorktree ?? true,
-          autoApprove: data.autoApprove ?? false,
+          permissionMode: data.permissionMode ?? 'default',
           branchCreatedByDash: data.branchCreatedByDash ?? false,
           linkedItems: linkedItemsJson,
           sortOrder: sortOrder ?? 0,
@@ -160,6 +171,7 @@ export class DatabaseService {
             branch: data.branch,
             path: data.path,
             status: data.status ?? 'idle',
+            permissionMode: data.permissionMode ?? 'default',
             linkedItems: linkedItemsJson,
             updatedAt: now,
           },
@@ -360,7 +372,7 @@ export class DatabaseService {
       path: row.path,
       status: row.status,
       useWorktree: row.useWorktree ?? true,
-      autoApprove: row.autoApprove ?? false,
+      permissionMode: normalizePermissionMode(row.permissionMode),
       branchCreatedByDash: row.branchCreatedByDash ?? false,
       linkedItems,
       contextPrompt: row.contextPrompt ?? null,
