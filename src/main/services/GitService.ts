@@ -66,7 +66,24 @@ export class GitService {
     }
 
     if (hasOrigin) {
-      // Fetch with prune to sync with remote (30s timeout)
+      // Consolidate loose refs into packed-refs first. Prevents "cannot lock ref:
+      // is at X but expected Y" errors during fetch — those come from a loose ref
+      // disagreeing with packed-refs (common in repos with frequent force-pushes).
+      // Best-effort: a failure here isn't fatal, fetch may still succeed.
+      try {
+        await execFileAsync('git', ['pack-refs', '--all', '--prune'], {
+          cwd,
+          timeout: 10000,
+        });
+      } catch {
+        // ignore — fetch will report its own error if there's a real problem
+      }
+
+      // Fetch with prune to sync with remote (30s timeout). Fetch failure is
+      // non-fatal: we can still list remote-tracking refs from local state,
+      // which is more useful than blocking the dialog. Only surface the error
+      // if we end up with nothing to show.
+      let fetchError: Error | null = null;
       try {
         await execFileAsync('git', ['fetch', '--prune', 'origin'], {
           cwd,
@@ -75,25 +92,26 @@ export class GitService {
       } catch (err: unknown) {
         const msg = String((err as { stderr?: string }).stderr || err);
         if (/could not read from remote repository/i.test(msg)) {
-          throw new Error(
+          fetchError = new Error(
             'Could not connect to remote repository. Check your network connection and SSH/HTTPS credentials.',
           );
         } else if (/authentication failed/i.test(msg) || /could not resolve host/i.test(msg)) {
-          throw new Error(
+          fetchError = new Error(
             'Authentication failed or host not reachable. Check your credentials and network.',
           );
         } else if (/not a git repository/i.test(msg)) {
-          throw new Error('This directory is not a git repository.');
+          fetchError = new Error('This directory is not a git repository.');
         } else if (/timed out/i.test(msg) || (err as { killed?: boolean }).killed) {
-          throw new Error('Fetch timed out. Check your network connection and try again.');
+          fetchError = new Error('Fetch timed out. Check your network connection and try again.');
         } else {
           const fatalMatch = msg.match(/fatal:\s*(.+)/i);
-          throw new Error(
+          fetchError = new Error(
             fatalMatch
               ? `Git fetch failed: ${fatalMatch[1].trim()}`
               : `Git fetch failed: ${msg.split('\n')[0].trim()}`,
           );
         }
+        console.warn(`[GitService] fetch failed for ${cwd}: ${fetchError.message}`);
       }
 
       // List remote branches sorted by committerdate descending
@@ -120,6 +138,10 @@ export class GitService {
           relativeDate: dateParts.join('\t') || '',
         });
       }
+
+      // If fetch failed AND there's nothing cached locally, the failure is
+      // genuinely actionable (auth, network, never-fetched remote) — surface it.
+      if (fetchError && branches.length === 0) throw fetchError;
 
       // Enrich top branches with ahead/behind counts (limit to avoid slowness)
       await this.enrichBranchesWithAheadBehind(cwd, branches, 20);
