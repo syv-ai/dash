@@ -1630,6 +1630,8 @@ export function App() {
     <div className="h-screen w-screen flex flex-col overflow-hidden">
       <PanelGroup direction="horizontal" className="flex-1">
         <Panel
+          id="sidebar"
+          order={1}
           ref={sidebarPanelRef}
           className={sidebarAnimating ? 'panel-transition' : ''}
           defaultSize={sidebarCollapsed ? 3 : 18}
@@ -1710,6 +1712,8 @@ export function App() {
         />
 
         <Panel
+          id="main"
+          order={2}
           className={sidebarAnimating || changesAnimating ? 'panel-transition' : ''}
           minSize={35}
         >
@@ -1782,6 +1786,8 @@ export function App() {
               className="resize-handle-floating w-[1px] bg-transparent"
             />
             <Panel
+              id="changes"
+              order={3}
               ref={changesPanelRef}
               className={changesAnimating ? 'panel-transition' : ''}
               style={

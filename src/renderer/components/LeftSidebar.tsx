@@ -1,5 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useDragReorder } from '../hooks/useDragReorder';
 import { UsageBarInline, usageTextColor } from './ui/UsageBar';
 import {
@@ -30,6 +29,9 @@ import { IconButton } from './ui/IconButton';
 import { Tooltip } from './ui/Tooltip';
 
 /* ── Rotation (Active Tasks) with sliding highlight ──────── */
+
+type RotationRow = { task: Task; phase: 'entering' | 'present' | 'leaving' };
+const ROTATION_EXIT_MS = 320;
 
 function RotationSection({
   rotationTasks,
@@ -65,6 +67,53 @@ function RotationSection({
     onReorder: rotationOnReorder,
     getItems: rotationGetItems,
   });
+
+  // Track displayed rows so removed items can animate out before unmounting.
+  // Initial mount renders rows as 'present' (no entry animation), matching the
+  // previous AnimatePresence `initial={false}` behavior.
+  const [rows, setRows] = useState<RotationRow[]>(() =>
+    rotationTasks.map((task) => ({ task, phase: 'present' as const })),
+  );
+
+  useEffect(() => {
+    setRows((prev) => {
+      const nextIds = new Set(rotationTasks.map((t) => t.id));
+      const prevById = new Map(prev.map((r) => [r.task.id, r] as const));
+      // Items still present, in incoming order. Revive any that were mid-exit.
+      const next: RotationRow[] = rotationTasks.map((task) => {
+        const existing = prevById.get(task.id);
+        if (!existing) return { task, phase: 'entering' };
+        return { task, phase: existing.phase === 'leaving' ? 'present' : existing.phase };
+      });
+      // Items no longer in the list stay mounted as 'leaving' to play exit anim.
+      for (const r of prev) {
+        if (!nextIds.has(r.task.id)) {
+          next.push({ task: r.task, phase: 'leaving' });
+        }
+      }
+      return next;
+    });
+  }, [rotationTasks]);
+
+  // Flip 'entering' → 'present' on next frame so the transition fires.
+  useEffect(() => {
+    if (!rows.some((r) => r.phase === 'entering')) return;
+    const id = requestAnimationFrame(() => {
+      setRows((prev) =>
+        prev.map((r) => (r.phase === 'entering' ? { ...r, phase: 'present' as const } : r)),
+      );
+    });
+    return () => cancelAnimationFrame(id);
+  }, [rows]);
+
+  // Drop 'leaving' rows once their collapse transition finishes.
+  useEffect(() => {
+    if (!rows.some((r) => r.phase === 'leaving')) return;
+    const id = setTimeout(() => {
+      setRows((prev) => prev.filter((r) => r.phase !== 'leaving'));
+    }, ROTATION_EXIT_MS);
+    return () => clearTimeout(id);
+  }, [rows]);
 
   const setRowRef = useCallback((taskId: string, el: HTMLDivElement | null) => {
     if (el) rowRefs.current.set(taskId, el);
@@ -107,7 +156,7 @@ function RotationSection({
     setIsRotating(true);
     const t = setTimeout(() => setIsRotating(false), 700);
     return () => clearTimeout(t);
-  }, [measureHighlight, rotationTasks]);
+  }, [measureHighlight, rows]);
 
   // Keep the highlight glued to the active row while motion animates the
   // surrounding rows' heights — the container resizes as rows open/close,
@@ -140,36 +189,26 @@ function RotationSection({
             }}
           />
         )}
-        <AnimatePresence initial={false}>
-          {rotationTasks.map((task) => {
-            const activity = taskActivity[task.id]?.state;
-            const isActiveTask = task.id === activeTaskId;
-            const project = projects.find((p) => p.id === task.projectId);
-            const ctx = contextUsage[task.id];
+        {rows.map(({ task, phase }) => {
+          const collapsed = phase !== 'present';
+          const activity = taskActivity[task.id]?.state;
+          const isActiveTask = task.id === activeTaskId;
+          const project = projects.find((p) => p.id === task.projectId);
+          const ctx = contextUsage[task.id];
 
-            return (
-              <motion.div
-                key={task.id}
-                ref={(el) => setRowRef(task.id, el)}
-                initial={{ opacity: 0, height: 0 }}
-                animate={{
-                  opacity: 1,
-                  height: 'auto',
-                  transition: {
-                    height: { duration: 0.4, ease: [0.16, 1, 0.3, 1] },
-                    opacity: { duration: 0.2, delay: 0.2 },
-                  },
-                }}
-                exit={{
-                  opacity: 0,
-                  height: 0,
-                  transition: {
-                    opacity: { duration: 0.18 },
-                    height: { duration: 0.35, ease: [0.16, 1, 0.3, 1], delay: 0.12 },
-                  },
-                }}
-                style={{ overflow: 'hidden' }}
-              >
+          return (
+            <div
+              key={task.id}
+              ref={(el) => setRowRef(task.id, el)}
+              className="grid"
+              style={{
+                gridTemplateRows: collapsed ? '0fr' : '1fr',
+                opacity: collapsed ? 0 : 1,
+                transition:
+                  'grid-template-rows 320ms cubic-bezier(0.16, 1, 0.3, 1), opacity 200ms cubic-bezier(0.16, 1, 0.3, 1)',
+              }}
+            >
+              <div className="overflow-hidden">
                 <div
                   draggable
                   {...getRotDragHandlers(task.id, rotationTasks)}
@@ -228,10 +267,10 @@ function RotationSection({
                     </IconButton>
                   </div>
                 </div>
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
