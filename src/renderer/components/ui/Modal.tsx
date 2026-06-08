@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
 // Lets nested close buttons (Settings's sidebar X, Skills's header X) trigger the
 // fade-out + scale-out animation instead of calling the parent's onClose directly,
@@ -46,6 +46,11 @@ const modalCloseStack: Array<() => void> = [];
 export function Modal({ onClose, size, overflow = 'hidden', cardStyle, children }: ModalProps) {
   const [closing, setClosing] = useState(false);
   const requestClose = useCallback(() => setClosing(true), []);
+  // Backdrop click should ONLY close when both mousedown and mouseup land on
+  // the backdrop itself. Without this, a drag that starts on a card child
+  // (e.g. a react-resizable-panels handle) and releases outside the card
+  // synthesizes a click event on the backdrop and the modal closes mid-drag.
+  const mouseDownOnBackdrop = useRef(false);
 
   useEffect(() => {
     modalCloseStack.push(requestClose);
@@ -90,8 +95,14 @@ export function Modal({ onClose, size, overflow = 'hidden', cardStyle, children 
           card without dominating it. */}
       <div
         className={`fixed inset-0 z-50 flex items-center justify-center bg-[hsl(0_0%_0%/0.55)] backdrop-blur-md ${closing ? 'animate-fade-out' : 'animate-fade-in'}`}
+        onMouseDown={(e) => {
+          mouseDownOnBackdrop.current = e.target === e.currentTarget;
+        }}
         onClick={(e) => {
-          if (e.target === e.currentTarget) requestClose();
+          if (e.target === e.currentTarget && mouseDownOnBackdrop.current) {
+            requestClose();
+          }
+          mouseDownOnBackdrop.current = false;
         }}
         onAnimationEnd={() => {
           if (closing) onClose();
