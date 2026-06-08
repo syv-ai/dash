@@ -399,6 +399,41 @@ describe('mergeHookEntries — user content preservation', () => {
   });
 });
 
+describe('legacy permission-request endpoint cleanup', () => {
+  it('recognises a stale permission-request hook from a prior Dash version', () => {
+    // Older Dash versions wrote a `/hook/permission-request` URL that the
+    // current HookServer no longer serves. Without recognition, the entry
+    // survives the merge as "user content" and accumulates one stale
+    // ECONNREFUSED-on-every-tool-call entry per upgrade.
+    expect(
+      isDashOwnedHook({
+        type: 'http',
+        url: 'http://127.0.0.1:59273/hook/permission-request?ptyId=abc',
+      }),
+    ).toBe(true);
+  });
+
+  it('drops a stale permission-request entry under the legacy PermissionRequest event', () => {
+    // Older Dash versions wrote this hook under a dedicated PermissionRequest
+    // event that the current code no longer manages. Without listing the
+    // event in DASH_HOOK_EVENTS, the merger's pass-through branch preserves
+    // the entry verbatim on every write and the stale URL never gets cleaned.
+    const stale: HookEntry = {
+      matcher: '*',
+      hooks: [
+        {
+          type: 'http',
+          url: 'http://127.0.0.1:59273/hook/permission-request?ptyId=abc',
+          __dash: true,
+        },
+      ],
+    };
+    const merged = mergeHookEntries({ PermissionRequest: [stale] }, {});
+    // Stale entry filtered out and the now-empty event key removed entirely.
+    expect(merged.PermissionRequest).toBeUndefined();
+  });
+});
+
 describe('SessionEnd allowlist', () => {
   it('recognises Dash SessionEnd HTTP hook by URL shape', () => {
     const entry: HookEntry = {

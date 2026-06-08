@@ -37,6 +37,7 @@ export const DASH_HOOK_EVENTS = [
   'SessionStart',
   'SessionEnd',
   'PostToolUseFailure',
+  'PermissionRequest',
   'SubagentStart',
   'SubagentStop',
 ] as const;
@@ -72,6 +73,7 @@ export const DASH_HOOK_ENDPOINTS = [
   'compact-start',
   'compact-end',
   'post-tool-use-failure',
+  'permission-request',
   'subagent-start',
   'subagent-stop',
 ] as const;

@@ -107,6 +107,12 @@ export interface RefreshResult {
 export function refreshActivePtyHooks(): RefreshResult {
   const failures: RefreshFailure[] = [];
   for (const [id, rec] of ptys) {
+    // Shell PTYs (terminal drawer) share cwd with the task PTY but don't run
+    // Claude Code and aren't tracked by ActivityMonitor. Writing hook settings
+    // for them clobbers the task's settings.local.json with `ptyId=shell:…`,
+    // so every subsequent hook event lands in ActivityMonitor's no-op branch
+    // and the task's activity dot freezes on whatever it was last showing.
+    if (!rec.isDirectSpawn) continue;
     const result = writeHookSettings(rec.cwd, id);
     if (!result.ok) {
       failures.push({ settingsPath: result.settingsPath, error: result.error });
