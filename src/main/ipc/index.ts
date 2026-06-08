@@ -12,6 +12,7 @@ import { registerSkillsIpc } from './skillsIpc';
 import { registerSessionIpc } from './sessionIpc';
 import { registerEditorIpc } from './editorIpc';
 import { registerDiffCommentsIpc } from './diffCommentsIpc';
+import { registerTokenStatsIpc } from './tokenStatsIpc';
 
 export function registerAllIpc(): void {
   registerAppIpc();
@@ -28,4 +29,5 @@ export function registerAllIpc(): void {
   registerSessionIpc();
   registerEditorIpc();
   registerDiffCommentsIpc();
+  registerTokenStatsIpc();
 }

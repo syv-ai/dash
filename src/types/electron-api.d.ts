@@ -37,8 +37,15 @@ import type {
   DiffComment,
   DiffCommentInput,
   FileChange,
+  TokenStatsRollup,
 } from '../shared/types';
 import type { ParsedSessionMessage, SessionMetrics, SessionUpdate } from '../shared/sessionTypes';
+
+export interface TokenStatsUpdate {
+  taskId: string;
+  totalTokens: number;
+  totalCostUsd: number;
+}
 
 export interface ElectronAPI {
   // App
@@ -84,6 +91,11 @@ export interface ElectronAPI {
   // Database - Conversations
   getConversations: (taskId: string) => Promise<IpcResponse<Conversation[]>>;
   getOrCreateDefaultConversation: (taskId: string) => Promise<IpcResponse<Conversation>>;
+
+  // Token stats
+  getProjectTokenStats: (projectId: string) => Promise<IpcResponse<TokenStatsRollup>>;
+  getGlobalTokenStats: () => Promise<IpcResponse<TokenStatsRollup>>;
+  onTokenStatsUpdated: (callback: (data: TokenStatsUpdate) => void) => () => void;
 
   // Worktree
   worktreeCreate: (args: {

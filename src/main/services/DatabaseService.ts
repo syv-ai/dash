@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import { initDb, getDb } from '../db/client';
 import { runMigrations } from '../db/migrate';
 import { projects, tasks, conversations } from '../db/schema';
-import type { Project, Task, Conversation, LinkedItem } from '@shared/types';
+import type { Project, Task, Conversation, LinkedItem, TokenStatsRollup } from '@shared/types';
 
 export class DatabaseService {
   private static initialized = false;
@@ -185,6 +185,65 @@ export class DatabaseService {
       .run();
   }
 
+  static updateTaskTokenStats(
+    id: string,
+    stats: { totalTokens: number; totalCostUsd: number },
+  ): void {
+    const db = getDb();
+    db.update(tasks)
+      .set({
+        totalTokens: stats.totalTokens,
+        totalCostUsd: stats.totalCostUsd,
+        tokensBackfilledAt: new Date().toISOString(),
+      })
+      .where(eq(tasks.id, id))
+      .run();
+  }
+
+  static getProjectTokenStats(projectId: string): TokenStatsRollup {
+    const db = getDb();
+    const row = db
+      .select({
+        totalTokens: sql<number>`COALESCE(SUM(${tasks.totalTokens}), 0)`,
+        totalCostUsd: sql<number>`COALESCE(SUM(${tasks.totalCostUsd}), 0)`,
+        taskCount: sql<number>`COUNT(*)`,
+      })
+      .from(tasks)
+      .where(eq(tasks.projectId, projectId))
+      .get();
+    return {
+      totalTokens: row?.totalTokens ?? 0,
+      totalCostUsd: row?.totalCostUsd ?? 0,
+      taskCount: row?.taskCount ?? 0,
+    };
+  }
+
+  static getGlobalTokenStats(): TokenStatsRollup {
+    const db = getDb();
+    const row = db
+      .select({
+        totalTokens: sql<number>`COALESCE(SUM(${tasks.totalTokens}), 0)`,
+        totalCostUsd: sql<number>`COALESCE(SUM(${tasks.totalCostUsd}), 0)`,
+        taskCount: sql<number>`COUNT(*)`,
+      })
+      .from(tasks)
+      .get();
+    return {
+      totalTokens: row?.totalTokens ?? 0,
+      totalCostUsd: row?.totalCostUsd ?? 0,
+      taskCount: row?.taskCount ?? 0,
+    };
+  }
+
+  static listTasksNeedingBackfill(): Array<{ id: string; path: string }> {
+    const db = getDb();
+    return db
+      .select({ id: tasks.id, path: tasks.path })
+      .from(tasks)
+      .where(isNull(tasks.tokensBackfilledAt))
+      .all();
+  }
+
   static deleteTask(id: string): void {
     const db = getDb();
     db.delete(tasks).where(eq(tasks.id, id)).run();
@@ -307,6 +366,9 @@ export class DatabaseService {
       contextPrompt: row.contextPrompt ?? null,
       archivedAt: row.archivedAt,
       sortOrder: row.sortOrder,
+      totalTokens: row.totalTokens ?? 0,
+      totalCostUsd: row.totalCostUsd ?? 0,
+      tokensBackfilledAt: row.tokensBackfilledAt ?? null,
       createdAt: row.createdAt ?? '',
       updatedAt: row.updatedAt ?? '',
     };

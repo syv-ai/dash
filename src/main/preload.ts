@@ -39,6 +39,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getOrCreateDefaultConversation: (taskId: string) =>
     ipcRenderer.invoke('db:getOrCreateDefaultConversation', taskId),
 
+  // Token stats
+  getProjectTokenStats: (projectId: string) =>
+    ipcRenderer.invoke('tokenStats:getProject', projectId),
+  getGlobalTokenStats: () => ipcRenderer.invoke('tokenStats:getGlobal'),
+  onTokenStatsUpdated: (callback: (data: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
+    ipcRenderer.on('tokenStats:updated', handler);
+    return () => {
+      ipcRenderer.removeListener('tokenStats:updated', handler);
+    };
+  },
+
   // Worktree
   worktreeCreate: (args: unknown) => ipcRenderer.invoke('worktree:create', args),
   worktreeRemove: (args: unknown) => ipcRenderer.invoke('worktree:remove', args),

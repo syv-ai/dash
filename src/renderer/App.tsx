@@ -24,6 +24,7 @@ import { AdoSetupModal } from './components/AdoSetupModal';
 import { parseAdoRemote, isAdoRemote } from '../shared/urls';
 import { ToastContainer } from './components/Toast';
 import { toast } from 'sonner';
+import { getBillionToastContent } from './utils/billionToast';
 import { useStatusLine } from './hooks/useStatusLine';
 import { useThresholdAlerts } from './hooks/useThresholdAlerts';
 import type {
@@ -381,6 +382,93 @@ export function App() {
   useEffect(() => {
     localStorage.setItem('showActiveTasksSection', String(showActiveTasksSection));
   }, [showActiveTasksSection]);
+
+  // Token-usage UI toggles
+  const [showTaskTokens, setShowTaskTokens] = useState<boolean>(() => {
+    const stored = localStorage.getItem('showTaskTokens');
+    return stored === null ? true : stored === 'true';
+  });
+  useEffect(() => {
+    localStorage.setItem('showTaskTokens', String(showTaskTokens));
+  }, [showTaskTokens]);
+  const [showProjectTokens, setShowProjectTokens] = useState<boolean>(() => {
+    const stored = localStorage.getItem('showProjectTokens');
+    return stored === null ? true : stored === 'true';
+  });
+  useEffect(() => {
+    localStorage.setItem('showProjectTokens', String(showProjectTokens));
+  }, [showProjectTokens]);
+
+  // Token-stats rollups (per-project + global). Live-updated via tokenStats:updated event.
+  const [projectTokenStats, setProjectTokenStats] = useState<
+    Record<string, { totalTokens: number; totalCostUsd: number; taskCount: number }>
+  >({});
+  const [globalTokenStats, setGlobalTokenStats] = useState<{
+    totalTokens: number;
+    totalCostUsd: number;
+    taskCount: number;
+  }>({ totalTokens: 0, totalCostUsd: 0, taskCount: 0 });
+
+  const refreshTokenRollups = useCallback(async () => {
+    const global = await window.electronAPI.getGlobalTokenStats();
+    if (global.success && global.data) setGlobalTokenStats(global.data);
+    const entries = await Promise.all(
+      projects.map(async (p) => {
+        const r = await window.electronAPI.getProjectTokenStats(p.id);
+        return [
+          p.id,
+          r.success && r.data ? r.data : { totalTokens: 0, totalCostUsd: 0, taskCount: 0 },
+        ] as const;
+      }),
+    );
+    setProjectTokenStats(Object.fromEntries(entries));
+  }, [projects]);
+
+  useEffect(() => {
+    refreshTokenRollups();
+  }, [refreshTokenRollups]);
+
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.onTokenStatsUpdated((update) => {
+      setTasksByProject((prev) => {
+        const next: Record<string, Task[]> = {};
+        for (const [projectId, list] of Object.entries(prev)) {
+          next[projectId] = list.map((t) =>
+            t.id === update.taskId
+              ? { ...t, totalTokens: update.totalTokens, totalCostUsd: update.totalCostUsd }
+              : t,
+          );
+        }
+        return next;
+      });
+      refreshTokenRollups();
+    });
+    return unsubscribe;
+  }, [refreshTokenRollups]);
+
+  // Celebrate each billion-token milestone. The threshold filters out the
+  // initial DB load (0 → multi-billion in one step) and one-shot backfill jumps
+  // for individual tasks (can add hundreds of millions). Live recomputes
+  // increment by a few thousand at a time, so any plausible single-step delta
+  // is well under 50M.
+  const prevGlobalTotalRef = useRef<number | null>(null);
+  useEffect(() => {
+    const newTotal = globalTokenStats.totalTokens;
+    const prev = prevGlobalTotalRef.current;
+    prevGlobalTotalRef.current = newTotal;
+
+    if (prev === null) return;
+    const delta = newTotal - prev;
+    if (delta <= 0 || delta >= 50_000_000) return;
+
+    const prevB = Math.floor(prev / 1_000_000_000);
+    const newB = Math.floor(newTotal / 1_000_000_000);
+    if (newB <= prevB) return;
+    for (let b = prevB + 1; b <= newB; b++) {
+      const { title, description } = getBillionToastContent(b, newTotal);
+      toast.success(title, { description, duration: 8000 });
+    }
+  }, [globalTokenStats.totalTokens]);
 
   const [rotationExclusions, setRotationExclusions] = useState<Set<string>>(() => {
     try {
@@ -1744,6 +1832,8 @@ export function App() {
             showActiveTasksSection={showActiveTasksSection}
             onToggleActiveTasksSection={() => setShowActiveTasksSection((v) => !v)}
             onOpenSkillsBrowser={() => setShowSkillsBrowser(true)}
+            showProjectTokens={showProjectTokens}
+            projectTokenStats={projectTokenStats}
           />
         </Panel>
         <PanelResizeHandle
@@ -1815,6 +1905,7 @@ export function App() {
               onDeleteTask={handleDeleteTask}
               onArchiveTask={handleArchiveTask}
               onRestoreTask={handleRestoreTask}
+              showTaskTokens={showTaskTokens}
             />
           </ShellDrawerWrapper>
         </Panel>
@@ -2031,6 +2122,11 @@ export function App() {
           onShowContextUsageOnTaskCardsChange={setShowContextUsageOnTaskCards}
           showActiveTasksSection={showActiveTasksSection}
           onShowActiveTasksSectionChange={setShowActiveTasksSection}
+          showTaskTokens={showTaskTokens}
+          onShowTaskTokensChange={setShowTaskTokens}
+          showProjectTokens={showProjectTokens}
+          onShowProjectTokensChange={setShowProjectTokens}
+          globalTokenStats={globalTokenStats}
           shellDrawerEnabled={shellDrawerEnabled}
           onShellDrawerEnabledChange={(v) => {
             setShellDrawerEnabled(v);

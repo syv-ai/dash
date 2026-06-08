@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, uniqueIndex, index } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, uniqueIndex, index } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 export const projects = sqliteTable(
@@ -42,6 +42,9 @@ export const tasks = sqliteTable(
     lastSessionId: text('last_session_id'),
     archivedAt: text('archived_at'),
     sortOrder: integer('sort_order').notNull().default(0),
+    totalTokens: integer('total_tokens').notNull().default(0),
+    totalCostUsd: real('total_cost_usd').notNull().default(0),
+    tokensBackfilledAt: text('tokens_backfilled_at'),
     createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
   },

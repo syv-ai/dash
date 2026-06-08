@@ -111,6 +111,11 @@ app.whenReady().then(async () => {
   const { createWindow } = await import('./window');
   mainWindow = createWindow();
 
+  // Token stats: bind sender and kick off backfill asynchronously.
+  const { tokenStatsService } = await import('./services/TokenStatsService');
+  tokenStatsService.setSender(mainWindow.webContents);
+  void tokenStatsService.backfillPending();
+
   // Kill PTYs owned by this window on close (CMD+W on macOS)
   mainWindow.on('close', () => {
     import('./services/ptyManager').then(({ killByOwner }) => {
@@ -211,6 +216,8 @@ app.on('activate', async () => {
     RtkService.setSender(mainWindow.webContents);
     const { contextUsageService } = await import('./services/ContextUsageService');
     contextUsageService.setSender(mainWindow.webContents);
+    const { tokenStatsService } = await import('./services/TokenStatsService');
+    tokenStatsService.setSender(mainWindow.webContents);
 
     // Update auto-updater window reference
     if (!process.argv.includes('--dev')) {

@@ -55,6 +55,7 @@ import type {
 } from '../../shared/types';
 import { formatResetTime } from '../../shared/format';
 import { UsageBar } from './ui/UsageBar';
+import { formatTokens, formatCost } from '../utils/formatTokens';
 
 const DASH_DEFAULT_ATTRIBUTION =
   '\n\nCo-Authored-By: Claude <noreply@anthropic.com> via Dash <dash@syv.ai>';
@@ -196,6 +197,11 @@ interface SettingsModalProps {
   onShowContextUsageOnTaskCardsChange: (value: boolean) => void;
   showActiveTasksSection: boolean;
   onShowActiveTasksSectionChange: (value: boolean) => void;
+  showTaskTokens: boolean;
+  onShowTaskTokensChange: (value: boolean) => void;
+  showProjectTokens: boolean;
+  onShowProjectTokensChange: (value: boolean) => void;
+  globalTokenStats: { totalTokens: number; totalCostUsd: number; taskCount: number };
   shellDrawerEnabled: boolean;
   onShellDrawerEnabledChange: (value: boolean) => void;
   shellDrawerPosition: 'main' | 'right';
@@ -469,6 +475,11 @@ function UsageSection({
   onShowUsageInlineChange,
   showContextUsageOnTaskCards,
   onShowContextUsageOnTaskCardsChange,
+  showTaskTokens,
+  onShowTaskTokensChange,
+  showProjectTokens,
+  onShowProjectTokensChange,
+  globalTokenStats,
 }: {
   latestRateLimits?: RateLimits;
   thresholds: UsageThresholds;
@@ -479,9 +490,32 @@ function UsageSection({
   onShowUsageInlineChange: (value: boolean) => void;
   showContextUsageOnTaskCards: boolean;
   onShowContextUsageOnTaskCardsChange: (value: boolean) => void;
+  showTaskTokens: boolean;
+  onShowTaskTokensChange: (value: boolean) => void;
+  showProjectTokens: boolean;
+  onShowProjectTokensChange: (value: boolean) => void;
+  globalTokenStats: { totalTokens: number; totalCostUsd: number; taskCount: number };
 }) {
   return (
     <SettingsPane>
+      <SettingsCard title="Token usage">
+        <div className="px-4 py-3">
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-[18px] tabular-nums text-foreground">
+              {formatTokens(globalTokenStats.totalTokens)}
+            </span>
+            <span className="text-foreground/40">·</span>
+            <span className="font-mono text-[18px] tabular-nums text-foreground">
+              {formatCost(globalTokenStats.totalCostUsd)}
+            </span>
+          </div>
+          <p className="mt-1 text-[11.5px] text-muted-foreground">
+            Total across {globalTokenStats.taskCount} task
+            {globalTokenStats.taskCount === 1 ? '' : 's'} (cost computed from token counts).
+          </p>
+        </div>
+      </SettingsCard>
+
       <SettingsCard title="Your usage">
         {latestRateLimits && (latestRateLimits.fiveHour || latestRateLimits.sevenDay) ? (
           <div className="p-4 space-y-3">
@@ -535,6 +569,16 @@ function UsageSection({
               onToggle={onShowContextUsageOnTaskCardsChange}
             />
           }
+        />
+        <SettingsRow
+          label="Show task token badge"
+          description="Display total tokens and cost in the task header (right side)."
+          control={<Switch enabled={showTaskTokens} onToggle={onShowTaskTokensChange} />}
+        />
+        <SettingsRow
+          label="Show project token total on hover"
+          description="Show a project's token rollup when hovering its row in the sidebar."
+          control={<Switch enabled={showProjectTokens} onToggle={onShowProjectTokensChange} />}
         />
       </SettingsCard>
 
@@ -806,6 +850,11 @@ export function SettingsModal({
   onShowContextUsageOnTaskCardsChange,
   showActiveTasksSection,
   onShowActiveTasksSectionChange,
+  showTaskTokens,
+  onShowTaskTokensChange,
+  showProjectTokens,
+  onShowProjectTokensChange,
+  globalTokenStats,
   shellDrawerEnabled,
   onShellDrawerEnabledChange,
   shellDrawerPosition,
@@ -1662,6 +1711,11 @@ export function SettingsModal({
                   onShowUsageInlineChange={onShowUsageInlineChange}
                   showContextUsageOnTaskCards={showContextUsageOnTaskCards}
                   onShowContextUsageOnTaskCardsChange={onShowContextUsageOnTaskCardsChange}
+                  showTaskTokens={showTaskTokens}
+                  onShowTaskTokensChange={onShowTaskTokensChange}
+                  showProjectTokens={showProjectTokens}
+                  onShowProjectTokensChange={onShowProjectTokensChange}
+                  globalTokenStats={globalTokenStats}
                 />
               )}
 

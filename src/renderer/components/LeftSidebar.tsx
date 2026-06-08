@@ -27,6 +27,7 @@ import type {
 } from '../../shared/types';
 import { IconButton } from './ui/IconButton';
 import { Tooltip } from './ui/Tooltip';
+import { formatTokens, formatCost } from '../utils/formatTokens';
 
 /* ── Rotation (Active Tasks) with sliding highlight ──────── */
 
@@ -308,6 +309,11 @@ interface LeftSidebarProps {
   showActiveTasksSection?: boolean;
   onToggleActiveTasksSection?: () => void;
   onOpenSkillsBrowser?: () => void;
+  showProjectTokens?: boolean;
+  projectTokenStats?: Record<
+    string,
+    { totalTokens: number; totalCostUsd: number; taskCount: number }
+  >;
 }
 
 export function LeftSidebar({
@@ -342,6 +348,8 @@ export function LeftSidebar({
   showActiveTasksSection = true,
   onToggleActiveTasksSection,
   onOpenSkillsBrowser,
+  showProjectTokens = true,
+  projectTokenStats = {},
 }: LeftSidebarProps) {
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(() => {
     try {
@@ -703,13 +711,25 @@ export function LeftSidebar({
                     </button>
 
                     <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                      <span
-                        className={`truncate flex-1 min-w-0 ${
-                          isProjectCollapsed && !hasActiveTask ? 'opacity-50' : ''
-                        }`}
-                      >
-                        {project.name}
-                      </span>
+                      {(() => {
+                        const stats = projectTokenStats[project.id];
+                        const nameSpan = (
+                          <span
+                            className={`truncate flex-1 min-w-0 ${
+                              isProjectCollapsed && !hasActiveTask ? 'opacity-50' : ''
+                            }`}
+                          >
+                            {project.name}
+                          </span>
+                        );
+                        if (!showProjectTokens || !stats || stats.totalTokens === 0) {
+                          return nameSpan;
+                        }
+                        const tip = `${formatTokens(stats.totalTokens)} tokens · ${formatCost(
+                          stats.totalCostUsd,
+                        )} across ${stats.taskCount} task${stats.taskCount === 1 ? '' : 's'}`;
+                        return <Tooltip content={tip}>{nameSpan}</Tooltip>;
+                      })()}
                       {isProjectCollapsed && hasActiveTask && (
                         <Tooltip content="Active task in this project">
                           <div className="status-dot-idle w-[6px] h-[6px] rounded-full flex-shrink-0" />

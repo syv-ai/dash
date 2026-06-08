@@ -51,6 +51,9 @@ export interface Task {
   contextPrompt: string | null;
   archivedAt: string | null;
   sortOrder: number;
+  totalTokens: number;
+  totalCostUsd: number;
+  tokensBackfilledAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -64,6 +67,12 @@ export interface Conversation {
   displayOrder: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TokenStatsRollup {
+  totalTokens: number;
+  totalCostUsd: number;
+  taskCount: number;
 }
 
 export interface IpcResponse<T = unknown> {

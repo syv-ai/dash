@@ -24,6 +24,7 @@ import type {
 } from '../../shared/types';
 import { branchUrl } from '../../shared/urls';
 import { Tooltip } from './ui/Tooltip';
+import { TokenBadge } from './TokenBadge';
 
 interface MainContentProps {
   activeTask: Task | null;
@@ -50,6 +51,7 @@ interface MainContentProps {
   onDeleteTask?: (id: string) => void;
   onArchiveTask?: (id: string) => void;
   onRestoreTask?: (id: string) => void;
+  showTaskTokens?: boolean;
 }
 
 export function MainContent({
@@ -77,6 +79,7 @@ export function MainContent({
   onDeleteTask,
   onArchiveTask,
   onRestoreTask,
+  showTaskTokens = true,
 }: MainContentProps) {
   if (!activeProject) {
     return (
@@ -141,6 +144,9 @@ export function MainContent({
 
       {/* Right cluster: controls + right-inspector toggle */}
       <div className="inline-flex items-center gap-1.5 flex-shrink-0 titlebar-no-drag">
+        {activeTask && showTaskTokens && (
+          <TokenBadge totalTokens={activeTask.totalTokens} totalCostUsd={activeTask.totalCostUsd} />
+        )}
         {activeTask && currentBranch && (
           <Tooltip content={branchTooltip}>
             {currentBranchUrl ? (
