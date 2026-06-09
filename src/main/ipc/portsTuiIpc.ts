@@ -160,9 +160,14 @@ export function registerPortsTuiIpc(opts: { getMainWindow: () => BrowserWindow |
 
         // Compiled main is at dist/main/main/ipc/portsTuiIpc.js; bundle ships at
         // dist/main/main/scripts/portsTui.js. __dirname keeps the resolution
-        // correct in dev AND packaged (electron-builder unpacks scripts/* to
-        // app.asar.unpacked so node-pty can spawn it).
-        const scriptPath = path.join(__dirname, '..', 'scripts', 'portsTui.js');
+        // correct in dev. In packaged builds the bundle lives inside app.asar,
+        // but node-pty can't spawn from there — electron-builder unpacks
+        // dist/main/main/scripts/** to app.asar.unpacked (see package.json
+        // build.asarUnpack), and the standard Electron trick is to swap the
+        // path. The replace is a no-op in dev.
+        const scriptPath = path
+          .join(__dirname, '..', 'scripts', 'portsTui.js')
+          .replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`);
         if (!fs.existsSync(scriptPath)) {
           throw new Error(
             `Ports TUI bundle missing at ${scriptPath}. Run \`pnpm build:tui\` and try again.`,
