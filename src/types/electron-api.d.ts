@@ -39,6 +39,10 @@ import type {
   FileChange,
   TokenStatsRollup,
   PermissionMode,
+  TaskPort,
+  PortLiveness,
+  PortLivenessUpdate,
+  PortHeuristicResult,
 } from '../shared/types';
 import type { ParsedSessionMessage, SessionMetrics, SessionUpdate } from '../shared/sessionTypes';
 
@@ -436,6 +440,22 @@ export interface ElectronAPI {
   ) => () => void;
   onAutoUpdateDownloaded: (callback: () => void) => () => void;
   onAutoUpdateError: (callback: (info: { message: string; detail: string }) => void) => () => void;
+
+  // Workspace ports
+  portsList: (taskId: string) => Promise<IpcResponse<TaskPort[]>>;
+  portsRefresh: (taskId: string) => Promise<IpcResponse<TaskPort[]>>;
+  portsLivenessGet: (taskId: string) => Promise<IpcResponse<Record<number, PortLiveness>>>;
+  portsUnwatch: (taskId: string) => Promise<IpcResponse<void>>;
+  portsOpenUrl: (port: number) => Promise<IpcResponse<void>>;
+  portsDetect: (taskId: string) => Promise<IpcResponse<PortHeuristicResult>>;
+  portsIsDockerDesktopAvailable: () => Promise<IpcResponse<boolean>>;
+  portsOpenInDocker: () => Promise<IpcResponse<void>>;
+  portsWatchConfig: (taskId: string) => Promise<IpcResponse<void>>;
+  portsUnwatchConfig: (taskId: string) => Promise<IpcResponse<void>>;
+  portsInstallSetupCommand: (taskId: string) => Promise<IpcResponse<void>>;
+  onPortsLiveness: (callback: (update: PortLivenessUpdate) => void) => () => void;
+  onPortsConfigChanged: (callback: (data: { taskId: string }) => void) => () => void;
+  onPortsSetupComplete: (callback: (data: { taskId: string }) => void) => () => void;
 }
 
 declare global {

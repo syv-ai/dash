@@ -9,6 +9,8 @@ import { LeftSidebar } from './components/LeftSidebar';
 import { MainContent } from './components/MainContent';
 import { openInIde } from './lib/openInIde';
 import { RightInspector } from './components/rightInspector/RightInspector';
+import { PortsDrawerWrapper } from './components/rightInspector/PortsDrawerWrapper';
+import { usePortsOnboarding } from './components/rightInspector/usePortsOnboarding';
 const DiffEditor = lazy(() => import('./components/diffEditor/DiffEditor'));
 import { ShellDrawerWrapper } from './components/ShellDrawerWrapper';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
@@ -41,9 +43,11 @@ import type {
   RtkStatus,
   RtkDownloadProgress,
   BranchInfo,
+  PortHeuristicResult,
 } from '../shared/types';
 import type { CreateTaskOptions } from './components/TaskModal';
 import { formatTaskContextPrompt } from '../shared/taskContext';
+import { buildPortsSetupCommand } from '../shared/portsSetupCommand';
 import { loadKeybindings, saveKeybindings, matchesBinding } from './keybindings';
 import type { KeyBindingMap } from './keybindings';
 import { sessionRegistry } from './terminal/SessionRegistry';
@@ -54,6 +58,45 @@ import type { NotificationSound } from './sounds';
 
 const GIT_POLL_INTERVAL = 5000;
 const EMPTY_CONTEXT_USAGE: Record<string, import('../shared/types').ContextUsage> = {};
+
+/**
+ * Module-scoped (stable reference) so the usePortsOnboarding effect's dep
+ * array doesn't churn on every App re-render. The taskId argument comes
+ * from the hook's own state, so this function doesn't need to close over
+ * any React state.
+ *
+ * Three steps:
+ *   1. Install `.claude/commands/dash-port-setup.md` into the worktree.
+ *   2. Auto-submit `/reload-skills` — the running Claude Code session loads
+ *      commands at startup, so without this it reports "Unknown command:
+ *      /dash-port-setup". `/reload-skills` (CC v2.1.152+) re-scans the
+ *      `.claude/commands/` directory mid-session.
+ *   3. Type `/dash-port-setup signals: …; guesses: …` into the prompt — no
+ *      auto-submit, so the user can edit the heuristic args before sending.
+ *
+ * Two ptyInput calls separated by a short delay. Sending them together
+ * fails because:
+ *  - `\n` between them is treated as input content (rendered as a space),
+ *    collapsing the two commands into one input line — only the actual
+ *    Enter byte `\r` submits.
+ *  - Even with `\r`, sending back-to-back races the reload: characters of
+ *    the second command can land in /reload-skills's input buffer before
+ *    the TUI returns to a fresh prompt.
+ */
+async function setupPortsForTask(taskId: string, heuristic: PortHeuristicResult): Promise<void> {
+  const install = await window.electronAPI.portsInstallSetupCommand(taskId);
+  if (!install.success) {
+    toast.error(`Failed to install /dash-port-setup: ${install.error ?? 'unknown error'}`);
+    return;
+  }
+  window.electronAPI.ptyInput({ id: taskId, data: '/reload-skills\r' });
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  const command = buildPortsSetupCommand(heuristic);
+  window.electronAPI.ptyInput({ id: taskId, data: command });
+  // No success toast — the onboarding toast transitions to the "waiting"
+  // body via beginWaiting() with the same toast id. A second success toast
+  // would just overlap that one with redundant copy.
+}
 
 export function App() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -119,6 +162,12 @@ export function App() {
   });
   const [shellDrawerCollapsed, setShellDrawerCollapsed] = useState(() => {
     return localStorage.getItem('shellDrawerCollapsed') === 'true';
+  });
+  // Ports drawer defaults to collapsed so it doesn't intrude on projects
+  // that aren't using port management; the collapsed bar still shows status.
+  const [portsDrawerCollapsed, setPortsDrawerCollapsed] = useState(() => {
+    const stored = localStorage.getItem('portsDrawerCollapsed');
+    return stored === null ? true : stored === 'true';
   });
   const [shellDrawerPosition, setShellDrawerPosition] = useState<'main' | 'right'>(() => {
     const stored = localStorage.getItem('shellDrawerPosition');
@@ -569,6 +618,15 @@ export function App() {
   const activeProjectTasks = activeProjectId
     ? (tasksByProject[activeProjectId] || []).filter((t) => !t.archivedAt)
     : [];
+
+  // Persisted toast that nudges the user to set up port management when the
+  // heuristic fires for the active project. Lives at App level so it persists
+  // across task switches within a project and disappears on project switch.
+  usePortsOnboarding({
+    taskId: activeTask?.id ?? null,
+    projectId: activeTask?.projectId ?? null,
+    onSetup: setupPortsForTask,
+  });
 
   // Memoized props for SkillsBrowserModal. Without these, App.tsx re-renders (terminal
   // activity, git polls, PTY events) hand the modal new array references every time,
@@ -2006,51 +2064,64 @@ export function App() {
                   }}
                 >
                   {!changesPanelCollapsed && (
-                    <RightInspector
-                      activeTask={activeTask}
-                      gitStatus={gitStatus}
-                      gitLoading={gitLoading}
-                      rateLimits={showRateLimits && latestRateLimits ? latestRateLimits : {}}
-                      contextUsage={
-                        showUsageInline && activeTask ? contextUsage[activeTask.id] : undefined
-                      }
-                      onViewDiff={handleViewDiff}
-                      onStageFiles={handleStageFiles}
-                      onUnstageFiles={handleUnstageFiles}
-                      onStageAll={handleStageAll}
-                      onUnstageAll={handleUnstageAll}
-                      onDiscardFiles={handleDiscardFiles}
-                      onAddToGitignore={handleAddToGitignore}
-                      onCommit={handleCommit}
-                      onPush={handlePush}
-                      onCommitFinished={() => activeTask && refreshGitStatus(activeTask.path)}
-                      onShowCommitGraph={() => setShowCommitGraph(true)}
-                      onOpenEditor={() => {
-                        if (!activeTask) return;
-                        const files = gitStatus?.files ?? [];
-                        if (files.length > 0) {
-                          // Prefer the first unstaged file; otherwise first staged.
-                          const target = files.find((f) => !f.staged) ?? files[0];
-                          setDiffFile({
-                            cwd: activeTask.path,
-                            filePath: target.path,
-                            staged: target.staged,
-                          });
-                        } else {
-                          // No working changes — open at the latest commit.
-                          // The 'HEAD' sentinel resolves to the real sha once
-                          // the editor loads its commit list.
-                          setDiffFile({
-                            cwd: activeTask.path,
-                            filePath: '',
-                            staged: false,
-                            initialView: { kind: 'commit', hash: 'HEAD' },
-                          });
-                        }
+                    <PortsDrawerWrapper
+                      taskId={activeTask?.id ?? null}
+                      collapsed={portsDrawerCollapsed}
+                      onCollapse={() => {
+                        setPortsDrawerCollapsed(true);
+                        localStorage.setItem('portsDrawerCollapsed', 'true');
                       }}
-                      collapsed={changesPanelCollapsed}
-                      onToggleCollapse={toggleChangesPanel}
-                    />
+                      onExpand={() => {
+                        setPortsDrawerCollapsed(false);
+                        localStorage.setItem('portsDrawerCollapsed', 'false');
+                      }}
+                    >
+                      <RightInspector
+                        activeTask={activeTask}
+                        gitStatus={gitStatus}
+                        gitLoading={gitLoading}
+                        rateLimits={showRateLimits && latestRateLimits ? latestRateLimits : {}}
+                        contextUsage={
+                          showUsageInline && activeTask ? contextUsage[activeTask.id] : undefined
+                        }
+                        onViewDiff={handleViewDiff}
+                        onStageFiles={handleStageFiles}
+                        onUnstageFiles={handleUnstageFiles}
+                        onStageAll={handleStageAll}
+                        onUnstageAll={handleUnstageAll}
+                        onDiscardFiles={handleDiscardFiles}
+                        onAddToGitignore={handleAddToGitignore}
+                        onCommit={handleCommit}
+                        onPush={handlePush}
+                        onCommitFinished={() => activeTask && refreshGitStatus(activeTask.path)}
+                        onShowCommitGraph={() => setShowCommitGraph(true)}
+                        onOpenEditor={() => {
+                          if (!activeTask) return;
+                          const files = gitStatus?.files ?? [];
+                          if (files.length > 0) {
+                            // Prefer the first unstaged file; otherwise first staged.
+                            const target = files.find((f) => !f.staged) ?? files[0];
+                            setDiffFile({
+                              cwd: activeTask.path,
+                              filePath: target.path,
+                              staged: target.staged,
+                            });
+                          } else {
+                            // No working changes — open at the latest commit.
+                            // The 'HEAD' sentinel resolves to the real sha once
+                            // the editor loads its commit list.
+                            setDiffFile({
+                              cwd: activeTask.path,
+                              filePath: '',
+                              staged: false,
+                              initialView: { kind: 'commit', hash: 'HEAD' },
+                            });
+                          }
+                        }}
+                        collapsed={changesPanelCollapsed}
+                        onToggleCollapse={toggleChangesPanel}
+                      />
+                    </PortsDrawerWrapper>
                   )}
                 </ShellDrawerWrapper>
               </div>

@@ -13,6 +13,7 @@ import { registerSessionIpc } from './sessionIpc';
 import { registerEditorIpc } from './editorIpc';
 import { registerDiffCommentsIpc } from './diffCommentsIpc';
 import { registerTokenStatsIpc } from './tokenStatsIpc';
+import { registerPortsIpc } from './portsIpc';
 
 export function registerAllIpc(): void {
   registerAppIpc();
@@ -30,4 +31,5 @@ export function registerAllIpc(): void {
   registerEditorIpc();
   registerDiffCommentsIpc();
   registerTokenStatsIpc();
+  registerPortsIpc();
 }

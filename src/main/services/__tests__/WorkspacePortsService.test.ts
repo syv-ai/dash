@@ -65,6 +65,22 @@ describe('loadWorkspacePorts — validation', () => {
     expect(loadWorkspacePorts(tmpDir)).toBeNull();
   });
 
+  it('accepts a bare top-level array as shorthand for { ports: [...] }', () => {
+    // Agents writing this file for the first time sometimes infer the file
+    // IS the array of entries — a reasonable reading of "two entry shapes".
+    // We accept it; slots/stride defaults apply.
+    writeJson('.dash/ports.json', [
+      { label: 'Frontend', envVar: 'FRONTEND_PORT', defaultPort: 5173 },
+      { label: 'Backend', envVar: 'BACKEND_PORT', defaultPort: 8000 },
+    ]);
+    expect(loadWorkspacePorts(tmpDir)).toEqual({
+      ports: [
+        { label: 'Frontend', envVar: 'FRONTEND_PORT', defaultPort: 5173 },
+        { label: 'Backend', envVar: 'BACKEND_PORT', defaultPort: 8000 },
+      ],
+    });
+  });
+
   it('returns null when ports is missing', () => {
     writeJson('.dash/ports.json', {});
     expect(loadWorkspacePorts(tmpDir)).toBeNull();
@@ -89,9 +105,20 @@ describe('loadWorkspacePorts — validation', () => {
     expect(loadWorkspacePorts(tmpDir)).toBeNull();
   });
 
-  it('returns null when defaultPort is below 1024', () => {
+  it('accepts privileged ports (defaultPort 80)', () => {
+    // Reverse proxies and similar services commonly baseline at 80/443.
+    // We accept; the allocator's hash offset will usually escape the
+    // privileged range, and at-bind-time failure is clearer than a
+    // schema-time rejection.
     writeJson('.dash/ports.json', {
-      ports: [{ label: 'X', envVar: 'X_PORT', defaultPort: 80 }],
+      ports: [{ label: 'Proxy', envVar: 'PROXY_PORT', defaultPort: 80 }],
+    });
+    expect(loadWorkspacePorts(tmpDir)).not.toBeNull();
+  });
+
+  it('returns null when defaultPort is zero or negative', () => {
+    writeJson('.dash/ports.json', {
+      ports: [{ label: 'X', envVar: 'X_PORT', defaultPort: 0 }],
     });
     expect(loadWorkspacePorts(tmpDir)).toBeNull();
   });
@@ -153,9 +180,11 @@ describe('loadPortOverrides', () => {
 
   it('drops entries whose value is not a valid port', () => {
     writeJson('.dash/ports.local.json', {
-      overrides: { OK_PORT: 3000, BAD_PORT: 80, NEG_PORT: -1, STR_PORT: '5173' },
+      overrides: { OK_PORT: 3000, PROXY_PORT: 80, NEG_PORT: -1, STR_PORT: '5173' },
     });
-    expect(loadPortOverrides(tmpDir)).toEqual({ OK_PORT: 3000 });
+    // Port 80 is now accepted (privileged but legitimate for proxies etc.).
+    // Negative numbers and non-integers are still dropped.
+    expect(loadPortOverrides(tmpDir)).toEqual({ OK_PORT: 3000, PROXY_PORT: 80 });
   });
 
   it('returns empty map for malformed JSON', () => {

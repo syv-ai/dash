@@ -9,6 +9,7 @@ import { hookServer } from './HookServer';
 import { contextUsageService } from './ContextUsageService';
 import { DatabaseService } from './DatabaseService';
 import { RtkService } from './RtkService';
+import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
 import {
   type Hook,
   type HookEntry,
@@ -235,7 +236,7 @@ async function findClaudePath(): Promise<string | null> {
  * When syncShellEnv is off (default), uses a minimal set for fast, predictable spawns.
  * When on, inherits the full parent process.env as a base.
  */
-function buildDirectEnv(isDark: boolean): Record<string, string> {
+function buildDirectEnv(isDark: boolean, cwd?: string): Record<string, string> {
   const isWin = process.platform === 'win32';
   const base: Record<string, string> = syncShellEnv
     ? Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => !!e[1]))
@@ -314,6 +315,19 @@ function buildDirectEnv(isDark: boolean): Record<string, string> {
   for (const [key, value] of Object.entries(claudeEnvVars)) {
     if (!RESERVED_ENV_KEYS.has(key)) {
       env[key] = value;
+    }
+  }
+
+  // Merge per-task port env vars (FRONTEND_PORT=…, etc) so commands run by
+  // Claude resolve the same host port the user sees in the ports panel.
+  // After user settings so a project never accidentally clobbers an allocated
+  // port; before the CLAUDE_CODE_NO_FLICKER line so reserved-key checks above
+  // would still apply if a user declared one in .dash/ports.json (the schema
+  // enforces an allowlist regex; the RESERVED_ENV_KEYS list is a defense in
+  // depth not really expected to fire here).
+  if (cwd) {
+    for (const [key, value] of Object.entries(WorkspacePortsRuntime.getEnvForWorktree(cwd))) {
+      if (!RESERVED_ENV_KEYS.has(key)) env[key] = value;
     }
   }
 
@@ -740,7 +754,7 @@ export async function startDirectPty(options: {
   } else if (options.permissionMode === 'bypassPermissions') {
     args.push('--dangerously-skip-permissions');
   }
-  const env = buildDirectEnv(options.isDark ?? true);
+  const env = buildDirectEnv(options.isDark ?? true, options.cwd);
 
   writeHookSettings(options.cwd, options.id);
 
@@ -937,6 +951,15 @@ export async function startPty(options: {
     if (shell.endsWith('/zsh') || shell === 'zsh') {
       env.ZDOTDIR = ensureShellConfig();
     }
+  }
+
+  // Same port-env injection as direct PTYs — the terminal drawer shares the
+  // task's worktree, so `curl localhost:$FRONTEND_PORT` should resolve there
+  // too. RESERVED_ENV_KEYS guard is unnecessary here since we're working from
+  // a fresh `{ ...process.env }` and the allocator's env-var allowlist already
+  // excludes the reserved set.
+  for (const [key, value] of Object.entries(WorkspacePortsRuntime.getEnvForWorktree(options.cwd))) {
+    env[key] = value;
   }
 
   const proc = pty.spawn(shell, args, {

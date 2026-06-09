@@ -903,3 +903,45 @@
 .monaco-diff-editor .monaco-scrollable-element > .shadow {
   display: none !important;
 }
+
+/* ── Sonner toasts: frosted glass ─────────────────────────────
+ *
+ * Match the same gradient + backdrop-blur language used by .sidebar-shell
+ * and .right-inspector-shell so toasts read as the same surface as the rest
+ * of the chrome instead of an opaque card pasted on top. We override the
+ * built-in CSS variables sonner exposes (--normal-bg, --normal-border,
+ * --normal-text) for the background fill and palette, then patch the toast
+ * element directly with the gradient + backdrop-filter that sonner's
+ * variables don't cover. */
+[data-sonner-toaster] {
+  --normal-bg: transparent;
+  --normal-border: hsl(0 0% 100% / 0.12);
+  --normal-text: hsl(var(--foreground));
+}
+[data-sonner-toast] {
+  background: linear-gradient(
+    180deg,
+    hsl(0 0% 100% / 0.08) 0%,
+    hsl(var(--surface-2) / 0.55) 40%,
+    hsl(var(--surface-1) / 0.75) 100%
+  ) !important;
+  backdrop-filter: blur(24px) saturate(1.8);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  border: 1px solid hsl(0 0% 100% / 0.12) !important;
+  box-shadow:
+    inset 0 1px 0 0 hsl(0 0% 100% / 0.14),
+    inset 0 -1px 0 0 hsl(0 0% 0% / 0.18),
+    0 8px 24px hsl(0 0% 0% / 0.25) !important;
+  color: hsl(var(--foreground)) !important;
+}
+/* Suppress sonner's slide-in for the second (and later) appearance of the
+ * ports-onboarding toast in this session. Users who project-hop see it pop
+ * back into the viewport without the attention-grabbing entry effect.
+ * Targets both the keyframe-driven and transition-driven entry — sonner's
+ * implementation has varied across versions. */
+[data-sonner-toast].no-entry-anim {
+  animation: none !important;
+  transition-property: none !important;
+  opacity: 1 !important;
+  transform: translateY(0) translateX(0) !important;
+}

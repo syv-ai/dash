@@ -408,4 +408,40 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('autoUpdate:error', handler);
     };
   },
+
+  // Workspace ports
+  portsList: (taskId: string) => ipcRenderer.invoke('ports:list', taskId),
+  portsRefresh: (taskId: string) => ipcRenderer.invoke('ports:refresh', taskId),
+  portsLivenessGet: (taskId: string) => ipcRenderer.invoke('ports:liveness:get', taskId),
+  portsUnwatch: (taskId: string) => ipcRenderer.invoke('ports:unwatch', taskId),
+  portsOpenUrl: (port: number) => ipcRenderer.invoke('ports:openUrl', port),
+  portsDetect: (taskId: string) => ipcRenderer.invoke('ports:detect', taskId),
+  portsIsDockerDesktopAvailable: () => ipcRenderer.invoke('ports:isDockerDesktopAvailable'),
+  portsOpenInDocker: () => ipcRenderer.invoke('ports:openInDocker'),
+  portsWatchConfig: (taskId: string) => ipcRenderer.invoke('ports:watchConfig', taskId),
+  portsUnwatchConfig: (taskId: string) => ipcRenderer.invoke('ports:unwatchConfig', taskId),
+  portsInstallSetupCommand: (taskId: string) =>
+    ipcRenderer.invoke('ports:installSetupCommand', taskId),
+  onPortsConfigChanged: (callback: (data: { taskId: string }) => void) => {
+    const handler = (_event: unknown, data: { taskId: string }) => callback(data);
+    ipcRenderer.on('ports:configChanged', handler);
+    return () => {
+      ipcRenderer.removeListener('ports:configChanged', handler);
+    };
+  },
+  onPortsSetupComplete: (callback: (data: { taskId: string }) => void) => {
+    const handler = (_event: unknown, data: { taskId: string }) => callback(data);
+    ipcRenderer.on('ports:setupComplete', handler);
+    return () => {
+      ipcRenderer.removeListener('ports:setupComplete', handler);
+    };
+  },
+  onPortsLiveness: (callback: (update: import('@shared/types').PortLivenessUpdate) => void) => {
+    const handler = (_event: unknown, update: import('@shared/types').PortLivenessUpdate) =>
+      callback(update);
+    ipcRenderer.on('ports:liveness', handler);
+    return () => {
+      ipcRenderer.removeListener('ports:liveness', handler);
+    };
+  },
 });

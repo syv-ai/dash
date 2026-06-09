@@ -357,7 +357,7 @@ export class TerminalSessionManager {
         if (gen !== this.attachGeneration) return;
 
         const dims = this.fitAddon.proposeDimensions();
-        const shellResp = await window.electronAPI.ptyStart({
+        let shellResp = await window.electronAPI.ptyStart({
           id: this.id,
           cwd: this.cwd,
           cols: this.ptyCols(dims?.cols ?? 120),
@@ -365,6 +365,29 @@ export class TerminalSessionManager {
         });
         if (gen !== this.attachGeneration) return;
         reattached = shellResp.data?.reattached ?? false;
+
+        // Self-heal: a buggy earlier `restart()` (pre-shellOnly branch)
+        // could have spawned Claude into this shell-mode PTY id. ptyStart
+        // reattaches blindly, so without this we'd render Claude's TUI in
+        // the drawer. Kill the stray and respawn as a real shell. The
+        // snapshot is also discarded — it's from the Claude session and
+        // would replay garbled into a shell terminal.
+        if (reattached && shellResp.data?.isDirectSpawn) {
+          console.warn(
+            `[terminal] stray direct-spawn at shell id ${this.id} — killing and respawning as shell`,
+          );
+          window.electronAPI.ptyKill(this.id);
+          existingSnapshot = null;
+          await new Promise((r) => setTimeout(r, 50));
+          shellResp = await window.electronAPI.ptyStart({
+            id: this.id,
+            cwd: this.cwd,
+            cols: this.ptyCols(dims?.cols ?? 120),
+            rows: dims?.rows ?? 30,
+          });
+          if (gen !== this.attachGeneration) return;
+          reattached = shellResp.data?.reattached ?? false;
+        }
         this.ptyStarted = true;
 
         if (existingSnapshot && !reattached) {
@@ -566,6 +589,84 @@ export class TerminalSessionManager {
 
   onRestarting(cb: () => void) {
     this.onRestartingCallback = cb;
+  }
+
+  /**
+   * User-initiated restart — kill the current PTY and respawn fresh so the
+   * new process inherits whatever env vars / settings have changed since
+   * the original spawn. Used by the port-management flow to pick up newly
+   * allocated env vars without losing the Claude session (the main process
+   * re-spawns with `claude --continue`).
+   *
+   * Branches on shellOnly because `restartAllForTask` blindly iterates
+   * every PTY associated with the task — agent (taskId) + drawer shells
+   * (shell:taskId, shell:taskId:*). Without the branch we'd call
+   * ptyStartDirect on the shell-mode sessions and spawn Claude inside the
+   * shell drawer's PTY ID, leaving the drawer mirroring the agent's CC
+   * session after the next refresh.
+   *
+   * Tears down the existing listeners before kill so the onPtyExit
+   * shell-fallback path doesn't fire — we want a clean re-spawn, not the
+   * "process died, give me a shell" recovery.
+   */
+  async restart(): Promise<void> {
+    if (this.disposed) return;
+    this._isRestarting = true;
+    this.readyFired = false;
+    this.onRestartingCallback?.();
+    this.dataBuffer = [];
+
+    if (this.unsubExit) {
+      this.unsubExit();
+      this.unsubExit = null;
+    }
+    if (this.unsubData) {
+      this.unsubData();
+      this.unsubData = null;
+    }
+
+    window.electronAPI.ptyKill(this.id);
+    this.ptyStarted = false;
+
+    // Brief settle so main has time to delete the PTY record before the
+    // next start call sees it and reattaches.
+    await new Promise((r) => setTimeout(r, 50));
+
+    if (this.shellOnly) {
+      const dims = this.fitAddon.proposeDimensions();
+      await window.electronAPI.ptyStart({
+        id: this.id,
+        cwd: this.cwd,
+        cols: this.ptyCols(dims?.cols ?? 120),
+        rows: dims?.rows ?? 30,
+      });
+      this.ptyStarted = true;
+    } else {
+      await this.startPty();
+    }
+    this.connectPtyListeners();
+
+    // Flush + stop buffering. We set dataBuffer = [] at the top to absorb
+    // any in-flight bytes during the kill/respawn window, but if we leave
+    // it non-null, onPtyData keeps pushing into it forever and never
+    // writes to xterm — the terminal looks frozen until the next attach()
+    // (e.g. on task switch) hits its own flush path. Mirrors attach().
+    if (this.dataBuffer !== null) {
+      const buffered = this.dataBuffer;
+      this.dataBuffer = null;
+      for (const chunk of buffered) {
+        this.terminal.write(chunk);
+      }
+      if (buffered.length > 0) {
+        this.snapshotDirty = true;
+        this.debounceSaveSnapshot();
+      }
+    }
+
+    if (this.readyFallbackTimer) clearTimeout(this.readyFallbackTimer);
+    this.readyFallbackTimer = setTimeout(() => {
+      this.fireReady();
+    }, 10_000);
   }
 
   onReady(cb: () => void) {

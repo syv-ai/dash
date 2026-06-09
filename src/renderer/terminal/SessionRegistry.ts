@@ -69,6 +69,22 @@ class SessionRegistryImpl {
     }
   }
 
+  /**
+   * Restart every PTY associated with a task — the Claude agent session
+   * (taskId), the main shell drawer (shell:taskId), and any additional
+   * shell tabs (shell:taskId:N). Used by the port-management flow so the
+   * new env vars are picked up without losing the agent's Claude session.
+   */
+  async restartAllForTask(taskId: string): Promise<void> {
+    const targets: TerminalSessionManager[] = [];
+    for (const [id, session] of this.sessions) {
+      if (id === taskId || id === `shell:${taskId}` || id.startsWith(`shell:${taskId}:`)) {
+        targets.push(session);
+      }
+    }
+    await Promise.all(targets.map((s) => s.restart()));
+  }
+
   setAllThemes(isDark: boolean): void {
     this._isDark = isDark;
     this.setAllTerminalThemes(this._themeId, isDark);

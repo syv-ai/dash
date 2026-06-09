@@ -97,3 +97,30 @@ export const diffEditorComments = sqliteTable(
     taskFileIdx: index('idx_diff_editor_comments_task_file').on(table.taskId, table.filePath),
   }),
 );
+
+// One row per port assignment surfaced to the task. Tier 1 (fixed) entries
+// have null env_var / default_port; Tier 2 (allocated) entries carry both.
+// Re-allocated on every worktree setup, so rows are transient — the DB is the
+// source of truth for "which host ports are currently taken" during cross-task
+// collision avoidance.
+export const taskPorts = sqliteTable(
+  'task_ports',
+  {
+    id: text('id').primaryKey(),
+    taskId: text('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    label: text('label').notNull(),
+    envVar: text('env_var'),
+    defaultPort: integer('default_port'),
+    hostPort: integer('host_port').notNull(),
+    // 'fixed' | 'hash' | 'override' | 'probe' — see PortSource in PortAllocator
+    source: text('source').notNull(),
+    createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    taskIdIdx: index('idx_task_ports_task_id').on(table.taskId),
+    hostPortIdx: index('idx_task_ports_host_port').on(table.hostPort),
+  }),
+);

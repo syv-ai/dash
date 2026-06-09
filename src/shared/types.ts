@@ -606,6 +606,54 @@ export interface EditorCommitListItem {
   body: string;
 }
 
+// ── Workspace ports ──────────────────────────────────────────
+
+/** Where a host port came from. Surfaced in the ports panel tooltip. */
+export type PortSource = 'fixed' | 'hash' | 'override' | 'probe';
+
+export interface TaskPort {
+  id: string;
+  taskId: string;
+  label: string;
+  /** null for Tier 1 (fixed) entries — they have no env var. */
+  envVar: string | null;
+  /** null for Tier 1 entries; the schema-declared port the assignment was derived from. */
+  defaultPort: number | null;
+  hostPort: number;
+  source: PortSource;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Per-task liveness map keyed by host port. 'unknown' = first probe pending. */
+export type PortLiveness = 'up' | 'down' | 'unknown';
+
+export interface PortLivenessUpdate {
+  taskId: string;
+  results: Record<number, PortLiveness>;
+}
+
+export interface PortHeuristicGuess {
+  label: string;
+  envVar: string;
+  defaultPort: number;
+}
+
+/** Result of the project-shape heuristic. `alreadyConfigured` short-circuits
+ *  the panel's onboarding card when .dash/ports.json already exists, so the
+ *  renderer can call detect unconditionally without first probing the list.
+ *  `configError` is set when the file exists but failed to parse — distinct
+ *  from "file doesn't exist" so the onboarding poll can stop and surface
+ *  the error to the user instead of waiting forever for a file that's there
+ *  but malformed. */
+export interface PortHeuristicResult {
+  needsPorts: boolean;
+  signals: string[];
+  guesses: PortHeuristicGuess[];
+  alreadyConfigured: boolean;
+  configError?: string;
+}
+
 // ── Diff editor comments ──────────────────────────────────────
 
 /** A persisted annotation on a working-tree file in the diff editor.

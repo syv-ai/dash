@@ -79,6 +79,22 @@ export function runMigrations(): void {
        ON diff_editor_comments(task_id, file_path);`,
   );
 
+  rawDb.exec(`
+    CREATE TABLE IF NOT EXISTS task_ports (
+      id            TEXT PRIMARY KEY,
+      task_id       TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      label         TEXT NOT NULL,
+      env_var       TEXT,
+      default_port  INTEGER,
+      host_port     INTEGER NOT NULL,
+      source        TEXT NOT NULL,
+      created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at    TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  rawDb.exec(`CREATE INDEX IF NOT EXISTS idx_task_ports_task_id ON task_ports(task_id);`);
+  rawDb.exec(`CREATE INDEX IF NOT EXISTS idx_task_ports_host_port ON task_ports(host_port);`);
+
   // Migrations for existing databases
   try {
     rawDb.exec(`ALTER TABLE tasks ADD COLUMN auto_approve INTEGER DEFAULT 0`);

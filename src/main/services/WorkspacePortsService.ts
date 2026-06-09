@@ -27,17 +27,30 @@ export interface WorkspacePorts {
 }
 
 const ENV_VAR_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
-const MIN_PORT = 1024;
+// Accept the full TCP range. A 1024 floor would block legitimate use cases
+// like proxies bound to port 80 (Tier 1 observe-only) and services whose
+// allocator hash adds enough offset to escape the privileged range. If a
+// user picks an unworkable port, the failure surfaces at bind time with a
+// clearer error than ours could be.
+const MIN_PORT = 1;
 const MAX_PORT = 65535;
+
+// Validation errors funnel through `report` so loadWorkspacePorts can hand
+// the messages back to its caller in addition to logging. Module-scoped
+// because the parser is a tree of small functions and threading a reporter
+// through each signature is more churn than this is worth. Reset in finally.
+let captureErrors: string[] | null = null;
+function report(msg: string): void {
+  if (captureErrors) captureErrors.push(msg);
+  console.error(`[WorkspacePorts] ${msg}`);
+}
 
 function readJson(filePath: string): unknown {
   if (!fs.existsSync(filePath)) return undefined;
   try {
     return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
   } catch (err) {
-    console.error(
-      `[WorkspacePorts] Failed to parse ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    report(`Failed to parse ${filePath}: ${err instanceof Error ? err.message : String(err)}`);
     return undefined;
   }
 }
@@ -54,13 +67,13 @@ function isValidPort(value: unknown): value is number {
 
 function parsePortEntry(raw: unknown, index: number, source: string): PortDeclaration | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    console.error(`[WorkspacePorts] ${source}: ports[${index}] must be an object`);
+    report(`${source}: ports[${index}] must be an object`);
     return null;
   }
   const obj = raw as Record<string, unknown>;
 
   if (typeof obj.label !== 'string' || obj.label.trim().length === 0) {
-    console.error(`[WorkspacePorts] ${source}: ports[${index}].label must be a non-empty string`);
+    report(`${source}: ports[${index}].label must be a non-empty string`);
     return null;
   }
   const label = obj.label.trim();
@@ -70,37 +83,29 @@ function parsePortEntry(raw: unknown, index: number, source: string): PortDeclar
   const hasPort = obj.port !== undefined;
 
   if (hasPort && (hasEnvVar || hasDefaultPort)) {
-    console.error(
-      `[WorkspacePorts] ${source}: ports[${index}] cannot combine 'port' with 'envVar'/'defaultPort'`,
-    );
+    report(`${source}: ports[${index}] cannot combine 'port' with 'envVar'/'defaultPort'`);
     return null;
   }
 
   if (hasPort) {
     if (!isValidPort(obj.port)) {
-      console.error(
-        `[WorkspacePorts] ${source}: ports[${index}].port must be an integer in [${MIN_PORT}, ${MAX_PORT}]`,
-      );
+      report(`${source}: ports[${index}].port must be an integer in [${MIN_PORT}, ${MAX_PORT}]`);
       return null;
     }
     return { label, port: obj.port };
   }
 
   if (!hasEnvVar || !hasDefaultPort) {
-    console.error(
-      `[WorkspacePorts] ${source}: ports[${index}] requires either 'port' or both 'envVar' and 'defaultPort'`,
-    );
+    report(`${source}: ports[${index}] requires either 'port' or both 'envVar' and 'defaultPort'`);
     return null;
   }
   if (typeof obj.envVar !== 'string' || !ENV_VAR_PATTERN.test(obj.envVar)) {
-    console.error(
-      `[WorkspacePorts] ${source}: ports[${index}].envVar must match /^[A-Z_][A-Z0-9_]*$/`,
-    );
+    report(`${source}: ports[${index}].envVar must match /^[A-Z_][A-Z0-9_]*$/`);
     return null;
   }
   if (!isValidPort(obj.defaultPort)) {
-    console.error(
-      `[WorkspacePorts] ${source}: ports[${index}].defaultPort must be an integer in [${MIN_PORT}, ${MAX_PORT}]`,
+    report(
+      `${source}: ports[${index}].defaultPort must be an integer in [${MIN_PORT}, ${MAX_PORT}]`,
     );
     return null;
   }
@@ -108,41 +113,53 @@ function parsePortEntry(raw: unknown, index: number, source: string): PortDeclar
 }
 
 function parseConfig(parsed: unknown, source: string): WorkspacePorts | null {
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    console.error(`[WorkspacePorts] ${source}: root must be an object`);
+  // Accept either the canonical `{ ports: [...], slots?, stride? }` shape or
+  // a bare top-level array. The bare-array shape is a natural reading of
+  // "the schema has two entry shapes" — agents writing this file for the
+  // first time sometimes infer the collection IS the array. We prefer to
+  // be liberal in what we accept here; slots/stride aren't expressible in
+  // the bare form but their defaults are fine for almost every project.
+  let portsArr: unknown;
+  let obj: Record<string, unknown> | null = null;
+  if (Array.isArray(parsed)) {
+    portsArr = parsed;
+  } else if (parsed && typeof parsed === 'object') {
+    obj = parsed as Record<string, unknown>;
+    portsArr = obj.ports;
+  } else {
+    report(`${source}: root must be an object or an array`);
     return null;
   }
-  const obj = parsed as Record<string, unknown>;
 
-  if (!Array.isArray(obj.ports)) {
-    console.error(`[WorkspacePorts] ${source}: 'ports' must be an array`);
+  if (!Array.isArray(portsArr)) {
+    report(`${source}: 'ports' must be an array`);
     return null;
   }
 
   const result: WorkspacePorts = { ports: [] };
 
-  if (obj.slots !== undefined) {
+  if (obj?.slots !== undefined) {
     if (!isPositiveInt(obj.slots)) {
-      console.error(`[WorkspacePorts] ${source}: 'slots' must be a positive integer`);
+      report(`${source}: 'slots' must be a positive integer`);
       return null;
     }
     result.slots = obj.slots;
   }
-  if (obj.stride !== undefined) {
+  if (obj?.stride !== undefined) {
     if (!isPositiveInt(obj.stride)) {
-      console.error(`[WorkspacePorts] ${source}: 'stride' must be a positive integer`);
+      report(`${source}: 'stride' must be a positive integer`);
       return null;
     }
     result.stride = obj.stride;
   }
 
   const seenEnvVars = new Set<string>();
-  for (let i = 0; i < obj.ports.length; i++) {
-    const entry = parsePortEntry(obj.ports[i], i, source);
+  for (let i = 0; i < portsArr.length; i++) {
+    const entry = parsePortEntry(portsArr[i], i, source);
     if (entry === null) return null;
     if ('envVar' in entry) {
       if (seenEnvVars.has(entry.envVar)) {
-        console.error(`[WorkspacePorts] ${source}: duplicate envVar '${entry.envVar}'`);
+        report(`${source}: duplicate envVar '${entry.envVar}'`);
         return null;
       }
       seenEnvVars.add(entry.envVar);
@@ -153,11 +170,16 @@ function parseConfig(parsed: unknown, source: string): WorkspacePorts | null {
   return result;
 }
 
-export function loadWorkspacePorts(worktreePath: string): WorkspacePorts | null {
-  const filePath = path.join(worktreePath, DASH_DIR, PORTS_FILE);
-  const parsed = readJson(filePath);
-  if (parsed === undefined) return null;
-  return parseConfig(parsed, filePath);
+export function loadWorkspacePorts(worktreePath: string, errors?: string[]): WorkspacePorts | null {
+  captureErrors = errors ?? null;
+  try {
+    const filePath = path.join(worktreePath, DASH_DIR, PORTS_FILE);
+    const parsed = readJson(filePath);
+    if (parsed === undefined) return null;
+    return parseConfig(parsed, filePath);
+  } finally {
+    captureErrors = null;
+  }
 }
 
 /**

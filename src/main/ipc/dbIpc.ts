@@ -1,6 +1,8 @@
 import { ipcMain } from 'electron';
 import { DatabaseService } from '../services/DatabaseService';
 import { TelemetryService } from '../services/TelemetryService';
+import { WorkspacePortsRuntime } from '../services/WorkspacePortsRuntime';
+import { startWatching as startPortsConfigWatch } from '../services/PortsConfigWatcher';
 
 export function registerDbIpc(): void {
   // ── Projects ─────────────────────────────────────────────
@@ -51,6 +53,21 @@ export function registerDbIpc(): void {
       const isNew = !task.id;
       const data = DatabaseService.saveTask(task);
       if (isNew) TelemetryService.capture('task_created');
+      // Allocate per-task ports the first time the row is saved. Done here so
+      // .dash/ports.env exists before the renderer spawns the task PTY, which
+      // is the point at which port env vars get merged into the spawn env.
+      // Skipped for in-place (non-worktree) tasks — they share the project dir
+      // with everyone else and shouldn't get rewritten ports.env files.
+      if (isNew && data.useWorktree) {
+        try {
+          WorkspacePortsRuntime.setupTask({ taskId: data.id, worktreePath: data.path });
+          // setupTask just created .dash/ (writing ports.env there), so the
+          // watcher can attach now. Idempotent — re-arms below don't stack.
+          startPortsConfigWatch(data.id, data.path);
+        } catch (err) {
+          console.error('[dbIpc] setupTask ports allocation failed:', err);
+        }
+      }
       return { success: true, data };
     } catch (error) {
       return { success: false, error: String(error) };

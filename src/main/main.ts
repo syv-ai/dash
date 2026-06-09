@@ -297,6 +297,14 @@ app.on('before-quit', async () => {
     // Best effort
   }
 
+  // Stop all ports.json watchers
+  try {
+    const { stopAll: stopPortsConfigWatchers } = await import('./services/PortsConfigWatcher');
+    stopPortsConfigWatchers();
+  } catch {
+    // Best effort
+  }
+
   // Flush telemetry
   try {
     const { TelemetryService } = await import('./services/TelemetryService');

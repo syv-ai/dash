@@ -2,7 +2,7 @@ import { eq, desc, and, isNull, ne, asc, sql } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { initDb, getDb } from '../db/client';
 import { runMigrations } from '../db/migrate';
-import { projects, tasks, conversations } from '../db/schema';
+import { projects, tasks, conversations, taskPorts } from '../db/schema';
 import type {
   Project,
   Task,
@@ -10,6 +10,8 @@ import type {
   LinkedItem,
   TokenStatsRollup,
   PermissionMode,
+  TaskPort,
+  PortSource,
 } from '@shared/types';
 
 function normalizePermissionMode(value: string | null | undefined): PermissionMode {
@@ -335,6 +337,91 @@ export class DatabaseService {
     return this.mapConversation(rows[0]);
   }
 
+  // ── Task ports ───────────────────────────────────────────
+
+  static getTaskPorts(taskId: string): TaskPort[] {
+    const db = getDb();
+    const rows = db
+      .select()
+      .from(taskPorts)
+      .where(eq(taskPorts.taskId, taskId))
+      .orderBy(asc(taskPorts.label))
+      .all();
+    return rows.map(DatabaseService.mapTaskPort);
+  }
+
+  /**
+   * Replace the full set of ports for a task in one transaction. We always
+   * write the whole snapshot rather than diff-patching: the allocator's output
+   * is the single source of truth, and a stale row left over from a previous
+   * .dash/ports.json would break the env-var contract.
+   */
+  static setTaskPorts(
+    taskId: string,
+    assignments: Array<{
+      label: string;
+      envVar: string | null;
+      defaultPort: number | null;
+      hostPort: number;
+      source: PortSource;
+    }>,
+  ): TaskPort[] {
+    const db = getDb();
+    const now = new Date().toISOString();
+    db.transaction((tx) => {
+      tx.delete(taskPorts).where(eq(taskPorts.taskId, taskId)).run();
+      if (assignments.length === 0) return;
+      tx.insert(taskPorts)
+        .values(
+          assignments.map((a) => ({
+            id: randomUUID(),
+            taskId,
+            label: a.label,
+            envVar: a.envVar,
+            defaultPort: a.defaultPort,
+            hostPort: a.hostPort,
+            source: a.source,
+            createdAt: now,
+            updatedAt: now,
+          })),
+        )
+        .run();
+    });
+    return DatabaseService.getTaskPorts(taskId);
+  }
+
+  static deleteTaskPorts(taskId: string): void {
+    const db = getDb();
+    db.delete(taskPorts).where(eq(taskPorts.taskId, taskId)).run();
+  }
+
+  /**
+   * Host ports already claimed by other tasks. Used by the allocator's
+   * collision-probe step so two worktrees never get the same host port.
+   * Excludes archived tasks — once a task is archived, its port assignments
+   * are no longer in service and should be freely re-issuable to others.
+   */
+  static getTakenHostPorts(excludeTaskId?: string): Set<number> {
+    const db = getDb();
+    const conditions = [isNull(tasks.archivedAt)];
+    if (excludeTaskId) conditions.push(ne(tasks.id, excludeTaskId));
+    const rows = db
+      .select({ hostPort: taskPorts.hostPort })
+      .from(taskPorts)
+      .innerJoin(tasks, eq(taskPorts.taskId, tasks.id))
+      .where(and(...conditions))
+      .all();
+    return new Set(rows.map((r) => r.hostPort));
+  }
+
+  /** Lookup the task by its worktree path. Used by ptyManager to merge port
+   *  env vars into spawned PTYs without forcing the renderer to pass taskId. */
+  static getTaskByPath(path: string): Task | undefined {
+    const db = getDb();
+    const row = db.select().from(tasks).where(eq(tasks.path, path)).get();
+    return row ? DatabaseService.mapTask(row) : undefined;
+  }
+
   // ── Mappers ──────────────────────────────────────────────
 
   private static mapProject(row: typeof projects.$inferSelect): Project {
@@ -378,6 +465,20 @@ export class DatabaseService {
       totalTokens: row.totalTokens ?? 0,
       totalCostUsd: row.totalCostUsd ?? 0,
       tokensBackfilledAt: row.tokensBackfilledAt ?? null,
+      createdAt: row.createdAt ?? '',
+      updatedAt: row.updatedAt ?? '',
+    };
+  }
+
+  private static mapTaskPort(row: typeof taskPorts.$inferSelect): TaskPort {
+    return {
+      id: row.id,
+      taskId: row.taskId,
+      label: row.label,
+      envVar: row.envVar,
+      defaultPort: row.defaultPort,
+      hostPort: row.hostPort,
+      source: row.source as PortSource,
       createdAt: row.createdAt ?? '',
       updatedAt: row.updatedAt ?? '',
     };
