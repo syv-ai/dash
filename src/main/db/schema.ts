@@ -14,6 +14,10 @@ export const projects = sqliteTable(
     // Deprecated since 0.13: replaced by .dash/config.json setup commands.
     // Column kept so existing DBs don't break; do not read or write.
     worktreeSetupScript: text('worktree_setup_script'),
+    // Set when the user picks 'Not relevant for this project' in the ports
+    // onboarding TUI. NULL = never dismissed. Cleared by deleting the row,
+    // not surfaced in the UI for editing today.
+    portsSetupDismissedAt: text('ports_setup_dismissed_at'),
     createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
   },

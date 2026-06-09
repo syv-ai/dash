@@ -352,6 +352,27 @@ export class TerminalSessionManager {
       this.connectPtyListeners();
 
       if (this.shellOnly) {
+        // TUI tabs are backed by a PTY that main spawned via startCommandPty
+        // (Clack side-car). If the user reaches this attach path and no PTY
+        // exists for the id, the orchestrator/side-car died — falling back to
+        // a shell would silently hide the failure behind a plausible-looking
+        // prompt. Render an error line and bail instead.
+        if (this.isTui) {
+          const targets = await window.electronAPI.ptyListForTask(this.id.split(':')[1] ?? '', {
+            kinds: ['tui'],
+          });
+          const exists = targets.success && targets.data && targets.data.includes(this.id);
+          if (!exists) {
+            this.terminal.write(
+              '\x1b[31m[ports tui] side-car not running for this tab.\x1b[0m\r\n' +
+                'Try closing this tab and re-opening the task. If the issue persists,\r\n' +
+                'check the main-process console for spawn errors.\r\n',
+            );
+            this.ptyStarted = true;
+            return;
+          }
+        }
+
         // Shell-only mode: just spawn a shell, skip Claude CLI
         let existingSnapshot: TerminalSnapshot | null = null;
         try {

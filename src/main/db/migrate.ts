@@ -256,5 +256,11 @@ export function runMigrations(): void {
     /* already exists */
   }
 
+  try {
+    rawDb.exec(`ALTER TABLE projects ADD COLUMN ports_setup_dismissed_at TEXT`);
+  } catch {
+    /* already exists */
+  }
+
   rawDb.pragma('foreign_keys = ON');
 }

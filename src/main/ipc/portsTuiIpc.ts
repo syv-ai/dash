@@ -10,6 +10,7 @@ import { detectPortsNeed } from '../services/PortsHeuristic';
 import { installPortsSetupCommand } from '../services/PortsSetupCommandInstaller';
 import { WorkspacePortsRuntime } from '../services/WorkspacePortsRuntime';
 import { events as portsConfigEvents } from '../services/PortsConfigWatcher';
+import { DatabaseService } from '../services/DatabaseService';
 
 interface ActiveTui {
   socket: TuiSocketServer;
@@ -18,31 +19,36 @@ interface ActiveTui {
 
 const activeTuis = new Map<string, ActiveTui>();
 
+const dismissStore = {
+  isDismissed: (pid: string) => DatabaseService.isPortsSetupDismissed(pid),
+  markDismissed: (pid: string) => DatabaseService.markPortsSetupDismissed(pid),
+};
+
 /**
- * Project-keyed dismiss store. Persisted to userData so 'Not relevant for this
- * project' sticks across Dash launches. Mirrors the toast's prior storage at
- * the same lifecycle layer (project-scoped, set once).
+ * One-time best-effort migration from the legacy dismissed-projects.json file
+ * (used by the pre-DB ports onboarding) into the projects table. Runs at boot;
+ * deletes the file once each id has been marked dismissed in SQLite.
  */
-function dismissStore() {
-  const file = path.join(app.getPath('userData'), 'dismissed-projects.json');
+function migrateLegacyDismissFile(): void {
+  const legacyPath = path.join(app.getPath('userData'), 'dismissed-projects.json');
   let state: Record<string, true> = {};
   try {
-    state = JSON.parse(fs.readFileSync(file, 'utf8'));
+    state = JSON.parse(fs.readFileSync(legacyPath, 'utf8'));
   } catch {
-    /* fresh */
+    return; // no file, nothing to migrate
   }
-  return {
-    isDismissed: (pid: string) => Boolean(state[pid]),
-    markDismissed: (pid: string) => {
-      state[pid] = true;
-      try {
-        fs.mkdirSync(path.dirname(file), { recursive: true });
-      } catch {
-        /* already exists */
-      }
-      fs.writeFileSync(file, JSON.stringify(state, null, 2));
-    },
-  };
+  for (const pid of Object.keys(state)) {
+    try {
+      DatabaseService.markPortsSetupDismissed(pid);
+    } catch {
+      /* unknown project — skip */
+    }
+  }
+  try {
+    fs.unlinkSync(legacyPath);
+  } catch {
+    /* already gone */
+  }
 }
 
 export function registerPortsTuiIpc(opts: { getMainWindow: () => BrowserWindow | null }): void {
@@ -61,14 +67,17 @@ export function registerPortsTuiIpc(opts: { getMainWindow: () => BrowserWindow |
       },
     ) => {
       const { taskId, projectId, taskName, projectName, cwd, cols, rows } = payload;
-      const store = dismissStore();
-      if (store.isDismissed(projectId)) {
-        return { success: true as const, data: { started: false, reason: 'dismissed' as const } };
+
+      if (dismissStore.isDismissed(projectId)) {
+        return {
+          success: true as const,
+          data: { started: false as const, reason: 'dismissed' as const },
+        };
       }
       if (activeTuis.has(taskId)) {
         return {
           success: true as const,
-          data: { started: false, reason: 'already-active' as const },
+          data: { started: false as const, reason: 'already-active' as const },
         };
       }
 
@@ -78,108 +87,144 @@ export function registerPortsTuiIpc(opts: { getMainWindow: () => BrowserWindow |
         `ports-tui-${taskId}-${crypto.randomBytes(4).toString('hex')}.sock`,
       );
 
-      const socket = new TuiSocketServer(sockPath);
-      await socket.listen();
-
       const drawerTabs = initDrawerTabsService();
-      const tab = drawerTabs.add(taskId, {
-        kind: 'tui',
-        label: 'Ports',
-        featureId: 'ports',
-        id: `ports-tui:${taskId}`,
-      });
+      const tabIdLocal = `ports-tui:${taskId}`;
 
-      const orch = new PortsOnboardingOrchestrator({
-        taskId,
-        projectId,
-        taskName,
-        projectName,
-        initialState: 'onboarding',
-        socket,
-        services: {
-          heuristic: {
-            run: async () => {
-              const result = detectPortsNeed(cwd);
-              return {
-                signals: result.signals,
-                // PortGuess → "LABEL (ENV_VAR @ defaultPort)" for the side-car
-                guesses: result.guesses.map((g) => `${g.label} (${g.envVar} @ ${g.defaultPort})`),
-              };
+      // All side-effects are gated behind the spawn — if any part of setup
+      // throws, we tear down everything we created so the user doesn't end up
+      // with an empty Ports tab backed by a shell. The legacy code did the tab
+      // INSERT before spawning, which is why a failed side-car spawn previously
+      // surfaced as "shell prompt in the Ports tab" instead of a clean error.
+      let socket: TuiSocketServer | null = null;
+      let orch: PortsOnboardingOrchestrator | null = null;
+      let tabCreated = false;
+
+      try {
+        socket = new TuiSocketServer(sockPath);
+        await socket.listen();
+
+        const tab = drawerTabs.add(taskId, {
+          kind: 'tui',
+          label: 'Ports',
+          featureId: 'ports',
+          id: tabIdLocal,
+        });
+        tabCreated = true;
+
+        orch = new PortsOnboardingOrchestrator({
+          taskId,
+          projectId,
+          taskName,
+          projectName,
+          initialState: 'onboarding',
+          socket,
+          services: {
+            heuristic: {
+              run: async () => {
+                const result = detectPortsNeed(cwd);
+                return {
+                  signals: result.signals,
+                  guesses: result.guesses.map((g) => `${g.label} (${g.envVar} @ ${g.defaultPort})`),
+                };
+              },
+            },
+            installer: { install: async () => installPortsSetupCommand(cwd) },
+            runtime: {
+              setupTask: async (tid: string) => {
+                const ports = WorkspacePortsRuntime.setupTask({
+                  taskId: tid,
+                  worktreePath: cwd,
+                });
+                return { count: ports.length };
+              },
+            },
+            configWatcher: portsConfigEvents,
+            sessionRegistry: {
+              restartAllForTask: async (tid: string) => {
+                const win = opts.getMainWindow();
+                win?.webContents.send('ports:restart-task', tid);
+              },
+            },
+            drawerTabs: {
+              add: (tid: string, o: unknown) => drawerTabs.add(tid, o as never),
+              close: (id: string) => drawerTabs.close(id),
+            },
+            dismissStore,
+            agentSender: {
+              sendKeys: async (tid: string, text: string) => writePty(tid, text),
             },
           },
-          installer: {
-            install: async () => installPortsSetupCommand(cwd),
-          },
-          runtime: {
-            setupTask: async (tid: string) => {
-              const ports = WorkspacePortsRuntime.setupTask({
-                taskId: tid,
-                worktreePath: cwd,
-              });
-              return { count: ports.length };
-            },
-          },
-          configWatcher: portsConfigEvents,
-          sessionRegistry: {
-            restartAllForTask: async (tid: string) => {
-              const win = opts.getMainWindow();
-              win?.webContents.send('ports:restart-task', tid);
-            },
-          },
-          drawerTabs: {
-            add: (tid: string, o: unknown) => drawerTabs.add(tid, o as never),
-            close: (id: string) => drawerTabs.close(id),
-          },
-          dismissStore: store,
-          agentSender: {
-            sendKeys: async (tid: string, text: string) => {
-              writePty(tid, text);
-            },
-          },
-        },
-      });
-      orch.setTabId(tab.id);
-      await orch.start();
+        });
+        orch.setTabId(tab.id);
+        await orch.start();
 
-      activeTuis.set(taskId, { socket, orch });
+        // Compiled main is at dist/main/main/ipc/portsTuiIpc.js; bundle ships at
+        // dist/main/main/scripts/portsTui.js. __dirname keeps the resolution
+        // correct in dev AND packaged (electron-builder unpacks scripts/* to
+        // app.asar.unpacked so node-pty can spawn it).
+        const scriptPath = path.join(__dirname, '..', 'scripts', 'portsTui.js');
+        if (!fs.existsSync(scriptPath)) {
+          throw new Error(
+            `Ports TUI bundle missing at ${scriptPath}. Run \`pnpm build:tui\` and try again.`,
+          );
+        }
 
-      const scriptPath = app.isPackaged
-        ? path.join(
-            process.resourcesPath,
-            'app.asar.unpacked',
-            'dist',
-            'main',
-            'scripts',
-            'portsTui.js',
-          )
-        : path.join(app.getAppPath(), 'dist', 'main', 'scripts', 'portsTui.js');
+        const win = opts.getMainWindow();
+        await startCommandPty({
+          id: tab.id,
+          command: process.execPath,
+          args: [scriptPath],
+          cwd,
+          cols,
+          rows,
+          env: {
+            DASH_TUI_SOCKET: sockPath,
+            DASH_TUI_INITIAL_STATE: 'onboarding',
+            DASH_TUI_TASK_NAME: taskName,
+            DASH_TUI_PROJECT_NAME: projectName,
+            // Electron binary runs as plain Node when this is set.
+            ELECTRON_RUN_AS_NODE: '1',
+          },
+          owner: win?.webContents ?? null,
+          taskId,
+          featureId: 'ports',
+        });
 
-      const win = opts.getMainWindow();
-      await startCommandPty({
-        id: tab.id,
-        command: process.execPath,
-        args: [scriptPath],
-        cwd,
-        cols,
-        rows,
-        env: {
-          DASH_TUI_SOCKET: sockPath,
-          DASH_TUI_INITIAL_STATE: 'onboarding',
-          DASH_TUI_TASK_NAME: taskName,
-          DASH_TUI_PROJECT_NAME: projectName,
-          // ELECTRON_RUN_AS_NODE=1 so process.execPath (Electron binary) runs
-          // as plain Node instead of opening a new app window.
-          ELECTRON_RUN_AS_NODE: '1',
-        },
-        owner: win?.webContents ?? null,
-        taskId,
-        featureId: 'ports',
-      });
-
-      return {
-        success: true as const,
-        data: { started: true as const, tabId: tab.id },
-      };
+        activeTuis.set(taskId, { socket, orch });
+        return {
+          success: true as const,
+          data: { started: true as const, tabId: tab.id },
+        };
+      } catch (err) {
+        console.error('[portsTuiIpc] requestStart failed for task', taskId, err);
+        // Roll back partial state so the user doesn't see an orphaned Ports tab.
+        if (orch) {
+          try {
+            await (orch as unknown as { teardown(): Promise<void> }).teardown?.();
+          } catch {
+            /* best effort */
+          }
+        }
+        if (socket) {
+          try {
+            await socket.close();
+          } catch {
+            /* best effort */
+          }
+        }
+        if (tabCreated) {
+          try {
+            drawerTabs.close(tabIdLocal);
+          } catch {
+            /* best effort */
+          }
+        }
+        activeTuis.delete(taskId);
+        return {
+          success: false as const,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
     },
   );
 
@@ -204,13 +249,16 @@ export function registerPortsTuiIpc(opts: { getMainWindow: () => BrowserWindow |
 }
 
 /**
- * Clean up TUI state left behind by the previous run. Two things:
- *   1. Socket files in userData/sockets/ — orphaned by the kernel on crash.
- *   2. drawer_tabs rows with kind='tui' — the orchestrator + side-car that
+ * Clean up TUI state left behind by the previous run. Three things:
+ *   1. Migrate the legacy dismissed-projects.json into projects.ports_setup_dismissed_at.
+ *   2. Socket files in userData/sockets/ — orphaned by the kernel on crash.
+ *   3. drawer_tabs rows with kind='tui' — the orchestrator + side-car that
  *      owned them are gone, but the row would otherwise persist and collide
  *      with the next portsTuiRequestStart's INSERT.
  */
 export function cleanupOrphanSockets(): void {
+  migrateLegacyDismissFile();
+
   const dir = path.join(app.getPath('userData'), 'sockets');
   try {
     for (const f of fs.readdirSync(dir)) {

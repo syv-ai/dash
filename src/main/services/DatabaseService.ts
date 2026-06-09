@@ -77,6 +77,28 @@ export class DatabaseService {
     db.delete(projects).where(eq(projects.id, id)).run();
   }
 
+  /**
+   * True when the user picked "Not relevant for this project" in the ports
+   * onboarding TUI. The renderer short-circuits the TUI spawn on this.
+   */
+  static isPortsSetupDismissed(projectId: string): boolean {
+    const db = getDb();
+    const row = db
+      .select({ at: projects.portsSetupDismissedAt })
+      .from(projects)
+      .where(eq(projects.id, projectId))
+      .get();
+    return Boolean(row?.at);
+  }
+
+  static markPortsSetupDismissed(projectId: string): void {
+    const db = getDb();
+    db.update(projects)
+      .set({ portsSetupDismissedAt: new Date().toISOString() })
+      .where(eq(projects.id, projectId))
+      .run();
+  }
+
   // ── Tasks ────────────────────────────────────────────────
 
   static getTasks(projectId: string): Task[] {
@@ -433,6 +455,7 @@ export class DatabaseService {
       gitRemote: row.gitRemote,
       gitBranch: row.gitBranch,
       baseRef: row.baseRef,
+      portsSetupDismissedAt: row.portsSetupDismissedAt,
       createdAt: row.createdAt ?? '',
       updatedAt: row.updatedAt ?? '',
     };
