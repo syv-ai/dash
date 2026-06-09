@@ -88,21 +88,28 @@ export class DrawerTabsService {
   }
 
   bulkUpsert(entries: BulkUpsertEntry[]): void {
+    const taskExists = this.db.prepare(`SELECT 1 FROM tasks WHERE id = ?`);
     const insert = this.db.prepare(
       `INSERT OR REPLACE INTO drawer_tabs (id, task_id, kind, feature_id, label, position, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
     );
     const setActive = this.db.prepare(`UPDATE tasks SET active_drawer_tab_id = ? WHERE id = ?`);
+    // The migration shim sources entries from localStorage, which can carry
+    // taskIds for tasks the user has since deleted. Silently skip those —
+    // they're stale stickers, not lost data.
+    const applied: BulkUpsertEntry[] = [];
     const tx = this.db.transaction((es: BulkUpsertEntry[]) => {
       for (const e of es) {
+        if (!taskExists.get(e.taskId)) continue;
         for (const t of e.tabs) {
           insert.run(t.id, e.taskId, t.kind, null, t.label, t.position, Date.now());
         }
         if (e.activeTabId) setActive.run(e.activeTabId, e.taskId);
+        applied.push(e);
       }
     });
     tx(entries);
-    for (const e of entries) this.emit(e.taskId);
+    for (const e of applied) this.emit(e.taskId);
   }
 
   onChange(taskId: string, cb: Listener): () => void {

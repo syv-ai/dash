@@ -94,4 +94,23 @@ describe('DrawerTabsService', () => {
     expect(svc.list('t1').map((t) => t.id)).toEqual(['shell:t1', 'shell:t1:1']);
     expect(svc.getActive('t1')).toBe('shell:t1:1');
   });
+
+  it('bulkUpsert() silently skips entries for tasks that no longer exist', () => {
+    // Old localStorage keys can outlive their tasks; the migration shim
+    // forwards them all, and FK enforcement would otherwise throw.
+    svc.bulkUpsert([
+      {
+        taskId: 'gone',
+        tabs: [{ id: 'shell:gone', kind: 'shell', label: '1', position: 0 }],
+        activeTabId: 'shell:gone',
+      },
+      {
+        taskId: 't1',
+        tabs: [{ id: 'shell:t1', kind: 'shell', label: '1', position: 0 }],
+        activeTabId: 'shell:t1',
+      },
+    ]);
+    expect(svc.list('gone')).toEqual([]);
+    expect(svc.list('t1').map((t) => t.id)).toEqual(['shell:t1']);
+  });
 });
