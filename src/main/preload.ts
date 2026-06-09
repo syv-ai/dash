@@ -99,6 +99,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('ports:restart-task', handler);
     return () => ipcRenderer.removeListener('ports:restart-task', handler);
   },
+  onPortsTuiMigrated: (cb: (info: { fromTaskId: string; toTaskId: string }) => void) => {
+    const handler = (_event: unknown, info: { fromTaskId: string; toTaskId: string }) => cb(info);
+    ipcRenderer.on('ports:tui:migrated', handler);
+    return () => ipcRenderer.removeListener('ports:tui:migrated', handler);
+  },
   onPtyData: (id: string, callback: (data: string) => void) => {
     const handler = (_event: unknown, data: string) => callback(data);
     ipcRenderer.on(`pty:data:${id}`, handler);

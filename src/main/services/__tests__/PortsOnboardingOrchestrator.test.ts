@@ -53,6 +53,7 @@ function makeServices() {
       markDismissed: vi.fn(),
     },
     agentSender: { sendKeys: vi.fn(async () => {}) },
+    migrate: vi.fn(async () => {}),
   };
 }
 
@@ -259,6 +260,54 @@ describe('PortsOnboardingOrchestrator transitions', () => {
     sock.triggerClose();
     await vi.runAllTimersAsync();
     expect(services.drawerTabs.close).toHaveBeenCalled();
+  });
+
+  it('CHOOSE_TASK + new -> emits migrating, calls migrate, exits with reason=migrated', async () => {
+    const sock = new FakeSocket();
+    const orch = makeOrchestrator(sock);
+    await orch.start();
+    sock.receive({ type: 'ready', version: 1 });
+    await vi.runAllTimersAsync();
+    sock.receive({ type: 'choice', screen: 'onboarding', value: 'setup' });
+    await vi.runAllTimersAsync();
+    sock.receive({ type: 'choice', screen: 'describe', value: 'proceed' });
+    await vi.runAllTimersAsync();
+    sock.receive({ type: 'choice', screen: 'choose-task', value: 'new' });
+    await vi.runAllTimersAsync();
+
+    expect(sock.sent.some((m) => m.type === 'show' && m.screen === 'migrating')).toBe(true);
+    expect(services.migrate).toHaveBeenCalledWith({
+      signals: ['vite'],
+      guesses: ['frontend:5173'],
+    });
+    const exit = sock.sent.find((m) => m.type === 'show' && m.screen === 'exit');
+    expect(exit).toBeDefined();
+    expect((exit as Extract<MainToTui, { type: 'show'; screen: 'exit' }>).props.reason).toBe(
+      'migrated',
+    );
+  });
+
+  it('CHOOSE_TASK + new -> migrate failure surfaces as error exit', async () => {
+    services.migrate = vi.fn(async () => {
+      throw new Error('git worktree add failed');
+    });
+    const sock = new FakeSocket();
+    const orch = makeOrchestrator(sock);
+    await orch.start();
+    sock.receive({ type: 'ready', version: 1 });
+    await vi.runAllTimersAsync();
+    sock.receive({ type: 'choice', screen: 'onboarding', value: 'setup' });
+    await vi.runAllTimersAsync();
+    sock.receive({ type: 'choice', screen: 'describe', value: 'proceed' });
+    await vi.runAllTimersAsync();
+    sock.receive({ type: 'choice', screen: 'choose-task', value: 'new' });
+    await vi.runAllTimersAsync();
+
+    const exit = sock.sent.find((m) => m.type === 'show' && m.screen === 'exit');
+    expect(exit).toBeDefined();
+    const props = (exit as Extract<MainToTui, { type: 'show'; screen: 'exit' }>).props;
+    expect(props.reason).toBe('error');
+    expect(props.errorMessage).toContain('git worktree add failed');
   });
 
   it('captures taskId at start; installer is invoked with locked taskId', async () => {

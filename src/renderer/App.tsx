@@ -656,6 +656,19 @@ export function App() {
     return off;
   }, []);
 
+  // Ports TUI migrate flow: main created a `port-setup` worktree task and
+  // already spawned the new orchestrator + side-car in its drawer. We need
+  // to (a) refresh the project's task list so the new task shows up in the
+  // sidebar and (b) switch active to it so the user lands on the new TUI.
+  useEffect(() => {
+    const off = window.electronAPI.onPortsTuiMigrated(async ({ toTaskId }) => {
+      if (!activeProjectId) return;
+      await loadTasksForProject(activeProjectId);
+      setActiveTaskId(toTaskId);
+    });
+    return off;
+  }, [activeProjectId]);
+
   // Memoized props for SkillsBrowserModal. Without these, App.tsx re-renders (terminal
   // activity, git polls, PTY events) hand the modal new array references every time,
   // and the modal's loadInstalled useCallback re-fires its refetch effect — flickering

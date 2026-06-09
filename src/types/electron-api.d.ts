@@ -205,6 +205,7 @@ export interface ElectronAPI {
   portsTuiClose: (taskId: string) => Promise<IpcResponse<void>>;
   portsTuiIsActive: (taskId: string) => Promise<IpcResponse<boolean>>;
   onPortsRestartTask: (cb: (taskId: string) => void) => () => void;
+  onPortsTuiMigrated: (cb: (info: { fromTaskId: string; toTaskId: string }) => void) => () => void;
 
   onPtyData: (id: string, callback: (data: string) => void) => () => void;
   onPtyExit: (

@@ -33,6 +33,18 @@ interface Services {
     markDismissed(projectId: string): void;
   };
   agentSender: { sendKeys(taskId: string, text: string): Promise<void> };
+  /**
+   * Hand-off to the host when the user picks "New task" in CHOOSE_TASK. The
+   * host is responsible for:
+   *   - creating a 'port-setup' worktree task on a new branch
+   *   - switching the renderer's active task to it
+   *   - spawning a fresh orchestrator in the new task's drawer at LAUNCHING,
+   *     pre-seeded with the same signals/guesses so the new TUI doesn't re-run
+   *     the heuristic on an empty worktree (the wiring will be on the new
+   *     branch but the heuristic source files are checked out fresh).
+   * Resolves once the new TUI is spawned; this orchestrator then teardowns.
+   */
+  migrate(opts: { signals: string[]; guesses: string[] }): Promise<void>;
 }
 
 interface Opts {
@@ -41,6 +53,13 @@ interface Opts {
   taskName: string;
   projectName: string;
   initialState: 'onboarding' | 'launching';
+  /**
+   * Pre-seeded heuristic output. Set by the migrate path so the new
+   * orchestrator (initialState='launching') reuses the original task's
+   * signals/guesses without re-running the heuristic. Ignored when
+   * initialState='onboarding'.
+   */
+  presetSignalsGuesses?: { signals: string[]; guesses: string[] };
   socket: TuiSocketServer;
   services: Services;
 }
@@ -106,6 +125,9 @@ export class PortsOnboardingOrchestrator {
       const { signals, guesses } = await services.heuristic.run({ taskId: this.taskId });
       this.signals = signals;
       this.guesses = guesses;
+    } else if (this.opts.presetSignalsGuesses) {
+      this.signals = this.opts.presetSignalsGuesses.signals;
+      this.guesses = this.opts.presetSignalsGuesses.guesses;
     }
   }
 
@@ -173,15 +195,28 @@ export class PortsOnboardingOrchestrator {
       if (m.value === 'current') {
         await this.toLaunching();
       } else {
-        // MIGRATING: the orchestrator signals migration; host (portsTuiIpc)
-        // is responsible for creating the new task and re-spawning a fresh
-        // orchestrator with initialState='launching' in the new task's drawer.
+        // The orchestrator shows the MIGRATING spinner, then hands off to the
+        // host via services.migrate() to create the worktree task, switch the
+        // active task in the renderer, and spawn a fresh orchestrator in the
+        // new task's drawer (initialState='launching', signals/guesses preset).
+        // We then teardown — the new instance takes it from here.
         await this.send({
           type: 'show',
           screen: 'migrating',
           props: { newTaskName: 'port-setup', branchName: 'dash/port-setup' },
         });
-        await this.exit('migrated');
+        try {
+          await this.opts.services.migrate({
+            signals: this.signals,
+            guesses: this.guesses,
+          });
+          await this.exit('migrated');
+        } catch (err) {
+          await this.exit(
+            'error',
+            `Couldn't create port-setup task: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
       }
       return;
     }
