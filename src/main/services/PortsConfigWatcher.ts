@@ -1,7 +1,16 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { EventEmitter } from 'events';
 import { BrowserWindow } from 'electron';
 import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
+
+/**
+ * In-process event bus for main-side consumers (e.g. PortsOnboardingOrchestrator)
+ * that need the same notifications the renderer gets via IPC. Emits:
+ *   - 'ports:config'        with { taskId } when ports.json changes
+ *   - 'ports:setupComplete' with { taskId } when the sentinel exists
+ */
+export const events = new EventEmitter();
 
 // 2s debounce — ports.json changes are infrequent (the agent writes once
 // during setup, the user edits rarely). Slow-rolling is fine; this also
@@ -118,6 +127,7 @@ export function stopAll(): void {
 }
 
 function notifyConfigChanged(taskId: string): void {
+  events.emit('ports:config', { taskId });
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
       win.webContents.send('ports:configChanged', { taskId });
@@ -126,6 +136,7 @@ function notifyConfigChanged(taskId: string): void {
 }
 
 function notifySetupComplete(taskId: string): void {
+  events.emit('ports:setupComplete', { taskId });
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
       win.webContents.send('ports:setupComplete', { taskId });

@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import {
   startDirectPty,
   startPty,
+  startCommandPty,
   writePty,
   resizePty,
   killPty,
@@ -138,6 +139,31 @@ export function registerPtyIpc(): void {
     'pty:listForTask',
     (_event, taskId: string, opts?: { kinds?: PtyKind[]; featureId?: string }) => {
       return { success: true, data: listForTask(taskId, opts) };
+    },
+  );
+
+  ipcMain.handle(
+    'pty:startCommand',
+    async (
+      event,
+      opts: {
+        id: string;
+        command: string;
+        args: string[];
+        cwd: string;
+        cols: number;
+        rows: number;
+        env?: Record<string, string>;
+        taskId: string;
+        featureId: string;
+      },
+    ) => {
+      try {
+        const result = await startCommandPty({ ...opts, owner: event.sender });
+        return { success: true, data: result };
+      } catch (error) {
+        return { success: false, error: String(error) };
+      }
     },
   );
 }

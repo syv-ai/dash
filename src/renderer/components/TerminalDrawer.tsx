@@ -76,17 +76,21 @@ export function TerminalDrawer({
       container.removeChild(container.firstChild);
     }
 
+    const activeTab = tabs.find((t) => t.id === activeTabId);
+    const isTui = activeTab?.kind === 'tui';
+
     const session = sessionRegistry.getOrCreate({
       id: activeTabId,
       cwd,
       shellOnly: true,
+      isTui,
     });
     session.attach(container, { autoFocus: false });
 
     return () => {
       sessionRegistry.detach(activeTabId);
     };
-  }, [activeTabId, cwd]);
+  }, [activeTabId, cwd, tabs]);
 
   // Focus terminal when the user explicitly expands the drawer
   const prevCollapsedRef = useRef(collapsed);

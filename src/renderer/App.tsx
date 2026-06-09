@@ -10,7 +10,6 @@ import { MainContent } from './components/MainContent';
 import { openInIde } from './lib/openInIde';
 import { RightInspector } from './components/rightInspector/RightInspector';
 import { PortsDrawerWrapper } from './components/rightInspector/PortsDrawerWrapper';
-import { usePortsOnboarding } from './components/rightInspector/usePortsOnboarding';
 const DiffEditor = lazy(() => import('./components/diffEditor/DiffEditor'));
 import { ShellDrawerWrapper } from './components/ShellDrawerWrapper';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
@@ -43,11 +42,9 @@ import type {
   RtkStatus,
   RtkDownloadProgress,
   BranchInfo,
-  PortHeuristicResult,
 } from '../shared/types';
 import type { CreateTaskOptions } from './components/TaskModal';
 import { formatTaskContextPrompt } from '../shared/taskContext';
-import { buildPortsSetupCommand } from '../shared/portsSetupCommand';
 import { loadKeybindings, saveKeybindings, matchesBinding } from './keybindings';
 import type { KeyBindingMap } from './keybindings';
 import { sessionRegistry } from './terminal/SessionRegistry';
@@ -58,45 +55,6 @@ import type { NotificationSound } from './sounds';
 
 const GIT_POLL_INTERVAL = 5000;
 const EMPTY_CONTEXT_USAGE: Record<string, import('../shared/types').ContextUsage> = {};
-
-/**
- * Module-scoped (stable reference) so the usePortsOnboarding effect's dep
- * array doesn't churn on every App re-render. The taskId argument comes
- * from the hook's own state, so this function doesn't need to close over
- * any React state.
- *
- * Three steps:
- *   1. Install `.claude/commands/dash-port-setup.md` into the worktree.
- *   2. Auto-submit `/reload-skills` — the running Claude Code session loads
- *      commands at startup, so without this it reports "Unknown command:
- *      /dash-port-setup". `/reload-skills` (CC v2.1.152+) re-scans the
- *      `.claude/commands/` directory mid-session.
- *   3. Type `/dash-port-setup signals: …; guesses: …` into the prompt — no
- *      auto-submit, so the user can edit the heuristic args before sending.
- *
- * Two ptyInput calls separated by a short delay. Sending them together
- * fails because:
- *  - `\n` between them is treated as input content (rendered as a space),
- *    collapsing the two commands into one input line — only the actual
- *    Enter byte `\r` submits.
- *  - Even with `\r`, sending back-to-back races the reload: characters of
- *    the second command can land in /reload-skills's input buffer before
- *    the TUI returns to a fresh prompt.
- */
-async function setupPortsForTask(taskId: string, heuristic: PortHeuristicResult): Promise<void> {
-  const install = await window.electronAPI.portsInstallSetupCommand(taskId);
-  if (!install.success) {
-    toast.error(`Failed to install /dash-port-setup: ${install.error ?? 'unknown error'}`);
-    return;
-  }
-  window.electronAPI.ptyInput({ id: taskId, data: '/reload-skills\r' });
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  const command = buildPortsSetupCommand(heuristic);
-  window.electronAPI.ptyInput({ id: taskId, data: command });
-  // No success toast — the onboarding toast transitions to the "waiting"
-  // body via beginWaiting() with the same toast id. A second success toast
-  // would just overlap that one with redundant copy.
-}
 
 export function App() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -660,14 +618,43 @@ export function App() {
     ? (tasksByProject[activeProjectId] || []).filter((t) => !t.archivedAt)
     : [];
 
-  // Persisted toast that nudges the user to set up port management when the
-  // heuristic fires for the active project. Lives at App level so it persists
-  // across task switches within a project and disappears on project switch.
-  usePortsOnboarding({
-    taskId: activeTask?.id ?? null,
-    projectId: activeTask?.projectId ?? null,
-    onSetup: setupPortsForTask,
-  });
+  // Ports onboarding TUI side-car. On active-task change, ask main to spawn
+  // the orchestrator + Clack TUI inside a drawer tab — unless the project is
+  // dismissed, or a TUI is already active for this task. Main owns the state
+  // machine; the renderer just kicks it off.
+  useEffect(() => {
+    if (!activeTask || !activeTask.projectId) return;
+    const project = projects.find((p) => p.id === activeTask.projectId);
+    if (!project) return;
+    const taskId = activeTask.id;
+    const projectId = activeTask.projectId;
+    const taskName = activeTask.name;
+    const projectName = project.name;
+    const cwd = activeTask.path;
+
+    window.electronAPI.portsTuiIsActive(taskId).then((resp) => {
+      if (resp.success && resp.data) return;
+      window.electronAPI.portsTuiRequestStart({
+        taskId,
+        projectId,
+        taskName,
+        projectName,
+        cwd,
+        cols: 80,
+        rows: 24,
+      });
+    });
+  }, [activeTask, projects]);
+
+  // Orchestrator broadcasts ports:restart-task when the user picks 'restart'
+  // on the DONE screen. SessionRegistry restarts both agent + shell PTYs so
+  // they pick up the freshly written .dash/ports.env.
+  useEffect(() => {
+    const off = window.electronAPI.onPortsRestartTask((tid) => {
+      sessionRegistry.restartAllForTask(tid);
+    });
+    return off;
+  }, []);
 
   // Memoized props for SkillsBrowserModal. Without these, App.tsx re-renders (terminal
   // activity, git polls, PTY events) hand the modal new array references every time,

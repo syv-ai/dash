@@ -7,10 +7,11 @@
   "license": "MIT",
   "scripts": {
     "dev": "concurrently -n main,renderer -c blue,green \"pnpm dev:main\" \"pnpm dev:renderer\"",
-    "dev:main": "tsc -p tsconfig.main.json && electron dist/main/main/entry.js --dev",
+    "dev:main": "tsc -p tsconfig.main.json && pnpm build:tui && electron dist/main/main/entry.js --dev",
     "dev:renderer": "vite",
     "build": "pnpm build:main && pnpm build:renderer",
-    "build:main": "tsc -p tsconfig.main.json",
+    "build:main": "tsc -p tsconfig.main.json && pnpm build:tui",
+    "build:tui": "esbuild src/main/scripts/portsTui.ts --bundle --platform=node --target=node22 --outfile=dist/main/scripts/portsTui.js",
     "build:renderer": "vite build",
     "rebuild": "electron-rebuild -f -w node-pty,better-sqlite3",
     "package:mac": "pnpm build && electron-builder --mac",
@@ -111,6 +112,8 @@
     ]
   },
   "dependencies": {
+    "@clack/core": "^1.4.1",
+    "@clack/prompts": "^1.5.1",
     "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-popover": "^1.1.15",
     "@types/qrcode": "^1.5.6",

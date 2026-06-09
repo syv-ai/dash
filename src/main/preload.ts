@@ -88,6 +88,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('drawerTabs:changed', handler);
     return () => ipcRenderer.removeListener('drawerTabs:changed', handler);
   },
+
+  // Ports TUI lifecycle
+  ptyStartCommand: (opts: unknown) => ipcRenderer.invoke('pty:startCommand', opts),
+  portsTuiRequestStart: (payload: unknown) => ipcRenderer.invoke('ports:tui:requestStart', payload),
+  portsTuiClose: (taskId: string) => ipcRenderer.invoke('ports:tui:close', taskId),
+  portsTuiIsActive: (taskId: string) => ipcRenderer.invoke('ports:tui:isActive', taskId),
+  onPortsRestartTask: (cb: (taskId: string) => void) => {
+    const handler = (_event: unknown, taskId: string) => cb(taskId);
+    ipcRenderer.on('ports:restart-task', handler);
+    return () => ipcRenderer.removeListener('ports:restart-task', handler);
+  },
   onPtyData: (id: string, callback: (data: string) => void) => {
     const handler = (_event: unknown, data: string) => callback(data);
     ipcRenderer.on(`pty:data:${id}`, handler);

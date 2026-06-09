@@ -148,6 +148,12 @@ app.whenReady().then(async () => {
     console.error('[RtkService.warmUp]', err);
   });
 
+  // Ports TUI IPC needs the main window for restart-task broadcasts; register
+  // here (not in registerAllIpc) since that path doesn't have a window yet.
+  const { registerPortsTuiIpc, cleanupOrphanSockets } = await import('./ipc/portsTuiIpc');
+  cleanupOrphanSockets();
+  registerPortsTuiIpc({ getMainWindow: () => mainWindow });
+
   // Cleanup orphaned reserve worktrees (background, non-blocking)
   setTimeout(async () => {
     try {

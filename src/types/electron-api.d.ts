@@ -181,6 +181,31 @@ export interface ElectronAPI {
   drawerTabsUnsubscribe: (taskId: string) => Promise<IpcResponse<void>>;
   onDrawerTabsChanged: (cb: (taskId: string) => void) => () => void;
 
+  // Ports TUI lifecycle
+  ptyStartCommand: (opts: {
+    id: string;
+    command: string;
+    args: string[];
+    cwd: string;
+    cols: number;
+    rows: number;
+    env?: Record<string, string>;
+    taskId: string;
+    featureId: string;
+  }) => Promise<IpcResponse<{ reattached: boolean }>>;
+  portsTuiRequestStart: (payload: {
+    taskId: string;
+    projectId: string;
+    taskName: string;
+    projectName: string;
+    cwd: string;
+    cols: number;
+    rows: number;
+  }) => Promise<IpcResponse<{ started: boolean; tabId?: string; reason?: string }>>;
+  portsTuiClose: (taskId: string) => Promise<IpcResponse<void>>;
+  portsTuiIsActive: (taskId: string) => Promise<IpcResponse<boolean>>;
+  onPortsRestartTask: (cb: (taskId: string) => void) => () => void;
+
   onPtyData: (id: string, callback: (data: string) => void) => () => void;
   onPtyExit: (
     id: string,

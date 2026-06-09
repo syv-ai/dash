@@ -48,6 +48,7 @@ export class TerminalSessionManager {
   private lastPtyRows = 0;
   private savedViewportY: number | null = null;
   readonly shellOnly: boolean;
+  readonly isTui: boolean;
   private themeId: string;
   // Claude Code's TUI rewrites cells continuously, which causes xterm to drop
   // the visible selection before the user can press the copy shortcut. Cache
@@ -60,6 +61,13 @@ export class TerminalSessionManager {
     permissionMode?: PermissionMode;
     isDark?: boolean;
     shellOnly?: boolean;
+    /**
+     * True when the underlying PTY hosts a side-car TUI (e.g. the ports
+     * onboarding Clack TUI). Disables snapshot save/restore — the TUI
+     * repaints itself on socket reconnect, and persisted bytes would
+     * replay as garbled ghosts after a reload.
+     */
+    isTui?: boolean;
     themeId?: string;
   }) {
     this.id = opts.id;
@@ -68,6 +76,7 @@ export class TerminalSessionManager {
     this.permissionMode = opts.permissionMode ?? 'default';
     this.isDark = opts.isDark ?? true;
     this.shellOnly = opts.shellOnly ?? false;
+    this.isTui = opts.isTui ?? false;
     this.themeId = opts.themeId ?? 'default';
 
     this.terminal = new Terminal({
@@ -320,8 +329,10 @@ export class TerminalSessionManager {
     });
     this.resizeObserver.observe(container);
 
-    // Save snapshot on page unload (CMD+R) so it's always available on reload
-    if (!this.boundBeforeUnload) {
+    // Save snapshot on page unload (CMD+R) so it's always available on reload.
+    // TUI sessions skip this — the side-car repaints on socket reconnect, and
+    // persisted bytes would replay as ghost output on top of the fresh draw.
+    if (!this.boundBeforeUnload && !this.isTui) {
       this.boundBeforeUnload = () => {
         if (this.snapshotDirty && this.opened) {
           this.saveSnapshot();

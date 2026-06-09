@@ -7,6 +7,7 @@ interface AttachOptions {
   container: HTMLElement;
   permissionMode?: PermissionMode;
   shellOnly?: boolean;
+  isTui?: boolean;
   themeId?: string;
 }
 
@@ -24,6 +25,7 @@ class SessionRegistryImpl {
         permissionMode: opts.permissionMode,
         isDark: this._isDark,
         shellOnly: opts.shellOnly,
+        isTui: opts.isTui,
         themeId: opts.themeId ?? this._themeId,
       });
       this.sessions.set(opts.id, session);

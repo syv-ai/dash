@@ -1130,6 +1130,68 @@ export function listForTask(
   return result;
 }
 
+/**
+ * Spawn an arbitrary command in a PTY tagged as kind='tui'. Used by feature
+ * orchestrators (e.g. ports onboarding) to host a side-car interactive
+ * program inside the existing drawer tab UI without polluting agent/shell
+ * code paths.
+ */
+export async function startCommandPty(options: {
+  id: string;
+  command: string;
+  args: string[];
+  cwd: string;
+  cols: number;
+  rows: number;
+  env?: Record<string, string>;
+  owner: WebContents | null;
+  taskId: string;
+  featureId: string;
+}): Promise<{ reattached: boolean }> {
+  const existing = ptys.get(options.id);
+  if (existing) {
+    existing.owner = options.owner;
+    return { reattached: true };
+  }
+
+  const pty = getPty();
+  const proc = pty.spawn(options.command, options.args, {
+    name: 'xterm-256color',
+    cols: options.cols,
+    rows: options.rows,
+    cwd: options.cwd,
+    env: { ...process.env, ...(options.env ?? {}) } as Record<string, string>,
+  });
+
+  const record: PtyRecord = {
+    proc,
+    cwd: options.cwd,
+    isDirectSpawn: false,
+    owner: options.owner,
+    kind: 'tui',
+    taskId: options.taskId,
+    featureId: options.featureId,
+  };
+
+  ptys.set(options.id, record);
+
+  proc.onData((data: string) => {
+    if (record.owner && !record.owner.isDestroyed()) {
+      record.owner.send(`pty:data:${options.id}`, data);
+    }
+  });
+
+  proc.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
+    if (ptys.get(options.id) !== record) return;
+    if (record.owner && !record.owner.isDestroyed()) {
+      record.owner.send(`pty:exit:${options.id}`, { exitCode, signal });
+    }
+    ptys.delete(options.id);
+  });
+
+  return { reattached: false };
+}
+
 // ---------------------------------------------------------------------------
 // Test-only hooks — not exported via any index. The Map is module-private,
 // so unit tests need these handles to seed/clear synthetic records.
