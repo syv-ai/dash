@@ -7,6 +7,8 @@ import {
   killPty,
   killByOwner,
   sendRemoteControl,
+  listForTask,
+  type PtyKind,
 } from '../services/ptyManager';
 import { DatabaseService } from '../services/DatabaseService';
 import { terminalSnapshotService } from '../services/TerminalSnapshotService';
@@ -131,4 +133,11 @@ export function registerPtyIpc(): void {
   ipcMain.handle('pty:statusLine:getAll', () => {
     return { success: true, data: contextUsageService.getAllStatusLine() };
   });
+
+  ipcMain.handle(
+    'pty:listForTask',
+    (_event, taskId: string, opts?: { kinds?: PtyKind[]; featureId?: string }) => {
+      return { success: true, data: listForTask(taskId, opts) };
+    },
+  );
 }

@@ -67,6 +67,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ptyResize: (args: { id: string; cols: number; rows: number }) =>
     ipcRenderer.send('pty:resize', args),
   ptyKill: (id: string) => ipcRenderer.send('pty:kill', id),
+  ptyListForTask: (
+    taskId: string,
+    opts?: { kinds?: ('agent' | 'shell' | 'tui')[]; featureId?: string },
+  ) => ipcRenderer.invoke('pty:listForTask', taskId, opts),
   onPtyData: (id: string, callback: (data: string) => void) => {
     const handler = (_event: unknown, data: string) => callback(data);
     ipcRenderer.on(`pty:data:${id}`, handler);

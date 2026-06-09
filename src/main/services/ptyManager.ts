@@ -50,11 +50,16 @@ function hasAnySessionForCwd(cwd: string): boolean {
   }
 }
 
+export type PtyKind = 'agent' | 'shell' | 'tui';
+
 interface PtyRecord {
   proc: any; // IPty from node-pty
   cwd: string;
   isDirectSpawn: boolean;
   owner: WebContents | null;
+  kind: PtyKind;
+  taskId: string | null;
+  featureId: string | null;
 }
 
 const ptys = new Map<string, PtyRecord>();
@@ -776,6 +781,9 @@ export async function startDirectPty(options: {
     cwd: options.cwd,
     isDirectSpawn: true,
     owner: options.sender || null,
+    kind: 'agent',
+    taskId: options.id,
+    featureId: null,
   };
 
   ptys.set(options.id, record);
@@ -970,11 +978,23 @@ export async function startPty(options: {
     env: env as Record<string, string>,
   });
 
+  // Shell PTY IDs follow the shape `shell:<taskId>[:N]`; parse the taskId so
+  // task-scoped queries (listForTask, restartAllForTask) can find this PTY
+  // without resorting to string-prefix matching on the id.
+  const shellPrefix = 'shell:';
+  const shellRest = options.id.startsWith(shellPrefix)
+    ? options.id.slice(shellPrefix.length)
+    : options.id;
+  const shellTaskId = shellRest.split(':')[0];
+
   const record: PtyRecord = {
     proc,
     cwd: options.cwd,
     isDirectSpawn: false,
     owner: options.sender || null,
+    kind: 'shell',
+    taskId: shellTaskId,
+    featureId: null,
   };
 
   ptys.set(options.id, record);
@@ -1088,4 +1108,48 @@ export function killByOwner(owner: WebContents): void {
       }
     }
   }
+}
+
+/**
+ * Return all PTY ids attached to `taskId`, optionally filtered by kind /
+ * featureId. Used by SessionRegistry.restartAllForTask to find the right set
+ * without string-prefix matching on PTY ids — which would accidentally hit
+ * future task-bound PTYs (e.g. the ports TUI).
+ */
+export function listForTask(
+  taskId: string,
+  opts?: { kinds?: PtyKind[]; featureId?: string },
+): string[] {
+  const result: string[] = [];
+  for (const [id, rec] of ptys) {
+    if (rec.taskId !== taskId) continue;
+    if (opts?.kinds && !opts.kinds.includes(rec.kind)) continue;
+    if (opts?.featureId && rec.featureId !== opts.featureId) continue;
+    result.push(id);
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Test-only hooks — not exported via any index. The Map is module-private,
+// so unit tests need these handles to seed/clear synthetic records.
+// ---------------------------------------------------------------------------
+
+export function __testReset(): void {
+  ptys.clear();
+}
+
+export function __registerForTest(
+  id: string,
+  rec: { kind: PtyKind; taskId: string | null; featureId: string | null },
+): void {
+  ptys.set(id, {
+    proc: null,
+    cwd: '/tmp',
+    isDirectSpawn: rec.kind === 'agent',
+    owner: null,
+    kind: rec.kind,
+    taskId: rec.taskId,
+    featureId: rec.featureId,
+  });
 }

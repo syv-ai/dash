@@ -70,17 +70,21 @@ class SessionRegistryImpl {
   }
 
   /**
-   * Restart every PTY associated with a task — the Claude agent session
-   * (taskId), the main shell drawer (shell:taskId), and any additional
-   * shell tabs (shell:taskId:N). Used by the port-management flow so the
-   * new env vars are picked up without losing the agent's Claude session.
+   * Restart every agent + shell PTY associated with a task. Used by the
+   * port-management flow so new env vars are picked up without losing the
+   * agent's Claude session. TUI PTYs (e.g. the ports onboarding TUI) are
+   * filtered out — they don't read the same env and a forced restart would
+   * tear down their state machine mid-flow.
    */
   async restartAllForTask(taskId: string): Promise<void> {
+    const resp = await window.electronAPI.ptyListForTask(taskId, {
+      kinds: ['agent', 'shell'],
+    });
+    if (!resp.success || !resp.data) return;
     const targets: TerminalSessionManager[] = [];
-    for (const [id, session] of this.sessions) {
-      if (id === taskId || id === `shell:${taskId}` || id.startsWith(`shell:${taskId}:`)) {
-        targets.push(session);
-      }
+    for (const id of resp.data) {
+      const session = this.sessions.get(id);
+      if (session) targets.push(session);
     }
     await Promise.all(targets.map((s) => s.restart()));
   }
