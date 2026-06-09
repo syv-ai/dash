@@ -72,6 +72,8 @@ interface SettingsModalProps {
   onShowActiveTasksSectionChange: (value: boolean) => void;
   shellDrawerEnabled: boolean;
   onShellDrawerEnabledChange: (value: boolean) => void;
+  showShellBranch: boolean;
+  onShowShellBranchChange: (value: boolean) => void;
   shellDrawerPosition: 'left' | 'main' | 'right';
   onShellDrawerPositionChange: (value: 'left' | 'main' | 'right') => void;
   terminalTheme: string;
@@ -1319,6 +1321,18 @@ export function SettingsModal({
                 <p className="text-[10px] text-foreground/80 mt-2">
                   Toggle with Cmd+J. Run git, npm, and other commands alongside Claude.
                 </p>
+                {shellDrawerEnabled && (
+                  <div className="mt-3">
+                    <ToggleSwitch
+                      enabled={showShellBranch}
+                      onToggle={onShowShellBranchChange}
+                      label="Show git branch in prompt"
+                    />
+                    <p className="text-[10px] text-foreground/80 mt-1">
+                      Applies to new terminal sessions.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Preferred IDE */}

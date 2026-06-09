@@ -175,6 +175,10 @@ export function App() {
   const [syncShellEnv, setSyncShellEnv] = useState(() => {
     return localStorage.getItem('syncShellEnv') === 'true';
   });
+  const [showShellBranch, setShowShellBranch] = useState(() => {
+    const stored = localStorage.getItem('showShellBranch');
+    return stored === null ? true : stored === 'true';
+  });
   const [customClaudeEnvVars, setCustomClaudeEnvVars] = useState<Record<string, string>>(() => {
     try {
       return JSON.parse(localStorage.getItem('customClaudeEnvVars') || '{}');
@@ -279,6 +283,10 @@ export function App() {
   useEffect(() => {
     window.electronAPI.setSyncShellEnv?.(syncShellEnv);
   }, [syncShellEnv]);
+  // Sync shell branch visibility to main process
+  useEffect(() => {
+    window.electronAPI.setShowShellBranch?.(showShellBranch);
+  }, [showShellBranch]);
   // Sync Claude Code env vars to main process
   useEffect(() => {
     const vars: Record<string, string> = { ...customClaudeEnvVars };
@@ -1964,6 +1972,11 @@ export function App() {
           onShellDrawerEnabledChange={(v) => {
             setShellDrawerEnabled(v);
             localStorage.setItem('shellDrawerEnabled', String(v));
+          }}
+          showShellBranch={showShellBranch}
+          onShowShellBranchChange={(v) => {
+            setShowShellBranch(v);
+            localStorage.setItem('showShellBranch', String(v));
           }}
           shellDrawerPosition={shellDrawerPosition}
           onShellDrawerPositionChange={(v) => {
