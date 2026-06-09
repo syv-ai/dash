@@ -203,7 +203,13 @@ export function registerPortsTuiIpc(opts: { getMainWindow: () => BrowserWindow |
   }));
 }
 
-/** Cleanup leftover socket files at boot (orphaned by a previous crash). */
+/**
+ * Clean up TUI state left behind by the previous run. Two things:
+ *   1. Socket files in userData/sockets/ — orphaned by the kernel on crash.
+ *   2. drawer_tabs rows with kind='tui' — the orchestrator + side-car that
+ *      owned them are gone, but the row would otherwise persist and collide
+ *      with the next portsTuiRequestStart's INSERT.
+ */
 export function cleanupOrphanSockets(): void {
   const dir = path.join(app.getPath('userData'), 'sockets');
   try {
@@ -218,5 +224,10 @@ export function cleanupOrphanSockets(): void {
     }
   } catch {
     /* dir doesn't exist yet */
+  }
+  try {
+    initDrawerTabsService().sweepTuiTabs();
+  } catch (err) {
+    console.warn('[portsTuiIpc] sweepTuiTabs failed:', err);
   }
 }

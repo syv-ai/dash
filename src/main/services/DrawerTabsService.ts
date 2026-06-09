@@ -112,6 +112,32 @@ export class DrawerTabsService {
     for (const e of applied) this.emit(e.taskId);
   }
 
+  /**
+   * Delete every drawer-tab row whose kind === 'tui'. TUI tabs are tied to a
+   * live socket + side-car process pair; when Dash exits, those terminate and
+   * the row becomes stale. Called once at boot so the next portsTuiRequestStart
+   * can re-add the tab without hitting a PK collision.
+   *
+   * Returns the task_ids that had rows cleared so callers can notify
+   * subscribers if they care.
+   */
+  sweepTuiTabs(): string[] {
+    const rows = this.db
+      .prepare(`SELECT DISTINCT task_id as taskId FROM drawer_tabs WHERE kind = 'tui'`)
+      .all() as Array<{ taskId: string }>;
+    if (rows.length === 0) return [];
+    this.db.exec(`DELETE FROM drawer_tabs WHERE kind = 'tui'`);
+    // Clear active pointer if it pointed at one of the swept tabs.
+    this.db.exec(
+      `UPDATE tasks SET active_drawer_tab_id = NULL
+         WHERE active_drawer_tab_id IS NOT NULL
+           AND active_drawer_tab_id NOT IN (SELECT id FROM drawer_tabs)`,
+    );
+    const taskIds = rows.map((r) => r.taskId);
+    for (const tid of taskIds) this.emit(tid);
+    return taskIds;
+  }
+
   onChange(taskId: string, cb: Listener): () => void {
     let set = this.listeners.get(taskId);
     if (!set) {

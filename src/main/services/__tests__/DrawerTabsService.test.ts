@@ -95,6 +95,27 @@ describe('DrawerTabsService', () => {
     expect(svc.getActive('t1')).toBe('shell:t1:1');
   });
 
+  it('sweepTuiTabs() removes all tui rows and clears stale active pointers', () => {
+    const shell = svc.add('t1', { kind: 'shell', label: '1' });
+    const tui = svc.add('t1', { kind: 'tui', featureId: 'ports', label: 'Ports' });
+    svc.setActive('t1', tui.id);
+    expect(svc.getActive('t1')).toBe(tui.id);
+
+    const swept = svc.sweepTuiTabs();
+
+    expect(swept).toEqual(['t1']);
+    expect(svc.list('t1').map((t) => t.id)).toEqual([shell.id]);
+    // Active pointed at the TUI — it gets cleared (renderer will pick another
+    // tab the next time it refreshes).
+    expect(svc.getActive('t1')).toBeNull();
+  });
+
+  it('sweepTuiTabs() is a no-op when no tui rows exist', () => {
+    svc.add('t1', { kind: 'shell', label: '1' });
+    expect(svc.sweepTuiTabs()).toEqual([]);
+    expect(svc.list('t1')).toHaveLength(1);
+  });
+
   it('bulkUpsert() silently skips entries for tasks that no longer exist', () => {
     // Old localStorage keys can outlive their tasks; the migration shim
     // forwards them all, and FK enforcement would otherwise throw.
