@@ -71,6 +71,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
     taskId: string,
     opts?: { kinds?: ('agent' | 'shell' | 'tui')[]; featureId?: string },
   ) => ipcRenderer.invoke('pty:listForTask', taskId, opts),
+
+  // Drawer tabs (per-task tab state owned by main)
+  drawerTabsList: (taskId: string) => ipcRenderer.invoke('drawerTabs:list', taskId),
+  drawerTabsGetActive: (taskId: string) => ipcRenderer.invoke('drawerTabs:getActive', taskId),
+  drawerTabsAdd: (taskId: string, opts: unknown) =>
+    ipcRenderer.invoke('drawerTabs:add', taskId, opts),
+  drawerTabsClose: (tabId: string) => ipcRenderer.invoke('drawerTabs:close', tabId),
+  drawerTabsSetActive: (taskId: string, tabId: string) =>
+    ipcRenderer.invoke('drawerTabs:setActive', taskId, tabId),
+  drawerTabsBulkUpsert: (entries: unknown) => ipcRenderer.invoke('drawerTabs:bulkUpsert', entries),
+  drawerTabsSubscribe: (taskId: string) => ipcRenderer.invoke('drawerTabs:subscribe', taskId),
+  drawerTabsUnsubscribe: (taskId: string) => ipcRenderer.invoke('drawerTabs:unsubscribe', taskId),
+  onDrawerTabsChanged: (cb: (taskId: string) => void) => {
+    const handler = (_event: unknown, taskId: string) => cb(taskId);
+    ipcRenderer.on('drawerTabs:changed', handler);
+    return () => ipcRenderer.removeListener('drawerTabs:changed', handler);
+  },
   onPtyData: (id: string, callback: (data: string) => void) => {
     const handler = (_event: unknown, data: string) => callback(data);
     ipcRenderer.on(`pty:data:${id}`, handler);

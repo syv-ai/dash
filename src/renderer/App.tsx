@@ -201,6 +201,51 @@ export function App() {
     return { path: '', args: [] };
   });
   const [availableIDEs, setAvailableIDEs] = useState<Array<{ id: string; label: string }>>([]);
+
+  // One-shot localStorage → SQLite migration for drawer tabs. After upgrading
+  // past commit 3, per-task tab state lives in the drawer_tabs table owned by
+  // main. We scrape the old `shellTabs:*` / `shellActiveTab:*` keys and hand
+  // them to drawerTabsBulkUpsert; once the IPC succeeds, the keys are deleted
+  // so subsequent mounts no-op.
+  useEffect(() => {
+    const entries: Array<{
+      taskId: string;
+      tabs: Array<{ id: string; kind: 'shell' | 'tui'; label: string; position: number }>;
+      activeTabId: string | null;
+    }> = [];
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key?.startsWith('shellTabs:')) continue;
+      const taskId = key.slice('shellTabs:'.length);
+      try {
+        const raw = JSON.parse(localStorage.getItem(key) ?? '[]');
+        if (!Array.isArray(raw)) continue;
+        entries.push({
+          taskId,
+          tabs: raw.map((t: { id: string; label?: string }, idx: number) => ({
+            id: t.id,
+            kind: 'shell' as const,
+            label: t.label ?? String(idx + 1),
+            position: idx,
+          })),
+          activeTabId: localStorage.getItem(`shellActiveTab:${taskId}`),
+        });
+      } catch {
+        /* skip corrupted */
+      }
+    }
+
+    if (entries.length === 0) return;
+    window.electronAPI.drawerTabsBulkUpsert(entries).then((resp) => {
+      if (!resp.success) return;
+      for (const e of entries) {
+        localStorage.removeItem(`shellTabs:${e.taskId}`);
+        localStorage.removeItem(`shellActiveTab:${e.taskId}`);
+      }
+    });
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     window.electronAPI.detectAvailableIDEs().then((res) => {

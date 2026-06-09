@@ -1,11 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Terminal, ChevronDown, ChevronUp, X, Plus } from 'lucide-react';
+import { Terminal, ChevronDown, ChevronUp, X, Plus, Settings2 } from 'lucide-react';
 import { sessionRegistry } from '../terminal/SessionRegistry';
-
-interface TerminalTab {
-  id: string;
-  label: string;
-}
+import type { Tab } from '../../shared/drawerTabs';
 
 interface TerminalDrawerProps {
   taskId: string;
@@ -26,40 +22,56 @@ export function TerminalDrawer({
 }: TerminalDrawerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const shellId = `shell:${taskId}`;
-  // Tab state — persisted to localStorage per task
-  const [tabs, setTabs] = useState<TerminalTab[]>(() => {
-    try {
-      const stored = localStorage.getItem(`shellTabs:${taskId}`);
-      return stored ? JSON.parse(stored) : [{ id: shellId, label: '1' }];
-    } catch {
-      return [{ id: shellId, label: '1' }];
-    }
-  });
+  const [tabs, setTabs] = useState<Tab[]>([]);
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
 
-  const [activeTabId, setActiveTabId] = useState<string>(() => {
-    try {
-      return localStorage.getItem(`shellActiveTab:${taskId}`) ?? shellId;
-    } catch {
-      return shellId;
-    }
-  });
-
-  // Persist tab state
+  // Subscribe to main's drawer-tabs feed. On first mount of a task that has no
+  // rows yet, seed the default shell tab so we don't render an empty header.
   useEffect(() => {
-    localStorage.setItem(`shellTabs:${taskId}`, JSON.stringify(tabs));
-  }, [tabs, taskId]);
+    let cancelled = false;
 
-  useEffect(() => {
-    localStorage.setItem(`shellActiveTab:${taskId}`, activeTabId);
-  }, [activeTabId, taskId]);
+    const refresh = async () => {
+      const [listResp, activeResp] = await Promise.all([
+        window.electronAPI.drawerTabsList(taskId),
+        window.electronAPI.drawerTabsGetActive(taskId),
+      ]);
+      if (cancelled) return;
+      if (listResp.success && listResp.data) setTabs(listResp.data);
+      if (activeResp.success) setActiveTabId(activeResp.data ?? null);
+    };
 
-  // Attach the active tab's session to the container
+    refresh();
+    window.electronAPI.drawerTabsSubscribe(taskId);
+    const off = window.electronAPI.onDrawerTabsChanged((changedTaskId) => {
+      if (changedTaskId === taskId) refresh();
+    });
+
+    // Seed the first shell tab if none exist yet. Idempotent — once the row
+    // lands in SQLite, this branch never fires again for the task.
+    (async () => {
+      const r = await window.electronAPI.drawerTabsList(taskId);
+      if (cancelled) return;
+      if (r.success && r.data && r.data.length === 0) {
+        await window.electronAPI.drawerTabsAdd(taskId, {
+          kind: 'shell',
+          label: '1',
+          id: shellId,
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      off();
+      window.electronAPI.drawerTabsUnsubscribe(taskId);
+    };
+  }, [taskId, shellId]);
+
+  // Attach the active tab's session to the container.
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || !activeTabId) return;
 
-    // Remove previous session's xterm DOM before attaching a new one,
-    // since detach() leaves the element in place for React-driven unmounts.
     while (container.firstChild) {
       container.removeChild(container.firstChild);
     }
@@ -82,7 +94,7 @@ export function TerminalDrawer({
     const wasCollapsed = prevCollapsedRef.current;
     prevCollapsedRef.current = collapsed;
 
-    if (wasCollapsed && !collapsed) {
+    if (wasCollapsed && !collapsed && activeTabId) {
       const session = sessionRegistry.get(activeTabId);
       if (session) {
         requestAnimationFrame(() => session.focus());
@@ -91,20 +103,21 @@ export function TerminalDrawer({
   }, [collapsed, activeTabId]);
 
   function handleAddTab() {
-    const newId = `shell:${taskId}:t${Date.now()}`;
-    const newTab: TerminalTab = { id: newId, label: String(tabs.length + 1) };
-    setTabs((prev) => [...prev, newTab]);
-    setActiveTabId(newId);
+    window.electronAPI.drawerTabsAdd(taskId, {
+      kind: 'shell',
+      label: String(tabs.length + 1),
+      id: `shell:${taskId}:t${Date.now()}`,
+    });
   }
 
   function handleCloseTab(tabId: string) {
     if (tabs.length <= 1) return;
-    const idx = tabs.findIndex((t) => t.id === tabId);
-    const updated = tabs.filter((t) => t.id !== tabId);
     sessionRegistry.dispose(tabId);
-    const newActive = activeTabId === tabId ? updated[Math.max(0, idx - 1)].id : activeTabId;
-    setTabs(updated);
-    setActiveTabId(newActive);
+    window.electronAPI.drawerTabsClose(tabId);
+  }
+
+  function handleSelectTab(tabId: string) {
+    window.electronAPI.drawerTabsSetActive(taskId, tabId);
   }
 
   return (
@@ -133,8 +146,11 @@ export function TerminalDrawer({
                   ? 'border-primary text-foreground'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
-              onClick={() => setActiveTabId(tab.id)}
+              onClick={() => handleSelectTab(tab.id)}
             >
+              {tab.kind === 'tui' && (
+                <Settings2 size={11} strokeWidth={1.8} className="opacity-80" />
+              )}
               <span className="text-[11px] font-medium">{tab.label}</span>
               {tabs.length > 1 && (
                 <button

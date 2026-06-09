@@ -51,6 +51,8 @@ export const tasks = sqliteTable(
     totalTokens: integer('total_tokens').notNull().default(0),
     totalCostUsd: real('total_cost_usd').notNull().default(0),
     tokensBackfilledAt: text('tokens_backfilled_at'),
+    // FK pointer to drawer_tabs.id. Nullable when a task has no tabs.
+    activeDrawerTabId: text('active_drawer_tab_id'),
     createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
   },
@@ -95,6 +97,28 @@ export const diffEditorComments = sqliteTable(
   },
   (table) => ({
     taskFileIdx: index('idx_diff_editor_comments_task_file').on(table.taskId, table.filePath),
+  }),
+);
+
+// Drawer tabs per task. Replaces the per-task `shellTabs:<taskId>` localStorage
+// keys so main can mutate the tab list (e.g. add the ports TUI tab) without
+// round-tripping through renderer state. `id` matches the PTY id when the tab
+// owns one.
+export const drawerTabs = sqliteTable(
+  'drawer_tabs',
+  {
+    id: text('id').primaryKey(),
+    taskId: text('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(), // 'shell' | 'tui'
+    featureId: text('feature_id'),
+    label: text('label').notNull(),
+    position: integer('position').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => ({
+    taskPosIdx: index('idx_drawer_tabs_task').on(table.taskId, table.position),
   }),
 );
 

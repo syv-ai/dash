@@ -45,6 +45,7 @@ import type {
   PortHeuristicResult,
 } from '../shared/types';
 import type { ParsedSessionMessage, SessionMetrics, SessionUpdate } from '../shared/sessionTypes';
+import type { Tab, AddTabOpts, BulkUpsertEntry } from '../shared/drawerTabs';
 
 export interface TokenStatsUpdate {
   taskId: string;
@@ -168,6 +169,18 @@ export interface ElectronAPI {
     taskId: string,
     opts?: { kinds?: ('agent' | 'shell' | 'tui')[]; featureId?: string },
   ) => Promise<IpcResponse<string[]>>;
+
+  // Drawer tabs (per-task tab state owned by main)
+  drawerTabsList: (taskId: string) => Promise<IpcResponse<Tab[]>>;
+  drawerTabsGetActive: (taskId: string) => Promise<IpcResponse<string | null>>;
+  drawerTabsAdd: (taskId: string, opts: AddTabOpts) => Promise<IpcResponse<Tab>>;
+  drawerTabsClose: (tabId: string) => Promise<IpcResponse<void>>;
+  drawerTabsSetActive: (taskId: string, tabId: string) => Promise<IpcResponse<void>>;
+  drawerTabsBulkUpsert: (entries: BulkUpsertEntry[]) => Promise<IpcResponse<void>>;
+  drawerTabsSubscribe: (taskId: string) => Promise<IpcResponse<void>>;
+  drawerTabsUnsubscribe: (taskId: string) => Promise<IpcResponse<void>>;
+  onDrawerTabsChanged: (cb: (taskId: string) => void) => () => void;
+
   onPtyData: (id: string, callback: (data: string) => void) => () => void;
   onPtyExit: (
     id: string,

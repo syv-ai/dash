@@ -235,5 +235,26 @@ export function runMigrations(): void {
     /* already exists */
   }
 
+  // Drawer tabs replace per-task localStorage keys for tab state. id matches
+  // the PTY id when the tab owns one (e.g. 'shell:t1' or 'ports-tui:t1').
+  rawDb.exec(`
+    CREATE TABLE IF NOT EXISTS drawer_tabs (
+      id           TEXT PRIMARY KEY,
+      task_id      TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      kind         TEXT NOT NULL,
+      feature_id   TEXT,
+      label        TEXT NOT NULL,
+      position     INTEGER NOT NULL,
+      created_at   INTEGER NOT NULL
+    );
+  `);
+  rawDb.exec(`CREATE INDEX IF NOT EXISTS idx_drawer_tabs_task ON drawer_tabs (task_id, position);`);
+
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN active_drawer_tab_id TEXT`);
+  } catch {
+    /* already exists */
+  }
+
   rawDb.pragma('foreign_keys = ON');
 }

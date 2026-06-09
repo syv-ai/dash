@@ -14,6 +14,7 @@ import { registerEditorIpc } from './editorIpc';
 import { registerDiffCommentsIpc } from './diffCommentsIpc';
 import { registerTokenStatsIpc } from './tokenStatsIpc';
 import { registerPortsIpc } from './portsIpc';
+import { registerDrawerTabsIpc } from './drawerTabsIpc';
 
 export function registerAllIpc(): void {
   registerAppIpc();
@@ -32,4 +33,5 @@ export function registerAllIpc(): void {
   registerDiffCommentsIpc();
   registerTokenStatsIpc();
   registerPortsIpc();
+  registerDrawerTabsIpc();
 }
