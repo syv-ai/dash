@@ -13,6 +13,7 @@ pnpm dev                  # Vite on :3000 + Electron
 pnpm dev:main             # main process only
 pnpm dev:renderer         # Vite dev server only
 pnpm build                # compile main (tsc) + renderer (vite)
+pnpm test                 # vitest under Electron's Node (ELECTRON_RUN_AS_NODE)
 pnpm type-check           # typecheck both processes
 pnpm package:mac          # build + package as .dmg (arm64)
 pnpm package:linux        # build + package as .AppImage (x64)
@@ -20,6 +21,10 @@ pnpm drizzle:generate     # generate Drizzle migrations
 ```
 
 Renderer hot-reloads; main process changes require restart. Husky pre-commit runs lint-staged (Prettier + ESLint on staged `.ts`/`.tsx`).
+
+### Native modules and test ABI
+
+`better-sqlite3` and `node-pty` are native modules with one binary per Node ABI. Production runs under Electron's bundled Node (its own ABI); plain `node` has a different one. `pnpm test` runs vitest under Electron's Node via `ELECTRON_RUN_AS_NODE=1 electron …` so it uses the same binding as production. **Always rebuild for Electron** (`pnpm rebuild` or `npx electron-rebuild`) — never `npm rebuild` the native modules, which builds for the wrong ABI and breaks both dev and tests.
 
 ## Architecture
 
