@@ -202,8 +202,6 @@ interface SettingsModalProps {
   showProjectTokens: boolean;
   onShowProjectTokensChange: (value: boolean) => void;
   globalTokenStats: { totalTokens: number; totalCostUsd: number; taskCount: number };
-  shellDrawerEnabled: boolean;
-  onShellDrawerEnabledChange: (value: boolean) => void;
   shellDrawerPosition: 'main' | 'right';
   onShellDrawerPositionChange: (value: 'main' | 'right') => void;
   terminalTheme: string;
@@ -855,8 +853,6 @@ export function SettingsModal({
   showProjectTokens,
   onShowProjectTokensChange,
   globalTokenStats,
-  shellDrawerEnabled,
-  onShellDrawerEnabledChange,
   shellDrawerPosition,
   onShellDrawerPositionChange,
   terminalTheme,
@@ -1206,28 +1202,16 @@ export function SettingsModal({
               {tab === 'terminal' && (
                 <SettingsPane key={`pane-${tab}`}>
                   <SettingsCard title="Shell drawer" hint="Cmd+J">
-                    <SettingsRow
-                      label="Show shell drawer"
-                      description="Run git, npm, and other commands alongside Claude."
-                      control={
-                        <Switch
-                          enabled={shellDrawerEnabled}
-                          onToggle={onShellDrawerEnabledChange}
-                        />
-                      }
-                    />
-                    {shellDrawerEnabled && (
-                      <SettingsBlock label="Position">
-                        <Segmented
-                          value={shellDrawerPosition}
-                          options={[
-                            { value: 'main', label: 'Main' },
-                            { value: 'right', label: 'Right' },
-                          ]}
-                          onChange={onShellDrawerPositionChange}
-                        />
-                      </SettingsBlock>
-                    )}
+                    <SettingsBlock label="Position">
+                      <Segmented
+                        value={shellDrawerPosition}
+                        options={[
+                          { value: 'main', label: 'Main' },
+                          { value: 'right', label: 'Right' },
+                        ]}
+                        onChange={onShellDrawerPositionChange}
+                      />
+                    </SettingsBlock>
                   </SettingsCard>
                 </SettingsPane>
               )}

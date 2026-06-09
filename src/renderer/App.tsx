@@ -156,10 +156,6 @@ export function App() {
     const stored = localStorage.getItem('updateNotificationsEnabled');
     return stored === null ? true : stored === 'true';
   });
-  const [shellDrawerEnabled, setShellDrawerEnabled] = useState(() => {
-    const stored = localStorage.getItem('shellDrawerEnabled');
-    return stored === null ? true : stored === 'true';
-  });
   const [shellDrawerCollapsed, setShellDrawerCollapsed] = useState(() => {
     return localStorage.getItem('shellDrawerCollapsed') === 'true';
   });
@@ -1223,7 +1219,6 @@ export function App() {
   }, [changesPanelCollapsed]);
 
   const toggleShellDrawer = useCallback(() => {
-    if (!shellDrawerEnabled) return;
     const panel = shellDrawerPanelRef.current;
     if (!panel) return;
     setShellDrawerAnimating(true);
@@ -1232,7 +1227,7 @@ export function App() {
     } else {
       panel.collapse();
     }
-  }, [shellDrawerEnabled, shellDrawerCollapsed]);
+  }, [shellDrawerCollapsed]);
 
   // ── Data Loading ─────────────────────────────────────────
 
@@ -1941,7 +1936,7 @@ export function App() {
           minSize={35}
         >
           <ShellDrawerWrapper
-            enabled={shellDrawerEnabled && shellDrawerPosition === 'main'}
+            enabled={shellDrawerPosition === 'main'}
             taskId={activeTask?.id ?? null}
             cwd={activeTask?.path ?? null}
             collapsed={shellDrawerCollapsed}
@@ -2043,9 +2038,7 @@ export function App() {
                 }
               >
                 <ShellDrawerWrapper
-                  enabled={
-                    shellDrawerEnabled && shellDrawerPosition === 'right' && !changesPanelCollapsed
-                  }
+                  enabled={shellDrawerPosition === 'right' && !changesPanelCollapsed}
                   taskId={activeTask?.id ?? null}
                   cwd={activeTask?.path ?? null}
                   collapsed={shellDrawerCollapsed}
@@ -2243,11 +2236,6 @@ export function App() {
           showProjectTokens={showProjectTokens}
           onShowProjectTokensChange={setShowProjectTokens}
           globalTokenStats={globalTokenStats}
-          shellDrawerEnabled={shellDrawerEnabled}
-          onShellDrawerEnabledChange={(v) => {
-            setShellDrawerEnabled(v);
-            localStorage.setItem('shellDrawerEnabled', String(v));
-          }}
           shellDrawerPosition={shellDrawerPosition}
           onShellDrawerPositionChange={(v) => {
             setShellDrawerPosition(v);
