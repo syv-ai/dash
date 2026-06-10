@@ -29,6 +29,7 @@ import type {
   SkillsSearchArgs,
   SkillsRegistryMeta,
   InstalledSkillsResult,
+  CarbonStats,
 } from '../shared/types';
 import type { ParsedSessionMessage, SessionMetrics, SessionUpdate } from '../shared/sessionTypes';
 
@@ -309,6 +310,9 @@ export interface ElectronAPI {
     taskId: string,
   ) => Promise<IpcResponse<{ messages: ParsedSessionMessage[]; metrics: SessionMetrics } | null>>;
   onSessionUpdate: (callback: (data: SessionUpdate) => void) => () => void;
+
+  // Carbon / energy stats
+  getCarbonStats: (paths?: string[]) => Promise<IpcResponse<CarbonStats>>;
 
   // Telemetry
   telemetryCapture: (event: string, properties?: Record<string, unknown>) => Promise<void>;

@@ -1,3 +1,4 @@
+import { computeEnergyFromMessages } from '../../shared/carbon';
 import {
   EMPTY_METRICS,
   type ContentBlock,
@@ -206,5 +207,6 @@ export function calculateMetrics(messages: ParsedSessionMessage[]): SessionMetri
     outputTokens,
     cacheReadTokens,
     messageCount: messages.length,
+    energyWh: computeEnergyFromMessages(messages).energyWh,
   };
 }

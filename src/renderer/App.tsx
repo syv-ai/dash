@@ -27,6 +27,8 @@ import { ToastContainer } from './components/Toast';
 import { toast } from 'sonner';
 import { useStatusLine } from './hooks/useStatusLine';
 import { useThresholdAlerts } from './hooks/useThresholdAlerts';
+import { useSessionCarbon } from './hooks/useSessionCarbon';
+import { useGridIntensity } from './hooks/useGridIntensity';
 import type {
   Project,
   Task,
@@ -451,6 +453,9 @@ export function App() {
     }
     return null;
   })();
+
+  const activeSessionEnergyWh = useSessionCarbon(activeTaskId);
+  const [gridIntensity] = useGridIntensity();
 
   // All non-archived tasks for the active project (for cycling)
   const activeProjectTasks = activeProjectId
@@ -1759,10 +1764,19 @@ export function App() {
                     const rawCtx = activeTask ? contextUsage[activeTask.id] : undefined;
                     const activeCtx = showUsageInline ? rawCtx : undefined;
                     const rateLimits = showRateLimits && latestRateLimits ? latestRateLimits : {};
+                    const sessionEnergyWh = showUsageInline ? activeSessionEnergyWh : undefined;
                     const hasRateLimits = rateLimits.fiveHour || rateLimits.sevenDay;
                     const hasCtx = activeCtx && activeCtx.percentage > 0;
-                    if (!hasRateLimits && !hasCtx) return null;
-                    return <UsageWidget rateLimits={rateLimits} contextUsage={activeCtx} />;
+                    const hasCarbon = sessionEnergyWh && sessionEnergyWh > 0;
+                    if (!hasRateLimits && !hasCtx && !hasCarbon) return null;
+                    return (
+                      <UsageWidget
+                        rateLimits={rateLimits}
+                        contextUsage={activeCtx}
+                        sessionEnergyWh={sessionEnergyWh}
+                        gridIntensity={gridIntensity}
+                      />
+                    );
                   })()}
                 <ShellDrawerWrapper
                   enabled={

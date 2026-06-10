@@ -151,6 +151,30 @@ export interface StatusLineData {
   updatedAt: number; // epoch ms
 }
 
+/**
+ * Aggregate energy/carbon estimate over Claude Code sessions. Token counts are
+ * cache-weighted (see src/shared/carbon.ts). `energyWh` is grid-intensity
+ * independent; carbon (grams CO2e) is derived in the renderer with the user's
+ * configured grid intensity.
+ */
+export interface CarbonProjectStat {
+  /** Decoded project path (Claude Code's ~/.claude/projects folder name decoded). */
+  project: string;
+  tokens: number;
+  energyWh: number;
+}
+
+export interface CarbonStats {
+  tokens: number;
+  energyWh: number;
+  /** Effective tokens grouped by model family: opus / sonnet / haiku. */
+  tokensByModel: Record<string, number>;
+  /** Per-project breakdown, largest energy first. */
+  projects: CarbonProjectStat[];
+  /** Number of session .jsonl files scanned. */
+  sessionCount: number;
+}
+
 export interface UsageThresholds {
   /** Warn when context window usage exceeds this percentage (0-100), or null to disable. */
   contextPercentage: number | null;

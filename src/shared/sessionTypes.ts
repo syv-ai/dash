@@ -87,6 +87,12 @@ export interface SessionMetrics {
   outputTokens: number;
   cacheReadTokens: number;
   messageCount: number;
+  /**
+   * Estimated energy use in watt-hours (model-aware, cache-weighted). Grid-intensity
+   * independent — convert to carbon in the renderer with the user's intensity. See
+   * src/shared/carbon.ts.
+   */
+  energyWh: number;
 }
 
 export const EMPTY_METRICS: SessionMetrics = {
@@ -96,6 +102,7 @@ export const EMPTY_METRICS: SessionMetrics = {
   outputTokens: 0,
   cacheReadTokens: 0,
   messageCount: 0,
+  energyWh: 0,
 };
 
 export interface SessionUpdate {

@@ -1,17 +1,25 @@
 import React from 'react';
+import { Leaf } from 'lucide-react';
 import type { RateLimits, ContextUsage } from '../../shared/types';
-import { formatResetTime, formatTokens } from '../../shared/format';
+import { formatResetTime, formatTokens, formatEnergy, formatCarbon } from '../../shared/format';
+import { carbonGramsFromWh, householdComparison, flightComparison } from '../../shared/carbon';
 import { UsageBar } from './ui/UsageBar';
 
 export function UsageWidget({
   rateLimits,
   contextUsage,
+  sessionEnergyWh,
+  gridIntensity,
 }: {
   rateLimits: RateLimits;
   contextUsage?: ContextUsage;
+  /** Estimated energy (Wh) for the active task's session. Omit to hide the carbon row. */
+  sessionEnergyWh?: number;
+  gridIntensity?: number;
 }) {
   const ctx = contextUsage && contextUsage.percentage > 0 ? contextUsage : null;
-  if (!rateLimits.fiveHour && !rateLimits.sevenDay && !ctx) return null;
+  const carbon = sessionEnergyWh && sessionEnergyWh > 0 ? sessionEnergyWh : null;
+  if (!rateLimits.fiveHour && !rateLimits.sevenDay && !ctx && !carbon) return null;
 
   return (
     <div
@@ -55,6 +63,23 @@ export function UsageWidget({
           labelClassName="text-[10px] text-muted-foreground/70 uppercase tracking-wide"
           detailClassName="text-[10px]"
         />
+      )}
+      {carbon && (
+        <div
+          className="flex items-center justify-between text-[10px]"
+          title={`Estimated · ${householdComparison(carbon)} · ${flightComparison(
+            carbonGramsFromWh(carbon, gridIntensity),
+          )}`}
+        >
+          <span className="flex items-center gap-1 text-muted-foreground/70 uppercase tracking-wide">
+            <Leaf size={11} strokeWidth={1.8} className="text-emerald-400" />
+            Carbon (est.)
+          </span>
+          <span className="tabular-nums font-medium text-foreground/60">
+            {formatCarbon(carbonGramsFromWh(carbon, gridIntensity))}
+            <span className="text-foreground/40 font-normal ml-1.5">· {formatEnergy(carbon)}</span>
+          </span>
+        </div>
       )}
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { openInIde } from '../lib/openInIde';
 import {
   GitBranch,
@@ -18,6 +18,7 @@ import type { Project, Task, ActivityInfo } from '../../shared/types';
 import { linkedItemUrl } from '../../shared/urls';
 import { IconButton } from './ui/IconButton';
 import { Tooltip } from './ui/Tooltip';
+import { CarbonPanel } from './CarbonPanel';
 
 interface ProjectOverviewProps {
   project: Project;
@@ -110,6 +111,17 @@ export function ProjectOverview({
   onRestoreTask,
 }: ProjectOverviewProps) {
   const [showArchived, setShowArchived] = useState(false);
+
+  // Claude Code paths owned by this project: the repo path plus each task's
+  // worktree path. Scopes the carbon panel to this project rather than all of them.
+  const carbonPaths = useMemo(() => {
+    const set = new Set<string>();
+    if (project.path) set.add(project.path);
+    for (const t of tasks) if (t.path) set.add(t.path);
+    for (const t of archivedTasks) if (t.path) set.add(t.path);
+    return Array.from(set);
+  }, [project.path, tasks, archivedTasks]);
+
   const busyCount = tasks.filter((t) => taskActivity[t.id]?.state === 'busy').length;
   const waitingCount = tasks.filter((t) => taskActivity[t.id]?.state === 'waiting').length;
   const errorCount = tasks.filter((t) => taskActivity[t.id]?.state === 'error').length;
@@ -222,6 +234,7 @@ export function ProjectOverview({
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto px-14 py-6">
         <div className="w-full">
+          <CarbonPanel paths={carbonPaths} />
           {tasks.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <p className="text-[13px] text-muted-foreground mb-4">
