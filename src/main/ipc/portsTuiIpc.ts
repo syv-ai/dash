@@ -303,12 +303,15 @@ async function handleMigrate(args: {
     portsDebug.log('migrate', 'ports bootstrap failed', { err: String(err) });
   }
 
-  const win = args.getMainWindow();
-  win?.webContents.send('ports:tui:migrated', {
-    fromTaskId: args.currentTaskId,
-    toTaskId: task.id,
-  });
-
+  // Spawn the new TUI BEFORE notifying the renderer. spawnTui only adds the
+  // entry to activeTuis at its very end (after socket listen, drawer tab
+  // INSERT, orchestrator start, and side-car PTY spawn). If we sent the
+  // 'ports:tui:migrated' event first, the renderer would switch active task,
+  // its portsTuiRequestStart effect would fire, see activeTuis.has === false,
+  // and race in to spawn its OWN orchestrator at initialState='onboarding'.
+  // The renderer's spawnTui usually won the race because it had fewer awaits
+  // before the drawerTabs.add — so the user saw an onboarding screen for the
+  // newly-created port-setup task instead of the launching spinner.
   await spawnTui({
     taskId: task.id,
     projectId: args.currentProjectId,
@@ -320,6 +323,12 @@ async function handleMigrate(args: {
     initialState: 'launching',
     presetSignalsGuesses: { signals: args.signals, guesses: args.guesses },
     getMainWindow: args.getMainWindow,
+  });
+
+  const win = args.getMainWindow();
+  win?.webContents.send('ports:tui:migrated', {
+    fromTaskId: args.currentTaskId,
+    toTaskId: task.id,
   });
 }
 
