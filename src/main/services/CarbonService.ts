@@ -1,14 +1,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import type { CarbonStats, CarbonProjectStat } from '@shared/types';
-import { computeEnergyFromMessages, sumEnergyStats, type EnergyStats } from '@shared/carbon';
-import type { ParsedSessionMessage } from '@shared/sessionTypes';
-import { parseJsonlLine, deduplicateByRequestId, encodeProjectPath } from '../utils/jsonlParser';
-
-function getProjectsDir(): string {
-  return path.join(os.homedir(), '.claude', 'projects');
-}
+import {
+  computeEnergyFromMessages,
+  sumEnergyStats,
+  emptyTokensByModel,
+  type EnergyStats,
+} from '@shared/carbon';
+import { encodeProjectPath, getProjectsDir, parseSessionFile } from '../utils/jsonlParser';
 
 /** Best-effort readable label for a Claude Code encoded project folder name. */
 function decodeProjectName(folder: string): string {
@@ -20,18 +19,9 @@ function decodeProjectName(folder: string): string {
 }
 
 function energyStatsForFile(filePath: string): EnergyStats | null {
-  let data: string;
-  try {
-    data = fs.readFileSync(filePath, 'utf8');
-  } catch {
-    return null;
-  }
-  const messages: ParsedSessionMessage[] = [];
-  for (const line of data.split('\n')) {
-    const parsed = parseJsonlLine(line);
-    if (parsed) messages.push(parsed);
-  }
-  return computeEnergyFromMessages(deduplicateByRequestId(messages));
+  const parsed = parseSessionFile(filePath);
+  if (!parsed) return null;
+  return computeEnergyFromMessages(parsed.messages);
 }
 
 /**
@@ -48,21 +38,37 @@ export function computeCarbonStats(paths?: string[]): CarbonStats {
   const empty: CarbonStats = {
     tokens: 0,
     energyWh: 0,
-    tokensByModel: { opus: 0, sonnet: 0, haiku: 0 },
+    tokensByModel: emptyTokensByModel(),
     projects: [],
     sessionCount: 0,
   };
 
   // Encode the requested paths to the folder names Claude Code uses. An empty
   // (but defined) list means "no folders match" → return empty rather than all.
-  const allowedFolders =
-    paths !== undefined ? new Set(paths.filter(Boolean).map(encodeProjectPath)) : null;
-  if (allowedFolders && allowedFolders.size === 0) return empty;
+  // Keep each folder's real basename as its display label (the encoded folder
+  // name can't be decoded back to a path); fall back to decodeProjectName when
+  // unscoped (lifetime total, no originating paths available).
+  const allowedFolders = paths !== undefined ? new Set<string>() : null;
+  const folderLabels = new Map<string, string>();
+  if (paths !== undefined) {
+    for (const p of paths.filter(Boolean)) {
+      const folder = encodeProjectPath(p);
+      allowedFolders!.add(folder);
+      folderLabels.set(folder, path.basename(p));
+    }
+    if (allowedFolders!.size === 0) return empty;
+  }
 
   let projectFolders: string[];
   try {
     projectFolders = fs.readdirSync(projectsDir);
-  } catch {
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+      console.warn('[CarbonService.computeCarbonStats] readdir projectsDir failed', {
+        projectsDir,
+        err,
+      });
+    }
     return empty;
   }
   if (allowedFolders) projectFolders = projectFolders.filter((f) => allowedFolders.has(f));
@@ -77,7 +83,15 @@ export function computeCarbonStats(paths?: string[]): CarbonStats {
     try {
       if (!fs.statSync(folderPath).isDirectory()) continue;
       entries = fs.readdirSync(folderPath);
-    } catch {
+    } catch (err) {
+      // ENOENT = folder removed mid-scan (benign race); anything else is a real
+      // read problem that would silently drop this project's contribution.
+      if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+        console.warn('[CarbonService.computeCarbonStats] read project folder failed', {
+          folderPath,
+          err,
+        });
+      }
       continue;
     }
 
@@ -94,7 +108,7 @@ export function computeCarbonStats(paths?: string[]): CarbonStats {
     if (projectTotal.tokens === 0) continue;
     perProjectStats.push(projectTotal);
     projectStats.push({
-      project: decodeProjectName(folder),
+      project: folderLabels.get(folder) ?? decodeProjectName(folder),
       tokens: projectTotal.tokens,
       energyWh: projectTotal.energyWh,
     });

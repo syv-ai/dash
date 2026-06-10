@@ -1,3 +1,5 @@
+import type { CarbonModel } from './carbon';
+
 export interface Project {
   id: string;
   name: string;
@@ -158,7 +160,7 @@ export interface StatusLineData {
  * configured grid intensity.
  */
 export interface CarbonProjectStat {
-  /** Decoded project path (Claude Code's ~/.claude/projects folder name decoded). */
+  /** Human-readable project label (worktree/folder basename; the full path can't be recovered). */
   project: string;
   tokens: number;
   energyWh: number;
@@ -168,7 +170,7 @@ export interface CarbonStats {
   tokens: number;
   energyWh: number;
   /** Effective tokens grouped by model family: opus / sonnet / haiku. */
-  tokensByModel: Record<string, number>;
+  tokensByModel: Record<CarbonModel, number>;
   /** Per-project breakdown, largest energy first. */
   projects: CarbonProjectStat[];
   /** Number of session .jsonl files scanned. */

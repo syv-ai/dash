@@ -1,6 +1,5 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import { BrowserWindow } from 'electron';
 import type {
   ParsedSessionMessage,
@@ -9,9 +8,10 @@ import type {
 } from '../../shared/sessionTypes';
 import {
   parseJsonlLine,
-  deduplicateByRequestId,
   calculateMetrics,
   encodeProjectPath,
+  getProjectsDir,
+  parseSessionFile,
 } from '../utils/jsonlParser';
 
 const DEBOUNCE_MS = 300;
@@ -29,10 +29,6 @@ interface WatchEntry {
 }
 
 const watchers = new Map<string, WatchEntry>();
-
-function getProjectsDir(): string {
-  return path.join(os.homedir(), '.claude', 'projects');
-}
 
 /**
  * Resolve Claude's project dir for a cwd by exact path encoding only.
@@ -77,24 +73,7 @@ function findLatestSessionFile(projectDir: string): string | null {
 }
 
 function parseFullFile(filePath: string): { messages: ParsedSessionMessage[]; bytesRead: number } {
-  let data: string;
-  try {
-    data = fs.readFileSync(filePath, 'utf8');
-  } catch (err) {
-    console.warn('[SessionWatcher.parseFullFile] readFile failed', { filePath, err });
-    return { messages: [], bytesRead: 0 };
-  }
-
-  const messages: ParsedSessionMessage[] = [];
-  for (const line of data.split('\n')) {
-    const parsed = parseJsonlLine(line);
-    if (parsed) messages.push(parsed);
-  }
-
-  return {
-    messages: deduplicateByRequestId(messages),
-    bytesRead: Buffer.byteLength(data, 'utf8'),
-  };
+  return parseSessionFile(filePath) ?? { messages: [], bytesRead: 0 };
 }
 
 function parseIncrementalBytes(entry: WatchEntry): ParsedSessionMessage[] {

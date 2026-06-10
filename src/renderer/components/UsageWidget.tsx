@@ -1,8 +1,8 @@
 import React from 'react';
 import { Leaf } from 'lucide-react';
 import type { RateLimits, ContextUsage } from '../../shared/types';
-import { formatResetTime, formatTokens, formatEnergy, formatCarbon } from '../../shared/format';
-import { carbonGramsFromWh, householdComparison, flightComparison } from '../../shared/carbon';
+import { formatResetTime, formatTokens } from '../../shared/format';
+import { carbonDisplay } from '../../shared/carbon';
 import { UsageBar } from './ui/UsageBar';
 
 export function UsageWidget({
@@ -18,7 +18,8 @@ export function UsageWidget({
   gridIntensity?: number;
 }) {
   const ctx = contextUsage && contextUsage.percentage > 0 ? contextUsage : null;
-  const carbon = sessionEnergyWh && sessionEnergyWh > 0 ? sessionEnergyWh : null;
+  const carbon =
+    sessionEnergyWh && sessionEnergyWh > 0 ? carbonDisplay(sessionEnergyWh, gridIntensity) : null;
   if (!rateLimits.fiveHour && !rateLimits.sevenDay && !ctx && !carbon) return null;
 
   return (
@@ -67,17 +68,15 @@ export function UsageWidget({
       {carbon && (
         <div
           className="flex items-center justify-between text-[10px]"
-          title={`Estimated · ${householdComparison(carbon)} · ${flightComparison(
-            carbonGramsFromWh(carbon, gridIntensity),
-          )}`}
+          title={`Estimated · ${carbon.household} · ${carbon.flight}`}
         >
           <span className="flex items-center gap-1 text-muted-foreground/70 uppercase tracking-wide">
             <Leaf size={11} strokeWidth={1.8} className="text-emerald-400" />
             Carbon (est.)
           </span>
           <span className="tabular-nums font-medium text-foreground/60">
-            {formatCarbon(carbonGramsFromWh(carbon, gridIntensity))}
-            <span className="text-foreground/40 font-normal ml-1.5">· {formatEnergy(carbon)}</span>
+            {carbon.carbon}
+            <span className="text-foreground/40 font-normal ml-1.5">· {carbon.energy}</span>
           </span>
         </div>
       )}

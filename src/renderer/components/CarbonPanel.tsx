@@ -1,16 +1,16 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Leaf, Zap, RefreshCw, ChevronRight, ChevronDown, Info } from 'lucide-react';
 import type { CarbonStats } from '../../shared/types';
-import { carbonGramsFromWh, householdComparison, flightComparison } from '../../shared/carbon';
-import { formatEnergy, formatCarbon, formatTokens } from '../../shared/format';
+import { carbonDisplay, CARBON_MODELS, type CarbonModel } from '../../shared/carbon';
+import { formatTokens } from '../../shared/format';
 import { useGridIntensity } from '../hooks/useGridIntensity';
 import { Tooltip } from './ui/Tooltip';
 
-const MODEL_ORDER: Array<{ key: string; label: string }> = [
-  { key: 'opus', label: 'Opus' },
-  { key: 'sonnet', label: 'Sonnet' },
-  { key: 'haiku', label: 'Haiku' },
-];
+const MODEL_LABELS: Record<CarbonModel, string> = {
+  opus: 'Opus',
+  sonnet: 'Sonnet',
+  haiku: 'Haiku',
+};
 
 function StatBlock({
   icon,
@@ -72,8 +72,6 @@ export function CarbonPanel({ paths }: { paths?: string[] }) {
     void load();
   }, [load]);
 
-  const grams = stats ? carbonGramsFromWh(stats.energyWh, gridIntensity) : 0;
-
   function renderBody(): React.ReactNode {
     if (error) {
       return <div className="px-4 py-4 text-[12px] text-destructive">{error}</div>;
@@ -93,6 +91,8 @@ export function CarbonPanel({ paths }: { paths?: string[] }) {
       );
     }
 
+    const display = carbonDisplay(stats.energyWh, gridIntensity);
+
     return (
       <>
         {/* Hero stats */}
@@ -100,14 +100,14 @@ export function CarbonPanel({ paths }: { paths?: string[] }) {
           <StatBlock
             icon={<Leaf size={20} strokeWidth={1.6} className="text-emerald-400" />}
             label="CO₂e (est.)"
-            value={formatCarbon(grams)}
-            sub={flightComparison(grams)}
+            value={display.carbon}
+            sub={display.flight}
           />
           <StatBlock
             icon={<Zap size={20} strokeWidth={1.6} className="text-amber-400" />}
             label="Energy (est.)"
-            value={formatEnergy(stats.energyWh)}
-            sub={householdComparison(stats.energyWh)}
+            value={display.energy}
+            sub={display.household}
           />
           <StatBlock
             icon={<span className="text-[20px] leading-none text-sky-400 font-semibold">∑</span>}
@@ -152,13 +152,13 @@ export function CarbonPanel({ paths }: { paths?: string[] }) {
                 By model (effective tokens)
               </div>
               <div className="space-y-1">
-                {MODEL_ORDER.map(({ key, label }) => {
-                  const t = stats.tokensByModel[key] ?? 0;
+                {CARBON_MODELS.map((key) => {
+                  const t = stats.tokensByModel[key];
                   if (t === 0) return null;
                   const pct = stats.tokens > 0 ? (t / stats.tokens) * 100 : 0;
                   return (
                     <div key={key} className="flex items-center gap-2 text-[11px]">
-                      <span className="w-14 text-foreground/80">{label}</span>
+                      <span className="w-14 text-foreground/80">{MODEL_LABELS[key]}</span>
                       <div className="flex-1 h-1.5 rounded-full bg-border/40 overflow-hidden">
                         <div
                           className="h-full rounded-full bg-emerald-400/70"
@@ -181,18 +181,20 @@ export function CarbonPanel({ paths }: { paths?: string[] }) {
                   By worktree
                 </div>
                 <div className="space-y-1">
-                  {stats.projects.slice(0, 8).map((p) => (
-                    <div
-                      key={p.project}
-                      className="flex items-center justify-between gap-3 text-[11px]"
-                    >
-                      <span className="truncate text-foreground/80">{p.project}</span>
-                      <span className="flex-shrink-0 tabular-nums text-muted-foreground">
-                        {formatCarbon(carbonGramsFromWh(p.energyWh, gridIntensity))} ·{' '}
-                        {formatEnergy(p.energyWh)}
-                      </span>
-                    </div>
-                  ))}
+                  {stats.projects.slice(0, 8).map((p) => {
+                    const pd = carbonDisplay(p.energyWh, gridIntensity);
+                    return (
+                      <div
+                        key={p.project}
+                        className="flex items-center justify-between gap-3 text-[11px]"
+                      >
+                        <span className="truncate text-foreground/80">{p.project}</span>
+                        <span className="flex-shrink-0 tabular-nums text-muted-foreground">
+                          {pd.carbon} · {pd.energy}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
