@@ -9,9 +9,14 @@ import { startCommandPty, writePty } from '../services/ptyManager';
 import { detectPortsNeed } from '../services/PortsHeuristic';
 import { installPortsSetupCommand } from '../services/PortsSetupCommandInstaller';
 import { WorkspacePortsRuntime } from '../services/WorkspacePortsRuntime';
-import { events as portsConfigEvents } from '../services/PortsConfigWatcher';
+import {
+  events as portsConfigEvents,
+  startWatching as startPortsConfigWatch,
+} from '../services/PortsConfigWatcher';
+import { hookEvents } from '../services/HookServer';
 import { DatabaseService } from '../services/DatabaseService';
 import { worktreeService } from '../services/WorktreeService';
+import { portsDebug } from '../services/PortsDebugLog';
 
 interface ActiveTui {
   socket: TuiSocketServer;
@@ -151,6 +156,7 @@ async function spawnTui(opts: SpawnTuiOpts): Promise<SpawnResult> {
           },
         },
         configWatcher: portsConfigEvents,
+        hookEvents,
         sessionRegistry: {
           restartAllForTask: async (tid: string) => {
             const win = getMainWindow();
@@ -276,6 +282,26 @@ async function handleMigrate(args: {
     useWorktree: true,
     branchCreatedByDash: true,
   });
+
+  // Arm the file watcher so the orchestrator hears about it when the agent
+  // writes .dash/ports.json and the sentinel. We have to create .dash/
+  // ourselves first — startWatching no-ops if the directory doesn't exist,
+  // and WorkspacePortsRuntime.setupTask's writeEnvFile only creates .dash/
+  // when there are non-empty assignments. For a fresh worktree there are
+  // none yet, so it never gets created and the watcher never arms.
+  try {
+    const dashDir = path.join(task.path, '.dash');
+    if (!fs.existsSync(dashDir)) fs.mkdirSync(dashDir, { recursive: true });
+    WorkspacePortsRuntime.setupTask({ taskId: task.id, worktreePath: task.path });
+    startPortsConfigWatch(task.id, task.path);
+    portsDebug.log('migrate', 'watcher armed', {
+      taskId: task.id,
+      dashDir,
+      exists: fs.existsSync(dashDir),
+    });
+  } catch (err) {
+    portsDebug.log('migrate', 'ports bootstrap failed', { err: String(err) });
+  }
 
   const win = args.getMainWindow();
   win?.webContents.send('ports:tui:migrated', {

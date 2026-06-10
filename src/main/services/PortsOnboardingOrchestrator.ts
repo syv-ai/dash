@@ -1,12 +1,14 @@
 import type { EventEmitter } from 'events';
 import type { TuiSocketServer } from './TuiSocketServer';
 import type { MainToTui, TuiToMain, ExitReason } from '../../shared/portsTuiProtocol';
+import { portsDebug } from './PortsDebugLog';
 
 type State =
   | 'pending-ready'
   | 'onboarding'
   | 'describe'
   | 'choose-task'
+  | 'pre-launch-confirm'
   | 'launching'
   | 'waiting-ports-json'
   | 'allocated-waiting-sentinel'
@@ -16,6 +18,23 @@ type State =
 
 const POLL_MAX_DURATION_MS = 30 * 60_000; // 30-min cap waiting for ports.json
 const SENTINEL_FALLBACK_MS = 20 * 60_000; // 20-min cap waiting for setup-complete
+/**
+ * After SessionStart(startup) fires for a migrated task's agent PTY, wait this
+ * long without any further permission_prompt notification before deciding
+ * Claude Code is settled and ready to receive slash commands. Restarts on
+ * every permission_prompt so back-to-back modals (directory + MCPs) extend
+ * the window naturally.
+ */
+const READY_SETTLE_MS = 5_000;
+/**
+ * Hard ceiling on the auto-detect path. If we don't see SessionStart(startup)
+ * or never reach a settled state within this window, fall back to the manual
+ * pre-launch-confirm screen so the user can drive proceed manually. Empirically
+ * Claude Code doesn't always fire SessionStart(startup) before its first-run
+ * prompts (or possibly not at all), so we don't want this to block the user
+ * for long.
+ */
+const READY_TIMEOUT_MS = 20_000;
 
 interface Services {
   heuristic: { run(opts: { taskId: string }): Promise<{ signals: string[]; guesses: string[] }> };
@@ -23,6 +42,14 @@ interface Services {
   runtime: { setupTask(taskId: string): Promise<{ count: number }> };
   /** Emits 'ports:config' and 'ports:setupComplete' with { taskId } payloads. */
   configWatcher: EventEmitter;
+  /**
+   * Emits 'agent-startup' { ptyId } when SessionStart(startup) fires for any
+   * agent PTY, and 'permission-prompt' { ptyId } when Claude Code shows a
+   * permission modal. The orchestrator uses these to detect when a freshly-
+   * migrated task's Claude session is past first-run prompts before auto-
+   * submitting slash commands.
+   */
+  hookEvents: EventEmitter;
   sessionRegistry: { restartAllForTask(taskId: string): Promise<void> };
   drawerTabs: {
     add(taskId: string, opts: unknown): { id: string };
@@ -101,6 +128,11 @@ export class PortsOnboardingOrchestrator {
   }
 
   async start(): Promise<void> {
+    portsDebug.log('orch', 'start', {
+      taskId: this.taskId,
+      projectId: this.projectId,
+      initialState: this.initialState,
+    });
     const { socket, services } = this.opts;
 
     this.offMessage = socket.onMessage((m) => {
@@ -111,9 +143,19 @@ export class PortsOnboardingOrchestrator {
     });
 
     const onConfig = (payload: { taskId: string }) => {
+      portsDebug.log('orch', 'heard ports:config', {
+        payloadTaskId: payload.taskId,
+        wanted: this.taskId,
+        state: this.state,
+      });
       if (payload.taskId === this.taskId) void this.onPortsConfig();
     };
     const onComplete = (payload: { taskId: string }) => {
+      portsDebug.log('orch', 'heard ports:setupComplete', {
+        payloadTaskId: payload.taskId,
+        wanted: this.taskId,
+        state: this.state,
+      });
       if (payload.taskId === this.taskId) void this.onSetupComplete();
     };
     services.configWatcher.on('ports:config', onConfig);
@@ -147,7 +189,27 @@ export class PortsOnboardingOrchestrator {
 
   private async onReady(): Promise<void> {
     if (this.initialState === 'launching') {
-      await this.toLaunching();
+      // Migrate path: the new task's Claude Code session is starting fresh and
+      // is likely to prompt the user for directory trust / MCP approvals. We
+      // race against those by waiting for SessionStart(startup) + a settle
+      // window with no permission_prompts. If hooks land cleanly, we auto-
+      // submit. If we time out (90s), fall back to the manual pre-launch-
+      // confirm screen so the user can drive it.
+      this.state = 'pre-launch-confirm';
+      await this.send({ type: 'show', screen: 'launching' });
+
+      const auto = await this.waitForAgentReady();
+      if (auto === 'ready') {
+        await this.toLaunching();
+        return;
+      }
+
+      // Auto-detect timed out — fall back to manual confirm.
+      await this.send({
+        type: 'show',
+        screen: 'pre-launch-confirm',
+        props: { taskName: this.opts.taskName },
+      });
     } else {
       this.state = 'onboarding';
       await this.send({
@@ -156,6 +218,51 @@ export class PortsOnboardingOrchestrator {
         props: { signals: this.signals, guesses: this.guesses },
       });
     }
+  }
+
+  private waitForAgentReady(): Promise<'ready' | 'timeout'> {
+    return new Promise((resolve) => {
+      const { hookEvents } = this.opts.services;
+      let startupSeen = false;
+      let settleTimer: NodeJS.Timeout | null = null;
+      let hardTimer: NodeJS.Timeout | null = null;
+      const taskId = this.taskId;
+
+      const onStartup = (e: { ptyId: string }) => {
+        if (e.ptyId !== taskId) return;
+        startupSeen = true;
+        scheduleSettle();
+      };
+      const onPermission = (e: { ptyId: string }) => {
+        if (e.ptyId !== taskId) return;
+        startupSeen = true;
+        scheduleSettle();
+      };
+
+      const scheduleSettle = () => {
+        if (settleTimer) clearTimeout(settleTimer);
+        settleTimer = setTimeout(() => {
+          if (!startupSeen) return;
+          cleanup();
+          resolve('ready');
+        }, READY_SETTLE_MS);
+      };
+
+      const cleanup = () => {
+        hookEvents.off('agent-startup', onStartup);
+        hookEvents.off('permission-prompt', onPermission);
+        if (settleTimer) clearTimeout(settleTimer);
+        if (hardTimer) clearTimeout(hardTimer);
+      };
+
+      hookEvents.on('agent-startup', onStartup);
+      hookEvents.on('permission-prompt', onPermission);
+
+      hardTimer = setTimeout(() => {
+        cleanup();
+        resolve('timeout');
+      }, READY_TIMEOUT_MS);
+    });
   }
 
   private async onChoice(m: Extract<TuiToMain, { type: 'choice' }>): Promise<void> {
@@ -221,6 +328,15 @@ export class PortsOnboardingOrchestrator {
       return;
     }
 
+    if (m.screen === 'pre-launch-confirm') {
+      if (m.value === 'continue') {
+        await this.toLaunching();
+      } else {
+        await this.exit('later');
+      }
+      return;
+    }
+
     if (m.screen === 'done') {
       if (m.value === 'restart') {
         this.state = 'restarting';
@@ -237,11 +353,14 @@ export class PortsOnboardingOrchestrator {
   }
 
   private async toLaunching(): Promise<void> {
+    portsDebug.log('orch', 'toLaunching enter', { taskId: this.taskId });
     this.state = 'launching';
     await this.send({ type: 'show', screen: 'launching' });
 
     await this.opts.services.installer.install({ taskId: this.taskId });
+    portsDebug.log('orch', 'installer.install done', { taskId: this.taskId });
     await this.opts.services.agentSender.sendKeys(this.taskId, '/reload-skills\r');
+    portsDebug.log('orch', 'sent /reload-skills', { taskId: this.taskId });
 
     // 500ms gap between slash commands matches the live invariant — sending
     // \n between two commands collapses them into one input line; sending
@@ -249,9 +368,11 @@ export class PortsOnboardingOrchestrator {
     setTimeout(async () => {
       const cmd = `/dash-port-setup signals: ${this.signals.join(', ')}; guesses: ${this.guesses.join(', ')}\r`;
       await this.opts.services.agentSender.sendKeys(this.taskId, cmd);
+      portsDebug.log('orch', 'sent /dash-port-setup', { taskId: this.taskId });
 
       this.state = 'waiting-ports-json';
       await this.send({ type: 'show', screen: 'waiting-ports-json' });
+      portsDebug.log('orch', 'transitioned to waiting-ports-json', { taskId: this.taskId });
 
       this.pollTimeout = setTimeout(() => {
         void this.exit('error', "Agent didn't write ports.json within 30 minutes.");
@@ -260,7 +381,17 @@ export class PortsOnboardingOrchestrator {
   }
 
   private async onPortsConfig(): Promise<void> {
-    if (this.state !== 'waiting-ports-json') return;
+    portsDebug.log('orch', 'onPortsConfig entered', {
+      taskId: this.taskId,
+      state: this.state,
+    });
+    if (this.state !== 'waiting-ports-json') {
+      portsDebug.log('orch', 'onPortsConfig ignored (wrong state)', {
+        taskId: this.taskId,
+        state: this.state,
+      });
+      return;
+    }
     if (this.pollTimeout) clearTimeout(this.pollTimeout);
 
     const { count } = await this.opts.services.runtime.setupTask(this.taskId);

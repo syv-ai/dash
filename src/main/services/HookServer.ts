@@ -1,10 +1,24 @@
 import * as http from 'http';
+import { EventEmitter } from 'events';
 import { BrowserWindow, Notification } from 'electron';
 import { eq } from 'drizzle-orm';
 import { activityMonitor } from './ActivityMonitor';
 import { contextUsageService } from './ContextUsageService';
+import { portsDebug } from './PortsDebugLog';
 import { getDb } from '../db/client';
 import { tasks } from '../db/schema';
+
+/**
+ * In-process event bus for hook events that other main-side services need to
+ * react to. The PortsOnboardingOrchestrator's launching path uses these to
+ * detect when Claude Code is past first-run prompts in a freshly-migrated
+ * task.
+ *
+ * Events:
+ *  - 'agent-startup'      { ptyId }  — SessionStart(startup) fired
+ *  - 'permission-prompt'  { ptyId }  — Notification(permission_prompt) fired
+ */
+export const hookEvents = new EventEmitter();
 
 /** Maximum JSON body size for hook payloads (64KB). */
 const MAX_HOOK_BODY_BYTES = 65_536;
@@ -188,7 +202,9 @@ class HookServerImpl {
               const message = typeof payload.message === 'string' ? payload.message : undefined;
 
               if (notificationType === 'permission_prompt') {
+                portsDebug.log('hook', 'permission-prompt fired', { ptyId });
                 activityMonitor.setWaitingForPermission(ptyId);
+                hookEvents.emit('permission-prompt', { ptyId });
                 const taskName = this.getTaskName(ptyId);
                 const notifBody = message
                   ? `${taskName}: ${message}`
@@ -293,6 +309,16 @@ class HookServerImpl {
           if (pathname === '/hook/session-end') {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
               activityMonitor.setIdle(ptyId);
+              res.writeHead(200);
+              res.end();
+            });
+            return;
+          }
+
+          if (pathname === '/hook/agent-startup') {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
+              portsDebug.log('hook', 'agent-startup fired', { ptyId });
+              hookEvents.emit('agent-startup', { ptyId });
               res.writeHead(200);
               res.end();
             });

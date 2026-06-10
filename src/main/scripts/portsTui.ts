@@ -146,6 +146,30 @@ async function showScreen(msg: Extract<MainToTui, { type: 'show' }>): Promise<vo
       break;
     }
 
+    case 'pre-launch-confirm': {
+      note(
+        `Switch to the agent pane (Cmd+1 or click) and dismiss any first-run\n` +
+          `prompts Claude Code shows in task "${msg.props.taskName}":\n` +
+          `  • "Trust this directory?"\n` +
+          `  • "Allow this MCP server?"\n\n` +
+          `When the agent shows a clean prompt and you're ready, choose Continue.`,
+        'Heads up',
+      );
+      const choice = await select({
+        message: 'Ready to start setup?',
+        options: [
+          { value: 'continue', label: 'Continue — start setup now' },
+          { value: 'abort', label: 'Not yet — close this TUI' },
+        ],
+      });
+      if (isCancel(choice)) {
+        send({ type: 'choice', screen: 'pre-launch-confirm', value: 'abort' });
+      } else {
+        send({ type: 'choice', screen: 'pre-launch-confirm', value: choice as never });
+      }
+      break;
+    }
+
     case 'launching': {
       currentSpinner = spinner();
       currentSpinner.start('Loading the setup command into your agent…');

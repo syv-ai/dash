@@ -330,9 +330,7 @@ export class TerminalSessionManager {
     this.resizeObserver.observe(container);
 
     // Save snapshot on page unload (CMD+R) so it's always available on reload.
-    // TUI sessions skip this — the side-car repaints on socket reconnect, and
-    // persisted bytes would replay as ghost output on top of the fresh draw.
-    if (!this.boundBeforeUnload && !this.isTui) {
+    if (!this.boundBeforeUnload) {
       this.boundBeforeUnload = () => {
         if (this.snapshotDirty && this.opened) {
           this.saveSnapshot();
@@ -422,7 +420,11 @@ export class TerminalSessionManager {
         }
         this.ptyStarted = true;
 
-        if (existingSnapshot && !reattached) {
+        // For shell reattach we skip the snapshot — the live shell keeps
+        // writing and we don't want to double-render. For TUI reattach we
+        // DO replay: Clack drew once and won't redraw on a still-open
+        // socket, so without the snapshot the new xterm is blank.
+        if (existingSnapshot && (!reattached || this.isTui)) {
           try {
             this.terminal.write(existingSnapshot.data);
           } catch (err) {

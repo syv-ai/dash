@@ -536,10 +536,17 @@ function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
 
   // SessionStart(clear|compact) → defensive idle. /clear and auto-compact
   // reset the session, so any prior busy state on the activity dot is stale.
-  // SessionStart(startup|resume) are NOT wired — register() already initialises
-  // to idle and a resumed session's busy state, if any, will be re-established
-  // by the next UserPromptSubmit / PreToolUse hook.
+  // SessionStart(resume) is NOT wired — register() already initialises and a
+  // resumed session's busy state will be re-established by the next
+  // UserPromptSubmit / PreToolUse hook.
+  //
+  // SessionStart(startup) → /hook/agent-startup. Used by the ports onboarding
+  // TUI's launching path to detect when Claude Code has finished its initial
+  // session bring-up in a freshly-migrated task, before auto-submitting the
+  // /reload-skills and /dash-port-setup slash commands. Without this we race
+  // any first-run permission prompts and our \r gets eaten by the modal.
   const sessionStartEntries: HookEntry[] = [
+    { matcher: 'startup', hooks: [dashHttp('agent-startup', true)] },
     { matcher: 'clear', hooks: [dashHttp('session-start', true)] },
     { matcher: 'compact', hooks: [dashHttp('session-start', true)] },
   ];

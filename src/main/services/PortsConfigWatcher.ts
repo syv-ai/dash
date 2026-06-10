@@ -3,6 +3,7 @@ import * as path from 'path';
 import { EventEmitter } from 'events';
 import { BrowserWindow } from 'electron';
 import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
+import { portsDebug } from './PortsDebugLog';
 
 /**
  * In-process event bus for main-side consumers (e.g. PortsOnboardingOrchestrator)
@@ -52,14 +53,24 @@ const entries = new Map<string, WatcherEntry>();
  * watcher is in place once there's actually something to watch.
  */
 export function startWatching(taskId: string, worktreePath: string): void {
-  if (entries.has(taskId)) return;
+  if (entries.has(taskId)) {
+    portsDebug.log('watcher', 'startWatching: already running', { taskId });
+    return;
+  }
 
   const dashDir = path.join(worktreePath, DASH_DIR);
-  if (!fs.existsSync(dashDir)) return;
+  if (!fs.existsSync(dashDir)) {
+    portsDebug.log('watcher', 'startWatching: .dash missing — bailing', {
+      taskId,
+      dashDir,
+    });
+    return;
+  }
 
   let watcher: fs.FSWatcher;
   try {
-    watcher = fs.watch(dashDir, (_eventType, filename) => {
+    watcher = fs.watch(dashDir, (eventType, filename) => {
+      portsDebug.log('watcher', 'fs.watch event', { taskId, eventType, filename });
       if (filename === PORTS_FILE) {
         const entry = entries.get(taskId);
         if (!entry) return;
@@ -69,7 +80,7 @@ export function startWatching(taskId: string, worktreePath: string): void {
           try {
             WorkspacePortsRuntime.setupTask({ taskId, worktreePath });
           } catch (err) {
-            console.error('[PortsConfigWatcher] setupTask failed:', err);
+            portsDebug.log('watcher', 'setupTask failed', { taskId, err: String(err) });
           }
           notifyConfigChanged(taskId);
         }, DEBOUNCE_MS);
@@ -78,11 +89,10 @@ export function startWatching(taskId: string, worktreePath: string): void {
       if (filename === SETUP_COMPLETE_FILE) {
         const entry = entries.get(taskId);
         if (!entry) return;
-        // Only fire when the file actually EXISTS post-event — the agent
-        // is told to delete the stale sentinel at the start of work, and
-        // we don't want that deletion to trigger the "agent done" path.
         const sentinelPath = path.join(dashDir, SETUP_COMPLETE_FILE);
-        if (!fs.existsSync(sentinelPath)) return;
+        const exists = fs.existsSync(sentinelPath);
+        portsDebug.log('watcher', 'sentinel event', { taskId, exists });
+        if (!exists) return;
         if (entry.sentinelDebounceTimer) clearTimeout(entry.sentinelDebounceTimer);
         entry.sentinelDebounceTimer = setTimeout(() => {
           entry.sentinelDebounceTimer = null;
@@ -90,10 +100,9 @@ export function startWatching(taskId: string, worktreePath: string): void {
         }, DEBOUNCE_MS);
       }
     });
+    portsDebug.log('watcher', 'startWatching: armed', { taskId, dashDir });
   } catch (err) {
-    console.error(
-      `[PortsConfigWatcher] failed to watch ${dashDir}: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    portsDebug.log('watcher', 'fs.watch threw', { taskId, err: String(err) });
     return;
   }
 
@@ -127,6 +136,7 @@ export function stopAll(): void {
 }
 
 function notifyConfigChanged(taskId: string): void {
+  portsDebug.log('watcher', 'emit ports:config', { taskId });
   events.emit('ports:config', { taskId });
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
@@ -136,6 +146,7 @@ function notifyConfigChanged(taskId: string): void {
 }
 
 function notifySetupComplete(taskId: string): void {
+  portsDebug.log('watcher', 'emit ports:setupComplete', { taskId });
   events.emit('ports:setupComplete', { taskId });
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {

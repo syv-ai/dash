@@ -43,6 +43,7 @@ function makeServices() {
     installer: { install: vi.fn(async () => {}) },
     runtime: { setupTask: vi.fn(async () => ({ count: 8 })) },
     configWatcher: new EventEmitter(),
+    hookEvents: new EventEmitter(),
     sessionRegistry: { restartAllForTask: vi.fn(async () => {}) },
     drawerTabs: {
       add: vi.fn(() => ({ id: 'ports-tui:t1' })),
@@ -260,6 +261,72 @@ describe('PortsOnboardingOrchestrator transitions', () => {
     sock.triggerClose();
     await vi.runAllTimersAsync();
     expect(services.drawerTabs.close).toHaveBeenCalled();
+  });
+
+  it('initialState=launching emits LAUNCHING spinner and waits for hook signal', async () => {
+    const sock = new FakeSocket();
+    const orch = makeOrchestrator(sock, 'launching');
+    await orch.start();
+    sock.receive({ type: 'ready', version: 1 });
+    await vi.runAllTimersAsync();
+    // First screen is the launching spinner — we're auto-detecting CC readiness
+    // via the agent-startup hook + permission-prompt settle window.
+    expect(sock.sent[0]).toMatchObject({ type: 'show', screen: 'launching' });
+    // Commands haven't been sent yet — waiting for the hook signal.
+    expect(services.installer.install).not.toHaveBeenCalled();
+    expect(services.agentSender.sendKeys).not.toHaveBeenCalled();
+  });
+
+  it('hook signal -> auto-launches without manual confirm', async () => {
+    const sock = new FakeSocket();
+    const orch = makeOrchestrator(sock, 'launching');
+    await orch.start();
+    sock.receive({ type: 'ready', version: 1 });
+    // Flush microtasks so onReady reaches the await waitForAgentReady() point
+    // and wires up the hook listeners — but don't fire any timers yet (that
+    // would race past the 20s hard timeout before we can emit the hook).
+    await Promise.resolve();
+    await Promise.resolve();
+    services.hookEvents.emit('agent-startup', { ptyId: 't1' });
+    await vi.advanceTimersByTimeAsync(5_500);
+    expect(services.installer.install).toHaveBeenCalled();
+  });
+
+  it('hook timeout -> falls back to PRE_LAUNCH_CONFIRM', async () => {
+    const sock = new FakeSocket();
+    const orch = makeOrchestrator(sock, 'launching');
+    await orch.start();
+    sock.receive({ type: 'ready', version: 1 });
+    await vi.runAllTimersAsync();
+    // No hook fires; advance past the hard timeout (20s).
+    await vi.advanceTimersByTimeAsync(20_500);
+    expect(sock.sent.some((m) => m.type === 'show' && m.screen === 'pre-launch-confirm')).toBe(
+      true,
+    );
+    expect(services.installer.install).not.toHaveBeenCalled();
+  });
+
+  it('PRE_LAUNCH_CONFIRM + continue -> LAUNCHING (sends commands)', async () => {
+    const sock = new FakeSocket();
+    const orch = makeOrchestrator(sock, 'launching');
+    await orch.start();
+    sock.receive({ type: 'ready', version: 1 });
+    await vi.advanceTimersByTimeAsync(20_500);
+    sock.receive({ type: 'choice', screen: 'pre-launch-confirm', value: 'continue' });
+    await vi.runAllTimersAsync();
+    expect(services.installer.install).toHaveBeenCalled();
+  });
+
+  it('PRE_LAUNCH_CONFIRM + abort -> exits without sending commands', async () => {
+    const sock = new FakeSocket();
+    const orch = makeOrchestrator(sock, 'launching');
+    await orch.start();
+    sock.receive({ type: 'ready', version: 1 });
+    await vi.advanceTimersByTimeAsync(20_500);
+    sock.receive({ type: 'choice', screen: 'pre-launch-confirm', value: 'abort' });
+    await vi.runAllTimersAsync();
+    expect(services.installer.install).not.toHaveBeenCalled();
+    expect(sock.sent.some((m) => m.type === 'show' && m.screen === 'exit')).toBe(true);
   });
 
   it('CHOOSE_TASK + new -> emits migrating, calls migrate, exits with reason=migrated', async () => {

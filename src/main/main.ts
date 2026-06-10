@@ -151,6 +151,8 @@ app.whenReady().then(async () => {
   // Ports TUI IPC needs the main window for restart-task broadcasts; register
   // here (not in registerAllIpc) since that path doesn't have a window yet.
   const { registerPortsTuiIpc, cleanupOrphanSockets } = await import('./ipc/portsTuiIpc');
+  const { portsDebug } = await import('./services/PortsDebugLog');
+  portsDebug.boot();
   cleanupOrphanSockets();
   registerPortsTuiIpc({ getMainWindow: () => mainWindow });
 
