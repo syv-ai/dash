@@ -38,6 +38,15 @@ export class TerminalMirror {
     });
   }
 
+  /**
+   * Serialize without flushing the parse queue — synchronous, for quit-time
+   * persistence where an async flush would race app exit. May miss a chunk
+   * still in the parser; acceptable for best-effort persistence.
+   */
+  serializeNow(): string {
+    return this.addon.serialize();
+  }
+
   dims(): { cols: number; rows: number } {
     return { cols: this.term.cols, rows: this.term.rows };
   }

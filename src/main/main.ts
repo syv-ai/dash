@@ -162,6 +162,13 @@ app.whenReady().then(async () => {
   const { registerServicesIpc } = await import('./ipc/servicesIpc');
   registerServicesIpc();
 
+  // Crash resilience: persist terminal mirrors every 60s (quit and kill
+  // paths persist too — this only bounds what a hard crash can lose).
+  setInterval(async () => {
+    const { persistAllMirrors } = await import('./services/ptyManager');
+    persistAllMirrors();
+  }, 60_000);
+
   // Cleanup orphaned reserve worktrees (background, non-blocking)
   setTimeout(async () => {
     try {
@@ -242,18 +249,9 @@ app.on('activate', async () => {
 });
 
 app.on('before-quit', async () => {
-  // Signal renderer to save all terminal snapshots before we kill PTYs
-  try {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) {
-        win.webContents.send('app:beforeQuit');
-      }
-    }
-    // Give renderer a moment to save snapshots
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  } catch {
-    // Best effort
-  }
+  // Terminal persistence happens main-side: killAll() below serializes every
+  // PTY's TerminalMirror to the snapshot files before killing — the renderer
+  // is no longer involved (no app:beforeQuit round-trip needed).
 
   // Stop auto-updater
   try {
