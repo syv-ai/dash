@@ -20,6 +20,7 @@ import { IconButton } from '../ui/IconButton';
 import { Tooltip } from '../ui/Tooltip';
 import { formatTokens, formatCost } from '../../utils/formatTokens';
 import { TaskCard } from './TaskCard';
+import { useSettings } from '../../stores/settingsStore';
 
 interface ProjectsSectionProps {
   projects: Project[];
@@ -30,7 +31,6 @@ interface ProjectsSectionProps {
   unseenTaskIds?: Set<string>;
   remoteControlStates: Record<string, RemoteControlState>;
   contextUsage: Record<string, ContextUsage>;
-  showProjectTokens: boolean;
   projectTokenStats: Record<
     string,
     { totalTokens: number; totalCostUsd: number; taskCount: number }
@@ -63,7 +63,6 @@ export function ProjectsSection({
   unseenTaskIds,
   remoteControlStates,
   contextUsage,
-  showProjectTokens,
   projectTokenStats,
   onSelectProject,
   onOpenFolder,
@@ -81,6 +80,7 @@ export function ProjectsSection({
   onReorderTasks,
   onReorderTasksCommit,
 }: ProjectsSectionProps) {
+  const showProjectTokens = useSettings((s) => s.showProjectTokens);
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(() => {
     try {
       const raw = localStorage.getItem('expandedProjects');

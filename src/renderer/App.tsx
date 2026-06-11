@@ -418,23 +418,14 @@ export function App() {
   const setShowContextUsageOnTaskCards = useSettings((s) => s.setShowContextUsageOnTaskCards);
 
   // Rotation — tasks the user cycles through with Ctrl+Tab
-  const [showActiveTasksSection, setShowActiveTasksSection] = useState(
-    () => localStorage.getItem('showActiveTasksSection') !== 'false',
-  );
-  useEffect(() => {
-    localStorage.setItem('showActiveTasksSection', String(showActiveTasksSection));
-  }, [showActiveTasksSection]);
+  const showActiveTasksSection = useSettings((s) => s.showActiveTasksSection);
+  const setShowActiveTasksSection = useSettings((s) => s.setShowActiveTasksSection);
 
   // Token-usage UI toggles
   const showTaskTokens = useSettings((s) => s.showTaskTokens);
   const setShowTaskTokens = useSettings((s) => s.setShowTaskTokens);
-  const [showProjectTokens, setShowProjectTokens] = useState<boolean>(() => {
-    const stored = localStorage.getItem('showProjectTokens');
-    return stored === null ? true : stored === 'true';
-  });
-  useEffect(() => {
-    localStorage.setItem('showProjectTokens', String(showProjectTokens));
-  }, [showProjectTokens]);
+  const showProjectTokens = useSettings((s) => s.showProjectTokens);
+  const setShowProjectTokens = useSettings((s) => s.setShowProjectTokens);
 
   // Token-stats rollups (per-project + global). Live-updated via tokenStats:updated event.
   const [projectTokenStats, setProjectTokenStats] = useState<
@@ -1982,10 +1973,8 @@ export function App() {
             rotationTasks={rotationTasks}
             onReorderRotation={handleReorderRotation}
             onRemoveFromRotation={removeFromRotation}
-            showActiveTasksSection={showActiveTasksSection}
-            onToggleActiveTasksSection={() => setShowActiveTasksSection((v) => !v)}
+            onToggleActiveTasksSection={() => setShowActiveTasksSection(!showActiveTasksSection)}
             onOpenSkillsBrowser={() => setShowSkillsBrowser(true)}
-            showProjectTokens={showProjectTokens}
             projectTokenStats={projectTokenStats}
           />
         </Panel>

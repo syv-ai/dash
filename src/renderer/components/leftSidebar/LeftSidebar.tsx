@@ -10,6 +10,7 @@ import type {
 import { Tooltip } from '../ui/Tooltip';
 import { RotationSection } from './RotationSection';
 import { ProjectsSection } from './ProjectsSection';
+import { useSettings } from '../../stores/settingsStore';
 import { getProjectActivity } from './projectActivity';
 
 interface LeftSidebarProps {
@@ -42,10 +43,8 @@ interface LeftSidebarProps {
   rotationTasks?: Task[];
   onReorderRotation?: (reordered: Task[]) => void;
   onRemoveFromRotation?: (taskId: string) => void;
-  showActiveTasksSection?: boolean;
   onToggleActiveTasksSection?: () => void;
   onOpenSkillsBrowser?: () => void;
-  showProjectTokens?: boolean;
   projectTokenStats?: Record<
     string,
     { totalTokens: number; totalCostUsd: number; taskCount: number }
@@ -81,11 +80,10 @@ export function LeftSidebar({
   rotationTasks = [],
   onReorderRotation,
   onRemoveFromRotation,
-  showActiveTasksSection = true,
   onOpenSkillsBrowser,
-  showProjectTokens = true,
   projectTokenStats = {},
 }: LeftSidebarProps) {
+  const showActiveTasksSection = useSettings((s) => s.showActiveTasksSection);
   // Project-reorder drag state for the collapsed rail. The expanded view owns
   // its own drag state inside ProjectsSection (the two views never coexist).
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -292,7 +290,6 @@ export function LeftSidebar({
         unseenTaskIds={unseenTaskIds}
         remoteControlStates={remoteControlStates}
         contextUsage={contextUsage}
-        showProjectTokens={showProjectTokens}
         projectTokenStats={projectTokenStats}
         onSelectProject={onSelectProject}
         onOpenFolder={onOpenFolder}
