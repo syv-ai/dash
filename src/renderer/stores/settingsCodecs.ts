@@ -15,3 +15,15 @@ export function str(def: string): Codec<string> {
 export function boolDefaultTrue(): Codec<boolean> {
   return { decode: (raw) => (raw === null ? true : raw === 'true'), encode: (v) => String(v) };
 }
+
+/** Boolean stored as 'true'/'false', defaulting to false when absent.
+ *  Matches the legacy `stored === 'true'` idiom. */
+export function boolDefaultFalse(): Codec<boolean> {
+  return { decode: (raw) => raw === 'true', encode: (v) => String(v) };
+}
+
+/** Boolean defaulting to true unless explicitly 'false'.
+ *  Matches the legacy `stored !== 'false'` idiom. */
+export function boolNotFalse(): Codec<boolean> {
+  return { decode: (raw) => raw !== 'false', encode: (v) => String(v) };
+}
