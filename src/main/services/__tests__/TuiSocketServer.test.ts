@@ -82,7 +82,7 @@ describe('TuiSocketServer', () => {
     // Wait one tick so the server's connection handler attaches before we send.
     await new Promise((r) => setTimeout(r, 20));
 
-    const msg: MainToTui = { type: 'show', screen: 'describe' };
+    const msg: MainToTui = { type: 'show', screen: 'waiting-ports-json' };
     await server.send(msg);
     await new Promise((r) => setTimeout(r, 50));
     client.end();

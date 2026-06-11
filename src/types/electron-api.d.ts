@@ -202,10 +202,11 @@ export interface ElectronAPI {
     cols: number;
     rows: number;
   }) => Promise<IpcResponse<{ started: boolean; tabId?: string; reason?: string }>>;
-  portsTuiClose: (taskId: string) => Promise<IpcResponse<void>>;
   portsTuiIsActive: (taskId: string) => Promise<IpcResponse<boolean>>;
   onPortsRestartTask: (cb: (taskId: string) => void) => () => void;
-  onPortsTuiMigrated: (cb: (info: { fromTaskId: string; toTaskId: string }) => void) => () => void;
+  onPortsTuiMigrated: (
+    cb: (info: { fromTaskId: string; toTaskId: string; projectId: string }) => void,
+  ) => () => void;
 
   onPtyData: (id: string, callback: (data: string) => void) => () => void;
   onPtyExit: (
@@ -495,7 +496,6 @@ export interface ElectronAPI {
   portsOpenInDocker: () => Promise<IpcResponse<void>>;
   portsWatchConfig: (taskId: string) => Promise<IpcResponse<void>>;
   portsUnwatchConfig: (taskId: string) => Promise<IpcResponse<void>>;
-  portsInstallSetupCommand: (taskId: string) => Promise<IpcResponse<void>>;
   onPortsLiveness: (callback: (update: PortLivenessUpdate) => void) => () => void;
   onPortsConfigChanged: (callback: (data: { taskId: string }) => void) => () => void;
   onPortsSetupComplete: (callback: (data: { taskId: string }) => void) => () => void;

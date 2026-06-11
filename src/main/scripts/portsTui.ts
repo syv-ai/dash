@@ -4,10 +4,28 @@
  * the UNIX socket whose path is passed via DASH_TUI_SOCKET. Pure renderer —
  * no fs, no file watching, no business logic.
  */
+
+// MUST run before any @clack/prompts load — see require() below. Clack samples
+// isTTY at import time to pick between an in-place spinner (with cursor-up
+// codes) and a non-TTY fallback that re-prints the spinner frame as a new
+// line. When this process runs as `ELECTRON_RUN_AS_NODE=1 electron
+// portsTui.js`, Node's TTY detection on the PTY-wrapped stdio doesn't always
+// tag stdout/stderr as TTY, so without these flags the user sees the spinner
+// cascade line by line. ESM imports would be hoisted above this block, so we
+// `require()` Clack lazily after setting the flags.
+(process.stdout as { isTTY?: boolean }).isTTY = true;
+(process.stderr as { isTTY?: boolean }).isTTY = true;
+process.stdout.columns ??= 80;
+process.stdout.rows ??= 24;
+
 import net from 'net';
-import { intro, outro, select, confirm, note, spinner, isCancel } from '@clack/prompts';
 import type { MainToTui, TuiToMain } from '../../shared/portsTuiProtocol';
 import { TUI_PROTOCOL_VERSION } from '../../shared/portsTuiProtocol';
+
+/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
+const { intro, outro, select, confirm, note, spinner, isCancel } =
+  require('@clack/prompts') as typeof import('@clack/prompts');
+/* eslint-enable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
 
 const sockPath = process.env.DASH_TUI_SOCKET;
 const projectName = process.env.DASH_TUI_PROJECT_NAME ?? 'project';
@@ -52,21 +70,39 @@ const initialTimeout = setTimeout(() => {
 }, 30_000);
 
 let currentSpinner: ReturnType<typeof spinner> | null = null;
+let currentSpinnerLabel: string | null = null;
+
+function startSpinner(label: string): void {
+  currentSpinner = spinner();
+  currentSpinnerLabel = label;
+  currentSpinner.start(label);
+}
+
+function stopCurrentSpinner(): void {
+  if (!currentSpinner) return;
+  // Pass the current label so the stopped row renders as "◇ <label>" rather
+  // than a bare "◇" — without this, every completed phase loses its label
+  // when the next phase starts and the scroll history fills with empty
+  // markers.
+  currentSpinner.stop(currentSpinnerLabel ?? undefined);
+  currentSpinner = null;
+  currentSpinnerLabel = null;
+}
 
 async function handle(msg: MainToTui): Promise<void> {
   clearTimeout(initialTimeout);
 
   switch (msg.type) {
     case 'show':
-      currentSpinner?.stop();
-      currentSpinner = null;
+      stopCurrentSpinner();
       await showScreen(msg);
       break;
     case 'progress':
       currentSpinner?.message(msg.text);
+      currentSpinnerLabel = msg.text;
       break;
     case 'shutdown':
-      currentSpinner?.stop();
+      stopCurrentSpinner();
       send({ type: 'exit', reason: 'shutdown-ack' });
       setTimeout(() => process.exit(0), 100);
       break;
@@ -77,18 +113,26 @@ async function showScreen(msg: Extract<MainToTui, { type: 'show' }>): Promise<vo
   switch (msg.screen) {
     case 'onboarding': {
       intro(`◆  Dash — port management for ${projectName}`);
-      if (msg.props.signals.length) {
-        note(msg.props.signals.join('\n'), 'Signals');
+      const { signals, guesses } = msg.props;
+      if (signals.length > 0 || guesses.length > 0) {
+        const lines = [
+          ...(signals.length > 0 ? [`Detected: ${signals.join(', ')}`] : []),
+          ...guesses.map((g) => `  · ${g}`),
+        ];
+        note(lines.join('\n'), 'What Dash found');
       }
-      if (msg.props.guesses.length) {
-        note(msg.props.guesses.join('\n'), 'Guesses');
-      }
+      note(
+        'Setup creates a new "port-setup" task on a new branch and runs an\n' +
+          'agent there that configures unique ports per worktree. ~30s–2min.',
+        'How it works',
+      );
       const choice = await select({
-        message: 'How do you want to proceed?',
+        message:
+          'Want Dash to manage ports for you? Allocate unique ports per worktree automatically. No more collisions.',
         options: [
-          { value: 'setup', label: 'Set it up' },
-          { value: 'not-now', label: 'Not now' },
-          { value: 'not-relevant', label: 'Not relevant for this project' },
+          { value: 'setup', label: 'Sure. Set it up.' },
+          { value: 'not-now', label: 'Not now, go away.' },
+          { value: 'not-relevant', label: 'Never for this project' },
         ],
       });
       if (isCancel(choice)) {
@@ -99,100 +143,27 @@ async function showScreen(msg: Extract<MainToTui, { type: 'show' }>): Promise<vo
       break;
     }
 
-    case 'describe': {
-      note(
-        'Dash will install a slash command and ask your agent to set up\n' +
-          "per-worktree ports. Takes ~30s–2min. You'll see progress here.\n\n" +
-          'Press Enter to begin (ESC to go back).',
-        'What happens next',
-      );
-      const choice = await select({
-        message: 'Proceed?',
-        options: [
-          { value: 'proceed', label: 'Yes, begin' },
-          { value: 'back', label: 'Go back' },
-        ],
-      });
-      if (isCancel(choice)) {
-        send({ type: 'choice', screen: 'describe', value: 'back' });
-      } else {
-        send({ type: 'choice', screen: 'describe', value: choice as never });
-      }
-      break;
-    }
-
-    case 'choose-task': {
-      const choice = await select({
-        message: 'Which task should run setup?',
-        options: [
-          { value: 'current', label: `Current task (${msg.props.currentTaskName})` },
-          {
-            value: 'new',
-            label: `New task — "${msg.props.newTaskName}" on a new branch`,
-          },
-        ],
-      });
-      if (isCancel(choice)) {
-        send({ type: 'exit', reason: 'user' });
-      } else {
-        send({ type: 'choice', screen: 'choose-task', value: choice as never });
-      }
-      break;
-    }
-
     case 'migrating': {
-      currentSpinner = spinner();
-      currentSpinner.start(`Creating task "${msg.props.newTaskName}" on ${msg.props.branchName}…`);
-      break;
-    }
-
-    case 'pre-launch-confirm': {
-      note(
-        `Switch to the agent pane (Cmd+1 or click) and dismiss any first-run\n` +
-          `prompts Claude Code shows in task "${msg.props.taskName}":\n` +
-          `  • "Trust this directory?"\n` +
-          `  • "Allow this MCP server?"\n\n` +
-          `When the agent shows a clean prompt and you're ready, choose Continue.`,
-        'Heads up',
+      startSpinner(
+        `Creating task "${msg.props.newTaskName}" on ${msg.props.branchName}… ` +
+          'This terminal will shut down — see you in the other task.',
       );
-      const choice = await select({
-        message: 'Ready to start setup?',
-        options: [
-          { value: 'continue', label: 'Continue — start setup now' },
-          { value: 'abort', label: 'Not yet — close this TUI' },
-        ],
-      });
-      if (isCancel(choice)) {
-        send({ type: 'choice', screen: 'pre-launch-confirm', value: 'abort' });
-      } else {
-        send({ type: 'choice', screen: 'pre-launch-confirm', value: choice as never });
-      }
-      break;
-    }
-
-    case 'launching': {
-      currentSpinner = spinner();
-      currentSpinner.start('Loading the setup command into your agent…');
       break;
     }
 
     case 'waiting-ports-json': {
-      currentSpinner = spinner();
-      currentSpinner.start('Agent reading project files…');
+      startSpinner('Agent does the thing..');
       break;
     }
 
     case 'allocated-waiting-sentinel': {
-      currentSpinner = spinner();
-      currentSpinner.start(
-        `✓ ${msg.props.count} ports allocated. Agent wiring code and writing docs…`,
-      );
+      startSpinner(`${msg.props.count} ports allocated. Awaiting completion sentinel...`);
       break;
     }
 
     case 'done': {
       const c = await confirm({
-        message: `${msg.props.count} ports allocated. Restart this session now to pick up the new env vars?`,
+        message: "Job's done. Session needs a restart to pick up the new env vars. Restart?",
         initialValue: true,
       });
       if (isCancel(c)) {
@@ -204,8 +175,7 @@ async function showScreen(msg: Extract<MainToTui, { type: 'show' }>): Promise<vo
     }
 
     case 'restarting': {
-      currentSpinner = spinner();
-      currentSpinner.start('Restarting… see you on the other side. ◢◤');
+      startSpinner('Restarting… see you on the other side. ◢◤');
       break;
     }
 
@@ -213,13 +183,13 @@ async function showScreen(msg: Extract<MainToTui, { type: 'show' }>): Promise<vo
       const reason = msg.props.reason;
       const message =
         reason === 'not-now'
-          ? 'No problem. Re-open this task to set up later.'
+          ? "No problem — Dash will ask again next time it's started."
           : reason === 'not-relevant'
             ? "Got it — Dash won't ask about ports for this project again."
             : reason === 'later'
               ? 'Restart this Dash session manually when ready.'
               : reason === 'migrated'
-                ? `Continuing in task "${msg.props.errorMessage ?? 'port-setup'}".`
+                ? 'Continuing in the new "port-setup" task.'
                 : `Error: ${msg.props.errorMessage ?? 'unknown'}`;
       outro(message);
       send({ type: 'exit', reason: 'user' });

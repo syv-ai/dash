@@ -40,10 +40,12 @@ function makeServices() {
     heuristic: {
       run: vi.fn(async () => ({ signals: ['vite'], guesses: ['frontend:5173'] })),
     },
-    installer: { install: vi.fn(async () => {}) },
-    runtime: { setupTask: vi.fn(async () => ({ count: 8 })) },
-    configWatcher: new EventEmitter(),
-    hookEvents: new EventEmitter(),
+    runtime: { getPortCount: vi.fn(async () => 8) },
+    configWatcher: {
+      events: new EventEmitter(),
+      startWatching: vi.fn(),
+      stopWatching: vi.fn(),
+    },
     sessionRegistry: { restartAllForTask: vi.fn(async () => {}) },
     drawerTabs: {
       add: vi.fn(() => ({ id: 'ports-tui:t1' })),
@@ -53,8 +55,8 @@ function makeServices() {
       isDismissed: vi.fn(() => false),
       markDismissed: vi.fn(),
     },
-    agentSender: { sendKeys: vi.fn(async () => {}) },
     migrate: vi.fn(async () => {}),
+    onTeardown: vi.fn(),
   };
 }
 
@@ -75,6 +77,17 @@ function makeOrchestrator(
   });
 }
 
+/**
+ * Flush microtasks without firing any pending fake timers. Used for tests that
+ * arm the 30-min waiting-ports-json poll-timeout in onReady; vi.runAllTimers
+ * would fire the timeout itself and tear the orchestrator down before assertions.
+ */
+async function flushMicrotasks(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 beforeEach(() => {
   services = makeServices();
   vi.useFakeTimers();
@@ -86,19 +99,8 @@ describe('PortsOnboardingOrchestrator transitions', () => {
     const orch = makeOrchestrator(sock);
     await orch.start();
     sock.receive({ type: 'ready', version: 1 });
-    await vi.runAllTimersAsync();
+    await flushMicrotasks();
     expect(sock.sent[0]).toMatchObject({ type: 'show', screen: 'onboarding' });
-  });
-
-  it('ONBOARDING + setup -> DESCRIBE', async () => {
-    const sock = new FakeSocket();
-    const orch = makeOrchestrator(sock);
-    await orch.start();
-    sock.receive({ type: 'ready', version: 1 });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'onboarding', value: 'setup' });
-    await vi.runAllTimersAsync();
-    expect(sock.sent.find((m) => m.type === 'show' && m.screen === 'describe')).toBeDefined();
   });
 
   it('ONBOARDING + not-now -> EXIT without dismiss', async () => {
@@ -106,9 +108,9 @@ describe('PortsOnboardingOrchestrator transitions', () => {
     const orch = makeOrchestrator(sock);
     await orch.start();
     sock.receive({ type: 'ready', version: 1 });
-    await vi.runAllTimersAsync();
+    await flushMicrotasks();
     sock.receive({ type: 'choice', screen: 'onboarding', value: 'not-now' });
-    await vi.runAllTimersAsync();
+    await flushMicrotasks();
     expect(services.dismissStore.markDismissed).not.toHaveBeenCalled();
     expect(sock.sent.some((m) => m.type === 'show' && m.screen === 'exit')).toBe(true);
   });
@@ -118,229 +120,20 @@ describe('PortsOnboardingOrchestrator transitions', () => {
     const orch = makeOrchestrator(sock);
     await orch.start();
     sock.receive({ type: 'ready', version: 1 });
-    await vi.runAllTimersAsync();
+    await flushMicrotasks();
     sock.receive({ type: 'choice', screen: 'onboarding', value: 'not-relevant' });
-    await vi.runAllTimersAsync();
+    await flushMicrotasks();
     expect(services.dismissStore.markDismissed).toHaveBeenCalledWith('p1');
   });
 
-  it('DESCRIBE + proceed -> CHOOSE_TASK', async () => {
+  it('ONBOARDING + setup -> emits MIGRATING, calls migrate, exits with reason=migrated', async () => {
     const sock = new FakeSocket();
     const orch = makeOrchestrator(sock);
     await orch.start();
     sock.receive({ type: 'ready', version: 1 });
-    await vi.runAllTimersAsync();
+    await flushMicrotasks();
     sock.receive({ type: 'choice', screen: 'onboarding', value: 'setup' });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'describe', value: 'proceed' });
-    await vi.runAllTimersAsync();
-    expect(sock.sent.some((m) => m.type === 'show' && m.screen === 'choose-task')).toBe(true);
-  });
-
-  it('CHOOSE_TASK + current -> LAUNCHING (skips MIGRATING)', async () => {
-    const sock = new FakeSocket();
-    const orch = makeOrchestrator(sock);
-    await orch.start();
-    sock.receive({ type: 'ready', version: 1 });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'onboarding', value: 'setup' });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'describe', value: 'proceed' });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'choose-task', value: 'current' });
-    await vi.runAllTimersAsync();
-    expect(sock.sent.some((m) => m.type === 'show' && m.screen === 'launching')).toBe(true);
-    expect(services.installer.install).toHaveBeenCalled();
-    expect(services.agentSender.sendKeys).toHaveBeenCalled();
-  });
-
-  it('LAUNCHING -> WAITING_FOR_PORTS_JSON', async () => {
-    const sock = new FakeSocket();
-    const orch = makeOrchestrator(sock);
-    await orch.start();
-    sock.receive({ type: 'ready', version: 1 });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'onboarding', value: 'setup' });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'describe', value: 'proceed' });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'choose-task', value: 'current' });
-    await vi.advanceTimersByTimeAsync(1500);
-    expect(sock.sent.some((m) => m.type === 'show' && m.screen === 'waiting-ports-json')).toBe(
-      true,
-    );
-  });
-
-  it('WAITING_FOR_PORTS_JSON receives portsConfig event -> ALLOCATED', async () => {
-    const sock = new FakeSocket();
-    const orch = makeOrchestrator(sock);
-    await orch.start();
-    sock.receive({ type: 'ready', version: 1 });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'onboarding', value: 'setup' });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'describe', value: 'proceed' });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'choose-task', value: 'current' });
-    await vi.advanceTimersByTimeAsync(1500);
-    services.configWatcher.emit('ports:config', { taskId: 't1' });
-    await vi.runAllTimersAsync();
-    expect(
-      sock.sent.some((m) => m.type === 'show' && m.screen === 'allocated-waiting-sentinel'),
-    ).toBe(true);
-    expect(services.runtime.setupTask).toHaveBeenCalledWith('t1');
-  });
-
-  it('ALLOCATED receives setupComplete event -> DONE', async () => {
-    const sock = new FakeSocket();
-    const orch = makeOrchestrator(sock);
-    await orch.start();
-    sock.receive({ type: 'ready', version: 1 });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'onboarding', value: 'setup' });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'describe', value: 'proceed' });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'choose-task', value: 'current' });
-    await vi.advanceTimersByTimeAsync(1500);
-    services.configWatcher.emit('ports:config', { taskId: 't1' });
-    await vi.runAllTimersAsync();
-    services.configWatcher.emit('ports:setupComplete', { taskId: 't1' });
-    await vi.runAllTimersAsync();
-    expect(sock.sent.some((m) => m.type === 'show' && m.screen === 'done')).toBe(true);
-  });
-
-  it('DONE + restart -> RESTARTING and calls sessionRegistry', async () => {
-    const sock = new FakeSocket();
-    const orch = makeOrchestrator(sock);
-    await orch.start();
-    sock.receive({ type: 'ready', version: 1 });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'onboarding', value: 'setup' });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'describe', value: 'proceed' });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'choose-task', value: 'current' });
-    await vi.advanceTimersByTimeAsync(1500);
-    services.configWatcher.emit('ports:config', { taskId: 't1' });
-    await vi.runAllTimersAsync();
-    services.configWatcher.emit('ports:setupComplete', { taskId: 't1' });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'done', value: 'restart' });
-    await vi.advanceTimersByTimeAsync(600);
-    expect(services.sessionRegistry.restartAllForTask).toHaveBeenCalledWith('t1');
-  });
-
-  it('30-min cap on WAITING_FOR_PORTS_JSON exits with error reason', async () => {
-    const sock = new FakeSocket();
-    const orch = makeOrchestrator(sock);
-    await orch.start();
-    sock.receive({ type: 'ready', version: 1 });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'onboarding', value: 'setup' });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'describe', value: 'proceed' });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'choose-task', value: 'current' });
-    await vi.advanceTimersByTimeAsync(1500);
-    await vi.advanceTimersByTimeAsync(30 * 60_000 + 1000);
-    const exit = sock.sent.find((m) => m.type === 'show' && m.screen === 'exit');
-    expect(exit).toBeDefined();
-    expect((exit as Extract<MainToTui, { type: 'show'; screen: 'exit' }>).props.reason).toBe(
-      'error',
-    );
-  });
-
-  it('TUI close mid-flow tears down state and does not throw', async () => {
-    const sock = new FakeSocket();
-    const orch = makeOrchestrator(sock);
-    orch.setTabId('ports-tui:t1');
-    await orch.start();
-    sock.receive({ type: 'ready', version: 1 });
-    await vi.runAllTimersAsync();
-    sock.triggerClose();
-    await vi.runAllTimersAsync();
-    expect(services.drawerTabs.close).toHaveBeenCalled();
-  });
-
-  it('initialState=launching emits LAUNCHING spinner and waits for hook signal', async () => {
-    const sock = new FakeSocket();
-    const orch = makeOrchestrator(sock, 'launching');
-    await orch.start();
-    sock.receive({ type: 'ready', version: 1 });
-    await vi.runAllTimersAsync();
-    // First screen is the launching spinner — we're auto-detecting CC readiness
-    // via the agent-startup hook + permission-prompt settle window.
-    expect(sock.sent[0]).toMatchObject({ type: 'show', screen: 'launching' });
-    // Commands haven't been sent yet — waiting for the hook signal.
-    expect(services.installer.install).not.toHaveBeenCalled();
-    expect(services.agentSender.sendKeys).not.toHaveBeenCalled();
-  });
-
-  it('hook signal -> auto-launches without manual confirm', async () => {
-    const sock = new FakeSocket();
-    const orch = makeOrchestrator(sock, 'launching');
-    await orch.start();
-    sock.receive({ type: 'ready', version: 1 });
-    // Flush microtasks so onReady reaches the await waitForAgentReady() point
-    // and wires up the hook listeners — but don't fire any timers yet (that
-    // would race past the 20s hard timeout before we can emit the hook).
-    await Promise.resolve();
-    await Promise.resolve();
-    services.hookEvents.emit('agent-startup', { ptyId: 't1' });
-    await vi.advanceTimersByTimeAsync(5_500);
-    expect(services.installer.install).toHaveBeenCalled();
-  });
-
-  it('hook timeout -> falls back to PRE_LAUNCH_CONFIRM', async () => {
-    const sock = new FakeSocket();
-    const orch = makeOrchestrator(sock, 'launching');
-    await orch.start();
-    sock.receive({ type: 'ready', version: 1 });
-    await vi.runAllTimersAsync();
-    // No hook fires; advance past the hard timeout (20s).
-    await vi.advanceTimersByTimeAsync(20_500);
-    expect(sock.sent.some((m) => m.type === 'show' && m.screen === 'pre-launch-confirm')).toBe(
-      true,
-    );
-    expect(services.installer.install).not.toHaveBeenCalled();
-  });
-
-  it('PRE_LAUNCH_CONFIRM + continue -> LAUNCHING (sends commands)', async () => {
-    const sock = new FakeSocket();
-    const orch = makeOrchestrator(sock, 'launching');
-    await orch.start();
-    sock.receive({ type: 'ready', version: 1 });
-    await vi.advanceTimersByTimeAsync(20_500);
-    sock.receive({ type: 'choice', screen: 'pre-launch-confirm', value: 'continue' });
-    await vi.runAllTimersAsync();
-    expect(services.installer.install).toHaveBeenCalled();
-  });
-
-  it('PRE_LAUNCH_CONFIRM + abort -> exits without sending commands', async () => {
-    const sock = new FakeSocket();
-    const orch = makeOrchestrator(sock, 'launching');
-    await orch.start();
-    sock.receive({ type: 'ready', version: 1 });
-    await vi.advanceTimersByTimeAsync(20_500);
-    sock.receive({ type: 'choice', screen: 'pre-launch-confirm', value: 'abort' });
-    await vi.runAllTimersAsync();
-    expect(services.installer.install).not.toHaveBeenCalled();
-    expect(sock.sent.some((m) => m.type === 'show' && m.screen === 'exit')).toBe(true);
-  });
-
-  it('CHOOSE_TASK + new -> emits migrating, calls migrate, exits with reason=migrated', async () => {
-    const sock = new FakeSocket();
-    const orch = makeOrchestrator(sock);
-    await orch.start();
-    sock.receive({ type: 'ready', version: 1 });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'onboarding', value: 'setup' });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'describe', value: 'proceed' });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'choose-task', value: 'new' });
-    await vi.runAllTimersAsync();
+    await flushMicrotasks();
 
     expect(sock.sent.some((m) => m.type === 'show' && m.screen === 'migrating')).toBe(true);
     expect(services.migrate).toHaveBeenCalledWith({
@@ -354,7 +147,7 @@ describe('PortsOnboardingOrchestrator transitions', () => {
     );
   });
 
-  it('CHOOSE_TASK + new -> migrate failure surfaces as error exit', async () => {
+  it('ONBOARDING + setup -> migrate failure surfaces as error exit', async () => {
     services.migrate = vi.fn(async () => {
       throw new Error('git worktree add failed');
     });
@@ -362,13 +155,9 @@ describe('PortsOnboardingOrchestrator transitions', () => {
     const orch = makeOrchestrator(sock);
     await orch.start();
     sock.receive({ type: 'ready', version: 1 });
-    await vi.runAllTimersAsync();
+    await flushMicrotasks();
     sock.receive({ type: 'choice', screen: 'onboarding', value: 'setup' });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'describe', value: 'proceed' });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'choose-task', value: 'new' });
-    await vi.runAllTimersAsync();
+    await flushMicrotasks();
 
     const exit = sock.sent.find((m) => m.type === 'show' && m.screen === 'exit');
     expect(exit).toBeDefined();
@@ -377,21 +166,147 @@ describe('PortsOnboardingOrchestrator transitions', () => {
     expect(props.errorMessage).toContain('git worktree add failed');
   });
 
-  it('captures taskId at start; installer is invoked with locked taskId', async () => {
-    // Invariant: orchestrator's taskId is locked at TUI spawn, never read live.
+  it('TUI close mid-flow tears down state and does not throw', async () => {
+    const sock = new FakeSocket();
+    const orch = makeOrchestrator(sock);
+    orch.setTabId('ports-tui:t1');
+    await orch.start();
+    sock.receive({ type: 'ready', version: 1 });
+    await flushMicrotasks();
+    sock.triggerClose();
+    // teardown() now sends a graceful 'shutdown' to the side-car and waits
+    // ~200ms before yanking the socket — advance fake timers past that
+    // delay so drawerTabs.close() actually runs.
+    await vi.advanceTimersByTimeAsync(300);
+    expect(services.drawerTabs.close).toHaveBeenCalled();
+  });
+
+  it('initialState=launching emits WAITING_PORTS_JSON immediately (agent PTY pre-loaded with prompt)', async () => {
+    const sock = new FakeSocket();
+    const orch = makeOrchestrator(sock, 'launching');
+    await orch.start();
+    sock.receive({ type: 'ready', version: 1 });
+    await flushMicrotasks();
+    // Migrate path: the new task's `claude` was spawned with the inlined
+    // setup prompt as its positional argument (see ptyManager.setInitialPrompt
+    // + portsTuiIpc.handleMigrate). CC auto-submits once trust clears, so
+    // the orchestrator never injects keystrokes — it just waits for ports.json.
+    expect(sock.sent[0]).toMatchObject({ type: 'show', screen: 'waiting-ports-json' });
+  });
+
+  it('initialState=launching transitions to ALLOCATED on ports:config', async () => {
+    const sock = new FakeSocket();
+    const orch = makeOrchestrator(sock, 'launching');
+    await orch.start();
+    sock.receive({ type: 'ready', version: 1 });
+    await flushMicrotasks();
+    services.configWatcher.events.emit('ports:config', { taskId: 't1' });
+    await flushMicrotasks();
+    expect(
+      sock.sent.some((m) => m.type === 'show' && m.screen === 'allocated-waiting-sentinel'),
+    ).toBe(true);
+    // The watcher already ran WorkspacePortsRuntime.setupTask before emitting
+    // ports:config — the orchestrator only reads the resulting count.
+    expect(services.runtime.getPortCount).toHaveBeenCalledWith('t1');
+  });
+
+  it('ONBOARDING + not-now exits with reason not-now', async () => {
     const sock = new FakeSocket();
     const orch = makeOrchestrator(sock);
     await orch.start();
     sock.receive({ type: 'ready', version: 1 });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'onboarding', value: 'setup' });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'describe', value: 'proceed' });
-    await vi.runAllTimersAsync();
-    sock.receive({ type: 'choice', screen: 'choose-task', value: 'current' });
-    await vi.advanceTimersByTimeAsync(1500);
-    expect(services.installer.install).toHaveBeenCalledWith(
-      expect.objectContaining({ taskId: 't1' }),
+    await flushMicrotasks();
+    sock.receive({ type: 'choice', screen: 'onboarding', value: 'not-now' });
+    await flushMicrotasks();
+    const exit = sock.sent.find((m) => m.type === 'show' && m.screen === 'exit');
+    expect(exit).toBeDefined();
+    expect((exit as Extract<MainToTui, { type: 'show'; screen: 'exit' }>).props.reason).toBe(
+      'not-now',
+    );
+  });
+
+  it('duplicate ready after leaving pending-ready is ignored', async () => {
+    const sock = new FakeSocket();
+    const orch = makeOrchestrator(sock, 'launching');
+    await orch.start();
+    sock.receive({ type: 'ready', version: 1 });
+    await flushMicrotasks();
+    services.configWatcher.events.emit('ports:config', { taskId: 't1' });
+    await flushMicrotasks();
+    sock.receive({ type: 'ready', version: 1 });
+    await flushMicrotasks();
+    // A second 'ready' must not reset the flow back to waiting-ports-json.
+    const waitingShows = sock.sent.filter(
+      (m) => m.type === 'show' && m.screen === 'waiting-ports-json',
+    );
+    expect(waitingShows).toHaveLength(1);
+    // The sentinel path must still complete normally afterwards.
+    services.configWatcher.events.emit('ports:setupComplete', { taskId: 't1' });
+    await flushMicrotasks();
+    expect(sock.sent.some((m) => m.type === 'show' && m.screen === 'done')).toBe(true);
+  });
+
+  it('teardown reports the exit reason via onTeardown', async () => {
+    const sock = new FakeSocket();
+    const orch = makeOrchestrator(sock);
+    await orch.start();
+    sock.receive({ type: 'ready', version: 1 });
+    await flushMicrotasks();
+    sock.receive({ type: 'choice', screen: 'onboarding', value: 'not-now' });
+    await vi.advanceTimersByTimeAsync(300);
+    expect(services.onTeardown).toHaveBeenCalledWith('not-now');
+  });
+
+  it('socket close mid-flow reports onTeardown(null)', async () => {
+    const sock = new FakeSocket();
+    const orch = makeOrchestrator(sock);
+    await orch.start();
+    sock.receive({ type: 'ready', version: 1 });
+    await flushMicrotasks();
+    sock.triggerClose();
+    await vi.advanceTimersByTimeAsync(300);
+    expect(services.onTeardown).toHaveBeenCalledWith(null);
+  });
+
+  it('ALLOCATED receives setupComplete event -> DONE', async () => {
+    const sock = new FakeSocket();
+    const orch = makeOrchestrator(sock, 'launching');
+    await orch.start();
+    sock.receive({ type: 'ready', version: 1 });
+    await flushMicrotasks();
+    services.configWatcher.events.emit('ports:config', { taskId: 't1' });
+    await flushMicrotasks();
+    services.configWatcher.events.emit('ports:setupComplete', { taskId: 't1' });
+    await flushMicrotasks();
+    expect(sock.sent.some((m) => m.type === 'show' && m.screen === 'done')).toBe(true);
+  });
+
+  it('DONE + restart -> RESTARTING and calls sessionRegistry', async () => {
+    const sock = new FakeSocket();
+    const orch = makeOrchestrator(sock, 'launching');
+    await orch.start();
+    sock.receive({ type: 'ready', version: 1 });
+    await flushMicrotasks();
+    services.configWatcher.events.emit('ports:config', { taskId: 't1' });
+    await flushMicrotasks();
+    services.configWatcher.events.emit('ports:setupComplete', { taskId: 't1' });
+    await flushMicrotasks();
+    sock.receive({ type: 'choice', screen: 'done', value: 'restart' });
+    await vi.advanceTimersByTimeAsync(600);
+    expect(services.sessionRegistry.restartAllForTask).toHaveBeenCalledWith('t1');
+  });
+
+  it('30-min cap on WAITING_FOR_PORTS_JSON exits with error reason', async () => {
+    const sock = new FakeSocket();
+    const orch = makeOrchestrator(sock, 'launching');
+    await orch.start();
+    sock.receive({ type: 'ready', version: 1 });
+    await flushMicrotasks();
+    await vi.advanceTimersByTimeAsync(30 * 60_000 + 1000);
+    const exit = sock.sent.find((m) => m.type === 'show' && m.screen === 'exit');
+    expect(exit).toBeDefined();
+    expect((exit as Extract<MainToTui, { type: 'show'; screen: 'exit' }>).props.reason).toBe(
+      'error',
     );
   });
 });

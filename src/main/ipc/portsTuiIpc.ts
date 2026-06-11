@@ -5,15 +5,15 @@ import * as fs from 'fs';
 import { TuiSocketServer } from '../services/TuiSocketServer';
 import { PortsOnboardingOrchestrator } from '../services/PortsOnboardingOrchestrator';
 import { initDrawerTabsService } from './drawerTabsIpc';
-import { startCommandPty, writePty } from '../services/ptyManager';
+import { startCommandPty, setInitialPrompt } from '../services/ptyManager';
 import { detectPortsNeed } from '../services/PortsHeuristic';
-import { installPortsSetupCommand } from '../services/PortsSetupCommandInstaller';
+import { buildPortsSetupPrompt } from '../services/PortsSetupPrompt';
 import { WorkspacePortsRuntime } from '../services/WorkspacePortsRuntime';
 import {
   events as portsConfigEvents,
   startWatching as startPortsConfigWatch,
+  stopWatching as stopPortsConfigWatch,
 } from '../services/PortsConfigWatcher';
-import { hookEvents } from '../services/HookServer';
 import { DatabaseService } from '../services/DatabaseService';
 import { worktreeService } from '../services/WorktreeService';
 import { portsDebug } from '../services/PortsDebugLog';
@@ -24,6 +24,25 @@ interface ActiveTui {
 }
 
 const activeTuis = new Map<string, ActiveTui>();
+/**
+ * Tasks whose `spawnTui` is in flight but hasn't yet registered in `activeTuis`.
+ * The renderer's `portsTuiRequestStart` effect (and the `ports:tui:isActive`
+ * IPC) treats `pending` the same as `active` so the renderer's effect bails
+ * during the migrate window — otherwise it would see `isActive=false` between
+ * "main switched the renderer to the new task" and "main finished wiring the
+ * new orchestrator", and would race in to spawn its own `onboarding`-state
+ * orchestrator for the new task.
+ */
+const pendingTuis = new Set<string>();
+/**
+ * Tasks whose TUI finished this session (declined, completed, migrated away,
+ * or closed). Consulted alongside activeTuis/pendingTuis so the renderer's
+ * task-switch effect doesn't re-spawn onboarding every time the user returns
+ * to the task. Session-scoped on purpose: a Dash restart asks again. Spawn
+ * FAILURES ('error' reason, or rollback before registration) are deliberately
+ * NOT suppressed so the user can retry by switching tasks.
+ */
+const suppressedTuis = new Set<string>();
 
 const dismissStore = {
   isDismissed: (pid: string) => DatabaseService.isPortsSetupDismissed(pid),
@@ -114,6 +133,11 @@ async function spawnTui(opts: SpawnTuiOpts): Promise<SpawnResult> {
   let socket: TuiSocketServer | null = null;
   let orch: PortsOnboardingOrchestrator | null = null;
   let tabCreated = false;
+  // Set once the TUI is registered in activeTuis. The orchestrator's
+  // onTeardown fires on the rollback path too — before registration it must
+  // neither delete a live entry nor suppress a retry.
+  let registered = false;
+  pendingTuis.add(taskId);
 
   try {
     socket = new TuiSocketServer(sockPath);
@@ -121,7 +145,7 @@ async function spawnTui(opts: SpawnTuiOpts): Promise<SpawnResult> {
 
     const tab = drawerTabs.add(taskId, {
       kind: 'tui',
-      label: 'Ports',
+      label: 'Set up ports',
       featureId: 'ports',
       id: tabIdLocal,
     });
@@ -145,18 +169,16 @@ async function spawnTui(opts: SpawnTuiOpts): Promise<SpawnResult> {
             };
           },
         },
-        installer: { install: async () => installPortsSetupCommand(cwd) },
         runtime: {
-          setupTask: async (tid: string) => {
-            const ports = WorkspacePortsRuntime.setupTask({
-              taskId: tid,
-              worktreePath: cwd,
-            });
-            return { count: ports.length };
-          },
+          // The watcher already re-ran WorkspacePortsRuntime.setupTask before
+          // emitting ports:config — only the count is needed here.
+          getPortCount: async (tid: string) => WorkspacePortsRuntime.getPortsForTask(tid).length,
         },
-        configWatcher: portsConfigEvents,
-        hookEvents,
+        configWatcher: {
+          events: portsConfigEvents,
+          startWatching: () => startPortsConfigWatch(taskId, cwd),
+          stopWatching: () => stopPortsConfigWatch(taskId),
+        },
         sessionRegistry: {
           restartAllForTask: async (tid: string) => {
             const win = getMainWindow();
@@ -168,9 +190,6 @@ async function spawnTui(opts: SpawnTuiOpts): Promise<SpawnResult> {
           close: (id: string) => drawerTabs.close(id),
         },
         dismissStore,
-        agentSender: {
-          sendKeys: async (tid: string, text: string) => writePty(tid, text),
-        },
         migrate: async ({ signals, guesses }) => {
           await handleMigrate({
             currentTaskId: taskId,
@@ -181,6 +200,11 @@ async function spawnTui(opts: SpawnTuiOpts): Promise<SpawnResult> {
             rows,
             getMainWindow,
           });
+        },
+        onTeardown: (reason) => {
+          if (!registered) return;
+          activeTuis.delete(taskId);
+          if (reason !== 'error') suppressedTuis.add(taskId);
         },
       },
     });
@@ -216,11 +240,12 @@ async function spawnTui(opts: SpawnTuiOpts): Promise<SpawnResult> {
     });
 
     activeTuis.set(taskId, { socket, orch });
+    registered = true;
     return { tabId: tab.id };
   } catch (err) {
     if (orch) {
       try {
-        await (orch as unknown as { teardown(): Promise<void> }).teardown?.();
+        await orch.teardown();
       } catch {
         /* best effort */
       }
@@ -239,13 +264,14 @@ async function spawnTui(opts: SpawnTuiOpts): Promise<SpawnResult> {
         /* best effort */
       }
     }
-    activeTuis.delete(taskId);
     throw err;
+  } finally {
+    pendingTuis.delete(taskId);
   }
 }
 
 /**
- * Migrate path: the user picked "New task" in CHOOSE_TASK. We:
+ * Migrate path: the user picked "Set it up" on the ONBOARDING screen. We:
  *   1. Create a `port-setup` worktree task on a new branch from the project's
  *      default base (push to remote is skipped — this branch is local-only
  *      throwaway in the common case).
@@ -284,14 +310,19 @@ async function handleMigrate(args: {
   });
 
   // Arm the file watcher so the orchestrator hears about it when the agent
-  // writes .dash/ports.json and the sentinel. We have to create .dash/
-  // ourselves first — startWatching no-ops if the directory doesn't exist,
-  // and WorkspacePortsRuntime.setupTask's writeEnvFile only creates .dash/
-  // when there are non-empty assignments. For a fresh worktree there are
-  // none yet, so it never gets created and the watcher never arms.
+  // writes .dash/ports.json and the sentinel. We mkdir `.dash/` defensively
+  // so `fs.watch` attaches immediately — the deferred-arm refcount in
+  // PortsConfigWatcher would also retry on the next startWatching call,
+  // but doing it eagerly avoids a race where the agent races us to write
+  // ports.json before anyone has called startWatching a second time.
   try {
     const dashDir = path.join(task.path, '.dash');
     if (!fs.existsSync(dashDir)) fs.mkdirSync(dashDir, { recursive: true });
+    // A committed setup-complete from a previous run (pre-gitignore repos)
+    // would land in the fresh worktree; the agent's step 1 deletes it too,
+    // but main owning the reset keeps the DONE trigger trustworthy even if
+    // the agent skips instructions.
+    fs.rmSync(path.join(dashDir, 'setup-complete'), { force: true });
     WorkspacePortsRuntime.setupTask({ taskId: task.id, worktreePath: task.path });
     startPortsConfigWatch(task.id, task.path);
     portsDebug.log('migrate', 'watcher armed', {
@@ -303,16 +334,41 @@ async function handleMigrate(args: {
     portsDebug.log('migrate', 'ports bootstrap failed', { err: String(err) });
   }
 
-  // Spawn the new TUI BEFORE notifying the renderer. spawnTui only adds the
-  // entry to activeTuis at its very end (after socket listen, drawer tab
-  // INSERT, orchestrator start, and side-car PTY spawn). If we sent the
-  // 'ports:tui:migrated' event first, the renderer would switch active task,
-  // its portsTuiRequestStart effect would fire, see activeTuis.has === false,
-  // and race in to spawn its OWN orchestrator at initialState='onboarding'.
-  // The renderer's spawnTui usually won the race because it had fewer awaits
-  // before the drawerTabs.add — so the user saw an onboarding screen for the
-  // newly-created port-setup task instead of the launching spinner.
-  await spawnTui({
+  // Stash the FULL setup prompt as the agent's initial positional arg.
+  // CC auto-submits this once the user accepts the trust gate, so the user
+  // goes "click new task → dismiss trust modal → setup runs" with zero
+  // interaction in the Ports tab — and we don't install a slash-command
+  // .md file in the new worktree (no per-worktree footprint, no
+  // .gitignore mutation).
+  try {
+    const setupPrompt = buildPortsSetupPrompt({
+      signals: args.signals,
+      guesses: args.guesses,
+    });
+    setInitialPrompt(task.id, setupPrompt);
+    portsDebug.log('migrate', 'initial prompt stashed', {
+      taskId: task.id,
+      promptLen: setupPrompt.length,
+    });
+  } catch (err) {
+    // Best effort — if the builder somehow fails, the orchestrator still
+    // surfaces the 30-min ports.json timeout, and the user can re-run
+    // setup from the Dash UI.
+    portsDebug.log('migrate', 'initial-prompt build failed', { err: String(err) });
+  }
+
+  // Kick off the spawn synchronously so `pendingTuis.has(task.id)` is true
+  // before we notify the renderer. The renderer's portsTuiRequestStart effect
+  // checks `ports:tui:isActive` which now consults `pendingTuis ∪ activeTuis`
+  // and bails — without the pending guard, the renderer would race in to
+  // spawn its own `onboarding`-state orchestrator for the new task.
+  //
+  // Don't await the full spawn before sending the IPC: spawnTui's side-car
+  // PTY + socket dance can take long enough that the user sees the old
+  // task's "migrating" spinner stuck for seconds while everything is already
+  // resolved on disk. We still await it afterwards so failures surface to
+  // the old orchestrator's services.migrate() caller.
+  const spawnPromise = spawnTui({
     taskId: task.id,
     projectId: args.currentProjectId,
     taskName: task.name,
@@ -329,7 +385,23 @@ async function handleMigrate(args: {
   win?.webContents.send('ports:tui:migrated', {
     fromTaskId: args.currentTaskId,
     toTaskId: task.id,
+    projectId: args.currentProjectId,
   });
+
+  try {
+    await spawnPromise;
+  } catch (err) {
+    // The renderer has already switched to the new task, so the old TUI's
+    // error screen (rendered by our caller's exit('error')) is off-screen.
+    // Surface the failure where the user is actually looking.
+    const w = args.getMainWindow();
+    if (w && !w.isDestroyed()) {
+      w.webContents.send('app:toast', {
+        message: `Port-setup TUI failed to start: ${err instanceof Error ? err.message : String(err)}`,
+      });
+    }
+    throw err;
+  }
 }
 
 export function registerPortsTuiIpc(opts: { getMainWindow: () => BrowserWindow | null }): void {
@@ -355,7 +427,7 @@ export function registerPortsTuiIpc(opts: { getMainWindow: () => BrowserWindow |
           data: { started: false as const, reason: 'dismissed' as const },
         };
       }
-      if (activeTuis.has(taskId)) {
+      if (activeTuis.has(taskId) || pendingTuis.has(taskId) || suppressedTuis.has(taskId)) {
         return {
           success: true as const,
           data: { started: false as const, reason: 'already-active' as const },
@@ -382,23 +454,9 @@ export function registerPortsTuiIpc(opts: { getMainWindow: () => BrowserWindow |
     },
   );
 
-  ipcMain.handle('ports:tui:close', async (_e, taskId: string) => {
-    const entry = activeTuis.get(taskId);
-    if (!entry) return { success: true as const };
-    try {
-      await entry.socket.send({ type: 'shutdown' });
-    } catch {
-      /* socket already gone */
-    }
-    setTimeout(() => {
-      activeTuis.delete(taskId);
-    }, 1500);
-    return { success: true as const };
-  });
-
   ipcMain.handle('ports:tui:isActive', (_e, taskId: string) => ({
     success: true as const,
-    data: activeTuis.has(taskId),
+    data: activeTuis.has(taskId) || pendingTuis.has(taskId) || suppressedTuis.has(taskId),
   }));
 }
 

@@ -648,7 +648,8 @@ export function App() {
 
   // Orchestrator broadcasts ports:restart-task when the user picks 'restart'
   // on the DONE screen. SessionRegistry restarts both agent + shell PTYs so
-  // they pick up the freshly written .dash/ports.env.
+  // they pick up the freshly allocated env vars (Dash injects them from
+  // SQLite at spawn time).
   useEffect(() => {
     const off = window.electronAPI.onPortsRestartTask((tid) => {
       sessionRegistry.restartAllForTask(tid);
@@ -658,16 +659,18 @@ export function App() {
 
   // Ports TUI migrate flow: main created a `port-setup` worktree task and
   // already spawned the new orchestrator + side-car in its drawer. We need
-  // to (a) refresh the project's task list so the new task shows up in the
-  // sidebar and (b) switch active to it so the user lands on the new TUI.
+  // to (a) refresh the source project's task list so the new task shows up
+  // in the sidebar and (b) switch active to it so the user lands on the new
+  // TUI. The payload's projectId (not activeProjectId) targets the right
+  // project even if the user switched projects during the migrate window.
   useEffect(() => {
-    const off = window.electronAPI.onPortsTuiMigrated(async ({ toTaskId }) => {
-      if (!activeProjectId) return;
-      await loadTasksForProject(activeProjectId);
+    const off = window.electronAPI.onPortsTuiMigrated(async ({ toTaskId, projectId }) => {
+      await loadTasksForProject(projectId);
+      setActiveProjectId(projectId);
       setActiveTaskId(toTaskId);
     });
     return off;
-  }, [activeProjectId]);
+  }, []);
 
   // Memoized props for SkillsBrowserModal. Without these, App.tsx re-renders (terminal
   // activity, git polls, PTY events) hand the modal new array references every time,

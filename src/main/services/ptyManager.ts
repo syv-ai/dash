@@ -22,6 +22,7 @@ import {
   mergeHookEntries,
 } from './hookSettingsMerge';
 import { encodeProjectPath } from '../utils/jsonlParser';
+import { portsDebug } from './PortsDebugLog';
 import type { PermissionMode } from '@shared/types';
 
 const execFileAsync = promisify(execFile);
@@ -63,6 +64,40 @@ interface PtyRecord {
 }
 
 const ptys = new Map<string, PtyRecord>();
+
+/**
+ * Per-task initial prompt to pass as `claude`'s positional argument when the
+ * task's agent PTY is spawned. Used by the ports onboarding migrate path:
+ * the full inlined setup-prompt body (see PortsSetupPrompt) is stashed here
+ * before the renderer triggers the spawn, so CC auto-submits it as soon as
+ * the trust-this-directory gate clears — no post-spawn keystroke injection
+ * needed (which previously raced first-run gates and flashed visibly in the
+ * input box).
+ *
+ * Single-use: consumed (and removed) by startDirectPty's first spawn. A
+ * re-attach to an existing PTY is a no-op — the prompt only applies to the
+ * very first claude process for the task. Consequence: if that first spawn
+ * dies before the user accepts the trust gate, the prompt is gone and a
+ * respawn starts a plain session (the ports TUI then surfaces its
+ * 30-minute timeout). The consumption breadcrumb in the ports debug log is
+ * the trail for diagnosing that.
+ */
+const pendingInitialPrompts = new Map<string, string>();
+
+export function setInitialPrompt(taskId: string, prompt: string): void {
+  pendingInitialPrompts.set(taskId, prompt);
+}
+
+function consumeInitialPrompt(taskId: string): string | undefined {
+  const prompt = pendingInitialPrompts.get(taskId);
+  if (prompt !== undefined) pendingInitialPrompts.delete(taskId);
+  return prompt;
+}
+
+/** Test/cleanup hook: drop a stashed prompt without spawning. */
+export function discardInitialPrompt(taskId: string): void {
+  pendingInitialPrompts.delete(taskId);
+}
 
 /** Tracks all settings.local.json paths Dash has written hooks to, for cleanup on exit. */
 const writtenSettingsPaths = new Set<string>();
@@ -538,15 +573,10 @@ function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
   // reset the session, so any prior busy state on the activity dot is stale.
   // SessionStart(resume) is NOT wired — register() already initialises and a
   // resumed session's busy state will be re-established by the next
-  // UserPromptSubmit / PreToolUse hook.
-  //
-  // SessionStart(startup) → /hook/agent-startup. Used by the ports onboarding
-  // TUI's launching path to detect when Claude Code has finished its initial
-  // session bring-up in a freshly-migrated task, before auto-submitting the
-  // /reload-skills and /dash-port-setup slash commands. Without this we race
-  // any first-run permission prompts and our \r gets eaten by the modal.
+  // UserPromptSubmit / PreToolUse hook. SessionStart(startup) was previously
+  // wired to /hook/agent-startup for the ports onboarding TUI's auto-detect
+  // path; we dropped that — see PortsOnboardingOrchestrator.onReady.
   const sessionStartEntries: HookEntry[] = [
-    { matcher: 'startup', hooks: [dashHttp('agent-startup', true)] },
     { matcher: 'clear', hooks: [dashHttp('session-start', true)] },
     { matcher: 'compact', hooks: [dashHttp('session-start', true)] },
   ];
@@ -651,6 +681,21 @@ function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
     const effectiveAttribution =
       commitAttributionSetting === undefined ? DASH_DEFAULT_ATTRIBUTION : commitAttributionSetting;
     merged.attribution = { commit: effectiveAttribution };
+
+    // Pre-grant every project-level MCP server (.mcp.json) so Dash's first
+    // spawn into a worktree doesn't trip "Allow this MCP server?" modals for
+    // each one. The user already opted in by checking .mcp.json into the
+    // project; making them re-approve per worktree is just friction. NOTE: a
+    // narrower `enabledMcpjsonServers: [...]` allowlist is safer per Anthropic's
+    // docs, but Dash can't know the server names without reading .mcp.json on
+    // every settings write. Don't overwrite if user/team explicitly set either
+    // key — let their decision win.
+    if (
+      typeof merged.enableAllProjectMcpServers !== 'boolean' &&
+      !Array.isArray(merged.enabledMcpjsonServers)
+    ) {
+      merged.enableAllProjectMcpServers = true;
+    }
 
     atomicWriteFileSync(settingsPath, JSON.stringify(merged, null, 2) + '\n');
     writtenSettingsPaths.add(settingsPath);
@@ -766,6 +811,21 @@ export async function startDirectPty(options: {
   } else if (options.permissionMode === 'bypassPermissions') {
     args.push('--dangerously-skip-permissions');
   }
+
+  // Pre-loaded prompt (the inlined ports-setup body) — must be the last
+  // positional. CC auto-submits this after the trust-this-directory gate
+  // clears, eliminating the need for keystroke injection or a "wait for
+  // session ready" signal. Only present for the ports-migrate flow today;
+  // no-op for every other spawn.
+  const initialPrompt = consumeInitialPrompt(options.id);
+  if (initialPrompt) {
+    args.push(initialPrompt);
+    portsDebug.log('migrate', 'initial prompt consumed at spawn', {
+      taskId: options.id,
+      promptLen: initialPrompt.length,
+    });
+  }
+
   const env = buildDirectEnv(options.isDark ?? true, options.cwd);
 
   writeHookSettings(options.cwd, options.id);

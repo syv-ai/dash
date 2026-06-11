@@ -1,13 +1,9 @@
-import * as fs from 'fs';
-import * as path from 'path';
-
-const COMMANDS_DIR = path.join('.claude', 'commands');
-const COMMAND_FILE = 'dash-port-setup.md';
-const GITIGNORE_FILE = '.gitignore';
-
-const GITIGNORE_HEADER = '# Dash — slash command (generated per-worktree; do not commit)';
-const GITIGNORE_ENTRIES = ['.claude/commands/dash-port-setup.md'];
-
+// The prompt body Dash inlines as `claude`'s positional argument when it
+// spawns the agent in a fresh port-setup worktree. Historically this was
+// installed as a `.claude/commands/dash-port-setup.md` slash command and
+// invoked via `/dash-port-setup`; we now pass the whole substituted body
+// directly because Dash spawns the session itself (no per-worktree slash
+// command file, no `.gitignore` mutation, no `/reload-skills` dance).
 const COMMAND_BODY = `---
 description: Set up per-worktree port management for this project (Dash)
 ---
@@ -39,8 +35,25 @@ A \`.dash/ports.json\` file at the worktree root — a JSON object with a top-le
 4. Write \`.dash/ports.json\`.
 5. Verify the project's run mechanism honors the env vars (see **Wiring** below).
 6. Ask about the documentation additions (see **Documentation** below).
-7. **As your final action**, write an empty file at \`.dash/setup-complete\`. This is Dash's signal that everything is done — without it, the user keeps seeing a "still working" indicator and never gets prompted to restart. Write this AFTER all other work, including documentation and final user messages.
-8. Then tell the user: setup is complete; Dash is now showing a toast bottom-right with the allocated port count and a **Restart session** button — click it to restart this Claude agent and the shell drawers with the new env vars (otherwise the running PTYs still have the old env). If the toast was dismissed, they can restart the task manually. Name the toast and button explicitly — don't be vague.
+7. **Remote check + PR offer.** Run \`git remote -v\` to see whether this worktree has a remote configured. If it does, identify the host from the URL and pick the matching CLI:
+   - GitHub (\`github.com\`) → \`gh pr create\`
+   - Azure DevOps (\`dev.azure.com\` / \`visualstudio.com\`) → \`az repos pr create\`
+   - GitLab (\`gitlab.com\` or any GitLab self-hosted detected via remote URL) → \`glab mr create\`
+   - Anything else, or the matching CLI isn't installed (\`command -v <cli>\` to check) → fall back to \`git push -u origin <branch>\` and print the host's web URL for opening the PR manually.
+
+   Then use AskUserQuestion: *"Want me to commit and push these changes, then open a PR to merge the **port-setup** branch into the default branch?"*
+   - If **yes**:
+     - Dash already added a managed section to \`.gitignore\` covering its per-worktree artifacts (\`.dash/ports.local.json\`, \`.dash/setup-complete\`). Stage that \`.gitignore\` update along with the rest — don't add extra entries.
+     - Stage only the real changes — \`.dash/ports.json\`, any wiring edits, the docs you wrote, and the Dash-added \`.gitignore\` section.
+     - Commit with a clear message: \`feat(ports): per-worktree port management via Dash\` (or similar — match the project's existing commit style).
+     - \`git push -u origin <current-branch>\`.
+     - Open the PR via the detected CLI (e.g. \`gh pr create --fill\`). If the CLI isn't available, print the host's create-PR web URL and stop.
+     - Show the user the PR URL when done.
+   - If **no**: skip silently. The branch stays local; the user can open a PR manually later.
+
+   If there's no remote at all, skip this step entirely.
+8. **As your final action** (AFTER the PR step above), write an empty file at \`.dash/setup-complete\`. This is Dash's signal that everything is done — without it, the user keeps seeing a "still working" indicator and never gets prompted to restart. Write this AFTER all other work, including documentation, PR flow, and final user messages.
+9. Then tell the user: setup is complete; the **Dash Ports tab** in the drawer (where these instructions were initiated) is now on its DONE screen showing the allocated port count and a **Restart session** prompt — confirm that prompt to restart this Claude agent and the shell drawers with the new env vars (otherwise the running PTYs still have the old env). If the Ports tab was closed, they can restart the task manually. Name the Ports tab and the Restart prompt explicitly — don't be vague.
 
 ## Wiring: the contract
 
@@ -54,7 +67,7 @@ What to do:
 
 What NOT to do:
 
-- **NO** \`source .dash/ports.env\` in \`package.json\` scripts, shell scripts, Dockerfiles, or any committed file. Redundant inside Dash (the PTY already has the env vars).
+- **NO** sourcing a Dash-generated env file from \`package.json\` scripts, shell scripts, Dockerfiles, or any committed file. Dash does NOT emit one — env vars are injected directly into every PTY it spawns. If you're tempted to add a \`source\` line, that's the signal you're over-engineering this.
 - **NO** instructions to source files, **NO** direnv / \`.envrc\` recommendation, **NO** opt-in tooling to bridge outside-Dash usage. Outside Dash = defaults, **by design**. Single-worktree workflows, CI, fresh clones, and non-Dash contributors all work fine that way — don't try to "fix" it.
 
 The project ends up Dash-aware only in the trivial \`process.env.X || default\` sense, indistinguishable from generic good practice.
@@ -73,7 +86,7 @@ Three resolution patterns by config style — pick by framework, not by preferen
 
 Same env-fallback pattern as the app — no extra rules. Inside Dash, the PTY has the env vars set; processes spawned from it (\`pnpm test\`, \`vitest\`, \`jest\`, \`pytest\`, \`cargo test\`, \`playwright\`, \`cypress\`) inherit them, and so do wrappers like \`start-server-and-test\`, \`concurrently\`, \`pnpm dev & pnpm test\`, or Makefile targets. Outside Dash → defaults.
 
-When test code needs the port (E2E targeting a dev server, integration tests against a real backend): read \`process.env.SERVER_PORT || 8080\` from inside the test, exactly like the app. Do NOT introduce a test-specific env-loading mechanism; do NOT tell users to source \`.dash/ports.env\` before tests.
+When test code needs the port (E2E targeting a dev server, integration tests against a real backend): read \`process.env.SERVER_PORT || 8080\` from inside the test, exactly like the app. Do NOT introduce a test-specific env-loading mechanism; Dash injects env vars at PTY spawn time, so any process you launch inside Dash already has them.
 
 ## Documentation
 
@@ -118,7 +131,7 @@ After wiring is done, use the AskUserQuestion tool to ask the user whether to ad
    **d. What changed.** One short paragraph. The app config (and any test code that hits a service port) now reads from env vars with the original default as the fallback. Everything else — \`package.json\` scripts, Dockerfile, run commands — is unchanged.
 
    **Hard rules**:
-   - Do NOT mention manual sourcing of \`.dash/ports.env\`, direnv, \`.envrc\`, or any opt-in setup for outside-Dash usage. Outside Dash = defaults, period.
+   - Do NOT mention sourcing a Dash env file, direnv, \`.envrc\`, or any opt-in setup for outside-Dash usage. Outside Dash = defaults, period.
    - Do NOT mention Windows, PowerShell, cmd, cross-platform concerns, CI specifics, or Docker unless the codebase actually uses those environments (grep / check before writing). Generic platform warnings for hypothetical contributors are noise.
    - Do NOT repeat the design rationale from this prompt; the file is for users of this project, not maintainers of Dash. Aim for "I show up, run the dev command, it works" — that's the entire contract for the reader.
    - Keep the file tight — roughly 40-60 lines is fine for the four sections above. Don't pad.
@@ -129,63 +142,20 @@ After wiring is done, use the AskUserQuestion tool to ask the user whether to ad
 
 - DO NOT pick host port numbers yourself — Dash handles allocation deterministically from \`defaultPort\`. Just declare the baseline.
 - ASK the user before modifying any committed files. Show the diff first.
-- DO NOT commit anything. Leave the working tree dirty for the user to review.
+- DO NOT commit anything **except** in step 7's PR flow, and only when the user explicitly confirms. Until that step, leave the working tree dirty for the user to review. If the user declines the PR in step 7, do NOT commit — leave the tree dirty.
 `;
 
 /**
- * Installs the `/dash-port-setup` slash command into a worktree so the Claude
- * Code agent can be invoked with the structured prompt. Writes to
- * `<worktreePath>/.claude/commands/dash-port-setup.md`, idempotent overwrite so
- * each Dash launch ships the current body. Also gitignores the file under a
- * distinct header so a re-install in the same worktree doesn't restack
- * duplicate lines.
- *
- * Throws on filesystem errors so the caller (IPC handler) can surface them to
- * the renderer — we don't want to silently inject `/dash-port-setup ...` into
- * the TUI when the command file isn't actually there for the agent to read.
+ * Builds the full setup prompt as a plain string with `$ARGUMENTS` substituted
+ * and YAML frontmatter stripped. Dash spawns `claude "<this body>"` directly
+ * — CC auto-submits the prompt once the trust gate clears, so we never
+ * install a slash command file in the worktree (no `.claude/commands/`
+ * footprint, no `.gitignore` mutation).
  */
-export function installPortsSetupCommand(worktreePath: string): void {
-  const commandsDir = path.join(worktreePath, COMMANDS_DIR);
-  const commandPath = path.join(commandsDir, COMMAND_FILE);
-
-  if (!fs.existsSync(commandsDir)) {
-    fs.mkdirSync(commandsDir, { recursive: true });
-  }
-  fs.writeFileSync(commandPath, COMMAND_BODY, 'utf-8');
-
-  ensureGitignoreEntries(worktreePath);
-}
-
-function ensureGitignoreEntries(worktreePath: string): void {
-  const gitignorePath = path.join(worktreePath, GITIGNORE_FILE);
-  let existing = '';
-  try {
-    if (fs.existsSync(gitignorePath)) {
-      existing = fs.readFileSync(gitignorePath, 'utf-8');
-    }
-  } catch (err) {
-    console.error(
-      `[PortsSetupCommandInstaller] Failed to read ${gitignorePath}: ${err instanceof Error ? err.message : String(err)}`,
-    );
-    return;
-  }
-  if (existing.includes(GITIGNORE_HEADER)) return;
-
-  const separator =
-    existing.length === 0
-      ? ''
-      : existing.endsWith('\n\n')
-        ? ''
-        : existing.endsWith('\n')
-          ? '\n'
-          : '\n\n';
-  const section = [GITIGNORE_HEADER, ...GITIGNORE_ENTRIES, ''].join('\n');
-
-  try {
-    fs.writeFileSync(gitignorePath, existing + separator + section, 'utf-8');
-  } catch (err) {
-    console.error(
-      `[PortsSetupCommandInstaller] Failed to write ${gitignorePath}: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
+export function buildPortsSetupPrompt(args: { signals: string[]; guesses: string[] }): string {
+  const argsLine = `signals: ${args.signals.join(', ')}; guesses: ${args.guesses.join(', ')}`;
+  // Drop the YAML frontmatter — `description` was metadata for CC's slash-
+  // command discovery; an inlined prompt doesn't use it.
+  const body = COMMAND_BODY.replace(/^---\n[\s\S]*?\n---\n+/, '');
+  return body.replace('$ARGUMENTS', argsLine);
 }

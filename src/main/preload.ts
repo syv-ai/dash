@@ -92,15 +92,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Ports TUI lifecycle
   ptyStartCommand: (opts: unknown) => ipcRenderer.invoke('pty:startCommand', opts),
   portsTuiRequestStart: (payload: unknown) => ipcRenderer.invoke('ports:tui:requestStart', payload),
-  portsTuiClose: (taskId: string) => ipcRenderer.invoke('ports:tui:close', taskId),
   portsTuiIsActive: (taskId: string) => ipcRenderer.invoke('ports:tui:isActive', taskId),
   onPortsRestartTask: (cb: (taskId: string) => void) => {
     const handler = (_event: unknown, taskId: string) => cb(taskId);
     ipcRenderer.on('ports:restart-task', handler);
     return () => ipcRenderer.removeListener('ports:restart-task', handler);
   },
-  onPortsTuiMigrated: (cb: (info: { fromTaskId: string; toTaskId: string }) => void) => {
-    const handler = (_event: unknown, info: { fromTaskId: string; toTaskId: string }) => cb(info);
+  onPortsTuiMigrated: (
+    cb: (info: { fromTaskId: string; toTaskId: string; projectId: string }) => void,
+  ) => {
+    const handler = (
+      _event: unknown,
+      info: { fromTaskId: string; toTaskId: string; projectId: string },
+    ) => cb(info);
     ipcRenderer.on('ports:tui:migrated', handler);
     return () => ipcRenderer.removeListener('ports:tui:migrated', handler);
   },
@@ -457,8 +461,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   portsOpenInDocker: () => ipcRenderer.invoke('ports:openInDocker'),
   portsWatchConfig: (taskId: string) => ipcRenderer.invoke('ports:watchConfig', taskId),
   portsUnwatchConfig: (taskId: string) => ipcRenderer.invoke('ports:unwatchConfig', taskId),
-  portsInstallSetupCommand: (taskId: string) =>
-    ipcRenderer.invoke('ports:installSetupCommand', taskId),
   onPortsConfigChanged: (callback: (data: { taskId: string }) => void) => {
     const handler = (_event: unknown, data: { taskId: string }) => callback(data);
     ipcRenderer.on('ports:configChanged', handler);

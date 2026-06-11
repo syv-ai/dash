@@ -27,10 +27,14 @@ const PORTS_FILE = 'ports.json';
 const SETUP_COMPLETE_FILE = 'setup-complete';
 
 interface WatcherEntry {
-  watcher: fs.FSWatcher;
+  // null when startWatching was called before .dash/ existed; the refcount
+  // is still tracked so stopWatching stays balanced, and we retry arming
+  // on every subsequent startWatching call.
+  watcher: fs.FSWatcher | null;
   worktreePath: string;
   debounceTimer: ReturnType<typeof setTimeout> | null;
   sentinelDebounceTimer: ReturnType<typeof setTimeout> | null;
+  refCount: number;
 }
 
 const entries = new Map<string, WatcherEntry>();
@@ -38,9 +42,8 @@ const entries = new Map<string, WatcherEntry>();
 /**
  * Watch the task's `.dash/` directory for changes to `ports.json`. On any
  * create / modify / delete, debounce 2s, then re-run setupTask (which
- * handles all three cases — clears DB + removes ports.env when the file is
- * gone, re-allocates when it's there) and broadcast `ports:configChanged`
- * so the drawer re-fetches.
+ * clears DB rows when the file is gone and re-allocates when it's there)
+ * and broadcast `ports:configChanged` so the drawer re-fetches.
  *
  * Watches the parent directory rather than the file itself because:
  *   1. fs.watch on a non-existent file errors immediately, so it's harder
@@ -48,21 +51,56 @@ const entries = new Map<string, WatcherEntry>();
  *   2. Editors save atomically (write tmp → rename), which leaves the
  *      file-watch's inode pointing at the old, deleted file on macOS.
  *
- * Skips entirely if `.dash/` doesn't exist yet. The IPC layer (db:saveTask,
- * ports:refresh) re-arms after setupTask creates the directory, so the
- * watcher is in place once there's actually something to watch.
+ * Ref-counted, with two kinds of holders:
+ *   - Paired: the orchestrator (start() → teardown()) and the renderer
+ *     drawer (ports:watchConfig → ports:unwatchConfig) each balance their
+ *     calls. Without the refcount, a drawer unmount mid-flow would kill the
+ *     watcher and the agent's `.dash/ports.json` write would never reach
+ *     the orchestrator.
+ *   - Permanent (by design): task creation (dbIpc saveTask, handleMigrate)
+ *     takes one ref that lives for the app session, so agent edits to
+ *     ports.json keep the SQLite allocations fresh even with no drawer or
+ *     orchestrator open. Released only by forceStop (task deletion) or
+ *     stopAll (app quit).
+ * Callers that just need to retry a deferred arm (e.g. ports:refresh after
+ * the agent created `.dash/`) must use rearm(), NOT startWatching — an
+ * unmatched startWatching pins the watcher forever.
+ *
+ * If `.dash/` doesn't exist yet, the refcount is still tracked but the
+ * fs.watch is deferred — every subsequent startWatching call retries the
+ * arm, so the watcher comes online as soon as the directory appears.
  */
 export function startWatching(taskId: string, worktreePath: string): void {
-  if (entries.has(taskId)) {
-    portsDebug.log('watcher', 'startWatching: already running', { taskId });
+  let entry = entries.get(taskId);
+  if (entry) {
+    entry.refCount++;
+    portsDebug.log('watcher', 'startWatching: ref++', {
+      taskId,
+      refCount: entry.refCount,
+      armed: entry.watcher !== null,
+    });
+    if (!entry.watcher) armWatcher(entry, taskId);
     return;
   }
 
-  const dashDir = path.join(worktreePath, DASH_DIR);
+  entry = {
+    watcher: null,
+    worktreePath,
+    debounceTimer: null,
+    sentinelDebounceTimer: null,
+    refCount: 1,
+  };
+  entries.set(taskId, entry);
+  armWatcher(entry, taskId);
+}
+
+function armWatcher(entry: WatcherEntry, taskId: string): void {
+  const dashDir = path.join(entry.worktreePath, DASH_DIR);
   if (!fs.existsSync(dashDir)) {
-    portsDebug.log('watcher', 'startWatching: .dash missing — bailing', {
+    portsDebug.log('watcher', 'armWatcher: .dash missing — deferred', {
       taskId,
       dashDir,
+      refCount: entry.refCount,
     });
     return;
   }
@@ -72,13 +110,13 @@ export function startWatching(taskId: string, worktreePath: string): void {
     watcher = fs.watch(dashDir, (eventType, filename) => {
       portsDebug.log('watcher', 'fs.watch event', { taskId, eventType, filename });
       if (filename === PORTS_FILE) {
-        const entry = entries.get(taskId);
-        if (!entry) return;
-        if (entry.debounceTimer) clearTimeout(entry.debounceTimer);
-        entry.debounceTimer = setTimeout(() => {
-          entry.debounceTimer = null;
+        const e = entries.get(taskId);
+        if (!e) return;
+        if (e.debounceTimer) clearTimeout(e.debounceTimer);
+        e.debounceTimer = setTimeout(() => {
+          e.debounceTimer = null;
           try {
-            WorkspacePortsRuntime.setupTask({ taskId, worktreePath });
+            WorkspacePortsRuntime.setupTask({ taskId, worktreePath: entry.worktreePath });
           } catch (err) {
             portsDebug.log('watcher', 'setupTask failed', { taskId, err: String(err) });
           }
@@ -87,20 +125,19 @@ export function startWatching(taskId: string, worktreePath: string): void {
         return;
       }
       if (filename === SETUP_COMPLETE_FILE) {
-        const entry = entries.get(taskId);
-        if (!entry) return;
+        const e = entries.get(taskId);
+        if (!e) return;
         const sentinelPath = path.join(dashDir, SETUP_COMPLETE_FILE);
         const exists = fs.existsSync(sentinelPath);
         portsDebug.log('watcher', 'sentinel event', { taskId, exists });
         if (!exists) return;
-        if (entry.sentinelDebounceTimer) clearTimeout(entry.sentinelDebounceTimer);
-        entry.sentinelDebounceTimer = setTimeout(() => {
-          entry.sentinelDebounceTimer = null;
+        if (e.sentinelDebounceTimer) clearTimeout(e.sentinelDebounceTimer);
+        e.sentinelDebounceTimer = setTimeout(() => {
+          e.sentinelDebounceTimer = null;
           notifySetupComplete(taskId);
         }, DEBOUNCE_MS);
       }
     });
-    portsDebug.log('watcher', 'startWatching: armed', { taskId, dashDir });
   } catch (err) {
     portsDebug.log('watcher', 'fs.watch threw', { taskId, err: String(err) });
     return;
@@ -110,29 +147,83 @@ export function startWatching(taskId: string, worktreePath: string): void {
   // suppress unhandled-error logs in that case.
   watcher.on('error', () => {});
 
-  entries.set(taskId, {
-    watcher,
-    worktreePath,
-    debounceTimer: null,
-    sentinelDebounceTimer: null,
+  entry.watcher = watcher;
+  portsDebug.log('watcher', 'armWatcher: armed', {
+    taskId,
+    dashDir,
+    refCount: entry.refCount,
   });
+}
+
+/**
+ * Retry arming a deferred watcher WITHOUT taking a ref. No-op when nothing
+ * is watching the task or the fs.watch is already attached. Use from paths
+ * that merely notice `.dash/` may have just appeared (e.g. ports:refresh).
+ */
+export function rearm(taskId: string): void {
+  const entry = entries.get(taskId);
+  if (entry && !entry.watcher) armWatcher(entry, taskId);
+}
+
+/**
+ * Close the watcher and drop the entry regardless of refcount. For task
+ * deletion — the permanent creation-time ref has no paired stop, and any
+ * outstanding holders are about to lose the directory anyway. Subsequent
+ * stopWatching calls from stale holders are no-ops.
+ */
+export function forceStop(taskId: string): void {
+  const entry = entries.get(taskId);
+  if (!entry) return;
+  if (entry.debounceTimer) clearTimeout(entry.debounceTimer);
+  if (entry.sentinelDebounceTimer) clearTimeout(entry.sentinelDebounceTimer);
+  if (entry.watcher) {
+    try {
+      entry.watcher.close();
+    } catch {
+      // Already closed.
+    }
+  }
+  entries.delete(taskId);
+  portsDebug.log('watcher', 'forceStop: closed', { taskId });
 }
 
 export function stopWatching(taskId: string): void {
   const entry = entries.get(taskId);
   if (!entry) return;
+  entry.refCount--;
+  if (entry.refCount > 0) {
+    portsDebug.log('watcher', 'stopWatching: ref-- (still alive)', {
+      taskId,
+      refCount: entry.refCount,
+    });
+    return;
+  }
   if (entry.debounceTimer) clearTimeout(entry.debounceTimer);
   if (entry.sentinelDebounceTimer) clearTimeout(entry.sentinelDebounceTimer);
-  try {
-    entry.watcher.close();
-  } catch {
-    // Already closed.
+  if (entry.watcher) {
+    try {
+      entry.watcher.close();
+    } catch {
+      // Already closed.
+    }
   }
   entries.delete(taskId);
+  portsDebug.log('watcher', 'stopWatching: closed (refCount=0)', { taskId });
 }
 
 export function stopAll(): void {
-  for (const id of Array.from(entries.keys())) stopWatching(id);
+  for (const [taskId, entry] of Array.from(entries.entries())) {
+    if (entry.debounceTimer) clearTimeout(entry.debounceTimer);
+    if (entry.sentinelDebounceTimer) clearTimeout(entry.sentinelDebounceTimer);
+    if (entry.watcher) {
+      try {
+        entry.watcher.close();
+      } catch {
+        // Already closed.
+      }
+    }
+    entries.delete(taskId);
+  }
 }
 
 function notifyConfigChanged(taskId: string): void {

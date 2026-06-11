@@ -9,8 +9,8 @@ const PORTS_LOCAL_FILE = 'ports.local.json';
  * A single service declared in `.dash/ports.json`. Either:
  *
  *   - Tier 2 (allocated): `label` + `envVar` + `defaultPort`. Dash assigns a
- *     unique host port per worktree (defaultPort + hash offset), injects the
- *     env var, and mirrors it to `.dash/ports.env`.
+ *     unique host port per worktree (defaultPort + hash offset) and injects
+ *     the env var into every PTY it spawns for the task.
  *   - Tier 1 (fixed): `label` + `port`. Dash just shows liveness — no
  *     allocation, no env injection. Useful for services on hard-coded ports.
  */

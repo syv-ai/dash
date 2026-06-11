@@ -2,7 +2,11 @@ import { ipcMain } from 'electron';
 import { DatabaseService } from '../services/DatabaseService';
 import { TelemetryService } from '../services/TelemetryService';
 import { WorkspacePortsRuntime } from '../services/WorkspacePortsRuntime';
-import { startWatching as startPortsConfigWatch } from '../services/PortsConfigWatcher';
+import {
+  startWatching as startPortsConfigWatch,
+  forceStop as forceStopPortsConfigWatch,
+} from '../services/PortsConfigWatcher';
+import { discardInitialPrompt } from '../services/ptyManager';
 
 export function registerDbIpc(): void {
   // ── Projects ─────────────────────────────────────────────
@@ -53,16 +57,20 @@ export function registerDbIpc(): void {
       const isNew = !task.id;
       const data = DatabaseService.saveTask(task);
       if (isNew) TelemetryService.capture('task_created');
-      // Allocate per-task ports the first time the row is saved. Done here so
-      // .dash/ports.env exists before the renderer spawns the task PTY, which
-      // is the point at which port env vars get merged into the spawn env.
-      // Skipped for in-place (non-worktree) tasks — they share the project dir
-      // with everyone else and shouldn't get rewritten ports.env files.
+      // Allocate per-task ports the first time the row is saved. setupTask
+      // persists to SQLite (the only source of truth for what ports are
+      // taken); the renderer's later agent-PTY spawn reads the env from
+      // there. Skipped for in-place (non-worktree) tasks — they share the
+      // project dir and shouldn't get re-allocated on every save.
       if (isNew && data.useWorktree) {
         try {
           WorkspacePortsRuntime.setupTask({ taskId: data.id, worktreePath: data.path });
-          // setupTask just created .dash/ (writing ports.env there), so the
-          // watcher can attach now. Idempotent — re-arms below don't stack.
+          // Arm the watcher even if .dash/ doesn't exist yet — the refcount
+          // implementation in PortsConfigWatcher keeps the entry and retries
+          // the fs.watch on every subsequent start, so it auto-attaches as
+          // soon as the agent creates .dash/. This ref is PERMANENT by
+          // design (agent edits keep SQLite fresh with no drawer open);
+          // forceStop in db:deleteTask is its release.
           startPortsConfigWatch(data.id, data.path);
         } catch (err) {
           console.error('[dbIpc] setupTask ports allocation failed:', err);
@@ -77,6 +85,10 @@ export function registerDbIpc(): void {
   ipcMain.handle('db:deleteTask', (_event, id: string) => {
     try {
       DatabaseService.deleteTask(id);
+      // The worktree is gone (or about to be) — close the ports watcher
+      // regardless of refcount and drop any never-consumed initial prompt.
+      forceStopPortsConfigWatch(id);
+      discardInitialPrompt(id);
       TelemetryService.capture('task_deleted');
       return { success: true };
     } catch (error) {

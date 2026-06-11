@@ -8,10 +8,10 @@ import { portLivenessService } from '../services/PortLivenessService';
 import { DatabaseService } from '../services/DatabaseService';
 import { detectPortsNeed } from '../services/PortsHeuristic';
 import { loadWorkspacePorts } from '../services/WorkspacePortsService';
-import { installPortsSetupCommand } from '../services/PortsSetupCommandInstaller';
 import {
   startWatching as startPortsConfigWatch,
   stopWatching as stopPortsConfigWatch,
+  rearm as rearmPortsConfigWatch,
 } from '../services/PortsConfigWatcher';
 
 const execFileAsync = promisify(execFile);
@@ -74,10 +74,10 @@ export function registerPortsIpc(): void {
         taskId,
         data.map((p) => p.hostPort),
       );
-      // setupTask may have just created .dash/ for the first time (post-
-      // onboarding agent write). Arm the watcher now so subsequent edits
-      // are detected; idempotent if already running.
-      startPortsConfigWatch(taskId, task.path);
+      // .dash/ may have just appeared (post-onboarding agent write); retry
+      // a deferred arm. rearm, NOT startWatching — refresh has no matching
+      // stop, and an unmatched ref would pin the watcher per click.
+      rearmPortsConfigWatch(taskId);
       return { success: true, data };
     } catch (error) {
       return { success: false, error: String(error) };
@@ -113,31 +113,6 @@ export function registerPortsIpc(): void {
   ipcMain.handle('ports:unwatchConfig', (_event, taskId: string) => {
     stopPortsConfigWatch(taskId);
     return { success: true };
-  });
-
-  // Install the `/dash-port-setup` slash command into the worktree so the
-  // agent's CWD-based command lookup finds it. Idempotent overwrite — the
-  // markdown body ships with Dash, so re-installing on each Set-Up click
-  // ensures the agent always sees the current instructions.
-  //
-  // Also resets the completion sentinel — the agent is supposed to delete
-  // it as their first step, but we don't trust that; a stale sentinel
-  // would fire the "Restart session" prompt the moment the agent writes
-  // ports.json (mid-flow), which is the exact bug this whole flow exists
-  // to prevent.
-  ipcMain.handle('ports:installSetupCommand', (_event, taskId: string) => {
-    try {
-      const task = DatabaseService.getTask(taskId);
-      if (!task) return { success: false, error: `Task ${taskId} not found` };
-      installPortsSetupCommand(task.path);
-      const sentinelPath = path.join(task.path, '.dash', 'setup-complete');
-      if (fs.existsSync(sentinelPath)) {
-        fs.rmSync(sentinelPath, { force: true });
-      }
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: String(error) };
-    }
   });
 
   ipcMain.handle('ports:openUrl', (_event, port: number) => {

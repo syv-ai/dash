@@ -13,7 +13,7 @@ export interface PortGuess {
 export interface HeuristicResult {
   needsPorts: boolean;
   /** Human-readable list of what triggered the result, e.g. "vite (package.json)",
-   *  "docker-compose.yml: api, web". Surfaced in the panel's onboarding card so
+   *  "docker-compose.yml: api, web". Surfaced on the TUI onboarding screen so
    *  the user can sanity-check the detection before agreeing to set it up. */
   signals: string[];
   guesses: PortGuess[];

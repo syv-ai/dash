@@ -9,13 +9,10 @@ import { getDb } from '../db/client';
 import { tasks } from '../db/schema';
 
 /**
- * In-process event bus for hook events that other main-side services need to
- * react to. The PortsOnboardingOrchestrator's launching path uses these to
- * detect when Claude Code is past first-run prompts in a freshly-migrated
- * task.
+ * In-process event bus for hook events that other main-side services may need
+ * to observe. No internal consumers right now; kept as infrastructure.
  *
  * Events:
- *  - 'agent-startup'      { ptyId }  — SessionStart(startup) fired
  *  - 'permission-prompt'  { ptyId }  — Notification(permission_prompt) fired
  */
 export const hookEvents = new EventEmitter();
@@ -309,16 +306,6 @@ class HookServerImpl {
           if (pathname === '/hook/session-end') {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
               activityMonitor.setIdle(ptyId);
-              res.writeHead(200);
-              res.end();
-            });
-            return;
-          }
-
-          if (pathname === '/hook/agent-startup') {
-            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
-              portsDebug.log('hook', 'agent-startup fired', { ptyId });
-              hookEvents.emit('agent-startup', { ptyId });
               res.writeHead(200);
               res.end();
             });
