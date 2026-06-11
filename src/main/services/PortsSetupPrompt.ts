@@ -27,6 +27,15 @@ A \`.dash/ports.json\` file at the worktree root — a JSON object with a top-le
 - **Allocated**: \`{ "label": "Frontend", "envVar": "FRONTEND_PORT", "defaultPort": 5173 }\` — Dash hashes a unique host port per worktree from \`defaultPort\` and injects \`FRONTEND_PORT\` into every PTY Dash spawns.
 - **Fixed observe-only**: \`{ "label": "Postgres", "port": 5432 }\` — Dash just shows liveness, no allocation, no env var.
 
+Each entry may also carry optional **service commands** (record them in step 6):
+
+- \`run\`: the project's normal **foreground** command that starts this one service (e.g. \`"pnpm dev"\`, \`"docker compose up api"\`). Dash runs it in a terminal tab — the tab doubles as live logs — with the allocated env vars already present, so it's the same command the docs show.
+- \`stop\`: how to stop the service when Dash didn't start it (e.g. \`"docker compose stop api"\`). REQUIRED whenever the service is container-backed or \`run\` detaches.
+- \`logs\`: how to tail logs for an externally-running instance (e.g. \`"docker compose logs -f api"\`).
+- \`cwd\`: working directory relative to the worktree root, only when the commands must run in a subdirectory.
+
+Labels must be unique across entries — Dash keys its service runner by label.
+
 ## Steps
 
 1. **Reset the completion sentinel first.** If \`.dash/setup-complete\` exists from a previous run, delete it. Do this BEFORE anything else — Dash watches that file to know when you're done, and a stale one would make it prompt the user mid-flow.
@@ -34,8 +43,13 @@ A \`.dash/ports.json\` file at the worktree root — a JSON object with a top-le
 3. Use the AskUserQuestion tool to confirm the final service list with the user.
 4. Write \`.dash/ports.json\`.
 5. Verify the project's run mechanism honors the env vars (see **Wiring** below).
-6. Ask about the documentation additions (see **Documentation** below).
-7. **Remote check + PR offer.** Run \`git remote -v\` to see whether this worktree has a remote configured. If it does, identify the host from the URL and pick the matching CLI:
+6. **Record service run commands.** Determine how each service in \`ports.json\` is actually run in this repo — read compose files, \`package.json\` scripts, Makefiles, bespoke scripts; don't guess. Add the command fields to each entry:
+   - Prefer **foreground** \`run\` commands — the Dash tab running it doubles as live logs.
+   - If the idiomatic command **detaches** (\`-d\`, daemons, container-backed services), you MUST also record \`stop\` and \`logs\`.
+   - Services the user runs externally (e.g. a shared DB container) get \`stop\`/\`logs\` without \`run\` where sensible.
+   - The commands run with Dash's allocated env vars already in the environment — record the project's normal commands, no Dash-specific variants.
+7. Ask about the documentation additions (see **Documentation** below).
+8. **Remote check + PR offer.** Run \`git remote -v\` to see whether this worktree has a remote configured. If it does, identify the host from the URL and pick the matching CLI:
    - GitHub (\`github.com\`) → \`gh pr create\`
    - Azure DevOps (\`dev.azure.com\` / \`visualstudio.com\`) → \`az repos pr create\`
    - GitLab (\`gitlab.com\` or any GitLab self-hosted detected via remote URL) → \`glab mr create\`
@@ -52,8 +66,8 @@ A \`.dash/ports.json\` file at the worktree root — a JSON object with a top-le
    - If **no**: skip silently. The branch stays local; the user can open a PR manually later.
 
    If there's no remote at all, skip this step entirely.
-8. **As your final action** (AFTER the PR step above), write an empty file at \`.dash/setup-complete\`. This is Dash's signal that everything is done — without it, the user keeps seeing a "still working" indicator and never gets prompted to restart. Write this AFTER all other work, including documentation, PR flow, and final user messages.
-9. Then tell the user: setup is complete; the **Dash Ports tab** in the drawer (where these instructions were initiated) is now on its DONE screen showing the allocated port count and a **Restart session** prompt — confirm that prompt to restart this Claude agent and the shell drawers with the new env vars (otherwise the running PTYs still have the old env). If the Ports tab was closed, they can restart the task manually. Name the Ports tab and the Restart prompt explicitly — don't be vague.
+9. **As your final action** (AFTER the PR step above), write an empty file at \`.dash/setup-complete\`. This is Dash's signal that everything is done — without it, the user keeps seeing a "still working" indicator and never gets prompted to restart. Write this AFTER all other work, including documentation, PR flow, and final user messages.
+10. Then tell the user: setup is complete; the **Dash Ports tab** in the drawer (where these instructions were initiated) is now on its DONE screen showing the allocated port count and a **Restart session** prompt — confirm that prompt to restart this Claude agent and the shell drawers with the new env vars (otherwise the running PTYs still have the old env). If the Ports tab was closed, they can restart the task manually. Name the Ports tab and the Restart prompt explicitly — don't be vague.
 
 ## Wiring: the contract
 
@@ -94,7 +108,7 @@ After wiring is done, use the AskUserQuestion tool to ask the user whether to ad
 
 1. **\`WORKTREE.md\` at the project root** — an **operational guide** for humans working in THIS project under Dash's port management. Cover these sections in order, in this style:
 
-   **a. Services** — a table: \`Service | Env var | Default port | Where it runs\`. One row per service from \`.dash/ports.json\`.
+   **a. Services** — a table: \`Service | Env var | Default port | Run command | Where it runs\`. One row per service from \`.dash/ports.json\`.
 
    **b. Running services — inside vs outside Dash.** Show the project's *actual* dev command (whatever it is — \`pnpm dev\`, \`pnpm tauri dev\`, \`make serve\`, \`docker compose up\`, \`cargo run\`, etc.) with both behaviors side by side. Use the project's real env var names and a plausible allocated port (e.g. one digit off the default). Concise — a code block each side, plus a one-line caption. Pattern to follow (adapt to this project's actual commands):
 
@@ -142,7 +156,7 @@ After wiring is done, use the AskUserQuestion tool to ask the user whether to ad
 
 - DO NOT pick host port numbers yourself — Dash handles allocation deterministically from \`defaultPort\`. Just declare the baseline.
 - ASK the user before modifying any committed files. Show the diff first.
-- DO NOT commit anything **except** in step 7's PR flow, and only when the user explicitly confirms. Until that step, leave the working tree dirty for the user to review. If the user declines the PR in step 7, do NOT commit — leave the tree dirty.
+- DO NOT commit anything **except** in step 8's PR flow, and only when the user explicitly confirms. Until that step, leave the working tree dirty for the user to review. If the user declines the PR in step 8, do NOT commit — leave the tree dirty.
 `;
 
 /**
