@@ -115,7 +115,7 @@ export class DrawerTabsService {
   /**
    * Delete every drawer-tab row whose kind === 'tui'. TUI tabs are tied to a
    * live socket + side-car process pair; when Dash exits, those terminate and
-   * the row becomes stale. Called once at boot so the next portsTuiRequestStart
+   * the row becomes stale. Called once at boot so the next tui:requestStart
    * can re-add the tab without hitting a PK collision.
    *
    * Returns the task_ids that had rows cleared so callers can notify

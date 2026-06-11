@@ -575,7 +575,8 @@ function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
   // resumed session's busy state will be re-established by the next
   // UserPromptSubmit / PreToolUse hook. SessionStart(startup) was previously
   // wired to /hook/agent-startup for the ports onboarding TUI's auto-detect
-  // path; we dropped that — see PortsOnboardingOrchestrator.onReady.
+  // path; we dropped that — see PortsSetupFlow (the agent self-starts via the
+  // inlined initial prompt instead).
   const sessionStartEntries: HookEntry[] = [
     { matcher: 'clear', hooks: [dashHttp('session-start', true)] },
     { matcher: 'compact', hooks: [dashHttp('session-start', true)] },

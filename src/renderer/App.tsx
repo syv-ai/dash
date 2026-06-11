@@ -5,6 +5,7 @@ import {
   PanelResizeHandle,
   type ImperativePanelHandle,
 } from 'react-resizable-panels';
+import { TUI_FEATURE_IDS } from '@shared/tuiProtocol';
 import { LeftSidebar } from './components/LeftSidebar';
 import { MainContent } from './components/MainContent';
 import { openInIde } from './lib/openInIde';
@@ -618,10 +619,11 @@ export function App() {
     ? (tasksByProject[activeProjectId] || []).filter((t) => !t.archivedAt)
     : [];
 
-  // Ports onboarding TUI side-car. On active-task change, ask main to spawn
-  // the orchestrator + Clack TUI inside a drawer tab — unless the project is
-  // dismissed, or a TUI is already active for this task. Main owns the state
-  // machine; the renderer just kicks it off.
+  // Side-car TUI features (ports onboarding today). On active-task change,
+  // ask main to spawn each feature's flow + Clack TUI inside a drawer tab —
+  // unless the project dismissed the feature, or a TUI is already active or
+  // suppressed for this task. Main owns the state machine; the renderer just
+  // kicks it off.
   useEffect(() => {
     if (!activeTask || !activeTask.projectId) return;
     const project = projects.find((p) => p.id === activeTask.projectId);
@@ -632,18 +634,21 @@ export function App() {
     const projectName = project.name;
     const cwd = activeTask.path;
 
-    window.electronAPI.portsTuiIsActive(taskId).then((resp) => {
-      if (resp.success && resp.data) return;
-      window.electronAPI.portsTuiRequestStart({
-        taskId,
-        projectId,
-        taskName,
-        projectName,
-        cwd,
-        cols: 80,
-        rows: 24,
+    for (const featureId of TUI_FEATURE_IDS) {
+      window.electronAPI.tuiIsActive({ featureId, taskId }).then((resp) => {
+        if (resp.success && resp.data) return;
+        window.electronAPI.tuiRequestStart({
+          featureId,
+          taskId,
+          projectId,
+          taskName,
+          projectName,
+          cwd,
+          cols: 80,
+          rows: 24,
+        });
       });
-    });
+    }
   }, [activeTask, projects]);
 
   // Orchestrator broadcasts ports:restart-task when the user picks 'restart'

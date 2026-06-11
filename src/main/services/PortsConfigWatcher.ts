@@ -6,7 +6,7 @@ import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
 import { portsDebug } from './PortsDebugLog';
 
 /**
- * In-process event bus for main-side consumers (e.g. PortsOnboardingOrchestrator)
+ * In-process event bus for main-side consumers (e.g. PortsSetupFlow)
  * that need the same notifications the renderer gets via IPC. Emits:
  *   - 'ports:config'        with { taskId } when ports.json changes
  *   - 'ports:setupComplete' with { taskId } when the sentinel exists
