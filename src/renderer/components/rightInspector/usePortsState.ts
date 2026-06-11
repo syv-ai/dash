@@ -4,6 +4,12 @@ import type { TaskPort, PortLiveness } from '../../../shared/types';
 export interface PortsState {
   ports: TaskPort[];
   liveness: Record<number, PortLiveness>;
+  /** Per-service Dash ownership, keyed by service label. */
+  serviceStates: Record<string, { ownedTabId: string | null }>;
+  /** ≥1 port has a runCommand — gates the header Run-all button. */
+  anyRunnable: boolean;
+  /** Every runnable port is up — disables Run-all. */
+  allRunnableUp: boolean;
   refreshing: boolean;
   hasContent: boolean;
   livenessSummary: { up: number; total: number };
@@ -19,6 +25,32 @@ export function usePortsState(taskId: string | null): PortsState {
   const [ports, setPorts] = useState<TaskPort[]>([]);
   const [liveness, setLiveness] = useState<Record<number, PortLiveness>>({});
   const [refreshing, setRefreshing] = useState(false);
+  const [serviceStates, setServiceStates] = useState<Record<string, { ownedTabId: string | null }>>(
+    {},
+  );
+
+  // Dash-ownership snapshot per service — decides whether Logs focuses the
+  // run tab or spawns the logs command, and is refetched whenever main
+  // reports a change (start/stop/PTY exit).
+  useEffect(() => {
+    if (!taskId) {
+      setServiceStates({});
+      return;
+    }
+    let cancelled = false;
+    const fetchStatus = async () => {
+      const resp = await window.electronAPI.portsServiceStatus(taskId);
+      if (!cancelled && resp.success && resp.data) setServiceStates(resp.data);
+    };
+    void fetchStatus();
+    const off = window.electronAPI.onPortsServiceChanged((data) => {
+      if (data.taskId === taskId) void fetchStatus();
+    });
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, [taskId]);
 
   useEffect(() => {
     if (!taskId) {
@@ -98,9 +130,16 @@ export function usePortsState(taskId: string | null): PortsState {
   let up = 0;
   for (const p of ports) if (liveness[p.hostPort] === 'up') up++;
 
+  const runnable = ports.filter((p) => p.runCommand);
+  const anyRunnable = runnable.length > 0;
+  const allRunnableUp = anyRunnable && runnable.every((p) => liveness[p.hostPort] === 'up');
+
   return {
     ports,
     liveness,
+    serviceStates,
+    anyRunnable,
+    allRunnableUp,
     refreshing,
     hasContent: ports.length > 0,
     livenessSummary: { up, total: ports.length },

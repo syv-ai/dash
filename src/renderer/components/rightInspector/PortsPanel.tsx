@@ -1,11 +1,13 @@
-import React from 'react';
-import { ExternalLink } from 'lucide-react';
+import React, { useState } from 'react';
+import { ExternalLink, Play, Square, ScrollText, Loader2 } from 'lucide-react';
 import type { TaskPort, PortLiveness } from '../../../shared/types';
 import { Tooltip } from '../ui/Tooltip';
 
 interface PortsPanelProps {
+  taskId: string;
   ports: TaskPort[];
   liveness: Record<number, PortLiveness>;
+  serviceStates: Record<string, { ownedTabId: string | null }>;
 }
 
 const SOURCE_LABEL: Record<TaskPort['source'], string> = {
@@ -21,17 +23,49 @@ const STATE_DOT_CLASS: Record<PortLiveness, string> = {
   unknown: 'bg-foreground/40 animate-pulse',
 };
 
-export function PortsPanel({ ports, liveness }: PortsPanelProps) {
+export function PortsPanel({ taskId, ports, liveness, serviceStates }: PortsPanelProps) {
   return (
     <ul className="flex flex-col gap-0.5 px-2 py-1.5">
       {ports.map((port) => (
-        <PortRow key={port.id} port={port} state={liveness[port.hostPort] ?? 'unknown'} />
+        <PortRow
+          key={port.id}
+          taskId={taskId}
+          port={port}
+          state={liveness[port.hostPort] ?? 'unknown'}
+          owned={Boolean(serviceStates[port.label]?.ownedTabId)}
+        />
       ))}
     </ul>
   );
 }
 
-function PortRow({ port, state }: { port: TaskPort; state: PortLiveness }) {
+function PortRow({
+  taskId,
+  port,
+  state,
+  owned,
+}: {
+  taskId: string;
+  port: TaskPort;
+  state: PortLiveness;
+  owned: boolean;
+}) {
+  const [busy, setBusy] = useState(false);
+  const showStop = state === 'up';
+  const showRun = !showStop && Boolean(port.runCommand);
+  const showLogs = owned || Boolean(port.logsCommand);
+
+  const runStop = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (showStop) await window.electronAPI.portsServiceStop(taskId, port);
+      else await window.electronAPI.portsServiceStart(taskId, port);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const url = `http://localhost:${port.hostPort}`;
   const tooltip = `${port.label} · ${SOURCE_LABEL[port.source]}${
     port.envVar ? ` · $${port.envVar}` : ''
@@ -58,6 +92,35 @@ function PortRow({ port, state }: { port: TaskPort; state: PortLiveness }) {
           </span>
         </button>
       </Tooltip>
+      {(showRun || showStop) && (
+        <Tooltip content={showStop ? `Stop ${port.label}` : `Run: ${port.runCommand}`}>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={runStop}
+            className="p-[2px] rounded text-muted-foreground/40 hover:text-foreground hover:bg-accent/60 transition-colors disabled:opacity-40"
+          >
+            {busy ? (
+              <Loader2 size={10} strokeWidth={2} className="animate-spin" />
+            ) : showStop ? (
+              <Square size={10} strokeWidth={2} />
+            ) : (
+              <Play size={10} strokeWidth={2} />
+            )}
+          </button>
+        </Tooltip>
+      )}
+      {showLogs && (
+        <Tooltip content={owned ? 'Show service terminal' : `Logs: ${port.logsCommand}`}>
+          <button
+            type="button"
+            onClick={() => window.electronAPI.portsServiceLogs(taskId, port)}
+            className="p-[2px] rounded text-muted-foreground/40 hover:text-foreground hover:bg-accent/60 transition-colors"
+          >
+            <ScrollText size={10} strokeWidth={2} />
+          </button>
+        </Tooltip>
+      )}
       <Tooltip content="Open in browser">
         <button
           type="button"

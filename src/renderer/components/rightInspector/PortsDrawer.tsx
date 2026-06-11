@@ -1,10 +1,11 @@
-import React from 'react';
-import { ChevronDown, ChevronUp, Plug, RefreshCw } from 'lucide-react';
+import React, { useState } from 'react';
+import { ChevronDown, ChevronUp, Plug, RefreshCw, Play, Loader2 } from 'lucide-react';
 import { Tooltip } from '../ui/Tooltip';
 import { PortsPanel } from './PortsPanel';
 import type { PortsState } from './usePortsState';
 
 interface PortsDrawerProps {
+  taskId: string;
   state: PortsState;
   collapsed: boolean;
   onCollapse: () => void;
@@ -13,8 +14,15 @@ interface PortsDrawerProps {
 
 const LABEL = 'PORTS';
 
-export function PortsDrawer({ state, collapsed, onCollapse, onExpand }: PortsDrawerProps) {
+export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: PortsDrawerProps) {
   const status = `${state.livenessSummary.up}/${state.livenessSummary.total} up`;
+  const [startingAll, setStartingAll] = useState(false);
+
+  const runAll = () => {
+    if (startingAll) return;
+    setStartingAll(true);
+    window.electronAPI.portsServiceStartAll(taskId).finally(() => setStartingAll(false));
+  };
 
   return (
     <div className="flex flex-col flex-shrink-0">
@@ -43,6 +51,22 @@ export function PortsDrawer({ state, collapsed, onCollapse, onExpand }: PortsDra
               {status}
             </span>
             <div className="flex-1" />
+            {state.anyRunnable && (
+              <Tooltip content="Run all services">
+                <button
+                  type="button"
+                  onClick={runAll}
+                  disabled={state.allRunnableUp || startingAll}
+                  className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 disabled:opacity-40"
+                >
+                  {startingAll ? (
+                    <Loader2 size={11} strokeWidth={2} className="animate-spin" />
+                  ) : (
+                    <Play size={11} strokeWidth={2} />
+                  )}
+                </button>
+              </Tooltip>
+            )}
             <Tooltip content="Re-allocate from .dash/ports.json">
               <button
                 type="button"
@@ -65,7 +89,12 @@ export function PortsDrawer({ state, collapsed, onCollapse, onExpand }: PortsDra
             </button>
           </div>
           <div className="overflow-y-auto max-h-[50vh]" style={{ scrollbarGutter: 'stable' }}>
-            <PortsPanel ports={state.ports} liveness={state.liveness} />
+            <PortsPanel
+              taskId={taskId}
+              ports={state.ports}
+              liveness={state.liveness}
+              serviceStates={state.serviceStates}
+            />
           </div>
         </>
       )}
