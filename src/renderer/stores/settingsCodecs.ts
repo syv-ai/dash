@@ -35,3 +35,21 @@ export function strEnum<T extends string>(allowed: readonly T[], def: T): Codec<
     encode: (v) => v,
   };
 }
+
+/** JSON value with parse-failure fallback to `def`. An optional `validate`
+ *  predicate rejects structurally-wrong parsed values (falling back to `def`). */
+export function json<T>(def: T, validate?: (v: unknown) => boolean): Codec<T> {
+  return {
+    decode: (raw) => {
+      if (raw === null) return def;
+      try {
+        const parsed: unknown = JSON.parse(raw);
+        if (validate && !validate(parsed)) return def;
+        return parsed as T;
+      } catch {
+        return def;
+      }
+    },
+    encode: (v) => JSON.stringify(v),
+  };
+}

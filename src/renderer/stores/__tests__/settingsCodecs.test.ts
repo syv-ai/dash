@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { str, boolDefaultTrue, boolDefaultFalse, boolNotFalse, strEnum } from '../settingsCodecs';
+import {
+  str,
+  boolDefaultTrue,
+  boolDefaultFalse,
+  boolNotFalse,
+  strEnum,
+  json,
+} from '../settingsCodecs';
 
 describe('str codec', () => {
   const c = str('dark');
@@ -41,4 +48,18 @@ describe('strEnum codec', () => {
   it('absent falls back to default', () => expect(c.decode(null)).toBe('right'));
   it('invalid value falls back to default', () => expect(c.decode('bogus')).toBe('right'));
   it('encodes the raw string', () => expect(c.encode('main')).toBe('main'));
+});
+
+describe('json codec', () => {
+  const c = json<{ a: number }>({ a: 0 });
+  it('parses stored JSON', () => expect(c.decode('{"a":5}')).toEqual({ a: 5 }));
+  it('absent falls back to default', () => expect(c.decode(null)).toEqual({ a: 0 }));
+  it('invalid JSON falls back to default', () => expect(c.decode('{bad')).toEqual({ a: 0 }));
+  it('encodes as JSON', () => expect(c.encode({ a: 5 })).toBe('{"a":5}'));
+
+  it('honors a validator, falling back when it fails', () => {
+    const v = json<{ p: string }>({ p: '' }, (x) => typeof (x as { p?: unknown }).p === 'string');
+    expect(v.decode('{"p":"ok"}')).toEqual({ p: 'ok' });
+    expect(v.decode('{"p":123}')).toEqual({ p: '' });
+  });
 });
