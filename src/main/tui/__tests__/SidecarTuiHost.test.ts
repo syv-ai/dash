@@ -1,0 +1,128 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { SidecarTuiHost, type SpawnOpts, type FlowWiring } from '../SidecarTuiHost';
+
+let dir: string;
+let host: SidecarTuiHost;
+let startPty: ReturnType<typeof vi.fn>;
+let tabAdd: ReturnType<typeof vi.fn>;
+let tabClose: ReturnType<typeof vi.fn>;
+let scriptPath: string;
+
+function makeFlow(opts?: { failStart?: boolean }) {
+  return {
+    wiring: null as FlowWiring | null,
+    start: vi.fn(async () => {
+      if (opts?.failStart) throw new Error('flow start failed');
+    }),
+    teardown: vi.fn(async () => {}),
+  };
+}
+
+function spawnOpts(flow: ReturnType<typeof makeFlow>, overrides?: Partial<SpawnOpts>): SpawnOpts {
+  return {
+    featureId: 'ports',
+    taskId: 't1',
+    projectId: 'p1',
+    cwd: dir,
+    cols: 80,
+    rows: 24,
+    tabLabel: 'Set up ports',
+    createFlow: (wiring) => {
+      flow.wiring = wiring;
+      return flow;
+    },
+    getMainWindow: () => null,
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-host-test-'));
+  scriptPath = path.join(dir, 'tui.js');
+  fs.writeFileSync(scriptPath, '// stub bundle');
+  startPty = vi.fn(async () => ({}));
+  tabAdd = vi.fn((_tid: string, o: { id: string }) => ({ id: o.id }));
+  tabClose = vi.fn();
+  host = new SidecarTuiHost({
+    socketDir: path.join(dir, 'sockets'),
+    scriptPath,
+    drawerTabs: { add: tabAdd as never, close: tabClose },
+    startPty: startPty as never,
+  });
+});
+
+afterEach(() => {
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+describe('SidecarTuiHost', () => {
+  it('spawn registers active; pending is set synchronously', async () => {
+    const flow = makeFlow();
+    const p = host.spawn(spawnOpts(flow));
+    // Synchronous pending guard — the migrate path notifies the renderer
+    // right after calling spawn() and relies on this being true already.
+    expect(host.isActive('ports', 't1')).toBe(true);
+    const { tabId } = await p;
+    expect(tabId).toBe('tui:ports:t1');
+    expect(host.isActive('ports', 't1')).toBe(true);
+    expect(startPty).toHaveBeenCalledOnce();
+    const env = (startPty.mock.calls[0][0] as { env: Record<string, string> }).env;
+    expect(env.DASH_TUI_FEATURE).toBe('ports');
+    expect(env.ELECTRON_RUN_AS_NODE).toBe('1');
+    expect(env.DASH_TUI_SOCKET).toContain('tui-ports-t1-');
+  });
+
+  it('teardown with a user reason drops active and suppresses respawn', async () => {
+    const flow = makeFlow();
+    await host.spawn(spawnOpts(flow));
+    flow.wiring!.onTeardown('not-now');
+    expect(tabClose).toHaveBeenCalledWith('tui:ports:t1');
+    // Suppressed: still "active" from the renderer's point of view.
+    expect(host.isActive('ports', 't1')).toBe(true);
+  });
+
+  it("teardown with reason 'error' does NOT suppress (retryable)", async () => {
+    const flow = makeFlow();
+    await host.spawn(spawnOpts(flow));
+    flow.wiring!.onTeardown('error');
+    expect(host.isActive('ports', 't1')).toBe(false);
+  });
+
+  it('rolls back tab + pending on PTY spawn failure and rethrows', async () => {
+    startPty.mockRejectedValueOnce(new Error('pty boom'));
+    const flow = makeFlow();
+    await expect(host.spawn(spawnOpts(flow))).rejects.toThrow('pty boom');
+    expect(flow.teardown).toHaveBeenCalled();
+    expect(tabClose).toHaveBeenCalledWith('tui:ports:t1');
+    // Not registered, not suppressed: a retry must be possible.
+    expect(host.isActive('ports', 't1')).toBe(false);
+  });
+
+  it('missing bundle fails the spawn with a build hint', async () => {
+    fs.rmSync(scriptPath);
+    const flow = makeFlow();
+    await expect(host.spawn(spawnOpts(flow))).rejects.toThrow(/pnpm build:tui/);
+    expect(host.isActive('ports', 't1')).toBe(false);
+  });
+
+  it('same feature+task keys collide; different features coexist', async () => {
+    const flow = makeFlow();
+    await host.spawn(spawnOpts(flow));
+    expect(host.isActive('ports', 't1')).toBe(true);
+    expect(host.isActive('other', 't1')).toBe(false);
+    expect(host.isActive('ports', 't2')).toBe(false);
+  });
+
+  it('sweepSockets removes tui-* and legacy ports-tui-* files', () => {
+    const sockDir = path.join(dir, 'sockets');
+    fs.mkdirSync(sockDir, { recursive: true });
+    fs.writeFileSync(path.join(sockDir, 'tui-ports-x-aa.sock'), '');
+    fs.writeFileSync(path.join(sockDir, 'ports-tui-x-aa.sock'), '');
+    fs.writeFileSync(path.join(sockDir, 'other.sock'), '');
+    host.sweepSockets();
+    expect(fs.readdirSync(sockDir)).toEqual(['other.sock']);
+  });
+});
