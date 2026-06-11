@@ -110,9 +110,8 @@ export function App() {
     return parseInt(stored, 10) || 3;
   });
   const [keybindings, setKeybindings] = useState<KeyBindingMap>(loadKeybindings);
-  const [notificationSound, setNotificationSound] = useState<NotificationSound>(() => {
-    return (localStorage.getItem('notificationSound') as NotificationSound) || 'off';
-  });
+  const notificationSound = useSettings((s) => s.notificationSound);
+  const setNotificationSound = useSettings((s) => s.setNotificationSound);
   const desktopNotification = useSettings((s) => s.desktopNotification);
   const setDesktopNotification = useSettings((s) => s.setDesktopNotification);
   const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(() => {
@@ -132,17 +131,12 @@ export function App() {
     const stored = localStorage.getItem('portsDrawerCollapsed');
     return stored === null ? true : stored === 'true';
   });
-  const [shellDrawerPosition, setShellDrawerPosition] = useState<'main' | 'right'>(() => {
-    const stored = localStorage.getItem('shellDrawerPosition');
-    if (stored === 'main' || stored === 'right') return stored;
-    return 'right';
-  });
-  const [terminalTheme, setTerminalTheme] = useState(() => {
-    return localStorage.getItem('terminalTheme') || 'default';
-  });
-  const [terminalFontFamily, setTerminalFontFamily] = useState(() => {
-    return localStorage.getItem('terminalFontFamily') || 'system';
-  });
+  const shellDrawerPosition = useSettings((s) => s.shellDrawerPosition);
+  const setShellDrawerPosition = useSettings((s) => s.setShellDrawerPosition);
+  const terminalTheme = useSettings((s) => s.terminalTheme);
+  const setTerminalTheme = useSettings((s) => s.setTerminalTheme);
+  const terminalFontFamily = useSettings((s) => s.terminalFontFamily);
+  const setTerminalFontFamily = useSettings((s) => s.setTerminalFontFamily);
   const [preferredIDE, setPreferredIDE] = useState<string>(() => {
     const stored = localStorage.getItem('preferredIDE');
     if (!stored) return 'auto';
@@ -240,9 +234,8 @@ export function App() {
     if (stored === null) return undefined; // "default" — key absent
     return stored; // '' for "none", or custom text
   });
-  const [effortLevel, setEffortLevel] = useState<string>(() => {
-    return localStorage.getItem('claudeEffortLevel') || 'auto';
-  });
+  const effortLevel = useSettings((s) => s.effortLevel);
+  const setEffortLevel = useSettings((s) => s.setEffortLevel);
   const syncShellEnv = useSettings((s) => s.syncShellEnv);
   const setSyncShellEnv = useSettings((s) => s.setSyncShellEnv);
   const [customClaudeEnvVars, setCustomClaudeEnvVars] = useState<Record<string, string>>(() => {
@@ -2292,18 +2285,15 @@ export function App() {
           shellDrawerPosition={shellDrawerPosition}
           onShellDrawerPositionChange={(v) => {
             setShellDrawerPosition(v);
-            localStorage.setItem('shellDrawerPosition', v);
           }}
           terminalTheme={terminalTheme}
           onTerminalThemeChange={(id) => {
             setTerminalTheme(id);
-            localStorage.setItem('terminalTheme', id);
             sessionRegistry.setAllTerminalThemes(id, theme === 'dark');
           }}
           terminalFontFamily={terminalFontFamily}
           onTerminalFontFamilyChange={(id) => {
             setTerminalFontFamily(id);
-            localStorage.setItem('terminalFontFamily', id);
           }}
           diffContextLines={diffContextLines}
           onDiffContextLinesChange={(v) => {
@@ -2313,7 +2303,6 @@ export function App() {
           notificationSound={notificationSound}
           onNotificationSoundChange={(v) => {
             setNotificationSound(v);
-            localStorage.setItem('notificationSound', v);
             if (v !== 'off') playNotificationSound(v);
           }}
           desktopNotification={desktopNotification}
@@ -2362,11 +2351,6 @@ export function App() {
           effortLevel={effortLevel}
           onEffortLevelChange={(v) => {
             setEffortLevel(v);
-            if (v === 'auto') {
-              localStorage.removeItem('claudeEffortLevel');
-            } else {
-              localStorage.setItem('claudeEffortLevel', v);
-            }
           }}
           syncShellEnv={syncShellEnv}
           onSyncShellEnvChange={(v) => {
