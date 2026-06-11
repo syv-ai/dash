@@ -25,7 +25,7 @@ export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: 
   };
 
   return (
-    <div className="flex flex-col flex-shrink-0">
+    <div className="flex flex-col flex-shrink-0 ports-drawer-enter">
       {collapsed ? (
         <button
           onClick={onExpand}

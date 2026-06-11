@@ -945,3 +945,20 @@
   opacity: 1 !important;
   transform: translateY(0) translateX(0) !important;
 }
+
+/* Ports drawer entrance — plays once when the section first appears
+   (post-onboarding, or on task switch). Collapse/expand does not replay
+   it because the component stays mounted. */
+@keyframes ports-drawer-in {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.ports-drawer-enter {
+  animation: ports-drawer-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
