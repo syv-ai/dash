@@ -27,3 +27,11 @@ export function boolDefaultFalse(): Codec<boolean> {
 export function boolNotFalse(): Codec<boolean> {
   return { decode: (raw) => raw !== 'false', encode: (v) => String(v) };
 }
+
+/** String constrained to `allowed`; invalid/absent values fall back to `def`. */
+export function strEnum<T extends string>(allowed: readonly T[], def: T): Codec<T> {
+  return {
+    decode: (raw) => (raw !== null && allowed.includes(raw as T) ? (raw as T) : def),
+    encode: (v) => v,
+  };
+}

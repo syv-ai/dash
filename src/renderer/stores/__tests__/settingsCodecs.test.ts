@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { str, boolDefaultTrue, boolDefaultFalse, boolNotFalse } from '../settingsCodecs';
+import { str, boolDefaultTrue, boolDefaultFalse, boolNotFalse, strEnum } from '../settingsCodecs';
 
 describe('str codec', () => {
   const c = str('dark');
@@ -33,4 +33,12 @@ describe('boolNotFalse codec', () => {
   it("'false' means false", () => expect(c.decode('false')).toBe(false));
   it("anything but 'false' means true", () => expect(c.decode('true')).toBe(true));
   it('encodes as legacy string', () => expect(c.encode(false)).toBe('false'));
+});
+
+describe('strEnum codec', () => {
+  const c = strEnum(['main', 'right'] as const, 'right');
+  it('decodes an allowed value', () => expect(c.decode('main')).toBe('main'));
+  it('absent falls back to default', () => expect(c.decode(null)).toBe('right'));
+  it('invalid value falls back to default', () => expect(c.decode('bogus')).toBe('right'));
+  it('encodes the raw string', () => expect(c.encode('main')).toBe('main'));
 });
