@@ -356,15 +356,21 @@ export class TerminalSessionManager {
         // a shell would silently hide the failure behind a plausible-looking
         // prompt. Render an error line and bail instead.
         if (this.isTui) {
-          const targets = await window.electronAPI.ptyListForTask(this.id.split(':')[1] ?? '', {
-            kinds: ['tui'],
+          // Extract the taskId from the tab id. Chassis TUI tabs are
+          // `tui:<featureId>:<taskId>`; service tabs are
+          // `service:<taskId>:<slug>[:logs]`; legacy shapes were
+          // `<feature>-tui:<taskId>`.
+          const parts = this.id.split(':');
+          const taskIdGuess = this.id.startsWith('tui:') ? (parts[2] ?? '') : (parts[1] ?? '');
+          const targets = await window.electronAPI.ptyListForTask(taskIdGuess, {
+            kinds: ['tui', 'service'],
           });
           const exists = targets.success && targets.data && targets.data.includes(this.id);
           if (!exists) {
             this.terminal.write(
-              '\x1b[31m[ports tui] side-car not running for this tab.\x1b[0m\r\n' +
-                'Try closing this tab and re-opening the task. If the issue persists,\r\n' +
-                'check the main-process console for spawn errors.\r\n',
+              '\x1b[31m[dash] backing process not running for this tab.\x1b[0m\r\n' +
+                'For a service tab, press Run in the Ports panel to start it again.\r\n' +
+                'For a Dash TUI tab, close it and re-open the task.\r\n',
             );
             this.ptyStarted = true;
             return;

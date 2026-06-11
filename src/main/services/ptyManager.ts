@@ -51,7 +51,7 @@ function hasAnySessionForCwd(cwd: string): boolean {
   }
 }
 
-export type PtyKind = 'agent' | 'shell' | 'tui';
+export type PtyKind = 'agent' | 'shell' | 'tui' | 'service';
 
 interface PtyRecord {
   proc: any; // IPty from node-pty
@@ -1215,6 +1215,8 @@ export async function startCommandPty(options: {
   owner: WebContents | null;
   taskId: string;
   featureId: string;
+  /** PTY registry kind. Side-car TUIs (default) vs user-facing service runs. */
+  kind?: 'tui' | 'service';
 }): Promise<{ reattached: boolean }> {
   const existing = ptys.get(options.id);
   if (existing) {
@@ -1236,7 +1238,7 @@ export async function startCommandPty(options: {
     cwd: options.cwd,
     isDirectSpawn: false,
     owner: options.owner,
-    kind: 'tui',
+    kind: options.kind ?? 'tui',
     taskId: options.taskId,
     featureId: options.featureId,
   };

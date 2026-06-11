@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Terminal, ChevronDown, ChevronUp, X, Plus, Settings2 } from 'lucide-react';
+import { Terminal, ChevronDown, ChevronUp, X, Plus, Settings2, ScrollText } from 'lucide-react';
 import { sessionRegistry } from '../terminal/SessionRegistry';
 import type { Tab } from '../../shared/drawerTabs';
 
@@ -77,7 +77,10 @@ export function TerminalDrawer({
     }
 
     const activeTab = tabs.find((t) => t.id === activeTabId);
-    const isTui = activeTab?.kind === 'tui';
+    // 'service' tabs are TUI-like for attach purposes: the PTY was spawned by
+    // main (never self-spawn a shell) and output won't redraw on reattach, so
+    // the snapshot replays.
+    const isTui = activeTab?.kind === 'tui' || activeTab?.kind === 'service';
 
     const session = sessionRegistry.getOrCreate({
       id: activeTabId,
@@ -154,6 +157,9 @@ export function TerminalDrawer({
             >
               {tab.kind === 'tui' && (
                 <Settings2 size={11} strokeWidth={1.8} className="opacity-80" />
+              )}
+              {tab.kind === 'service' && (
+                <ScrollText size={11} strokeWidth={1.8} className="opacity-80" />
               )}
               <span className="text-[11px] font-medium">{tab.label}</span>
               {tabs.length > 1 && (

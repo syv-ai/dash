@@ -110,6 +110,13 @@ describe('DrawerTabsService', () => {
     expect(svc.getActive('t1')).toBeNull();
   });
 
+  it('sweepTuiTabs() also sweeps service tabs', () => {
+    svc.add('t1', { kind: 'service', label: 'Web', featureId: 'ports', id: 'service:t1:web' });
+    const shell = svc.add('t1', { kind: 'shell', label: '1', id: 'shell:t1' });
+    svc.sweepTuiTabs();
+    expect(svc.list('t1').map((t) => t.id)).toEqual([shell.id]);
+  });
+
   it('sweepTuiTabs() is a no-op when no tui rows exist', () => {
     svc.add('t1', { kind: 'shell', label: '1' });
     expect(svc.sweepTuiTabs()).toEqual([]);

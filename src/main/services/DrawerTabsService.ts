@@ -113,20 +113,22 @@ export class DrawerTabsService {
   }
 
   /**
-   * Delete every drawer-tab row whose kind === 'tui'. TUI tabs are tied to a
-   * live socket + side-car process pair; when Dash exits, those terminate and
+   * Delete every drawer-tab row whose kind is 'tui' or 'service'. Both are
+   * tied to a live process Dash spawned; when Dash exits, those terminate and
    * the row becomes stale. Called once at boot so the next tui:requestStart
-   * can re-add the tab without hitting a PK collision.
+   * (or service run) can re-add the tab without hitting a PK collision.
    *
    * Returns the task_ids that had rows cleared so callers can notify
    * subscribers if they care.
    */
   sweepTuiTabs(): string[] {
     const rows = this.db
-      .prepare(`SELECT DISTINCT task_id as taskId FROM drawer_tabs WHERE kind = 'tui'`)
+      .prepare(
+        `SELECT DISTINCT task_id as taskId FROM drawer_tabs WHERE kind IN ('tui', 'service')`,
+      )
       .all() as Array<{ taskId: string }>;
     if (rows.length === 0) return [];
-    this.db.exec(`DELETE FROM drawer_tabs WHERE kind = 'tui'`);
+    this.db.exec(`DELETE FROM drawer_tabs WHERE kind IN ('tui', 'service')`);
     // Clear active pointer if it pointed at one of the swept tabs.
     this.db.exec(
       `UPDATE tasks SET active_drawer_tab_id = NULL

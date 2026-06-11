@@ -1,4 +1,4 @@
-export type TabKind = 'shell' | 'tui';
+export type TabKind = 'shell' | 'tui' | 'service';
 
 export interface Tab {
   id: string;

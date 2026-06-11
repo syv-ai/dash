@@ -167,7 +167,7 @@ export interface ElectronAPI {
   ptyKill: (id: string) => void;
   ptyListForTask: (
     taskId: string,
-    opts?: { kinds?: ('agent' | 'shell' | 'tui')[]; featureId?: string },
+    opts?: { kinds?: ('agent' | 'shell' | 'tui' | 'service')[]; featureId?: string },
   ) => Promise<IpcResponse<string[]>>;
 
   // Drawer tabs (per-task tab state owned by main)
