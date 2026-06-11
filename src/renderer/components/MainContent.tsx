@@ -21,10 +21,72 @@ import type {
   PullRequestInfo,
   RemoteControlState,
   ActivityInfo,
+  LinkedItem,
 } from '../../shared/types';
-import { branchUrl } from '../../shared/urls';
+import { branchUrl, linkedItemUrl } from '../../shared/urls';
 import { Tooltip } from './ui/Tooltip';
 import { TokenBadge } from './TokenBadge';
+
+/**
+ * Colored, linkable badges for the GitHub issues / ADO work items attached to a
+ * task at creation. Rendered in the main-pane header next to the breadcrumb so
+ * the attached issues are one click from the task. GitHub and ADO get distinct
+ * hues; each badge deep-links to the issue and shows its title on hover.
+ */
+function LinkedItemBadges({
+  items,
+  gitRemote,
+  max = 3,
+}: {
+  items: LinkedItem[];
+  gitRemote: string | null;
+  max?: number;
+}) {
+  const visible = items.slice(0, max);
+  const overflow = items.length - max;
+  return (
+    <div className="inline-flex items-center gap-1 min-w-0">
+      {visible.map((item) => {
+        const url = linkedItemUrl(item, gitRemote);
+        const key = `${item.provider}-${item.id}`;
+        const tone =
+          item.provider === 'ado'
+            ? 'bg-primary/10 text-primary hover:bg-primary/20'
+            : 'bg-[hsl(var(--git-added))]/10 text-[hsl(var(--git-added))] hover:bg-[hsl(var(--git-added))]/20';
+        const badge = url ? (
+          <a
+            key={key}
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`px-1.5 py-[2px] rounded-full text-[10px] font-medium transition-colors ${tone}`}
+          >
+            #{item.id}
+          </a>
+        ) : (
+          <span
+            key={key}
+            className={`px-1.5 py-[2px] rounded-full text-[10px] font-medium ${tone}`}
+          >
+            #{item.id}
+          </span>
+        );
+        return item.title ? (
+          <Tooltip key={key} content={item.title}>
+            {badge}
+          </Tooltip>
+        ) : (
+          badge
+        );
+      })}
+      {overflow > 0 && (
+        <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+          +{overflow} more
+        </span>
+      )}
+    </div>
+  );
+}
 
 interface MainContentProps {
   activeTask: Task | null;
@@ -139,6 +201,12 @@ export function MainContent({
               {activeTask.name}
             </span>
           </div>
+        )}
+        {activeTask?.linkedItems && activeTask.linkedItems.length > 0 && (
+          <LinkedItemBadges
+            items={activeTask.linkedItems}
+            gitRemote={activeProject.gitRemote ?? null}
+          />
         )}
       </div>
 
