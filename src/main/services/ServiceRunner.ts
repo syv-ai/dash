@@ -5,6 +5,19 @@ import { portsDebug } from './PortsDebugLog';
 export interface RunnerDeps {
   getTaskPath(taskId: string): string | undefined;
   getPorts(taskId: string): TaskPort[];
+  /**
+   * Allocated `ENV_VAR=port` pairs for the task. MUST be passed into every
+   * service spawn — startCommandPty does NOT inject ports env on its own
+   * (only the agent/shell spawn paths do), and those paths key off the
+   * worktree root, which would also miss services running in a `cwd` subdir.
+   */
+  portEnv(taskId: string): Record<string, string>;
+  /**
+   * Drop the persisted terminal snapshot for a tab id. Service tabs reuse
+   * deterministic ids, and closing a tab saves its output as the snapshot —
+   * without clearing it, a fresh run replays the previous run's output.
+   */
+  clearSnapshot(tabId: string): void;
   drawerTabsAdd(
     taskId: string,
     opts: { kind: 'service'; label: string; featureId: 'ports'; id: string },
@@ -104,6 +117,7 @@ export class ServiceRunner {
       // The tab row may still exist from a previous run (respawn into the same
       // id would hit the PK) — close it first; close() is a no-op when absent.
       this.deps.drawerTabsCloseIfExists(tabId);
+      this.deps.clearSnapshot(tabId);
       const tab = this.deps.drawerTabsAdd(taskId, {
         kind: 'service',
         label: port.label,
@@ -117,7 +131,7 @@ export class ServiceRunner {
         cwd: port.cwd ? path.join(taskPath, port.cwd) : taskPath,
         cols: 120,
         rows: 30,
-        env: {},
+        env: this.deps.portEnv(taskId),
         owner: null,
         taskId,
         featureId: 'ports',
@@ -191,6 +205,7 @@ export class ServiceRunner {
       // Logs tabs are NOT ownership — closing one just kills the tail.
       if (this.deps.ptyAlive(tabId)) this.deps.killPty(tabId);
       this.deps.drawerTabsCloseIfExists(tabId);
+      this.deps.clearSnapshot(tabId);
       const tab = this.deps.drawerTabsAdd(taskId, {
         kind: 'service',
         label: `${port.label} logs`,
@@ -204,7 +219,7 @@ export class ServiceRunner {
         cwd: port.cwd ? path.join(taskPath, port.cwd) : taskPath,
         cols: 120,
         rows: 30,
-        env: {},
+        env: this.deps.portEnv(taskId),
         owner: null,
         taskId,
         featureId: 'ports',

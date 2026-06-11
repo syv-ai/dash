@@ -24,6 +24,8 @@ function port(over: Partial<TaskPort>): TaskPort {
 let deps: {
   getTaskPath: ReturnType<typeof vi.fn>;
   getPorts: ReturnType<typeof vi.fn>;
+  portEnv: ReturnType<typeof vi.fn>;
+  clearSnapshot: ReturnType<typeof vi.fn>;
   drawerTabsAdd: ReturnType<typeof vi.fn>;
   drawerTabsCloseIfExists: ReturnType<typeof vi.fn>;
   startPty: ReturnType<typeof vi.fn>;
@@ -45,6 +47,8 @@ beforeEach(() => {
   deps = {
     getTaskPath: vi.fn(() => '/wt'),
     getPorts: vi.fn(() => [] as TaskPort[]),
+    portEnv: vi.fn(() => ({ SERVER_PORT: '11280' })),
+    clearSnapshot: vi.fn(),
     drawerTabsAdd: vi.fn((_tid: string, o: { id: string }) => ({ id: o.id })),
     drawerTabsCloseIfExists: vi.fn(),
     startPty: vi.fn(async () => ({})),
@@ -81,6 +85,21 @@ describe('start', () => {
     expect(opts.kind).toBe('service');
     expect(runner.status('t1').Web.ownedTabId).toBe('service:t1:web');
     expect(deps.notifyChanged).toHaveBeenCalledWith('t1');
+  });
+
+  it('spawns with the allocated port env (the whole point of the wiring)', async () => {
+    await runner.start('t1', port({ runCommand: 'npm run server' }));
+    expect(deps.portEnv).toHaveBeenCalledWith('t1');
+    const opts = deps.startPty.mock.calls[0][0] as Record<string, unknown>;
+    expect(opts.env).toEqual({ SERVER_PORT: '11280' });
+  });
+
+  it('clears the stale tab snapshot before spawning a fresh run', async () => {
+    await runner.start('t1', port({ runCommand: 'npm run server' }));
+    expect(deps.clearSnapshot).toHaveBeenCalledWith('service:t1:web');
+    const snapOrder = deps.clearSnapshot.mock.invocationCallOrder[0];
+    const spawnOrder = deps.startPty.mock.invocationCallOrder[0];
+    expect(snapOrder).toBeLessThan(spawnOrder);
   });
 
   it('re-running an owned service kills the old PTY first', async () => {
@@ -155,6 +174,11 @@ describe('logs', () => {
       id: 'service:t1:web:logs',
     });
     expect(runner.status('t1').Web?.ownedTabId ?? null).toBe(null);
+    // Logs commands may reference ports too, and a reused logs tab id must
+    // not replay the previous tail.
+    const opts = deps.startPty.mock.calls[0][0] as Record<string, unknown>;
+    expect(opts.env).toEqual({ SERVER_PORT: '11280' });
+    expect(deps.clearSnapshot).toHaveBeenCalledWith('service:t1:web:logs');
   });
 });
 

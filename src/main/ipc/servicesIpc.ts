@@ -6,6 +6,7 @@ import { WorkspacePortsRuntime } from '../services/WorkspacePortsRuntime';
 import { portLivenessService } from '../services/PortLivenessService';
 import { initDrawerTabsService } from './drawerTabsIpc';
 import { startCommandPty, killPty, hasPty } from '../services/ptyManager';
+import { terminalSnapshotService } from '../services/TerminalSnapshotService';
 import type { TaskPort } from '@shared/types';
 
 function broadcast(channel: string, payload: unknown): void {
@@ -50,6 +51,10 @@ export function getServiceRunner(): ServiceRunner {
     runner = new ServiceRunner({
       getTaskPath: (taskId) => DatabaseService.getTask(taskId)?.path,
       getPorts: (taskId) => WorkspacePortsRuntime.getPortsForTask(taskId),
+      portEnv: (taskId) => WorkspacePortsRuntime.getEnvForTask(taskId),
+      clearSnapshot: (tabId) => {
+        void terminalSnapshotService.deleteSnapshot(tabId);
+      },
       drawerTabsAdd: (taskId, opts) => initDrawerTabsService().add(taskId, opts as never),
       drawerTabsCloseIfExists: (tabId) => initDrawerTabsService().close(tabId),
       startPty: (opts) => startCommandPty(opts as never),
