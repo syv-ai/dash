@@ -6,7 +6,7 @@ import {
   type ImperativePanelHandle,
 } from 'react-resizable-panels';
 import { TUI_FEATURE_IDS, TUI_COLS, TUI_ROWS } from '@shared/tuiProtocol';
-import { LeftSidebar } from './components/LeftSidebar';
+import { LeftSidebar } from './components/leftSidebar/LeftSidebar';
 import { MainContent } from './components/MainContent';
 import { openInIde } from './lib/openInIde';
 import { RightInspector } from './components/rightInspector/RightInspector';

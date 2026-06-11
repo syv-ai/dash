@@ -1,6 +1,6 @@
 import { useRef, useState, useCallback } from 'react';
 
-interface DragHandlers {
+export interface DragHandlers {
   onDragStart: (e: React.DragEvent<HTMLElement>) => void;
   onDragOver: (e: React.DragEvent<HTMLElement>) => void;
   onDrop: (e: React.DragEvent<HTMLElement>) => void;
