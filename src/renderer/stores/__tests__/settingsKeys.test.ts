@@ -26,4 +26,13 @@ describe('settings registry', () => {
     const fields: (keyof SettingsState)[] = SETTINGS_REGISTRY.map((r) => r.field);
     expect(fields.length).toBe(SETTINGS_REGISTRY.length);
   });
+
+  it('registers the phase-1b booleans with correct defaults', () => {
+    const byField = Object.fromEntries(SETTINGS_REGISTRY.map((r) => [r.field, r]));
+    expect(byField.showRateLimits.codec.decode(null)).toBe(true); // boolNotFalse
+    expect(byField.showActiveTasksSection.codec.decode('false')).toBe(false);
+    expect(byField.desktopNotification.codec.decode(null)).toBe(false); // boolDefaultFalse
+    expect(byField.syncShellEnv.codec.decode('true')).toBe(true);
+    expect(byField.showProjectTokens.codec.decode(null)).toBe(true); // boolDefaultTrue
+  });
 });

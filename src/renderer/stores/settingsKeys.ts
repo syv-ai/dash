@@ -1,9 +1,16 @@
-import { type Codec, str, boolDefaultTrue } from './settingsCodecs';
+import { type Codec, str, boolDefaultTrue, boolDefaultFalse, boolNotFalse } from './settingsCodecs';
 
 /** The slice of settings managed by settingsStore. Grows as fields migrate. */
 export interface SettingsState {
   theme: 'light' | 'dark';
   showTaskTokens: boolean;
+  showRateLimits: boolean;
+  showUsageInline: boolean;
+  showContextUsageOnTaskCards: boolean;
+  showActiveTasksSection: boolean;
+  showProjectTokens: boolean;
+  desktopNotification: boolean;
+  syncShellEnv: boolean;
 }
 
 /** One entry per managed setting: the store field, its existing localStorage
@@ -25,6 +32,13 @@ function entry<K extends keyof SettingsState>(
 export const SETTINGS_REGISTRY: RegistryEntry[] = [
   entry('theme', 'theme', str('dark') as Codec<SettingsState['theme']>),
   entry('showTaskTokens', 'showTaskTokens', boolDefaultTrue()),
+  entry('showRateLimits', 'showRateLimits', boolNotFalse()),
+  entry('showUsageInline', 'showUsageInline', boolNotFalse()),
+  entry('showContextUsageOnTaskCards', 'showContextUsageOnTaskCards', boolNotFalse()),
+  entry('showActiveTasksSection', 'showActiveTasksSection', boolNotFalse()),
+  entry('showProjectTokens', 'showProjectTokens', boolDefaultTrue()),
+  entry('desktopNotification', 'desktopNotification', boolDefaultFalse()),
+  entry('syncShellEnv', 'syncShellEnv', boolDefaultFalse()),
 ];
 
 /** Initial state = every field decoded from an absent key (its default). */
