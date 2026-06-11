@@ -11,7 +11,7 @@
     "dev:renderer": "vite",
     "build": "pnpm build:main && pnpm build:renderer",
     "build:main": "tsc -p tsconfig.main.json && pnpm build:tui",
-    "build:tui": "esbuild src/main/scripts/portsTui.ts --bundle --platform=node --target=node20 --outfile=dist/main/main/scripts/portsTui.js",
+    "build:tui": "esbuild src/main/scripts/tui/index.ts --bundle --platform=node --target=node20 --outfile=dist/main/main/scripts/tui.js",
     "build:renderer": "vite build",
     "rebuild": "electron-rebuild -f -w node-pty,better-sqlite3",
     "package:mac": "pnpm build && electron-builder --mac",

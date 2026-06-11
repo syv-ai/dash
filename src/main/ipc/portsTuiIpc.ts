@@ -51,7 +51,7 @@ const dismissStore = {
 
 function resolveScriptPath(): string {
   return path
-    .join(__dirname, '..', 'scripts', 'portsTui.js')
+    .join(__dirname, '..', 'scripts', 'tui.js')
     .replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`);
 }
 
@@ -230,8 +230,7 @@ async function spawnTui(opts: SpawnTuiOpts): Promise<SpawnResult> {
       rows,
       env: {
         DASH_TUI_SOCKET: sockPath,
-        DASH_TUI_INITIAL_STATE: initialState,
-        DASH_TUI_TASK_NAME: taskName,
+        DASH_TUI_FEATURE: 'ports',
         DASH_TUI_PROJECT_NAME: projectName,
         // Electron binary runs as plain Node when this is set.
         ELECTRON_RUN_AS_NODE: '1',
