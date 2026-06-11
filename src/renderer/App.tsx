@@ -147,20 +147,8 @@ export function App() {
     }
     return stored;
   });
-  const [customIDE, setCustomIDE] = useState<{ path: string; args: string[] }>(() => {
-    const raw = localStorage.getItem('customIDE');
-    if (!raw) return { path: '', args: [] };
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed.path === 'string' && Array.isArray(parsed.args)) {
-        return parsed;
-      }
-      console.warn('[openInIDE] customIDE has unexpected shape, resetting');
-    } catch (err) {
-      console.warn('[openInIDE] Failed to parse customIDE from localStorage:', err);
-    }
-    return { path: '', args: [] };
-  });
+  const customIDE = useSettings((s) => s.customIDE);
+  const setCustomIDE = useSettings((s) => s.setCustomIDE);
   const [availableIDEs, setAvailableIDEs] = useState<Array<{ id: string; label: string }>>([]);
 
   // One-shot localStorage → SQLite migration for drawer tabs. After upgrading
@@ -238,15 +226,8 @@ export function App() {
   const setEffortLevel = useSettings((s) => s.setEffortLevel);
   const syncShellEnv = useSettings((s) => s.syncShellEnv);
   const setSyncShellEnv = useSettings((s) => s.setSyncShellEnv);
-  const [customClaudeEnvVars, setCustomClaudeEnvVars] = useState<Record<string, string>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem('customClaudeEnvVars') || '{}');
-    } catch (err) {
-      console.error('Failed to parse customClaudeEnvVars from localStorage, resetting:', err);
-      localStorage.removeItem('customClaudeEnvVars');
-      return {};
-    }
-  });
+  const customClaudeEnvVars = useSettings((s) => s.customClaudeEnvVars);
+  const setCustomClaudeEnvVars = useSettings((s) => s.setCustomClaudeEnvVars);
   // RTK state
   const [rtkStatus, setRtkStatus] = useState<RtkStatus | null>(null);
   const [rtkDownloadProgress, setRtkDownloadProgress] = useState<RtkDownloadProgress | null>(null);
@@ -347,25 +328,8 @@ export function App() {
   const { statusLineData, contextUsage, latestRateLimits } = useStatusLine();
 
   // Usage thresholds for popup notifications
-  const [usageThresholds, setUsageThresholds] = useState<UsageThresholds>(() => {
-    try {
-      const stored = localStorage.getItem('usageThresholds');
-      return stored
-        ? JSON.parse(stored)
-        : {
-            contextPercentage: 80,
-            fiveHourPercentage: null,
-            sevenDayPercentage: null,
-          };
-    } catch (err) {
-      console.warn('Failed to parse usageThresholds from localStorage, resetting:', err);
-      return {
-        contextPercentage: 80,
-        fiveHourPercentage: null,
-        sevenDayPercentage: null,
-      };
-    }
-  });
+  const usageThresholds = useSettings((s) => s.usageThresholds);
+  const setUsageThresholds = useSettings((s) => s.setUsageThresholds);
 
   const notificationSoundRef = useRef(notificationSound);
   useEffect(() => {
@@ -506,18 +470,8 @@ export function App() {
     localStorage.setItem('rotationExclusions', JSON.stringify([...rotationExclusions]));
   }, [rotationExclusions]);
 
-  const [rotationOrder, setRotationOrder] = useState<string[]>(() => {
-    try {
-      const stored = localStorage.getItem('rotationOrder');
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  useEffect(() => {
-    localStorage.setItem('rotationOrder', JSON.stringify(rotationOrder));
-  }, [rotationOrder]);
+  const rotationOrder = useSettings((s) => s.rotationOrder);
+  const setRotationOrder = useSettings((s) => s.setRotationOrder);
 
   // Clean up rotationOrder: prune IDs for tasks that no longer exist
   useEffect(() => {
@@ -856,9 +810,6 @@ export function App() {
   useThresholdAlerts(statusLineData, latestRateLimits, usageThresholds, taskNames);
 
   // Persist usage thresholds
-  useEffect(() => {
-    localStorage.setItem('usageThresholds', JSON.stringify(usageThresholds));
-  }, [usageThresholds]);
 
   // Persist selection to localStorage (survives CMD+R reload)
   useEffect(() => {
@@ -2333,11 +2284,6 @@ export function App() {
           customIDE={customIDE}
           onCustomIDEChange={(v) => {
             setCustomIDE(v);
-            if (!v.path && v.args.length === 0) {
-              localStorage.removeItem('customIDE');
-            } else {
-              localStorage.setItem('customIDE', JSON.stringify(v));
-            }
           }}
           commitAttribution={commitAttribution}
           onCommitAttributionChange={(v) => {
@@ -2359,7 +2305,6 @@ export function App() {
           customClaudeEnvVars={customClaudeEnvVars}
           onCustomClaudeEnvVarsChange={(v) => {
             setCustomClaudeEnvVars(v);
-            localStorage.setItem('customClaudeEnvVars', JSON.stringify(v));
           }}
           keybindings={keybindings}
           onKeybindingsChange={(b) => {
