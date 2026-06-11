@@ -24,7 +24,9 @@ export function fanOutStorage(backing: StorageLike) {
     getItem(_name: string): string | null {
       const state = {} as SettingsState;
       for (const e of SETTINGS_REGISTRY) {
-        (state as Record<string, unknown>)[e.field] = e.codec.decode(backing.getItem(e.key));
+        (state as unknown as Record<string, unknown>)[e.field] = e.codec.decode(
+          backing.getItem(e.key),
+        );
       }
       return JSON.stringify({ state, version: 0 });
     },

@@ -19,7 +19,7 @@ function entry<K extends keyof SettingsState>(
   key: string,
   codec: Codec<SettingsState[K]>,
 ): RegistryEntry {
-  return { field, key, codec } as RegistryEntry;
+  return { field, key, codec } as unknown as RegistryEntry;
 }
 
 export const SETTINGS_REGISTRY: RegistryEntry[] = [
@@ -31,7 +31,7 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
 export function defaultSettings(): SettingsState {
   const out = {} as SettingsState;
   for (const e of SETTINGS_REGISTRY) {
-    (out as Record<string, unknown>)[e.field] = e.codec.decode(null);
+    (out as unknown as Record<string, unknown>)[e.field] = e.codec.decode(null);
   }
   return out;
 }
