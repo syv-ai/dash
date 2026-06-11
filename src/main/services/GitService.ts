@@ -627,7 +627,9 @@ export class GitService {
         const expected =
           /unknown revision/i.test(stderr) ||
           /bad revision/i.test(stderr) ||
-          /ambiguous argument/i.test(stderr);
+          /ambiguous argument/i.test(stderr) ||
+          /no such branch/i.test(stderr) ||
+          /no upstream configured/i.test(stderr);
         if (!expected) {
           console.error('[GitService.getBranchAheadBehind] unexpected error', { branch, stderr });
         }
@@ -637,14 +639,37 @@ export class GitService {
   }
 
   /**
+   * Local branch names (short form). Used to gate ahead/behind enrichment: a
+   * remote branch with no local counterpart has nothing to be ahead/behind of,
+   * and `<name>@{upstream}`/`origin/<name>...<name>` would just fail on the
+   * missing local ref.
+   */
+  private static async getLocalBranchNames(cwd: string): Promise<Set<string>> {
+    try {
+      const out = await git(cwd, ['branch', '--format=%(refname:short)']);
+      return new Set(
+        out
+          .split('\n')
+          .map((l) => l.trim())
+          .filter(Boolean),
+      );
+    } catch {
+      return new Set();
+    }
+  }
+
+  /**
    * Enrich a list of branches with ahead/behind counts (best-effort, in-place).
+   * Only branches that exist locally are enriched — ahead/behind relative to an
+   * upstream is undefined for a remote branch that was never checked out.
    */
   private static async enrichBranchesWithAheadBehind(
     cwd: string,
     branches: BranchInfo[],
     limit: number,
   ): Promise<void> {
-    const slice = branches.slice(0, limit);
+    const localNames = await this.getLocalBranchNames(cwd);
+    const slice = branches.slice(0, limit).filter((b) => localNames.has(b.name));
     const results = await Promise.allSettled(
       slice.map((b) => this.getBranchAheadBehind(cwd, b.name)),
     );
