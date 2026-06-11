@@ -9,6 +9,9 @@ import { FilePathLinkProvider } from './FilePathLinkProvider';
 import type { ITheme } from 'xterm';
 import { darkTheme, lightTheme, resolveTheme } from './terminalThemes';
 import { getTerminalFont } from './terminalFonts';
+import { ptyExitFallback } from './ptyExitFallback';
+import { clackBlock, clackExitBlock } from './clackLines';
+import { FitScheduler } from './fitScheduler';
 
 const MEMORY_LIMIT_BYTES = 128 * 1024 * 1024; // 128MB soft limit
 
@@ -37,7 +40,9 @@ export class TerminalSessionManager {
   private _currentCwd: string;
   private onCwdChangeCallback: ((cwd: string) => void) | null = null;
   private onFindKey: (() => void) | null = null;
-  private fitDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  // 250ms debounce covers panel-transition animations (200ms) to avoid
+  // fitting at intermediate sizes; cancels itself when the container hides
+  private fitScheduler = new FitScheduler(() => this.fit(), 250);
   private lastPtyCols = 0;
   private lastPtyRows = 0;
   private savedViewportY: number | null = null;
@@ -307,16 +312,7 @@ export class TerminalSessionManager {
       this.resizeObserver.disconnect();
     }
     this.resizeObserver = new ResizeObserver((entries) => {
-      // Skip when container is collapsed/hidden to avoid resizing PTY to 0 rows
-      const rect = entries[0]?.contentRect;
-      if (!rect || rect.height < 10) return;
-      if (this.fitDebounceTimer) clearTimeout(this.fitDebounceTimer);
-      // 250ms debounce covers panel-transition animations (200ms) to avoid
-      // fitting at intermediate sizes which causes scroll jumps and clipping
-      this.fitDebounceTimer = setTimeout(() => {
-        this.fitDebounceTimer = null;
-        this.fit();
-      }, 250);
+      this.fitScheduler.onResize(entries[0]?.contentRect?.height ?? 0);
     });
     this.resizeObserver.observe(container);
 
@@ -349,9 +345,12 @@ export class TerminalSessionManager {
           const exists = targets.success && targets.data && targets.data.includes(this.id);
           if (!exists) {
             this.terminal.write(
-              '\x1b[31m[dash] backing process not running for this tab.\x1b[0m\r\n' +
-                'For a service tab, press Run in the Ports panel to start it again.\r\n' +
-                'For a Dash TUI tab, close it and re-open the task.\r\n',
+              clackBlock(
+                'error',
+                'Backing process not running for this tab.',
+                'For a service tab, press Run in the Ports panel to start it again.',
+                'For a Dash TUI tab, close it and re-open the task.',
+              ),
             );
             this.ptyStarted = true;
             return;
@@ -557,10 +556,7 @@ export class TerminalSessionManager {
       clearTimeout(this.readyFallbackTimer);
       this.readyFallbackTimer = null;
     }
-    if (this.fitDebounceTimer) {
-      clearTimeout(this.fitDebounceTimer);
-      this.fitDebounceTimer = null;
-    }
+    this.fitScheduler.cancel();
 
     // Clear callbacks to prevent stale setState on unmounted components
     this.onRestartingCallback = null;
@@ -582,10 +578,7 @@ export class TerminalSessionManager {
     if (this.disposed) return;
     this.disposed = true;
 
-    if (this.fitDebounceTimer) {
-      clearTimeout(this.fitDebounceTimer);
-      this.fitDebounceTimer = null;
-    }
+    this.fitScheduler.cancel();
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
@@ -784,6 +777,10 @@ export class TerminalSessionManager {
 
   private fit() {
     try {
+      // Never fit against a hidden container — FitAddon clamps to a 1-row
+      // minimum, which would squash the PTY and desync the shell's prompt
+      const containerEl = this.terminal.element?.parentElement;
+      if (containerEl && containerEl.clientHeight < 10) return;
       this.fitAddon.fit();
       const dims = this.fitAddon.proposeDimensions();
       if (dims && dims.cols > 0 && dims.rows > 0) {
@@ -833,18 +830,22 @@ export class TerminalSessionManager {
 
       if (isNativeModuleError) {
         // node-pty itself failed — shell fallback won't work either
-        this.terminal.writeln('\x1b[31m✖ Terminal failed to start: native module error.\x1b[0m');
-        this.terminal.writeln('\x1b[31m  Rebuild native modules with: pnpm rebuild\x1b[0m');
-        if (resp.error) {
-          this.terminal.writeln(`\x1b[90m  ${resp.error}\x1b[0m\r\n`);
-        }
+        this.terminal.write(
+          clackBlock(
+            'error',
+            'Terminal failed to start: native module error.',
+            'Rebuild native modules with: pnpm rebuild',
+            ...(resp.error ? [resp.error] : []),
+          ),
+        );
       } else {
         // Claude CLI not found — fall back to shell
-        this.terminal.writeln(
-          '\x1b[33m⚠ Could not start Claude CLI directly — falling back to shell.\x1b[0m',
-        );
-        this.terminal.writeln(
-          '\x1b[33m  Install with: npm install -g @anthropic-ai/claude-code\x1b[0m\r\n',
+        this.terminal.write(
+          clackBlock(
+            'warn',
+            'Could not start Claude CLI directly — falling back to shell.',
+            'Install with: npm install -g @anthropic-ai/claude-code',
+          ),
         );
 
         const shellResp = await window.electronAPI.ptyStart({
@@ -858,10 +859,13 @@ export class TerminalSessionManager {
           reattached = shellResp.data?.reattached ?? false;
           isDirectSpawn = shellResp.data?.isDirectSpawn ?? false;
         } else {
-          this.terminal.writeln('\x1b[31m✖ Shell also failed to start.\x1b[0m');
-          if (shellResp.error) {
-            this.terminal.writeln(`\x1b[90m  ${shellResp.error}\x1b[0m\r\n`);
-          }
+          this.terminal.write(
+            clackBlock(
+              'error',
+              'Shell also failed to start.',
+              ...(shellResp.error ? [shellResp.error] : []),
+            ),
+          );
         }
       }
     }
@@ -915,19 +919,23 @@ export class TerminalSessionManager {
       this.checkMemory();
     });
 
-    // Listen for PTY exit → spawn shell fallback
+    // Listen for PTY exit → spawn shell fallback (agent/shell tabs only)
     this.unsubExit = window.electronAPI.onPtyExit(this.id, (info) => {
       if (this.disposed) return;
+
+      // Ensure PTY is cleaned up in main process
+      window.electronAPI.ptyKill(this.id);
+
+      const fallback = ptyExitFallback(this.id, this.isTui);
+      if (fallback.action === 'message') {
+        this.terminal.write(clackExitBlock(info.exitCode, fallback.message));
+        return;
+      }
+      this.terminal.write(clackExitBlock(info.exitCode));
 
       // Show xterm's real cursor for the shell fallback
       this.terminal.write('\x1b[?25h');
 
-      this.terminal.writeln(`\r\n\x1b[90m[Process exited with code ${info.exitCode}]\x1b[0m\r\n`);
-
-      // Ensure PTY is cleaned up in main process before spawning shell
-      window.electronAPI.ptyKill(this.id);
-
-      // Spawn shell fallback
       const dims = this.fitAddon.proposeDimensions();
       window.electronAPI
         .ptyStart({

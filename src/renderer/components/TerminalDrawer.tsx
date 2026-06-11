@@ -1,6 +1,8 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Terminal, ChevronDown, ChevronUp, X, Plus, Settings2, ScrollText } from 'lucide-react';
 import { sessionRegistry } from '../terminal/SessionRegistry';
+import { Tooltip } from './ui/Tooltip';
+import { nextShellLabel } from '../utils/shellTabLabel';
 import type { Tab } from '../../shared/drawerTabs';
 
 interface TerminalDrawerProps {
@@ -24,6 +26,8 @@ export function TerminalDrawer({
   const shellId = `shell:${taskId}`;
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const [livePtyIds, setLivePtyIds] = useState<Set<string>>(new Set());
+  const pendingFocusRef = useRef<string | null>(null);
 
   // Subscribe to main's drawer-tabs feed. On first mount of a task that has no
   // rows yet, seed the default shell tab so we don't render an empty header.
@@ -31,19 +35,24 @@ export function TerminalDrawer({
     let cancelled = false;
 
     const refresh = async () => {
-      const [listResp, activeResp] = await Promise.all([
+      const [listResp, activeResp, liveResp] = await Promise.all([
         window.electronAPI.drawerTabsList(taskId),
         window.electronAPI.drawerTabsGetActive(taskId),
+        window.electronAPI.ptyListForTask(taskId, { kinds: ['tui', 'service'] }),
       ]);
       if (cancelled) return;
       if (listResp.success && listResp.data) setTabs(listResp.data);
       if (activeResp.success) setActiveTabId(activeResp.data ?? null);
+      if (liveResp.success && liveResp.data) setLivePtyIds(new Set(liveResp.data));
     };
 
     refresh();
     window.electronAPI.drawerTabsSubscribe(taskId);
     const off = window.electronAPI.onDrawerTabsChanged((changedTaskId) => {
       if (changedTaskId === taskId) refresh();
+    });
+    const offService = window.electronAPI.onPortsServiceChanged(({ taskId: tid }) => {
+      if (tid === taskId) refresh();
     });
 
     // Seed the first shell tab if none exist yet. Idempotent — once the row
@@ -63,9 +72,28 @@ export function TerminalDrawer({
     return () => {
       cancelled = true;
       off();
+      offService();
       window.electronAPI.drawerTabsUnsubscribe(taskId);
     };
   }, [taskId, shellId]);
+
+  // A main-spawned PTY (service/tui) dying on its own pushes no service-changed
+  // event — drop its dot the moment its exit reaches the renderer.
+  useEffect(() => {
+    const offs = tabs
+      .filter((t) => t.kind === 'service' || t.kind === 'tui')
+      .map((t) =>
+        window.electronAPI.onPtyExit(t.id, () => {
+          setLivePtyIds((prev) => {
+            if (!prev.has(t.id)) return prev;
+            const next = new Set(prev);
+            next.delete(t.id);
+            return next;
+          });
+        }),
+      );
+    return () => offs.forEach((off) => off());
+  }, [tabs]);
 
   // Attach the active tab's session to the container.
   useEffect(() => {
@@ -88,7 +116,9 @@ export function TerminalDrawer({
       shellOnly: true,
       isTui,
     });
-    session.attach(container, { autoFocus: false });
+    const autoFocus = pendingFocusRef.current === activeTabId;
+    if (autoFocus) pendingFocusRef.current = null;
+    session.attach(container, { autoFocus });
 
     return () => {
       sessionRegistry.detach(activeTabId);
@@ -119,12 +149,15 @@ export function TerminalDrawer({
     }
   }, [collapsed, activeTabId]);
 
-  function handleAddTab() {
-    window.electronAPI.drawerTabsAdd(taskId, {
+  async function handleAddTab() {
+    const id = `shell:${taskId}:t${Date.now()}`;
+    pendingFocusRef.current = id;
+    await window.electronAPI.drawerTabsAdd(taskId, {
       kind: 'shell',
-      label: String(tabs.length + 1),
-      id: `shell:${taskId}:t${Date.now()}`,
+      label: nextShellLabel(tabs.map((t) => t.label)),
+      id,
     });
+    window.electronAPI.drawerTabsSetActive(taskId, id);
   }
 
   function handleCloseTab(tabId: string) {
@@ -149,51 +182,53 @@ export function TerminalDrawer({
           <ChevronUp size={12} strokeWidth={1.8} className="ml-auto" />
         </button>
       ) : (
-        <div className="flex items-center h-8 flex-shrink-0 border-t border-white/[0.08]">
-          <Terminal
-            size={12}
-            strokeWidth={1.8}
-            className="flex-shrink-0 ml-3 mr-1.5 text-foreground/80"
-          />
+        <div className="flex items-center h-8 flex-shrink-0 border-t border-white/[0.08] pl-1">
           {tabs.map((tab) => (
             <div
               key={tab.id}
-              className={`flex items-center gap-1 px-2 h-full border-b-2 cursor-pointer transition-colors flex-shrink-0 select-none ${
+              className={`group/tab relative flex items-center justify-center min-w-12 px-3 h-full border-b-2 cursor-pointer transition-colors flex-shrink-0 select-none ${
                 tab.id === activeTabId
                   ? 'border-primary text-foreground'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
               onClick={() => handleSelectTab(tab.id)}
             >
-              {tab.kind === 'tui' && (
-                <Settings2 size={11} strokeWidth={1.8} className="opacity-80" />
-              )}
-              {tab.kind === 'service' && (
-                <ScrollText size={11} strokeWidth={1.8} className="opacity-80" />
-              )}
-              <span className="text-[11px] font-medium">{tab.label}</span>
+              <span className="flex items-center gap-1">
+                {tab.kind === 'tui' && (
+                  <Settings2 size={11} strokeWidth={1.8} className="opacity-80" />
+                )}
+                {tab.kind === 'service' && (
+                  <ScrollText size={11} strokeWidth={1.8} className="opacity-80" />
+                )}
+                <span className="text-[11px] font-medium">{tab.label}</span>
+                {livePtyIds.has(tab.id) && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--git-added))] shadow-[0_0_6px_hsl(var(--git-added)/0.55)] status-pulse" />
+                )}
+              </span>
               {tabs.length > 1 && (
                 <button
-                  className="w-3.5 h-3.5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                  className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded hidden group-hover/tab:flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                   onClick={(e) => {
                     e.stopPropagation();
                     handleCloseTab(tab.id);
                   }}
                   aria-label={`Close terminal ${tab.label}`}
                 >
-                  <X size={9} strokeWidth={2} />
+                  <X size={10} strokeWidth={2} />
                 </button>
               )}
             </div>
           ))}
-          <button
-            className="ml-1 w-5 h-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors flex-shrink-0"
-            onClick={handleAddTab}
-            aria-label="Add terminal"
-          >
-            <Plus size={11} strokeWidth={2} />
-          </button>
           <div className="flex-1" />
+          <Tooltip content="New terminal">
+            <button
+              className="w-5 h-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors flex-shrink-0"
+              onClick={handleAddTab}
+              aria-label="Add terminal"
+            >
+              <Plus size={11} strokeWidth={2} />
+            </button>
+          </Tooltip>
           <button
             onClick={onCollapse}
             className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"

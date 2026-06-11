@@ -976,36 +976,25 @@ const SHELL_ZLOGIN = `\
 
 const SHELL_PROMPT = `\
 # Dash badge-style prompt — uses ANSI 16 colors (themed by xterm.js)
-autoload -Uz vcs_info add-zsh-hook
+autoload -Uz add-zsh-hook
 
 # Prevent venv from prepending (name) to prompt
 export VIRTUAL_ENV_DISABLE_PROMPT=1
 
-zstyle ':vcs_info:*' enable git
-zstyle ':vcs_info:*' check-for-changes false
-zstyle ':vcs_info:git:*' formats '%b'
-
 __dash_prompt_precmd() {
-  vcs_info
-
-  local dir="%F{12}%~%f"
-  local branch=""
-  if [[ -n "\${vcs_info_msg_0_}" ]]; then
-    local dirty=""
-    # Fast dirty check: staged + unstaged + untracked
-    if ! git diff --quiet HEAD -- 2>/dev/null || [[ -n "$(git ls-files --others --exclude-standard 2>/dev/null | head -1)" ]]; then
-      dirty="%F{3}*%f"
-    fi
-    branch="  %F{5}\${vcs_info_msg_0_}\${dirty}%f"
-  fi
+  # Clack-style two-line prompt, matching the ports side-car TUI:
+  #   ◇  dash  .venv     <- green ◇ on success, red ■ on failure; %1~ dir only
+  #   │  <input>         <- gray gutter bar
+  local sym="%(?.%F{2}◇.%F{1}■)%f"
+  local dir="%F{12}%1~%f"
 
   local venv=""
   if [[ -n "\${VIRTUAL_ENV}" ]]; then
     venv="  %F{6}\${VIRTUAL_ENV:t}%f"
   fi
 
-  PROMPT="\${dir}\${branch}\${venv}
-%F{%(?.2.1)}\\$%f "
+  PROMPT="\${sym}  \${dir}\${venv}
+%F{8}│%f  "
   RPROMPT=""
 }
 
