@@ -13,6 +13,11 @@ interface SettingsActions {
   setShowProjectTokens: (value: boolean) => void;
   setDesktopNotification: (value: boolean) => void;
   setSyncShellEnv: (value: boolean) => void;
+  setNotificationSound: (value: SettingsState['notificationSound']) => void;
+  setTerminalTheme: (value: string) => void;
+  setTerminalFontFamily: (value: string) => void;
+  setEffortLevel: (value: string) => void;
+  setShellDrawerPosition: (value: SettingsState['shellDrawerPosition']) => void;
 }
 
 export type SettingsStore = SettingsState & SettingsActions;
@@ -38,6 +43,11 @@ export const useSettings = create<SettingsStore>()(
       setShowProjectTokens: (showProjectTokens) => set({ showProjectTokens }),
       setDesktopNotification: (desktopNotification) => set({ desktopNotification }),
       setSyncShellEnv: (syncShellEnv) => set({ syncShellEnv }),
+      setNotificationSound: (notificationSound) => set({ notificationSound }),
+      setTerminalTheme: (terminalTheme) => set({ terminalTheme }),
+      setTerminalFontFamily: (terminalFontFamily) => set({ terminalFontFamily }),
+      setEffortLevel: (effortLevel) => set({ effortLevel }),
+      setShellDrawerPosition: (shellDrawerPosition) => set({ shellDrawerPosition }),
     }),
     {
       name: 'settings',
