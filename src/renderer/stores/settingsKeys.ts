@@ -1,4 +1,12 @@
-import { type Codec, str, boolDefaultTrue, boolDefaultFalse, boolNotFalse } from './settingsCodecs';
+import {
+  type Codec,
+  str,
+  boolDefaultTrue,
+  boolDefaultFalse,
+  boolNotFalse,
+  strEnum,
+} from './settingsCodecs';
+import type { NotificationSound } from '../sounds';
 
 /** The slice of settings managed by settingsStore. Grows as fields migrate. */
 export interface SettingsState {
@@ -11,6 +19,11 @@ export interface SettingsState {
   showProjectTokens: boolean;
   desktopNotification: boolean;
   syncShellEnv: boolean;
+  notificationSound: NotificationSound;
+  terminalTheme: string;
+  terminalFontFamily: string;
+  effortLevel: string;
+  shellDrawerPosition: 'main' | 'right';
 }
 
 /** One entry per managed setting: the store field, its existing localStorage
@@ -39,6 +52,11 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   entry('showProjectTokens', 'showProjectTokens', boolDefaultTrue()),
   entry('desktopNotification', 'desktopNotification', boolDefaultFalse()),
   entry('syncShellEnv', 'syncShellEnv', boolDefaultFalse()),
+  entry('notificationSound', 'notificationSound', str('off') as Codec<NotificationSound>),
+  entry('terminalTheme', 'terminalTheme', str('default')),
+  entry('terminalFontFamily', 'terminalFontFamily', str('system')),
+  entry('effortLevel', 'claudeEffortLevel', str('auto')),
+  entry('shellDrawerPosition', 'shellDrawerPosition', strEnum(['main', 'right'] as const, 'right')),
 ];
 
 /** Initial state = every field decoded from an absent key (its default). */

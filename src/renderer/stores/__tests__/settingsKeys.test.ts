@@ -35,4 +35,14 @@ describe('settings registry', () => {
     expect(byField.syncShellEnv.codec.decode('true')).toBe(true);
     expect(byField.showProjectTokens.codec.decode(null)).toBe(true); // boolDefaultTrue
   });
+
+  it('registers the phase-1c string settings', () => {
+    const byField = Object.fromEntries(SETTINGS_REGISTRY.map((r) => [r.field, r]));
+    expect(byField.effortLevel.key).toBe('claudeEffortLevel'); // legacy key
+    expect(byField.effortLevel.codec.decode(null)).toBe('auto');
+    expect(byField.terminalTheme.codec.decode(null)).toBe('default');
+    expect(byField.notificationSound.codec.decode(null)).toBe('off');
+    expect(byField.shellDrawerPosition.codec.decode('bogus')).toBe('right');
+    expect(byField.shellDrawerPosition.codec.decode('main')).toBe('main');
+  });
 });
