@@ -644,9 +644,9 @@ export function App() {
     const cwd = activeTask.path;
 
     for (const featureId of TUI_FEATURE_IDS) {
-      window.electronAPI.tuiIsActive({ featureId, taskId }).then((resp) => {
+      window.electronAPI.wizardActive({ featureId, taskId }).then((resp) => {
         if (resp.success && resp.data) return;
-        window.electronAPI.tuiRequestStart({
+        window.electronAPI.requestWizard({
           featureId,
           taskId,
           projectId,

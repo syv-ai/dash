@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventEmitter } from 'events';
-import { PortsSetupFlow } from '../PortsSetupFlow';
+import { PortsSetupWizard } from '../PortsSetupWizard';
 import type { PortsMainToTui } from '../../../../shared/portsTuiProtocol';
 
 class FakeSocket {
@@ -45,7 +45,7 @@ function makeFlow() {
     restartAllForTask: vi.fn(async () => {}),
   };
   onTeardown = vi.fn();
-  return new PortsSetupFlow('t1', 'p1', { socket: sock as never, onTeardown }, services);
+  return new PortsSetupWizard('t1', 'p1', { socket: sock as never, onTeardown }, services);
 }
 
 async function flush() {
@@ -54,7 +54,7 @@ async function flush() {
   await Promise.resolve();
 }
 
-async function readyAndConfig(flow: PortsSetupFlow) {
+async function readyAndConfig(flow: PortsSetupWizard) {
   await flow.start();
   sock.receive({ type: 'ready', version: 1 });
   await flush();
@@ -66,7 +66,7 @@ beforeEach(() => {
   vi.useFakeTimers();
 });
 
-describe('PortsSetupFlow', () => {
+describe('PortsSetupWizard', () => {
   it('shows WAITING_PORTS_JSON on ready', async () => {
     const flow = makeFlow();
     await flow.start();

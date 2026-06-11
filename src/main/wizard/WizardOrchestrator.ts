@@ -2,7 +2,7 @@ import type { TuiSocketServer } from '../services/TuiSocketServer';
 import type { MainToTui, TuiToMain } from '../../shared/tuiProtocol';
 import { portsDebug } from '../services/PortsDebugLog';
 
-export interface FlowIo<Show, Choice> {
+export interface WizardIo<Show, Choice> {
   socket: TuiSocketServer<TuiToMain<Choice>, MainToTui<Show>>;
   /**
    * Called exactly once at the end of teardown with the feature's exit
@@ -23,7 +23,7 @@ export interface FlowIo<Show, Choice> {
  * long-running async observes "the active task" via a live ref is a bug
  * waiting to happen — task switches must not corrupt this flow's targeting.
  */
-export abstract class FlowOrchestrator<
+export abstract class WizardOrchestrator<
   Show extends { type: 'show' },
   Choice extends { type: 'choice' },
 > {
@@ -36,7 +36,7 @@ export abstract class FlowOrchestrator<
   constructor(
     protected readonly taskId: string,
     protected readonly projectId: string,
-    private readonly io: FlowIo<Show, Choice>,
+    private readonly io: WizardIo<Show, Choice>,
   ) {}
 
   async start(): Promise<void> {

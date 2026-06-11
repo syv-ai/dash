@@ -18,7 +18,7 @@ export type TuiToMain<Choice> =
 export const TUI_PROTOCOL_VERSION = 1;
 
 /**
- * Features the renderer auto-offers on task switch (via tui:requestStart).
+ * Features the renderer auto-offers on task switch (via wizard:requestStart).
  * Registering a feature in main without listing it here means it can only be
  * started programmatically (e.g. the ports setup flow spawned by migrate).
  */

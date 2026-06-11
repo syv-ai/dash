@@ -151,14 +151,14 @@ app.whenReady().then(async () => {
   // TUI feature IPC needs the main window for feature broadcasts (e.g.
   // ports:restart-task); register here (not in registerAllIpc) since that
   // path doesn't have a window yet.
-  const { registerTuiIpc, cleanupTuiAtBoot } = await import('./ipc/tuiIpc');
-  const { registerPortsFeature, migrateLegacyPortsDismissals } = await import('./features/ports');
+  const { registerWizardIpc, cleanupWizardsAtBoot } = await import('./ipc/wizardIpc');
+  const { registerPortsWizard, migrateLegacyPortsDismissals } = await import('./wizard/ports');
   const { portsDebug } = await import('./services/PortsDebugLog');
   portsDebug.boot();
-  registerPortsFeature();
+  registerPortsWizard();
   migrateLegacyPortsDismissals();
-  cleanupTuiAtBoot();
-  registerTuiIpc({ getMainWindow: () => mainWindow });
+  cleanupWizardsAtBoot();
+  registerWizardIpc({ getMainWindow: () => mainWindow });
   const { registerServicesIpc } = await import('./ipc/servicesIpc');
   registerServicesIpc();
 

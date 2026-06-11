@@ -1,5 +1,5 @@
 import type { EventEmitter } from 'events';
-import { FlowOrchestrator, type FlowIo } from '../../tui/FlowOrchestrator';
+import { WizardOrchestrator, type WizardIo } from '../WizardOrchestrator';
 import type { PortsShow, PortsChoice, ExitReason } from '../../../shared/portsTuiProtocol';
 import { portsDebug } from '../../services/PortsDebugLog';
 
@@ -24,7 +24,7 @@ export interface SetupServices {
  * accepts the trust gate — this flow never injects keystrokes; it just
  * listens for the watcher's events and walks the spinner screens.
  */
-export class PortsSetupFlow extends FlowOrchestrator<PortsShow, PortsChoice> {
+export class PortsSetupWizard extends WizardOrchestrator<PortsShow, PortsChoice> {
   private phase: 'pending' | 'waiting-config' | 'waiting-sentinel' | 'done' | 'restarting' =
     'pending';
   private allocatedCount = 0;
@@ -32,7 +32,7 @@ export class PortsSetupFlow extends FlowOrchestrator<PortsShow, PortsChoice> {
   constructor(
     taskId: string,
     projectId: string,
-    io: FlowIo<PortsShow, PortsChoice>,
+    io: WizardIo<PortsShow, PortsChoice>,
     private readonly services: SetupServices,
   ) {
     super(taskId, projectId, io);

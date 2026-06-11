@@ -107,13 +107,13 @@ describe('DrawerTabsService', () => {
     expect(svc.getActive('t1')).toBe('shell:t1:1');
   });
 
-  it('sweepTuiTabs() removes all tui rows and clears stale active pointers', () => {
+  it('sweepEphemeralTabs() removes all tui rows and clears stale active pointers', () => {
     const shell = svc.add('t1', { kind: 'shell', label: '1' });
     const tui = svc.add('t1', { kind: 'tui', featureId: 'ports', label: 'Ports' });
     svc.setActive('t1', tui.id);
     expect(svc.getActive('t1')).toBe(tui.id);
 
-    const swept = svc.sweepTuiTabs();
+    const swept = svc.sweepEphemeralTabs();
 
     expect(swept).toEqual(['t1']);
     expect(svc.list('t1').map((t) => t.id)).toEqual([shell.id]);
@@ -122,16 +122,16 @@ describe('DrawerTabsService', () => {
     expect(svc.getActive('t1')).toBeNull();
   });
 
-  it('sweepTuiTabs() also sweeps service tabs', () => {
+  it('sweepEphemeralTabs() also sweeps service tabs', () => {
     svc.add('t1', { kind: 'service', label: 'Web', featureId: 'ports', id: 'service:t1:web' });
     const shell = svc.add('t1', { kind: 'shell', label: '1', id: 'shell:t1' });
-    svc.sweepTuiTabs();
+    svc.sweepEphemeralTabs();
     expect(svc.list('t1').map((t) => t.id)).toEqual([shell.id]);
   });
 
-  it('sweepTuiTabs() is a no-op when no tui rows exist', () => {
+  it('sweepEphemeralTabs() is a no-op when no tui rows exist', () => {
     svc.add('t1', { kind: 'shell', label: '1' });
-    expect(svc.sweepTuiTabs()).toEqual([]);
+    expect(svc.sweepEphemeralTabs()).toEqual([]);
     expect(svc.list('t1')).toHaveLength(1);
   });
 

@@ -7,7 +7,7 @@ import { startCommandPty, killPty } from '../services/ptyManager';
 let host: SidecarTuiHost | null = null;
 
 /**
- * Lazy singleton so importing modules (tuiIpc, feature registrations) don't
+ * Lazy singleton so importing modules (wizardIpc, feature registrations) don't
  * touch `app` paths before Electron is ready. NB: app.getAppPath() lies in
  * dev — __dirname-based resolution is the documented pattern (CLAUDE.md /
  * docs/state.md critical knowledge §2).

@@ -1,4 +1,4 @@
-import { FlowOrchestrator, type FlowIo } from '../../tui/FlowOrchestrator';
+import { WizardOrchestrator, type WizardIo } from '../WizardOrchestrator';
 import type { PortsShow, PortsChoice, ExitReason } from '../../../shared/portsTuiProtocol';
 
 export interface OnboardingServices {
@@ -8,21 +8,21 @@ export interface OnboardingServices {
    * Hand-off to the ports feature when the user picks "Set it up": create a
    * fresh 'port-setup' worktree task, stash the inlined setup prompt for the
    * new agent PTY, switch the renderer's active task, and spawn a
-   * PortsSetupFlow TUI in the new task's drawer. Resolves once the new TUI
+   * PortsSetupWizard TUI in the new task's drawer. Resolves once the new TUI
    * is spawned; this flow then exits with 'migrated'.
    */
   migrate(opts: { signals: string[]; guesses: string[] }): Promise<void>;
 }
 
 /** Source-task flow: offer ports setup, dispatch to migrate or dismiss. */
-export class PortsOnboardingFlow extends FlowOrchestrator<PortsShow, PortsChoice> {
+export class PortsOnboardingWizard extends WizardOrchestrator<PortsShow, PortsChoice> {
   private signals: string[] = [];
   private guesses: string[] = [];
 
   constructor(
     taskId: string,
     projectId: string,
-    io: FlowIo<PortsShow, PortsChoice>,
+    io: WizardIo<PortsShow, PortsChoice>,
     private readonly services: OnboardingServices,
   ) {
     super(taskId, projectId, io);

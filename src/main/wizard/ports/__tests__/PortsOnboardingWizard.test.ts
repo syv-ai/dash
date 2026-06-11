@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PortsOnboardingFlow } from '../PortsOnboardingFlow';
+import { PortsOnboardingWizard } from '../PortsOnboardingWizard';
 import type { PortsMainToTui } from '../../../../shared/portsTuiProtocol';
 
 class FakeSocket {
@@ -42,7 +42,7 @@ function makeFlow() {
   sock = new FakeSocket();
   services = makeServices();
   onTeardown = vi.fn();
-  return new PortsOnboardingFlow('t1', 'p1', { socket: sock as never, onTeardown }, services);
+  return new PortsOnboardingWizard('t1', 'p1', { socket: sock as never, onTeardown }, services);
 }
 
 async function flush() {
@@ -61,7 +61,7 @@ beforeEach(() => {
   vi.useFakeTimers();
 });
 
-describe('PortsOnboardingFlow', () => {
+describe('PortsOnboardingWizard', () => {
   it('shows ONBOARDING with heuristic results on ready', async () => {
     const flow = makeFlow();
     await flow.start();
@@ -97,7 +97,7 @@ describe('PortsOnboardingFlow', () => {
       throw new Error('git worktree add failed');
     });
     onTeardown = vi.fn();
-    const failing = new PortsOnboardingFlow(
+    const failing = new PortsOnboardingWizard(
       't1',
       'p1',
       { socket: sock as never, onTeardown },

@@ -197,7 +197,7 @@ export interface ElectronAPI {
     taskId: string;
     featureId: string;
   }) => Promise<IpcResponse<{ reattached: boolean }>>;
-  tuiRequestStart: (payload: {
+  requestWizard: (payload: {
     featureId: string;
     taskId: string;
     projectId: string;
@@ -207,7 +207,7 @@ export interface ElectronAPI {
     cols: number;
     rows: number;
   }) => Promise<IpcResponse<{ started: boolean; tabId?: string; reason?: string }>>;
-  tuiIsActive: (q: { featureId: string; taskId: string }) => Promise<IpcResponse<boolean>>;
+  wizardActive: (q: { featureId: string; taskId: string }) => Promise<IpcResponse<boolean>>;
   onPortsRestartTask: (cb: (taskId: string) => void) => () => void;
   onPortsTuiMigrated: (
     cb: (info: { fromTaskId: string; toTaskId: string; projectId: string }) => void,

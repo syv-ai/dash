@@ -4,12 +4,12 @@ import crypto from 'crypto';
 import type { BrowserWindow } from 'electron';
 import { TuiSocketServer } from '../services/TuiSocketServer';
 
-export interface FlowHandle {
+export interface WizardHandle {
   start(): Promise<void>;
   teardown(): Promise<void>;
 }
 
-export interface FlowWiring {
+export interface WizardWiring {
   socket: TuiSocketServer;
   onTeardown(reason: string | null): void;
 }
@@ -30,7 +30,7 @@ export interface SpawnOpts {
   activate?: boolean;
   /** Extra env for the side-car process (e.g. DASH_TUI_PROJECT_NAME). */
   env?: Record<string, string>;
-  createFlow(wiring: FlowWiring): FlowHandle;
+  createWizard(wiring: WizardWiring): WizardHandle;
   getMainWindow(): BrowserWindow | null;
 }
 
@@ -75,7 +75,7 @@ export class SidecarTuiHost {
    * second flow for the new task.
    */
   private pending = new Set<string>();
-  private active = new Map<string, FlowHandle>();
+  private active = new Map<string, WizardHandle>();
   /**
    * Keys whose TUI finished this session (declined, completed, migrated away,
    * or closed). Session-scoped on purpose: a Dash restart asks again. Spawn
@@ -102,7 +102,7 @@ export class SidecarTuiHost {
     const tabId = `tui:${opts.featureId}:${opts.taskId}`;
 
     let socket: TuiSocketServer | null = null;
-    let flow: FlowHandle | null = null;
+    let flow: WizardHandle | null = null;
     let tabCreated = false;
     // Set once registered in `active`. The flow's onTeardown fires on the
     // rollback path too — before registration it must neither delete a live
@@ -123,7 +123,7 @@ export class SidecarTuiHost {
       tabCreated = true;
       if (opts.activate) this.deps.drawerTabs.setActive(opts.taskId, tab.id);
 
-      flow = opts.createFlow({
+      flow = opts.createWizard({
         socket,
         onTeardown: (reason) => {
           try {
@@ -208,7 +208,7 @@ export class SidecarTuiHost {
       await Promise.all(
         entries.map(async ([key, flow]) => {
           try {
-            // FlowOrchestrator.teardown → onTeardown closes the tab and
+            // WizardOrchestrator.teardown → onTeardown closes the tab and
             // drops the active entry; the explicit cleanup below covers a
             // flow whose teardown throws before reaching it.
             await flow.teardown();

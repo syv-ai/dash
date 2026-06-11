@@ -1,11 +1,11 @@
 import { app, type BrowserWindow } from 'electron';
 import path from 'path';
 import * as fs from 'fs';
-import { registerFeature, type RequestStartPayload } from '../../tui/featureRegistry';
+import { registerWizard, type RequestStartPayload } from '../wizardRegistry';
 import type { SpawnOpts } from '../../tui/SidecarTuiHost';
 import { getTuiHost } from '../../tui/hostInstance';
-import { PortsOnboardingFlow } from './PortsOnboardingFlow';
-import { PortsSetupFlow } from './PortsSetupFlow';
+import { PortsOnboardingWizard } from './PortsOnboardingWizard';
+import { PortsSetupWizard } from './PortsSetupWizard';
 import { portsOnboardingRelevant } from './relevance';
 import { detectPortsNeed } from '../../services/PortsHeuristic';
 import { buildPortsSetupPrompt } from '../../services/PortsSetupPrompt';
@@ -21,8 +21,8 @@ import { portsDebug } from '../../services/PortsDebugLog';
 
 const FEATURE_ID = 'ports';
 
-export function registerPortsFeature(): void {
-  registerFeature({
+export function registerPortsWizard(): void {
+  registerWizard({
     id: FEATURE_ID,
     buildSpawn: (payload, getMainWindow) => onboardingSpawn(payload, getMainWindow),
     isRelevant: (payload) => portsOnboardingRelevant(payload.cwd),
@@ -44,8 +44,8 @@ function onboardingSpawn(
     tabLabel: 'Set up ports?',
     env: { DASH_TUI_PROJECT_NAME: payload.projectName },
     getMainWindow,
-    createFlow: (wiring) =>
-      new PortsOnboardingFlow(payload.taskId, payload.projectId, wiring as never, {
+    createWizard: (wiring) =>
+      new PortsOnboardingWizard(payload.taskId, payload.projectId, wiring as never, {
         heuristic: async () => {
           const result = detectPortsNeed(payload.cwd);
           return {
@@ -91,8 +91,8 @@ function setupSpawn(args: {
     activate: true,
     env: { DASH_TUI_PROJECT_NAME: args.projectName },
     getMainWindow: args.getMainWindow,
-    createFlow: (wiring) =>
-      new PortsSetupFlow(args.taskId, args.projectId, wiring as never, {
+    createWizard: (wiring) =>
+      new PortsSetupWizard(args.taskId, args.projectId, wiring as never, {
         portsEvents: portsConfigEvents,
         getPortCount: async (tid: string) => WorkspacePortsRuntime.getPortsForTask(tid).length,
         restartAllForTask: async (tid: string) => {
@@ -112,7 +112,7 @@ function setupSpawn(args: {
  *   3. Ask the renderer to switch its active task to the new one (the
  *      renderer's requestStart effect won't race in: the host's pending set
  *      is populated synchronously by the spawn call below).
- *   4. Spawn a PortsSetupFlow TUI for the new task.
+ *   4. Spawn a PortsSetupWizard TUI for the new task.
  */
 async function handleMigrate(args: {
   currentTaskId: string;
@@ -189,7 +189,7 @@ async function handleMigrate(args: {
 
   // Kick off the spawn synchronously so the host's pending set contains the
   // new task before we notify the renderer — its requestStart effect checks
-  // tui:isActive (pending ∪ active ∪ suppressed) and bails.
+  // wizard:active (pending ∪ active ∪ suppressed) and bails.
   //
   // Don't await the full spawn before sending the IPC: the side-car PTY +
   // socket dance can take long enough that the user sees the old task's

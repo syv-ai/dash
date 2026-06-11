@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { FlowOrchestrator, type FlowIo } from '../FlowOrchestrator';
+import { WizardOrchestrator, type WizardIo } from '../WizardOrchestrator';
 
 type Show =
   | { type: 'show'; screen: 'main' }
@@ -30,7 +30,7 @@ class FakeSocket {
   }
 }
 
-class TestFlow extends FlowOrchestrator<Show, Choice> {
+class TestWizard extends WizardOrchestrator<Show, Choice> {
   readyCount = 0;
   choices: Choice[] = [];
   cleanupRuns = 0;
@@ -58,12 +58,15 @@ class TestFlow extends FlowOrchestrator<Show, Choice> {
 
 let sock: FakeSocket;
 let onTeardown: ReturnType<typeof vi.fn>;
-let flow: TestFlow;
+let flow: TestWizard;
 
 function makeFlow() {
   sock = new FakeSocket();
   onTeardown = vi.fn();
-  flow = new TestFlow('t1', 'p1', { socket: sock, onTeardown } as unknown as FlowIo<Show, Choice>);
+  flow = new TestWizard('t1', 'p1', { socket: sock, onTeardown } as unknown as WizardIo<
+    Show,
+    Choice
+  >);
   return flow;
 }
 
@@ -77,7 +80,7 @@ beforeEach(() => {
   vi.useFakeTimers();
 });
 
-describe('FlowOrchestrator lifecycle', () => {
+describe('WizardOrchestrator lifecycle', () => {
   it('routes ready -> onReady exactly once (dup-ready guard)', async () => {
     await makeFlow().start();
     sock.receive({ type: 'ready', version: 1 });

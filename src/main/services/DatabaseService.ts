@@ -79,7 +79,7 @@ export class DatabaseService {
 
   /**
    * True when the user dismissed the given TUI feature for this project
-   * ("Never for this project"). The tui:requestStart IPC short-circuits on it.
+   * ("Never for this project"). The wizard:requestStart IPC short-circuits on it.
    */
   static isFeatureDismissed(projectId: string, featureId: string): boolean {
     const db = getDb();

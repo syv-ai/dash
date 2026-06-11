@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { SidecarTuiHost, type SpawnOpts, type FlowWiring } from '../SidecarTuiHost';
+import { SidecarTuiHost, type SpawnOpts, type WizardWiring } from '../SidecarTuiHost';
 
 let dir: string;
 let host: SidecarTuiHost;
@@ -15,7 +15,7 @@ let scriptPath: string;
 
 function makeFlow(opts?: { failStart?: boolean }) {
   return {
-    wiring: null as FlowWiring | null,
+    wiring: null as WizardWiring | null,
     start: vi.fn(async () => {
       if (opts?.failStart) throw new Error('flow start failed');
     }),
@@ -32,7 +32,7 @@ function spawnOpts(flow: ReturnType<typeof makeFlow>, overrides?: Partial<SpawnO
     cols: 80,
     rows: 24,
     tabLabel: 'Set up ports',
-    createFlow: (wiring) => {
+    createWizard: (wiring) => {
       flow.wiring = wiring;
       return flow;
     },

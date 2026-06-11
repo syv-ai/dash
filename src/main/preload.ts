@@ -91,8 +91,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Ports TUI lifecycle
   ptyStartCommand: (opts: unknown) => ipcRenderer.invoke('pty:startCommand', opts),
-  tuiRequestStart: (payload: unknown) => ipcRenderer.invoke('tui:requestStart', payload),
-  tuiIsActive: (q: { featureId: string; taskId: string }) => ipcRenderer.invoke('tui:isActive', q),
+  requestWizard: (payload: unknown) => ipcRenderer.invoke('wizard:requestStart', payload),
+  wizardActive: (q: { featureId: string; taskId: string }) =>
+    ipcRenderer.invoke('wizard:active', q),
   onPortsRestartTask: (cb: (taskId: string) => void) => {
     const handler = (_event: unknown, taskId: string) => cb(taskId);
     ipcRenderer.on('ports:restart-task', handler);

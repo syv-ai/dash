@@ -1,20 +1,20 @@
 import { ipcMain, type BrowserWindow } from 'electron';
 import { getTuiHost } from '../tui/hostInstance';
-import { getFeature, type RequestStartPayload } from '../tui/featureRegistry';
+import { getWizard, type RequestStartPayload } from '../wizard/wizardRegistry';
 import { DatabaseService } from '../services/DatabaseService';
 import { initDrawerTabsService } from './drawerTabsIpc';
 
-export function registerTuiIpc(opts: { getMainWindow: () => BrowserWindow | null }): void {
+export function registerWizardIpc(opts: { getMainWindow: () => BrowserWindow | null }): void {
   ipcMain.handle(
-    'tui:requestStart',
+    'wizard:requestStart',
     async (_e, payload: RequestStartPayload & { featureId: string }) => {
       const { featureId, taskId, projectId } = payload;
-      const feature = getFeature(featureId);
-      if (!feature) {
-        return { success: false as const, error: `unknown TUI feature: ${featureId}` };
+      const wizard = getWizard(featureId);
+      if (!wizard) {
+        return { success: false as const, error: `unknown wizard feature: ${featureId}` };
       }
       // A freshly reloaded renderer can request before the reload teardown
-      // finishes — wait so isActive doesn't report a flow that's mid-death.
+      // finishes — wait so isActive doesn't report a wizard that's mid-death.
       await getTuiHost().reloadSettled();
       if (DatabaseService.isFeatureDismissed(projectId, featureId)) {
         return {
@@ -22,7 +22,7 @@ export function registerTuiIpc(opts: { getMainWindow: () => BrowserWindow | null
           data: { started: false as const, reason: 'dismissed' as const },
         };
       }
-      if (feature.isRelevant && !feature.isRelevant(payload)) {
+      if (wizard.isRelevant && !wizard.isRelevant(payload)) {
         return {
           success: true as const,
           data: { started: false as const, reason: 'not-relevant' as const },
@@ -36,10 +36,10 @@ export function registerTuiIpc(opts: { getMainWindow: () => BrowserWindow | null
         };
       }
       try {
-        const { tabId } = await host.spawn(feature.buildSpawn(payload, opts.getMainWindow));
+        const { tabId } = await host.spawn(wizard.buildSpawn(payload, opts.getMainWindow));
         return { success: true as const, data: { started: true as const, tabId } };
       } catch (err) {
-        console.error('[tuiIpc] requestStart failed for', featureId, taskId, err);
+        console.error('[wizardIpc] requestStart failed for', featureId, taskId, err);
         return {
           success: false as const,
           error: err instanceof Error ? err.message : String(err),
@@ -48,7 +48,7 @@ export function registerTuiIpc(opts: { getMainWindow: () => BrowserWindow | null
     },
   );
 
-  ipcMain.handle('tui:isActive', async (_e, q: { featureId: string; taskId: string }) => {
+  ipcMain.handle('wizard:active', async (_e, q: { featureId: string; taskId: string }) => {
     await getTuiHost().reloadSettled();
     return {
       success: true as const,
@@ -58,15 +58,15 @@ export function registerTuiIpc(opts: { getMainWindow: () => BrowserWindow | null
 }
 
 /**
- * Clean up TUI state left behind by the previous run: orphaned socket files
- * and drawer_tabs rows with kind='tui' (their owning flow + side-car are
- * gone; the row would otherwise collide with the next requestStart INSERT).
+ * Clean up wizard state left behind by the previous run: orphaned socket files
+ * and drawer_tabs rows with kind='tui'/'service' (their owning wizard + side-car
+ * are gone; the row would otherwise collide with the next requestStart INSERT).
  */
-export function cleanupTuiAtBoot(): void {
+export function cleanupWizardsAtBoot(): void {
   getTuiHost().sweepSockets();
   try {
-    initDrawerTabsService().sweepTuiTabs();
+    initDrawerTabsService().sweepEphemeralTabs();
   } catch (err) {
-    console.warn('[tuiIpc] sweepTuiTabs failed:', err);
+    console.warn('[wizardIpc] sweepEphemeralTabs failed:', err);
   }
 }
