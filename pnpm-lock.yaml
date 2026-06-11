@@ -29,6 +29,12 @@ importers:
       '@xterm/addon-search':
         specifier: ^0.16.0
         version: 0.16.0
+      '@xterm/addon-serialize':
+        specifier: ^0.13.0
+        version: 0.13.0(@xterm/xterm@5.5.0)
+      '@xterm/headless':
+        specifier: ^5.5.0
+        version: 5.5.0
       better-sqlite3:
         specifier: ^11.7.0
         version: 11.10.0
@@ -105,9 +111,6 @@ importers:
       '@xterm/addon-fit':
         specifier: ^0.10.0
         version: 0.10.0(@xterm/xterm@5.5.0)
-      '@xterm/addon-serialize':
-        specifier: ^0.13.0
-        version: 0.13.0(@xterm/xterm@5.5.0)
       '@xterm/addon-web-links':
         specifier: ^0.11.0
         version: 0.11.0(@xterm/xterm@5.5.0)
@@ -1229,6 +1232,9 @@ packages:
     resolution: {integrity: sha512-xCnfMBTI+/HKPdRnSOHaJDRqEpq2Ugy8LEj9GiY4J3zJObo3joylIFaMvzBwbYRg8zLtkO0KQaStCeSfoaI2/w==}
     peerDependencies:
       '@xterm/xterm': ^5.0.0
+
+  '@xterm/headless@5.5.0':
+    resolution: {integrity: sha512-5xXB7kdQlFBP82ViMJTwwEc3gKCLGKR/eoxQm4zge7GPBl86tCdI0IdPJjoKd8mUSFXz5V7i/25sfsEkP4j46g==}
 
   '@xterm/xterm@5.5.0':
     resolution: {integrity: sha512-hqJHYaQb5OptNunnyAnkHyM8aCjZ1MEIDTQu1iIbbTD/xops91NB5yq1ZK/dC2JDbVWtF23zUtl9JE2NqwT87A==}
@@ -4667,6 +4673,8 @@ snapshots:
   '@xterm/addon-webgl@0.18.0(@xterm/xterm@5.5.0)':
     dependencies:
       '@xterm/xterm': 5.5.0
+
+  '@xterm/headless@5.5.0': {}
 
   '@xterm/xterm@5.5.0': {}
 
