@@ -179,3 +179,29 @@ describe('allocatePorts', () => {
     expect(assignments[0].hostPort).toBe(5000 + offset);
   });
 });
+
+describe('service command passthrough', () => {
+  it('passes service command fields through to assignments', () => {
+    const result = allocatePorts({
+      ports: {
+        ports: [
+          { label: 'Web', envVar: 'WEB_PORT', defaultPort: 3000, run: 'pnpm dev', cwd: 'web' },
+          {
+            label: 'DB',
+            port: 5432,
+            stop: 'docker compose stop db',
+            logs: 'docker compose logs -f db',
+          },
+        ],
+      },
+      worktreeName: 'wt-a',
+      overrides: {},
+      taken: new Set<number>(),
+    });
+    expect(result.find((a) => a.label === 'Web')).toMatchObject({ run: 'pnpm dev', cwd: 'web' });
+    expect(result.find((a) => a.label === 'DB')).toMatchObject({
+      stop: 'docker compose stop db',
+      logs: 'docker compose logs -f db',
+    });
+  });
+});

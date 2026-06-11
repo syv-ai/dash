@@ -1,4 +1,4 @@
-import type { WorkspacePorts } from './WorkspacePortsService';
+import type { WorkspacePorts, PortDeclaration } from './WorkspacePortsService';
 
 const DEFAULT_SLOTS = 50;
 const DEFAULT_STRIDE = 100;
@@ -29,6 +29,21 @@ export interface PortAssignment {
   envVar?: string;
   /** Tier 2 only — the defaultPort the assignment was derived from. */
   defaultPort?: number;
+  /** Optional service commands, passed through from the declaration. */
+  run?: string;
+  stop?: string;
+  logs?: string;
+  cwd?: string;
+}
+
+/** Copy the optional service commands without materializing undefined keys. */
+function commandFields(e: PortDeclaration): Pick<PortAssignment, 'run' | 'stop' | 'logs' | 'cwd'> {
+  const out: Pick<PortAssignment, 'run' | 'stop' | 'logs' | 'cwd'> = {};
+  if (e.run !== undefined) out.run = e.run;
+  if (e.stop !== undefined) out.stop = e.stop;
+  if (e.logs !== undefined) out.logs = e.logs;
+  if (e.cwd !== undefined) out.cwd = e.cwd;
+  return out;
 }
 
 export interface AllocatePortsArgs {
@@ -70,7 +85,12 @@ export function allocatePorts(args: AllocatePortsArgs): PortAssignment[] {
 
   for (const entry of args.ports.ports) {
     if ('port' in entry) {
-      assignments.push({ label: entry.label, hostPort: entry.port, source: 'fixed' });
+      assignments.push({
+        label: entry.label,
+        hostPort: entry.port,
+        source: 'fixed',
+        ...commandFields(entry),
+      });
       continue;
     }
 
@@ -83,6 +103,7 @@ export function allocatePorts(args: AllocatePortsArgs): PortAssignment[] {
         defaultPort: entry.defaultPort,
         hostPort: override,
         source: 'override',
+        ...commandFields(entry),
       });
       continue;
     }
@@ -117,6 +138,7 @@ export function allocatePorts(args: AllocatePortsArgs): PortAssignment[] {
       defaultPort: entry.defaultPort,
       hostPort: candidate,
       source,
+      ...commandFields(entry),
     });
   }
 

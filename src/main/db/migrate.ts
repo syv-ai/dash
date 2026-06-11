@@ -256,6 +256,14 @@ export function runMigrations(): void {
     /* already exists */
   }
 
+  for (const col of ['run_command', 'stop_command', 'logs_command', 'cwd']) {
+    try {
+      rawDb.exec(`ALTER TABLE task_ports ADD COLUMN ${col} TEXT`);
+    } catch {
+      /* already exists */
+    }
+  }
+
   rawDb.exec(`
     CREATE TABLE IF NOT EXISTS feature_dismissals (
       project_id   TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,

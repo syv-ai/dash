@@ -621,6 +621,11 @@ export interface TaskPort {
   defaultPort: number | null;
   hostPort: number;
   source: PortSource;
+  /** Optional repo-specific service commands from .dash/ports.json. */
+  runCommand: string | null;
+  stopCommand: string | null;
+  logsCommand: string | null;
+  cwd: string | null;
   createdAt: string;
   updatedAt: string;
 }

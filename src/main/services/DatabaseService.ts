@@ -388,6 +388,10 @@ export class DatabaseService {
       defaultPort: number | null;
       hostPort: number;
       source: PortSource;
+      runCommand: string | null;
+      stopCommand: string | null;
+      logsCommand: string | null;
+      cwd: string | null;
     }>,
   ): TaskPort[] {
     const db = getDb();
@@ -405,6 +409,10 @@ export class DatabaseService {
             defaultPort: a.defaultPort,
             hostPort: a.hostPort,
             source: a.source,
+            runCommand: a.runCommand,
+            stopCommand: a.stopCommand,
+            logsCommand: a.logsCommand,
+            cwd: a.cwd,
             createdAt: now,
             updatedAt: now,
           })),
@@ -503,6 +511,10 @@ export class DatabaseService {
       defaultPort: row.defaultPort,
       hostPort: row.hostPort,
       source: row.source as PortSource,
+      runCommand: row.runCommand,
+      stopCommand: row.stopCommand,
+      logsCommand: row.logsCommand,
+      cwd: row.cwd,
       createdAt: row.createdAt ?? '',
       updatedAt: row.updatedAt ?? '',
     };

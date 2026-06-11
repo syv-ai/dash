@@ -66,6 +66,10 @@ export class WorkspacePortsRuntime {
         defaultPort: a.defaultPort ?? null,
         hostPort: a.hostPort,
         source: a.source,
+        runCommand: a.run ?? null,
+        stopCommand: a.stop ?? null,
+        logsCommand: a.logs ?? null,
+        cwd: a.cwd ?? null,
       })),
     );
 

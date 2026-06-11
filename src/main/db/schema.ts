@@ -148,6 +148,11 @@ export const taskPorts = sqliteTable(
     hostPort: integer('host_port').notNull(),
     // 'fixed' | 'hash' | 'override' | 'probe' — see PortSource in PortAllocator
     source: text('source').notNull(),
+    // Optional repo-specific service commands (see WorkspacePortsService.ServiceCommands).
+    runCommand: text('run_command'),
+    stopCommand: text('stop_command'),
+    logsCommand: text('logs_command'),
+    cwd: text('cwd'),
     createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
   },
