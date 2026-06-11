@@ -6,6 +6,13 @@ import { fanOutStorage, createMemoryStorage, type StorageLike } from './fanOutSt
 interface SettingsActions {
   setTheme: (theme: SettingsState['theme']) => void;
   setShowTaskTokens: (value: boolean) => void;
+  setShowRateLimits: (value: boolean) => void;
+  setShowUsageInline: (value: boolean) => void;
+  setShowContextUsageOnTaskCards: (value: boolean) => void;
+  setShowActiveTasksSection: (value: boolean) => void;
+  setShowProjectTokens: (value: boolean) => void;
+  setDesktopNotification: (value: boolean) => void;
+  setSyncShellEnv: (value: boolean) => void;
 }
 
 export type SettingsStore = SettingsState & SettingsActions;
@@ -23,6 +30,14 @@ export const useSettings = create<SettingsStore>()(
       ...defaultSettings(),
       setTheme: (theme) => set({ theme }),
       setShowTaskTokens: (showTaskTokens) => set({ showTaskTokens }),
+      setShowRateLimits: (showRateLimits) => set({ showRateLimits }),
+      setShowUsageInline: (showUsageInline) => set({ showUsageInline }),
+      setShowContextUsageOnTaskCards: (showContextUsageOnTaskCards) =>
+        set({ showContextUsageOnTaskCards }),
+      setShowActiveTasksSection: (showActiveTasksSection) => set({ showActiveTasksSection }),
+      setShowProjectTokens: (showProjectTokens) => set({ showProjectTokens }),
+      setDesktopNotification: (desktopNotification) => set({ desktopNotification }),
+      setSyncShellEnv: (syncShellEnv) => set({ syncShellEnv }),
     }),
     {
       name: 'settings',
