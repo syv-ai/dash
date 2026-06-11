@@ -14,9 +14,21 @@ const PORTS_LOCAL_FILE = 'ports.local.json';
  *   - Tier 1 (fixed): `label` + `port`. Dash just shows liveness — no
  *     allocation, no env injection. Useful for services on hard-coded ports.
  */
+/** Optional repo-specific service commands, recorded by the onboarding agent. */
+export interface ServiceCommands {
+  /** Foreground command that starts the service (the tab doubles as logs). */
+  run?: string;
+  /** Stops the service when Dash didn't start it (e.g. docker compose stop X). */
+  stop?: string;
+  /** Tails logs for an externally-running instance. */
+  logs?: string;
+  /** Working directory relative to the worktree root. Default: root. */
+  cwd?: string;
+}
+
 export type PortDeclaration =
-  | { label: string; envVar: string; defaultPort: number }
-  | { label: string; port: number };
+  | ({ label: string; envVar: string; defaultPort: number } & ServiceCommands)
+  | ({ label: string; port: number } & ServiceCommands);
 
 export interface WorkspacePorts {
   /** Number of distinct port slots in the allocator's modulus. Default 50. */
@@ -65,6 +77,37 @@ function isValidPort(value: unknown): value is number {
   );
 }
 
+/** Validate + collect the optional command fields. Returns null on invalid. */
+function parseCommandFields(
+  obj: Record<string, unknown>,
+  index: number,
+  source: string,
+): ServiceCommands | null {
+  const out: ServiceCommands = {};
+  for (const key of ['run', 'stop', 'logs'] as const) {
+    const v = obj[key];
+    if (v === undefined) continue;
+    if (typeof v !== 'string' || v.trim().length === 0) {
+      report(`${source}: ports[${index}].${key} must be a non-empty string`);
+      return null;
+    }
+    out[key] = v.trim();
+  }
+  if (obj.cwd !== undefined) {
+    if (typeof obj.cwd !== 'string' || obj.cwd.trim().length === 0) {
+      report(`${source}: ports[${index}].cwd must be a non-empty string`);
+      return null;
+    }
+    const cwd = obj.cwd.trim();
+    if (path.isAbsolute(cwd) || path.normalize(cwd).split(path.sep).includes('..')) {
+      report(`${source}: ports[${index}].cwd must be a relative path inside the worktree`);
+      return null;
+    }
+    out.cwd = cwd;
+  }
+  return out;
+}
+
 function parsePortEntry(raw: unknown, index: number, source: string): PortDeclaration | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     report(`${source}: ports[${index}] must be an object`);
@@ -77,6 +120,9 @@ function parsePortEntry(raw: unknown, index: number, source: string): PortDeclar
     return null;
   }
   const label = obj.label.trim();
+
+  const commands = parseCommandFields(obj, index, source);
+  if (commands === null) return null;
 
   const hasEnvVar = obj.envVar !== undefined;
   const hasDefaultPort = obj.defaultPort !== undefined;
@@ -92,7 +138,7 @@ function parsePortEntry(raw: unknown, index: number, source: string): PortDeclar
       report(`${source}: ports[${index}].port must be an integer in [${MIN_PORT}, ${MAX_PORT}]`);
       return null;
     }
-    return { label, port: obj.port };
+    return { label, port: obj.port, ...commands };
   }
 
   if (!hasEnvVar || !hasDefaultPort) {
@@ -109,7 +155,7 @@ function parsePortEntry(raw: unknown, index: number, source: string): PortDeclar
     );
     return null;
   }
-  return { label, envVar: obj.envVar, defaultPort: obj.defaultPort };
+  return { label, envVar: obj.envVar, defaultPort: obj.defaultPort, ...commands };
 }
 
 function parseConfig(parsed: unknown, source: string): WorkspacePorts | null {
@@ -154,9 +200,17 @@ function parseConfig(parsed: unknown, source: string): WorkspacePorts | null {
   }
 
   const seenEnvVars = new Set<string>();
+  const seenLabels = new Set<string>();
   for (let i = 0; i < portsArr.length; i++) {
     const entry = parsePortEntry(portsArr[i], i, source);
     if (entry === null) return null;
+    // Labels key the service-runner's ownership map and tab ids — duplicates
+    // would collide.
+    if (seenLabels.has(entry.label)) {
+      report(`${source}: duplicate label '${entry.label}'`);
+      return null;
+    }
+    seenLabels.add(entry.label);
     if ('envVar' in entry) {
       if (seenEnvVars.has(entry.envVar)) {
         report(`${source}: duplicate envVar '${entry.envVar}'`);

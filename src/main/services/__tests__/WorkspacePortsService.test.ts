@@ -194,3 +194,72 @@ describe('loadPortOverrides', () => {
     expect(loadPortOverrides(tmpDir)).toEqual({});
   });
 });
+
+describe('loadWorkspacePorts — service command fields', () => {
+  it('accepts run/stop/logs/cwd on both entry shapes', () => {
+    writeJson('.dash/ports.json', {
+      ports: [
+        {
+          label: 'Frontend',
+          envVar: 'FRONTEND_PORT',
+          defaultPort: 5173,
+          run: 'pnpm dev',
+          cwd: 'apps/web',
+        },
+        {
+          label: 'DB',
+          port: 5432,
+          stop: 'docker compose stop db',
+          logs: 'docker compose logs -f db',
+        },
+      ],
+    });
+    const result = loadWorkspacePorts(tmpDir);
+    expect(result).not.toBeNull();
+    expect(result!.ports[0]).toMatchObject({ run: 'pnpm dev', cwd: 'apps/web' });
+    expect(result!.ports[1]).toMatchObject({
+      stop: 'docker compose stop db',
+      logs: 'docker compose logs -f db',
+    });
+  });
+
+  it('trims command strings and rejects empty ones', () => {
+    writeJson('.dash/ports.json', { ports: [{ label: 'A', port: 1234, run: '  pnpm dev  ' }] });
+    expect(loadWorkspacePorts(tmpDir)!.ports[0]).toMatchObject({ run: 'pnpm dev' });
+
+    writeJson('.dash/ports.json', { ports: [{ label: 'A', port: 1234, run: '   ' }] });
+    const errors: string[] = [];
+    expect(loadWorkspacePorts(tmpDir, errors)).toBeNull();
+    expect(errors.join(' ')).toContain('run');
+  });
+
+  it('rejects absolute and escaping cwd', () => {
+    writeJson('.dash/ports.json', { ports: [{ label: 'A', port: 1, cwd: '/etc' }] });
+    expect(loadWorkspacePorts(tmpDir)).toBeNull();
+    writeJson('.dash/ports.json', { ports: [{ label: 'A', port: 1, cwd: '../up' }] });
+    expect(loadWorkspacePorts(tmpDir)).toBeNull();
+    writeJson('.dash/ports.json', { ports: [{ label: 'A', port: 1, cwd: 'apps/../..' }] });
+    expect(loadWorkspacePorts(tmpDir)).toBeNull();
+    writeJson('.dash/ports.json', { ports: [{ label: 'A', port: 1, cwd: 'apps/web' }] });
+    expect(loadWorkspacePorts(tmpDir)).not.toBeNull();
+  });
+
+  it('rejects duplicate labels (ServiceRunner keys by label)', () => {
+    writeJson('.dash/ports.json', {
+      ports: [
+        { label: 'API', port: 1 },
+        { label: 'API', port: 2 },
+      ],
+    });
+    expect(loadWorkspacePorts(tmpDir)).toBeNull();
+  });
+
+  it('old files without command fields parse unchanged (no extra keys)', () => {
+    writeJson('.dash/ports.json', { ports: [{ label: 'A', envVar: 'A_PORT', defaultPort: 3000 }] });
+    expect(loadWorkspacePorts(tmpDir)!.ports[0]).toEqual({
+      label: 'A',
+      envVar: 'A_PORT',
+      defaultPort: 3000,
+    });
+  });
+});
