@@ -18,6 +18,10 @@ interface SettingsActions {
   setTerminalFontFamily: (value: string) => void;
   setEffortLevel: (value: string) => void;
   setShellDrawerPosition: (value: SettingsState['shellDrawerPosition']) => void;
+  setCustomIDE: (value: SettingsState['customIDE']) => void;
+  setCustomClaudeEnvVars: (value: SettingsState['customClaudeEnvVars']) => void;
+  setUsageThresholds: (value: SettingsState['usageThresholds']) => void;
+  setRotationOrder: (value: SettingsState['rotationOrder']) => void;
 }
 
 export type SettingsStore = SettingsState & SettingsActions;
@@ -48,6 +52,10 @@ export const useSettings = create<SettingsStore>()(
       setTerminalFontFamily: (terminalFontFamily) => set({ terminalFontFamily }),
       setEffortLevel: (effortLevel) => set({ effortLevel }),
       setShellDrawerPosition: (shellDrawerPosition) => set({ shellDrawerPosition }),
+      setCustomIDE: (customIDE) => set({ customIDE }),
+      setCustomClaudeEnvVars: (customClaudeEnvVars) => set({ customClaudeEnvVars }),
+      setUsageThresholds: (usageThresholds) => set({ usageThresholds }),
+      setRotationOrder: (rotationOrder) => set({ rotationOrder }),
     }),
     {
       name: 'settings',
