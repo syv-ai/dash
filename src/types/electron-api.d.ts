@@ -154,6 +154,8 @@ export interface ElectronAPI {
     IpcResponse<{
       reattached: boolean;
       isDirectSpawn: boolean;
+      /** Serialized mirror state (main-process headless xterm) on reattach. */
+      serializedState?: string;
     }>
   >;
   ptyStart: (args: {
@@ -161,7 +163,9 @@ export interface ElectronAPI {
     cwd: string;
     cols: number;
     rows: number;
-  }) => Promise<IpcResponse<{ reattached: boolean; isDirectSpawn: boolean }>>;
+  }) => Promise<
+    IpcResponse<{ reattached: boolean; isDirectSpawn: boolean; serializedState?: string }>
+  >;
   ptyInput: (args: { id: string; data: string }) => void;
   ptyResize: (args: { id: string; cols: number; rows: number }) => void;
   ptyKill: (id: string) => void;

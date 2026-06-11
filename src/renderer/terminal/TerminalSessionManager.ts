@@ -1,7 +1,6 @@
 import { Terminal } from 'xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
-import { SerializeAddon } from '@xterm/addon-serialize';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { Utf8Base64 } from './clipboardCodec';
@@ -11,7 +10,6 @@ import type { ITheme } from 'xterm';
 import { darkTheme, lightTheme, resolveTheme } from './terminalThemes';
 import { getTerminalFont } from './terminalFonts';
 
-const SNAPSHOT_DEBOUNCE_MS = 10_000;
 const MEMORY_LIMIT_BYTES = 128 * 1024 * 1024; // 128MB soft limit
 
 export class TerminalSessionManager {
@@ -19,11 +17,8 @@ export class TerminalSessionManager {
   readonly cwd: string;
   private terminal: Terminal;
   private fitAddon: FitAddon;
-  private serializeAddon: SerializeAddon;
   private searchAddon: SearchAddon;
   private resizeObserver: ResizeObserver | null = null;
-  private snapshotDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-  private snapshotDirty = false;
   private dataBuffer: string[] | null = null;
   private unsubData: (() => void) | null = null;
   private unsubExit: (() => void) | null = null;
@@ -32,7 +27,6 @@ export class TerminalSessionManager {
   private opened = false;
   private permissionMode: PermissionMode;
   private currentContainer: HTMLElement | null = null;
-  private boundBeforeUnload: (() => void) | null = null;
   private attachGeneration = 0;
   private isDark = true;
   private _isRestarting = false;
@@ -62,10 +56,9 @@ export class TerminalSessionManager {
     isDark?: boolean;
     shellOnly?: boolean;
     /**
-     * True when the underlying PTY hosts a side-car TUI (e.g. the ports
-     * onboarding Clack TUI). Disables snapshot save/restore — the TUI
-     * repaints itself on socket reconnect, and persisted bytes would
-     * replay as garbled ghosts after a reload.
+     * True when the underlying PTY was spawned by main (side-car TUIs and
+     * service runs). The attach path then verifies the PTY exists instead
+     * of falling back to a shell, and renders an error line if it's gone.
      */
     isTui?: boolean;
     themeId?: string;
@@ -98,11 +91,9 @@ export class TerminalSessionManager {
     });
 
     this.fitAddon = new FitAddon();
-    this.serializeAddon = new SerializeAddon();
     this.searchAddon = new SearchAddon();
 
     this.terminal.loadAddon(this.fitAddon);
-    this.terminal.loadAddon(this.serializeAddon);
     this.terminal.loadAddon(this.searchAddon);
     this.terminal.loadAddon(new ClipboardAddon(new Utf8Base64()));
     this.terminal.loadAddon(
@@ -329,16 +320,6 @@ export class TerminalSessionManager {
     });
     this.resizeObserver.observe(container);
 
-    // Save snapshot on page unload (CMD+R) so it's always available on reload.
-    if (!this.boundBeforeUnload) {
-      this.boundBeforeUnload = () => {
-        if (this.snapshotDirty && this.opened) {
-          this.saveSnapshot();
-        }
-      };
-      window.addEventListener('beforeunload', this.boundBeforeUnload);
-    }
-
     // Start PTY if not started (first attach)
     let reattached = false;
     let isDirectSpawn = false;
@@ -426,18 +407,22 @@ export class TerminalSessionManager {
         }
         this.ptyStarted = true;
 
-        // For shell reattach we skip the snapshot — the live shell keeps
-        // writing and we don't want to double-render. For TUI reattach we
-        // DO replay: Clack drew once and won't redraw on a still-open
-        // socket, so without the snapshot the new xterm is blank.
-        if (existingSnapshot && (!reattached || this.isTui)) {
+        // Reattach: restore from the main-process mirror — authoritative,
+        // includes output emitted while no renderer was attached, and fixes
+        // the blank idle shell after reload (a shell never repaints its
+        // prompt unprompted). Fresh spawn: replay the persisted file
+        // snapshot (app-restart restore).
+        const restoreData = reattached
+          ? (shellResp.data?.serializedState ?? null)
+          : (existingSnapshot?.data ?? null);
+        if (restoreData) {
           try {
-            this.terminal.write(existingSnapshot.data);
+            this.terminal.write(restoreData);
           } catch (err) {
             // xterm rejected the buffered bytes — usually a corrupt or
             // malformed control sequence in the snapshot. Without logging,
             // the user just sees a half-rendered terminal with no clue why.
-            console.warn('[terminal] writing snapshot to xterm failed:', err);
+            console.warn('[terminal] writing restored state to xterm failed:', err);
           }
         }
       } else {
@@ -465,7 +450,11 @@ export class TerminalSessionManager {
         // kill it and spawn fresh. Ink's internal cursor state can't be
         // recovered via SIGWINCH, but a fresh Claude Code process with `-r`
         // pointed at this task's session file gives a clean TUI init.
+        let mirrorState: string | null = null;
         if (result.reattached && result.isDirectSpawn) {
+          // The old PTY's mirror state is fresher than the file snapshot —
+          // keep it for the context write below before killing the PTY.
+          mirrorState = result.serializedState ?? null;
           this._isRestarting = true;
           this.readyFired = false;
           this.onRestartingCallback?.();
@@ -484,15 +473,19 @@ export class TerminalSessionManager {
 
         isDirectSpawn = result.isDirectSpawn;
 
-        // Show previous snapshot for visual context while Claude starts
-        if (existingSnapshot && !result.reattached) {
+        // Show previous content for visual context while Claude starts —
+        // mirror state when we just recycled a live PTY, file snapshot on a
+        // cold start.
+        const restoreData =
+          mirrorState ?? (!result.reattached ? (existingSnapshot?.data ?? null) : null);
+        if (restoreData) {
           try {
-            this.terminal.write(existingSnapshot.data);
+            this.terminal.write(restoreData);
           } catch (err) {
             // xterm rejected the buffered bytes — usually a corrupt or
             // malformed control sequence in the snapshot. Without logging,
             // the user just sees a half-rendered terminal with no clue why.
-            console.warn('[terminal] writing snapshot to xterm failed:', err);
+            console.warn('[terminal] writing restored state to xterm failed:', err);
           }
         }
       }
@@ -513,10 +506,6 @@ export class TerminalSessionManager {
         this.dataBuffer = null;
         for (const chunk of buffered) {
           this.terminal.write(chunk);
-        }
-        if (buffered.length > 0) {
-          this.snapshotDirty = true;
-          this.debounceSaveSnapshot();
         }
       }
 
@@ -563,14 +552,7 @@ export class TerminalSessionManager {
   detach() {
     this.savedViewportY = this.terminal.buffer.active.viewportY;
 
-    // Save snapshot before detaching
-    this.saveSnapshot();
-
     // Stop timers
-    if (this.snapshotDebounceTimer) {
-      clearTimeout(this.snapshotDebounceTimer);
-      this.snapshotDebounceTimer = null;
-    }
     if (this.readyFallbackTimer) {
       clearTimeout(this.readyFallbackTimer);
       this.readyFallbackTimer = null;
@@ -600,17 +582,6 @@ export class TerminalSessionManager {
     if (this.disposed) return;
     this.disposed = true;
 
-    if (this.boundBeforeUnload) {
-      window.removeEventListener('beforeunload', this.boundBeforeUnload);
-      this.boundBeforeUnload = null;
-    }
-
-    this.saveSnapshot();
-
-    if (this.snapshotDebounceTimer) {
-      clearTimeout(this.snapshotDebounceTimer);
-      this.snapshotDebounceTimer = null;
-    }
     if (this.fitDebounceTimer) {
       clearTimeout(this.fitDebounceTimer);
       this.fitDebounceTimer = null;
@@ -696,10 +667,6 @@ export class TerminalSessionManager {
       this.dataBuffer = null;
       for (const chunk of buffered) {
         this.terminal.write(chunk);
-      }
-      if (buffered.length > 0) {
-        this.snapshotDirty = true;
-        this.debounceSaveSnapshot();
       }
     }
 
@@ -797,11 +764,6 @@ export class TerminalSessionManager {
     }
   }
 
-  /** Public wrapper for saving snapshot (used by SessionRegistry on app quit). */
-  async forceSaveSnapshot(): Promise<void> {
-    await this.saveSnapshot();
-  }
-
   /** Reserve columns so the TUI doesn't render into the right edge. */
   private static readonly COL_RESERVE = 5;
   private static readonly COL_RESERVE_SHELL = 1;
@@ -844,6 +806,7 @@ export class TerminalSessionManager {
   private async startPty(): Promise<{
     reattached: boolean;
     isDirectSpawn: boolean;
+    serializedState?: string;
   }> {
     const dims = this.fitAddon.proposeDimensions();
     const cols = this.ptyCols(dims?.cols ?? 120);
@@ -851,6 +814,7 @@ export class TerminalSessionManager {
 
     let reattached = false;
     let isDirectSpawn = false;
+    let serializedState: string | undefined;
     const resp = await window.electronAPI.ptyStartDirect({
       id: this.id,
       cwd: this.cwd,
@@ -863,6 +827,7 @@ export class TerminalSessionManager {
     if (resp.success) {
       reattached = resp.data?.reattached ?? false;
       isDirectSpawn = resp.data?.isDirectSpawn ?? true;
+      serializedState = resp.data?.serializedState;
     } else {
       const isNativeModuleError = resp.error?.includes('[native module]');
 
@@ -903,7 +868,7 @@ export class TerminalSessionManager {
 
     this.ptyStarted = true;
 
-    return { reattached, isDirectSpawn };
+    return { reattached, isDirectSpawn, serializedState };
   }
 
   private fireReady() {
@@ -947,9 +912,7 @@ export class TerminalSessionManager {
       }
 
       this.terminal.write(data);
-      this.snapshotDirty = true;
       this.checkMemory();
-      this.debounceSaveSnapshot();
     });
 
     // Listen for PTY exit → spawn shell fallback
@@ -977,35 +940,6 @@ export class TerminalSessionManager {
           this.connectPtyListeners();
         });
     });
-  }
-
-  private debounceSaveSnapshot() {
-    if (this.snapshotDebounceTimer) clearTimeout(this.snapshotDebounceTimer);
-    this.snapshotDebounceTimer = setTimeout(() => {
-      this.snapshotDebounceTimer = null;
-      this.saveSnapshot();
-    }, SNAPSHOT_DEBOUNCE_MS);
-  }
-
-  private saveSnapshot() {
-    if (this.disposed || !this.opened) return;
-    try {
-      const data = this.serializeAddon.serialize();
-      const dims = this.fitAddon.proposeDimensions();
-      const snapshot: TerminalSnapshot = {
-        version: 1,
-        createdAt: new Date().toISOString(),
-        cols: dims?.cols ?? 120,
-        rows: dims?.rows ?? 30,
-        data,
-      };
-      window.electronAPI.ptySaveSnapshot(this.id, snapshot);
-      this.snapshotDirty = false;
-    } catch (err) {
-      // Serialize / IPC failure. If snapshots are silently broken, the user
-      // sees a blank terminal on next reload with no way to attribute it.
-      console.warn('[terminal] saveSnapshot failed:', err);
-    }
   }
 
   private async restoreSnapshot(): Promise<boolean> {

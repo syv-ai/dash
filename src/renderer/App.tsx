@@ -764,13 +764,6 @@ export function App() {
     }
   }, [activeProjectIdForFetch, activeProjectPathForFetch, activeProjectIsGit]);
 
-  // Save all terminal snapshots when app is about to quit
-  useEffect(() => {
-    return window.electronAPI.onBeforeQuit(() => {
-      sessionRegistry.saveAllSnapshots();
-    });
-  }, []);
-
   // Focus a specific task when notification is clicked
   useEffect(() => {
     return window.electronAPI.onFocusTask((taskId) => {
