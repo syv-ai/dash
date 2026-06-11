@@ -23,6 +23,8 @@ import {
 } from './hookSettingsMerge';
 import { encodeProjectPath } from '../utils/jsonlParser';
 import { portsDebug } from './PortsDebugLog';
+import { TerminalMirror } from './TerminalMirror';
+import { terminalSnapshotService } from './TerminalSnapshotService';
 import type { PermissionMode } from '@shared/types';
 
 const execFileAsync = promisify(execFile);
@@ -62,29 +64,51 @@ interface PtyRecord {
   taskId: string | null;
   featureId: string | null;
   /**
-   * Output emitted while no live owner was attached (command PTYs are spawned
-   * by main with owner=null; the renderer claims ownership via startPty's
-   * reattach). Flushed on reattach — without it, a service's startup banner
-   * is silently dropped. Bounded by PENDING_OUTPUT_CAP.
+   * Headless xterm mirror fed every output chunk (the VS Code pty-host
+   * pattern). Serialized on reattach so a fresh renderer xterm shows the
+   * full terminal state — including output emitted while no renderer was
+   * attached. Persisted to the snapshot files on kill/exit/quit.
    */
-  pendingOutput?: string[];
+  mirror: TerminalMirror | null;
 }
-
-// Cap on buffered unowned output (chars). A service that scrolls megabytes
-// before anyone attaches keeps only the tail — same effect as a scrollback
-// limit.
-const PENDING_OUTPUT_CAP = 512_000;
 
 const ptys = new Map<string, PtyRecord>();
 
-/** Buffer a chunk of unowned output on the record, trimming oldest past the cap. */
-function bufferPendingOutput(record: PtyRecord, data: string): void {
-  record.pendingOutput = record.pendingOutput ?? [];
-  record.pendingOutput.push(data);
-  let total = 0;
-  for (const c of record.pendingOutput) total += c.length;
-  while (total > PENDING_OUTPUT_CAP && record.pendingOutput.length > 1) {
-    total -= record.pendingOutput.shift()!.length;
+/** Persist a mirror's state to the snapshot files (sync — quit-safe). */
+function persistMirrorSync(id: string, mirror: TerminalMirror): void {
+  try {
+    const data = mirror.serializeNow();
+    if (!data) return;
+    const { cols, rows } = mirror.dims();
+    terminalSnapshotService
+      .saveSnapshot(id, {
+        version: 1,
+        createdAt: new Date().toISOString(),
+        cols,
+        rows,
+        data,
+      })
+      .catch(() => {
+        // Persistence is best-effort (also: no `app` under test env).
+      });
+  } catch {
+    // Persistence is best-effort.
+  }
+}
+
+/** Detach, persist, and dispose a record's mirror (kill/exit paths). */
+function persistAndDisposeMirror(id: string, record: PtyRecord): void {
+  const mirror = record.mirror;
+  record.mirror = null;
+  if (!mirror) return;
+  persistMirrorSync(id, mirror);
+  mirror.dispose();
+}
+
+/** Serialize every live mirror to disk — before-quit + crash-resilience interval. */
+export function persistAllMirrors(): void {
+  for (const [id, record] of ptys) {
+    if (record.mirror) persistMirrorSync(id, record.mirror);
   }
 }
 
@@ -792,6 +816,7 @@ export async function startDirectPty(options: {
 }): Promise<{
   reattached: boolean;
   isDirectSpawn: boolean;
+  serializedState?: string;
 }> {
   // Re-attach to existing PTY (e.g., after renderer reload)
   const existing = ptys.get(options.id);
@@ -802,10 +827,14 @@ export async function startDirectPty(options: {
     } catch {
       /* already dead */
     }
+    persistAndDisposeMirror(options.id, existing);
     ptys.delete(options.id);
   } else if (existing) {
+    // Serialize BEFORE claiming the owner: a chunk arriving mid-serialize
+    // lands in the mirror only (next output repaints it) — never duplicated.
+    const serializedState = existing.mirror ? await existing.mirror.serialize() : undefined;
     existing.owner = options.sender || null;
-    return { reattached: true, isDirectSpawn: true };
+    return { reattached: true, isDirectSpawn: true, serializedState };
   }
 
   const claudePath = await findClaudePath();
@@ -875,13 +904,17 @@ export async function startDirectPty(options: {
     kind: 'agent',
     taskId: options.id,
     featureId: null,
+    mirror: new TerminalMirror(options.cols, options.rows),
   };
 
   ptys.set(options.id, record);
   activityMonitor.register(options.id, proc.pid);
 
-  // Forward output to renderer, replacing the Claude logo with "7" art
+  // Forward output to renderer, replacing the Claude logo with "7" art.
+  // The mirror receives the same filtered stream the renderer renders, so
+  // its serialized state matches what a reattaching xterm should show.
   const bannerFilter = createBannerFilter((filtered: string) => {
+    record.mirror?.write(filtered);
     if (record.owner && !record.owner.isDestroyed()) {
       record.owner.send(`pty:data:${options.id}`, filtered);
     }
@@ -902,6 +935,7 @@ export async function startDirectPty(options: {
     if (record.owner && !record.owner.isDestroyed()) {
       record.owner.send(`pty:exit:${options.id}`, { exitCode, signal });
     }
+    persistAndDisposeMirror(options.id, record);
     ptys.delete(options.id);
   });
 
@@ -1020,22 +1054,15 @@ export async function startPty(options: {
   cols: number;
   rows: number;
   sender?: WebContents;
-}): Promise<{ reattached: boolean; isDirectSpawn: boolean }> {
+}): Promise<{ reattached: boolean; isDirectSpawn: boolean; serializedState?: string }> {
   // Re-attach to existing PTY (e.g., after renderer reload)
   const existing = ptys.get(options.id);
   if (existing) {
+    // Serialize BEFORE claiming the owner: a chunk arriving mid-serialize
+    // lands in the mirror only (next output repaints it) — never duplicated.
+    const serializedState = existing.mirror ? await existing.mirror.serialize() : undefined;
     existing.owner = options.sender || null;
-    // Flush output buffered while no renderer was attached (see
-    // bufferPendingOutput) — a command PTY's startup banner lands here.
-    // The renderer registers its pty:data listener before invoking
-    // pty:start, so these sends are received in order ahead of live data.
-    if (existing.owner && existing.pendingOutput?.length) {
-      for (const chunk of existing.pendingOutput) {
-        existing.owner.send(`pty:data:${options.id}`, chunk);
-      }
-      existing.pendingOutput = undefined;
-    }
-    return { reattached: true, isDirectSpawn: existing.isDirectSpawn };
+    return { reattached: true, isDirectSpawn: existing.isDirectSpawn, serializedState };
   }
 
   const pty = getPty();
@@ -1096,6 +1123,7 @@ export async function startPty(options: {
     kind: 'shell',
     taskId: shellTaskId,
     featureId: null,
+    mirror: new TerminalMirror(options.cols, options.rows),
   };
 
   ptys.set(options.id, record);
@@ -1104,6 +1132,7 @@ export async function startPty(options: {
   // shell PTY exit (below) is a no-op for unknown ids, so it's safe.
 
   proc.onData((data: string) => {
+    record.mirror?.write(data);
     if (record.owner && !record.owner.isDestroyed()) {
       record.owner.send(`pty:data:${options.id}`, data);
     }
@@ -1116,6 +1145,7 @@ export async function startPty(options: {
     if (record.owner && !record.owner.isDestroyed()) {
       record.owner.send(`pty:exit:${options.id}`, { exitCode, signal });
     }
+    persistAndDisposeMirror(options.id, record);
     ptys.delete(options.id);
   });
 
@@ -1149,6 +1179,7 @@ export function writePty(id: string, data: string): void {
 export function resizePty(id: string, cols: number, rows: number): void {
   const record = ptys.get(id);
   if (record) {
+    record.mirror?.resize(cols, rows);
     try {
       record.proc.resize(cols, rows);
     } catch {
@@ -1168,6 +1199,9 @@ export function killPty(id: string): void {
     activityMonitor.unregister(id);
     remoteControlService.unregister(id);
     contextUsageService.unregister(id);
+    // Persist before killing — restart() relies on the snapshot for visual
+    // context when it respawns into the same id.
+    persistAndDisposeMirror(id, record);
     try {
       record.proc.kill();
     } catch {
@@ -1180,7 +1214,8 @@ export function killPty(id: string): void {
  * Kill all PTYs (on app quit).
  */
 export function killAll(): void {
-  for (const [, record] of ptys) {
+  for (const [id, record] of ptys) {
+    persistAndDisposeMirror(id, record);
     try {
       record.proc.kill();
     } catch {
@@ -1274,18 +1309,18 @@ export async function startCommandPty(options: {
     kind: options.kind ?? 'tui',
     taskId: options.taskId,
     featureId: options.featureId,
+    mirror: new TerminalMirror(options.cols, options.rows),
   };
 
   ptys.set(options.id, record);
 
   proc.onData((data: string) => {
+    // The mirror always consumes — output emitted before any renderer
+    // attaches (service startup banners) is recovered from its serialized
+    // state on reattach.
+    record.mirror?.write(data);
     if (record.owner && !record.owner.isDestroyed()) {
       record.owner.send(`pty:data:${options.id}`, data);
-    } else {
-      // Spawned by main with owner=null (service runs) — keep the output
-      // until the renderer attaches, or it's gone (startup banners print
-      // before the drawer tab exists).
-      bufferPendingOutput(record, data);
     }
   });
 
@@ -1294,6 +1329,7 @@ export async function startCommandPty(options: {
     if (record.owner && !record.owner.isDestroyed()) {
       record.owner.send(`pty:exit:${options.id}`, { exitCode, signal });
     }
+    persistAndDisposeMirror(options.id, record);
     ptys.delete(options.id);
   });
 
@@ -1306,6 +1342,10 @@ export async function startCommandPty(options: {
 // ---------------------------------------------------------------------------
 
 export function __testReset(): void {
+  for (const record of ptys.values()) {
+    record.mirror?.dispose();
+    record.mirror = null;
+  }
   ptys.clear();
 }
 
@@ -1321,5 +1361,6 @@ export function __registerForTest(
     kind: rec.kind,
     taskId: rec.taskId,
     featureId: rec.featureId,
+    mirror: null,
   });
 }
