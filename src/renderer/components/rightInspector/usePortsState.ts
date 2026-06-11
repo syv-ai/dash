@@ -1,23 +1,9 @@
 import { useEffect, useState } from 'react';
 import type { TaskPort, PortLiveness } from '../../../shared/types';
 
-// Module-scoped so the IPC fires once per renderer reload rather than once
-// per task switch — Docker Desktop's install state is stable for the process.
-let dockerDesktopAvailablePromise: Promise<boolean> | null = null;
-function isDockerDesktopAvailable(): Promise<boolean> {
-  if (!dockerDesktopAvailablePromise) {
-    dockerDesktopAvailablePromise = window.electronAPI
-      .portsIsDockerDesktopAvailable()
-      .then((r) => (r.success && r.data) || false)
-      .catch(() => false);
-  }
-  return dockerDesktopAvailablePromise;
-}
-
 export interface PortsState {
   ports: TaskPort[];
   liveness: Record<number, PortLiveness>;
-  dockerAvailable: boolean;
   refreshing: boolean;
   hasContent: boolean;
   livenessSummary: { up: number; total: number };
@@ -25,26 +11,14 @@ export interface PortsState {
 }
 
 /**
- * Runtime state for the ports drawer — owns the list fetch, liveness
- * subscription, and Docker-available probe. The onboarding/heuristic side
- * lives in usePortsOnboarding so the drawer doesn't need to know anything
- * about pre-setup state.
+ * Runtime state for the ports drawer — owns the list fetch and the liveness
+ * subscription. The onboarding/heuristic side lives in usePortsOnboarding so
+ * the drawer doesn't need to know anything about pre-setup state.
  */
 export function usePortsState(taskId: string | null): PortsState {
   const [ports, setPorts] = useState<TaskPort[]>([]);
   const [liveness, setLiveness] = useState<Record<number, PortLiveness>>({});
   const [refreshing, setRefreshing] = useState(false);
-  const [dockerAvailable, setDockerAvailable] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    isDockerDesktopAvailable().then((v) => {
-      if (!cancelled) setDockerAvailable(v);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     if (!taskId) {
@@ -127,7 +101,6 @@ export function usePortsState(taskId: string | null): PortsState {
   return {
     ports,
     liveness,
-    dockerAvailable,
     refreshing,
     hasContent: ports.length > 0,
     livenessSummary: { up, total: ports.length },

@@ -493,8 +493,6 @@ export interface ElectronAPI {
   portsUnwatch: (taskId: string) => Promise<IpcResponse<void>>;
   portsOpenUrl: (port: number) => Promise<IpcResponse<void>>;
   portsDetect: (taskId: string) => Promise<IpcResponse<PortHeuristicResult>>;
-  portsIsDockerDesktopAvailable: () => Promise<IpcResponse<boolean>>;
-  portsOpenInDocker: () => Promise<IpcResponse<void>>;
   portsWatchConfig: (taskId: string) => Promise<IpcResponse<void>>;
   portsServiceStart: (taskId: string, port: TaskPort) => Promise<IpcResponse<void>>;
   portsServiceStop: (taskId: string, port: TaskPort) => Promise<IpcResponse<void>>;

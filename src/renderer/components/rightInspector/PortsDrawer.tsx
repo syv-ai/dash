@@ -65,11 +65,7 @@ export function PortsDrawer({ state, collapsed, onCollapse, onExpand }: PortsDra
             </button>
           </div>
           <div className="overflow-y-auto max-h-[50vh]" style={{ scrollbarGutter: 'stable' }}>
-            <PortsPanel
-              ports={state.ports}
-              liveness={state.liveness}
-              dockerAvailable={state.dockerAvailable}
-            />
+            <PortsPanel ports={state.ports} liveness={state.liveness} />
           </div>
         </>
       )}

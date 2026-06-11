@@ -1,12 +1,11 @@
 import React from 'react';
-import { ExternalLink, Container } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import type { TaskPort, PortLiveness } from '../../../shared/types';
 import { Tooltip } from '../ui/Tooltip';
 
 interface PortsPanelProps {
   ports: TaskPort[];
   liveness: Record<number, PortLiveness>;
-  dockerAvailable: boolean;
 }
 
 const SOURCE_LABEL: Record<TaskPort['source'], string> = {
@@ -22,30 +21,17 @@ const STATE_DOT_CLASS: Record<PortLiveness, string> = {
   unknown: 'bg-foreground/40 animate-pulse',
 };
 
-export function PortsPanel({ ports, liveness, dockerAvailable }: PortsPanelProps) {
+export function PortsPanel({ ports, liveness }: PortsPanelProps) {
   return (
     <ul className="flex flex-col gap-0.5 px-2 py-1.5">
       {ports.map((port) => (
-        <PortRow
-          key={port.id}
-          port={port}
-          state={liveness[port.hostPort] ?? 'unknown'}
-          showDocker={dockerAvailable}
-        />
+        <PortRow key={port.id} port={port} state={liveness[port.hostPort] ?? 'unknown'} />
       ))}
     </ul>
   );
 }
 
-function PortRow({
-  port,
-  state,
-  showDocker,
-}: {
-  port: TaskPort;
-  state: PortLiveness;
-  showDocker: boolean;
-}) {
+function PortRow({ port, state }: { port: TaskPort; state: PortLiveness }) {
   const url = `http://localhost:${port.hostPort}`;
   const tooltip = `${port.label} · ${SOURCE_LABEL[port.source]}${
     port.envVar ? ` · $${port.envVar}` : ''
@@ -72,17 +58,6 @@ function PortRow({
           </span>
         </button>
       </Tooltip>
-      {showDocker && (
-        <Tooltip content="Open Docker Desktop">
-          <button
-            type="button"
-            onClick={() => window.electronAPI.portsOpenInDocker()}
-            className="p-[2px] rounded text-muted-foreground/40 hover:text-foreground hover:bg-accent/60 transition-colors"
-          >
-            <Container size={10} strokeWidth={2} />
-          </button>
-        </Tooltip>
-      )}
       <Tooltip content="Open in browser">
         <button
           type="button"

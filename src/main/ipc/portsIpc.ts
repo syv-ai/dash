@@ -1,7 +1,5 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 import { ipcMain, shell } from 'electron';
 import { WorkspacePortsRuntime } from '../services/WorkspacePortsRuntime';
 import { portLivenessService } from '../services/PortLivenessService';
@@ -9,37 +7,6 @@ import { DatabaseService } from '../services/DatabaseService';
 import { detectPortsNeed } from '../services/PortsHeuristic';
 import { loadWorkspacePorts } from '../services/WorkspacePortsService';
 import { ensureWatching as ensurePortsConfigWatch } from '../services/PortsConfigWatcher';
-
-const execFileAsync = promisify(execFile);
-
-// Cached after first probe — Docker Desktop's install state doesn't change
-// while Dash is running, and the probe involves either a stat or a child
-// process so it's worth not repeating it for every port row.
-let dockerDesktopAvailable: boolean | null = null;
-
-async function detectDockerDesktop(): Promise<boolean> {
-  if (dockerDesktopAvailable !== null) return dockerDesktopAvailable;
-  try {
-    if (process.platform === 'darwin') {
-      dockerDesktopAvailable = fs.existsSync('/Applications/Docker.app');
-    } else if (process.platform === 'linux') {
-      // Linux ships Docker Desktop as a separate `docker-desktop` binary on
-      // PATH; the regular `docker` CLI is not enough since it might be a
-      // Docker Engine install without the Desktop UI.
-      try {
-        const { stdout } = await execFileAsync('which', ['docker-desktop']);
-        dockerDesktopAvailable = stdout.trim().length > 0;
-      } catch {
-        dockerDesktopAvailable = false;
-      }
-    } else {
-      dockerDesktopAvailable = false;
-    }
-  } catch {
-    dockerDesktopAvailable = false;
-  }
-  return dockerDesktopAvailable;
-}
 
 export function registerPortsIpc(): void {
   ipcMain.handle('ports:list', (_event, taskId: string) => {
@@ -107,38 +74,6 @@ export function registerPortsIpc(): void {
   ipcMain.handle('ports:openUrl', (_event, port: number) => {
     shell.openExternal(`http://localhost:${port}`);
     return { success: true };
-  });
-
-  // Docker Desktop deep-link. We don't know which container is bound to the
-  // given port without running `docker ps` (deferred), so for v1 we just
-  // surface the containers dashboard and let the user pick. The icon is only
-  // shown in the UI when isAvailable is true, so a no-op handler isn't
-  // expected here.
-  ipcMain.handle('ports:isDockerDesktopAvailable', async () => {
-    return { success: true, data: await detectDockerDesktop() };
-  });
-
-  ipcMain.handle('ports:openInDocker', async () => {
-    const available = await detectDockerDesktop();
-    if (!available) return { success: false, error: 'Docker Desktop not installed' };
-    try {
-      if (process.platform === 'darwin') {
-        // `open -a Docker` reliably launches AND focuses the app. The
-        // docker-desktop:// URL scheme is inconsistent — registered, fires
-        // a handler, but doesn't always foreground the window.
-        await execFileAsync('open', ['-a', 'Docker']);
-      } else if (process.platform === 'linux') {
-        // Detach so Dash doesn't sit waiting for Docker Desktop to exit.
-        const { spawn } = await import('child_process');
-        const proc = spawn('docker-desktop', [], { detached: true, stdio: 'ignore' });
-        proc.unref();
-      } else {
-        await shell.openExternal('docker-desktop://');
-      }
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: String(error) };
-    }
   });
 
   // Onboarding state — only fires when the task has no ports.json yet, so
