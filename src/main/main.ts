@@ -159,6 +159,8 @@ app.whenReady().then(async () => {
   migrateLegacyPortsDismissals();
   cleanupTuiAtBoot();
   registerTuiIpc({ getMainWindow: () => mainWindow });
+  const { registerServicesIpc } = await import('./ipc/servicesIpc');
+  registerServicesIpc();
 
   // Cleanup orphaned reserve worktrees (background, non-blocking)
   setTimeout(async () => {

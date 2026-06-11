@@ -496,6 +496,17 @@ export interface ElectronAPI {
   portsIsDockerDesktopAvailable: () => Promise<IpcResponse<boolean>>;
   portsOpenInDocker: () => Promise<IpcResponse<void>>;
   portsWatchConfig: (taskId: string) => Promise<IpcResponse<void>>;
+  portsServiceStart: (taskId: string, port: TaskPort) => Promise<IpcResponse<void>>;
+  portsServiceStop: (taskId: string, port: TaskPort) => Promise<IpcResponse<void>>;
+  portsServiceLogs: (taskId: string, port: TaskPort) => Promise<IpcResponse<void>>;
+  portsServiceStartAll: (
+    taskId: string,
+  ) => Promise<IpcResponse<{ started: string[]; failed: string[] }>>;
+  portsServiceStatus: (
+    taskId: string,
+  ) => Promise<IpcResponse<Record<string, { ownedTabId: string | null }>>>;
+  onPortsServiceChanged: (cb: (data: { taskId: string }) => void) => () => void;
+  onPortsServiceFocusTab: (cb: (data: { taskId: string; tabId: string }) => void) => () => void;
   onPortsLiveness: (callback: (update: PortLivenessUpdate) => void) => () => void;
   onPortsConfigChanged: (callback: (data: { taskId: string }) => void) => () => void;
   onPortsSetupComplete: (callback: (data: { taskId: string }) => void) => () => void;

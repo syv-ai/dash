@@ -95,6 +95,16 @@ export function TerminalDrawer({
     };
   }, [activeTabId, cwd, tabs]);
 
+  // Logs button with a Dash-owned tab: main asks us to surface that tab.
+  useEffect(() => {
+    const off = window.electronAPI.onPortsServiceFocusTab(({ taskId: tid, tabId }) => {
+      if (tid !== taskId) return;
+      onExpand();
+      window.electronAPI.drawerTabsSetActive(taskId, tabId);
+    });
+    return off;
+  }, [taskId, onExpand]);
+
   // Focus terminal when the user explicitly expands the drawer
   const prevCollapsedRef = useRef(collapsed);
   useEffect(() => {

@@ -460,6 +460,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
   portsIsDockerDesktopAvailable: () => ipcRenderer.invoke('ports:isDockerDesktopAvailable'),
   portsOpenInDocker: () => ipcRenderer.invoke('ports:openInDocker'),
   portsWatchConfig: (taskId: string) => ipcRenderer.invoke('ports:watchConfig', taskId),
+  portsServiceStart: (taskId: string, port: unknown) =>
+    ipcRenderer.invoke('ports:service:start', taskId, port),
+  portsServiceStop: (taskId: string, port: unknown) =>
+    ipcRenderer.invoke('ports:service:stop', taskId, port),
+  portsServiceLogs: (taskId: string, port: unknown) =>
+    ipcRenderer.invoke('ports:service:logs', taskId, port),
+  portsServiceStartAll: (taskId: string) => ipcRenderer.invoke('ports:service:startAll', taskId),
+  portsServiceStatus: (taskId: string) => ipcRenderer.invoke('ports:service:status', taskId),
+  onPortsServiceChanged: (cb: (data: { taskId: string }) => void) => {
+    const handler = (_event: unknown, data: { taskId: string }) => cb(data);
+    ipcRenderer.on('ports:service:changed', handler);
+    return () => ipcRenderer.removeListener('ports:service:changed', handler);
+  },
+  onPortsServiceFocusTab: (cb: (data: { taskId: string; tabId: string }) => void) => {
+    const handler = (_event: unknown, data: { taskId: string; tabId: string }) => cb(data);
+    ipcRenderer.on('ports:service:focusTab', handler);
+    return () => ipcRenderer.removeListener('ports:service:focusTab', handler);
+  },
   onPortsConfigChanged: (callback: (data: { taskId: string }) => void) => {
     const handler = (_event: unknown, data: { taskId: string }) => callback(data);
     ipcRenderer.on('ports:configChanged', handler);
