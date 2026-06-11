@@ -80,6 +80,32 @@ describe('SidecarTuiHost', () => {
     expect(env.DASH_TUI_SOCKET).toContain('tui-ports-t1-');
   });
 
+  it('isActive stays true while the spawn is still in flight (migrate relies on this)', async () => {
+    // The side-car PTY + socket dance is slow; the migrate path fires the
+    // ports:tui:migrated IPC right after calling spawn() WITHOUT awaiting it,
+    // and the renderer's task-switch effect checks isActive() to avoid
+    // double-spawning. That only works if the engagement is reserved up front
+    // and stays reserved across every await inside spawn().
+    let resolvePty: (() => void) | undefined;
+    startPty.mockImplementationOnce(
+      () =>
+        new Promise<object>((res) => {
+          resolvePty = () => res({});
+        }),
+    );
+    const flow = makeFlow();
+    const p = host.spawn(spawnOpts(flow));
+    // Reserved synchronously, before any await resolves.
+    expect(host.isActive('ports', 't1')).toBe(true);
+    // Still true once the spawn has progressed all the way to the (hung) PTY
+    // spawn — the exact window in which migrate notifies the renderer.
+    await vi.waitFor(() => expect(startPty).toHaveBeenCalled());
+    expect(host.isActive('ports', 't1')).toBe(true);
+    resolvePty!();
+    await p;
+    expect(host.isActive('ports', 't1')).toBe(true);
+  });
+
   it('teardown with a user reason drops active and suppresses respawn', async () => {
     const flow = makeFlow();
     await host.spawn(spawnOpts(flow));
