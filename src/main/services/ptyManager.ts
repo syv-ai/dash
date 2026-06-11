@@ -61,9 +61,32 @@ interface PtyRecord {
   kind: PtyKind;
   taskId: string | null;
   featureId: string | null;
+  /**
+   * Output emitted while no live owner was attached (command PTYs are spawned
+   * by main with owner=null; the renderer claims ownership via startPty's
+   * reattach). Flushed on reattach — without it, a service's startup banner
+   * is silently dropped. Bounded by PENDING_OUTPUT_CAP.
+   */
+  pendingOutput?: string[];
 }
 
+// Cap on buffered unowned output (chars). A service that scrolls megabytes
+// before anyone attaches keeps only the tail — same effect as a scrollback
+// limit.
+const PENDING_OUTPUT_CAP = 512_000;
+
 const ptys = new Map<string, PtyRecord>();
+
+/** Buffer a chunk of unowned output on the record, trimming oldest past the cap. */
+function bufferPendingOutput(record: PtyRecord, data: string): void {
+  record.pendingOutput = record.pendingOutput ?? [];
+  record.pendingOutput.push(data);
+  let total = 0;
+  for (const c of record.pendingOutput) total += c.length;
+  while (total > PENDING_OUTPUT_CAP && record.pendingOutput.length > 1) {
+    total -= record.pendingOutput.shift()!.length;
+  }
+}
 
 /**
  * Per-task initial prompt to pass as `claude`'s positional argument when the
@@ -1002,6 +1025,16 @@ export async function startPty(options: {
   const existing = ptys.get(options.id);
   if (existing) {
     existing.owner = options.sender || null;
+    // Flush output buffered while no renderer was attached (see
+    // bufferPendingOutput) — a command PTY's startup banner lands here.
+    // The renderer registers its pty:data listener before invoking
+    // pty:start, so these sends are received in order ahead of live data.
+    if (existing.owner && existing.pendingOutput?.length) {
+      for (const chunk of existing.pendingOutput) {
+        existing.owner.send(`pty:data:${options.id}`, chunk);
+      }
+      existing.pendingOutput = undefined;
+    }
     return { reattached: true, isDirectSpawn: existing.isDirectSpawn };
   }
 
@@ -1248,6 +1281,11 @@ export async function startCommandPty(options: {
   proc.onData((data: string) => {
     if (record.owner && !record.owner.isDestroyed()) {
       record.owner.send(`pty:data:${options.id}`, data);
+    } else {
+      // Spawned by main with owner=null (service runs) — keep the output
+      // until the renderer attaches, or it's gone (startup banners print
+      // before the drawer tab exists).
+      bufferPendingOutput(record, data);
     }
   });
 
