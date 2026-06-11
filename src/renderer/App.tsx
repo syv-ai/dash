@@ -113,9 +113,8 @@ export function App() {
   const [notificationSound, setNotificationSound] = useState<NotificationSound>(() => {
     return (localStorage.getItem('notificationSound') as NotificationSound) || 'off';
   });
-  const [desktopNotification, setDesktopNotification] = useState(() => {
-    return localStorage.getItem('desktopNotification') === 'true';
-  });
+  const desktopNotification = useSettings((s) => s.desktopNotification);
+  const setDesktopNotification = useSettings((s) => s.setDesktopNotification);
   const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(() => {
     const stored = localStorage.getItem('autoUpdateEnabled');
     return stored === null ? true : stored === 'true';
@@ -244,9 +243,8 @@ export function App() {
   const [effortLevel, setEffortLevel] = useState<string>(() => {
     return localStorage.getItem('claudeEffortLevel') || 'auto';
   });
-  const [syncShellEnv, setSyncShellEnv] = useState(() => {
-    return localStorage.getItem('syncShellEnv') === 'true';
-  });
+  const syncShellEnv = useSettings((s) => s.syncShellEnv);
+  const setSyncShellEnv = useSettings((s) => s.setSyncShellEnv);
   const [customClaudeEnvVars, setCustomClaudeEnvVars] = useState<Record<string, string>>(() => {
     try {
       return JSON.parse(localStorage.getItem('customClaudeEnvVars') || '{}');
@@ -412,28 +410,12 @@ export function App() {
   }, [activeTaskId]);
 
   // Right-sidebar: 5-hour / 7-day rate limit bars
-  const [showRateLimits, setShowRateLimits] = useState(
-    () => localStorage.getItem('showRateLimits') !== 'false',
-  );
-  useEffect(() => {
-    localStorage.setItem('showRateLimits', String(showRateLimits));
-  }, [showRateLimits]);
-
-  // Right-sidebar: current session (context) usage bar
-  const [showUsageInline, setShowUsageInline] = useState(
-    () => localStorage.getItem('showUsageInline') !== 'false',
-  );
-  useEffect(() => {
-    localStorage.setItem('showUsageInline', String(showUsageInline));
-  }, [showUsageInline]);
-
-  // Left-sidebar task cards: context progress bar under each task
-  const [showContextUsageOnTaskCards, setShowContextUsageOnTaskCards] = useState(
-    () => localStorage.getItem('showContextUsageOnTaskCards') !== 'false',
-  );
-  useEffect(() => {
-    localStorage.setItem('showContextUsageOnTaskCards', String(showContextUsageOnTaskCards));
-  }, [showContextUsageOnTaskCards]);
+  const showRateLimits = useSettings((s) => s.showRateLimits);
+  const setShowRateLimits = useSettings((s) => s.setShowRateLimits);
+  const showUsageInline = useSettings((s) => s.showUsageInline);
+  const setShowUsageInline = useSettings((s) => s.setShowUsageInline);
+  const showContextUsageOnTaskCards = useSettings((s) => s.showContextUsageOnTaskCards);
+  const setShowContextUsageOnTaskCards = useSettings((s) => s.setShowContextUsageOnTaskCards);
 
   // Rotation — tasks the user cycles through with Ctrl+Tab
   const [showActiveTasksSection, setShowActiveTasksSection] = useState(
@@ -2348,7 +2330,6 @@ export function App() {
           desktopNotification={desktopNotification}
           onDesktopNotificationChange={(v) => {
             setDesktopNotification(v);
-            localStorage.setItem('desktopNotification', String(v));
           }}
           autoUpdateEnabled={autoUpdateEnabled}
           onAutoUpdateEnabledChange={(v) => {
@@ -2401,7 +2382,6 @@ export function App() {
           syncShellEnv={syncShellEnv}
           onSyncShellEnvChange={(v) => {
             setSyncShellEnv(v);
-            localStorage.setItem('syncShellEnv', String(v));
           }}
           customClaudeEnvVars={customClaudeEnvVars}
           onCustomClaudeEnvVarsChange={(v) => {
