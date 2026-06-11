@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import path from 'path';
 import * as fs from 'fs';
 import { TuiSocketServer } from '../services/TuiSocketServer';
+import type { PortsMainToTui, PortsTuiToMain } from '../../shared/portsTuiProtocol';
 import { PortsOnboardingOrchestrator } from '../services/PortsOnboardingOrchestrator';
 import { initDrawerTabsService } from './drawerTabsIpc';
 import { startCommandPty, setInitialPrompt } from '../services/ptyManager';
@@ -19,7 +20,7 @@ import { worktreeService } from '../services/WorktreeService';
 import { portsDebug } from '../services/PortsDebugLog';
 
 interface ActiveTui {
-  socket: TuiSocketServer;
+  socket: TuiSocketServer<PortsTuiToMain, PortsMainToTui>;
   orch: PortsOnboardingOrchestrator;
 }
 
@@ -130,7 +131,7 @@ async function spawnTui(opts: SpawnTuiOpts): Promise<SpawnResult> {
   const drawerTabs = initDrawerTabsService();
   const tabIdLocal = `ports-tui:${taskId}`;
 
-  let socket: TuiSocketServer | null = null;
+  let socket: TuiSocketServer<PortsTuiToMain, PortsMainToTui> | null = null;
   let orch: PortsOnboardingOrchestrator | null = null;
   let tabCreated = false;
   // Set once the TUI is registered in activeTuis. The orchestrator's
@@ -140,7 +141,7 @@ async function spawnTui(opts: SpawnTuiOpts): Promise<SpawnResult> {
   pendingTuis.add(taskId);
 
   try {
-    socket = new TuiSocketServer(sockPath);
+    socket = new TuiSocketServer<PortsTuiToMain, PortsMainToTui>(sockPath);
     await socket.listen();
 
     const tab = drawerTabs.add(taskId, {

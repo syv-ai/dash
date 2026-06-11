@@ -1,6 +1,10 @@
 import type { EventEmitter } from 'events';
 import type { TuiSocketServer } from './TuiSocketServer';
-import type { MainToTui, TuiToMain, ExitReason } from '../../shared/portsTuiProtocol';
+import type {
+  PortsMainToTui as MainToTui,
+  PortsTuiToMain as TuiToMain,
+  ExitReason,
+} from '../../shared/portsTuiProtocol';
 import { portsDebug } from './PortsDebugLog';
 
 type State =
@@ -78,7 +82,7 @@ interface Opts {
    * initialState='onboarding'.
    */
   presetSignalsGuesses?: { signals: string[]; guesses: string[] };
-  socket: TuiSocketServer;
+  socket: TuiSocketServer<TuiToMain, MainToTui>;
   services: Services;
 }
 

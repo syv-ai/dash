@@ -19,8 +19,11 @@ process.stdout.columns ??= 80;
 process.stdout.rows ??= 24;
 
 import net from 'net';
-import type { MainToTui, TuiToMain } from '../../shared/portsTuiProtocol';
-import { TUI_PROTOCOL_VERSION } from '../../shared/portsTuiProtocol';
+import type {
+  PortsMainToTui as MainToTui,
+  PortsTuiToMain as TuiToMain,
+} from '../../shared/portsTuiProtocol';
+import { TUI_PROTOCOL_VERSION } from '../../shared/tuiProtocol';
 
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
 const { intro, outro, select, confirm, note, spinner, isCancel } =

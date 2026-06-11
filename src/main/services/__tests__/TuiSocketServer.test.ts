@@ -4,7 +4,10 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import { TuiSocketServer } from '../TuiSocketServer';
-import type { MainToTui, TuiToMain } from '../../../shared/portsTuiProtocol';
+import type {
+  PortsMainToTui as MainToTui,
+  PortsTuiToMain as TuiToMain,
+} from '../../../shared/portsTuiProtocol';
 
 const SOCK_DIR = path.join(os.tmpdir(), `tui-test-${process.pid}`);
 
@@ -24,7 +27,7 @@ function freshSockPath(): string {
 describe('TuiSocketServer', () => {
   it('parses newline-delimited JSON messages from the client', async () => {
     const sockPath = freshSockPath();
-    const server = new TuiSocketServer(sockPath);
+    const server = new TuiSocketServer<TuiToMain, MainToTui>(sockPath);
     const received: TuiToMain[] = [];
     server.onMessage((m) => received.push(m));
     await server.listen();
@@ -45,7 +48,7 @@ describe('TuiSocketServer', () => {
 
   it('recovers from a malformed JSON line and continues parsing', async () => {
     const sockPath = freshSockPath();
-    const server = new TuiSocketServer(sockPath);
+    const server = new TuiSocketServer<TuiToMain, MainToTui>(sockPath);
     const received: TuiToMain[] = [];
     const errors: string[] = [];
     server.onMessage((m) => received.push(m));
@@ -66,7 +69,7 @@ describe('TuiSocketServer', () => {
 
   it('sends framed messages to the connected client', async () => {
     const sockPath = freshSockPath();
-    const server = new TuiSocketServer(sockPath);
+    const server = new TuiSocketServer<TuiToMain, MainToTui>(sockPath);
     await server.listen();
 
     const client = net.createConnection(sockPath);
@@ -94,14 +97,14 @@ describe('TuiSocketServer', () => {
   it('unlinks an orphan socket file before listening', async () => {
     const sockPath = freshSockPath();
     fs.writeFileSync(sockPath, ''); // simulate orphan
-    const server = new TuiSocketServer(sockPath);
+    const server = new TuiSocketServer<TuiToMain, MainToTui>(sockPath);
     await expect(server.listen()).resolves.toBeUndefined();
     await server.close();
   });
 
   it('emits a close event when the client disconnects', async () => {
     const sockPath = freshSockPath();
-    const server = new TuiSocketServer(sockPath);
+    const server = new TuiSocketServer<TuiToMain, MainToTui>(sockPath);
     let closed = false;
     server.onClose(() => {
       closed = true;

@@ -1,9 +1,7 @@
 import net from 'net';
 import fs from 'fs';
 import path from 'path';
-import type { MainToTui, TuiToMain } from '../../shared/portsTuiProtocol';
 
-type MessageHandler = (m: TuiToMain) => void;
 type ErrorHandler = (e: Error) => void;
 type CloseHandler = () => void;
 
@@ -11,12 +9,14 @@ type CloseHandler = () => void;
  * Per-spawn UNIX socket server for talking to a side-car TUI process. Wire
  * format is newline-delimited JSON in BOTH directions — the stdout pipe carries
  * Clack visuals separately and is never shared with the protocol.
+ *
+ * `In` is what the side-car sends us; `Out` is what we send it.
  */
-export class TuiSocketServer {
+export class TuiSocketServer<In = unknown, Out = unknown> {
   private server: net.Server | null = null;
   private client: net.Socket | null = null;
   private buffer = '';
-  private messageHandlers = new Set<MessageHandler>();
+  private messageHandlers = new Set<(m: In) => void>();
   private errorHandlers = new Set<ErrorHandler>();
   private closeHandlers = new Set<CloseHandler>();
 
@@ -54,7 +54,7 @@ export class TuiSocketServer {
     });
   }
 
-  async send(msg: MainToTui): Promise<void> {
+  async send(msg: Out): Promise<void> {
     if (!this.client) throw new Error('No client connected');
     const line = JSON.stringify(msg) + '\n';
     await new Promise<void>((resolve, reject) => {
@@ -62,7 +62,7 @@ export class TuiSocketServer {
     });
   }
 
-  onMessage(cb: MessageHandler): () => void {
+  onMessage(cb: (m: In) => void): () => void {
     this.messageHandlers.add(cb);
     return () => this.messageHandlers.delete(cb);
   }
@@ -97,7 +97,7 @@ export class TuiSocketServer {
     for (const line of lines) {
       if (!line) continue;
       try {
-        const msg = JSON.parse(line) as TuiToMain;
+        const msg = JSON.parse(line) as In;
         for (const h of this.messageHandlers) h(msg);
       } catch (err) {
         for (const h of this.errorHandlers) {

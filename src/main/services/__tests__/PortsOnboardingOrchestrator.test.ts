@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { EventEmitter } from 'events';
 import { PortsOnboardingOrchestrator } from '../PortsOnboardingOrchestrator';
-import type { MainToTui, TuiToMain } from '../../../shared/portsTuiProtocol';
+import type {
+  PortsMainToTui as MainToTui,
+  PortsTuiToMain as TuiToMain,
+} from '../../../shared/portsTuiProtocol';
 
 class FakeSocket {
   sent: MainToTui[] = [];
