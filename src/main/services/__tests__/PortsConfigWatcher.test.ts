@@ -50,7 +50,11 @@ describe('PortsConfigWatcher lifecycle', () => {
     fs.mkdirSync(dashDir);
     ensureWatching('tA', worktree); // retries the arm
 
-    const wait = waitForConfigEvent('tA');
+    // Give the freshly-armed fs.watch a beat to attach before the write —
+    // under full-suite load macOS FSEvents can miss a write that lands in
+    // the same tick as the watch registration.
+    await new Promise((r) => setTimeout(r, 250));
+    const wait = waitForConfigEvent('tA', 7000);
     fs.writeFileSync(path.join(dashDir, 'ports.json'), '{"ports":[]}');
     expect(await wait).toBe(true);
   }, 15_000);
