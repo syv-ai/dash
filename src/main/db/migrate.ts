@@ -256,10 +256,33 @@ export function runMigrations(): void {
     /* already exists */
   }
 
-  try {
-    rawDb.exec(`ALTER TABLE projects ADD COLUMN ports_setup_dismissed_at TEXT`);
-  } catch {
-    /* already exists */
+  rawDb.exec(`
+    CREATE TABLE IF NOT EXISTS feature_dismissals (
+      project_id   TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      feature_id   TEXT NOT NULL,
+      dismissed_at TEXT NOT NULL,
+      PRIMARY KEY (project_id, feature_id)
+    );
+  `);
+
+  // One-time move of the old ports dismissal column into feature_dismissals,
+  // then drop the column. Guarded by a pragma check so it runs exactly once.
+  const hadPortsDismissCol =
+    (
+      rawDb
+        .prepare(
+          `SELECT COUNT(*) AS c FROM pragma_table_info('projects')
+           WHERE name = 'ports_setup_dismissed_at'`,
+        )
+        .get() as { c: number }
+    ).c > 0;
+  if (hadPortsDismissCol) {
+    rawDb.exec(`
+      INSERT OR IGNORE INTO feature_dismissals (project_id, feature_id, dismissed_at)
+      SELECT id, 'ports', ports_setup_dismissed_at FROM projects
+      WHERE ports_setup_dismissed_at IS NOT NULL;
+    `);
+    rawDb.exec(`ALTER TABLE projects DROP COLUMN ports_setup_dismissed_at`);
   }
 
   rawDb.pragma('foreign_keys = ON');

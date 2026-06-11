@@ -2,7 +2,7 @@ import { eq, desc, and, isNull, ne, asc, sql } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { initDb, getDb } from '../db/client';
 import { runMigrations } from '../db/migrate';
-import { projects, tasks, conversations, taskPorts } from '../db/schema';
+import { projects, tasks, conversations, taskPorts, featureDismissals } from '../db/schema';
 import type {
   Project,
   Task,
@@ -78,24 +78,26 @@ export class DatabaseService {
   }
 
   /**
-   * True when the user picked "Not relevant for this project" in the ports
-   * onboarding TUI. The renderer short-circuits the TUI spawn on this.
+   * True when the user dismissed the given TUI feature for this project
+   * ("Never for this project"). The tui:requestStart IPC short-circuits on it.
    */
-  static isPortsSetupDismissed(projectId: string): boolean {
+  static isFeatureDismissed(projectId: string, featureId: string): boolean {
     const db = getDb();
     const row = db
-      .select({ at: projects.portsSetupDismissedAt })
-      .from(projects)
-      .where(eq(projects.id, projectId))
+      .select({ at: featureDismissals.dismissedAt })
+      .from(featureDismissals)
+      .where(
+        and(eq(featureDismissals.projectId, projectId), eq(featureDismissals.featureId, featureId)),
+      )
       .get();
-    return Boolean(row?.at);
+    return Boolean(row);
   }
 
-  static markPortsSetupDismissed(projectId: string): void {
+  static markFeatureDismissed(projectId: string, featureId: string): void {
     const db = getDb();
-    db.update(projects)
-      .set({ portsSetupDismissedAt: new Date().toISOString() })
-      .where(eq(projects.id, projectId))
+    db.insert(featureDismissals)
+      .values({ projectId, featureId, dismissedAt: new Date().toISOString() })
+      .onConflictDoNothing()
       .run();
   }
 
@@ -455,7 +457,6 @@ export class DatabaseService {
       gitRemote: row.gitRemote,
       gitBranch: row.gitBranch,
       baseRef: row.baseRef,
-      portsSetupDismissedAt: row.portsSetupDismissedAt,
       createdAt: row.createdAt ?? '',
       updatedAt: row.updatedAt ?? '',
     };

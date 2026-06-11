@@ -1,4 +1,12 @@
-import { sqliteTable, text, integer, real, uniqueIndex, index } from 'drizzle-orm/sqlite-core';
+import {
+  sqliteTable,
+  text,
+  integer,
+  real,
+  uniqueIndex,
+  index,
+  primaryKey,
+} from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 export const projects = sqliteTable(
@@ -14,10 +22,6 @@ export const projects = sqliteTable(
     // Deprecated since 0.13: replaced by .dash/config.json setup commands.
     // Column kept so existing DBs don't break; do not read or write.
     worktreeSetupScript: text('worktree_setup_script'),
-    // Set when the user picks 'Not relevant for this project' in the ports
-    // onboarding TUI. NULL = never dismissed. Cleared by deleting the row,
-    // not surfaced in the UI for editing today.
-    portsSetupDismissedAt: text('ports_setup_dismissed_at'),
     createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
   },
@@ -150,5 +154,22 @@ export const taskPorts = sqliteTable(
   (table) => ({
     taskIdIdx: index('idx_task_ports_task_id').on(table.taskId),
     hostPortIdx: index('idx_task_ports_host_port').on(table.hostPort),
+  }),
+);
+
+// Per-project dismissal of a Dash TUI feature ("Never for this project").
+// One row per (project, feature); absence = never dismissed. Replaces the
+// old projects.ports_setup_dismissed_at column.
+export const featureDismissals = sqliteTable(
+  'feature_dismissals',
+  {
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    featureId: text('feature_id').notNull(),
+    dismissedAt: text('dismissed_at').notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.projectId, table.featureId] }),
   }),
 );

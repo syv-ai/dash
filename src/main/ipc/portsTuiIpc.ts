@@ -45,8 +45,8 @@ const pendingTuis = new Set<string>();
 const suppressedTuis = new Set<string>();
 
 const dismissStore = {
-  isDismissed: (pid: string) => DatabaseService.isPortsSetupDismissed(pid),
-  markDismissed: (pid: string) => DatabaseService.markPortsSetupDismissed(pid),
+  isDismissed: (pid: string) => DatabaseService.isFeatureDismissed(pid, 'ports'),
+  markDismissed: (pid: string) => DatabaseService.markFeatureDismissed(pid, 'ports'),
 };
 
 function resolveScriptPath(): string {
@@ -70,7 +70,7 @@ function migrateLegacyDismissFile(): void {
   }
   for (const pid of Object.keys(state)) {
     try {
-      DatabaseService.markPortsSetupDismissed(pid);
+      DatabaseService.markFeatureDismissed(pid, 'ports');
     } catch {
       /* unknown project — skip */
     }
@@ -464,7 +464,7 @@ export function registerPortsTuiIpc(opts: { getMainWindow: () => BrowserWindow |
 
 /**
  * Clean up TUI state left behind by the previous run. Three things:
- *   1. Migrate the legacy dismissed-projects.json into projects.ports_setup_dismissed_at.
+ *   1. Migrate the legacy dismissed-projects.json into feature_dismissals.
  *   2. Socket files in userData/sockets/ — orphaned by the kernel on crash.
  *   3. drawer_tabs rows with kind='tui' — the orchestrator + side-car that
  *      owned them are gone, but the row would otherwise persist and collide

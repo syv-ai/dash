@@ -6,9 +6,6 @@ export interface Project {
   gitRemote: string | null;
   gitBranch: string | null;
   baseRef: string | null;
-  /** ISO timestamp set when the user picks 'Not relevant for this project' in
-   *  the ports onboarding TUI. NULL = never dismissed. */
-  portsSetupDismissedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
