@@ -55,9 +55,19 @@ export class PortsSetupWizard extends WizardOrchestrator<PortsShow, PortsChoice>
       });
       if (p.taskId === this.taskId) void this.onSetupComplete();
     };
+    const onConfigError = (p: { taskId: string; errors: string[] }) => {
+      portsDebug.log('orch', 'heard ports:configError', {
+        payloadTaskId: p.taskId,
+        wanted: this.taskId,
+        phase: this.phase,
+      });
+      if (p.taskId === this.taskId) void this.onConfigError(p.errors);
+    };
     this.services.portsEvents.on('ports:config', onConfig);
+    this.services.portsEvents.on('ports:configError', onConfigError);
     this.services.portsEvents.on('ports:setupComplete', onComplete);
     this.onCleanup(() => this.services.portsEvents.off('ports:config', onConfig));
+    this.onCleanup(() => this.services.portsEvents.off('ports:configError', onConfigError));
     this.onCleanup(() => this.services.portsEvents.off('ports:setupComplete', onComplete));
   }
 
@@ -91,6 +101,17 @@ export class PortsSetupWizard extends WizardOrchestrator<PortsShow, PortsChoice>
     if (this.phase !== 'waiting-sentinel') return;
     this.clearTimer('sentinel');
     await this.showDone();
+  }
+
+  /**
+   * The agent wrote a malformed/invalid ports.json. Show the validation errors
+   * and stay in waiting-config (and on the 30-min cap) — a corrected rewrite
+   * fires 'ports:config' and advances us. Once past waiting-config the
+   * allocation already landed, so a later bad edit is the user's problem.
+   */
+  private async onConfigError(errors: string[]): Promise<void> {
+    if (this.phase !== 'waiting-config') return;
+    await this.show({ type: 'show', screen: 'config-invalid', props: { errors } });
   }
 
   private async showDone(): Promise<void> {

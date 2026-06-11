@@ -51,6 +51,17 @@ export const showPortsScreen: ShowHandler = async (raw, ctx) => {
       break;
     }
 
+    case 'config-invalid': {
+      // Drop the waiting spinner, print the validation errors, then resume
+      // waiting — the agent (or user) fixes ports.json and we advance.
+      ctx.stopSpinner();
+      ctx.clack.log.error(
+        `ports.json is invalid:\n${msg.props.errors.map((e) => `  • ${e}`).join('\n')}`,
+      );
+      ctx.startSpinner('Waiting for a corrected ports.json…');
+      break;
+    }
+
     case 'allocated-waiting-sentinel': {
       ctx.startSpinner(`${msg.props.count} ports allocated. Awaiting completion sentinel...`);
       break;

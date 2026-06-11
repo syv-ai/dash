@@ -8,7 +8,8 @@ import { portsDebug } from './PortsDebugLog';
 /**
  * In-process event bus for main-side consumers (e.g. PortsSetupWizard)
  * that need the same notifications the renderer gets via IPC. Emits:
- *   - 'ports:config'        with { taskId } when ports.json changes
+ *   - 'ports:config'        with { taskId } when ports.json is valid
+ *   - 'ports:configError'   with { taskId, errors } when ports.json is invalid
  *   - 'ports:setupComplete' with { taskId } when the sentinel exists
  */
 export const events = new EventEmitter();
@@ -83,12 +84,14 @@ function armWatcher(entry: WatcherEntry, taskId: string): void {
         if (e.debounceTimer) clearTimeout(e.debounceTimer);
         e.debounceTimer = setTimeout(() => {
           e.debounceTimer = null;
+          const errors: string[] = [];
           try {
-            WorkspacePortsRuntime.setupTask({ taskId, worktreePath: entry.worktreePath });
+            WorkspacePortsRuntime.setupTask({ taskId, worktreePath: entry.worktreePath }, errors);
           } catch (err) {
             portsDebug.log('watcher', 'setupTask failed', { taskId, err: String(err) });
+            errors.push(err instanceof Error ? err.message : String(err));
           }
-          notifyConfigChanged(taskId);
+          notifyConfigChanged(taskId, errors);
         }, DEBOUNCE_MS);
         return;
       }
@@ -147,13 +150,22 @@ function closeEntry(entry: WatcherEntry): void {
   }
 }
 
-function notifyConfigChanged(taskId: string): void {
-  portsDebug.log('watcher', 'emit ports:config', { taskId });
-  events.emit('ports:config', { taskId });
+function notifyConfigChanged(taskId: string, errors: string[]): void {
+  // The renderer panel refreshes either way — setupTask re-applied the DB
+  // rows (or cleared them on an invalid config), and the panel reads from DB.
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
       win.webContents.send('ports:configChanged', { taskId });
     }
+  }
+  // In-process: a valid config advances the setup wizard; an invalid one keeps
+  // it waiting and shows the errors, so a corrected rewrite re-advances it.
+  if (errors.length > 0) {
+    portsDebug.log('watcher', 'emit ports:configError', { taskId, errors });
+    events.emit('ports:configError', { taskId, errors });
+  } else {
+    portsDebug.log('watcher', 'emit ports:config', { taskId });
+    events.emit('ports:config', { taskId });
   }
 }
 

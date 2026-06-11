@@ -40,12 +40,16 @@ export interface SetupTaskArgs {
 export class WorkspacePortsRuntime {
   /**
    * Resolve and persist port assignments for a task. No-op (returns empty
-   * array) when `.dash/ports.json` is missing or malformed — the underlying
-   * loader logs to stderr and we keep going with no ports rather than
-   * blocking worktree setup on a bad config.
+   * array) when `.dash/ports.json` is missing or malformed — we keep going
+   * with no ports rather than blocking worktree setup on a bad config.
+   *
+   * Pass `errors` to capture validation failures: after the call, a non-empty
+   * array means the file existed but was invalid (vs. absent, which leaves it
+   * empty). The watcher uses this to surface a recoverable error in the setup
+   * wizard instead of silently advancing with zero ports.
    */
-  static setupTask(args: SetupTaskArgs): TaskPort[] {
-    const ports = loadWorkspacePorts(args.worktreePath);
+  static setupTask(args: SetupTaskArgs, errors?: string[]): TaskPort[] {
+    const ports = loadWorkspacePorts(args.worktreePath, errors);
     if (!ports) {
       // Either no .dash/ports.json or invalid. Clear any stale rows from a
       // previous good config so the task doesn't keep ghost assignments.

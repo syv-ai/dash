@@ -31,6 +31,25 @@ function waitForConfigEvent(taskId: string, timeoutMs = DEBOUNCE_MARGIN_MS): Pro
   });
 }
 
+function waitForConfigError(
+  taskId: string,
+  timeoutMs = DEBOUNCE_MARGIN_MS,
+): Promise<string[] | null> {
+  return new Promise((resolve) => {
+    const handler = (payload: { taskId: string; errors: string[] }) => {
+      if (payload.taskId !== taskId) return;
+      events.off('ports:configError', handler);
+      clearTimeout(timer);
+      resolve(payload.errors);
+    };
+    const timer = setTimeout(() => {
+      events.off('ports:configError', handler);
+      resolve(null);
+    }, timeoutMs);
+    events.on('ports:configError', handler);
+  });
+}
+
 let worktree: string;
 
 beforeEach(() => {
@@ -75,6 +94,34 @@ describe('PortsConfigWatcher lifecycle', () => {
     await new Promise((r) => setTimeout(r, DEBOUNCE_MARGIN_MS));
     events.off('ports:config', handler);
     expect(count).toBe(1);
+  }, 15_000);
+
+  it('routes setupTask validation errors to ports:configError (not ports:config)', async () => {
+    const { WorkspacePortsRuntime } = await import('../WorkspacePortsRuntime');
+    (WorkspacePortsRuntime.setupTask as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      (_args: unknown, errors?: string[]) => {
+        errors?.push('ports[0].envVar must match /^[A-Z_]/');
+        return [];
+      },
+    );
+    const dashDir = path.join(worktree, '.dash');
+    fs.mkdirSync(dashDir);
+    ensureWatching('tD', worktree);
+    await new Promise((r) => setTimeout(r, 250));
+
+    // The valid-config event must NOT also fire for the same (invalid) write.
+    // Both emit synchronously in notifyConfigChanged, so a flag is sufficient.
+    let configFired = false;
+    const configFlag = (p: { taskId: string }) => {
+      if (p.taskId === 'tD') configFired = true;
+    };
+    events.on('ports:config', configFlag);
+
+    const errPromise = waitForConfigError('tD', 7000);
+    fs.writeFileSync(path.join(dashDir, 'ports.json'), '{"ports":[{"label":"x"}]}');
+    expect(await errPromise).toEqual(['ports[0].envVar must match /^[A-Z_]/']);
+    events.off('ports:config', configFlag);
+    expect(configFired).toBe(false);
   }, 15_000);
 
   it('stop closes the watcher; no events after', async () => {

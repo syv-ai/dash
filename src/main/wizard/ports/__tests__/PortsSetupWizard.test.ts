@@ -101,6 +101,53 @@ describe('PortsSetupWizard', () => {
     expect(services.getPortCount).toHaveBeenCalledWith('t1');
   });
 
+  it('ports:configError -> CONFIG_INVALID with the errors, no advance', async () => {
+    const flow = makeFlow();
+    await flow.start();
+    sock.receive({ type: 'ready', version: 1 });
+    await flush();
+    portsEvents.emit('ports:configError', {
+      taskId: 't1',
+      errors: ['ports[0].envVar must match /^[A-Z_]/'],
+    });
+    await flush();
+    const invalid = sock.sent.find((m) => m.type === 'show' && m.screen === 'config-invalid') as
+      | Extract<PortsMainToTui, { type: 'show'; screen: 'config-invalid' }>
+      | undefined;
+    expect(invalid?.props.errors).toEqual(['ports[0].envVar must match /^[A-Z_]/']);
+    // Did NOT advance past waiting-config.
+    expect(
+      sock.sent.some((m) => m.type === 'show' && m.screen === 'allocated-waiting-sentinel'),
+    ).toBe(false);
+    void flow;
+  });
+
+  it('config-invalid is recoverable: a corrected ports:config still advances', async () => {
+    const flow = makeFlow();
+    await flow.start();
+    sock.receive({ type: 'ready', version: 1 });
+    await flush();
+    portsEvents.emit('ports:configError', { taskId: 't1', errors: ['bad'] });
+    await flush();
+    portsEvents.emit('ports:config', { taskId: 't1' });
+    await flush();
+    expect(
+      sock.sent.some((m) => m.type === 'show' && m.screen === 'allocated-waiting-sentinel'),
+    ).toBe(true);
+    void flow;
+  });
+
+  it('ignores ports:configError for other tasks', async () => {
+    const flow = makeFlow();
+    await flow.start();
+    sock.receive({ type: 'ready', version: 1 });
+    await flush();
+    portsEvents.emit('ports:configError', { taskId: 'other', errors: ['bad'] });
+    await flush();
+    expect(sock.sent.some((m) => m.type === 'show' && m.screen === 'config-invalid')).toBe(false);
+    void flow;
+  });
+
   it('ports:config before ready is ignored (pending gate)', async () => {
     const flow = makeFlow();
     await flow.start();
@@ -185,6 +232,7 @@ describe('PortsSetupWizard', () => {
     sock.triggerClose();
     await vi.advanceTimersByTimeAsync(300);
     expect(portsEvents.listenerCount('ports:config')).toBe(0);
+    expect(portsEvents.listenerCount('ports:configError')).toBe(0);
     expect(portsEvents.listenerCount('ports:setupComplete')).toBe(0);
     void flow;
   });
