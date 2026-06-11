@@ -1,6 +1,7 @@
 import React from 'react';
 import { TerminalPane } from './TerminalPane';
 import { ProjectOverview } from './ProjectOverview';
+import { useSettings } from '../stores/settingsStore';
 import {
   FolderOpen,
   Code2,
@@ -113,7 +114,6 @@ interface MainContentProps {
   onDeleteTask?: (id: string) => void;
   onArchiveTask?: (id: string) => void;
   onRestoreTask?: (id: string) => void;
-  showTaskTokens?: boolean;
 }
 
 export function MainContent({
@@ -141,8 +141,8 @@ export function MainContent({
   onDeleteTask,
   onArchiveTask,
   onRestoreTask,
-  showTaskTokens = true,
 }: MainContentProps) {
+  const showTaskTokens = useSettings((s) => s.showTaskTokens);
   if (!activeProject) {
     return (
       <div className="h-full flex flex-col bg-background">

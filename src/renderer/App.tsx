@@ -444,13 +444,8 @@ export function App() {
   }, [showActiveTasksSection]);
 
   // Token-usage UI toggles
-  const [showTaskTokens, setShowTaskTokens] = useState<boolean>(() => {
-    const stored = localStorage.getItem('showTaskTokens');
-    return stored === null ? true : stored === 'true';
-  });
-  useEffect(() => {
-    localStorage.setItem('showTaskTokens', String(showTaskTokens));
-  }, [showTaskTokens]);
+  const showTaskTokens = useSettings((s) => s.showTaskTokens);
+  const setShowTaskTokens = useSettings((s) => s.setShowTaskTokens);
   const [showProjectTokens, setShowProjectTokens] = useState<boolean>(() => {
     const stored = localStorage.getItem('showProjectTokens');
     return stored === null ? true : stored === 'true';
@@ -2081,7 +2076,6 @@ export function App() {
               onDeleteTask={handleDeleteTask}
               onArchiveTask={handleArchiveTask}
               onRestoreTask={handleRestoreTask}
-              showTaskTokens={showTaskTokens}
             />
           </ShellDrawerWrapper>
         </Panel>
