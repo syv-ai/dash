@@ -3,8 +3,8 @@ import { DatabaseService } from '../services/DatabaseService';
 import { TelemetryService } from '../services/TelemetryService';
 import { WorkspacePortsRuntime } from '../services/WorkspacePortsRuntime';
 import {
-  startWatching as startPortsConfigWatch,
-  forceStop as forceStopPortsConfigWatch,
+  ensureWatching as ensurePortsConfigWatch,
+  stop as stopPortsConfigWatch,
 } from '../services/PortsConfigWatcher';
 import { discardInitialPrompt } from '../services/ptyManager';
 
@@ -65,13 +65,11 @@ export function registerDbIpc(): void {
       if (isNew && data.useWorktree) {
         try {
           WorkspacePortsRuntime.setupTask({ taskId: data.id, worktreePath: data.path });
-          // Arm the watcher even if .dash/ doesn't exist yet — the refcount
-          // implementation in PortsConfigWatcher keeps the entry and retries
-          // the fs.watch on every subsequent start, so it auto-attaches as
-          // soon as the agent creates .dash/. This ref is PERMANENT by
-          // design (agent edits keep SQLite fresh with no drawer open);
-          // forceStop in db:deleteTask is its release.
-          startPortsConfigWatch(data.id, data.path);
+          // Arm the watcher even if .dash/ doesn't exist yet — ensureWatching
+          // keeps the entry and retries the fs.watch on every subsequent
+          // call, so it auto-attaches as soon as the agent creates .dash/.
+          // The watcher lives until db:deleteTask stops it.
+          ensurePortsConfigWatch(data.id, data.path);
         } catch (err) {
           console.error('[dbIpc] setupTask ports allocation failed:', err);
         }
@@ -86,8 +84,8 @@ export function registerDbIpc(): void {
     try {
       DatabaseService.deleteTask(id);
       // The worktree is gone (or about to be) — close the ports watcher
-      // regardless of refcount and drop any never-consumed initial prompt.
-      forceStopPortsConfigWatch(id);
+      // and drop any never-consumed initial prompt.
+      stopPortsConfigWatch(id);
       discardInitialPrompt(id);
       TelemetryService.capture('task_deleted');
       return { success: true };

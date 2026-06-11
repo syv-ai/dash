@@ -8,11 +8,7 @@ import { portLivenessService } from '../services/PortLivenessService';
 import { DatabaseService } from '../services/DatabaseService';
 import { detectPortsNeed } from '../services/PortsHeuristic';
 import { loadWorkspacePorts } from '../services/WorkspacePortsService';
-import {
-  startWatching as startPortsConfigWatch,
-  stopWatching as stopPortsConfigWatch,
-  rearm as rearmPortsConfigWatch,
-} from '../services/PortsConfigWatcher';
+import { ensureWatching as ensurePortsConfigWatch } from '../services/PortsConfigWatcher';
 
 const execFileAsync = promisify(execFile);
 
@@ -74,10 +70,8 @@ export function registerPortsIpc(): void {
         taskId,
         data.map((p) => p.hostPort),
       );
-      // .dash/ may have just appeared (post-onboarding agent write); retry
-      // a deferred arm. rearm, NOT startWatching — refresh has no matching
-      // stop, and an unmatched ref would pin the watcher per click.
-      rearmPortsConfigWatch(taskId);
+      // .dash/ may have just appeared (post-onboarding agent write); idempotent.
+      ensurePortsConfigWatch(taskId, task.path);
       return { success: true, data };
     } catch (error) {
       return { success: false, error: String(error) };
@@ -95,24 +89,19 @@ export function registerPortsIpc(): void {
     return { success: true };
   });
 
-  // Config watcher — armed when the drawer mounts for a task, torn down
-  // when it unmounts. Watches .dash/ports.json so external edits (manual
-  // tweaks, deletion, agent writes outside the setup flow) are reflected
-  // in the drawer without forcing a manual refresh.
+  // Config watcher — ensured when the drawer mounts for a task. Watches
+  // .dash/ports.json so external edits (manual tweaks, deletion, agent writes
+  // outside the setup flow) are reflected in the drawer without a manual
+  // refresh. Lives for the task's lifetime; no unwatch.
   ipcMain.handle('ports:watchConfig', (_event, taskId: string) => {
     try {
       const task = DatabaseService.getTask(taskId);
       if (!task) return { success: false, error: `Task ${taskId} not found` };
-      startPortsConfigWatch(taskId, task.path);
+      ensurePortsConfigWatch(taskId, task.path);
       return { success: true };
     } catch (error) {
       return { success: false, error: String(error) };
     }
-  });
-
-  ipcMain.handle('ports:unwatchConfig', (_event, taskId: string) => {
-    stopPortsConfigWatch(taskId);
-    return { success: true };
   });
 
   ipcMain.handle('ports:openUrl', (_event, port: number) => {

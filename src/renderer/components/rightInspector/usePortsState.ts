@@ -76,16 +76,13 @@ export function usePortsState(taskId: string | null): PortsState {
     return off;
   }, [taskId]);
 
-  // Arm the main-process file watcher on .dash/ports.json for this task so
+  // Ensure the main-process file watcher on .dash/ports.json for this task so
   // external edits (manual tweaks, deletes, agent writes outside the setup
-  // flow) are reflected without forcing a refresh-button click. Watcher
-  // tears down on task switch via the cleanup.
+  // flow) are reflected without forcing a refresh-button click. The watcher
+  // is task-lifetime in main; mounting just makes sure it's armed.
   useEffect(() => {
     if (!taskId) return;
     window.electronAPI.portsWatchConfig(taskId).catch(() => {});
-    return () => {
-      window.electronAPI.portsUnwatchConfig(taskId).catch(() => {});
-    };
   }, [taskId]);
 
   // Two refresh paths funnel into one re-pull:

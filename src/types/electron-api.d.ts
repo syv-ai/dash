@@ -495,7 +495,6 @@ export interface ElectronAPI {
   portsIsDockerDesktopAvailable: () => Promise<IpcResponse<boolean>>;
   portsOpenInDocker: () => Promise<IpcResponse<void>>;
   portsWatchConfig: (taskId: string) => Promise<IpcResponse<void>>;
-  portsUnwatchConfig: (taskId: string) => Promise<IpcResponse<void>>;
   onPortsLiveness: (callback: (update: PortLivenessUpdate) => void) => () => void;
   onPortsConfigChanged: (callback: (data: { taskId: string }) => void) => () => void;
   onPortsSetupComplete: (callback: (data: { taskId: string }) => void) => () => void;

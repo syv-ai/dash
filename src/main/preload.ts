@@ -460,7 +460,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   portsIsDockerDesktopAvailable: () => ipcRenderer.invoke('ports:isDockerDesktopAvailable'),
   portsOpenInDocker: () => ipcRenderer.invoke('ports:openInDocker'),
   portsWatchConfig: (taskId: string) => ipcRenderer.invoke('ports:watchConfig', taskId),
-  portsUnwatchConfig: (taskId: string) => ipcRenderer.invoke('ports:unwatchConfig', taskId),
   onPortsConfigChanged: (callback: (data: { taskId: string }) => void) => {
     const handler = (_event: unknown, data: { taskId: string }) => callback(data);
     ipcRenderer.on('ports:configChanged', handler);

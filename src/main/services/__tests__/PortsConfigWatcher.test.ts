@@ -8,18 +8,11 @@ vi.mock('../WorkspacePortsRuntime', () => ({
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import {
-  startWatching,
-  stopWatching,
-  rearm,
-  forceStop,
-  stopAll,
-  events,
-} from '../PortsConfigWatcher';
+import { ensureWatching, stop, stopAll, events } from '../PortsConfigWatcher';
 
 // Real timers + real fs.watch — the 2s debounce makes these tests slow by
-// design; they cover refcount semantics that only manifest through actual
-// file events.
+// design; they cover arming/teardown semantics that only manifest through
+// actual file events.
 const DEBOUNCE_MARGIN_MS = 3500;
 
 function waitForConfigEvent(taskId: string, timeoutMs = DEBOUNCE_MARGIN_MS): Promise<boolean> {
@@ -49,52 +42,49 @@ afterEach(() => {
   fs.rmSync(worktree, { recursive: true, force: true });
 });
 
-describe('PortsConfigWatcher refcounts', () => {
-  it('rearm arms a deferred watcher without taking a ref', async () => {
-    // .dash/ doesn't exist yet — startWatching defers the fs.watch but
-    // tracks the ref.
-    startWatching('tA', worktree);
+describe('PortsConfigWatcher lifecycle', () => {
+  it('ensureWatching retries a deferred arm once .dash/ exists', async () => {
+    // .dash/ doesn't exist yet — the fs.watch is deferred but the entry is kept.
+    ensureWatching('tA', worktree);
     const dashDir = path.join(worktree, '.dash');
     fs.mkdirSync(dashDir);
-    rearm('tA');
+    ensureWatching('tA', worktree); // retries the arm
 
     const wait = waitForConfigEvent('tA');
     fs.writeFileSync(path.join(dashDir, 'ports.json'), '{"ports":[]}');
     expect(await wait).toBe(true);
-
-    // rearm must NOT have incremented the refcount: a single stopWatching
-    // closes the watcher.
-    stopWatching('tA');
-    const waitAfterStop = waitForConfigEvent('tA', 2600);
-    fs.writeFileSync(path.join(dashDir, 'ports.json'), '{"ports":[{"label":"x","port":80}]}');
-    expect(await waitAfterStop).toBe(false);
   }, 15_000);
 
-  it('stopping one of two holders keeps the watcher alive', async () => {
+  it('ensureWatching is idempotent — repeated calls emit one event per write', async () => {
     const dashDir = path.join(worktree, '.dash');
     fs.mkdirSync(dashDir);
-    startWatching('tB', worktree);
-    startWatching('tB', worktree);
-    stopWatching('tB');
+    ensureWatching('tB', worktree);
+    ensureWatching('tB', worktree);
+    ensureWatching('tB', worktree);
 
-    const wait = waitForConfigEvent('tB');
+    let count = 0;
+    const handler = (payload: { taskId: string }) => {
+      if (payload.taskId === 'tB') count++;
+    };
+    events.on('ports:config', handler);
     fs.writeFileSync(path.join(dashDir, 'ports.json'), '{"ports":[]}');
-    expect(await wait).toBe(true);
+    await new Promise((r) => setTimeout(r, DEBOUNCE_MARGIN_MS));
+    events.off('ports:config', handler);
+    expect(count).toBe(1);
   }, 15_000);
 
-  it('forceStop closes the watcher despite outstanding refs', async () => {
+  it('stop closes the watcher; no events after', async () => {
     const dashDir = path.join(worktree, '.dash');
     fs.mkdirSync(dashDir);
-    startWatching('tC', worktree);
-    startWatching('tC', worktree);
-    forceStop('tC');
+    ensureWatching('tC', worktree);
+    stop('tC');
 
     const wait = waitForConfigEvent('tC', 2600);
     fs.writeFileSync(path.join(dashDir, 'ports.json'), '{"ports":[]}');
     expect(await wait).toBe(false);
 
-    // Outstanding holders calling stopWatching later must not throw.
-    stopWatching('tC');
-    stopWatching('tC');
+    // stop is idempotent.
+    stop('tC');
+    stop('tC');
   }, 15_000);
 });

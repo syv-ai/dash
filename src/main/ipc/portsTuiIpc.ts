@@ -12,8 +12,7 @@ import { buildPortsSetupPrompt } from '../services/PortsSetupPrompt';
 import { WorkspacePortsRuntime } from '../services/WorkspacePortsRuntime';
 import {
   events as portsConfigEvents,
-  startWatching as startPortsConfigWatch,
-  stopWatching as stopPortsConfigWatch,
+  ensureWatching as ensurePortsConfigWatch,
 } from '../services/PortsConfigWatcher';
 import { DatabaseService } from '../services/DatabaseService';
 import { worktreeService } from '../services/WorktreeService';
@@ -177,8 +176,10 @@ async function spawnTui(opts: SpawnTuiOpts): Promise<SpawnResult> {
         },
         configWatcher: {
           events: portsConfigEvents,
-          startWatching: () => startPortsConfigWatch(taskId, cwd),
-          stopWatching: () => stopPortsConfigWatch(taskId),
+          startWatching: () => ensurePortsConfigWatch(taskId, cwd),
+          stopWatching: () => {
+            /* watcher is task-lifetime now; nothing to release */
+          },
         },
         sessionRegistry: {
           restartAllForTask: async (tid: string) => {
@@ -325,7 +326,7 @@ async function handleMigrate(args: {
     // the agent skips instructions.
     fs.rmSync(path.join(dashDir, 'setup-complete'), { force: true });
     WorkspacePortsRuntime.setupTask({ taskId: task.id, worktreePath: task.path });
-    startPortsConfigWatch(task.id, task.path);
+    ensurePortsConfigWatch(task.id, task.path);
     portsDebug.log('migrate', 'watcher armed', {
       taskId: task.id,
       dashDir,
