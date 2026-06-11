@@ -53,6 +53,7 @@ import { resolveTheme } from './terminal/terminalThemes';
 import { resolveTerminalFontValue } from './terminal/terminalFonts';
 import { playNotificationSound, playPeonSound } from './sounds';
 import type { NotificationSound } from './sounds';
+import { useSettings } from './stores/settingsStore';
 
 const GIT_POLL_INTERVAL = 5000;
 /** Chrome around the pinned TUI canvas (panel padding + drawer gutter) added
@@ -101,9 +102,8 @@ export function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showSkillsBrowser, setShowSkillsBrowser] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>();
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    return (localStorage.getItem('theme') as 'light' | 'dark') || 'dark';
-  });
+  const theme = useSettings((s) => s.theme);
+  const setTheme = useSettings((s) => s.setTheme);
   const [diffContextLines, setDiffContextLines] = useState<number | null>(() => {
     const stored = localStorage.getItem('diffContextLines');
     if (stored === null || stored === 'null') return null; // null = full file
@@ -444,13 +444,8 @@ export function App() {
   }, [showActiveTasksSection]);
 
   // Token-usage UI toggles
-  const [showTaskTokens, setShowTaskTokens] = useState<boolean>(() => {
-    const stored = localStorage.getItem('showTaskTokens');
-    return stored === null ? true : stored === 'true';
-  });
-  useEffect(() => {
-    localStorage.setItem('showTaskTokens', String(showTaskTokens));
-  }, [showTaskTokens]);
+  const showTaskTokens = useSettings((s) => s.showTaskTokens);
+  const setShowTaskTokens = useSettings((s) => s.setShowTaskTokens);
   const [showProjectTokens, setShowProjectTokens] = useState<boolean>(() => {
     const stored = localStorage.getItem('showProjectTokens');
     return stored === null ? true : stored === 'true';
@@ -2081,7 +2076,6 @@ export function App() {
               onDeleteTask={handleDeleteTask}
               onArchiveTask={handleArchiveTask}
               onRestoreTask={handleRestoreTask}
-              showTaskTokens={showTaskTokens}
             />
           </ShellDrawerWrapper>
         </Panel>
@@ -2309,7 +2303,6 @@ export function App() {
           theme={theme}
           onThemeChange={(t) => {
             setTheme(t);
-            localStorage.setItem('theme', t);
             sessionRegistry.setAllTerminalThemes(terminalTheme, t === 'dark');
           }}
           showRateLimits={showRateLimits}
