@@ -45,4 +45,14 @@ describe('settings registry', () => {
     expect(byField.shellDrawerPosition.codec.decode('bogus')).toBe('right');
     expect(byField.shellDrawerPosition.codec.decode('main')).toBe('main');
   });
+
+  it('registers the phase-1d json settings', () => {
+    const byField = Object.fromEntries(SETTINGS_REGISTRY.map((r) => [r.field, r]));
+    expect(byField.rotationOrder.codec.decode(null)).toEqual([]);
+    expect(byField.customClaudeEnvVars.codec.decode(null)).toEqual({});
+    expect(byField.usageThresholds.codec.decode(null)).toMatchObject({ contextPercentage: 80 });
+    expect(byField.customIDE.codec.decode(null)).toEqual({ path: '', args: [] });
+    // validator rejects wrong shape
+    expect(byField.customIDE.codec.decode('{"path":123}')).toEqual({ path: '', args: [] });
+  });
 });
