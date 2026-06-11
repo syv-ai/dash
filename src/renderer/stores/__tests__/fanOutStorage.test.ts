@@ -20,12 +20,13 @@ describe('fanOutStorage', () => {
     mem.setItem('theme', 'light');
     mem.setItem('showTaskTokens', 'false');
     const raw = fanOutStorage(mem).getItem(NAME)!;
-    expect(JSON.parse(raw).state).toEqual({ theme: 'light', showTaskTokens: false });
+    // Partial match: the registry carries more fields than this test seeds.
+    expect(JSON.parse(raw).state).toMatchObject({ theme: 'light', showTaskTokens: false });
   });
 
   it('absent keys decode to defaults (dark / true)', () => {
     const raw = fanOutStorage(createMemoryStorage()).getItem(NAME)!;
-    expect(JSON.parse(raw).state).toEqual({ theme: 'dark', showTaskTokens: true });
+    expect(JSON.parse(raw).state).toMatchObject({ theme: 'dark', showTaskTokens: true });
   });
 
   it('round-trips an external reader value untouched', () => {
