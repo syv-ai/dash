@@ -6,10 +6,11 @@ export interface RunnerDeps {
   getTaskPath(taskId: string): string | undefined;
   getPorts(taskId: string): TaskPort[];
   /**
-   * Allocated `ENV_VAR=port` pairs for the task. MUST be passed into every
-   * service spawn — startCommandPty does NOT inject ports env on its own
-   * (only the agent/shell spawn paths do), and those paths key off the
-   * worktree root, which would also miss services running in a `cwd` subdir.
+   * Allocated `ENV_VAR=port` pairs for the task. Injected by the single
+   * spawnServicePty() path so no call site can spawn a service without it —
+   * startCommandPty does NOT inject ports env for service spawns (its
+   * agent/shell injection keys off the worktree root, which would miss
+   * services running in a `cwd` subdir).
    */
   portEnv(taskId: string): Record<string, string>;
   /**
@@ -100,6 +101,31 @@ export class ServiceRunner {
     return out;
   }
 
+  /**
+   * The ONE service-PTY spawn path. Injects the task's allocated port env and
+   * the fixed service-tab fields (shell, kind, owner) in a single place, so a
+   * service can never be spawned without its ports — see RunnerDeps.portEnv.
+   */
+  private spawnServicePty(
+    taskId: string,
+    opts: { id: string; cwd: string; shellCommand: string; onExit?: () => void },
+  ): Promise<unknown> {
+    return this.deps.startPty({
+      id: opts.id,
+      command: this.deps.shell,
+      args: ['-lc', opts.shellCommand],
+      cwd: opts.cwd,
+      cols: 120,
+      rows: 30,
+      env: this.deps.portEnv(taskId),
+      owner: null,
+      taskId,
+      featureId: 'ports',
+      kind: 'service',
+      onExit: opts.onExit,
+    });
+  }
+
   async start(taskId: string, port: TaskPort): Promise<OpResult> {
     if (!port.runCommand) return { ok: false, message: `${port.label} has no run command` };
     const taskPath = this.deps.getTaskPath(taskId);
@@ -126,18 +152,10 @@ export class ServiceRunner {
         featureId: 'ports',
         id: tabId,
       });
-      await this.deps.startPty({
+      await this.spawnServicePty(taskId, {
         id: tab.id,
-        command: this.deps.shell,
-        args: ['-lc', port.runCommand],
         cwd: port.cwd ? path.join(taskPath, port.cwd) : taskPath,
-        cols: 120,
-        rows: 30,
-        env: this.deps.portEnv(taskId),
-        owner: null,
-        taskId,
-        featureId: 'ports',
-        kind: 'service',
+        shellCommand: port.runCommand,
         // A service dying on its own is a status change the panel must hear
         // about — start/stop notify explicitly, this covers self-death.
         onExit: () => this.handleSelfExit(taskId, port.label, tab.id),
@@ -224,18 +242,10 @@ export class ServiceRunner {
         featureId: 'ports',
         id: tabId,
       });
-      await this.deps.startPty({
+      await this.spawnServicePty(taskId, {
         id: tab.id,
-        command: this.deps.shell,
-        args: ['-lc', port.logsCommand],
         cwd: port.cwd ? path.join(taskPath, port.cwd) : taskPath,
-        cols: 120,
-        rows: 30,
-        env: this.deps.portEnv(taskId),
-        owner: null,
-        taskId,
-        featureId: 'ports',
-        kind: 'service',
+        shellCommand: port.logsCommand,
       });
       this.deps.focusTab(taskId, tab.id);
       return { ok: true };
