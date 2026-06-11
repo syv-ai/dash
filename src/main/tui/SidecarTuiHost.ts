@@ -22,6 +22,12 @@ export interface SpawnOpts {
   cols: number;
   rows: number;
   tabLabel: string;
+  /**
+   * Make the new tab the task's active drawer tab. Off by default — an
+   * unrequested CTA (onboarding) must not steal focus; the migrate path
+   * turns it on because the user explicitly asked for that TUI.
+   */
+  activate?: boolean;
   /** Extra env for the side-car process (e.g. DASH_TUI_PROJECT_NAME). */
   env?: Record<string, string>;
   createFlow(wiring: FlowWiring): FlowHandle;
@@ -37,6 +43,7 @@ export interface HostDeps {
       opts: { kind: 'tui'; label: string; featureId: string; id: string },
     ): { id: string };
     close(tabId: string): void;
+    setActive(taskId: string, tabId: string): void;
   };
   startPty(opts: {
     id: string;
@@ -50,6 +57,8 @@ export interface HostDeps {
     taskId: string;
     featureId: string;
   }): Promise<unknown>;
+  /** Kill a side-car PTY by tab id (no-op when already gone). */
+  killPty(id: string): void;
 }
 
 /**
@@ -74,6 +83,8 @@ export class SidecarTuiHost {
    * deliberately NOT suppressed so the user can retry by switching tasks.
    */
   private suppressed = new Set<string>();
+  /** In-flight reload reset — requestStart awaits this to avoid racing it. */
+  private reloadWork: Promise<void> | null = null;
 
   constructor(private readonly deps: HostDeps) {}
 
@@ -110,6 +121,7 @@ export class SidecarTuiHost {
         id: tabId,
       });
       tabCreated = true;
+      if (opts.activate) this.deps.drawerTabs.setActive(opts.taskId, tab.id);
 
       flow = opts.createFlow({
         socket,
@@ -181,6 +193,51 @@ export class SidecarTuiHost {
     } finally {
       this.pending.delete(key);
     }
+  }
+
+  /**
+   * Renderer reload (Cmd+R) — side-car TUIs can't survive it: clack output
+   * replayed from the mirror into a fresh xterm breaks formatting, so the
+   * tab + side-car are torn down and the renderer's mount-time requestStart
+   * re-offers anything still relevant. A reload counts as a fresh session,
+   * so the session-scoped suppression set is cleared too.
+   */
+  async handleRendererReload(): Promise<void> {
+    const work = (async () => {
+      const entries = [...this.active.entries()];
+      await Promise.all(
+        entries.map(async ([key, flow]) => {
+          try {
+            // FlowOrchestrator.teardown → onTeardown closes the tab and
+            // drops the active entry; the explicit cleanup below covers a
+            // flow whose teardown throws before reaching it.
+            await flow.teardown();
+          } catch {
+            /* best effort */
+          }
+          this.active.delete(key);
+          const tabId = `tui:${key}`;
+          try {
+            this.deps.drawerTabs.close(tabId);
+          } catch {
+            /* already closed */
+          }
+          try {
+            this.deps.killPty(tabId);
+          } catch {
+            /* already gone */
+          }
+        }),
+      );
+      this.suppressed.clear();
+    })();
+    this.reloadWork = work;
+    await work;
+  }
+
+  /** Resolves once any in-flight reload reset has finished. */
+  reloadSettled(): Promise<void> {
+    return this.reloadWork ?? Promise.resolve();
   }
 
   /**

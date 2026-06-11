@@ -49,6 +49,18 @@ describe('DrawerTabsService', () => {
     expect(c.featureId).toBe('ports');
   });
 
+  it('add() never auto-activates a tui tab, even as the first tab', () => {
+    const tui = svc.add('t1', { kind: 'tui', label: 'Ports', featureId: 'ports' });
+    expect(svc.getActive('t1')).toBeNull();
+    expect(svc.list('t1').map((t) => t.id)).toEqual([tui.id]);
+  });
+
+  it('add() activates a non-tui tab when the task has no active tab', () => {
+    svc.add('t1', { kind: 'tui', label: 'Ports', featureId: 'ports' });
+    const shell = svc.add('t1', { kind: 'shell', label: '1' });
+    expect(svc.getActive('t1')).toBe(shell.id);
+  });
+
   it('close() removes the tab and reassigns active to the next remaining', () => {
     const a = svc.add('t1', { kind: 'shell', label: '1' });
     const b = svc.add('t1', { kind: 'shell', label: '2' });

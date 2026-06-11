@@ -101,13 +101,16 @@ function persistAndDisposeMirror(id: string, record: PtyRecord): void {
   const mirror = record.mirror;
   record.mirror = null;
   if (!mirror) return;
-  persistMirrorSync(id, mirror);
+  // TUI tabs never restore from file snapshots (their side-car is torn down
+  // and re-offered instead) — persisting would only leave orphan files.
+  if (record.kind !== 'tui') persistMirrorSync(id, mirror);
   mirror.dispose();
 }
 
 /** Serialize every live mirror to disk — before-quit + crash-resilience interval. */
 export function persistAllMirrors(): void {
   for (const [id, record] of ptys) {
+    if (record.kind === 'tui') continue;
     if (record.mirror) persistMirrorSync(id, record.mirror);
   }
 }
@@ -1274,6 +1277,12 @@ export async function startCommandPty(options: {
   featureId: string;
   /** PTY registry kind. Side-car TUIs (default) vs user-facing service runs. */
   kind?: 'tui' | 'service';
+  /**
+   * Fires only when the process exits on its own — an explicit killPty()
+   * removes the record first, so the guarded handler below never reaches it.
+   * Callers that kill notify themselves; this hook covers self-death.
+   */
+  onExit?: (info: { exitCode: number; signal?: number }) => void;
 }): Promise<{ reattached: boolean }> {
   const existing = ptys.get(options.id);
   if (existing) {
@@ -1320,6 +1329,7 @@ export async function startCommandPty(options: {
     }
     persistAndDisposeMirror(options.id, record);
     ptys.delete(options.id);
+    options.onExit?.({ exitCode, signal });
   });
 
   return { reattached: false };

@@ -1,5 +1,6 @@
 import { BrowserWindow, Menu, shell } from 'electron';
 import * as path from 'path';
+import { getTuiHost } from './tui/hostInstance';
 
 const isDev = process.argv.includes('--dev');
 
@@ -29,6 +30,14 @@ export function createWindow(): BrowserWindow {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+  });
+
+  // Side-car TUIs can't survive a renderer reload — replaying clack output
+  // into a fresh xterm breaks formatting. Tear them down (and clear the
+  // session suppression set) so the fresh renderer re-offers anything still
+  // relevant. Fires on the initial load too, where it's a no-op.
+  mainWindow.webContents.on('did-navigate', () => {
+    void getTuiHost().handleRendererReload();
   });
 
   // Open external links in default browser

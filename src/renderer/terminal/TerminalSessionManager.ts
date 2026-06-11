@@ -11,7 +11,9 @@ import { darkTheme, lightTheme, resolveTheme } from './terminalThemes';
 import { getTerminalFont } from './terminalFonts';
 import { ptyExitFallback } from './ptyExitFallback';
 import { clackBlock, clackExitBlock } from './clackLines';
+import { isPromptOnlySnapshot } from './snapshotFilter';
 import { FitScheduler } from './fitScheduler';
+import { TUI_COLS, TUI_ROWS } from '../../shared/tuiProtocol';
 
 const MEMORY_LIMIT_BYTES = 128 * 1024 * 1024; // 128MB soft limit
 
@@ -48,6 +50,13 @@ export class TerminalSessionManager {
   private savedViewportY: number | null = null;
   readonly shellOnly: boolean;
   readonly isTui: boolean;
+  /**
+   * Side-car clack TUIs (`tui:` ids) render on a fixed TUI_COLS×TUI_ROWS
+   * canvas — clack never repaints on resize, so these sessions are exempt
+   * from all fitting. Service tabs share isTui for attach purposes but stay
+   * fully fitted.
+   */
+  private readonly pinnedTui: boolean;
   private themeId: string;
   // Claude Code's TUI rewrites cells continuously, which causes xterm to drop
   // the visible selection before the user can press the copy shortcut. Cache
@@ -75,11 +84,14 @@ export class TerminalSessionManager {
     this.isDark = opts.isDark ?? true;
     this.shellOnly = opts.shellOnly ?? false;
     this.isTui = opts.isTui ?? false;
+    this.pinnedTui = this.isTui && opts.id.startsWith('tui:');
     this.themeId = opts.themeId ?? 'default';
 
     this.terminal = new Terminal({
       scrollback: 100_000,
-      fontSize: 13,
+      // Pinned clack TUIs are a compact dialog, not a code terminal — match
+      // the app's chrome size so they don't read oversized.
+      fontSize: this.pinnedTui ? 11 : 13,
       fontFamily: getTerminalFont(),
       lineHeight: 1.2,
       allowProposedApi: true,
@@ -87,7 +99,8 @@ export class TerminalSessionManager {
       // with alpha so the frosted background shows through xterm's canvas.
       allowTransparency: this.shellOnly,
       theme: this.effectiveTheme(resolveTheme(this.themeId, this.isDark)),
-      cursorBlink: true,
+      // Pinned TUIs are non-interactive; no blinking xterm caret.
+      cursorBlink: !this.pinnedTui,
       linkHandler: {
         activate: (_event, uri) => {
           window.electronAPI.openExternal(uri);
@@ -286,6 +299,12 @@ export class TerminalSessionManager {
       // First time: open xterm in this container
       this.terminal.open(container);
       this.opened = true;
+      // TUI sessions render on a fixed canvas: clack paints a frame at the
+      // dims it sees and never repaints on resize, so the xterm is pinned to
+      // the side-car's spawn dims and exempted from all fitting below.
+      if (this.pinnedTui) {
+        this.terminal.resize(TUI_COLS, TUI_ROWS);
+      }
       // Sync .xterm background so padding gutters match the theme
       const bg = this.effectiveTheme(resolveTheme(this.themeId, this.isDark)).background;
       if (this.terminal.element && bg) {
@@ -410,13 +429,21 @@ export class TerminalSessionManager {
         // includes output emitted while no renderer was attached, and fixes
         // the blank idle shell after reload (a shell never repaints its
         // prompt unprompted). Fresh spawn: replay the persisted file
-        // snapshot (app-restart restore).
-        const restoreData = reattached
-          ? (shellResp.data?.serializedState ?? null)
-          : (existingSnapshot?.data ?? null);
+        // snapshot (app-restart restore) — unless it holds nothing but an
+        // idle prompt: the new shell prints its own, and replaying would
+        // stack a duplicate.
+        const snapshotData =
+          existingSnapshot?.data && !isPromptOnlySnapshot(existingSnapshot.data)
+            ? existingSnapshot.data
+            : null;
+        const restoreData = reattached ? (shellResp.data?.serializedState ?? null) : snapshotData;
         if (restoreData) {
           try {
             this.terminal.write(restoreData);
+            // Fresh spawn under replayed content: park the cursor at col 0
+            // so the incoming shell's PROMPT_SP mark (%) overwrites itself
+            // instead of smearing onto the restored last line.
+            if (!reattached) this.terminal.write('\r\n');
           } catch (err) {
             // xterm rejected the buffered bytes — usually a corrupt or
             // malformed control sequence in the snapshot. Without logging,
@@ -494,7 +521,9 @@ export class TerminalSessionManager {
       // Hide xterm's real cursor for direct spawns — Ink renders its own
       // character cursor in the input field; xterm's cursor just blinks
       // at the wrong position (end of buffer). Skip for shell-only.
-      if (isDirectSpawn && !this.shellOnly) {
+      // Pinned TUIs are non-interactive: clack draws its own caret, so xterm's
+      // would just blink in the empty row below the frame.
+      if ((isDirectSpawn && !this.shellOnly) || this.pinnedTui) {
         this.terminal.write('\x1b[?25l');
       }
 
@@ -520,7 +549,10 @@ export class TerminalSessionManager {
         // would send \x1b[I as PTY input before the new Ink process is ready,
         // causing stray "O"/"I" chars in the input field.
         this.terminal.write('\x1b[?1004l');
-        this.fitAddon.fit();
+        // TUI sessions keep their pinned canvas — fitting here mid-drawer
+        // animation shrank the PTY to transitional dims and the side-car's
+        // clack frame (which never repaints on resize) rendered garbled.
+        if (!this.pinnedTui) this.fitAddon.fit();
         if (opts?.autoFocus !== false) {
           this.terminal.focus();
         }
@@ -530,6 +562,7 @@ export class TerminalSessionManager {
           this.savedViewportY = null;
         }
 
+        if (this.pinnedTui) return;
         // Use fit() dedup logic — avoid redundant SIGWINCH that can cause
         // the shell to redraw while the user is already typing
         const dims = this.fitAddon.proposeDimensions();
@@ -685,6 +718,16 @@ export class TerminalSessionManager {
     this.terminal.focus();
   }
 
+  /**
+   * CSS px width of the rendered grid — used to size the drawer panel to hug
+   * a pinned TUI canvas (clack can't reflow, so the panel fits the canvas
+   * rather than the reverse). 0 before the renderer has laid out.
+   */
+  getCanvasWidthPx(): number {
+    const screen = this.terminal.element?.querySelector('.xterm-screen') as HTMLElement | null;
+    return screen?.offsetWidth ?? 0;
+  }
+
   getSearchAddon(): SearchAddon {
     return this.searchAddon;
   }
@@ -732,8 +775,10 @@ export class TerminalSessionManager {
     }
 
     // Trigger SIGWINCH so the TUI redraws with the new ANSI palette.
-    // rows+1 then rows forces the PTY process to handle SIGWINCH.
-    if (this.ptyStarted && this.opened) {
+    // rows+1 then rows forces the PTY process to handle SIGWINCH. Skipped
+    // for pinned TUI sessions — clack uses ANSI-16 colors, which xterm
+    // re-themes without a repaint.
+    if (this.ptyStarted && this.opened && !this.pinnedTui) {
       const dims = this.fitAddon.proposeDimensions();
       if (dims) {
         const cols = this.ptyCols(dims.cols);
@@ -776,6 +821,8 @@ export class TerminalSessionManager {
   }
 
   private fit() {
+    // TUI sessions are pinned to TUI_COLS×TUI_ROWS — never fit or resize.
+    if (this.pinnedTui) return;
     try {
       // Never fit against a hidden container — FitAddon clamps to a 1-row
       // minimum, which would squash the PTY and desync the shell's prompt

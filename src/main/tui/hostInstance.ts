@@ -2,7 +2,7 @@ import { app } from 'electron';
 import path from 'path';
 import { SidecarTuiHost } from './SidecarTuiHost';
 import { initDrawerTabsService } from '../ipc/drawerTabsIpc';
-import { startCommandPty } from '../services/ptyManager';
+import { startCommandPty, killPty } from '../services/ptyManager';
 
 let host: SidecarTuiHost | null = null;
 
@@ -22,8 +22,10 @@ export function getTuiHost(): SidecarTuiHost {
       drawerTabs: {
         add: (taskId, opts) => initDrawerTabsService().add(taskId, opts as never),
         close: (tabId) => initDrawerTabsService().close(tabId),
+        setActive: (taskId, tabId) => initDrawerTabsService().setActive(taskId, tabId),
       },
       startPty: (opts) => startCommandPty(opts as never),
+      killPty: (id) => killPty(id),
     });
   }
   return host;

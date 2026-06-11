@@ -13,10 +13,19 @@ export function registerTuiIpc(opts: { getMainWindow: () => BrowserWindow | null
       if (!feature) {
         return { success: false as const, error: `unknown TUI feature: ${featureId}` };
       }
+      // A freshly reloaded renderer can request before the reload teardown
+      // finishes — wait so isActive doesn't report a flow that's mid-death.
+      await getTuiHost().reloadSettled();
       if (DatabaseService.isFeatureDismissed(projectId, featureId)) {
         return {
           success: true as const,
           data: { started: false as const, reason: 'dismissed' as const },
+        };
+      }
+      if (feature.isRelevant && !feature.isRelevant(payload)) {
+        return {
+          success: true as const,
+          data: { started: false as const, reason: 'not-relevant' as const },
         };
       }
       const host = getTuiHost();
@@ -39,10 +48,13 @@ export function registerTuiIpc(opts: { getMainWindow: () => BrowserWindow | null
     },
   );
 
-  ipcMain.handle('tui:isActive', (_e, q: { featureId: string; taskId: string }) => ({
-    success: true as const,
-    data: getTuiHost().isActive(q.featureId, q.taskId),
-  }));
+  ipcMain.handle('tui:isActive', async (_e, q: { featureId: string; taskId: string }) => {
+    await getTuiHost().reloadSettled();
+    return {
+      success: true as const,
+      data: getTuiHost().isActive(q.featureId, q.taskId),
+    };
+  });
 }
 
 /**

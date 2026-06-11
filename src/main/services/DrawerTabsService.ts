@@ -53,7 +53,12 @@ export class DrawerTabsService {
       createdAt,
     };
 
-    if (existing.length === 0) this.setActiveInternal(taskId, id);
+    // TUI tabs never steal focus — they announce themselves via the tab
+    // header styling instead. Any other kind becomes active when the task
+    // has no active tab yet (covers the shell seeded after a TUI tab).
+    if (opts.kind !== 'tui' && this.getActive(taskId) === null) {
+      this.setActiveInternal(taskId, id);
+    }
     this.emit(taskId);
     return tab;
   }

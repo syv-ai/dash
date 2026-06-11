@@ -16,6 +16,12 @@ export interface TuiFeature {
   id: string;
   /** Wire the feature's flow + env into a host SpawnOpts for the request path. */
   buildSpawn(payload: RequestStartPayload, getMainWindow: () => BrowserWindow | null): SpawnOpts;
+  /**
+   * Cheap pre-spawn gate: false means the feature has nothing to offer for
+   * this task (e.g. ports onboarding when .dash/ports.json already exists).
+   * Absent = always relevant.
+   */
+  isRelevant?(payload: RequestStartPayload): boolean;
 }
 
 const features = new Map<string, TuiFeature>();

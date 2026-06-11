@@ -13,28 +13,17 @@ function send(ctx: ScreenContext, msg: PortsTuiToMain): void {
 
 export const showPortsScreen: ShowHandler = async (raw, ctx) => {
   const msg = raw as ShowMsg;
-  const { intro, outro, select, confirm, note, isCancel } = ctx.clack;
-  const projectName = ctx.env.DASH_TUI_PROJECT_NAME ?? 'project';
+  const { outro, select, confirm, isCancel } = ctx.clack;
 
   switch (msg.screen) {
     case 'onboarding': {
-      intro(`◆  Dash — port management for ${projectName}`);
-      const { signals, guesses } = msg.props;
-      if (signals.length > 0 || guesses.length > 0) {
-        const lines = [
-          ...(signals.length > 0 ? [`Detected: ${signals.join(', ')}`] : []),
-          ...guesses.map((g) => `  · ${g}`),
-        ];
-        note(lines.join('\n'), 'What Dash found');
-      }
-      note(
-        'Setup creates a new "port-setup" task on a new branch and runs an\n' +
-          'agent there that configures unique ports per worktree. ~30s–2min.',
-        'How it works',
-      );
       const choice = await select({
+        // Blank lines (gutter-prefixed by clack's trim:false wrapping) separate
+        // the pitch, the action note, and the options for breathing room.
         message:
-          'Want Dash to manage ports for you? Allocate unique ports per worktree automatically. No more collisions.',
+          'Want Dash to manage port allocation for you? Assign ports per worktree ' +
+          'automatically. No more collisions.\n\n' +
+          'This will start a new task and instruct an agent to do the thing.\n',
         options: [
           { value: 'setup', label: 'Sure. Set it up.' },
           { value: 'not-now', label: 'Not now, go away.' },

@@ -476,6 +476,30 @@
   animation: pulse-glow 2s ease-in-out infinite;
 }
 
+/* ── Drawer tabs ──────────────────────────────────────────── */
+
+@keyframes drawerTabIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.drawer-tab-in {
+  animation: drawerTabIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* Side-car TUI tabs render on a fixed-size xterm canvas (see TUI_COLS /
+   TUI_ROWS). Left-align it: the canvas can be wider than a narrow panel, and
+   centering would push its left gutter (the │ ◆ ● markers) off-screen —
+   left-aligning keeps the gutter and clips only wrapped-line tails. */
+.tui-canvas-host {
+  display: flex;
+  justify-content: flex-start;
+}
+
 /* ── Sidebar atmosphere (A1 · Soft Pill) ─────────────────── */
 
 .sidebar-shell {

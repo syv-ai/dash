@@ -200,6 +200,29 @@ describe('startAll', () => {
   });
 });
 
+describe('service self-exit', () => {
+  it('a service dying on its own drops ownership and notifies the panel', async () => {
+    const p = port({ runCommand: 'pnpm dev' });
+    deps.getPorts.mockReturnValue([p]);
+    await runner.start('t1', p);
+    deps.notifyChanged.mockClear();
+
+    const opts = deps.startPty.mock.calls[0][0] as { onExit?: () => void };
+    expect(typeof opts.onExit).toBe('function');
+    opts.onExit!();
+
+    expect(runner.status('t1').Web.ownedTabId).toBe(null);
+    expect(deps.notifyChanged).toHaveBeenCalledWith('t1');
+  });
+
+  it('logs tabs do not register an exit hook (their death is not a status change)', async () => {
+    deps.ptyAlive.mockReturnValue(false);
+    await runner.logs('t1', port({ logsCommand: 'docker compose logs -f web' }));
+    const opts = deps.startPty.mock.calls[0][0] as { onExit?: () => void };
+    expect(opts.onExit).toBeUndefined();
+  });
+});
+
 describe('status', () => {
   it('drops ownership when the PTY died', async () => {
     const p = port({ runCommand: 'pnpm dev' });

@@ -6,6 +6,7 @@ import type { SpawnOpts } from '../../tui/SidecarTuiHost';
 import { getTuiHost } from '../../tui/hostInstance';
 import { PortsOnboardingFlow } from './PortsOnboardingFlow';
 import { PortsSetupFlow } from './PortsSetupFlow';
+import { portsOnboardingRelevant } from './relevance';
 import { detectPortsNeed } from '../../services/PortsHeuristic';
 import { buildPortsSetupPrompt } from '../../services/PortsSetupPrompt';
 import { WorkspacePortsRuntime } from '../../services/WorkspacePortsRuntime';
@@ -24,6 +25,7 @@ export function registerPortsFeature(): void {
   registerFeature({
     id: FEATURE_ID,
     buildSpawn: (payload, getMainWindow) => onboardingSpawn(payload, getMainWindow),
+    isRelevant: (payload) => portsOnboardingRelevant(payload.cwd),
   });
 }
 
@@ -39,7 +41,7 @@ function onboardingSpawn(
     cwd: payload.cwd,
     cols: payload.cols,
     rows: payload.rows,
-    tabLabel: 'Set up ports',
+    tabLabel: 'Set up ports?',
     env: { DASH_TUI_PROJECT_NAME: payload.projectName },
     getMainWindow,
     createFlow: (wiring) =>
@@ -84,6 +86,9 @@ function setupSpawn(args: {
     cols: args.cols,
     rows: args.rows,
     tabLabel: 'Set up ports',
+    // The user picked "Set it up" — landing them on the setup TUI is the
+    // point of the migrate, unlike the unrequested onboarding CTA.
+    activate: true,
     env: { DASH_TUI_PROJECT_NAME: args.projectName },
     getMainWindow: args.getMainWindow,
     createFlow: (wiring) =>

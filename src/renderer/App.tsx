@@ -5,7 +5,7 @@ import {
   PanelResizeHandle,
   type ImperativePanelHandle,
 } from 'react-resizable-panels';
-import { TUI_FEATURE_IDS } from '@shared/tuiProtocol';
+import { TUI_FEATURE_IDS, TUI_COLS, TUI_ROWS } from '@shared/tuiProtocol';
 import { LeftSidebar } from './components/LeftSidebar';
 import { MainContent } from './components/MainContent';
 import { openInIde } from './lib/openInIde';
@@ -55,6 +55,15 @@ import { playNotificationSound, playPeonSound } from './sounds';
 import type { NotificationSound } from './sounds';
 
 const GIT_POLL_INTERVAL = 5000;
+/** Chrome around the pinned TUI canvas (panel padding + drawer gutter) added
+ *  to the measured canvas px so the panel hugs it without clipping. */
+const TUI_PANEL_CHROME_PX = 52;
+/** Trim the hugged panel width — the canvas has built-in right whitespace, so
+ *  the panel can sit narrower than the full canvas without clipping content. */
+const TUI_PANEL_WIDTH_SCALE = 0.85;
+/** Bounds for the hugged right-panel width (%) — matches the panel's min/max. */
+const TUI_PANEL_MIN_PCT = 12;
+const TUI_PANEL_MAX_PCT = 40;
 const EMPTY_CONTEXT_USAGE: Record<string, import('../shared/types').ContextUsage> = {};
 
 export function App() {
@@ -644,8 +653,8 @@ export function App() {
           taskName,
           projectName,
           cwd,
-          cols: 80,
-          rows: 24,
+          cols: TUI_COLS,
+          rows: TUI_ROWS,
         });
       });
     }
@@ -1274,6 +1283,39 @@ export function App() {
       panel.collapse();
     }
   }, [shellDrawerCollapsed]);
+
+  // While a side-car TUI is the active drawer tab, smoothly size the right
+  // panel (the drawer lives inside it) to hug the TUI's pinned canvas — clack
+  // can't reflow, so the panel fits the canvas, not the reverse. Restore the
+  // user's width when the TUI finishes / closes / is cancelled.
+  const changesSizeBeforeTui = useRef<number | null>(null);
+  const handleTuiPanelActive = useCallback((active: boolean, canvasPx?: number) => {
+    const panel = changesPanelRef.current;
+    if (!panel) return;
+    if (active) {
+      // canvasPx may arrive 0/undefined on the first frame; ignore until a
+      // real measurement lands so we don't snap to a bogus width.
+      if (!canvasPx || changesSizeBeforeTui.current !== null) return;
+      const targetPct = Math.max(
+        TUI_PANEL_MIN_PCT,
+        Math.min(
+          TUI_PANEL_MAX_PCT,
+          (((canvasPx + TUI_PANEL_CHROME_PX) * TUI_PANEL_WIDTH_SCALE) / window.innerWidth) * 100,
+        ),
+      );
+      changesSizeBeforeTui.current = panel.getSize();
+      setChangesAnimating(true);
+      panel.resize(targetPct);
+      setTimeout(() => setChangesAnimating(false), 200);
+    } else {
+      const prev = changesSizeBeforeTui.current;
+      changesSizeBeforeTui.current = null;
+      if (prev === null) return;
+      setChangesAnimating(true);
+      panel.resize(prev);
+      setTimeout(() => setChangesAnimating(false), 200);
+    }
+  }, []);
 
   // ── Data Loading ─────────────────────────────────────────
 
@@ -2090,6 +2132,7 @@ export function App() {
                   collapsed={shellDrawerCollapsed}
                   panelRef={shellDrawerPanelRef}
                   animating={shellDrawerAnimating}
+                  onTuiActiveChange={handleTuiPanelActive}
                   onAnimate={() => setShellDrawerAnimating(true)}
                   onCollapse={() => {
                     setShellDrawerCollapsed(true);

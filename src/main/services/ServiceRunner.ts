@@ -36,6 +36,8 @@ export interface RunnerDeps {
     taskId: string;
     featureId: string;
     kind: 'service';
+    /** Fires only on self-death — explicit kills never reach it (see startCommandPty). */
+    onExit?: () => void;
   }): Promise<unknown>;
   killPty(id: string): void;
   ptyAlive(id: string): boolean;
@@ -136,6 +138,9 @@ export class ServiceRunner {
         taskId,
         featureId: 'ports',
         kind: 'service',
+        // A service dying on its own is a status change the panel must hear
+        // about — start/stop notify explicitly, this covers self-death.
+        onExit: () => this.handleSelfExit(taskId, port.label, tab.id),
       });
       this.owned.set(this.key(taskId, port.label), tab.id);
       this.deps.notifyChanged(taskId);
@@ -146,6 +151,13 @@ export class ServiceRunner {
       this.deps.toast(message);
       return { ok: false, message };
     }
+  }
+
+  private handleSelfExit(taskId: string, label: string, tabId: string): void {
+    if (this.owned.get(this.key(taskId, label)) !== tabId) return;
+    portsDebug.log('service', 'self-exit', { taskId, label });
+    this.owned.delete(this.key(taskId, label));
+    this.deps.notifyChanged(taskId);
   }
 
   async stop(taskId: string, port: TaskPort): Promise<OpResult> {

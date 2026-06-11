@@ -9,6 +9,8 @@ let host: SidecarTuiHost;
 let startPty: ReturnType<typeof vi.fn>;
 let tabAdd: ReturnType<typeof vi.fn>;
 let tabClose: ReturnType<typeof vi.fn>;
+let tabSetActive: ReturnType<typeof vi.fn>;
+let killPty: ReturnType<typeof vi.fn>;
 let scriptPath: string;
 
 function makeFlow(opts?: { failStart?: boolean }) {
@@ -46,11 +48,14 @@ beforeEach(() => {
   startPty = vi.fn(async () => ({}));
   tabAdd = vi.fn((_tid: string, o: { id: string }) => ({ id: o.id }));
   tabClose = vi.fn();
+  tabSetActive = vi.fn();
+  killPty = vi.fn();
   host = new SidecarTuiHost({
     socketDir: path.join(dir, 'sockets'),
     scriptPath,
-    drawerTabs: { add: tabAdd as never, close: tabClose },
+    drawerTabs: { add: tabAdd as never, close: tabClose, setActive: tabSetActive },
     startPty: startPty as never,
+    killPty,
   });
 });
 
@@ -113,6 +118,34 @@ describe('SidecarTuiHost', () => {
     await host.spawn(spawnOpts(flow));
     expect(host.isActive('ports', 't1')).toBe(true);
     expect(host.isActive('other', 't1')).toBe(false);
+    expect(host.isActive('ports', 't2')).toBe(false);
+  });
+
+  it('spawn does not activate the tab by default; activate: true does', async () => {
+    const flow = makeFlow();
+    await host.spawn(spawnOpts(flow));
+    expect(tabSetActive).not.toHaveBeenCalled();
+
+    const flow2 = makeFlow();
+    await host.spawn(spawnOpts(flow2, { taskId: 't2', activate: true }));
+    expect(tabSetActive).toHaveBeenCalledWith('t2', 'tui:ports:t2');
+  });
+
+  it('handleRendererReload tears down active flows and clears suppression', async () => {
+    const flow = makeFlow();
+    await host.spawn(spawnOpts(flow));
+    const flow2 = makeFlow();
+    await host.spawn(spawnOpts(flow2, { taskId: 't2' }));
+    flow2.wiring!.onTeardown('not-now'); // user declined earlier → suppressed
+
+    await host.handleRendererReload();
+
+    expect(flow.teardown).toHaveBeenCalled();
+    expect(tabClose).toHaveBeenCalledWith('tui:ports:t1');
+    expect(killPty).toHaveBeenCalledWith('tui:ports:t1');
+    // A reload is a fresh session: both the live flow and the previously
+    // suppressed key must be free to respawn.
+    expect(host.isActive('ports', 't1')).toBe(false);
     expect(host.isActive('ports', 't2')).toBe(false);
   });
 
