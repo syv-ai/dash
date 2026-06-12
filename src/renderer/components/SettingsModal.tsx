@@ -56,6 +56,7 @@ import type {
 import { formatResetTime } from '../../shared/format';
 import { UsageBar } from './ui/UsageBar';
 import { formatTokens, formatCost } from '../utils/formatTokens';
+import { useSettings } from '../stores/settingsStore';
 
 const DASH_DEFAULT_ATTRIBUTION =
   '\n\nCo-Authored-By: Claude <noreply@anthropic.com> via Dash <dash@syv.ai>';
@@ -189,18 +190,8 @@ interface SettingsModalProps {
   onAutoUpdateEnabledChange: (value: boolean) => void;
   updateNotificationsEnabled: boolean;
   onUpdateNotificationsEnabledChange: (value: boolean) => void;
-  showRateLimits: boolean;
-  onShowRateLimitsChange: (value: boolean) => void;
-  showUsageInline: boolean;
-  onShowUsageInlineChange: (value: boolean) => void;
-  showContextUsageOnTaskCards: boolean;
-  onShowContextUsageOnTaskCardsChange: (value: boolean) => void;
   showActiveTasksSection: boolean;
   onShowActiveTasksSectionChange: (value: boolean) => void;
-  showTaskTokens: boolean;
-  onShowTaskTokensChange: (value: boolean) => void;
-  showProjectTokens: boolean;
-  onShowProjectTokensChange: (value: boolean) => void;
   globalTokenStats: { totalTokens: number; totalCostUsd: number; taskCount: number };
   shellDrawerPosition: 'main' | 'right';
   onShellDrawerPositionChange: (value: 'main' | 'right') => void;
@@ -229,8 +220,6 @@ interface SettingsModalProps {
   onRtkDownload: () => void;
   rtkDownloadProgress: RtkDownloadProgress | null;
   latestRateLimits?: RateLimits;
-  usageThresholds: UsageThresholds;
-  onUsageThresholdsChange: (thresholds: UsageThresholds) => void;
   onClose: () => void;
 }
 
@@ -465,35 +454,23 @@ function KeyRecorder({
 
 function UsageSection({
   latestRateLimits,
-  thresholds,
-  onThresholdsChange,
-  showRateLimits,
-  onShowRateLimitsChange,
-  showUsageInline,
-  onShowUsageInlineChange,
-  showContextUsageOnTaskCards,
-  onShowContextUsageOnTaskCardsChange,
-  showTaskTokens,
-  onShowTaskTokensChange,
-  showProjectTokens,
-  onShowProjectTokensChange,
   globalTokenStats,
 }: {
   latestRateLimits?: RateLimits;
-  thresholds: UsageThresholds;
-  onThresholdsChange: (t: UsageThresholds) => void;
-  showRateLimits: boolean;
-  onShowRateLimitsChange: (value: boolean) => void;
-  showUsageInline: boolean;
-  onShowUsageInlineChange: (value: boolean) => void;
-  showContextUsageOnTaskCards: boolean;
-  onShowContextUsageOnTaskCardsChange: (value: boolean) => void;
-  showTaskTokens: boolean;
-  onShowTaskTokensChange: (value: boolean) => void;
-  showProjectTokens: boolean;
-  onShowProjectTokensChange: (value: boolean) => void;
   globalTokenStats: { totalTokens: number; totalCostUsd: number; taskCount: number };
 }) {
+  const thresholds = useSettings((s) => s.usageThresholds);
+  const onThresholdsChange = useSettings((s) => s.setUsageThresholds);
+  const showRateLimits = useSettings((s) => s.showRateLimits);
+  const onShowRateLimitsChange = useSettings((s) => s.setShowRateLimits);
+  const showUsageInline = useSettings((s) => s.showUsageInline);
+  const onShowUsageInlineChange = useSettings((s) => s.setShowUsageInline);
+  const showContextUsageOnTaskCards = useSettings((s) => s.showContextUsageOnTaskCards);
+  const onShowContextUsageOnTaskCardsChange = useSettings((s) => s.setShowContextUsageOnTaskCards);
+  const showTaskTokens = useSettings((s) => s.showTaskTokens);
+  const onShowTaskTokensChange = useSettings((s) => s.setShowTaskTokens);
+  const showProjectTokens = useSettings((s) => s.showProjectTokens);
+  const onShowProjectTokensChange = useSettings((s) => s.setShowProjectTokens);
   return (
     <SettingsPane>
       <SettingsCard title="Token usage">
@@ -840,18 +817,8 @@ export function SettingsModal({
   onAutoUpdateEnabledChange,
   updateNotificationsEnabled,
   onUpdateNotificationsEnabledChange,
-  showRateLimits,
-  onShowRateLimitsChange,
-  showUsageInline,
-  onShowUsageInlineChange,
-  showContextUsageOnTaskCards,
-  onShowContextUsageOnTaskCardsChange,
   showActiveTasksSection,
   onShowActiveTasksSectionChange,
-  showTaskTokens,
-  onShowTaskTokensChange,
-  showProjectTokens,
-  onShowProjectTokensChange,
   globalTokenStats,
   shellDrawerPosition,
   onShellDrawerPositionChange,
@@ -880,8 +847,6 @@ export function SettingsModal({
   onRtkDownload,
   rtkDownloadProgress,
   latestRateLimits,
-  usageThresholds,
-  onUsageThresholdsChange,
   onClose,
 }: SettingsModalProps) {
   const validTabs: SettingsTab[] = NAV_ITEMS.map((n) => n.id);
@@ -1687,18 +1652,6 @@ export function SettingsModal({
               {tab === 'usage' && (
                 <UsageSection
                   latestRateLimits={latestRateLimits}
-                  thresholds={usageThresholds}
-                  onThresholdsChange={onUsageThresholdsChange}
-                  showRateLimits={showRateLimits}
-                  onShowRateLimitsChange={onShowRateLimitsChange}
-                  showUsageInline={showUsageInline}
-                  onShowUsageInlineChange={onShowUsageInlineChange}
-                  showContextUsageOnTaskCards={showContextUsageOnTaskCards}
-                  onShowContextUsageOnTaskCardsChange={onShowContextUsageOnTaskCardsChange}
-                  showTaskTokens={showTaskTokens}
-                  onShowTaskTokensChange={onShowTaskTokensChange}
-                  showProjectTokens={showProjectTokens}
-                  onShowProjectTokensChange={onShowProjectTokensChange}
                   globalTokenStats={globalTokenStats}
                 />
               )}

@@ -306,7 +306,6 @@ export function App() {
 
   // Usage thresholds for popup notifications
   const usageThresholds = useSettings((s) => s.usageThresholds);
-  const setUsageThresholds = useSettings((s) => s.setUsageThresholds);
 
   const notificationSoundRef = useRef(notificationSound);
   useEffect(() => {
@@ -334,21 +333,12 @@ export function App() {
 
   // Right-sidebar: 5-hour / 7-day rate limit bars
   const showRateLimits = useSettings((s) => s.showRateLimits);
-  const setShowRateLimits = useSettings((s) => s.setShowRateLimits);
   const showUsageInline = useSettings((s) => s.showUsageInline);
-  const setShowUsageInline = useSettings((s) => s.setShowUsageInline);
   const showContextUsageOnTaskCards = useSettings((s) => s.showContextUsageOnTaskCards);
-  const setShowContextUsageOnTaskCards = useSettings((s) => s.setShowContextUsageOnTaskCards);
 
   // Rotation — tasks the user cycles through with Ctrl+Tab
   const showActiveTasksSection = useSettings((s) => s.showActiveTasksSection);
   const setShowActiveTasksSection = useSettings((s) => s.setShowActiveTasksSection);
-
-  // Token-usage UI toggles
-  const showTaskTokens = useSettings((s) => s.showTaskTokens);
-  const setShowTaskTokens = useSettings((s) => s.setShowTaskTokens);
-  const showProjectTokens = useSettings((s) => s.showProjectTokens);
-  const setShowProjectTokens = useSettings((s) => s.setShowProjectTokens);
 
   // Token-stats rollups (per-project + global). Live-updated via tokenStats:updated event.
   const [projectTokenStats, setProjectTokenStats] = useState<
@@ -2162,18 +2152,8 @@ export function App() {
             setTheme(t);
             sessionRegistry.setAllTerminalThemes(terminalTheme, t === 'dark');
           }}
-          showRateLimits={showRateLimits}
-          onShowRateLimitsChange={setShowRateLimits}
-          showUsageInline={showUsageInline}
-          onShowUsageInlineChange={setShowUsageInline}
-          showContextUsageOnTaskCards={showContextUsageOnTaskCards}
-          onShowContextUsageOnTaskCardsChange={setShowContextUsageOnTaskCards}
           showActiveTasksSection={showActiveTasksSection}
           onShowActiveTasksSectionChange={setShowActiveTasksSection}
-          showTaskTokens={showTaskTokens}
-          onShowTaskTokensChange={setShowTaskTokens}
-          showProjectTokens={showProjectTokens}
-          onShowProjectTokensChange={setShowProjectTokens}
           globalTokenStats={globalTokenStats}
           shellDrawerPosition={shellDrawerPosition}
           onShellDrawerPositionChange={(v) => {
@@ -2275,8 +2255,6 @@ export function App() {
           }}
           rtkDownloadProgress={rtkDownloadProgress}
           latestRateLimits={latestRateLimits}
-          usageThresholds={usageThresholds}
-          onUsageThresholdsChange={setUsageThresholds}
           onClose={() => setShowSettings(false)}
         />
       )}
