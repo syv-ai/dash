@@ -134,16 +134,8 @@ export function App() {
   const setTerminalTheme = useSettings((s) => s.setTerminalTheme);
   const terminalFontFamily = useSettings((s) => s.terminalFontFamily);
   const setTerminalFontFamily = useSettings((s) => s.setTerminalFontFamily);
-  const [preferredIDE, setPreferredIDE] = useState<string>(() => {
-    const stored = localStorage.getItem('preferredIDE');
-    if (!stored) return 'auto';
-    // Migrate legacy 'code' → 'vscode'
-    if (stored === 'code') {
-      localStorage.setItem('preferredIDE', 'vscode');
-      return 'vscode';
-    }
-    return stored;
-  });
+  const preferredIDE = useSettings((s) => s.preferredIDE);
+  const setPreferredIDE = useSettings((s) => s.setPreferredIDE);
   const customIDE = useSettings((s) => s.customIDE);
   const setCustomIDE = useSettings((s) => s.setCustomIDE);
   const [availableIDEs, setAvailableIDEs] = useState<Array<{ id: string; label: string }>>([]);
@@ -206,7 +198,6 @@ export function App() {
       setPreferredIDE((current) => {
         if (current === 'auto' || current === 'custom') return current;
         if (res.data!.some((d) => d.id === current)) return current;
-        localStorage.removeItem('preferredIDE');
         return 'auto';
       });
     });
@@ -2244,11 +2235,6 @@ export function App() {
           preferredIDE={preferredIDE}
           onPreferredIDEChange={(v) => {
             setPreferredIDE(v);
-            if (v === 'auto') {
-              localStorage.removeItem('preferredIDE');
-            } else {
-              localStorage.setItem('preferredIDE', v);
-            }
           }}
           availableIDEs={availableIDEs}
           customIDE={customIDE}
