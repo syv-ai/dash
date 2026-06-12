@@ -11,11 +11,10 @@ import {
 } from './fileChanges/commitRunReducer';
 import { CommitRunView } from './fileChanges/CommitRunView';
 import { FileDiff, Check, Upload, X } from 'lucide-react';
-import type { GitStatus } from '../../shared/types';
+import { useGit } from '../stores/gitStore';
 
 interface FileChangesPanelProps {
   cwd: string;
-  gitStatus: GitStatus | null;
   loading: boolean;
   onStageFiles: (filePaths: string[]) => void;
   onUnstageFiles: (filePaths: string[]) => void;
@@ -30,7 +29,6 @@ interface FileChangesPanelProps {
 
 export function FileChangesPanel({
   cwd,
-  gitStatus,
   loading,
   onStageFiles,
   onUnstageFiles,
@@ -42,6 +40,7 @@ export function FileChangesPanel({
   onShowCommitGraph,
   collapsed,
 }: FileChangesPanelProps) {
+  const gitStatus = useGit((s) => s.gitStatus);
   const [commitMsg, setCommitMsg] = useState('');
   const [committing, setCommitting] = useState(false);
   const [pushing, setPushing] = useState(false);

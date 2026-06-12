@@ -1062,7 +1062,6 @@ export function App() {
               activeProject={activeProject}
               tasks={activeProjectTasks}
               taskActivity={taskActivity}
-              gitStatus={gitStatus}
               prInfo={prInfo}
               remoteControlState={activeTask ? (remoteControlStates[activeTask.id] ?? null) : null}
               isMac={window.electronAPI.getPlatform() === 'darwin'}
@@ -1167,7 +1166,6 @@ export function App() {
                     >
                       <RightInspector
                         activeTask={activeTask}
-                        gitStatus={gitStatus}
                         gitLoading={gitLoading}
                         rateLimits={showRateLimits && latestRateLimits ? latestRateLimits : {}}
                         contextUsage={
@@ -1387,7 +1385,6 @@ export function App() {
             initialFilePath={diffFile.filePath}
             initialStaged={diffFile.staged}
             initialView={diffFile.initialView}
-            gitStatus={gitStatus}
             activeTaskId={activeTaskId}
             terminalTheme={resolvedTerminalTheme}
             isDark={theme === 'dark'}

@@ -2,6 +2,7 @@ import React from 'react';
 import { TerminalPane } from './TerminalPane';
 import { ProjectOverview } from './ProjectOverview';
 import { useSettings } from '../stores/settingsStore';
+import { useGit } from '../stores/gitStore';
 import {
   FolderOpen,
   Code2,
@@ -18,7 +19,6 @@ import {
 import type {
   Project,
   Task,
-  GitStatus,
   PullRequestInfo,
   RemoteControlState,
   ActivityInfo,
@@ -94,7 +94,6 @@ interface MainContentProps {
   activeProject: Project | null;
   tasks?: Task[];
   taskActivity?: Record<string, ActivityInfo>;
-  gitStatus?: GitStatus | null;
   prInfo?: PullRequestInfo | null;
   remoteControlState?: RemoteControlState | null;
   isMac?: boolean;
@@ -121,7 +120,6 @@ export function MainContent({
   activeProject,
   tasks = [],
   taskActivity = {},
-  gitStatus = null,
   prInfo = null,
   remoteControlState = null,
   isMac = false,
@@ -143,6 +141,7 @@ export function MainContent({
   onRestoreTask,
 }: MainContentProps) {
   const showTaskTokens = useSettings((s) => s.showTaskTokens);
+  const gitStatus = useGit((s) => s.gitStatus);
   if (!activeProject) {
     return (
       <div className="h-full flex flex-col bg-background">

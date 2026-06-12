@@ -3,11 +3,11 @@ import { ArrowDown, ArrowUp, GitBranch, Maximize2, Minus, Plus } from 'lucide-re
 import { FileChangesPanel } from '../FileChangesPanel';
 import { Tooltip } from '../ui/Tooltip';
 import { UsageStrip } from './UsageStrip';
-import type { GitStatus, RateLimits, ContextUsage, Task } from '../../../shared/types';
+import { useGit } from '../../stores/gitStore';
+import type { RateLimits, ContextUsage, Task } from '../../../shared/types';
 
 interface RightInspectorProps {
   activeTask: Task | null;
-  gitStatus: GitStatus | null;
   gitLoading: boolean;
   rateLimits: RateLimits;
   contextUsage?: ContextUsage;
@@ -30,7 +30,6 @@ interface RightInspectorProps {
 
 export function RightInspector({
   activeTask,
-  gitStatus,
   gitLoading,
   rateLimits,
   contextUsage,
@@ -47,6 +46,7 @@ export function RightInspector({
   onOpenEditor,
   collapsed,
 }: RightInspectorProps) {
+  const gitStatus = useGit((s) => s.gitStatus);
   const { adds, dels, fileCount, stagedCount, unstagedCount } = useMemo(() => {
     const files = gitStatus?.files ?? [];
     let stagedCount = 0;
@@ -144,7 +144,6 @@ export function RightInspector({
         <FileChangesPanel
           key={activeTask?.id ?? '__none__'}
           cwd={activeTask?.path ?? ''}
-          gitStatus={gitStatus}
           loading={gitLoading}
           onStageFiles={onStageFiles}
           onUnstageFiles={onUnstageFiles}

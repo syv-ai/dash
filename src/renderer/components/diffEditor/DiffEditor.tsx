@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import type { ITheme as XtermTheme } from 'xterm';
 import { Modal } from '../ui/Modal';
-import type { FileChange, GitStatus } from '../../../shared/types';
+import type { FileChange } from '../../../shared/types';
+import { useGit } from '../../stores/gitStore';
 import { EditorSidebar } from './EditorSidebar';
 import { EditorPane } from './EditorPane';
 import type { CommitSummary, EditorView } from './types';
@@ -18,8 +19,6 @@ interface DiffEditorProps {
   /** Initial view. Defaults to working tree at HEAD/index. Pass `{kind:'commit', hash:'HEAD'}`
    *  to open at the latest commit (the editor resolves the sentinel once commits load). */
   initialView?: EditorView;
-  /** Working-tree git status the project already has — seeds the sidebar without a round-trip. */
-  gitStatus: GitStatus | null;
   activeTaskId: string | null;
   terminalTheme: XtermTheme;
   isDark: boolean;
@@ -39,12 +38,12 @@ function DiffEditorBody({
   initialFilePath,
   initialStaged,
   initialView,
-  gitStatus,
   activeTaskId,
   terminalTheme,
   isDark,
   onClose,
 }: DiffEditorProps) {
+  const gitStatus = useGit((s) => s.gitStatus);
   const [view, setView] = useState<EditorView>(
     () => initialView ?? { kind: 'working', ref: initialStaged ? 'index' : 'HEAD' },
   );
