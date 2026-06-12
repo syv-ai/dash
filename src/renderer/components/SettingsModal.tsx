@@ -34,25 +34,19 @@ import { Tooltip } from './ui/Tooltip';
 import { ToggleSwitch } from './ui/ToggleSwitch';
 import { Switch } from './ui/Switch';
 import { Modal, useModalClose } from './ui/Modal';
-import type { KeyBindingMap, KeyBinding } from '../keybindings';
+import type { KeyBinding } from '../keybindings';
 import {
   getBindingKeys,
   bindingFromEvent,
   DEFAULT_KEYBINDINGS,
   groupByCategory,
 } from '../keybindings';
-import { NOTIFICATION_SOUNDS, SOUND_LABELS } from '../sounds';
+import { NOTIFICATION_SOUNDS, SOUND_LABELS, playNotificationSound } from '../sounds';
 import type { NotificationSound } from '../sounds';
 import { TERMINAL_THEMES, darkTheme, lightTheme } from '../terminal/terminalThemes';
 import { TERMINAL_FONTS, resolveTerminalFontValue } from '../terminal/terminalFonts';
 import { Select } from './ui/Select';
-import type {
-  RateLimits,
-  UsageThresholds,
-  RtkStatus,
-  RtkDownloadProgress,
-  RtkTestResult,
-} from '../../shared/types';
+import type { RateLimits, RtkStatus, RtkDownloadProgress, RtkTestResult } from '../../shared/types';
 import { formatResetTime } from '../../shared/format';
 import { UsageBar } from './ui/UsageBar';
 import { formatTokens, formatCost } from '../utils/formatTokens';
@@ -178,37 +172,9 @@ const NAV_ITEMS: Array<{
 
 interface SettingsModalProps {
   initialTab?: string;
-  theme: 'light' | 'dark';
-  onThemeChange: (theme: 'light' | 'dark') => void;
-  diffContextLines: number | null;
-  onDiffContextLinesChange: (value: number | null) => void;
-  notificationSound: NotificationSound;
-  onNotificationSoundChange: (value: NotificationSound) => void;
-  desktopNotification: boolean;
-  onDesktopNotificationChange: (value: boolean) => void;
-  autoUpdateEnabled: boolean;
-  onAutoUpdateEnabledChange: (value: boolean) => void;
-  updateNotificationsEnabled: boolean;
-  onUpdateNotificationsEnabledChange: (value: boolean) => void;
-  showActiveTasksSection: boolean;
-  onShowActiveTasksSectionChange: (value: boolean) => void;
   globalTokenStats: { totalTokens: number; totalCostUsd: number; taskCount: number };
-  shellDrawerPosition: 'main' | 'right';
-  onShellDrawerPositionChange: (value: 'main' | 'right') => void;
-  terminalTheme: string;
-  onTerminalThemeChange: (id: string) => void;
-  terminalFontFamily: string;
-  onTerminalFontFamilyChange: (id: string) => void;
-  preferredIDE: string;
-  onPreferredIDEChange: (value: string) => void;
   availableIDEs: Array<{ id: string; label: string }>;
-  customIDE: { path: string; args: string[] };
-  onCustomIDEChange: (value: { path: string; args: string[] }) => void;
-  commitAttribution: string | undefined;
-  onCommitAttributionChange: (value: string | undefined) => void;
   activeProjectPath?: string;
-  keybindings: KeyBindingMap;
-  onKeybindingsChange: (bindings: KeyBindingMap) => void;
   rtkStatus: RtkStatus | null;
   onRtkEnabledChange: (enabled: boolean) => void;
   onRtkDownload: () => void;
@@ -793,37 +759,9 @@ function ClaudeCodeTab({
 
 export function SettingsModal({
   initialTab,
-  theme,
-  onThemeChange,
-  diffContextLines,
-  onDiffContextLinesChange,
-  notificationSound,
-  onNotificationSoundChange,
-  desktopNotification,
-  onDesktopNotificationChange,
-  autoUpdateEnabled,
-  onAutoUpdateEnabledChange,
-  updateNotificationsEnabled,
-  onUpdateNotificationsEnabledChange,
-  showActiveTasksSection,
-  onShowActiveTasksSectionChange,
   globalTokenStats,
-  shellDrawerPosition,
-  onShellDrawerPositionChange,
-  terminalTheme,
-  onTerminalThemeChange,
-  terminalFontFamily,
-  onTerminalFontFamilyChange,
-  preferredIDE,
-  onPreferredIDEChange,
   availableIDEs,
-  customIDE,
-  onCustomIDEChange,
-  commitAttribution,
-  onCommitAttributionChange,
   activeProjectPath,
-  keybindings,
-  onKeybindingsChange,
   rtkStatus,
   onRtkEnabledChange,
   onRtkDownload,
@@ -831,6 +769,38 @@ export function SettingsModal({
   latestRateLimits,
   onClose,
 }: SettingsModalProps) {
+  const theme = useSettings((s) => s.theme);
+  const onThemeChange = useSettings((s) => s.setTheme);
+  const diffContextLines = useSettings((s) => s.diffContextLines);
+  const onDiffContextLinesChange = useSettings((s) => s.setDiffContextLines);
+  const notificationSound = useSettings((s) => s.notificationSound);
+  const setNotificationSound = useSettings((s) => s.setNotificationSound);
+  const onNotificationSoundChange = (v: NotificationSound) => {
+    setNotificationSound(v);
+    if (v !== 'off') playNotificationSound(v);
+  };
+  const desktopNotification = useSettings((s) => s.desktopNotification);
+  const onDesktopNotificationChange = useSettings((s) => s.setDesktopNotification);
+  const autoUpdateEnabled = useSettings((s) => s.autoUpdateEnabled);
+  const onAutoUpdateEnabledChange = useSettings((s) => s.setAutoUpdateEnabled);
+  const updateNotificationsEnabled = useSettings((s) => s.updateNotificationsEnabled);
+  const onUpdateNotificationsEnabledChange = useSettings((s) => s.setUpdateNotificationsEnabled);
+  const showActiveTasksSection = useSettings((s) => s.showActiveTasksSection);
+  const onShowActiveTasksSectionChange = useSettings((s) => s.setShowActiveTasksSection);
+  const shellDrawerPosition = useSettings((s) => s.shellDrawerPosition);
+  const onShellDrawerPositionChange = useSettings((s) => s.setShellDrawerPosition);
+  const terminalTheme = useSettings((s) => s.terminalTheme);
+  const onTerminalThemeChange = useSettings((s) => s.setTerminalTheme);
+  const terminalFontFamily = useSettings((s) => s.terminalFontFamily);
+  const onTerminalFontFamilyChange = useSettings((s) => s.setTerminalFontFamily);
+  const preferredIDE = useSettings((s) => s.preferredIDE);
+  const onPreferredIDEChange = useSettings((s) => s.setPreferredIDE);
+  const customIDE = useSettings((s) => s.customIDE);
+  const onCustomIDEChange = useSettings((s) => s.setCustomIDE);
+  const commitAttribution = useSettings((s) => s.commitAttribution);
+  const onCommitAttributionChange = useSettings((s) => s.setCommitAttribution);
+  const keybindings = useSettings((s) => s.keybindings);
+  const onKeybindingsChange = useSettings((s) => s.setKeybindings);
   const validTabs: SettingsTab[] = NAV_ITEMS.map((n) => n.id);
   const [tab, setTab] = useState<SettingsTab>(
     initialTab && validTabs.includes(initialTab as SettingsTab)

@@ -37,7 +37,6 @@ import type {
   LinkedGithubIssue,
   LinkedAdoWorkItem,
   RemoteControlState,
-  UsageThresholds,
   ActivityInfo,
   PullRequestInfo,
   RtkStatus,
@@ -51,7 +50,6 @@ import { sessionRegistry } from './terminal/SessionRegistry';
 import { resolveTheme } from './terminal/terminalThemes';
 import { resolveTerminalFontValue } from './terminal/terminalFonts';
 import { playNotificationSound, playPeonSound } from './sounds';
-import type { NotificationSound } from './sounds';
 import { useSettings } from './stores/settingsStore';
 
 const GIT_POLL_INTERVAL = 5000;
@@ -102,19 +100,12 @@ export function App() {
   const [showSkillsBrowser, setShowSkillsBrowser] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>();
   const theme = useSettings((s) => s.theme);
-  const setTheme = useSettings((s) => s.setTheme);
-  const diffContextLines = useSettings((s) => s.diffContextLines);
-  const setDiffContextLines = useSettings((s) => s.setDiffContextLines);
   const keybindings = useSettings((s) => s.keybindings);
-  const setKeybindings = useSettings((s) => s.setKeybindings);
   const notificationSound = useSettings((s) => s.notificationSound);
-  const setNotificationSound = useSettings((s) => s.setNotificationSound);
   const desktopNotification = useSettings((s) => s.desktopNotification);
-  const setDesktopNotification = useSettings((s) => s.setDesktopNotification);
   const autoUpdateEnabled = useSettings((s) => s.autoUpdateEnabled);
   const setAutoUpdateEnabled = useSettings((s) => s.setAutoUpdateEnabled);
   const updateNotificationsEnabled = useSettings((s) => s.updateNotificationsEnabled);
-  const setUpdateNotificationsEnabled = useSettings((s) => s.setUpdateNotificationsEnabled);
   const shellDrawerCollapsed = useSettings((s) => s.shellDrawerCollapsed);
   const setShellDrawerCollapsed = useSettings((s) => s.setShellDrawerCollapsed);
   // Ports drawer defaults to collapsed so it doesn't intrude on projects
@@ -122,15 +113,9 @@ export function App() {
   const portsDrawerCollapsed = useSettings((s) => s.portsDrawerCollapsed);
   const setPortsDrawerCollapsed = useSettings((s) => s.setPortsDrawerCollapsed);
   const shellDrawerPosition = useSettings((s) => s.shellDrawerPosition);
-  const setShellDrawerPosition = useSettings((s) => s.setShellDrawerPosition);
   const terminalTheme = useSettings((s) => s.terminalTheme);
-  const setTerminalTheme = useSettings((s) => s.setTerminalTheme);
   const terminalFontFamily = useSettings((s) => s.terminalFontFamily);
-  const setTerminalFontFamily = useSettings((s) => s.setTerminalFontFamily);
-  const preferredIDE = useSettings((s) => s.preferredIDE);
   const setPreferredIDE = useSettings((s) => s.setPreferredIDE);
-  const customIDE = useSettings((s) => s.customIDE);
-  const setCustomIDE = useSettings((s) => s.setCustomIDE);
   const [availableIDEs, setAvailableIDEs] = useState<Array<{ id: string; label: string }>>([]);
 
   // One-shot localStorage → SQLite migration for drawer tabs. After upgrading
@@ -199,7 +184,6 @@ export function App() {
     };
   }, []);
   const commitAttribution = useSettings((s) => s.commitAttribution);
-  const setCommitAttribution = useSettings((s) => s.setCommitAttribution);
   const effortLevel = useSettings((s) => s.effortLevel);
   const syncShellEnv = useSettings((s) => s.syncShellEnv);
   const customClaudeEnvVars = useSettings((s) => s.customClaudeEnvVars);
@@ -2144,66 +2128,9 @@ export function App() {
       {showSettings && (
         <SettingsModal
           initialTab={settingsInitialTab}
-          theme={theme}
-          onThemeChange={(t) => {
-            setTheme(t);
-            sessionRegistry.setAllTerminalThemes(terminalTheme, t === 'dark');
-          }}
-          showActiveTasksSection={showActiveTasksSection}
-          onShowActiveTasksSectionChange={setShowActiveTasksSection}
           globalTokenStats={globalTokenStats}
-          shellDrawerPosition={shellDrawerPosition}
-          onShellDrawerPositionChange={(v) => {
-            setShellDrawerPosition(v);
-          }}
-          terminalTheme={terminalTheme}
-          onTerminalThemeChange={(id) => {
-            setTerminalTheme(id);
-            sessionRegistry.setAllTerminalThemes(id, theme === 'dark');
-          }}
-          terminalFontFamily={terminalFontFamily}
-          onTerminalFontFamilyChange={(id) => {
-            setTerminalFontFamily(id);
-          }}
-          diffContextLines={diffContextLines}
-          onDiffContextLinesChange={(v) => {
-            setDiffContextLines(v);
-          }}
-          notificationSound={notificationSound}
-          onNotificationSoundChange={(v) => {
-            setNotificationSound(v);
-            if (v !== 'off') playNotificationSound(v);
-          }}
-          desktopNotification={desktopNotification}
-          onDesktopNotificationChange={(v) => {
-            setDesktopNotification(v);
-          }}
-          autoUpdateEnabled={autoUpdateEnabled}
-          onAutoUpdateEnabledChange={(v) => {
-            setAutoUpdateEnabled(v);
-          }}
-          updateNotificationsEnabled={updateNotificationsEnabled}
-          onUpdateNotificationsEnabledChange={(v) => {
-            setUpdateNotificationsEnabled(v);
-          }}
           activeProjectPath={activeProject?.path}
-          preferredIDE={preferredIDE}
-          onPreferredIDEChange={(v) => {
-            setPreferredIDE(v);
-          }}
           availableIDEs={availableIDEs}
-          customIDE={customIDE}
-          onCustomIDEChange={(v) => {
-            setCustomIDE(v);
-          }}
-          commitAttribution={commitAttribution}
-          onCommitAttributionChange={(v) => {
-            setCommitAttribution(v);
-          }}
-          keybindings={keybindings}
-          onKeybindingsChange={(b) => {
-            setKeybindings(b);
-          }}
           rtkStatus={rtkStatus}
           onRtkEnabledChange={(enabled) => {
             // Optimistic update only applies to the installed arm — the type
