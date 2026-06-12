@@ -40,6 +40,10 @@ export interface SettingsState {
   commitAttribution: string | undefined;
   preferredIDE: string;
   keybindings: KeyBindingMap;
+  sidebarCollapsed: boolean;
+  changesPanelCollapsed: boolean;
+  shellDrawerCollapsed: boolean;
+  portsDrawerCollapsed: boolean;
 }
 
 /** One entry per managed setting: the store field, its existing localStorage
@@ -109,6 +113,10 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   entry('commitAttribution', 'commitAttribution', strOrUndefined()),
   entry('preferredIDE', 'preferredIDE', str('auto')),
   entry('keybindings', 'keybindings', keybindingsCodec()),
+  entry('sidebarCollapsed', 'sidebarCollapsed', boolDefaultFalse()),
+  entry('changesPanelCollapsed', 'changesPanelCollapsed', boolDefaultFalse()),
+  entry('shellDrawerCollapsed', 'shellDrawerCollapsed', boolDefaultFalse()),
+  entry('portsDrawerCollapsed', 'portsDrawerCollapsed', boolDefaultTrue()),
 ];
 
 /** Initial state = every field decoded from an absent key (its default). */

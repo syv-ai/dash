@@ -86,4 +86,12 @@ describe('settings registry', () => {
     expect(e.key).toBe('keybindings');
     expect(e.codec.decode(null)).toEqual(DEFAULT_KEYBINDINGS);
   });
+
+  it('registers the phase-1i panel-collapse settings', () => {
+    const byField = Object.fromEntries(SETTINGS_REGISTRY.map((r) => [r.field, r]));
+    expect(byField.sidebarCollapsed.codec.decode(null)).toBe(false);
+    expect(byField.changesPanelCollapsed.codec.decode('true')).toBe(true);
+    expect(byField.shellDrawerCollapsed.codec.decode(null)).toBe(false);
+    expect(byField.portsDrawerCollapsed.codec.decode(null)).toBe(true); // boolDefaultTrue
+  });
 });
