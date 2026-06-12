@@ -1,4 +1,5 @@
 import { SETTINGS_REGISTRY, type SettingsState } from './settingsKeys';
+import type { PersistStorage, StorageValue } from 'zustand/middleware';
 
 /** Minimal Web Storage surface we depend on — injectable for tests. */
 export interface StorageLike {
@@ -17,26 +18,25 @@ export function createMemoryStorage(): StorageLike {
   };
 }
 
-/** A zustand StateStorage (string in/out) that stores each settings field under
- *  its own legacy localStorage key instead of one blob. `name` is ignored. */
-export function fanOutStorage(backing: StorageLike) {
+/** A zustand PersistStorage that stores each settings field under its own legacy
+ *  localStorage key (via the registry codecs) instead of one JSON blob. Working
+ *  on the real state object means Set/Map-valued fields survive — no whole-state
+ *  JSON.stringify pass collapses them. `name` is ignored. */
+export function fanOutStorage(backing: StorageLike): PersistStorage<SettingsState> {
   return {
-    getItem(_name: string): string | null {
+    getItem(_name: string): StorageValue<SettingsState> {
       const state = {} as SettingsState;
       for (const e of SETTINGS_REGISTRY) {
         (state as unknown as Record<string, unknown>)[e.field] = e.codec.decode(
           backing.getItem(e.key),
         );
       }
-      return JSON.stringify({ state, version: 0 });
+      return { state, version: 0 };
     },
-    setItem(_name: string, value: string): void {
-      const parsed = JSON.parse(value) as { state: Partial<SettingsState> };
+    setItem(_name: string, value: StorageValue<SettingsState>): void {
       for (const e of SETTINGS_REGISTRY) {
-        const v = parsed.state[e.field];
-        if (v !== undefined) {
-          backing.setItem(e.key, e.codec.encode(v as never));
-        }
+        const v = (value.state as Partial<SettingsState>)[e.field];
+        if (v !== undefined) backing.setItem(e.key, e.codec.encode(v as never));
       }
     },
     removeItem(_name: string): void {

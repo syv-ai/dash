@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
 import { type SettingsState, defaultSettings } from './settingsKeys';
 import { fanOutStorage, createMemoryStorage, type StorageLike } from './fanOutStorage';
 
@@ -59,7 +59,7 @@ export const useSettings = create<SettingsStore>()(
     }),
     {
       name: 'settings',
-      storage: createJSONStorage(() => fanOutStorage(backing())),
+      storage: fanOutStorage(backing()),
     },
   ),
 );
