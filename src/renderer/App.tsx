@@ -111,14 +111,10 @@ export function App() {
   const setNotificationSound = useSettings((s) => s.setNotificationSound);
   const desktopNotification = useSettings((s) => s.desktopNotification);
   const setDesktopNotification = useSettings((s) => s.setDesktopNotification);
-  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(() => {
-    const stored = localStorage.getItem('autoUpdateEnabled');
-    return stored === null ? true : stored === 'true';
-  });
-  const [updateNotificationsEnabled, setUpdateNotificationsEnabled] = useState(() => {
-    const stored = localStorage.getItem('updateNotificationsEnabled');
-    return stored === null ? true : stored === 'true';
-  });
+  const autoUpdateEnabled = useSettings((s) => s.autoUpdateEnabled);
+  const setAutoUpdateEnabled = useSettings((s) => s.setAutoUpdateEnabled);
+  const updateNotificationsEnabled = useSettings((s) => s.updateNotificationsEnabled);
+  const setUpdateNotificationsEnabled = useSettings((s) => s.setUpdateNotificationsEnabled);
   const shellDrawerCollapsed = useSettings((s) => s.shellDrawerCollapsed);
   const setShellDrawerCollapsed = useSettings((s) => s.setShellDrawerCollapsed);
   // Ports drawer defaults to collapsed so it doesn't intrude on projects
@@ -268,7 +264,6 @@ export function App() {
       if (cancelled) return;
       if (res.success && typeof res.data === 'boolean') {
         setAutoUpdateEnabled(res.data);
-        localStorage.setItem('autoUpdateEnabled', String(res.data));
       }
       autoUpdateHydratedRef.current = true;
     });
@@ -2209,12 +2204,10 @@ export function App() {
           autoUpdateEnabled={autoUpdateEnabled}
           onAutoUpdateEnabledChange={(v) => {
             setAutoUpdateEnabled(v);
-            localStorage.setItem('autoUpdateEnabled', String(v));
           }}
           updateNotificationsEnabled={updateNotificationsEnabled}
           onUpdateNotificationsEnabledChange={(v) => {
             setUpdateNotificationsEnabled(v);
-            localStorage.setItem('updateNotificationsEnabled', String(v));
           }}
           activeProjectPath={activeProject?.path}
           preferredIDE={preferredIDE}
