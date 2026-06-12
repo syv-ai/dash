@@ -22,6 +22,8 @@ interface SettingsActions {
   setCustomClaudeEnvVars: (value: SettingsState['customClaudeEnvVars']) => void;
   setUsageThresholds: (value: SettingsState['usageThresholds']) => void;
   setRotationOrder: (value: SettingsState['rotationOrder']) => void;
+  setRotationExclusions: (value: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
+  setUnseenTaskIds: (value: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
 }
 
 export type SettingsStore = SettingsState & SettingsActions;
@@ -56,6 +58,14 @@ export const useSettings = create<SettingsStore>()(
       setCustomClaudeEnvVars: (customClaudeEnvVars) => set({ customClaudeEnvVars }),
       setUsageThresholds: (usageThresholds) => set({ usageThresholds }),
       setRotationOrder: (rotationOrder) => set({ rotationOrder }),
+      setRotationExclusions: (value) =>
+        set((s) => ({
+          rotationExclusions: typeof value === 'function' ? value(s.rotationExclusions) : value,
+        })),
+      setUnseenTaskIds: (value) =>
+        set((s) => ({
+          unseenTaskIds: typeof value === 'function' ? value(s.unseenTaskIds) : value,
+        })),
     }),
     {
       name: 'settings',
