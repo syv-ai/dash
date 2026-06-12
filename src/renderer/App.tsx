@@ -39,6 +39,7 @@ import { useSettings } from './stores/settingsStore';
 import { useUi } from './stores/uiStore';
 import { useGit } from './stores/gitStore';
 import { useRuntime } from './stores/runtimeStore';
+import { useAppBootstrap } from './hooks/useAppBootstrap';
 import { useShallow } from 'zustand/react/shallow';
 import {
   useProjects,
@@ -115,6 +116,10 @@ export function App() {
   const terminalFontFamily = useSettings((s) => s.terminalFontFamily);
   const setPreferredIDE = useSettings((s) => s.setPreferredIDE);
   const availableIDEs = useProjects((s) => s.availableIDEs);
+
+  // Store-level live subscriptions + reactive bootstrap (runtime init, token rollups,
+  // git watcher/poll, PR detection). React schedules WHEN; the stores own HOW.
+  useAppBootstrap();
 
   // One-shot localStorage → SQLite migration for drawer tabs. After upgrading
   // past commit 3, per-task tab state lives in the drawer_tabs table owned by
@@ -274,11 +279,6 @@ export function App() {
   // Token-stats rollups (runtimeStore; live-updated via its init() tokenStats subscription).
   const projectTokenStats = useRuntime((s) => s.projectTokenStats);
   const globalTokenStats = useRuntime((s) => s.globalTokenStats);
-
-  // Re-fetch rollups whenever the project list changes (initial load + add/remove).
-  useEffect(() => {
-    useRuntime.getState().refreshTokenRollups();
-  }, [projects]);
 
   // Celebrate each billion-token milestone. The threshold filters out the
   // initial DB load (0 → multi-billion in one step) and one-shot backfill jumps
@@ -516,12 +516,6 @@ export function App() {
     });
   }, []);
 
-  // Runtime subscriptions (activity monitor, remote control, token-stats writeback,
-  // RTK status/progress) all live in runtimeStore.init(); wire them once on mount.
-  // (Precursor to useAppBootstrap — the final thin-out phase will fold every store's
-  // init() into one hook.)
-  useEffect(() => useRuntime.getState().init(), []);
-
   // Task name lookup (used for threshold alerts and settings)
   const taskNames = useMemo(() => {
     const names: Record<string, string> = {};
@@ -622,22 +616,6 @@ export function App() {
     document.documentElement.style.setProperty('--terminal-font', resolved);
     sessionRegistry.setAllTerminalFonts(resolved);
   }, [terminalFontFamily]);
-
-  // Git: watch the active task dir + poll. gitStore owns the watcher/poll timer;
-  // this thin effect just (re)wires it whenever the active task changes.
-  useEffect(() => {
-    useGit.getState().watchActiveTask(activeTask ?? null);
-    return () => useGit.getState().stopWatch();
-  }, [activeTask?.id, activeTask?.path]);
-
-  // PR detection (consumed by Topbar). gitStore owns the fetch + 30s poll; this
-  // effect re-runs it on task/project/branch change.
-  useEffect(() => {
-    useGit
-      .getState()
-      .detectPr(activeProject ?? null, activeTask ?? null, gitStatus?.branch ?? null);
-    return () => useGit.getState().stopPrDetect();
-  }, [activeTask?.id, activeTask?.path, activeProject, gitStatus?.branch]);
 
   const cycleTask = useCallback(
     (direction: 1 | -1) => {
