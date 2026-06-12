@@ -7,6 +7,8 @@ import {
   strEnum,
   json,
   stringSet,
+  nullableInt,
+  strOrUndefined,
 } from './settingsCodecs';
 import type { NotificationSound } from '../sounds';
 import type { UsageThresholds } from '@shared/types';
@@ -33,6 +35,8 @@ export interface SettingsState {
   rotationOrder: string[];
   rotationExclusions: Set<string>;
   unseenTaskIds: Set<string>;
+  diffContextLines: number | null;
+  commitAttribution: string | undefined;
 }
 
 /** One entry per managed setting: the store field, its existing localStorage
@@ -90,6 +94,8 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   entry('rotationOrder', 'rotationOrder', json<string[]>([])),
   entry('rotationExclusions', 'rotationExclusions', stringSet()),
   entry('unseenTaskIds', 'unseenTaskIds', stringSet()),
+  entry('diffContextLines', 'diffContextLines', nullableInt(3)),
+  entry('commitAttribution', 'commitAttribution', strOrUndefined()),
 ];
 
 /** Initial state = every field decoded from an absent key (its default). */

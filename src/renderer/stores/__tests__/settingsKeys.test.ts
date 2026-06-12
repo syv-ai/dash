@@ -64,4 +64,12 @@ describe('settings registry', () => {
       't2',
     ]);
   });
+
+  it('registers the phase-1f special settings', () => {
+    const byField = Object.fromEntries(SETTINGS_REGISTRY.map((r) => [r.field, r]));
+    expect(byField.diffContextLines.codec.decode(null)).toBeNull();
+    expect(byField.diffContextLines.codec.decode('5')).toBe(5);
+    expect(byField.commitAttribution.codec.decode(null)).toBeUndefined();
+    expect(byField.commitAttribution.codec.decode('')).toBe('');
+  });
 });
