@@ -336,24 +336,13 @@ export function App() {
     notificationSoundRef.current = notificationSound;
   }, [notificationSound]);
 
-  const [unseenTaskIds, setUnseenTaskIds] = useState<Set<string>>(() => {
-    try {
-      const stored = localStorage.getItem('unseenTaskIds');
-      return stored ? new Set(JSON.parse(stored)) : new Set();
-    } catch {
-      return new Set();
-    }
-  });
+  const unseenTaskIds = useSettings((s) => s.unseenTaskIds);
+  const setUnseenTaskIds = useSettings((s) => s.setUnseenTaskIds);
 
   const activeTaskIdRef = useRef(activeTaskId);
   useEffect(() => {
     activeTaskIdRef.current = activeTaskId;
   }, [activeTaskId]);
-
-  // Persist unseenTaskIds to localStorage
-  useEffect(() => {
-    localStorage.setItem('unseenTaskIds', JSON.stringify([...unseenTaskIds]));
-  }, [unseenTaskIds]);
 
   // Clear unseen when a task becomes active
   useEffect(() => {
@@ -455,20 +444,8 @@ export function App() {
     }
   }, [globalTokenStats.totalTokens]);
 
-  const [rotationExclusions, setRotationExclusions] = useState<Set<string>>(() => {
-    try {
-      const stored = localStorage.getItem('rotationExclusions');
-      return stored ? new Set(JSON.parse(stored)) : new Set();
-    } catch (err) {
-      console.error('Failed to parse rotationExclusions from localStorage, resetting:', err);
-      localStorage.removeItem('rotationExclusions');
-      return new Set();
-    }
-  });
-
-  useEffect(() => {
-    localStorage.setItem('rotationExclusions', JSON.stringify([...rotationExclusions]));
-  }, [rotationExclusions]);
+  const rotationExclusions = useSettings((s) => s.rotationExclusions);
+  const setRotationExclusions = useSettings((s) => s.setRotationExclusions);
 
   const rotationOrder = useSettings((s) => s.rotationOrder);
   const setRotationOrder = useSettings((s) => s.setRotationOrder);
