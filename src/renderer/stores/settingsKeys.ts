@@ -44,6 +44,8 @@ export interface SettingsState {
   changesPanelCollapsed: boolean;
   shellDrawerCollapsed: boolean;
   portsDrawerCollapsed: boolean;
+  autoUpdateEnabled: boolean;
+  updateNotificationsEnabled: boolean;
 }
 
 /** One entry per managed setting: the store field, its existing localStorage
@@ -117,6 +119,8 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   entry('changesPanelCollapsed', 'changesPanelCollapsed', boolDefaultFalse()),
   entry('shellDrawerCollapsed', 'shellDrawerCollapsed', boolDefaultFalse()),
   entry('portsDrawerCollapsed', 'portsDrawerCollapsed', boolDefaultTrue()),
+  entry('autoUpdateEnabled', 'autoUpdateEnabled', boolDefaultTrue()),
+  entry('updateNotificationsEnabled', 'updateNotificationsEnabled', boolDefaultTrue()),
 ];
 
 /** Initial state = every field decoded from an absent key (its default). */

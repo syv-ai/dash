@@ -94,4 +94,11 @@ describe('settings registry', () => {
     expect(byField.shellDrawerCollapsed.codec.decode(null)).toBe(false);
     expect(byField.portsDrawerCollapsed.codec.decode(null)).toBe(true); // boolDefaultTrue
   });
+
+  it('registers the phase-1j update settings (default true)', () => {
+    const byField = Object.fromEntries(SETTINGS_REGISTRY.map((r) => [r.field, r]));
+    expect(byField.autoUpdateEnabled.codec.decode(null)).toBe(true);
+    expect(byField.autoUpdateEnabled.codec.decode('false')).toBe(false);
+    expect(byField.updateNotificationsEnabled.codec.decode(null)).toBe(true);
+  });
 });
