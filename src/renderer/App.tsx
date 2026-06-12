@@ -104,11 +104,8 @@ export function App() {
   const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>();
   const theme = useSettings((s) => s.theme);
   const setTheme = useSettings((s) => s.setTheme);
-  const [diffContextLines, setDiffContextLines] = useState<number | null>(() => {
-    const stored = localStorage.getItem('diffContextLines');
-    if (stored === null || stored === 'null') return null; // null = full file
-    return parseInt(stored, 10) || 3;
-  });
+  const diffContextLines = useSettings((s) => s.diffContextLines);
+  const setDiffContextLines = useSettings((s) => s.setDiffContextLines);
   const [keybindings, setKeybindings] = useState<KeyBindingMap>(loadKeybindings);
   const notificationSound = useSettings((s) => s.notificationSound);
   const setNotificationSound = useSettings((s) => s.setNotificationSound);
@@ -217,11 +214,8 @@ export function App() {
       cancelled = true;
     };
   }, []);
-  const [commitAttribution, setCommitAttribution] = useState<string | undefined>(() => {
-    const stored = localStorage.getItem('commitAttribution');
-    if (stored === null) return undefined; // "default" — key absent
-    return stored; // '' for "none", or custom text
-  });
+  const commitAttribution = useSettings((s) => s.commitAttribution);
+  const setCommitAttribution = useSettings((s) => s.setCommitAttribution);
   const effortLevel = useSettings((s) => s.effortLevel);
   const setEffortLevel = useSettings((s) => s.setEffortLevel);
   const syncShellEnv = useSettings((s) => s.syncShellEnv);
@@ -2226,7 +2220,6 @@ export function App() {
           diffContextLines={diffContextLines}
           onDiffContextLinesChange={(v) => {
             setDiffContextLines(v);
-            localStorage.setItem('diffContextLines', String(v));
           }}
           notificationSound={notificationSound}
           onNotificationSoundChange={(v) => {
@@ -2265,11 +2258,6 @@ export function App() {
           commitAttribution={commitAttribution}
           onCommitAttributionChange={(v) => {
             setCommitAttribution(v);
-            if (v === undefined) {
-              localStorage.removeItem('commitAttribution');
-            } else {
-              localStorage.setItem('commitAttribution', v);
-            }
           }}
           effortLevel={effortLevel}
           onEffortLevelChange={(v) => {
