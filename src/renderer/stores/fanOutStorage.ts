@@ -34,12 +34,20 @@ export function fanOutStorage(backing: StorageLike): PersistStorage<SettingsStat
       return { state, version: 0 };
     },
     setItem(_name: string, value: StorageValue<SettingsState>): void {
+      // persist hands us the full state on every change; write only the keys
+      // whose encoded form actually changed so a single toggle doesn't rewrite
+      // all ~30 localStorage keys.
       for (const e of SETTINGS_REGISTRY) {
         const v = (value.state as Partial<SettingsState>)[e.field];
-        // undefined means "unset" — actively remove the key so a prior value
-        // doesn't linger (e.g. commitAttribution returning to default).
-        if (v === undefined) backing.removeItem(e.key);
-        else backing.setItem(e.key, e.codec.encode(v as never));
+        const current = backing.getItem(e.key);
+        if (v === undefined) {
+          // undefined means "unset" — remove a lingering prior value (e.g.
+          // commitAttribution returning to default).
+          if (current !== null) backing.removeItem(e.key);
+        } else {
+          const encoded = e.codec.encode(v as never);
+          if (current !== encoded) backing.setItem(e.key, encoded);
+        }
       }
     },
     removeItem(_name: string): void {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { StorageValue } from 'zustand/middleware';
-import { createMemoryStorage, fanOutStorage } from '../fanOutStorage';
+import { createMemoryStorage, fanOutStorage, type StorageLike } from '../fanOutStorage';
 import type { SettingsState } from '../settingsKeys';
 
 const NAME = 'settings';
@@ -39,6 +39,36 @@ describe('fanOutStorage (PersistStorage)', () => {
     const mem = createMemoryStorage();
     mem.setItem('theme', 'light');
     expect(read(mem).state.theme).toBe('light');
+  });
+
+  it('writes only the keys whose encoded value changed', () => {
+    const mem = createMemoryStorage();
+    let writes = 0;
+    const counting: StorageLike = {
+      getItem: (k) => mem.getItem(k),
+      setItem: (k, v) => {
+        writes++;
+        mem.setItem(k, v);
+      },
+      removeItem: (k) => {
+        writes++;
+        mem.removeItem(k);
+      },
+    };
+    const s = fanOutStorage(counting);
+
+    s.setItem(NAME, { state: { theme: 'light', showTaskTokens: false } as never, version: 0 });
+    expect(writes).toBe(2); // theme + showTaskTokens
+
+    // Re-persisting the same state writes nothing.
+    writes = 0;
+    s.setItem(NAME, { state: { theme: 'light', showTaskTokens: false } as never, version: 0 });
+    expect(writes).toBe(0);
+
+    // Changing one field writes only that key.
+    writes = 0;
+    s.setItem(NAME, { state: { theme: 'dark', showTaskTokens: false } as never, version: 0 });
+    expect(writes).toBe(1);
   });
 
   it('removes the key when a field is undefined (e.g. commitAttribution default)', () => {

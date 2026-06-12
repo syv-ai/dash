@@ -86,6 +86,7 @@ describe('nullableInt codec', () => {
   it('absent decodes to null', () => expect(c.decode(null)).toBeNull());
   it("'null' sentinel decodes to null", () => expect(c.decode('null')).toBeNull());
   it('numeric string decodes to a number', () => expect(c.decode('5')).toBe(5));
+  it('keeps a stored 0 (not coerced to the fallback)', () => expect(c.decode('0')).toBe(0));
   it('invalid decodes to the fallback', () => expect(c.decode('abc')).toBe(3));
   it('encodes a number', () => expect(c.encode(5)).toBe('5'));
   it('encodes null as the sentinel', () => expect(c.encode(null)).toBe('null'));

@@ -37,12 +37,14 @@ export function strEnum<T extends string>(allowed: readonly T[], def: T): Codec<
 }
 
 /** number | null, where `null` (and the legacy `'null'` string) means "unset";
- *  a non-numeric stored value falls back to `fallback`. */
+ *  a non-numeric stored value falls back to `fallback`. A stored `0` is kept as
+ *  0 (not coerced to the fallback the way `parseInt(raw) || fallback` would). */
 export function nullableInt(fallback: number): Codec<number | null> {
   return {
     decode: (raw) => {
       if (raw === null || raw === 'null') return null;
-      return parseInt(raw, 10) || fallback;
+      const n = parseInt(raw, 10);
+      return Number.isNaN(n) ? fallback : n;
     },
     encode: (v) => String(v),
   };
