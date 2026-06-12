@@ -37,6 +37,7 @@ export interface SettingsState {
   unseenTaskIds: Set<string>;
   diffContextLines: number | null;
   commitAttribution: string | undefined;
+  preferredIDE: string;
 }
 
 /** One entry per managed setting: the store field, its existing localStorage
@@ -96,6 +97,7 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   entry('unseenTaskIds', 'unseenTaskIds', stringSet()),
   entry('diffContextLines', 'diffContextLines', nullableInt(3)),
   entry('commitAttribution', 'commitAttribution', strOrUndefined()),
+  entry('preferredIDE', 'preferredIDE', str('auto')),
 ];
 
 /** Initial state = every field decoded from an absent key (its default). */

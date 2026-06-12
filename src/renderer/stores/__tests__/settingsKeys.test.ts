@@ -72,4 +72,11 @@ describe('settings registry', () => {
     expect(byField.commitAttribution.codec.decode(null)).toBeUndefined();
     expect(byField.commitAttribution.codec.decode('')).toBe('');
   });
+
+  it('registers preferredIDE with an auto default', () => {
+    const e = SETTINGS_REGISTRY.find((r) => r.field === 'preferredIDE')!;
+    expect(e.key).toBe('preferredIDE');
+    expect(e.codec.decode(null)).toBe('auto');
+    expect(e.codec.decode('vscode')).toBe('vscode');
+  });
 });
