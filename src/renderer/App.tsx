@@ -18,20 +18,19 @@ import { SkillsBrowserModal } from './components/SkillsBrowserModal';
 import { TaskModal } from './components/TaskModal';
 import { AddProjectModal } from './components/AddProjectModal';
 import { DeleteTaskModal } from './components/DeleteTaskModal';
-import { DeleteProjectModal, type DeleteProjectOptions } from './components/DeleteProjectModal';
+import { DeleteProjectModal } from './components/DeleteProjectModal';
 import { RemoteControlModal } from './components/RemoteControlModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ProjectSettingsModal } from './components/ProjectSettingsModal';
 import { TaskSettingsModal } from './components/TaskSettingsModal';
 import { AdoSetupModal } from './components/AdoSetupModal';
-import { parseAdoRemote, isAdoRemote } from '../shared/urls';
+import { isAdoRemote } from '../shared/urls';
 import { ToastContainer } from './components/Toast';
 import { toast } from 'sonner';
 import { getBillionToastContent } from './utils/billionToast';
 import { useStatusLine } from './hooks/useStatusLine';
 import { useThresholdAlerts } from './hooks/useThresholdAlerts';
 import type {
-  Project,
   Task,
   GitStatus,
   RemoteControlState,
@@ -47,6 +46,7 @@ import { resolveTheme } from './terminal/terminalThemes';
 import { resolveTerminalFontValue } from './terminal/terminalFonts';
 import { playNotificationSound, playPeonSound } from './sounds';
 import { useSettings } from './stores/settingsStore';
+import { useUi } from './stores/uiStore';
 import {
   useProjects,
   selectActiveProject,
@@ -81,25 +81,31 @@ export function App() {
   // Action aliases keep existing call sites compiling unchanged.
   const setActiveProjectId = useProjects((s) => s.setActiveProject);
   const setActiveTaskId = useProjects((s) => s.setActiveTask);
-  const [showTaskModal, setShowTaskModal] = useState(false);
-  const [taskModalProjectId, setTaskModalProjectId] = useState<string | null>(null);
-  const [showAddProjectModal, setShowAddProjectModal] = useState(false);
-  const [cloneStatus, setCloneStatus] = useState<{ loading: boolean; error: string | null }>({
-    loading: false,
-    error: null,
-  });
-  const [deleteTaskTarget, setDeleteTaskTarget] = useState<Task | null>(null);
-  const [deleteProjectTarget, setDeleteProjectTarget] = useState<Project | null>(null);
-  const [projectSettingsTarget, setProjectSettingsTarget] = useState<Project | null>(null);
-  const [taskSettingsTarget, setTaskSettingsTarget] = useState<Task | null>(null);
-  const [adoSetup, setAdoSetup] = useState<{
-    projectId: string;
-    organizationUrl: string;
-    project: string;
-  } | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showSkillsBrowser, setShowSkillsBrowser] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>();
+  // ── UI / modal state (uiStore) ───────────────────────────
+  const showTaskModal = useUi((s) => s.showTaskModal);
+  const setShowTaskModal = useUi((s) => s.setShowTaskModal);
+  const taskModalProjectId = useUi((s) => s.taskModalProjectId);
+  const setTaskModalProjectId = useUi((s) => s.setTaskModalProjectId);
+  const showAddProjectModal = useUi((s) => s.showAddProjectModal);
+  const setShowAddProjectModal = useUi((s) => s.setShowAddProjectModal);
+  const cloneStatus = useUi((s) => s.cloneStatus);
+  const setCloneStatus = useUi((s) => s.setCloneStatus);
+  const deleteTaskTarget = useUi((s) => s.deleteTaskTarget);
+  const setDeleteTaskTarget = useUi((s) => s.setDeleteTaskTarget);
+  const deleteProjectTarget = useUi((s) => s.deleteProjectTarget);
+  const setDeleteProjectTarget = useUi((s) => s.setDeleteProjectTarget);
+  const projectSettingsTarget = useUi((s) => s.projectSettingsTarget);
+  const setProjectSettingsTarget = useUi((s) => s.setProjectSettingsTarget);
+  const taskSettingsTarget = useUi((s) => s.taskSettingsTarget);
+  const setTaskSettingsTarget = useUi((s) => s.setTaskSettingsTarget);
+  const adoSetup = useUi((s) => s.adoSetup);
+  const setAdoSetup = useUi((s) => s.setAdoSetup);
+  const showSettings = useUi((s) => s.showSettings);
+  const setShowSettings = useUi((s) => s.setShowSettings);
+  const showSkillsBrowser = useUi((s) => s.showSkillsBrowser);
+  const setShowSkillsBrowser = useUi((s) => s.setShowSkillsBrowser);
+  const settingsInitialTab = useUi((s) => s.settingsInitialTab);
+  const setSettingsInitialTab = useUi((s) => s.setSettingsInitialTab);
   const theme = useSettings((s) => s.theme);
   const keybindings = useSettings((s) => s.keybindings);
   const notificationSound = useSettings((s) => s.notificationSound);
@@ -281,7 +287,8 @@ export function App() {
   const [remoteControlStates, setRemoteControlStates] = useState<
     Record<string, RemoteControlState>
   >({});
-  const [remoteControlModalPtyId, setRemoteControlModalPtyId] = useState<string | null>(null);
+  const remoteControlModalPtyId = useUi((s) => s.remoteControlModalPtyId);
+  const setRemoteControlModalPtyId = useUi((s) => s.setRemoteControlModalPtyId);
 
   // Status line data (context + cost + rate limits) — derived contextUsage & latestRateLimits
   const { statusLineData, contextUsage, latestRateLimits } = useStatusLine();
@@ -434,9 +441,12 @@ export function App() {
   const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
   const changesPanelRef = useRef<ImperativePanelHandle>(null);
   const shellDrawerPanelRef = useRef<ImperativePanelHandle>(null);
-  const [sidebarAnimating, setSidebarAnimating] = useState(false);
-  const [changesAnimating, setChangesAnimating] = useState(false);
-  const [shellDrawerAnimating, setShellDrawerAnimating] = useState(false);
+  const sidebarAnimating = useUi((s) => s.sidebarAnimating);
+  const setSidebarAnimating = useUi((s) => s.setSidebarAnimating);
+  const changesAnimating = useUi((s) => s.changesAnimating);
+  const setChangesAnimating = useUi((s) => s.setChangesAnimating);
+  const shellDrawerAnimating = useUi((s) => s.shellDrawerAnimating);
+  const setShellDrawerAnimating = useUi((s) => s.setShellDrawerAnimating);
   const fileWatcherCleanup = useRef<(() => void) | null>(null);
   const gitPollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeProject = useProjects(selectActiveProject);
@@ -1140,6 +1150,11 @@ export function App() {
   const handleArchiveTask = useProjects((s) => s.archiveTask);
   const handleRestoreTask = useProjects((s) => s.restoreTask);
   const handleCloseTask = useProjects((s) => s.closeTask);
+  // Data-mutating UI flows live in uiStore (own their modal state).
+  const handleOpenFolder = useUi((s) => s.openFolder);
+  const handleCloneRepo = useUi((s) => s.cloneRepo);
+  const handleDeleteProjectConfirm = useUi((s) => s.confirmDeleteProject);
+  const handleDeleteTaskConfirm = useUi((s) => s.confirmDeleteTask);
 
   async function refreshGitStatus(cwd: string) {
     setGitLoading(true);
@@ -1157,88 +1172,9 @@ export function App() {
 
   // ── Handlers ─────────────────────────────────────────────
 
-  function promptAdoSetupIfNeeded(projectId: string, remote: string | null) {
-    if (!remote) return;
-    const adoInfo = parseAdoRemote(remote);
-    if (adoInfo) {
-      setAdoSetup({
-        projectId,
-        organizationUrl: adoInfo.organizationUrl,
-        project: adoInfo.project,
-      });
-    }
-  }
-
-  async function handleOpenFolder() {
-    setShowAddProjectModal(false);
-    const resp = await window.electronAPI.showOpenDialog();
-    if (resp.success && resp.data && resp.data.length > 0) {
-      const folderPath = resp.data[0];
-      const name = folderPath.split(/[\\/]/).pop() || 'Untitled';
-
-      const gitResp = await window.electronAPI.detectGit(folderPath);
-      const gitInfo = gitResp.success ? gitResp.data : null;
-
-      const saveResp = await window.electronAPI.saveProject({
-        name,
-        path: folderPath,
-        isGitRepo: gitInfo?.isGitRepo ?? false,
-        gitRemote: gitInfo?.remote ?? null,
-        gitBranch: gitInfo?.branch ?? null,
-      });
-
-      if (saveResp.success && saveResp.data) {
-        await loadProjects();
-        setActiveProjectId(saveResp.data.id);
-        promptAdoSetupIfNeeded(saveResp.data.id, gitInfo?.remote ?? null);
-      }
-    }
-  }
-
-  async function handleCloneRepo(url: string) {
-    setCloneStatus({ loading: true, error: null });
-    try {
-      const cloneResp = await window.electronAPI.gitClone({ url });
-      if (!cloneResp.success) {
-        setCloneStatus({ loading: false, error: cloneResp.error || 'Clone failed' });
-        return;
-      }
-
-      const { path: clonedPath, name } = cloneResp.data!;
-
-      const gitResp = await window.electronAPI.detectGit(clonedPath);
-      const gitInfo = gitResp.success ? gitResp.data : null;
-
-      const saveResp = await window.electronAPI.saveProject({
-        name,
-        path: clonedPath,
-        isGitRepo: gitInfo?.isGitRepo ?? true,
-        gitRemote: gitInfo?.remote ?? null,
-        gitBranch: gitInfo?.branch ?? null,
-      });
-
-      if (saveResp.success && saveResp.data) {
-        await loadProjects();
-        setActiveProjectId(saveResp.data.id);
-        promptAdoSetupIfNeeded(saveResp.data.id, gitInfo?.remote ?? null);
-      }
-
-      setCloneStatus({ loading: false, error: null });
-      setShowAddProjectModal(false);
-    } catch (err) {
-      setCloneStatus({ loading: false, error: String(err) });
-    }
-  }
-
   function handleDeleteProject(id: string) {
     const project = projects.find((p) => p.id === id);
     if (project) setDeleteProjectTarget(project);
-  }
-
-  async function handleDeleteProjectConfirm(options: DeleteProjectOptions) {
-    if (!deleteProjectTarget) return;
-    await useProjects.getState().deleteProject(deleteProjectTarget, options);
-    setDeleteProjectTarget(null);
   }
 
   function handleSelectTask(projectId: string, taskId: string) {
@@ -1273,19 +1209,6 @@ export function App() {
         setDeleteTaskTarget(found);
         return;
       }
-    }
-  }
-
-  async function handleDeleteTaskConfirm(options?: {
-    deleteWorktreeDir: boolean;
-    deleteLocalBranch: boolean;
-    deleteRemoteBranch: boolean;
-  }) {
-    if (!deleteTaskTarget) return;
-    try {
-      await useProjects.getState().deleteTask(deleteTaskTarget, options);
-    } finally {
-      setDeleteTaskTarget(null);
     }
   }
 
