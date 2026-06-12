@@ -35,6 +35,29 @@ export interface ProjectsActions {
   setAdoConfigured: (projectId: string, v: boolean) => void;
   setBranchesForProject: (projectId: string, branches: BranchInfo[]) => void;
   setAvailableIDEs: (list: Array<{ id: string; label: string }>) => void;
+  loadProjects: () => Promise<void>;
+  loadTasks: (projectId: string) => Promise<void>;
+}
+
+/** Sort projects by the saved projectOrder, pruning stale ids from storage. */
+function applyProjectOrder(projectList: Project[]): Project[] {
+  const store = ls();
+  try {
+    const saved = store?.getItem('projectOrder');
+    if (!saved) return projectList;
+    const order: string[] = JSON.parse(saved);
+    const validIds = new Set(projectList.map((p) => p.id));
+    const cleanOrder = order.filter((id) => validIds.has(id));
+    if (cleanOrder.length !== order.length) {
+      store?.setItem('projectOrder', JSON.stringify(cleanOrder));
+    }
+    const orderMap = new Map(cleanOrder.map((id, i) => [id, i]));
+    return [...projectList].sort(
+      (a, b) => (orderMap.get(a.id) ?? Infinity) - (orderMap.get(b.id) ?? Infinity),
+    );
+  } catch {
+    return projectList;
+  }
 }
 
 export type ProjectsStore = ProjectsState & ProjectsActions;
@@ -67,6 +90,30 @@ export const useProjects = create<ProjectsStore>((set) => ({
   setBranchesForProject: (projectId, branches) =>
     set((s) => ({ branchesByProject: { ...s.branchesByProject, [projectId]: branches } })),
   setAvailableIDEs: (list) => set({ availableIDEs: list }),
+
+  loadProjects: async () => {
+    const resp = await window.electronAPI.getProjects();
+    if (!resp.success || !resp.data) return;
+    // On Windows, older projects may have been saved with the full path as the
+    // name; derive the folder name so the sidebar shows short names.
+    const projects = resp.data.map((p) => {
+      const looksLikePath = p.name.includes('\\') || p.name.includes('/');
+      return looksLikePath ? { ...p, name: p.name.split(/[\\/]/).pop() || p.name } : p;
+    });
+    set({ projects: applyProjectOrder(projects) });
+    if (projects.length > 0) {
+      const prev = useProjects.getState().activeProjectId;
+      if (!prev || !projects.some((p) => p.id === prev)) {
+        useProjects.getState().setActiveProject(projects[0].id);
+      }
+    }
+  },
+  loadTasks: async (projectId) => {
+    const resp = await window.electronAPI.getTasks(projectId);
+    if (resp.success && resp.data) {
+      set((s) => ({ tasksByProject: { ...s.tasksByProject, [projectId]: resp.data! } }));
+    }
+  },
 }));
 
 // ── Selectors ───────────────────────────────────────────────

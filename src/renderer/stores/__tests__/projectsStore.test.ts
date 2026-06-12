@@ -86,3 +86,48 @@ describe('projectsStore state + selectors', () => {
     expect(store.selectActiveProjectTasks(s).map((t) => t.id)).toEqual(['t1']); // non-archived for active project
   });
 });
+
+describe('projectsStore loadProjects / loadTasks', () => {
+  let api: ReturnType<typeof makeElectronApiMock>;
+  beforeEach(() => {
+    api = makeElectronApiMock();
+    installWindow(api);
+  });
+  afterEach(() => resetWindow());
+
+  it('loadProjects applies saved projectOrder and prunes stale ids', async () => {
+    const useProjects = await freshStore();
+    window.localStorage.setItem('projectOrder', JSON.stringify(['p2', 'p1', 'gone']));
+    api.getProjects.mockResolvedValue({ success: true, data: [proj('p1'), proj('p2')] });
+    await useProjects.getState().loadProjects();
+    expect(useProjects.getState().projects.map((p) => p.id)).toEqual(['p2', 'p1']);
+    expect(JSON.parse(window.localStorage.getItem('projectOrder')!)).toEqual(['p2', 'p1']);
+  });
+
+  it('loadProjects defaults activeProject to first only when no valid selection', async () => {
+    const useProjects = await freshStore();
+    api.getProjects.mockResolvedValue({ success: true, data: [proj('p1'), proj('p2')] });
+    await useProjects.getState().loadProjects();
+    expect(useProjects.getState().activeProjectId).toBe('p1');
+    useProjects.getState().setActiveProject('p2');
+    await useProjects.getState().loadProjects();
+    expect(useProjects.getState().activeProjectId).toBe('p2'); // kept
+  });
+
+  it('loadProjects shortens Windows-style path names', async () => {
+    const useProjects = await freshStore();
+    api.getProjects.mockResolvedValue({
+      success: true,
+      data: [proj('p1', { name: 'C:\\repos\\app' })],
+    });
+    await useProjects.getState().loadProjects();
+    expect(useProjects.getState().projects[0].name).toBe('app');
+  });
+
+  it('loadTasks stores tasks under the project id', async () => {
+    const useProjects = await freshStore();
+    api.getTasks.mockResolvedValue({ success: true, data: [task('t1', 'p1')] });
+    await useProjects.getState().loadTasks('p1');
+    expect(useProjects.getState().tasksByProject.p1.map((t) => t.id)).toEqual(['t1']);
+  });
+});
