@@ -36,7 +36,10 @@ export function fanOutStorage(backing: StorageLike): PersistStorage<SettingsStat
     setItem(_name: string, value: StorageValue<SettingsState>): void {
       for (const e of SETTINGS_REGISTRY) {
         const v = (value.state as Partial<SettingsState>)[e.field];
-        if (v !== undefined) backing.setItem(e.key, e.codec.encode(v as never));
+        // undefined means "unset" — actively remove the key so a prior value
+        // doesn't linger (e.g. commitAttribution returning to default).
+        if (v === undefined) backing.removeItem(e.key);
+        else backing.setItem(e.key, e.codec.encode(v as never));
       }
     },
     removeItem(_name: string): void {

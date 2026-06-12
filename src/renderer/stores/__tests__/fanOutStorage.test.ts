@@ -40,4 +40,14 @@ describe('fanOutStorage (PersistStorage)', () => {
     mem.setItem('theme', 'light');
     expect(read(mem).state.theme).toBe('light');
   });
+
+  it('removes the key when a field is undefined (e.g. commitAttribution default)', () => {
+    const mem = createMemoryStorage();
+    mem.setItem('commitAttribution', 'old custom text'); // a stale prior value
+    fanOutStorage(mem).setItem(NAME, {
+      state: { commitAttribution: undefined } as never,
+      version: 0,
+    });
+    expect(mem.getItem('commitAttribution')).toBeNull();
+  });
 });
