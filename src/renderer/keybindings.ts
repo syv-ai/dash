@@ -139,22 +139,26 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
 
 const STORAGE_KEY = 'keybindings';
 
-export function loadKeybindings(): KeyBindingMap {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored) as Partial<KeyBindingMap>;
-      // Merge with defaults so new bindings always appear
+/** Merge a stored (possibly partial/older) keybindings JSON string onto the
+ *  defaults so newly-added bindings always appear. null/invalid → defaults. */
+export function parseKeybindings(raw: string | null): KeyBindingMap {
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as Partial<KeyBindingMap>;
       const merged: KeyBindingMap = {};
       for (const [id, def] of Object.entries(DEFAULT_KEYBINDINGS)) {
         merged[id] = parsed[id] ? { ...def, ...parsed[id] } : { ...def };
       }
       return merged;
+    } catch {
+      /* ignore */
     }
-  } catch {
-    /* ignore */
   }
   return { ...DEFAULT_KEYBINDINGS };
+}
+
+export function loadKeybindings(): KeyBindingMap {
+  return parseKeybindings(localStorage.getItem(STORAGE_KEY));
 }
 
 export function saveKeybindings(bindings: KeyBindingMap): void {
