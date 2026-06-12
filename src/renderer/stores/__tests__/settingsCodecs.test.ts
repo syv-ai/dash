@@ -6,6 +6,7 @@ import {
   boolNotFalse,
   strEnum,
   json,
+  stringSet,
 } from '../settingsCodecs';
 
 describe('str codec', () => {
@@ -62,4 +63,18 @@ describe('json codec', () => {
     expect(v.decode('{"p":"ok"}')).toEqual({ p: 'ok' });
     expect(v.decode('{"p":123}')).toEqual({ p: '' });
   });
+});
+
+describe('stringSet codec', () => {
+  const c = stringSet();
+  it('decodes a JSON array into a Set', () => {
+    const s = c.decode('["a","b"]');
+    expect(s instanceof Set).toBe(true);
+    expect([...s]).toEqual(['a', 'b']);
+  });
+  it('absent yields an empty Set', () => expect([...c.decode(null)]).toEqual([]));
+  it('invalid JSON yields an empty Set', () => expect([...c.decode('{bad')]).toEqual([]));
+  it('drops non-string members', () => expect([...c.decode('["a",1,null]')]).toEqual(['a']));
+  it('encodes a Set as a JSON array', () =>
+    expect(c.encode(new Set(['a', 'b']))).toBe('["a","b"]'));
 });

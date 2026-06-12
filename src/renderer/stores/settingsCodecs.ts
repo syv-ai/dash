@@ -36,6 +36,24 @@ export function strEnum<T extends string>(allowed: readonly T[], def: T): Codec<
   };
 }
 
+/** Set<string> stored as a JSON string array. Parse failure → empty Set. */
+export function stringSet(): Codec<Set<string>> {
+  return {
+    decode: (raw) => {
+      if (raw === null) return new Set();
+      try {
+        const arr: unknown = JSON.parse(raw);
+        return Array.isArray(arr)
+          ? new Set(arr.filter((x): x is string => typeof x === 'string'))
+          : new Set();
+      } catch {
+        return new Set();
+      }
+    },
+    encode: (v) => JSON.stringify([...v]),
+  };
+}
+
 /** JSON value with parse-failure fallback to `def`. An optional `validate`
  *  predicate rejects structurally-wrong parsed values (falling back to `def`). */
 export function json<T>(def: T, validate?: (v: unknown) => boolean): Codec<T> {
