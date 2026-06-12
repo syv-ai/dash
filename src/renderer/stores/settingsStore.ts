@@ -24,6 +24,8 @@ interface SettingsActions {
   setRotationOrder: (value: SettingsState['rotationOrder']) => void;
   setRotationExclusions: (value: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
   setUnseenTaskIds: (value: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
+  setDiffContextLines: (value: SettingsState['diffContextLines']) => void;
+  setCommitAttribution: (value: SettingsState['commitAttribution']) => void;
 }
 
 export type SettingsStore = SettingsState & SettingsActions;
@@ -66,6 +68,8 @@ export const useSettings = create<SettingsStore>()(
         set((s) => ({
           unseenTaskIds: typeof value === 'function' ? value(s.unseenTaskIds) : value,
         })),
+      setDiffContextLines: (diffContextLines) => set({ diffContextLines }),
+      setCommitAttribution: (commitAttribution) => set({ commitAttribution }),
     }),
     {
       name: 'settings',
