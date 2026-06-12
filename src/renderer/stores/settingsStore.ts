@@ -28,6 +28,7 @@ interface SettingsActions {
   setDiffContextLines: (value: SettingsState['diffContextLines']) => void;
   setCommitAttribution: (value: SettingsState['commitAttribution']) => void;
   setPreferredIDE: (value: string | ((prev: string) => string)) => void;
+  setKeybindings: (value: SettingsState['keybindings']) => void;
 }
 
 export type SettingsStore = SettingsState & SettingsActions;
@@ -79,6 +80,7 @@ export const useSettings = create<SettingsStore>()(
         set((s) => ({
           preferredIDE: typeof value === 'function' ? value(s.preferredIDE) : value,
         })),
+      setKeybindings: (keybindings) => set({ keybindings }),
     }),
     {
       name: 'settings',
