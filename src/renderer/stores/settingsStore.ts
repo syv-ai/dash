@@ -33,6 +33,8 @@ interface SettingsActions {
   setChangesPanelCollapsed: (value: boolean) => void;
   setShellDrawerCollapsed: (value: boolean) => void;
   setPortsDrawerCollapsed: (value: boolean) => void;
+  setAutoUpdateEnabled: (value: boolean) => void;
+  setUpdateNotificationsEnabled: (value: boolean) => void;
 }
 
 export type SettingsStore = SettingsState & SettingsActions;
@@ -89,6 +91,9 @@ export const useSettings = create<SettingsStore>()(
       setChangesPanelCollapsed: (changesPanelCollapsed) => set({ changesPanelCollapsed }),
       setShellDrawerCollapsed: (shellDrawerCollapsed) => set({ shellDrawerCollapsed }),
       setPortsDrawerCollapsed: (portsDrawerCollapsed) => set({ portsDrawerCollapsed }),
+      setAutoUpdateEnabled: (autoUpdateEnabled) => set({ autoUpdateEnabled }),
+      setUpdateNotificationsEnabled: (updateNotificationsEnabled) =>
+        set({ updateNotificationsEnabled }),
     }),
     {
       name: 'settings',
