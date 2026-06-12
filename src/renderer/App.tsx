@@ -34,23 +34,25 @@ import type {
   Project,
   Task,
   GitStatus,
-  LinkedGithubIssue,
-  LinkedAdoWorkItem,
   RemoteControlState,
   ActivityInfo,
   PullRequestInfo,
   RtkStatus,
   RtkDownloadProgress,
-  BranchInfo,
 } from '../shared/types';
 import type { CreateTaskOptions } from './components/TaskModal';
-import { formatTaskContextPrompt } from '../shared/taskContext';
 import { matchesBinding } from './keybindings';
 import { sessionRegistry } from './terminal/SessionRegistry';
 import { resolveTheme } from './terminal/terminalThemes';
 import { resolveTerminalFontValue } from './terminal/terminalFonts';
 import { playNotificationSound, playPeonSound } from './sounds';
 import { useSettings } from './stores/settingsStore';
+import {
+  useProjects,
+  selectActiveProject,
+  selectActiveTask,
+  selectActiveProjectTasks,
+} from './stores/projectsStore';
 
 const GIT_POLL_INTERVAL = 5000;
 /** Chrome around the pinned TUI canvas (panel padding + drawer gutter) added
@@ -65,23 +67,22 @@ const TUI_PANEL_MAX_PCT = 40;
 const EMPTY_CONTEXT_USAGE: Record<string, import('../shared/types').ContextUsage> = {};
 
 export function App() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(() =>
-    localStorage.getItem('activeProjectId'),
-  );
-  const [tasksByProject, setTasksByProject] = useState<Record<string, Task[]>>({});
-  const [activeTaskId, setActiveTaskId] = useState<string | null>(() =>
-    localStorage.getItem('activeTaskId'),
-  );
+  // Projects/tasks domain state lives in projectsStore; subscribe via selectors.
+  const projects = useProjects((s) => s.projects);
+  const tasksByProject = useProjects((s) => s.tasksByProject);
+  const activeProjectId = useProjects((s) => s.activeProjectId);
+  const activeTaskId = useProjects((s) => s.activeTaskId);
+  const isCreatingTask = useProjects((s) => s.isCreatingTask);
+  // Pre-resolved for the TaskModal so the issue picker + branch banner render at
+  // their final size on first paint, instead of popping in mid-mount.
+  const ghAvailable = useProjects((s) => s.ghAvailable);
+  const adoConfiguredById = useProjects((s) => s.adoConfiguredById);
+  const branchesByProject = useProjects((s) => s.branchesByProject);
+  // Action aliases keep existing call sites compiling unchanged.
+  const setActiveProjectId = useProjects((s) => s.setActiveProject);
+  const setActiveTaskId = useProjects((s) => s.setActiveTask);
   const [showTaskModal, setShowTaskModal] = useState(false);
-  const [isCreatingTask, setIsCreatingTask] = useState(false);
   const [taskModalProjectId, setTaskModalProjectId] = useState<string | null>(null);
-  // Pre-resolved for the TaskModal so the issue picker + branch banner render
-  // at their final size on first paint, instead of popping in mid-mount and
-  // visibly growing the centered dialog.
-  const [ghAvailable, setGhAvailable] = useState(false);
-  const [adoConfiguredById, setAdoConfiguredById] = useState<Record<string, boolean>>({});
-  const [branchesByProject, setBranchesByProject] = useState<Record<string, BranchInfo[]>>({});
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
   const [cloneStatus, setCloneStatus] = useState<{ loading: boolean; error: string | null }>({
     loading: false,
@@ -116,7 +117,7 @@ export function App() {
   const terminalTheme = useSettings((s) => s.terminalTheme);
   const terminalFontFamily = useSettings((s) => s.terminalFontFamily);
   const setPreferredIDE = useSettings((s) => s.setPreferredIDE);
-  const [availableIDEs, setAvailableIDEs] = useState<Array<{ id: string; label: string }>>([]);
+  const availableIDEs = useProjects((s) => s.availableIDEs);
 
   // One-shot localStorage → SQLite migration for drawer tabs. After upgrading
   // past commit 3, per-task tab state lives in the drawer_tabs table owned by
@@ -170,7 +171,7 @@ export function App() {
         console.warn('[openInIDE] Failed to detect available IDEs:', res.error);
         return;
       }
-      setAvailableIDEs(res.data);
+      useProjects.getState().setAvailableIDEs(res.data);
       // Self-heal: if the stored IDE was uninstalled, fall back to auto so
       // Settings doesn't show a phantom selection and clicks don't 404.
       setPreferredIDE((current) => {
@@ -352,16 +353,16 @@ export function App() {
 
   useEffect(() => {
     const unsubscribe = window.electronAPI.onTokenStatsUpdated((update) => {
-      setTasksByProject((prev) => {
+      useProjects.setState((s) => {
         const next: Record<string, Task[]> = {};
-        for (const [projectId, list] of Object.entries(prev)) {
+        for (const [projectId, list] of Object.entries(s.tasksByProject)) {
           next[projectId] = list.map((t) =>
             t.id === update.taskId
               ? { ...t, totalTokens: update.totalTokens, totalCostUsd: update.totalCostUsd }
               : t,
           );
         }
-        return next;
+        return { tasksByProject: next };
       });
       refreshTokenRollups();
     });
@@ -438,7 +439,7 @@ export function App() {
   const [shellDrawerAnimating, setShellDrawerAnimating] = useState(false);
   const fileWatcherCleanup = useRef<(() => void) | null>(null);
   const gitPollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const activeProject = projects.find((p) => p.id === activeProjectId) ?? null;
+  const activeProject = useProjects(selectActiveProject);
 
   // Color of the active terminal bg — used to make the main-pane header strip
   // blend with whatever palette the user has selected (default / Dracula / Tokyo Night / …)
@@ -452,19 +453,9 @@ export function App() {
     [terminalTheme, theme],
   );
 
-  // Find activeTask across all projects
-  const activeTask = (() => {
-    for (const tasks of Object.values(tasksByProject)) {
-      const found = tasks.find((t) => t.id === activeTaskId);
-      if (found) return found;
-    }
-    return null;
-  })();
-
+  const activeTask = useProjects(selectActiveTask);
   // All non-archived tasks for the active project (for cycling)
-  const activeProjectTasks = activeProjectId
-    ? (tasksByProject[activeProjectId] || []).filter((t) => !t.archivedAt)
-    : [];
+  const activeProjectTasks = useProjects(selectActiveProjectTasks);
 
   // Side-car TUI features (ports onboarding today). On active-task change,
   // ask main to spawn each feature's flow + Clack TUI inside a drawer tab —
@@ -582,7 +573,7 @@ export function App() {
   // TaskModal can read the result synchronously instead of mid-mount.
   useEffect(() => {
     window.electronAPI.githubCheckAvailable().then((r) => {
-      if (r.success) setGhAvailable(!!r.data);
+      if (r.success) useProjects.getState().setGhAvailable(!!r.data);
     });
   }, []);
 
@@ -595,17 +586,12 @@ export function App() {
     if (!activeProjectIdForFetch) return;
     const id = activeProjectIdForFetch;
     window.electronAPI.adoCheckConfigured(id).then((r) => {
-      if (r.success) {
-        setAdoConfiguredById((prev) =>
-          prev[id] === !!r.data ? prev : { ...prev, [id]: !!r.data },
-        );
-      }
+      if (r.success) useProjects.getState().setAdoConfigured(id, !!r.data);
     });
     if (activeProjectIsGit && activeProjectPathForFetch) {
       window.electronAPI.gitListBranches(activeProjectPathForFetch).then((r) => {
         if (r.success && r.data) {
-          const data = r.data;
-          setBranchesByProject((prev) => ({ ...prev, [id]: data }));
+          useProjects.getState().setBranchesForProject(id, r.data);
         }
       });
     }
@@ -734,16 +720,8 @@ export function App() {
 
   // Persist usage thresholds
 
-  // Persist selection to localStorage (survives CMD+R reload)
-  useEffect(() => {
-    if (activeProjectId) localStorage.setItem('activeProjectId', activeProjectId);
-    else localStorage.removeItem('activeProjectId');
-  }, [activeProjectId]);
-
-  useEffect(() => {
-    if (activeTaskId) localStorage.setItem('activeTaskId', activeTaskId);
-    else localStorage.removeItem('activeTaskId');
-  }, [activeTaskId]);
+  // (Selection persistence to localStorage is handled by projectsStore's
+  // setActiveProject/setActiveTask actions.)
 
   // Clear stale activeTaskId if it no longer exists in loaded tasks.
   // Wait until all projects have had their tasks loaded to avoid clearing
@@ -1152,99 +1130,16 @@ export function App() {
     }
   }, []);
 
-  // ── Data Loading ─────────────────────────────────────────
+  // ── Data Loading (projectsStore actions) ─────────────────
 
-  function applyProjectOrder(projectList: Project[]): Project[] {
-    try {
-      const saved = localStorage.getItem('projectOrder');
-      if (!saved) return projectList;
-      const order: string[] = JSON.parse(saved);
-      const validIds = new Set(projectList.map((p) => p.id));
-      const cleanOrder = order.filter((id) => validIds.has(id));
-      // Prune stale IDs from storage
-      if (cleanOrder.length !== order.length) {
-        localStorage.setItem('projectOrder', JSON.stringify(cleanOrder));
-      }
-      const orderMap = new Map(cleanOrder.map((id, i) => [id, i]));
-      return [...projectList].sort((a, b) => {
-        const ai = orderMap.get(a.id) ?? Infinity;
-        const bi = orderMap.get(b.id) ?? Infinity;
-        return ai - bi;
-      });
-    } catch {
-      return projectList;
-    }
-  }
-
-  function handleReorderProjects(reordered: Project[]) {
-    setProjects(reordered);
-    // Only persist IDs that still exist, pruning stale entries
-    localStorage.setItem('projectOrder', JSON.stringify(reordered.map((p) => p.id)));
-  }
-
-  function handleReorderTasks(projectId: string, reordered: Task[]) {
-    setTasksByProject((prev) => {
-      const current = prev[projectId] || [];
-      const archived = current.filter((t) => t.archivedAt);
-      return { ...prev, [projectId]: [...reordered, ...archived] };
-    });
-  }
-
-  async function handleReorderTasksCommit(projectId: string, reordered: Task[]) {
-    const ids = reordered.map((t) => t.id);
-    const resp = await window.electronAPI.reorderTasks(projectId, ids);
-    if (!resp.success) {
-      console.error('Failed to persist task reorder:', resp.error);
-      toast.error('Failed to save task order');
-      const refetch = await window.electronAPI.getTasks(projectId);
-      if (refetch.success && refetch.data) {
-        setTasksByProject((prev) => ({ ...prev, [projectId]: refetch.data! }));
-      } else {
-        // Refetch also failed — force reload to avoid stale optimistic state
-        toast.error('Could not recover task list — reloading');
-        const allProjects = await window.electronAPI.getProjects();
-        if (allProjects.success && allProjects.data) {
-          const project = allProjects.data.find((p) => p.id === projectId);
-          if (project) {
-            const retry = await window.electronAPI.getTasks(projectId);
-            if (retry.success && retry.data) {
-              setTasksByProject((prev) => ({ ...prev, [projectId]: retry.data! }));
-            }
-          }
-        }
-      }
-    }
-  }
-
-  async function loadProjects() {
-    const resp = await window.electronAPI.getProjects();
-    if (resp.success && resp.data) {
-      // On Windows, older projects may have been saved with the full path as the name.
-      // Derive the folder name from the path so the sidebar shows short names.
-      const projects = resp.data.map((p) => {
-        const looksLikePath = p.name.includes('\\') || p.name.includes('/');
-        if (looksLikePath) {
-          return { ...p, name: p.name.split(/[\\/]/).pop() || p.name };
-        }
-        return p;
-      });
-      setProjects(applyProjectOrder(projects));
-      if (projects.length > 0) {
-        // Only default to first project if no valid selection exists
-        setActiveProjectId((prev) => {
-          if (prev && projects.some((p) => p.id === prev)) return prev;
-          return projects[0].id;
-        });
-      }
-    }
-  }
-
-  async function loadTasksForProject(projectId: string) {
-    const resp = await window.electronAPI.getTasks(projectId);
-    if (resp.success && resp.data) {
-      setTasksByProject((prev) => ({ ...prev, [projectId]: resp.data! }));
-    }
-  }
+  const loadProjects = useProjects((s) => s.loadProjects);
+  const loadTasksForProject = useProjects((s) => s.loadTasks);
+  const handleReorderProjects = useProjects((s) => s.reorderProjects);
+  const handleReorderTasks = useProjects((s) => s.reorderTasks);
+  const handleReorderTasksCommit = useProjects((s) => s.commitTaskReorder);
+  const handleArchiveTask = useProjects((s) => s.archiveTask);
+  const handleRestoreTask = useProjects((s) => s.restoreTask);
+  const handleCloseTask = useProjects((s) => s.closeTask);
 
   async function refreshGitStatus(cwd: string) {
     setGitLoading(true);
@@ -1341,41 +1236,9 @@ export function App() {
   }
 
   async function handleDeleteProjectConfirm(options: DeleteProjectOptions) {
-    const project = deleteProjectTarget;
-    if (!project) return;
-
-    const projectTasks = tasksByProject[project.id] ?? [];
-
-    // Clean up worktrees and branches for each task
-    for (const task of projectTasks) {
-      if (task.useWorktree) {
-        await window.electronAPI.worktreeRemove({
-          projectPath: project.path,
-          worktreePath: task.path,
-          branch: task.branch,
-          options: {
-            deleteWorktreeDir: options.deleteWorktreeDirs,
-            deleteLocalBranch: options.deleteLocalBranches && task.branchCreatedByDash,
-            deleteRemoteBranch: options.deleteRemoteBranches && task.branchCreatedByDash,
-          },
-        });
-      }
-      sessionRegistry.dispose(`shell:${task.id}`);
-      sessionRegistry.disposeByPrefix(`shell:${task.id}:`);
-    }
-
-    await window.electronAPI.deleteProject(project.id);
-    if (activeProjectId === project.id) {
-      setActiveProjectId(null);
-      setActiveTaskId(null);
-    }
-    setTasksByProject((prev) => {
-      const next = { ...prev };
-      delete next[project.id];
-      return next;
-    });
+    if (!deleteProjectTarget) return;
+    await useProjects.getState().deleteProject(deleteProjectTarget, options);
     setDeleteProjectTarget(null);
-    await loadProjects();
   }
 
   function handleSelectTask(projectId: string, taskId: string) {
@@ -1395,182 +1258,11 @@ export function App() {
     setShowTaskModal(true);
   }
 
-  async function handleCreateTask(options: CreateTaskOptions): Promise<boolean> {
-    const { name, permissionMode, linkedItems } = options;
-
-    const targetProjectId = taskModalProjectId || activeProjectId;
-    const targetProject = projects.find((p) => p.id === targetProjectId);
-    if (!targetProject) return false;
-
-    setIsCreatingTask(true);
-    try {
-      let worktreeInfo: { branch: string; path: string } | null = null;
-
-      const ghItems =
-        linkedItems?.filter((i): i is LinkedGithubIssue => i.provider === 'github') ?? [];
-      const adoItems =
-        linkedItems?.filter((i): i is LinkedAdoWorkItem => i.provider === 'ado') ?? [];
-      const ghIssueNumbers = ghItems.map((i) => i.id);
-
-      switch (options.kind) {
-        case 'worktree-new-branch': {
-          // New branch: try reserve pool, fall back to direct creation
-          const claimResp = await window.electronAPI.worktreeClaimReserve({
-            projectId: targetProject.id,
-            taskName: name,
-            baseRef: options.baseRef,
-            linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
-            pushRemote: options.pushRemote,
-          });
-
-          if (claimResp.success && claimResp.data) {
-            worktreeInfo = { branch: claimResp.data.branch, path: claimResp.data.path };
-          } else {
-            const createResp = await window.electronAPI.worktreeCreate({
-              projectPath: targetProject.path,
-              taskName: name,
-              baseRef: options.baseRef,
-              projectId: targetProject.id,
-              linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
-              pushRemote: options.pushRemote,
-            });
-            if (createResp.success && createResp.data) {
-              worktreeInfo = { branch: createResp.data.branch, path: createResp.data.path };
-            } else {
-              toast.error(createResp.error || 'Failed to create worktree');
-              return false;
-            }
-          }
-          break;
-        }
-        case 'worktree-existing': {
-          const createResp = await window.electronAPI.worktreeCreateFromExisting({
-            projectPath: targetProject.path,
-            taskName: name,
-            branch: options.branch,
-            projectId: targetProject.id,
-            linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
-          });
-          if (createResp.success && createResp.data) {
-            worktreeInfo = { branch: createResp.data.branch, path: createResp.data.path };
-          } else {
-            toast.error(createResp.error || 'Failed to create worktree from existing branch');
-            return false;
-          }
-          break;
-        }
-        case 'in-place-checkout': {
-          const checkoutResp = await window.electronAPI.gitCheckoutBranch({
-            cwd: targetProject.path,
-            branch: options.branch,
-          });
-          if (!checkoutResp.success) {
-            toast.error(checkoutResp.error || 'Failed to checkout branch');
-            return false;
-          }
-          break;
-        }
-        case 'in-place-no-git':
-          break;
-      }
-
-      const useWorktree =
-        options.kind === 'worktree-new-branch' || options.kind === 'worktree-existing';
-      const fallbackBranch =
-        options.kind === 'worktree-existing' || options.kind === 'in-place-checkout'
-          ? options.branch
-          : options.kind === 'worktree-new-branch'
-            ? options.baseRef
-            : 'main';
-      const branch = worktreeInfo?.branch ?? fallbackBranch;
-      const taskPath = worktreeInfo?.path ?? targetProject.path;
-
-      const saveResp = await window.electronAPI.saveTask({
-        projectId: targetProject.id,
-        name,
-        branch,
-        path: taskPath,
-        useWorktree,
-        permissionMode,
-        // Only Dash-created branches should be auto-deleted on task removal.
-        branchCreatedByDash: options.kind === 'worktree-new-branch' && !!worktreeInfo,
-        linkedItems: linkedItems ?? null,
-      });
-
-      if (!saveResp.success || !saveResp.data) {
-        toast.error(saveResp.error || 'Failed to save task');
-        return false;
-      }
-      {
-        const taskId = saveResp.data.id;
-
-        // Store task context so the SessionStart hook can inject it
-        if (linkedItems && linkedItems.length > 0) {
-          const prompt = formatTaskContextPrompt(linkedItems);
-          if (prompt) {
-            await window.electronAPI.ptyWriteTaskContext({
-              taskId,
-              prompt,
-            });
-
-            // Notify the user that linked context will be injected
-            const maxVisible = 3;
-            const visible = linkedItems.slice(0, maxVisible);
-            const overflow = linkedItems.length - maxVisible;
-            toast(
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-muted-foreground">Context injected</span>
-                {visible.map((item) => (
-                  <a
-                    key={`${item.provider}-${item.id}`}
-                    href={item.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium hover:bg-primary/20 transition-colors"
-                  >
-                    #{item.id}
-                  </a>
-                ))}
-                {overflow > 0 && (
-                  <span className="text-[10px] text-muted-foreground">+{overflow} more</span>
-                )}
-              </div>,
-            );
-          }
-        }
-
-        await window.electronAPI.getOrCreateDefaultConversation(taskId);
-        await loadTasksForProject(targetProject.id);
-        setActiveProjectId(targetProject.id);
-        setActiveTaskId(taskId);
-
-        if (notificationSoundRef.current === 'peon') {
-          playPeonSound('what');
-        }
-
-        window.electronAPI.worktreeEnsureReserve({
-          projectId: targetProject.id,
-          projectPath: targetProject.path,
-        });
-
-        // Fire-and-forget: post branch comment on each linked GitHub issue
-        for (const num of ghIssueNumbers) {
-          window.electronAPI
-            .githubPostBranchComment(targetProject.path, num, branch)
-            .catch(() => toast.error(`Failed to link branch to issue #${num}`));
-        }
-
-        // Fire-and-forget: post branch comment on each linked ADO work item
-        for (const wi of adoItems) {
-          window.electronAPI
-            .adoPostBranchComment(wi.id, branch, targetProject.id)
-            .catch(() => toast.error(`Failed to link branch to work item #${wi.id}`));
-        }
-      }
-      return true;
-    } finally {
-      setIsCreatingTask(false);
-    }
+  function handleCreateTask(options: CreateTaskOptions): Promise<boolean> {
+    // Modal-selected project (App-owned) takes precedence over the active one.
+    return useProjects
+      .getState()
+      .createTask(options, taskModalProjectId || activeProjectId || undefined);
   }
 
   function handleDeleteTask(id: string) {
@@ -1589,80 +1281,11 @@ export function App() {
     deleteLocalBranch: boolean;
     deleteRemoteBranch: boolean;
   }) {
-    const task = deleteTaskTarget;
-    if (!task) return;
-
-    const taskProjectId = task.projectId;
-
+    if (!deleteTaskTarget) return;
     try {
-      if (task.useWorktree) {
-        const project = projects.find((p) => p.id === taskProjectId);
-        if (project) {
-          await window.electronAPI.worktreeRemove({
-            projectPath: project.path,
-            worktreePath: task.path,
-            branch: task.branch,
-            options: options
-              ? {
-                  deleteWorktreeDir: options.deleteWorktreeDir,
-                  deleteLocalBranch: options.deleteLocalBranch && task.branchCreatedByDash,
-                  deleteRemoteBranch: options.deleteRemoteBranch && task.branchCreatedByDash,
-                }
-              : undefined,
-          });
-        }
-      }
-
-      // Clean up all terminal sessions: Claude main session + shell tabs
-      sessionRegistry.dispose(task.id);
-      sessionRegistry.dispose(`shell:${task.id}`);
-      sessionRegistry.disposeByPrefix(`shell:${task.id}:`);
-
-      // Kill PTY and clear snapshot so a new task in the same cwd starts fresh
-      window.electronAPI.ptyKill(task.id);
-      window.electronAPI.ptyClearSnapshot(task.id);
-
-      await window.electronAPI.deleteTask(task.id);
-      if (activeTaskId === task.id) {
-        setActiveTaskId(null);
-      }
-      await loadTasksForProject(taskProjectId);
+      await useProjects.getState().deleteTask(deleteTaskTarget, options);
     } finally {
       setDeleteTaskTarget(null);
-    }
-  }
-
-  async function handleArchiveTask(id: string) {
-    await window.electronAPI.archiveTask(id);
-    // Find which project this task belongs to and reload
-    for (const [projectId, tasks] of Object.entries(tasksByProject)) {
-      if (tasks.some((t) => t.id === id)) {
-        await loadTasksForProject(projectId);
-        break;
-      }
-    }
-  }
-
-  // "Close" a task — tear down its PTY and shell sessions so it becomes
-  // inactive again. Task remains in the list and can be re-opened later.
-  function handleCloseTask(id: string) {
-    sessionRegistry.dispose(id);
-    sessionRegistry.dispose(`shell:${id}`);
-    sessionRegistry.disposeByPrefix(`shell:${id}:`);
-    window.electronAPI.ptyKill(id);
-    window.electronAPI.ptyClearSnapshot(id);
-    if (activeTaskId === id) {
-      setActiveTaskId(null);
-    }
-  }
-
-  async function handleRestoreTask(id: string) {
-    await window.electronAPI.restoreTask(id);
-    for (const [projectId, tasks] of Object.entries(tasksByProject)) {
-      if (tasks.some((t) => t.id === id)) {
-        await loadTasksForProject(projectId);
-        break;
-      }
     }
   }
 
@@ -1677,24 +1300,9 @@ export function App() {
   }
 
   async function persistTaskUpdate(task: Task, patch: Partial<Task>): Promise<Task | null> {
-    const resp = await window.electronAPI.saveTask({
-      id: task.id,
-      projectId: task.projectId,
-      name: patch.name ?? task.name,
-      branch: task.branch,
-      path: task.path,
-      useWorktree: task.useWorktree,
-      permissionMode: patch.permissionMode ?? task.permissionMode,
-      branchCreatedByDash: task.branchCreatedByDash,
-      linkedItems: task.linkedItems,
-    });
-    if (!resp.success || !resp.data) {
-      toast.error(resp.error || 'Failed to save task');
-      return null;
-    }
-    await loadTasksForProject(task.projectId);
-    const updated = resp.data;
-    setTaskSettingsTarget((prev) => (prev?.id === updated.id ? updated : prev));
+    const updated = await useProjects.getState().updateTask(task, patch);
+    // Keep the (App-owned) task-settings modal target in sync with the save.
+    if (updated) setTaskSettingsTarget((prev) => (prev?.id === updated.id ? updated : prev));
     return updated;
   }
 
