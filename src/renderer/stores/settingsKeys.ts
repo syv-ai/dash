@@ -12,6 +12,7 @@ import {
 } from './settingsCodecs';
 import type { NotificationSound } from '../sounds';
 import type { UsageThresholds } from '@shared/types';
+import { parseKeybindings, type KeyBindingMap } from '../keybindings';
 
 /** The slice of settings managed by settingsStore. Grows as fields migrate. */
 export interface SettingsState {
@@ -38,6 +39,7 @@ export interface SettingsState {
   diffContextLines: number | null;
   commitAttribution: string | undefined;
   preferredIDE: string;
+  keybindings: KeyBindingMap;
 }
 
 /** One entry per managed setting: the store field, its existing localStorage
@@ -52,6 +54,14 @@ export interface RegistryEntry<K extends keyof SettingsState = keyof SettingsSta
 function isCustomIDE(v: unknown): boolean {
   const o = v as { path?: unknown; args?: unknown } | null;
   return !!o && typeof o.path === 'string' && Array.isArray(o.args);
+}
+
+/** Keybindings codec: decode merges stored over defaults (via parseKeybindings). */
+function keybindingsCodec(): Codec<KeyBindingMap> {
+  return {
+    decode: (raw) => parseKeybindings(raw),
+    encode: (v) => JSON.stringify(v),
+  };
 }
 
 function entry<K extends keyof SettingsState>(
@@ -98,6 +108,7 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   entry('diffContextLines', 'diffContextLines', nullableInt(3)),
   entry('commitAttribution', 'commitAttribution', strOrUndefined()),
   entry('preferredIDE', 'preferredIDE', str('auto')),
+  entry('keybindings', 'keybindings', keybindingsCodec()),
 ];
 
 /** Initial state = every field decoded from an absent key (its default). */

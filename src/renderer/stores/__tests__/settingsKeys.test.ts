@@ -79,4 +79,11 @@ describe('settings registry', () => {
     expect(e.codec.decode(null)).toBe('auto');
     expect(e.codec.decode('vscode')).toBe('vscode');
   });
+
+  it('registers keybindings with a merging codec defaulting to DEFAULT_KEYBINDINGS', async () => {
+    const { DEFAULT_KEYBINDINGS } = await import('../../keybindings');
+    const e = SETTINGS_REGISTRY.find((r) => r.field === 'keybindings')!;
+    expect(e.key).toBe('keybindings');
+    expect(e.codec.decode(null)).toEqual(DEFAULT_KEYBINDINGS);
+  });
 });
