@@ -1,41 +1,22 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { type SettingsState, defaultSettings } from './settingsKeys';
+import { type SettingsState, defaultSettings, SETTINGS_REGISTRY } from './settingsKeys';
 import { fanOutStorage, createMemoryStorage, type StorageLike } from './fanOutStorage';
 import { runSettingsMigrations } from './settingsMigrations';
 
-interface SettingsActions {
-  setTheme: (theme: SettingsState['theme']) => void;
-  setShowTaskTokens: (value: boolean) => void;
-  setShowRateLimits: (value: boolean) => void;
-  setShowUsageInline: (value: boolean) => void;
-  setShowContextUsageOnTaskCards: (value: boolean) => void;
-  setShowActiveTasksSection: (value: boolean) => void;
-  setShowProjectTokens: (value: boolean) => void;
-  setDesktopNotification: (value: boolean) => void;
-  setSyncShellEnv: (value: boolean) => void;
-  setNotificationSound: (value: SettingsState['notificationSound']) => void;
-  setTerminalTheme: (value: string) => void;
-  setTerminalFontFamily: (value: string) => void;
-  setEffortLevel: (value: string) => void;
-  setShellDrawerPosition: (value: SettingsState['shellDrawerPosition']) => void;
-  setCustomIDE: (value: SettingsState['customIDE']) => void;
-  setCustomClaudeEnvVars: (value: SettingsState['customClaudeEnvVars']) => void;
-  setUsageThresholds: (value: SettingsState['usageThresholds']) => void;
-  setRotationOrder: (value: SettingsState['rotationOrder']) => void;
+/** One plain value-setter per settings field: setTheme(v), setShowTaskTokens(v), … */
+type ValueSetters = {
+  [K in keyof SettingsState as `set${Capitalize<string & K>}`]: (value: SettingsState[K]) => void;
+};
+
+/** Fields whose setter also accepts a functional updater (defined explicitly below). */
+interface UpdaterActions {
+  setPreferredIDE: (value: string | ((prev: string) => string)) => void;
   setRotationExclusions: (value: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
   setUnseenTaskIds: (value: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
-  setDiffContextLines: (value: SettingsState['diffContextLines']) => void;
-  setCommitAttribution: (value: SettingsState['commitAttribution']) => void;
-  setPreferredIDE: (value: string | ((prev: string) => string)) => void;
-  setKeybindings: (value: SettingsState['keybindings']) => void;
-  setSidebarCollapsed: (value: boolean) => void;
-  setChangesPanelCollapsed: (value: boolean) => void;
-  setShellDrawerCollapsed: (value: boolean) => void;
-  setPortsDrawerCollapsed: (value: boolean) => void;
-  setAutoUpdateEnabled: (value: boolean) => void;
-  setUpdateNotificationsEnabled: (value: boolean) => void;
 }
+
+type SettingsActions = Omit<ValueSetters, keyof UpdaterActions> & UpdaterActions;
 
 export type SettingsStore = SettingsState & SettingsActions;
 
@@ -51,50 +32,34 @@ runSettingsMigrations(storageBacking);
 
 export const useSettings = create<SettingsStore>()(
   persist(
-    (set) => ({
-      ...defaultSettings(),
-      setTheme: (theme) => set({ theme }),
-      setShowTaskTokens: (showTaskTokens) => set({ showTaskTokens }),
-      setShowRateLimits: (showRateLimits) => set({ showRateLimits }),
-      setShowUsageInline: (showUsageInline) => set({ showUsageInline }),
-      setShowContextUsageOnTaskCards: (showContextUsageOnTaskCards) =>
-        set({ showContextUsageOnTaskCards }),
-      setShowActiveTasksSection: (showActiveTasksSection) => set({ showActiveTasksSection }),
-      setShowProjectTokens: (showProjectTokens) => set({ showProjectTokens }),
-      setDesktopNotification: (desktopNotification) => set({ desktopNotification }),
-      setSyncShellEnv: (syncShellEnv) => set({ syncShellEnv }),
-      setNotificationSound: (notificationSound) => set({ notificationSound }),
-      setTerminalTheme: (terminalTheme) => set({ terminalTheme }),
-      setTerminalFontFamily: (terminalFontFamily) => set({ terminalFontFamily }),
-      setEffortLevel: (effortLevel) => set({ effortLevel }),
-      setShellDrawerPosition: (shellDrawerPosition) => set({ shellDrawerPosition }),
-      setCustomIDE: (customIDE) => set({ customIDE }),
-      setCustomClaudeEnvVars: (customClaudeEnvVars) => set({ customClaudeEnvVars }),
-      setUsageThresholds: (usageThresholds) => set({ usageThresholds }),
-      setRotationOrder: (rotationOrder) => set({ rotationOrder }),
-      setRotationExclusions: (value) =>
-        set((s) => ({
-          rotationExclusions: typeof value === 'function' ? value(s.rotationExclusions) : value,
-        })),
-      setUnseenTaskIds: (value) =>
-        set((s) => ({
-          unseenTaskIds: typeof value === 'function' ? value(s.unseenTaskIds) : value,
-        })),
-      setDiffContextLines: (diffContextLines) => set({ diffContextLines }),
-      setCommitAttribution: (commitAttribution) => set({ commitAttribution }),
-      setPreferredIDE: (value) =>
-        set((s) => ({
-          preferredIDE: typeof value === 'function' ? value(s.preferredIDE) : value,
-        })),
-      setKeybindings: (keybindings) => set({ keybindings }),
-      setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
-      setChangesPanelCollapsed: (changesPanelCollapsed) => set({ changesPanelCollapsed }),
-      setShellDrawerCollapsed: (shellDrawerCollapsed) => set({ shellDrawerCollapsed }),
-      setPortsDrawerCollapsed: (portsDrawerCollapsed) => set({ portsDrawerCollapsed }),
-      setAutoUpdateEnabled: (autoUpdateEnabled) => set({ autoUpdateEnabled }),
-      setUpdateNotificationsEnabled: (updateNotificationsEnabled) =>
-        set({ updateNotificationsEnabled }),
-    }),
+    (set) => {
+      // Value-setters are generated from the registry so a new setting gets its
+      // `set<Field>` action for free; the three updater-capable actions below
+      // override their generated value-only versions.
+      const valueSetters = Object.fromEntries(
+        SETTINGS_REGISTRY.map((e) => [
+          `set${e.field[0].toUpperCase()}${e.field.slice(1)}`,
+          (value: unknown) => set({ [e.field]: value } as Partial<SettingsState>),
+        ]),
+      ) as unknown as ValueSetters;
+
+      return {
+        ...defaultSettings(),
+        ...valueSetters,
+        setPreferredIDE: (value) =>
+          set((s) => ({
+            preferredIDE: typeof value === 'function' ? value(s.preferredIDE) : value,
+          })),
+        setRotationExclusions: (value) =>
+          set((s) => ({
+            rotationExclusions: typeof value === 'function' ? value(s.rotationExclusions) : value,
+          })),
+        setUnseenTaskIds: (value) =>
+          set((s) => ({
+            unseenTaskIds: typeof value === 'function' ? value(s.unseenTaskIds) : value,
+          })),
+      };
+    },
     {
       name: 'settings',
       storage: fanOutStorage(storageBacking),
