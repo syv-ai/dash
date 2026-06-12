@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { toast } from 'sonner';
 import type { Project, Task, BranchInfo } from '../../shared/types';
 
 export interface ProjectsState {
@@ -37,6 +38,9 @@ export interface ProjectsActions {
   setAvailableIDEs: (list: Array<{ id: string; label: string }>) => void;
   loadProjects: () => Promise<void>;
   loadTasks: (projectId: string) => Promise<void>;
+  reorderProjects: (reordered: Project[]) => void;
+  reorderTasks: (projectId: string, reordered: Task[]) => void;
+  commitTaskReorder: (projectId: string, reordered: Task[]) => Promise<void>;
 }
 
 /** Sort projects by the saved projectOrder, pruning stale ids from storage. */
@@ -112,6 +116,32 @@ export const useProjects = create<ProjectsStore>((set) => ({
     const resp = await window.electronAPI.getTasks(projectId);
     if (resp.success && resp.data) {
       set((s) => ({ tasksByProject: { ...s.tasksByProject, [projectId]: resp.data! } }));
+    }
+  },
+  reorderProjects: (reordered) => {
+    set({ projects: reordered });
+    ls()?.setItem('projectOrder', JSON.stringify(reordered.map((p) => p.id)));
+  },
+  reorderTasks: (projectId, reordered) =>
+    set((s) => {
+      const current = s.tasksByProject[projectId] || [];
+      const archived = current.filter((t) => t.archivedAt);
+      return { tasksByProject: { ...s.tasksByProject, [projectId]: [...reordered, ...archived] } };
+    }),
+  commitTaskReorder: async (projectId, reordered) => {
+    const resp = await window.electronAPI.reorderTasks(
+      projectId,
+      reordered.map((t) => t.id),
+    );
+    if (resp.success) return;
+    console.error('Failed to persist task reorder:', resp.error);
+    toast.error('Failed to save task order');
+    const refetch = await window.electronAPI.getTasks(projectId);
+    if (refetch.success && refetch.data) {
+      set((s) => ({ tasksByProject: { ...s.tasksByProject, [projectId]: refetch.data! } }));
+    } else {
+      toast.error('Could not recover task list — reloading');
+      await useProjects.getState().loadTasks(projectId);
     }
   },
 }));

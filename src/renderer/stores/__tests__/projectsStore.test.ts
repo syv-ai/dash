@@ -131,3 +131,39 @@ describe('projectsStore loadProjects / loadTasks', () => {
     expect(useProjects.getState().tasksByProject.p1.map((t) => t.id)).toEqual(['t1']);
   });
 });
+
+describe('projectsStore reordering', () => {
+  let api: ReturnType<typeof makeElectronApiMock>;
+  beforeEach(() => {
+    api = makeElectronApiMock();
+    installWindow(api);
+  });
+  afterEach(() => resetWindow());
+
+  it('reorderProjects sets projects and persists projectOrder', async () => {
+    const useProjects = await freshStore();
+    useProjects.getState().reorderProjects([proj('p2'), proj('p1')]);
+    expect(useProjects.getState().projects.map((p) => p.id)).toEqual(['p2', 'p1']);
+    expect(JSON.parse(window.localStorage.getItem('projectOrder')!)).toEqual(['p2', 'p1']);
+  });
+
+  it('reorderTasks keeps archived tasks appended after the new order', async () => {
+    const useProjects = await freshStore();
+    useProjects.setState({
+      tasksByProject: {
+        p1: [task('t1', 'p1'), task('t2', 'p1'), task('a1', 'p1', { archivedAt: 9 })],
+      },
+    });
+    useProjects.getState().reorderTasks('p1', [task('t2', 'p1'), task('t1', 'p1')]);
+    expect(useProjects.getState().tasksByProject.p1.map((t) => t.id)).toEqual(['t2', 't1', 'a1']);
+  });
+
+  it('commitTaskReorder refetches and toasts on failure', async () => {
+    const useProjects = await freshStore();
+    api.reorderTasks.mockResolvedValue({ success: false, error: 'boom' });
+    api.getTasks.mockResolvedValue({ success: true, data: [task('t1', 'p1')] });
+    await useProjects.getState().commitTaskReorder('p1', [task('t2', 'p1')]);
+    expect(api.getTasks).toHaveBeenCalledWith('p1');
+    expect(useProjects.getState().tasksByProject.p1.map((t) => t.id)).toEqual(['t1']);
+  });
+});
