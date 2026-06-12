@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { makeElectronApiMock, installWindow, resetWindow } from './helpers/electronApiMock';
 import type { Project, Task } from '../../../shared/types';
+import type { DeleteProjectOptions } from '../../components/DeleteProjectModal';
 
 vi.mock('../../terminal/SessionRegistry', () => ({
   sessionRegistry: {
@@ -210,5 +211,53 @@ describe('projectsStore archive/restore/close/update', () => {
     const result = await useProjects.getState().updateTask(task('t1', 'p1'), { name: 'renamed' });
     expect(result?.name).toBe('renamed');
     expect(api.saveTask).toHaveBeenCalled();
+  });
+});
+
+describe('projectsStore delete', () => {
+  let api: ReturnType<typeof makeElectronApiMock>;
+  beforeEach(() => {
+    api = makeElectronApiMock();
+    installWindow(api);
+  });
+  afterEach(() => resetWindow());
+
+  it('deleteTask removes worktree, kills pty, clears active, reloads', async () => {
+    const useProjects = await freshStore();
+    useProjects.setState({
+      projects: [proj('p1')],
+      tasksByProject: { p1: [task('t1', 'p1', { branchCreatedByDash: true })] },
+    });
+    useProjects.getState().setActiveTask('t1');
+    api.getTasks.mockResolvedValue({ success: true, data: [] });
+    await useProjects.getState().deleteTask(task('t1', 'p1', { branchCreatedByDash: true }), {
+      deleteWorktreeDir: true,
+      deleteLocalBranch: true,
+      deleteRemoteBranch: false,
+    });
+    expect(api.worktreeRemove).toHaveBeenCalled();
+    expect(api.deleteTask).toHaveBeenCalledWith('t1');
+    expect(api.ptyKill).toHaveBeenCalledWith('t1');
+    expect(useProjects.getState().activeTaskId).toBeNull();
+  });
+
+  it('deleteProject removes task worktrees, deletes project, clears active, reloads', async () => {
+    const useProjects = await freshStore();
+    useProjects.setState({
+      projects: [proj('p1')],
+      tasksByProject: { p1: [task('t1', 'p1', { branchCreatedByDash: true })] },
+      activeProjectId: 'p1',
+    });
+    api.getProjects.mockResolvedValue({ success: true, data: [] });
+    const opts: DeleteProjectOptions = {
+      deleteWorktreeDirs: true,
+      deleteLocalBranches: true,
+      deleteRemoteBranches: false,
+    };
+    await useProjects.getState().deleteProject(proj('p1'), opts);
+    expect(api.worktreeRemove).toHaveBeenCalled();
+    expect(api.deleteProject).toHaveBeenCalledWith('p1');
+    expect(useProjects.getState().activeProjectId).toBeNull();
+    expect(useProjects.getState().tasksByProject.p1).toBeUndefined();
   });
 });

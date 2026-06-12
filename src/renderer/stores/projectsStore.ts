@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { toast } from 'sonner';
 import { sessionRegistry } from '../terminal/SessionRegistry';
 import type { Project, Task, BranchInfo } from '../../shared/types';
+import type { DeleteProjectOptions } from '../components/DeleteProjectModal';
 
 export interface ProjectsState {
   projects: Project[];
@@ -46,6 +47,15 @@ export interface ProjectsActions {
   restoreTask: (id: string) => Promise<void>;
   closeTask: (id: string) => void;
   updateTask: (taskItem: Task, patch: Partial<Task>) => Promise<Task | null>;
+  deleteTask: (
+    taskItem: Task,
+    options?: {
+      deleteWorktreeDir: boolean;
+      deleteLocalBranch: boolean;
+      deleteRemoteBranch: boolean;
+    },
+  ) => Promise<void>;
+  deleteProject: (project: Project, options: DeleteProjectOptions) => Promise<void>;
 }
 
 /** Reload tasks for whichever project currently owns `taskId`. */
@@ -199,6 +209,65 @@ export const useProjects = create<ProjectsStore>((set) => ({
     }
     await useProjects.getState().loadTasks(taskItem.projectId);
     return resp.data;
+  },
+  deleteTask: async (taskItem, options) => {
+    if (taskItem.useWorktree) {
+      const project = useProjects.getState().projects.find((p) => p.id === taskItem.projectId);
+      if (project) {
+        await window.electronAPI.worktreeRemove({
+          projectPath: project.path,
+          worktreePath: taskItem.path,
+          branch: taskItem.branch,
+          options: options
+            ? {
+                deleteWorktreeDir: options.deleteWorktreeDir,
+                deleteLocalBranch: options.deleteLocalBranch && taskItem.branchCreatedByDash,
+                deleteRemoteBranch: options.deleteRemoteBranch && taskItem.branchCreatedByDash,
+              }
+            : undefined,
+        });
+      }
+    }
+    // Clean up all terminal sessions, then kill PTY + clear snapshot so a new
+    // task in the same cwd starts fresh.
+    disposeTaskSessions(taskItem.id);
+    window.electronAPI.ptyKill(taskItem.id);
+    window.electronAPI.ptyClearSnapshot(taskItem.id);
+    await window.electronAPI.deleteTask(taskItem.id);
+    if (useProjects.getState().activeTaskId === taskItem.id) {
+      useProjects.getState().setActiveTask(null);
+    }
+    await useProjects.getState().loadTasks(taskItem.projectId);
+  },
+  deleteProject: async (project, options) => {
+    const projectTasks = useProjects.getState().tasksByProject[project.id] ?? [];
+    for (const t of projectTasks) {
+      if (t.useWorktree) {
+        await window.electronAPI.worktreeRemove({
+          projectPath: project.path,
+          worktreePath: t.path,
+          branch: t.branch,
+          options: {
+            deleteWorktreeDir: options.deleteWorktreeDirs,
+            deleteLocalBranch: options.deleteLocalBranches && t.branchCreatedByDash,
+            deleteRemoteBranch: options.deleteRemoteBranches && t.branchCreatedByDash,
+          },
+        });
+      }
+      sessionRegistry.dispose(`shell:${t.id}`);
+      sessionRegistry.disposeByPrefix(`shell:${t.id}:`);
+    }
+    await window.electronAPI.deleteProject(project.id);
+    if (useProjects.getState().activeProjectId === project.id) {
+      useProjects.getState().setActiveProject(null);
+      useProjects.getState().setActiveTask(null);
+    }
+    set((s) => {
+      const next = { ...s.tasksByProject };
+      delete next[project.id];
+      return { tasksByProject: next };
+    });
+    await useProjects.getState().loadProjects();
   },
 }));
 
