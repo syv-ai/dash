@@ -206,12 +206,6 @@ interface SettingsModalProps {
   onCustomIDEChange: (value: { path: string; args: string[] }) => void;
   commitAttribution: string | undefined;
   onCommitAttributionChange: (value: string | undefined) => void;
-  effortLevel: string;
-  onEffortLevelChange: (value: string) => void;
-  syncShellEnv: boolean;
-  onSyncShellEnvChange: (value: boolean) => void;
-  customClaudeEnvVars: Record<string, string>;
-  onCustomClaudeEnvVarsChange: (value: Record<string, string>) => void;
   activeProjectPath?: string;
   keybindings: KeyBindingMap;
   onKeybindingsChange: (bindings: KeyBindingMap) => void;
@@ -624,22 +618,16 @@ function ThresholdInputInline({
 }
 
 function ClaudeCodeTab({
-  effortLevel,
-  onEffortLevelChange,
-  syncShellEnv,
-  onSyncShellEnvChange,
-  customEnvVars,
-  onCustomEnvVarsChange,
   claudeInfo,
 }: {
-  effortLevel: string;
-  onEffortLevelChange: (v: string) => void;
-  syncShellEnv: boolean;
-  onSyncShellEnvChange: (v: boolean) => void;
-  customEnvVars: Record<string, string>;
-  onCustomEnvVarsChange: (v: Record<string, string>) => void;
   claudeInfo: { installed: boolean; version: string | null; path: string | null } | null;
 }) {
+  const effortLevel = useSettings((s) => s.effortLevel);
+  const onEffortLevelChange = useSettings((s) => s.setEffortLevel);
+  const syncShellEnv = useSettings((s) => s.syncShellEnv);
+  const onSyncShellEnvChange = useSettings((s) => s.setSyncShellEnv);
+  const customEnvVars = useSettings((s) => s.customClaudeEnvVars);
+  const onCustomEnvVarsChange = useSettings((s) => s.setCustomClaudeEnvVars);
   const [newKey, setNewKey] = useState('');
   const [newValue, setNewValue] = useState('');
 
@@ -833,12 +821,6 @@ export function SettingsModal({
   onCustomIDEChange,
   commitAttribution,
   onCommitAttributionChange,
-  effortLevel,
-  onEffortLevelChange,
-  syncShellEnv,
-  onSyncShellEnvChange,
-  customClaudeEnvVars,
-  onCustomClaudeEnvVarsChange,
   activeProjectPath,
   keybindings,
   onKeybindingsChange,
@@ -1603,17 +1585,7 @@ export function SettingsModal({
                 </SettingsPane>
               )}
 
-              {tab === 'claude-code' && (
-                <ClaudeCodeTab
-                  effortLevel={effortLevel}
-                  onEffortLevelChange={onEffortLevelChange}
-                  syncShellEnv={syncShellEnv}
-                  onSyncShellEnvChange={onSyncShellEnvChange}
-                  customEnvVars={customClaudeEnvVars}
-                  onCustomEnvVarsChange={onCustomClaudeEnvVarsChange}
-                  claudeInfo={claudeInfo}
-                />
-              )}
+              {tab === 'claude-code' && <ClaudeCodeTab claudeInfo={claudeInfo} />}
 
               {tab === 'add-ons' && (
                 <SettingsPane key={`pane-${tab}`}>

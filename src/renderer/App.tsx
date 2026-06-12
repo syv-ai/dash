@@ -201,11 +201,8 @@ export function App() {
   const commitAttribution = useSettings((s) => s.commitAttribution);
   const setCommitAttribution = useSettings((s) => s.setCommitAttribution);
   const effortLevel = useSettings((s) => s.effortLevel);
-  const setEffortLevel = useSettings((s) => s.setEffortLevel);
   const syncShellEnv = useSettings((s) => s.syncShellEnv);
-  const setSyncShellEnv = useSettings((s) => s.setSyncShellEnv);
   const customClaudeEnvVars = useSettings((s) => s.customClaudeEnvVars);
-  const setCustomClaudeEnvVars = useSettings((s) => s.setCustomClaudeEnvVars);
   // RTK state
   const [rtkStatus, setRtkStatus] = useState<RtkStatus | null>(null);
   const [rtkDownloadProgress, setRtkDownloadProgress] = useState<RtkDownloadProgress | null>(null);
@@ -2202,18 +2199,6 @@ export function App() {
           commitAttribution={commitAttribution}
           onCommitAttributionChange={(v) => {
             setCommitAttribution(v);
-          }}
-          effortLevel={effortLevel}
-          onEffortLevelChange={(v) => {
-            setEffortLevel(v);
-          }}
-          syncShellEnv={syncShellEnv}
-          onSyncShellEnvChange={(v) => {
-            setSyncShellEnv(v);
-          }}
-          customClaudeEnvVars={customClaudeEnvVars}
-          onCustomClaudeEnvVarsChange={(v) => {
-            setCustomClaudeEnvVars(v);
           }}
           keybindings={keybindings}
           onKeybindingsChange={(b) => {
