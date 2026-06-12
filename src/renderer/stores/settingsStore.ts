@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { type SettingsState, defaultSettings } from './settingsKeys';
 import { fanOutStorage, createMemoryStorage, type StorageLike } from './fanOutStorage';
+import { runSettingsMigrations } from './settingsMigrations';
 
 interface SettingsActions {
   setTheme: (theme: SettingsState['theme']) => void;
@@ -26,6 +27,7 @@ interface SettingsActions {
   setUnseenTaskIds: (value: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
   setDiffContextLines: (value: SettingsState['diffContextLines']) => void;
   setCommitAttribution: (value: SettingsState['commitAttribution']) => void;
+  setPreferredIDE: (value: string | ((prev: string) => string)) => void;
 }
 
 export type SettingsStore = SettingsState & SettingsActions;
@@ -36,6 +38,9 @@ function backing(): StorageLike {
     ? window.localStorage
     : createMemoryStorage();
 }
+
+const storageBacking = backing();
+runSettingsMigrations(storageBacking);
 
 export const useSettings = create<SettingsStore>()(
   persist(
@@ -70,10 +75,14 @@ export const useSettings = create<SettingsStore>()(
         })),
       setDiffContextLines: (diffContextLines) => set({ diffContextLines }),
       setCommitAttribution: (commitAttribution) => set({ commitAttribution }),
+      setPreferredIDE: (value) =>
+        set((s) => ({
+          preferredIDE: typeof value === 'function' ? value(s.preferredIDE) : value,
+        })),
     }),
     {
       name: 'settings',
-      storage: fanOutStorage(backing()),
+      storage: fanOutStorage(storageBacking),
     },
   ),
 );
