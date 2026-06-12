@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense, lazy } from 'react';
+import React, { useEffect, useCallback, useRef, useMemo, Suspense, lazy } from 'react';
 import {
   PanelGroup,
   Panel,
@@ -29,22 +29,16 @@ import { toast } from 'sonner';
 import { getBillionToastContent } from './utils/billionToast';
 import { useStatusLine } from './hooks/useStatusLine';
 import { useThresholdAlerts } from './hooks/useThresholdAlerts';
-import type {
-  Task,
-  RemoteControlState,
-  ActivityInfo,
-  RtkStatus,
-  RtkDownloadProgress,
-} from '../shared/types';
+import type { Task } from '../shared/types';
 import type { CreateTaskOptions } from './components/TaskModal';
 import { matchesBinding } from './keybindings';
 import { sessionRegistry } from './terminal/SessionRegistry';
 import { resolveTheme } from './terminal/terminalThemes';
 import { resolveTerminalFontValue } from './terminal/terminalFonts';
-import { playNotificationSound, playPeonSound } from './sounds';
 import { useSettings } from './stores/settingsStore';
 import { useUi } from './stores/uiStore';
 import { useGit } from './stores/gitStore';
+import { useRuntime } from './stores/runtimeStore';
 import { useShallow } from 'zustand/react/shallow';
 import {
   useProjects,
@@ -106,7 +100,6 @@ export function App() {
   const setSettingsInitialTab = useUi((s) => s.setSettingsInitialTab);
   const theme = useSettings((s) => s.theme);
   const keybindings = useSettings((s) => s.keybindings);
-  const notificationSound = useSettings((s) => s.notificationSound);
   const desktopNotification = useSettings((s) => s.desktopNotification);
   const autoUpdateEnabled = useSettings((s) => s.autoUpdateEnabled);
   const setAutoUpdateEnabled = useSettings((s) => s.setAutoUpdateEnabled);
@@ -192,46 +185,11 @@ export function App() {
   const effortLevel = useSettings((s) => s.effortLevel);
   const syncShellEnv = useSettings((s) => s.syncShellEnv);
   const customClaudeEnvVars = useSettings((s) => s.customClaudeEnvVars);
-  // RTK state
-  const [rtkStatus, setRtkStatus] = useState<RtkStatus | null>(null);
-  const [rtkDownloadProgress, setRtkDownloadProgress] = useState<RtkDownloadProgress | null>(null);
-
-  useEffect(() => {
-    // Retry once on transient failure — without it, a single flake at startup
-    // leaves rtkStatus null forever and the Settings card stays stuck on
-    // "loading…".
-    let cancelled = false;
-    const tryFetch = (attempt: number): void => {
-      window.electronAPI.rtkGetStatus().then((resp) => {
-        if (cancelled) return;
-        if (resp.success && resp.data) {
-          setRtkStatus(resp.data);
-        } else if (attempt < 1) {
-          console.warn('[rtk:getStatus] retrying after transient failure:', resp.error);
-          setTimeout(() => tryFetch(attempt + 1), 500);
-        } else {
-          console.error('[rtk:getStatus] gave up after retry:', resp.error);
-          // Sentinel so the Settings card stops spinning. `enabled` is
-          // unrepresentable on the not-installed arm by design.
-          setRtkStatus({ installed: false, downloadable: false });
-        }
-      });
-    };
-    tryFetch(0);
-    const cleanup = window.electronAPI.onRtkDownloadProgress((progress) => {
-      setRtkDownloadProgress(progress);
-      if (progress.phase === 'done') {
-        window.electronAPI.rtkGetStatus().then((resp) => {
-          if (resp.success && resp.data) setRtkStatus(resp.data);
-          else console.error('[rtk:getStatus after download]', resp.error);
-        });
-      }
-    });
-    return () => {
-      cancelled = true;
-      cleanup();
-    };
-  }, []);
+  // RTK state (runtimeStore; status/progress fetched + subscribed in its init()).
+  const rtkStatus = useRuntime((s) => s.rtkStatus);
+  const rtkDownloadProgress = useRuntime((s) => s.rtkDownloadProgress);
+  const enableRtk = useRuntime((s) => s.enableRtk);
+  const downloadRtk = useRuntime((s) => s.downloadRtk);
 
   // Sync desktop notification settings to main process
   useEffect(() => {
@@ -278,13 +236,9 @@ export function App() {
     window.electronAPI.setClaudeEnvVars?.(vars);
   }, [effortLevel, customClaudeEnvVars]);
 
-  // Activity state — keys are PTY IDs that have active sessions
-  const [taskActivity, setTaskActivity] = useState<Record<string, ActivityInfo>>({});
-
-  // Remote control state
-  const [remoteControlStates, setRemoteControlStates] = useState<
-    Record<string, RemoteControlState>
-  >({});
+  // Activity + remote-control state (runtimeStore; both fed by its init() subscriptions).
+  const taskActivity = useRuntime((s) => s.taskActivity);
+  const remoteControlStates = useRuntime((s) => s.remoteControlStates);
   const remoteControlModalPtyId = useUi((s) => s.remoteControlModalPtyId);
   const setRemoteControlModalPtyId = useUi((s) => s.setRemoteControlModalPtyId);
 
@@ -294,18 +248,8 @@ export function App() {
   // Usage thresholds for popup notifications
   const usageThresholds = useSettings((s) => s.usageThresholds);
 
-  const notificationSoundRef = useRef(notificationSound);
-  useEffect(() => {
-    notificationSoundRef.current = notificationSound;
-  }, [notificationSound]);
-
   const unseenTaskIds = useSettings((s) => s.unseenTaskIds);
   const setUnseenTaskIds = useSettings((s) => s.setUnseenTaskIds);
-
-  const activeTaskIdRef = useRef(activeTaskId);
-  useEffect(() => {
-    activeTaskIdRef.current = activeTaskId;
-  }, [activeTaskId]);
 
   // Clear unseen when a task becomes active
   useEffect(() => {
@@ -327,52 +271,14 @@ export function App() {
   const showActiveTasksSection = useSettings((s) => s.showActiveTasksSection);
   const setShowActiveTasksSection = useSettings((s) => s.setShowActiveTasksSection);
 
-  // Token-stats rollups (per-project + global). Live-updated via tokenStats:updated event.
-  const [projectTokenStats, setProjectTokenStats] = useState<
-    Record<string, { totalTokens: number; totalCostUsd: number; taskCount: number }>
-  >({});
-  const [globalTokenStats, setGlobalTokenStats] = useState<{
-    totalTokens: number;
-    totalCostUsd: number;
-    taskCount: number;
-  }>({ totalTokens: 0, totalCostUsd: 0, taskCount: 0 });
+  // Token-stats rollups (runtimeStore; live-updated via its init() tokenStats subscription).
+  const projectTokenStats = useRuntime((s) => s.projectTokenStats);
+  const globalTokenStats = useRuntime((s) => s.globalTokenStats);
 
-  const refreshTokenRollups = useCallback(async () => {
-    const global = await window.electronAPI.getGlobalTokenStats();
-    if (global.success && global.data) setGlobalTokenStats(global.data);
-    const entries = await Promise.all(
-      projects.map(async (p) => {
-        const r = await window.electronAPI.getProjectTokenStats(p.id);
-        return [
-          p.id,
-          r.success && r.data ? r.data : { totalTokens: 0, totalCostUsd: 0, taskCount: 0 },
-        ] as const;
-      }),
-    );
-    setProjectTokenStats(Object.fromEntries(entries));
+  // Re-fetch rollups whenever the project list changes (initial load + add/remove).
+  useEffect(() => {
+    useRuntime.getState().refreshTokenRollups();
   }, [projects]);
-
-  useEffect(() => {
-    refreshTokenRollups();
-  }, [refreshTokenRollups]);
-
-  useEffect(() => {
-    const unsubscribe = window.electronAPI.onTokenStatsUpdated((update) => {
-      useProjects.setState((s) => {
-        const next: Record<string, Task[]> = {};
-        for (const [projectId, list] of Object.entries(s.tasksByProject)) {
-          next[projectId] = list.map((t) =>
-            t.id === update.taskId
-              ? { ...t, totalTokens: update.totalTokens, totalCostUsd: update.totalCostUsd }
-              : t,
-          );
-        }
-        return { tasksByProject: next };
-      });
-      refreshTokenRollups();
-    });
-    return unsubscribe;
-  }, [refreshTokenRollups]);
 
   // Celebrate each billion-token milestone. The threshold filters out the
   // initial DB load (0 → multi-billion in one step) and one-shot backfill jumps
@@ -610,107 +516,11 @@ export function App() {
     });
   }, []);
 
-  // Activity monitor — subscribe first, then query to avoid race
-  useEffect(() => {
-    const prevState: Record<string, string> = {};
-    // Track PTYs that have been idle at least once, so we skip the initial
-    // busy→idle transition that fires when a direct-spawn PTY first registers.
-    const hasBeenIdle = new Set<string>();
-    // Track when each PTY entered busy state, so we can ignore brief flashes
-    // (e.g. startup child processes) that shouldn't trigger "done" notifications.
-    const busySince: Record<string, number> = {};
-    const MIN_BUSY_DURATION_MS = 3000;
-
-    const unsubscribe = window.electronAPI.onPtyActivity((newActivity) => {
-      // Peon mode: detect idle→busy transitions (user submits query)
-      if (notificationSoundRef.current === 'peon') {
-        for (const [id, info] of Object.entries(newActivity)) {
-          if (prevState[id] === 'idle' && info.state === 'busy' && hasBeenIdle.has(id)) {
-            playPeonSound('yes');
-            break;
-          }
-        }
-      }
-      // Detect any busy→idle transition (only for PTYs that completed a full work cycle)
-      // Skip transitions from 'waiting' — those are not task completions
-      // Skip brief busy flashes (< 3s) — these are startup artifacts, not real work
-      const newlyDoneIds: string[] = [];
-      for (const [id, info] of Object.entries(newActivity)) {
-        if (prevState[id] === 'busy' && info.state === 'idle' && hasBeenIdle.has(id)) {
-          const elapsed = Date.now() - (busySince[id] ?? Date.now());
-          if (elapsed >= MIN_BUSY_DURATION_MS) {
-            newlyDoneIds.push(id);
-          }
-        }
-      }
-
-      // Track busy start times (after detection, so busySince is still available above)
-      for (const [id, info] of Object.entries(newActivity)) {
-        if (info.state === 'busy' && prevState[id] !== 'busy') {
-          busySince[id] = Date.now();
-        } else if (info.state !== 'busy') {
-          delete busySince[id];
-        }
-      }
-      if (newlyDoneIds.length > 0) {
-        playNotificationSound(notificationSoundRef.current);
-        const currentActiveId = activeTaskIdRef.current;
-        const toMarkUnseen = newlyDoneIds.filter((id) => id !== currentActiveId);
-        if (toMarkUnseen.length > 0) {
-          setUnseenTaskIds((prev) => new Set([...prev, ...toMarkUnseen]));
-        }
-      }
-      // Mark PTYs that have reached idle (so the *next* busy→idle triggers)
-      for (const [id, info] of Object.entries(newActivity)) {
-        if (info.state === 'idle') hasBeenIdle.add(id);
-      }
-      // Clean up removed PTYs
-      for (const id of hasBeenIdle) {
-        if (!(id in newActivity)) hasBeenIdle.delete(id);
-      }
-      // Update previous state (shallow copy of states only)
-      for (const k of Object.keys(prevState)) delete prevState[k];
-      for (const [id, info] of Object.entries(newActivity)) {
-        prevState[id] = info.state;
-      }
-
-      setTaskActivity(newActivity);
-    });
-
-    window.electronAPI.ptyGetAllActivity().then((resp) => {
-      if (resp.success && resp.data) {
-        for (const [id, info] of Object.entries(resp.data)) {
-          prevState[id] = info.state;
-          if (info.state === 'idle') hasBeenIdle.add(id);
-        }
-        setTaskActivity(resp.data);
-      }
-    });
-
-    return unsubscribe;
-  }, []);
-
-  // Remote control — subscribe to state changes
-  useEffect(() => {
-    const unsubscribe = window.electronAPI.onRemoteControlStateChanged(({ ptyId, state }) => {
-      setRemoteControlStates((prev) => {
-        if (!state) {
-          const next = { ...prev };
-          delete next[ptyId];
-          return next;
-        }
-        return { ...prev, [ptyId]: state };
-      });
-    });
-
-    window.electronAPI.ptyRemoteControlGetAllStates().then((resp) => {
-      if (resp.success && resp.data) {
-        setRemoteControlStates(resp.data);
-      }
-    });
-
-    return unsubscribe;
-  }, []);
+  // Runtime subscriptions (activity monitor, remote control, token-stats writeback,
+  // RTK status/progress) all live in runtimeStore.init(); wire them once on mount.
+  // (Precursor to useAppBootstrap — the final thin-out phase will fold every store's
+  // init() into one hook.)
+  useEffect(() => useRuntime.getState().init(), []);
 
   // Task name lookup (used for threshold alerts and settings)
   const taskNames = useMemo(() => {
@@ -1529,39 +1339,8 @@ export function App() {
           activeProjectPath={activeProject?.path}
           availableIDEs={availableIDEs}
           rtkStatus={rtkStatus}
-          onRtkEnabledChange={(enabled) => {
-            // Optimistic update only applies to the installed arm — the type
-            // forbids `enabled` on { installed: false }.
-            setRtkStatus((prev) => (prev?.installed ? { ...prev, enabled } : prev));
-            window.electronAPI.rtkSetEnabled(enabled).then((resp) => {
-              if (!resp.success) {
-                toast.error(resp.error ?? 'Failed to toggle RTK');
-                window.electronAPI.rtkGetStatus().then((s) => {
-                  if (s.success && s.data) setRtkStatus(s.data);
-                  else console.error('[rtk:getStatus after setEnabled failure]', s.error);
-                });
-                return;
-              }
-              if (resp.data?.warning) {
-                toast.warning(resp.data.warning);
-              }
-            });
-          }}
-          onRtkDownload={() => {
-            setRtkDownloadProgress({ phase: 'downloading', percent: 0 });
-            window.electronAPI.rtkDownload().then((resp) => {
-              if (!resp.success) {
-                setRtkDownloadProgress({
-                  phase: 'error',
-                  error: resp.error ?? 'download failed',
-                });
-                return;
-              }
-              if (resp.data?.warning) {
-                toast.warning(resp.data.warning);
-              }
-            });
-          }}
+          onRtkEnabledChange={enableRtk}
+          onRtkDownload={downloadRtk}
           rtkDownloadProgress={rtkDownloadProgress}
           latestRateLimits={latestRateLimits}
           onClose={() => setShowSettings(false)}
