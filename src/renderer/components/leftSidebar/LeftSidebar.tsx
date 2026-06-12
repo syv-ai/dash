@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { Plus, Settings, Blocks } from 'lucide-react';
-import type { Project, Task, RemoteControlState, ContextUsage } from '../../../shared/types';
+import type { Project, Task, ContextUsage } from '../../../shared/types';
 import { Tooltip } from '../ui/Tooltip';
 import { RotationSection } from './RotationSection';
 import { ProjectsSection } from './ProjectsSection';
@@ -29,7 +29,6 @@ interface LeftSidebarProps {
   collapsed: boolean;
   onToggleCollapse: () => void;
   unseenTaskIds?: Set<string>;
-  remoteControlStates?: Record<string, RemoteControlState>;
   contextUsage?: Record<string, ContextUsage>;
   onReorderProjects?: (reordered: Project[]) => void;
   onReorderTasks?: (projectId: string, reordered: Task[]) => void;
@@ -61,7 +60,6 @@ export function LeftSidebar({
   onShowCommitGraph,
   collapsed,
   unseenTaskIds,
-  remoteControlStates = {},
   contextUsage = {},
   onReorderProjects,
   onReorderTasks,
@@ -275,7 +273,6 @@ export function LeftSidebar({
         tasksByProject={tasksByProject}
         activeTaskId={activeTaskId}
         unseenTaskIds={unseenTaskIds}
-        remoteControlStates={remoteControlStates}
         contextUsage={contextUsage}
         onSelectProject={onSelectProject}
         onOpenFolder={onOpenFolder}

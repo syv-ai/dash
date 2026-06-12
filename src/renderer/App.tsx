@@ -1011,7 +1011,6 @@ export function App() {
             collapsed={sidebarCollapsed}
             onToggleCollapse={toggleSidebar}
             unseenTaskIds={unseenTaskIds}
-            remoteControlStates={remoteControlStates}
             contextUsage={showContextUsageOnTaskCards ? contextUsage : EMPTY_CONTEXT_USAGE}
             onReorderProjects={handleReorderProjects}
             onReorderTasks={handleReorderTasks}
@@ -1056,7 +1055,6 @@ export function App() {
               activeTask={activeTask}
               activeProject={activeProject}
               tasks={activeProjectTasks}
-              remoteControlState={activeTask ? (remoteControlStates[activeTask.id] ?? null) : null}
               isMac={window.electronAPI.getPlatform() === 'darwin'}
               terminalBg={terminalBg}
               sidebarCollapsed={sidebarCollapsed}

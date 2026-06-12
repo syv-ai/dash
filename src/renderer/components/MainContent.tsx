@@ -3,6 +3,7 @@ import { TerminalPane } from './TerminalPane';
 import { ProjectOverview } from './ProjectOverview';
 import { useSettings } from '../stores/settingsStore';
 import { useGit } from '../stores/gitStore';
+import { useRuntime } from '../stores/runtimeStore';
 import {
   FolderOpen,
   Code2,
@@ -16,13 +17,7 @@ import {
   PanelRightClose,
   PanelRightOpen,
 } from 'lucide-react';
-import type {
-  Project,
-  Task,
-  RemoteControlState,
-  ActivityInfo,
-  LinkedItem,
-} from '../../shared/types';
+import type { Project, Task, LinkedItem } from '../../shared/types';
 import { branchUrl, linkedItemUrl } from '../../shared/urls';
 import { Tooltip } from './ui/Tooltip';
 import { TokenBadge } from './TokenBadge';
@@ -92,7 +87,6 @@ interface MainContentProps {
   activeTask: Task | null;
   activeProject: Project | null;
   tasks?: Task[];
-  remoteControlState?: RemoteControlState | null;
   isMac?: boolean;
   terminalBg?: string;
   sidebarCollapsed?: boolean;
@@ -116,7 +110,6 @@ export function MainContent({
   activeTask,
   activeProject,
   tasks = [],
-  remoteControlState = null,
   isMac = false,
   terminalBg,
   sidebarCollapsed = false,
@@ -138,6 +131,8 @@ export function MainContent({
   const showTaskTokens = useSettings((s) => s.showTaskTokens);
   const gitStatus = useGit((s) => s.gitStatus);
   const prInfo = useGit((s) => s.prInfo);
+  const remoteControlStates = useRuntime((s) => s.remoteControlStates);
+  const remoteControlState = activeTask ? (remoteControlStates[activeTask.id] ?? null) : null;
   if (!activeProject) {
     return (
       <div className="h-full flex flex-col bg-background">
