@@ -6,6 +6,7 @@ import {
   boolNotFalse,
   strEnum,
   json,
+  stringSet,
 } from './settingsCodecs';
 import type { NotificationSound } from '../sounds';
 import type { UsageThresholds } from '@shared/types';
@@ -30,6 +31,8 @@ export interface SettingsState {
   customClaudeEnvVars: Record<string, string>;
   usageThresholds: UsageThresholds;
   rotationOrder: string[];
+  rotationExclusions: Set<string>;
+  unseenTaskIds: Set<string>;
 }
 
 /** One entry per managed setting: the store field, its existing localStorage
@@ -85,6 +88,8 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
     }),
   ),
   entry('rotationOrder', 'rotationOrder', json<string[]>([])),
+  entry('rotationExclusions', 'rotationExclusions', stringSet()),
+  entry('unseenTaskIds', 'unseenTaskIds', stringSet()),
 ];
 
 /** Initial state = every field decoded from an absent key (its default). */

@@ -55,4 +55,13 @@ describe('settings registry', () => {
     // validator rejects wrong shape
     expect(byField.customIDE.codec.decode('{"path":123}')).toEqual({ path: '', args: [] });
   });
+
+  it('registers the phase-1e set settings', () => {
+    const byField = Object.fromEntries(SETTINGS_REGISTRY.map((r) => [r.field, r]));
+    expect([...(byField.rotationExclusions.codec.decode(null) as Set<string>)]).toEqual([]);
+    expect([...(byField.unseenTaskIds.codec.decode('["t1","t2"]') as Set<string>)]).toEqual([
+      't1',
+      't2',
+    ]);
+  });
 });
