@@ -7,6 +7,8 @@ import {
   strEnum,
   json,
   stringSet,
+  nullableInt,
+  strOrUndefined,
 } from '../settingsCodecs';
 
 describe('str codec', () => {
@@ -77,4 +79,22 @@ describe('stringSet codec', () => {
   it('drops non-string members', () => expect([...c.decode('["a",1,null]')]).toEqual(['a']));
   it('encodes a Set as a JSON array', () =>
     expect(c.encode(new Set(['a', 'b']))).toBe('["a","b"]'));
+});
+
+describe('nullableInt codec', () => {
+  const c = nullableInt(3);
+  it('absent decodes to null', () => expect(c.decode(null)).toBeNull());
+  it("'null' sentinel decodes to null", () => expect(c.decode('null')).toBeNull());
+  it('numeric string decodes to a number', () => expect(c.decode('5')).toBe(5));
+  it('invalid decodes to the fallback', () => expect(c.decode('abc')).toBe(3));
+  it('encodes a number', () => expect(c.encode(5)).toBe('5'));
+  it('encodes null as the sentinel', () => expect(c.encode(null)).toBe('null'));
+});
+
+describe('strOrUndefined codec', () => {
+  const c = strOrUndefined();
+  it('absent decodes to undefined', () => expect(c.decode(null)).toBeUndefined());
+  it('empty string is preserved', () => expect(c.decode('')).toBe(''));
+  it('custom string is preserved', () => expect(c.decode('x')).toBe('x'));
+  it('encodes a string as itself', () => expect(c.encode('x')).toBe('x'));
 });

@@ -36,6 +36,27 @@ export function strEnum<T extends string>(allowed: readonly T[], def: T): Codec<
   };
 }
 
+/** number | null, where `null` (and the legacy `'null'` string) means "unset";
+ *  a non-numeric stored value falls back to `fallback`. */
+export function nullableInt(fallback: number): Codec<number | null> {
+  return {
+    decode: (raw) => {
+      if (raw === null || raw === 'null') return null;
+      return parseInt(raw, 10) || fallback;
+    },
+    encode: (v) => String(v),
+  };
+}
+
+/** string | undefined, where an absent key decodes to undefined (the "default").
+ *  Empty string and other values are preserved verbatim. */
+export function strOrUndefined(): Codec<string | undefined> {
+  return {
+    decode: (raw) => (raw === null ? undefined : raw),
+    encode: (v) => v ?? '',
+  };
+}
+
 /** Set<string> stored as a JSON string array. Parse failure → empty Set. */
 export function stringSet(): Codec<Set<string>> {
   return {
