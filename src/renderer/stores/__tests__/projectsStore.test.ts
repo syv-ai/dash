@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { makeElectronApiMock, installWindow, resetWindow } from './helpers/electronApiMock';
 import type { Project, Task } from '../../../shared/types';
 import type { DeleteProjectOptions } from '../../components/DeleteProjectModal';
+import type { CreateTaskOptions } from '../../components/TaskModal';
 
 vi.mock('../../terminal/SessionRegistry', () => ({
   sessionRegistry: {
@@ -75,7 +76,7 @@ describe('projectsStore state + selectors', () => {
     useProjects.setState({
       projects: [proj('p1'), proj('p2')],
       tasksByProject: {
-        p1: [task('t1', 'p1'), task('t2', 'p1', { archivedAt: 123 })],
+        p1: [task('t1', 'p1'), task('t2', 'p1', { archivedAt: '123' })],
         p2: [task('t3', 'p2')],
       },
       activeProjectId: 'p1',
@@ -152,7 +153,7 @@ describe('projectsStore reordering', () => {
     const useProjects = await freshStore();
     useProjects.setState({
       tasksByProject: {
-        p1: [task('t1', 'p1'), task('t2', 'p1'), task('a1', 'p1', { archivedAt: 9 })],
+        p1: [task('t1', 'p1'), task('t2', 'p1'), task('a1', 'p1', { archivedAt: '9' })],
       },
     });
     useProjects.getState().reorderTasks('p1', [task('t2', 'p1'), task('t1', 'p1')]);
@@ -180,15 +181,18 @@ describe('projectsStore archive/restore/close/update', () => {
   it('archiveTask calls IPC and reloads the owning project', async () => {
     const useProjects = await freshStore();
     useProjects.setState({ tasksByProject: { p1: [task('t1', 'p1')] } });
-    api.getTasks.mockResolvedValue({ success: true, data: [task('t1', 'p1', { archivedAt: 5 })] });
+    api.getTasks.mockResolvedValue({
+      success: true,
+      data: [task('t1', 'p1', { archivedAt: '5' })],
+    });
     await useProjects.getState().archiveTask('t1');
     expect(api.archiveTask).toHaveBeenCalledWith('t1');
-    expect(useProjects.getState().tasksByProject.p1[0].archivedAt).toBe(5);
+    expect(useProjects.getState().tasksByProject.p1[0].archivedAt).toBe('5');
   });
 
   it('restoreTask calls IPC and reloads the owning project', async () => {
     const useProjects = await freshStore();
-    useProjects.setState({ tasksByProject: { p1: [task('t1', 'p1', { archivedAt: 5 })] } });
+    useProjects.setState({ tasksByProject: { p1: [task('t1', 'p1', { archivedAt: '5' })] } });
     api.getTasks.mockResolvedValue({ success: true, data: [task('t1', 'p1')] });
     await useProjects.getState().restoreTask('t1');
     expect(api.restoreTask).toHaveBeenCalledWith('t1');
@@ -259,5 +263,62 @@ describe('projectsStore delete', () => {
     expect(api.deleteProject).toHaveBeenCalledWith('p1');
     expect(useProjects.getState().activeProjectId).toBeNull();
     expect(useProjects.getState().tasksByProject.p1).toBeUndefined();
+  });
+});
+
+describe('projectsStore createTask', () => {
+  let api: ReturnType<typeof makeElectronApiMock>;
+  beforeEach(() => {
+    api = makeElectronApiMock();
+    installWindow(api);
+  });
+  afterEach(() => resetWindow());
+
+  it('worktree-new-branch path: claims reserve, saves task, selects it', async () => {
+    const useProjects = await freshStore();
+    useProjects.setState({ projects: [proj('p1')], activeProjectId: 'p1' });
+    api.worktreeClaimReserve.mockResolvedValue({
+      success: true,
+      data: { branch: 'feat/x', path: '/w/x' },
+    });
+    api.saveTask.mockResolvedValue({ success: true, data: task('t9', 'p1') });
+    api.getTasks.mockResolvedValue({ success: true, data: [task('t9', 'p1')] });
+    const ok = await useProjects.getState().createTask({
+      kind: 'worktree-new-branch',
+      name: 'x',
+      baseRef: 'main',
+      pushRemote: false,
+      permissionMode: 'default',
+    } as CreateTaskOptions);
+    expect(ok).toBe(true);
+    expect(api.saveTask).toHaveBeenCalled();
+    expect(useProjects.getState().activeTaskId).toBe('t9');
+    expect(useProjects.getState().isCreatingTask).toBe(false);
+  });
+
+  it('returns false and toasts when worktree creation fails', async () => {
+    const useProjects = await freshStore();
+    useProjects.setState({ projects: [proj('p1')], activeProjectId: 'p1' });
+    api.worktreeClaimReserve.mockResolvedValue({ success: false });
+    api.worktreeCreate.mockResolvedValue({ success: false, error: 'nope' });
+    const ok = await useProjects.getState().createTask({
+      kind: 'worktree-new-branch',
+      name: 'x',
+      baseRef: 'main',
+      pushRemote: false,
+      permissionMode: 'default',
+    } as CreateTaskOptions);
+    expect(ok).toBe(false);
+    expect(useProjects.getState().isCreatingTask).toBe(false);
+  });
+
+  it('returns false when there is no target project', async () => {
+    const useProjects = await freshStore();
+    const ok = await useProjects.getState().createTask({
+      kind: 'in-place-no-git',
+      name: 'x',
+      permissionMode: 'default',
+    } as CreateTaskOptions);
+    expect(ok).toBe(false);
   });
 });

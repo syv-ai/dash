@@ -3,7 +3,9 @@ import { createMemoryStorage, type StorageLike } from '../../fanOutStorage';
 
 /** A vi.fn-backed stand-in for window.electronAPI; add/override methods per test. */
 export function makeElectronApiMock(overrides: Record<string, unknown> = {}) {
-  const ok = <T>(data: T) => Promise.resolve({ success: true, data });
+  // Loosely typed so tests can mockResolvedValue arbitrary IpcResponse shapes
+  // (success/error/data) without fighting narrow inferred return types.
+  const ok = (data?: unknown): Promise<any> => Promise.resolve({ success: true, data });
   return {
     getProjects: vi.fn(() => ok([])),
     getTasks: vi.fn(() => ok([])),
@@ -14,7 +16,7 @@ export function makeElectronApiMock(overrides: Record<string, unknown> = {}) {
     archiveTask: vi.fn(() => ok(undefined)),
     restoreTask: vi.fn(() => ok(undefined)),
     reorderTasks: vi.fn(() => ok(undefined)),
-    worktreeClaimReserve: vi.fn(() => Promise.resolve({ success: false })),
+    worktreeClaimReserve: vi.fn((): Promise<any> => Promise.resolve({ success: false })),
     worktreeCreate: vi.fn(),
     worktreeCreateFromExisting: vi.fn(),
     worktreeRemove: vi.fn(() => ok(undefined)),

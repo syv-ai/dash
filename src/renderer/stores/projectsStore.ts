@@ -1,8 +1,19 @@
 import { create } from 'zustand';
 import { toast } from 'sonner';
 import { sessionRegistry } from '../terminal/SessionRegistry';
-import type { Project, Task, BranchInfo } from '../../shared/types';
+import type {
+  Project,
+  Task,
+  BranchInfo,
+  LinkedGithubIssue,
+  LinkedAdoWorkItem,
+} from '../../shared/types';
 import type { DeleteProjectOptions } from '../components/DeleteProjectModal';
+import type { CreateTaskOptions } from '../components/TaskModal';
+import { formatTaskContextPrompt } from '../../shared/taskContext';
+import { playPeonSound } from '../sounds';
+import { useSettings } from './settingsStore';
+import { notifyContextInjected } from './taskToasts';
 
 export interface ProjectsState {
   projects: Project[];
@@ -56,6 +67,7 @@ export interface ProjectsActions {
     },
   ) => Promise<void>;
   deleteProject: (project: Project, options: DeleteProjectOptions) => Promise<void>;
+  createTask: (options: CreateTaskOptions, projectId?: string) => Promise<boolean>;
 }
 
 /** Reload tasks for whichever project currently owns `taskId`. */
@@ -268,6 +280,146 @@ export const useProjects = create<ProjectsStore>((set) => ({
       return { tasksByProject: next };
     });
     await useProjects.getState().loadProjects();
+  },
+  createTask: async (options, projectId) => {
+    const { name, permissionMode, linkedItems } = options;
+    const targetProjectId = projectId ?? useProjects.getState().activeProjectId;
+    const targetProject = useProjects.getState().projects.find((p) => p.id === targetProjectId);
+    if (!targetProject) return false;
+
+    set({ isCreatingTask: true });
+    try {
+      let worktreeInfo: { branch: string; path: string } | null = null;
+      const ghItems =
+        linkedItems?.filter((i): i is LinkedGithubIssue => i.provider === 'github') ?? [];
+      const adoItems =
+        linkedItems?.filter((i): i is LinkedAdoWorkItem => i.provider === 'ado') ?? [];
+      const ghIssueNumbers = ghItems.map((i) => i.id);
+
+      switch (options.kind) {
+        case 'worktree-new-branch': {
+          // New branch: try reserve pool, fall back to direct creation
+          const claimResp = await window.electronAPI.worktreeClaimReserve({
+            projectId: targetProject.id,
+            taskName: name,
+            baseRef: options.baseRef,
+            linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
+            pushRemote: options.pushRemote,
+          });
+          if (claimResp.success && claimResp.data) {
+            worktreeInfo = { branch: claimResp.data.branch, path: claimResp.data.path };
+          } else {
+            const createResp = await window.electronAPI.worktreeCreate({
+              projectPath: targetProject.path,
+              taskName: name,
+              baseRef: options.baseRef,
+              projectId: targetProject.id,
+              linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
+              pushRemote: options.pushRemote,
+            });
+            if (createResp.success && createResp.data) {
+              worktreeInfo = { branch: createResp.data.branch, path: createResp.data.path };
+            } else {
+              toast.error(createResp.error || 'Failed to create worktree');
+              return false;
+            }
+          }
+          break;
+        }
+        case 'worktree-existing': {
+          const createResp = await window.electronAPI.worktreeCreateFromExisting({
+            projectPath: targetProject.path,
+            taskName: name,
+            branch: options.branch,
+            projectId: targetProject.id,
+            linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
+          });
+          if (createResp.success && createResp.data) {
+            worktreeInfo = { branch: createResp.data.branch, path: createResp.data.path };
+          } else {
+            toast.error(createResp.error || 'Failed to create worktree from existing branch');
+            return false;
+          }
+          break;
+        }
+        case 'in-place-checkout': {
+          const checkoutResp = await window.electronAPI.gitCheckoutBranch({
+            cwd: targetProject.path,
+            branch: options.branch,
+          });
+          if (!checkoutResp.success) {
+            toast.error(checkoutResp.error || 'Failed to checkout branch');
+            return false;
+          }
+          break;
+        }
+        case 'in-place-no-git':
+          break;
+      }
+
+      const useWorktree =
+        options.kind === 'worktree-new-branch' || options.kind === 'worktree-existing';
+      const fallbackBranch =
+        options.kind === 'worktree-existing' || options.kind === 'in-place-checkout'
+          ? options.branch
+          : options.kind === 'worktree-new-branch'
+            ? options.baseRef
+            : 'main';
+      const branch = worktreeInfo?.branch ?? fallbackBranch;
+      const taskPath = worktreeInfo?.path ?? targetProject.path;
+
+      const saveResp = await window.electronAPI.saveTask({
+        projectId: targetProject.id,
+        name,
+        branch,
+        path: taskPath,
+        useWorktree,
+        permissionMode,
+        // Only Dash-created branches should be auto-deleted on task removal.
+        branchCreatedByDash: options.kind === 'worktree-new-branch' && !!worktreeInfo,
+        linkedItems: linkedItems ?? null,
+      });
+      if (!saveResp.success || !saveResp.data) {
+        toast.error(saveResp.error || 'Failed to save task');
+        return false;
+      }
+
+      const taskId = saveResp.data.id;
+      // Store task context so the SessionStart hook can inject it.
+      if (linkedItems && linkedItems.length > 0) {
+        const prompt = formatTaskContextPrompt(linkedItems);
+        if (prompt) {
+          await window.electronAPI.ptyWriteTaskContext({ taskId, prompt });
+          notifyContextInjected(linkedItems);
+        }
+      }
+
+      await window.electronAPI.getOrCreateDefaultConversation(taskId);
+      await useProjects.getState().loadTasks(targetProject.id);
+      useProjects.getState().setActiveProject(targetProject.id);
+      useProjects.getState().setActiveTask(taskId);
+
+      if (useSettings.getState().notificationSound === 'peon') playPeonSound('what');
+
+      window.electronAPI.worktreeEnsureReserve({
+        projectId: targetProject.id,
+        projectPath: targetProject.path,
+      });
+      // Fire-and-forget: post branch comment on each linked GitHub issue / ADO item.
+      for (const num of ghIssueNumbers) {
+        window.electronAPI
+          .githubPostBranchComment(targetProject.path, num, branch)
+          .catch(() => toast.error(`Failed to link branch to issue #${num}`));
+      }
+      for (const wi of adoItems) {
+        window.electronAPI
+          .adoPostBranchComment(wi.id, branch, targetProject.id)
+          .catch(() => toast.error(`Failed to link branch to work item #${wi.id}`));
+      }
+      return true;
+    } finally {
+      set({ isCreatingTask: false });
+    }
   },
 }));
 
