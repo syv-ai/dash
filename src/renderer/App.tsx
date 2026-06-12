@@ -46,8 +46,7 @@ import type {
 } from '../shared/types';
 import type { CreateTaskOptions } from './components/TaskModal';
 import { formatTaskContextPrompt } from '../shared/taskContext';
-import { loadKeybindings, saveKeybindings, matchesBinding } from './keybindings';
-import type { KeyBindingMap } from './keybindings';
+import { matchesBinding } from './keybindings';
 import { sessionRegistry } from './terminal/SessionRegistry';
 import { resolveTheme } from './terminal/terminalThemes';
 import { resolveTerminalFontValue } from './terminal/terminalFonts';
@@ -106,7 +105,8 @@ export function App() {
   const setTheme = useSettings((s) => s.setTheme);
   const diffContextLines = useSettings((s) => s.diffContextLines);
   const setDiffContextLines = useSettings((s) => s.setDiffContextLines);
-  const [keybindings, setKeybindings] = useState<KeyBindingMap>(loadKeybindings);
+  const keybindings = useSettings((s) => s.keybindings);
+  const setKeybindings = useSettings((s) => s.setKeybindings);
   const notificationSound = useSettings((s) => s.notificationSound);
   const setNotificationSound = useSettings((s) => s.setNotificationSound);
   const desktopNotification = useSettings((s) => s.desktopNotification);
@@ -2260,7 +2260,6 @@ export function App() {
           keybindings={keybindings}
           onKeybindingsChange={(b) => {
             setKeybindings(b);
-            saveKeybindings(b);
           }}
           rtkStatus={rtkStatus}
           onRtkEnabledChange={(enabled) => {
