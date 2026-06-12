@@ -1301,7 +1301,6 @@ export function App() {
       {showSettings && (
         <SettingsModal
           initialTab={settingsInitialTab}
-          globalTokenStats={globalTokenStats}
           activeProjectPath={activeProject?.path}
           availableIDEs={availableIDEs}
           rtkStatus={rtkStatus}

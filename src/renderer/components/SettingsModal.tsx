@@ -51,6 +51,7 @@ import { formatResetTime } from '../../shared/format';
 import { UsageBar } from './ui/UsageBar';
 import { formatTokens, formatCost } from '../utils/formatTokens';
 import { useSettings } from '../stores/settingsStore';
+import { useRuntime } from '../stores/runtimeStore';
 
 const DASH_DEFAULT_ATTRIBUTION =
   '\n\nCo-Authored-By: Claude <noreply@anthropic.com> via Dash <dash@syv.ai>';
@@ -172,7 +173,6 @@ const NAV_ITEMS: Array<{
 
 interface SettingsModalProps {
   initialTab?: string;
-  globalTokenStats: { totalTokens: number; totalCostUsd: number; taskCount: number };
   availableIDEs: Array<{ id: string; label: string }>;
   activeProjectPath?: string;
   rtkStatus: RtkStatus | null;
@@ -412,13 +412,8 @@ function KeyRecorder({
   );
 }
 
-function UsageSection({
-  latestRateLimits,
-  globalTokenStats,
-}: {
-  latestRateLimits?: RateLimits;
-  globalTokenStats: { totalTokens: number; totalCostUsd: number; taskCount: number };
-}) {
+function UsageSection({ latestRateLimits }: { latestRateLimits?: RateLimits }) {
+  const globalTokenStats = useRuntime((s) => s.globalTokenStats);
   const thresholds = useSettings((s) => s.usageThresholds);
   const onThresholdsChange = useSettings((s) => s.setUsageThresholds);
   const showRateLimits = useSettings((s) => s.showRateLimits);
@@ -759,7 +754,6 @@ function ClaudeCodeTab({
 
 export function SettingsModal({
   initialTab,
-  globalTokenStats,
   availableIDEs,
   activeProjectPath,
   rtkStatus,
@@ -1591,12 +1585,7 @@ export function SettingsModal({
                 </SettingsPane>
               )}
 
-              {tab === 'usage' && (
-                <UsageSection
-                  latestRateLimits={latestRateLimits}
-                  globalTokenStats={globalTokenStats}
-                />
-              )}
+              {tab === 'usage' && <UsageSection latestRateLimits={latestRateLimits} />}
 
               {tab === 'keybindings' && (
                 <SettingsPane key={`pane-${tab}`}>
