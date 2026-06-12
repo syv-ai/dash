@@ -31,7 +31,7 @@ Renderer hot-reloads; main process changes require restart. Husky pre-commit run
 Two-process Electron app, strict context isolation (nodeIntegration disabled).
 
 - **Main** (`src/main/`): `entry.ts` → `main.ts` boots PATH fix, DB, hook server, IPC handlers, activity monitor, window.
-- **Renderer** (`src/renderer/`): React SPA, all state in `App.tsx` (no Redux). Communicates via `window.electronAPI` (preload bridge, typed in `src/types/electron-api.d.ts`).
+- **Renderer** (`src/renderer/`): React SPA. State lives in **Zustand stores** under `src/renderer/stores/` (`settingsStore`, `projectsStore`, `uiStore`, `gitStore`, `runtimeStore`); components subscribe with selectors instead of receiving drilled props, and stores read each other via `getState()`. `App.tsx` is a thin composition root (layout + modals + bootstrap). Communicates via `window.electronAPI` (preload bridge, typed in `src/types/electron-api.d.ts`). **Selector caveat:** a selector that returns a _derived_ array/object (`.filter`/`.map`/object-literal) must be wrapped in `useShallow` (`zustand/react/shallow`) or it re-renders infinitely; plain `s => s.field` selectors are stable.
 - **IPC**: `electronAPI.method()` → `ipcRenderer.invoke()` → handler in `src/main/ipc/` → `IpcResponse<T>` `{ success, data?, error? }`. Fire-and-forget via `send()` for ptyInput/resize/kill/snapshot-save.
 - **Services** (`src/main/services/`): Stateless singletons with static methods.
 - **Database** (`src/main/db/`): SQLite via better-sqlite3 + Drizzle ORM. WAL mode, foreign keys ON. Migrations run on startup. Tables: projects → tasks → conversations (cascade deletes).
