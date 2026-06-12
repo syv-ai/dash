@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { toast } from 'sonner';
+import { sessionRegistry } from '../terminal/SessionRegistry';
 import type { Project, Task, BranchInfo } from '../../shared/types';
 
 export interface ProjectsState {
@@ -41,6 +42,28 @@ export interface ProjectsActions {
   reorderProjects: (reordered: Project[]) => void;
   reorderTasks: (projectId: string, reordered: Task[]) => void;
   commitTaskReorder: (projectId: string, reordered: Task[]) => Promise<void>;
+  archiveTask: (id: string) => Promise<void>;
+  restoreTask: (id: string) => Promise<void>;
+  closeTask: (id: string) => void;
+  updateTask: (taskItem: Task, patch: Partial<Task>) => Promise<Task | null>;
+}
+
+/** Reload tasks for whichever project currently owns `taskId`. */
+async function reloadOwningProject(taskId: string) {
+  const { tasksByProject } = useProjects.getState();
+  for (const [projectId, tasks] of Object.entries(tasksByProject)) {
+    if (tasks.some((t) => t.id === taskId)) {
+      await useProjects.getState().loadTasks(projectId);
+      return;
+    }
+  }
+}
+
+/** Dispose the Claude session + shell sessions for a task. */
+function disposeTaskSessions(taskId: string) {
+  sessionRegistry.dispose(taskId);
+  sessionRegistry.dispose(`shell:${taskId}`);
+  sessionRegistry.disposeByPrefix(`shell:${taskId}:`);
 }
 
 /** Sort projects by the saved projectOrder, pruning stale ids from storage. */
@@ -143,6 +166,39 @@ export const useProjects = create<ProjectsStore>((set) => ({
       toast.error('Could not recover task list — reloading');
       await useProjects.getState().loadTasks(projectId);
     }
+  },
+  archiveTask: async (id) => {
+    await window.electronAPI.archiveTask(id);
+    await reloadOwningProject(id);
+  },
+  restoreTask: async (id) => {
+    await window.electronAPI.restoreTask(id);
+    await reloadOwningProject(id);
+  },
+  closeTask: (id) => {
+    disposeTaskSessions(id);
+    window.electronAPI.ptyKill(id);
+    window.electronAPI.ptyClearSnapshot(id);
+    if (useProjects.getState().activeTaskId === id) useProjects.getState().setActiveTask(null);
+  },
+  updateTask: async (taskItem, patch) => {
+    const resp = await window.electronAPI.saveTask({
+      id: taskItem.id,
+      projectId: taskItem.projectId,
+      name: patch.name ?? taskItem.name,
+      branch: taskItem.branch,
+      path: taskItem.path,
+      useWorktree: taskItem.useWorktree,
+      permissionMode: patch.permissionMode ?? taskItem.permissionMode,
+      branchCreatedByDash: taskItem.branchCreatedByDash,
+      linkedItems: taskItem.linkedItems,
+    });
+    if (!resp.success || !resp.data) {
+      toast.error(resp.error || 'Failed to save task');
+      return null;
+    }
+    await useProjects.getState().loadTasks(taskItem.projectId);
+    return resp.data;
   },
 }));
 

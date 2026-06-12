@@ -167,3 +167,48 @@ describe('projectsStore reordering', () => {
     expect(useProjects.getState().tasksByProject.p1.map((t) => t.id)).toEqual(['t1']);
   });
 });
+
+describe('projectsStore archive/restore/close/update', () => {
+  let api: ReturnType<typeof makeElectronApiMock>;
+  beforeEach(() => {
+    api = makeElectronApiMock();
+    installWindow(api);
+  });
+  afterEach(() => resetWindow());
+
+  it('archiveTask calls IPC and reloads the owning project', async () => {
+    const useProjects = await freshStore();
+    useProjects.setState({ tasksByProject: { p1: [task('t1', 'p1')] } });
+    api.getTasks.mockResolvedValue({ success: true, data: [task('t1', 'p1', { archivedAt: 5 })] });
+    await useProjects.getState().archiveTask('t1');
+    expect(api.archiveTask).toHaveBeenCalledWith('t1');
+    expect(useProjects.getState().tasksByProject.p1[0].archivedAt).toBe(5);
+  });
+
+  it('restoreTask calls IPC and reloads the owning project', async () => {
+    const useProjects = await freshStore();
+    useProjects.setState({ tasksByProject: { p1: [task('t1', 'p1', { archivedAt: 5 })] } });
+    api.getTasks.mockResolvedValue({ success: true, data: [task('t1', 'p1')] });
+    await useProjects.getState().restoreTask('t1');
+    expect(api.restoreTask).toHaveBeenCalledWith('t1');
+  });
+
+  it('closeTask kills pty, clears snapshot, and clears active task if it was active', async () => {
+    const useProjects = await freshStore();
+    useProjects.getState().setActiveTask('t1');
+    useProjects.getState().closeTask('t1');
+    expect(api.ptyKill).toHaveBeenCalledWith('t1');
+    expect(api.ptyClearSnapshot).toHaveBeenCalledWith('t1');
+    expect(useProjects.getState().activeTaskId).toBeNull();
+  });
+
+  it('updateTask saves, reloads, and returns the updated task', async () => {
+    const useProjects = await freshStore();
+    const updated = task('t1', 'p1', { name: 'renamed' });
+    api.saveTask.mockResolvedValue({ success: true, data: updated });
+    api.getTasks.mockResolvedValue({ success: true, data: [updated] });
+    const result = await useProjects.getState().updateTask(task('t1', 'p1'), { name: 'renamed' });
+    expect(result?.name).toBe('renamed');
+    expect(api.saveTask).toHaveBeenCalled();
+  });
+});
