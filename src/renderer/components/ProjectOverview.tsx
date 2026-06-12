@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { openInIde } from '../lib/openInIde';
+import { useRuntime } from '../stores/runtimeStore';
 import {
   GitBranch,
   Plus,
@@ -23,7 +24,6 @@ interface ProjectOverviewProps {
   project: Project;
   tasks: Task[];
   archivedTasks: Task[];
-  taskActivity: Record<string, ActivityInfo>;
   onSelectTask: (id: string) => void;
   onNewTask: () => void;
   onProjectSettings: () => void;
@@ -99,7 +99,6 @@ export function ProjectOverview({
   project,
   tasks,
   archivedTasks,
-  taskActivity,
   onSelectTask,
   onNewTask,
   onProjectSettings,
@@ -109,6 +108,7 @@ export function ProjectOverview({
   onArchiveTask,
   onRestoreTask,
 }: ProjectOverviewProps) {
+  const taskActivity = useRuntime((s) => s.taskActivity);
   const [showArchived, setShowArchived] = useState(false);
   const busyCount = tasks.filter((t) => taskActivity[t.id]?.state === 'busy').length;
   const waitingCount = tasks.filter((t) => taskActivity[t.id]?.state === 'waiting').length;

@@ -1,16 +1,11 @@
 import { useState, useRef } from 'react';
 import { Plus, Settings, Blocks } from 'lucide-react';
-import type {
-  Project,
-  Task,
-  RemoteControlState,
-  ContextUsage,
-  ActivityInfo,
-} from '../../../shared/types';
+import type { Project, Task, RemoteControlState, ContextUsage } from '../../../shared/types';
 import { Tooltip } from '../ui/Tooltip';
 import { RotationSection } from './RotationSection';
 import { ProjectsSection } from './ProjectsSection';
 import { useSettings } from '../../stores/settingsStore';
+import { useRuntime } from '../../stores/runtimeStore';
 import { getProjectActivity } from './projectActivity';
 
 interface LeftSidebarProps {
@@ -33,7 +28,6 @@ interface LeftSidebarProps {
   onShowCommitGraph: (projectId: string) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
-  taskActivity: Record<string, ActivityInfo>;
   unseenTaskIds?: Set<string>;
   remoteControlStates?: Record<string, RemoteControlState>;
   contextUsage?: Record<string, ContextUsage>;
@@ -66,7 +60,6 @@ export function LeftSidebar({
   onOpenSettings,
   onShowCommitGraph,
   collapsed,
-  taskActivity,
   unseenTaskIds,
   remoteControlStates = {},
   contextUsage = {},
@@ -79,6 +72,7 @@ export function LeftSidebar({
   onOpenSkillsBrowser,
 }: LeftSidebarProps) {
   const showActiveTasksSection = useSettings((s) => s.showActiveTasksSection);
+  const taskActivity = useRuntime((s) => s.taskActivity);
   // Project-reorder drag state for the collapsed rail. The expanded view owns
   // its own drag state inside ProjectsSection (the two views never coexist).
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -260,7 +254,6 @@ export function LeftSidebar({
         <RotationSection
           rotationTasks={rotationTasks}
           activeTaskId={activeTaskId}
-          taskActivity={taskActivity}
           unseenTaskIds={unseenTaskIds}
           projects={projects}
           onSelectTask={onSelectTask}
@@ -281,7 +274,6 @@ export function LeftSidebar({
         activeProjectId={activeProjectId}
         tasksByProject={tasksByProject}
         activeTaskId={activeTaskId}
-        taskActivity={taskActivity}
         unseenTaskIds={unseenTaskIds}
         remoteControlStates={remoteControlStates}
         contextUsage={contextUsage}

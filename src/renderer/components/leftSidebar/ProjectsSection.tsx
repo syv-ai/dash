@@ -8,13 +8,7 @@ import {
   ChevronRight,
   ChevronDown,
 } from 'lucide-react';
-import type {
-  Project,
-  Task,
-  RemoteControlState,
-  ContextUsage,
-  ActivityInfo,
-} from '../../../shared/types';
+import type { Project, Task, RemoteControlState, ContextUsage } from '../../../shared/types';
 import { useDragReorder } from '../../hooks/useDragReorder';
 import { IconButton } from '../ui/IconButton';
 import { Tooltip } from '../ui/Tooltip';
@@ -28,7 +22,6 @@ interface ProjectsSectionProps {
   activeProjectId: string | null;
   tasksByProject: Record<string, Task[]>;
   activeTaskId: string | null;
-  taskActivity: Record<string, ActivityInfo>;
   unseenTaskIds?: Set<string>;
   remoteControlStates: Record<string, RemoteControlState>;
   contextUsage: Record<string, ContextUsage>;
@@ -56,7 +49,6 @@ export function ProjectsSection({
   activeProjectId,
   tasksByProject,
   activeTaskId,
-  taskActivity,
   unseenTaskIds,
   remoteControlStates,
   contextUsage,
@@ -78,6 +70,7 @@ export function ProjectsSection({
 }: ProjectsSectionProps) {
   const showProjectTokens = useSettings((s) => s.showProjectTokens);
   const projectTokenStats = useRuntime((s) => s.projectTokenStats);
+  const taskActivity = useRuntime((s) => s.taskActivity);
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(() => {
     try {
       const raw = localStorage.getItem('expandedProjects');

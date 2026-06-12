@@ -92,7 +92,6 @@ interface MainContentProps {
   activeTask: Task | null;
   activeProject: Project | null;
   tasks?: Task[];
-  taskActivity?: Record<string, ActivityInfo>;
   remoteControlState?: RemoteControlState | null;
   isMac?: boolean;
   terminalBg?: string;
@@ -117,7 +116,6 @@ export function MainContent({
   activeTask,
   activeProject,
   tasks = [],
-  taskActivity = {},
   remoteControlState = null,
   isMac = false,
   terminalBg,
@@ -311,7 +309,6 @@ export function MainContent({
             project={activeProject}
             tasks={tasks}
             archivedTasks={archivedTasks}
-            taskActivity={taskActivity}
             onSelectTask={(id) => onSelectTask?.(id)}
             onNewTask={() => onNewTask?.()}
             onProjectSettings={() => onProjectSettings?.()}

@@ -3,7 +3,8 @@ import { X } from 'lucide-react';
 import { useDragReorder } from '../../hooks/useDragReorder';
 import { IconButton } from '../ui/IconButton';
 import { Tooltip } from '../ui/Tooltip';
-import type { Project, Task, ActivityInfo, ContextUsage } from '../../../shared/types';
+import { useRuntime } from '../../stores/runtimeStore';
+import type { Project, Task, ContextUsage } from '../../../shared/types';
 
 /* ── Rotation (Active Tasks) with sliding highlight ──────── */
 
@@ -13,7 +14,6 @@ const ROTATION_EXIT_MS = 320;
 export function RotationSection({
   rotationTasks,
   activeTaskId,
-  taskActivity,
   unseenTaskIds,
   projects,
   onSelectTask,
@@ -23,7 +23,6 @@ export function RotationSection({
 }: {
   rotationTasks: Task[];
   activeTaskId: string | null;
-  taskActivity: Record<string, ActivityInfo>;
   unseenTaskIds?: Set<string>;
   projects: Project[];
   onSelectTask: (projectId: string, taskId: string) => void;
@@ -31,6 +30,7 @@ export function RotationSection({
   onRemoveFromRotation?: (taskId: string) => void;
   contextUsage?: Record<string, ContextUsage>;
 }) {
+  const taskActivity = useRuntime((s) => s.taskActivity);
   const containerRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [highlight, setHighlight] = useState<{ top: number; height: number } | null>(null);
