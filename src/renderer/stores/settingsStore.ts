@@ -29,6 +29,10 @@ interface SettingsActions {
   setCommitAttribution: (value: SettingsState['commitAttribution']) => void;
   setPreferredIDE: (value: string | ((prev: string) => string)) => void;
   setKeybindings: (value: SettingsState['keybindings']) => void;
+  setSidebarCollapsed: (value: boolean) => void;
+  setChangesPanelCollapsed: (value: boolean) => void;
+  setShellDrawerCollapsed: (value: boolean) => void;
+  setPortsDrawerCollapsed: (value: boolean) => void;
 }
 
 export type SettingsStore = SettingsState & SettingsActions;
@@ -81,6 +85,10 @@ export const useSettings = create<SettingsStore>()(
           preferredIDE: typeof value === 'function' ? value(s.preferredIDE) : value,
         })),
       setKeybindings: (keybindings) => set({ keybindings }),
+      setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
+      setChangesPanelCollapsed: (changesPanelCollapsed) => set({ changesPanelCollapsed }),
+      setShellDrawerCollapsed: (shellDrawerCollapsed) => set({ shellDrawerCollapsed }),
+      setPortsDrawerCollapsed: (portsDrawerCollapsed) => set({ portsDrawerCollapsed }),
     }),
     {
       name: 'settings',
