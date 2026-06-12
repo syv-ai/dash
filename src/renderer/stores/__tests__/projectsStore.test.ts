@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { shallow } from 'zustand/vanilla/shallow';
 import { makeElectronApiMock, installWindow, resetWindow } from './helpers/electronApiMock';
 import type { Project, Task } from '../../../shared/types';
 import type { DeleteProjectOptions } from '../../components/DeleteProjectModal';
@@ -86,6 +87,24 @@ describe('projectsStore state + selectors', () => {
     expect(store.selectActiveProject(s)?.id).toBe('p1');
     expect(store.selectActiveTask(s)?.id).toBe('t3'); // searches all projects
     expect(store.selectActiveProjectTasks(s).map((t) => t.id)).toEqual(['t1']); // non-archived for active project
+  });
+
+  // App subscribes via useProjects(useShallow(selectActiveProjectTasks)). The raw selector
+  // filters → a fresh array every call (a !== b), which alone would loop useSyncExternalStore;
+  // useShallow only rescues it because successive outputs are SHALLOW-equal. If a future change
+  // makes the output not shallow-stable for unchanged state, useShallow stops working and the
+  // app loops again — this test guards that invariant in the (renderable-free) vanilla layer.
+  it('selectActiveProjectTasks is shallow-stable across calls (the useShallow precondition)', async () => {
+    const useProjects = await freshStore();
+    useProjects.setState({
+      tasksByProject: { p1: [task('t1', 'p1'), task('t2', 'p1', { archivedAt: '123' })] },
+      activeProjectId: 'p1',
+    });
+    const s = useProjects.getState();
+    const a = store.selectActiveProjectTasks(s);
+    const b = store.selectActiveProjectTasks(s);
+    expect(a).not.toBe(b); // raw selector allocates a new array each call (the hazard)
+    expect(shallow(a, b)).toBe(true); // ...but shallow-equal, so useShallow collapses them
   });
 });
 

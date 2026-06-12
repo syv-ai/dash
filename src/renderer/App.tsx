@@ -47,6 +47,7 @@ import { resolveTerminalFontValue } from './terminal/terminalFonts';
 import { playNotificationSound, playPeonSound } from './sounds';
 import { useSettings } from './stores/settingsStore';
 import { useUi } from './stores/uiStore';
+import { useShallow } from 'zustand/react/shallow';
 import {
   useProjects,
   selectActiveProject,
@@ -464,8 +465,11 @@ export function App() {
   );
 
   const activeTask = useProjects(selectActiveTask);
-  // All non-archived tasks for the active project (for cycling)
-  const activeProjectTasks = useProjects(selectActiveProjectTasks);
+  // All non-archived tasks for the active project (for cycling).
+  // selectActiveProjectTasks filters → a fresh array every call, so it must be wrapped in
+  // useShallow; a raw subscription feeds useSyncExternalStore an ever-changing snapshot and
+  // loops infinitely. (selectActiveProject/Task return existing objects, so they're stable.)
+  const activeProjectTasks = useProjects(useShallow(selectActiveProjectTasks));
 
   // Side-car TUI features (ports onboarding today). On active-task change,
   // ask main to spawn each feature's flow + Clack TUI inside a drawer tab —
