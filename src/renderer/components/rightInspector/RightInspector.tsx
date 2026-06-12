@@ -8,7 +8,6 @@ import type { RateLimits, ContextUsage, Task } from '../../../shared/types';
 
 interface RightInspectorProps {
   activeTask: Task | null;
-  gitLoading: boolean;
   rateLimits: RateLimits;
   contextUsage?: ContextUsage;
   onViewDiff: (filePath: string, staged: boolean) => void;
@@ -30,7 +29,6 @@ interface RightInspectorProps {
 
 export function RightInspector({
   activeTask,
-  gitLoading,
   rateLimits,
   contextUsage,
   onViewDiff,
@@ -47,6 +45,7 @@ export function RightInspector({
   collapsed,
 }: RightInspectorProps) {
   const gitStatus = useGit((s) => s.gitStatus);
+  const gitLoading = useGit((s) => s.gitLoading);
   const { adds, dels, fileCount, stagedCount, unstagedCount } = useMemo(() => {
     const files = gitStatus?.files ?? [];
     let stagedCount = 0;

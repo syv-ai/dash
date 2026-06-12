@@ -327,10 +327,8 @@ export function App() {
 
   // ── Git state (gitStore) ─────────────────────────────────
   const gitStatus = useGit((s) => s.gitStatus);
-  const gitLoading = useGit((s) => s.gitLoading);
   const diffFile = useGit((s) => s.diffFile);
   const setDiffFile = useGit((s) => s.setDiffFile);
-  const prInfo = useGit((s) => s.prInfo);
   const showCommitGraph = useGit((s) => s.showCommitGraph);
   const setShowCommitGraph = useGit((s) => s.setShowCommitGraph);
 
@@ -1062,7 +1060,6 @@ export function App() {
               activeProject={activeProject}
               tasks={activeProjectTasks}
               taskActivity={taskActivity}
-              prInfo={prInfo}
               remoteControlState={activeTask ? (remoteControlStates[activeTask.id] ?? null) : null}
               isMac={window.electronAPI.getPlatform() === 'darwin'}
               terminalBg={terminalBg}
@@ -1166,7 +1163,6 @@ export function App() {
                     >
                       <RightInspector
                         activeTask={activeTask}
-                        gitLoading={gitLoading}
                         rateLimits={showRateLimits && latestRateLimits ? latestRateLimits : {}}
                         contextUsage={
                           showUsageInline && activeTask ? contextUsage[activeTask.id] : undefined

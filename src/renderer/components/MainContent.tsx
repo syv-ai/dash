@@ -19,7 +19,6 @@ import {
 import type {
   Project,
   Task,
-  PullRequestInfo,
   RemoteControlState,
   ActivityInfo,
   LinkedItem,
@@ -94,7 +93,6 @@ interface MainContentProps {
   activeProject: Project | null;
   tasks?: Task[];
   taskActivity?: Record<string, ActivityInfo>;
-  prInfo?: PullRequestInfo | null;
   remoteControlState?: RemoteControlState | null;
   isMac?: boolean;
   terminalBg?: string;
@@ -120,7 +118,6 @@ export function MainContent({
   activeProject,
   tasks = [],
   taskActivity = {},
-  prInfo = null,
   remoteControlState = null,
   isMac = false,
   terminalBg,
@@ -142,6 +139,7 @@ export function MainContent({
 }: MainContentProps) {
   const showTaskTokens = useSettings((s) => s.showTaskTokens);
   const gitStatus = useGit((s) => s.gitStatus);
+  const prInfo = useGit((s) => s.prInfo);
   if (!activeProject) {
     return (
       <div className="h-full flex flex-col bg-background">
