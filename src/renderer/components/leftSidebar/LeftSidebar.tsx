@@ -45,10 +45,6 @@ interface LeftSidebarProps {
   onRemoveFromRotation?: (taskId: string) => void;
   onToggleActiveTasksSection?: () => void;
   onOpenSkillsBrowser?: () => void;
-  projectTokenStats?: Record<
-    string,
-    { totalTokens: number; totalCostUsd: number; taskCount: number }
-  >;
 }
 
 export function LeftSidebar({
@@ -81,7 +77,6 @@ export function LeftSidebar({
   onReorderRotation,
   onRemoveFromRotation,
   onOpenSkillsBrowser,
-  projectTokenStats = {},
 }: LeftSidebarProps) {
   const showActiveTasksSection = useSettings((s) => s.showActiveTasksSection);
   // Project-reorder drag state for the collapsed rail. The expanded view owns
@@ -290,7 +285,6 @@ export function LeftSidebar({
         unseenTaskIds={unseenTaskIds}
         remoteControlStates={remoteControlStates}
         contextUsage={contextUsage}
-        projectTokenStats={projectTokenStats}
         onSelectProject={onSelectProject}
         onOpenFolder={onOpenFolder}
         onDeleteProject={onDeleteProject}

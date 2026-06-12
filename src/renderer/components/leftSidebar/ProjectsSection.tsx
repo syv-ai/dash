@@ -21,6 +21,7 @@ import { Tooltip } from '../ui/Tooltip';
 import { formatTokens, formatCost } from '../../utils/formatTokens';
 import { TaskCard } from './TaskCard';
 import { useSettings } from '../../stores/settingsStore';
+import { useRuntime } from '../../stores/runtimeStore';
 
 interface ProjectsSectionProps {
   projects: Project[];
@@ -31,10 +32,6 @@ interface ProjectsSectionProps {
   unseenTaskIds?: Set<string>;
   remoteControlStates: Record<string, RemoteControlState>;
   contextUsage: Record<string, ContextUsage>;
-  projectTokenStats: Record<
-    string,
-    { totalTokens: number; totalCostUsd: number; taskCount: number }
-  >;
   onSelectProject: (id: string) => void;
   onOpenFolder: () => void;
   onDeleteProject: (id: string) => void;
@@ -63,7 +60,6 @@ export function ProjectsSection({
   unseenTaskIds,
   remoteControlStates,
   contextUsage,
-  projectTokenStats,
   onSelectProject,
   onOpenFolder,
   onDeleteProject,
@@ -81,6 +77,7 @@ export function ProjectsSection({
   onReorderTasksCommit,
 }: ProjectsSectionProps) {
   const showProjectTokens = useSettings((s) => s.showProjectTokens);
+  const projectTokenStats = useRuntime((s) => s.projectTokenStats);
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(() => {
     try {
       const raw = localStorage.getItem('expandedProjects');

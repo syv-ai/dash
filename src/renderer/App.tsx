@@ -277,7 +277,6 @@ export function App() {
   const setShowActiveTasksSection = useSettings((s) => s.setShowActiveTasksSection);
 
   // Token-stats rollups (runtimeStore; live-updated via its init() tokenStats subscription).
-  const projectTokenStats = useRuntime((s) => s.projectTokenStats);
   const globalTokenStats = useRuntime((s) => s.globalTokenStats);
 
   // Celebrate each billion-token milestone. The threshold filters out the
@@ -1023,7 +1022,6 @@ export function App() {
             onRemoveFromRotation={removeFromRotation}
             onToggleActiveTasksSection={() => setShowActiveTasksSection(!showActiveTasksSection)}
             onOpenSkillsBrowser={() => setShowSkillsBrowser(true)}
-            projectTokenStats={projectTokenStats}
           />
         </Panel>
         <PanelResizeHandle
