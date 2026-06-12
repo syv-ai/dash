@@ -24,7 +24,6 @@ import { SettingsModal } from './components/SettingsModal';
 import { ProjectSettingsModal } from './components/ProjectSettingsModal';
 import { TaskSettingsModal } from './components/TaskSettingsModal';
 import { AdoSetupModal } from './components/AdoSetupModal';
-import { isAdoRemote } from '../shared/urls';
 import { ToastContainer } from './components/Toast';
 import { toast } from 'sonner';
 import { getBillionToastContent } from './utils/billionToast';
@@ -32,10 +31,8 @@ import { useStatusLine } from './hooks/useStatusLine';
 import { useThresholdAlerts } from './hooks/useThresholdAlerts';
 import type {
   Task,
-  GitStatus,
   RemoteControlState,
   ActivityInfo,
-  PullRequestInfo,
   RtkStatus,
   RtkDownloadProgress,
 } from '../shared/types';
@@ -47,6 +44,7 @@ import { resolveTerminalFontValue } from './terminal/terminalFonts';
 import { playNotificationSound, playPeonSound } from './sounds';
 import { useSettings } from './stores/settingsStore';
 import { useUi } from './stores/uiStore';
+import { useGit } from './stores/gitStore';
 import { useShallow } from 'zustand/react/shallow';
 import {
   useProjects,
@@ -55,7 +53,6 @@ import {
   selectActiveProjectTasks,
 } from './stores/projectsStore';
 
-const GIT_POLL_INTERVAL = 5000;
 /** Chrome around the pinned TUI canvas (panel padding + drawer gutter) added
  *  to the measured canvas px so the panel hugs it without clipping. */
 const TUI_PANEL_CHROME_PX = 52;
@@ -422,17 +419,14 @@ export function App() {
     }
   }, [tasksByProject]);
 
-  // Git state
-  const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
-  const [gitLoading, setGitLoading] = useState(false);
-  const [diffFile, setDiffFile] = useState<{
-    cwd: string;
-    filePath: string;
-    staged: boolean;
-    initialView?: { kind: 'working'; ref: 'HEAD' | 'index' } | { kind: 'commit'; hash: string };
-  } | null>(null);
-  const [prInfo, setPrInfo] = useState<PullRequestInfo | null>(null);
-  const [showCommitGraph, setShowCommitGraph] = useState(false);
+  // ── Git state (gitStore) ─────────────────────────────────
+  const gitStatus = useGit((s) => s.gitStatus);
+  const gitLoading = useGit((s) => s.gitLoading);
+  const diffFile = useGit((s) => s.diffFile);
+  const setDiffFile = useGit((s) => s.setDiffFile);
+  const prInfo = useGit((s) => s.prInfo);
+  const showCommitGraph = useGit((s) => s.showCommitGraph);
+  const setShowCommitGraph = useGit((s) => s.setShowCommitGraph);
 
   const sidebarCollapsed = useSettings((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useSettings((s) => s.setSidebarCollapsed);
@@ -448,8 +442,6 @@ export function App() {
   const setChangesAnimating = useUi((s) => s.setChangesAnimating);
   const shellDrawerAnimating = useUi((s) => s.shellDrawerAnimating);
   const setShellDrawerAnimating = useUi((s) => s.setShellDrawerAnimating);
-  const fileWatcherCleanup = useRef<(() => void) | null>(null);
-  const gitPollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeProject = useProjects(selectActiveProject);
 
   // Color of the active terminal bg — used to make the main-pane header strip
@@ -821,90 +813,20 @@ export function App() {
     sessionRegistry.setAllTerminalFonts(resolved);
   }, [terminalFontFamily]);
 
-  // Git: watch active task directory + poll
+  // Git: watch the active task dir + poll. gitStore owns the watcher/poll timer;
+  // this thin effect just (re)wires it whenever the active task changes.
   useEffect(() => {
-    if (fileWatcherCleanup.current) {
-      fileWatcherCleanup.current();
-      fileWatcherCleanup.current = null;
-    }
-    if (gitPollTimer.current) {
-      clearInterval(gitPollTimer.current);
-      gitPollTimer.current = null;
-    }
-
-    if (!activeTask) {
-      setGitStatus(null);
-      return;
-    }
-
-    const taskCwd = activeTask.path;
-    refreshGitStatus(taskCwd);
-
-    window.electronAPI.gitWatch({ id: activeTask.id, cwd: taskCwd });
-    const unsubscribe = window.electronAPI.onGitFileChanged((id) => {
-      if (id === activeTask.id) {
-        refreshGitStatus(taskCwd);
-      }
-    });
-
-    gitPollTimer.current = setInterval(() => {
-      refreshGitStatus(taskCwd);
-    }, GIT_POLL_INTERVAL);
-
-    fileWatcherCleanup.current = () => {
-      unsubscribe();
-      window.electronAPI.gitUnwatch(activeTask.id);
-      if (gitPollTimer.current) {
-        clearInterval(gitPollTimer.current);
-        gitPollTimer.current = null;
-      }
-    };
-
-    return () => {
-      if (fileWatcherCleanup.current) {
-        fileWatcherCleanup.current();
-        fileWatcherCleanup.current = null;
-      }
-    };
+    useGit.getState().watchActiveTask(activeTask ?? null);
+    return () => useGit.getState().stopWatch();
   }, [activeTask?.id, activeTask?.path]);
 
-  // PR detection (consumed by Topbar)
+  // PR detection (consumed by Topbar). gitStore owns the fetch + 30s poll; this
+  // effect re-runs it on task/project/branch change.
   useEffect(() => {
-    setPrInfo(null);
-
-    const liveBranch = gitStatus?.branch;
-    const defaultBranch = activeProject?.baseRef || activeProject?.gitBranch || 'main';
-    if (!liveBranch || !activeProject || liveBranch === defaultBranch) return;
-
-    let cancelled = false;
-    const remote = activeProject.gitRemote;
-    const projectId = activeProject.id;
-    const projectPath = activeProject.path;
-    const taskPath = activeTask?.path ?? null;
-
-    async function fetchPr() {
-      try {
-        let pr: PullRequestInfo | null = null;
-        if (remote && isAdoRemote(remote)) {
-          const resp = await window.electronAPI.adoGetPrForBranch(liveBranch!, remote, projectId);
-          if (!cancelled && resp.success) pr = resp.data ?? null;
-        } else {
-          const cwd = taskPath || projectPath;
-          const resp = await window.electronAPI.githubGetPrForBranch(cwd, liveBranch!);
-          if (!cancelled && resp.success) pr = resp.data ?? null;
-        }
-        if (!cancelled) setPrInfo(pr);
-      } catch {
-        if (!cancelled) setPrInfo(null);
-      }
-    }
-
-    fetchPr();
-    const interval = setInterval(fetchPr, 30_000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
+    useGit
+      .getState()
+      .detectPr(activeProject ?? null, activeTask ?? null, gitStatus?.branch ?? null);
+    return () => useGit.getState().stopPrDetect();
   }, [activeTask?.id, activeTask?.path, activeProject, gitStatus?.branch]);
 
   const cycleTask = useCallback(
@@ -1160,19 +1082,16 @@ export function App() {
   const handleDeleteProjectConfirm = useUi((s) => s.confirmDeleteProject);
   const handleDeleteTaskConfirm = useUi((s) => s.confirmDeleteTask);
 
-  async function refreshGitStatus(cwd: string) {
-    setGitLoading(true);
-    try {
-      const resp = await window.electronAPI.gitGetStatus(cwd);
-      if (resp.success && resp.data) {
-        setGitStatus(resp.data);
-      }
-    } catch {
-      // Ignore
-    } finally {
-      setGitLoading(false);
-    }
-  }
+  // Git actions live in gitStore (they resolve the active task themselves).
+  const refreshGitStatus = useGit((s) => s.refreshGitStatus);
+  const handleStageFiles = useGit((s) => s.stageFiles);
+  const handleUnstageFiles = useGit((s) => s.unstageFiles);
+  const handleStageAll = useGit((s) => s.stageAll);
+  const handleUnstageAll = useGit((s) => s.unstageAll);
+  const handleCommit = useGit((s) => s.commit);
+  const handlePush = useGit((s) => s.push);
+  const handleDiscardFiles = useGit((s) => s.discardFiles);
+  const handleAddToGitignore = useGit((s) => s.addToGitignore);
 
   // ── Handlers ─────────────────────────────────────────────
 
@@ -1234,63 +1153,6 @@ export function App() {
   }
 
   // ── Git Handlers ─────────────────────────────────────────
-
-  async function handleStageFiles(filePaths: string[]) {
-    if (!activeTask || filePaths.length === 0) return;
-    await window.electronAPI.gitStageFiles({ cwd: activeTask.path, filePaths });
-    refreshGitStatus(activeTask.path);
-  }
-
-  async function handleUnstageFiles(filePaths: string[]) {
-    if (!activeTask || filePaths.length === 0) return;
-    await window.electronAPI.gitUnstageFiles({ cwd: activeTask.path, filePaths });
-    refreshGitStatus(activeTask.path);
-  }
-
-  async function handleStageAll() {
-    if (!activeTask) return;
-    await window.electronAPI.gitStageAll(activeTask.path);
-    refreshGitStatus(activeTask.path);
-  }
-
-  async function handleUnstageAll() {
-    if (!activeTask) return;
-    await window.electronAPI.gitUnstageAll(activeTask.path);
-    refreshGitStatus(activeTask.path);
-  }
-
-  async function handleCommit(message: string, options: { allowEmpty?: boolean } = {}) {
-    if (!activeTask) return;
-    const res = await window.electronAPI.gitCommit({
-      cwd: activeTask.path,
-      message,
-      allowEmpty: options.allowEmpty,
-    });
-    if (!res.success) throw new Error(res.error || 'Commit failed');
-    refreshGitStatus(activeTask.path);
-  }
-
-  async function handlePush() {
-    if (!activeTask) return;
-    const res = await window.electronAPI.gitPush(activeTask.path);
-    if (!res.success) throw new Error(res.error || 'Push failed');
-    refreshGitStatus(activeTask.path);
-  }
-
-  async function handleDiscardFiles(filePaths: string[]) {
-    if (!activeTask || filePaths.length === 0) return;
-    await window.electronAPI.gitDiscardFiles({ cwd: activeTask.path, filePaths });
-    refreshGitStatus(activeTask.path);
-  }
-
-  async function handleAddToGitignore(filePath: string) {
-    if (!activeTask) return;
-    const res = await window.electronAPI.gitignoreAdd({ cwd: activeTask.path, filePath });
-    if (!res.success) {
-      console.error('[gitignore] add failed', res.error);
-    }
-    refreshGitStatus(activeTask.path);
-  }
 
   function handleViewDiff(filePath: string, staged: boolean) {
     if (!activeTask) return;
