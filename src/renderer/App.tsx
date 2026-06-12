@@ -119,15 +119,12 @@ export function App() {
     const stored = localStorage.getItem('updateNotificationsEnabled');
     return stored === null ? true : stored === 'true';
   });
-  const [shellDrawerCollapsed, setShellDrawerCollapsed] = useState(() => {
-    return localStorage.getItem('shellDrawerCollapsed') === 'true';
-  });
+  const shellDrawerCollapsed = useSettings((s) => s.shellDrawerCollapsed);
+  const setShellDrawerCollapsed = useSettings((s) => s.setShellDrawerCollapsed);
   // Ports drawer defaults to collapsed so it doesn't intrude on projects
   // that aren't using port management; the collapsed bar still shows status.
-  const [portsDrawerCollapsed, setPortsDrawerCollapsed] = useState(() => {
-    const stored = localStorage.getItem('portsDrawerCollapsed');
-    return stored === null ? true : stored === 'true';
-  });
+  const portsDrawerCollapsed = useSettings((s) => s.portsDrawerCollapsed);
+  const setPortsDrawerCollapsed = useSettings((s) => s.setPortsDrawerCollapsed);
   const shellDrawerPosition = useSettings((s) => s.shellDrawerPosition);
   const setShellDrawerPosition = useSettings((s) => s.setShellDrawerPosition);
   const terminalTheme = useSettings((s) => s.terminalTheme);
@@ -462,12 +459,10 @@ export function App() {
   const [prInfo, setPrInfo] = useState<PullRequestInfo | null>(null);
   const [showCommitGraph, setShowCommitGraph] = useState(false);
 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    return localStorage.getItem('sidebarCollapsed') === 'true';
-  });
-  const [changesPanelCollapsed, setChangesPanelCollapsed] = useState(() => {
-    return localStorage.getItem('changesPanelCollapsed') === 'true';
-  });
+  const sidebarCollapsed = useSettings((s) => s.sidebarCollapsed);
+  const setSidebarCollapsed = useSettings((s) => s.setSidebarCollapsed);
+  const changesPanelCollapsed = useSettings((s) => s.changesPanelCollapsed);
+  const setChangesPanelCollapsed = useSettings((s) => s.setChangesPanelCollapsed);
 
   const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
   const changesPanelRef = useRef<ImperativePanelHandle>(null);
@@ -1825,12 +1820,10 @@ export function App() {
           }}
           onCollapse={() => {
             setSidebarCollapsed(true);
-            localStorage.setItem('sidebarCollapsed', 'true');
             setTimeout(() => setSidebarAnimating(false), 200);
           }}
           onExpand={() => {
             setSidebarCollapsed(false);
-            localStorage.setItem('sidebarCollapsed', 'false');
             setTimeout(() => setSidebarAnimating(false), 200);
           }}
         >
@@ -1906,12 +1899,10 @@ export function App() {
             onAnimate={() => setShellDrawerAnimating(true)}
             onCollapse={() => {
               setShellDrawerCollapsed(true);
-              localStorage.setItem('shellDrawerCollapsed', 'true');
               setTimeout(() => setShellDrawerAnimating(false), 200);
             }}
             onExpand={() => {
               setShellDrawerCollapsed(false);
-              localStorage.setItem('shellDrawerCollapsed', 'false');
               setTimeout(() => setShellDrawerAnimating(false), 200);
             }}
           >
@@ -1980,12 +1971,10 @@ export function App() {
               collapsedSize={0.5}
               onCollapse={() => {
                 setChangesPanelCollapsed(true);
-                localStorage.setItem('changesPanelCollapsed', 'true');
                 setTimeout(() => setChangesAnimating(false), 200);
               }}
               onExpand={() => {
                 setChangesPanelCollapsed(false);
-                localStorage.setItem('changesPanelCollapsed', 'false');
                 setTimeout(() => setChangesAnimating(false), 200);
               }}
             >
@@ -2007,12 +1996,10 @@ export function App() {
                   onAnimate={() => setShellDrawerAnimating(true)}
                   onCollapse={() => {
                     setShellDrawerCollapsed(true);
-                    localStorage.setItem('shellDrawerCollapsed', 'true');
                     setTimeout(() => setShellDrawerAnimating(false), 200);
                   }}
                   onExpand={() => {
                     setShellDrawerCollapsed(false);
-                    localStorage.setItem('shellDrawerCollapsed', 'false');
                     setTimeout(() => setShellDrawerAnimating(false), 200);
                   }}
                 >
@@ -2022,11 +2009,9 @@ export function App() {
                       collapsed={portsDrawerCollapsed}
                       onCollapse={() => {
                         setPortsDrawerCollapsed(true);
-                        localStorage.setItem('portsDrawerCollapsed', 'true');
                       }}
                       onExpand={() => {
                         setPortsDrawerCollapsed(false);
-                        localStorage.setItem('portsDrawerCollapsed', 'false');
                       }}
                     >
                       <RightInspector
