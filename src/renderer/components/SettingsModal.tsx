@@ -175,10 +175,6 @@ interface SettingsModalProps {
   initialTab?: string;
   availableIDEs: Array<{ id: string; label: string }>;
   activeProjectPath?: string;
-  rtkStatus: RtkStatus | null;
-  onRtkEnabledChange: (enabled: boolean) => void;
-  onRtkDownload: () => void;
-  rtkDownloadProgress: RtkDownloadProgress | null;
   latestRateLimits?: RateLimits;
   onClose: () => void;
 }
@@ -756,13 +752,13 @@ export function SettingsModal({
   initialTab,
   availableIDEs,
   activeProjectPath,
-  rtkStatus,
-  onRtkEnabledChange,
-  onRtkDownload,
-  rtkDownloadProgress,
   latestRateLimits,
   onClose,
 }: SettingsModalProps) {
+  const rtkStatus = useRuntime((s) => s.rtkStatus);
+  const rtkDownloadProgress = useRuntime((s) => s.rtkDownloadProgress);
+  const onRtkEnabledChange = useRuntime((s) => s.enableRtk);
+  const onRtkDownload = useRuntime((s) => s.downloadRtk);
   const theme = useSettings((s) => s.theme);
   const onThemeChange = useSettings((s) => s.setTheme);
   const diffContextLines = useSettings((s) => s.diffContextLines);

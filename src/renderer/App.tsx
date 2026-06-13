@@ -190,11 +190,6 @@ export function App() {
   const effortLevel = useSettings((s) => s.effortLevel);
   const syncShellEnv = useSettings((s) => s.syncShellEnv);
   const customClaudeEnvVars = useSettings((s) => s.customClaudeEnvVars);
-  // RTK state (runtimeStore; status/progress fetched + subscribed in its init()).
-  const rtkStatus = useRuntime((s) => s.rtkStatus);
-  const rtkDownloadProgress = useRuntime((s) => s.rtkDownloadProgress);
-  const enableRtk = useRuntime((s) => s.enableRtk);
-  const downloadRtk = useRuntime((s) => s.downloadRtk);
 
   // Sync desktop notification settings to main process
   useEffect(() => {
@@ -1290,10 +1285,6 @@ export function App() {
           initialTab={settingsInitialTab}
           activeProjectPath={activeProject?.path}
           availableIDEs={availableIDEs}
-          rtkStatus={rtkStatus}
-          onRtkEnabledChange={enableRtk}
-          onRtkDownload={downloadRtk}
-          rtkDownloadProgress={rtkDownloadProgress}
           latestRateLimits={latestRateLimits}
           onClose={() => setShowSettings(false)}
         />
