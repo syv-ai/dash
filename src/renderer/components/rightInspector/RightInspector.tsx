@@ -11,14 +11,6 @@ interface RightInspectorProps {
   rateLimits: RateLimits;
   contextUsage?: ContextUsage;
   onViewDiff: (filePath: string, staged: boolean) => void;
-  onStageFiles: (filePaths: string[]) => void;
-  onUnstageFiles: (filePaths: string[]) => void;
-  onStageAll: () => void;
-  onUnstageAll: () => void;
-  onDiscardFiles: (filePaths: string[]) => void;
-  onAddToGitignore: (filePath: string) => void;
-  onCommit: (message: string) => Promise<void>;
-  onPush: () => Promise<void>;
   onCommitFinished?: () => void;
   onShowCommitGraph: () => void;
   /** Open the diff editor on the first changed file. */
@@ -32,13 +24,6 @@ export function RightInspector({
   rateLimits,
   contextUsage,
   onViewDiff,
-  onStageFiles,
-  onUnstageFiles,
-  onStageAll,
-  onUnstageAll,
-  onDiscardFiles,
-  onAddToGitignore,
-  onPush,
   onCommitFinished,
   onShowCommitGraph,
   onOpenEditor,
@@ -46,6 +31,8 @@ export function RightInspector({
 }: RightInspectorProps) {
   const gitStatus = useGit((s) => s.gitStatus);
   const gitLoading = useGit((s) => s.gitLoading);
+  const onStageAll = useGit((s) => s.stageAll);
+  const onUnstageAll = useGit((s) => s.unstageAll);
   const { adds, dels, fileCount, stagedCount, unstagedCount } = useMemo(() => {
     const files = gitStatus?.files ?? [];
     let stagedCount = 0;
@@ -144,12 +131,7 @@ export function RightInspector({
           key={activeTask?.id ?? '__none__'}
           cwd={activeTask?.path ?? ''}
           loading={gitLoading}
-          onStageFiles={onStageFiles}
-          onUnstageFiles={onUnstageFiles}
-          onDiscardFiles={onDiscardFiles}
-          onAddToGitignore={onAddToGitignore}
           onViewDiff={onViewDiff}
-          onPush={onPush}
           onCommitFinished={onCommitFinished}
           onShowCommitGraph={onShowCommitGraph}
           collapsed={collapsed}

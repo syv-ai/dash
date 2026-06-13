@@ -869,14 +869,9 @@ export function App() {
 
   // Git actions live in gitStore (they resolve the active task themselves).
   const refreshGitStatus = useGit((s) => s.refreshGitStatus);
-  const handleStageFiles = useGit((s) => s.stageFiles);
-  const handleUnstageFiles = useGit((s) => s.unstageFiles);
+  // Kept as App aliases because the stage-all / unstage-all keybindings call them.
   const handleStageAll = useGit((s) => s.stageAll);
   const handleUnstageAll = useGit((s) => s.unstageAll);
-  const handleCommit = useGit((s) => s.commit);
-  const handlePush = useGit((s) => s.push);
-  const handleDiscardFiles = useGit((s) => s.discardFiles);
-  const handleAddToGitignore = useGit((s) => s.addToGitignore);
 
   // ── Handlers ─────────────────────────────────────────────
 
@@ -1162,14 +1157,6 @@ export function App() {
                           showUsageInline && activeTask ? contextUsage[activeTask.id] : undefined
                         }
                         onViewDiff={handleViewDiff}
-                        onStageFiles={handleStageFiles}
-                        onUnstageFiles={handleUnstageFiles}
-                        onStageAll={handleStageAll}
-                        onUnstageAll={handleUnstageAll}
-                        onDiscardFiles={handleDiscardFiles}
-                        onAddToGitignore={handleAddToGitignore}
-                        onCommit={handleCommit}
-                        onPush={handlePush}
                         onCommitFinished={() => activeTask && refreshGitStatus(activeTask.path)}
                         onShowCommitGraph={() => setShowCommitGraph(true)}
                         onOpenEditor={() => {

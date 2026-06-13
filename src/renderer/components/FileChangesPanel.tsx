@@ -16,12 +16,7 @@ import { useGit } from '../stores/gitStore';
 interface FileChangesPanelProps {
   cwd: string;
   loading: boolean;
-  onStageFiles: (filePaths: string[]) => void;
-  onUnstageFiles: (filePaths: string[]) => void;
-  onDiscardFiles: (filePaths: string[]) => void;
-  onAddToGitignore: (filePath: string) => void;
   onViewDiff: (filePath: string, staged: boolean) => void;
-  onPush: () => Promise<void>;
   onCommitFinished?: () => void;
   onShowCommitGraph?: () => void;
   collapsed?: boolean;
@@ -30,17 +25,17 @@ interface FileChangesPanelProps {
 export function FileChangesPanel({
   cwd,
   loading,
-  onStageFiles,
-  onUnstageFiles,
-  onDiscardFiles,
-  onAddToGitignore,
   onViewDiff,
-  onPush,
   onCommitFinished,
   onShowCommitGraph,
   collapsed,
 }: FileChangesPanelProps) {
   const gitStatus = useGit((s) => s.gitStatus);
+  const onStageFiles = useGit((s) => s.stageFiles);
+  const onUnstageFiles = useGit((s) => s.unstageFiles);
+  const onDiscardFiles = useGit((s) => s.discardFiles);
+  const onAddToGitignore = useGit((s) => s.addToGitignore);
+  const onPush = useGit((s) => s.push);
   const [commitMsg, setCommitMsg] = useState('');
   const [committing, setCommitting] = useState(false);
   const [pushing, setPushing] = useState(false);
