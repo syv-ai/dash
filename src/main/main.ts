@@ -268,7 +268,7 @@ app.on('before-quit', () => {
 
     // Clean up hook settings from all settings.local.json files before stopping server
     try {
-      const { cleanupHookSettings } = await import('./services/ptyManager');
+      const { cleanupHookSettings } = await import('./services/ptyHookSettings');
       cleanupHookSettings();
     } catch {
       // Best effort
