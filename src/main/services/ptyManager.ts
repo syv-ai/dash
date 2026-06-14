@@ -1,9 +1,7 @@
 import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
-import { type WebContents, app, BrowserWindow } from 'electron';
+import { type WebContents, BrowserWindow } from 'electron';
 import { activityMonitor } from './ActivityMonitor';
 import { hookServer } from './HookServer';
 import { contextUsageService } from './ContextUsageService';
@@ -11,7 +9,6 @@ import { DatabaseService } from './DatabaseService';
 import { RtkService } from './RtkService';
 import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
 import {
-  type Hook,
   type HookEntry,
   type HttpHook,
   type CommandHook,
@@ -21,37 +18,12 @@ import {
   entryIsDashOwned,
   mergeHookEntries,
 } from './hookSettingsMerge';
-import { encodeProjectPath } from '../utils/jsonlParser';
 import { portsDebug } from './PortsDebugLog';
 import { TerminalMirror } from './TerminalMirror';
 import { terminalSnapshotService } from './TerminalSnapshotService';
+import { ensureShellConfig } from './ptyShellConfig';
+import { findClaudePath, hasAnySessionForCwd, isClaudeVersionAtLeast } from './claudeCli';
 import type { PermissionMode } from '@shared/types';
-
-const execFileAsync = promisify(execFile);
-
-/** Exact-match-only project dir lookup. See SessionWatcherService.findProjectDir
- *  for the rationale (PR #117/#124) and `encodeProjectPath` for the platform rules. */
-function findClaudeProjectDir(cwd: string): string | null {
-  try {
-    const projectsDir = path.join(os.homedir(), '.claude', 'projects');
-    const pathBased = path.join(projectsDir, encodeProjectPath(cwd));
-    return fs.existsSync(pathBased) ? pathBased : null;
-  } catch (err) {
-    console.error('[findClaudeProjectDir] Failed to check projects dir:', err);
-    return null;
-  }
-}
-
-/** Check whether Claude has any jsonl history for this cwd. */
-function hasAnySessionForCwd(cwd: string): boolean {
-  const projDir = findClaudeProjectDir(cwd);
-  if (!projDir) return false;
-  try {
-    return fs.readdirSync(projDir).some((f) => f.endsWith('.jsonl'));
-  } catch {
-    return false;
-  }
-}
 
 export type PtyKind = 'agent' | 'shell' | 'tui' | 'service';
 
@@ -252,75 +224,6 @@ function getPty() {
 import { createBannerFilter } from './bannerFilter';
 import { remoteControlService } from './remoteControlService';
 
-// Cached Claude CLI path
-let cachedClaudePath: string | null = null;
-
-async function findClaudePath(): Promise<string | null> {
-  if (cachedClaudePath) return cachedClaudePath;
-
-  // 1. Check the startup-detected cache from main.ts
-  try {
-    const { claudeCliCache } = await import('../main');
-    if (claudeCliCache.path) {
-      cachedClaudePath = claudeCliCache.path;
-      return cachedClaudePath;
-    }
-  } catch {
-    // Best effort
-  }
-
-  // 2. Try `which`/`where.exe` (works when PATH is correct)
-  try {
-    const findCmd = process.platform === 'win32' ? 'where.exe' : 'which';
-    const { stdout } = await execFileAsync(findCmd, ['claude']);
-    // where.exe may return multiple lines; prefer .cmd on Windows
-    const lines = stdout.trim().split(/\r?\n/).filter(Boolean);
-    const resolved =
-      process.platform === 'win32'
-        ? (lines.find((l) => l.toLowerCase().endsWith('.cmd')) || lines[0])?.trim()
-        : lines[0]?.trim();
-    if (resolved) {
-      cachedClaudePath = resolved;
-      return cachedClaudePath;
-    }
-  } catch {
-    // Not in PATH
-  }
-
-  // 3. Direct probe common install locations
-  const home = os.homedir();
-  const candidates: string[] =
-    process.platform === 'win32'
-      ? [
-          path.join(
-            process.env.APPDATA || path.join(home, 'AppData', 'Roaming'),
-            'npm',
-            'claude.cmd',
-          ),
-          path.join(home, 'AppData', 'Local', 'Programs', 'nodejs', 'claude.cmd'),
-          path.join('C:\\Program Files\\nodejs', 'claude.cmd'),
-          // Version managers: check their env-var-based directories
-          ...(process.env.NVM_SYMLINK ? [path.join(process.env.NVM_SYMLINK, 'claude.cmd')] : []),
-          ...(process.env.VOLTA_HOME
-            ? [path.join(process.env.VOLTA_HOME, 'bin', 'claude.cmd')]
-            : []),
-        ]
-      : [path.join(home, '.local/bin/claude'), '/opt/homebrew/bin/claude', '/usr/local/bin/claude'];
-  for (const candidate of candidates) {
-    try {
-      const accessMode = process.platform === 'win32' ? fs.constants.F_OK : fs.constants.X_OK;
-      await fs.promises.access(candidate, accessMode);
-      cachedClaudePath = candidate;
-      return cachedClaudePath;
-    } catch {
-      // Not found here
-    }
-  }
-
-  console.error('[findClaudePath] Claude CLI not found in any known location');
-  return null;
-}
-
 /**
  * Build environment for direct CLI spawn.
  * When syncShellEnv is off (default), uses a minimal set for fast, predictable spawns.
@@ -436,34 +339,6 @@ function getTaskContextPrompt(taskId: string): string | null {
     console.error('[getTaskContextPrompt] Failed to read context for task', taskId, err);
     return null;
   }
-}
-
-/**
- * Claude Code rejects an entire settings.local.json if any top-level hook key
- * is unknown to the running CLI version. Newer hook events must be gated so
- * older Claude Code installs don't lose ALL Dash hooks (see GH #127).
- *
- * Returns false when the version is unknown, which keeps the new keys out of
- * the file — the safer default. main.ts populates claudeCliCache after the
- * async --version probe; by the time a PTY spawns, it's almost always set.
- */
-function isClaudeVersionAtLeast(major: number, minor: number, patch: number): boolean {
-  let version: string | null = null;
-  try {
-    // Lazy require to avoid the circular import that a static import of main.ts
-    // would create (main → ptyManager → main). At call time, main is fully loaded.
-    const main = require('../main') as typeof import('../main');
-    version = main.claudeCliCache.version;
-  } catch {
-    return false;
-  }
-  if (!version) return false;
-  const m = version.match(/^(\d+)\.(\d+)\.(\d+)/);
-  if (!m) return false;
-  const [a, b, c] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  if (a !== major) return a > major;
-  if (b !== minor) return b > minor;
-  return c >= patch;
 }
 
 /**
@@ -945,95 +820,6 @@ export async function startDirectPty(options: {
     reattached: false,
     isDirectSpawn: true,
   };
-}
-
-// ---------------------------------------------------------------------------
-// Custom zsh prompt via ZDOTDIR
-// ---------------------------------------------------------------------------
-
-const SHELL_ZSHENV = `\
-# Save our ZDOTDIR so .zshrc can find prompt.zsh
-export __DASH_ZDOTDIR="\${ZDOTDIR}"
-# Source user's .zshenv from HOME
-[[ -f "$HOME/.zshenv" ]] && source "$HOME/.zshenv"
-# Keep ZDOTDIR as our dir so zsh loads .zshrc etc. from here
-ZDOTDIR="\${__DASH_ZDOTDIR}"
-`;
-
-const SHELL_ZPROFILE = `\
-[[ -f "$HOME/.zprofile" ]] && source "$HOME/.zprofile"
-`;
-
-const SHELL_ZSHRC = `\
-# Restore ZDOTDIR to HOME so user config loads normally
-ZDOTDIR="$HOME"
-[[ -f "$HOME/.zshrc" ]] && source "$HOME/.zshrc"
-# Apply our prompt after user config
-source "\${__DASH_ZDOTDIR}/prompt.zsh"
-`;
-
-const SHELL_ZLOGIN = `\
-[[ -f "$HOME/.zlogin" ]] && source "$HOME/.zlogin"
-`;
-
-const SHELL_PROMPT = `\
-# Dash badge-style prompt — uses ANSI 16 colors (themed by xterm.js)
-autoload -Uz add-zsh-hook
-
-# Prevent venv from prepending (name) to prompt
-export VIRTUAL_ENV_DISABLE_PROMPT=1
-
-__dash_prompt_precmd() {
-  # Clack-style two-line prompt, matching the ports side-car TUI:
-  #   ◇  dash  .venv     <- green ◇ on success, red ■ on failure; %1~ dir only
-  #   │  <input>         <- gray gutter bar
-  local sym="%(?.%F{2}◇.%F{1}■)%f"
-  local dir="%F{12}%1~%f"
-
-  local venv=""
-  if [[ -n "\${VIRTUAL_ENV}" ]]; then
-    venv="  %F{6}\${VIRTUAL_ENV:t}%f"
-  fi
-
-  PROMPT="\${sym}  \${dir}\${venv}
-%F{8}│%f  "
-  RPROMPT=""
-}
-
-add-zsh-hook precmd __dash_prompt_precmd
-# Set PROMPT immediately so the first prompt is styled — precmd may not
-# fire before the initial prompt in all zsh configurations.
-__dash_prompt_precmd
-`;
-
-let shellConfigDir: string | null = null;
-
-function ensureShellConfig(): string {
-  if (shellConfigDir) return shellConfigDir;
-
-  const dir = path.join(app.getPath('userData'), 'shell');
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-
-  const files: Record<string, string> = {
-    '.zshenv': SHELL_ZSHENV,
-    '.zprofile': SHELL_ZPROFILE,
-    '.zshrc': SHELL_ZSHRC,
-    '.zlogin': SHELL_ZLOGIN,
-    'prompt.zsh': SHELL_PROMPT,
-  };
-
-  for (const [name, content] of Object.entries(files)) {
-    const filePath = path.join(dir, name);
-    const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : null;
-    if (existing !== content) {
-      fs.writeFileSync(filePath, content);
-    }
-  }
-
-  shellConfigDir = dir;
-  return dir;
 }
 
 /**

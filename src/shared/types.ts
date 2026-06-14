@@ -44,13 +44,20 @@ export type LinkedItem = LinkedGithubIssue | LinkedAdoWorkItem;
  */
 export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions';
 
+/**
+ * Lifecycle state of a task row. `idle` is the DB default; `active` is set when
+ * a worktree is created. Archival is tracked separately via `archivedAt`, not a
+ * status value. Legacy/unknown values are normalized to `idle` on read.
+ */
+export type TaskStatus = 'idle' | 'active';
+
 export interface Task {
   id: string;
   projectId: string;
   name: string;
   branch: string;
   path: string;
-  status: string;
+  status: TaskStatus;
   useWorktree: boolean;
   permissionMode: PermissionMode;
   branchCreatedByDash: boolean;

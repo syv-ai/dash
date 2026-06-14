@@ -10,12 +10,17 @@ import type {
   LinkedItem,
   TokenStatsRollup,
   PermissionMode,
+  TaskStatus,
   TaskPort,
   PortSource,
 } from '@shared/types';
 
 function normalizePermissionMode(value: string | null | undefined): PermissionMode {
   return value === 'acceptEdits' || value === 'bypassPermissions' ? value : 'default';
+}
+
+function normalizeTaskStatus(value: string | null | undefined): TaskStatus {
+  return value === 'active' ? 'active' : 'idle';
 }
 
 export class DatabaseService {
@@ -486,7 +491,7 @@ export class DatabaseService {
       name: row.name,
       branch: row.branch,
       path: row.path,
-      status: row.status,
+      status: normalizeTaskStatus(row.status),
       useWorktree: row.useWorktree ?? true,
       permissionMode: normalizePermissionMode(row.permissionMode),
       branchCreatedByDash: row.branchCreatedByDash ?? false,

@@ -42,7 +42,7 @@ export const taskInputSchema = z.looseObject({
   name: z.string(),
   branch: z.string(),
   path: z.string(),
-  status: z.string().optional(),
+  status: z.enum(['idle', 'active']).optional(),
   useWorktree: z.boolean().optional(),
   permissionMode: permissionModeSchema.optional(),
   branchCreatedByDash: z.boolean().optional(),
