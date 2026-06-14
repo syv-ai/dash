@@ -24,9 +24,7 @@ import { TUI_PROTOCOL_VERSION } from '../../../shared/tuiProtocol';
 import type { ScreenContext, ShowHandler } from './types';
 import { showPortsScreen } from './features/ports';
 
-/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
 const clack = require('@clack/prompts') as typeof import('@clack/prompts');
-/* eslint-enable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
 
 const handlers: Record<string, ShowHandler> = {
   ports: showPortsScreen,

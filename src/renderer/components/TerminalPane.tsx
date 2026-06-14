@@ -57,7 +57,7 @@ export function TerminalPane({ id, cwd, permissionMode, terminalBg }: TerminalPa
     setSearchAddon(session.getSearchAddon());
 
     // Now attach — the async work will call onRestarting/onReady as needed
-    session.attach(container);
+    void session.attach(container);
 
     return () => {
       session.setOnFindKey(null);

@@ -452,7 +452,6 @@ function isClaudeVersionAtLeast(major: number, minor: number, patch: number): bo
   try {
     // Lazy require to avoid the circular import that a static import of main.ts
     // would create (main → ptyManager → main). At call time, main is fully loaded.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
     const main = require('../main') as typeof import('../main');
     version = main.claudeCliCache.version;
   } catch {

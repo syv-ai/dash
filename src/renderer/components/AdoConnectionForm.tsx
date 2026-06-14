@@ -66,7 +66,13 @@ export function AdoConnectionForm({ projectId }: AdoConnectionFormProps) {
             </p>
           </div>
         </button>
-        <button type="button" onClick={handleToggle} className="flex-shrink-0">
+        <button
+          type="button"
+          onClick={() => {
+            void handleToggle();
+          }}
+          className="flex-shrink-0"
+        >
           <div
             className={`w-8 h-[18px] rounded-full relative transition-colors duration-150 ${
               enabled ? 'bg-primary' : 'bg-border'
@@ -94,7 +100,9 @@ export function AdoConnectionForm({ projectId }: AdoConnectionFormProps) {
               <button
                 type="button"
                 disabled={!conn.canSubmit || conn.testing}
-                onClick={conn.handleTest}
+                onClick={() => {
+                  void conn.handleTest();
+                }}
                 className="px-3 py-1.5 rounded-lg text-[11px] font-medium border border-border/60 text-foreground/70 hover:bg-accent/40 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
               >
                 {conn.testing ? 'Testing...' : 'Test Connection'}
@@ -102,7 +110,9 @@ export function AdoConnectionForm({ projectId }: AdoConnectionFormProps) {
               <button
                 type="button"
                 disabled={!conn.canSubmit || conn.saving}
-                onClick={conn.handleSave}
+                onClick={() => {
+                  void conn.handleSave();
+                }}
                 className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-primary text-primary-foreground hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
               >
                 {conn.saving ? 'Saving...' : 'Save'}

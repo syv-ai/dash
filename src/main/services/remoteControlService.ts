@@ -6,7 +6,9 @@ const WATCH_TIMEOUT = 15_000;
 
 const URL_REGEX = /https:\/\/claude\.ai\/code\/[a-zA-Z0-9_-]+/;
 
-// Strip ANSI escape sequences so they don't break URL matching
+// Strip ANSI escape sequences so they don't break URL matching.
+// Control characters (ESC, BEL) are intentional here — they ARE the escape codes.
+// eslint-disable-next-line no-control-regex
 const ANSI_RE = /\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?(?:\x07|\x1b\\)/g;
 
 interface Watcher {

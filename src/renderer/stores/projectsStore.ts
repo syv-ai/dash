@@ -83,9 +83,9 @@ async function reloadOwningProject(taskId: string) {
 
 /** Dispose the Claude session + shell sessions for a task. */
 function disposeTaskSessions(taskId: string) {
-  sessionRegistry.dispose(taskId);
-  sessionRegistry.dispose(`shell:${taskId}`);
-  sessionRegistry.disposeByPrefix(`shell:${taskId}:`);
+  void sessionRegistry.dispose(taskId);
+  void sessionRegistry.dispose(`shell:${taskId}`);
+  void sessionRegistry.disposeByPrefix(`shell:${taskId}:`);
 }
 
 /** Sort projects by the saved projectOrder, pruning stale ids from storage. */
@@ -199,8 +199,8 @@ export const useProjects = create<ProjectsStore>((set) => ({
   },
   closeTask: (id) => {
     disposeTaskSessions(id);
-    window.electronAPI.ptyKill(id);
-    window.electronAPI.ptyClearSnapshot(id);
+    void window.electronAPI.ptyKill(id);
+    void window.electronAPI.ptyClearSnapshot(id);
     if (useProjects.getState().activeTaskId === id) useProjects.getState().setActiveTask(null);
   },
   updateTask: async (taskItem, patch) => {
@@ -243,8 +243,8 @@ export const useProjects = create<ProjectsStore>((set) => ({
     // Clean up all terminal sessions, then kill PTY + clear snapshot so a new
     // task in the same cwd starts fresh.
     disposeTaskSessions(taskItem.id);
-    window.electronAPI.ptyKill(taskItem.id);
-    window.electronAPI.ptyClearSnapshot(taskItem.id);
+    void window.electronAPI.ptyKill(taskItem.id);
+    void window.electronAPI.ptyClearSnapshot(taskItem.id);
     await window.electronAPI.deleteTask(taskItem.id);
     if (useProjects.getState().activeTaskId === taskItem.id) {
       useProjects.getState().setActiveTask(null);
@@ -266,8 +266,8 @@ export const useProjects = create<ProjectsStore>((set) => ({
           },
         });
       }
-      sessionRegistry.dispose(`shell:${t.id}`);
-      sessionRegistry.disposeByPrefix(`shell:${t.id}:`);
+      void sessionRegistry.dispose(`shell:${t.id}`);
+      void sessionRegistry.disposeByPrefix(`shell:${t.id}:`);
     }
     await window.electronAPI.deleteProject(project.id);
     if (useProjects.getState().activeProjectId === project.id) {
@@ -401,7 +401,7 @@ export const useProjects = create<ProjectsStore>((set) => ({
 
       if (useSettings.getState().notificationSound === 'peon') playPeonSound('what');
 
-      window.electronAPI.worktreeEnsureReserve({
+      void window.electronAPI.worktreeEnsureReserve({
         projectId: targetProject.id,
         projectPath: targetProject.path,
       });

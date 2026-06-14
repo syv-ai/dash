@@ -77,7 +77,9 @@ function PortRow({
       <Tooltip content={tooltip}>
         <button
           type="button"
-          onClick={() => window.electronAPI.portsOpenUrl(port.hostPort)}
+          onClick={() => {
+            void window.electronAPI.portsOpenUrl(port.hostPort);
+          }}
           onContextMenu={(e) => {
             e.preventDefault();
             void window.electronAPI.clipboardWriteText(e.shiftKey ? String(port.hostPort) : url);
@@ -97,7 +99,9 @@ function PortRow({
           <button
             type="button"
             disabled={busy}
-            onClick={runStop}
+            onClick={() => {
+              void runStop();
+            }}
             className="p-[2px] rounded text-muted-foreground/40 hover:text-foreground hover:bg-accent/60 transition-colors disabled:opacity-40"
           >
             {busy ? (
@@ -114,7 +118,9 @@ function PortRow({
         <Tooltip content={owned ? 'Show service terminal' : `Logs: ${port.logsCommand}`}>
           <button
             type="button"
-            onClick={() => window.electronAPI.portsServiceLogs(taskId, port)}
+            onClick={() => {
+              void window.electronAPI.portsServiceLogs(taskId, port);
+            }}
             className="p-[2px] rounded text-muted-foreground/40 hover:text-foreground hover:bg-accent/60 transition-colors"
           >
             <ScrollText size={10} strokeWidth={2} />
@@ -124,7 +130,9 @@ function PortRow({
       <Tooltip content="Open in browser">
         <button
           type="button"
-          onClick={() => window.electronAPI.portsOpenUrl(port.hostPort)}
+          onClick={() => {
+            void window.electronAPI.portsOpenUrl(port.hostPort);
+          }}
           className="p-[2px] rounded text-muted-foreground/40 hover:text-foreground hover:bg-accent/60 transition-colors"
         >
           <ExternalLink size={10} strokeWidth={2} />

@@ -30,7 +30,6 @@ function fixPath(): void {
     );
     // Try to get login shell PATH
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { execSync } = require('child_process');
       const shellPath = execSync('zsh -ilc "echo $PATH"', {
         encoding: 'utf-8',
@@ -88,14 +87,14 @@ if (!gotLock) {
 // ── App Ready ─────────────────────────────────────────────────
 let mainWindow: BrowserWindow | null = null;
 
-app.whenReady().then(async () => {
+void app.whenReady().then(async () => {
   // Initialize telemetry (before anything else, never throws)
   const { TelemetryService } = await import('./services/TelemetryService');
   TelemetryService.initialize();
 
   // Initialize database
   const { DatabaseService } = await import('./services/DatabaseService');
-  await DatabaseService.initialize();
+  DatabaseService.initialize();
 
   // Start hook server (must be ready before any PTY spawns)
   const { hookServer } = await import('./services/HookServer');
@@ -118,7 +117,7 @@ app.whenReady().then(async () => {
 
   // Kill PTYs owned by this window on close (CMD+W on macOS)
   mainWindow.on('close', () => {
-    import('./services/ptyManager').then(({ killByOwner }) => {
+    void import('./services/ptyManager').then(({ killByOwner }) => {
       killByOwner(mainWindow!.webContents);
     });
   });
@@ -164,23 +163,26 @@ app.whenReady().then(async () => {
 
   // Crash resilience: persist terminal mirrors every 60s (quit and kill
   // paths persist too — this only bounds what a hard crash can lose).
-  setInterval(async () => {
-    const { persistAllMirrors } = await import('./services/ptyManager');
-    persistAllMirrors();
+  setInterval(() => {
+    void import('./services/ptyManager').then(({ persistAllMirrors }) => {
+      persistAllMirrors();
+    });
   }, 60_000);
 
   // Cleanup orphaned reserve worktrees (background, non-blocking)
-  setTimeout(async () => {
-    try {
-      const { worktreePoolService } = await import('./services/WorktreePoolService');
-      await worktreePoolService.cleanupOrphanedReserves();
-    } catch {
-      // Best effort
-    }
+  setTimeout(() => {
+    void (async () => {
+      try {
+        const { worktreePoolService } = await import('./services/WorktreePoolService');
+        await worktreePoolService.cleanupOrphanedReserves();
+      } catch {
+        // Best effort
+      }
+    })();
   }, 2000);
 
   // Detect Claude CLI (cache for settings UI)
-  detectClaudeCli();
+  void detectClaudeCli();
 });
 
 // ── Claude CLI Detection ──────────────────────────────────────
@@ -225,103 +227,107 @@ app.on('window-all-closed', () => {
   }
 });
 
-app.on('activate', async () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    const { createWindow } = await import('./window');
-    mainWindow = createWindow();
-    const { activityMonitor } = await import('./services/ActivityMonitor');
-    activityMonitor.start(mainWindow.webContents);
-    const { remoteControlService } = await import('./services/remoteControlService');
-    remoteControlService.setSender(mainWindow.webContents);
-    const { RtkService } = await import('./services/RtkService');
-    RtkService.setSender(mainWindow.webContents);
-    const { contextUsageService } = await import('./services/ContextUsageService');
-    contextUsageService.setSender(mainWindow.webContents);
-    const { tokenStatsService } = await import('./services/TokenStatsService');
-    tokenStatsService.setSender(mainWindow.webContents);
+app.on('activate', () => {
+  void (async () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      const { createWindow } = await import('./window');
+      mainWindow = createWindow();
+      const { activityMonitor } = await import('./services/ActivityMonitor');
+      activityMonitor.start(mainWindow.webContents);
+      const { remoteControlService } = await import('./services/remoteControlService');
+      remoteControlService.setSender(mainWindow.webContents);
+      const { RtkService } = await import('./services/RtkService');
+      RtkService.setSender(mainWindow.webContents);
+      const { contextUsageService } = await import('./services/ContextUsageService');
+      contextUsageService.setSender(mainWindow.webContents);
+      const { tokenStatsService } = await import('./services/TokenStatsService');
+      tokenStatsService.setSender(mainWindow.webContents);
 
-    // Update auto-updater window reference
-    if (!process.argv.includes('--dev')) {
-      const { AutoUpdateService } = await import('./services/AutoUpdateService');
-      AutoUpdateService.setWindow(mainWindow);
+      // Update auto-updater window reference
+      if (!process.argv.includes('--dev')) {
+        const { AutoUpdateService } = await import('./services/AutoUpdateService');
+        AutoUpdateService.setWindow(mainWindow);
+      }
     }
-  }
+  })();
 });
 
-app.on('before-quit', async () => {
-  // Terminal persistence happens main-side: killAll() below serializes every
-  // PTY's TerminalMirror to the snapshot files before killing — the renderer
-  // is no longer involved (no app:beforeQuit round-trip needed).
+app.on('before-quit', () => {
+  void (async () => {
+    // Terminal persistence happens main-side: killAll() below serializes every
+    // PTY's TerminalMirror to the snapshot files before killing — the renderer
+    // is no longer involved (no app:beforeQuit round-trip needed).
 
-  // Stop auto-updater
-  try {
-    const { AutoUpdateService } = await import('./services/AutoUpdateService');
-    AutoUpdateService.cleanup();
-  } catch {
-    // Best effort
-  }
+    // Stop auto-updater
+    try {
+      const { AutoUpdateService } = await import('./services/AutoUpdateService');
+      AutoUpdateService.cleanup();
+    } catch {
+      // Best effort
+    }
 
-  // Clean up hook settings from all settings.local.json files before stopping server
-  try {
-    const { cleanupHookSettings } = await import('./services/ptyManager');
-    cleanupHookSettings();
-  } catch {
-    // Best effort
-  }
+    // Clean up hook settings from all settings.local.json files before stopping server
+    try {
+      const { cleanupHookSettings } = await import('./services/ptyManager');
+      cleanupHookSettings();
+    } catch {
+      // Best effort
+    }
 
-  // Stop hook server
-  try {
-    const { hookServer } = await import('./services/HookServer');
-    hookServer.stop();
-  } catch {
-    // Best effort
-  }
+    // Stop hook server
+    try {
+      const { hookServer } = await import('./services/HookServer');
+      hookServer.stop();
+    } catch {
+      // Best effort
+    }
 
-  // Kill all PTYs (also stops activity monitor)
-  try {
-    const { killAll } = await import('./services/ptyManager');
-    killAll();
-  } catch {
-    // Best effort
-  }
+    // Kill all PTYs (also stops activity monitor)
+    try {
+      const { killAll } = await import('./services/ptyManager');
+      killAll();
+    } catch {
+      // Best effort
+    }
 
-  // Stop context usage service (clears debounce timer)
-  try {
-    const { contextUsageService } = await import('./services/ContextUsageService');
-    contextUsageService.stop();
-  } catch {
-    // Best effort
-  }
+    // Stop context usage service (clears debounce timer)
+    try {
+      const { contextUsageService } = await import('./services/ContextUsageService');
+      contextUsageService.stop();
+    } catch {
+      // Best effort
+    }
 
-  // Stop all file watchers
-  try {
-    const { stopAll } = await import('./services/FileWatcherService');
-    stopAll();
-  } catch {
-    // Best effort
-  }
+    // Stop all file watchers
+    try {
+      const { stopAll } = await import('./services/FileWatcherService');
+      stopAll();
+    } catch {
+      // Best effort
+    }
 
-  // Stop all session watchers
-  try {
-    const { stopAll: stopSessionWatchers } = await import('./services/SessionWatcherService');
-    stopSessionWatchers();
-  } catch {
-    // Best effort
-  }
+    // Stop all session watchers
+    try {
+      const { stopAll: stopSessionWatchers } = await import('./services/SessionWatcherService');
+      stopSessionWatchers();
+    } catch {
+      // Best effort
+    }
 
-  // Stop all ports.json watchers
-  try {
-    const { stopAll: stopPortsConfigWatchers } = await import('./services/PortsConfigWatcher');
-    stopPortsConfigWatchers();
-  } catch {
-    // Best effort
-  }
+    // Stop all ports.json watchers
+    try {
+      const { stopAll: stopPortsConfigWatchers } = await import('./services/PortsConfigWatcher');
+      stopPortsConfigWatchers();
+    } catch {
+      // Best effort
+    }
 
-  // Flush telemetry
-  try {
-    const { TelemetryService } = await import('./services/TelemetryService');
-    await TelemetryService.shutdown();
-  } catch {
-    // Best effort
-  }
+    // Flush telemetry
+    try {
+      const { TelemetryService } = await import('./services/TelemetryService');
+      await TelemetryService.shutdown();
+    } catch {
+      // Best effort
+    }
+  })();
 });

@@ -146,15 +146,15 @@ export const useGit = create<GitStore>((set, get) => ({
       return;
     }
     const { id, path: cwd } = task;
-    get().refreshGitStatus(cwd);
-    window.electronAPI.gitWatch({ id, cwd });
+    void get().refreshGitStatus(cwd);
+    void window.electronAPI.gitWatch({ id, cwd });
     const unsubscribe = window.electronAPI.onGitFileChanged((changedId) => {
-      if (changedId === id) get().refreshGitStatus(cwd);
+      if (changedId === id) void get().refreshGitStatus(cwd);
     });
-    const timer = setInterval(() => get().refreshGitStatus(cwd), GIT_POLL_INTERVAL);
+    const timer = setInterval(() => void get().refreshGitStatus(cwd), GIT_POLL_INTERVAL);
     watchTeardown = () => {
       unsubscribe();
-      window.electronAPI.gitUnwatch(id);
+      void window.electronAPI.gitUnwatch(id);
       clearInterval(timer);
     };
   },
@@ -193,8 +193,8 @@ export const useGit = create<GitStore>((set, get) => ({
       }
     };
 
-    fetchPr();
-    const interval = setInterval(fetchPr, PR_POLL_INTERVAL);
+    void fetchPr();
+    const interval = setInterval(() => void fetchPr(), PR_POLL_INTERVAL);
     prTeardown = () => {
       cancelled = true;
       clearInterval(interval);

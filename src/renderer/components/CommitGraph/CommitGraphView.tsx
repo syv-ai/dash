@@ -1,8 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import type {
-  CommitGraphData,
-  CommitDetail as CommitDetailType,
-} from '../../../shared/types';
+import type { CommitGraphData, CommitDetail as CommitDetailType } from '../../../shared/types';
 import { GraphSvg } from './GraphSvg';
 import { CommitRow } from './CommitRow';
 import { CommitDetailPanel } from './CommitDetail';
@@ -29,7 +26,12 @@ function getGithubSlug(remote: string | null): string | null {
   return null;
 }
 
-export function CommitGraphView({ projectPath, gitRemote, taskBranches, onSelectTask }: CommitGraphViewProps) {
+export function CommitGraphView({
+  projectPath,
+  gitRemote,
+  taskBranches,
+  onSelectTask,
+}: CommitGraphViewProps) {
   const [graphData, setGraphData] = useState<CommitGraphData | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -58,7 +60,7 @@ export function CommitGraphView({ projectPath, gitRemote, taskBranches, onSelect
     setLoading(true);
     setSelectedRow(null);
     setDetail(null);
-    fetchGraph(0).then((data) => {
+    void fetchGraph(0).then((data) => {
       setGraphData(data);
       setLoading(false);
     });
@@ -169,7 +171,9 @@ export function CommitGraphView({ projectPath, gitRemote, taskBranches, onSelect
                 refColors={refColors}
                 rowIndex={row}
                 githubSlug={githubSlug}
-                onClick={() => handleSelectCommit(row)}
+                onClick={() => {
+                  void handleSelectCommit(row);
+                }}
               />
             ))}
 
@@ -177,11 +181,15 @@ export function CommitGraphView({ projectPath, gitRemote, taskBranches, onSelect
             {hasMore && (
               <div className="flex justify-center py-3" style={{ height: ROW_HEIGHT + 16 }}>
                 <button
-                  onClick={handleLoadMore}
+                  onClick={() => {
+                    void handleLoadMore();
+                  }}
                   disabled={loadingMore}
                   className="px-4 py-1.5 rounded-md text-[11px] font-medium bg-accent hover:bg-accent/80 text-foreground/80 hover:text-foreground transition-colors disabled:opacity-40"
                 >
-                  {loadingMore ? 'Loading...' : `Load more (${graphData.totalCount - graphData.commits.length} remaining)`}
+                  {loadingMore
+                    ? 'Loading...'
+                    : `Load more (${graphData.totalCount - graphData.commits.length} remaining)`}
                 </button>
               </div>
             )}

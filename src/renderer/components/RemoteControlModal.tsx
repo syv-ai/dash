@@ -35,7 +35,7 @@ function RemoteControlBody({ ptyId, state }: RemoteControlBodyProps) {
     if (!state && !enabledRef.current) {
       enabledRef.current = true;
       setEnabling(true);
-      window.electronAPI.ptyRemoteControlEnable(ptyId);
+      void window.electronAPI.ptyRemoteControlEnable(ptyId);
     }
   }, [ptyId, state]);
 
@@ -50,7 +50,7 @@ function RemoteControlBody({ ptyId, state }: RemoteControlBodyProps) {
   useEffect(() => {
     if (!state?.url) return;
     console.log('[RemoteControl] QR code URL:', state.url);
-    QRCode.toDataURL(state.url, {
+    void QRCode.toDataURL(state.url, {
       width: 200,
       margin: 2,
       color: { dark: '#000000', light: '#ffffff' },
@@ -59,7 +59,7 @@ function RemoteControlBody({ ptyId, state }: RemoteControlBodyProps) {
 
   const handleCopy = useCallback(() => {
     if (!state?.url) return;
-    navigator.clipboard.writeText(state.url);
+    void navigator.clipboard.writeText(state.url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, [state?.url]);

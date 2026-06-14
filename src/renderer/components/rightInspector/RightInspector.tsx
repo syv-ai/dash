@@ -99,7 +99,9 @@ export function RightInspector({
         {unstagedCount > 0 && (
           <Tooltip content="Stage all">
             <button
-              onClick={onStageAll}
+              onClick={() => {
+                void onStageAll();
+              }}
               className="p-[3px] rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0"
             >
               <Plus size={11} strokeWidth={2} />
@@ -109,7 +111,9 @@ export function RightInspector({
         {stagedCount > 0 && (
           <Tooltip content="Unstage all">
             <button
-              onClick={onUnstageAll}
+              onClick={() => {
+                void onUnstageAll();
+              }}
               className="p-[3px] rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0"
             >
               <Minus size={11} strokeWidth={2} />

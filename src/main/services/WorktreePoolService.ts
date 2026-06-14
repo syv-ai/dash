@@ -131,7 +131,7 @@ export class WorktreePoolService {
       if (shouldPush) {
         // Link branch to issues before pushing (createLinkedBranch needs the branch to not exist)
         if (linkedIssueNumbers && linkedIssueNumbers.length > 0) {
-          (async () => {
+          void (async () => {
             try {
               for (const num of linkedIssueNumbers) {
                 try {
@@ -174,7 +174,7 @@ export class WorktreePoolService {
       worktreeService.runSetupScriptAsync(newPath, newBranch, reserve.projectPath);
 
       // Fire-and-forget replenish
-      this.ensureReserve(projectId, reserve.projectPath);
+      void this.ensureReserve(projectId, reserve.projectPath);
 
       return {
         id: worktreeService.stableIdFromPath(newPath),
@@ -208,7 +208,7 @@ export class WorktreePoolService {
     // We can't scan everywhere, so just clean up known projects from the database
     try {
       const { DatabaseService } = await import('./DatabaseService');
-      const projects = await DatabaseService.getProjects();
+      const projects = DatabaseService.getProjects();
 
       for (const project of projects) {
         const worktreesDir = worktreeService.getWorktreesDir(project.path);

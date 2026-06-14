@@ -21,7 +21,7 @@ export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: 
   const runAll = () => {
     if (startingAll) return;
     setStartingAll(true);
-    window.electronAPI.portsServiceStartAll(taskId).finally(() => setStartingAll(false));
+    void window.electronAPI.portsServiceStartAll(taskId).finally(() => setStartingAll(false));
   };
 
   return (
@@ -70,7 +70,9 @@ export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: 
             <Tooltip content="Re-allocate from .dash/ports.json">
               <button
                 type="button"
-                onClick={() => state.refresh()}
+                onClick={() => {
+                  void state.refresh();
+                }}
                 disabled={state.refreshing}
                 className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 disabled:opacity-40"
               >

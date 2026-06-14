@@ -74,7 +74,9 @@ export function DiscardFolderConfirm({
         </button>
         <button
           type="button"
-          onClick={handleConfirm}
+          onClick={() => {
+            void handleConfirm();
+          }}
           disabled={busy}
           className="flex items-center gap-1.5 px-3 h-8 rounded-md text-[11.5px] font-medium bg-destructive text-destructive-foreground hover:brightness-110 transition-colors disabled:opacity-70 disabled:pointer-events-none"
         >

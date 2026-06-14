@@ -146,7 +146,7 @@ export const useRuntime = create<RuntimeStore>((set, get) => ({
       });
       cleanups.push(unsub);
 
-      window.electronAPI.ptyGetAllActivity().then((resp) => {
+      void window.electronAPI.ptyGetAllActivity().then((resp) => {
         if (resp.success && resp.data) {
           for (const [id, info] of Object.entries(resp.data)) {
             prevState[id] = info.state;
@@ -171,7 +171,7 @@ export const useRuntime = create<RuntimeStore>((set, get) => ({
       });
       cleanups.push(unsub);
 
-      window.electronAPI.ptyRemoteControlGetAllStates().then((resp) => {
+      void window.electronAPI.ptyRemoteControlGetAllStates().then((resp) => {
         if (resp.success && resp.data) set({ remoteControlStates: resp.data });
       });
     }
@@ -190,7 +190,7 @@ export const useRuntime = create<RuntimeStore>((set, get) => ({
           }
           return { tasksByProject: next };
         });
-        get().refreshTokenRollups();
+        void get().refreshTokenRollups();
       });
       cleanups.push(unsub);
     }
@@ -201,7 +201,7 @@ export const useRuntime = create<RuntimeStore>((set, get) => ({
       // Retry once on transient failure — a single startup flake otherwise leaves
       // rtkStatus null forever and the Settings card stays stuck on "loading…".
       const tryFetch = (attempt: number): void => {
-        window.electronAPI.rtkGetStatus().then((resp) => {
+        void window.electronAPI.rtkGetStatus().then((resp) => {
           if (cancelled) return;
           if (resp.success && resp.data) set({ rtkStatus: resp.data });
           else if (attempt < 1) setTimeout(() => tryFetch(attempt + 1), 500);
@@ -212,7 +212,7 @@ export const useRuntime = create<RuntimeStore>((set, get) => ({
       const unsub = window.electronAPI.onRtkDownloadProgress((progress) => {
         set({ rtkDownloadProgress: progress });
         if (progress.phase === 'done') {
-          window.electronAPI.rtkGetStatus().then((resp) => {
+          void window.electronAPI.rtkGetStatus().then((resp) => {
             if (resp.success && resp.data) set({ rtkStatus: resp.data });
           });
         }

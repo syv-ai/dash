@@ -171,24 +171,26 @@ export function FileChangesPanel({
             autoFixCount={autoFixPaths.length}
             onCancel={() => {
               if (commitRun.status === 'running') {
-                window.electronAPI.gitCommitCancel(commitRun.requestId);
+                void window.electronAPI.gitCommitCancel(commitRun.requestId);
               }
             }}
             onBackToFiles={() => setCommitRun({ status: 'idle' })}
-            onStageFixesAndRetry={async () => {
-              await window.electronAPI.gitStageFiles({ cwd, filePaths: autoFixPaths });
-              prevStagedRef.current = [...new Set([...prevStagedRef.current, ...autoFixPaths])];
-              const res = await window.electronAPI.gitCommitStart({
-                cwd,
-                message: lastMessageRef.current,
-                allowEmpty: lastAllowEmptyRef.current,
-              });
-              if (!res.success || !res.data) {
-                setError(res.error || 'Retry failed');
-                setCommitRun({ status: 'idle' });
-                return;
-              }
-              setCommitRun(initialRunningState(res.data.requestId));
+            onStageFixesAndRetry={() => {
+              void (async () => {
+                await window.electronAPI.gitStageFiles({ cwd, filePaths: autoFixPaths });
+                prevStagedRef.current = [...new Set([...prevStagedRef.current, ...autoFixPaths])];
+                const res = await window.electronAPI.gitCommitStart({
+                  cwd,
+                  message: lastMessageRef.current,
+                  allowEmpty: lastAllowEmptyRef.current,
+                });
+                if (!res.success || !res.data) {
+                  setError(res.error || 'Retry failed');
+                  setCommitRun({ status: 'idle' });
+                  return;
+                }
+                setCommitRun(initialRunningState(res.data.requestId));
+              })();
             }}
           />
         </div>
@@ -229,12 +231,22 @@ export function FileChangesPanel({
                     </div>
                     <FileTreeView
                       files={stagedFiles}
-                      onToggleFileStage={(f) => onUnstageFiles([f.path])}
-                      onToggleFolderStage={onUnstageFiles}
+                      onToggleFileStage={(f) => {
+                        void onUnstageFiles([f.path]);
+                      }}
+                      onToggleFolderStage={(paths) => {
+                        void onUnstageFiles(paths);
+                      }}
                       onViewDiff={(f) => onViewDiff(f.path, true)}
-                      onDiscard={(f) => onDiscardFiles([f.path])}
-                      onDiscardMany={onDiscardFiles}
-                      onAddToGitignore={onAddToGitignore}
+                      onDiscard={(f) => {
+                        void onDiscardFiles([f.path]);
+                      }}
+                      onDiscardMany={(paths) => {
+                        void onDiscardFiles(paths);
+                      }}
+                      onAddToGitignore={(path) => {
+                        void onAddToGitignore(path);
+                      }}
                     />
                   </div>
                 )}
@@ -245,12 +257,22 @@ export function FileChangesPanel({
                     </div>
                     <FileTreeView
                       files={unstagedFiles}
-                      onToggleFileStage={(f) => onStageFiles([f.path])}
-                      onToggleFolderStage={onStageFiles}
+                      onToggleFileStage={(f) => {
+                        void onStageFiles([f.path]);
+                      }}
+                      onToggleFolderStage={(paths) => {
+                        void onStageFiles(paths);
+                      }}
                       onViewDiff={(f) => onViewDiff(f.path, false)}
-                      onDiscard={(f) => onDiscardFiles([f.path])}
-                      onDiscardMany={onDiscardFiles}
-                      onAddToGitignore={onAddToGitignore}
+                      onDiscard={(f) => {
+                        void onDiscardFiles([f.path]);
+                      }}
+                      onDiscardMany={(paths) => {
+                        void onDiscardFiles(paths);
+                      }}
+                      onAddToGitignore={(path) => {
+                        void onAddToGitignore(path);
+                      }}
                     />
                   </div>
                 )}
@@ -323,7 +345,7 @@ export function FileChangesPanel({
                       if (e.key !== 'Escape') e.stopPropagation();
                       if (e.key === 'Enter' && e.metaKey) {
                         e.preventDefault();
-                        handleCommit();
+                        void handleCommit();
                       }
                     }}
                     placeholder="Describe the change…"
@@ -357,7 +379,9 @@ export function FileChangesPanel({
                     <div className="flex gap-1.5 ml-auto">
                       {gitStatus && gitStatus.ahead > 0 && (
                         <button
-                          onClick={handlePush}
+                          onClick={() => {
+                            void handlePush();
+                          }}
                           disabled={pushing}
                           className="flex items-center justify-center gap-1.5 h-8 px-3 rounded-md text-[11.5px] font-medium transition-colors bg-accent hover:bg-accent/80 text-foreground/80 disabled:opacity-30 disabled:cursor-not-allowed"
                         >
@@ -366,7 +390,9 @@ export function FileChangesPanel({
                         </button>
                       )}
                       <button
-                        onClick={handleCommit}
+                        onClick={() => {
+                          void handleCommit();
+                        }}
                         disabled={!commitMsg.trim() || committing}
                         className="flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-md text-[11.5px] font-medium transition-colors bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-30 disabled:cursor-not-allowed"
                       >

@@ -25,7 +25,7 @@ export function useAppBootstrap() {
 
   // Token rollups re-fetch when the project list changes (initial load + add/remove).
   useEffect(() => {
-    useRuntime.getState().refreshTokenRollups();
+    void useRuntime.getState().refreshTokenRollups();
   }, [projects]);
 
   // Git watcher + poll, re-wired whenever the active task changes.

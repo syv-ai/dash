@@ -69,7 +69,9 @@ function AdoSetupBody({ projectId, organizationUrl, project, onClose }: AdoSetup
           <button
             type="button"
             disabled={!conn.canSubmit || conn.testing}
-            onClick={conn.handleTest}
+            onClick={() => {
+              void conn.handleTest();
+            }}
             className="px-3 py-1.5 rounded-lg text-[11px] font-medium border border-border/60 text-foreground/70 hover:bg-accent/40 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
           >
             {conn.testing ? 'Testing...' : 'Test Connection'}
@@ -85,7 +87,9 @@ function AdoSetupBody({ projectId, organizationUrl, project, onClose }: AdoSetup
             <button
               type="button"
               disabled={!conn.canSubmit || conn.saving}
-              onClick={conn.handleSave}
+              onClick={() => {
+                void conn.handleSave();
+              }}
               className="px-5 py-2 rounded-lg text-[13px] font-medium bg-primary text-primary-foreground hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
             >
               {conn.saving ? 'Saving...' : 'Save'}

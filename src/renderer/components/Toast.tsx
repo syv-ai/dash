@@ -17,7 +17,9 @@ export function ToastContainer({ updateNotificationsEnabled }: ToastContainerPro
         toast(data.message, {
           action: {
             label: 'Open',
-            onClick: () => window.electronAPI.openExternal(data.url!),
+            onClick: () => {
+              void window.electronAPI.openExternal(data.url!);
+            },
           },
           duration: 6000,
         });
@@ -36,7 +38,7 @@ export function ToastContainer({ updateNotificationsEnabled }: ToastContainerPro
         action: {
           label: 'Download',
           onClick: () => {
-            window.electronAPI.autoUpdateDownload();
+            void window.electronAPI.autoUpdateDownload();
           },
         },
       });
@@ -52,7 +54,7 @@ export function ToastContainer({ updateNotificationsEnabled }: ToastContainerPro
         action: {
           label: 'Restart',
           onClick: () => {
-            window.electronAPI.autoUpdateQuitAndInstall();
+            void window.electronAPI.autoUpdateQuitAndInstall();
           },
         },
       });
@@ -68,7 +70,7 @@ export function ToastContainer({ updateNotificationsEnabled }: ToastContainerPro
         action: {
           label: 'Download manually',
           onClick: () => {
-            window.electronAPI.openExternal('https://github.com/syv-ai/dash/releases/latest');
+            void window.electronAPI.openExternal('https://github.com/syv-ai/dash/releases/latest');
           },
         },
       });

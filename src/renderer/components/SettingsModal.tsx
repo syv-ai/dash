@@ -815,7 +815,7 @@ export function SettingsModal({
     // Events fire whether or not the modal is mounted, so on open we pull the
     // current snapshot before subscribing — otherwise we'd show "idle" while
     // the background check has already surfaced an available update.
-    window.electronAPI.autoUpdateGetStatus?.().then((res) => {
+    void window.electronAPI.autoUpdateGetStatus?.().then((res) => {
       if (res?.success && res.data) {
         setUpdateStatus(res.data.state);
         setUpdateVersion(res.data.availableVersion);
@@ -840,17 +840,17 @@ export function SettingsModal({
   }, []);
 
   useEffect(() => {
-    window.electronAPI.detectClaude().then((resp) => {
+    void window.electronAPI.detectClaude().then((resp) => {
       if (resp.success) setClaudeInfo(resp.data ?? null);
     });
-    window.electronAPI.getAppVersion().then((v) => setAppVersion(v));
-    window.electronAPI.telemetryGetStatus().then((resp) => {
+    void window.electronAPI.getAppVersion().then((v) => setAppVersion(v));
+    void window.electronAPI.telemetryGetStatus().then((resp) => {
       if (resp.success && resp.data) {
         setTelemetryEnabled(resp.data.enabled);
         setTelemetryEnvDisabled(resp.data.envDisabled);
       }
     });
-    window.electronAPI.getClaudeAttribution(activeProjectPath).then((resp) => {
+    void window.electronAPI.getClaudeAttribution(activeProjectPath).then((resp) => {
       if (resp.success && resp.data != null) {
         setClaudeDefaultAttribution(resp.data);
       }
@@ -1165,15 +1165,17 @@ export function SettingsModal({
                                 className="flex-1 px-3 py-2 text-[11.5px] rounded-md border border-border/60 bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-1 focus:ring-primary/40 font-mono"
                               />
                               <button
-                                onClick={async () => {
-                                  const res = await window.electronAPI.pickExecutable();
-                                  if (!res.success) {
-                                    toast.error(res.error || 'Failed to open file picker');
-                                    return;
-                                  }
-                                  if (res.data) {
-                                    onCustomIDEChange({ ...customIDE, path: res.data });
-                                  }
+                                onClick={() => {
+                                  void (async () => {
+                                    const res = await window.electronAPI.pickExecutable();
+                                    if (!res.success) {
+                                      toast.error(res.error || 'Failed to open file picker');
+                                      return;
+                                    }
+                                    if (res.data) {
+                                      onCustomIDEChange({ ...customIDE, path: res.data });
+                                    }
+                                  })();
                                 }}
                                 className="px-3 py-2 text-[11.5px] rounded-md border border-border/60 text-foreground/80 hover:bg-accent/40 hover:text-foreground flex items-center gap-1.5"
                               >
@@ -1331,7 +1333,9 @@ export function SettingsModal({
                       </div>
                       {updateStatus === 'ready' ? (
                         <button
-                          onClick={() => window.electronAPI.autoUpdateQuitAndInstall()}
+                          onClick={() => {
+                            void window.electronAPI.autoUpdateQuitAndInstall();
+                          }}
                           className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium border border-primary/40 bg-primary/10 text-foreground ring-1 ring-primary/20 hover:bg-primary/15 transition-all duration-150"
                         >
                           <Download size={12} strokeWidth={2} />
@@ -1341,7 +1345,7 @@ export function SettingsModal({
                         <button
                           onClick={() => {
                             setUpdateStatus('downloading');
-                            window.electronAPI.autoUpdateDownload();
+                            void window.electronAPI.autoUpdateDownload();
                           }}
                           className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium border border-primary/40 bg-primary/10 text-foreground ring-1 ring-primary/20 hover:bg-primary/15 transition-all duration-150"
                         >
@@ -1352,7 +1356,7 @@ export function SettingsModal({
                         <button
                           onClick={() => {
                             setUpdateStatus('checking');
-                            window.electronAPI.autoUpdateCheck().then(async (resp) => {
+                            void window.electronAPI.autoUpdateCheck().then(async (resp) => {
                               if (!resp.success) {
                                 setUpdateStatus('idle');
                                 return;
@@ -1412,7 +1416,7 @@ export function SettingsModal({
                           disabled={telemetryEnvDisabled}
                           onToggle={(next) => {
                             setTelemetryEnabled(next);
-                            window.electronAPI.telemetrySetEnabled(next);
+                            void window.electronAPI.telemetrySetEnabled(next);
                           }}
                         />
                       }
@@ -1573,8 +1577,12 @@ export function SettingsModal({
                   >
                     <RtkSection
                       status={rtkStatus}
-                      onEnabledChange={onRtkEnabledChange}
-                      onDownload={onRtkDownload}
+                      onEnabledChange={(enabled) => {
+                        void onRtkEnabledChange(enabled);
+                      }}
+                      onDownload={() => {
+                        void onRtkDownload();
+                      }}
                       progress={rtkDownloadProgress}
                     />
                   </AddOnAccordion>
@@ -1968,7 +1976,9 @@ function RtkSection({
         <div>
           <label className="block text-[12px] font-medium text-foreground mb-3">Verify</label>
           <button
-            onClick={runTest}
+            onClick={() => {
+              void runTest();
+            }}
             disabled={testing}
             className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] border border-border/60 text-foreground/80 hover:bg-accent/40 hover:text-foreground transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
           >

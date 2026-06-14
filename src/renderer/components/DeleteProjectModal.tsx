@@ -70,7 +70,7 @@ function DeleteProjectBody({ project, tasks, onConfirm }: DeleteProjectBodyProps
   useEffect(() => {
     if (candidateRemoteTasks.length === 0) return;
     let cancelled = false;
-    Promise.all(
+    void Promise.all(
       candidateRemoteTasks.map(
         (t) =>
           window.electronAPI
@@ -186,7 +186,9 @@ function DeleteProjectBody({ project, tasks, onConfirm }: DeleteProjectBodyProps
           </button>
           <button
             type="button"
-            onClick={handleConfirm}
+            onClick={() => {
+              void handleConfirm();
+            }}
             disabled={isDeleting}
             className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[13px] font-medium bg-destructive text-destructive-foreground hover:brightness-110 transition-all duration-150 disabled:opacity-70 disabled:pointer-events-none"
           >

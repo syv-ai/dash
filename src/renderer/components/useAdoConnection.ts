@@ -102,7 +102,7 @@ export function useAdoConnectionLoader(
   setConfigured?: (v: boolean) => void,
 ) {
   useEffect(() => {
-    window.electronAPI.adoGetConfig(projectId).then((resp) => {
+    void window.electronAPI.adoGetConfig(projectId).then((resp) => {
       if (resp.success && resp.data) {
         state.setOrgUrl(resp.data.organizationUrl);
         state.setProject(resp.data.project);

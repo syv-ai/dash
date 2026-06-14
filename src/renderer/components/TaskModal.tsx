@@ -189,7 +189,7 @@ function TaskModalBody({
   // Fall back to fetching here when App couldn't pre-fetch — either the modal
   // opened before App's effect settled, or git was just initialized in this modal.
   useEffect(() => {
-    if (gitReady && branches.length === 0) fetchBranches();
+    if (gitReady && branches.length === 0) void fetchBranches();
   }, [gitReady, projectPath]);
 
   // Close branch dropdown on click outside
@@ -333,7 +333,12 @@ function TaskModalBody({
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="p-5">
+      <form
+        onSubmit={(e) => {
+          void handleSubmit(e);
+        }}
+        className="p-5"
+      >
         {/* Task name */}
         <div className="mb-5">
           <label className="block text-[12px] font-medium text-muted-foreground/70 mb-2">
@@ -392,7 +397,9 @@ function TaskModalBody({
             </span>
             <button
               type="button"
-              onClick={handleGitInit}
+              onClick={() => {
+                void handleGitInit();
+              }}
               disabled={gitInitLoading}
               className="text-[11px] font-medium text-primary hover:text-primary/80 transition-colors disabled:opacity-50"
             >
@@ -439,7 +446,9 @@ function TaskModalBody({
                 <span className="flex-1 truncate">{branchError}</span>
                 <button
                   type="button"
-                  onClick={fetchBranches}
+                  onClick={() => {
+                    void fetchBranches();
+                  }}
                   className="text-[11px] font-medium underline underline-offset-2 hover:no-underline shrink-0"
                 >
                   Retry

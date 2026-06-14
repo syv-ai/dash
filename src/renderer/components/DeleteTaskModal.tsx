@@ -135,7 +135,9 @@ function DeleteTaskBody({ task, onConfirm }: DeleteTaskBodyProps) {
           </button>
           <button
             type="button"
-            onClick={handleConfirm}
+            onClick={() => {
+              void handleConfirm();
+            }}
             disabled={isDeleting}
             className="flex items-center gap-1.5 px-4 py-2 rounded-full text-[13px] font-medium bg-destructive text-destructive-foreground hover:brightness-110 transition-all duration-150 disabled:opacity-70 disabled:pointer-events-none"
           >

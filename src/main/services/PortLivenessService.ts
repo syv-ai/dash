@@ -45,7 +45,9 @@ class PortLivenessService {
       return;
     }
 
-    const probe = () => this.probeAll(taskId);
+    const probe = () => {
+      void this.probeAll(taskId);
+    };
     const timer = setInterval(probe, POLL_INTERVAL_MS);
     timer.unref?.();
     this.watches.set(taskId, { ports, states, timer });

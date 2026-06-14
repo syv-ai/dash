@@ -103,7 +103,7 @@ export class TerminalSessionManager {
       cursorBlink: !this.pinnedTui,
       linkHandler: {
         activate: (_event, uri) => {
-          window.electronAPI.openExternal(uri);
+          void window.electronAPI.openExternal(uri);
         },
       },
     });
@@ -116,7 +116,7 @@ export class TerminalSessionManager {
     this.terminal.loadAddon(new ClipboardAddon(new Utf8Base64()));
     this.terminal.loadAddon(
       new WebLinksAddon((_event, uri) => {
-        window.electronAPI.openExternal(uri);
+        void window.electronAPI.openExternal(uri);
       }),
     );
 
@@ -203,7 +203,7 @@ export class TerminalSessionManager {
         (!isMac && e.ctrlKey && e.shiftKey && isKeyV)
       ) {
         e.preventDefault();
-        window.electronAPI.clipboardReadText().then((text) => {
+        void window.electronAPI.clipboardReadText().then((text) => {
           if (text) window.electronAPI.ptyInput({ id: this.id, data: text });
         });
         return false;
@@ -273,7 +273,7 @@ export class TerminalSessionManager {
         const webgl = new WebglAddon();
         webgl.onContextLoss(() => {
           webgl.dispose();
-          this.loadGpuAddon();
+          void this.loadGpuAddon();
         });
         this.terminal.loadAddon(webgl);
         return;
@@ -984,7 +984,7 @@ export class TerminalSessionManager {
       this.terminal.write('\x1b[?25h');
 
       const dims = this.fitAddon.proposeDimensions();
-      window.electronAPI
+      void window.electronAPI
         .ptyStart({
           id: this.id,
           cwd: this.cwd,

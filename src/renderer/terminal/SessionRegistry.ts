@@ -35,7 +35,7 @@ class SessionRegistryImpl {
 
   attach(opts: AttachOptions): TerminalSessionManager {
     const session = this.getOrCreate(opts);
-    session.attach(opts.container);
+    void session.attach(opts.container);
     return session;
   }
 
@@ -57,7 +57,7 @@ class SessionRegistryImpl {
   async dispose(id: string): Promise<void> {
     const session = this.sessions.get(id);
     if (session) {
-      await session.dispose();
+      session.dispose();
       this.sessions.delete(id);
     }
   }
@@ -65,7 +65,7 @@ class SessionRegistryImpl {
   async disposeByPrefix(prefix: string): Promise<void> {
     for (const [id, session] of this.sessions) {
       if (id.startsWith(prefix)) {
-        await session.dispose();
+        session.dispose();
         this.sessions.delete(id);
       }
     }
@@ -112,7 +112,7 @@ class SessionRegistryImpl {
 
   async disposeAll(): Promise<void> {
     for (const [id, session] of this.sessions) {
-      await session.dispose();
+      session.dispose();
       this.sessions.delete(id);
     }
   }

@@ -59,7 +59,7 @@ export function usePortsState(taskId: string | null): PortsState {
       return;
     }
     let cancelled = false;
-    (async () => {
+    void (async () => {
       const resp = await window.electronAPI.portsList(taskId);
       if (cancelled) return;
       if (resp.success && resp.data) setPorts(resp.data);

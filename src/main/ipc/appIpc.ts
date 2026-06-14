@@ -286,29 +286,31 @@ export function registerAppIpc(): void {
     }
   });
 
-  ipcMain.on('app:setDesktopNotification', async (_event, opts: { enabled: boolean }) => {
-    try {
-      const { setDesktopNotification } = await import('../services/ptyManager');
-      setDesktopNotification(opts);
+  ipcMain.on('app:setDesktopNotification', (_event, opts: { enabled: boolean }) => {
+    void (async () => {
+      try {
+        const { setDesktopNotification } = await import('../services/ptyManager');
+        setDesktopNotification(opts);
 
-      // Fire a test notification when newly enabled so macOS prompts for permission
-      if (opts.enabled) {
-        try {
-          const n = new Notification({
-            title: 'Dash',
-            body: 'Notifications enabled!',
-          });
-          n.show();
-        } catch (err) {
-          console.error(
-            '[app:setDesktopNotification] Test notification failed (permission denied?):',
-            err,
-          );
+        // Fire a test notification when newly enabled so macOS prompts for permission
+        if (opts.enabled) {
+          try {
+            const n = new Notification({
+              title: 'Dash',
+              body: 'Notifications enabled!',
+            });
+            n.show();
+          } catch (err) {
+            console.error(
+              '[app:setDesktopNotification] Test notification failed (permission denied?):',
+              err,
+            );
+          }
         }
+      } catch (err) {
+        console.error('[app:setDesktopNotification] Failed:', err);
       }
-    } catch (err) {
-      console.error('[app:setDesktopNotification] Failed:', err);
-    }
+    })();
   });
 
   // Read effective commit attribution from Claude Code settings hierarchy
@@ -345,31 +347,37 @@ export function registerAppIpc(): void {
     },
   );
 
-  ipcMain.on('app:setCommitAttribution', async (_event, value: string | undefined) => {
-    try {
-      const { setCommitAttribution } = await import('../services/ptyManager');
-      setCommitAttribution(value);
-    } catch (err) {
-      console.error('[app:setCommitAttribution] Failed:', err);
-    }
+  ipcMain.on('app:setCommitAttribution', (_event, value: string | undefined) => {
+    void (async () => {
+      try {
+        const { setCommitAttribution } = await import('../services/ptyManager');
+        setCommitAttribution(value);
+      } catch (err) {
+        console.error('[app:setCommitAttribution] Failed:', err);
+      }
+    })();
   });
 
-  ipcMain.on('app:setClaudeEnvVars', async (_event, vars: Record<string, string>) => {
-    try {
-      const { setClaudeEnvVars } = await import('../services/ptyManager');
-      setClaudeEnvVars(vars);
-    } catch (err) {
-      console.error('[app:setClaudeEnvVars] Failed:', err);
-    }
+  ipcMain.on('app:setClaudeEnvVars', (_event, vars: Record<string, string>) => {
+    void (async () => {
+      try {
+        const { setClaudeEnvVars } = await import('../services/ptyManager');
+        setClaudeEnvVars(vars);
+      } catch (err) {
+        console.error('[app:setClaudeEnvVars] Failed:', err);
+      }
+    })();
   });
 
-  ipcMain.on('app:setSyncShellEnv', async (_event, enabled: boolean) => {
-    try {
-      const { setSyncShellEnv } = await import('../services/ptyManager');
-      setSyncShellEnv(enabled);
-    } catch (err) {
-      console.error('[app:setSyncShellEnv] Failed:', err);
-    }
+  ipcMain.on('app:setSyncShellEnv', (_event, enabled: boolean) => {
+    void (async () => {
+      try {
+        const { setSyncShellEnv } = await import('../services/ptyManager');
+        setSyncShellEnv(enabled);
+      } catch (err) {
+        console.error('[app:setSyncShellEnv] Failed:', err);
+      }
+    })();
   });
 
   ipcMain.handle('app:detectClaude', async () => {

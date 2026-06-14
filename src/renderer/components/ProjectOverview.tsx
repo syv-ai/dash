@@ -142,7 +142,7 @@ export function ProjectOverview({
                       href={project.gitRemote}
                       onClick={(e) => {
                         e.preventDefault();
-                        window.electronAPI.openExternal(project.gitRemote!);
+                        void window.electronAPI.openExternal(project.gitRemote!);
                       }}
                       className="flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer"
                     >
@@ -256,7 +256,7 @@ export function ProjectOverview({
                         tabIndex={-1}
                         onClick={(e) => {
                           e.stopPropagation();
-                          openInIde(task.path || project.path);
+                          void openInIde(task.path || project.path);
                         }}
                         className="absolute top-3 right-3 p-1 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-accent/60 opacity-0 group-hover:opacity-100"
                       >
@@ -322,7 +322,7 @@ export function ProjectOverview({
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         e.preventDefault();
-                                        window.electronAPI.openExternal(url);
+                                        void window.electronAPI.openExternal(url);
                                       }}
                                       className="hover:opacity-80 transition-opacity"
                                     >

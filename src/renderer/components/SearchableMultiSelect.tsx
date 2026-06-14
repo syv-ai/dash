@@ -76,18 +76,20 @@ export function SearchableMultiSelect<T>({
       if (debounceRef.current) clearTimeout(debounceRef.current);
       setLoading(true);
       const gen = ++searchGenRef.current;
-      debounceRef.current = setTimeout(async () => {
-        try {
-          const resp = await onSearch(q);
-          if (gen !== searchGenRef.current) return; // discard stale results
-          if (resp.success && resp.data) {
-            setResults(resp.data);
+      debounceRef.current = setTimeout(() => {
+        void (async () => {
+          try {
+            const resp = await onSearch(q);
+            if (gen !== searchGenRef.current) return; // discard stale results
+            if (resp.success && resp.data) {
+              setResults(resp.data);
+            }
+          } catch {
+            // Best effort
+          } finally {
+            if (gen === searchGenRef.current) setLoading(false);
           }
-        } catch {
-          // Best effort
-        } finally {
-          if (gen === searchGenRef.current) setLoading(false);
-        }
+        })();
       }, 400);
     },
     [onSearch],
@@ -145,7 +147,7 @@ export function SearchableMultiSelect<T>({
             }}
             onFocus={() => {
               setDropdownOpen(true);
-              fetchRecent();
+              void fetchRecent();
             }}
             placeholder={placeholder}
             className="flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/30 outline-none"

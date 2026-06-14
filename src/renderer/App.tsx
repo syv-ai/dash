@@ -156,7 +156,7 @@ export function App() {
     }
 
     if (entries.length === 0) return;
-    window.electronAPI.drawerTabsBulkUpsert(entries).then((resp) => {
+    void window.electronAPI.drawerTabsBulkUpsert(entries).then((resp) => {
       if (!resp.success) return;
       for (const e of entries) {
         localStorage.removeItem(`shellTabs:${e.taskId}`);
@@ -167,7 +167,7 @@ export function App() {
 
   useEffect(() => {
     let cancelled = false;
-    window.electronAPI.detectAvailableIDEs().then((res) => {
+    void window.electronAPI.detectAvailableIDEs().then((res) => {
       if (cancelled) return;
       if (!res.success || !res.data) {
         console.warn('[openInIDE] Failed to detect available IDEs:', res.error);
@@ -204,7 +204,7 @@ export function App() {
   const autoUpdateHydratedRef = useRef(false);
   useEffect(() => {
     let cancelled = false;
-    window.electronAPI.autoUpdateGetEnabled?.().then((res) => {
+    void window.electronAPI.autoUpdateGetEnabled?.().then((res) => {
       if (cancelled) return;
       if (res.success && typeof res.data === 'boolean') {
         setAutoUpdateEnabled(res.data);
@@ -219,7 +219,7 @@ export function App() {
   // Sync auto-update enabled to main process (only after hydration)
   useEffect(() => {
     if (!autoUpdateHydratedRef.current) return;
-    window.electronAPI.autoUpdateSetEnabled?.(autoUpdateEnabled);
+    void window.electronAPI.autoUpdateSetEnabled?.(autoUpdateEnabled);
   }, [autoUpdateEnabled]);
   // Sync commit attribution to main process
   useEffect(() => {
@@ -377,9 +377,9 @@ export function App() {
     const cwd = activeTask.path;
 
     for (const featureId of TUI_FEATURE_IDS) {
-      window.electronAPI.wizardActive({ featureId, taskId }).then((resp) => {
+      void window.electronAPI.wizardActive({ featureId, taskId }).then((resp) => {
         if (resp.success && resp.data) return;
-        window.electronAPI.requestWizard({
+        void window.electronAPI.requestWizard({
           featureId,
           taskId,
           projectId,
@@ -399,7 +399,7 @@ export function App() {
   // SQLite at spawn time).
   useEffect(() => {
     const off = window.electronAPI.onPortsRestartTask((tid) => {
-      sessionRegistry.restartAllForTask(tid);
+      void sessionRegistry.restartAllForTask(tid);
     });
     return off;
   }, []);
@@ -411,10 +411,12 @@ export function App() {
   // TUI. The payload's projectId (not activeProjectId) targets the right
   // project even if the user switched projects during the migrate window.
   useEffect(() => {
-    const off = window.electronAPI.onPortsTuiMigrated(async ({ toTaskId, projectId }) => {
-      await loadTasksForProject(projectId);
-      setActiveProjectId(projectId);
-      setActiveTaskId(toTaskId);
+    const off = window.electronAPI.onPortsTuiMigrated(({ toTaskId, projectId }) => {
+      void (async () => {
+        await loadTasksForProject(projectId);
+        setActiveProjectId(projectId);
+        setActiveTaskId(toTaskId);
+      })();
     });
     return off;
   }, []);
@@ -470,13 +472,13 @@ export function App() {
 
   // Load projects on mount
   useEffect(() => {
-    loadProjects();
+    void loadProjects();
   }, []);
 
   // `gh auth status` spawns a subprocess (100-500ms); warm it once so the
   // TaskModal can read the result synchronously instead of mid-mount.
   useEffect(() => {
-    window.electronAPI.githubCheckAvailable().then((r) => {
+    void window.electronAPI.githubCheckAvailable().then((r) => {
       if (r.success) useProjects.getState().setGhAvailable(!!r.data);
     });
   }, []);
@@ -489,11 +491,11 @@ export function App() {
   useEffect(() => {
     if (!activeProjectIdForFetch) return;
     const id = activeProjectIdForFetch;
-    window.electronAPI.adoCheckConfigured(id).then((r) => {
+    void window.electronAPI.adoCheckConfigured(id).then((r) => {
       if (r.success) useProjects.getState().setAdoConfigured(id, !!r.data);
     });
     if (activeProjectIsGit && activeProjectPathForFetch) {
-      window.electronAPI.gitListBranches(activeProjectPathForFetch).then((r) => {
+      void window.electronAPI.gitListBranches(activeProjectPathForFetch).then((r) => {
         if (r.success && r.data) {
           useProjects.getState().setBranchesForProject(id, r.data);
         }
@@ -540,13 +542,13 @@ export function App() {
   // Load tasks for all projects when projects change
   useEffect(() => {
     for (const project of projects) {
-      loadTasksForProject(project.id);
+      void loadTasksForProject(project.id);
     }
     // Ensure reserve worktree for active project
     if (activeProjectId) {
       const project = projects.find((p) => p.id === activeProjectId);
       if (project) {
-        window.electronAPI.worktreeEnsureReserve({
+        void window.electronAPI.worktreeEnsureReserve({
           projectId: activeProjectId,
           projectPath: project.path,
         });
@@ -677,11 +679,11 @@ export function App() {
       // Git
       if (keybindings.stageAll && matchesBinding(e, keybindings.stageAll)) {
         e.preventDefault();
-        handleStageAll();
+        void handleStageAll();
       }
       if (keybindings.unstageAll && matchesBinding(e, keybindings.unstageAll)) {
         e.preventDefault();
-        handleUnstageAll();
+        void handleUnstageAll();
       }
       if (keybindings.commitGraph && matchesBinding(e, keybindings.commitGraph)) {
         e.preventDefault();
@@ -986,8 +988,12 @@ export function App() {
             onSelectTask={handleSelectTask}
             onNewTask={handleNewTask}
             onDeleteTask={handleDeleteTask}
-            onArchiveTask={handleArchiveTask}
-            onRestoreTask={handleRestoreTask}
+            onArchiveTask={(id) => {
+              void handleArchiveTask(id);
+            }}
+            onRestoreTask={(id) => {
+              void handleRestoreTask(id);
+            }}
             onCloseTask={handleCloseTask}
             onTaskSettings={handleTaskSettings}
             onOpenSettings={() => {
@@ -1004,7 +1010,9 @@ export function App() {
             contextUsage={showContextUsageOnTaskCards ? contextUsage : EMPTY_CONTEXT_USAGE}
             onReorderProjects={handleReorderProjects}
             onReorderTasks={handleReorderTasks}
-            onReorderTasksCommit={handleReorderTasksCommit}
+            onReorderTasksCommit={(projectId, reordered) => {
+              void handleReorderTasksCommit(projectId, reordered);
+            }}
             rotationTasks={rotationTasks}
             onReorderRotation={handleReorderRotation}
             onRemoveFromRotation={removeFromRotation}
@@ -1053,7 +1061,9 @@ export function App() {
               onToggleChangesPanel={toggleChangesPanel}
               onSelectTask={setActiveTaskId}
               onEnableRemoteControl={() => activeTask && setRemoteControlModalPtyId(activeTask.id)}
-              onOpenIde={() => activeTask && openInIde(activeTask.path)}
+              onOpenIde={() => {
+                if (activeTask) void openInIde(activeTask.path);
+              }}
               onNewTask={() => activeProjectId && handleNewTask(activeProjectId)}
               onProjectSettings={() => {
                 if (activeProject) setProjectSettingsTarget(activeProject);
@@ -1073,8 +1083,12 @@ export function App() {
                   : []
               }
               onDeleteTask={handleDeleteTask}
-              onArchiveTask={handleArchiveTask}
-              onRestoreTask={handleRestoreTask}
+              onArchiveTask={(id) => {
+                void handleArchiveTask(id);
+              }}
+              onRestoreTask={(id) => {
+                void handleRestoreTask(id);
+              }}
             />
           </ShellDrawerWrapper>
         </Panel>
@@ -1152,7 +1166,9 @@ export function App() {
                           showUsageInline && activeTask ? contextUsage[activeTask.id] : undefined
                         }
                         onViewDiff={handleViewDiff}
-                        onCommitFinished={() => activeTask && refreshGitStatus(activeTask.path)}
+                        onCommitFinished={() => {
+                          if (activeTask) void refreshGitStatus(activeTask.path);
+                        }}
                         onShowCommitGraph={() => setShowCommitGraph(true)}
                         onOpenEditor={() => {
                           if (!activeTask) return;
@@ -1192,8 +1208,12 @@ export function App() {
       {showAddProjectModal && (
         <AddProjectModal
           onClose={() => setShowAddProjectModal(false)}
-          onOpenFolder={handleOpenFolder}
-          onCloneRepo={handleCloneRepo}
+          onOpenFolder={() => {
+            void handleOpenFolder();
+          }}
+          onCloneRepo={(url) => {
+            void handleCloneRepo(url);
+          }}
           cloneStatus={cloneStatus}
         />
       )}
@@ -1223,7 +1243,7 @@ export function App() {
               onCreate={handleCreateTask}
               onGitInit={() => {
                 if (modalProject) {
-                  window.electronAPI.detectGit(modalProject.path).then(async (gitResp) => {
+                  void window.electronAPI.detectGit(modalProject.path).then(async (gitResp) => {
                     const gitInfo = gitResp.success ? gitResp.data : null;
                     await window.electronAPI.saveProject({
                       ...modalProject,
@@ -1231,7 +1251,7 @@ export function App() {
                       gitRemote: gitInfo?.remote ?? null,
                       gitBranch: gitInfo?.branch ?? null,
                     });
-                    loadProjects();
+                    await loadProjects();
                   });
                 }
               }}
@@ -1253,13 +1273,13 @@ export function App() {
           task={taskSettingsTarget}
           hasActiveSession={!!taskActivity[taskSettingsTarget.id]?.state}
           onClose={() => setTaskSettingsTarget(null)}
-          onRename={async (id, newName) => {
+          onRename={(id, newName) => {
             if (!taskSettingsTarget || taskSettingsTarget.id !== id) return;
-            await persistTaskUpdate(taskSettingsTarget, { name: newName });
+            void persistTaskUpdate(taskSettingsTarget, { name: newName });
           }}
-          onPermissionModeChange={async (id, mode) => {
+          onPermissionModeChange={(id, mode) => {
             if (!taskSettingsTarget || taskSettingsTarget.id !== id) return;
-            await persistTaskUpdate(taskSettingsTarget, { permissionMode: mode });
+            void persistTaskUpdate(taskSettingsTarget, { permissionMode: mode });
           }}
         />
       )}
@@ -1268,14 +1288,16 @@ export function App() {
         <ProjectSettingsModal
           project={projectSettingsTarget}
           onClose={() => setProjectSettingsTarget(null)}
-          onRename={async (id, newName) => {
+          onRename={(id, newName) => {
             const proj = projects.find((p) => p.id === id);
             if (!proj) return;
-            await window.electronAPI.saveProject({ ...proj, name: newName });
-            await loadProjects();
-            setProjectSettingsTarget((prev) =>
-              prev?.id === id ? { ...prev, name: newName } : prev,
-            );
+            void (async () => {
+              await window.electronAPI.saveProject({ ...proj, name: newName });
+              await loadProjects();
+              setProjectSettingsTarget((prev) =>
+                prev?.id === id ? { ...prev, name: newName } : prev,
+              );
+            })();
           }}
         />
       )}

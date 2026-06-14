@@ -72,7 +72,7 @@ export function registerPortsIpc(): void {
   });
 
   ipcMain.handle('ports:openUrl', (_event, port: number) => {
-    shell.openExternal(`http://localhost:${port}`);
+    void shell.openExternal(`http://localhost:${port}`);
     return { success: true };
   });
 

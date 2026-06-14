@@ -86,7 +86,7 @@ export function registerPtyIpc(): void {
 
   ipcMain.on('pty:snapshot:save', (_event, id: string, payload: unknown) => {
     try {
-      terminalSnapshotService.saveSnapshot(id, payload as any);
+      void terminalSnapshotService.saveSnapshot(id, payload as any);
     } catch {
       // Best effort — fire-and-forget from beforeunload
     }

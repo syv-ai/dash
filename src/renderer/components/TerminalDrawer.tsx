@@ -63,20 +63,20 @@ export function TerminalDrawer({
       if (liveResp.success && liveResp.data) setLivePtyIds(new Set(liveResp.data));
     };
 
-    refresh();
-    window.electronAPI.drawerTabsSubscribe(taskId);
+    void refresh();
+    void window.electronAPI.drawerTabsSubscribe(taskId);
     const off = window.electronAPI.onDrawerTabsChanged((changedTaskId) => {
-      if (changedTaskId === taskId) refresh();
+      if (changedTaskId === taskId) void refresh();
     });
     const offService = window.electronAPI.onPortsServiceChanged(({ taskId: tid }) => {
-      if (tid === taskId) refresh();
+      if (tid === taskId) void refresh();
     });
 
     // Seed the first shell tab if the task has no shell tabs yet. Checked by
     // kind, not list length — a TUI tab racing in first (fresh task spawning
     // its onboarding CTA) must not starve the task of its shell. Idempotent —
     // once the row lands in SQLite, this branch never fires again.
-    (async () => {
+    void (async () => {
       const r = await window.electronAPI.drawerTabsList(taskId);
       if (cancelled) return;
       if (r.success && r.data && !r.data.some((t) => t.kind === 'shell')) {
@@ -92,7 +92,7 @@ export function TerminalDrawer({
       cancelled = true;
       off();
       offService();
-      window.electronAPI.drawerTabsUnsubscribe(taskId);
+      void window.electronAPI.drawerTabsUnsubscribe(taskId);
     };
   }, [taskId, shellId]);
 
@@ -184,10 +184,10 @@ export function TerminalDrawer({
     });
     const autoFocus = pendingFocusRef.current === activeTabId;
     if (autoFocus) pendingFocusRef.current = null;
-    session.attach(container, { autoFocus });
+    void session.attach(container, { autoFocus });
 
     return () => {
-      sessionRegistry.detach(activeTabId);
+      void sessionRegistry.detach(activeTabId);
     };
   }, [activeTabId, cwd, tabs]);
 
@@ -196,7 +196,7 @@ export function TerminalDrawer({
     const off = window.electronAPI.onPortsServiceFocusTab(({ taskId: tid, tabId }) => {
       if (tid !== taskId) return;
       onExpand();
-      window.electronAPI.drawerTabsSetActive(taskId, tabId);
+      void window.electronAPI.drawerTabsSetActive(taskId, tabId);
     });
     return off;
   }, [taskId, onExpand]);
@@ -223,17 +223,17 @@ export function TerminalDrawer({
       label: nextShellLabel(tabs.map((t) => t.label)),
       id,
     });
-    window.electronAPI.drawerTabsSetActive(taskId, id);
+    void window.electronAPI.drawerTabsSetActive(taskId, id);
   }
 
   function handleCloseTab(tabId: string) {
     if (tabs.length <= 1) return;
-    sessionRegistry.dispose(tabId);
-    window.electronAPI.drawerTabsClose(tabId);
+    void sessionRegistry.dispose(tabId);
+    void window.electronAPI.drawerTabsClose(tabId);
   }
 
   function handleSelectTab(tabId: string) {
-    window.electronAPI.drawerTabsSetActive(taskId, tabId);
+    void window.electronAPI.drawerTabsSetActive(taskId, tabId);
   }
 
   function renderTab(tab: Tab) {
@@ -315,7 +315,9 @@ export function TerminalDrawer({
           <Tooltip content="New terminal">
             <button
               className="w-5 h-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors flex-shrink-0"
-              onClick={handleAddTab}
+              onClick={() => {
+                void handleAddTab();
+              }}
               aria-label="Add terminal"
             >
               <Plus size={11} strokeWidth={2} />

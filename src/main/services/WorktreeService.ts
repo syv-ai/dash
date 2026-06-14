@@ -66,7 +66,7 @@ export class WorktreeService {
     if (pushRemote) {
       // Link branch to issues before pushing (createLinkedBranch needs the branch to not exist)
       if (options.linkedIssueNumbers && options.linkedIssueNumbers.length > 0) {
-        this.linkAndPushAsync(worktreePath, branchName, options.linkedIssueNumbers);
+        void this.linkAndPushAsync(worktreePath, branchName, options.linkedIssueNumbers);
       } else {
         // Push branch with upstream tracking (async, non-blocking)
         this.pushBranchAsync(worktreePath, branchName);
@@ -349,7 +349,7 @@ export class WorktreeService {
    * Async, non-blocking — sends a toast on failure.
    */
   runSetupScriptAsync(worktreePath: string, branchName: string, projectPath: string): void {
-    (async () => {
+    void (async () => {
       try {
         const config = loadWorkspaceConfig(worktreePath);
         const fallbackPath = path.join(projectPath, '.dash', 'setup.sh');
@@ -480,7 +480,7 @@ export class WorktreeService {
     // For existing branches, only link issues — do not push, since the branch
     // already exists and the user manages its remote state.
     if (options.linkedIssueNumbers && options.linkedIssueNumbers.length > 0) {
-      this.linkIssuesAsync(worktreePath, branch, options.linkedIssueNumbers);
+      void this.linkIssuesAsync(worktreePath, branch, options.linkedIssueNumbers);
     }
 
     this.runSetupScriptAsync(worktreePath, branch, projectPath);
