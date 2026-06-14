@@ -1,4 +1,6 @@
 import { ipcMain } from 'electron';
+import { z } from 'zod';
+import { parseArgs } from './validate';
 import { AutoUpdateService } from '../services/AutoUpdateService';
 
 export function registerAutoUpdateIpc(): void {
@@ -9,8 +11,9 @@ export function registerAutoUpdateIpc(): void {
     success: true,
     data: AutoUpdateService.readPreference(),
   }));
-  ipcMain.handle('autoUpdate:setEnabled', (_event, enabled: boolean) =>
-    AutoUpdateService.setEnabled(enabled),
-  );
+  ipcMain.handle('autoUpdate:setEnabled', (_event, enabled: boolean) => {
+    parseArgs('autoUpdate:setEnabled', z.boolean(), enabled);
+    return AutoUpdateService.setEnabled(enabled);
+  });
   ipcMain.handle('autoUpdate:getStatus', () => AutoUpdateService.getStatus());
 }

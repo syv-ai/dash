@@ -71,6 +71,9 @@ importers:
       sonner:
         specifier: ^2.0.7
         version: 2.0.7(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
       zustand:
         specifier: ^5.0.14
         version: 5.0.14(@types/react@18.3.28)(react@18.3.1)
@@ -3635,6 +3638,9 @@ packages:
   zip-stream@4.1.1:
     resolution: {integrity: sha512-9qv4rlDiopXg4E69k+vMHjNN63YFMe9sZMrdlvKnCjlCRWeCBswPPMPUfx+ipsAWq1LXHe70RcbaHdJJpS6hyQ==}
     engines: {node: '>= 10'}
+
+  zod@4.4.3:
+    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
   zustand@5.0.14:
     resolution: {integrity: sha512-/8tAspM5LMPr28b3fwLYrtdj77ECpfZviaP75CMTnwO8ISyaE4GDIG/9rDDYq/cH9D2Xw2A2RXglLInmVBQB/g==}
@@ -7212,6 +7218,8 @@ snapshots:
       archiver-utils: 3.0.4
       compress-commons: 4.1.2
       readable-stream: 3.6.2
+
+  zod@4.4.3: {}
 
   zustand@5.0.14(@types/react@18.3.28)(react@18.3.1):
     optionalDependencies:

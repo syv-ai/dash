@@ -1,6 +1,8 @@
 import { basename } from 'node:path';
 import { ipcMain } from 'electron';
+import { z } from 'zod';
 import { RtkService } from '../services/RtkService';
+import { parseArgs } from './validate';
 import { refreshActivePtyHooks, type RefreshFailure } from '../services/ptyManager';
 
 function errorMessage(err: unknown): string {
@@ -30,6 +32,7 @@ export function registerRtkIpc(): void {
 
   ipcMain.handle('rtk:setEnabled', async (_event, enabled: boolean) => {
     try {
+      parseArgs('rtk:setEnabled', z.boolean(), enabled);
       // RtkService.setEnabled throws "rtk is not installed" if no binary is
       // resolved; we surface it via the IPC error envelope. The wire-type
       // (RtkStatus) makes "enabled while not installed" unrepresentable, so

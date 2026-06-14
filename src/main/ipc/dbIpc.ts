@@ -1,4 +1,7 @@
 import { ipcMain } from 'electron';
+import { z } from 'zod';
+import { parseArgs } from './validate';
+import { projectInputSchema, taskInputSchema } from './schemas';
 import { DatabaseService } from '../services/DatabaseService';
 import { TelemetryService } from '../services/TelemetryService';
 import { WorkspacePortsRuntime } from '../services/WorkspacePortsRuntime';
@@ -22,6 +25,7 @@ export function registerDbIpc(): void {
 
   ipcMain.handle('db:saveProject', (_event, project) => {
     try {
+      parseArgs('db:saveProject', projectInputSchema, project);
       const isNew = !project.id;
       const data = DatabaseService.saveProject(project);
       if (isNew) TelemetryService.capture('project_added');
@@ -33,6 +37,7 @@ export function registerDbIpc(): void {
 
   ipcMain.handle('db:deleteProject', (_event, id: string) => {
     try {
+      parseArgs('db:deleteProject', z.string(), id);
       DatabaseService.deleteProject(id);
       TelemetryService.capture('project_deleted');
       return { success: true };
@@ -45,6 +50,7 @@ export function registerDbIpc(): void {
 
   ipcMain.handle('db:getTasks', (_event, projectId: string) => {
     try {
+      parseArgs('db:getTasks', z.string(), projectId);
       const data = DatabaseService.getTasks(projectId);
       return { success: true, data };
     } catch (error) {
@@ -54,6 +60,7 @@ export function registerDbIpc(): void {
 
   ipcMain.handle('db:saveTask', (_event, task) => {
     try {
+      parseArgs('db:saveTask', taskInputSchema, task);
       const isNew = !task.id;
       const data = DatabaseService.saveTask(task);
       if (isNew) TelemetryService.capture('task_created');
@@ -82,6 +89,7 @@ export function registerDbIpc(): void {
 
   ipcMain.handle('db:deleteTask', (_event, id: string) => {
     try {
+      parseArgs('db:deleteTask', z.string(), id);
       DatabaseService.deleteTask(id);
       // The worktree is gone (or about to be) — close the ports watcher
       // and drop any never-consumed initial prompt.
@@ -96,6 +104,7 @@ export function registerDbIpc(): void {
 
   ipcMain.handle('db:archiveTask', (_event, id: string) => {
     try {
+      parseArgs('db:archiveTask', z.string(), id);
       DatabaseService.archiveTask(id);
       TelemetryService.capture('task_archived');
       return { success: true };
@@ -108,6 +117,11 @@ export function registerDbIpc(): void {
     'db:reorderTasks',
     (_event, args: { projectId: string; orderedTaskIds: string[] }) => {
       try {
+        parseArgs(
+          'db:reorderTasks',
+          z.looseObject({ projectId: z.string(), orderedTaskIds: z.array(z.string()) }),
+          args,
+        );
         DatabaseService.reorderTasks(args.projectId, args.orderedTaskIds);
         return { success: true };
       } catch (error) {
@@ -118,6 +132,7 @@ export function registerDbIpc(): void {
 
   ipcMain.handle('db:restoreTask', (_event, id: string) => {
     try {
+      parseArgs('db:restoreTask', z.string(), id);
       DatabaseService.restoreTask(id);
       TelemetryService.capture('task_restored');
       return { success: true };
@@ -130,6 +145,7 @@ export function registerDbIpc(): void {
 
   ipcMain.handle('db:getConversations', (_event, taskId: string) => {
     try {
+      parseArgs('db:getConversations', z.string(), taskId);
       const data = DatabaseService.getConversations(taskId);
       return { success: true, data };
     } catch (error) {
@@ -139,6 +155,7 @@ export function registerDbIpc(): void {
 
   ipcMain.handle('db:getOrCreateDefaultConversation', (_event, taskId: string) => {
     try {
+      parseArgs('db:getOrCreateDefaultConversation', z.string(), taskId);
       const data = DatabaseService.getOrCreateDefaultConversation(taskId);
       return { success: true, data };
     } catch (error) {

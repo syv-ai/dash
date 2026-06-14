@@ -1,6 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ipcMain, shell } from 'electron';
+import { z } from 'zod';
+import { parseArgs } from './validate';
 import { WorkspacePortsRuntime } from '../services/WorkspacePortsRuntime';
 import { portLivenessService } from '../services/PortLivenessService';
 import { DatabaseService } from '../services/DatabaseService';
@@ -11,6 +13,7 @@ import { ensureWatching as ensurePortsConfigWatch } from '../services/PortsConfi
 export function registerPortsIpc(): void {
   ipcMain.handle('ports:list', (_event, taskId: string) => {
     try {
+      parseArgs('ports:list', z.string(), taskId);
       const data = WorkspacePortsRuntime.getPortsForTask(taskId);
       // Kick the liveness watcher every time the renderer asks for the list —
       // simpler than a separate "watch" handshake and keeps the watch set in
@@ -27,6 +30,7 @@ export function registerPortsIpc(): void {
 
   ipcMain.handle('ports:refresh', (_event, taskId: string) => {
     try {
+      parseArgs('ports:refresh', z.string(), taskId);
       const task = DatabaseService.getTask(taskId);
       if (!task) return { success: false, error: `Task ${taskId} not found` };
       const data = WorkspacePortsRuntime.setupTask({
@@ -48,10 +52,12 @@ export function registerPortsIpc(): void {
   // Liveness snapshot for the focused task — useful for restoring state after
   // a renderer reload without waiting for the next 2s tick.
   ipcMain.handle('ports:liveness:get', (_event, taskId: string) => {
+    parseArgs('ports:liveness:get', z.string(), taskId);
     return { success: true, data: portLivenessService.getStates(taskId) };
   });
 
   ipcMain.handle('ports:unwatch', (_event, taskId: string) => {
+    parseArgs('ports:unwatch', z.string(), taskId);
     portLivenessService.unwatchTask(taskId);
     return { success: true };
   });
@@ -62,6 +68,7 @@ export function registerPortsIpc(): void {
   // refresh. Lives for the task's lifetime; no unwatch.
   ipcMain.handle('ports:watchConfig', (_event, taskId: string) => {
     try {
+      parseArgs('ports:watchConfig', z.string(), taskId);
       const task = DatabaseService.getTask(taskId);
       if (!task) return { success: false, error: `Task ${taskId} not found` };
       ensurePortsConfigWatch(taskId, task.path);
@@ -72,6 +79,7 @@ export function registerPortsIpc(): void {
   });
 
   ipcMain.handle('ports:openUrl', (_event, port: number) => {
+    parseArgs('ports:openUrl', z.number(), port);
     void shell.openExternal(`http://localhost:${port}`);
     return { success: true };
   });
@@ -83,6 +91,7 @@ export function registerPortsIpc(): void {
   // the section stays hidden.
   ipcMain.handle('ports:detect', (_event, taskId: string) => {
     try {
+      parseArgs('ports:detect', z.string(), taskId);
       const task = DatabaseService.getTask(taskId);
       if (!task) return { success: false, error: `Task ${taskId} not found` };
       // Collect parser errors so the onboarding toast can show the specific

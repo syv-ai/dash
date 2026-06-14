@@ -1,4 +1,6 @@
 import { ipcMain } from 'electron';
+import { z } from 'zod';
+import { parseArgs } from './validate';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { existsSync, mkdirSync } from 'fs';
@@ -17,6 +19,7 @@ export function registerGitIpc(): void {
   // Clone a git repository
   ipcMain.handle('git:clone', async (_event, args: { url: string }) => {
     try {
+      parseArgs('git:clone', z.looseObject({ url: z.string() }), args);
       const { url } = args;
 
       // Extract repo name from URL
@@ -50,6 +53,7 @@ export function registerGitIpc(): void {
   // Get full git status for a directory
   ipcMain.handle('git:getStatus', async (_event, cwd: string) => {
     try {
+      parseArgs('git:getStatus', z.string(), cwd);
       const status = await GitService.getStatus(cwd);
       return { success: true, data: status };
     } catch (error) {
@@ -65,6 +69,16 @@ export function registerGitIpc(): void {
       args: { cwd: string; filePath?: string; staged?: boolean; contextLines?: number },
     ) => {
       try {
+        parseArgs(
+          'git:getDiff',
+          z.looseObject({
+            cwd: z.string(),
+            filePath: z.string().optional(),
+            staged: z.boolean().optional(),
+            contextLines: z.number().optional(),
+          }),
+          args,
+        );
         const diff = await GitService.getDiff(
           args.cwd,
           args.filePath,
@@ -83,6 +97,15 @@ export function registerGitIpc(): void {
     'git:getDiffUntracked',
     async (_event, args: { cwd: string; filePath: string; contextLines?: number }) => {
       try {
+        parseArgs(
+          'git:getDiffUntracked',
+          z.looseObject({
+            cwd: z.string(),
+            filePath: z.string(),
+            contextLines: z.number().optional(),
+          }),
+          args,
+        );
         const diff = await GitService.getDiffUntracked(args.cwd, args.filePath, args.contextLines);
         return { success: true, data: diff };
       } catch (error) {
@@ -94,6 +117,11 @@ export function registerGitIpc(): void {
   // Stage one or more files in a single git invocation
   ipcMain.handle('git:stageFiles', async (_event, args: { cwd: string; filePaths: string[] }) => {
     try {
+      parseArgs(
+        'git:stageFiles',
+        z.looseObject({ cwd: z.string(), filePaths: z.array(z.string()) }),
+        args,
+      );
       await GitService.stageFiles(args.cwd, args.filePaths);
       return { success: true };
     } catch (error) {
@@ -104,6 +132,7 @@ export function registerGitIpc(): void {
   // Stage all files
   ipcMain.handle('git:stageAll', async (_event, cwd: string) => {
     try {
+      parseArgs('git:stageAll', z.string(), cwd);
       await GitService.stageAll(cwd);
       return { success: true };
     } catch (error) {
@@ -114,6 +143,11 @@ export function registerGitIpc(): void {
   // Unstage one or more files in a single git invocation
   ipcMain.handle('git:unstageFiles', async (_event, args: { cwd: string; filePaths: string[] }) => {
     try {
+      parseArgs(
+        'git:unstageFiles',
+        z.looseObject({ cwd: z.string(), filePaths: z.array(z.string()) }),
+        args,
+      );
       await GitService.unstageFiles(args.cwd, args.filePaths);
       return { success: true };
     } catch (error) {
@@ -124,6 +158,7 @@ export function registerGitIpc(): void {
   // Unstage all files
   ipcMain.handle('git:unstageAll', async (_event, cwd: string) => {
     try {
+      parseArgs('git:unstageAll', z.string(), cwd);
       await GitService.unstageAll(cwd);
       return { success: true };
     } catch (error) {
@@ -134,6 +169,11 @@ export function registerGitIpc(): void {
   // Discard changes (tracked checkout + untracked unlinks) for one or more files
   ipcMain.handle('git:discardFiles', async (_event, args: { cwd: string; filePaths: string[] }) => {
     try {
+      parseArgs(
+        'git:discardFiles',
+        z.looseObject({ cwd: z.string(), filePaths: z.array(z.string()) }),
+        args,
+      );
       await GitService.discardFiles(args.cwd, args.filePaths);
       return { success: true };
     } catch (error) {
@@ -146,6 +186,15 @@ export function registerGitIpc(): void {
     'git:commit',
     async (_event, args: { cwd: string; message: string; allowEmpty?: boolean }) => {
       try {
+        parseArgs(
+          'git:commit',
+          z.looseObject({
+            cwd: z.string(),
+            message: z.string(),
+            allowEmpty: z.boolean().optional(),
+          }),
+          args,
+        );
         await GitService.commit(args.cwd, args.message, { allowEmpty: args.allowEmpty });
         return { success: true };
       } catch (error) {
@@ -160,6 +209,15 @@ export function registerGitIpc(): void {
     'git:commitStart',
     async (event, args: { cwd: string; message: string; allowEmpty?: boolean }) => {
       try {
+        parseArgs(
+          'git:commitStart',
+          z.looseObject({
+            cwd: z.string(),
+            message: z.string(),
+            allowEmpty: z.boolean().optional(),
+          }),
+          args,
+        );
         const requestId = randomBytes(8).toString('hex');
         const wc = event.sender;
         const handle = GitService.commitStreamed(
@@ -192,6 +250,7 @@ export function registerGitIpc(): void {
   // Append a path to the repo's .gitignore (creates the file if missing).
   ipcMain.handle('git:gitignoreAdd', async (_event, args: { cwd: string; filePath: string }) => {
     try {
+      parseArgs('git:gitignoreAdd', z.looseObject({ cwd: z.string(), filePath: z.string() }), args);
       await GitService.addToGitignore(args.cwd, args.filePath);
       return { success: true };
     } catch (error) {
@@ -201,6 +260,7 @@ export function registerGitIpc(): void {
 
   // Cancel an in-flight streamed commit (sends SIGTERM to the git child).
   ipcMain.handle('git:commitCancel', async (_event, args: { requestId: string }) => {
+    parseArgs('git:commitCancel', z.looseObject({ requestId: z.string() }), args);
     const handle = activeCommits.get(args.requestId);
     if (!handle) return { success: false, error: 'No active commit with that id' };
     handle.cancel();
@@ -210,6 +270,7 @@ export function registerGitIpc(): void {
   // Push to remote
   ipcMain.handle('git:push', async (_event, cwd: string) => {
     try {
+      parseArgs('git:push', z.string(), cwd);
       await GitService.push(cwd);
       return { success: true };
     } catch (error) {
@@ -222,6 +283,11 @@ export function registerGitIpc(): void {
     'git:remoteBranchExists',
     async (_event, args: { cwd: string; branch: string }) => {
       try {
+        parseArgs(
+          'git:remoteBranchExists',
+          z.looseObject({ cwd: z.string(), branch: z.string() }),
+          args,
+        );
         const exists = await GitService.remoteBranchExists(args.cwd, args.branch);
         return { success: true, data: exists };
       } catch (error) {
@@ -232,6 +298,7 @@ export function registerGitIpc(): void {
 
   ipcMain.handle('git:checkoutBranch', async (_event, args: { cwd: string; branch: string }) => {
     try {
+      parseArgs('git:checkoutBranch', z.looseObject({ cwd: z.string(), branch: z.string() }), args);
       await GitService.checkoutBranch(args.cwd, args.branch);
       return { success: true };
     } catch (error) {
@@ -244,6 +311,7 @@ export function registerGitIpc(): void {
 
   ipcMain.handle('git:listBranches', async (_event, cwd: string) => {
     try {
+      parseArgs('git:listBranches', z.string(), cwd);
       const branches = await GitService.fetchAndListBranches(cwd);
       return { success: true, data: branches };
     } catch (error) {
@@ -261,6 +329,15 @@ export function registerGitIpc(): void {
     'git:getCommitGraph',
     async (_event, args: { cwd: string; limit?: number; skip?: number }) => {
       try {
+        parseArgs(
+          'git:getCommitGraph',
+          z.looseObject({
+            cwd: z.string(),
+            limit: z.number().optional(),
+            skip: z.number().optional(),
+          }),
+          args,
+        );
         const data = await GitService.getCommitGraph(args.cwd, args.limit, args.skip);
         return { success: true, data };
       } catch (error) {
@@ -272,6 +349,7 @@ export function registerGitIpc(): void {
   // Get detailed info for a single commit
   ipcMain.handle('git:getCommitDetail', async (_event, args: { cwd: string; hash: string }) => {
     try {
+      parseArgs('git:getCommitDetail', z.looseObject({ cwd: z.string(), hash: z.string() }), args);
       const data = await GitService.getCommitDetail(args.cwd, args.hash);
       return { success: true, data };
     } catch (error) {
@@ -282,6 +360,7 @@ export function registerGitIpc(): void {
   // Start watching a directory for file changes
   ipcMain.handle('git:watch', async (_event, args: { id: string; cwd: string }) => {
     try {
+      parseArgs('git:watch', z.looseObject({ id: z.string(), cwd: z.string() }), args);
       startWatching(args.id, args.cwd);
       return { success: true };
     } catch (error) {
@@ -292,6 +371,7 @@ export function registerGitIpc(): void {
   // Stop watching a directory
   ipcMain.handle('git:unwatch', async (_event, id: string) => {
     try {
+      parseArgs('git:unwatch', z.string(), id);
       stopWatching(id);
       return { success: true };
     } catch (error) {

@@ -1,8 +1,10 @@
 import { ipcMain } from 'electron';
+import { z } from 'zod';
 import { promises as fs, realpathSync } from 'fs';
 import { execFile } from 'child_process';
 import path from 'path';
 import { promisify } from 'util';
+import { parseArgs } from './validate';
 import type {
   EditorCommitListItem,
   EditorReadBranchResult,
@@ -274,6 +276,15 @@ export function registerEditorIpc(): void {
       args: { cwd: string; filePath: string; ref: WorkingRef },
     ): Promise<IpcResponse<EditorReadWorkingResult>> => {
       try {
+        parseArgs(
+          'editor:readWorking',
+          z.looseObject({
+            cwd: z.string(),
+            filePath: z.string(),
+            ref: z.enum(['HEAD', 'index']),
+          }),
+          args,
+        );
         const abs = resolveInsideCwd(args.cwd, args.filePath);
         const cwdAbs = path.resolve(args.cwd);
         let cwdReal = cwdAbs;
@@ -337,6 +348,11 @@ export function registerEditorIpc(): void {
       args: { cwd: string; filePath: string; hash: string },
     ): Promise<IpcResponse<EditorReadCommitResult>> => {
       try {
+        parseArgs(
+          'editor:readCommit',
+          z.looseObject({ cwd: z.string(), filePath: z.string(), hash: z.string() }),
+          args,
+        );
         const abs = resolveInsideCwd(args.cwd, args.filePath);
         const cwdAbs = path.resolve(args.cwd);
         let cwdReal = cwdAbs;
@@ -386,6 +402,17 @@ export function registerEditorIpc(): void {
       },
     ): Promise<IpcResponse<EditorWriteResult>> => {
       try {
+        parseArgs(
+          'editor:writeWorking',
+          z.looseObject({
+            cwd: z.string(),
+            filePath: z.string(),
+            content: z.string(),
+            expectedMtimeMs: z.number(),
+            expectedSizeBytes: z.number(),
+          }),
+          args,
+        );
         const abs = resolveInsideCwd(args.cwd, args.filePath);
 
         try {
@@ -447,6 +474,11 @@ export function registerEditorIpc(): void {
       args: { cwd: string; limit?: number },
     ): Promise<IpcResponse<EditorCommitListItem[]>> => {
       try {
+        parseArgs(
+          'editor:listCommits',
+          z.looseObject({ cwd: z.string(), limit: z.number().optional() }),
+          args,
+        );
         const limit = args.limit ?? 50;
         // -z separates records with NUL; %x1f is a unit-separator between
         // fields. Body can contain newlines, so we keep it last and use the
@@ -483,6 +515,11 @@ export function registerEditorIpc(): void {
     'editor:listFilesInCommit',
     async (_event, args: { cwd: string; hash: string }): Promise<IpcResponse<FileChange[]>> => {
       try {
+        parseArgs(
+          'editor:listFilesInCommit',
+          z.looseObject({ cwd: z.string(), hash: z.string() }),
+          args,
+        );
         let base = `${args.hash}~1`;
         try {
           await execFileAsync('git', ['rev-parse', '--verify', `${args.hash}~1`], {
@@ -557,6 +594,11 @@ export function registerEditorIpc(): void {
       args: { cwd: string; source: { kind: 'working' } | { kind: 'commit'; hash: string } },
     ): Promise<IpcResponse<string[]>> => {
       try {
+        parseArgs(
+          'editor:listRepoFiles',
+          z.looseObject({ cwd: z.string(), source: z.looseObject({ kind: z.string() }) }),
+          args,
+        );
         const paths =
           args.source.kind === 'working'
             ? await listWorkingRepoFiles(args.cwd)
@@ -573,6 +615,7 @@ export function registerEditorIpc(): void {
     'editor:resolveDefaultBase',
     async (_event, args: { cwd: string }): Promise<IpcResponse<string | null>> => {
       try {
+        parseArgs('editor:resolveDefaultBase', z.looseObject({ cwd: z.string() }), args);
         return { success: true, data: await resolveDefaultBase(args.cwd) };
       } catch (err) {
         return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -587,6 +630,11 @@ export function registerEditorIpc(): void {
     'editor:listFilesAgainstBase',
     async (_event, args: { cwd: string; base: string }): Promise<IpcResponse<FileChange[]>> => {
       try {
+        parseArgs(
+          'editor:listFilesAgainstBase',
+          z.looseObject({ cwd: z.string(), base: z.string() }),
+          args,
+        );
         // Sanity-check the base ref upfront so a missing ref returns a clean
         // error instead of confusing diff output.
         try {
@@ -673,6 +721,11 @@ export function registerEditorIpc(): void {
       args: { cwd: string; filePath: string; base: string },
     ): Promise<IpcResponse<EditorReadBranchResult>> => {
       try {
+        parseArgs(
+          'editor:readAgainstBase',
+          z.looseObject({ cwd: z.string(), filePath: z.string(), base: z.string() }),
+          args,
+        );
         const abs = resolveInsideCwd(args.cwd, args.filePath);
         const cwdAbs = path.resolve(args.cwd);
         let cwdReal = cwdAbs;

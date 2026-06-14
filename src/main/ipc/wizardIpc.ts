@@ -1,4 +1,6 @@
 import { ipcMain, type BrowserWindow } from 'electron';
+import { z } from 'zod';
+import { parseArgs } from './validate';
 import { getTuiHost } from '../tui/hostInstance';
 import { getWizard, type RequestStartPayload } from '../wizard/wizardRegistry';
 import { DatabaseService } from '../services/DatabaseService';
@@ -8,6 +10,20 @@ export function registerWizardIpc(opts: { getMainWindow: () => BrowserWindow | n
   ipcMain.handle(
     'wizard:requestStart',
     async (_e, payload: RequestStartPayload & { featureId: string }) => {
+      parseArgs(
+        'wizard:requestStart',
+        z.looseObject({
+          featureId: z.string(),
+          taskId: z.string(),
+          projectId: z.string(),
+          taskName: z.string(),
+          projectName: z.string(),
+          cwd: z.string(),
+          cols: z.number(),
+          rows: z.number(),
+        }),
+        payload,
+      );
       const { featureId, taskId, projectId } = payload;
       const wizard = getWizard(featureId);
       if (!wizard) {
@@ -49,6 +65,7 @@ export function registerWizardIpc(opts: { getMainWindow: () => BrowserWindow | n
   );
 
   ipcMain.handle('wizard:active', async (_e, q: { featureId: string; taskId: string }) => {
+    parseArgs('wizard:active', z.looseObject({ featureId: z.string(), taskId: z.string() }), q);
     await getTuiHost().reloadSettled();
     return {
       success: true as const,

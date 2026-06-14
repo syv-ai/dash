@@ -1,4 +1,6 @@
 import { ipcMain } from 'electron';
+import { z } from 'zod';
+import { parseArgs } from './validate';
 import { worktreeService } from '../services/WorktreeService';
 import { worktreePoolService } from '../services/WorktreePoolService';
 import { TelemetryService } from '../services/TelemetryService';
@@ -18,6 +20,18 @@ export function registerWorktreeIpc(): void {
       },
     ) => {
       try {
+        parseArgs(
+          'worktree:create',
+          z.looseObject({
+            projectPath: z.string(),
+            taskName: z.string(),
+            baseRef: z.string().optional(),
+            projectId: z.string(),
+            linkedIssueNumbers: z.array(z.number()).optional(),
+            pushRemote: z.boolean().optional(),
+          }),
+          args,
+        );
         const data = await worktreeService.createWorktree(args.projectPath, args.taskName, {
           baseRef: args.baseRef,
           projectId: args.projectId,
@@ -48,6 +62,22 @@ export function registerWorktreeIpc(): void {
       },
     ) => {
       try {
+        parseArgs(
+          'worktree:remove',
+          z.looseObject({
+            projectPath: z.string(),
+            worktreePath: z.string(),
+            branch: z.string(),
+            options: z
+              .looseObject({
+                deleteWorktreeDir: z.boolean().optional(),
+                deleteLocalBranch: z.boolean().optional(),
+                deleteRemoteBranch: z.boolean().optional(),
+              })
+              .optional(),
+          }),
+          args,
+        );
         await worktreeService.removeWorktree(
           args.projectPath,
           args.worktreePath,
@@ -66,6 +96,11 @@ export function registerWorktreeIpc(): void {
     'worktree:ensureReserve',
     async (_event, args: { projectId: string; projectPath: string }) => {
       try {
+        parseArgs(
+          'worktree:ensureReserve',
+          z.looseObject({ projectId: z.string(), projectPath: z.string() }),
+          args,
+        );
         await worktreePoolService.ensureReserve(args.projectId, args.projectPath);
         return { success: true };
       } catch (error) {
@@ -87,6 +122,17 @@ export function registerWorktreeIpc(): void {
       },
     ) => {
       try {
+        parseArgs(
+          'worktree:claimReserve',
+          z.looseObject({
+            projectId: z.string(),
+            taskName: z.string(),
+            baseRef: z.string().optional(),
+            linkedIssueNumbers: z.array(z.number()).optional(),
+            pushRemote: z.boolean().optional(),
+          }),
+          args,
+        );
         const data = await worktreePoolService.claimReserve(
           args.projectId,
           args.taskName,
@@ -117,6 +163,17 @@ export function registerWorktreeIpc(): void {
       },
     ) => {
       try {
+        parseArgs(
+          'worktree:createFromExisting',
+          z.looseObject({
+            projectPath: z.string(),
+            taskName: z.string(),
+            branch: z.string(),
+            projectId: z.string(),
+            linkedIssueNumbers: z.array(z.number()).optional(),
+          }),
+          args,
+        );
         const data = await worktreeService.createWorktreeFromExistingBranch(
           args.projectPath,
           args.taskName,
@@ -139,6 +196,7 @@ export function registerWorktreeIpc(): void {
 
   ipcMain.handle('worktree:hasReserve', async (_event, projectId: string) => {
     try {
+      parseArgs('worktree:hasReserve', z.string(), projectId);
       return { success: true, data: worktreePoolService.hasReserve(projectId) };
     } catch (error) {
       return { success: false, error: String(error) };

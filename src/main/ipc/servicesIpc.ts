@@ -1,5 +1,7 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import { execFile, spawn } from 'child_process';
+import { z } from 'zod';
+import { parseArgs } from './validate';
 import { ServiceRunner } from '../services/ServiceRunner';
 import { DatabaseService } from '../services/DatabaseService';
 import { WorkspacePortsRuntime } from '../services/WorkspacePortsRuntime';
@@ -44,6 +46,22 @@ function lsofPids(port: number): Promise<number[]> {
   });
 }
 
+const taskPortSchema = z.looseObject({
+  id: z.string(),
+  taskId: z.string(),
+  label: z.string(),
+  envVar: z.string().nullable(),
+  defaultPort: z.number().nullable(),
+  hostPort: z.number(),
+  source: z.string(),
+  runCommand: z.string().nullable(),
+  stopCommand: z.string().nullable(),
+  logsCommand: z.string().nullable(),
+  cwd: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
 let runner: ServiceRunner | null = null;
 
 export function getServiceRunner(): ServiceRunner {
@@ -82,29 +100,35 @@ export function getServiceRunner(): ServiceRunner {
 
 export function registerServicesIpc(): void {
   ipcMain.handle('ports:service:start', async (_e, taskId: string, port: TaskPort) => {
+    parseArgs('ports:service:start', z.string(), taskId);
+    parseArgs('ports:service:start', taskPortSchema, port);
     const r = await getServiceRunner().start(taskId, port);
     return r.ok
       ? { success: true as const }
       : { success: false as const, error: r.message ?? 'start failed' };
   });
   ipcMain.handle('ports:service:stop', async (_e, taskId: string, port: TaskPort) => {
+    parseArgs('ports:service:stop', z.string(), taskId);
+    parseArgs('ports:service:stop', taskPortSchema, port);
     const r = await getServiceRunner().stop(taskId, port);
     return r.ok
       ? { success: true as const }
       : { success: false as const, error: r.message ?? 'stop failed' };
   });
   ipcMain.handle('ports:service:logs', async (_e, taskId: string, port: TaskPort) => {
+    parseArgs('ports:service:logs', z.string(), taskId);
+    parseArgs('ports:service:logs', taskPortSchema, port);
     const r = await getServiceRunner().logs(taskId, port);
     return r.ok
       ? { success: true as const }
       : { success: false as const, error: r.message ?? 'logs failed' };
   });
-  ipcMain.handle('ports:service:startAll', async (_e, taskId: string) => ({
-    success: true as const,
-    data: await getServiceRunner().startAll(taskId),
-  }));
-  ipcMain.handle('ports:service:status', (_e, taskId: string) => ({
-    success: true as const,
-    data: getServiceRunner().status(taskId),
-  }));
+  ipcMain.handle('ports:service:startAll', async (_e, taskId: string) => {
+    parseArgs('ports:service:startAll', z.string(), taskId);
+    return { success: true as const, data: await getServiceRunner().startAll(taskId) };
+  });
+  ipcMain.handle('ports:service:status', (_e, taskId: string) => {
+    parseArgs('ports:service:status', z.string(), taskId);
+    return { success: true as const, data: getServiceRunner().status(taskId) };
+  });
 }

@@ -1,6 +1,9 @@
 import { ipcMain } from 'electron';
+import { z } from 'zod';
 import type { Database, Statement } from 'better-sqlite3';
 import { getRawDb } from '../db/client';
+import { parseArgs } from './validate';
+import { diffCommentInputSchema } from './schemas';
 import type { DiffComment, DiffCommentInput, IpcResponse } from '@shared/types';
 
 interface DiffCommentRow {
@@ -89,6 +92,7 @@ export function registerDiffCommentsIpc(): void {
     'diffComments:list',
     (_e, args: { taskId: string }): IpcResponse<DiffComment[]> => {
       try {
+        parseArgs('diffComments:list', z.looseObject({ taskId: z.string() }), args);
         const rows = getStmts().listByTask.all(args.taskId) as DiffCommentRow[];
         return { success: true, data: rows.map(rowToComment) };
       } catch (err) {
@@ -99,6 +103,7 @@ export function registerDiffCommentsIpc(): void {
 
   ipcMain.handle('diffComments:upsert', (_e, c: DiffCommentInput): IpcResponse<DiffComment> => {
     try {
+      parseArgs('diffComments:upsert', diffCommentInputSchema, c);
       const s = getStmts();
       s.upsert.run({ ...c, sent: c.sent ? 1 : 0, now: new Date().toISOString() });
       const row = s.getById.get(c.id) as DiffCommentRow | undefined;
@@ -111,6 +116,7 @@ export function registerDiffCommentsIpc(): void {
 
   ipcMain.handle('diffComments:delete', (_e, args: { id: string }): IpcResponse<void> => {
     try {
+      parseArgs('diffComments:delete', z.looseObject({ id: z.string() }), args);
       getStmts().deleteById.run(args.id);
       return { success: true };
     } catch (err) {
@@ -125,6 +131,11 @@ export function registerDiffCommentsIpc(): void {
       args: { taskId: string; existingFilePaths: string[] },
     ): IpcResponse<{ deleted: number }> => {
       try {
+        parseArgs(
+          'diffComments:pruneForTask',
+          z.looseObject({ taskId: z.string(), existingFilePaths: z.array(z.string()) }),
+          args,
+        );
         const s = getStmts();
         const rows = s.listPathsByTask.all(args.taskId) as Array<{
           id: string;

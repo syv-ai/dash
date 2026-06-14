@@ -1,4 +1,6 @@
 import { ipcMain, dialog, app, shell, BrowserWindow, Notification, clipboard } from 'electron';
+import { z } from 'zod';
+import { parseArgs, parseArgsSafe } from './validate';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { existsSync, readFileSync } from 'fs';
@@ -192,6 +194,7 @@ export function registerAppIpc(): void {
   });
 
   ipcMain.handle('app:openExternal', async (_event, url: string) => {
+    parseArgs('app:openExternal', z.string(), url);
     await shell.openExternal(url);
   });
 
@@ -199,6 +202,8 @@ export function registerAppIpc(): void {
   // unreliable on Linux (Wayland permission prompts, silent failures when
   // the page loses focus between keydown and the async write).
   ipcMain.on('app:clipboardWriteText', (_event, text: string) => {
+    const v = parseArgsSafe('app:clipboardWriteText', z.string(), text);
+    if (v === undefined) return;
     clipboard.writeText(text);
   });
   ipcMain.handle('app:clipboardReadText', () => {
@@ -245,6 +250,7 @@ export function registerAppIpc(): void {
 
   ipcMain.handle('app:detectGit', async (_event, folderPath: string) => {
     try {
+      parseArgs('app:detectGit', z.string(), folderPath);
       const gitDir = join(folderPath, '.git');
       if (!existsSync(gitDir)) {
         return { success: true, data: { isGitRepo: false, remote: null, branch: null } };
@@ -279,6 +285,7 @@ export function registerAppIpc(): void {
 
   ipcMain.handle('git:init', async (_event, folderPath: string) => {
     try {
+      parseArgs('git:init', z.string(), folderPath);
       await execFileAsync('git', ['init'], { cwd: folderPath, timeout: 10000 });
       return { success: true, data: null };
     } catch (error) {
@@ -287,6 +294,12 @@ export function registerAppIpc(): void {
   });
 
   ipcMain.on('app:setDesktopNotification', (_event, opts: { enabled: boolean }) => {
+    const v = parseArgsSafe(
+      'app:setDesktopNotification',
+      z.looseObject({ enabled: z.boolean() }),
+      opts,
+    );
+    if (v === undefined) return;
     void (async () => {
       try {
         const { setDesktopNotification } = await import('../services/ptyManager');
@@ -318,6 +331,7 @@ export function registerAppIpc(): void {
     'app:getClaudeAttribution',
     (_event, projectPath?: string): { success: boolean; data?: string | null; error?: string } => {
       try {
+        parseArgs('app:getClaudeAttribution', z.string().optional(), projectPath);
         // Check project-level settings first (higher precedence)
         if (projectPath) {
           const repoSettings = join(projectPath, '.claude', 'settings.json');
@@ -348,6 +362,12 @@ export function registerAppIpc(): void {
   );
 
   ipcMain.on('app:setCommitAttribution', (_event, value: string | undefined) => {
+    if (
+      value !== undefined &&
+      parseArgsSafe('app:setCommitAttribution', z.string(), value) === undefined
+    ) {
+      return;
+    }
     void (async () => {
       try {
         const { setCommitAttribution } = await import('../services/ptyManager');
@@ -359,6 +379,8 @@ export function registerAppIpc(): void {
   });
 
   ipcMain.on('app:setClaudeEnvVars', (_event, vars: Record<string, string>) => {
+    const v = parseArgsSafe('app:setClaudeEnvVars', z.record(z.string(), z.string()), vars);
+    if (v === undefined) return;
     void (async () => {
       try {
         const { setClaudeEnvVars } = await import('../services/ptyManager');
@@ -370,6 +392,8 @@ export function registerAppIpc(): void {
   });
 
   ipcMain.on('app:setSyncShellEnv', (_event, enabled: boolean) => {
+    const v = parseArgsSafe('app:setSyncShellEnv', z.boolean(), enabled);
+    if (v === undefined) return;
     void (async () => {
       try {
         const { setSyncShellEnv } = await import('../services/ptyManager');
@@ -410,6 +434,17 @@ export function registerAppIpc(): void {
       },
     ) => {
       try {
+        parseArgs(
+          'app:openInIDE',
+          z.looseObject({
+            folderPath: z.string(),
+            ide: z.string().optional(),
+            customCommand: z
+              .looseObject({ path: z.string(), args: z.array(z.string()) })
+              .optional(),
+          }),
+          args,
+        );
         if (!existsSync(args.folderPath)) {
           return { success: false, error: `Path not found: ${args.folderPath}` };
         }
@@ -481,6 +516,16 @@ export function registerAppIpc(): void {
     'app:openInEditor',
     async (_event, args: { cwd: string; filePath: string; line?: number; col?: number }) => {
       try {
+        parseArgs(
+          'app:openInEditor',
+          z.looseObject({
+            cwd: z.string(),
+            filePath: z.string(),
+            line: z.number().optional(),
+            col: z.number().optional(),
+          }),
+          args,
+        );
         const resolved = resolve(args.cwd, args.filePath);
         if (!existsSync(resolved)) {
           return { success: false, error: `File not found: ${resolved}` };
