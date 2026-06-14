@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { installGlobalErrorHandlers } from './services/globalErrorHandler';
 
 const execFileAsync = promisify(execFile);
 
@@ -11,6 +12,12 @@ process.stderr.on('error', (err) => {
   if ((err as NodeJS.ErrnoException).code === 'EPIPE') return;
   throw err;
 });
+
+// ── Global Error Handlers ────────────────────────────────────
+// Last-resort uncaughtException / unhandledRejection handlers: log + report to
+// telemetry, then keep running. Installed before anything else so startup
+// errors are caught too (telemetry.capture no-ops until initialize() runs).
+installGlobalErrorHandlers();
 
 // ── PATH Fix ──────────────────────────────────────────────────
 function fixPath(): void {
