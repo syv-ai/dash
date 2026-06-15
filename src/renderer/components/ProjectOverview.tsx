@@ -244,10 +244,21 @@ export function ProjectOverview({
                 const linkedItems = task.linkedItems ?? [];
 
                 return (
-                  <button
+                  // role=button (not <button>) so the interactive children below
+                  // (Open-in-IDE, issue links, Delete) are valid DOM — a <button>
+                  // can't contain other buttons or anchors.
+                  <div
                     key={task.id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => onSelectTask(task.id)}
-                    className="relative flex flex-col p-4 rounded-xl border border-border bg-[hsl(var(--surface-2))] hover:bg-[hsl(var(--surface-3))] hover:border-foreground/20 transition-all duration-150 text-left group overflow-hidden min-w-0"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onSelectTask(task.id);
+                      }
+                    }}
+                    className="relative flex flex-col p-4 rounded-xl border border-border bg-[hsl(var(--surface-2))] hover:bg-[hsl(var(--surface-3))] hover:border-foreground/20 transition-all duration-150 text-left group overflow-hidden min-w-0 cursor-pointer"
                   >
                     {/* Open in IDE — top right */}
                     <Tooltip content="Open in IDE">
@@ -374,7 +385,7 @@ export function ProjectOverview({
                         Updated {timeAgo(task.updatedAt)}
                       </span>
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>
