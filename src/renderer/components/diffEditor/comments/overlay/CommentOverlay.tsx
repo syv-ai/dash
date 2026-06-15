@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
-import type { LineRange, LiveComment, Shade } from './types';
-import { commentIdsAtLine } from './rowShades';
-import { BubbleStack } from './BubbleStack';
-import { CommentIcon } from './CommentIcon';
-import { DraftBubble } from './DraftBubble';
+import type { LineRange, LiveComment, Shade } from '../types';
+import { commentIdsAtLine } from '../rowShades';
+import { BubbleStack } from '../BubbleStack';
+import { CommentIcon } from '../CommentIcon';
+import { DraftBubble } from '../DraftBubble';
 
 interface Props {
   liveComments: LiveComment[];

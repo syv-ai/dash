@@ -11,7 +11,7 @@ import { useCommentBands } from './comments/useCommentBands';
 import { useCommentDraft } from './comments/useCommentDraft';
 import { useCommentPrompt } from './comments/useCommentPrompt';
 import { useFileFade } from './comments/useFileFade';
-import { CommentOverlay } from './comments/CommentOverlay';
+import { CommentOverlay } from './comments/overlay/CommentOverlay';
 import { CommentsMenu } from './comments/CommentsMenu';
 import { EditCommentsModal } from './comments/EditCommentsModal';
 import { useFileLoad, type LoadState } from './editor/useFileLoad';
