@@ -8,6 +8,8 @@ import { useGutterSelection } from './comments/useGutterSelection';
 import { useFileComments } from './comments/useFileComments';
 import { computeRowDecorations } from './comments/rowShades';
 import { useCommentShades } from './comments/useCommentShades';
+import { useCommentDraft } from './comments/useCommentDraft';
+import { useCommentPrompt } from './comments/useCommentPrompt';
 import { CommentOverlay } from './comments/CommentOverlay';
 import { CommentsMenu } from './comments/CommentsMenu';
 import { EditCommentsModal } from './comments/EditCommentsModal';
@@ -64,12 +66,6 @@ export function EditorPane({
   const { state, setState } = useFileLoad(cwd, filePath, view);
   const [draft, setDraft] = useState<string>('');
   const [loadedBuffer, setLoadedBuffer] = useState<string>('');
-  // When non-empty, the WIP popover opens prefilled with this text. Used by
-  // the dbl-click-to-edit flow on a persisted comment widget.
-  const [pendingText, setPendingText] = useState<string>('');
-  // The id of the comment currently being edited, so the widgets effect can
-  // skip rendering it (the WIP popover is taking its place).
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [wordWrap, setWordWrap] = useState<boolean>(
     () => localStorage.getItem(WORDWRAP_KEY) === 'on',
   );
@@ -302,134 +298,19 @@ export function EditorPane({
     commentDecorations.current.set(decos);
   }, [liveComments, shadeById, isDark, commentsDisabled, modifiedEditor, monaco, hoveredCommentId]);
 
-  function addComment(text: string) {
-    if (editingId) {
-      binding.updateText(editingId, text);
-      setEditingId(null);
-      setPendingText('');
-      setPendingRange(null);
-      return;
-    }
-    if (!pendingRange) return;
-    binding.addComment(pendingRange, text);
-    setPendingText('');
-    setPendingRange(null);
-  }
+  // In-progress comment (fresh-create vs dbl-click-to-edit) state.
+  const draftApi = useCommentDraft({ modifiedEditor, setPendingRange, binding });
 
-  function cancelComment() {
-    setEditingId(null);
-    setPendingText('');
-    setPendingRange(null);
-  }
-
-  // ── Prompt assembly ────────────────────────────────────
-  // buildPromptText turns a set of comment ids into the path:line: prompt
-  // body. writePromptToTui takes the (potentially edited) text and ships it
-  // to the task, marking the original ids as sent so they don't sneak back
-  // into the next bulk send. They're split so the edit-before-send modal
-  // can build once, let the user mutate the text, then ship the result.
-  function buildPromptText(idsToSend: ReadonlyArray<string>): string | null {
-    if (idsToSend.length === 0) return null;
-    const idSet = new Set(idsToSend);
-    const model = modifiedEditor?.getModel();
-    const lang = state.kind === 'loaded' ? state.language : '';
-
-    const fileGroups = Object.entries(commentsByFile)
-      .map(([path, list]) => [path, list.filter((c) => idSet.has(c.id))] as const)
-      .filter(([, list]) => list.length > 0)
-      .sort(([a], [b]) => {
-        if (a === filePath) return -1;
-        if (b === filePath) return 1;
-        return a.localeCompare(b);
-      });
-    if (fileGroups.length === 0) return null;
-
-    const sections: string[] = [];
-    for (const [path, list] of fileGroups) {
-      const isCurrent = path === filePath;
-      for (const sc of list) {
-        let startLine = sc.startLine;
-        let endLine = sc.endLine;
-        let code = '';
-        // For the current file, prefer live decoration ranges (line shifts
-        // from typing) and embed a code excerpt.
-        if (isCurrent && modifiedEditor && monaco && model) {
-          const live = liveComments.find((c) => c.id === sc.id);
-          if (live) {
-            const r = model.getDecorationRange(live.decorationId);
-            if (r) {
-              startLine = r.startLineNumber;
-              endLine = r.endLineNumber;
-            }
-          }
-          code = model.getValueInRange(
-            new monaco.Range(startLine, 1, endLine, model.getLineMaxColumn(endLine)),
-          );
-        }
-        const lineRef = startLine === endLine ? `${startLine}` : `${startLine}-${endLine}`;
-        const header = `${path}:${lineRef}:`;
-        sections.push(
-          code ? `${header}\n\`\`\`${lang}\n${code}\n\`\`\`\n${sc.text}` : `${header}\n${sc.text}`,
-        );
-      }
-    }
-    return `Comments:\n\n${sections.join('\n\n')}`;
-  }
-
-  function writePromptToTui(text: string, idsToMarkSent: ReadonlyArray<string>): void {
-    if (!activeTaskId) return;
-    const taskId = activeTaskId;
-    void import('../../terminal/SessionRegistry').then(({ sessionRegistry }) => {
-      const session = sessionRegistry.get(taskId);
-      if (session) session.writeInput(text);
-    });
-    useCommentsStore.getState().markSent(idsToMarkSent);
-  }
-
-  function sendCommentsToPrompt(idsToSend: ReadonlyArray<string>): boolean {
-    if (!activeTaskId) return false;
-    const text = buildPromptText(idsToSend);
-    if (text === null) return false;
-    writePromptToTui(text, idsToSend);
-    return true;
-  }
-
-  function collectUnsentIds(): string[] {
-    const ids: string[] = [];
-    for (const list of Object.values(commentsByFile)) {
-      for (const c of list) if (!c.sent) ids.push(c.id);
-    }
-    return ids;
-  }
-
-  function sendAllUnsent() {
-    if (sendCommentsToPrompt(collectUnsentIds())) onClose();
-  }
-
-  function sendOneComment(id: string) {
-    sendCommentsToPrompt([id]);
-    // Stay in the modal: the user is browsing the dropdown and likely
-    // wants to triage more before leaving.
-  }
-
-  // Edit-before-send modal state. The ids snapshot is captured at open time
-  // so any edits to the text don't change which comments get marked sent.
-  const [editTarget, setEditTarget] = useState<{ ids: string[]; text: string } | null>(null);
-
-  function openEditAndSendModal() {
-    if (!activeTaskId) return;
-    const ids = collectUnsentIds();
-    const text = buildPromptText(ids);
-    if (text === null) return;
-    setEditTarget({ ids, text });
-  }
-
-  function confirmEditAndSend(editedText: string) {
-    if (!editTarget) return;
-    writePromptToTui(editedText, editTarget.ids);
-    setEditTarget(null);
-    onClose();
-  }
+  // Prompt assembly + send-to-TUI + edit-and-send modal.
+  const promptApi = useCommentPrompt({
+    activeTaskId,
+    filePath,
+    modifiedEditor,
+    monaco,
+    liveComments,
+    language: state.kind === 'loaded' ? state.language : '',
+    onClose,
+  });
 
   function handleClose() {
     if (dirty && !window.confirm('Discard unsaved changes?')) return;
@@ -439,23 +320,6 @@ export function EditorPane({
   const hasAnyComments = useMemo(
     () => Object.values(commentsByFile).some((list) => list.length > 0),
     [commentsByFile],
-  );
-
-  // Used by the React overlay's onDoubleClick → re-opens the WIP popover
-  // prefilled with the chosen comment's text + range. Same behavior the
-  // legacy widget exposed via dbl-click; lives in EditorPane because it
-  // owns editingId / pendingText / pendingRange.
-  const editComment = useCallback(
-    (c: LiveComment) => {
-      const model = modifiedEditor?.getModel();
-      if (!model) return;
-      const range = model.getDecorationRange(c.decorationId);
-      if (!range) return;
-      setEditingId(c.id);
-      setPendingText(c.text);
-      setPendingRange({ start: range.startLineNumber, end: range.endLineNumber });
-    },
-    [modifiedEditor, setPendingRange],
   );
 
   const showCommentsMenu = !commentsDisabled && hasAnyComments;
@@ -527,9 +391,9 @@ export function EditorPane({
               }}
               onRemove={(_path, id) => useCommentsStore.getState().remove(id)}
               onUnsend={(id) => useCommentsStore.getState().markUnsent(id)}
-              onSend={sendAllUnsent}
-              onEditAndSend={openEditAndSendModal}
-              onSendOne={sendOneComment}
+              onSend={promptApi.sendAllUnsent}
+              onEditAndSend={promptApi.openEditAndSend}
+              onSendOne={promptApi.sendOne}
             />
           </div>
         )}
@@ -542,21 +406,21 @@ export function EditorPane({
           area={editorAreaEl}
           hoveredId={hoveredCommentId}
           onHoveredIdChange={setHoveredCommentId}
-          onEditComment={editComment}
+          onEditComment={draftApi.beginEdit}
           onDeleteComment={binding.remove}
           pendingRange={dragging ? null : pendingRange}
-          pendingText={pendingText}
-          editingId={editingId}
-          onSubmitDraft={addComment}
-          onCancelDraft={cancelComment}
+          pendingText={draftApi.pendingText}
+          editingId={draftApi.editingId}
+          onSubmitDraft={(text) => draftApi.submit(text, dragging ? null : pendingRange)}
+          onCancelDraft={draftApi.cancel}
         />
       </EditorViewport>
-      {editTarget && (
+      {promptApi.editTarget && (
         <EditCommentsModal
-          initialText={editTarget.text}
-          count={editTarget.ids.length}
-          onClose={() => setEditTarget(null)}
-          onSend={confirmEditAndSend}
+          initialText={promptApi.editTarget.text}
+          count={promptApi.editTarget.ids.length}
+          onClose={promptApi.cancelEditAndSend}
+          onSend={promptApi.confirmEditAndSend}
         />
       )}
     </div>
