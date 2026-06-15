@@ -1,13 +1,14 @@
 import { join } from 'path';
+import {
+  CLONE_METHODS,
+  getCloneMethod,
+  type CloneMethod,
+  type DetectStrategy,
+} from '@shared/cloneMethods';
 
-export type DetectStrategy = 'dest' | 'diff';
-
-export interface CloneMethod {
-  id: string;
-  label: string;
-  /** True when the tool prompts on stdin and must run in a pty the user can type into. */
-  interactive: boolean;
-}
+// Re-export the shared registry so existing main-process imports keep working.
+export { CLONE_METHODS, getCloneMethod };
+export type { CloneMethod, DetectStrategy };
 
 export interface SourceCommandContext {
   url: string;
@@ -22,17 +23,6 @@ export interface SourceCommand {
   detect: DetectStrategy;
   /** The known result folder for `detect: 'dest'`; null for `diff`. */
   dest: string | null;
-}
-
-/** Order matters: index 0 is the default shown in the dropdown. */
-export const CLONE_METHODS: readonly CloneMethod[] = [
-  { id: 'git', label: 'git', interactive: false },
-  { id: 'cookiecutter', label: 'cookiecutter', interactive: true },
-  { id: 'copier', label: 'copier', interactive: true },
-];
-
-export function getCloneMethod(id: string): CloneMethod | undefined {
-  return CLONE_METHODS.find((m) => m.id === id);
 }
 
 export function buildSourceCommand(methodId: string, ctx: SourceCommandContext): SourceCommand {
