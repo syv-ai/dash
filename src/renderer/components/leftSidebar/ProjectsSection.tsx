@@ -17,6 +17,7 @@ import { TaskCard } from './TaskCard';
 import { openInIde } from '../../lib/openInIde';
 import { useSettings } from '../../stores/settingsStore';
 import { useRuntime } from '../../stores/runtimeStore';
+import { useProjects } from '../../stores/projectsStore';
 
 interface ProjectsSectionProps {
   projects: Project[];
@@ -71,6 +72,17 @@ export function ProjectsSection({
   const projectTokenStats = useRuntime((s) => s.projectTokenStats);
   const taskActivity = useRuntime((s) => s.taskActivity);
   const remoteControlStates = useRuntime((s) => s.remoteControlStates);
+  const justCreatedProjectId = useProjects((s) => s.justCreatedProjectId);
+  const clearJustCreatedProject = useProjects((s) => s.clearJustCreatedProject);
+  const newRowRef = useRef<HTMLDivElement | null>(null);
+
+  // One-shot: scroll the freshly-created project's row into view, then clear the
+  // signal so we never scroll again on unrelated re-renders.
+  useEffect(() => {
+    if (!justCreatedProjectId) return;
+    newRowRef.current?.scrollIntoView({ block: 'nearest' });
+    clearJustCreatedProject();
+  }, [justCreatedProjectId, clearJustCreatedProject]);
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(() => {
     try {
       const raw = localStorage.getItem('expandedProjects');
@@ -175,7 +187,10 @@ export function ProjectsSection({
             const hasActiveTask = projectTasks.some((t) => !!taskActivity[t.id]?.state);
 
             return (
-              <div key={project.id}>
+              <div
+                key={project.id}
+                ref={project.id === justCreatedProjectId ? newRowRef : undefined}
+              >
                 {/* Project row */}
                 <div
                   draggable

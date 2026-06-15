@@ -25,6 +25,9 @@ export interface ProjectsState {
   adoConfiguredById: Record<string, boolean>;
   availableIDEs: Array<{ id: string; label: string }>;
   isCreatingTask: boolean;
+  /** Id of a project just created via the wizard — the sidebar scrolls its row
+   *  into view once, then clears this. */
+  justCreatedProjectId: string | null;
 }
 
 const ls = () => (typeof window !== 'undefined' ? window.localStorage : undefined);
@@ -45,6 +48,8 @@ export interface ProjectsActions {
   setTasksForProject: (projectId: string, tasks: Task[]) => void;
   setActiveProject: (id: string | null) => void;
   setActiveTask: (id: string | null) => void;
+  setJustCreatedProject: (id: string | null) => void;
+  clearJustCreatedProject: () => void;
   setGhAvailable: (v: boolean) => void;
   setAdoConfigured: (projectId: string, v: boolean) => void;
   setBranchesForProject: (projectId: string, branches: BranchInfo[]) => void;
@@ -121,6 +126,7 @@ export const useProjects = create<ProjectsStore>((set) => ({
   adoConfiguredById: {},
   availableIDEs: [],
   isCreatingTask: false,
+  justCreatedProjectId: null,
 
   setProjects: (projects) => set({ projects }),
   setTasksForProject: (projectId, tasks) =>
@@ -133,6 +139,8 @@ export const useProjects = create<ProjectsStore>((set) => ({
     persistKey('activeTaskId', id);
     set({ activeTaskId: id });
   },
+  setJustCreatedProject: (id) => set({ justCreatedProjectId: id }),
+  clearJustCreatedProject: () => set({ justCreatedProjectId: null }),
   setGhAvailable: (v) => set({ ghAvailable: v }),
   setAdoConfigured: (projectId, v) =>
     set((s) => ({ adoConfiguredById: { ...s.adoConfiguredById, [projectId]: v } })),
