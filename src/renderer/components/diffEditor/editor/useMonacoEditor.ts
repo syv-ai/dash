@@ -54,6 +54,14 @@ export function useMonacoEditor(args: Args): Api {
   const [editor, setEditor] = useState<monacoEditor.IStandaloneDiffEditor | null>(null);
   const [monaco, setMonaco] = useState<typeof import('monaco-editor') | null>(null);
 
+  // The diff editor's two TextModels, captured at mount so we can dispose them
+  // ourselves on unmount (EditorViewport passes keepCurrent*Model so the
+  // library doesn't — its disposal order is buggy). See the unmount effect.
+  const modelsRef = useRef<{
+    original: monacoEditor.ITextModel;
+    modified: monacoEditor.ITextModel;
+  } | null>(null);
+
   // Keep the most recently loaded state alive so the editor doesn't unmount
   // mid-switch. Mutating a ref during render is intentional here — `displayed`
   // is always a recent snapshot of `state`.
@@ -75,6 +83,11 @@ export function useMonacoEditor(args: Args): Api {
       defineMonacoThemeFromTerminal(monacoApi, themeNameFor(isDark), isDark, terminalTheme);
       monacoApi.editor.setTheme(themeNameFor(isDark));
 
+      const diffModel = ed.getModel();
+      if (diffModel) {
+        modelsRef.current = { original: diffModel.original, modified: diffModel.modified };
+      }
+
       const modified = ed.getModifiedEditor();
       modified.onDidChangeModelContent(() => {
         if (!isCommitViewRef.current) onDraftChangeRef.current(modified.getValue());
@@ -84,6 +97,22 @@ export function useMonacoEditor(args: Args): Api {
       });
       setMonaco(monacoApi);
       setEditor(ed);
+    },
+    [],
+  );
+
+  // Dispose the diff models on unmount. Deferred to a macrotask so it runs
+  // AFTER the library's synchronous widget disposal — guaranteeing the order
+  // is widget-reset-then-model-dispose (the reverse is the library's bug).
+  useEffect(
+    () => () => {
+      const models = modelsRef.current;
+      modelsRef.current = null;
+      if (!models) return;
+      setTimeout(() => {
+        models.original.dispose();
+        models.modified.dispose();
+      }, 0);
     },
     [],
   );

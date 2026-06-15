@@ -89,6 +89,12 @@ export function EditorViewport({
         <div ref={monacoWrapRef} className="absolute inset-0">
           <MonacoDiffEditor
             beforeMount={beforeMount}
+            // We own model disposal (see useMonacoEditor): @monaco-editor/react
+            // 4.7 disposes the diff TextModels before the widget on unmount,
+            // throwing "TextModel got disposed before DiffEditorWidget model got
+            // reset". keepCurrent*Model makes the lib leave the models to us.
+            keepCurrentOriginalModel
+            keepCurrentModifiedModel
             original={displayed.originalContent}
             modified={isCommitView ? displayed.modifiedContent : draft}
             language={displayed.language || undefined}
