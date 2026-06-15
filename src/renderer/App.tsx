@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useRef, useMemo, Suspense, lazy } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo, Suspense, lazy } from 'react';
 import {
   PanelGroup,
   Panel,
@@ -30,7 +30,7 @@ import { getBillionToastContent } from './utils/billionToast';
 import { useStatusLine } from './hooks/useStatusLine';
 import { useThresholdAlerts } from './hooks/useThresholdAlerts';
 import type { Task } from '../shared/types';
-import type { CreateTaskOptions } from './components/TaskModal';
+import type { CreateTaskOptions, TaskModalDefaults } from './components/TaskModal';
 import { matchesBinding } from './keybindings';
 import { sessionRegistry } from './terminal/SessionRegistry';
 import { resolveTheme } from './terminal/terminalThemes';
@@ -662,10 +662,7 @@ export function App() {
       // Tasks
       if (keybindings.newTask && matchesBinding(e, keybindings.newTask)) {
         e.preventDefault();
-        if (activeProjectId) {
-          setTaskModalProjectId(activeProjectId);
-          setShowTaskModal(true);
-        }
+        if (activeProjectId) void handleNewTask(activeProjectId);
       }
       if (keybindings.nextTask && matchesBinding(e, keybindings.nextTask)) {
         e.preventDefault();
@@ -884,9 +881,21 @@ export function App() {
     });
   }
 
-  function handleNewTask(projectId: string) {
+  // Loaded before the modal mounts so its fields render with the project's
+  // taskDefaults already applied (prefill only).
+  const [taskModalDefaults, setTaskModalDefaults] = useState<TaskModalDefaults | null>(null);
+
+  async function handleNewTask(projectId: string) {
     setActiveProjectId(projectId);
     setTaskModalProjectId(projectId);
+    // Read from the store (not a closure) so a freshly-created project resolves.
+    const project = useProjects.getState().projects.find((p) => p.id === projectId);
+    let defaults: TaskModalDefaults | null = null;
+    if (project) {
+      const resp = await window.electronAPI.readWorkspaceConfig(project.path);
+      defaults = resp.success ? (resp.data?.taskDefaults ?? null) : null;
+    }
+    setTaskModalDefaults(defaults);
     setShowTaskModal(true);
   }
 
@@ -981,7 +990,7 @@ export function App() {
             tasksByProject={tasksByProject}
             activeTaskId={activeTaskId}
             onSelectTask={handleSelectTask}
-            onNewTask={handleNewTask}
+            onNewTask={(id) => void handleNewTask(id)}
             onDeleteTask={handleDeleteTask}
             onArchiveTask={(id) => {
               void handleArchiveTask(id);
@@ -1059,7 +1068,9 @@ export function App() {
               onOpenIde={() => {
                 if (activeTask) void openInIde(activeTask.path);
               }}
-              onNewTask={() => activeProjectId && handleNewTask(activeProjectId)}
+              onNewTask={() => {
+                if (activeProjectId) void handleNewTask(activeProjectId);
+              }}
               onProjectSettings={() => {
                 if (activeProject) setProjectSettingsTarget(activeProject);
               }}
@@ -1230,6 +1241,7 @@ export function App() {
               ghAvailable={ghAvailable}
               adoConfigured={modalProjectId ? (adoConfiguredById[modalProjectId] ?? false) : false}
               initialBranches={modalProjectId ? branchesByProject[modalProjectId] : undefined}
+              taskDefaults={taskModalDefaults}
               onClose={() => setShowTaskModal(false)}
               onCreate={handleCreateTask}
               onGitInit={() => {

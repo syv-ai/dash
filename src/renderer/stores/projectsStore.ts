@@ -290,7 +290,7 @@ export const useProjects = create<ProjectsStore>((set) => ({
     await useProjects.getState().loadProjects();
   },
   createTask: async (options, projectId) => {
-    const { name, permissionMode, linkedItems } = options;
+    const { name, permissionMode, linkedItems, contextPrompt } = options;
     const targetProjectId = projectId ?? useProjects.getState().activeProjectId;
     const targetProject = useProjects.getState().projects.find((p) => p.id === targetProjectId);
     if (!targetProject) return false;
@@ -386,6 +386,7 @@ export const useProjects = create<ProjectsStore>((set) => ({
         // Only Dash-created branches should be auto-deleted on task removal.
         branchCreatedByDash: options.kind === 'worktree-new-branch' && !!worktreeInfo,
         linkedItems: linkedItems ?? null,
+        contextPrompt: contextPrompt ?? null,
       });
       if (!saveResp.success || !saveResp.data) {
         toast.error(saveResp.error || 'Failed to save task');
@@ -393,13 +394,19 @@ export const useProjects = create<ProjectsStore>((set) => ({
       }
 
       const taskId = saveResp.data.id;
-      // Store task context so the SessionStart hook can inject it.
-      if (linkedItems && linkedItems.length > 0) {
-        const prompt = formatTaskContextPrompt(linkedItems);
-        if (prompt) {
-          await window.electronAPI.ptyWriteTaskContext({ taskId, prompt });
-          notifyContextInjected(linkedItems);
-        }
+      // Store task context so the SessionStart hook can inject it. The user's
+      // context prompt (project default or per-task) is combined with any
+      // linked-issue context.
+      const hasLinkedItems = !!linkedItems && linkedItems.length > 0;
+      const prompt = [
+        contextPrompt?.trim(),
+        hasLinkedItems ? formatTaskContextPrompt(linkedItems) : '',
+      ]
+        .filter((part): part is string => !!part)
+        .join('\n\n');
+      if (prompt) {
+        await window.electronAPI.ptyWriteTaskContext({ taskId, prompt });
+        if (hasLinkedItems) notifyContextInjected(linkedItems);
       }
 
       await window.electronAPI.getOrCreateDefaultConversation(taskId);

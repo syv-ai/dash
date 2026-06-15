@@ -34,12 +34,22 @@ export type CreateTaskOptions = {
   name: string;
   permissionMode: PermissionMode;
   linkedItems?: LinkedItem[];
+  contextPrompt?: string;
 } & (
   | { kind: 'worktree-new-branch'; baseRef: string; pushRemote: boolean }
   | { kind: 'worktree-existing'; branch: string }
   | { kind: 'in-place-checkout'; branch: string }
   | { kind: 'in-place-no-git' }
 );
+
+/** Project-level prefill for the New Task fields, loaded from .dash/config.json.
+ *  Prefill only — sets each field's default value; the user can still change it. */
+export interface TaskModalDefaults {
+  baseRef?: string;
+  permissionMode?: PermissionMode;
+  useWorktree?: boolean;
+  contextPrompt?: string;
+}
 
 interface TaskModalProps {
   projectPath: string;
@@ -52,6 +62,7 @@ interface TaskModalProps {
   ghAvailable: boolean;
   adoConfigured: boolean;
   initialBranches?: BranchInfo[];
+  taskDefaults?: TaskModalDefaults | null;
   onClose: () => void;
   onCreate: (options: CreateTaskOptions) => Promise<boolean>;
   onGitInit?: () => void;
@@ -69,6 +80,7 @@ export function TaskModal(props: TaskModalProps) {
         ghAvailable={props.ghAvailable}
         adoConfigured={props.adoConfigured}
         initialBranches={props.initialBranches}
+        taskDefaults={props.taskDefaults}
         onCreate={props.onCreate}
         onGitInit={props.onGitInit}
       />
@@ -85,6 +97,7 @@ interface TaskModalBodyProps {
   ghAvailable: boolean;
   adoConfigured: boolean;
   initialBranches?: BranchInfo[];
+  taskDefaults?: TaskModalDefaults | null;
   onCreate: (options: CreateTaskOptions) => Promise<boolean>;
   onGitInit?: () => void;
 }
@@ -150,6 +163,7 @@ function TaskModalBody({
   ghAvailable,
   adoConfigured,
   initialBranches,
+  taskDefaults,
   onCreate,
   onGitInit,
 }: TaskModalBodyProps) {
@@ -157,8 +171,13 @@ function TaskModalBody({
   const [name, setName] = useState('');
   const [gitReady, setGitReady] = useState(isGitRepo);
   const worktreeForced = !!existingNonWorktreeTask;
-  const [useWorktree, setUseWorktree] = useState(isGitRepo || worktreeForced);
-  const [permissionMode, setPermissionMode] = useState<PermissionMode>(readInitialPermissionMode);
+  const [useWorktree, setUseWorktree] = useState(
+    taskDefaults?.useWorktree ?? (isGitRepo || worktreeForced),
+  );
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>(
+    () => taskDefaults?.permissionMode ?? readInitialPermissionMode(),
+  );
+  const [contextPrompt, setContextPrompt] = useState(taskDefaults?.contextPrompt ?? '');
   const [pushRemote, setPushRemote] = useState(true);
   const [gitInitLoading, setGitInitLoading] = useState(false);
   const [createNewBranch, setCreateNewBranch] = useState(false);
@@ -169,9 +188,16 @@ function TaskModalBody({
   const [branches, setBranches] = useState<BranchInfo[]>(initialBranches ?? []);
   const [branchLoading, setBranchLoading] = useState(false);
   const [branchError, setBranchError] = useState<string | null>(null);
-  const [selectedBranch, setSelectedBranch] = useState<BranchInfo | null>(
-    initialBranches?.[0] ?? null,
-  );
+  const [selectedBranch, setSelectedBranch] = useState<BranchInfo | null>(() => {
+    const list = initialBranches ?? [];
+    if (taskDefaults?.baseRef) {
+      const match = list.find(
+        (b) => b.ref === taskDefaults.baseRef || b.name === taskDefaults.baseRef,
+      );
+      if (match) return match;
+    }
+    return list[0] ?? null;
+  });
   const [branchSearch, setBranchSearch] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
@@ -285,7 +311,12 @@ function TaskModalBody({
     const allLinkedItems: LinkedItem[] = [...ghItems, ...adoItems];
     const linkedItems = allLinkedItems.length > 0 ? allLinkedItems : undefined;
 
-    const base = { name: name.trim(), permissionMode, linkedItems };
+    const base = {
+      name: name.trim(),
+      permissionMode,
+      linkedItems,
+      contextPrompt: contextPrompt.trim() || undefined,
+    };
 
     let options: CreateTaskOptions;
     if (useWorktree) {
@@ -352,6 +383,20 @@ function TaskModalBody({
             maxLength={60}
             className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[13px] placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150"
             autoFocus
+          />
+        </div>
+
+        {/* Context prompt (optional) */}
+        <div className="mb-5">
+          <label className="block text-[12px] font-medium text-muted-foreground/70 mb-2">
+            Context prompt <span className="text-muted-foreground/40">(optional)</span>
+          </label>
+          <textarea
+            value={contextPrompt}
+            onChange={(e) => setContextPrompt(e.target.value)}
+            rows={2}
+            placeholder="Prepended to the task's context — e.g. coding conventions, links."
+            className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[13px] placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
           />
         </div>
 
