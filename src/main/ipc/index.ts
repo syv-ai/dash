@@ -16,6 +16,7 @@ import { registerTokenStatsIpc } from './tokenStatsIpc';
 import { registerPortsIpc } from './portsIpc';
 import { registerDrawerTabsIpc } from './drawerTabsIpc';
 import { registerWorkspaceConfigIpc } from './workspaceConfigIpc';
+import { registerProjectSourceIpc } from './projectSourceIpc';
 
 export function registerAllIpc(): void {
   registerAppIpc();
@@ -36,4 +37,5 @@ export function registerAllIpc(): void {
   registerPortsIpc();
   registerDrawerTabsIpc();
   registerWorkspaceConfigIpc();
+  registerProjectSourceIpc();
 }
