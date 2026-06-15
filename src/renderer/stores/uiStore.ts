@@ -10,11 +10,6 @@ export interface AdoSetup {
   project: string;
 }
 
-export interface CloneStatus {
-  loading: boolean;
-  error: string | null;
-}
-
 export interface DeleteTaskOptions {
   deleteWorktreeDir: boolean;
   deleteLocalBranch: boolean;
@@ -31,7 +26,6 @@ export interface UiState {
   showTaskModal: boolean;
   taskModalProjectId: string | null;
   showAddProjectModal: boolean;
-  cloneStatus: CloneStatus;
   deleteTaskTarget: Task | null;
   deleteProjectTarget: Project | null;
   projectSettingsTarget: Project | null;
@@ -51,7 +45,6 @@ export interface UiActions {
   setShowTaskModal: (v: boolean) => void;
   setTaskModalProjectId: (v: string | null) => void;
   setShowAddProjectModal: (v: boolean) => void;
-  setCloneStatus: (v: CloneStatus) => void;
   setDeleteTaskTarget: (v: Task | null) => void;
   setDeleteProjectTarget: (v: Project | null) => void;
   setProjectSettingsTarget: (v: Updater<Project | null>) => void;
@@ -65,8 +58,6 @@ export interface UiActions {
   setChangesAnimating: (v: boolean) => void;
   setShellDrawerAnimating: (v: boolean) => void;
   // Data-mutating UI flows (own their modal state; delegate domain ops to projectsStore)
-  openFolder: () => Promise<void>;
-  cloneRepo: (url: string) => Promise<void>;
   finishProjectCreation: (projectId: string) => Promise<void>;
   confirmDeleteProject: (options: DeleteProjectOptions) => Promise<void>;
   confirmDeleteTask: (options?: DeleteTaskOptions) => Promise<void>;
@@ -78,7 +69,6 @@ const initialState: UiState = {
   showTaskModal: false,
   taskModalProjectId: null,
   showAddProjectModal: false,
-  cloneStatus: { loading: false, error: null },
   deleteTaskTarget: null,
   deleteProjectTarget: null,
   projectSettingsTarget: null,
@@ -99,7 +89,6 @@ export const useUi = create<UiStore>((set, get) => ({
   setShowTaskModal: (v) => set({ showTaskModal: v }),
   setTaskModalProjectId: (v) => set({ taskModalProjectId: v }),
   setShowAddProjectModal: (v) => set({ showAddProjectModal: v }),
-  setCloneStatus: (v) => set({ cloneStatus: v }),
   setDeleteTaskTarget: (v) => set({ deleteTaskTarget: v }),
   setDeleteProjectTarget: (v) => set({ deleteProjectTarget: v }),
   setProjectSettingsTarget: (v) =>
@@ -114,65 +103,6 @@ export const useUi = create<UiStore>((set, get) => ({
   setSidebarAnimating: (v) => set({ sidebarAnimating: v }),
   setChangesAnimating: (v) => set({ changesAnimating: v }),
   setShellDrawerAnimating: (v) => set({ shellDrawerAnimating: v }),
-
-  openFolder: async () => {
-    set({ showAddProjectModal: false });
-    const resp = await window.electronAPI.showOpenDialog();
-    if (!resp.success || !resp.data || resp.data.length === 0) return;
-    const folderPath = resp.data[0]!;
-    const name = folderPath.split(/[\\/]/).pop() || 'Untitled';
-
-    const gitResp = await window.electronAPI.detectGit(folderPath);
-    const gitInfo = gitResp.success ? gitResp.data : null;
-
-    const saveResp = await window.electronAPI.saveProject({
-      name,
-      path: folderPath,
-      isGitRepo: gitInfo?.isGitRepo ?? false,
-      gitRemote: gitInfo?.remote ?? null,
-      gitBranch: gitInfo?.branch ?? null,
-    });
-
-    if (saveResp.success && saveResp.data) {
-      await useProjects.getState().loadProjects();
-      useProjects.getState().setActiveProject(saveResp.data.id);
-      promptAdoSetupIfNeeded(set, saveResp.data.id, gitInfo?.remote ?? null);
-    }
-  },
-
-  cloneRepo: async (url) => {
-    set({ cloneStatus: { loading: true, error: null } });
-    try {
-      const cloneResp = await window.electronAPI.gitClone({ url });
-      if (!cloneResp.success) {
-        set({ cloneStatus: { loading: false, error: cloneResp.error || 'Clone failed' } });
-        return;
-      }
-
-      const { path: clonedPath, name } = cloneResp.data!;
-
-      const gitResp = await window.electronAPI.detectGit(clonedPath);
-      const gitInfo = gitResp.success ? gitResp.data : null;
-
-      const saveResp = await window.electronAPI.saveProject({
-        name,
-        path: clonedPath,
-        isGitRepo: gitInfo?.isGitRepo ?? true,
-        gitRemote: gitInfo?.remote ?? null,
-        gitBranch: gitInfo?.branch ?? null,
-      });
-
-      if (saveResp.success && saveResp.data) {
-        await useProjects.getState().loadProjects();
-        useProjects.getState().setActiveProject(saveResp.data.id);
-        promptAdoSetupIfNeeded(set, saveResp.data.id, gitInfo?.remote ?? null);
-      }
-
-      set({ cloneStatus: { loading: false, error: null }, showAddProjectModal: false });
-    } catch (err) {
-      set({ cloneStatus: { loading: false, error: String(err) } });
-    }
-  },
 
   finishProjectCreation: async (projectId) => {
     set({ showAddProjectModal: false });

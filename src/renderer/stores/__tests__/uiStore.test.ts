@@ -63,9 +63,6 @@ describe('uiStore setters', () => {
     useUi.getState().setDeleteTaskTarget(t);
     expect(useUi.getState().deleteTaskTarget).toBe(t);
 
-    useUi.getState().setCloneStatus({ loading: true, error: null });
-    expect(useUi.getState().cloneStatus).toEqual({ loading: true, error: null });
-
     useUi.getState().setRemoteControlModalPtyId('pty-9');
     expect(useUi.getState().remoteControlModalPtyId).toBe('pty-9');
   });
@@ -104,7 +101,7 @@ describe('uiStore setters', () => {
   });
 });
 
-describe('uiStore.openFolder', () => {
+describe('uiStore.finishProjectCreation', () => {
   let api: ReturnType<typeof makeElectronApiMock>;
   beforeEach(() => {
     api = makeElectronApiMock();
@@ -112,91 +109,34 @@ describe('uiStore.openFolder', () => {
   });
   afterEach(() => resetWindow());
 
-  it('saves the picked folder, loads projects, activates it, and closes the modal', async () => {
+  it('loads projects, activates the new one, flags it for scroll, and closes the modal', async () => {
     const saved = proj('newid', { name: 'new', path: '/p/new' });
-    api.showOpenDialog = vi.fn(() => Promise.resolve({ success: true, data: ['/p/new'] }));
-    api.detectGit = vi.fn(() =>
-      Promise.resolve({ success: true, data: { isGitRepo: true, remote: null, branch: 'main' } }),
-    );
-    api.saveProject = vi.fn(() => Promise.resolve({ success: true, data: saved }));
     api.getProjects = vi.fn(() => Promise.resolve({ success: true, data: [saved] }));
 
     const { useUi, useProjects } = await freshStores();
     useUi.getState().setShowAddProjectModal(true);
-    await useUi.getState().openFolder();
+    await useUi.getState().finishProjectCreation('newid');
 
-    expect(api.saveProject).toHaveBeenCalled();
     expect(useProjects.getState().activeProjectId).toBe('newid');
+    expect(useProjects.getState().activeTaskId).toBeNull();
+    expect(useProjects.getState().justCreatedProjectId).toBe('newid');
     expect(useUi.getState().showAddProjectModal).toBe(false);
     expect(useUi.getState().adoSetup).toBeNull();
   });
 
-  it('prompts ADO setup when the saved project has an Azure DevOps remote', async () => {
+  it('prompts ADO setup when the new project has an Azure DevOps remote', async () => {
     const remote = 'https://dev.azure.com/org/proj/_git/repo';
     const saved = proj('adoid', { name: 'repo', path: '/p/repo', gitRemote: remote });
-    api.showOpenDialog = vi.fn(() => Promise.resolve({ success: true, data: ['/p/repo'] }));
-    api.detectGit = vi.fn(() =>
-      Promise.resolve({ success: true, data: { isGitRepo: true, remote, branch: 'main' } }),
-    );
-    api.saveProject = vi.fn(() => Promise.resolve({ success: true, data: saved }));
     api.getProjects = vi.fn(() => Promise.resolve({ success: true, data: [saved] }));
 
     const { useUi } = await freshStores();
-    await useUi.getState().openFolder();
+    await useUi.getState().finishProjectCreation('adoid');
 
     expect(useUi.getState().adoSetup).toEqual({
       projectId: 'adoid',
       organizationUrl: 'https://dev.azure.com/org',
       project: 'proj',
     });
-  });
-
-  it('does nothing when the dialog is cancelled', async () => {
-    api.showOpenDialog = vi.fn(() => Promise.resolve({ success: true, data: [] }));
-    api.saveProject = vi.fn();
-
-    const { useUi } = await freshStores();
-    await useUi.getState().openFolder();
-    expect(api.saveProject).not.toHaveBeenCalled();
-  });
-});
-
-describe('uiStore.cloneRepo', () => {
-  let api: ReturnType<typeof makeElectronApiMock>;
-  beforeEach(() => {
-    api = makeElectronApiMock();
-    installWindow(api);
-  });
-  afterEach(() => resetWindow());
-
-  it('clones, saves, activates the project, and clears clone status', async () => {
-    const saved = proj('clonedid', { name: 'cloned', path: '/p/cloned' });
-    api.gitClone = vi.fn(() =>
-      Promise.resolve({ success: true, data: { path: '/p/cloned', name: 'cloned' } }),
-    );
-    api.detectGit = vi.fn(() =>
-      Promise.resolve({ success: true, data: { isGitRepo: true, remote: null, branch: 'main' } }),
-    );
-    api.saveProject = vi.fn(() => Promise.resolve({ success: true, data: saved }));
-    api.getProjects = vi.fn(() => Promise.resolve({ success: true, data: [saved] }));
-
-    const { useUi, useProjects } = await freshStores();
-    await useUi.getState().cloneRepo('https://example.com/repo.git');
-
-    expect(useProjects.getState().activeProjectId).toBe('clonedid');
-    expect(useUi.getState().cloneStatus).toEqual({ loading: false, error: null });
-    expect(useUi.getState().showAddProjectModal).toBe(false);
-  });
-
-  it('records the error and stops when the clone fails', async () => {
-    api.gitClone = vi.fn(() => Promise.resolve({ success: false, error: 'nope' }));
-    api.saveProject = vi.fn();
-
-    const { useUi } = await freshStores();
-    await useUi.getState().cloneRepo('https://example.com/repo.git');
-
-    expect(api.saveProject).not.toHaveBeenCalled();
-    expect(useUi.getState().cloneStatus).toEqual({ loading: false, error: 'nope' });
   });
 });
 
