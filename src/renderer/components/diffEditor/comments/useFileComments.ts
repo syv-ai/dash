@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
 import { useCommentsStore } from '../../../stores/commentsStore';
+import { projectRanges, rangesEqual, type RangeReader } from './liveProjection';
 import type { DiffComment, LineRange, LiveComment } from './types';
 
-// Frozen empty default so render-time `?? []` doesn't allocate a fresh
-// array each pass (the result feeds effect dep arrays).
+// Frozen empty default so `?? EMPTY_STORED` doesn't allocate a fresh array
+// each render (the result feeds effect dep arrays).
 const EMPTY_STORED: readonly DiffComment[] = Object.freeze([]);
 
 interface Args {
@@ -12,13 +13,13 @@ interface Args {
   /** True once the model's content matches `filePath` (i.e. the file is
    *  loaded). Hydration must wait for this to flip. */
   isFileLoaded: boolean;
-  /** Diff editor instance (state, not ref) — null until mount. Effects
-   *  that need post-mount access get a reactive signal when this flips. */
+  /** Diff editor instance (state, not ref) — null until mount. */
   editor: monacoEditor.IStandaloneDiffEditor | null;
   monaco: typeof import('monaco-editor') | null;
 }
 
-interface Binding {
+export interface FileCommentsBinding {
+  /** Comments for the open file, ranges already projected to live values. */
   liveComments: LiveComment[];
   /** Add a new comment: creates the persisted entity via the store, then
    *  attaches a decoration. Returns the created live comment (or null when
@@ -30,36 +31,48 @@ interface Binding {
   remove(id: string): void;
 }
 
-/** Owns the Monaco-decoration lifecycle for ONE filePath. Hydration runs
- *  exactly once per (filePath, loaded-content) pair via a local
- *  hydratedKeyRef. Snapshot runs on unmount (file switch or modal close)
- *  via a closure-captured `filePath`, so a later filePath change can never
- *  corrupt the snapshot's destination. This is what fixes the phantom-
- *  comment-on-switch bug from the previous filePath-ref-based design. */
-export function useFileCommentsBinding(args: Args): Binding {
-  const { filePath, isFileLoaded, editor, monaco } = args;
+/** Owns the Monaco-decoration lifecycle for ONE filePath AND is the single
+ *  place `decorationId → live range` projection happens. Hydration runs once
+ *  per (filePath, loaded-content) pair; a content-change subscription
+ *  re-publishes `liveComments` with their live ranges (guarded by rangesEqual
+ *  so no new reference is emitted unless a range actually moved). Snapshot
+ *  runs on unmount/file-switch via a closure-captured `filePath`. */
+export function useFileComments({
+  filePath,
+  isFileLoaded,
+  editor,
+  monaco,
+}: Args): FileCommentsBinding {
   const storeReady = useCommentsStore((s) => s.isReady);
   const stored = useCommentsStore((s) => s.byFile[filePath]) ?? EMPTY_STORED;
 
   const [liveComments, setLiveComments] = useState<LiveComment[]>([]);
   const liveCommentsRef = useRef<LiveComment[]>([]);
   liveCommentsRef.current = liveComments;
-
-  // Track which (filePath, loaded) pair we've hydrated. Reset on file
-  // change or when isFileLoaded goes false; rehydrate exactly once on the
-  // next loaded-true transition.
   const hydratedKeyRef = useRef<string>('');
 
-  // Hydrate when the new file's content is in the model AND the persisted
-  // comments have arrived from SQLite. If we hydrate before the store
-  // resolves, `stored` is empty and the key latches — the dropdown later
-  // shows comments from the resolved store, but their decorations never
-  // get attached because this effect won't re-run.
+  const modifiedEditor = editor?.getModifiedEditor() ?? null;
+
+  const makeReader = useCallback((): RangeReader => {
+    const model = modifiedEditor?.getModel() ?? null;
+    return (decorationId) => {
+      const r = model?.getDecorationRange(decorationId);
+      return r ? { startLine: r.startLineNumber, endLine: r.endLineNumber } : null;
+    };
+  }, [modifiedEditor]);
+
+  // Publish a re-projection if (and only if) a range actually changed.
+  const republish = useCallback(() => {
+    const next = projectRanges(liveCommentsRef.current, makeReader());
+    if (!rangesEqual(liveCommentsRef.current, next)) setLiveComments(next);
+  }, [makeReader]);
+
+  // ── Hydrate (file loaded + store ready) ──
   useEffect(() => {
     if (!isFileLoaded || !storeReady) {
-      // File is loading OR store hasn't resolved yet. Drop live state but
-      // DO NOT snapshot — there are no valid decorations to read against
-      // the current (still-old) model.
+      // File is loading OR store hasn't resolved yet. Drop live state but DO
+      // NOT snapshot — there are no valid decorations against the (still-old)
+      // model.
       setLiveComments([]);
       hydratedKeyRef.current = '';
       return;
@@ -68,13 +81,8 @@ export function useFileCommentsBinding(args: Args): Binding {
     if (hydratedKeyRef.current === key) return;
     hydratedKeyRef.current = key;
 
-    const modified = editor?.getModifiedEditor();
-    const model = modified?.getModel();
-    if (!modified || !monaco || !model) {
-      setLiveComments([]);
-      return;
-    }
-    if (stored.length === 0) {
+    const model = modifiedEditor?.getModel();
+    if (!modifiedEditor || !monaco || !model || stored.length === 0) {
       setLiveComments([]);
       return;
     }
@@ -91,82 +99,71 @@ export function useFileCommentsBinding(args: Args): Binding {
           },
         ],
       );
-      return { ...sc, decorationId: ids[0]! };
+      return { ...sc, startLine: start, endLine: end, decorationId: ids[0]! };
     });
     setLiveComments(hydrated);
-    // `stored` is intentionally excluded from deps: store mutations
-    // (add/update/remove) should NOT trigger re-hydration. Reconciliation
-    // is handled by the separate effects below.
+    // `stored` is intentionally excluded: store mutations should NOT trigger
+    // re-hydration. Reconciliation lives in the effects below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filePath, isFileLoaded, storeReady, editor, monaco]);
 
-  // Reconcile parent-driven removals: if `stored` drops an id, remove the
-  // matching local decoration.
+  // ── Reactive projection on edits ──
+  useEffect(() => {
+    if (!modifiedEditor) return;
+    const sub = modifiedEditor.onDidChangeModelContent(() => republish());
+    return () => sub.dispose();
+  }, [modifiedEditor, republish]);
+
+  // ── Reconcile store removals → drop decorations ──
   useEffect(() => {
     if (hydratedKeyRef.current !== `${filePath}::loaded`) return;
     const storedIds = new Set(stored.map((s) => s.id));
-    const removed: LiveComment[] = [];
-    const remaining: LiveComment[] = [];
-    for (const c of liveCommentsRef.current) {
-      if (storedIds.has(c.id)) remaining.push(c);
-      else removed.push(c);
-    }
+    const removed = liveCommentsRef.current.filter((c) => !storedIds.has(c.id));
     if (removed.length === 0) return;
-    const model = editor?.getModifiedEditor().getModel();
-    if (model) {
+    const model = modifiedEditor?.getModel();
+    if (model)
       model.deltaDecorations(
         removed.map((c) => c.decorationId),
         [],
       );
-    }
-    setLiveComments(remaining);
-  }, [stored, filePath, editor]);
+    setLiveComments(liveCommentsRef.current.filter((c) => storedIds.has(c.id)));
+  }, [stored, filePath, modifiedEditor]);
 
-  // Mirror text/sent edits from the store into liveComments (without
-  // touching decorations or ranges). Skip when arrays match by reference.
+  // ── Mirror text/sent edits from store (not ranges) ──
   useEffect(() => {
     if (hydratedKeyRef.current !== `${filePath}::loaded`) return;
     let changed = false;
     const next = liveCommentsRef.current.map((live) => {
       const fresh = stored.find((s) => s.id === live.id);
-      if (!fresh) return live;
-      if (fresh.text === live.text && fresh.sent === live.sent) return live;
+      if (!fresh || (fresh.text === live.text && fresh.sent === live.sent)) return live;
       changed = true;
       return { ...live, text: fresh.text, sent: fresh.sent };
     });
     if (changed) setLiveComments(next);
   }, [stored, filePath]);
 
-  // Snapshot on unmount / filePath change. CRITICAL: `pathAtMount` is
-  // captured in the effect closure, so the snapshot lands on the correct
-  // file even after `filePath` has already advanced. The previous design
-  // used `filePathRef.current`, which had already updated by the time
-  // cleanup ran — that was the source of the phantom-comment bug.
+  // ── Snapshot on unmount / file switch (closure-captured path) ──
   useEffect(() => {
     const pathAtMount = filePath;
     return () => {
-      const model = editor?.getModifiedEditor().getModel();
+      const model = modifiedEditor?.getModel();
       if (!model) return;
       const snapshots = liveCommentsRef.current.flatMap((c) => {
         const r = model.getDecorationRange(c.decorationId);
-        if (!r) return [];
-        return [{ id: c.id, startLine: r.startLineNumber, endLine: r.endLineNumber }];
+        return r ? [{ id: c.id, startLine: r.startLineNumber, endLine: r.endLineNumber }] : [];
       });
-      if (snapshots.length === 0) return;
-      useCommentsStore.getState().snapshotRanges(pathAtMount, snapshots);
+      if (snapshots.length > 0) useCommentsStore.getState().snapshotRanges(pathAtMount, snapshots);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filePath, editor]);
 
   const addComment = useCallback(
     (range: LineRange, text: string): LiveComment | null => {
-      const modified = editor?.getModifiedEditor();
-      const model = modified?.getModel();
-      if (!modified || !monaco || !model) return null;
-      const created = useCommentsStore.getState().addComment({
-        filePath,
-        startLine: range.start,
-        endLine: range.end,
-        text,
-      });
+      const model = modifiedEditor?.getModel();
+      if (!modifiedEditor || !monaco || !model) return null;
+      const created = useCommentsStore
+        .getState()
+        .addComment({ filePath, startLine: range.start, endLine: range.end, text });
       if (!created) return null;
       const ids = model.deltaDecorations(
         [],
@@ -177,11 +174,11 @@ export function useFileCommentsBinding(args: Args): Binding {
           },
         ],
       );
-      const live: LiveComment = { ...created, decorationId: ids[0]! };
-      setLiveComments((prev) => [...prev, live]);
-      return live;
+      const liveC: LiveComment = { ...created, decorationId: ids[0]! };
+      setLiveComments((prev) => [...prev, liveC]);
+      return liveC;
     },
-    [filePath, editor, monaco],
+    [filePath, modifiedEditor, monaco],
   );
 
   const updateText = useCallback((id: string, text: string) => {
@@ -192,13 +189,11 @@ export function useFileCommentsBinding(args: Args): Binding {
     (id: string) => {
       const target = liveCommentsRef.current.find((c) => c.id === id);
       useCommentsStore.getState().remove(id);
-      const model = editor?.getModifiedEditor().getModel();
-      if (model && target) {
-        model.deltaDecorations([target.decorationId], []);
-      }
+      const model = modifiedEditor?.getModel();
+      if (model && target) model.deltaDecorations([target.decorationId], []);
       setLiveComments((prev) => prev.filter((c) => c.id !== id));
     },
-    [editor],
+    [modifiedEditor],
   );
 
   return { liveComments, addComment, updateText, remove };

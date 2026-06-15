@@ -5,7 +5,7 @@ import type { EditorView } from './types';
 import type { LiveComment } from './comments/types';
 import { useCommentsStore } from '../../stores/commentsStore';
 import { useGutterSelection } from './comments/useGutterSelection';
-import { useFileCommentsBinding } from './comments/useFileCommentsBinding';
+import { useFileComments } from './comments/useFileComments';
 import { assignShades } from './comments/shadeAssignment';
 import { computeRowDecorations } from './comments/rowShades';
 import { CommentOverlay } from './comments/CommentOverlay';
@@ -171,7 +171,7 @@ export function EditorPane({
   // and snapshot are both scoped via closure inside the hook, which kills
   // the previous file-ref-races (the source of the phantom-comment bug).
   const isFileLoaded = state.kind === 'loaded';
-  const binding = useFileCommentsBinding({
+  const binding = useFileComments({
     filePath,
     isFileLoaded,
     editor,

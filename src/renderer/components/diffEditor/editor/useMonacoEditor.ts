@@ -49,7 +49,7 @@ export function useMonacoEditor(args: Args): Api {
   const themeName = themeNameFor(args.isDark);
 
   // Editor + monaco live in state, not refs: dependent hooks
-  // (useGutterSelection, useFileCommentsBinding, decoration effects) need a
+  // (useGutterSelection, useFileComments, decoration effects) need a
   // reactive signal to re-run after mount.
   const [editor, setEditor] = useState<monacoEditor.IStandaloneDiffEditor | null>(null);
   const [monaco, setMonaco] = useState<typeof import('monaco-editor') | null>(null);
