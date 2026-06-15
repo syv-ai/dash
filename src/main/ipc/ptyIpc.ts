@@ -9,6 +9,7 @@ import {
   writePty,
   resizePty,
   killPty,
+  killPtyAwait,
   killByOwner,
   sendRemoteControl,
   listForTask,
@@ -49,8 +50,12 @@ export function registerPtyIpc(): void {
           }),
           args,
         );
+        // The agent PTY id is the bare task id — look up its name so a fresh
+        // spawn gets `claude --name <task>` (recognizable in /resume + title).
+        const task = DatabaseService.getTask(args.id);
         const result = await startDirectPty({
           ...args,
+          name: task?.name,
           sender: event.sender,
         });
         TelemetryService.capture('terminal_started', { source: 'direct' });
@@ -102,6 +107,19 @@ export function registerPtyIpc(): void {
     const v = parseArgsSafe('pty:kill', z.string(), id);
     if (v === undefined) return;
     killPty(id);
+  });
+
+  // Awaitable kill: resolves only after the child has exited (or the grace
+  // window elapsed). The renderer awaits this before respawning so a fresh
+  // `claude --resume` never races the dying process for the session jsonl.
+  ipcMain.handle('pty:kill-await', async (_event, id: string) => {
+    try {
+      parseArgs('pty:kill-await', z.string(), id);
+      await killPtyAwait(id);
+      return { success: true };
+    } catch (error) {
+      return errorResponse(error);
+    }
   });
 
   // Snapshot handlers

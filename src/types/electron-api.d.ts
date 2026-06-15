@@ -169,6 +169,7 @@ export interface ElectronAPI {
   ptyInput: (args: { id: string; data: string }) => void;
   ptyResize: (args: { id: string; cols: number; rows: number }) => void;
   ptyKill: (id: string) => void;
+  ptyKillAwait: (id: string) => Promise<IpcResponse<void>>;
   ptyListForTask: (
     taskId: string,
     opts?: { kinds?: ('agent' | 'shell' | 'tui' | 'service')[]; featureId?: string },

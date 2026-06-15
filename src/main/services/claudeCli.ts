@@ -20,14 +20,48 @@ function findClaudeProjectDir(cwd: string): string | null {
   }
 }
 
-/** Check whether Claude has any jsonl history for this cwd. */
-export function hasAnySessionForCwd(cwd: string): boolean {
+/**
+ * Pure selection: given a project dir's entries, return the basename (sans
+ * `.jsonl`) of the most-recently-modified session file, or null if none.
+ *
+ * Newest-mtime is deliberately the same criterion SessionWatcherService uses
+ * (`findLatestSessionFile`), so the session we resume is always the exact one
+ * Dash is already displaying — and it naturally follows Claude's `/clear` and
+ * `/compact` forks (each writes a fresh, newer file) instead of pinning a
+ * stale id the way the old SessionStart-hook machinery did (see 32bcdb6).
+ */
+export function pickLatestSessionId(
+  files: Array<{ name: string; mtimeMs: number }>,
+): string | null {
+  let latest: { name: string; mtimeMs: number } | null = null;
+  for (const f of files) {
+    if (!f.name.endsWith('.jsonl')) continue;
+    if (!latest || f.mtimeMs > latest.mtimeMs) latest = f;
+  }
+  return latest ? latest.name.slice(0, -'.jsonl'.length) : null;
+}
+
+/**
+ * Resolve the most recent Claude session id for a cwd, or null if Claude has
+ * no jsonl history there yet. Used to pin `--resume <id>` instead of the
+ * undocumented `--continue` "most recent" guess.
+ */
+export function findLatestSessionId(cwd: string): string | null {
   const projDir = findClaudeProjectDir(cwd);
-  if (!projDir) return false;
+  if (!projDir) return null;
   try {
-    return fs.readdirSync(projDir).some((f) => f.endsWith('.jsonl'));
+    const files = fs.readdirSync(projDir).map((name) => {
+      let mtimeMs = 0;
+      try {
+        mtimeMs = fs.statSync(path.join(projDir, name)).mtimeMs;
+      } catch {
+        // Vanished between readdir and stat — treat as oldest; benign race.
+      }
+      return { name, mtimeMs };
+    });
+    return pickLatestSessionId(files);
   } catch {
-    return false;
+    return null;
   }
 }
 

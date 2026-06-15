@@ -259,7 +259,20 @@ app.on('activate', () => {
   })();
 });
 
-app.on('before-quit', () => {
+// Set once cleanup has finished so the re-issued quit passes straight through.
+let quitCleanupComplete = false;
+
+app.on('before-quit', (event) => {
+  // Second pass (after cleanup re-issues app.quit()): let the quit proceed.
+  if (quitCleanupComplete) return;
+  // Hold the quit so graceful PTY shutdown (killAll → SIGTERM → flush) can
+  // complete — otherwise the app exits before Claude persists its session tail.
+  event.preventDefault();
+
+  // Hard safety net: never let a hung cleanup wedge the quit. app.exit bypasses
+  // before-quit entirely and force-terminates.
+  const forceExit = setTimeout(() => app.exit(0), 8000);
+
   void (async () => {
     // Terminal persistence happens main-side: killAll() below serializes every
     // PTY's TerminalMirror to the snapshot files before killing — the renderer
@@ -289,10 +302,11 @@ app.on('before-quit', () => {
       // Best effort
     }
 
-    // Kill all PTYs (also stops activity monitor)
+    // Kill all PTYs (also stops activity monitor). Awaited so each Claude
+    // child gets its SIGTERM flush window before the app exits.
     try {
       const { killAll } = await import('./services/ptyManager');
-      killAll();
+      await killAll();
     } catch {
       // Best effort
     }
@@ -336,5 +350,10 @@ app.on('before-quit', () => {
     } catch {
       // Best effort
     }
+
+    // Cleanup done — cancel the safety net and let the re-issued quit through.
+    clearTimeout(forceExit);
+    quitCleanupComplete = true;
+    app.quit();
   })();
 });

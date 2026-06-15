@@ -486,7 +486,12 @@ export class TerminalSessionManager {
           this.onRestartingCallback?.();
           // Discard any data buffered from the old PTY before killing it
           this.dataBuffer = [];
-          window.electronAPI.ptyKill(this.id);
+          // Await the graceful kill (SIGTERM → flush → exit) before respawning
+          // so the fresh `claude --resume` doesn't race the dying process for
+          // the session jsonl. The map record is dropped synchronously in main,
+          // so the respawn below spawns fresh rather than reattaching.
+          await window.electronAPI.ptyKillAwait(this.id);
+          if (gen !== this.attachGeneration) return;
           this.ptyStarted = false;
           result = await this.startPty();
           if (gen !== this.attachGeneration) return;
@@ -662,12 +667,12 @@ export class TerminalSessionManager {
       this.unsubData = null;
     }
 
-    window.electronAPI.ptyKill(this.id);
+    // Await the graceful kill: main drops the PTY record synchronously and
+    // then waits for the child to flush + exit, so the respawn below spawns
+    // fresh (no reattach race) and no session-jsonl tail is lost. Replaces the
+    // old fire-and-forget kill + fixed 50ms settle.
+    await window.electronAPI.ptyKillAwait(this.id);
     this.ptyStarted = false;
-
-    // Brief settle so main has time to delete the PTY record before the
-    // next start call sees it and reattaches.
-    await new Promise((r) => setTimeout(r, 50));
 
     if (this.shellOnly) {
       const dims = this.fitAddon.proposeDimensions();

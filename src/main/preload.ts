@@ -67,6 +67,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ptyResize: (args: { id: string; cols: number; rows: number }) =>
     ipcRenderer.send('pty:resize', args),
   ptyKill: (id: string) => ipcRenderer.send('pty:kill', id),
+  ptyKillAwait: (id: string) => ipcRenderer.invoke('pty:kill-await', id),
   ptyListForTask: (
     taskId: string,
     opts?: { kinds?: ('agent' | 'shell' | 'tui')[]; featureId?: string },

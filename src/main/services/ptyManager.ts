@@ -9,7 +9,7 @@ import { portsDebug } from './PortsDebugLog';
 import { TerminalMirror } from './TerminalMirror';
 import { terminalSnapshotService } from './TerminalSnapshotService';
 import { ensureShellConfig } from './ptyShellConfig';
-import { findClaudePath, hasAnySessionForCwd } from './claudeCli';
+import { findClaudePath, findLatestSessionId } from './claudeCli';
 import { writeHookSettings, setCommitAttributionValue } from './ptyHookSettings';
 import type { PermissionMode } from '@shared/types';
 
@@ -324,6 +324,39 @@ function prependUnique(dir: string, basePath: string, sep: string): string {
 /**
  * Spawn Claude CLI directly (fast path, bypasses shell config).
  */
+/**
+ * Build the `claude` CLI args. Pure so the resume/name/permission policy is
+ * unit-testable without spawning. Two load-bearing rules:
+ *  - `--resume <id>` and `--name` are mutually exclusive. `--name` is a
+ *    fresh-session display label (shown in `/resume` + the terminal title);
+ *    combining it with `--resume` is undocumented (rename? ignore? new
+ *    session?), and resume already targets the right session by id.
+ *  - the initial prompt, when present, is always the LAST positional — CC
+ *    auto-submits it once the trust-this-directory gate clears.
+ */
+export function buildClaudeArgs(opts: {
+  resumeSessionId: string | null;
+  name?: string;
+  permissionMode?: PermissionMode;
+  initialPrompt?: string;
+}): string[] {
+  const args: string[] = [];
+  if (opts.resumeSessionId) {
+    args.push('--resume', opts.resumeSessionId);
+  } else if (opts.name) {
+    args.push('--name', opts.name);
+  }
+  if (opts.permissionMode === 'acceptEdits') {
+    args.push('--permission-mode', 'acceptEdits');
+  } else if (opts.permissionMode === 'bypassPermissions') {
+    args.push('--dangerously-skip-permissions');
+  }
+  if (opts.initialPrompt) {
+    args.push(opts.initialPrompt);
+  }
+  return args;
+}
+
 export async function startDirectPty(options: {
   id: string;
   cwd: string;
@@ -331,6 +364,8 @@ export async function startDirectPty(options: {
   rows: number;
   permissionMode?: PermissionMode;
   isDark?: boolean;
+  /** Task name → `claude --name` on a fresh spawn (recognizable in /resume). */
+  name?: string;
   sender?: WebContents;
 }): Promise<{
   reattached: boolean;
@@ -362,41 +397,36 @@ export async function startDirectPty(options: {
     throw new Error('Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code');
   }
 
-  const args: string[] = [];
-
-  // Resume strategy depends on a load-bearing invariant: each task has a
-  // unique cwd. Worktree tasks get their own dir by construction; non-worktree
-  // tasks are capped at one per project (enforced in DatabaseService.saveTask /
-  // restoreTask, with UI gating in TaskModal as a first line). Because cwd is
-  // unique, Claude's own "most recent jsonl in this dir" pick is always the
-  // right session — including across /clear and /compact forks.
+  // Resume by the exact newest session id rather than `--continue`. Both rest
+  // on a load-bearing invariant: each task has a unique cwd (worktree tasks by
+  // construction; non-worktree tasks capped at one per project in
+  // DatabaseService.saveTask / restoreTask, UI-gated in TaskModal). Pinning the
+  // id we resolve ourselves — the same newest-mtime file SessionWatcherService
+  // tails — makes the resumed session deterministically the one Dash is showing,
+  // instead of delegating the pick to `--continue`'s undocumented selector. It
+  // still follows /clear and /compact forks (each is a newer file).
   //
-  // DO NOT relax the one-non-worktree-task cap without reintroducing per-task
-  // session pinning; see git history at 32bcdb6 for the previous implementation
-  // and the issues that drove its removal.
-  if (hasAnySessionForCwd(options.cwd)) {
-    args.push('--continue');
-  }
+  // DO NOT relax the one-non-worktree-task cap without revisiting this; see git
+  // history at 32bcdb6 for why the old SessionStart-hook pinning was removed.
+  const resumeSessionId = findLatestSessionId(options.cwd);
 
-  if (options.permissionMode === 'acceptEdits') {
-    args.push('--permission-mode', 'acceptEdits');
-  } else if (options.permissionMode === 'bypassPermissions') {
-    args.push('--dangerously-skip-permissions');
-  }
-
-  // Pre-loaded prompt (the inlined ports-setup body) — must be the last
-  // positional. CC auto-submits this after the trust-this-directory gate
-  // clears, eliminating the need for keystroke injection or a "wait for
-  // session ready" signal. Only present for the ports-migrate flow today;
-  // no-op for every other spawn.
+  // Pre-loaded prompt (the inlined ports-setup body). Only present for the
+  // ports-migrate flow today; no-op for every other spawn. buildClaudeArgs
+  // places it last (CC auto-submits it after the trust gate clears).
   const initialPrompt = consumeInitialPrompt(options.id);
   if (initialPrompt) {
-    args.push(initialPrompt);
     portsDebug.log('migrate', 'initial prompt consumed at spawn', {
       taskId: options.id,
       promptLen: initialPrompt.length,
     });
   }
+
+  const args = buildClaudeArgs({
+    resumeSessionId,
+    name: options.name,
+    permissionMode: options.permissionMode,
+    initialPrompt,
+  });
 
   const env = buildDirectEnv(options.isDark ?? true, options.cwd);
 
@@ -607,60 +637,129 @@ export function resizePty(id: string, cols: number, rows: number): void {
   }
 }
 
+// Grace window for a SIGTERM'd child to flush and exit before we force SIGKILL.
+const GRACEFUL_KILL_TIMEOUT_MS = 3000;
+
 /**
- * Kill a specific PTY.
+ * Gracefully terminate a pty's child process: send SIGTERM so it can flush and
+ * exit cleanly, then escalate to SIGKILL only if it overstays the grace window.
+ * Resolves once the process is gone (or was already dead).
+ *
+ * node-pty's bare `kill()` sends SIGHUP, which Claude Code does not trap — so
+ * its in-memory session tail (the last several turns) was lost on every
+ * refresh/quit, and no `--resume`/`--continue` could recover what never
+ * reached the jsonl. SIGTERM + a wait gives Claude the chance to persist first.
  */
-export function killPty(id: string): void {
-  const record = ptys.get(id);
-  if (record) {
-    // Delete first so the guarded onExit handler becomes a no-op
-    ptys.delete(id);
-    activityMonitor.unregister(id);
-    remoteControlService.unregister(id);
-    contextUsageService.unregister(id);
-    // Persist before killing — restart() relies on the snapshot for visual
-    // context when it respawns into the same id.
-    persistAndDisposeMirror(id, record);
+type KillableProc = {
+  kill: (signal?: string) => void;
+  onExit: (listener: (e: { exitCode: number; signal?: number }) => void) => {
+    dispose: () => void;
+  };
+};
+
+function gracefulKillProc(proc: KillableProc, timeoutMs = GRACEFUL_KILL_TIMEOUT_MS): Promise<void> {
+  return new Promise<void>((resolve) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let disposable: { dispose: () => void } | null = null;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      try {
+        disposable?.dispose();
+      } catch {
+        // listener already gone
+      }
+      resolve();
+    };
     try {
-      record.proc.kill();
+      disposable = proc.onExit(() => finish());
     } catch {
-      // Already dead
+      // proc doesn't expose onExit (already disposed) — rely on the timer/catch.
     }
-  }
+    timer = setTimeout(() => {
+      try {
+        proc.kill('SIGKILL');
+      } catch {
+        // already dead
+      }
+      finish();
+    }, timeoutMs);
+    try {
+      proc.kill('SIGTERM');
+    } catch {
+      // already dead — nothing to wait for
+      finish();
+    }
+  });
+}
+
+/** Detach a record from all registries and persist its mirror (shared by the
+ *  kill paths). The map delete makes the spawn-time onExit handler a no-op. */
+function teardownRecord(id: string, record: PtyRecord): void {
+  ptys.delete(id);
+  activityMonitor.unregister(id);
+  remoteControlService.unregister(id);
+  contextUsageService.unregister(id);
+  // Persist before killing — restart() relies on the snapshot for visual
+  // context when it respawns into the same id.
+  persistAndDisposeMirror(id, record);
+}
+
+function killPtyInternal(id: string): Promise<void> {
+  const record = ptys.get(id);
+  if (!record) return Promise.resolve();
+  teardownRecord(id, record);
+  return gracefulKillProc(record.proc);
 }
 
 /**
- * Kill all PTYs (on app quit).
+ * Kill a specific PTY (graceful: SIGTERM → grace → SIGKILL). Fire-and-forget;
+ * callers that must serialize a respawn against the dying process use
+ * killPtyAwait instead.
  */
-export function killAll(): void {
+export function killPty(id: string): void {
+  void killPtyInternal(id);
+}
+
+/**
+ * Kill a specific PTY and resolve once it has actually exited (or the grace
+ * window elapsed). The renderer's reattach/restart paths await this before
+ * respawning so the new `claude --resume` process never races the dying one
+ * for the session jsonl (a brief two-writer overlap could corrupt the tail).
+ */
+export function killPtyAwait(id: string): Promise<void> {
+  return killPtyInternal(id);
+}
+
+/**
+ * Kill all PTYs (on app quit). Awaits every child's graceful exit in parallel
+ * so the bound is ~one grace window, not the sum — the before-quit handler
+ * awaits this so the app doesn't exit before Claude flushes its session.
+ */
+export async function killAll(): Promise<void> {
+  const pending: Promise<void>[] = [];
   for (const [id, record] of ptys) {
     persistAndDisposeMirror(id, record);
-    try {
-      record.proc.kill();
-    } catch {
-      // Already dead
-    }
+    pending.push(gracefulKillProc(record.proc));
   }
   ptys.clear();
   // Bulk cleanup — don't rely on onExit during shutdown
   activityMonitor.stop();
+  await Promise.all(pending);
 }
 
 /**
  * Kill all PTYs owned by a specific WebContents (on window close).
+ * Fire-and-forget graceful kills — the app stays alive (macOS) so there's no
+ * exit to race, but the child still gets its SIGTERM flush window.
  */
 export function killByOwner(owner: WebContents): void {
   for (const [id, record] of ptys) {
     if (record.owner === owner) {
-      ptys.delete(id);
-      activityMonitor.unregister(id);
-      remoteControlService.unregister(id);
-      contextUsageService.unregister(id);
-      try {
-        record.proc.kill();
-      } catch {
-        // Already dead
-      }
+      teardownRecord(id, record);
+      void gracefulKillProc(record.proc);
     }
   }
 }
