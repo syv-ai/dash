@@ -1,6 +1,6 @@
-import { GitBranch, Globe, Power, Settings, Archive, Trash2 } from 'lucide-react';
+import { GitBranch, Globe } from 'lucide-react';
 import type { Task, ActivityInfo, ContextUsage } from '../../../shared/types';
-import { IconButton } from '../ui/IconButton';
+import { TaskActions } from '../TaskActions';
 import { Tooltip } from '../ui/Tooltip';
 import { UsageBarInline } from '../ui/UsageBar';
 import type { DragHandlers } from '../../hooks/useDragReorder';
@@ -15,6 +15,7 @@ interface TaskCardProps {
   isDragging: boolean;
   dragHandlers: DragHandlers;
   onSelect: () => void;
+  onOpenIde: () => void;
   onClose: () => void;
   onSettings: () => void;
   onArchive: () => void;
@@ -32,6 +33,7 @@ export function TaskCard({
   isDragging,
   dragHandlers,
   onSelect,
+  onOpenIde,
   onClose,
   onSettings,
   onArchive,
@@ -119,50 +121,15 @@ export function TaskCard({
               strokeWidth={2}
             />
           )}
-          <div className="hidden group-hover/task:flex gap-0.5">
-            {activityState && (
-              <IconButton
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClose();
-                }}
-                title="Close task"
-                size="sm"
-              >
-                <Power size={12} strokeWidth={1.8} />
-              </IconButton>
-            )}
-            <IconButton
-              onClick={(e) => {
-                e.stopPropagation();
-                onSettings();
-              }}
-              title="Task settings"
-              size="sm"
-            >
-              <Settings size={12} strokeWidth={1.8} />
-            </IconButton>
-            <IconButton
-              onClick={(e) => {
-                e.stopPropagation();
-                onArchive();
-              }}
-              title="Archive task"
-              size="sm"
-            >
-              <Archive size={12} strokeWidth={1.8} />
-            </IconButton>
-            <IconButton
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete();
-              }}
-              title="Delete task"
-              variant="destructive"
-              size="sm"
-            >
-              <Trash2 size={12} strokeWidth={1.8} />
-            </IconButton>
+          <div className="hidden group-hover/task:flex">
+            <TaskActions
+              hasActiveSession={!!activityState}
+              onOpenIde={onOpenIde}
+              onClose={onClose}
+              onSettings={onSettings}
+              onArchive={onArchive}
+              onDelete={onDelete}
+            />
           </div>
         </div>
       </div>

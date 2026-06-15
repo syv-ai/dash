@@ -14,6 +14,7 @@ import { IconButton } from '../ui/IconButton';
 import { Tooltip } from '../ui/Tooltip';
 import { formatTokens, formatCost } from '../../utils/formatTokens';
 import { TaskCard } from './TaskCard';
+import { openInIde } from '../../lib/openInIde';
 import { useSettings } from '../../stores/settingsStore';
 import { useRuntime } from '../../stores/runtimeStore';
 
@@ -336,6 +337,7 @@ export function ProjectsSection({
                           isDragging={draggingTaskId === task.id}
                           dragHandlers={getTaskDragHandlers(task.id, projectTasks, project.id)}
                           onSelect={() => onSelectTask(project.id, task.id)}
+                          onOpenIde={() => void openInIde(task.path || project.path)}
                           onClose={() => onCloseTask(task.id)}
                           onSettings={() => onTaskSettings(task.id)}
                           onArchive={() => onArchiveTask(task.id)}

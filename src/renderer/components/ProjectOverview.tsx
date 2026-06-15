@@ -9,10 +9,6 @@ import {
   GitGraph,
   Trash2,
   Globe,
-  GitFork,
-  Code2,
-  Power,
-  Archive,
   ChevronRight,
   ChevronDown,
   ArchiveRestore,
@@ -21,6 +17,7 @@ import type { Project, Task, ActivityInfo } from '../../shared/types';
 import { linkedItemUrl } from '../../shared/urls';
 import { IconButton } from './ui/IconButton';
 import { Tooltip } from './ui/Tooltip';
+import { TaskActions } from './TaskActions';
 
 interface ProjectOverviewProps {
   project: Project;
@@ -266,21 +263,6 @@ export function ProjectOverview({
                     }}
                     className="relative flex flex-col p-4 rounded-xl border border-border bg-[hsl(var(--surface-2))] hover:bg-[hsl(var(--surface-3))] hover:border-foreground/20 transition-all duration-150 text-left group overflow-hidden min-w-0 cursor-pointer"
                   >
-                    {/* Open in IDE — top right */}
-                    <Tooltip content="Open in IDE">
-                      <div
-                        role="button"
-                        tabIndex={-1}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void openInIde(task.path || project.path);
-                        }}
-                        className="absolute top-3 right-3 p-1 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-accent/60 opacity-0 group-hover:opacity-100"
-                      >
-                        <Code2 size={13} strokeWidth={1.8} />
-                      </div>
-                    </Tooltip>
-
                     {/* Task name + status */}
                     <div className="flex items-start gap-2.5 mb-3 pr-6 min-w-0">
                       <div className="mt-1.5 flex-shrink-0">
@@ -370,44 +352,17 @@ export function ProjectOverview({
                         })()}
                     </div>
 
-                    {/* Actions — bottom right. Same group as the sidebar task card:
-                        Close (only when the task has an active session), Settings,
-                        Archive, Delete. */}
-                    <div
-                      className="absolute bottom-3 right-3 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {activity?.state && (
-                        <IconButton
-                          onClick={() => onCloseTask(task.id)}
-                          title="Close task"
-                          size="sm"
-                        >
-                          <Power size={12} strokeWidth={1.8} />
-                        </IconButton>
-                      )}
-                      <IconButton
-                        onClick={() => onTaskSettings(task.id)}
-                        title="Task settings"
-                        size="sm"
-                      >
-                        <Settings size={12} strokeWidth={1.8} />
-                      </IconButton>
-                      <IconButton
-                        onClick={() => onArchiveTask(task.id)}
-                        title="Archive task"
-                        size="sm"
-                      >
-                        <Archive size={12} strokeWidth={1.8} />
-                      </IconButton>
-                      <IconButton
-                        onClick={() => onDeleteTask(task.id)}
-                        title="Delete task"
-                        variant="destructive"
-                        size="sm"
-                      >
-                        <Trash2 size={12} strokeWidth={1.8} />
-                      </IconButton>
+                    {/* Actions — bottom right. Shared toolbar, identical to the
+                        sidebar task card. */}
+                    <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <TaskActions
+                        hasActiveSession={!!activity?.state}
+                        onOpenIde={() => void openInIde(task.path || project.path)}
+                        onClose={() => onCloseTask(task.id)}
+                        onSettings={() => onTaskSettings(task.id)}
+                        onArchive={() => onArchiveTask(task.id)}
+                        onDelete={() => onDeleteTask(task.id)}
+                      />
                     </div>
 
                     {/* Footer */}
