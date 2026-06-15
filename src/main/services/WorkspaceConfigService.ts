@@ -1,15 +1,26 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import type { PermissionMode } from '../../shared/types';
 
 const DASH_DIR = '.dash';
 const CONFIG_FILE = 'config.json';
 const LOCAL_CONFIG_FILE = 'config.local.json';
+
+const PERMISSION_MODES: readonly PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions'];
+
+export interface WorkspaceTaskDefaults {
+  baseRef?: string;
+  permissionMode?: PermissionMode;
+  useWorktree?: boolean;
+  contextPrompt?: string;
+}
 
 export interface WorkspaceConfig {
   setup?: string[];
   teardown?: string[];
   run?: string[];
   cwd?: string;
+  taskDefaults?: WorkspaceTaskDefaults;
 }
 
 const SCRIPT_KEYS = ['setup', 'teardown', 'run'] as const;
@@ -29,6 +40,23 @@ function readJson(filePath: string): unknown {
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((v) => typeof v === 'string');
+}
+
+function parseTaskDefaults(value: unknown, source: string): WorkspaceTaskDefaults | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    console.error(`[WorkspaceConfig] ${source}: 'taskDefaults' must be an object`);
+    return undefined;
+  }
+  const obj = value as Record<string, unknown>;
+  const result: WorkspaceTaskDefaults = {};
+  if (typeof obj.baseRef === 'string' && obj.baseRef.trim()) result.baseRef = obj.baseRef.trim();
+  if (PERMISSION_MODES.includes(obj.permissionMode as PermissionMode)) {
+    result.permissionMode = obj.permissionMode as PermissionMode;
+  }
+  if (typeof obj.useWorktree === 'boolean') result.useWorktree = obj.useWorktree;
+  if (typeof obj.contextPrompt === 'string') result.contextPrompt = obj.contextPrompt;
+  return Object.keys(result).length > 0 ? result : undefined;
 }
 
 function parseBaseConfig(parsed: unknown, source: string): WorkspaceConfig | null {
@@ -53,6 +81,9 @@ function parseBaseConfig(parsed: unknown, source: string): WorkspaceConfig | nul
     }
     result.cwd = obj.cwd.trim();
   }
+
+  const taskDefaults = parseTaskDefaults(obj.taskDefaults, source);
+  if (taskDefaults) result.taskDefaults = taskDefaults;
 
   return result;
 }
@@ -170,4 +201,31 @@ export function loadWorkspaceConfig(worktreePath: string): WorkspaceConfig | nul
   if (!localParsed || typeof localParsed !== 'object' || Array.isArray(localParsed)) return base;
 
   return applyLocalOverlay(base, localParsed as Record<string, unknown>);
+}
+
+/**
+ * Persist a WorkspaceConfig to `<projectPath>/.dash/config.json`, preserving any
+ * keys we don't model (e.g. custom keys). Only setup/teardown/cwd/taskDefaults
+ * are overwritten from `config`; passing `undefined` for one of those removes it.
+ */
+export function writeWorkspaceConfig(projectPath: string, config: WorkspaceConfig): void {
+  const dashDir = path.join(projectPath, DASH_DIR);
+  const configPath = path.join(dashDir, CONFIG_FILE);
+  const existing = readJson(configPath);
+  const base: Record<string, unknown> =
+    existing && typeof existing === 'object' && !Array.isArray(existing)
+      ? { ...(existing as Record<string, unknown>) }
+      : {};
+
+  const assign = (key: keyof WorkspaceConfig) => {
+    if (config[key] === undefined) delete base[key];
+    else base[key] = config[key];
+  };
+  assign('setup');
+  assign('teardown');
+  assign('cwd');
+  assign('taskDefaults');
+
+  if (!fs.existsSync(dashDir)) fs.mkdirSync(dashDir, { recursive: true });
+  fs.writeFileSync(configPath, JSON.stringify(base, null, 2) + '\n', 'utf-8');
 }
