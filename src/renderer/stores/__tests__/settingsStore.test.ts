@@ -18,7 +18,7 @@ describe('settingsStore generated actions', () => {
     const { SETTINGS_REGISTRY } = await import('../settingsKeys');
     const store = useSettings.getState() as unknown as Record<string, unknown>;
     for (const e of SETTINGS_REGISTRY) {
-      const name = `set${e.field[0].toUpperCase()}${e.field.slice(1)}`;
+      const name = `set${e.field[0]!.toUpperCase()}${e.field.slice(1)}`;
       expect(typeof store[name]).toBe('function');
     }
   });

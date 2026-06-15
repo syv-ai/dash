@@ -122,8 +122,8 @@ describe('allocatePorts', () => {
       overrides: {},
       taken: new Set(),
     });
-    expect(assignments[0].hostPort).not.toBe(assignments[1].hostPort);
-    expect(assignments[1].source).toBe('probe');
+    expect(assignments[0]!.hostPort).not.toBe(assignments[1]!.hostPort);
+    expect(assignments[1]!.source).toBe('probe');
   });
 
   it('hash candidate colliding with a fixed port in the same config probes past it', () => {
@@ -157,7 +157,7 @@ describe('allocatePorts', () => {
       overrides: {},
       taken: new Set([65535]),
     });
-    const high = assignments[0];
+    const high = assignments[0]!;
     expect(high.hostPort).toBeGreaterThanOrEqual(1);
     expect(high.hostPort).toBeLessThanOrEqual(65535);
     expect(high.hostPort).not.toBe(65535);
@@ -176,7 +176,7 @@ describe('allocatePorts', () => {
       overrides: {},
       taken: new Set(),
     });
-    expect(assignments[0].hostPort).toBe(5000 + offset);
+    expect(assignments[0]!.hostPort).toBe(5000 + offset);
   });
 });
 

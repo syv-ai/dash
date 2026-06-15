@@ -111,7 +111,7 @@ async function handle(msg: { type: string; text?: string }): Promise<void> {
   switch (msg.type) {
     case 'show':
       stopCurrentSpinner();
-      await handleShow(msg as Parameters<ShowHandler>[0], ctx);
+      await handleShow!(msg as Parameters<ShowHandler>[0], ctx);
       break;
     case 'progress':
       currentSpinner?.message(msg.text!);

@@ -219,6 +219,7 @@ export function parseDiffNameStatusZ(
   let i = 0;
   while (i < tokens.length) {
     const code = tokens[i++];
+    if (code == null) break;
     const isRename = code.startsWith('R') || code.startsWith('C');
     if (isRename) {
       const oldPath = tokens[i++];
@@ -245,6 +246,7 @@ export function parseDiffNumstatZ(
   let i = 0;
   while (i < tokens.length) {
     const head = tokens[i++];
+    if (head == null) break;
     const tabIdx1 = head.indexOf('\t');
     const tabIdx2 = head.indexOf('\t', tabIdx1 + 1);
     if (tabIdx1 < 0 || tabIdx2 < 0) continue;
@@ -258,7 +260,8 @@ export function parseDiffNumstatZ(
     const next = tokens[i];
     const isRename = next != null && !next.includes('\t');
     if (isRename) {
-      const newPath = tokens[i++];
+      const newPath = next;
+      i++;
       map.set(newPath, { additions, deletions });
     } else {
       map.set(firstPath, { additions, deletions });
@@ -495,10 +498,10 @@ export function registerEditorIpc(): void {
           const parts = record.split('\x1f');
           if (parts.length < 6) continue;
           commits.push({
-            hash: parts[0],
-            shortHash: parts[1],
+            hash: parts[0]!,
+            shortHash: parts[1]!,
             authorName: parts[2] || '',
-            authorDate: parseInt(parts[3], 10) || 0,
+            authorDate: parseInt(parts[3]!, 10) || 0,
             subject: parts[4] || '',
             body: (parts[5] || '').trim(),
           });
@@ -553,8 +556,8 @@ export function registerEditorIpc(): void {
           const p = pathParts.join('\t');
           if (!p) continue;
           stats.set(p, {
-            additions: adds === '-' ? 0 : parseInt(adds, 10) || 0,
-            deletions: dels === '-' ? 0 : parseInt(dels, 10) || 0,
+            additions: adds === '-' ? 0 : parseInt(adds ?? '', 10) || 0,
+            deletions: dels === '-' ? 0 : parseInt(dels ?? '', 10) || 0,
           });
         }
 
@@ -562,9 +565,9 @@ export function registerEditorIpc(): void {
         for (const line of nameStatusOut.split('\n')) {
           if (!line.trim()) continue;
           const parts = line.split('\t');
-          const code = parts[0];
+          const code = parts[0]!;
           const status = statusFromGitCode(code);
-          const filePath = parts[parts.length - 1];
+          const filePath = parts[parts.length - 1]!;
           const oldPath = code.startsWith('R') || code.startsWith('C') ? parts[1] : undefined;
           const stat = stats.get(filePath) ?? { additions: 0, deletions: 0 };
           files.push({

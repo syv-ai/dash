@@ -153,7 +153,7 @@ export const useProjects = create<ProjectsStore>((set) => ({
     if (projects.length > 0) {
       const prev = useProjects.getState().activeProjectId;
       if (!prev || !projects.some((p) => p.id === prev)) {
-        useProjects.getState().setActiveProject(projects[0].id);
+        useProjects.getState().setActiveProject(projects[0]!.id);
       }
     }
   },

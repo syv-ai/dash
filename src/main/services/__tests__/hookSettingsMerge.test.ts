@@ -176,9 +176,9 @@ describe('mergeHookEntries — user content preservation', () => {
 
     expect(merged.PreToolUse).toHaveLength(2);
     // User entry must survive verbatim (deep equality).
-    expect(merged.PreToolUse[0]).toEqual(userHook);
+    expect(merged.PreToolUse![0]).toEqual(userHook);
     // Dash entry appended after.
-    expect(merged.PreToolUse[1].hooks[0]).toMatchObject({ __dash: true });
+    expect(merged.PreToolUse![1]!.hooks[0]).toMatchObject({ __dash: true });
   });
 
   it('drops a mixed entry (user hook + Dash hook spliced together) wholesale', () => {
@@ -200,7 +200,7 @@ describe('mergeHookEntries — user content preservation', () => {
 
     // Mixed entry gone; only the fresh Dash entry remains.
     expect(merged.PreToolUse).toHaveLength(1);
-    expect(merged.PreToolUse[0].hooks[0]).toMatchObject({ __dash: true });
+    expect(merged.PreToolUse![0]!.hooks[0]).toMatchObject({ __dash: true });
   });
 
   it('passes a brand-tagged hook through unchanged on a non-Dash event', () => {
@@ -268,7 +268,7 @@ describe('mergeHookEntries — user content preservation', () => {
     const merged = mergeHookEntries(existing, dash);
 
     expect(merged.PreToolUse).toHaveLength(1);
-    expect(merged.PreToolUse[0].hooks[0]).toMatchObject({ __dash: true });
+    expect(merged.PreToolUse![0]!.hooks[0]).toMatchObject({ __dash: true });
   });
 
   it('drops stale curl-command Dash entries on legacy event names and removes the empty key', () => {
@@ -364,7 +364,7 @@ describe('mergeHookEntries — user content preservation', () => {
     const merged = mergeHookEntries(existing, dash);
 
     expect(merged.PreToolUse).toHaveLength(1);
-    expect(merged.PreToolUse[0].hooks[0]).toMatchObject({ __dash: true });
+    expect(merged.PreToolUse![0]!.hooks[0]).toMatchObject({ __dash: true });
   });
 
   it('handles a fully empty existing object', () => {
@@ -471,8 +471,8 @@ describe('SessionEnd allowlist', () => {
     );
     // Stale Dash entry filtered out; user entry preserved; fresh Dash entry appended.
     expect(merged.SessionEnd).toHaveLength(2);
-    expect(merged.SessionEnd[0].hooks[0]).toMatchObject({ command: 'echo user-hook' });
-    expect(merged.SessionEnd[1].hooks[0]).toMatchObject({
+    expect(merged.SessionEnd![0]!.hooks[0]).toMatchObject({ command: 'echo user-hook' });
+    expect(merged.SessionEnd![1]!.hooks[0]).toMatchObject({
       url: expect.stringContaining(':54321/'),
     });
   });

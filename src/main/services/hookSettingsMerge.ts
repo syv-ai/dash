@@ -116,12 +116,12 @@ const DASH_BASE64_DECODE_RE =
 
 function urlFieldIsDashEndpoint(url: string): boolean {
   const m = url.match(DASH_URL_FULL_RE);
-  return m !== null && DASH_ENDPOINT_SET.has(m[1].toLowerCase());
+  return m !== null && DASH_ENDPOINT_SET.has(m[1]!.toLowerCase());
 }
 
 function commandLooksLikeDash(s: string): boolean {
   const m = s.match(DASH_URL_SUBSTR_RE);
-  if (m !== null && DASH_ENDPOINT_SET.has(m[1].toLowerCase())) return true;
+  if (m !== null && DASH_ENDPOINT_SET.has(m[1]!.toLowerCase())) return true;
   return DASH_BASE64_DECODE_RE.test(s);
 }
 
@@ -196,7 +196,7 @@ export function mergeHookEntries(
     merged[event] = [...preserved, ...entries];
   }
   for (const event of Object.keys(merged)) {
-    if (merged[event].length === 0) delete merged[event];
+    if (merged[event]!.length === 0) delete merged[event];
   }
   return merged;
 }

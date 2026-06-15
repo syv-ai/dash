@@ -127,7 +127,7 @@ function detectComposeServices(content: string): Array<{ service: string; port: 
     if (currentService === null || indent <= currentServiceIndent) {
       const match = trimmed.match(/^([A-Za-z0-9_.-]+)\s*:\s*$/);
       if (match) {
-        currentService = match[1];
+        currentService = match[1]!;
         currentServiceIndent = indent;
         inPortsBlock = false;
       }
@@ -147,7 +147,7 @@ function detectComposeServices(content: string): Array<{ service: string; port: 
     if (inPortsBlock && trimmed.startsWith('-') && currentService) {
       const portMatch = trimmed.match(/(\d{2,5})(?::\d{2,5})?(?:\/(?:tcp|udp))?["']?\s*$/);
       if (portMatch) {
-        const port = parseInt(portMatch[1], 10);
+        const port = parseInt(portMatch[1]!, 10);
         if (port >= 1024 && port <= 65535) {
           results.push({ service: currentService, port });
           // One port per service is enough for the guesses — additional ones
@@ -164,8 +164,8 @@ function detectComposeServices(content: string): Array<{ service: string; port: 
 function detectDockerfileExpose(content: string): number[] {
   const ports: number[] = [];
   for (const match of content.matchAll(/^\s*EXPOSE\s+([^\n#]+)/gim)) {
-    for (const token of match[1].split(/\s+/)) {
-      const portStr = token.split('/')[0];
+    for (const token of match[1]!.split(/\s+/)) {
+      const portStr = token.split('/')[0]!;
       const port = parseInt(portStr, 10);
       if (Number.isInteger(port) && port >= 1024 && port <= 65535) ports.push(port);
     }

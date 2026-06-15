@@ -57,7 +57,7 @@ const STATUS_PRIORITY: FileChangeStatus[] = [
 
 function dominantStatus(statuses: Set<FileChangeStatus>): FileChangeStatus | 'mixed' {
   if (statuses.size === 0) return 'mixed';
-  if (statuses.size === 1) return [...statuses][0];
+  if (statuses.size === 1) return [...statuses][0]!;
   for (const s of STATUS_PRIORITY) {
     if (statuses.has(s)) return s;
   }
@@ -107,7 +107,7 @@ export function compressedDisplay(node: TreeNode): { display: string; terminal: 
   let cur = node;
   let display = node.name;
   while (cur.children.size === 1 && cur.files.length === 0) {
-    const onlyChild = [...cur.children.values()][0];
+    const onlyChild = [...cur.children.values()][0]!;
     display = `${display}/${onlyChild.name}`;
     cur = onlyChild;
   }
@@ -120,7 +120,7 @@ export function buildTree(files: FileChange[]): TreeNode {
     const segments = file.path.split('/');
     let node = root;
     for (let i = 0; i < segments.length - 1; i++) {
-      const seg = segments[i];
+      const seg = segments[i]!;
       let child = node.children.get(seg);
       if (!child) {
         const childPath = node.path ? `${node.path}/${seg}` : seg;

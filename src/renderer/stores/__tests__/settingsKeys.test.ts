@@ -29,37 +29,37 @@ describe('settings registry', () => {
 
   it('registers the phase-1b booleans with correct defaults', () => {
     const byField = Object.fromEntries(SETTINGS_REGISTRY.map((r) => [r.field, r]));
-    expect(byField.showRateLimits.codec.decode(null)).toBe(true); // boolNotFalse
-    expect(byField.showActiveTasksSection.codec.decode('false')).toBe(false);
-    expect(byField.desktopNotification.codec.decode(null)).toBe(false); // boolDefaultFalse
-    expect(byField.syncShellEnv.codec.decode('true')).toBe(true);
-    expect(byField.showProjectTokens.codec.decode(null)).toBe(true); // boolDefaultTrue
+    expect(byField.showRateLimits!.codec.decode(null)).toBe(true); // boolNotFalse
+    expect(byField.showActiveTasksSection!.codec.decode('false')).toBe(false);
+    expect(byField.desktopNotification!.codec.decode(null)).toBe(false); // boolDefaultFalse
+    expect(byField.syncShellEnv!.codec.decode('true')).toBe(true);
+    expect(byField.showProjectTokens!.codec.decode(null)).toBe(true); // boolDefaultTrue
   });
 
   it('registers the phase-1c string settings', () => {
     const byField = Object.fromEntries(SETTINGS_REGISTRY.map((r) => [r.field, r]));
-    expect(byField.effortLevel.key).toBe('claudeEffortLevel'); // legacy key
-    expect(byField.effortLevel.codec.decode(null)).toBe('auto');
-    expect(byField.terminalTheme.codec.decode(null)).toBe('default');
-    expect(byField.notificationSound.codec.decode(null)).toBe('off');
-    expect(byField.shellDrawerPosition.codec.decode('bogus')).toBe('right');
-    expect(byField.shellDrawerPosition.codec.decode('main')).toBe('main');
+    expect(byField.effortLevel!.key).toBe('claudeEffortLevel'); // legacy key
+    expect(byField.effortLevel!.codec.decode(null)).toBe('auto');
+    expect(byField.terminalTheme!.codec.decode(null)).toBe('default');
+    expect(byField.notificationSound!.codec.decode(null)).toBe('off');
+    expect(byField.shellDrawerPosition!.codec.decode('bogus')).toBe('right');
+    expect(byField.shellDrawerPosition!.codec.decode('main')).toBe('main');
   });
 
   it('registers the phase-1d json settings', () => {
     const byField = Object.fromEntries(SETTINGS_REGISTRY.map((r) => [r.field, r]));
-    expect(byField.rotationOrder.codec.decode(null)).toEqual([]);
-    expect(byField.customClaudeEnvVars.codec.decode(null)).toEqual({});
-    expect(byField.usageThresholds.codec.decode(null)).toMatchObject({ contextPercentage: 80 });
-    expect(byField.customIDE.codec.decode(null)).toEqual({ path: '', args: [] });
+    expect(byField.rotationOrder!.codec.decode(null)).toEqual([]);
+    expect(byField.customClaudeEnvVars!.codec.decode(null)).toEqual({});
+    expect(byField.usageThresholds!.codec.decode(null)).toMatchObject({ contextPercentage: 80 });
+    expect(byField.customIDE!.codec.decode(null)).toEqual({ path: '', args: [] });
     // validator rejects wrong shape
-    expect(byField.customIDE.codec.decode('{"path":123}')).toEqual({ path: '', args: [] });
+    expect(byField.customIDE!.codec.decode('{"path":123}')).toEqual({ path: '', args: [] });
   });
 
   it('registers the phase-1e set settings', () => {
     const byField = Object.fromEntries(SETTINGS_REGISTRY.map((r) => [r.field, r]));
-    expect([...(byField.rotationExclusions.codec.decode(null) as Set<string>)]).toEqual([]);
-    expect([...(byField.unseenTaskIds.codec.decode('["t1","t2"]') as Set<string>)]).toEqual([
+    expect([...(byField.rotationExclusions!.codec.decode(null) as Set<string>)]).toEqual([]);
+    expect([...(byField.unseenTaskIds!.codec.decode('["t1","t2"]') as Set<string>)]).toEqual([
       't1',
       't2',
     ]);
@@ -67,10 +67,10 @@ describe('settings registry', () => {
 
   it('registers the phase-1f special settings', () => {
     const byField = Object.fromEntries(SETTINGS_REGISTRY.map((r) => [r.field, r]));
-    expect(byField.diffContextLines.codec.decode(null)).toBeNull();
-    expect(byField.diffContextLines.codec.decode('5')).toBe(5);
-    expect(byField.commitAttribution.codec.decode(null)).toBeUndefined();
-    expect(byField.commitAttribution.codec.decode('')).toBe('');
+    expect(byField.diffContextLines!.codec.decode(null)).toBeNull();
+    expect(byField.diffContextLines!.codec.decode('5')).toBe(5);
+    expect(byField.commitAttribution!.codec.decode(null)).toBeUndefined();
+    expect(byField.commitAttribution!.codec.decode('')).toBe('');
   });
 
   it('registers preferredIDE with an auto default', () => {
@@ -89,16 +89,16 @@ describe('settings registry', () => {
 
   it('registers the phase-1i panel-collapse settings', () => {
     const byField = Object.fromEntries(SETTINGS_REGISTRY.map((r) => [r.field, r]));
-    expect(byField.sidebarCollapsed.codec.decode(null)).toBe(false);
-    expect(byField.changesPanelCollapsed.codec.decode('true')).toBe(true);
-    expect(byField.shellDrawerCollapsed.codec.decode(null)).toBe(false);
-    expect(byField.portsDrawerCollapsed.codec.decode(null)).toBe(true); // boolDefaultTrue
+    expect(byField.sidebarCollapsed!.codec.decode(null)).toBe(false);
+    expect(byField.changesPanelCollapsed!.codec.decode('true')).toBe(true);
+    expect(byField.shellDrawerCollapsed!.codec.decode(null)).toBe(false);
+    expect(byField.portsDrawerCollapsed!.codec.decode(null)).toBe(true); // boolDefaultTrue
   });
 
   it('registers the phase-1j update settings (default true)', () => {
     const byField = Object.fromEntries(SETTINGS_REGISTRY.map((r) => [r.field, r]));
-    expect(byField.autoUpdateEnabled.codec.decode(null)).toBe(true);
-    expect(byField.autoUpdateEnabled.codec.decode('false')).toBe(false);
-    expect(byField.updateNotificationsEnabled.codec.decode(null)).toBe(true);
+    expect(byField.autoUpdateEnabled!.codec.decode(null)).toBe(true);
+    expect(byField.autoUpdateEnabled!.codec.decode('false')).toBe(false);
+    expect(byField.updateNotificationsEnabled!.codec.decode(null)).toBe(true);
   });
 });

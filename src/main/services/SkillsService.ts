@@ -981,7 +981,7 @@ async function tryBackfillOne(
   // and don't write a sentinel: there's nothing to learn from a fetch we wouldn't
   // do, and a future registry refresh might disambiguate.
   if (candidates.length !== 1) return;
-  const ref = candidates[0];
+  const ref = candidates[0]!;
 
   const dirs: string[] = [];
   if (info.globalInstalled) dirs.push(path.join(home, '.claude', 'skills', skillName));

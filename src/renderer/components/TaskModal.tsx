@@ -227,7 +227,7 @@ function TaskModalBody({
       if (resp.success && resp.data) {
         setBranches(resp.data);
         if (!selectedBranch && resp.data.length > 0) {
-          setSelectedBranch(resp.data[0]);
+          setSelectedBranch(resp.data[0]!);
         }
       } else {
         setBranchError(resp.error || 'Failed to load branches');

@@ -74,7 +74,7 @@ export class DatabaseService {
       .run();
 
     const rows = db.select().from(projects).where(eq(projects.id, id)).all();
-    return this.mapProject(rows[0]);
+    return this.mapProject(rows[0]!);
   }
 
   static deleteProject(id: string): void {
@@ -209,7 +209,7 @@ export class DatabaseService {
     });
 
     const rows = db.select().from(tasks).where(eq(tasks.id, id)).all();
-    return this.mapTask(rows[0]);
+    return this.mapTask(rows[0]!);
   }
 
   static getTask(id: string): Task | undefined {
@@ -363,7 +363,7 @@ export class DatabaseService {
       .run();
 
     const rows = db.select().from(conversations).where(eq(conversations.id, id)).all();
-    return this.mapConversation(rows[0]);
+    return this.mapConversation(rows[0]!);
   }
 
   // ── Task ports ───────────────────────────────────────────

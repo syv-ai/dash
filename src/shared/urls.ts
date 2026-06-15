@@ -18,8 +18,8 @@ export function parseAdoRemote(
   if (https) {
     return {
       organizationUrl: `https://dev.azure.com/${https[1]}`,
-      project: decodeURIComponent(https[2]),
-      repository: decodeURIComponent(https[3]),
+      project: decodeURIComponent(https[2]!),
+      repository: decodeURIComponent(https[3]!),
     };
   }
   // Fallback without /_git/ segment
@@ -27,7 +27,7 @@ export function parseAdoRemote(
   if (httpsNoGit) {
     return {
       organizationUrl: `https://dev.azure.com/${httpsNoGit[1]}`,
-      project: decodeURIComponent(httpsNoGit[2]),
+      project: decodeURIComponent(httpsNoGit[2]!),
     };
   }
 
@@ -36,8 +36,8 @@ export function parseAdoRemote(
   if (ssh) {
     return {
       organizationUrl: `https://dev.azure.com/${ssh[1]}`,
-      project: decodeURIComponent(ssh[2]),
-      repository: decodeURIComponent(ssh[3]),
+      project: decodeURIComponent(ssh[2]!),
+      repository: decodeURIComponent(ssh[3]!),
     };
   }
   // Fallback without repo
@@ -45,7 +45,7 @@ export function parseAdoRemote(
   if (sshNoRepo) {
     return {
       organizationUrl: `https://dev.azure.com/${sshNoRepo[1]}`,
-      project: decodeURIComponent(sshNoRepo[2]),
+      project: decodeURIComponent(sshNoRepo[2]!),
     };
   }
 
@@ -56,8 +56,8 @@ export function parseAdoRemote(
   if (vs) {
     return {
       organizationUrl: `https://dev.azure.com/${vs[1]}`,
-      project: decodeURIComponent(vs[2]),
-      repository: decodeURIComponent(vs[3]),
+      project: decodeURIComponent(vs[2]!),
+      repository: decodeURIComponent(vs[3]!),
     };
   }
   // Fallback without /_git/ segment
@@ -65,7 +65,7 @@ export function parseAdoRemote(
   if (vsNoGit) {
     return {
       organizationUrl: `https://dev.azure.com/${vsNoGit[1]}`,
-      project: decodeURIComponent(vsNoGit[2]),
+      project: decodeURIComponent(vsNoGit[2]!),
     };
   }
 

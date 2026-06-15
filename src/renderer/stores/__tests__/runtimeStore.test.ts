@@ -81,8 +81,8 @@ describe('runtimeStore.refreshTokenRollups', () => {
       totalCostUsd: 1,
       taskCount: 3,
     });
-    expect(useRuntime.getState().projectTokenStats.p1.totalTokens).toBe(60);
-    expect(useRuntime.getState().projectTokenStats.p2.totalTokens).toBe(40);
+    expect(useRuntime.getState().projectTokenStats.p1!.totalTokens).toBe(60);
+    expect(useRuntime.getState().projectTokenStats.p2!.totalTokens).toBe(40);
   });
 });
 
@@ -231,7 +231,7 @@ describe('runtimeStore.init — token stats writeback', () => {
 
     tokenCb!({ taskId: 't2', totalTokens: 999, totalCostUsd: 1.5 });
 
-    const t2 = useProjects.getState().tasksByProject.p1.find((t) => t.id === 't2');
+    const t2 = useProjects.getState().tasksByProject.p1!.find((t) => t.id === 't2');
     expect(t2?.totalTokens).toBe(999);
     expect(t2?.totalCostUsd).toBe(1.5);
     cleanup();

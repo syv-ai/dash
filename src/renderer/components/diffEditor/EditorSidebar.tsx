@@ -121,7 +121,7 @@ function buildRepoTree(paths: string[], changedFiles: FileChange[]): TreeFolder 
     const parts = p.split('/');
     let node = root;
     for (let i = 0; i < parts.length - 1; i++) {
-      const seg = parts[i];
+      const seg = parts[i]!;
       let child = node.children.get(seg);
       if (!child) {
         const childPath = node.fullPath ? `${node.fullPath}/${seg}` : seg;
@@ -131,7 +131,7 @@ function buildRepoTree(paths: string[], changedFiles: FileChange[]): TreeFolder 
       node = child;
     }
     node.files.push({
-      name: parts[parts.length - 1],
+      name: parts[parts.length - 1]!,
       fullPath: p,
       change: changedByPath.get(p) ?? null,
     });

@@ -195,7 +195,7 @@ export function ProjectsSection({
                     if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
                     const reordered = [...projects];
                     const [moved] = reordered.splice(fromIdx, 1);
-                    reordered.splice(toIdx, 0, moved);
+                    reordered.splice(toIdx, 0, moved!);
                     onReorderProjects?.(reordered);
                   }}
                   onDrop={(e) => e.preventDefault()}

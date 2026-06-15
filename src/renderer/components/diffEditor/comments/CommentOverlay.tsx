@@ -103,7 +103,7 @@ export function CommentOverlay({
       else byKey.set(k, [c]);
     }
     return Array.from(byKey.entries())
-      .map(([key, comments]) => ({ key, anchorLine: comments[0].startLine, comments }))
+      .map(([key, comments]) => ({ key, anchorLine: comments[0]!.startLine, comments }))
       .sort((a, b) => a.anchorLine - b.anchorLine);
   }, [projected]);
 
@@ -515,7 +515,7 @@ export function CommentOverlay({
       const line = e.target?.position?.lineNumber;
       if (!line) return;
       const ids = commentIdsAtLine(projected, line);
-      onHoveredIdChange(ids.length === 1 ? ids[0] : null);
+      onHoveredIdChange(ids.length === 1 ? ids[0]! : null);
     });
     const leave = modifiedEditor.onMouseLeave(() => onHoveredIdChange(null));
     return () => {
@@ -576,7 +576,7 @@ export function CommentOverlay({
         const anchorTop = modifiedEditor.getTopForLineNumber(anchorLine) - scrollTop;
         const isCollapsed = collapsed.has(key);
         const stacked = comments.length >= 2;
-        const iconShade: Shade | null = stacked ? null : (shadeById.get(comments[0].id) ?? 1);
+        const iconShade: Shade | null = stacked ? null : (shadeById.get(comments[0]!.id) ?? 1);
         return (
           <div
             key={`icon-${key}`}
@@ -592,7 +592,7 @@ export function CommentOverlay({
               state={isCollapsed ? 'collapsed' : 'expanded'}
               count={stacked ? comments.length : undefined}
               onClick={() => toggleGroup(key)}
-              onMouseEnter={() => !stacked && onHoveredIdChange(comments[0].id)}
+              onMouseEnter={() => !stacked && onHoveredIdChange(comments[0]!.id)}
               onMouseLeave={() => !stacked && onHoveredIdChange(null)}
               title={stacked ? `Toggle ${comments.length} comments` : 'Toggle comment'}
             />

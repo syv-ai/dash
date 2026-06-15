@@ -179,7 +179,7 @@ export class WorktreeService {
         timeout: 5000,
       });
       const match = stdout.match(/HEAD branch:\s*(\S+)/);
-      if (match) return match[1];
+      if (match) return match[1]!;
     } catch {
       // Ignore
     }

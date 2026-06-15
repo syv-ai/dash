@@ -118,7 +118,7 @@ export const useUi = create<UiStore>((set, get) => ({
     set({ showAddProjectModal: false });
     const resp = await window.electronAPI.showOpenDialog();
     if (!resp.success || !resp.data || resp.data.length === 0) return;
-    const folderPath = resp.data[0];
+    const folderPath = resp.data[0]!;
     const name = folderPath.split(/[\\/]/).pop() || 'Untitled';
 
     const gitResp = await window.electronAPI.detectGit(folderPath);

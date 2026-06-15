@@ -200,7 +200,7 @@ function startFileWatcher(entry: WatchEntry): void {
 
         const existingByRequestId = new Map<string, number>();
         for (let i = 0; i < entry.messages.length; i++) {
-          const rid = entry.messages[i].requestId;
+          const rid = entry.messages[i]!.requestId;
           if (rid) existingByRequestId.set(rid, i);
         }
 

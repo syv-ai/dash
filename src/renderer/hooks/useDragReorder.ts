@@ -63,7 +63,7 @@ export function useDragReorder<T extends { id: string }>({
         if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
         const reordered = [...items];
         const [moved] = reordered.splice(fromIdx, 1);
-        reordered.splice(toIdx, 0, moved);
+        reordered.splice(toIdx, 0, moved!);
         onReorder(groupId, reordered);
       },
 

@@ -32,7 +32,7 @@ describe('commentsReducer', () => {
     const state = commentsReducer(initialCommentsState(), { type: 'hydrate', comments: [] });
     const next = commentsReducer(state, { type: 'upsert', comment: c({ id: 'x' }) });
     expect(next.byFile['src/foo.ts']).toHaveLength(1);
-    expect(next.byFile['src/foo.ts'][0].id).toBe('x');
+    expect(next.byFile['src/foo.ts']![0]!.id).toBe('x');
   });
 
   it('upsert replaces an existing comment in place', () => {
@@ -45,7 +45,7 @@ describe('commentsReducer', () => {
       comment: c({ id: 'a', text: 'new' }),
     });
     expect(next.byFile['src/foo.ts']).toHaveLength(1);
-    expect(next.byFile['src/foo.ts'][0].text).toBe('new');
+    expect(next.byFile['src/foo.ts']![0]!.text).toBe('new');
   });
 
   it('upsert moves a comment when its filePath changes', () => {
@@ -76,7 +76,7 @@ describe('commentsReducer', () => {
       comments: [c({ id: 'a' }), c({ id: 'b' })],
     });
     const next = commentsReducer(initial, { type: 'markSent', ids: ['a', 'b'] });
-    expect(next.byFile['src/foo.ts'].every((c) => c.sent)).toBe(true);
+    expect(next.byFile['src/foo.ts']!.every((c) => c.sent)).toBe(true);
   });
 
   it('markUnsent flips one id back to sent=false', () => {
@@ -85,7 +85,7 @@ describe('commentsReducer', () => {
       comments: [c({ id: 'a', sent: true })],
     });
     const next = commentsReducer(initial, { type: 'markUnsent', id: 'a' });
-    expect(next.byFile['src/foo.ts'][0].sent).toBe(false);
+    expect(next.byFile['src/foo.ts']![0]!.sent).toBe(false);
   });
 
   it('snapshotRanges updates startLine/endLine for matched ids', () => {
@@ -98,7 +98,7 @@ describe('commentsReducer', () => {
       filePath: 'src/foo.ts',
       snapshots: [{ id: 'a', startLine: 20, endLine: 22 }],
     });
-    expect(next.byFile['src/foo.ts'][0].startLine).toBe(20);
-    expect(next.byFile['src/foo.ts'][0].endLine).toBe(22);
+    expect(next.byFile['src/foo.ts']![0]!.startLine).toBe(20);
+    expect(next.byFile['src/foo.ts']![0]!.endLine).toBe(22);
   });
 });

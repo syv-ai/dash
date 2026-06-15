@@ -79,7 +79,7 @@ export class AzureDevOpsService {
   static async getWorkItem(config: AzureDevOpsConfig, id: number): Promise<AzureDevOpsWorkItem> {
     const items = await this.getWorkItemsByIds(config, [id], { expand: true });
     if (items.length === 0) throw new Error(`Work item ${id} not found`);
-    return items[0];
+    return items[0]!;
   }
 
   static async getPullRequestForBranch(
@@ -104,7 +104,7 @@ export class AzureDevOpsService {
       return (order[a.status] ?? 3) - (order[b.status] ?? 3);
     });
 
-    const pr = sorted[0];
+    const pr = sorted[0]!;
     const baseUrl = config.organizationUrl.replace(/\/+$/, '');
     const prUrl = `${baseUrl}/${config.project}/_git/${repositoryName}/pullrequest/${pr.pullRequestId}`;
 
@@ -198,7 +198,7 @@ export class AzureDevOpsService {
     for (let level = 0; level < 3; level++) {
       const idsToFetch = new Set<number>();
       for (const chain of parentIdMap.values()) {
-        const lastId = chain[chain.length - 1];
+        const lastId = chain[chain.length - 1]!;
         if (!fetched.has(lastId)) idsToFetch.add(lastId);
       }
       // Remove already-fetched
@@ -254,7 +254,7 @@ export class AzureDevOpsService {
 
   private static extractIdFromUrl(url: string): number | null {
     const match = url.match(/\/workItems\/(\d+)$/i);
-    return match ? parseInt(match[1], 10) : null;
+    return match ? parseInt(match[1]!, 10) : null;
   }
 
   private static mapWorkItem(raw: RawWorkItem, config: AzureDevOpsConfig): AzureDevOpsWorkItem {

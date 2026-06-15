@@ -35,7 +35,7 @@ export function createParser(): Parser {
         state.inHook = true;
         evts.push({
           type: 'hookResult',
-          name: headerMatch[1].trimEnd(),
+          name: headerMatch[1]!.trimEnd(),
           status: headerMatch[2] as HookStatus,
         });
         return evts;
@@ -43,17 +43,17 @@ export function createParser(): Parser {
       if (state.inHook) {
         const idM = META_ID.exec(line);
         if (idM) {
-          evts.push({ type: 'hookMeta', key: 'id', value: idM[1] });
+          evts.push({ type: 'hookMeta', key: 'id', value: idM[1]! });
           return evts;
         }
         const exitM = META_EXIT.exec(line);
         if (exitM) {
-          evts.push({ type: 'hookMeta', key: 'exit', value: parseInt(exitM[1], 10) });
+          evts.push({ type: 'hookMeta', key: 'exit', value: parseInt(exitM[1]!, 10) });
           return evts;
         }
         const durM = META_DURATION.exec(line);
         if (durM) {
-          evts.push({ type: 'hookMeta', key: 'duration', value: parseFloat(durM[1]) });
+          evts.push({ type: 'hookMeta', key: 'duration', value: parseFloat(durM[1]!) });
           return evts;
         }
         if (META_MODIFIED.test(line)) {

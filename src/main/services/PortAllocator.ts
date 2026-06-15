@@ -78,7 +78,7 @@ export function allocatePorts(args: AllocatePortsArgs): PortAssignment[] {
     if ('port' in entry) {
       usedThisRun.add(entry.port);
     } else if (args.overrides[entry.envVar] !== undefined) {
-      usedThisRun.add(args.overrides[entry.envVar]);
+      usedThisRun.add(args.overrides[entry.envVar]!);
     }
   }
   const isFree = (p: number) => p <= MAX_PORT && !args.taken.has(p) && !usedThisRun.has(p);

@@ -33,7 +33,7 @@ describe('commitRunReducer', () => {
       { type: 'hookMeta', key: 'modified', value: true },
     ]);
     if (s.status !== 'running') throw new Error('expected running');
-    const h = s.hooks[0];
+    const h = s.hooks[0]!;
     expect(h.id).toBe('black');
     expect(h.exitCode).toBe(1);
     expect(h.modifiedFiles).toBe(true);
@@ -46,7 +46,7 @@ describe('commitRunReducer', () => {
       { type: 'hookDiagnostic', text: 'src/bar.py:2:1: F401' },
     ]);
     if (s.status !== 'running') throw new Error('expected running');
-    expect(s.hooks[0].diagnostic).toBe('src/foo.py:1:1: F401\nsrc/bar.py:2:1: F401');
+    expect(s.hooks[0]!.diagnostic).toBe('src/foo.py:1:1: F401\nsrc/bar.py:2:1: F401');
   });
 
   it('settles to success when close.exitCode is 0 and no failures', () => {

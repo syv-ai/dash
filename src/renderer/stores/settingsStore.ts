@@ -38,7 +38,7 @@ export const useSettings = create<SettingsStore>()(
       // override their generated value-only versions.
       const valueSetters = Object.fromEntries(
         SETTINGS_REGISTRY.map((e) => [
-          `set${e.field[0].toUpperCase()}${e.field.slice(1)}`,
+          `set${e.field[0]!.toUpperCase()}${e.field.slice(1)}`,
           (value: unknown) => set({ [e.field]: value } as Partial<SettingsState>),
         ]),
       ) as unknown as ValueSetters;

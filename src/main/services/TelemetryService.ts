@@ -235,7 +235,7 @@ export class TelemetryService {
 
   private static checkDailyActiveUser(): void {
     if (!this.config) return;
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toISOString().split('T')[0]!;
     if (this.config.lastActiveDate === today) return;
 
     this.config.lastActiveDate = today;

@@ -617,7 +617,7 @@ export function App() {
       const currentIdx = activeProjectTasks.findIndex((t) => t.id === activeTaskId);
       const nextIdx =
         (currentIdx + direction + activeProjectTasks.length) % activeProjectTasks.length;
-      setActiveTaskId(activeProjectTasks[nextIdx].id);
+      setActiveTaskId(activeProjectTasks[nextIdx]!.id);
     },
     [activeProjectTasks, activeTaskId],
   );
@@ -627,7 +627,7 @@ export function App() {
       if (rotationTasks.length === 0) return;
       const currentIdx = rotationTasks.findIndex((t) => t.id === activeTaskId);
       const nextIdx = (currentIdx + direction + rotationTasks.length) % rotationTasks.length;
-      const nextTask = rotationTasks[nextIdx];
+      const nextTask = rotationTasks[nextIdx]!;
       setActiveProjectId(nextTask.projectId);
       setActiveTaskId(nextTask.id);
     },
@@ -731,13 +731,13 @@ export function App() {
       }
       // Cmd+Shift+1..9 to jump to project by index
       if (e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey) {
-        const digit = e.code >= 'Digit1' && e.code <= 'Digit9' ? parseInt(e.code[5], 10) : 0;
+        const digit = e.code >= 'Digit1' && e.code <= 'Digit9' ? parseInt(e.code[5]!, 10) : 0;
         if (digit > 0 && digit <= projects.length) {
           e.preventDefault();
-          const projectId = projects[digit - 1].id;
+          const projectId = projects[digit - 1]!.id;
           setActiveProjectId(projectId);
           const tasks = (tasksByProject[projectId] || []).filter((t) => !t.archivedAt);
-          if (tasks.length > 0) setActiveTaskId(tasks[0].id);
+          if (tasks.length > 0) setActiveTaskId(tasks[0]!.id);
         }
       }
       // Cmd+1..9 to jump to task by index
@@ -745,7 +745,7 @@ export function App() {
         const digit = e.key >= '1' && e.key <= '9' ? parseInt(e.key, 10) : 0;
         if (digit > 0 && digit <= activeProjectTasks.length) {
           e.preventDefault();
-          setActiveTaskId(activeProjectTasks[digit - 1].id);
+          setActiveTaskId(activeProjectTasks[digit - 1]!.id);
         }
       }
       if (keybindings.focusTerminal && matchesBinding(e, keybindings.focusTerminal)) {
@@ -1175,7 +1175,7 @@ export function App() {
                           const files = gitStatus?.files ?? [];
                           if (files.length > 0) {
                             // Prefer the first unstaged file; otherwise first staged.
-                            const target = files.find((f) => !f.staged) ?? files[0];
+                            const target = files.find((f) => !f.staged) ?? files[0]!;
                             setDiffFile({
                               cwd: activeTask.path,
                               filePath: target.path,

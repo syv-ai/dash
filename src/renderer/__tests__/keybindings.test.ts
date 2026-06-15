@@ -9,7 +9,7 @@ describe('parseKeybindings', () => {
   it('merges a stored override onto the default binding', () => {
     const stored = JSON.stringify({ newTask: { ...DEFAULT_KEYBINDINGS.newTask, key: 'm' } });
     const result = parseKeybindings(stored);
-    expect(result.newTask.key).toBe('m');
+    expect(result.newTask!.key).toBe('m');
     expect(result.saveFile).toEqual(DEFAULT_KEYBINDINGS.saveFile); // untouched default still present
   });
 

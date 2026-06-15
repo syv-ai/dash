@@ -152,7 +152,7 @@ function DiffEditorBody({
           // concrete hash so the drawer highlight matches.
           setView((current) => {
             if (current.kind === 'commit' && current.hash === 'HEAD' && list.length > 0) {
-              return { kind: 'commit', hash: list[0].hash };
+              return { kind: 'commit', hash: list[0]!.hash };
             }
             return current;
           });
@@ -173,11 +173,11 @@ function DiffEditorBody({
   useEffect(() => {
     if (selectedPath !== '') return;
     if (view.kind === 'working') {
-      if (workingFiles.length > 0) setSelectedPath(workingFiles[0].path);
+      if (workingFiles.length > 0) setSelectedPath(workingFiles[0]!.path);
     } else if (view.kind === 'commit') {
-      if (commitFiles.length > 0) setSelectedPath(commitFiles[0].path);
+      if (commitFiles.length > 0) setSelectedPath(commitFiles[0]!.path);
     } else if (view.kind === 'branch') {
-      if (branchFiles.length > 0) setSelectedPath(branchFiles[0].path);
+      if (branchFiles.length > 0) setSelectedPath(branchFiles[0]!.path);
     }
   }, [selectedPath, view.kind, workingFiles, commitFiles, branchFiles]);
 

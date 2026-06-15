@@ -546,7 +546,7 @@ describe('listInstalled — externally-installed registry skills', () => {
     const marker = JSON.parse(readFileSync(path.join(dir, '.dash-skill.json'), 'utf-8'));
     expect(marker.repo).toBe('someone/skills');
     expect(marker.path).toBe('skills/demo');
-    expect(result.skills[0].catalog?.repo).toBe('someone/skills');
+    expect(result.skills[0]!.catalog?.repo).toBe('someone/skills');
     // No verified-custom sentinel when we bound successfully.
     expect(existsSync(path.join(dir, '.dash-skill-checked.json'))).toBe(false);
   });
@@ -564,7 +564,7 @@ describe('listInstalled — externally-installed registry skills', () => {
     const result = await SkillsService.listInstalled([tmpRoot]);
 
     expect(existsSync(path.join(dir, '.dash-skill.json'))).toBe(false);
-    expect(result.skills[0].catalog).toBeNull();
+    expect(result.skills[0]!.catalog).toBeNull();
 
     const sentinel = JSON.parse(readFileSync(path.join(dir, '.dash-skill-checked.json'), 'utf-8'));
     expect(sentinel.contentSha256).toBe(sha256(localContent));
@@ -622,7 +622,7 @@ describe('listInstalled — externally-installed registry skills', () => {
 
     expect(existsSync(path.join(dir, '.dash-skill.json'))).toBe(false);
     expect(existsSync(path.join(dir, '.dash-skill-checked.json'))).toBe(false);
-    expect(result.skills[0].catalog).toBeNull();
+    expect(result.skills[0]!.catalog).toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -634,7 +634,7 @@ describe('listInstalled — externally-installed registry skills', () => {
 
     expect(existsSync(path.join(dir, '.dash-skill.json'))).toBe(false);
     expect(existsSync(path.join(dir, '.dash-skill-checked.json'))).toBe(false);
-    expect(result.skills[0].catalog).toBeNull();
+    expect(result.skills[0]!.catalog).toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

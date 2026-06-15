@@ -204,7 +204,7 @@ async function detectClaudeCli(): Promise<void> {
     const findCmd = process.platform === 'win32' ? 'where.exe' : 'which';
     const { stdout } = await execFileAsync(findCmd, ['claude']);
     // where.exe may return multiple lines; take the first
-    const claudePath = stdout.trim().split(/\r?\n/)[0].trim();
+    const claudePath = stdout.trim().split(/\r?\n/)[0]!.trim();
     // .cmd files on Windows must be invoked through cmd.exe
     const { stdout: versionOut } =
       process.platform === 'win32'

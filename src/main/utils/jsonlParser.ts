@@ -162,7 +162,7 @@ export function parseJsonlLine(line: string): ParsedSessionMessage | null {
 export function deduplicateByRequestId(messages: ParsedSessionMessage[]): ParsedSessionMessage[] {
   const lastIndexByRequestId = new Map<string, number>();
   for (let i = 0; i < messages.length; i++) {
-    const rid = messages[i].requestId;
+    const rid = messages[i]!.requestId;
     if (rid) {
       lastIndexByRequestId.set(rid, i);
     }

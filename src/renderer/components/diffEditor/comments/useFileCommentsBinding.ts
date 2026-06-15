@@ -92,7 +92,7 @@ export function useFileCommentsBinding(args: Args): Binding {
           },
         ],
       );
-      return { ...sc, decorationId: ids[0] };
+      return { ...sc, decorationId: ids[0]! };
     });
     setLiveComments(hydrated);
     // `stored` is intentionally excluded from deps: store mutations
@@ -178,7 +178,7 @@ export function useFileCommentsBinding(args: Args): Binding {
           },
         ],
       );
-      const live: LiveComment = { ...created, decorationId: ids[0] };
+      const live: LiveComment = { ...created, decorationId: ids[0]! };
       setLiveComments((prev) => [...prev, live]);
       return live;
     },

@@ -19,7 +19,7 @@ export interface BillionToastContent {
 }
 
 export function getBillionToastContent(billionN: number, totalTokens: number): BillionToastContent {
-  const cmp = COMPARISONS[(billionN - 1) % COMPARISONS.length];
+  const cmp = COMPARISONS[(billionN - 1) % COMPARISONS.length]!;
   const words = totalTokens * TOKENS_TO_WORDS;
   const count = Math.max(1, Math.round(words / cmp.wordsPer));
   return {

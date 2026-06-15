@@ -107,8 +107,8 @@ export class GitService {
           const fatalMatch = msg.match(/fatal:\s*(.+)/i);
           fetchError = new Error(
             fatalMatch
-              ? `Git fetch failed: ${fatalMatch[1].trim()}`
-              : `Git fetch failed: ${msg.split('\n')[0].trim()}`,
+              ? `Git fetch failed: ${fatalMatch[1]!.trim()}`
+              : `Git fetch failed: ${msg.split('\n')[0]!.trim()}`,
           );
         }
         console.warn(`[GitService] fetch failed for ${cwd}: ${fetchError.message}`);
@@ -215,8 +215,8 @@ export class GitService {
       const parts = out.trim().split(/\s+/);
       return {
         hasUpstream: true,
-        behind: parseInt(parts[0], 10) || 0,
-        ahead: parseInt(parts[1], 10) || 0,
+        behind: parseInt(parts[0] ?? '', 10) || 0,
+        ahead: parseInt(parts[1] ?? '', 10) || 0,
       };
     } catch {
       return { hasUpstream: false, ahead: 0, behind: 0 };
@@ -255,8 +255,8 @@ export class GitService {
             filePath = parts.slice(8).join(' ');
           }
 
-          const x = xy[0]; // Index (staged) status
-          const y = xy[1]; // Working tree status
+          const x = xy![0]!; // Index (staged) status
+          const y = xy![1]!; // Working tree status
 
           // If staged (X is not '.' and not '?')
           if (x !== '.' && x !== '?') {
@@ -378,8 +378,8 @@ export class GitService {
     for (const line of output.split('\n').filter(Boolean)) {
       const parts = line.split('\t');
       if (parts.length < 3) continue;
-      const additions = parts[0] === '-' ? 0 : parseInt(parts[0], 10) || 0;
-      const deletions = parts[1] === '-' ? 0 : parseInt(parts[1], 10) || 0;
+      const additions = parts[0] === '-' ? 0 : parseInt(parts[0]!, 10) || 0;
+      const deletions = parts[1] === '-' ? 0 : parseInt(parts[1]!, 10) || 0;
       const filePath = parts[2];
       const match = files.find((f) => f.path === filePath && f.staged === staged);
       if (match) {
@@ -616,8 +616,8 @@ export class GitService {
         const parts = out.trim().split(/\s+/);
         return {
           hasUpstream: true,
-          behind: parseInt(parts[0], 10) || 0,
-          ahead: parseInt(parts[1], 10) || 0,
+          behind: parseInt(parts[0] ?? '', 10) || 0,
+          ahead: parseInt(parts[1] ?? '', 10) || 0,
         };
       } catch (error) {
         // Expected when this ref isn't a valid upstream (no tracking branch,
@@ -674,12 +674,12 @@ export class GitService {
       slice.map((b) => this.getBranchAheadBehind(cwd, b.name)),
     );
     for (let i = 0; i < results.length; i++) {
-      const r = results[i];
+      const r = results[i]!;
       if (r.status === 'fulfilled' && r.value.hasUpstream) {
-        slice[i].upstream = { ahead: r.value.ahead, behind: r.value.behind };
+        slice[i]!.upstream = { ahead: r.value.ahead, behind: r.value.behind };
       } else if (r.status === 'rejected') {
         console.error('[GitService.enrichBranchesWithAheadBehind] rejected', {
-          branch: slice[i].name,
+          branch: slice[i]!.name,
           reason: r.reason,
         });
       }
@@ -751,12 +751,12 @@ export class GitService {
     const commits: CommitNode[] = lines.map((line) => {
       const parts = line.split('\0');
       return {
-        hash: parts[0],
-        shortHash: parts[1],
+        hash: parts[0]!,
+        shortHash: parts[1]!,
         parents: parts[2] ? parts[2].split(' ') : [],
-        authorName: parts[3],
-        authorDate: parseInt(parts[4], 10) || 0,
-        subject: parts[5],
+        authorName: parts[3]!,
+        authorDate: parseInt(parts[4]!, 10) || 0,
+        subject: parts[5]!,
         refs: this.parseRefs(parts[6] || ''),
       };
     });
@@ -783,12 +783,12 @@ export class GitService {
     const out = await git(cwd, ['log', '-1', `--format=${format}`, hash]);
     const parts = out.trim().split('\0');
     const commit: CommitNode = {
-      hash: parts[0],
-      shortHash: parts[1],
+      hash: parts[0]!,
+      shortHash: parts[1]!,
       parents: parts[2] ? parts[2].split(' ') : [],
-      authorName: parts[3],
-      authorDate: parseInt(parts[4], 10) || 0,
-      subject: parts[5],
+      authorName: parts[3]!,
+      authorDate: parseInt(parts[4]!, 10) || 0,
+      subject: parts[5]!,
       refs: this.parseRefs(parts[6] || ''),
     };
 
@@ -810,9 +810,9 @@ export class GitService {
         /(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/,
       );
       if (match) {
-        filesChanged = parseInt(match[1], 10) || 0;
-        additions = parseInt(match[2], 10) || 0;
-        deletions = parseInt(match[3], 10) || 0;
+        filesChanged = parseInt(match[1]!, 10) || 0;
+        additions = parseInt(match[2] ?? '', 10) || 0;
+        deletions = parseInt(match[3] ?? '', 10) || 0;
       }
     } catch {
       // root commit or error
@@ -855,11 +855,11 @@ export class GitService {
     // Build a map from hash → row index for connection endpoints
     const rowIndex = new Map<string, number>();
     for (let i = 0; i < commits.length; i++) {
-      rowIndex.set(commits[i].hash, i);
+      rowIndex.set(commits[i]!.hash, i);
     }
 
     for (let row = 0; row < commits.length; row++) {
-      const commit = commits[row];
+      const commit = commits[row]!;
       const connections: GraphConnection[] = [];
 
       // Determine this commit's lane
@@ -874,7 +874,7 @@ export class GitService {
 
       // Process parents
       for (let pi = 0; pi < commit.parents.length; pi++) {
-        const parentHash = commit.parents[pi];
+        const parentHash = commit.parents[pi]!;
         const parentRow = rowIndex.get(parentHash);
 
         if (activeLanes.has(parentHash)) {
@@ -964,8 +964,8 @@ export class GitService {
           lines: [],
         };
         hunks.push(currentHunk);
-        oldLine = parseInt(hunkMatch[1], 10);
-        newLine = parseInt(hunkMatch[2], 10);
+        oldLine = parseInt(hunkMatch[1]!, 10);
+        newLine = parseInt(hunkMatch[2]!, 10);
         continue;
       }
 

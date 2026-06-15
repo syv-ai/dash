@@ -142,14 +142,14 @@ describe('projectsStore loadProjects / loadTasks', () => {
       data: [proj('p1', { name: 'C:\\repos\\app' })],
     });
     await useProjects.getState().loadProjects();
-    expect(useProjects.getState().projects[0].name).toBe('app');
+    expect(useProjects.getState().projects[0]!.name).toBe('app');
   });
 
   it('loadTasks stores tasks under the project id', async () => {
     const useProjects = await freshStore();
     api.getTasks.mockResolvedValue({ success: true, data: [task('t1', 'p1')] });
     await useProjects.getState().loadTasks('p1');
-    expect(useProjects.getState().tasksByProject.p1.map((t) => t.id)).toEqual(['t1']);
+    expect(useProjects.getState().tasksByProject.p1!.map((t) => t.id)).toEqual(['t1']);
   });
 });
 
@@ -176,7 +176,7 @@ describe('projectsStore reordering', () => {
       },
     });
     useProjects.getState().reorderTasks('p1', [task('t2', 'p1'), task('t1', 'p1')]);
-    expect(useProjects.getState().tasksByProject.p1.map((t) => t.id)).toEqual(['t2', 't1', 'a1']);
+    expect(useProjects.getState().tasksByProject.p1!.map((t) => t.id)).toEqual(['t2', 't1', 'a1']);
   });
 
   it('commitTaskReorder refetches and toasts on failure', async () => {
@@ -185,7 +185,7 @@ describe('projectsStore reordering', () => {
     api.getTasks.mockResolvedValue({ success: true, data: [task('t1', 'p1')] });
     await useProjects.getState().commitTaskReorder('p1', [task('t2', 'p1')]);
     expect(api.getTasks).toHaveBeenCalledWith('p1');
-    expect(useProjects.getState().tasksByProject.p1.map((t) => t.id)).toEqual(['t1']);
+    expect(useProjects.getState().tasksByProject.p1!.map((t) => t.id)).toEqual(['t1']);
   });
 });
 
@@ -206,7 +206,7 @@ describe('projectsStore archive/restore/close/update', () => {
     });
     await useProjects.getState().archiveTask('t1');
     expect(api.archiveTask).toHaveBeenCalledWith('t1');
-    expect(useProjects.getState().tasksByProject.p1[0].archivedAt).toBe('5');
+    expect(useProjects.getState().tasksByProject.p1![0]!.archivedAt).toBe('5');
   });
 
   it('restoreTask calls IPC and reloads the owning project', async () => {

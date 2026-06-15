@@ -12,5 +12,5 @@ export const LANE_COLORS = [
 ];
 
 export function getLaneColor(index: number): string {
-  return LANE_COLORS[index % LANE_COLORS.length];
+  return LANE_COLORS[index % LANE_COLORS.length]!;
 }

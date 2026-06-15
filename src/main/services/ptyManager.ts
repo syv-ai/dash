@@ -532,7 +532,7 @@ export async function startPty(options: {
   const shellRest = options.id.startsWith(shellPrefix)
     ? options.id.slice(shellPrefix.length)
     : options.id;
-  const shellTaskId = shellRest.split(':')[0];
+  const shellTaskId = shellRest.split(':')[0]!;
 
   const record: PtyRecord = {
     proc,

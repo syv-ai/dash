@@ -25,7 +25,7 @@ describe('reportMainProcessError', () => {
       expect.any(Error),
     );
     expect(capture).toHaveBeenCalledTimes(1);
-    const [event, props] = capture.mock.calls[0];
+    const [event, props] = capture.mock.calls[0]!;
     expect(event).toBe('$exception');
     expect(props).toMatchObject({
       $exception_type: 'TypeError',
@@ -39,7 +39,7 @@ describe('reportMainProcessError', () => {
   it('coerces a non-Error rejection reason into a reported Error', () => {
     reportMainProcessError('unhandledRejection', 'plain string reason');
     expect(capture).toHaveBeenCalledTimes(1);
-    const props = capture.mock.calls[0][1] as Record<string, unknown>;
+    const props = capture.mock.calls[0]![1] as Record<string, unknown>;
     expect(props.$exception_message).toBe('plain string reason');
     expect(props.source).toBe('unhandledRejection');
   });

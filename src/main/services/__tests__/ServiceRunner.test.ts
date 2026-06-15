@@ -78,27 +78,27 @@ describe('start', () => {
       featureId: 'ports',
       id: 'service:t1:web',
     });
-    const opts = deps.startPty.mock.calls[0][0] as Record<string, unknown>;
+    const opts = deps.startPty.mock.calls[0]![0] as Record<string, unknown>;
     expect(opts.command).toBe('/bin/zsh');
     expect(opts.args).toEqual(['-lc', 'pnpm dev']);
     expect(opts.cwd).toBe('/wt/apps/web');
     expect(opts.kind).toBe('service');
-    expect(runner.status('t1').Web.ownedTabId).toBe('service:t1:web');
+    expect(runner.status('t1').Web!.ownedTabId).toBe('service:t1:web');
     expect(deps.notifyChanged).toHaveBeenCalledWith('t1');
   });
 
   it('spawns with the allocated port env (the whole point of the wiring)', async () => {
     await runner.start('t1', port({ runCommand: 'npm run server' }));
     expect(deps.portEnv).toHaveBeenCalledWith('t1');
-    const opts = deps.startPty.mock.calls[0][0] as Record<string, unknown>;
+    const opts = deps.startPty.mock.calls[0]![0] as Record<string, unknown>;
     expect(opts.env).toEqual({ SERVER_PORT: '11280' });
   });
 
   it('clears the stale tab snapshot before spawning a fresh run', async () => {
     await runner.start('t1', port({ runCommand: 'npm run server' }));
     expect(deps.clearSnapshot).toHaveBeenCalledWith('service:t1:web');
-    const snapOrder = deps.clearSnapshot.mock.invocationCallOrder[0];
-    const spawnOrder = deps.startPty.mock.invocationCallOrder[0];
+    const snapOrder = deps.clearSnapshot.mock.invocationCallOrder[0]!;
+    const spawnOrder = deps.startPty.mock.invocationCallOrder[0]!;
     expect(snapOrder).toBeLessThan(spawnOrder);
   });
 
@@ -176,7 +176,7 @@ describe('logs', () => {
     expect(runner.status('t1').Web?.ownedTabId ?? null).toBe(null);
     // Logs commands may reference ports too, and a reused logs tab id must
     // not replay the previous tail.
-    const opts = deps.startPty.mock.calls[0][0] as Record<string, unknown>;
+    const opts = deps.startPty.mock.calls[0]![0] as Record<string, unknown>;
     expect(opts.env).toEqual({ SERVER_PORT: '11280' });
     expect(deps.clearSnapshot).toHaveBeenCalledWith('service:t1:web:logs');
   });
@@ -207,18 +207,18 @@ describe('service self-exit', () => {
     await runner.start('t1', p);
     deps.notifyChanged.mockClear();
 
-    const opts = deps.startPty.mock.calls[0][0] as { onExit?: () => void };
+    const opts = deps.startPty.mock.calls[0]![0] as { onExit?: () => void };
     expect(typeof opts.onExit).toBe('function');
     opts.onExit!();
 
-    expect(runner.status('t1').Web.ownedTabId).toBe(null);
+    expect(runner.status('t1').Web!.ownedTabId).toBe(null);
     expect(deps.notifyChanged).toHaveBeenCalledWith('t1');
   });
 
   it('logs tabs do not register an exit hook (their death is not a status change)', async () => {
     deps.ptyAlive.mockReturnValue(false);
     await runner.logs('t1', port({ logsCommand: 'docker compose logs -f web' }));
-    const opts = deps.startPty.mock.calls[0][0] as { onExit?: () => void };
+    const opts = deps.startPty.mock.calls[0]![0] as { onExit?: () => void };
     expect(opts.onExit).toBeUndefined();
   });
 });
@@ -229,6 +229,6 @@ describe('status', () => {
     deps.getPorts.mockReturnValue([p]);
     await runner.start('t1', p);
     deps.ptyAlive.mockReturnValue(false);
-    expect(runner.status('t1').Web.ownedTabId).toBe(null);
+    expect(runner.status('t1').Web!.ownedTabId).toBe(null);
   });
 });

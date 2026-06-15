@@ -883,7 +883,7 @@ export function SettingsModal({
   }
 
   const groups = groupByCategory(keybindings);
-  const activeNav = NAV_ITEMS.find((n) => n.id === tab) ?? NAV_ITEMS[0];
+  const activeNav = NAV_ITEMS.find((n) => n.id === tab) ?? NAV_ITEMS[0]!;
   const updateAvailable = updateStatus === 'available' || updateStatus === 'ready';
 
   // Sliding sidebar highlight refs

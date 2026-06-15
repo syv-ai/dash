@@ -306,12 +306,12 @@ describe('parseTarVerbose', () => {
 
   it('classifies hardlinks as hardlink', () => {
     const out = parseTarVerbose('hrw-r--r-- user 1234 date hardlink');
-    expect(out[0].type).toBe('hardlink');
+    expect(out[0]!.type).toBe('hardlink');
   });
 
   it('falls back to "other" for unknown type chars', () => {
     const out = parseTarVerbose('crw-r--r-- user 0 date weird-device');
-    expect(out[0].type).toBe('other');
+    expect(out[0]!.type).toBe('other');
   });
 });
 

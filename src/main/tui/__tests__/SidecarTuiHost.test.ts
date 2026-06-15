@@ -74,7 +74,7 @@ describe('SidecarTuiHost', () => {
     expect(tabId).toBe('tui:ports:t1');
     expect(host.isActive('ports', 't1')).toBe(true);
     expect(startPty).toHaveBeenCalledOnce();
-    const env = (startPty.mock.calls[0][0] as { env: Record<string, string> }).env;
+    const env = (startPty.mock.calls[0]![0] as { env: Record<string, string> }).env;
     expect(env.DASH_TUI_FEATURE).toBe('ports');
     expect(env.ELECTRON_RUN_AS_NODE).toBe('1');
     expect(env.DASH_TUI_SOCKET).toContain('tui-ports-t1-');
