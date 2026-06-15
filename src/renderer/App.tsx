@@ -1082,6 +1082,8 @@ export function App() {
                   ? (tasksByProject[activeProjectId] || []).filter((t) => t.archivedAt)
                   : []
               }
+              onCloseTask={handleCloseTask}
+              onTaskSettings={handleTaskSettings}
               onDeleteTask={handleDeleteTask}
               onArchiveTask={(id) => {
                 void handleArchiveTask(id);

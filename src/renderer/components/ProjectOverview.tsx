@@ -11,6 +11,8 @@ import {
   Globe,
   GitFork,
   Code2,
+  Power,
+  Archive,
   ChevronRight,
   ChevronDown,
   ArchiveRestore,
@@ -29,6 +31,8 @@ interface ProjectOverviewProps {
   onProjectSettings: () => void;
   onShowCommitGraph: () => void;
   onDeleteProject: () => void;
+  onCloseTask: (id: string) => void;
+  onTaskSettings: (id: string) => void;
   onDeleteTask: (id: string) => void;
   onArchiveTask: (id: string) => void;
   onRestoreTask: (id: string) => void;
@@ -104,6 +108,8 @@ export function ProjectOverview({
   onProjectSettings,
   onShowCommitGraph,
   onDeleteProject,
+  onCloseTask,
+  onTaskSettings,
   onDeleteTask,
   onArchiveTask,
   onRestoreTask,
@@ -364,11 +370,36 @@ export function ProjectOverview({
                         })()}
                     </div>
 
-                    {/* Delete — bottom right */}
+                    {/* Actions — bottom right. Same group as the sidebar task card:
+                        Close (only when the task has an active session), Settings,
+                        Archive, Delete. */}
                     <div
-                      className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="absolute bottom-3 right-3 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
                       onClick={(e) => e.stopPropagation()}
                     >
+                      {activity?.state && (
+                        <IconButton
+                          onClick={() => onCloseTask(task.id)}
+                          title="Close task"
+                          size="sm"
+                        >
+                          <Power size={12} strokeWidth={1.8} />
+                        </IconButton>
+                      )}
+                      <IconButton
+                        onClick={() => onTaskSettings(task.id)}
+                        title="Task settings"
+                        size="sm"
+                      >
+                        <Settings size={12} strokeWidth={1.8} />
+                      </IconButton>
+                      <IconButton
+                        onClick={() => onArchiveTask(task.id)}
+                        title="Archive task"
+                        size="sm"
+                      >
+                        <Archive size={12} strokeWidth={1.8} />
+                      </IconButton>
                       <IconButton
                         onClick={() => onDeleteTask(task.id)}
                         title="Delete task"

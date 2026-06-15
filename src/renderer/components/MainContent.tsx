@@ -101,6 +101,8 @@ interface MainContentProps {
   onShowCommitGraph?: () => void;
   onDeleteProject?: () => void;
   archivedTasks?: Task[];
+  onCloseTask?: (id: string) => void;
+  onTaskSettings?: (id: string) => void;
   onDeleteTask?: (id: string) => void;
   onArchiveTask?: (id: string) => void;
   onRestoreTask?: (id: string) => void;
@@ -124,6 +126,8 @@ export function MainContent({
   onShowCommitGraph,
   onDeleteProject,
   archivedTasks = [],
+  onCloseTask,
+  onTaskSettings,
   onDeleteTask,
   onArchiveTask,
   onRestoreTask,
@@ -309,6 +313,8 @@ export function MainContent({
             onProjectSettings={() => onProjectSettings?.()}
             onShowCommitGraph={() => onShowCommitGraph?.()}
             onDeleteProject={() => onDeleteProject?.()}
+            onCloseTask={(id) => onCloseTask?.(id)}
+            onTaskSettings={(id) => onTaskSettings?.(id)}
             onDeleteTask={(id) => onDeleteTask?.(id)}
             onArchiveTask={(id) => onArchiveTask?.(id)}
             onRestoreTask={(id) => onRestoreTask?.(id)}
