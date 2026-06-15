@@ -1,39 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
-import type { ITheme as XtermTheme } from 'xterm';
-import { Modal } from '../ui/Modal';
 import type { FileChange } from '../../../shared/types';
 import { useGit } from '../../stores/gitStore';
 import { EditorSidebar } from './EditorSidebar';
 import { EditorPane } from './EditorPane';
 import type { CommitSummary, EditorView } from './types';
+import type { DiffEditorModalProps } from './DiffEditorModal';
 import { useCommentsStore } from './comments/useCommentsStore';
 import { CommentsProvider } from './comments/CommentsContext';
 
-interface DiffEditorProps {
-  cwd: string;
-  /** File the user clicked, or '' to let the editor pick the first file in the view. */
-  initialFilePath: string;
-  /** Whether the clicked file was the staged version. Used only when initialView is omitted. */
-  initialStaged: boolean;
-  /** Initial view. Defaults to working tree at HEAD/index. Pass `{kind:'commit', hash:'HEAD'}`
-   *  to open at the latest commit (the editor resolves the sentinel once commits load). */
-  initialView?: EditorView;
-  activeTaskId: string | null;
-  terminalTheme: XtermTheme;
-  isDark: boolean;
-  onClose: () => void;
-}
-
-export function DiffEditor(props: DiffEditorProps) {
-  return (
-    <Modal onClose={props.onClose} size="w-[92vw] h-[88vh]">
-      <DiffEditorBody {...props} />
-    </Modal>
-  );
-}
-
-function DiffEditorBody({
+/** Composition-root workspace: owns view state, drives the data loaders, and
+ *  lays out the sidebar + editor pane. Rendered inside <DiffEditorModal>. */
+export function DiffEditor({
   cwd,
   initialFilePath,
   initialStaged,
@@ -42,7 +20,7 @@ function DiffEditorBody({
   terminalTheme,
   isDark,
   onClose,
-}: DiffEditorProps) {
+}: DiffEditorModalProps) {
   const gitStatus = useGit((s) => s.gitStatus);
   const [view, setView] = useState<EditorView>(
     () => initialView ?? { kind: 'working', ref: initialStaged ? 'index' : 'HEAD' },
@@ -292,5 +270,3 @@ function DiffEditorBody({
     </div>
   );
 }
-
-export default DiffEditor;

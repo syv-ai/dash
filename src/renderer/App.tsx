@@ -11,7 +11,7 @@ import { MainContent } from './components/MainContent';
 import { openInIde } from './lib/openInIde';
 import { RightInspector } from './components/rightInspector/RightInspector';
 import { PortsDrawerWrapper } from './components/rightInspector/PortsDrawerWrapper';
-const DiffEditor = lazy(() => import('./components/diffEditor/DiffEditor'));
+const DiffEditorModal = lazy(() => import('./components/diffEditor/DiffEditorModal'));
 import { ShellDrawerWrapper } from './components/ShellDrawerWrapper';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
 import { SkillsBrowserModal } from './components/SkillsBrowserModal';
@@ -1371,7 +1371,7 @@ export function App() {
 
       {diffFile && (
         <Suspense fallback={null}>
-          <DiffEditor
+          <DiffEditorModal
             cwd={diffFile.cwd}
             initialFilePath={diffFile.filePath}
             initialStaged={diffFile.staged}
