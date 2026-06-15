@@ -67,6 +67,7 @@ export interface UiActions {
   // Data-mutating UI flows (own their modal state; delegate domain ops to projectsStore)
   openFolder: () => Promise<void>;
   cloneRepo: (url: string) => Promise<void>;
+  finishProjectCreation: (projectId: string) => Promise<void>;
   confirmDeleteProject: (options: DeleteProjectOptions) => Promise<void>;
   confirmDeleteTask: (options?: DeleteTaskOptions) => Promise<void>;
 }
@@ -171,6 +172,16 @@ export const useUi = create<UiStore>((set, get) => ({
     } catch (err) {
       set({ cloneStatus: { loading: false, error: String(err) } });
     }
+  },
+
+  finishProjectCreation: async (projectId) => {
+    set({ showAddProjectModal: false });
+    await useProjects.getState().loadProjects();
+    useProjects.getState().setActiveTask(null);
+    useProjects.getState().setActiveProject(projectId);
+    useProjects.getState().setJustCreatedProject(projectId);
+    const project = useProjects.getState().projects.find((p) => p.id === projectId);
+    promptAdoSetupIfNeeded(set, projectId, project?.gitRemote ?? null);
   },
 
   confirmDeleteProject: async (options) => {

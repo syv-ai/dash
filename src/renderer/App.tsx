@@ -16,7 +16,7 @@ import { ShellDrawerWrapper } from './components/ShellDrawerWrapper';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
 import { SkillsBrowserModal } from './components/SkillsBrowserModal';
 import { TaskModal } from './components/TaskModal';
-import { AddProjectModal } from './components/AddProjectModal';
+import { NewProjectWizard } from './components/newProject/NewProjectWizard';
 import { DeleteTaskModal } from './components/DeleteTaskModal';
 import { DeleteProjectModal } from './components/DeleteProjectModal';
 import { RemoteControlModal } from './components/RemoteControlModal';
@@ -81,8 +81,7 @@ export function App() {
   const setTaskModalProjectId = useUi((s) => s.setTaskModalProjectId);
   const showAddProjectModal = useUi((s) => s.showAddProjectModal);
   const setShowAddProjectModal = useUi((s) => s.setShowAddProjectModal);
-  const cloneStatus = useUi((s) => s.cloneStatus);
-  const setCloneStatus = useUi((s) => s.setCloneStatus);
+  const finishProjectCreation = useUi((s) => s.finishProjectCreation);
   const deleteTaskTarget = useUi((s) => s.deleteTaskTarget);
   const setDeleteTaskTarget = useUi((s) => s.setDeleteTaskTarget);
   const deleteProjectTarget = useUi((s) => s.deleteProjectTarget);
@@ -696,7 +695,6 @@ export function App() {
       }
       if (keybindings.openFolder && matchesBinding(e, keybindings.openFolder)) {
         e.preventDefault();
-        setCloneStatus({ loading: false, error: null });
         setShowAddProjectModal(true);
       }
       if (keybindings.closeDiff && matchesBinding(e, keybindings.closeDiff)) {
@@ -859,8 +857,6 @@ export function App() {
   const handleRestoreTask = useProjects((s) => s.restoreTask);
   const handleCloseTask = useProjects((s) => s.closeTask);
   // Data-mutating UI flows live in uiStore (own their modal state).
-  const handleOpenFolder = useUi((s) => s.openFolder);
-  const handleCloneRepo = useUi((s) => s.cloneRepo);
   const handleDeleteProjectConfirm = useUi((s) => s.confirmDeleteProject);
   const handleDeleteTaskConfirm = useUi((s) => s.confirmDeleteTask);
 
@@ -975,7 +971,6 @@ export function App() {
               setActiveTaskId(null);
             }}
             onOpenFolder={() => {
-              setCloneStatus({ loading: false, error: null });
               setShowAddProjectModal(true);
             }}
             onDeleteProject={handleDeleteProject}
@@ -1208,15 +1203,9 @@ export function App() {
       </PanelGroup>
 
       {showAddProjectModal && (
-        <AddProjectModal
+        <NewProjectWizard
           onClose={() => setShowAddProjectModal(false)}
-          onOpenFolder={() => {
-            void handleOpenFolder();
-          }}
-          onCloneRepo={(url) => {
-            void handleCloneRepo(url);
-          }}
-          cloneStatus={cloneStatus}
+          onCreated={(projectId) => void finishProjectCreation(projectId)}
         />
       )}
 
