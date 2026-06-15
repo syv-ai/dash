@@ -310,8 +310,12 @@ function FolderEntry({
   onSelectFile: (path: string) => void;
   commentCounts: Map<string, number>;
 }) {
-  // Default-open if any descendant is the current selection or changed.
-  const [open, setOpen] = useState<boolean>(() => folder.changedCount > 0);
+  // Default-open if the folder has changes OR it contains the file the editor
+  // opened to — so that file is never hidden in a collapsed folder. Computed
+  // once at mount (lazy init); the user's collapse/expand fully owns it after.
+  const [open, setOpen] = useState<boolean>(
+    () => folder.changedCount > 0 || selectedPath.startsWith(`${folder.fullPath}/`),
+  );
   const tint = folder.dominantStatus ? FOLDER_TINT[folder.dominantStatus] : 'text-foreground/90';
   const commentCount = folderCommentCount(folder, commentCounts);
   return (
