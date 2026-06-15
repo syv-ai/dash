@@ -175,14 +175,5 @@
     "vite": "^5.4.0",
     "vitest": "^2.1.9",
     "xterm": "^5.3.0"
-  },
-  "lint-staged": {
-    "*.{ts,tsx}": [
-      "prettier --write",
-      "eslint --fix"
-    ],
-    "*.{json,md,css}": [
-      "prettier --write"
-    ]
   }
 }
