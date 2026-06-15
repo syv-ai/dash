@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { openInIde } from '../lib/openInIde';
 import { useRuntime } from '../stores/runtimeStore';
+import { useGit } from '../stores/gitStore';
 import {
   GitBranch,
   Plus,
@@ -18,6 +19,8 @@ import { linkedItemUrl } from '../../shared/urls';
 import { IconButton } from './ui/IconButton';
 import { Tooltip } from './ui/Tooltip';
 import { TaskActions } from './TaskActions';
+import { TokenBadge } from './TokenBadge';
+import { PrBadge } from './ui/PrBadge';
 
 interface ProjectOverviewProps {
   project: Project;
@@ -112,11 +115,22 @@ export function ProjectOverview({
   onRestoreTask,
 }: ProjectOverviewProps) {
   const taskActivity = useRuntime((s) => s.taskActivity);
+  const prByTask = useGit((s) => s.prByTask);
+  const detectProjectPrs = useGit((s) => s.detectProjectPrs);
+  const projectTokens = useRuntime((s) => s.projectTokenStats[project.id]);
   const [showArchived, setShowArchived] = useState(false);
   const busyCount = tasks.filter((t) => taskActivity[t.id]?.state === 'busy').length;
   const waitingCount = tasks.filter((t) => taskActivity[t.id]?.state === 'waiting').length;
   const errorCount = tasks.filter((t) => taskActivity[t.id]?.state === 'error').length;
   const idleCount = tasks.filter((t) => taskActivity[t.id]?.state === 'idle').length;
+
+  // Fetch each task's PR when the project view opens (or a task/branch set
+  // changes). Keyed on a stable branch signature, not the tasks array ref, so
+  // routine store updates don't re-spam the gh/ado lookups. No polling.
+  const branchSig = tasks.map((t) => `${t.id}:${t.branch}`).join('|');
+  useEffect(() => {
+    void detectProjectPrs(project, tasks);
+  }, [project.id, branchSig, detectProjectPrs]);
 
   return (
     <div className="h-full flex flex-col bg-background">
@@ -216,6 +230,13 @@ export function ProjectOverview({
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                   {idleCount} idle
                 </span>
+              )}
+              {projectTokens && projectTokens.totalTokens > 0 && (
+                <TokenBadge
+                  totalTokens={projectTokens.totalTokens}
+                  totalCostUsd={projectTokens.totalCostUsd}
+                  size="sm"
+                />
               )}
             </div>
           )}
@@ -350,26 +371,39 @@ export function ProjectOverview({
                             </div>
                           );
                         })()}
+
+                      {prByTask[task.id] && (
+                        <div className="flex items-start gap-1.5 text-muted-foreground">
+                          <span className="flex-shrink-0 text-muted-foreground/70 mt-0.5">PR:</span>
+                          <PrBadge prInfo={prByTask[task.id]!} size="sm" />
+                        </div>
+                      )}
                     </div>
 
-                    {/* Actions — bottom right. Shared toolbar, identical to the
-                        sidebar task card. */}
-                    <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <TaskActions
-                        hasActiveSession={!!activity?.state}
-                        onOpenIde={() => void openInIde(task.path || project.path)}
-                        onClose={() => onCloseTask(task.id)}
-                        onSettings={() => onTaskSettings(task.id)}
-                        onArchive={() => onArchiveTask(task.id)}
-                        onDelete={() => onDeleteTask(task.id)}
-                      />
-                    </div>
-
-                    {/* Footer */}
-                    <div className="mt-3 pt-2.5 border-t border-border/50">
-                      <span className="text-[10px] text-muted-foreground">
-                        Updated {timeAgo(task.updatedAt)}
-                      </span>
+                    {/* Footer: Updated + tokens on the left; the action toolbar
+                        fades in on hover, right-aligned on the same row.
+                        opacity-0 still reserves layout, so nothing shifts. */}
+                    <div className="mt-3 pt-2.5 border-t border-border/50 flex items-center justify-between gap-2 min-w-0">
+                      <div className="flex items-center gap-2 min-w-0 text-[10px] text-muted-foreground">
+                        <span className="flex-shrink-0">Updated {timeAgo(task.updatedAt)}</span>
+                        {task.totalTokens > 0 && (
+                          <TokenBadge
+                            totalTokens={task.totalTokens}
+                            totalCostUsd={task.totalCostUsd}
+                            size="sm"
+                          />
+                        )}
+                      </div>
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                        <TaskActions
+                          hasActiveSession={!!activity?.state}
+                          onOpenIde={() => void openInIde(task.path || project.path)}
+                          onClose={() => onCloseTask(task.id)}
+                          onSettings={() => onTaskSettings(task.id)}
+                          onArchive={() => onArchiveTask(task.id)}
+                          onDelete={() => onDeleteTask(task.id)}
+                        />
+                      </div>
                     </div>
                   </div>
                 );

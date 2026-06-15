@@ -9,8 +9,6 @@ import {
   Code2,
   GitBranch,
   FolderGit2,
-  GitPullRequest,
-  GitMerge,
   Globe,
   PanelLeftClose,
   PanelLeftOpen,
@@ -21,6 +19,7 @@ import type { Project, Task, LinkedItem } from '../../shared/types';
 import { branchUrl, linkedItemUrl } from '../../shared/urls';
 import { Tooltip } from './ui/Tooltip';
 import { TokenBadge } from './TokenBadge';
+import { PrBadge } from './ui/PrBadge';
 
 /**
  * Colored, linkable badges for the GitHub issues / ADO work items attached to a
@@ -230,27 +229,7 @@ export function MainContent({
           </Tooltip>
         )}
 
-        {activeTask && prInfo && prInfo.state !== 'closed' && (
-          <Tooltip content={`${prInfo.title} (${prInfo.state})`}>
-            <a
-              href={prInfo.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`inline-flex items-center gap-1 px-2 py-[3px] rounded font-mono text-[11px] transition-colors ${
-                prInfo.state === 'merged'
-                  ? 'bg-primary/10 text-primary hover:bg-primary/20'
-                  : 'bg-[hsl(var(--git-added))]/10 text-[hsl(var(--git-added))] hover:bg-[hsl(var(--git-added))]/20'
-              }`}
-            >
-              {prInfo.state === 'merged' ? (
-                <GitMerge size={11} strokeWidth={2} />
-              ) : (
-                <GitPullRequest size={11} strokeWidth={2} />
-              )}
-              PR #{prInfo.number}
-            </a>
-          </Tooltip>
-        )}
+        {activeTask && prInfo && <PrBadge prInfo={prInfo} />}
 
         {activeTask && (
           <Tooltip content="Remote control">

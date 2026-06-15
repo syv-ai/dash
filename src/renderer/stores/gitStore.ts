@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { GitStatus, PullRequestInfo, Project, Task } from '../../shared/types';
 import { isAdoRemote } from '../../shared/urls';
+import { prDetectionTargets } from './prDetectionTargets';
 import { useProjects, selectActiveTask } from './projectsStore';
 
 const GIT_POLL_INTERVAL = 5000;
@@ -24,6 +25,8 @@ export interface GitState {
   gitLoading: boolean;
   diffFile: DiffFileTarget | null;
   prInfo: PullRequestInfo | null;
+  /** PR per task for the ProjectView cards, keyed by task id (null = none). */
+  prByTask: Record<string, PullRequestInfo | null>;
   showCommitGraph: boolean;
 }
 
@@ -45,6 +48,8 @@ export interface GitActions {
   stopWatch: () => void;
   detectPr: (project: Project | null, task: Task | null, branch: string | null) => void;
   stopPrDetect: () => void;
+  /** Fetch each non-default-branch task's PR in parallel; fill prByTask. */
+  detectProjectPrs: (project: Project, tasks: Task[]) => Promise<void>;
 }
 
 export type GitStore = GitState & GitActions;
@@ -58,6 +63,7 @@ export const useGit = create<GitStore>((set, get) => ({
   gitLoading: false,
   diffFile: null,
   prInfo: null,
+  prByTask: {},
   showCommitGraph: false,
 
   setDiffFile: (v) => set({ diffFile: v }),
@@ -204,5 +210,23 @@ export const useGit = create<GitStore>((set, get) => ({
   stopPrDetect: () => {
     prTeardown?.();
     prTeardown = null;
+  },
+
+  detectProjectPrs: async (project, tasks) => {
+    const targets = prDetectionTargets(project, tasks);
+    const results = await Promise.all(
+      targets.map(async (t) => {
+        try {
+          const resp =
+            t.provider === 'ado' && t.remote
+              ? await window.electronAPI.adoGetPrForBranch(t.branch, t.remote, t.projectId)
+              : await window.electronAPI.githubGetPrForBranch(t.cwd, t.branch);
+          return [t.taskId, resp.success ? (resp.data ?? null) : null] as const;
+        } catch {
+          return [t.taskId, null] as const;
+        }
+      }),
+    );
+    set({ prByTask: { ...get().prByTask, ...Object.fromEntries(results) } });
   },
 }));
