@@ -89,10 +89,21 @@ export interface TokenStatsRollup {
   taskCount: number;
 }
 
+/**
+ * Machine-readable error category on a failed IpcResponse, so the renderer can
+ * branch on the kind of failure instead of pattern-matching the message string.
+ * - `VALIDATION`: arguments failed the handler's zod schema (a renderer bug).
+ * - `NOT_FOUND`: the referenced entity (task, file, branch, commit…) is missing.
+ * - `UNKNOWN`: any other caught error (the default).
+ */
+export type IpcErrorCode = 'VALIDATION' | 'NOT_FOUND' | 'UNKNOWN';
+
 export interface IpcResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
+  /** Present on failures (`success: false`); absent on success. */
+  code?: IpcErrorCode;
 }
 
 export interface WorktreeInfo {

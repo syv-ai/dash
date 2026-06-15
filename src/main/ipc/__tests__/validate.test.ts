@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { z } from 'zod';
 import { parseArgs, parseArgsSafe } from '../validate';
+import { IpcError, errorResponse } from '../ipcErrors';
 import { projectInputSchema, taskInputSchema, permissionModeSchema } from '../schemas';
 
 describe('parseArgs', () => {
@@ -18,6 +19,17 @@ describe('parseArgs', () => {
   it('includes the offending path in the message', () => {
     const schema = z.object({ id: z.string() });
     expect(() => parseArgs('x', schema, { id: 1 })).toThrow(/id:/);
+  });
+
+  it('throws an IpcError that errorResponse maps to a VALIDATION code', () => {
+    let thrown: unknown;
+    try {
+      parseArgs('db:deleteProject', z.tuple([z.string()]), [42]);
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBeInstanceOf(IpcError);
+    expect(errorResponse(thrown)).toMatchObject({ success: false, code: 'VALIDATION' });
   });
 });
 

@@ -1,6 +1,6 @@
 import { ipcMain, type BrowserWindow } from 'electron';
 import { z } from 'zod';
-import { parseArgs } from './validate';
+import { parseArgs, errorResponse } from './validate';
 import { getTuiHost } from '../tui/hostInstance';
 import { getWizard, type RequestStartPayload } from '../wizard/wizardRegistry';
 import { DatabaseService } from '../services/DatabaseService';
@@ -56,10 +56,7 @@ export function registerWizardIpc(opts: { getMainWindow: () => BrowserWindow | n
         return { success: true as const, data: { started: true as const, tabId } };
       } catch (err) {
         console.error('[wizardIpc] requestStart failed for', featureId, taskId, err);
-        return {
-          success: false as const,
-          error: err instanceof Error ? err.message : String(err),
-        };
+        return errorResponse(err);
       }
     },
   );

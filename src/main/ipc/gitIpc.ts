@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import { z } from 'zod';
-import { parseArgs } from './validate';
+import { parseArgs, errorResponse, ipcError } from './validate';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { existsSync, mkdirSync } from 'fs';
@@ -46,7 +46,7 @@ export function registerGitIpc(): void {
 
       return { success: true, data: { path: targetDir, name: repoName } };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
@@ -57,7 +57,7 @@ export function registerGitIpc(): void {
       const status = await GitService.getStatus(cwd);
       return { success: true, data: status };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
@@ -87,7 +87,7 @@ export function registerGitIpc(): void {
         );
         return { success: true, data: diff };
       } catch (error) {
-        return { success: false, error: String(error) };
+        return errorResponse(error);
       }
     },
   );
@@ -109,7 +109,7 @@ export function registerGitIpc(): void {
         const diff = await GitService.getDiffUntracked(args.cwd, args.filePath, args.contextLines);
         return { success: true, data: diff };
       } catch (error) {
-        return { success: false, error: String(error) };
+        return errorResponse(error);
       }
     },
   );
@@ -125,7 +125,7 @@ export function registerGitIpc(): void {
       await GitService.stageFiles(args.cwd, args.filePaths);
       return { success: true };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
@@ -136,7 +136,7 @@ export function registerGitIpc(): void {
       await GitService.stageAll(cwd);
       return { success: true };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
@@ -151,7 +151,7 @@ export function registerGitIpc(): void {
       await GitService.unstageFiles(args.cwd, args.filePaths);
       return { success: true };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
@@ -162,7 +162,7 @@ export function registerGitIpc(): void {
       await GitService.unstageAll(cwd);
       return { success: true };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
@@ -177,7 +177,7 @@ export function registerGitIpc(): void {
       await GitService.discardFiles(args.cwd, args.filePaths);
       return { success: true };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
@@ -198,7 +198,7 @@ export function registerGitIpc(): void {
         await GitService.commit(args.cwd, args.message, { allowEmpty: args.allowEmpty });
         return { success: true };
       } catch (error) {
-        return { success: false, error: String(error) };
+        return errorResponse(error);
       }
     },
   );
@@ -242,7 +242,7 @@ export function registerGitIpc(): void {
         activeCommits.set(requestId, handle);
         return { success: true, data: { requestId } };
       } catch (error) {
-        return { success: false, error: String(error) };
+        return errorResponse(error);
       }
     },
   );
@@ -254,7 +254,7 @@ export function registerGitIpc(): void {
       await GitService.addToGitignore(args.cwd, args.filePath);
       return { success: true };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
@@ -262,7 +262,7 @@ export function registerGitIpc(): void {
   ipcMain.handle('git:commitCancel', async (_event, args: { requestId: string }) => {
     parseArgs('git:commitCancel', z.looseObject({ requestId: z.string() }), args);
     const handle = activeCommits.get(args.requestId);
-    if (!handle) return { success: false, error: 'No active commit with that id' };
+    if (!handle) return ipcError('No active commit with that id', 'NOT_FOUND');
     handle.cancel();
     return { success: true };
   });
@@ -274,7 +274,7 @@ export function registerGitIpc(): void {
       await GitService.push(cwd);
       return { success: true };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
@@ -291,7 +291,7 @@ export function registerGitIpc(): void {
         const exists = await GitService.remoteBranchExists(args.cwd, args.branch);
         return { success: true, data: exists };
       } catch (error) {
-        return { success: false, error: String(error) };
+        return errorResponse(error);
       }
     },
   );
@@ -341,7 +341,7 @@ export function registerGitIpc(): void {
         const data = await GitService.getCommitGraph(args.cwd, args.limit, args.skip);
         return { success: true, data };
       } catch (error) {
-        return { success: false, error: String(error) };
+        return errorResponse(error);
       }
     },
   );
@@ -353,7 +353,7 @@ export function registerGitIpc(): void {
       const data = await GitService.getCommitDetail(args.cwd, args.hash);
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
@@ -364,7 +364,7 @@ export function registerGitIpc(): void {
       startWatching(args.id, args.cwd);
       return { success: true };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
@@ -375,7 +375,7 @@ export function registerGitIpc(): void {
       stopWatching(id);
       return { success: true };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 }

@@ -2,7 +2,7 @@ import { ipcMain } from 'electron';
 import { z } from 'zod';
 import type { Database, Statement } from 'better-sqlite3';
 import { getRawDb } from '../db/client';
-import { parseArgs } from './validate';
+import { parseArgs, errorResponse } from './validate';
 import { diffCommentInputSchema } from './schemas';
 import type { DiffComment, DiffCommentInput, IpcResponse } from '@shared/types';
 
@@ -96,7 +96,7 @@ export function registerDiffCommentsIpc(): void {
         const rows = getStmts().listByTask.all(args.taskId) as DiffCommentRow[];
         return { success: true, data: rows.map(rowToComment) };
       } catch (err) {
-        return { success: false, error: err instanceof Error ? err.message : String(err) };
+        return errorResponse(err);
       }
     },
   );
@@ -110,7 +110,7 @@ export function registerDiffCommentsIpc(): void {
       if (!row) throw new Error('row missing after upsert');
       return { success: true, data: rowToComment(row) };
     } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : String(err) };
+      return errorResponse(err);
     }
   });
 
@@ -120,7 +120,7 @@ export function registerDiffCommentsIpc(): void {
       getStmts().deleteById.run(args.id);
       return { success: true };
     } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : String(err) };
+      return errorResponse(err);
     }
   });
 
@@ -149,7 +149,7 @@ export function registerDiffCommentsIpc(): void {
         tx(orphans);
         return { success: true, data: { deleted: orphans.length } };
       } catch (err) {
-        return { success: false, error: err instanceof Error ? err.message : String(err) };
+        return errorResponse(err);
       }
     },
   );

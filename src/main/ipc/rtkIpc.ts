@@ -2,12 +2,8 @@ import { basename } from 'node:path';
 import { ipcMain } from 'electron';
 import { z } from 'zod';
 import { RtkService } from '../services/RtkService';
-import { parseArgs } from './validate';
+import { parseArgs, errorResponse } from './validate';
 import { refreshActivePtyHooks, type RefreshFailure } from '../services/ptyManager';
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
 
 function summarizeFailures(failures: RefreshFailure[]): string {
   const n = failures.length;
@@ -26,7 +22,7 @@ export function registerRtkIpc(): void {
       return { success: true, data: await RtkService.getStatus() };
     } catch (error) {
       console.error('[rtk:getStatus]', error);
-      return { success: false, error: errorMessage(error) };
+      return errorResponse(error);
     }
   });
 
@@ -48,7 +44,7 @@ export function registerRtkIpc(): void {
       return { success: true, data: {} };
     } catch (error) {
       console.error('[rtk:setEnabled]', error);
-      return { success: false, error: errorMessage(error) };
+      return errorResponse(error);
     }
   });
 
@@ -72,7 +68,7 @@ export function registerRtkIpc(): void {
       return { success: true, data: undefined };
     } catch (error) {
       console.error('[rtk:download]', error);
-      return { success: false, error: errorMessage(error) };
+      return errorResponse(error);
     }
   });
 
@@ -81,7 +77,7 @@ export function registerRtkIpc(): void {
       return { success: true, data: await RtkService.runHookTest() };
     } catch (error) {
       console.error('[rtk:test]', error);
-      return { success: false, error: errorMessage(error) };
+      return errorResponse(error);
     }
   });
 }

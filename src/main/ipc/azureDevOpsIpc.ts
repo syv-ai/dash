@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import { z } from 'zod';
-import { parseArgs } from './validate';
+import { parseArgs, errorResponse } from './validate';
 import { AzureDevOpsService } from '../services/AzureDevOpsService';
 import { ConnectionConfigService } from '../services/ConnectionConfigService';
 import type { AzureDevOpsConfig } from '@shared/types';
@@ -22,7 +22,7 @@ export function registerAzureDevOpsIpc(): void {
       );
       return { success: true, data: ConnectionConfigService.isAdoConfigured(args?.projectId) };
     } catch (err) {
-      return { success: false, error: String(err) };
+      return errorResponse(err);
     }
   });
 
@@ -32,7 +32,7 @@ export function registerAzureDevOpsIpc(): void {
       const ok = await AzureDevOpsService.testConnection(args);
       return { success: true, data: ok };
     } catch (err) {
-      return { success: false, error: String(err) };
+      return errorResponse(err);
     }
   });
 
@@ -48,7 +48,7 @@ export function registerAzureDevOpsIpc(): void {
         ConnectionConfigService.saveAdoConfig(args.config, args.projectId);
         return { success: true };
       } catch (err) {
-        return { success: false, error: String(err) };
+        return errorResponse(err);
       }
     },
   );
@@ -63,7 +63,7 @@ export function registerAzureDevOpsIpc(): void {
       const config = ConnectionConfigService.getAdoConfig(args?.projectId);
       return { success: true, data: config };
     } catch (err) {
-      return { success: false, error: String(err) };
+      return errorResponse(err);
     }
   });
 
@@ -77,7 +77,7 @@ export function registerAzureDevOpsIpc(): void {
       ConnectionConfigService.removeAdoConfig(args?.projectId);
       return { success: true };
     } catch (err) {
-      return { success: false, error: String(err) };
+      return errorResponse(err);
     }
   });
 
@@ -95,7 +95,7 @@ export function registerAzureDevOpsIpc(): void {
         const items = await AzureDevOpsService.searchWorkItems(config, args.query);
         return { success: true, data: items };
       } catch (err) {
-        return { success: false, error: String(err) };
+        return errorResponse(err);
       }
     },
   );
@@ -112,7 +112,7 @@ export function registerAzureDevOpsIpc(): void {
       const item = await AzureDevOpsService.getWorkItem(config, args.id);
       return { success: true, data: item };
     } catch (err) {
-      return { success: false, error: String(err) };
+      return errorResponse(err);
     }
   });
 
@@ -141,7 +141,7 @@ export function registerAzureDevOpsIpc(): void {
         );
         return { success: true, data: pr };
       } catch (err) {
-        return { success: false, error: String(err) };
+        return errorResponse(err);
       }
     },
   );
@@ -164,7 +164,7 @@ export function registerAzureDevOpsIpc(): void {
         await AzureDevOpsService.postBranchComment(config, args.workItemId, args.branch);
         return { success: true };
       } catch (err) {
-        return { success: false, error: String(err) };
+        return errorResponse(err);
       }
     },
   );

@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import { IpcError } from './ipcErrors';
+
+// Re-exported so handlers get validation + error-response helpers from one place.
+export { IpcError, errorResponse, ipcError } from './ipcErrors';
 
 /**
  * Runtime validation for IPC handler arguments.
@@ -15,13 +19,17 @@ function formatIssues(error: z.ZodError): string {
 
 /**
  * Validate `raw` against `schema` for an invoke handler. On failure throws an
- * Error with a compact, readable message — caught by the handler's try/catch
- * and surfaced to the renderer as `{ success: false, error }`.
+ * `IpcError` (code `VALIDATION`) with a compact, readable message — caught by
+ * the handler's try/catch and surfaced via `errorResponse` as
+ * `{ success: false, error, code: 'VALIDATION' }`.
  */
 export function parseArgs<T>(channel: string, schema: z.ZodType<T>, raw: unknown): T {
   const result = schema.safeParse(raw);
   if (result.success) return result.data;
-  throw new Error(`Invalid IPC arguments for ${channel}: ${formatIssues(result.error)}`);
+  throw new IpcError(
+    `Invalid IPC arguments for ${channel}: ${formatIssues(result.error)}`,
+    'VALIDATION',
+  );
 }
 
 /**

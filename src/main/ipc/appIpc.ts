@@ -1,6 +1,6 @@
 import { ipcMain, dialog, app, shell, BrowserWindow, Notification, clipboard } from 'electron';
 import { z } from 'zod';
-import { parseArgs, parseArgsSafe } from './validate';
+import { parseArgs, parseArgsSafe, errorResponse, ipcError } from './validate';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { existsSync, readFileSync } from 'fs';
@@ -223,7 +223,7 @@ export function registerAppIpc(): void {
 
       return { success: true, data: result.filePaths };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
@@ -244,7 +244,7 @@ export function registerAppIpc(): void {
       }
       return { success: true, data: result.filePaths[0] };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
@@ -279,7 +279,7 @@ export function registerAppIpc(): void {
 
       return { success: true, data: { isGitRepo: true, remote, branch } };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
@@ -289,7 +289,7 @@ export function registerAppIpc(): void {
       await execFileAsync('git', ['init'], { cwd: folderPath, timeout: 10000 });
       return { success: true, data: null };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
@@ -356,7 +356,7 @@ export function registerAppIpc(): void {
         return { success: true, data: null };
       } catch (err) {
         console.error('[app:getClaudeAttribution] Failed to read settings:', err);
-        return { success: false, error: String(err) };
+        return errorResponse(err);
       }
     },
   );
@@ -446,7 +446,7 @@ export function registerAppIpc(): void {
           args,
         );
         if (!existsSync(args.folderPath)) {
-          return { success: false, error: `Path not found: ${args.folderPath}` };
+          return ipcError(`Path not found: ${args.folderPath}`, 'NOT_FOUND');
         }
 
         if (args.ide === 'custom') {
@@ -455,7 +455,7 @@ export function registerAppIpc(): void {
             return { success: false, error: 'No custom IDE configured' };
           }
           if (!existsSync(custom.path)) {
-            return { success: false, error: `Custom IDE not found: ${custom.path}` };
+            return ipcError(`Custom IDE not found: ${custom.path}`, 'NOT_FOUND');
           }
           const substituted = custom.args.map((a) => a.replace('{path}', args.folderPath));
           const finalArgs = custom.args.some((a) => a.includes('{path}'))
@@ -495,7 +495,7 @@ export function registerAppIpc(): void {
         }
         return { success: true, data: null };
       } catch (error) {
-        return { success: false, error: String(error) };
+        return errorResponse(error);
       }
     },
   );
@@ -508,7 +508,7 @@ export function registerAppIpc(): void {
         data: detected.map(({ id, label }) => ({ id, label })),
       };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
@@ -528,7 +528,7 @@ export function registerAppIpc(): void {
         );
         const resolved = resolve(args.cwd, args.filePath);
         if (!existsSync(resolved)) {
-          return { success: false, error: `File not found: ${resolved}` };
+          return ipcError(`File not found: ${resolved}`, 'NOT_FOUND');
         }
 
         const editor = await detectEditor();
@@ -560,7 +560,7 @@ export function registerAppIpc(): void {
 
         return { success: true, data: null };
       } catch (error) {
-        return { success: false, error: String(error) };
+        return errorResponse(error);
       }
     },
   );

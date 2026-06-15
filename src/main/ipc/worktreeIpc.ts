@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import { z } from 'zod';
-import { parseArgs } from './validate';
+import { parseArgs, errorResponse } from './validate';
 import { worktreeService } from '../services/WorktreeService';
 import { worktreePoolService } from '../services/WorktreePoolService';
 import { TelemetryService } from '../services/TelemetryService';
@@ -41,7 +41,7 @@ export function registerWorktreeIpc(): void {
         TelemetryService.capture('worktree_created');
         return { success: true, data };
       } catch (error) {
-        return { success: false, error: String(error) };
+        return errorResponse(error);
       }
     },
   );
@@ -87,7 +87,7 @@ export function registerWorktreeIpc(): void {
         TelemetryService.capture('worktree_removed');
         return { success: true };
       } catch (error) {
-        return { success: false, error: String(error) };
+        return errorResponse(error);
       }
     },
   );
@@ -104,7 +104,7 @@ export function registerWorktreeIpc(): void {
         await worktreePoolService.ensureReserve(args.projectId, args.projectPath);
         return { success: true };
       } catch (error) {
-        return { success: false, error: String(error) };
+        return errorResponse(error);
       }
     },
   );
@@ -145,7 +145,7 @@ export function registerWorktreeIpc(): void {
         }
         return { success: false, error: 'No reserve available' };
       } catch (error) {
-        return { success: false, error: String(error) };
+        return errorResponse(error);
       }
     },
   );
@@ -199,7 +199,7 @@ export function registerWorktreeIpc(): void {
       parseArgs('worktree:hasReserve', z.string(), projectId);
       return { success: true, data: worktreePoolService.hasReserve(projectId) };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 }

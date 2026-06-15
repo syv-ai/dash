@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 import { z } from 'zod';
 import { SkillsService } from '../services/SkillsService';
-import { parseArgs } from './validate';
+import { parseArgs, errorResponse } from './validate';
 import type {
   SkillRef,
   SkillInstallArgs,
@@ -24,7 +24,7 @@ function describe(err: unknown): string {
 
 function fail(errorId: string, err: unknown, ctx?: Record<string, unknown>) {
   console.error(`[skillsIpc.${errorId}]`, { message: describe(err), ...ctx });
-  return { success: false, error: describe(err) };
+  return errorResponse(err);
 }
 
 export function registerSkillsIpc(): void {

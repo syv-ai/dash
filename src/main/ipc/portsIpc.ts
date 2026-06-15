@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ipcMain, shell } from 'electron';
 import { z } from 'zod';
-import { parseArgs } from './validate';
+import { parseArgs, errorResponse, ipcError } from './validate';
 import { WorkspacePortsRuntime } from '../services/WorkspacePortsRuntime';
 import { portLivenessService } from '../services/PortLivenessService';
 import { DatabaseService } from '../services/DatabaseService';
@@ -24,7 +24,7 @@ export function registerPortsIpc(): void {
       );
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
@@ -32,7 +32,7 @@ export function registerPortsIpc(): void {
     try {
       parseArgs('ports:refresh', z.string(), taskId);
       const task = DatabaseService.getTask(taskId);
-      if (!task) return { success: false, error: `Task ${taskId} not found` };
+      if (!task) return ipcError(`Task ${taskId} not found`, 'NOT_FOUND');
       const data = WorkspacePortsRuntime.setupTask({
         taskId,
         worktreePath: task.path,
@@ -45,7 +45,7 @@ export function registerPortsIpc(): void {
       ensurePortsConfigWatch(taskId, task.path);
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
@@ -70,11 +70,11 @@ export function registerPortsIpc(): void {
     try {
       parseArgs('ports:watchConfig', z.string(), taskId);
       const task = DatabaseService.getTask(taskId);
-      if (!task) return { success: false, error: `Task ${taskId} not found` };
+      if (!task) return ipcError(`Task ${taskId} not found`, 'NOT_FOUND');
       ensurePortsConfigWatch(taskId, task.path);
       return { success: true };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
@@ -93,7 +93,7 @@ export function registerPortsIpc(): void {
     try {
       parseArgs('ports:detect', z.string(), taskId);
       const task = DatabaseService.getTask(taskId);
-      if (!task) return { success: false, error: `Task ${taskId} not found` };
+      if (!task) return ipcError(`Task ${taskId} not found`, 'NOT_FOUND');
       // Collect parser errors so the onboarding toast can show the specific
       // reason (privileged port, duplicate envVar, malformed JSON, etc.)
       // rather than just pointing at the main-process console.
@@ -130,7 +130,7 @@ export function registerPortsIpc(): void {
         data: { ...result, alreadyConfigured: false },
       };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 }

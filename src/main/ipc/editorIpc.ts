@@ -4,7 +4,7 @@ import { promises as fs, realpathSync } from 'fs';
 import { execFile } from 'child_process';
 import path from 'path';
 import { promisify } from 'util';
-import { parseArgs } from './validate';
+import { parseArgs, errorResponse, ipcError } from './validate';
 import type {
   EditorCommitListItem,
   EditorReadBranchResult,
@@ -335,7 +335,7 @@ export function registerEditorIpc(): void {
           },
         };
       } catch (err) {
-        return { success: false, error: err instanceof Error ? err.message : String(err) };
+        return errorResponse(err);
       }
     },
   );
@@ -383,7 +383,7 @@ export function registerEditorIpc(): void {
           },
         };
       } catch (err) {
-        return { success: false, error: err instanceof Error ? err.message : String(err) };
+        return errorResponse(err);
       }
     },
   );
@@ -461,7 +461,7 @@ export function registerEditorIpc(): void {
           data: { ok: true, mtimeMs: stat.mtimeMs, sizeBytes: stat.size },
         };
       } catch (err) {
-        return { success: false, error: err instanceof Error ? err.message : String(err) };
+        return errorResponse(err);
       }
     },
   );
@@ -505,7 +505,7 @@ export function registerEditorIpc(): void {
         }
         return { success: true, data: commits };
       } catch (err) {
-        return { success: false, error: err instanceof Error ? err.message : String(err) };
+        return errorResponse(err);
       }
     },
   );
@@ -578,7 +578,7 @@ export function registerEditorIpc(): void {
         }
         return { success: true, data: files };
       } catch (err) {
-        return { success: false, error: err instanceof Error ? err.message : String(err) };
+        return errorResponse(err);
       }
     },
   );
@@ -605,7 +605,7 @@ export function registerEditorIpc(): void {
             : await listCommitRepoFiles(args.cwd, args.source.hash);
         return { success: true, data: paths };
       } catch (err) {
-        return { success: false, error: err instanceof Error ? err.message : String(err) };
+        return errorResponse(err);
       }
     },
   );
@@ -618,7 +618,7 @@ export function registerEditorIpc(): void {
         parseArgs('editor:resolveDefaultBase', z.looseObject({ cwd: z.string() }), args);
         return { success: true, data: await resolveDefaultBase(args.cwd) };
       } catch (err) {
-        return { success: false, error: err instanceof Error ? err.message : String(err) };
+        return errorResponse(err);
       }
     },
   );
@@ -643,7 +643,7 @@ export function registerEditorIpc(): void {
             timeout: 5000,
           });
         } catch {
-          return { success: false, error: `Base ref not found: ${args.base}` };
+          return ipcError(`Base ref not found: ${args.base}`, 'NOT_FOUND');
         }
 
         const nameStatusRaw = (
@@ -706,7 +706,7 @@ export function registerEditorIpc(): void {
         files.sort((a, b) => a.path.localeCompare(b.path));
         return { success: true, data: files };
       } catch (err) {
-        return { success: false, error: err instanceof Error ? err.message : String(err) };
+        return errorResponse(err);
       }
     },
   );
@@ -775,7 +775,7 @@ export function registerEditorIpc(): void {
           },
         };
       } catch (err) {
-        return { success: false, error: err instanceof Error ? err.message : String(err) };
+        return errorResponse(err);
       }
     },
   );

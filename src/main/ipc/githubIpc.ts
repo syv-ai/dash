@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import { z } from 'zod';
-import { parseArgs } from './validate';
+import { parseArgs, errorResponse } from './validate';
 import { GithubService } from '../services/GithubService';
 
 export function registerGithubIpc(): void {
@@ -9,7 +9,7 @@ export function registerGithubIpc(): void {
       const available = await GithubService.isAvailable();
       return { success: true, data: available };
     } catch (err) {
-      return { success: false, error: String(err) };
+      return errorResponse(err);
     }
   });
 
@@ -23,7 +23,7 @@ export function registerGithubIpc(): void {
       const issues = await GithubService.searchIssues(args.cwd, args.query);
       return { success: true, data: issues };
     } catch (err) {
-      return { success: false, error: String(err) };
+      return errorResponse(err);
     }
   });
 
@@ -33,7 +33,7 @@ export function registerGithubIpc(): void {
       const issue = await GithubService.getIssue(args.cwd, args.number);
       return { success: true, data: issue };
     } catch (err) {
-      return { success: false, error: String(err) };
+      return errorResponse(err);
     }
   });
 
@@ -49,7 +49,7 @@ export function registerGithubIpc(): void {
         const pr = await GithubService.getPullRequestForBranch(args.cwd, args.branch);
         return { success: true, data: pr };
       } catch (err) {
-        return { success: false, error: String(err) };
+        return errorResponse(err);
       }
     },
   );
@@ -66,7 +66,7 @@ export function registerGithubIpc(): void {
         await GithubService.postBranchComment(args.cwd, args.issueNumber, args.branch);
         return { success: true };
       } catch (err) {
-        return { success: false, error: String(err) };
+        return errorResponse(err);
       }
     },
   );
@@ -83,7 +83,7 @@ export function registerGithubIpc(): void {
         await GithubService.linkBranch(args.cwd, args.issueNumber, args.branch);
         return { success: true };
       } catch (err) {
-        return { success: false, error: String(err) };
+        return errorResponse(err);
       }
     },
   );

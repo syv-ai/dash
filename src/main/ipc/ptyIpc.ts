@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import { z } from 'zod';
-import { parseArgs, parseArgsSafe } from './validate';
+import { parseArgs, parseArgsSafe, errorResponse } from './validate';
 import { permissionModeSchema } from './schemas';
 import {
   startDirectPty,
@@ -56,7 +56,7 @@ export function registerPtyIpc(): void {
         TelemetryService.capture('terminal_started', { source: 'direct' });
         return { success: true, data: result };
       } catch (error) {
-        return { success: false, error: String(error) };
+        return errorResponse(error);
       }
     },
   );
@@ -76,7 +76,7 @@ export function registerPtyIpc(): void {
         });
         return { success: true, data: result };
       } catch (error) {
-        return { success: false, error: String(error) };
+        return errorResponse(error);
       }
     },
   );
@@ -111,7 +111,7 @@ export function registerPtyIpc(): void {
       const data = await terminalSnapshotService.getSnapshot(id);
       return { success: true, data };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
@@ -131,7 +131,7 @@ export function registerPtyIpc(): void {
       await terminalSnapshotService.deleteSnapshot(id);
       return { success: true };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
@@ -146,7 +146,7 @@ export function registerPtyIpc(): void {
       DatabaseService.setTaskContextPrompt(args.taskId, args.prompt);
       return { success: true };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
@@ -162,7 +162,7 @@ export function registerPtyIpc(): void {
       sendRemoteControl(ptyId);
       return { success: true };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
@@ -228,7 +228,7 @@ export function registerPtyIpc(): void {
         const result = await startCommandPty({ ...opts, owner: event.sender });
         return { success: true, data: result };
       } catch (error) {
-        return { success: false, error: String(error) };
+        return errorResponse(error);
       }
     },
   );
