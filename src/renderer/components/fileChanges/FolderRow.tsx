@@ -49,8 +49,10 @@ export function FolderRow({
 }: FolderRowProps) {
   const [discardOpen, setDiscardOpen] = useState(false);
   // A folder is only tinted when the folder itself was renamed/moved (agg.status
-  // === 'renamed'); changes to its contents don't tint it, so it stays neutral.
-  const nameTint = agg.status !== 'mixed' ? FOLDER_TINT[agg.status] : 'text-foreground';
+  // === 'renamed'); changes to its contents don't tint it. Otherwise the name is
+  // a muted foreground — dimmer than full white, but kept warm so it never reads
+  // as the grey untracked tint.
+  const nameTint = agg.status !== 'mixed' ? FOLDER_TINT[agg.status] : 'text-foreground/75';
   return (
     <div
       role="button"
