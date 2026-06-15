@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import crypto from 'crypto';
 import type { BrowserWindow } from 'electron';
 import { TuiSocketServer } from '../services/TuiSocketServer';
+import { tuiSocketPath } from './tuiSocketPath';
 
 export interface WizardHandle {
   start(): Promise<void>;
@@ -119,9 +120,10 @@ export class SidecarTuiHost {
 
   async spawn(opts: SpawnOpts): Promise<{ tabId: string }> {
     const key = this.key(opts.featureId, opts.taskId);
-    const sockPath = path.join(
+    const sockPath = tuiSocketPath(
       this.deps.socketDir,
-      `tui-${opts.featureId}-${opts.taskId}-${crypto.randomBytes(4).toString('hex')}.sock`,
+      opts.featureId,
+      crypto.randomBytes(4).toString('hex'),
     );
     const tabId = `tui:${opts.featureId}:${opts.taskId}`;
 

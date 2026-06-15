@@ -77,7 +77,9 @@ describe('SidecarTuiHost', () => {
     const env = (startPty.mock.calls[0]![0] as { env: Record<string, string> }).env;
     expect(env.DASH_TUI_FEATURE).toBe('ports');
     expect(env.ELECTRON_RUN_AS_NODE).toBe('1');
-    expect(env.DASH_TUI_SOCKET).toContain('tui-ports-t1-');
+    // Socket name is short (feature tag + random token, no task UUID) to stay
+    // under the macOS AF_UNIX path limit — see tuiSocketPath.
+    expect(env.DASH_TUI_SOCKET).toMatch(/\/tui-ports-[0-9a-f]+\.sock$/);
   });
 
   it('isActive stays true while the spawn is still in flight (migrate relies on this)', async () => {
