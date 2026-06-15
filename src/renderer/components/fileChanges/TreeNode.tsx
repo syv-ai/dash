@@ -61,7 +61,9 @@ function DirNode({ node, indent, ...callbacks }: TreeNodeProps) {
   const canDiscard = discardable.length > 0;
   // Only pure-untracked folders can be safely .gitignored — mixing in tracked
   // content would suddenly ignore those too, which is rarely what the user wants.
-  const canIgnore = terminal.agg.status === 'untracked';
+  // (Computed from the files directly: agg.status no longer carries 'untracked'
+  // now that folders only tint for their own rename.)
+  const canIgnore = subtreeFiles.length > 0 && subtreeFiles.every((f) => f.status === 'untracked');
   return (
     <motion.div
       layout

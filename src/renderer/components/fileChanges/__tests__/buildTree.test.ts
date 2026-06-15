@@ -12,6 +12,10 @@ function f(
   return { path, status, staged, additions, deletions };
 }
 
+function rn(path: string, oldPath: string, staged = false): FileChange {
+  return { path, status: 'renamed', staged, additions: 0, deletions: 0, oldPath };
+}
+
 describe('buildTree', () => {
   it('returns a root with no children for empty input', () => {
     const root = buildTree([]);
@@ -54,33 +58,64 @@ describe('buildTree', () => {
     expect(root.children.get('src')!.agg.add).toBe(10);
   });
 
-  it('computes status as a single value when homogeneous', () => {
-    const root = buildTree([f('vendor/a.py', 'untracked'), f('vendor/b.py', 'untracked')]);
-    expect(root.children.get('vendor')!.agg.status).toBe('untracked');
+  // A folder is only tinted ('renamed') when the folder ITSELF was renamed.
+  // Descendant file changes (modified/added/untracked) never tint it — its
+  // status stays 'mixed', which renders neutral.
+  it('leaves a folder neutral (mixed) when it only contains modified files', () => {
+    const root = buildTree([f('src/a.py', 'modified', true), f('src/b.py', 'modified', true)]);
+    expect(root.children.get('src')!.agg.status).toBe('mixed');
   });
 
-  it('picks the highest-priority status when descendants differ (modified > added)', () => {
-    const root = buildTree([f('src/a.py', 'modified', true), f('src/b.py', 'added', true)]);
-    expect(root.children.get('src')!.agg.status).toBe('modified');
-  });
-
-  it('cascades the modified status up through ancestor folders mixed with untracked', () => {
+  it('leaves a folder neutral when descendants mix modified and untracked', () => {
     const root = buildTree([
       f('src/utils/format.py', 'modified', true, 4, 1),
       f('src/scratch/new1.py', 'untracked'),
       f('src/scratch/new2.py', 'untracked'),
     ]);
-    // src/ has a modified file deep inside plus untracked siblings — the dominant
-    // status for the tint should still be 'modified', not 'mixed' or 'untracked'.
-    expect(root.children.get('src')!.agg.status).toBe('modified');
+    expect(root.children.get('src')!.agg.status).toBe('mixed');
   });
 
-  it('keeps untracked when every descendant is untracked', () => {
+  it('leaves a pure-untracked folder neutral', () => {
+    const root = buildTree([f('vendor/a.py', 'untracked'), f('vendor/b.py', 'untracked')]);
+    expect(root.children.get('vendor')!.agg.status).toBe('mixed');
+  });
+
+  it('marks a folder renamed when it was moved (all descendants renamed from one dir)', () => {
     const root = buildTree([
-      f('vendor/parsers/a.py', 'untracked'),
-      f('vendor/parsers/b.py', 'untracked'),
+      rn('src/new/a.py', 'src/old/a.py', true),
+      rn('src/new/b.py', 'src/old/b.py', true),
     ]);
-    expect(root.children.get('vendor')!.agg.status).toBe('untracked');
+    expect(root.children.get('src')!.children.get('new')!.agg.status).toBe('renamed');
+  });
+
+  it('does not mark the parent of a renamed folder as renamed', () => {
+    const root = buildTree([rn('src/new/a.py', 'src/old/a.py', true)]);
+    expect(root.children.get('src')!.agg.status).toBe('mixed');
+  });
+
+  it('marks nested subfolders of a renamed folder renamed too (their path changed)', () => {
+    const root = buildTree([rn('src/new/sub/a.py', 'src/old/sub/a.py', true)]);
+    const newDir = root.children.get('src')!.children.get('new')!;
+    expect(newDir.agg.status).toBe('renamed');
+    expect(newDir.children.get('sub')!.agg.status).toBe('renamed');
+  });
+
+  it('does not mark a folder renamed when only a file inside it was renamed in place', () => {
+    const root = buildTree([rn('src/dir/new.py', 'src/dir/old.py', true)]);
+    expect(root.children.get('src')!.children.get('dir')!.agg.status).toBe('mixed');
+  });
+
+  it('does not mark a folder renamed when its descendants moved from different dirs', () => {
+    const root = buildTree([rn('dest/a.py', 'one/a.py', true), rn('dest/b.py', 'two/b.py', true)]);
+    expect(root.children.get('dest')!.agg.status).toBe('mixed');
+  });
+
+  it('does not mark a folder renamed when it also contains a non-rename change', () => {
+    const root = buildTree([
+      rn('src/new/a.py', 'src/old/a.py', true),
+      f('src/new/b.py', 'modified', true),
+    ]);
+    expect(root.children.get('src')!.children.get('new')!.agg.status).toBe('mixed');
   });
 
   it('keeps untracked line counts separate from tracked add/del', () => {

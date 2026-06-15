@@ -41,27 +41,47 @@ function makeNode(name: string, path: string): TreeNode {
   };
 }
 
-// Precedence used when a folder has mixed-status descendants. The most
-// "interesting" status wins so ancestors stay tinted with the change type
-// rather than collapsing to neutral grey. Untracked sits last so a folder
-// of new files alone still reads as untracked, but a folder mixing
-// untracked with real modifications reads as modified.
-const STATUS_PRIORITY: FileChangeStatus[] = [
-  'conflicted',
-  'modified',
-  'deleted',
-  'renamed',
-  'added',
-  'untracked',
-];
+/** Every changed file in this subtree (this node's files + descendants'). */
+export function collectFiles(node: TreeNode): FileChange[] {
+  const out = [...node.files];
+  for (const child of node.children.values()) out.push(...collectFiles(child));
+  return out;
+}
 
-function dominantStatus(statuses: Set<FileChangeStatus>): FileChangeStatus | 'mixed' {
-  if (statuses.size === 0) return 'mixed';
-  if (statuses.size === 1) return [...statuses][0]!;
-  for (const s of STATUS_PRIORITY) {
-    if (statuses.has(s)) return s;
+/** `path` relative to `base` ('a/b/c' under 'a' → 'b/c'), or null if not under it. */
+function relativeUnder(base: string, path: string): string | null {
+  if (base === '') return path;
+  return path.startsWith(`${base}/`) ? path.slice(base.length + 1) : null;
+}
+
+/** The source directory a renamed file came from, given its suffix relative to
+ *  the folder ('old/dir/x.py' with rel 'x.py' → 'old/dir'), or null on mismatch. */
+function renameSourceDir(oldPath: string, rel: string): string | null {
+  if (oldPath === rel) return '';
+  return oldPath.endsWith(`/${rel}`) ? oldPath.slice(0, oldPath.length - rel.length - 1) : null;
+}
+
+/**
+ * Whether the folder ITSELF was renamed/moved — true only when every changed
+ * file in its subtree is a git rename and they all moved from a single common
+ * source directory other than this folder's path. A folder that merely contains
+ * modified/added/untracked files (or a file renamed in place) is NOT itself
+ * changed, so it renders neutral rather than inheriting a child's tint.
+ */
+function isRenamedFolder(node: TreeNode): boolean {
+  const files = collectFiles(node);
+  if (files.length === 0) return false;
+  let source: string | null = null;
+  for (const file of files) {
+    if (file.status !== 'renamed' || !file.oldPath) return false;
+    const rel = relativeUnder(node.path, file.path);
+    if (rel === null) return false;
+    const src = renameSourceDir(file.oldPath, rel);
+    if (src === null) return false;
+    if (source === null) source = src;
+    else if (source !== src) return false;
   }
-  return 'mixed';
+  return source !== null && source !== node.path;
 }
 
 function aggregate(node: TreeNode): void {
@@ -99,7 +119,7 @@ function aggregate(node: TreeNode): void {
   node.agg.untrackedAdd = untrackedAdd;
   node.agg.stagedCount = stagedCount;
   node.agg.statuses = statuses;
-  node.agg.status = dominantStatus(statuses);
+  node.agg.status = isRenamedFolder(node) ? 'renamed' : 'mixed';
   node.agg.stageState = stagedCount === 0 ? false : stagedCount === count ? true : 'mixed';
 }
 

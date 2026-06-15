@@ -48,8 +48,8 @@ export function FolderRow({
   onAddToGitignore,
 }: FolderRowProps) {
   const [discardOpen, setDiscardOpen] = useState(false);
-  // Folder name color follows the aggregate status (modified → orange,
-  // added → green, etc.). Mixed-status folders fall back to neutral foreground.
+  // A folder is only tinted when the folder itself was renamed/moved (agg.status
+  // === 'renamed'); changes to its contents don't tint it, so it stays neutral.
   const nameTint = agg.status !== 'mixed' ? FOLDER_TINT[agg.status] : 'text-foreground';
   return (
     <div
@@ -80,11 +80,7 @@ export function FolderRow({
       <span className={`flex-1 min-w-0 font-mono text-[11.5px] truncate font-medium ${nameTint}`}>
         {displayName}/
       </span>
-      <span
-        className={`font-mono text-[10px] font-semibold tabular-nums flex-shrink-0 ${
-          agg.status !== 'mixed' ? FOLDER_TINT[agg.status] : 'text-muted-foreground/70'
-        }`}
-      >
+      <span className="font-mono text-[10px] font-semibold tabular-nums flex-shrink-0 text-muted-foreground/70">
         {agg.count}
       </span>
       {!open && (
