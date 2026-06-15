@@ -6,10 +6,11 @@ import type { LiveComment } from './comments/types';
 import { useCommentsStore } from '../../stores/commentsStore';
 import { useGutterSelection } from './comments/useGutterSelection';
 import { useFileComments } from './comments/useFileComments';
-import { computeRowDecorations } from './comments/rowShades';
 import { useCommentShades } from './comments/useCommentShades';
+import { useCommentBands } from './comments/useCommentBands';
 import { useCommentDraft } from './comments/useCommentDraft';
 import { useCommentPrompt } from './comments/useCommentPrompt';
+import { useFileFade } from './comments/useFileFade';
 import { CommentOverlay } from './comments/CommentOverlay';
 import { CommentsMenu } from './comments/CommentsMenu';
 import { EditCommentsModal } from './comments/EditCommentsModal';
@@ -70,14 +71,8 @@ export function EditorPane({
     () => localStorage.getItem(WORDWRAP_KEY) === 'on',
   );
 
-  const commentDecorations = useRef<monacoEditor.IEditorDecorationsCollection | null>(null);
   const selectionDecorations = useRef<monacoEditor.IEditorDecorationsCollection | null>(null);
   const saveCmdRef = useRef<(() => void) | null>(null);
-  // Fade-on-file-change. Bumped only after the new file's content has
-  // actually swapped into the editor — earlier than that and the user
-  // sees the OLD content fade in, which feels wrong.
-  const pendingFileFadeRef = useRef(false);
-  const [fileFadeNonce, setFileFadeNonce] = useState(0);
   // State (not ref) so the popover's `container` prop sees the actual node
   // after mount — refs alone don't trigger a re-render.
   const [editorAreaEl, setEditorAreaEl] = useState<HTMLDivElement | null>(null);
@@ -147,20 +142,9 @@ export function EditorPane({
     setStale(null);
   }, [state, setPendingRange]);
 
-  // Mark a fade as pending whenever the user switches files. We don't run
-  // it here — we wait for the new content to actually load (below) so the
-  // fade-in coincides with the visual swap, not the click.
-  useEffect(() => {
-    pendingFileFadeRef.current = true;
-  }, [filePath]);
-
-  // Fire the fade once `loaded` arrives for the pending file change.
-  useEffect(() => {
-    if (state.kind !== 'loaded') return;
-    if (!pendingFileFadeRef.current) return;
-    pendingFileFadeRef.current = false;
-    setFileFadeNonce((n) => n + 1);
-  }, [state]);
+  // Fade-on-file-change: bumps only after the new file's content has actually
+  // loaded (not on the click), so the fade-in coincides with the visual swap.
+  const fileFadeNonce = useFileFade(filePath, state.kind === 'loaded');
 
   // ── Comments binding ────────────────────────────────────
   // Owns Monaco decoration lifecycle for the current filePath. Hydration
@@ -240,63 +224,17 @@ export function EditorPane({
     ]);
   }, [pendingRange, modifiedEditor, monaco]);
 
-  // Shade-aware band rendering. Each row gets one of three classNames
-  // depending on which comments claim it. Coalesced runs of same-signature
-  // rows become single decoration ranges for efficiency. The minimap +
-  // overview ruler still get the band marker, using primary as the
-  // representative color (Monaco's canvas can't read CSS vars, so picking
-  // one shade is the right call there).
-  useEffect(() => {
-    if (!modifiedEditor || !monaco) return;
-    const model = modifiedEditor.getModel();
-    if (!model) return;
-    if (!commentDecorations.current) {
-      commentDecorations.current = modifiedEditor.createDecorationsCollection();
-    }
-    if (commentsDisabled) {
-      commentDecorations.current.clear();
-      return;
-    }
-    const commentMarker = isDark ? '#b8c5e0' : '#3b5078';
-    // liveComments already carry live ranges (useFileComments re-projects on
-    // edits) and shadeById is the shared single shade assignment.
-    if (liveComments.length === 0) {
-      commentDecorations.current.clear();
-      return;
-    }
-    const rows = computeRowDecorations(liveComments, shadeById);
-    // Build the highlighted-line set from the hovered comment, if any.
-    // A coalesced run is entirely-in or entirely-out of this set because
-    // each run covers lines that share the exact same signature, and the
-    // hovered comment is a single signature contributor.
-    const highlightedLines = new Set<number>();
-    if (hoveredCommentId) {
-      const hovered = liveComments.find((c) => c.id === hoveredCommentId);
-      if (hovered) {
-        for (let l = hovered.startLine; l <= hovered.endLine; l++) {
-          highlightedLines.add(l);
-        }
-      }
-    }
-    const decos: monacoEditor.IModelDeltaDecoration[] = rows.map((r) => {
-      const hi = highlightedLines.has(r.startLine);
-      const cls = `monaco-comment-line-shade-${r.signature}${hi ? '-hi' : ''}`;
-      return {
-        range: new monaco.Range(r.startLine, 1, r.endLine, 1),
-        options: {
-          isWholeLine: true,
-          className: cls,
-          lineNumberClassName: `monaco-comment-ln-shade-${r.signature}`,
-          minimap: { color: commentMarker, position: monaco.editor.MinimapPosition.Inline },
-          overviewRuler: {
-            color: commentMarker,
-            position: monaco.editor.OverviewRulerLane.Right,
-          },
-        },
-      };
-    });
-    commentDecorations.current.set(decos);
-  }, [liveComments, shadeById, isDark, commentsDisabled, modifiedEditor, monaco, hoveredCommentId]);
+  // Shade-aware band rendering (per-row decoration collection for the open
+  // file). Owns its own decorations ref inside the hook.
+  useCommentBands({
+    modifiedEditor,
+    monaco,
+    liveComments,
+    shadeById,
+    isDark,
+    disabled: commentsDisabled,
+    hoveredCommentId,
+  });
 
   // In-progress comment (fresh-create vs dbl-click-to-edit) state.
   const draftApi = useCommentDraft({ modifiedEditor, setPendingRange, binding });
