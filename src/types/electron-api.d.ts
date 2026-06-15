@@ -46,6 +46,7 @@ import type {
 } from '../shared/types';
 import type { ParsedSessionMessage, SessionMetrics, SessionUpdate } from '../shared/sessionTypes';
 import type { Tab, AddTabOpts, BulkUpsertEntry } from '../shared/drawerTabs';
+import type { WorkspaceConfig } from '../main/services/WorkspaceConfigService';
 
 export interface TokenStatsUpdate {
   taskId: string;
@@ -307,6 +308,13 @@ export interface ElectronAPI {
   detectClaude: () => Promise<
     IpcResponse<{ installed: boolean; version: string | null; path: string | null }>
   >;
+
+  // Workspace config (.dash/config.json)
+  readWorkspaceConfig: (projectPath: string) => Promise<IpcResponse<WorkspaceConfig | null>>;
+  writeWorkspaceConfig: (args: {
+    projectPath: string;
+    config: WorkspaceConfig;
+  }) => Promise<IpcResponse<void>>;
 
   // Git operations
   gitClone: (args: { url: string }) => Promise<IpcResponse<{ path: string; name: string }>>;

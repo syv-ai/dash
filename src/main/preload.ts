@@ -251,6 +251,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   gitInit: (folderPath: string) => ipcRenderer.invoke('git:init', folderPath),
   detectClaude: () => ipcRenderer.invoke('app:detectClaude'),
 
+  // Workspace config (.dash/config.json)
+  readWorkspaceConfig: (projectPath: string) =>
+    ipcRenderer.invoke('workspaceConfig:read', projectPath),
+  writeWorkspaceConfig: (args: { projectPath: string; config: unknown }) =>
+    ipcRenderer.invoke('workspaceConfig:write', args),
+
   // Git operations
   gitClone: (args: { url: string }) => ipcRenderer.invoke('git:clone', args),
   gitGetStatus: (cwd: string) => ipcRenderer.invoke('git:getStatus', cwd),
