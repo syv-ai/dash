@@ -257,6 +257,41 @@ contextBridge.exposeInMainWorld('electronAPI', {
   writeWorkspaceConfig: (args: { projectPath: string; config: unknown }) =>
     ipcRenderer.invoke('workspaceConfig:write', args),
 
+  // Project sources (clone / empty / scaffold)
+  projectClone: (args: { url: string; parentDir: string }) =>
+    ipcRenderer.invoke('project:clone', args),
+  projectCreateEmpty: (args: { parentDir: string; name: string; initGit: boolean }) =>
+    ipcRenderer.invoke('project:createEmpty', args),
+  projectListDir: (dir: string) => ipcRenderer.invoke('project:listDir', dir),
+  scaffoldStart: (args: {
+    sessionId: string;
+    methodId: string;
+    url: string;
+    parentDir: string;
+    cols: number;
+    rows: number;
+  }) => ipcRenderer.send('scaffold:start', args),
+  scaffoldInput: (args: { sessionId: string; data: string }) =>
+    ipcRenderer.send('scaffold:input', args),
+  scaffoldResize: (args: { sessionId: string; cols: number; rows: number }) =>
+    ipcRenderer.send('scaffold:resize', args),
+  scaffoldKill: (args: { sessionId: string }) => ipcRenderer.send('scaffold:kill', args),
+  onScaffoldData: (callback: (p: { sessionId: string; data: string }) => void) => {
+    const handler = (_e: unknown, p: { sessionId: string; data: string }) => callback(p);
+    ipcRenderer.on('scaffold:data', handler);
+    return () => ipcRenderer.removeListener('scaffold:data', handler);
+  },
+  onScaffoldExit: (
+    callback: (p: { sessionId: string; exitCode: number; resultPath: string | null }) => void,
+  ) => {
+    const handler = (
+      _e: unknown,
+      p: { sessionId: string; exitCode: number; resultPath: string | null },
+    ) => callback(p);
+    ipcRenderer.on('scaffold:exit', handler);
+    return () => ipcRenderer.removeListener('scaffold:exit', handler);
+  },
+
   // Git operations
   gitClone: (args: { url: string }) => ipcRenderer.invoke('git:clone', args),
   gitGetStatus: (cwd: string) => ipcRenderer.invoke('git:getStatus', cwd),

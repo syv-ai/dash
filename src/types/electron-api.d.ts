@@ -316,6 +316,33 @@ export interface ElectronAPI {
     config: WorkspaceConfig;
   }) => Promise<IpcResponse<void>>;
 
+  // Project sources (clone / empty / scaffold)
+  projectClone: (args: {
+    url: string;
+    parentDir: string;
+  }) => Promise<IpcResponse<{ path: string; name: string }>>;
+  projectCreateEmpty: (args: {
+    parentDir: string;
+    name: string;
+    initGit: boolean;
+  }) => Promise<IpcResponse<{ path: string; name: string }>>;
+  projectListDir: (dir: string) => Promise<IpcResponse<string[]>>;
+  scaffoldStart: (args: {
+    sessionId: string;
+    methodId: string;
+    url: string;
+    parentDir: string;
+    cols: number;
+    rows: number;
+  }) => void;
+  scaffoldInput: (args: { sessionId: string; data: string }) => void;
+  scaffoldResize: (args: { sessionId: string; cols: number; rows: number }) => void;
+  scaffoldKill: (args: { sessionId: string }) => void;
+  onScaffoldData: (callback: (p: { sessionId: string; data: string }) => void) => () => void;
+  onScaffoldExit: (
+    callback: (p: { sessionId: string; exitCode: number; resultPath: string | null }) => void,
+  ) => () => void;
+
   // Git operations
   gitClone: (args: { url: string }) => Promise<IpcResponse<{ path: string; name: string }>>;
   gitGetStatus: (cwd: string) => Promise<IpcResponse<GitStatus>>;
