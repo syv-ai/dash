@@ -56,6 +56,10 @@ export function makeElectronApiMock(overrides: Record<string, unknown> = {}) {
     getOrCreateDefaultConversation: vi.fn(() => ok({ id: 'conv1' })),
     githubPostBranchComment: vi.fn(() => ok(undefined)),
     adoPostBranchComment: vi.fn(() => ok(undefined)),
+    diffCommentsList: vi.fn(() => ok([])),
+    diffCommentsUpsert: vi.fn((c: unknown) => ok(c)),
+    diffCommentsDelete: vi.fn(() => ok(undefined)),
+    diffCommentsPruneForTask: vi.fn(() => ok({ deleted: 0 })),
     ...overrides,
   };
 }

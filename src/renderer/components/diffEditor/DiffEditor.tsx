@@ -6,8 +6,7 @@ import { EditorSidebar } from './EditorSidebar';
 import { EditorPane } from './EditorPane';
 import type { CommitSummary, EditorView } from './types';
 import type { DiffEditorModalProps } from './DiffEditorModal';
-import { useCommentsStore } from './comments/useCommentsStore';
-import { CommentsProvider } from './comments/CommentsContext';
+import { useCommentsStore } from '../../stores/commentsStore';
 
 /** Composition-root workspace: owns view state, drives the data loaders, and
  *  lays out the sidebar + editor pane. Rendered inside <DiffEditorModal>. */
@@ -194,7 +193,10 @@ export function DiffEditor({
   // ── Comments store ──────────────────────────────────────
   // Task-scoped, persisted to SQLite. Survives modal close/reopen. When
   // activeTaskId is null the store is `disabled` and all mutators no-op.
-  const store = useCommentsStore(activeTaskId);
+  const commentsByFile = useCommentsStore((s) => s.byFile);
+  useEffect(() => {
+    void useCommentsStore.getState().loadForTask(activeTaskId);
+  }, [activeTaskId]);
 
   // Cross-file navigation token from the dropdown: when set, the EditorPane
   // switches to the requested file and reveals the comment with this id
@@ -210,11 +212,11 @@ export function DiffEditor({
 
   const commentCounts = useMemo(() => {
     const map = new Map<string, number>();
-    for (const [path, list] of Object.entries(store.state.byFile)) {
+    for (const [path, list] of Object.entries(commentsByFile)) {
       if (list.length > 0) map.set(path, list.length);
     }
     return map;
-  }, [store.state.byFile]);
+  }, [commentsByFile]);
 
   // Once the working tree's file list is known, hard-delete any persisted
   // comments whose path no longer exists. Runs once per modal session per
@@ -223,50 +225,48 @@ export function DiffEditor({
     if (!activeTaskId) return;
     if (repoPathsLoading) return;
     if (repoPaths.length === 0) return;
-    void store.prune(new Set(repoPaths));
-  }, [activeTaskId, repoPaths, repoPathsLoading, store]);
+    void useCommentsStore.getState().prune(new Set(repoPaths));
+  }, [activeTaskId, repoPaths, repoPathsLoading]);
 
   const bg = terminalTheme.background ?? (isDark ? '#0d0d11' : '#faf8f3');
 
   return (
     <div className="h-full w-full overflow-hidden" style={{ background: bg }}>
-      <CommentsProvider value={store}>
-        <PanelGroup direction="horizontal" autoSaveId="diff-editor-shell" className="h-full">
-          <Panel defaultSize={22} minSize={14} maxSize={45}>
-            <EditorSidebar
-              allPaths={repoPaths}
-              changedFiles={changedFiles}
-              filesLoading={repoPathsLoading || changedFilesLoading}
-              selectedPath={selectedPath}
-              onSelectFile={setSelectedPath}
-              commentCounts={commentCounts}
-              commits={commits}
-              commitsLoading={commitsLoading}
-              showWorkingTreeRow={workingFiles.length > 0}
-              view={view}
-              onSelectView={changeView}
-            />
-          </Panel>
-          <PanelResizeHandle className="w-3 bg-transparent hover:bg-transparent transition-colors" />
-          <Panel minSize={40}>
-            <EditorPane
-              cwd={cwd}
-              filePath={selectedPath}
-              view={view}
-              activeTaskId={activeTaskId}
-              terminalTheme={terminalTheme}
-              isDark={isDark}
-              revealCommentId={revealCommentId}
-              onNavigateAcrossFile={navigateAcrossFile}
-              onClearReveal={clearReveal}
-              onClose={onClose}
-              onSelectBase={selectBase}
-              onExitBranchView={exitBranchView}
-              defaultBase={defaultBase}
-            />
-          </Panel>
-        </PanelGroup>
-      </CommentsProvider>
+      <PanelGroup direction="horizontal" autoSaveId="diff-editor-shell" className="h-full">
+        <Panel defaultSize={22} minSize={14} maxSize={45}>
+          <EditorSidebar
+            allPaths={repoPaths}
+            changedFiles={changedFiles}
+            filesLoading={repoPathsLoading || changedFilesLoading}
+            selectedPath={selectedPath}
+            onSelectFile={setSelectedPath}
+            commentCounts={commentCounts}
+            commits={commits}
+            commitsLoading={commitsLoading}
+            showWorkingTreeRow={workingFiles.length > 0}
+            view={view}
+            onSelectView={changeView}
+          />
+        </Panel>
+        <PanelResizeHandle className="w-3 bg-transparent hover:bg-transparent transition-colors" />
+        <Panel minSize={40}>
+          <EditorPane
+            cwd={cwd}
+            filePath={selectedPath}
+            view={view}
+            activeTaskId={activeTaskId}
+            terminalTheme={terminalTheme}
+            isDark={isDark}
+            revealCommentId={revealCommentId}
+            onNavigateAcrossFile={navigateAcrossFile}
+            onClearReveal={clearReveal}
+            onClose={onClose}
+            onSelectBase={selectBase}
+            onExitBranchView={exitBranchView}
+            defaultBase={defaultBase}
+          />
+        </Panel>
+      </PanelGroup>
     </div>
   );
 }

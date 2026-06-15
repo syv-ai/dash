@@ -3,7 +3,7 @@ import type { editor as monacoEditor } from 'monaco-editor';
 import type { ITheme as XtermTheme } from 'xterm';
 import type { EditorView } from './types';
 import type { LiveComment } from './comments/types';
-import { useCommentsContext } from './comments/CommentsContext';
+import { useCommentsStore } from '../../stores/commentsStore';
 import { useGutterSelection } from './comments/useGutterSelection';
 import { useFileCommentsBinding } from './comments/useFileCommentsBinding';
 import { assignShades } from './comments/shadeAssignment';
@@ -59,8 +59,8 @@ export function EditorPane({
   onExitBranchView,
   defaultBase,
 }: EditorPaneProps) {
-  const commentsStore = useCommentsContext();
-  const commentsByFile = commentsStore.state.byFile;
+  const commentsByFile = useCommentsStore((s) => s.byFile);
+  const commentsDisabled = useCommentsStore((s) => s.disabled);
   const { state, setState } = useFileLoad(cwd, filePath, view);
   const [draft, setDraft] = useState<string>('');
   const [loadedBuffer, setLoadedBuffer] = useState<string>('');
@@ -128,7 +128,7 @@ export function EditorPane({
   const { pendingRange, setPendingRange, dragging } = useGutterSelection(
     modifiedEditor,
     monaco,
-    !commentsStore.disabled,
+    !commentsDisabled,
   );
   const dirty = !isCommitView && draft !== loadedBuffer;
   const editable =
@@ -256,7 +256,7 @@ export function EditorPane({
     if (!commentDecorations.current) {
       commentDecorations.current = modifiedEditor.createDecorationsCollection();
     }
-    if (commentsStore.disabled) {
+    if (commentsDisabled) {
       commentDecorations.current.clear();
       return;
     }
@@ -305,7 +305,7 @@ export function EditorPane({
       };
     });
     commentDecorations.current.set(decos);
-  }, [liveComments, isDark, commentsStore.disabled, modifiedEditor, monaco, hoveredCommentId]);
+  }, [liveComments, isDark, commentsDisabled, modifiedEditor, monaco, hoveredCommentId]);
 
   function addComment(text: string) {
     if (editingId) {
@@ -388,7 +388,7 @@ export function EditorPane({
       const session = sessionRegistry.get(taskId);
       if (session) session.writeInput(text);
     });
-    commentsStore.markSent(idsToMarkSent);
+    useCommentsStore.getState().markSent(idsToMarkSent);
   }
 
   function sendCommentsToPrompt(idsToSend: ReadonlyArray<string>): boolean {
@@ -463,7 +463,7 @@ export function EditorPane({
     [modifiedEditor, setPendingRange],
   );
 
-  const showCommentsMenu = !commentsStore.disabled && hasAnyComments;
+  const showCommentsMenu = !commentsDisabled && hasAnyComments;
 
   return (
     <div className="h-full flex flex-col min-w-0 min-h-0">
@@ -530,8 +530,8 @@ export function EditorPane({
                   onNavigateAcrossFile(targetPath, commentId);
                 }
               }}
-              onRemove={(_path, id) => commentsStore.remove(id)}
-              onUnsend={commentsStore.markUnsent}
+              onRemove={(_path, id) => useCommentsStore.getState().remove(id)}
+              onUnsend={(id) => useCommentsStore.getState().markUnsent(id)}
               onSend={sendAllUnsent}
               onEditAndSend={openEditAndSendModal}
               onSendOne={sendOneComment}

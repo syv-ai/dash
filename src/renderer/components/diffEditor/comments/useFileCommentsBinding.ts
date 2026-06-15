@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
-import { useCommentsContext } from './CommentsContext';
+import { useCommentsStore } from '../../../stores/commentsStore';
 import type { DiffComment, LineRange, LiveComment } from './types';
 
 // Frozen empty default so render-time `?? []` doesn't allocate a fresh
@@ -38,9 +38,8 @@ interface Binding {
  *  comment-on-switch bug from the previous filePath-ref-based design. */
 export function useFileCommentsBinding(args: Args): Binding {
   const { filePath, isFileLoaded, editor, monaco } = args;
-  const store = useCommentsContext();
-  const storeReady = store.isReady;
-  const stored = store.state.byFile[filePath] ?? EMPTY_STORED;
+  const storeReady = useCommentsStore((s) => s.isReady);
+  const stored = useCommentsStore((s) => s.byFile[filePath]) ?? EMPTY_STORED;
 
   const [liveComments, setLiveComments] = useState<LiveComment[]>([]);
   const liveCommentsRef = useRef<LiveComment[]>([]);
@@ -153,16 +152,16 @@ export function useFileCommentsBinding(args: Args): Binding {
         return [{ id: c.id, startLine: r.startLineNumber, endLine: r.endLineNumber }];
       });
       if (snapshots.length === 0) return;
-      store.snapshotRanges(pathAtMount, snapshots);
+      useCommentsStore.getState().snapshotRanges(pathAtMount, snapshots);
     };
-  }, [filePath, editor, store]);
+  }, [filePath, editor]);
 
   const addComment = useCallback(
     (range: LineRange, text: string): LiveComment | null => {
       const modified = editor?.getModifiedEditor();
       const model = modified?.getModel();
       if (!modified || !monaco || !model) return null;
-      const created = store.addComment({
+      const created = useCommentsStore.getState().addComment({
         filePath,
         startLine: range.start,
         endLine: range.end,
@@ -182,27 +181,24 @@ export function useFileCommentsBinding(args: Args): Binding {
       setLiveComments((prev) => [...prev, live]);
       return live;
     },
-    [filePath, editor, monaco, store],
+    [filePath, editor, monaco],
   );
 
-  const updateText = useCallback(
-    (id: string, text: string) => {
-      store.updateText(id, text);
-    },
-    [store],
-  );
+  const updateText = useCallback((id: string, text: string) => {
+    useCommentsStore.getState().updateText(id, text);
+  }, []);
 
   const remove = useCallback(
     (id: string) => {
       const target = liveCommentsRef.current.find((c) => c.id === id);
-      store.remove(id);
+      useCommentsStore.getState().remove(id);
       const model = editor?.getModifiedEditor().getModel();
       if (model && target) {
         model.deltaDecorations([target.decorationId], []);
       }
       setLiveComments((prev) => prev.filter((c) => c.id !== id));
     },
-    [store, editor],
+    [editor],
   );
 
   return { liveComments, addComment, updateText, remove };
