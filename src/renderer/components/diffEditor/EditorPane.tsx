@@ -6,8 +6,8 @@ import type { LiveComment } from './comments/types';
 import { useCommentsStore } from '../../stores/commentsStore';
 import { useGutterSelection } from './comments/useGutterSelection';
 import { useFileComments } from './comments/useFileComments';
-import { assignShades } from './comments/shadeAssignment';
 import { computeRowDecorations } from './comments/rowShades';
+import { useCommentShades } from './comments/useCommentShades';
 import { CommentOverlay } from './comments/CommentOverlay';
 import { CommentsMenu } from './comments/CommentsMenu';
 import { EditCommentsModal } from './comments/EditCommentsModal';
@@ -178,6 +178,7 @@ export function EditorPane({
     monaco,
   });
   const liveComments = binding.liveComments;
+  const shadeById = useCommentShades(liveComments);
 
   // Scroll to a live comment + select + focus. Shared by the cross-file
   // reveal effect and the same-file dropdown navigation. Returns true on a
@@ -261,26 +262,20 @@ export function EditorPane({
       return;
     }
     const commentMarker = isDark ? '#b8c5e0' : '#3b5078';
-    // Project liveComments → with their LIVE range from each decoration
-    // (so typing-induced shifts feed the row-shade calc).
-    const projected = liveComments.flatMap((c) => {
-      const r = model.getDecorationRange(c.decorationId);
-      if (!r) return [];
-      return [{ ...c, startLine: r.startLineNumber, endLine: r.endLineNumber }];
-    });
-    if (projected.length === 0) {
+    // liveComments already carry live ranges (useFileComments re-projects on
+    // edits) and shadeById is the shared single shade assignment.
+    if (liveComments.length === 0) {
       commentDecorations.current.clear();
       return;
     }
-    const shades = assignShades(projected);
-    const rows = computeRowDecorations(projected, shades);
+    const rows = computeRowDecorations(liveComments, shadeById);
     // Build the highlighted-line set from the hovered comment, if any.
     // A coalesced run is entirely-in or entirely-out of this set because
     // each run covers lines that share the exact same signature, and the
     // hovered comment is a single signature contributor.
     const highlightedLines = new Set<number>();
     if (hoveredCommentId) {
-      const hovered = projected.find((c) => c.id === hoveredCommentId);
+      const hovered = liveComments.find((c) => c.id === hoveredCommentId);
       if (hovered) {
         for (let l = hovered.startLine; l <= hovered.endLine; l++) {
           highlightedLines.add(l);
@@ -305,7 +300,7 @@ export function EditorPane({
       };
     });
     commentDecorations.current.set(decos);
-  }, [liveComments, isDark, commentsDisabled, modifiedEditor, monaco, hoveredCommentId]);
+  }, [liveComments, shadeById, isDark, commentsDisabled, modifiedEditor, monaco, hoveredCommentId]);
 
   function addComment(text: string) {
     if (editingId) {
@@ -541,6 +536,7 @@ export function EditorPane({
         {state.kind === 'loading' && displayed.kind === 'loaded' && <LoadingPill />}
         <CommentOverlay
           liveComments={liveComments}
+          shadeById={shadeById}
           modifiedEditor={modifiedEditor}
           monaco={monaco}
           area={editorAreaEl}

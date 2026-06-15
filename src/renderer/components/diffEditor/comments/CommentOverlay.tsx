@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
 import type { LineRange, LiveComment, Shade } from './types';
-import { assignShades } from './shadeAssignment';
 import { commentIdsAtLine } from './rowShades';
 import { BubbleStack } from './BubbleStack';
 import { CommentIcon } from './CommentIcon';
@@ -9,6 +8,9 @@ import { DraftBubble } from './DraftBubble';
 
 interface Props {
   liveComments: LiveComment[];
+  /** Shared shade assignment (from useCommentShades) — same map the band
+   *  decorations use, so bubbles and bands never disagree on colour. */
+  shadeById: ReadonlyMap<string, Shade>;
   modifiedEditor: monacoEditor.ICodeEditor | null;
   monaco: typeof import('monaco-editor') | null;
   area: HTMLDivElement | null;
@@ -60,6 +62,7 @@ const INITIAL_DRAFT_HEIGHT_PX = 130;
  *  only same-anchor comments share a trigger. */
 export function CommentOverlay({
   liveComments,
+  shadeById,
   modifiedEditor,
   monaco,
   area,
@@ -76,27 +79,14 @@ export function CommentOverlay({
 }: Props) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
 
-  // Live-range projection (line numbers track edits via Monaco stickiness).
-  // The comment being edited stays in the projection — the persisted bubble
-  // renders with opacity 0 while the DraftBubble crossfades in beside it,
-  // both sharing the same viewzone wrapper. That's what makes the read-only
-  // → editable transition feel like the bubble morphs in place instead of
-  // popping.
-  const projected = useMemo<LiveComment[]>(() => {
-    const model = modifiedEditor?.getModel();
-    if (!modifiedEditor || !model) return [];
-    return liveComments.flatMap((c) => {
-      const r = model.getDecorationRange(c.decorationId);
-      if (!r) return [];
-      return [{ ...c, startLine: r.startLineNumber, endLine: r.endLineNumber }];
-    });
-  }, [liveComments, modifiedEditor]);
-
-  const shadeById = useMemo<Map<string, Shade>>(() => assignShades(projected), [projected]);
-
+  // liveComments already carry live ranges (useFileComments re-projects on
+  // edits), and shadeById is the shared single shade assignment. The comment
+  // being edited stays in the list — the persisted bubble renders with opacity
+  // 0 while the DraftBubble crossfades in beside it, both sharing the same
+  // viewzone wrapper, so the read-only → editable transition morphs in place.
   const groups = useMemo<Group[]>(() => {
     const byKey = new Map<string, LiveComment[]>();
-    for (const c of projected) {
+    for (const c of liveComments) {
       const k = `${c.startLine}:${c.endLine}`;
       const list = byKey.get(k);
       if (list) list.push(c);
@@ -105,7 +95,7 @@ export function CommentOverlay({
     return Array.from(byKey.entries())
       .map(([key, comments]) => ({ key, anchorLine: comments[0]!.startLine, comments }))
       .sort((a, b) => a.anchorLine - b.anchorLine);
-  }, [projected]);
+  }, [liveComments]);
 
   // Re-render on scroll / resize / content-size change so absolute
   // positions track Monaco. onDidContentSizeChange fires when the editor's
@@ -514,7 +504,7 @@ export function CommentOverlay({
     const move = modifiedEditor.onMouseMove((e) => {
       const line = e.target?.position?.lineNumber;
       if (!line) return;
-      const ids = commentIdsAtLine(projected, line);
+      const ids = commentIdsAtLine(liveComments, line);
       onHoveredIdChange(ids.length === 1 ? ids[0]! : null);
     });
     const leave = modifiedEditor.onMouseLeave(() => onHoveredIdChange(null));
@@ -522,7 +512,7 @@ export function CommentOverlay({
       move.dispose();
       leave.dispose();
     };
-  }, [modifiedEditor, projected, onHoveredIdChange]);
+  }, [modifiedEditor, liveComments, onHoveredIdChange]);
 
   const toggleGroup = useCallback((key: string) => {
     setCollapsed((prev) => {
