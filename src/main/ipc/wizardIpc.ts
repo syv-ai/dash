@@ -3,13 +3,14 @@ import { z } from 'zod';
 import { parseArgs, errorResponse } from './validate';
 import { getTuiHost } from '../tui/hostInstance';
 import { getWizard, type RequestStartPayload } from '../wizard/wizardRegistry';
+import { decideWizardStart } from '../wizard/decideWizardStart';
 import { DatabaseService } from '../services/DatabaseService';
 import { initDrawerTabsService } from './drawerTabsIpc';
 
 export function registerWizardIpc(opts: { getMainWindow: () => BrowserWindow | null }): void {
   ipcMain.handle(
     'wizard:requestStart',
-    async (_e, payload: RequestStartPayload & { featureId: string }) => {
+    async (_e, payload: RequestStartPayload & { featureId: string; force?: boolean }) => {
       parseArgs(
         'wizard:requestStart',
         z.looseObject({
@@ -21,10 +22,11 @@ export function registerWizardIpc(opts: { getMainWindow: () => BrowserWindow | n
           cwd: z.string(),
           cols: z.number(),
           rows: z.number(),
+          force: z.boolean().optional(),
         }),
         payload,
       );
-      const { featureId, taskId, projectId } = payload;
+      const { featureId, taskId, projectId, force } = payload;
       const wizard = getWizard(featureId);
       if (!wizard) {
         return { success: false as const, error: `unknown wizard feature: ${featureId}` };
@@ -32,23 +34,22 @@ export function registerWizardIpc(opts: { getMainWindow: () => BrowserWindow | n
       // A freshly reloaded renderer can request before the reload teardown
       // finishes — wait so isActive doesn't report a wizard that's mid-death.
       await getTuiHost().reloadSettled();
-      if (DatabaseService.isFeatureDismissed(projectId, featureId)) {
-        return {
-          success: true as const,
-          data: { started: false as const, reason: 'dismissed' as const },
-        };
-      }
-      if (wizard.isRelevant && !wizard.isRelevant(payload)) {
-        return {
-          success: true as const,
-          data: { started: false as const, reason: 'not-relevant' as const },
-        };
-      }
       const host = getTuiHost();
-      if (host.isActive(featureId, taskId)) {
+      const engagement = host.isLive(featureId, taskId)
+        ? 'live'
+        : host.isActive(featureId, taskId)
+          ? 'suppressed'
+          : 'none';
+      const decision = decideWizardStart({
+        dismissed: DatabaseService.isFeatureDismissed(projectId, featureId),
+        relevant: !wizard.isRelevant || wizard.isRelevant(payload),
+        engagement,
+        force,
+      });
+      if (!decision.start) {
         return {
           success: true as const,
-          data: { started: false as const, reason: 'already-active' as const },
+          data: { started: false as const, reason: decision.reason },
         };
       }
       try {
@@ -67,6 +68,15 @@ export function registerWizardIpc(opts: { getMainWindow: () => BrowserWindow | n
     return {
       success: true as const,
       data: getTuiHost().isActive(q.featureId, q.taskId),
+    };
+  });
+
+  ipcMain.handle('wizard:completed', async (_e, q: { featureId: string; cwd: string }) => {
+    parseArgs('wizard:completed', z.looseObject({ featureId: z.string(), cwd: z.string() }), q);
+    const wizard = getWizard(q.featureId);
+    return {
+      success: true as const,
+      data: wizard?.isComplete?.(q.cwd) ?? false,
     };
   });
 }

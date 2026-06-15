@@ -95,6 +95,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   requestWizard: (payload: unknown) => ipcRenderer.invoke('wizard:requestStart', payload),
   wizardActive: (q: { featureId: string; taskId: string }) =>
     ipcRenderer.invoke('wizard:active', q),
+  wizardCompleted: (q: { featureId: string; cwd: string }) =>
+    ipcRenderer.invoke('wizard:completed', q),
   onPortsRestartTask: (cb: (taskId: string) => void) => {
     const handler = (_event: unknown, taskId: string) => cb(taskId);
     ipcRenderer.on('ports:restart-task', handler);

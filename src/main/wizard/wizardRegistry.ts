@@ -23,6 +23,12 @@ export interface Wizard {
    * Absent = always relevant.
    */
   isRelevant?(payload: RequestStartPayload): boolean;
+  /**
+   * Whether this wizard has already produced its artifact for `cwd` (e.g. ports
+   * setup wrote `.dash/ports.json`). Drives the green checkmark in the drawer
+   * dropdown. Absent = no completion state to show.
+   */
+  isComplete?(cwd: string): boolean;
 }
 
 const wizards = new Map<string, Wizard>();

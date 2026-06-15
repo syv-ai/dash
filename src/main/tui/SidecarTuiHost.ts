@@ -107,6 +107,16 @@ export class SidecarTuiHost {
     return this.engagements.has(this.key(featureId, taskId));
   }
 
+  /**
+   * True only while a side-car is genuinely running (pending or active). Unlike
+   * isActive, a `suppressed` (finished) engagement is NOT live — its drawer tab
+   * was already closed, so a forced restart may spawn over it.
+   */
+  isLive(featureId: string, taskId: string): boolean {
+    const state = this.engagements.get(this.key(featureId, taskId))?.state;
+    return state === 'pending' || state === 'active';
+  }
+
   async spawn(opts: SpawnOpts): Promise<{ tabId: string }> {
     const key = this.key(opts.featureId, opts.taskId);
     const sockPath = path.join(

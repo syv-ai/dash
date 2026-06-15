@@ -1,8 +1,20 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Terminal, ChevronDown, ChevronUp, X, Plus, ScrollText } from 'lucide-react';
+import { Terminal, ChevronDown, ChevronUp, X, Plus, ScrollText, Check } from 'lucide-react';
 import { sessionRegistry } from '../terminal/SessionRegistry';
 import { Tooltip } from './ui/Tooltip';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from './ui/dropdown-menu';
 import { nextShellLabel } from '../utils/shellTabLabel';
+import { useProjects } from '../stores/projectsStore';
+import { WIZARDS } from '../../shared/wizards';
+import { TUI_COLS, TUI_ROWS, type TuiFeatureId } from '../../shared/tuiProtocol';
 import type { Tab } from '../../shared/drawerTabs';
 
 /** Minimum drawer height (px) for a side-car TUI's CTA start screen. */
@@ -215,6 +227,21 @@ export function TerminalDrawer({
     }
   }, [collapsed, activeTabId]);
 
+  // Which wizards have already produced their artifact (e.g. ports setup wrote
+  // .dash/ports.json) — drives the green checkmark. Refreshed when the dropdown
+  // opens so it reflects the latest on-disk state.
+  const [wizardDone, setWizardDone] = useState<Record<string, boolean>>({});
+
+  async function refreshWizardDone() {
+    const entries = await Promise.all(
+      WIZARDS.map(async (w) => {
+        const r = await window.electronAPI.wizardCompleted({ featureId: w.id, cwd });
+        return [w.id, r.success ? Boolean(r.data) : false] as const;
+      }),
+    );
+    setWizardDone(Object.fromEntries(entries));
+  }
+
   async function handleAddTab() {
     const id = `shell:${taskId}:t${Date.now()}`;
     pendingFocusRef.current = id;
@@ -224,6 +251,40 @@ export function TerminalDrawer({
       id,
     });
     void window.electronAPI.drawerTabsSetActive(taskId, id);
+  }
+
+  async function handleLaunchWizard(featureId: TuiFeatureId) {
+    // A live wizard tab already on screen (e.g. an auto-launched "Set up ports"
+    // CTA) can't be re-spawned — focus it instead of silently no-opping. A tui
+    // tab is only present here while its side-car is live; it's closed on exit.
+    const liveTab = tabs.find((t) => t.kind === 'tui' && t.featureId === featureId);
+    if (liveTab) {
+      void window.electronAPI.drawerTabsSetActive(taskId, liveTab.id);
+      return;
+    }
+    const { projects, tasksByProject } = useProjects.getState();
+    const task = Object.values(tasksByProject)
+      .flat()
+      .find((t) => t.id === taskId);
+    const project = task && projects.find((p) => p.id === task.projectId);
+    if (!task || !project) return;
+    // force: the user explicitly picked the wizard, so re-run it even when it's
+    // already complete, dismissed, or finished this session (the IPC still
+    // refuses to spawn over a genuinely live side-car).
+    const resp = await window.electronAPI.requestWizard({
+      featureId,
+      taskId,
+      projectId: task.projectId,
+      taskName: task.name,
+      projectName: project.name,
+      cwd,
+      cols: TUI_COLS,
+      rows: TUI_ROWS,
+      force: true,
+    });
+    if (resp.success && resp.data?.started && resp.data.tabId) {
+      void window.electronAPI.drawerTabsSetActive(taskId, resp.data.tabId);
+    }
   }
 
   function handleCloseTab(tabId: string) {
@@ -312,17 +373,40 @@ export function TerminalDrawer({
           {/* TUI tabs (e.g. ports setup) sit right-aligned and tinted so they read
               as Dash speaking, not another terminal. */}
           {tabs.filter((t) => t.kind === 'tui').map(renderTab)}
-          <Tooltip content="New terminal">
-            <button
-              className="w-5 h-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors flex-shrink-0"
-              onClick={() => {
-                void handleAddTab();
-              }}
-              aria-label="Add terminal"
-            >
-              <Plus size={11} strokeWidth={2} />
-            </button>
-          </Tooltip>
+          <DropdownMenu
+            onOpenChange={(open) => {
+              if (open) void refreshWizardDone();
+            }}
+          >
+            <Tooltip content="New terminal or wizard">
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="w-5 h-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors flex-shrink-0"
+                  aria-label="New terminal or wizard"
+                >
+                  <Plus size={11} strokeWidth={2} />
+                </button>
+              </DropdownMenuTrigger>
+            </Tooltip>
+            <DropdownMenuContent align="end" sideOffset={6}>
+              <DropdownMenuItem onSelect={() => void handleAddTab()}>
+                <Terminal size={13} strokeWidth={1.8} />
+                <span>Terminal</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Wizards</DropdownMenuLabel>
+                {WIZARDS.map((w) => (
+                  <DropdownMenuItem key={w.id} onSelect={() => void handleLaunchWizard(w.id)}>
+                    <span className="flex-1">{w.label}</span>
+                    {wizardDone[w.id] && (
+                      <Check size={13} strokeWidth={2} className="text-[hsl(var(--git-added))]" />
+                    )}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <button
             onClick={onCollapse}
             className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"

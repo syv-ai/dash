@@ -207,8 +207,11 @@ export interface ElectronAPI {
     cwd: string;
     cols: number;
     rows: number;
+    /** User explicitly picked the wizard — bypass the dismissed/relevance gates. */
+    force?: boolean;
   }) => Promise<IpcResponse<{ started: boolean; tabId?: string; reason?: string }>>;
   wizardActive: (q: { featureId: string; taskId: string }) => Promise<IpcResponse<boolean>>;
+  wizardCompleted: (q: { featureId: string; cwd: string }) => Promise<IpcResponse<boolean>>;
   onPortsRestartTask: (cb: (taskId: string) => void) => () => void;
   onPortsTuiMigrated: (
     cb: (info: { fromTaskId: string; toTaskId: string; projectId: string }) => void,

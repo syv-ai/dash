@@ -26,6 +26,7 @@ export function registerPortsWizard(): void {
     id: FEATURE_ID,
     buildSpawn: (payload, getMainWindow) => onboardingSpawn(payload, getMainWindow),
     isRelevant: (payload) => portsOnboardingRelevant(payload.cwd),
+    isComplete: (cwd) => !portsOnboardingRelevant(cwd),
   });
 }
 
