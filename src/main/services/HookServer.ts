@@ -4,7 +4,6 @@ import { BrowserWindow, Notification } from 'electron';
 import { eq } from 'drizzle-orm';
 import { activityMonitor } from './ActivityMonitor';
 import { contextUsageService } from './ContextUsageService';
-import { portsDebug } from './PortsDebugLog';
 import { getDb } from '../db/client';
 import { tasks } from '../db/schema';
 
@@ -199,7 +198,6 @@ class HookServerImpl {
               const message = typeof payload.message === 'string' ? payload.message : undefined;
 
               if (notificationType === 'permission_prompt') {
-                portsDebug.log('hook', 'permission-prompt fired', { ptyId });
                 activityMonitor.setWaitingForPermission(ptyId);
                 hookEvents.emit('permission-prompt', { ptyId });
                 const taskName = this.getTaskName(ptyId);

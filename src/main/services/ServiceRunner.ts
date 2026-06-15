@@ -1,6 +1,5 @@
 import path from 'path';
 import type { TaskPort, PortLiveness } from '@shared/types';
-import { portsDebug } from './PortsDebugLog';
 
 export interface RunnerDeps {
   getTaskPath(taskId: string): string | undefined;
@@ -140,7 +139,6 @@ export class ServiceRunner {
         /* already gone */
       }
     }
-    portsDebug.log('service', 'start', { taskId, label: port.label, cmd: port.runCommand });
     try {
       // The tab row may still exist from a previous run (respawn into the same
       // id would hit the PK) — close it first; close() is a no-op when absent.
@@ -165,7 +163,7 @@ export class ServiceRunner {
       return { ok: true };
     } catch (err) {
       const message = `Couldn't start ${port.label}: ${err instanceof Error ? err.message : String(err)}`;
-      portsDebug.log('service', 'start failed', { taskId, label: port.label, err: String(err) });
+      console.error('[ServiceRunner] start failed', taskId, port.label, err);
       this.deps.toast(message);
       return { ok: false, message };
     }
@@ -173,7 +171,6 @@ export class ServiceRunner {
 
   private handleSelfExit(taskId: string, label: string, tabId: string): void {
     if (this.owned.get(this.key(taskId, label)) !== tabId) return;
-    portsDebug.log('service', 'self-exit', { taskId, label });
     this.owned.delete(this.key(taskId, label));
     this.deps.notifyChanged(taskId);
   }
@@ -182,7 +179,6 @@ export class ServiceRunner {
     // 1. Dash-owned and alive → kill our PTY.
     const ownedTab = this.ownedTabId(taskId, port.label);
     if (ownedTab) {
-      portsDebug.log('service', 'stop: kill owned pty', { taskId, label: port.label });
       this.deps.killPty(ownedTab);
       this.owned.delete(this.key(taskId, port.label));
       this.deps.notifyChanged(taskId);
@@ -195,7 +191,6 @@ export class ServiceRunner {
       const taskPath = this.deps.getTaskPath(taskId);
       if (!taskPath) return { ok: false, message: `task ${taskId} not found` };
       const cwd = port.cwd ? path.join(taskPath, port.cwd) : taskPath;
-      portsDebug.log('service', 'stop: exec', { taskId, label: port.label, cmd: port.stopCommand });
       const { code, stderrTail } = await this.deps.exec(port.stopCommand, cwd);
       if (code !== 0) {
         const message = `Stop command for ${port.label} exited ${code}${stderrTail ? `: ${stderrTail}` : ''}`;
@@ -213,7 +208,6 @@ export class ServiceRunner {
       this.deps.toast(message);
       return { ok: false, message };
     }
-    portsDebug.log('service', 'stop: sigterm pids', { taskId, label: port.label, pids });
     for (const pid of pids) this.deps.killPid(pid);
     this.deps.toast(
       `Sent SIGTERM to ${pids.map((p) => `PID ${p}`).join(', ')} (:${port.hostPort})`,

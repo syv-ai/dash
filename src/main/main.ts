@@ -159,8 +159,6 @@ void app.whenReady().then(async () => {
   // path doesn't have a window yet.
   const { registerWizardIpc, cleanupWizardsAtBoot } = await import('./ipc/wizardIpc');
   const { registerPortsWizard, migrateLegacyPortsDismissals } = await import('./wizard/ports');
-  const { portsDebug } = await import('./services/PortsDebugLog');
-  portsDebug.boot();
   registerPortsWizard();
   migrateLegacyPortsDismissals();
   cleanupWizardsAtBoot();

@@ -5,7 +5,6 @@ import { hookServer } from './HookServer';
 import { contextUsageService } from './ContextUsageService';
 import { RtkService } from './RtkService';
 import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
-import { portsDebug } from './PortsDebugLog';
 import { TerminalMirror } from './TerminalMirror';
 import { terminalSnapshotService } from './TerminalSnapshotService';
 import { ensureShellConfig } from './ptyShellConfig';
@@ -414,12 +413,6 @@ export async function startDirectPty(options: {
   // ports-migrate flow today; no-op for every other spawn. buildClaudeArgs
   // places it last (CC auto-submits it after the trust gate clears).
   const initialPrompt = consumeInitialPrompt(options.id);
-  if (initialPrompt) {
-    portsDebug.log('migrate', 'initial prompt consumed at spawn', {
-      taskId: options.id,
-      promptLen: initialPrompt.length,
-    });
-  }
 
   const args = buildClaudeArgs({
     resumeSessionId,

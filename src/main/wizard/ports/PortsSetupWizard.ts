@@ -1,7 +1,6 @@
 import type { EventEmitter } from 'events';
 import { WizardOrchestrator, type WizardIo } from '../WizardOrchestrator';
 import type { PortsShow, PortsChoice, ExitReason } from '../../../shared/portsTuiProtocol';
-import { portsDebug } from '../../services/PortsDebugLog';
 
 const PORTS_JSON_TIMEOUT_MS = 30 * 60_000; // cap waiting for ports.json
 const SENTINEL_TIMEOUT_MS = 20 * 60_000; // cap waiting for setup-complete
@@ -40,27 +39,12 @@ export class PortsSetupWizard extends WizardOrchestrator<PortsShow, PortsChoice>
 
   protected override async onStart(): Promise<void> {
     const onConfig = (p: { taskId: string }) => {
-      portsDebug.log('orch', 'heard ports:config', {
-        payloadTaskId: p.taskId,
-        wanted: this.taskId,
-        phase: this.phase,
-      });
       if (p.taskId === this.taskId) void this.onPortsConfig();
     };
     const onComplete = (p: { taskId: string }) => {
-      portsDebug.log('orch', 'heard ports:setupComplete', {
-        payloadTaskId: p.taskId,
-        wanted: this.taskId,
-        phase: this.phase,
-      });
       if (p.taskId === this.taskId) void this.onSetupComplete();
     };
     const onConfigError = (p: { taskId: string; errors: string[] }) => {
-      portsDebug.log('orch', 'heard ports:configError', {
-        payloadTaskId: p.taskId,
-        wanted: this.taskId,
-        phase: this.phase,
-      });
       if (p.taskId === this.taskId) void this.onConfigError(p.errors);
     };
     this.services.portsEvents.on('ports:config', onConfig);

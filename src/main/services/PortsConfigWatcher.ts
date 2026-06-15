@@ -3,7 +3,6 @@ import * as path from 'path';
 import { EventEmitter } from 'events';
 import { BrowserWindow } from 'electron';
 import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
-import { portsDebug } from './PortsDebugLog';
 
 /**
  * In-process event bus for main-side consumers (e.g. PortsSetupWizard)
@@ -69,15 +68,12 @@ export function ensureWatching(taskId: string, worktreePath: string): void {
 
 function armWatcher(entry: WatcherEntry, taskId: string): void {
   const dashDir = path.join(entry.worktreePath, DASH_DIR);
-  if (!fs.existsSync(dashDir)) {
-    portsDebug.log('watcher', 'armWatcher: .dash missing — deferred', { taskId, dashDir });
-    return;
-  }
+  // Deferred until .dash/ exists — ensureWatching retries the arm on its next call.
+  if (!fs.existsSync(dashDir)) return;
 
   let watcher: fs.FSWatcher;
   try {
     watcher = fs.watch(dashDir, (eventType, filename) => {
-      portsDebug.log('watcher', 'fs.watch event', { taskId, eventType, filename });
       if (filename === PORTS_FILE) {
         const e = entries.get(taskId);
         if (!e) return;
@@ -88,7 +84,7 @@ function armWatcher(entry: WatcherEntry, taskId: string): void {
           try {
             WorkspacePortsRuntime.setupTask({ taskId, worktreePath: entry.worktreePath }, errors);
           } catch (err) {
-            portsDebug.log('watcher', 'setupTask failed', { taskId, err: String(err) });
+            console.error('[PortsConfigWatcher] setupTask failed', taskId, err);
             errors.push(err instanceof Error ? err.message : String(err));
           }
           notifyConfigChanged(taskId, errors);
@@ -99,9 +95,7 @@ function armWatcher(entry: WatcherEntry, taskId: string): void {
         const e = entries.get(taskId);
         if (!e) return;
         const sentinelPath = path.join(dashDir, SETUP_COMPLETE_FILE);
-        const exists = fs.existsSync(sentinelPath);
-        portsDebug.log('watcher', 'sentinel event', { taskId, exists });
-        if (!exists) return;
+        if (!fs.existsSync(sentinelPath)) return;
         if (e.sentinelDebounceTimer) clearTimeout(e.sentinelDebounceTimer);
         e.sentinelDebounceTimer = setTimeout(() => {
           e.sentinelDebounceTimer = null;
@@ -110,7 +104,7 @@ function armWatcher(entry: WatcherEntry, taskId: string): void {
       }
     });
   } catch (err) {
-    portsDebug.log('watcher', 'fs.watch threw', { taskId, err: String(err) });
+    console.error('[PortsConfigWatcher] fs.watch failed', taskId, err);
     return;
   }
 
@@ -119,7 +113,6 @@ function armWatcher(entry: WatcherEntry, taskId: string): void {
   watcher.on('error', () => {});
 
   entry.watcher = watcher;
-  portsDebug.log('watcher', 'armWatcher: armed', { taskId, dashDir });
 }
 
 /** Close the watcher and drop the entry. For task deletion. Idempotent. */
@@ -128,7 +121,6 @@ export function stop(taskId: string): void {
   if (!entry) return;
   closeEntry(entry);
   entries.delete(taskId);
-  portsDebug.log('watcher', 'stop: closed', { taskId });
 }
 
 export function stopAll(): void {
@@ -161,16 +153,13 @@ function notifyConfigChanged(taskId: string, errors: string[]): void {
   // In-process: a valid config advances the setup wizard; an invalid one keeps
   // it waiting and shows the errors, so a corrected rewrite re-advances it.
   if (errors.length > 0) {
-    portsDebug.log('watcher', 'emit ports:configError', { taskId, errors });
     events.emit('ports:configError', { taskId, errors });
   } else {
-    portsDebug.log('watcher', 'emit ports:config', { taskId });
     events.emit('ports:config', { taskId });
   }
 }
 
 function notifySetupComplete(taskId: string): void {
-  portsDebug.log('watcher', 'emit ports:setupComplete', { taskId });
   events.emit('ports:setupComplete', { taskId });
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {

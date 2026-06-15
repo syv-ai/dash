@@ -17,7 +17,6 @@ import {
 import { DatabaseService } from '../../services/DatabaseService';
 import { worktreeService } from '../../services/WorktreeService';
 import { setInitialPrompt } from '../../services/ptyManager';
-import { portsDebug } from '../../services/PortsDebugLog';
 
 const FEATURE_ID = 'ports';
 
@@ -25,7 +24,11 @@ export function registerPortsWizard(): void {
   registerWizard({
     id: FEATURE_ID,
     buildSpawn: (payload, getMainWindow) => onboardingSpawn(payload, getMainWindow),
-    isRelevant: (payload) => portsOnboardingRelevant(payload.cwd),
+    // Relevant only when the worktree has no ports config yet AND the heuristic
+    // actually detects port-using services — otherwise we'd spawn a side-car
+    // just to have the onboarding flow find nothing and tear down.
+    isRelevant: (payload) =>
+      portsOnboardingRelevant(payload.cwd) && detectPortsNeed(payload.cwd).needsPorts,
     isComplete: (cwd) => !portsOnboardingRelevant(cwd),
   });
 }
@@ -157,13 +160,8 @@ async function handleMigrate(args: {
     fs.rmSync(path.join(dashDir, 'setup-complete'), { force: true });
     WorkspacePortsRuntime.setupTask({ taskId: task.id, worktreePath: task.path });
     ensurePortsConfigWatch(task.id, task.path);
-    portsDebug.log('migrate', 'watcher armed', {
-      taskId: task.id,
-      dashDir,
-      exists: fs.existsSync(dashDir),
-    });
   } catch (err) {
-    portsDebug.log('migrate', 'ports bootstrap failed', { err: String(err) });
+    console.error('[ports] migrate bootstrap failed', err);
   }
 
   // Stash the FULL setup prompt as the agent's initial positional arg.
@@ -177,15 +175,11 @@ async function handleMigrate(args: {
       guesses: args.guesses,
     });
     setInitialPrompt(task.id, setupPrompt);
-    portsDebug.log('migrate', 'initial prompt stashed', {
-      taskId: task.id,
-      promptLen: setupPrompt.length,
-    });
   } catch (err) {
     // Best effort — if the builder somehow fails, the setup flow still
     // surfaces the 30-min ports.json timeout, and the user can re-run
     // setup from the Dash UI.
-    portsDebug.log('migrate', 'initial-prompt build failed', { err: String(err) });
+    console.error('[ports] migrate initial-prompt build failed', err);
   }
 
   // Kick off the spawn synchronously so the host's pending set contains the

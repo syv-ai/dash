@@ -1,6 +1,5 @@
 import type { TuiSocketServer } from '../services/TuiSocketServer';
 import type { MainToTui, TuiToMain } from '../../shared/tuiProtocol';
-import { portsDebug } from '../services/PortsDebugLog';
 
 export interface WizardIo<Show, Choice> {
   socket: TuiSocketServer<TuiToMain<Choice>, MainToTui<Show>>;
@@ -40,11 +39,6 @@ export abstract class WizardOrchestrator<
   ) {}
 
   async start(): Promise<void> {
-    portsDebug.log('orch', 'start', {
-      taskId: this.taskId,
-      projectId: this.projectId,
-      flow: this.constructor.name,
-    });
     this.onCleanup(this.io.socket.onMessage((m) => void this.handleMessage(m)));
     this.onCleanup(this.io.socket.onClose(() => void this.teardown()));
     await this.onStart();
@@ -126,7 +120,6 @@ export abstract class WizardOrchestrator<
     // Idempotent — socket close and exit-message paths both land here.
     if (this.tornDown) return;
     this.tornDown = true;
-    portsDebug.log('orch', 'teardown', { taskId: this.taskId, reason: this.exitReason });
     for (const t of this.timers.values()) clearTimeout(t);
     this.timers.clear();
     for (const fn of this.cleanups) {
