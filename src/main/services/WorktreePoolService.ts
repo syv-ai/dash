@@ -85,6 +85,7 @@ export class WorktreePoolService {
     baseRef?: string,
     linkedIssueNumbers?: number[],
     pushRemote?: boolean,
+    setupScript?: string | null,
   ): Promise<WorktreeInfo | null> {
     const reserve = this.reserves.get(projectId);
     if (!reserve) return null;
@@ -171,7 +172,7 @@ export class WorktreePoolService {
       await worktreeService.preserveFiles(reserve.projectPath, newPath);
 
       // Run worktree setup script (async, non-blocking)
-      worktreeService.runSetupScriptAsync(newPath, newBranch, reserve.projectPath);
+      worktreeService.runSetupScriptAsync(newPath, newBranch, reserve.projectPath, setupScript);
 
       // Fire-and-forget replenish
       void this.ensureReserve(projectId, reserve.projectPath);

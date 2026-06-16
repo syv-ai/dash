@@ -238,13 +238,16 @@ export const useProjects = create<ProjectsStore>((set) => ({
           projectPath: project.path,
           worktreePath: taskItem.path,
           branch: taskItem.branch,
-          options: options
-            ? {
-                deleteWorktreeDir: options.deleteWorktreeDir,
-                deleteLocalBranch: options.deleteLocalBranch && taskItem.branchCreatedByDash,
-                deleteRemoteBranch: options.deleteRemoteBranch && taskItem.branchCreatedByDash,
-              }
-            : undefined,
+          options: {
+            ...(options
+              ? {
+                  deleteWorktreeDir: options.deleteWorktreeDir,
+                  deleteLocalBranch: options.deleteLocalBranch && taskItem.branchCreatedByDash,
+                  deleteRemoteBranch: options.deleteRemoteBranch && taskItem.branchCreatedByDash,
+                }
+              : {}),
+            teardownScript: taskItem.teardownScript,
+          },
         });
       }
     }
@@ -271,6 +274,7 @@ export const useProjects = create<ProjectsStore>((set) => ({
             deleteWorktreeDir: options.deleteWorktreeDirs,
             deleteLocalBranch: options.deleteLocalBranches && t.branchCreatedByDash,
             deleteRemoteBranch: options.deleteRemoteBranches && t.branchCreatedByDash,
+            teardownScript: t.teardownScript,
           },
         });
       }
@@ -290,7 +294,8 @@ export const useProjects = create<ProjectsStore>((set) => ({
     await useProjects.getState().loadProjects();
   },
   createTask: async (options, projectId) => {
-    const { name, permissionMode, linkedItems, contextPrompt } = options;
+    const { name, permissionMode, linkedItems, contextPrompt, setupScript, teardownScript } =
+      options;
     const targetProjectId = projectId ?? useProjects.getState().activeProjectId;
     const targetProject = useProjects.getState().projects.find((p) => p.id === targetProjectId);
     if (!targetProject) return false;
@@ -313,6 +318,7 @@ export const useProjects = create<ProjectsStore>((set) => ({
             baseRef: options.baseRef,
             linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
             pushRemote: options.pushRemote,
+            setupScript,
           });
           if (claimResp.success && claimResp.data) {
             worktreeInfo = { branch: claimResp.data.branch, path: claimResp.data.path };
@@ -324,6 +330,7 @@ export const useProjects = create<ProjectsStore>((set) => ({
               projectId: targetProject.id,
               linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
               pushRemote: options.pushRemote,
+              setupScript,
             });
             if (createResp.success && createResp.data) {
               worktreeInfo = { branch: createResp.data.branch, path: createResp.data.path };
@@ -341,6 +348,7 @@ export const useProjects = create<ProjectsStore>((set) => ({
             branch: options.branch,
             projectId: targetProject.id,
             linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
+            setupScript,
           });
           if (createResp.success && createResp.data) {
             worktreeInfo = { branch: createResp.data.branch, path: createResp.data.path };
@@ -387,6 +395,8 @@ export const useProjects = create<ProjectsStore>((set) => ({
         branchCreatedByDash: options.kind === 'worktree-new-branch' && !!worktreeInfo,
         linkedItems: linkedItems ?? null,
         contextPrompt: contextPrompt ?? null,
+        setupScript: setupScript ?? null,
+        teardownScript: teardownScript ?? null,
       });
       if (!saveResp.success || !saveResp.data) {
         toast.error(saveResp.error || 'Failed to save task');

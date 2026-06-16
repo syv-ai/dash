@@ -16,6 +16,17 @@ import {
 const execFileAsync = promisify(execFile);
 const execAsync = promisify(exec);
 
+/** Turn a newline-separated per-task script into a single shell command
+ *  (commands joined with " && " so a failure short-circuits), or null when
+ *  there are no non-empty commands. */
+function scriptStringToCommand(script: string | null | undefined): string | null {
+  const commands = (script ?? '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  return commands.length > 0 ? commands.join(' && ') : null;
+}
+
 const PRESERVE_PATTERNS = [
   '.env',
   '.env.keys',
@@ -37,6 +48,7 @@ export class WorktreeService {
       projectId: string;
       linkedIssueNumbers?: number[];
       pushRemote?: boolean;
+      setupScript?: string | null;
     },
   ): Promise<WorktreeInfo> {
     const slug = this.slugify(taskName);
@@ -74,7 +86,7 @@ export class WorktreeService {
     }
 
     // Run worktree setup script (async, non-blocking)
-    this.runSetupScriptAsync(worktreePath, branchName, projectPath);
+    this.runSetupScriptAsync(worktreePath, branchName, projectPath, options.setupScript);
 
     const id = this.stableIdFromPath(worktreePath);
     return {
@@ -126,7 +138,7 @@ export class WorktreeService {
       }
 
       // Run teardown before removal so the script can still read .dash/* in the worktree.
-      await this.runTeardownAsync(worktreePath, projectPath, branch);
+      await this.runTeardownAsync(worktreePath, projectPath, branch, options?.teardownScript);
 
       // Remove worktree
       try {
@@ -307,12 +319,22 @@ export class WorktreeService {
    * Awaited so cleanup (e.g. `docker compose down`) finishes before files vanish.
    * Failures are toasted but do not block removal — the user asked for the worktree gone.
    */
-  async runTeardownAsync(worktreePath: string, projectPath: string, branch: string): Promise<void> {
+  async runTeardownAsync(
+    worktreePath: string,
+    projectPath: string,
+    branch: string,
+    teardownOverride?: string | null,
+  ): Promise<void> {
     try {
       const config = loadWorkspaceConfig(worktreePath);
-      const fallbackPath = path.join(projectPath, '.dash', 'teardown.sh');
-      const fallbackScriptPath = fs.existsSync(fallbackPath) ? fallbackPath : null;
-      const command = resolveTeardownCommand({ config, fallbackScriptPath });
+      let command: string | null;
+      if (teardownOverride !== undefined && teardownOverride !== null) {
+        command = scriptStringToCommand(teardownOverride);
+      } else {
+        const fallbackPath = path.join(projectPath, '.dash', 'teardown.sh');
+        const fallbackScriptPath = fs.existsSync(fallbackPath) ? fallbackPath : null;
+        command = resolveTeardownCommand({ config, fallbackScriptPath });
+      }
       if (!command) return;
 
       const env = buildWorkspaceEnv({ worktreePath, projectPath, branch });
@@ -348,13 +370,26 @@ export class WorktreeService {
    *
    * Async, non-blocking — sends a toast on failure.
    */
-  runSetupScriptAsync(worktreePath: string, branchName: string, projectPath: string): void {
+  runSetupScriptAsync(
+    worktreePath: string,
+    branchName: string,
+    projectPath: string,
+    setupOverride?: string | null,
+  ): void {
     void (async () => {
       try {
         const config = loadWorkspaceConfig(worktreePath);
-        const fallbackPath = path.join(projectPath, '.dash', 'setup.sh');
-        const fallbackScriptPath = fs.existsSync(fallbackPath) ? fallbackPath : null;
-        const command = resolveSetupCommand({ config, fallbackScriptPath });
+        // A per-task override (even an empty one) supersedes the project config:
+        // empty means "this worktree intentionally has no setup".
+        const overrideCommand = scriptStringToCommand(setupOverride);
+        let command: string | null;
+        if (setupOverride !== undefined && setupOverride !== null) {
+          command = overrideCommand;
+        } else {
+          const fallbackPath = path.join(projectPath, '.dash', 'setup.sh');
+          const fallbackScriptPath = fs.existsSync(fallbackPath) ? fallbackPath : null;
+          command = resolveSetupCommand({ config, fallbackScriptPath });
+        }
         if (!command) return;
 
         const env = buildWorkspaceEnv({ worktreePath, projectPath, branch: branchName });
@@ -389,7 +424,7 @@ export class WorktreeService {
     projectPath: string,
     taskName: string,
     branch: string,
-    options: { projectId: string; linkedIssueNumbers?: number[] },
+    options: { projectId: string; linkedIssueNumbers?: number[]; setupScript?: string | null },
   ): Promise<WorktreeInfo> {
     // eslint-disable-next-line no-control-regex
     const hasControlChars = /[\x00-\x1f\x7f]/.test(branch);
@@ -483,7 +518,7 @@ export class WorktreeService {
       void this.linkIssuesAsync(worktreePath, branch, options.linkedIssueNumbers);
     }
 
-    this.runSetupScriptAsync(worktreePath, branch, projectPath);
+    this.runSetupScriptAsync(worktreePath, branch, projectPath, options.setupScript);
 
     const id = this.stableIdFromPath(worktreePath);
     return {

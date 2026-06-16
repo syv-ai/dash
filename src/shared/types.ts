@@ -63,6 +63,10 @@ export interface Task {
   branchCreatedByDash: boolean;
   linkedItems: LinkedItem[] | null;
   contextPrompt: string | null;
+  /** Per-task override of the project's default worktree setup/teardown scripts
+   *  (newline-separated commands). Null = no per-task scripts. */
+  setupScript: string | null;
+  teardownScript: string | null;
   archivedAt: string | null;
   sortOrder: number;
   totalTokens: number;
@@ -130,6 +134,9 @@ export interface RemoveWorktreeOptions {
   deleteWorktreeDir?: boolean;
   deleteLocalBranch?: boolean;
   deleteRemoteBranch?: boolean;
+  /** Per-task teardown override (newline-separated commands) run before removal.
+   *  Undefined → fall back to the project's .dash/config.json teardown. */
+  teardownScript?: string | null;
 }
 
 export interface PtyOptions {

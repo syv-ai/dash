@@ -102,6 +102,27 @@ export function registerDbIpc(): void {
     }
   });
 
+  ipcMain.handle(
+    'db:setTaskScripts',
+    (_event, args: { id: string; setupScript: string | null; teardownScript: string | null }) => {
+      try {
+        parseArgs(
+          'db:setTaskScripts',
+          z.looseObject({
+            id: z.string(),
+            setupScript: z.string().nullable(),
+            teardownScript: z.string().nullable(),
+          }),
+          args,
+        );
+        const data = DatabaseService.setTaskScripts(args.id, args.setupScript, args.teardownScript);
+        return { success: true, data };
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+  );
+
   ipcMain.handle('db:archiveTask', (_event, id: string) => {
     try {
       parseArgs('db:archiveTask', z.string(), id);

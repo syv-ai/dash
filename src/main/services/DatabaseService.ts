@@ -189,6 +189,9 @@ export class DatabaseService {
           permissionMode: data.permissionMode ?? 'default',
           branchCreatedByDash: data.branchCreatedByDash ?? false,
           linkedItems: linkedItemsJson,
+          contextPrompt: data.contextPrompt ?? null,
+          setupScript: data.setupScript ?? null,
+          teardownScript: data.teardownScript ?? null,
           sortOrder: sortOrder ?? 0,
           createdAt: now,
           updatedAt: now,
@@ -224,6 +227,23 @@ export class DatabaseService {
       .set({ contextPrompt: prompt, updatedAt: new Date().toISOString() })
       .where(eq(tasks.id, id))
       .run();
+  }
+
+  /** Update a task's per-task worktree scripts (Task Settings edit). Null clears
+   *  the override. Kept separate from saveTask so partial saves (rename, etc.)
+   *  can't clobber these. */
+  static setTaskScripts(
+    id: string,
+    setupScript: string | null,
+    teardownScript: string | null,
+  ): Task {
+    const db = getDb();
+    db.update(tasks)
+      .set({ setupScript, teardownScript, updatedAt: new Date().toISOString() })
+      .where(eq(tasks.id, id))
+      .run();
+    const row = db.select().from(tasks).where(eq(tasks.id, id)).get();
+    return this.mapTask(row!);
   }
 
   static updateTaskTokenStats(
@@ -497,6 +517,8 @@ export class DatabaseService {
       branchCreatedByDash: row.branchCreatedByDash ?? false,
       linkedItems,
       contextPrompt: row.contextPrompt ?? null,
+      setupScript: row.setupScript ?? null,
+      teardownScript: row.teardownScript ?? null,
       archivedAt: row.archivedAt,
       sortOrder: row.sortOrder,
       totalTokens: row.totalTokens ?? 0,

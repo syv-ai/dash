@@ -17,6 +17,7 @@ export function registerWorktreeIpc(): void {
         projectId: string;
         linkedIssueNumbers?: number[];
         pushRemote?: boolean;
+        setupScript?: string | null;
       },
     ) => {
       try {
@@ -29,6 +30,7 @@ export function registerWorktreeIpc(): void {
             projectId: z.string(),
             linkedIssueNumbers: z.array(z.number()).optional(),
             pushRemote: z.boolean().optional(),
+            setupScript: z.string().nullable().optional(),
           }),
           args,
         );
@@ -37,6 +39,7 @@ export function registerWorktreeIpc(): void {
           projectId: args.projectId,
           linkedIssueNumbers: args.linkedIssueNumbers,
           pushRemote: args.pushRemote,
+          setupScript: args.setupScript,
         });
         TelemetryService.capture('worktree_created');
         return { success: true, data };
@@ -58,6 +61,7 @@ export function registerWorktreeIpc(): void {
           deleteWorktreeDir?: boolean;
           deleteLocalBranch?: boolean;
           deleteRemoteBranch?: boolean;
+          teardownScript?: string | null;
         };
       },
     ) => {
@@ -73,6 +77,7 @@ export function registerWorktreeIpc(): void {
                 deleteWorktreeDir: z.boolean().optional(),
                 deleteLocalBranch: z.boolean().optional(),
                 deleteRemoteBranch: z.boolean().optional(),
+                teardownScript: z.string().nullable().optional(),
               })
               .optional(),
           }),
@@ -119,6 +124,7 @@ export function registerWorktreeIpc(): void {
         baseRef?: string;
         linkedIssueNumbers?: number[];
         pushRemote?: boolean;
+        setupScript?: string | null;
       },
     ) => {
       try {
@@ -130,6 +136,7 @@ export function registerWorktreeIpc(): void {
             baseRef: z.string().optional(),
             linkedIssueNumbers: z.array(z.number()).optional(),
             pushRemote: z.boolean().optional(),
+            setupScript: z.string().nullable().optional(),
           }),
           args,
         );
@@ -139,6 +146,7 @@ export function registerWorktreeIpc(): void {
           args.baseRef,
           args.linkedIssueNumbers,
           args.pushRemote,
+          args.setupScript,
         );
         if (data) {
           return { success: true, data };
@@ -160,6 +168,7 @@ export function registerWorktreeIpc(): void {
         branch: string;
         projectId: string;
         linkedIssueNumbers?: number[];
+        setupScript?: string | null;
       },
     ) => {
       try {
@@ -171,6 +180,7 @@ export function registerWorktreeIpc(): void {
             branch: z.string(),
             projectId: z.string(),
             linkedIssueNumbers: z.array(z.number()).optional(),
+            setupScript: z.string().nullable().optional(),
           }),
           args,
         );
@@ -181,6 +191,7 @@ export function registerWorktreeIpc(): void {
           {
             projectId: args.projectId,
             linkedIssueNumbers: args.linkedIssueNumbers,
+            setupScript: args.setupScript,
           },
         );
         TelemetryService.capture('worktree_created_existing_branch');

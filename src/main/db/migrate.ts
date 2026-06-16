@@ -187,6 +187,20 @@ export function runMigrations(): void {
     }
   }
 
+  // Per-task overrides for the project's default worktree setup/teardown scripts.
+  // Null = no per-task scripts. Snapshotted from .dash/config.json at task
+  // creation and editable per task.
+  for (const col of ['setup_script', 'teardown_script']) {
+    try {
+      rawDb.exec(`ALTER TABLE tasks ADD COLUMN ${col} TEXT`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes('duplicate column')) {
+        console.error(`[migrate] Failed to add ${col} column:`, err);
+      }
+    }
+  }
+
   // Deprecated since 0.9.9 — kept so existing DBs don't break, but no longer
   // read or written. See schema.ts for rationale. Do not remove this migration.
   try {

@@ -48,6 +48,8 @@ export const taskInputSchema = z.looseObject({
   branchCreatedByDash: z.boolean().optional(),
   linkedItems: z.array(linkedItemSchema).nullable().optional(),
   contextPrompt: z.string().nullable().optional(),
+  setupScript: z.string().nullable().optional(),
+  teardownScript: z.string().nullable().optional(),
   archivedAt: z.string().nullable().optional(),
   sortOrder: z.number().optional(),
   totalTokens: z.number().optional(),

@@ -91,6 +91,11 @@ export interface ElectronAPI {
     task: Partial<Task> & { projectId: string; name: string; branch: string; path: string },
   ) => Promise<IpcResponse<Task>>;
   deleteTask: (id: string) => Promise<IpcResponse<void>>;
+  setTaskScripts: (args: {
+    id: string;
+    setupScript: string | null;
+    teardownScript: string | null;
+  }) => Promise<IpcResponse<Task>>;
   archiveTask: (id: string) => Promise<IpcResponse<void>>;
   restoreTask: (id: string) => Promise<IpcResponse<void>>;
   reorderTasks: (projectId: string, orderedTaskIds: string[]) => Promise<IpcResponse<void>>;
@@ -112,6 +117,7 @@ export interface ElectronAPI {
     projectId: string;
     linkedIssueNumbers?: number[];
     pushRemote?: boolean;
+    setupScript?: string | null;
   }) => Promise<IpcResponse<WorktreeInfo>>;
   worktreeRemove: (args: {
     projectPath: string;
@@ -121,6 +127,7 @@ export interface ElectronAPI {
       deleteWorktreeDir?: boolean;
       deleteLocalBranch?: boolean;
       deleteRemoteBranch?: boolean;
+      teardownScript?: string | null;
     };
   }) => Promise<IpcResponse<void>>;
   worktreeClaimReserve: (args: {
@@ -129,6 +136,7 @@ export interface ElectronAPI {
     baseRef?: string;
     linkedIssueNumbers?: number[];
     pushRemote?: boolean;
+    setupScript?: string | null;
   }) => Promise<IpcResponse<WorktreeInfo>>;
   worktreeCreateFromExisting: (args: {
     projectPath: string;
@@ -136,6 +144,7 @@ export interface ElectronAPI {
     branch: string;
     projectId: string;
     linkedIssueNumbers?: number[];
+    setupScript?: string | null;
   }) => Promise<IpcResponse<WorktreeInfo>>;
   worktreeEnsureReserve: (args: {
     projectId: string;

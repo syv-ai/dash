@@ -37,6 +37,10 @@ export type CreateTaskOptions = {
   permissionMode: PermissionMode;
   linkedItems?: LinkedItem[];
   contextPrompt?: string;
+  /** Per-task worktree scripts (newline-separated), snapshotted from the project
+   *  default and editable per task. Only meaningful for worktree tasks. */
+  setupScript?: string | null;
+  teardownScript?: string | null;
 } & (
   | { kind: 'worktree-new-branch'; baseRef: string; pushRemote: boolean }
   | { kind: 'worktree-existing'; branch: string }
@@ -65,6 +69,9 @@ interface TaskModalProps {
   adoConfigured: boolean;
   initialBranches?: BranchInfo[];
   taskDefaults?: TaskModalDefaults | null;
+  /** Project default worktree scripts (newline-separated), prefilled into the
+   *  per-task override fields. */
+  defaultScripts?: { setup: string; teardown: string } | null;
   onClose: () => void;
   onCreate: (options: CreateTaskOptions) => Promise<boolean>;
   onGitInit?: () => void;
@@ -83,6 +90,7 @@ export function TaskModal(props: TaskModalProps) {
         adoConfigured={props.adoConfigured}
         initialBranches={props.initialBranches}
         taskDefaults={props.taskDefaults}
+        defaultScripts={props.defaultScripts}
         onCreate={props.onCreate}
         onGitInit={props.onGitInit}
       />
@@ -100,6 +108,7 @@ interface TaskModalBodyProps {
   adoConfigured: boolean;
   initialBranches?: BranchInfo[];
   taskDefaults?: TaskModalDefaults | null;
+  defaultScripts?: { setup: string; teardown: string } | null;
   onCreate: (options: CreateTaskOptions) => Promise<boolean>;
   onGitInit?: () => void;
 }
@@ -166,6 +175,7 @@ function TaskModalBody({
   adoConfigured,
   initialBranches,
   taskDefaults,
+  defaultScripts,
   onCreate,
   onGitInit,
 }: TaskModalBodyProps) {
@@ -180,6 +190,10 @@ function TaskModalBody({
     () => taskDefaults?.permissionMode ?? readInitialPermissionMode(),
   );
   const [contextPrompt, setContextPrompt] = useState(taskDefaults?.contextPrompt ?? '');
+  // Per-task worktree scripts, prefilled from the project default; edit to
+  // override for just this worktree.
+  const [setupScript, setSetupScript] = useState(defaultScripts?.setup ?? '');
+  const [teardownScript, setTeardownScript] = useState(defaultScripts?.teardown ?? '');
   const [pushRemote, setPushRemote] = useState(true);
   const [gitInitLoading, setGitInitLoading] = useState(false);
   const [createNewBranch, setCreateNewBranch] = useState(false);
@@ -328,11 +342,15 @@ function TaskModalBody({
     const allLinkedItems: LinkedItem[] = [...ghItems, ...adoItems];
     const linkedItems = allLinkedItems.length > 0 ? allLinkedItems : undefined;
 
+    // Per-task scripts only apply to worktree tasks; persist null otherwise.
+    const scriptsApply = useWorktree && !repoHasNoCommits;
     const base = {
       name: name.trim(),
       permissionMode,
       linkedItems,
       contextPrompt: contextPrompt.trim() || undefined,
+      setupScript: scriptsApply ? setupScript : null,
+      teardownScript: scriptsApply ? teardownScript : null,
     };
 
     let options: CreateTaskOptions;
@@ -748,6 +766,43 @@ function TaskModalBody({
                 origin/{slugify(name.trim())}
               </p>
             )}
+          </div>
+        )}
+
+        {/* Per-task worktree scripts (override the project default) */}
+        {useWorktree && !repoHasNoCommits && (
+          <div className="mb-4">
+            <Expandable label="Worktree scripts" hint="setup / teardown" defaultOpen={false}>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-medium text-muted-foreground/60 mb-1.5">
+                    Setup — runs in this new worktree
+                  </label>
+                  <textarea
+                    value={setupScript}
+                    onChange={(e) => setSetupScript(e.target.value)}
+                    rows={3}
+                    placeholder={'pnpm install\ncp ../.env .env'}
+                    className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[12px] font-mono placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-muted-foreground/60 mb-1.5">
+                    Teardown — runs before this worktree is removed
+                  </label>
+                  <textarea
+                    value={teardownScript}
+                    onChange={(e) => setTeardownScript(e.target.value)}
+                    rows={2}
+                    placeholder={'docker compose down'}
+                    className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[12px] font-mono placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground/40 leading-relaxed">
+                  Prefilled from the project default. Edits apply to this worktree only.
+                </p>
+              </div>
+            </Expandable>
           </div>
         )}
 

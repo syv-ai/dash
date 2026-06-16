@@ -882,8 +882,12 @@ export function App() {
   }
 
   // Loaded before the modal mounts so its fields render with the project's
-  // taskDefaults already applied (prefill only).
+  // taskDefaults + default worktree scripts already applied (prefill only).
   const [taskModalDefaults, setTaskModalDefaults] = useState<TaskModalDefaults | null>(null);
+  const [taskModalDefaultScripts, setTaskModalDefaultScripts] = useState<{
+    setup: string;
+    teardown: string;
+  } | null>(null);
 
   async function handleNewTask(projectId: string) {
     setActiveProjectId(projectId);
@@ -891,11 +895,18 @@ export function App() {
     // Read from the store (not a closure) so a freshly-created project resolves.
     const project = useProjects.getState().projects.find((p) => p.id === projectId);
     let defaults: TaskModalDefaults | null = null;
+    let scripts: { setup: string; teardown: string } | null = null;
     if (project) {
       const resp = await window.electronAPI.readWorkspaceConfig(project.path);
-      defaults = resp.success ? (resp.data?.taskDefaults ?? null) : null;
+      const config = resp.success ? resp.data : null;
+      defaults = config?.taskDefaults ?? null;
+      scripts = {
+        setup: (config?.setup ?? []).join('\n'),
+        teardown: (config?.teardown ?? []).join('\n'),
+      };
     }
     setTaskModalDefaults(defaults);
+    setTaskModalDefaultScripts(scripts);
     setShowTaskModal(true);
   }
 
@@ -1242,6 +1253,7 @@ export function App() {
               adoConfigured={modalProjectId ? (adoConfiguredById[modalProjectId] ?? false) : false}
               initialBranches={modalProjectId ? branchesByProject[modalProjectId] : undefined}
               taskDefaults={taskModalDefaults}
+              defaultScripts={taskModalDefaultScripts}
               onClose={() => setShowTaskModal(false)}
               onCreate={handleCreateTask}
               onGitInit={() => {
@@ -1283,6 +1295,19 @@ export function App() {
           onPermissionModeChange={(id, mode) => {
             if (!taskSettingsTarget || taskSettingsTarget.id !== id) return;
             void persistTaskUpdate(taskSettingsTarget, { permissionMode: mode });
+          }}
+          onScriptsChange={(id, setupScript, teardownScript) => {
+            void (async () => {
+              const resp = await window.electronAPI.setTaskScripts({
+                id,
+                setupScript: setupScript.trim() ? setupScript : null,
+                teardownScript: teardownScript.trim() ? teardownScript : null,
+              });
+              if (resp.success && resp.data) {
+                setTaskSettingsTarget((prev) => (prev?.id === id ? resp.data! : prev));
+                if (taskSettingsTarget) await loadTasksForProject(taskSettingsTarget.projectId);
+              }
+            })();
           }}
         />
       )}

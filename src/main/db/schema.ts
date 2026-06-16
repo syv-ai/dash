@@ -49,6 +49,11 @@ export const tasks = sqliteTable(
     permissionMode: text('permission_mode').notNull().default('default'),
     linkedItems: text('linked_items'),
     contextPrompt: text('context_prompt'),
+    // Per-task overrides of the project's default worktree scripts (newline-
+    // separated commands). Null = no per-task scripts. Snapshotted from
+    // .dash/config.json at creation; editable per task.
+    setupScript: text('setup_script'),
+    teardownScript: text('teardown_script'),
     branchCreatedByDash: integer('branch_created_by_dash', { mode: 'boolean' }).default(false),
     // Deprecated since 0.9.9: was used to pin Claude session_id captured by a
     // SessionStart hook before we switched to `claude --continue`. Column kept
