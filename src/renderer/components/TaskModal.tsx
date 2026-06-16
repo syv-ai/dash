@@ -23,6 +23,7 @@ import { isAdoRemote } from '../../shared/urls';
 import { Modal, useModalClose } from './ui/Modal';
 import { PermissionModePicker, readInitialPermissionMode } from './PermissionModePicker';
 import { getTaskCreatability } from './taskModalCreatability';
+import { Expandable } from './ui/Expandable';
 
 /**
  * Task creation modes. Each variant carries only the fields that are meaningful
@@ -407,27 +408,26 @@ function TaskModalBody({
 
         {/* Context prompt (optional) */}
         <div className="mb-5">
-          <label className="block text-[12px] font-medium text-muted-foreground/70 mb-2">
-            Context prompt <span className="text-muted-foreground/40">(optional)</span>
-          </label>
-          <textarea
-            value={contextPrompt}
-            onChange={(e) => setContextPrompt(e.target.value)}
-            rows={2}
-            placeholder="Prepended to the task's context — e.g. coding conventions, links."
-            className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[13px] placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
-          />
+          <Expandable label="Context prompt" hint="optional" defaultOpen={!!contextPrompt.trim()}>
+            <textarea
+              value={contextPrompt}
+              onChange={(e) => setContextPrompt(e.target.value)}
+              rows={2}
+              placeholder="Prepended to the task's context — e.g. coding conventions, links."
+              className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[13px] placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
+            />
+          </Expandable>
         </div>
 
         {/* Worktree toggle */}
         {gitReady && repoHasNoCommits ? (
-          <div className="mb-4 flex items-start gap-2 px-3 py-2.5 rounded-lg bg-surface-1 border border-border/40">
+          <div className="mb-4 flex items-start gap-2 px-3 py-2.5 rounded-lg bg-surface-1">
             <FolderGit2
               size={13}
-              className="text-muted-foreground/40 mt-0.5 flex-shrink-0"
+              className="text-muted-foreground/25 mt-0.5 flex-shrink-0"
               strokeWidth={1.8}
             />
-            <span className="text-[12px] text-muted-foreground/60">
+            <span className="text-[12px] text-muted-foreground/45">
               No commits yet — this task runs in the project folder. Make an initial commit to
               enable worktrees and branches.
             </span>

@@ -1,6 +1,7 @@
 import React from 'react';
 import type { PermissionMode } from '../../../shared/types';
 import { PERMISSION_MODE_LABELS, type ConfigureValues } from './types';
+import { Expandable } from '../ui/Expandable';
 
 interface ConfigureFormProps {
   value: ConfigureValues;
@@ -71,14 +72,19 @@ export function ConfigureForm({ value, onChange, showName = true }: ConfigureFor
           Use a git worktree per task
         </label>
         <div className="mt-3">
-          <label className={labelClass}>Default context prompt</label>
-          <textarea
-            value={value.contextPrompt}
-            onChange={(e) => set('contextPrompt', e.target.value)}
-            rows={2}
-            placeholder="Optional — prepended to each new task's context."
-            className={`${inputClass} resize-none`}
-          />
+          <Expandable
+            label="Default context prompt"
+            hint="optional"
+            defaultOpen={!!value.contextPrompt.trim()}
+          >
+            <textarea
+              value={value.contextPrompt}
+              onChange={(e) => set('contextPrompt', e.target.value)}
+              rows={2}
+              placeholder="Optional — prepended to each new task's context."
+              className={`${inputClass} resize-none`}
+            />
+          </Expandable>
         </div>
       </div>
 
