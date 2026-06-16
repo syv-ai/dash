@@ -22,6 +22,7 @@ import type {
 import { isAdoRemote } from '../../shared/urls';
 import { Modal, useModalClose } from './ui/Modal';
 import { PermissionModePicker, readInitialPermissionMode } from './PermissionModePicker';
+import { getTaskCreatability } from './taskModalCreatability';
 
 /**
  * Task creation modes. Each variant carries only the fields that are meaningful
@@ -187,6 +188,9 @@ function TaskModalBody({
   // at its final height on first paint.
   const [branches, setBranches] = useState<BranchInfo[]>(initialBranches ?? []);
   const [branchLoading, setBranchLoading] = useState(false);
+  // True once a branch fetch has resolved (or branches were preloaded), so an
+  // empty branch list can be trusted to mean "repo has no commits yet".
+  const [branchFetchDone, setBranchFetchDone] = useState((initialBranches?.length ?? 0) > 0);
   const [branchError, setBranchError] = useState<string | null>(null);
   const [selectedBranch, setSelectedBranch] = useState<BranchInfo | null>(() => {
     const list = initialBranches ?? [];
@@ -262,6 +266,7 @@ function TaskModalBody({
       setBranchError(String(err));
     } finally {
       setBranchLoading(false);
+      setBranchFetchDone(true);
     }
   }
 
@@ -282,6 +287,17 @@ function TaskModalBody({
   const filteredBranches = branches.filter((b) =>
     b.name.toLowerCase().includes(branchSearch.toLowerCase()),
   );
+
+  // A fresh git repo (no commits/branches) can't host a worktree and has no
+  // branch to select — surface it as an in-place task instead of dead-ending
+  // the disabled "Create Task" button.
+  const { repoHasNoCommits, requiresBranchSelection } = getTaskCreatability({
+    gitReady,
+    branchFetchDone,
+    branchError: !!branchError,
+    branchCount: branches.length,
+    hasSelectedBranch: !!selectedBranch,
+  });
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -319,7 +335,10 @@ function TaskModalBody({
     };
 
     let options: CreateTaskOptions;
-    if (useWorktree) {
+    if (repoHasNoCommits) {
+      // No commits yet → run in the project dir; worktrees need a base commit.
+      options = { ...base, kind: 'in-place-no-git' };
+    } else if (useWorktree) {
       if (createNewBranch && selectedBranch) {
         options = { ...base, kind: 'worktree-new-branch', baseRef: selectedBranch.ref, pushRemote };
       } else if (selectedBranch) {
@@ -401,7 +420,19 @@ function TaskModalBody({
         </div>
 
         {/* Worktree toggle */}
-        {gitReady ? (
+        {gitReady && repoHasNoCommits ? (
+          <div className="mb-4 flex items-start gap-2 px-3 py-2.5 rounded-lg bg-surface-1 border border-border/40">
+            <FolderGit2
+              size={13}
+              className="text-muted-foreground/40 mt-0.5 flex-shrink-0"
+              strokeWidth={1.8}
+            />
+            <span className="text-[12px] text-muted-foreground/60">
+              No commits yet — this task runs in the project folder. Make an initial commit to
+              enable worktrees and branches.
+            </span>
+          </div>
+        ) : gitReady ? (
           <div className="mb-4">
             <label
               className={`flex items-center gap-3 group ${worktreeForced ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
@@ -454,7 +485,7 @@ function TaskModalBody({
         )}
 
         {/* Use existing branch toggle */}
-        {useWorktree && (
+        {useWorktree && !repoHasNoCommits && (
           <div className="mb-4">
             <label className="flex items-center gap-3 cursor-pointer group">
               <div className="relative">
@@ -479,7 +510,7 @@ function TaskModalBody({
         )}
 
         {/* Branch selector */}
-        {gitReady && (
+        {gitReady && !repoHasNoCommits && (
           <div className="mb-4" ref={dropdownRef}>
             <label className="block text-[12px] font-medium text-muted-foreground/70 mb-2">
               {useWorktree && createNewBranch ? 'Base branch' : 'Branch'}
@@ -747,8 +778,9 @@ function TaskModalBody({
               isCreating ||
               // Block submit when git is ready but no branch is selected (e.g.
               // branch fetch failed). Otherwise we'd silently create the task
-              // on whatever branch the project happens to be on.
-              (gitReady && !selectedBranch)
+              // on whatever branch the project happens to be on. Waived for a
+              // commitless repo, which legitimately has no branch to select.
+              requiresBranchSelection
             }
             className="px-5 py-2 rounded-lg text-[13px] font-medium bg-primary text-primary-foreground hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 flex items-center gap-2"
           >
