@@ -28,6 +28,8 @@ The main idea: you open a project, create tasks, and each task gets an isolated 
 
 ## Install
 
+Requires macOS on Apple Silicon (arm64). There is currently no Intel Mac build.
+
 ### Homebrew
 
 ```bash
