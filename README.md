@@ -28,6 +28,16 @@ The main idea: you open a project, create tasks, and each task gets an isolated 
 
 ## Install
 
+### Homebrew
+
+```bash
+brew install --cask dash-syv-ai
+```
+
+The cask token is `dash-syv-ai` (not `dash`, which is taken by Kapeli's Dash). Homebrew handles updates, though the app can also update itself in the background.
+
+### Manual
+
 Download the latest build from [Releases](https://github.com/syv-ai/dash/releases/latest). Open the `.dmg` and drag `Dash.app` to `/Applications`.
 
 ## Prerequisites
