@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   writeFileSync,
+  readFileSync,
   mkdirSync,
   mkdtempSync,
   rmSync,
@@ -12,6 +13,7 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
+import { ReadableStream } from 'node:stream/web';
 
 // RtkService imports `app` from electron for userData paths, which isn't
 // available in the vitest Node env. The helpers we test don't touch it.
@@ -30,6 +32,7 @@ const {
   shellQuoteUnix,
   extractRewrittenCommand,
   verifyChecksum,
+  streamToFile,
   ensureUserBinSymlink,
 } = __test__;
 
@@ -368,5 +371,90 @@ describe('ensureUserBinSymlink', () => {
     const linkPath = join(blocker, 'bin', 'rtk');
     expect(() => ensureUserBinSymlink(target, linkPath)).not.toThrow();
     expect(existsSync(linkPath)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// streamToFile: the download streamer. The bug it fixes: a `source.on('data')`
+// progress listener put the stream into flowing mode before the write stream
+// was wired, so early chunks were counted but never written. Under Electron IPC
+// and high-latency links (a VPN) this dropped a varying number of leading bytes,
+// producing a short file with a DIFFERENT sha256 on every attempt while the
+// transferred-counter truncation guard waved it through. These tests pin: every
+// byte reaches disk regardless of chunk timing, and the guard now compares
+// against bytes actually on disk.
+// ---------------------------------------------------------------------------
+
+describe('streamToFile', () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'rtk-stream-'));
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  // Emits each chunk on a separate macrotask, mimicking a network body whose
+  // bytes arrive over time. With the old flowing-mode listener these gaps are
+  // exactly when leading chunks leaked; streamToFile must lose none of them.
+  function slowWebStream(chunks: Buffer[]): ReadableStream<Uint8Array> {
+    let i = 0;
+    return new ReadableStream<Uint8Array>({
+      pull(controller) {
+        return new Promise<void>((resolveTick) => {
+          setTimeout(() => {
+            if (i < chunks.length) controller.enqueue(chunks[i++]!);
+            else controller.close();
+            resolveTick();
+          }, 0);
+        });
+      },
+    });
+  }
+
+  it('writes every byte to disk even when chunks arrive across async ticks', async () => {
+    const chunks = Array.from({ length: 16 }, (_, n) =>
+      Buffer.from(`chunk-${n}-`.repeat(64)),
+    );
+    const full = Buffer.concat(chunks);
+    const dest = join(dir, 'out.bin');
+
+    await streamToFile(slowWebStream(chunks), dest, full.length);
+
+    const onDisk = readFileSync(dest);
+    expect(onDisk.length).toBe(full.length);
+    expect(onDisk.equals(full)).toBe(true); // byte-identical, no leading-chunk loss
+  });
+
+  it('reports progress that ends at the full byte count', async () => {
+    const chunks = [Buffer.alloc(100, 1), Buffer.alloc(100, 2), Buffer.alloc(50, 3)];
+    const full = Buffer.concat(chunks);
+    const seen: number[] = [];
+
+    await streamToFile(slowWebStream(chunks), join(dir, 'p.bin'), full.length, (t) =>
+      seen.push(t),
+    );
+
+    expect(seen.length).toBe(chunks.length);
+    expect(seen[seen.length - 1]).toBe(full.length); // monotonic up to the real total
+    expect(seen).toEqual([...seen].sort((a, b) => a - b));
+  });
+
+  it('throws when on-disk bytes fall short of the declared content-length', async () => {
+    // The false-assurance hole: a short body must be caught by comparing the
+    // file size on disk to content-length, not a side counter that could have
+    // tallied bytes that never landed.
+    const chunks = [Buffer.alloc(500, 7)];
+    await expect(
+      streamToFile(slowWebStream(chunks), join(dir, 'short.bin'), 1000),
+    ).rejects.toThrow(/Truncated download: expected 1000 bytes, got 500/);
+  });
+
+  it('accepts a stream when content-length is unknown (total = 0)', async () => {
+    const chunks = [Buffer.from('abc'), Buffer.from('def')];
+    const dest = join(dir, 'unknown.bin');
+    await expect(streamToFile(slowWebStream(chunks), dest, 0)).resolves.toBeUndefined();
+    expect(readFileSync(dest).toString()).toBe('abcdef');
   });
 });

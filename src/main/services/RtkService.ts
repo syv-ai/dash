@@ -5,6 +5,7 @@ import {
   mkdirSync,
   createReadStream,
   createWriteStream,
+  statSync,
   chmodSync,
   lstatSync,
   readlinkSync,
@@ -18,7 +19,7 @@ import { homedir, tmpdir } from 'node:os';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { pipeline } from 'node:stream/promises';
-import { Readable } from 'node:stream';
+import { Readable, Transform } from 'node:stream';
 import { createHash } from 'node:crypto';
 import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import { app } from 'electron';
@@ -445,22 +446,20 @@ export class RtkService {
         throw new Error(`Download failed: ${dlRes.status} ${dlRes.statusText}`);
       }
       const total = Number(dlRes.headers.get('content-length') || '0');
-      let transferred = 0;
 
-      const source = Readable.fromWeb(dlRes.body as unknown as WebReadableStream<Uint8Array>);
-      source.on('data', (chunk: Buffer) => {
-        transferred += chunk.length;
-        if (total > 0) {
-          RtkService.emitProgress({
-            phase: 'downloading',
-            percent: Math.min(99, Math.round((transferred / total) * 100)),
-          });
-        }
-      });
-      await pipeline(source, createWriteStream(dest));
-      if (total > 0 && transferred !== total) {
-        throw new Error(`Truncated download: expected ${total} bytes, got ${transferred}.`);
-      }
+      await streamToFile(
+        dlRes.body as unknown as WebReadableStream<Uint8Array>,
+        dest,
+        total,
+        (transferred) => {
+          if (total > 0) {
+            RtkService.emitProgress({
+              phase: 'downloading',
+              percent: Math.min(99, Math.round((transferred / total) * 100)),
+            });
+          }
+        },
+      );
       RtkService.emitProgress({ phase: 'downloading', percent: 100 });
     } finally {
       clearTimeout(wallTimer);
@@ -991,6 +990,48 @@ async function verifyChecksum(filePath: string, expectedSha: string): Promise<vo
   }
 }
 
+/**
+ * Stream a web response body to `dest`, reporting progress, without ever
+ * putting the source into flowing mode behind the pipeline's back.
+ *
+ * The previous implementation attached a `source.on('data')` listener for the
+ * progress bar and then awaited `pipeline(source, writeStream)`. Attaching a
+ * 'data' handler switches the stream to flowing mode immediately, so any chunk
+ * emitted before the write stream is wired (a window that widens under Electron
+ * IPC and high-latency links, such as a VPN) was counted by the listener but
+ * never written to disk. The result was a short, corrupt file whose byte count
+ * varied run to run (a different checksum every attempt) while the truncation
+ * guard compared against the inflated counter and let it through to fail later
+ * at the hash check.
+ *
+ * Counting inside a Transform that is part of the pipeline keeps the stream
+ * paused until the whole chain is connected, so no chunk can leak. The size
+ * guard then checks bytes actually on disk, not a side counter.
+ */
+async function streamToFile(
+  body: WebReadableStream<Uint8Array>,
+  dest: string,
+  total: number,
+  onProgress?: (transferred: number) => void,
+): Promise<void> {
+  let transferred = 0;
+  const counter = new Transform({
+    transform(chunk: Buffer, _enc, cb) {
+      transferred += chunk.length;
+      onProgress?.(transferred);
+      cb(null, chunk);
+    },
+  });
+  const source = Readable.fromWeb(body);
+  await pipeline(source, counter, createWriteStream(dest));
+  // Validate against bytes that actually landed on disk, not the side counter.
+  // The counter cannot detect chunks that the pipeline dropped before writing.
+  const onDisk = statSync(dest).size;
+  if (total > 0 && onDisk !== total) {
+    throw new Error(`Truncated download: expected ${total} bytes, got ${onDisk}.`);
+  }
+}
+
 async function fetchWithTimeout(
   url: string,
   init: RequestInit,
@@ -1037,5 +1078,6 @@ export const __test__ = {
   shellQuoteUnix,
   extractRewrittenCommand,
   verifyChecksum,
+  streamToFile,
   ensureUserBinSymlink,
 };
