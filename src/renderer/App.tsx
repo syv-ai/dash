@@ -188,6 +188,7 @@ export function App() {
   const commitAttribution = useSettings((s) => s.commitAttribution);
   const effortLevel = useSettings((s) => s.effortLevel);
   const syncShellEnv = useSettings((s) => s.syncShellEnv);
+  const ultracode = useSettings((s) => s.ultracode);
   const customClaudeEnvVars = useSettings((s) => s.customClaudeEnvVars);
 
   // Sync desktop notification settings to main process
@@ -228,6 +229,10 @@ export function App() {
   useEffect(() => {
     window.electronAPI.setSyncShellEnv?.(syncShellEnv);
   }, [syncShellEnv]);
+  // Sync ultracode toggle to main process (applied as a spawn arg on new sessions)
+  useEffect(() => {
+    window.electronAPI.setUltracode?.(ultracode);
+  }, [ultracode]);
   // Sync Claude Code env vars to main process
   useEffect(() => {
     const vars: Record<string, string> = { ...customClaudeEnvVars };

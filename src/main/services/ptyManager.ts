@@ -114,6 +114,12 @@ let claudeEnvVars: Record<string, string> = {};
 // When true, inherit the full parent process.env as a base instead of the minimal set.
 let syncShellEnv = false;
 
+// When true, launch Claude sessions in ultracode (X-High reasoning + multi-agent
+// workflow orchestration) via `--settings '{"ultracode":true}'`. ultracode is
+// session-only and can't be set through CLAUDE_CODE_EFFORT_LEVEL or --effort, so
+// it's applied per-spawn here rather than through the effort env var.
+let ultracode = false;
+
 const RESERVED_ENV_KEYS = new Set([
   'PATH',
   'HOME',
@@ -176,6 +182,10 @@ export function setClaudeEnvVars(vars: Record<string, string>): void {
 
 export function setSyncShellEnv(enabled: boolean): void {
   syncShellEnv = enabled;
+}
+
+export function setUltracode(enabled: boolean): void {
+  ultracode = enabled;
 }
 
 // Lazy-load node-pty to avoid native binding issues at startup
@@ -349,6 +359,12 @@ export function buildClaudeArgs(opts: {
     args.push('--permission-mode', 'acceptEdits');
   } else if (opts.permissionMode === 'bypassPermissions') {
     args.push('--dangerously-skip-permissions');
+  }
+  // ultracode is session-scoped; re-apply on every spawn so the user's toggle
+  // effectively sticks across the sessions Dash launches. Must precede the
+  // positional prompt below.
+  if (ultracode) {
+    args.push('--settings', JSON.stringify({ ultracode: true }));
   }
   if (opts.initialPrompt) {
     args.push(opts.initialPrompt);

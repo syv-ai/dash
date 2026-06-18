@@ -531,6 +531,8 @@ function ClaudeCodeTab({
   const onEffortLevelChange = useSettings((s) => s.setEffortLevel);
   const syncShellEnv = useSettings((s) => s.syncShellEnv);
   const onSyncShellEnvChange = useSettings((s) => s.setSyncShellEnv);
+  const ultracode = useSettings((s) => s.ultracode);
+  const onUltracodeChange = useSettings((s) => s.setUltracode);
   const customEnvVars = useSettings((s) => s.customClaudeEnvVars);
   const onCustomEnvVarsChange = useSettings((s) => s.setCustomClaudeEnvVars);
   const [newKey, setNewKey] = useState('');
@@ -598,7 +600,7 @@ function ClaudeCodeTab({
       <SettingsCard title="Behavior">
         <SettingsRow
           label="Effort level"
-          description="How much effort Claude spends reasoning. Auto lets the model decide."
+          description="How much effort Claude spends reasoning. Auto lets the model decide. X-High and Max apply on newer models (e.g. Opus 4.8); others fall back to their highest supported level."
           align="start"
           control={
             <Segmented
@@ -610,6 +612,8 @@ function ClaudeCodeTab({
                 { value: 'low', label: 'Low' },
                 { value: 'medium', label: 'Med' },
                 { value: 'high', label: 'High' },
+                { value: 'xhigh', label: 'X-High' },
+                { value: 'max', label: 'Max' },
               ]}
               onChange={onEffortLevelChange}
             />
@@ -623,6 +627,11 @@ function ClaudeCodeTab({
               : 'Minimal isolated env. Only variables below are passed to Claude.'
           }
           control={<Switch enabled={syncShellEnv} onToggle={onSyncShellEnvChange} />}
+        />
+        <SettingsRow
+          label="Ultracode"
+          description="Launch new sessions with X-High reasoning and multi-agent workflow orchestration (via --settings). Uses more tokens and runs slower; not a saved effort level, so the buttons above don't control it."
+          control={<Switch enabled={ultracode} onToggle={onUltracodeChange} />}
         />
       </SettingsCard>
 

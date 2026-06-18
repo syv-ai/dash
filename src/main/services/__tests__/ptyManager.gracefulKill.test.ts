@@ -7,6 +7,7 @@ import {
   killAll,
   hasPty,
   buildClaudeArgs,
+  setUltracode,
 } from '../ptyManager';
 
 describe('buildClaudeArgs', () => {
@@ -43,6 +44,25 @@ describe('buildClaudeArgs', () => {
     expect(
       buildClaudeArgs({ resumeSessionId: 'abc-123', permissionMode: 'bypassPermissions' }),
     ).toEqual(['--resume', 'abc-123', '--dangerously-skip-permissions']);
+  });
+
+  it('appends the ultracode --settings flag before the prompt when enabled', () => {
+    setUltracode(true);
+    try {
+      expect(buildClaudeArgs({ resumeSessionId: null, name: 't', initialPrompt: 'go' })).toEqual([
+        '--name',
+        't',
+        '--settings',
+        '{"ultracode":true}',
+        'go',
+      ]);
+    } finally {
+      setUltracode(false); // module-global; don't leak into other cases
+    }
+  });
+
+  it('omits the ultracode flag when disabled (default)', () => {
+    expect(buildClaudeArgs({ resumeSessionId: null })).toEqual([]);
   });
 });
 

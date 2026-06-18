@@ -25,6 +25,7 @@ export interface SettingsState {
   showProjectTokens: boolean;
   desktopNotification: boolean;
   syncShellEnv: boolean;
+  ultracode: boolean;
   notificationSound: NotificationSound;
   terminalTheme: string;
   terminalFontFamily: string;
@@ -88,6 +89,7 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   entry('showProjectTokens', 'showProjectTokens', boolDefaultTrue()),
   entry('desktopNotification', 'desktopNotification', boolDefaultFalse()),
   entry('syncShellEnv', 'syncShellEnv', boolDefaultFalse()),
+  entry('ultracode', 'ultracode', boolDefaultFalse()),
   entry('notificationSound', 'notificationSound', str('off') as Codec<NotificationSound>),
   entry('terminalTheme', 'terminalTheme', str('default')),
   entry('terminalFontFamily', 'terminalFontFamily', str('system')),

@@ -404,6 +404,19 @@ export function registerAppIpc(): void {
     })();
   });
 
+  ipcMain.on('app:setUltracode', (_event, enabled: boolean) => {
+    const v = parseArgsSafe('app:setUltracode', z.boolean(), enabled);
+    if (v === undefined) return;
+    void (async () => {
+      try {
+        const { setUltracode } = await import('../services/ptyManager');
+        setUltracode(v);
+      } catch (err) {
+        console.error('[app:setUltracode] Failed:', err);
+      }
+    })();
+  });
+
   ipcMain.handle('app:detectClaude', async () => {
     try {
       // Import cached result from main
