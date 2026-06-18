@@ -202,6 +202,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('git:getDiff', args),
   gitGetDiffUntracked: (args: { cwd: string; filePath: string; contextLines?: number }) =>
     ipcRenderer.invoke('git:getDiffUntracked', args),
+  readFileText: (args: { cwd: string; filePath: string }) =>
+    ipcRenderer.invoke('file:readText', args),
   gitStageFile: (args: { cwd: string; filePath: string }) =>
     ipcRenderer.invoke('git:stageFile', args),
   gitStageAll: (cwd: string) => ipcRenderer.invoke('git:stageAll', cwd),

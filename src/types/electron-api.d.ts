@@ -245,6 +245,7 @@ export interface ElectronAPI {
     filePath: string;
     contextLines?: number;
   }) => Promise<IpcResponse<DiffResult>>;
+  readFileText: (args: { cwd: string; filePath: string }) => Promise<IpcResponse<string>>;
   gitStageFile: (args: { cwd: string; filePath: string }) => Promise<IpcResponse<void>>;
   gitStageAll: (cwd: string) => Promise<IpcResponse<void>>;
   gitUnstageFile: (args: { cwd: string; filePath: string }) => Promise<IpcResponse<void>>;
