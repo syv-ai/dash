@@ -1,7 +1,8 @@
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
-import { X, FileText, MessageSquare, Send } from 'lucide-react';
+import { X, FileText, MessageSquare, Send, Code2, Eye } from 'lucide-react';
 import type { DiffResult, DiffLine, DiffHunk } from '../../shared/types';
 import { sessionRegistry } from '../terminal/SessionRegistry';
+import { HtmlPreview } from './HtmlPreview';
 
 // ── Internal Types ──────────────────────────────────────────
 
@@ -67,6 +68,7 @@ function getLanguageFromPath(filePath: string): string {
     css: 'css',
     scss: 'scss',
     html: 'html',
+    htm: 'html',
     json: 'json',
     yaml: 'yaml',
     yml: 'yaml',
@@ -175,11 +177,15 @@ interface DiffViewerProps {
   diff: DiffResult | null;
   loading: boolean;
   activeTaskId: string | null;
+  taskPath: string;
   onClose: () => void;
 }
 
-export function DiffViewer({ diff, loading, activeTaskId, onClose }: DiffViewerProps) {
+export function DiffViewer({ diff, loading, activeTaskId, taskPath, onClose }: DiffViewerProps) {
   const [comments, setComments] = useState<DiffComment[]>([]);
+  const [mode, setMode] = useState<'code' | 'preview'>('code');
+  const [previewContent, setPreviewContent] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [selection, setSelection] = useState<SelectionState | null>(null);
   const [popover, setPopover] = useState<PopoverState | null>(null);
   const [popoverText, setPopoverText] = useState('');
@@ -196,6 +202,37 @@ export function DiffViewer({ diff, loading, activeTaskId, onClose }: DiffViewerP
     () => (diff?.hunks ? buildChangeMarkers(diff.hunks) : []),
     [diff?.hunks],
   );
+
+  const isHtml = !!diff && getLanguageFromPath(diff.filePath) === 'html';
+
+  // Reset to source view and clear cached preview whenever a new file opens.
+  useEffect(() => {
+    setMode('code');
+    setPreviewContent(null);
+    setPreviewLoading(false);
+  }, [diff?.filePath]);
+
+  // Lazily load the full on-disk file content when entering preview mode.
+  useEffect(() => {
+    if (mode !== 'preview' || !diff || previewContent !== null || previewLoading) return;
+    let cancelled = false;
+    setPreviewLoading(true);
+    window.electronAPI
+      .readFileText({ cwd: taskPath, filePath: diff.filePath })
+      .then((res) => {
+        if (cancelled) return;
+        setPreviewContent(res.success && res.data != null ? res.data : '');
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewContent('');
+      })
+      .finally(() => {
+        if (!cancelled) setPreviewLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, diff, taskPath, previewContent, previewLoading]);
 
   // ── Selection helpers ───────────────────────────────────
 
@@ -449,6 +486,32 @@ export function DiffViewer({ diff, loading, activeTaskId, onClose }: DiffViewerP
           </div>
 
           <div className="flex items-center gap-2">
+            {isHtml && (
+              <div className="flex items-center gap-0.5 p-0.5 rounded-full bg-[hsl(var(--surface-3))]">
+                <button
+                  onClick={() => setMode('code')}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all duration-150 ${
+                    mode === 'code'
+                      ? 'bg-primary/15 text-primary'
+                      : 'text-muted-foreground/60 hover:text-foreground'
+                  }`}
+                >
+                  <Code2 size={11} strokeWidth={2} />
+                  Code
+                </button>
+                <button
+                  onClick={() => setMode('preview')}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all duration-150 ${
+                    mode === 'preview'
+                      ? 'bg-primary/15 text-primary'
+                      : 'text-muted-foreground/60 hover:text-foreground'
+                  }`}
+                >
+                  <Eye size={11} strokeWidth={2} />
+                  Preview
+                </button>
+              </div>
+            )}
             {comments.length > 0 && (
               <button
                 onClick={handleAddToPrompt}
@@ -469,202 +532,217 @@ export function DiffViewer({ diff, loading, activeTaskId, onClose }: DiffViewerP
 
         {/* Content */}
         <div className="flex-1 relative overflow-hidden">
-          <div
-            ref={contentRef}
-            className="h-full overflow-auto font-mono text-[12px] leading-[20px] relative"
-          >
-            {loading && (
+          {isHtml && mode === 'preview' ? (
+            previewLoading || previewContent === null ? (
               <div className="flex items-center justify-center h-full">
                 <div className="flex items-center gap-3">
                   <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                  <span className="text-[13px] text-muted-foreground/50">Loading diff...</span>
+                  <span className="text-[13px] text-muted-foreground/50">Loading preview...</span>
                 </div>
               </div>
-            )}
-
-            {diff?.isBinary && (
-              <div className="flex items-center justify-center h-full">
-                <span className="text-[13px] text-muted-foreground/40">
-                  Binary file — cannot display diff
-                </span>
-              </div>
-            )}
-
-            {diff && !diff.isBinary && diff.hunks.length === 0 && (
-              <div className="flex items-center justify-center h-full">
-                <span className="text-[13px] text-muted-foreground/40">No differences</span>
-              </div>
-            )}
-
-            {diff && !diff.isBinary && diff.hunks.length > 0 && (
-              <div className="inline-block min-w-full">
-                {diff.hunks.map((hunk, hi) => (
-                  <div key={hi}>
-                    {/* Hunk header */}
-                    <div className="diff-hunk px-5 py-1.5 text-[hsl(var(--git-renamed))]/70 border-y border-border/20 sticky top-0 backdrop-blur-sm text-[11px]">
-                      {hunk.header}
-                    </div>
-
-                    {/* Lines */}
-                    {hunk.lines.map((line, li) => {
-                      const isAdd = line.type === 'add';
-                      const isDel = line.type === 'delete';
-                      const selected = isLineInSelection(hi, li);
-                      const commented = isLineCommented(hi, li);
-                      const commentStart = isFirstLineOfComment(hi, li);
-
-                      return (
-                        <div
-                          key={`${hi}-${li}`}
-                          data-hunk={hi}
-                          data-line={li}
-                          className={[
-                            'flex',
-                            selected
-                              ? 'diff-line-selected'
-                              : isAdd
-                                ? 'diff-add'
-                                : isDel
-                                  ? 'diff-delete'
-                                  : '',
-                            commented && !selected ? 'diff-line-commented' : '',
-                            'transition-colors duration-75',
-                          ].join(' ')}
-                        >
-                          {/* Comment indicator */}
-                          {commentStart && !selected && (
-                            <span className="w-0 relative">
-                              <MessageSquare
-                                size={10}
-                                strokeWidth={2}
-                                className="absolute -left-0.5 top-[5px] text-primary/60"
-                              />
-                            </span>
-                          )}
-
-                          {/* Old line number */}
-                          <span
-                            className="w-14 flex-shrink-0 text-right pr-3 text-muted-foreground/20 select-none border-r border-border/10 tabular-nums diff-gutter-clickable"
-                            onMouseDown={(e) => handleGutterMouseDown(e, hi, li)}
-                          >
-                            {line.oldLineNumber ?? ''}
-                          </span>
-                          {/* New line number */}
-                          <span
-                            className="w-14 flex-shrink-0 text-right pr-3 text-muted-foreground/20 select-none border-r border-border/10 tabular-nums diff-gutter-clickable"
-                            onMouseDown={(e) => handleGutterMouseDown(e, hi, li)}
-                          >
-                            {line.newLineNumber ?? ''}
-                          </span>
-                          {/* Marker */}
-                          <span
-                            className={`w-8 flex-shrink-0 text-center select-none ${
-                              isAdd
-                                ? 'text-[hsl(var(--git-added))]/60'
-                                : isDel
-                                  ? 'text-[hsl(var(--git-deleted))]/60'
-                                  : 'text-muted-foreground/15'
-                            }`}
-                          >
-                            {isAdd ? '+' : isDel ? '-' : ' '}
-                          </span>
-                          {/* Content */}
-                          <span
-                            className={`flex-1 pr-5 whitespace-pre ${
-                              isAdd
-                                ? 'text-[hsl(var(--git-added))]/80'
-                                : isDel
-                                  ? 'text-[hsl(var(--git-deleted))]/80'
-                                  : 'text-foreground/70'
-                            }`}
-                          >
-                            {line.content}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Comment popover */}
-            {popover && (
+            ) : (
+              <HtmlPreview html={previewContent} />
+            )
+          ) : (
+            <>
               <div
-                ref={popoverRef}
-                className="absolute z-10 w-[320px] bg-card border border-border/60 rounded-lg shadow-xl shadow-black/30 overflow-hidden animate-scale-in"
-                style={{ top: popover.top, left: Math.max(8, popover.left) }}
+                ref={contentRef}
+                className="h-full overflow-auto font-mono text-[12px] leading-[20px] relative"
               >
-                <div className="p-3">
-                  <textarea
-                    ref={textareaRef}
-                    value={popoverText}
-                    onChange={(e) => setPopoverText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && e.metaKey) {
-                        e.preventDefault();
-                        handleAddComment();
-                      }
-                      if (e.key === 'Escape') {
-                        e.preventDefault();
-                        handleCancelComment();
-                      }
-                    }}
-                    placeholder="Add a comment..."
-                    rows={3}
-                    className="w-full text-[12px] bg-background/60 border border-border/60 rounded-md px-2.5 py-1.5 resize-none placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/40 font-sans"
-                  />
-                  <div className="flex gap-2 justify-end mt-2">
-                    <button
-                      onClick={handleCancelComment}
-                      className="px-3 py-1.5 rounded-md text-[11px] text-muted-foreground/60 hover:text-foreground hover:bg-accent/60 transition-all duration-150"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleAddComment}
-                      disabled={!popoverText.trim()}
-                      className="px-3 py-1.5 rounded-md text-[11px] font-medium bg-primary/15 text-primary hover:bg-primary/25 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
-                    >
-                      Add comment
-                    </button>
+                {loading && (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="flex items-center gap-3">
+                      <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                      <span className="text-[13px] text-muted-foreground/50">Loading diff...</span>
+                    </div>
                   </div>
-                </div>
-              </div>
-            )}
-          </div>
+                )}
 
-          {/* Scrollbar change minimap */}
-          {diff && !diff.isBinary && changeMarkers.length > 0 && (
-            <div
-              className="absolute right-0 top-0 bottom-0 w-[8px] z-20 pointer-events-auto"
-              onClick={(e) => {
-                if (!contentRef.current) return;
-                const rect = e.currentTarget.getBoundingClientRect();
-                const ratio = (e.clientY - rect.top) / rect.height;
-                contentRef.current.scrollTop =
-                  ratio * (contentRef.current.scrollHeight - contentRef.current.clientHeight);
-              }}
-            >
-              {changeMarkers.map((marker, i) => (
+                {diff?.isBinary && (
+                  <div className="flex items-center justify-center h-full">
+                    <span className="text-[13px] text-muted-foreground/40">
+                      Binary file — cannot display diff
+                    </span>
+                  </div>
+                )}
+
+                {diff && !diff.isBinary && diff.hunks.length === 0 && (
+                  <div className="flex items-center justify-center h-full">
+                    <span className="text-[13px] text-muted-foreground/40">No differences</span>
+                  </div>
+                )}
+
+                {diff && !diff.isBinary && diff.hunks.length > 0 && (
+                  <div className="inline-block min-w-full">
+                    {diff.hunks.map((hunk, hi) => (
+                      <div key={hi}>
+                        {/* Hunk header */}
+                        <div className="diff-hunk px-5 py-1.5 text-[hsl(var(--git-renamed))]/70 border-y border-border/20 sticky top-0 backdrop-blur-sm text-[11px]">
+                          {hunk.header}
+                        </div>
+
+                        {/* Lines */}
+                        {hunk.lines.map((line, li) => {
+                          const isAdd = line.type === 'add';
+                          const isDel = line.type === 'delete';
+                          const selected = isLineInSelection(hi, li);
+                          const commented = isLineCommented(hi, li);
+                          const commentStart = isFirstLineOfComment(hi, li);
+
+                          return (
+                            <div
+                              key={`${hi}-${li}`}
+                              data-hunk={hi}
+                              data-line={li}
+                              className={[
+                                'flex',
+                                selected
+                                  ? 'diff-line-selected'
+                                  : isAdd
+                                    ? 'diff-add'
+                                    : isDel
+                                      ? 'diff-delete'
+                                      : '',
+                                commented && !selected ? 'diff-line-commented' : '',
+                                'transition-colors duration-75',
+                              ].join(' ')}
+                            >
+                              {/* Comment indicator */}
+                              {commentStart && !selected && (
+                                <span className="w-0 relative">
+                                  <MessageSquare
+                                    size={10}
+                                    strokeWidth={2}
+                                    className="absolute -left-0.5 top-[5px] text-primary/60"
+                                  />
+                                </span>
+                              )}
+
+                              {/* Old line number */}
+                              <span
+                                className="w-14 flex-shrink-0 text-right pr-3 text-muted-foreground/20 select-none border-r border-border/10 tabular-nums diff-gutter-clickable"
+                                onMouseDown={(e) => handleGutterMouseDown(e, hi, li)}
+                              >
+                                {line.oldLineNumber ?? ''}
+                              </span>
+                              {/* New line number */}
+                              <span
+                                className="w-14 flex-shrink-0 text-right pr-3 text-muted-foreground/20 select-none border-r border-border/10 tabular-nums diff-gutter-clickable"
+                                onMouseDown={(e) => handleGutterMouseDown(e, hi, li)}
+                              >
+                                {line.newLineNumber ?? ''}
+                              </span>
+                              {/* Marker */}
+                              <span
+                                className={`w-8 flex-shrink-0 text-center select-none ${
+                                  isAdd
+                                    ? 'text-[hsl(var(--git-added))]/60'
+                                    : isDel
+                                      ? 'text-[hsl(var(--git-deleted))]/60'
+                                      : 'text-muted-foreground/15'
+                                }`}
+                              >
+                                {isAdd ? '+' : isDel ? '-' : ' '}
+                              </span>
+                              {/* Content */}
+                              <span
+                                className={`flex-1 pr-5 whitespace-pre ${
+                                  isAdd
+                                    ? 'text-[hsl(var(--git-added))]/80'
+                                    : isDel
+                                      ? 'text-[hsl(var(--git-deleted))]/80'
+                                      : 'text-foreground/70'
+                                }`}
+                              >
+                                {line.content}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Comment popover */}
+                {popover && (
+                  <div
+                    ref={popoverRef}
+                    className="absolute z-10 w-[320px] bg-card border border-border/60 rounded-lg shadow-xl shadow-black/30 overflow-hidden animate-scale-in"
+                    style={{ top: popover.top, left: Math.max(8, popover.left) }}
+                  >
+                    <div className="p-3">
+                      <textarea
+                        ref={textareaRef}
+                        value={popoverText}
+                        onChange={(e) => setPopoverText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && e.metaKey) {
+                            e.preventDefault();
+                            handleAddComment();
+                          }
+                          if (e.key === 'Escape') {
+                            e.preventDefault();
+                            handleCancelComment();
+                          }
+                        }}
+                        placeholder="Add a comment..."
+                        rows={3}
+                        className="w-full text-[12px] bg-background/60 border border-border/60 rounded-md px-2.5 py-1.5 resize-none placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/40 font-sans"
+                      />
+                      <div className="flex gap-2 justify-end mt-2">
+                        <button
+                          onClick={handleCancelComment}
+                          className="px-3 py-1.5 rounded-md text-[11px] text-muted-foreground/60 hover:text-foreground hover:bg-accent/60 transition-all duration-150"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleAddComment}
+                          disabled={!popoverText.trim()}
+                          className="px-3 py-1.5 rounded-md text-[11px] font-medium bg-primary/15 text-primary hover:bg-primary/25 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
+                        >
+                          Add comment
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Scrollbar change minimap */}
+              {diff && !diff.isBinary && changeMarkers.length > 0 && (
                 <div
-                  key={i}
-                  className={
-                    marker.type === 'add'
-                      ? 'bg-[hsl(var(--git-added))]'
-                      : 'bg-[hsl(var(--git-deleted))]'
-                  }
-                  style={{
-                    position: 'absolute',
-                    top: `${marker.position * 100}%`,
-                    left: 0,
-                    right: 0,
-                    height: `max(2px, ${marker.span * 100}%)`,
-                    opacity: 0.7,
+                  className="absolute right-0 top-0 bottom-0 w-[8px] z-20 pointer-events-auto"
+                  onClick={(e) => {
+                    if (!contentRef.current) return;
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const ratio = (e.clientY - rect.top) / rect.height;
+                    contentRef.current.scrollTop =
+                      ratio * (contentRef.current.scrollHeight - contentRef.current.clientHeight);
                   }}
-                />
-              ))}
-            </div>
+                >
+                  {changeMarkers.map((marker, i) => (
+                    <div
+                      key={i}
+                      className={
+                        marker.type === 'add'
+                          ? 'bg-[hsl(var(--git-added))]'
+                          : 'bg-[hsl(var(--git-deleted))]'
+                      }
+                      style={{
+                        position: 'absolute',
+                        top: `${marker.position * 100}%`,
+                        left: 0,
+                        right: 0,
+                        height: `max(2px, ${marker.span * 100}%)`,
+                        opacity: 0.7,
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
