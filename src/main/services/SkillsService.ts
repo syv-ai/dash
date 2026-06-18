@@ -928,6 +928,20 @@ function listSkillFolders(skillsDir: string): { names: string[]; error?: string 
   return { names };
 }
 
+/** Lists skill folders (those with SKILL.md) directly under `<scopePath>/.claude/skills`,
+ *  flagging those that carry the Dash install marker. Used by the Extensions overview to
+ *  show standalone skills per scope. Missing dir → []. */
+export function listScopeSkillFolders(
+  scopePath: string,
+): Array<{ name: string; fromRegistry: boolean }> {
+  const base = path.join(scopePath, '.claude', 'skills');
+  const { names } = listSkillFolders(base);
+  return names.map((name) => ({
+    name,
+    fromRegistry: readSkillMarker(path.join(base, name)).kind === 'present',
+  }));
+}
+
 interface InstalledEntry {
   installedPaths: string[];
   globalInstalled: boolean;

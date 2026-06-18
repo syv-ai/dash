@@ -29,6 +29,21 @@ import type {
   SkillsSearchArgs,
   SkillsRegistryMeta,
   InstalledSkillsResult,
+  PluginsOverview,
+  AddMarketplaceArgs,
+  RemoveMarketplaceArgs,
+  PluginInstallArgs,
+  PluginUninstallArgs,
+  PluginSetEnabledArgs,
+  ExtensionsOverview,
+  ExtensionScopeInput,
+  SetSkillOverrideArgs,
+  PluginComponents,
+  ComponentDetail,
+  SkillDetail,
+  GetPluginComponentsArgs,
+  GetPluginComponentDetailArgs,
+  GetSkillDetailArgs,
   EditorReadWorkingResult,
   EditorReadCommitResult,
   EditorReadBranchResult,
@@ -498,6 +513,28 @@ export interface ElectronAPI {
   }) => Promise<IpcResponse<InstalledSkillsResult>>;
   skillsUninstall: (args: SkillUninstallArgs) => Promise<IpcResponse<void>>;
   skillsResetCache: () => Promise<IpcResponse<SkillsRegistryMeta>>;
+
+  // Plugins (Claude Code native plugin manager). Mutating calls return the refreshed
+  // overview so the renderer can update without a second round-trip.
+  pluginsGetOverview: () => Promise<IpcResponse<PluginsOverview>>;
+  pluginsAddMarketplace: (args: AddMarketplaceArgs) => Promise<IpcResponse<PluginsOverview>>;
+  pluginsRemoveMarketplace: (args: RemoveMarketplaceArgs) => Promise<IpcResponse<PluginsOverview>>;
+  pluginsUpdateMarketplace: (args?: { name?: string }) => Promise<IpcResponse<PluginsOverview>>;
+  pluginsInstall: (args: PluginInstallArgs) => Promise<IpcResponse<PluginsOverview>>;
+  pluginsUninstall: (args: PluginUninstallArgs) => Promise<IpcResponse<PluginsOverview>>;
+  pluginsSetEnabled: (args: PluginSetEnabledArgs) => Promise<IpcResponse<PluginsOverview>>;
+
+  // Extensions (unified skills + plugins overview)
+  extensionsGetOverview: (args: ExtensionScopeInput) => Promise<IpcResponse<ExtensionsOverview>>;
+  extensionsSetSkillOverride: (args: SetSkillOverrideArgs) => Promise<IpcResponse<void>>;
+  extensionsGetPluginComponents: (
+    args: GetPluginComponentsArgs,
+  ) => Promise<IpcResponse<PluginComponents>>;
+  extensionsGetPluginComponentDetail: (
+    args: GetPluginComponentDetailArgs,
+  ) => Promise<IpcResponse<ComponentDetail>>;
+  extensionsGetSkillDetail: (args: GetSkillDetailArgs) => Promise<IpcResponse<SkillDetail>>;
+  extensionsGetRegistrySkillDetail: (args: SkillRef) => Promise<IpcResponse<SkillDetail>>;
 
   // Session (structured view)
   sessionWatch: (args: { taskId: string; taskPath: string }) => Promise<IpcResponse<void>>;

@@ -428,6 +428,36 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('skills:uninstall', args),
   skillsResetCache: () => ipcRenderer.invoke('skills:resetCache'),
 
+  // Plugins (Claude Code native plugin manager)
+  pluginsGetOverview: () => ipcRenderer.invoke('plugins:getOverview'),
+  pluginsAddMarketplace: (args: import('@shared/types').AddMarketplaceArgs) =>
+    ipcRenderer.invoke('plugins:addMarketplace', args),
+  pluginsRemoveMarketplace: (args: import('@shared/types').RemoveMarketplaceArgs) =>
+    ipcRenderer.invoke('plugins:removeMarketplace', args),
+  pluginsUpdateMarketplace: (args?: { name?: string }) =>
+    ipcRenderer.invoke('plugins:updateMarketplace', args),
+  pluginsInstall: (args: import('@shared/types').PluginInstallArgs) =>
+    ipcRenderer.invoke('plugins:install', args),
+  pluginsUninstall: (args: import('@shared/types').PluginUninstallArgs) =>
+    ipcRenderer.invoke('plugins:uninstall', args),
+  pluginsSetEnabled: (args: import('@shared/types').PluginSetEnabledArgs) =>
+    ipcRenderer.invoke('plugins:setEnabled', args),
+
+  // Extensions (unified skills + plugins overview)
+  extensionsGetOverview: (args: import('@shared/types').ExtensionScopeInput) =>
+    ipcRenderer.invoke('extensions:getOverview', args),
+  extensionsSetSkillOverride: (args: import('@shared/types').SetSkillOverrideArgs) =>
+    ipcRenderer.invoke('extensions:setSkillOverride', args),
+  extensionsGetPluginComponents: (args: import('@shared/types').GetPluginComponentsArgs) =>
+    ipcRenderer.invoke('extensions:getPluginComponents', args),
+  extensionsGetPluginComponentDetail: (
+    args: import('@shared/types').GetPluginComponentDetailArgs,
+  ) => ipcRenderer.invoke('extensions:getPluginComponentDetail', args),
+  extensionsGetSkillDetail: (args: import('@shared/types').GetSkillDetailArgs) =>
+    ipcRenderer.invoke('extensions:getSkillDetail', args),
+  extensionsGetRegistrySkillDetail: (args: import('@shared/types').SkillRef) =>
+    ipcRenderer.invoke('extensions:getRegistrySkillDetail', args),
+
   // Session (structured view)
   sessionWatch: (args: { taskId: string; taskPath: string }) =>
     ipcRenderer.invoke('session:watch', args),

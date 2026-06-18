@@ -9,6 +9,8 @@ import { registerAzureDevOpsIpc } from './azureDevOpsIpc';
 import { registerRtkIpc } from './rtkIpc';
 import { registerTelemetryIpc } from './telemetryIpc';
 import { registerSkillsIpc } from './skillsIpc';
+import { registerPluginsIpc } from './pluginsIpc';
+import { registerExtensionsIpc } from './extensionsIpc';
 import { registerSessionIpc } from './sessionIpc';
 import { registerEditorIpc } from './editorIpc';
 import { registerDiffCommentsIpc } from './diffCommentsIpc';
@@ -30,6 +32,8 @@ export function registerAllIpc(): void {
   registerRtkIpc();
   registerTelemetryIpc();
   registerSkillsIpc();
+  registerPluginsIpc();
+  registerExtensionsIpc();
   registerSessionIpc();
   registerEditorIpc();
   registerDiffCommentsIpc();

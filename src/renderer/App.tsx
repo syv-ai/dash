@@ -14,7 +14,7 @@ import { PortsDrawerWrapper } from './components/rightInspector/PortsDrawerWrapp
 const DiffEditorModal = lazy(() => import('./components/diffEditor/DiffEditorModal'));
 import { ShellDrawerWrapper } from './components/ShellDrawerWrapper';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
-import { SkillsBrowserModal } from './components/SkillsBrowserModal';
+import { ExtensionsModal } from './components/extensions/ExtensionsModal';
 import { TaskModal } from './components/TaskModal';
 import { NewProjectWizard } from './components/newProject/NewProjectWizard';
 import { DeleteTaskModal } from './components/DeleteTaskModal';
@@ -420,9 +420,9 @@ export function App() {
     return off;
   }, []);
 
-  // Memoized props for SkillsBrowserModal. Without these, App.tsx re-renders (terminal
+  // Memoized props for ExtensionsModal. Without these, App.tsx re-renders (terminal
   // activity, git polls, PTY events) hand the modal new array references every time,
-  // and the modal's loadInstalled useCallback re-fires its refetch effect — flickering
+  // and the modal's overview useCallback re-fires its refetch effect — flickering
   // the list back to a loading state on every unrelated re-render.
   const skillsModalProjects = useMemo(
     () => projects.map((p) => ({ id: p.id, name: p.name, path: p.path })),
@@ -438,10 +438,9 @@ export function App() {
           .filter((t) => t.useWorktree && !t.archivedAt)
           .map((t) => ({
             taskId: t.id,
-            taskName: t.name,
+            name: t.name,
             worktreePath: t.path,
             projectId: p.id,
-            projectName: p.name,
           }));
       }),
     [projects, tasksByProject],
@@ -1386,11 +1385,9 @@ export function App() {
       )}
 
       {showSkillsBrowser && (
-        <SkillsBrowserModal
+        <ExtensionsModal
           projects={skillsModalProjects}
-          activeProjectId={activeProjectId ?? undefined}
           activeTasks={skillsModalActiveTasks}
-          currentTaskId={activeTaskId ?? undefined}
           onClose={() => setShowSkillsBrowser(false)}
         />
       )}

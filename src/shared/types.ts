@@ -500,6 +500,102 @@ export interface SkillUninstallArgs {
   target: SkillInstallTarget;
 }
 
+/* ── Plugins (Claude Code native plugin system) ──────────────────────────────
+ * Dash manages plugins by driving the `claude plugin …` CLI and reading the
+ * on-disk catalog (each marketplace's .claude-plugin/marketplace.json). The
+ * three scopes mirror the skills install targets:
+ *   user    → Global   (~/.claude/settings.json)
+ *   project → Project  (<project>/.claude/settings.json, shared via git)
+ *   local   → Task     (this worktree/repo only, not shared)
+ * Project/local operations must run with the CLI's cwd set to the relevant
+ * directory so Claude Code resolves the right repo. */
+
+export type PluginScope = 'user' | 'project' | 'local';
+
+/** Where a plugin operation runs. `cwd` is the directory the `claude` CLI is
+ *  invoked from — required for project/local so the correct repo is targeted. */
+export type PluginInstallTarget =
+  | { scope: 'user' }
+  | { scope: 'project'; cwd: string }
+  | { scope: 'local'; cwd: string };
+
+/** A marketplace registered with Claude Code (from `claude plugin marketplace list`). */
+export interface PluginMarketplace {
+  name: string;
+  /** Source kind reported by the CLI: 'github' | 'git' | 'local' | 'url' | … */
+  source: string;
+  repo?: string;
+  url?: string;
+  path?: string;
+  installLocation?: string;
+}
+
+/** An available plugin from a marketplace's catalog (marketplace.json `plugins[]`). */
+export interface CatalogPlugin {
+  /** `${name}@${marketplace}` — the identifier all CLI commands take. */
+  id: string;
+  name: string;
+  marketplace: string;
+  description?: string;
+  author?: string;
+  category?: string;
+  homepage?: string;
+  version?: string;
+}
+
+/** A plugin install record from `claude plugin list --json`. A single plugin can
+ *  appear multiple times (once per scope it's installed in). */
+export interface InstalledPlugin {
+  id: string;
+  name: string;
+  marketplace: string;
+  version?: string;
+  /** 'user' | 'project' | 'local' | 'managed' (managed = admin, read-only). */
+  scope: string;
+  enabled: boolean;
+  /** Set for project/local scopes — the repo the install belongs to. */
+  projectPath?: string;
+}
+
+/** Everything the Plugins panel needs in one read. */
+export interface PluginsOverview {
+  /** The `claude` CLI was located; without it the panel is read-only/empty. */
+  claudeAvailable: boolean;
+  marketplaces: PluginMarketplace[];
+  catalog: CatalogPlugin[];
+  installed: InstalledPlugin[];
+}
+
+export interface AddMarketplaceArgs {
+  source: string;
+  scope?: PluginScope;
+  cwd?: string;
+  /** Git sparse-checkout filter paths for monorepo marketplaces (--sparse). */
+  sparse?: string[];
+}
+
+export interface RemoveMarketplaceArgs {
+  name: string;
+  scope?: PluginScope;
+  cwd?: string;
+}
+
+export interface PluginInstallArgs {
+  id: string;
+  target: PluginInstallTarget;
+}
+
+export interface PluginUninstallArgs {
+  id: string;
+  target: PluginInstallTarget;
+}
+
+export interface PluginSetEnabledArgs {
+  id: string;
+  enabled: boolean;
+  target: PluginInstallTarget;
+}
+
 // ── RTK (Rust Token Killer) Types ───────────────────────────
 
 export type RtkSource = 'path' | 'managed';
@@ -714,4 +810,131 @@ export interface DiffCommentInput {
   endLine: number;
   text: string;
   sent: boolean;
+}
+
+/* ── Unified Extensions model (Skills + Plugins across scopes) ──────────────
+ * See docs/specs/2026-06-17-skills-plugins-extensions-design.md. Phase 1 lists
+ * what is installed/enabled at each scope; inheritance resolution is Phase 2. */
+
+/** skillOverrides visibility values (per Claude Code settings). */
+export type SkillVisibility = 'on' | 'name-only' | 'user-invocable-only' | 'off';
+
+/** A concrete scope the Extensions surface can read/write. */
+export interface ExtensionScopeRef {
+  /** Stable id: 'global' | `project:${projectId}` | `task:${taskId}`. */
+  id: string;
+  kind: 'global' | 'project' | 'task';
+  /** Display label: 'Global', project name, or task name. */
+  name: string;
+  /** Root directory whose `.claude/` this scope owns (home dir for global). */
+  path: string;
+  /** Owning project id (task scope only). */
+  projectId?: string;
+}
+
+/** What the renderer passes so the main process can enumerate Project/Task scopes. */
+export interface ExtensionScopeInput {
+  projects: { id: string; name: string; path: string }[];
+  tasks: { taskId: string; name: string; worktreePath: string; projectId: string }[];
+}
+
+export interface OverviewPlugin {
+  /** plugin@marketplace */
+  id: string;
+  name: string;
+  marketplace: string;
+  enabled: boolean;
+  version?: string;
+}
+
+export interface OverviewSkill {
+  /** Skill folder name under .claude/skills. */
+  name: string;
+  /** Resolved from this scope's skillOverrides; defaults to 'on' when unset. */
+  visibility: SkillVisibility;
+  /** True when a Dash install marker is present (installed from the registry). */
+  fromRegistry: boolean;
+}
+
+export interface ScopeExtensions {
+  scope: ExtensionScopeRef;
+  plugins: OverviewPlugin[];
+  skills: OverviewSkill[];
+  /** Raw skill-visibility overrides set in THIS scope's settings (not inherited).
+   *  Lets the renderer detect a child scope overriding an inherited skill whose
+   *  folder isn't local. */
+  skillOverrides: Record<string, SkillVisibility>;
+}
+
+export interface ExtensionsOverview {
+  claudeAvailable: boolean;
+  scopes: ScopeExtensions[];
+}
+
+export interface SetSkillOverrideArgs {
+  scope: ExtensionScopeRef;
+  skillName: string;
+  /** null clears the override (reverts to the skill's own default). */
+  visibility: SkillVisibility | null;
+}
+
+export type PluginComponentKind = 'skill' | 'agent' | 'command' | 'hook';
+
+/** One read-only component bundled inside a plugin (name + optional description). */
+export interface PluginComponentSummary {
+  name: string;
+  description?: string;
+}
+
+/** Full detail for one bundled plugin component, read from the plugin's install dir. */
+export interface ComponentDetail {
+  kind: PluginComponentKind;
+  name: string;
+  description?: string;
+  allowedTools?: string[];
+  model?: string;
+  /** The component's source: SKILL.md / agent .md / command .md text, or a hook's
+   *  config JSON. */
+  raw?: string;
+  /** Bundled files (skills only) as POSIX-relative paths, excluding SKILL.md. */
+  files?: string[];
+}
+
+export interface GetPluginComponentDetailArgs {
+  pluginId: string;
+  kind: PluginComponentKind;
+  /** Component name (command names may contain `/` for namespacing). */
+  name: string;
+}
+
+/** Everything a plugin bundles, grouped by component type. Read-only — Claude Code
+ *  enables/disables a plugin's components as a unit. */
+export interface PluginComponents {
+  skills: PluginComponentSummary[];
+  agents: PluginComponentSummary[];
+  commands: PluginComponentSummary[];
+  hooks: PluginComponentSummary[];
+}
+
+/** Standalone skill detail parsed from its SKILL.md. */
+export interface SkillDetail {
+  name?: string;
+  description?: string;
+  allowedTools?: string[];
+  model?: string;
+  /** Full raw SKILL.md contents (frontmatter + body) for the detail drawer. */
+  raw?: string;
+  /** Other files bundled in the skill folder (scripts, references, assets) as
+   *  POSIX-relative paths, excluding SKILL.md itself. Sorted. */
+  files?: string[];
+}
+
+export interface GetPluginComponentsArgs {
+  /** plugin@marketplace */
+  pluginId: string;
+}
+
+export interface GetSkillDetailArgs {
+  scope: ExtensionScopeRef;
+  skillName: string;
 }

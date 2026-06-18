@@ -219,7 +219,7 @@ export function LeftSidebar({
 
         <div className="glass-hairline w-6 my-1" />
 
-        <Tooltip content="Skills">
+        <Tooltip content="Extensions">
           <button
             onClick={onOpenSkillsBrowser}
             className="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0 hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
@@ -298,7 +298,7 @@ export function LeftSidebar({
           className="flex items-center gap-2 px-2.5 py-[7px] w-full rounded-md text-xs text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-all duration-150 titlebar-no-drag"
         >
           <Blocks size={14} strokeWidth={1.8} />
-          <span>Skills</span>
+          <span>Extensions</span>
         </button>
         <button
           onClick={onOpenSettings}
