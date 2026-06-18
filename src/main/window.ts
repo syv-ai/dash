@@ -29,9 +29,19 @@ export function createWindow(): BrowserWindow {
     mainWindow.show();
   });
 
-  // Open external links in default browser
+  // Open external links in the default browser, but only for safe web/mail
+  // schemes. Validating the scheme here stops a hostile link (e.g. from
+  // previewed, agent-authored HTML) from handing an arbitrary `file:` or
+  // custom-scheme URL to the OS via shell.openExternal.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url).catch(() => {});
+    try {
+      const { protocol } = new URL(url);
+      if (protocol === 'http:' || protocol === 'https:' || protocol === 'mailto:') {
+        shell.openExternal(url).catch(() => {});
+      }
+    } catch {
+      // Malformed URL — ignore.
+    }
     return { action: 'deny' };
   });
 

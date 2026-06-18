@@ -213,8 +213,13 @@ export function DiffViewer({ diff, loading, activeTaskId, taskPath, onClose }: D
   }, [diff?.filePath]);
 
   // Lazily load the full on-disk file content when entering preview mode.
+  // NOTE: previewLoading must NOT be in this effect's deps — it's set to true
+  // inside the effect, and including it would re-run the effect, whose cleanup
+  // cancels the in-flight fetch before it can resolve (the preview would then
+  // hang on "Loading preview..." forever). The `cancelled` flag plus the
+  // `previewContent !== null` guard already prevent duplicate fetches.
   useEffect(() => {
-    if (mode !== 'preview' || !diff || previewContent !== null || previewLoading) return;
+    if (mode !== 'preview' || !diff || previewContent !== null) return;
     let cancelled = false;
     setPreviewLoading(true);
     window.electronAPI
@@ -232,7 +237,7 @@ export function DiffViewer({ diff, loading, activeTaskId, taskPath, onClose }: D
     return () => {
       cancelled = true;
     };
-  }, [mode, diff, taskPath, previewContent, previewLoading]);
+  }, [mode, diff, taskPath, previewContent]);
 
   // ── Selection helpers ───────────────────────────────────
 
