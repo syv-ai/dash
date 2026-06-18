@@ -109,7 +109,7 @@ export function Modal({ onClose, size, overflow = 'hidden', cardStyle, children 
         }}
       >
         <div
-          className={`bg-[hsl(var(--surface-2)/0.86)] backdrop-blur-2xl border border-border/40 rounded-xl shadow-2xl shadow-black/50 ${size} flex flex-col ${overflow === 'visible' ? 'overflow-visible' : 'overflow-hidden'} ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
+          className={`modal-shell border border-border/40 rounded-xl ${size} flex flex-col ${overflow === 'visible' ? 'overflow-visible' : 'overflow-hidden'} ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
           style={cardStyle}
           onClick={(e) => e.stopPropagation()}
         >

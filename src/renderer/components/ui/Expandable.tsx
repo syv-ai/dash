@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronRight, ChevronDown } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 
 interface ExpandableProps {
   label: string;
@@ -11,7 +11,8 @@ interface ExpandableProps {
 }
 
 /** A lightweight disclosure: a clickable label row with a chevron that toggles
- *  its children. Used to keep optional fields (context prompts) tucked away. */
+ *  its children. Used to keep optional fields (context prompts) tucked away.
+ *  Content height animates open/closed via the `.collapse-grid` helper. */
 export function Expandable({ label, defaultOpen = false, hint, children }: ExpandableProps) {
   const [open, setOpen] = useState(defaultOpen);
   return (
@@ -21,15 +22,19 @@ export function Expandable({ label, defaultOpen = false, hint, children }: Expan
         onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-1 text-[12px] font-medium text-muted-foreground/70 hover:text-foreground transition-colors"
       >
-        {open ? (
-          <ChevronDown size={13} strokeWidth={2} />
-        ) : (
-          <ChevronRight size={13} strokeWidth={2} />
-        )}
+        <ChevronRight
+          size={13}
+          strokeWidth={2}
+          className={`transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+            open ? 'rotate-90' : ''
+          }`}
+        />
         {label}
         {hint && <span className="text-muted-foreground/40 font-normal">{hint}</span>}
       </button>
-      {open && <div className="mt-2">{children}</div>}
+      <div className="collapse-grid" data-open={open}>
+        <div className="pt-2">{children}</div>
+      </div>
     </div>
   );
 }

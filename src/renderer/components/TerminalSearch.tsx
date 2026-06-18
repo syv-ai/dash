@@ -81,7 +81,7 @@ export function TerminalSearch({ searchAddon, onClose }: TerminalSearchProps) {
       : `${results.resultIndex + 1}/${results.resultCount}`;
 
   return (
-    <div className="absolute top-1 right-1 z-20 flex items-center gap-1 pl-2 pr-1 py-1 rounded-md bg-surface-1/95 border border-input/40 backdrop-blur shadow-md">
+    <div className="absolute top-1 right-1 z-20 flex items-center gap-1 pl-2 pr-1 py-1 rounded-md bg-[hsl(var(--surface-1)/0.95)] border border-input/40 backdrop-blur shadow-md">
       <input
         ref={inputRef}
         type="text"

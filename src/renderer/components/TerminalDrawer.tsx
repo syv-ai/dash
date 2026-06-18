@@ -368,8 +368,11 @@ export function TerminalDrawer({
         </button>
       ) : (
         <div className="flex items-center h-8 flex-shrink-0 border-t border-white/[0.08] pl-1">
-          {tabs.filter((t) => t.kind !== 'tui').map(renderTab)}
-          <div className="flex-1" />
+          {/* Tab strip scrolls within its own track so the trailing +/collapse
+              controls stay reachable when the panel is narrow or tabs are many. */}
+          <div className="flex items-center flex-1 min-w-0 overflow-x-auto scrollbar-none">
+            {tabs.filter((t) => t.kind !== 'tui').map(renderTab)}
+          </div>
           {/* TUI tabs (e.g. ports setup) sit right-aligned and tinted so they read
               as Dash speaking, not another terminal. */}
           {tabs.filter((t) => t.kind === 'tui').map(renderTab)}
@@ -391,14 +394,14 @@ export function TerminalDrawer({
             <DropdownMenuContent align="end" sideOffset={6}>
               <DropdownMenuItem onSelect={() => void handleAddTab()}>
                 <Terminal size={13} strokeWidth={1.8} />
-                <span>Terminal</span>
+                <span className="text-[13px]">Terminal</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuLabel>Wizards</DropdownMenuLabel>
                 {WIZARDS.map((w) => (
                   <DropdownMenuItem key={w.id} onSelect={() => void handleLaunchWizard(w.id)}>
-                    <span className="flex-1">{w.label}</span>
+                    <span className="flex-1 text-[13px]">{w.label}</span>
                     {wizardDone[w.id] && (
                       <Check size={13} strokeWidth={2} className="text-[hsl(var(--git-added))]" />
                     )}

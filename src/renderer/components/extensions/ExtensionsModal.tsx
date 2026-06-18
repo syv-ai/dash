@@ -66,7 +66,7 @@ function ExtensionsBody({
       </div>
 
       {ext.error && (
-        <div className="flex-shrink-0 border-b border-border/40 bg-destructive/10 px-5 py-2 text-[11px] text-destructive">
+        <div className="animate-fade-in flex-shrink-0 border-b border-border/40 bg-destructive/10 px-5 py-2 text-[11px] text-destructive">
           {ext.error}
         </div>
       )}
@@ -74,7 +74,7 @@ function ExtensionsBody({
       {/* Body */}
       <div className="relative flex min-h-0 flex-1">
         {mode === 'installed' ? (
-          <>
+          <div key="installed" className="animate-fade-in flex min-h-0 flex-1">
             <ScopeSidebar
               scopes={scopes}
               selectedScopeId={selected?.scope.id ?? 'global'}
@@ -82,9 +82,11 @@ function ExtensionsBody({
               loading={ext.loading}
             />
             <ScopeDetail scope={selected} ext={ext} />
-          </>
+          </div>
         ) : (
-          <BrowseView scopes={scopes.map((s) => s.scope)} ext={ext} />
+          <div key="browse" className="animate-fade-in flex min-h-0 flex-1">
+            <BrowseView scopes={scopes.map((s) => s.scope)} ext={ext} />
+          </div>
         )}
         <DetailDrawer ext={ext} />
       </div>

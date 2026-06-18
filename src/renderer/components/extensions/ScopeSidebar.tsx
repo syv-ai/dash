@@ -60,7 +60,9 @@ export function ScopeSidebar({
           >
             <ChevronRight
               size={12}
-              className={`transition-transform ${chevron.open ? 'rotate-90' : ''}`}
+              className={`transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                chevron.open ? 'rotate-90' : ''
+              }`}
             />
           </button>
         ) : (
@@ -68,7 +70,7 @@ export function ScopeSidebar({
         )}
         <button
           onClick={() => onSelect(id)}
-          className={`flex min-w-0 flex-1 items-center gap-2 py-1.5 pr-2 text-[12.5px] transition-colors ${
+          className={`flex min-w-0 flex-1 items-center gap-2 py-1.5 pr-2 text-[12.5px] transition-colors duration-150 ${
             active ? 'text-foreground' : 'text-foreground/60 group-hover:text-foreground'
           }`}
         >
@@ -105,16 +107,19 @@ export function ScopeSidebar({
               icon={<Folder size={14} strokeWidth={1.8} />}
               chevron={tasks.length > 0 ? { open, onToggle: () => toggle(project.id) } : undefined}
             />
-            {open &&
-              tasks.map((t) => (
-                <Row
-                  key={t.id}
-                  id={t.id}
-                  label={t.name}
-                  icon={<SquareTerminal size={13} strokeWidth={1.8} />}
-                  indent
-                />
-              ))}
+            <div className="collapse-grid" data-open={open}>
+              <div className="space-y-0.5">
+                {tasks.map((t) => (
+                  <Row
+                    key={t.id}
+                    id={t.id}
+                    label={t.name}
+                    icon={<SquareTerminal size={13} strokeWidth={1.8} />}
+                    indent
+                  />
+                ))}
+              </div>
+            </div>
           </div>
         );
       })}

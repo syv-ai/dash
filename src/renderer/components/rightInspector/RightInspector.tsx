@@ -58,14 +58,14 @@ export function RightInspector({
       <UsageStrip rateLimits={rateLimits} contextUsage={contextUsage} />
 
       {/* Control row */}
-      <div className="flex items-center gap-2 px-3 pt-3 pb-1.5">
+      <div className="inspector-controls flex items-center gap-2 px-3 pt-3 pb-1.5">
         {fileCount > 0 && (
           <span className="min-w-[18px] h-[16px] flex items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary tabular-nums px-1 shrink-0">
             {fileCount}
           </span>
         )}
         {fileCount > 0 && (
-          <span className="inline-flex items-center font-mono text-[10.5px] tabular-nums shrink-0">
+          <span className="inspector-gitstats inline-flex items-center font-mono text-[10.5px] tabular-nums shrink-0">
             <span className="text-[hsl(var(--git-added))]">+{adds}</span>
             <span className="mx-1.5 text-foreground/30">·</span>
             <span className="text-[hsl(var(--git-deleted))]">−{dels}</span>
@@ -73,7 +73,7 @@ export function RightInspector({
         )}
         <div className="flex-1" />
         {(showAhead || showBehind) && (
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="inspector-aheadbehind flex items-center gap-1 shrink-0">
             {showAhead && (
               <span className="flex items-center gap-0.5 text-[9px] text-[hsl(var(--git-added))]">
                 <ArrowUp size={8} strokeWidth={2.5} />

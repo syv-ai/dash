@@ -38,16 +38,16 @@ export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: 
         </button>
       ) : (
         <>
-          <div className="flex items-center h-8 flex-shrink-0 border-t border-white/[0.08]">
+          <div className="ports-header flex items-center h-8 flex-shrink-0 border-t border-white/[0.08]">
             <Plug
               size={12}
               strokeWidth={1.8}
               className="flex-shrink-0 ml-3 mr-1.5 text-foreground/80"
             />
-            <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground">
+            <span className="ports-label text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground">
               {LABEL}
             </span>
-            <span className="ml-2 text-[10.5px] tabular-nums text-muted-foreground/80">
+            <span className="ports-status ml-2 text-[10.5px] tabular-nums text-muted-foreground/80">
               {status}
             </span>
             <div className="flex-1" />

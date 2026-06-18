@@ -152,7 +152,7 @@ export function ScopeDetail({ scope, ext }: { scope?: ScopeExtensions; ext: Ext 
   const inheritedSkills = skills.filter((sk) => sk.provenance.kind === 'inherited');
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto p-5">
+    <div key={s.id} className="min-h-0 flex-1 overflow-y-auto p-5 animate-fade-in">
       <div className="mb-4 flex items-center gap-2.5">
         <span className="text-foreground/70">{meta.icon}</span>
         <div className="min-w-0">

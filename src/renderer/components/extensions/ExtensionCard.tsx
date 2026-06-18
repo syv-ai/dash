@@ -267,7 +267,9 @@ export function PluginRow({
             {total > 0 && (
               <ChevronDown
                 size={11}
-                className={`transition-transform ${open ? 'rotate-180' : ''}`}
+                className={`transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                  open ? 'rotate-180' : ''
+                }`}
               />
             )}
           </button>
@@ -288,29 +290,31 @@ export function PluginRow({
           </>
         )}
       </div>
-      {open && components && (
-        <div className="mt-2 ml-[46px] space-y-2">
-          {COMPONENT_GROUPS.map(({ key, kind, label }) => {
-            const items = components[key];
-            if (items.length === 0) return null;
-            return (
-              <div key={key} className="space-y-1">
-                <div className="font-mono text-[9.5px] uppercase tracking-[0.12em] text-foreground/35">
-                  {label}
+      {components && (
+        <div className="collapse-grid" data-open={open}>
+          <div className="mt-2 ml-[46px] space-y-2">
+            {COMPONENT_GROUPS.map(({ key, kind, label }) => {
+              const items = components[key];
+              if (items.length === 0) return null;
+              return (
+                <div key={key} className="space-y-1">
+                  <div className="font-mono text-[9.5px] uppercase tracking-[0.12em] text-foreground/35">
+                    {label}
+                  </div>
+                  {items.map((c) => (
+                    <ComponentCard
+                      key={c.name}
+                      kind={kind}
+                      title={c.name}
+                      subtitle={c.description}
+                      nested
+                      onOpen={() => onOpenComponent(kind, c)}
+                    />
+                  ))}
                 </div>
-                {items.map((c) => (
-                  <ComponentCard
-                    key={c.name}
-                    kind={kind}
-                    title={c.name}
-                    subtitle={c.description}
-                    nested
-                    onOpen={() => onOpenComponent(kind, c)}
-                  />
-                ))}
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

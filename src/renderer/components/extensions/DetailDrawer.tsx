@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Loader2, ChevronLeft, FileCode2 } from 'lucide-react';
 import type { ExtensionsOverview } from '../../../shared/types';
 import { IconButton } from '../ui/IconButton';
@@ -64,7 +64,23 @@ function SourceBlock({ label, raw, files }: { label: string; raw?: string; files
 }
 
 export function DetailDrawer({ ext }: { ext: Ext }) {
-  const ref = ext.detail;
+  const live = ext.detail;
+  // Keep the last-shown ref mounted through the exit animation: when `live`
+  // clears we flip to `closing` and only unmount once the slide-out ends.
+  const [shown, setShown] = useState<DetailRef | null>(live);
+  const [closing, setClosing] = useState(false);
+  useEffect(() => {
+    if (live) {
+      setShown(live);
+      setClosing(false);
+    } else if (shown) {
+      setClosing(true);
+    }
+    // `shown` is intentionally omitted — we react to `live` transitions only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live]);
+
+  const ref = shown;
   if (!ref) return null;
 
   const meta = ref.kind === 'plugin' ? ext.catalog.find((c) => c.id === ref.pluginId) : undefined;
@@ -105,12 +121,19 @@ export function DetailDrawer({ ext }: { ext: Ext }) {
     <>
       {/* in-modal scrim */}
       <div
-        className="absolute inset-0 z-20 animate-fade-in bg-[hsl(0_0%_0%/0.45)]"
+        className={`absolute inset-0 z-20 bg-[hsl(0_0%_0%/0.45)] ${
+          closing ? 'animate-fade-out' : 'animate-fade-in'
+        }`}
         onClick={ext.closeDetail}
       />
       <div
-        className="absolute inset-y-0 right-0 z-30 flex w-[480px] max-w-[80%] animate-slide-in-right flex-col shadow-[-30px_0_70px_-20px_hsl(0_0%_0%/0.65)]"
+        className={`absolute inset-y-0 right-0 z-30 flex w-[480px] max-w-[80%] flex-col shadow-[-30px_0_70px_-20px_hsl(0_0%_0%/0.65)] ${
+          closing ? 'animate-slide-out-right' : 'animate-slide-in-right'
+        }`}
         style={{ background: 'hsl(var(--surface-2))' }}
+        onAnimationEnd={() => {
+          if (closing) setShown(null);
+        }}
       >
         {/* header */}
         <div className="flex items-start gap-3 border-b border-border/40 px-5 py-4">

@@ -79,7 +79,7 @@ interface TaskModalProps {
 
 export function TaskModal(props: TaskModalProps) {
   return (
-    <Modal onClose={props.onClose} size="w-[420px]" overflow="visible">
+    <Modal onClose={props.onClose} size="w-[760px]" overflow="visible">
       <TaskModalBody
         projectPath={props.projectPath}
         projectId={props.projectId}
@@ -408,412 +408,427 @@ function TaskModalBody({
         }}
         className="p-5"
       >
-        {/* Task name */}
-        <div className="mb-5">
-          <label className="block text-[12px] font-medium text-muted-foreground/70 mb-2">
-            Task name
-          </label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Fix auth bug, Add dark mode..."
-            maxLength={60}
-            className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[13px] placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150"
-            autoFocus
-          />
-        </div>
+        <div className="grid grid-cols-2 gap-x-6">
+          {/* ── Left column: core settings ── */}
+          <div className="min-w-0">
+            {/* Task name */}
+            <div className="mb-5">
+              <label className="block text-[12px] font-medium text-muted-foreground/70 mb-2">
+                Task name
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Fix auth bug, Add dark mode..."
+                maxLength={60}
+                className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[13px] placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150"
+                autoFocus
+              />
+            </div>
 
-        {/* Context prompt (optional) */}
-        <div className="mb-5">
-          <Expandable label="Context prompt" hint="optional" defaultOpen={!!contextPrompt.trim()}>
-            <textarea
-              value={contextPrompt}
-              onChange={(e) => setContextPrompt(e.target.value)}
-              rows={2}
-              placeholder="Prepended to the task's context — e.g. coding conventions, links."
-              className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[13px] placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
-            />
-          </Expandable>
-        </div>
-
-        {/* Worktree toggle */}
-        {gitReady && repoHasNoCommits ? (
-          <div className="mb-4 flex items-start gap-2 px-3 py-2.5 rounded-lg bg-surface-1">
-            <FolderGit2
-              size={13}
-              className="text-muted-foreground/25 mt-0.5 flex-shrink-0"
-              strokeWidth={1.8}
-            />
-            <span className="text-[12px] text-muted-foreground/45">
-              No commits yet — this task runs in the project folder. Make an initial commit to
-              enable worktrees and branches.
-            </span>
-          </div>
-        ) : gitReady ? (
-          <div className="mb-4">
-            <label
-              className={`flex items-center gap-3 group ${worktreeForced ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
-            >
-              <div className="relative">
-                <input
-                  type="checkbox"
-                  checked={useWorktree}
-                  onChange={(e) => {
-                    if (!worktreeForced) setUseWorktree(e.target.checked);
-                  }}
-                  disabled={worktreeForced}
-                  className="sr-only peer"
+            {/* Worktree toggle */}
+            {gitReady && repoHasNoCommits ? (
+              <div className="mb-4 flex items-start gap-2 px-3 py-2.5 rounded-lg bg-[hsl(var(--surface-1))]">
+                <FolderGit2
+                  size={13}
+                  className="text-muted-foreground/25 mt-0.5 flex-shrink-0"
+                  strokeWidth={1.8}
                 />
-                <div className="w-8 h-[18px] rounded-full bg-accent peer-checked:bg-primary/80 transition-colors duration-200" />
-                <div className="absolute top-[3px] left-[3px] w-3 h-3 rounded-full bg-muted-foreground/40 peer-checked:bg-primary-foreground peer-checked:translate-x-[14px] transition-all duration-200" />
-              </div>
-              <div className="flex items-center gap-2">
-                <GitBranch size={13} className="text-muted-foreground/40" strokeWidth={1.8} />
-                <span className="text-[13px] text-foreground/80">Git worktree</span>
-                <span className="text-[11px] text-muted-foreground/40">isolated branch</span>
-              </div>
-            </label>
-            {worktreeForced && (
-              <p className="ml-[44px] mt-1 text-[11px] text-muted-foreground/50">
-                A non-worktree task already exists:{' '}
-                <span className="font-medium text-foreground/60">
-                  {existingNonWorktreeTask.name}
+                <span className="text-[12px] text-muted-foreground/45">
+                  No commits yet — this task runs in the project folder. Make an initial commit to
+                  enable worktrees and branches.
                 </span>
-              </p>
-            )}
-          </div>
-        ) : (
-          <div className="mb-4 flex items-center gap-2 px-3 py-2.5 rounded-lg bg-surface-1 border border-border/40">
-            <FolderGit2 size={13} className="text-muted-foreground/40" strokeWidth={1.8} />
-            <span className="text-[12px] text-muted-foreground/60 flex-1">
-              Not a git repository
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                void handleGitInit();
-              }}
-              disabled={gitInitLoading}
-              className="text-[11px] font-medium text-primary hover:text-primary/80 transition-colors disabled:opacity-50"
-            >
-              {gitInitLoading ? 'Initializing...' : 'Initialize Git'}
-            </button>
-          </div>
-        )}
-
-        {/* Use existing branch toggle */}
-        {useWorktree && !repoHasNoCommits && (
-          <div className="mb-4">
-            <label className="flex items-center gap-3 cursor-pointer group">
-              <div className="relative">
-                <input
-                  type="checkbox"
-                  checked={createNewBranch}
-                  onChange={(e) => {
-                    setCreateNewBranch(e.target.checked);
-                    setSelectedBranch(null);
-                  }}
-                  className="sr-only peer"
-                />
-                <div className="w-8 h-[18px] rounded-full bg-accent peer-checked:bg-primary/80 transition-colors duration-200" />
-                <div className="absolute top-[3px] left-[3px] w-3 h-3 rounded-full bg-muted-foreground/40 peer-checked:bg-primary-foreground peer-checked:translate-x-[14px] transition-all duration-200" />
               </div>
-              <div className="flex items-center gap-2">
-                <GitBranch size={13} className="text-muted-foreground/40" strokeWidth={1.8} />
-                <span className="text-[13px] text-foreground/80">Create new branch</span>
+            ) : gitReady ? (
+              <div className="mb-4">
+                <label
+                  className={`flex items-center gap-3 group ${worktreeForced ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                >
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={useWorktree}
+                      onChange={(e) => {
+                        if (!worktreeForced) setUseWorktree(e.target.checked);
+                      }}
+                      disabled={worktreeForced}
+                      className="sr-only peer"
+                    />
+                    <div className="w-8 h-[18px] rounded-full bg-accent peer-checked:bg-primary/80 transition-colors duration-200" />
+                    <div className="absolute top-[3px] left-[3px] w-3 h-3 rounded-full bg-muted-foreground/40 peer-checked:bg-primary-foreground peer-checked:translate-x-[14px] transition-all duration-200" />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <GitBranch size={13} className="text-muted-foreground/40" strokeWidth={1.8} />
+                    <span className="text-[13px] text-foreground/80">Git worktree</span>
+                    <span className="text-[11px] text-muted-foreground/40">isolated branch</span>
+                  </div>
+                </label>
+                {worktreeForced && (
+                  <p className="ml-[44px] mt-1 text-[11px] text-muted-foreground/50">
+                    A non-worktree task already exists:{' '}
+                    <span className="font-medium text-foreground/60">
+                      {existingNonWorktreeTask.name}
+                    </span>
+                  </p>
+                )}
               </div>
-            </label>
-          </div>
-        )}
-
-        {/* Branch selector */}
-        {gitReady && !repoHasNoCommits && (
-          <div className="mb-4" ref={dropdownRef}>
-            <label className="block text-[12px] font-medium text-muted-foreground/70 mb-2">
-              {useWorktree && createNewBranch ? 'Base branch' : 'Branch'}
-            </label>
-
-            {branchError ? (
-              <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-[12px] text-destructive">
-                <AlertCircle size={13} strokeWidth={2} />
-                <span className="flex-1 truncate">{branchError}</span>
+            ) : (
+              <div className="mb-4 flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[hsl(var(--surface-1))] border border-border/40">
+                <FolderGit2 size={13} className="text-muted-foreground/40" strokeWidth={1.8} />
+                <span className="text-[12px] text-muted-foreground/60 flex-1">
+                  Not a git repository
+                </span>
                 <button
                   type="button"
                   onClick={() => {
-                    void fetchBranches();
+                    void handleGitInit();
                   }}
-                  className="text-[11px] font-medium underline underline-offset-2 hover:no-underline shrink-0"
+                  disabled={gitInitLoading}
+                  className="text-[11px] font-medium text-primary hover:text-primary/80 transition-colors disabled:opacity-50"
                 >
-                  Retry
+                  {gitInitLoading ? 'Initializing...' : 'Initialize Git'}
                 </button>
               </div>
-            ) : (
-              <div className="relative">
-                <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-background border border-input/60 focus-within:ring-2 focus-within:ring-ring/30 focus-within:border-ring/50 transition-all duration-150">
-                  {branchLoading ? (
-                    <Loader2 size={12} className="animate-spin text-muted-foreground/50 shrink-0" />
-                  ) : (
-                    <GitBranch
-                      size={12}
-                      className="text-muted-foreground/40 shrink-0"
-                      strokeWidth={1.8}
-                    />
-                  )}
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    value={dropdownOpen ? branchSearch : selectedBranch?.name || ''}
-                    onChange={(e) => {
-                      setBranchSearch(e.target.value);
-                      if (!dropdownOpen) setDropdownOpen(true);
-                    }}
-                    onFocus={() => {
-                      setBranchSearch('');
-                      setDropdownOpen(true);
-                    }}
-                    placeholder={branchLoading ? 'Fetching branches...' : 'Search branches...'}
-                    disabled={branchLoading}
-                    className="flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/30 outline-none disabled:opacity-50"
-                  />
-                  {selectedBranch && !dropdownOpen && (
-                    <span className="text-[11px] text-muted-foreground/40 font-mono shrink-0">
-                      {selectedBranch.shortHash}
-                    </span>
-                  )}
-                  <ChevronDown
-                    size={13}
-                    className={`text-muted-foreground/40 shrink-0 transition-transform duration-150 ${dropdownOpen ? 'rotate-180' : ''}`}
-                  />
-                </div>
+            )}
 
-                {dropdownOpen && (
-                  <div className="absolute z-50 mt-1 w-full bg-card border border-border/60 rounded-lg shadow-xl shadow-black/30 overflow-hidden">
-                    <div className="max-h-[200px] overflow-y-auto">
-                      {filteredBranches.length === 0 ? (
-                        <div className="px-3 py-3 text-[12px] text-muted-foreground/40 text-center">
-                          No branches found
-                        </div>
-                      ) : (
-                        filteredBranches.map((branch) => (
-                          <button
-                            key={branch.ref}
-                            type="button"
-                            onClick={() => {
-                              setSelectedBranch(branch);
-                              setDropdownOpen(false);
-                              setBranchSearch('');
-                            }}
-                            className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-accent/60 transition-colors duration-100 ${
-                              selectedBranch?.ref === branch.ref ? 'bg-accent/40' : ''
-                            }`}
-                          >
-                            <GitBranch
-                              size={11}
-                              className="text-muted-foreground/40 shrink-0"
-                              strokeWidth={1.8}
-                            />
-                            <span className="flex-1 truncate text-[12px] text-foreground/80">
-                              {branch.name}
-                            </span>
-                            {branch.upstream && branch.upstream.ahead > 0 && (
-                              <span className="flex items-center gap-0.5 text-[10px] text-emerald-500 font-mono shrink-0">
-                                <ArrowUp size={9} strokeWidth={2.5} />
-                                {branch.upstream.ahead}
-                              </span>
-                            )}
-                            {branch.upstream && branch.upstream.behind > 0 && (
-                              <span className="flex items-center gap-0.5 text-[10px] text-amber-500 font-mono shrink-0">
-                                <ArrowDown size={9} strokeWidth={2.5} />
-                                {branch.upstream.behind}
-                              </span>
-                            )}
-                            <span className="text-[10px] text-muted-foreground/40 font-mono shrink-0">
-                              {branch.shortHash}
-                            </span>
-                            <span className="text-[10px] text-muted-foreground/30 shrink-0">
-                              {branch.relativeDate}
-                            </span>
-                          </button>
-                        ))
-                      )}
-                    </div>
+            {/* Use existing branch toggle */}
+            {useWorktree && !repoHasNoCommits && (
+              <div className="mb-4">
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={createNewBranch}
+                      onChange={(e) => {
+                        setCreateNewBranch(e.target.checked);
+                        setSelectedBranch(null);
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-8 h-[18px] rounded-full bg-accent peer-checked:bg-primary/80 transition-colors duration-200" />
+                    <div className="absolute top-[3px] left-[3px] w-3 h-3 rounded-full bg-muted-foreground/40 peer-checked:bg-primary-foreground peer-checked:translate-x-[14px] transition-all duration-200" />
                   </div>
+                  <div className="flex items-center gap-2">
+                    <GitBranch size={13} className="text-muted-foreground/40" strokeWidth={1.8} />
+                    <span className="text-[13px] text-foreground/80">Create new branch</span>
+                  </div>
+                </label>
+              </div>
+            )}
+
+            {/* Branch selector */}
+            {gitReady && !repoHasNoCommits && (
+              <div className="mb-4" ref={dropdownRef}>
+                <label className="block text-[12px] font-medium text-muted-foreground/70 mb-2">
+                  {useWorktree && createNewBranch ? 'Base branch' : 'Branch'}
+                </label>
+
+                {branchError ? (
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-[12px] text-destructive">
+                    <AlertCircle size={13} strokeWidth={2} />
+                    <span className="flex-1 truncate">{branchError}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void fetchBranches();
+                      }}
+                      className="text-[11px] font-medium underline underline-offset-2 hover:no-underline shrink-0"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-background border border-input/60 focus-within:ring-2 focus-within:ring-ring/30 focus-within:border-ring/50 transition-all duration-150">
+                      {branchLoading ? (
+                        <Loader2
+                          size={12}
+                          className="animate-spin text-muted-foreground/50 shrink-0"
+                        />
+                      ) : (
+                        <GitBranch
+                          size={12}
+                          className="text-muted-foreground/40 shrink-0"
+                          strokeWidth={1.8}
+                        />
+                      )}
+                      <input
+                        ref={searchInputRef}
+                        type="text"
+                        value={dropdownOpen ? branchSearch : selectedBranch?.name || ''}
+                        onChange={(e) => {
+                          setBranchSearch(e.target.value);
+                          if (!dropdownOpen) setDropdownOpen(true);
+                        }}
+                        onFocus={() => {
+                          setBranchSearch('');
+                          setDropdownOpen(true);
+                        }}
+                        placeholder={branchLoading ? 'Fetching branches...' : 'Search branches...'}
+                        disabled={branchLoading}
+                        className="flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/30 outline-none disabled:opacity-50"
+                      />
+                      {selectedBranch && !dropdownOpen && (
+                        <span className="text-[11px] text-muted-foreground/40 font-mono shrink-0">
+                          {selectedBranch.shortHash}
+                        </span>
+                      )}
+                      <ChevronDown
+                        size={13}
+                        className={`text-muted-foreground/40 shrink-0 transition-transform duration-150 ${dropdownOpen ? 'rotate-180' : ''}`}
+                      />
+                    </div>
+
+                    {dropdownOpen && (
+                      <div className="absolute z-50 mt-1 w-full bg-card border border-border/60 rounded-lg shadow-xl shadow-black/30 overflow-hidden">
+                        <div className="max-h-[200px] overflow-y-auto">
+                          {filteredBranches.length === 0 ? (
+                            <div className="px-3 py-3 text-[12px] text-muted-foreground/40 text-center">
+                              No branches found
+                            </div>
+                          ) : (
+                            filteredBranches.map((branch) => (
+                              <button
+                                key={branch.ref}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedBranch(branch);
+                                  setDropdownOpen(false);
+                                  setBranchSearch('');
+                                }}
+                                className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-accent/60 transition-colors duration-100 ${
+                                  selectedBranch?.ref === branch.ref ? 'bg-accent/40' : ''
+                                }`}
+                              >
+                                <GitBranch
+                                  size={11}
+                                  className="text-muted-foreground/40 shrink-0"
+                                  strokeWidth={1.8}
+                                />
+                                <span className="flex-1 truncate text-[12px] text-foreground/80">
+                                  {branch.name}
+                                </span>
+                                {branch.upstream && branch.upstream.ahead > 0 && (
+                                  <span className="flex items-center gap-0.5 text-[10px] text-emerald-500 font-mono shrink-0">
+                                    <ArrowUp size={9} strokeWidth={2.5} />
+                                    {branch.upstream.ahead}
+                                  </span>
+                                )}
+                                {branch.upstream && branch.upstream.behind > 0 && (
+                                  <span className="flex items-center gap-0.5 text-[10px] text-amber-500 font-mono shrink-0">
+                                    <ArrowDown size={9} strokeWidth={2.5} />
+                                    {branch.upstream.behind}
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-muted-foreground/40 font-mono shrink-0">
+                                  {branch.shortHash}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground/30 shrink-0">
+                                  {branch.relativeDate}
+                                </span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Branch status banner */}
+                {selectedBranch &&
+                  !dropdownOpen &&
+                  !branchError &&
+                  (() => {
+                    const behind = selectedBranch.upstream?.behind ?? 0;
+                    const ahead = selectedBranch.upstream?.ahead ?? 0;
+                    const isDirectCheckout = !createNewBranch || !useWorktree;
+
+                    if (behind > 0 && isDirectCheckout) {
+                      return (
+                        <div className="mt-2 flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px]">
+                          <ArrowDown
+                            size={12}
+                            strokeWidth={2}
+                            className="text-amber-500 shrink-0 mt-0.5"
+                          />
+                          <span className="text-amber-200/80">
+                            <span className="font-medium text-amber-500">
+                              {behind} commit{behind !== 1 ? 's' : ''} behind
+                            </span>{' '}
+                            remote. The local state of this branch will be used.
+                          </span>
+                        </div>
+                      );
+                    }
+                    if (behind > 0) {
+                      return (
+                        <p className="mt-1.5 text-[11px] text-muted-foreground/50">
+                          Base branch is{' '}
+                          <span className="text-amber-500 font-medium">
+                            {behind} commit{behind !== 1 ? 's' : ''} behind
+                          </span>{' '}
+                          remote
+                          {ahead > 0 && (
+                            <>
+                              {', '}
+                              <span className="text-emerald-500 font-medium">{ahead} ahead</span>
+                            </>
+                          )}
+                        </p>
+                      );
+                    }
+                    if (ahead > 0) {
+                      return (
+                        <p className="mt-1.5 text-[11px] text-muted-foreground/50">
+                          <span className="text-emerald-500 font-medium">
+                            {ahead} commit{ahead !== 1 ? 's' : ''} ahead
+                          </span>{' '}
+                          of remote
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
+              </div>
+            )}
+
+            <div className="mb-4">
+              <PermissionModePicker
+                value={permissionMode}
+                onChange={(v) => {
+                  setPermissionMode(v);
+                  localStorage.setItem('permissionMode', v);
+                }}
+              />
+            </div>
+          </div>
+
+          {/* ── Right column: content & details ── */}
+          <div className="min-w-0">
+            {/* Context prompt (optional) */}
+            <div className="mb-5">
+              <Expandable
+                label="Context prompt"
+                hint="optional"
+                defaultOpen={!!contextPrompt.trim()}
+              >
+                <textarea
+                  value={contextPrompt}
+                  onChange={(e) => setContextPrompt(e.target.value)}
+                  rows={2}
+                  placeholder="Prepended to the task's context — e.g. coding conventions, links."
+                  className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[13px] placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
+                />
+              </Expandable>
+            </div>
+
+            {/* Issue/Work Item pickers */}
+            {(showGithub || showAdo) && (
+              <div className="mb-4">
+                <label className="block text-[12px] font-medium text-muted-foreground/70 mb-2">
+                  <span className="flex items-center gap-1.5">
+                    <Search size={12} strokeWidth={1.8} />
+                    {showGithub && showAdo
+                      ? 'Link issues / work items'
+                      : showAdo
+                        ? 'Link work items'
+                        : 'Link issues'}
+                    <span className="text-muted-foreground/40 font-normal">optional</span>
+                  </span>
+                </label>
+
+                {showGithub && (
+                  <SearchableMultiSelect<GithubIssue>
+                    onSearch={searchGithubIssues}
+                    selected={selectedIssues}
+                    onSelect={setSelectedIssues}
+                    getKey={(i) => i.number}
+                    getLabel={(i) => `#${i.number}`}
+                    renderItem={(issue) => <GithubIssueRow issue={issue} />}
+                    placeholder="Search GitHub issues..."
+                  />
+                )}
+
+                {showAdo && (
+                  <SearchableMultiSelect<AzureDevOpsWorkItem>
+                    onSearch={searchAdoWorkItems}
+                    selected={selectedWorkItems}
+                    onSelect={setSelectedWorkItems}
+                    getKey={(i) => i.id}
+                    getLabel={(i) => `#${i.id}`}
+                    renderItem={(item) => <AdoWorkItemRow item={item} />}
+                    placeholder="Search work items..."
+                  />
                 )}
               </div>
             )}
 
-            {/* Branch status banner */}
-            {selectedBranch &&
-              !dropdownOpen &&
-              !branchError &&
-              (() => {
-                const behind = selectedBranch.upstream?.behind ?? 0;
-                const ahead = selectedBranch.upstream?.ahead ?? 0;
-                const isDirectCheckout = !createNewBranch || !useWorktree;
+            {/* Push remote branch toggle */}
+            {useWorktree && createNewBranch && (
+              <div className="mb-4">
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={pushRemote}
+                      onChange={(e) => setPushRemote(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-8 h-[18px] rounded-full bg-accent peer-checked:bg-primary/80 transition-colors duration-200" />
+                    <div className="absolute top-[3px] left-[3px] w-3 h-3 rounded-full bg-muted-foreground/40 peer-checked:bg-primary-foreground peer-checked:translate-x-[14px] transition-all duration-200" />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Upload size={13} className="text-muted-foreground/40" strokeWidth={1.8} />
+                    <span className="text-[13px] text-foreground/80">Push remote branch</span>
+                  </div>
+                </label>
+                {pushRemote && name.trim() && (
+                  <p className="ml-[44px] mt-1 text-[11px] text-muted-foreground/40 font-mono truncate">
+                    origin/{slugify(name.trim())}
+                  </p>
+                )}
+              </div>
+            )}
 
-                if (behind > 0 && isDirectCheckout) {
-                  return (
-                    <div className="mt-2 flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px]">
-                      <ArrowDown
-                        size={12}
-                        strokeWidth={2}
-                        className="text-amber-500 shrink-0 mt-0.5"
+            {/* Per-task worktree scripts (override the project default) */}
+            {useWorktree && !repoHasNoCommits && (
+              <div className="mb-4">
+                <Expandable label="Worktree scripts" hint="setup / teardown" defaultOpen={false}>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[11px] font-medium text-muted-foreground/60 mb-1.5">
+                        Setup — runs in this new worktree
+                      </label>
+                      <textarea
+                        value={setupScript}
+                        onChange={(e) => setSetupScript(e.target.value)}
+                        rows={3}
+                        placeholder={'pnpm install\ncp ../.env .env'}
+                        className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[12px] font-mono placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
                       />
-                      <span className="text-amber-200/80">
-                        <span className="font-medium text-amber-500">
-                          {behind} commit{behind !== 1 ? 's' : ''} behind
-                        </span>{' '}
-                        remote. The local state of this branch will be used.
-                      </span>
                     </div>
-                  );
-                }
-                if (behind > 0) {
-                  return (
-                    <p className="mt-1.5 text-[11px] text-muted-foreground/50">
-                      Base branch is{' '}
-                      <span className="text-amber-500 font-medium">
-                        {behind} commit{behind !== 1 ? 's' : ''} behind
-                      </span>{' '}
-                      remote
-                      {ahead > 0 && (
-                        <>
-                          {', '}
-                          <span className="text-emerald-500 font-medium">{ahead} ahead</span>
-                        </>
-                      )}
+                    <div>
+                      <label className="block text-[11px] font-medium text-muted-foreground/60 mb-1.5">
+                        Teardown — runs before this worktree is removed
+                      </label>
+                      <textarea
+                        value={teardownScript}
+                        onChange={(e) => setTeardownScript(e.target.value)}
+                        rows={2}
+                        placeholder={'docker compose down'}
+                        className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[12px] font-mono placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground/40 leading-relaxed">
+                      Prefilled from the project default. Edits apply to this worktree only.
                     </p>
-                  );
-                }
-                if (ahead > 0) {
-                  return (
-                    <p className="mt-1.5 text-[11px] text-muted-foreground/50">
-                      <span className="text-emerald-500 font-medium">
-                        {ahead} commit{ahead !== 1 ? 's' : ''} ahead
-                      </span>{' '}
-                      of remote
-                    </p>
-                  );
-                }
-                return null;
-              })()}
-          </div>
-        )}
-
-        {/* Issue/Work Item pickers */}
-        {(showGithub || showAdo) && (
-          <div className="mb-4">
-            <label className="block text-[12px] font-medium text-muted-foreground/70 mb-2">
-              <span className="flex items-center gap-1.5">
-                <Search size={12} strokeWidth={1.8} />
-                {showGithub && showAdo
-                  ? 'Link issues / work items'
-                  : showAdo
-                    ? 'Link work items'
-                    : 'Link issues'}
-                <span className="text-muted-foreground/40 font-normal">optional</span>
-              </span>
-            </label>
-
-            {showGithub && (
-              <SearchableMultiSelect<GithubIssue>
-                onSearch={searchGithubIssues}
-                selected={selectedIssues}
-                onSelect={setSelectedIssues}
-                getKey={(i) => i.number}
-                getLabel={(i) => `#${i.number}`}
-                renderItem={(issue) => <GithubIssueRow issue={issue} />}
-                placeholder="Search GitHub issues..."
-              />
-            )}
-
-            {showAdo && (
-              <SearchableMultiSelect<AzureDevOpsWorkItem>
-                onSearch={searchAdoWorkItems}
-                selected={selectedWorkItems}
-                onSelect={setSelectedWorkItems}
-                getKey={(i) => i.id}
-                getLabel={(i) => `#${i.id}`}
-                renderItem={(item) => <AdoWorkItemRow item={item} />}
-                placeholder="Search work items..."
-              />
+                  </div>
+                </Expandable>
+              </div>
             )}
           </div>
-        )}
-
-        {/* Push remote branch toggle */}
-        {useWorktree && createNewBranch && (
-          <div className="mb-4">
-            <label className="flex items-center gap-3 cursor-pointer group">
-              <div className="relative">
-                <input
-                  type="checkbox"
-                  checked={pushRemote}
-                  onChange={(e) => setPushRemote(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-8 h-[18px] rounded-full bg-accent peer-checked:bg-primary/80 transition-colors duration-200" />
-                <div className="absolute top-[3px] left-[3px] w-3 h-3 rounded-full bg-muted-foreground/40 peer-checked:bg-primary-foreground peer-checked:translate-x-[14px] transition-all duration-200" />
-              </div>
-              <div className="flex items-center gap-2">
-                <Upload size={13} className="text-muted-foreground/40" strokeWidth={1.8} />
-                <span className="text-[13px] text-foreground/80">Push remote branch</span>
-              </div>
-            </label>
-            {pushRemote && name.trim() && (
-              <p className="ml-[44px] mt-1 text-[11px] text-muted-foreground/40 font-mono truncate">
-                origin/{slugify(name.trim())}
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* Per-task worktree scripts (override the project default) */}
-        {useWorktree && !repoHasNoCommits && (
-          <div className="mb-4">
-            <Expandable label="Worktree scripts" hint="setup / teardown" defaultOpen={false}>
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-[11px] font-medium text-muted-foreground/60 mb-1.5">
-                    Setup — runs in this new worktree
-                  </label>
-                  <textarea
-                    value={setupScript}
-                    onChange={(e) => setSetupScript(e.target.value)}
-                    rows={3}
-                    placeholder={'pnpm install\ncp ../.env .env'}
-                    className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[12px] font-mono placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-muted-foreground/60 mb-1.5">
-                    Teardown — runs before this worktree is removed
-                  </label>
-                  <textarea
-                    value={teardownScript}
-                    onChange={(e) => setTeardownScript(e.target.value)}
-                    rows={2}
-                    placeholder={'docker compose down'}
-                    className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[12px] font-mono placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
-                  />
-                </div>
-                <p className="text-[10px] text-muted-foreground/40 leading-relaxed">
-                  Prefilled from the project default. Edits apply to this worktree only.
-                </p>
-              </div>
-            </Expandable>
-          </div>
-        )}
-
-        <div className="mb-6">
-          <PermissionModePicker
-            value={permissionMode}
-            onChange={(v) => {
-              setPermissionMode(v);
-              localStorage.setItem('permissionMode', v);
-            }}
-          />
         </div>
 
         {/* Actions */}
