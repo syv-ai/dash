@@ -10,6 +10,7 @@ import { registerRtkIpc } from './rtkIpc';
 import { registerTelemetryIpc } from './telemetryIpc';
 import { registerSkillsIpc } from './skillsIpc';
 import { registerSessionIpc } from './sessionIpc';
+import { registerFileIpc } from './fileIpc';
 
 export function registerAllIpc(): void {
   registerAppIpc();
@@ -24,4 +25,5 @@ export function registerAllIpc(): void {
   registerTelemetryIpc();
   registerSkillsIpc();
   registerSessionIpc();
+  registerFileIpc();
 }
