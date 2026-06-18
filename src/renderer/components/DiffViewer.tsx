@@ -532,7 +532,7 @@ export function DiffViewer({ diff, loading, activeTaskId, taskPath, onClose }: D
 
         {/* Content */}
         <div className="flex-1 relative overflow-hidden">
-          {mode === 'preview' ? (
+          {isHtml && mode === 'preview' ? (
             previewLoading || previewContent === null ? (
               <div className="flex items-center justify-center h-full">
                 <div className="flex items-center gap-3">

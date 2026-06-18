@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { promises as fs, statSync } from 'fs';
+import { promises as fs } from 'fs';
 import * as path from 'path';
 
 // Cap the size of files we'll load into the renderer for preview. HTML pages
@@ -12,15 +12,26 @@ export function registerFileIpc(): void {
   // itself only carries hunks).
   ipcMain.handle('file:readText', async (_event, args: { cwd: string; filePath: string }) => {
     try {
-      const base = path.resolve(args.cwd);
-      const abs = path.resolve(base, args.filePath);
+      // Resolve real paths (following symlinks) on both sides so the guard
+      // can't be bypassed by a symlink inside the worktree that points out of
+      // it. realpath on `base` also normalizes platform symlinks (e.g. macOS
+      // /var → /private/var) so legitimate files still pass.
+      const base = await fs.realpath(path.resolve(args.cwd));
+      const requested = path.resolve(base, args.filePath);
+
+      let abs: string;
+      try {
+        abs = await fs.realpath(requested);
+      } catch {
+        return { success: false, error: 'File not found' };
+      }
 
       // Path-traversal guard: the resolved file must live inside `cwd`.
       if (abs !== base && !abs.startsWith(base + path.sep)) {
         return { success: false, error: 'Path escapes the working directory' };
       }
 
-      const stat = statSync(abs);
+      const stat = await fs.stat(abs);
       if (!stat.isFile()) {
         return { success: false, error: 'Not a file' };
       }
