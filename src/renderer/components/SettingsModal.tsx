@@ -509,13 +509,15 @@ function ClaudeCodeTab({
       {/* Effort Level */}
       <div>
         <label className="block text-[12px] font-medium text-foreground mb-3">Effort Level</label>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           {(
             [
               { value: 'auto', label: 'Auto' },
               { value: 'low', label: 'Low' },
               { value: 'medium', label: 'Medium' },
               { value: 'high', label: 'High' },
+              { value: 'xhigh', label: 'X-High' },
+              { value: 'max', label: 'Max' },
             ] as const
           ).map(({ value, label }) => {
             const isActive = effortLevel === value;
@@ -535,7 +537,9 @@ function ClaudeCodeTab({
           })}
         </div>
         <p className="text-[10px] text-foreground/80 mt-2">
-          Controls how much effort Claude spends reasoning. Auto lets the model decide.
+          Controls how much effort Claude spends reasoning. Auto lets the model decide. X-High and
+          Max apply on newer models (e.g. Opus 4.8); others fall back to their highest supported
+          level.
         </p>
       </div>
 
