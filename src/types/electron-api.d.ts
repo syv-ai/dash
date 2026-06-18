@@ -178,6 +178,7 @@ export interface ElectronAPI {
   setCommitAttribution: (value: string | undefined) => void;
   setClaudeEnvVars: (vars: Record<string, string>) => void;
   setSyncShellEnv: (enabled: boolean) => void;
+  setUltracode: (enabled: boolean) => void;
   getClaudeAttribution: (projectPath?: string) => Promise<IpcResponse<string | null>>;
 
   // GitHub

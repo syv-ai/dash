@@ -338,6 +338,15 @@ export function registerAppIpc(): void {
     }
   });
 
+  ipcMain.on('app:setUltracode', async (_event, enabled: boolean) => {
+    try {
+      const { setUltracode } = await import('../services/ptyManager');
+      setUltracode(enabled);
+    } catch (err) {
+      console.error('[app:setUltracode] Failed:', err);
+    }
+  });
+
   ipcMain.handle('app:detectClaude', async () => {
     try {
       // Import cached result from main

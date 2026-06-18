@@ -156,6 +156,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setClaudeEnvVars: (vars: Record<string, string>) =>
     ipcRenderer.send('app:setClaudeEnvVars', vars),
   setSyncShellEnv: (enabled: boolean) => ipcRenderer.send('app:setSyncShellEnv', enabled),
+  setUltracode: (enabled: boolean) => ipcRenderer.send('app:setUltracode', enabled),
   getClaudeAttribution: (projectPath?: string) =>
     ipcRenderer.invoke('app:getClaudeAttribution', projectPath),
 

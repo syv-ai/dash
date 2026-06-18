@@ -73,6 +73,12 @@ let claudeEnvVars: Record<string, string> = {};
 // When true, inherit the full parent process.env as a base instead of the minimal set.
 let syncShellEnv = false;
 
+// When true, launch Claude sessions with ultracode (xhigh reasoning + workflow
+// orchestration) via `--settings '{"ultracode":true}'`. ultracode is session-only
+// and can't be set through CLAUDE_CODE_EFFORT_LEVEL or --effort, so it's applied
+// per-spawn here rather than through the effort env var.
+let ultracode = false;
+
 const RESERVED_ENV_KEYS = new Set([
   'PATH',
   'HOME',
@@ -129,6 +135,10 @@ export function setClaudeEnvVars(vars: Record<string, string>): void {
 
 export function setSyncShellEnv(enabled: boolean): void {
   syncShellEnv = enabled;
+}
+
+export function setUltracode(enabled: boolean): void {
+  ultracode = enabled;
 }
 
 // Lazy-load node-pty to avoid native binding issues at startup
@@ -715,6 +725,13 @@ export async function startDirectPty(options: {
   if (options.autoApprove) {
     args.push('--dangerously-skip-permissions');
   }
+
+  // ultracode is session-scoped; re-apply it on every spawn so the user's
+  // toggle effectively sticks across the sessions Dash launches.
+  if (ultracode) {
+    args.push('--settings', JSON.stringify({ ultracode: true }));
+  }
+
   const env = buildDirectEnv(options.isDark ?? true);
 
   writeHookSettings(options.cwd, options.id);
