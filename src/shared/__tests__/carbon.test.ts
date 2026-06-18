@@ -131,4 +131,19 @@ describe('householdComparison', () => {
     expect(householdComparison(5000)).toContain('home');
     expect(householdComparison(500000)).toContain('EV');
   });
+
+  it('reports phone charge as a sane percentage (~10 Wh ≈ a full battery)', () => {
+    // 1–10 Wh maps to 10–100% of a ~10 Wh phone battery, not ~0.05–0.5%.
+    expect(householdComparison(1)).toBe('Phone charge 10%');
+    expect(householdComparison(5)).toBe('Phone charge 50%');
+    expect(householdComparison(9.9)).toBe('Phone charge 99%');
+  });
+
+  it('keeps LED-bulb seconds monotonic across the 0.1 Wh boundary', () => {
+    // Both sub-1 Wh LED readings share the ×100 Wh→seconds scale, so seconds
+    // rise with energy instead of dropping 9× at 0.1 Wh.
+    expect(householdComparison(0.099)).toBe('LED bulb for 9s');
+    expect(householdComparison(0.1)).toBe('LED bulb for 10s');
+    expect(householdComparison(0.5)).toBe('LED bulb for 50s');
+  });
 });

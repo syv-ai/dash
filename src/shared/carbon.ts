@@ -164,10 +164,13 @@ export function flightComparison(gramsCO2e: number): string {
  */
 export function householdComparison(energyWh: number): string {
   if (energyWh < 0.01) return '< 1 sec of an LED bulb';
-  if (energyWh < 0.1) return `LED bulb for ${Math.floor(energyWh / 0.01)}s`;
-  if (energyWh < 1.0) return `LED bulb for ${Math.floor(energyWh * 10)}s`;
+  // Single Wh→seconds scale (×100) for the whole sub-1 Wh range so the reported
+  // seconds stay monotonic (a previous split used ×100 then ×10, which made
+  // 0.099 Wh → 9s but 0.1 Wh → 1s).
+  if (energyWh < 1.0) return `LED bulb for ${Math.floor(energyWh * 100)}s`;
   if (energyWh < 10.0) {
-    const percent = energyWh * 0.05;
+    // ~10 Wh ≈ a full phone battery, so 1–10 Wh maps to 10–100%.
+    const percent = energyWh * 10;
     return `Phone charge ${percent < 1 ? percent.toFixed(1) : percent.toFixed(0)}%`;
   }
   if (energyWh < 100.0) return `Laptop for ${Math.floor((energyWh / 10.0) * 5)} min`;
