@@ -173,6 +173,9 @@ export function App() {
   const [syncShellEnv, setSyncShellEnv] = useState(() => {
     return localStorage.getItem('syncShellEnv') === 'true';
   });
+  const [ultracode, setUltracode] = useState(() => {
+    return localStorage.getItem('ultracode') === 'true';
+  });
   const [customClaudeEnvVars, setCustomClaudeEnvVars] = useState<Record<string, string>>(() => {
     try {
       return JSON.parse(localStorage.getItem('customClaudeEnvVars') || '{}');
@@ -257,6 +260,10 @@ export function App() {
   useEffect(() => {
     window.electronAPI.setSyncShellEnv?.(syncShellEnv);
   }, [syncShellEnv]);
+  // Sync ultracode toggle to main process (applied as a spawn arg)
+  useEffect(() => {
+    window.electronAPI.setUltracode?.(ultracode);
+  }, [ultracode]);
   // Sync Claude Code env vars to main process
   useEffect(() => {
     const vars: Record<string, string> = { ...customClaudeEnvVars };
@@ -2013,6 +2020,11 @@ export function App() {
           onSyncShellEnvChange={(v) => {
             setSyncShellEnv(v);
             localStorage.setItem('syncShellEnv', String(v));
+          }}
+          ultracode={ultracode}
+          onUltracodeChange={(v) => {
+            setUltracode(v);
+            localStorage.setItem('ultracode', String(v));
           }}
           customClaudeEnvVars={customClaudeEnvVars}
           onCustomClaudeEnvVarsChange={(v) => {

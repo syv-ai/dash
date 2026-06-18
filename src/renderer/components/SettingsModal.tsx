@@ -82,6 +82,8 @@ interface SettingsModalProps {
   onEffortLevelChange: (value: string) => void;
   syncShellEnv: boolean;
   onSyncShellEnvChange: (value: boolean) => void;
+  ultracode: boolean;
+  onUltracodeChange: (value: boolean) => void;
   customClaudeEnvVars: Record<string, string>;
   onCustomClaudeEnvVarsChange: (value: Record<string, string>) => void;
   activeProjectPath?: string;
@@ -421,6 +423,8 @@ function ClaudeCodeTab({
   onEffortLevelChange,
   syncShellEnv,
   onSyncShellEnvChange,
+  ultracode,
+  onUltracodeChange,
   customEnvVars,
   onCustomEnvVarsChange,
   claudeInfo,
@@ -429,6 +433,8 @@ function ClaudeCodeTab({
   onEffortLevelChange: (v: string) => void;
   syncShellEnv: boolean;
   onSyncShellEnvChange: (v: boolean) => void;
+  ultracode: boolean;
+  onUltracodeChange: (v: boolean) => void;
   customEnvVars: Record<string, string>;
   onCustomEnvVarsChange: (v: Record<string, string>) => void;
   claudeInfo: { installed: boolean; version: string | null; path: string | null } | null;
@@ -540,6 +546,21 @@ function ClaudeCodeTab({
           Controls how much effort Claude spends reasoning. Auto lets the model decide. X-High and
           Max apply on newer models (e.g. Opus 4.8); others fall back to their highest supported
           level.
+        </p>
+      </div>
+
+      {/* Ultracode */}
+      <div>
+        <label className="block text-[12px] font-medium text-foreground mb-3">Ultracode</label>
+        <ToggleSwitch
+          enabled={ultracode}
+          onToggle={onUltracodeChange}
+          label="Launch new sessions in ultracode mode"
+        />
+        <p className="text-[10px] text-foreground/80 mt-2">
+          Sends X-High reasoning and has Claude orchestrate multi-agent workflows for substantive
+          tasks. Applied per session via <code>--settings</code>; uses more tokens and runs slower.
+          Effort buttons above don&apos;t control this — ultracode isn&apos;t a saved effort level.
         </p>
       </div>
 
@@ -656,6 +677,8 @@ export function SettingsModal({
   onEffortLevelChange,
   syncShellEnv,
   onSyncShellEnvChange,
+  ultracode,
+  onUltracodeChange,
   customClaudeEnvVars,
   onCustomClaudeEnvVarsChange,
   activeProjectPath,
@@ -1334,6 +1357,8 @@ export function SettingsModal({
               onEffortLevelChange={onEffortLevelChange}
               syncShellEnv={syncShellEnv}
               onSyncShellEnvChange={onSyncShellEnvChange}
+              ultracode={ultracode}
+              onUltracodeChange={onUltracodeChange}
               customEnvVars={customClaudeEnvVars}
               onCustomEnvVarsChange={onCustomClaudeEnvVarsChange}
               claudeInfo={claudeInfo}
