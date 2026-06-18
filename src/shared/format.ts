@@ -14,6 +14,20 @@ export function formatDuration(ms: number): string {
   return `${h}h ${m % 60}m`;
 }
 
+export function formatEnergy(wh: number): string {
+  if (wh >= 1000) return `${(wh / 1000).toFixed(1)} kWh`;
+  if (wh >= 1) return `${wh.toFixed(0)} Wh`;
+  if (wh <= 0) return '0 Wh';
+  return `${wh.toFixed(2)} Wh`;
+}
+
+export function formatCarbon(grams: number): string {
+  if (grams >= 1000) return `${(grams / 1000).toFixed(1)} kg`;
+  if (grams >= 1) return `${grams.toFixed(0)} g`;
+  if (grams <= 0) return '0 g';
+  return `${grams.toFixed(1)} g`;
+}
+
 export function formatResetTime(epochSeconds: number): string {
   if (!epochSeconds) return '';
   const diffMs = epochSeconds * 1000 - Date.now();

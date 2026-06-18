@@ -106,6 +106,7 @@ describe('calculateMetrics', () => {
       outputTokens: 0,
       cacheReadTokens: 0,
       messageCount: 0,
+      energyWh: 0,
     });
   });
 

@@ -1,3 +1,7 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import { computeEnergyFromMessages } from '../../shared/carbon';
 import {
   EMPTY_METRICS,
   type ContentBlock,
@@ -21,6 +25,38 @@ export function encodeProjectPath(absolutePath: string): string {
     return absolutePath.replace(/[\\/:]/g, '-');
   }
   return absolutePath.replace(/\//g, '-');
+}
+
+/** Directory Claude Code stores per-project session folders under. */
+export function getProjectsDir(): string {
+  return path.join(os.homedir(), '.claude', 'projects');
+}
+
+/**
+ * Read a Claude Code session .jsonl and parse it into deduplicated messages.
+ * Returns null (and logs) when the file can't be read; the benign ENOENT race
+ * (file removed between readdir and read) is silent.
+ */
+export function parseSessionFile(
+  filePath: string,
+): { messages: ParsedSessionMessage[]; bytesRead: number } | null {
+  let data: string;
+  try {
+    data = fs.readFileSync(filePath, 'utf8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+      console.warn('[jsonlParser.parseSessionFile] readFile failed', { filePath, err });
+    }
+    return null;
+  }
+
+  const messages: ParsedSessionMessage[] = [];
+  for (const line of data.split('\n')) {
+    const parsed = parseJsonlLine(line);
+    if (parsed) messages.push(parsed);
+  }
+
+  return { messages: deduplicateByRequestId(messages), bytesRead: Buffer.byteLength(data, 'utf8') };
 }
 
 export function extractToolCalls(content: ContentBlock[] | string): ToolCallInfo[] {
@@ -206,5 +242,6 @@ export function calculateMetrics(messages: ParsedSessionMessage[]): SessionMetri
     outputTokens,
     cacheReadTokens,
     messageCount: messages.length,
+    energyWh: computeEnergyFromMessages(messages).energyWh,
   };
 }

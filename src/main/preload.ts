@@ -293,6 +293,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 
+  // Carbon / energy stats
+  getCarbonStats: (paths?: string[]) => ipcRenderer.invoke('carbon:getStats', paths),
+
   // Telemetry
   telemetryCapture: (event: string, properties?: Record<string, unknown>) =>
     ipcRenderer.invoke('telemetry:capture', { event, properties }),

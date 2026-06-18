@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { formatTokens, formatDuration, formatResetTime } from '../format';
+import {
+  formatTokens,
+  formatDuration,
+  formatResetTime,
+  formatEnergy,
+  formatCarbon,
+} from '../format';
 
 describe('formatTokens', () => {
   it('returns raw number below 1000', () => {
@@ -23,6 +29,52 @@ describe('formatTokens', () => {
     expect(formatTokens(1000000)).toBe('1.0m');
     expect(formatTokens(1500000)).toBe('1.5m');
     expect(formatTokens(2345678)).toBe('2.3m');
+  });
+});
+
+describe('formatEnergy', () => {
+  it('formats kWh at/above 1000 Wh', () => {
+    expect(formatEnergy(1000)).toBe('1.0 kWh');
+    expect(formatEnergy(1500)).toBe('1.5 kWh');
+  });
+
+  it('formats whole Wh between 1 and 1000', () => {
+    expect(formatEnergy(1)).toBe('1 Wh');
+    expect(formatEnergy(50)).toBe('50 Wh');
+    expect(formatEnergy(999)).toBe('999 Wh');
+  });
+
+  it('formats sub-Wh values to two decimals', () => {
+    expect(formatEnergy(0.5)).toBe('0.50 Wh');
+    expect(formatEnergy(0.005)).toBe('0.01 Wh'); // rounds up
+  });
+
+  it('guards zero and negatives', () => {
+    expect(formatEnergy(0)).toBe('0 Wh');
+    expect(formatEnergy(-3)).toBe('0 Wh');
+  });
+});
+
+describe('formatCarbon', () => {
+  it('formats kg at/above 1000 g', () => {
+    expect(formatCarbon(1000)).toBe('1.0 kg');
+    expect(formatCarbon(1500)).toBe('1.5 kg');
+  });
+
+  it('formats whole grams between 1 and 1000', () => {
+    expect(formatCarbon(12)).toBe('12 g');
+    // 999.9 rounds to "1000" but stays in grams (below the 1000 kg threshold).
+    expect(formatCarbon(999.9)).toBe('1000 g');
+  });
+
+  it('formats sub-gram values to one decimal', () => {
+    expect(formatCarbon(0.5)).toBe('0.5 g');
+    expect(formatCarbon(0.04)).toBe('0.0 g');
+  });
+
+  it('guards zero and negatives', () => {
+    expect(formatCarbon(0)).toBe('0 g');
+    expect(formatCarbon(-2)).toBe('0 g');
   });
 });
 
