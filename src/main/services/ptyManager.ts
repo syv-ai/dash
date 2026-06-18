@@ -73,6 +73,9 @@ let claudeEnvVars: Record<string, string> = {};
 // When true, inherit the full parent process.env as a base instead of the minimal set.
 let syncShellEnv = false;
 
+// When true, show git branch name in the shell prompt (default: true).
+let showShellBranch = true;
+
 const RESERVED_ENV_KEYS = new Set([
   'PATH',
   'HOME',
@@ -129,6 +132,10 @@ export function setClaudeEnvVars(vars: Record<string, string>): void {
 
 export function setSyncShellEnv(enabled: boolean): void {
   syncShellEnv = enabled;
+}
+
+export function setShowShellBranch(enabled: boolean): void {
+  showShellBranch = enabled;
 }
 
 // Lazy-load node-pty to avoid native binding issues at startup
@@ -818,7 +825,7 @@ __dash_prompt_precmd() {
 
   local dir="%F{12}%~%f"
   local branch=""
-  if [[ -n "\${vcs_info_msg_0_}" ]]; then
+  if [[ "\${DASH_PROMPT_SHOW_BRANCH:-1}" == "1" && -n "\${vcs_info_msg_0_}" ]]; then
     local dirty=""
     # Fast dirty check: staged + unstaged + untracked
     if ! git diff --quiet HEAD -- 2>/dev/null || [[ -n "$(git ls-files --others --exclude-standard 2>/dev/null | head -1)" ]]; then
@@ -911,6 +918,7 @@ export async function startPty(options: {
     // Inject custom prompt for zsh via ZDOTDIR
     if (shell.endsWith('/zsh') || shell === 'zsh') {
       env.ZDOTDIR = ensureShellConfig();
+      env.DASH_PROMPT_SHOW_BRANCH = showShellBranch ? '1' : '0';
     }
   }
 

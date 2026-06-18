@@ -338,6 +338,15 @@ export function registerAppIpc(): void {
     }
   });
 
+  ipcMain.on('app:setShowShellBranch', async (_event, enabled: boolean) => {
+    try {
+      const { setShowShellBranch } = await import('../services/ptyManager');
+      setShowShellBranch(enabled);
+    } catch (err) {
+      console.error('[app:setShowShellBranch] Failed:', err);
+    }
+  });
+
   ipcMain.handle('app:detectClaude', async () => {
     try {
       // Import cached result from main
