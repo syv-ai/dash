@@ -2140,6 +2140,7 @@ export function App() {
           diff={diffResult}
           loading={diffLoading}
           activeTaskId={activeTaskId}
+          taskPath={activeTask?.path ?? ''}
           onClose={() => {
             setShowDiff(false);
             setDiffResult(null);
