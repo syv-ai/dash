@@ -19,11 +19,21 @@ import { useEditorSave } from './editor/useEditorSave';
 import { useMonacoEditor } from './editor/useMonacoEditor';
 import { EditorHeader } from './editor/EditorHeader';
 import { EditorViewport } from './editor/EditorViewport';
+import { HtmlPreview } from './editor/HtmlPreview';
+import { markdownToDocument } from './editor/markdownPreview';
 import { LoadingPill } from './editor/LoadingPill';
 import { StaleBanner } from './editor/StaleBanner';
 import '../../monaco-workers';
 
 const WORDWRAP_KEY = 'diffEditor.wordWrap';
+
+/** Which files get a Code | Preview toggle, and how their preview is rendered.
+ *  HTML renders as-is; markdown is converted to a styled HTML document. */
+function previewKind(filePath: string): 'html' | 'markdown' | null {
+  if (/\.html?$/i.test(filePath)) return 'html';
+  if (/\.(md|markdown)$/i.test(filePath)) return 'markdown';
+  return null;
+}
 
 interface EditorPaneProps {
   cwd: string;
@@ -70,6 +80,15 @@ export function EditorPane({
   const [wordWrap, setWordWrap] = useState<boolean>(
     () => localStorage.getItem(WORDWRAP_KEY) === 'on',
   );
+  const [previewing, setPreviewing] = useState(false);
+  const kind = previewKind(filePath);
+  const canPreview = kind !== null;
+
+  // Always start a newly-opened file in source view; clear any stale preview
+  // when switching to a non-previewable file.
+  useEffect(() => {
+    setPreviewing(false);
+  }, [filePath]);
 
   const selectionDecorations = useRef<monacoEditor.IEditorDecorationsCollection | null>(null);
   const saveCmdRef = useRef<(() => void) | null>(null);
@@ -128,6 +147,14 @@ export function EditorPane({
     !state.isBinary &&
     !state.isLargeFile &&
     state.modifiedPresent;
+
+  // Document fed to the preview iframe — the live editor buffer (so unsaved
+  // edits show immediately). Markdown is converted; HTML renders verbatim.
+  // Skipped entirely while showing source so we don't parse on every keystroke.
+  const previewHtml = useMemo(() => {
+    if (!previewing || !kind) return '';
+    return kind === 'markdown' ? markdownToDocument(draft, isDark) : draft;
+  }, [previewing, kind, draft, isDark]);
 
   // Initialize the editable buffer + saved buffer whenever a new file's
   // content loads. Comment lifecycle / pending range / stale flag are
@@ -270,6 +297,9 @@ export function EditorPane({
         view={view}
         wordWrap={wordWrap}
         onToggleWordWrap={() => setWordWrap((w) => !w)}
+        canPreview={canPreview}
+        previewing={previewing}
+        onTogglePreview={setPreviewing}
         onClose={handleClose}
         onSelectBase={onSelectBase}
         onExitBranchView={onExitBranchView}
@@ -285,74 +315,83 @@ export function EditorPane({
         />
       )}
 
-      <EditorViewport
-        displayed={displayed}
-        currentState={state}
-        isCommitView={isCommitView}
-        draft={draft}
-        editable={editable}
-        themeName={themeName}
-        wordWrap={wordWrap}
-        beforeMount={handleBeforeMount}
-        onMount={handleMount}
-        areaRef={setEditorAreaEl}
-        fileFadeNonce={fileFadeNonce}
-      >
-        {editable && (dirty || saving || savedPill) && (
-          <button
-            onClick={() => void save()}
-            disabled={!dirty || saving}
-            className={`absolute bottom-16 right-4 z-10 px-3 py-1.5 rounded-md text-[11px] font-medium bg-primary/70 text-primary-foreground hover:bg-primary/85 disabled:cursor-default backdrop-blur-sm shadow-lg shadow-black/30 transition-opacity ${savedPill ? 'animate-save-flash' : ''}`}
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-        )}
-        {showCommentsMenu && (
-          <div className="absolute bottom-4 right-4 z-10">
-            <CommentsMenu
-              commentsByFile={commentsByFile}
-              currentFilePath={filePath}
-              getLiveRangeForCurrent={(commentId) => {
-                const target = liveComments.find((c) => c.id === commentId);
-                if (!target) return null;
-                const model = modifiedEditor?.getModel();
-                const r = model?.getDecorationRange(target.decorationId);
-                return r ? { start: r.startLineNumber, end: r.endLineNumber } : null;
-              }}
-              onNavigate={(targetPath, commentId) => {
-                if (targetPath === filePath) {
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <EditorViewport
+          displayed={displayed}
+          currentState={state}
+          isCommitView={isCommitView}
+          draft={draft}
+          editable={editable}
+          themeName={themeName}
+          wordWrap={wordWrap}
+          beforeMount={handleBeforeMount}
+          onMount={handleMount}
+          areaRef={setEditorAreaEl}
+          fileFadeNonce={fileFadeNonce}
+        >
+          {editable && (dirty || saving || savedPill) && (
+            <button
+              onClick={() => void save()}
+              disabled={!dirty || saving}
+              className={`absolute bottom-16 right-4 z-10 px-3 py-1.5 rounded-md text-[11px] font-medium bg-primary/70 text-primary-foreground hover:bg-primary/85 disabled:cursor-default backdrop-blur-sm shadow-lg shadow-black/30 transition-opacity ${savedPill ? 'animate-save-flash' : ''}`}
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          )}
+          {showCommentsMenu && (
+            <div className="absolute bottom-4 right-4 z-10">
+              <CommentsMenu
+                commentsByFile={commentsByFile}
+                currentFilePath={filePath}
+                getLiveRangeForCurrent={(commentId) => {
                   const target = liveComments.find((c) => c.id === commentId);
-                  if (target) revealLive(target);
-                } else {
-                  onNavigateAcrossFile(targetPath, commentId);
-                }
-              }}
-              onRemove={(_path, id) => useCommentsStore.getState().remove(id)}
-              onUnsend={(id) => useCommentsStore.getState().markUnsent(id)}
-              onSend={promptApi.sendAllUnsent}
-              onEditAndSend={promptApi.openEditAndSend}
-              onSendOne={promptApi.sendOne}
-            />
+                  if (!target) return null;
+                  const model = modifiedEditor?.getModel();
+                  const r = model?.getDecorationRange(target.decorationId);
+                  return r ? { start: r.startLineNumber, end: r.endLineNumber } : null;
+                }}
+                onNavigate={(targetPath, commentId) => {
+                  if (targetPath === filePath) {
+                    const target = liveComments.find((c) => c.id === commentId);
+                    if (target) revealLive(target);
+                  } else {
+                    onNavigateAcrossFile(targetPath, commentId);
+                  }
+                }}
+                onRemove={(_path, id) => useCommentsStore.getState().remove(id)}
+                onUnsend={(id) => useCommentsStore.getState().markUnsent(id)}
+                onSend={promptApi.sendAllUnsent}
+                onEditAndSend={promptApi.openEditAndSend}
+                onSendOne={promptApi.sendOne}
+              />
+            </div>
+          )}
+          {state.kind === 'loading' && displayed.kind === 'loaded' && <LoadingPill />}
+          <CommentOverlay
+            liveComments={liveComments}
+            shadeById={shadeById}
+            modifiedEditor={modifiedEditor}
+            monaco={monaco}
+            area={editorAreaEl}
+            hoveredId={hoveredCommentId}
+            onHoveredIdChange={setHoveredCommentId}
+            onEditComment={draftApi.beginEdit}
+            onDeleteComment={binding.remove}
+            pendingRange={dragging ? null : pendingRange}
+            pendingText={draftApi.pendingText}
+            editingId={draftApi.editingId}
+            onSubmitDraft={(text) => draftApi.submit(text, dragging ? null : pendingRange)}
+            onCancelDraft={draftApi.cancel}
+          />
+        </EditorViewport>
+        {/* Rendered preview overlays the editor (kept mounted underneath so
+            toggling back to Code preserves scroll, cursor, and comment state). */}
+        {canPreview && previewing && (
+          <div className="absolute inset-0 z-30">
+            <HtmlPreview html={previewHtml} />
           </div>
         )}
-        {state.kind === 'loading' && displayed.kind === 'loaded' && <LoadingPill />}
-        <CommentOverlay
-          liveComments={liveComments}
-          shadeById={shadeById}
-          modifiedEditor={modifiedEditor}
-          monaco={monaco}
-          area={editorAreaEl}
-          hoveredId={hoveredCommentId}
-          onHoveredIdChange={setHoveredCommentId}
-          onEditComment={draftApi.beginEdit}
-          onDeleteComment={binding.remove}
-          pendingRange={dragging ? null : pendingRange}
-          pendingText={draftApi.pendingText}
-          editingId={draftApi.editingId}
-          onSubmitDraft={(text) => draftApi.submit(text, dragging ? null : pendingRange)}
-          onCancelDraft={draftApi.cancel}
-        />
-      </EditorViewport>
+      </div>
       {promptApi.editTarget && (
         <EditCommentsModal
           initialText={promptApi.editTarget.text}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { GitCompare, WrapText, X } from 'lucide-react';
+import { Code2, Eye, GitCompare, WrapText, X } from 'lucide-react';
 import type { EditorView } from '../types';
 import { Popover, PopoverAnchor, PopoverContent } from '../../ui/Popover';
 import { BranchPicker } from '../BranchPicker';
@@ -10,6 +10,11 @@ interface Props {
   view: EditorView;
   wordWrap: boolean;
   onToggleWordWrap(): void;
+  /** Show the Code | Preview toggle (HTML files only). */
+  canPreview: boolean;
+  /** True when the rendered preview is showing instead of the editor. */
+  previewing: boolean;
+  onTogglePreview(next: boolean): void;
   onClose(): void;
   /** Switch into branch view with the given base ref (e.g. "origin/main"). */
   onSelectBase(base: string): void;
@@ -28,6 +33,9 @@ export function EditorHeader({
   view,
   wordWrap,
   onToggleWordWrap,
+  canPreview,
+  previewing,
+  onTogglePreview,
   onClose,
   onSelectBase,
   onExitBranchView,
@@ -76,6 +84,36 @@ export function EditorHeader({
         )}
       </div>
       <div className="flex items-center gap-2">
+        {canPreview && (
+          <div className="flex items-center gap-0.5 rounded-md bg-[hsl(var(--surface-3))] p-0.5">
+            <button
+              type="button"
+              onClick={() => onTogglePreview(false)}
+              title="Show source"
+              className={`flex items-center gap-1.5 rounded px-2 py-1 text-[11px] font-medium transition-colors ${
+                previewing
+                  ? 'text-muted-foreground/60 hover:text-foreground'
+                  : 'bg-primary/15 text-primary'
+              }`}
+            >
+              <Code2 size={12} strokeWidth={1.8} />
+              Code
+            </button>
+            <button
+              type="button"
+              onClick={() => onTogglePreview(true)}
+              title="Show rendered preview"
+              className={`flex items-center gap-1.5 rounded px-2 py-1 text-[11px] font-medium transition-colors ${
+                previewing
+                  ? 'bg-primary/15 text-primary'
+                  : 'text-muted-foreground/60 hover:text-foreground'
+              }`}
+            >
+              <Eye size={12} strokeWidth={1.8} />
+              Preview
+            </button>
+          </div>
+        )}
         <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
           <PopoverAnchor asChild>
             <div className="inline-flex items-center">
