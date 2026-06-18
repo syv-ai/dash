@@ -1,7 +1,8 @@
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
-import { X, FileText, MessageSquare, Send } from 'lucide-react';
+import { X, FileText, MessageSquare, Send, Code2, Eye } from 'lucide-react';
 import type { DiffResult, DiffLine, DiffHunk } from '../../shared/types';
 import { sessionRegistry } from '../terminal/SessionRegistry';
+import { HtmlPreview } from './HtmlPreview';
 
 // ── Internal Types ──────────────────────────────────────────
 
@@ -67,6 +68,7 @@ function getLanguageFromPath(filePath: string): string {
     css: 'css',
     scss: 'scss',
     html: 'html',
+    htm: 'html',
     json: 'json',
     yaml: 'yaml',
     yml: 'yaml',
@@ -175,11 +177,15 @@ interface DiffViewerProps {
   diff: DiffResult | null;
   loading: boolean;
   activeTaskId: string | null;
+  taskPath: string;
   onClose: () => void;
 }
 
-export function DiffViewer({ diff, loading, activeTaskId, onClose }: DiffViewerProps) {
+export function DiffViewer({ diff, loading, activeTaskId, taskPath, onClose }: DiffViewerProps) {
   const [comments, setComments] = useState<DiffComment[]>([]);
+  const [mode, setMode] = useState<'code' | 'preview'>('code');
+  const [previewContent, setPreviewContent] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [selection, setSelection] = useState<SelectionState | null>(null);
   const [popover, setPopover] = useState<PopoverState | null>(null);
   const [popoverText, setPopoverText] = useState('');
@@ -196,6 +202,37 @@ export function DiffViewer({ diff, loading, activeTaskId, onClose }: DiffViewerP
     () => (diff?.hunks ? buildChangeMarkers(diff.hunks) : []),
     [diff?.hunks],
   );
+
+  const isHtml = !!diff && getLanguageFromPath(diff.filePath) === 'html';
+
+  // Reset to source view and clear cached preview whenever a new file opens.
+  useEffect(() => {
+    setMode('code');
+    setPreviewContent(null);
+    setPreviewLoading(false);
+  }, [diff?.filePath]);
+
+  // Lazily load the full on-disk file content when entering preview mode.
+  useEffect(() => {
+    if (mode !== 'preview' || !diff || previewContent !== null || previewLoading) return;
+    let cancelled = false;
+    setPreviewLoading(true);
+    window.electronAPI
+      .readFileText({ cwd: taskPath, filePath: diff.filePath })
+      .then((res) => {
+        if (cancelled) return;
+        setPreviewContent(res.success && res.data != null ? res.data : '');
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewContent('');
+      })
+      .finally(() => {
+        if (!cancelled) setPreviewLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, diff, taskPath, previewContent, previewLoading]);
 
   // ── Selection helpers ───────────────────────────────────
 
@@ -449,6 +486,32 @@ export function DiffViewer({ diff, loading, activeTaskId, onClose }: DiffViewerP
           </div>
 
           <div className="flex items-center gap-2">
+            {isHtml && (
+              <div className="flex items-center gap-0.5 p-0.5 rounded-full bg-[hsl(var(--surface-3))]">
+                <button
+                  onClick={() => setMode('code')}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all duration-150 ${
+                    mode === 'code'
+                      ? 'bg-primary/15 text-primary'
+                      : 'text-muted-foreground/60 hover:text-foreground'
+                  }`}
+                >
+                  <Code2 size={11} strokeWidth={2} />
+                  Code
+                </button>
+                <button
+                  onClick={() => setMode('preview')}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all duration-150 ${
+                    mode === 'preview'
+                      ? 'bg-primary/15 text-primary'
+                      : 'text-muted-foreground/60 hover:text-foreground'
+                  }`}
+                >
+                  <Eye size={11} strokeWidth={2} />
+                  Preview
+                </button>
+              </div>
+            )}
             {comments.length > 0 && (
               <button
                 onClick={handleAddToPrompt}
@@ -469,6 +532,19 @@ export function DiffViewer({ diff, loading, activeTaskId, onClose }: DiffViewerP
 
         {/* Content */}
         <div className="flex-1 relative overflow-hidden">
+          {mode === 'preview' ? (
+            previewLoading || previewContent === null ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="flex items-center gap-3">
+                  <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                  <span className="text-[13px] text-muted-foreground/50">Loading preview...</span>
+                </div>
+              </div>
+            ) : (
+              <HtmlPreview html={previewContent} />
+            )
+          ) : (
+            <>
           <div
             ref={contentRef}
             className="h-full overflow-auto font-mono text-[12px] leading-[20px] relative"
@@ -665,6 +741,8 @@ export function DiffViewer({ diff, loading, activeTaskId, onClose }: DiffViewerP
                 />
               ))}
             </div>
+          )}
+            </>
           )}
         </div>
       </div>
