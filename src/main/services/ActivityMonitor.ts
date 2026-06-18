@@ -226,6 +226,10 @@ class ActivityMonitorImpl {
   setWaitingForPermission(ptyId: string): void {
     const activity = this.activities.get(ptyId);
     if (!activity || activity.state === 'waiting') return;
+    if (activity.pendingBusyTimer) {
+      clearTimeout(activity.pendingBusyTimer);
+      activity.pendingBusyTimer = null;
+    }
     activity.state = 'waiting';
     activity.tool = null;
     this.emitAll();
@@ -291,6 +295,10 @@ class ActivityMonitorImpl {
   setError(ptyId: string, errorType: string, message?: string): void {
     const activity = this.activities.get(ptyId);
     if (!activity) return;
+    if (activity.pendingBusyTimer) {
+      clearTimeout(activity.pendingBusyTimer);
+      activity.pendingBusyTimer = null;
+    }
 
     const mappedType: ActivityError['type'] =
       ActivityMonitorImpl.ERROR_TYPE_MAP[errorType] ?? 'unknown';
@@ -383,14 +391,6 @@ class ActivityMonitorImpl {
 
         if (hasChildren) {
           activity.lastChildSeenTime = Date.now();
-        }
-
-        // Self-heal: if children are detected while waiting for permission,
-        // the user approved and Claude started a tool. Transition to busy.
-        if (activity.state === 'waiting' && hasChildren) {
-          activity.state = 'busy';
-          activity.idleChildrenSince = 0;
-          changed = true;
         }
 
         // Delayed self-heal: idle → busy when children are continuously
