@@ -107,6 +107,12 @@ export interface RefreshResult {
 export function refreshActivePtyHooks(): RefreshResult {
   const failures: RefreshFailure[] = [];
   for (const [id, rec] of ptys) {
+    // Shell-tab PTYs (id = `shell:<taskId>[:t<ts>]`) share a cwd with the
+    // task's main Claude PTY, so writing hook settings for them would clobber
+    // `.claude/settings.local.json` with a non-task ptyId — any Claude
+    // process in that cwd then posts statusLine under the shell id, which
+    // doesn't match any `task.id` in the renderer (ghost 81% toasts, GH bug).
+    if (!rec.isDirectSpawn) continue;
     const result = writeHookSettings(rec.cwd, id);
     if (!result.ok) {
       failures.push({ settingsPath: result.settingsPath, error: result.error });
@@ -708,8 +714,20 @@ export async function startDirectPty(options: {
   // DO NOT relax the one-non-worktree-task cap without reintroducing per-task
   // session pinning; see git history at 32bcdb6 for the previous implementation
   // and the issues that drove its removal.
+  const task = DatabaseService.getTask(options.id);
   if (hasAnySessionForCwd(options.cwd)) {
     args.push('--continue');
+    if (task && !task.hadMessages) {
+      try {
+        DatabaseService.setTaskHadMessages(options.id);
+      } catch (err) {
+        console.error('[ptyManager] Failed to set hadMessages:', err);
+      }
+    }
+  } else if (task?.hadMessages) {
+    broadcastToast(
+      `Couldn't resume previous session for "${task.name}" — history may have been cleared. Starting fresh.`,
+    );
   }
 
   if (options.autoApprove) {
