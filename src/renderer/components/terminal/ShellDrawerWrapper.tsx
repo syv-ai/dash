@@ -5,7 +5,7 @@ import {
   PanelResizeHandle,
   type ImperativePanelHandle,
 } from 'react-resizable-panels';
-import { TerminalDrawer } from './TerminalDrawer';
+import { TerminalTabs } from './TerminalTabs';
 
 interface ShellDrawerWrapperProps {
   enabled: boolean;
@@ -74,7 +74,7 @@ export function ShellDrawerWrapper({
           onCollapse={onCollapse}
           onExpand={onExpand}
         >
-          <TerminalDrawer
+          <TerminalTabs
             key={taskId}
             taskId={taskId}
             cwd={cwd}

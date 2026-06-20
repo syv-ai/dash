@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { ArrowDown, ArrowUp, GitBranch, Maximize2, Minus, Plus } from 'lucide-react';
-import { FileChangesPanel } from '../fileChanges/FileChangesPanel';
+import { FileChangesPanel } from '../changes/FileChangesPanel';
 import { Tooltip } from '../ui/Tooltip';
 import { UsageStrip } from './UsageStrip';
 import { useGit } from '../../stores/gitStore';

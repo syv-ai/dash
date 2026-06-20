@@ -22,7 +22,7 @@ const MIN_TUI_DRAWER_PX = 300;
 /** Rough canvas px (52 cols × ~8px) if the real measurement never lands. */
 const TUI_COLS_FALLBACK_PX = 420;
 
-interface TerminalDrawerProps {
+interface TerminalTabsProps {
   taskId: string;
   cwd: string;
   collapsed: boolean;
@@ -39,7 +39,7 @@ interface TerminalDrawerProps {
   onTuiActiveChange?: (active: boolean, canvasPx?: number) => void;
 }
 
-export function TerminalDrawer({
+export function TerminalTabs({
   taskId,
   cwd,
   collapsed,
@@ -48,7 +48,7 @@ export function TerminalDrawer({
   onExpand,
   onEnsureHeight,
   onTuiActiveChange,
-}: TerminalDrawerProps) {
+}: TerminalTabsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const shellId = `shell:${taskId}`;
   const [tabs, setTabs] = useState<Tab[]>([]);
