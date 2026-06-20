@@ -2,7 +2,7 @@ import React from 'react';
 import { X } from 'lucide-react';
 import { useAdoConnection } from './useAdoConnection';
 import { AdoFormFields, AdoTestResult } from './AdoFormFields';
-import { Modal, useModalClose } from './ui/Modal';
+import { Modal, useModalClose } from '../../ui/Modal';
 
 interface AdoSetupModalProps {
   projectId: string;

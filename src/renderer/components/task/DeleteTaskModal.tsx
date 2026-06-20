@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { X, Trash2, Loader2 } from 'lucide-react';
-import type { Task } from '../../shared/types';
-import { CircleCheck } from './ui/CircleCheck';
-import { Modal, useModalClose } from './ui/Modal';
+import type { Task } from '../../../shared/types';
+import { CircleCheck } from '../ui/CircleCheck';
+import { Modal, useModalClose } from '../ui/Modal';
 
 interface RemoveWorktreeOptions {
   deleteWorktreeDir: boolean;

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import type { PermissionMode, Task } from '../../shared/types';
-import { SettingsModalShell } from './ui/SettingsModalShell';
+import type { PermissionMode, Task } from '../../../shared/types';
+import { SettingsModalShell } from '../ui/SettingsModalShell';
 import { PermissionModePicker } from './PermissionModePicker';
-import { Expandable } from './ui/Expandable';
+import { Expandable } from '../ui/Expandable';
 
 interface TaskSettingsModalProps {
   task: Task;

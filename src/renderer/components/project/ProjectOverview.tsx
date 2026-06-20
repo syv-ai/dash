@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { openInIde } from '../lib/openInIde';
-import { useRuntime } from '../stores/runtimeStore';
-import { useGit } from '../stores/gitStore';
+import { openInIde } from '../../lib/openInIde';
+import { useRuntime } from '../../stores/runtimeStore';
+import { useGit } from '../../stores/gitStore';
 import {
   GitBranch,
   Plus,
@@ -14,13 +14,13 @@ import {
   ChevronDown,
   ArchiveRestore,
 } from 'lucide-react';
-import type { Project, Task, ActivityInfo } from '../../shared/types';
-import { linkedItemUrl } from '../../shared/urls';
-import { IconButton } from './ui/IconButton';
-import { Tooltip } from './ui/Tooltip';
-import { TaskActions } from './TaskActions';
-import { TokenBadge } from './TokenBadge';
-import { PrBadge } from './ui/PrBadge';
+import type { Project, Task, ActivityInfo } from '../../../shared/types';
+import { linkedItemUrl } from '../../../shared/urls';
+import { IconButton } from '../ui/IconButton';
+import { Tooltip } from '../ui/Tooltip';
+import { TaskActions } from '../task/TaskActions';
+import { TokenBadge } from '../ui/TokenBadge';
+import { PrBadge } from '../ui/PrBadge';
 
 interface ProjectOverviewProps {
   project: Project;

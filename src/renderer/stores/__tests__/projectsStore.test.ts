@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { shallow } from 'zustand/vanilla/shallow';
 import { makeElectronApiMock, installWindow, resetWindow } from './helpers/electronApiMock';
 import type { Project, Task } from '../../../shared/types';
-import type { DeleteProjectOptions } from '../../components/DeleteProjectModal';
-import type { CreateTaskOptions } from '../../components/TaskModal';
+import type { DeleteProjectOptions } from '../../components/project/DeleteProjectModal';
+import type { CreateTaskOptions } from '../../components/task/TaskModal';
 
 vi.mock('../../terminal/SessionRegistry', () => ({
   sessionRegistry: {

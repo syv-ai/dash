@@ -1,6 +1,6 @@
 import { GitBranch, Globe } from 'lucide-react';
 import type { Task, ActivityInfo, ContextUsage } from '../../../shared/types';
-import { TaskActions } from '../TaskActions';
+import { TaskActions } from '../task/TaskActions';
 import { Tooltip } from '../ui/Tooltip';
 import { UsageBarInline } from '../ui/UsageBar';
 import type { DragHandlers } from '../../hooks/useDragReorder';

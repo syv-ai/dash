@@ -1,6 +1,6 @@
 import React from 'react';
-import { TerminalPane } from './TerminalPane';
-import { ProjectOverview } from './ProjectOverview';
+import { TerminalPane } from './terminal/TerminalPane';
+import { ProjectOverview } from './project/ProjectOverview';
 import { useSettings } from '../stores/settingsStore';
 import { useGit } from '../stores/gitStore';
 import { useRuntime } from '../stores/runtimeStore';
@@ -18,7 +18,7 @@ import {
 import type { Project, Task, LinkedItem } from '../../shared/types';
 import { branchUrl, linkedItemUrl } from '../../shared/urls';
 import { Tooltip } from './ui/Tooltip';
-import { TokenBadge } from './TokenBadge';
+import { TokenBadge } from './ui/TokenBadge';
 import { PrBadge } from './ui/PrBadge';
 
 /**

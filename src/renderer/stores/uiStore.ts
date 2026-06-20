@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { Project, Task } from '../../shared/types';
-import type { DeleteProjectOptions } from '../components/DeleteProjectModal';
+import type { DeleteProjectOptions } from '../components/project/DeleteProjectModal';
 import { parseAdoRemote } from '../../shared/urls';
 import { useProjects } from './projectsStore';
 

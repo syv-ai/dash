@@ -11,20 +11,20 @@ import {
   ArrowUp,
   ArrowDown,
 } from 'lucide-react';
-import { SearchableMultiSelect } from './SearchableMultiSelect';
+import { SearchableMultiSelect } from '../ui/SearchableMultiSelect';
 import type {
   BranchInfo,
   GithubIssue,
   AzureDevOpsWorkItem,
   LinkedItem,
   PermissionMode,
-} from '../../shared/types';
-import { isAdoRemote } from '../../shared/urls';
-import { slugify } from '../../shared/slug';
-import { Modal, useModalClose } from './ui/Modal';
+} from '../../../shared/types';
+import { isAdoRemote } from '../../../shared/urls';
+import { slugify } from '../../../shared/slug';
+import { Modal, useModalClose } from '../ui/Modal';
 import { PermissionModePicker, readInitialPermissionMode } from './PermissionModePicker';
 import { getTaskCreatability } from './taskModalCreatability';
-import { Expandable } from './ui/Expandable';
+import { Expandable } from '../ui/Expandable';
 
 /**
  * Task creation modes. Each variant carries only the fields that are meaningful

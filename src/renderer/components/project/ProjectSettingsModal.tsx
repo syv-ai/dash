@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { AdoConnectionForm } from './AdoConnectionForm';
-import { isAdoRemote } from '../../shared/urls';
-import type { Project } from '../../shared/types';
-import { SettingsModalShell } from './ui/SettingsModalShell';
-import { ConfigureForm } from './newProject/ConfigureForm';
-import { configToValues, valuesToConfig, type ConfigureValues } from './newProject/types';
+import { AdoConnectionForm } from '../vcs/ado/AdoConnectionForm';
+import { isAdoRemote } from '../../../shared/urls';
+import type { Project } from '../../../shared/types';
+import { SettingsModalShell } from '../ui/SettingsModalShell';
+import { ConfigureForm } from '../newProject/ConfigureForm';
+import { configToValues, valuesToConfig, type ConfigureValues } from '../newProject/types';
 
 interface ProjectSettingsModalProps {
   project: Project;

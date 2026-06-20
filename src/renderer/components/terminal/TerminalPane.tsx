@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import type { SearchAddon } from '@xterm/addon-search';
-import { sessionRegistry } from '../terminal/SessionRegistry';
-import type { PermissionMode } from '../../shared/types';
+import { sessionRegistry } from '../../terminal/SessionRegistry';
+import type { PermissionMode } from '../../../shared/types';
 import { TerminalSearch } from './TerminalSearch';
 
 const OVERLAY_MIN_MS = 2000;

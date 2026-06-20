@@ -8,8 +8,8 @@ import type {
   LinkedGithubIssue,
   LinkedAdoWorkItem,
 } from '../../shared/types';
-import type { DeleteProjectOptions } from '../components/DeleteProjectModal';
-import type { CreateTaskOptions } from '../components/TaskModal';
+import type { DeleteProjectOptions } from '../components/project/DeleteProjectModal';
+import type { CreateTaskOptions } from '../components/task/TaskModal';
 import { formatTaskContextPrompt } from '../../shared/taskContext';
 import { playPeonSound } from '../sounds';
 import { useSettings } from './settingsStore';

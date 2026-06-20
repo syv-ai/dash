@@ -1,5 +1,5 @@
 import { Code2, Power, Settings, Archive, Trash2 } from 'lucide-react';
-import { IconButton } from './ui/IconButton';
+import { IconButton } from '../ui/IconButton';
 
 interface TaskActionsProps {
   /** Show the Close (power) button only when the task has a live session. */

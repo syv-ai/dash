@@ -30,28 +30,33 @@ import {
   Shield,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { Tooltip } from './ui/Tooltip';
-import { ToggleSwitch } from './ui/ToggleSwitch';
-import { Switch } from './ui/Switch';
-import { Modal, useModalClose } from './ui/Modal';
-import type { KeyBinding } from '../keybindings';
+import { Tooltip } from '../ui/Tooltip';
+import { ToggleSwitch } from '../ui/ToggleSwitch';
+import { Switch } from '../ui/Switch';
+import { Modal, useModalClose } from '../ui/Modal';
+import type { KeyBinding } from '../../keybindings';
 import {
   getBindingKeys,
   bindingFromEvent,
   DEFAULT_KEYBINDINGS,
   groupByCategory,
-} from '../keybindings';
-import { NOTIFICATION_SOUNDS, SOUND_LABELS, playNotificationSound } from '../sounds';
-import type { NotificationSound } from '../sounds';
-import { TERMINAL_THEMES, darkTheme, lightTheme } from '../terminal/terminalThemes';
-import { TERMINAL_FONTS, resolveTerminalFontValue } from '../terminal/terminalFonts';
-import { Select } from './ui/Select';
-import { Segmented } from './ui/Segmented';
-import type { RateLimits, RtkStatus, RtkDownloadProgress, RtkTestResult } from '../../shared/types';
-import { UsageBar } from './ui/UsageBar';
-import { formatTokens, formatCost, formatResetTime } from '../utils/format';
-import { useSettings } from '../stores/settingsStore';
-import { useRuntime } from '../stores/runtimeStore';
+} from '../../keybindings';
+import { NOTIFICATION_SOUNDS, SOUND_LABELS, playNotificationSound } from '../../sounds';
+import type { NotificationSound } from '../../sounds';
+import { TERMINAL_THEMES, darkTheme, lightTheme } from '../../terminal/terminalThemes';
+import { TERMINAL_FONTS, resolveTerminalFontValue } from '../../terminal/terminalFonts';
+import { Select } from '../ui/Select';
+import { Segmented } from '../ui/Segmented';
+import type {
+  RateLimits,
+  RtkStatus,
+  RtkDownloadProgress,
+  RtkTestResult,
+} from '../../../shared/types';
+import { UsageBar } from '../ui/UsageBar';
+import { formatTokens, formatCost, formatResetTime } from '../../utils/format';
+import { useSettings } from '../../stores/settingsStore';
+import { useRuntime } from '../../stores/runtimeStore';
 
 const DASH_DEFAULT_ATTRIBUTION =
   '\n\nCo-Authored-By: Claude <noreply@anthropic.com> via Dash <dash@syv.ai>';

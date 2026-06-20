@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Terminal, ChevronDown, ChevronUp, X, Plus, ScrollText, Check } from 'lucide-react';
-import { sessionRegistry } from '../terminal/SessionRegistry';
-import { Tooltip } from './ui/Tooltip';
+import { sessionRegistry } from '../../terminal/SessionRegistry';
+import { Tooltip } from '../ui/Tooltip';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -10,12 +10,12 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-} from './ui/dropdown-menu';
-import { nextShellLabel } from '../utils/shellTabLabel';
-import { useProjects } from '../stores/projectsStore';
-import { WIZARDS } from '../../shared/wizards';
-import { TUI_COLS, TUI_ROWS, type TuiFeatureId } from '../../shared/tuiProtocol';
-import type { Tab } from '../../shared/drawerTabs';
+} from '../ui/dropdown-menu';
+import { nextShellLabel } from '../../utils/shellTabLabel';
+import { useProjects } from '../../stores/projectsStore';
+import { WIZARDS } from '../../../shared/wizards';
+import { TUI_COLS, TUI_ROWS, type TuiFeatureId } from '../../../shared/tuiProtocol';
+import type { Tab } from '../../../shared/drawerTabs';
 
 /** Minimum drawer height (px) for a side-car TUI's CTA start screen. */
 const MIN_TUI_DRAWER_PX = 300;

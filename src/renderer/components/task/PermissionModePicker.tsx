@@ -1,7 +1,7 @@
 import React from 'react';
 import { Shield, Zap, Flame } from 'lucide-react';
-import type { PermissionMode } from '../../shared/types';
-import { Select, type SelectOption } from './ui/Select';
+import type { PermissionMode } from '../../../shared/types';
+import { Select, type SelectOption } from '../ui/Select';
 
 const OPTIONS: SelectOption<PermissionMode>[] = [
   { value: 'default', label: 'Default' },

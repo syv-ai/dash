@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, Loader2, Check, X } from 'lucide-react';
-import type { IpcResponse } from '../../shared/types';
+import type { IpcResponse } from '../../../shared/types';
 
 interface SearchableMultiSelectProps<T> {
   /** Perform a search and return results via IpcResponse */

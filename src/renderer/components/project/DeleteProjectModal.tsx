@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { X, Trash2, Loader2 } from 'lucide-react';
-import type { Project, Task } from '../../shared/types';
-import { CircleCheck } from './ui/CircleCheck';
-import { Modal, useModalClose } from './ui/Modal';
+import type { Project, Task } from '../../../shared/types';
+import { CircleCheck } from '../ui/CircleCheck';
+import { Modal, useModalClose } from '../ui/Modal';
 
 const PROTECTED_BRANCHES = new Set([
   'main',

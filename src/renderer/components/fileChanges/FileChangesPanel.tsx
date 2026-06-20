@@ -1,17 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Tooltip } from './ui/Tooltip';
-import { Popover, PopoverTrigger, PopoverContent, PopoverArrow } from './ui/Popover';
-import { CircleCheck } from './ui/CircleCheck';
-import { FileTreeView } from './fileChanges/FileTreeView';
+import { Tooltip } from '../ui/Tooltip';
+import { Popover, PopoverTrigger, PopoverContent, PopoverArrow } from '../ui/Popover';
+import { CircleCheck } from '../ui/CircleCheck';
+import { FileTreeView } from './FileTreeView';
 import {
   commitRunReducer,
   initialRunningState,
   type CommitRunState,
   type CommitRunEvent,
-} from './fileChanges/commitRunReducer';
-import { CommitRunView } from './fileChanges/CommitRunView';
+} from './commitRunReducer';
+import { CommitRunView } from './CommitRunView';
 import { FileDiff, Check, Upload, X } from 'lucide-react';
-import { useGit } from '../stores/gitStore';
+import { useGit } from '../../stores/gitStore';
 
 interface FileChangesPanelProps {
   cwd: string;
