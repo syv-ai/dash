@@ -13,14 +13,20 @@ interface Props {
   projects: ProjectInfo[];
   activeTasks: TaskInfo[];
   onClose: () => void;
+  // Scope to open at ('global', a projectId, or a taskId). null → global.
+  initialScopeId?: string | null;
 }
 
 type TopMode = 'installed' | 'browse';
 
-export function ExtensionsModal({ projects, activeTasks, onClose }: Props) {
+export function ExtensionsModal({ projects, activeTasks, onClose, initialScopeId }: Props) {
   return (
     <Modal onClose={onClose} size="w-[1140px] max-w-[94vw] h-[90vh] max-h-[800px]">
-      <ExtensionsBody projects={projects} activeTasks={activeTasks} />
+      <ExtensionsBody
+        projects={projects}
+        activeTasks={activeTasks}
+        initialScopeId={initialScopeId}
+      />
     </Modal>
   );
 }
@@ -28,14 +34,16 @@ export function ExtensionsModal({ projects, activeTasks, onClose }: Props) {
 function ExtensionsBody({
   projects,
   activeTasks,
+  initialScopeId,
 }: {
   projects: ProjectInfo[];
   activeTasks: TaskInfo[];
+  initialScopeId?: string | null;
 }) {
   const handleClose = useModalClose();
   const ext = useExtensions(projects, activeTasks);
   const [mode, setMode] = useState<TopMode>('installed');
-  const [selectedScopeId, setSelectedScopeId] = useState<string>('global');
+  const [selectedScopeId, setSelectedScopeId] = useState<string>(initialScopeId ?? 'global');
 
   const scopes = ext.overview?.scopes ?? [];
   const selected = scopes.find((s) => s.scope.id === selectedScopeId) ?? scopes[0];

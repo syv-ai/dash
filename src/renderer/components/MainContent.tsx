@@ -7,6 +7,7 @@ import { useRuntime } from '../stores/runtimeStore';
 import {
   FolderOpen,
   Code2,
+  Blocks,
   GitBranch,
   FolderGit2,
   Globe,
@@ -95,6 +96,8 @@ interface MainContentProps {
   onSelectTask?: (id: string) => void;
   onEnableRemoteControl?: () => void;
   onOpenIde?: () => void;
+  // Open the Extensions browser filtered to the given scope (taskId or projectId).
+  onOpenExtensions?: (scopeId: string) => void;
   onNewTask?: () => void;
   onProjectSettings?: () => void;
   onShowCommitGraph?: () => void;
@@ -120,6 +123,7 @@ export function MainContent({
   onSelectTask,
   onEnableRemoteControl,
   onOpenIde,
+  onOpenExtensions,
   onNewTask,
   onProjectSettings,
   onShowCommitGraph,
@@ -247,6 +251,21 @@ export function MainContent({
         )}
 
         {activeTask && (
+          <Tooltip content="Extensions">
+            <button
+              onClick={() =>
+                onOpenExtensions?.(
+                  activeTask.useWorktree ? `task:${activeTask.id}` : `project:${activeProject.id}`,
+                )
+              }
+              className="w-6 h-6 rounded inline-flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-foreground/5 transition-colors"
+            >
+              <Blocks size={13} strokeWidth={1.8} />
+            </button>
+          </Tooltip>
+        )}
+
+        {activeTask && (
           <Tooltip content="Open in IDE">
             <button
               onClick={onOpenIde}
@@ -290,6 +309,7 @@ export function MainContent({
             onSelectTask={(id) => onSelectTask?.(id)}
             onNewTask={() => onNewTask?.()}
             onProjectSettings={() => onProjectSettings?.()}
+            onOpenExtensions={() => onOpenExtensions?.(`project:${activeProject.id}`)}
             onShowCommitGraph={() => onShowCommitGraph?.()}
             onDeleteProject={() => onDeleteProject?.()}
             onCloseTask={(id) => onCloseTask?.(id)}

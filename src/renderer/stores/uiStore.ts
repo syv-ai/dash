@@ -33,6 +33,9 @@ export interface UiState {
   adoSetup: AdoSetup | null;
   showSettings: boolean;
   showSkillsBrowser: boolean;
+  // Scope the Extensions browser opens to ('global', a projectId, or a taskId).
+  // null → defaults to global. Mirrors settingsInitialTab/showSettings.
+  extensionsInitialScopeId: string | null;
   settingsInitialTab: string | undefined;
   remoteControlModalPtyId: string | null;
   // Panel-animation flags (driven by App's panel toggle handlers)
@@ -52,6 +55,7 @@ export interface UiActions {
   setAdoSetup: (v: AdoSetup | null) => void;
   setShowSettings: (v: Updater<boolean>) => void;
   setShowSkillsBrowser: (v: boolean) => void;
+  setExtensionsInitialScopeId: (v: string | null) => void;
   setSettingsInitialTab: (v: string | undefined) => void;
   setRemoteControlModalPtyId: (v: string | null) => void;
   setSidebarAnimating: (v: boolean) => void;
@@ -76,6 +80,7 @@ const initialState: UiState = {
   adoSetup: null,
   showSettings: false,
   showSkillsBrowser: false,
+  extensionsInitialScopeId: null,
   settingsInitialTab: undefined,
   remoteControlModalPtyId: null,
   sidebarAnimating: false,
@@ -98,6 +103,7 @@ export const useUi = create<UiStore>((set, get) => ({
   setAdoSetup: (v) => set({ adoSetup: v }),
   setShowSettings: (v) => set((s) => ({ showSettings: apply(v, s.showSettings) })),
   setShowSkillsBrowser: (v) => set({ showSkillsBrowser: v }),
+  setExtensionsInitialScopeId: (v) => set({ extensionsInitialScopeId: v }),
   setSettingsInitialTab: (v) => set({ settingsInitialTab: v }),
   setRemoteControlModalPtyId: (v) => set({ remoteControlModalPtyId: v }),
   setSidebarAnimating: (v) => set({ sidebarAnimating: v }),

@@ -96,6 +96,8 @@ export function App() {
   const setShowSettings = useUi((s) => s.setShowSettings);
   const showSkillsBrowser = useUi((s) => s.showSkillsBrowser);
   const setShowSkillsBrowser = useUi((s) => s.setShowSkillsBrowser);
+  const extensionsInitialScopeId = useUi((s) => s.extensionsInitialScopeId);
+  const setExtensionsInitialScopeId = useUi((s) => s.setExtensionsInitialScopeId);
   const settingsInitialTab = useUi((s) => s.settingsInitialTab);
   const setSettingsInitialTab = useUi((s) => s.setSettingsInitialTab);
   const theme = useSettings((s) => s.theme);
@@ -1036,7 +1038,10 @@ export function App() {
             onReorderRotation={handleReorderRotation}
             onRemoveFromRotation={removeFromRotation}
             onToggleActiveTasksSection={() => setShowActiveTasksSection(!showActiveTasksSection)}
-            onOpenSkillsBrowser={() => setShowSkillsBrowser(true)}
+            onOpenSkillsBrowser={() => {
+              setExtensionsInitialScopeId(null);
+              setShowSkillsBrowser(true);
+            }}
           />
         </Panel>
         <PanelResizeHandle
@@ -1082,6 +1087,10 @@ export function App() {
               onEnableRemoteControl={() => activeTask && setRemoteControlModalPtyId(activeTask.id)}
               onOpenIde={() => {
                 if (activeTask) void openInIde(activeTask.path);
+              }}
+              onOpenExtensions={(scopeId) => {
+                setExtensionsInitialScopeId(scopeId);
+                setShowSkillsBrowser(true);
               }}
               onNewTask={() => {
                 if (activeProjectId) void handleNewTask(activeProjectId);
@@ -1393,6 +1402,7 @@ export function App() {
         <ExtensionsModal
           projects={skillsModalProjects}
           activeTasks={skillsModalActiveTasks}
+          initialScopeId={extensionsInitialScopeId}
           onClose={() => setShowSkillsBrowser(false)}
         />
       )}
