@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Utf8Base64 } from '../clipboardCodec';
+import { Utf8Base64 } from '../Utf8Base64';
 
 const codec = new Utf8Base64();
 

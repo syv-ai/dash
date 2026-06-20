@@ -3,7 +3,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
-import { Utf8Base64 } from './clipboardCodec';
+import { Utf8Base64 } from './Utf8Base64';
 import type { PermissionMode, TerminalSnapshot } from '../../shared/types';
 import { FilePathLinkProvider } from './FilePathLinkProvider';
 import type { ITheme } from 'xterm';
@@ -12,7 +12,7 @@ import { getTerminalFont } from './terminalFonts';
 import { ptyExitFallback } from './ptyExitFallback';
 import { clackBlock, clackExitBlock } from './clackLines';
 import { isPromptOnlySnapshot } from './snapshotFilter';
-import { FitScheduler } from './fitScheduler';
+import { FitScheduler } from './FitScheduler';
 import { TUI_COLS, TUI_ROWS } from '../../shared/tuiProtocol';
 
 const MEMORY_LIMIT_BYTES = 128 * 1024 * 1024; // 128MB soft limit

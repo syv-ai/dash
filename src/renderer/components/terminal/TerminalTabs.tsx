@@ -10,7 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-} from '../ui/dropdown-menu';
+} from '../ui/DropdownMenu';
 import { nextShellLabel } from '../../utils/shellTabLabel';
 import { useProjects } from '../../stores/projectsStore';
 import { WIZARDS } from '../../../shared/wizards';

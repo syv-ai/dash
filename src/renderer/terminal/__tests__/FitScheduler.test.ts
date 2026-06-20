@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { FitScheduler } from '../fitScheduler';
+import { FitScheduler } from '../FitScheduler';
 
 describe('FitScheduler', () => {
   beforeEach(() => {

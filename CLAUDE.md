@@ -51,6 +51,7 @@ Main process `entry.ts` rewrites at runtime: `@shared/*` → `dist/main/shared/*
 - **Tailwind CSS** for all styling; dark/light via class on root
 - **Colors**: HSL CSS custom properties only (no raw hex/rgb). Tokens: `foreground`, `muted-foreground`, `background`, `surface-0..3`, `primary`, `destructive`, `border`, `git-added/modified/deleted/renamed/untracked/conflicted`
 - **Icons**: lucide-react, 14px default, stroke-width 1.8
+- **File naming**: PascalCase for component/class files, camelCase for function/value modules (utils, hooks, stores); enforced by the `check-file` ESLint rule (runs in the pre-commit hook)
 
 ## Data Storage
 

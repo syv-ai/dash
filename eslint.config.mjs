@@ -1,6 +1,7 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
+import checkFile from 'eslint-plugin-check-file';
 import globals from 'globals';
 
 export default tseslint.config(
@@ -40,6 +41,31 @@ export default tseslint.config(
       // React hooks correctness; deps are advisory (some effects intentionally manage deps).
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
+    },
+  },
+  // File-naming convention (see CLAUDE.md > Code Style > File naming): PascalCase
+  // for files whose primary export is a React component or class, camelCase for
+  // function/value modules. Enforced where it maps cleanly to a directory;
+  // src/main mixes class files (PascalCase) and function modules (camelCase) in
+  // the same dirs, so it's documented but not globbed here.
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    plugins: { 'check-file': checkFile },
+    rules: {
+      'check-file/filename-naming-convention': [
+        'error',
+        {
+          // Components are PascalCase (MainContent.tsx, TaskModal.tsx).
+          'src/renderer/components/**/*.tsx': 'PASCAL_CASE',
+          // Function/value modules are camelCase (hooks, stores, utils).
+          'src/renderer/hooks/**/*.ts': 'CAMEL_CASE',
+          'src/renderer/stores/**/*.{ts,tsx}': 'CAMEL_CASE',
+          'src/renderer/utils/**/*.ts': 'CAMEL_CASE',
+        },
+        // Treat `format.test.ts` / `*.d.ts` as `format` / name — ignore the
+        // middle extension when checking the base name's case.
+        { ignoreMiddleExtensions: true },
+      ],
     },
   },
 );
