@@ -485,11 +485,14 @@ export class GitService {
    */
   static async discardFiles(cwd: string, filePaths: string[]): Promise<void> {
     if (filePaths.length === 0) return;
-    const statusOut = await git(cwd, ['status', '--porcelain', '--', ...filePaths]);
+    // `-z` gives NUL-delimited, unquoted paths so filenames with spaces or
+    // non-ASCII bytes are reported verbatim (default `core.quotePath` would
+    // wrap them in escaped quotes and break the exact-match against filePaths).
+    const statusOut = await git(cwd, ['status', '--porcelain', '-z', '--', ...filePaths]);
     const untracked = new Set<string>();
-    for (const line of statusOut.split('\n')) {
-      if (line.startsWith('?? ')) {
-        untracked.add(line.slice(3).trim());
+    for (const entry of statusOut.split('\0')) {
+      if (entry.startsWith('?? ')) {
+        untracked.add(entry.slice(3));
       }
     }
     const tracked = filePaths.filter((p) => !untracked.has(p));

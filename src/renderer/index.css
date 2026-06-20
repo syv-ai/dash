@@ -47,6 +47,10 @@
     --git-untracked: 0 0% 50%;
     --git-conflicted: 25 95% 53%;
 
+    --status-idle: 158 64% 52%; /* emerald */
+    --status-wait: 25 95% 53%; /* orange */
+    --status-unseen: 213 94% 68%; /* blue */
+
     /* Diff-comment shade palette. shade-1 is the canonical primary; shade-2
      * is hue-shifted ~+60° and only kicks in when comments partially overlap. */
     --shade-1: 218 34% 35%;
@@ -112,6 +116,10 @@
     --git-renamed: 217 91% 60%; /* bright blue */
     --git-untracked: 0 0% 56%;
     --git-conflicted: 25 95% 53%; /* bright orange */
+
+    --status-idle: 158 64% 52%; /* emerald */
+    --status-wait: 25 95% 53%; /* orange */
+    --status-unseen: 213 94% 68%; /* blue */
 
     --shade-1: 220 35% 80%;
     --shade-2: 280 38% 80%;
@@ -704,22 +712,22 @@
 
 /* Status dots with soft colored halos. `status-pulse` (busy) already animates its glow. */
 .status-dot-idle {
-  background: rgb(52 211 153);
+  background: hsl(var(--status-idle));
   box-shadow:
-    0 0 0 1px rgb(52 211 153 / 0.4),
-    0 0 10px rgb(52 211 153 / 0.55);
+    0 0 0 1px hsl(var(--status-idle) / 0.4),
+    0 0 10px hsl(var(--status-idle) / 0.55);
 }
 .status-dot-wait {
-  background: rgb(249 115 22);
+  background: hsl(var(--status-wait));
   box-shadow:
-    0 0 0 1px rgb(249 115 22 / 0.4),
-    0 0 10px rgb(249 115 22 / 0.6);
+    0 0 0 1px hsl(var(--status-wait) / 0.4),
+    0 0 10px hsl(var(--status-wait) / 0.6);
 }
 .status-dot-unseen {
-  background: rgb(96 165 250);
+  background: hsl(var(--status-unseen));
   box-shadow:
-    0 0 0 1px rgb(96 165 250 / 0.4),
-    0 0 10px rgb(96 165 250 / 0.55);
+    0 0 0 1px hsl(var(--status-unseen) / 0.4),
+    0 0 10px hsl(var(--status-unseen) / 0.55);
 }
 .status-dot-err {
   background: hsl(var(--destructive));

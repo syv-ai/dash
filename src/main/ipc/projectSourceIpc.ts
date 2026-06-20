@@ -5,7 +5,7 @@ import { promisify } from 'util';
 import { existsSync, mkdirSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { randomBytes } from 'crypto';
-import { parseArgs, errorResponse } from './validate';
+import { parseArgs, parseArgsSafe, errorResponse } from './validate';
 import { buildSourceCommand, getCloneMethod } from '../services/cloneMethods';
 import {
   startScaffold,
@@ -119,13 +119,30 @@ export function registerProjectSourceIpc(): void {
     },
   );
 
-  ipcMain.on('scaffold:input', (_event, args: { sessionId: string; data: string }) =>
-    writeScaffold(args.sessionId, args.data),
+  ipcMain.on('scaffold:input', (_event, args: { sessionId: string; data: string }) => {
+    const v = parseArgsSafe(
+      'scaffold:input',
+      z.looseObject({ sessionId: z.string(), data: z.string() }),
+      args,
+    );
+    if (v === undefined) return;
+    writeScaffold(args.sessionId, args.data);
+  });
+  ipcMain.on(
+    'scaffold:resize',
+    (_event, args: { sessionId: string; cols: number; rows: number }) => {
+      const v = parseArgsSafe(
+        'scaffold:resize',
+        z.looseObject({ sessionId: z.string(), cols: z.number(), rows: z.number() }),
+        args,
+      );
+      if (v === undefined) return;
+      resizeScaffold(args.sessionId, args.cols, args.rows);
+    },
   );
-  ipcMain.on('scaffold:resize', (_event, args: { sessionId: string; cols: number; rows: number }) =>
-    resizeScaffold(args.sessionId, args.cols, args.rows),
-  );
-  ipcMain.on('scaffold:kill', (_event, args: { sessionId: string }) =>
-    killScaffold(args.sessionId),
-  );
+  ipcMain.on('scaffold:kill', (_event, args: { sessionId: string }) => {
+    const v = parseArgsSafe('scaffold:kill', z.looseObject({ sessionId: z.string() }), args);
+    if (v === undefined) return;
+    killScaffold(args.sessionId);
+  });
 }
