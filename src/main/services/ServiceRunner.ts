@@ -76,13 +76,17 @@ const STAGGER_MS = 300;
  * external.
  */
 export class ServiceRunner {
-  /** `${taskId}:${label}` → run-tab id. Logs tabs are never recorded here. */
+  /** `${taskId}:${slug(label)}` → run-tab id. Logs tabs are never recorded here.
+   *  Keyed by the SLUG, not the raw label, so the ownership key matches the
+   *  slug-derived tabId: two labels that slug-collide (`"My App"` / `"my-app"`)
+   *  share one tab/PTY and must therefore share one ownership entry, or
+   *  start/stop/status/logs cross-wire. */
   private owned = new Map<string, string>();
 
   constructor(private readonly deps: RunnerDeps) {}
 
   private key(taskId: string, label: string): string {
-    return `${taskId}:${label}`;
+    return `${taskId}:${slug(label)}`;
   }
 
   private ownedTabId(taskId: string, label: string): string | null {

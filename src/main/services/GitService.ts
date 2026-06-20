@@ -51,6 +51,126 @@ function wrapGitError(message: string, cause: unknown): Error {
   return err;
 }
 
+function statusFromChar(c: string): FileChangeStatus {
+  switch (c) {
+    case 'M':
+      return 'modified';
+    case 'A':
+      return 'added';
+    case 'D':
+      return 'deleted';
+    case 'R':
+      return 'renamed';
+    case 'C':
+      return 'added'; // copied → treat as added
+    case 'U':
+      return 'conflicted';
+    default:
+      return 'modified';
+  }
+}
+
+// Split the first `n` space-delimited header fields off a porcelain v2 record,
+// returning the remainder as the path. The path is the trailing remainder, so
+// it may itself contain spaces (and, under -z, any other byte but NUL).
+function splitV2Header(rec: string, n: number): { fields: string[]; path: string } {
+  const fields: string[] = [];
+  let idx = 0;
+  for (let f = 0; f < n; f++) {
+    const sp = rec.indexOf(' ', idx);
+    if (sp === -1) {
+      // Malformed record (fewer fields than expected) — bail with what we have.
+      fields.push(rec.slice(idx));
+      return { fields, path: '' };
+    }
+    fields.push(rec.slice(idx, sp));
+    idx = sp + 1;
+  }
+  return { fields, path: rec.slice(idx) };
+}
+
+/**
+ * Parse `git status --porcelain=v2 -z` output into FileChange entries.
+ *
+ * Why `-z` and a dedicated parser: in the default (LF-terminated) porcelain v2,
+ * git C-quotes any path with a quote/control/non-ASCII byte and inlines a
+ * rename's origPath after a literal tab — both of which a naive `split(' ')` /
+ * `split('\t')` mangles. Under `-z`, records are NUL-terminated, paths are
+ * emitted verbatim (never quoted), and a rename's origPath is a SEPARATE
+ * trailing NUL field. additions/deletions are left at 0 here and filled in
+ * later by numstat enrichment.
+ *
+ * Exported for unit testing the field-slicing against tricky paths.
+ */
+export function parsePorcelainV2Z(raw: string): FileChange[] {
+  const files: FileChange[] = [];
+  const records = raw.split('\0');
+  for (let i = 0; i < records.length; i++) {
+    const rec = records[i];
+    if (!rec) continue;
+    const type = rec[0];
+
+    if (type === '1' || type === '2') {
+      const isRename = type === '2';
+      // Ordinary: `1 XY sub mH mI mW hH hI <path>` → 8 header fields.
+      // Rename:   `2 XY sub mH mI mW hH hI Xscore <path>` → 9, with origPath in
+      //           the next NUL field.
+      const { fields, path } = splitV2Header(rec, isRename ? 9 : 8);
+      const xy = fields[1] ?? '..';
+      let oldPath: string | undefined;
+      if (isRename) {
+        oldPath = records[i + 1];
+        i++; // consume the trailing origPath field
+      }
+      const x = xy[0];
+      const y = xy[1];
+      // X is the staged (index) status, Y the worktree status. '.' = unchanged,
+      // '?' never appears for changed entries — skip both.
+      if (x && x !== '.' && x !== '?') {
+        files.push({
+          path,
+          status: statusFromChar(x),
+          staged: true,
+          additions: 0,
+          deletions: 0,
+          oldPath: isRename ? oldPath : undefined,
+        });
+      }
+      if (y && y !== '.' && y !== '?') {
+        files.push({
+          path,
+          status: statusFromChar(y),
+          staged: false,
+          additions: 0,
+          deletions: 0,
+        });
+      }
+    } else if (type === '?') {
+      // `? <path>`
+      files.push({
+        path: rec.slice(2),
+        status: 'untracked',
+        staged: false,
+        additions: 0,
+        deletions: 0,
+      });
+    } else if (type === 'u') {
+      // `u XY sub m1 m2 m3 mW h1 h2 h3 <path>` → 10 header fields.
+      const { path } = splitV2Header(rec, 10);
+      files.push({
+        path,
+        status: 'conflicted',
+        staged: false,
+        additions: 0,
+        deletions: 0,
+      });
+    }
+    // '#' header lines (only with --branch) and '!' ignored lines (only with
+    // --ignored) are never requested here, so anything else is dropped.
+  }
+  return files;
+}
+
 export class GitService {
   /**
    * Fetch from remote and list remote branches sorted by most recent commit.
@@ -227,82 +347,13 @@ export class GitService {
    * Get list of changed files with their status and stat counts.
    */
   static async getFileChanges(cwd: string): Promise<FileChange[]> {
-    const files: FileChange[] = [];
+    let files: FileChange[];
 
-    // Get staged + unstaged changes via porcelain v2
+    // Staged + unstaged changes via porcelain v2, NUL-delimited so paths with
+    // spaces/quotes/non-ASCII bytes survive intact (see parsePorcelainV2Z).
     try {
-      const out = await git(cwd, ['status', '--porcelain=v2', '--untracked-files=all']);
-      const lines = out.split('\n').filter(Boolean);
-
-      for (const line of lines) {
-        if (line.startsWith('1 ') || line.startsWith('2 ')) {
-          // Changed entry (1 = ordinary, 2 = rename)
-          const parts = line.split(' ');
-          const xy = parts[1]; // XY status codes
-          const isRename = line.startsWith('2 ');
-
-          let filePath: string;
-          let oldPath: string | undefined;
-
-          if (isRename) {
-            // Format: 2 XY sub mH mI mW hH hI score path\torigPath
-            const rest = parts.slice(8).join(' ');
-            const tabIdx = rest.indexOf('\t');
-            filePath = rest.substring(tabIdx + 1);
-            oldPath = rest.substring(0, tabIdx);
-          } else {
-            // Format: 1 XY sub mH mI mW hH hI path
-            filePath = parts.slice(8).join(' ');
-          }
-
-          const x = xy![0]!; // Index (staged) status
-          const y = xy![1]!; // Working tree status
-
-          // If staged (X is not '.' and not '?')
-          if (x !== '.' && x !== '?') {
-            files.push({
-              path: filePath,
-              status: this.parseStatusChar(x),
-              staged: true,
-              additions: 0,
-              deletions: 0,
-              oldPath: isRename ? oldPath : undefined,
-            });
-          }
-
-          // If unstaged (Y is not '.' and not '?')
-          if (y !== '.' && y !== '?') {
-            files.push({
-              path: filePath,
-              status: this.parseStatusChar(y),
-              staged: false,
-              additions: 0,
-              deletions: 0,
-            });
-          }
-        } else if (line.startsWith('? ')) {
-          // Untracked file
-          const filePath = line.substring(2);
-          files.push({
-            path: filePath,
-            status: 'untracked',
-            staged: false,
-            additions: 0,
-            deletions: 0,
-          });
-        } else if (line.startsWith('u ')) {
-          // Unmerged (conflicted)
-          const parts = line.split(' ');
-          const filePath = parts.slice(10).join(' ');
-          files.push({
-            path: filePath,
-            status: 'conflicted',
-            staged: false,
-            additions: 0,
-            deletions: 0,
-          });
-        }
-      }
+      const out = await git(cwd, ['status', '--porcelain=v2', '-z', '--untracked-files=all']);
+      files = parsePorcelainV2Z(out);
     } catch {
       // Not a git repo or git error
       return [];
@@ -1005,24 +1056,5 @@ export class GitService {
     }
 
     return { filePath, hunks, isBinary: false, additions: totalAdd, deletions: totalDel };
-  }
-
-  private static parseStatusChar(c: string): FileChangeStatus {
-    switch (c) {
-      case 'M':
-        return 'modified';
-      case 'A':
-        return 'added';
-      case 'D':
-        return 'deleted';
-      case 'R':
-        return 'renamed';
-      case 'C':
-        return 'added'; // copied → treat as added
-      case 'U':
-        return 'conflicted';
-      default:
-        return 'modified';
-    }
   }
 }

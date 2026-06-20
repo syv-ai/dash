@@ -16,7 +16,10 @@ export interface SaveApi {
    *  distinct from a stale conflict, which is a successful response. */
   saveError: string | null;
   setSaveError(msg: string | null): void;
-  save(): Promise<void>;
+  /** `expected` overrides the mtime/size sent as the optimistic-lock guard.
+   *  Callers that just learned the on-disk values (overwrite) pass them in
+   *  directly rather than relying on a re-render to refresh the closure. */
+  save(expected?: { mtimeMs: number; sizeBytes: number }): Promise<void>;
   overwrite(): Promise<void>;
   reloadFromDisk(): Promise<void>;
 }
@@ -54,42 +57,45 @@ export function useEditorSave({
   const [stale, setStale] = useState<StaleInfo | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const save = useCallback(async () => {
-    if (isCommitView || state.kind !== 'loaded') return;
-    if (draft === loadedBuffer) return;
-    setSaving(true);
-    setSaveError(null);
-    try {
-      const resp = await window.electronAPI.editorWriteWorking({
-        cwd,
-        filePath,
-        content: draft,
-        expectedMtimeMs: state.mtimeMs,
-        expectedSizeBytes: state.sizeBytes,
-      });
-      // A genuine failure (path rejected, fs error) comes back as
-      // success:false — surface it instead of faking a stale conflict, which
-      // would show a phantom "changed on disk" prompt and drop the edit.
-      if (!resp.success || !resp.data) {
-        setSaveError(resp.error ?? 'Could not save the file.');
-        return;
-      }
-      if (resp.data.ok === false) {
-        setStale({
-          currentMtimeMs: resp.data.currentMtimeMs,
-          currentSizeBytes: resp.data.currentSizeBytes,
+  const save = useCallback(
+    async (expected?: { mtimeMs: number; sizeBytes: number }) => {
+      if (isCommitView || state.kind !== 'loaded') return;
+      if (draft === loadedBuffer) return;
+      setSaving(true);
+      setSaveError(null);
+      try {
+        const resp = await window.electronAPI.editorWriteWorking({
+          cwd,
+          filePath,
+          content: draft,
+          expectedMtimeMs: expected?.mtimeMs ?? state.mtimeMs,
+          expectedSizeBytes: expected?.sizeBytes ?? state.sizeBytes,
         });
-        return;
+        // A genuine failure (path rejected, fs error) comes back as
+        // success:false — surface it instead of faking a stale conflict, which
+        // would show a phantom "changed on disk" prompt and drop the edit.
+        if (!resp.success || !resp.data) {
+          setSaveError(resp.error ?? 'Could not save the file.');
+          return;
+        }
+        if (resp.data.ok === false) {
+          setStale({
+            currentMtimeMs: resp.data.currentMtimeMs,
+            currentSizeBytes: resp.data.currentSizeBytes,
+          });
+          return;
+        }
+        setLoadedBuffer(draft);
+        patchLoadedState({ mtimeMs: resp.data.mtimeMs, sizeBytes: resp.data.sizeBytes });
+        setStale(null);
+        setSavedPill(true);
+        window.setTimeout(() => setSavedPill(false), 1000);
+      } finally {
+        setSaving(false);
       }
-      setLoadedBuffer(draft);
-      patchLoadedState({ mtimeMs: resp.data.mtimeMs, sizeBytes: resp.data.sizeBytes });
-      setStale(null);
-      setSavedPill(true);
-      window.setTimeout(() => setSavedPill(false), 1000);
-    } finally {
-      setSaving(false);
-    }
-  }, [cwd, filePath, isCommitView, state, draft, loadedBuffer, setLoadedBuffer, patchLoadedState]);
+    },
+    [cwd, filePath, isCommitView, state, draft, loadedBuffer, setLoadedBuffer, patchLoadedState],
+  );
 
   const reloadFromDisk = useCallback(async () => {
     if (isCommitView) return;
@@ -128,9 +134,14 @@ export function useEditorSave({
 
   const overwrite = useCallback(async () => {
     if (!stale || state.kind !== 'loaded') return;
-    patchLoadedState({ mtimeMs: stale.currentMtimeMs, sizeBytes: stale.currentSizeBytes });
+    // Hand the just-learned on-disk mtime/size straight to save() as the lock
+    // guard. Relying on patchLoadedState → re-render to refresh save()'s closure
+    // raced: the save fired with the old expected mtime and no-op'd, needing a
+    // second click.
+    const expected = { mtimeMs: stale.currentMtimeMs, sizeBytes: stale.currentSizeBytes };
+    patchLoadedState(expected);
     setStale(null);
-    setTimeout(() => void save(), 0);
+    await save(expected);
   }, [stale, save, state, patchLoadedState]);
 
   return {

@@ -59,11 +59,21 @@ export const taskInputSchema = z.looseObject({
   updatedAt: z.string().optional(),
 });
 
+/** A repo-relative path stored at a write boundary. Unlike the editor's file
+ *  paths it is never opened (no `cwd` to resolve against — it's matched against
+ *  diff entries and pruned), so `resolveInsideCwd` doesn't apply; the analog
+ *  hardening is to reject the path shapes that have no legitimate meaning here:
+ *  empty and null-byte-bearing. */
+const storedRelPathSchema = z
+  .string()
+  .min(1, 'must not be empty')
+  .refine((p) => !p.includes('\0'), 'must not contain a null byte');
+
 /** `diffComments:upsert` — `DiffCommentInput`. */
 export const diffCommentInputSchema = z.object({
   id: z.string(),
   taskId: z.string(),
-  filePath: z.string(),
+  filePath: storedRelPathSchema,
   startLine: z.number(),
   endLine: z.number(),
   text: z.string(),

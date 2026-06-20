@@ -196,6 +196,14 @@ export class DatabaseService {
           createdAt: now,
           updatedAt: now,
         })
+        // The update set is INSERT-only for the deep config fields on purpose.
+        // `useWorktree` is immutable after creation (no setter; updateTask
+        // passes the existing value), and `contextPrompt`/`setupScript`/
+        // `teardownScript` have dedicated setters (setTaskContextPrompt,
+        // setTaskScripts) precisely so a partial save like a rename can't
+        // clobber them. Adding them here would null them out on every update
+        // call that doesn't resend them (e.g. updateTask → rename wipes the
+        // context prompt). Leave them out.
         .onConflictDoUpdate({
           target: tasks.id,
           set: {
