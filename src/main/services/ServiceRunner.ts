@@ -1,5 +1,8 @@
 import path from 'path';
 import type { TaskPort, PortLiveness } from '@shared/types';
+// Service tab ids derive from the label via the shared slugifier (50-char cap is
+// inconsequential for short port labels and keeps tabId/ownership in lockstep).
+import { slugify as slug } from '@shared/slug';
 
 export interface RunnerDeps {
   getTaskPath(taskId: string): string | undefined;
@@ -56,13 +59,6 @@ export interface RunnerDeps {
 export interface OpResult {
   ok: boolean;
   message?: string;
-}
-
-export function slug(label: string): string {
-  return label
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
 }
 
 const STAGGER_MS = 300;

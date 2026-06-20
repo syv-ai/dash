@@ -4,6 +4,7 @@ import { GraphSvg } from './GraphSvg';
 import { CommitRow } from './CommitRow';
 import { CommitDetailPanel } from './CommitDetail';
 import { ROW_HEIGHT } from './graphLayout';
+import { githubSlug as parseGithubSlug } from '../../../shared/urls';
 
 import type { TaskBranchInfo } from './CommitGraphModal';
 
@@ -15,16 +16,6 @@ interface CommitGraphViewProps {
 }
 
 const PAGE_SIZE = 150;
-
-/** Extract GitHub org/repo slug from a remote URL */
-function getGithubSlug(remote: string | null): string | null {
-  if (!remote) return null;
-  const ssh = remote.match(/git@github\.com:(.+?)(?:\.git)?$/);
-  if (ssh) return ssh[1]!;
-  const https = remote.match(/https:\/\/github\.com\/(.+?)(?:\.git)?$/);
-  if (https) return https[1]!;
-  return null;
-}
 
 export function CommitGraphView({
   projectPath,
@@ -42,7 +33,7 @@ export function CommitGraphView({
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // taskBranches is already a Map, no need to transform
-  const githubSlug = useMemo(() => getGithubSlug(gitRemote), [gitRemote]);
+  const githubSlug = useMemo(() => parseGithubSlug(gitRemote), [gitRemote]);
 
   const fetchGraph = useCallback(
     async (skip = 0) => {

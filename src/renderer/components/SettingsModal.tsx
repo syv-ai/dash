@@ -48,9 +48,8 @@ import { TERMINAL_FONTS, resolveTerminalFontValue } from '../terminal/terminalFo
 import { Select } from './ui/Select';
 import { Segmented } from './ui/Segmented';
 import type { RateLimits, RtkStatus, RtkDownloadProgress, RtkTestResult } from '../../shared/types';
-import { formatResetTime } from '../../shared/format';
 import { UsageBar } from './ui/UsageBar';
-import { formatTokens, formatCost } from '../utils/formatTokens';
+import { formatTokens, formatCost, formatResetTime } from '../utils/format';
 import { useSettings } from '../stores/settingsStore';
 import { useRuntime } from '../stores/runtimeStore';
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { formatTokens, formatCost } from '../utils/formatTokens';
+import { formatTokens, formatCost } from '../utils/format';
 import { Tooltip } from './ui/Tooltip';
 
 interface TokenBadgeProps {

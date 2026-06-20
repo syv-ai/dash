@@ -1,28 +1,39 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { formatTokens, formatDuration, formatResetTime } from '../format';
+import { formatTokens, formatCost, formatDuration, formatResetTime } from '../format';
 
 describe('formatTokens', () => {
-  it('returns raw number below 1000', () => {
+  it('formats <1000 as a plain integer', () => {
     expect(formatTokens(0)).toBe('0');
+    expect(formatTokens(42)).toBe('42');
     expect(formatTokens(999)).toBe('999');
   });
 
-  it('formats thousands with one decimal when < 10k', () => {
-    expect(formatTokens(1000)).toBe('1.0k');
-    expect(formatTokens(1500)).toBe('1.5k');
-    expect(formatTokens(9999)).toBe('10.0k');
+  it('formats thousands with one decimal + k suffix', () => {
+    expect(formatTokens(1_000)).toBe('1.0k');
+    expect(formatTokens(12_345)).toBe('12.3k');
   });
 
-  it('formats thousands without decimal when >= 10k', () => {
-    expect(formatTokens(10000)).toBe('10k');
-    expect(formatTokens(50000)).toBe('50k');
-    expect(formatTokens(999999)).toBe('1000k');
+  it('formats millions with one decimal + M suffix', () => {
+    expect(formatTokens(1_000_000)).toBe('1.0M');
+    expect(formatTokens(2_400_000)).toBe('2.4M');
+    expect(formatTokens(18_000_000)).toBe('18.0M');
+  });
+});
+
+describe('formatCost', () => {
+  it('formats zero as "$0.00"', () => {
+    expect(formatCost(0)).toBe('$0.00');
   });
 
-  it('formats millions', () => {
-    expect(formatTokens(1000000)).toBe('1.0m');
-    expect(formatTokens(1500000)).toBe('1.5m');
-    expect(formatTokens(2345678)).toBe('2.3m');
+  it('formats small amounts to 2 decimals', () => {
+    expect(formatCost(0.123)).toBe('$0.12');
+    expect(formatCost(4.32)).toBe('$4.32');
+    expect(formatCost(63.1)).toBe('$63.10');
+  });
+
+  it('formats >=100 without cents', () => {
+    expect(formatCost(123.45)).toBe('$123');
+    expect(formatCost(1500)).toBe('$1500');
   });
 });
 
@@ -61,7 +72,6 @@ describe('formatResetTime', () => {
   it('formats minutes for < 60 min', () => {
     const now = 1000000000000;
     vi.spyOn(Date, 'now').mockReturnValue(now);
-    // 30 minutes from now in epoch seconds
     const future = now / 1000 + 30 * 60;
     expect(formatResetTime(future)).toBe('in 30m');
   });

@@ -1,3 +1,13 @@
+/** Extract the `owner/repo` slug from a GitHub remote URL (SSH or HTTPS), or null. */
+export function githubSlug(remote: string | null): string | null {
+  if (!remote) return null;
+  const ssh = remote.match(/git@github\.com:(.+?)(?:\.git)?$/);
+  if (ssh) return ssh[1]!;
+  const https = remote.match(/https:\/\/github\.com\/(.+?)(?:\.git)?$/);
+  if (https) return https[1]!;
+  return null;
+}
+
 /** Convert a git remote URL (SSH or HTTPS) to a GitHub issue URL */
 export function githubIssueUrl(remote: string, num: number): string | null {
   const ssh = remote.match(/git@github\.com:(.+?)(?:\.git)?$/);

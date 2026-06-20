@@ -12,7 +12,7 @@ import type { Project, Task, ContextUsage } from '../../../shared/types';
 import { useDragReorder } from '../../hooks/useDragReorder';
 import { IconButton } from '../ui/IconButton';
 import { Tooltip } from '../ui/Tooltip';
-import { formatTokens, formatCost } from '../../utils/formatTokens';
+import { formatTokens, formatCost } from '../../utils/format';
 import { TaskCard } from './TaskCard';
 import { openInIde } from '../../lib/openInIde';
 import { useSettings } from '../../stores/settingsStore';

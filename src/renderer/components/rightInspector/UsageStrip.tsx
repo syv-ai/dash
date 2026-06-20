@@ -1,6 +1,6 @@
 import React from 'react';
 import type { RateLimits, ContextUsage } from '../../../shared/types';
-import { formatResetTime, formatTokens } from '../../../shared/format';
+import { formatResetTime, formatTokens } from '../../utils/format';
 import { usageTier, type UsageTier } from './usageTier';
 
 interface UsageStripProps {

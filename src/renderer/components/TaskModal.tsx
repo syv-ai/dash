@@ -20,6 +20,7 @@ import type {
   PermissionMode,
 } from '../../shared/types';
 import { isAdoRemote } from '../../shared/urls';
+import { slugify } from '../../shared/slug';
 import { Modal, useModalClose } from './ui/Modal';
 import { PermissionModePicker, readInitialPermissionMode } from './PermissionModePicker';
 import { getTaskCreatability } from './taskModalCreatability';
@@ -378,14 +379,6 @@ function TaskModalBody({
     } finally {
       setIsCreating(false);
     }
-  }
-
-  function slugify(str: string): string {
-    return str
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 50);
   }
 
   return (

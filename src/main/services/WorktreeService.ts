@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { BrowserWindow } from 'electron';
 import type { WorktreeInfo, RemoveWorktreeOptions } from '@shared/types';
+import { slugify } from '@shared/slug';
 import { GithubService } from './GithubService';
 import {
   loadWorkspaceConfig,
@@ -536,12 +537,10 @@ export class WorktreeService {
     return path.join(path.dirname(path.resolve(projectPath)), 'worktrees');
   }
 
+  /** Thin wrapper over the shared {@link slugify} so existing
+   *  `worktreeService.slugify(...)` callers keep working. */
   slugify(name: string): string {
-    return name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 50);
+    return slugify(name);
   }
 
   generateShortHash(): string {
