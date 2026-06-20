@@ -311,6 +311,12 @@ export function TerminalTabs({
         : tab.id === activeTabId
           ? 'border-primary text-foreground'
           : 'border-transparent text-muted-foreground hover:text-foreground';
+    const closeable = tabs.length > 1;
+    const showDot = isHotTui || (tab.kind !== 'tui' && livePtyIds.has(tab.id));
+    // Hot wizard = red; live shell/service = green.
+    const dotColor = isHotTui
+      ? 'bg-destructive shadow-[0_0_6px_hsl(var(--destructive)/0.6)]'
+      : 'bg-[hsl(var(--git-added))] shadow-[0_0_6px_hsl(var(--git-added)/0.55)]';
     return (
       <div
         key={tab.id}
@@ -322,25 +328,34 @@ export function TerminalTabs({
             <ScrollText size={11} strokeWidth={1.8} className="opacity-80" />
           )}
           <span className="text-[11px] font-medium">{tab.label}</span>
-          {isHotTui && (
-            <span className="relative top-px ml-1 w-1.5 h-1.5 rounded-full bg-destructive shadow-[0_0_6px_hsl(var(--destructive)/0.6)] status-pulse" />
-          )}
-          {tab.kind !== 'tui' && livePtyIds.has(tab.id) && (
-            <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--git-added))] shadow-[0_0_6px_hsl(var(--git-added)/0.55)] status-pulse" />
+          {(showDot || closeable) && (
+            // The status dot and the close button share one trailing slot, so on
+            // hover the "x" lands directly over the pulsing dot rather than beside
+            // it. The dot animates its own opacity (pulse-glow), so it's toggled
+            // off with `hidden` — an opacity utility would lose to the animation.
+            <span className="relative ml-0.5 inline-flex w-1.5 h-1.5">
+              {showDot && (
+                <span
+                  className={`absolute inset-0 rounded-full status-pulse ${dotColor} ${
+                    closeable ? 'group-hover/tab:hidden' : ''
+                  }`}
+                />
+              )}
+              {closeable && (
+                <button
+                  className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded hidden group-hover/tab:flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleCloseTab(tab.id);
+                  }}
+                  aria-label={`Close terminal ${tab.label}`}
+                >
+                  <X size={10} strokeWidth={2} />
+                </button>
+              )}
+            </span>
           )}
         </span>
-        {tabs.length > 1 && (
-          <button
-            className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded hidden group-hover/tab:flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleCloseTab(tab.id);
-            }}
-            aria-label={`Close terminal ${tab.label}`}
-          >
-            <X size={10} strokeWidth={2} />
-          </button>
-        )}
       </div>
     );
   }
