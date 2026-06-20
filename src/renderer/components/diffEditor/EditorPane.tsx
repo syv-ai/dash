@@ -23,6 +23,7 @@ import { HtmlPreview } from './editor/HtmlPreview';
 import { markdownToDocument } from './editor/markdownPreview';
 import { LoadingPill } from './editor/LoadingPill';
 import { StaleBanner } from './editor/StaleBanner';
+import { SaveErrorBanner } from './editor/SaveErrorBanner';
 import '../../monaco-workers';
 
 const WORDWRAP_KEY = 'diffEditor.wordWrap';
@@ -133,7 +134,17 @@ export function EditorPane({
     patchLoadedState,
     isCommitView,
   });
-  const { saving, savedPill, stale, setStale, save, overwrite, reloadFromDisk } = saveApi;
+  const {
+    saving,
+    savedPill,
+    stale,
+    setStale,
+    saveError,
+    setSaveError,
+    save,
+    overwrite,
+    reloadFromDisk,
+  } = saveApi;
 
   const { pendingRange, setPendingRange, dragging } = useGutterSelection(
     modifiedEditor,
@@ -167,7 +178,8 @@ export function EditorPane({
     setDraft(initial);
     setPendingRange(null);
     setStale(null);
-  }, [state, setPendingRange]);
+    setSaveError(null);
+  }, [state, setPendingRange, setStale, setSaveError]);
 
   // Fade-on-file-change: bumps only after the new file's content has actually
   // loaded (not on the click), so the fade-in coincides with the visual swap.
@@ -312,6 +324,14 @@ export function EditorPane({
           onOverwrite={() => void overwrite()}
           onReload={() => void reloadFromDisk()}
           onCancel={() => setStale(null)}
+        />
+      )}
+
+      {saveError && (
+        <SaveErrorBanner
+          message={saveError}
+          onRetry={() => void save()}
+          onDismiss={() => setSaveError(null)}
         />
       )}
 

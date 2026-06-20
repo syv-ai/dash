@@ -12,6 +12,10 @@ export interface SaveApi {
   savedPill: boolean;
   stale: StaleInfo | null;
   setStale(info: StaleInfo | null): void;
+  /** Set when a save fails outright (IPC error, path rejected, write failed) —
+   *  distinct from a stale conflict, which is a successful response. */
+  saveError: string | null;
+  setSaveError(msg: string | null): void;
   save(): Promise<void>;
   overwrite(): Promise<void>;
   reloadFromDisk(): Promise<void>;
@@ -48,11 +52,13 @@ export function useEditorSave({
   const [saving, setSaving] = useState(false);
   const [savedPill, setSavedPill] = useState(false);
   const [stale, setStale] = useState<StaleInfo | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const save = useCallback(async () => {
     if (isCommitView || state.kind !== 'loaded') return;
     if (draft === loadedBuffer) return;
     setSaving(true);
+    setSaveError(null);
     try {
       const resp = await window.electronAPI.editorWriteWorking({
         cwd,
@@ -61,8 +67,11 @@ export function useEditorSave({
         expectedMtimeMs: state.mtimeMs,
         expectedSizeBytes: state.sizeBytes,
       });
+      // A genuine failure (path rejected, fs error) comes back as
+      // success:false — surface it instead of faking a stale conflict, which
+      // would show a phantom "changed on disk" prompt and drop the edit.
       if (!resp.success || !resp.data) {
-        setStale({ currentMtimeMs: 0, currentSizeBytes: 0 });
+        setSaveError(resp.error ?? 'Could not save the file.');
         return;
       }
       if (resp.data.ok === false) {
@@ -88,6 +97,7 @@ export function useEditorSave({
       if (!window.confirm('Discard unsaved changes and reload from disk?')) return;
     }
     setStale(null);
+    setSaveError(null);
     const resp = await window.electronAPI.editorReadWorking({ cwd, filePath, ref: workingRef });
     if (!resp.success || !resp.data) return;
     const modifiedPresent = resp.data.workingContent !== null;
@@ -123,5 +133,15 @@ export function useEditorSave({
     setTimeout(() => void save(), 0);
   }, [stale, save, state, patchLoadedState]);
 
-  return { saving, savedPill, stale, setStale, save, overwrite, reloadFromDisk };
+  return {
+    saving,
+    savedPill,
+    stale,
+    setStale,
+    saveError,
+    setSaveError,
+    save,
+    overwrite,
+    reloadFromDisk,
+  };
 }
