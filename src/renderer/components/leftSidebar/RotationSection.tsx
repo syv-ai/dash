@@ -161,6 +161,9 @@ export function RotationSection({
             style={{
               top: highlight.top,
               height: highlight.height,
+              // Match the active row's scale pop (see the row's scale-[1.035])
+              // so the highlight stays sized to the popped text.
+              transform: 'scale(1.035)',
               transition:
                 hasAnimated.current && !isRotating ? 'top 200ms ease, height 200ms ease' : 'none',
             }}
@@ -189,9 +192,9 @@ export function RotationSection({
                 <div
                   draggable
                   {...getRotDragHandlers(task.id, rotationTasks)}
-                  className={`group/rot relative flex items-start gap-2 min-w-0 pl-3.5 pr-2 py-[6px] rounded-md text-[13px] cursor-pointer transition-colors duration-150 ${
+                  className={`group/rot relative flex items-start gap-2 min-w-0 pl-3.5 pr-2 py-[6px] rounded-md text-[13px] cursor-pointer transition-[transform,color] duration-150 ${
                     isActiveTask
-                      ? 'text-foreground font-medium'
+                      ? 'text-foreground font-medium scale-[1.035]'
                       : 'sidebar-row-hover text-muted-foreground hover:text-foreground'
                   } ${draggingRotId === task.id ? 'opacity-40' : ''}`}
                   onClick={() => onSelectTask(task.projectId, task.id)}

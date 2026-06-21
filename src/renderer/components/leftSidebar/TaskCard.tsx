@@ -76,10 +76,10 @@ export function TaskCard({
       {...dragHandlers}
       className={`group/task task-row-pill ${
         isActive ? 'is-active' : ''
-      } grid grid-cols-[14px_minmax(0,1fr)] -ml-2 pl-2 pr-2 rounded-md text-[13px] cursor-pointer transition-colors duration-200 ${
+      } grid grid-cols-[14px_minmax(0,1fr)] -ml-2 pl-2 pr-2 py-[3px] rounded-md text-[13px] cursor-pointer transition-[transform,color] duration-200 ease-out ${
         isActive
-          ? 'py-[6px] text-foreground font-medium'
-          : 'py-[2px] sidebar-row-hover text-muted-foreground hover:text-foreground'
+          ? 'text-foreground font-medium scale-[1.035]'
+          : 'sidebar-row-hover text-muted-foreground hover:text-foreground'
       } ${isDragging ? 'opacity-40' : ''}`}
       onClick={onSelect}
     >
