@@ -29,5 +29,8 @@ export interface AdoApi {
     projectId?: string,
   ) => Promise<IpcResponse<PullRequestInfo | null>>;
   adoListPrs: (gitRemote: string, projectId?: string) => Promise<IpcResponse<PullRequest[]>>;
-  adoPreparePrBranch: (cwd: string, branch: string) => Promise<IpcResponse<{ branch: string }>>;
+  adoPreparePrBranch: (
+    cwd: string,
+    branch: string,
+  ) => Promise<IpcResponse<{ branch: string; checkedOut: boolean }>>;
 }

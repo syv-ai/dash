@@ -97,7 +97,7 @@ export class GithubService {
         '--state',
         'open',
         '--json',
-        'number,title,url,state,headRefName,author',
+        'number,title,url,state,headRefName,baseRefName,author',
         '--limit',
         '50',
       ],
@@ -118,12 +118,28 @@ export class GithubService {
     prNumber: number,
     headRefName: string,
   ): Promise<string> {
+    // No leading '+': git fast-forwards an existing local branch to the PR head
+    // when it can, and creates the branch when it's absent — so a stale local
+    // copy is refreshed for free, without ever rewinding local work.
     const refspec = buildPrHeadRefspec(prNumber, headRefName);
     try {
       await execFileAsync('git', ['fetch', 'origin', refspec], { cwd, timeout: TIMEOUT_MS });
     } catch (err) {
+      // Reuse the existing local branch only for the *expected* fast-forward
+      // conflicts: it has diverged from the PR head (non-ff), or it's checked out
+      // in a worktree. Forcing either would clobber work, so keep what's there.
+      // Any other failure (network, auth, a deleted PR ref) must not be masked as
+      // "reuse stale" — surface it.
+      const stderr =
+        err && typeof err === 'object' && 'stderr' in err
+          ? String((err as { stderr?: unknown }).stderr)
+          : err instanceof Error
+            ? err.message
+            : String(err);
+      const ffConflict =
+        /non-fast-forward|\[rejected\]|refusing to fetch into branch|checked out/i.test(stderr);
       const exists = await GithubService.localBranchExists(cwd, headRefName);
-      if (!exists) throw err;
+      if (!ffConflict || !exists) throw err;
     }
     return headRefName;
   }

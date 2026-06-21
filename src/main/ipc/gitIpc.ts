@@ -309,6 +309,26 @@ export function registerGitIpc(): void {
     }
   });
 
+  ipcMain.handle(
+    'git:updateBranchToRemote',
+    async (_event, args: { cwd: string; branch: string }) => {
+      try {
+        parseArgs(
+          'git:updateBranchToRemote',
+          z.looseObject({ cwd: z.string(), branch: z.string() }),
+          args,
+        );
+        await GitService.updateBranchToRemote(args.cwd, args.branch);
+        return { success: true };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    },
+  );
+
   ipcMain.handle('git:listBranches', async (_event, cwd: string) => {
     try {
       parseArgs('git:listBranches', z.string(), cwd);

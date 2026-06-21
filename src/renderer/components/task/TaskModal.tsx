@@ -14,6 +14,7 @@ import { Modal, useModalClose } from '../ui/Modal';
 import { PermissionModePicker, readInitialPermissionMode } from './PermissionModePicker';
 import { getTaskCreatability } from './taskModalCreatability';
 import { Expandable } from '../ui/Expandable';
+import { Segmented } from '../ui/Segmented';
 import { BranchPrPicker } from './BranchPrPicker';
 
 /**
@@ -34,8 +35,8 @@ export type CreateTaskOptions = {
   teardownScript?: string | null;
 } & (
   | { kind: 'worktree-new-branch'; baseRef: string; pushRemote: boolean }
-  | { kind: 'worktree-existing'; branch: string }
-  | { kind: 'in-place-checkout'; branch: string }
+  | { kind: 'worktree-existing'; branch: string; updateFromRemote?: boolean }
+  | { kind: 'in-place-checkout'; branch: string; updateFromRemote?: boolean }
   | { kind: 'in-place-no-git' }
 );
 
@@ -189,6 +190,9 @@ function TaskModalBody({
   const [gitInitLoading, setGitInitLoading] = useState(false);
   const [createNewBranch, setCreateNewBranch] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  // When the chosen branch is behind its upstream, whether to fast-forward it to
+  // remote before creating the task. Reset whenever the selected branch changes.
+  const [updateFromRemote, setUpdateFromRemote] = useState(false);
 
   // Seeded from App-level cache when available so the status banner renders
   // at its final height on first paint.
@@ -279,15 +283,29 @@ function TaskModalBody({
     hasSelectedBranch: !!selectedBranch,
   });
 
-  // From-PR quick start: the PR head has already been fetched to `branch`.
-  // Set up the modal so the normal worktree-existing create path runs on it,
-  // and prefill the name from the PR title if the user hasn't typed one.
-  function handlePrPrepared(branch: string, prTitle: string) {
+  // A worktree can't be created on a branch that's already checked out (primary
+  // repo or another worktree) — git refuses it. Block that selection up front
+  // and steer toward "Create new branch". In-place checkout is exempt: switching
+  // the primary repo to its own current branch is legal.
+  const branchInUse = useWorktree && !createNewBranch && !!selectedBranch?.checkedOut;
+
+  // The PR head has been fetched to `branch`. Drive the existing flow on it,
+  // honoring the current mode: in "Create new branch" it becomes the base for a
+  // fresh branch; otherwise it's checked out directly (worktree-existing). The
+  // create handler keys off createNewBranch, so leave that toggle as-is. Prefill
+  // the name from the PR title if the user hasn't typed one.
+  function handlePrPrepared(branch: string, prTitle: string, checkedOut: boolean) {
     setUseWorktree(true);
-    setCreateNewBranch(false);
-    const prBranch: BranchInfo = { name: branch, ref: branch, shortHash: '', relativeDate: '' };
+    const prBranch: BranchInfo = {
+      name: branch,
+      ref: branch,
+      shortHash: '',
+      relativeDate: '',
+      checkedOut,
+    };
     setBranches((prev) => (prev.some((b) => b.name === branch) ? prev : [prBranch, ...prev]));
     setSelectedBranch(prBranch);
+    setUpdateFromRemote(false);
     if (!name.trim()) setName(prTitle.slice(0, 60));
   }
 
@@ -330,6 +348,12 @@ function TaskModalBody({
       teardownScript: scriptsApply ? teardownScript : null,
     };
 
+    // The "Update from remote" choice only applies to a direct checkout of a
+    // branch that's behind its upstream — mirror the banner's visibility.
+    const behind = selectedBranch?.upstream?.behind ?? 0;
+    const isDirectCheckout = !createNewBranch || !useWorktree;
+    const wantRemote = updateFromRemote && behind > 0 && isDirectCheckout;
+
     let options: CreateTaskOptions;
     if (repoHasNoCommits) {
       // No commits yet → run in the project dir; worktrees need a base commit.
@@ -338,12 +362,22 @@ function TaskModalBody({
       if (createNewBranch && selectedBranch) {
         options = { ...base, kind: 'worktree-new-branch', baseRef: selectedBranch.ref, pushRemote };
       } else if (selectedBranch) {
-        options = { ...base, kind: 'worktree-existing', branch: selectedBranch.name };
+        options = {
+          ...base,
+          kind: 'worktree-existing',
+          branch: selectedBranch.name,
+          updateFromRemote: wantRemote,
+        };
       } else {
         return; // Submit was gated by the disabled check; defensive.
       }
     } else if (gitReady && selectedBranch) {
-      options = { ...base, kind: 'in-place-checkout', branch: selectedBranch.name };
+      options = {
+        ...base,
+        kind: 'in-place-checkout',
+        branch: selectedBranch.name,
+        updateFromRemote: wantRemote,
+      };
     } else {
       options = { ...base, kind: 'in-place-no-git' };
     }
@@ -470,8 +504,10 @@ function TaskModalBody({
                       type="checkbox"
                       checked={createNewBranch}
                       onChange={(e) => {
+                        // Keep the current selection across the toggle: it carries
+                        // over as the base branch (and an in-use branch, blocked
+                        // for checkout, becomes a valid base to start from).
                         setCreateNewBranch(e.target.checked);
-                        setSelectedBranch(null);
                       }}
                       className="sr-only peer"
                     />
@@ -481,6 +517,9 @@ function TaskModalBody({
                   <div className="flex items-center gap-2">
                     <GitBranch size={13} className="text-muted-foreground/40" strokeWidth={1.8} />
                     <span className="text-[13px] text-foreground/80">Create new branch</span>
+                    <span className="text-[11px] text-muted-foreground/40">
+                      {showGithub || showAdo ? 'from a base branch or PR' : 'from a base branch'}
+                    </span>
                   </div>
                 </label>
               </div>
@@ -490,7 +529,11 @@ function TaskModalBody({
             {gitReady && !repoHasNoCommits && (
               <div className="mb-4">
                 <label className="block text-[12px] font-medium text-foreground/70 mb-2">
-                  {useWorktree && createNewBranch ? 'Base branch' : 'Branch'}
+                  {useWorktree && createNewBranch
+                    ? showGithub || showAdo
+                      ? 'Base branch or PR'
+                      : 'Base branch'
+                    : 'Branch'}
                 </label>
 
                 <BranchPrPicker
@@ -498,11 +541,15 @@ function TaskModalBody({
                   selectedBranch={selectedBranch}
                   branchLoading={branchLoading}
                   branchError={branchError}
-                  onSelectBranch={setSelectedBranch}
+                  onSelectBranch={(b) => {
+                    setSelectedBranch(b);
+                    setUpdateFromRemote(false);
+                  }}
                   onRetry={() => {
                     void fetchBranches();
                   }}
-                  showPrs={(showGithub || showAdo) && !createNewBranch}
+                  showPrs={showGithub || showAdo}
+                  markInUse={!createNewBranch}
                   prProvider={showAdo ? 'ado' : 'github'}
                   projectPath={projectPath}
                   projectId={projectId}
@@ -510,9 +557,29 @@ function TaskModalBody({
                   onSelectPr={handlePrPrepared}
                 />
 
+                {/* Selected branch is checked out elsewhere, so a worktree on it
+                    would fail. Block it and point at "Create new branch". */}
+                {branchInUse && (
+                  <div className="mt-2 flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/5 text-[11px] leading-relaxed">
+                    <GitBranch
+                      size={12}
+                      strokeWidth={2}
+                      className="text-amber-500 shrink-0 mt-0.5"
+                    />
+                    <span className="text-muted-foreground/60">
+                      <span className="font-mono text-foreground/70">{selectedBranch?.name}</span>{' '}
+                      is already checked out. Git allows a branch in only one worktree at a time, so
+                      turn on{' '}
+                      <span className="font-medium text-foreground/70">Create new branch</span> to
+                      start one from it, or pick a branch that&apos;s free.
+                    </span>
+                  </div>
+                )}
+
                 {/* Branch status banner */}
                 {selectedBranch &&
                   !branchError &&
+                  !branchInUse &&
                   (() => {
                     const behind = selectedBranch.upstream?.behind ?? 0;
                     const ahead = selectedBranch.upstream?.ahead ?? 0;
@@ -520,18 +587,35 @@ function TaskModalBody({
 
                     if (behind > 0 && isDirectCheckout) {
                       return (
-                        <div className="mt-2 flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px]">
-                          <ArrowDown
-                            size={12}
-                            strokeWidth={2}
-                            className="text-amber-500 shrink-0 mt-0.5"
-                          />
-                          <span className="text-amber-200/80">
-                            <span className="font-medium text-amber-500">
-                              {behind} commit{behind !== 1 ? 's' : ''} behind
-                            </span>{' '}
-                            remote. The local state of this branch will be used.
-                          </span>
+                        <div className="mt-2 px-3 py-2.5 rounded-lg bg-amber-500/10 text-[11px]">
+                          <div className="flex items-start gap-2">
+                            <ArrowDown
+                              size={12}
+                              strokeWidth={2}
+                              className="text-amber-500 shrink-0 mt-0.5"
+                            />
+                            <span className="text-amber-200/80">
+                              Local is{' '}
+                              <span className="font-medium text-amber-500">
+                                {behind} commit{behind !== 1 ? 's' : ''} behind
+                              </span>{' '}
+                              the remote.{' '}
+                              {updateFromRemote
+                                ? `${selectedBranch.name} will be fast-forwarded to origin before the task is created.`
+                                : 'The behind local state will be used as-is.'}
+                            </span>
+                          </div>
+                          <div className="mt-2">
+                            <Segmented<'local' | 'pull'>
+                              size="sm"
+                              value={updateFromRemote ? 'pull' : 'local'}
+                              onChange={(v) => setUpdateFromRemote(v === 'pull')}
+                              options={[
+                                { value: 'local', label: 'Use local' },
+                                { value: 'pull', label: 'Update from remote' },
+                              ]}
+                            />
+                          </div>
                         </div>
                       );
                     }
@@ -729,7 +813,9 @@ function TaskModalBody({
               // branch fetch failed). Otherwise we'd silently create the task
               // on whatever branch the project happens to be on. Waived for a
               // commitless repo, which legitimately has no branch to select.
-              requiresBranchSelection
+              requiresBranchSelection ||
+              // Worktree on an already-checked-out branch would fail at create.
+              branchInUse
             }
             className="px-5 py-2 rounded-lg text-[13px] font-medium bg-primary text-primary-foreground hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 flex items-center gap-2"
           >

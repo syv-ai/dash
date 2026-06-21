@@ -4,6 +4,7 @@ import { parseArgs, errorResponse } from './validate';
 import { AzureDevOpsService } from '../services/AzureDevOpsService';
 import { ConnectionConfigService } from '../services/ConnectionConfigService';
 import { worktreeService } from '../services/WorktreeService';
+import { GitService } from '../services/GitService';
 import type { AzureDevOpsConfig } from '@shared/types';
 import { parseAdoRemote } from '@shared/urls';
 
@@ -177,7 +178,10 @@ export function registerAzureDevOpsIpc(): void {
         args,
       );
       const branch = await worktreeService.fetchRemoteBranch(args.cwd, args.branch);
-      return { success: true, data: { branch } };
+      // The head may already be checked out (a prior task on this PR). The modal
+      // blocks a worktree-existing checkout on it, same as any branch.
+      const checkedOut = (await GitService.getCheckedOutBranches(args.cwd)).has(branch);
+      return { success: true, data: { branch, checkedOut } };
     } catch (err) {
       return errorResponse(err);
     }

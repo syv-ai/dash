@@ -240,6 +240,10 @@ export interface BranchInfo {
   // Present iff the branch tracks a remote and we successfully measured.
   // Both fields move together — never one without the other.
   upstream?: { ahead: number; behind: number };
+  // True when this branch is currently checked out in the primary repo or any
+  // worktree. Git refuses a second worktree on an already-checked-out branch, so
+  // the New Task modal steers worktree-existing away from these.
+  checkedOut?: boolean;
 }
 
 // ── Git Types ────────────────────────────────────────────────
@@ -391,8 +395,9 @@ export interface PullRequestInfo {
  * A pull request as surfaced by the "From PR" task quick-start. Unlike
  * PullRequestInfo (a per-branch lookup for the PR badge), this carries the
  * head branch + author needed to start a task on the PR. `number` is the gh
- * PR number / ADO pullRequestId; `headRefName` is the plain branch name
- * (ADO's refs/heads/ prefix already stripped).
+ * PR number / ADO pullRequestId; `headRefName` (the source, "from") and
+ * `baseRefName` (the target, "against") are plain branch names (ADO's
+ * refs/heads/ prefix already stripped).
  */
 export interface PullRequest {
   number: number;
@@ -401,6 +406,7 @@ export interface PullRequest {
   state: PullRequestState;
   author: string;
   headRefName: string;
+  baseRefName: string;
   provider: 'github' | 'ado';
 }
 

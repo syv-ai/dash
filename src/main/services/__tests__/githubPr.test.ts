@@ -10,6 +10,7 @@ describe('mapGithubPrList', () => {
         url: 'https://github.com/o/r/pull/42',
         state: 'OPEN',
         headRefName: 'fix/auth',
+        baseRefName: 'main',
         author: { login: 'alice', name: 'Alice' },
       },
     ];
@@ -21,6 +22,7 @@ describe('mapGithubPrList', () => {
         state: 'open',
         author: 'alice',
         headRefName: 'fix/auth',
+        baseRefName: 'main',
         provider: 'github',
       },
     ]);

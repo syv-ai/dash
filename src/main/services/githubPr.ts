@@ -1,12 +1,13 @@
 import type { PullRequest, PullRequestState } from '@shared/types';
 
-/** Raw entry from `gh pr list --json number,title,url,state,headRefName,author`. */
+/** Raw entry from `gh pr list --json number,title,url,state,headRefName,baseRefName,author`. */
 interface RawGithubPr {
   number?: number;
   title?: string;
   url?: string;
   state?: string; // OPEN | MERGED | CLOSED
   headRefName?: string;
+  baseRefName?: string;
   author?: { login?: string; name?: string } | null;
 }
 
@@ -27,6 +28,7 @@ export function mapGithubPrList(raw: unknown): PullRequest[] {
       state: mapState(r.state),
       author: r.author?.login ?? '',
       headRefName: r.headRefName ?? '',
+      baseRefName: r.baseRefName ?? '',
       provider: 'github' as const,
     };
   });

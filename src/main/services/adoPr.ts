@@ -4,7 +4,8 @@ import type { PullRequest } from '@shared/types';
 interface RawAdoPr {
   pullRequestId?: number;
   title?: string;
-  sourceRefName?: string; // refs/heads/<branch>
+  sourceRefName?: string; // refs/heads/<branch> — the "from" branch
+  targetRefName?: string; // refs/heads/<branch> — the "against" branch
   status?: string; // active | completed | abandoned
   createdBy?: { displayName?: string } | null;
 }
@@ -34,6 +35,7 @@ export function mapAdoPrList(raw: unknown, ctx: AdoPrContext): PullRequest[] {
       state: 'open' as const,
       author: r.createdBy?.displayName ?? '',
       headRefName: r.sourceRefName ? adoSourceBranchName(r.sourceRefName) : '',
+      baseRefName: r.targetRefName ? adoSourceBranchName(r.targetRefName) : '',
       provider: 'ado' as const,
     };
   });

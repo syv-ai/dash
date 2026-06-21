@@ -24,5 +24,5 @@ export interface GithubApi {
     cwd: string,
     prNumber: number,
     headRefName: string,
-  ) => Promise<IpcResponse<{ branch: string }>>;
+  ) => Promise<IpcResponse<{ branch: string; checkedOut: boolean }>>;
 }

@@ -68,6 +68,7 @@ export interface GitApi {
   gitPush: (cwd: string) => Promise<IpcResponse<void>>;
   gitRemoteBranchExists: (args: { cwd: string; branch: string }) => Promise<IpcResponse<boolean>>;
   gitCheckoutBranch: (args: { cwd: string; branch: string }) => Promise<IpcResponse<void>>;
+  gitUpdateBranchToRemote: (args: { cwd: string; branch: string }) => Promise<IpcResponse<void>>;
 
   // Commit graph
   gitGetCommitGraph: (args: {

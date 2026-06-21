@@ -340,6 +340,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   gitCheckoutBranch: (args: { cwd: string; branch: string }) =>
     ipcRenderer.invoke('git:checkoutBranch', args),
 
+  gitUpdateBranchToRemote: (args: { cwd: string; branch: string }) =>
+    ipcRenderer.invoke('git:updateBranchToRemote', args),
+
   // Branch listing
   gitListBranches: (cwd: string) => ipcRenderer.invoke('git:listBranches', cwd),
 

@@ -23,6 +23,7 @@ describe('mapAdoPrList', () => {
         pullRequestId: 7,
         title: 'Add widget',
         sourceRefName: 'refs/heads/feature/widget',
+        targetRefName: 'refs/heads/main',
         status: 'active',
         createdBy: { displayName: 'Bob' },
       },
@@ -35,6 +36,7 @@ describe('mapAdoPrList', () => {
         state: 'open',
         author: 'Bob',
         headRefName: 'feature/widget',
+        baseRefName: 'main',
         provider: 'ado',
       },
     ]);

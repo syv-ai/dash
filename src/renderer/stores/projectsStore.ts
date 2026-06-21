@@ -342,6 +342,19 @@ export const useProjects = create<ProjectsStore>((set) => ({
           break;
         }
         case 'worktree-existing': {
+          // Fast-forward the local branch to remote first, when requested, so the
+          // worktree is cut from the up-to-date tip. Done before creation so a
+          // diverged branch aborts without leaving a half-built worktree.
+          if (options.updateFromRemote) {
+            const ffResp = await window.electronAPI.gitUpdateBranchToRemote({
+              cwd: targetProject.path,
+              branch: options.branch,
+            });
+            if (!ffResp.success) {
+              toast.error(ffResp.error || 'Failed to update branch from remote');
+              return false;
+            }
+          }
           const createResp = await window.electronAPI.worktreeCreateFromExisting({
             projectPath: targetProject.path,
             taskName: name,
@@ -359,6 +372,18 @@ export const useProjects = create<ProjectsStore>((set) => ({
           break;
         }
         case 'in-place-checkout': {
+          // Fast-forward to remote before switching, when requested, so a diverged
+          // branch aborts before we touch the working tree.
+          if (options.updateFromRemote) {
+            const ffResp = await window.electronAPI.gitUpdateBranchToRemote({
+              cwd: targetProject.path,
+              branch: options.branch,
+            });
+            if (!ffResp.success) {
+              toast.error(ffResp.error || 'Failed to update branch from remote');
+              return false;
+            }
+          }
           const checkoutResp = await window.electronAPI.gitCheckoutBranch({
             cwd: targetProject.path,
             branch: options.branch,

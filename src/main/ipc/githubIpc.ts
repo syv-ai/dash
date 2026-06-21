@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import { z } from 'zod';
 import { parseArgs, errorResponse } from './validate';
 import { GithubService } from '../services/GithubService';
+import { GitService } from '../services/GitService';
 
 export function registerGithubIpc(): void {
   ipcMain.handle('github:check-available', async () => {
@@ -78,7 +79,10 @@ export function registerGithubIpc(): void {
           args.prNumber,
           args.headRefName,
         );
-        return { success: true, data: { branch } };
+        // The head may already be checked out (a prior task on this PR). The
+        // modal blocks a worktree-existing checkout on it, same as any branch.
+        const checkedOut = (await GitService.getCheckedOutBranches(args.cwd)).has(branch);
+        return { success: true, data: { branch, checkedOut } };
       } catch (err) {
         return errorResponse(err);
       }

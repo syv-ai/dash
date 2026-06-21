@@ -7,6 +7,7 @@ import {
   AlertCircle,
   ArrowUp,
   ArrowDown,
+  ArrowRight,
 } from 'lucide-react';
 import type { BranchInfo, PullRequest, PullRequestState } from '../../../shared/types';
 import { Popover, PopoverTrigger, PopoverContent } from '../ui/Popover';
@@ -23,15 +24,19 @@ interface BranchPrPickerProps {
   branchError: string | null;
   onSelectBranch: (b: BranchInfo) => void;
   onRetry: () => void;
-  /** Show the "Pull requests" group. False while creating a new branch (you're
-   *  choosing a base branch then, not a PR to check out). */
+  /** Show the "Pull requests" group. */
   showPrs: boolean;
+  /** Flag branches that are already checked out as "in use". Only meaningful
+   *  when the selection will be checked out directly — branching off one is
+   *  fine, so the caller passes false in new-branch mode to avoid noise. */
+  markInUse: boolean;
   prProvider: 'github' | 'ado';
   projectPath: string;
   projectId?: string;
   gitRemote: string | null;
-  /** Fired after the PR head has been fetched into `branch`. */
-  onSelectPr: (branch: string, prTitle: string) => void;
+  /** Fired after the PR head has been fetched into `branch`. `checkedOut` is
+   *  true when that branch is already checked out elsewhere. */
+  onSelectPr: (branch: string, prTitle: string, checkedOut: boolean) => void;
 }
 
 /**
@@ -49,6 +54,7 @@ export function BranchPrPicker({
   onSelectBranch,
   onRetry,
   showPrs,
+  markInUse,
   prProvider,
   projectPath,
   projectId,
@@ -109,7 +115,7 @@ export function BranchPrPicker({
           : await window.electronAPI.githubPreparePrBranch(projectPath, pr.number, pr.headRefName);
       if (resp.success && resp.data) {
         setPickedPr({ number: pr.number, head: resp.data.branch, state: pr.state });
-        onSelectPr(resp.data.branch, pr.title);
+        onSelectPr(resp.data.branch, pr.title, resp.data.checkedOut);
         setOpen(false);
       } else {
         setPrError(resp.error || 'Failed to prepare PR branch');
@@ -161,6 +167,11 @@ export function BranchPrPicker({
           ) : (
             <span className="flex-1 truncate text-[13px] text-muted-foreground/40">
               {branchLoading ? 'Fetching branches…' : 'Select a branch or PR…'}
+            </span>
+          )}
+          {markInUse && !badgePr && selectedBranch?.checkedOut && (
+            <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-500 shrink-0">
+              in use
             </span>
           )}
           {badgePr && (
@@ -227,6 +238,11 @@ export function BranchPrPicker({
                       strokeWidth={1.8}
                     />
                     <span className="flex-1 truncate font-mono text-foreground/80">{b.name}</span>
+                    {markInUse && b.checkedOut && (
+                      <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-500 shrink-0">
+                        in use
+                      </span>
+                    )}
                     {b.upstream && b.upstream.ahead > 0 && (
                       <span className="flex items-center gap-0.5 text-[10px] text-emerald-500 font-mono shrink-0">
                         <ArrowUp size={9} strokeWidth={2.5} />
@@ -287,8 +303,18 @@ export function BranchPrPicker({
                           strokeWidth={1.8}
                         />
                         <span className="flex-1 truncate text-foreground/80">{pr.title}</span>
-                        <span className="text-[10px] text-muted-foreground/40 font-mono shrink-0 truncate max-w-[110px]">
-                          {pr.headRefName}
+                        <span className="flex items-center gap-1 text-[10px] text-muted-foreground/40 font-mono shrink-0 min-w-0 max-w-[160px]">
+                          <span className="truncate">{pr.headRefName}</span>
+                          {pr.baseRefName && (
+                            <>
+                              <ArrowRight
+                                size={9}
+                                strokeWidth={2}
+                                className="text-muted-foreground/30 shrink-0"
+                              />
+                              <span className="truncate">{pr.baseRefName}</span>
+                            </>
+                          )}
                         </span>
                         {preparingId === pr.number ? (
                           <Loader2

@@ -175,7 +175,27 @@ export class GitService {
   /**
    * Fetch from remote and list remote branches sorted by most recent commit.
    */
+  /**
+   * Names of branches currently checked out in the primary repo or any linked
+   * worktree. Git won't allow a branch into a second worktree, so the caller can
+   * flag these as unavailable for worktree-existing.
+   */
+  static async getCheckedOutBranches(cwd: string): Promise<Set<string>> {
+    const names = new Set<string>();
+    try {
+      const out = await git(cwd, ['worktree', 'list', '--porcelain']);
+      for (const line of out.split('\n')) {
+        const match = line.match(/^branch refs\/heads\/(.+)$/);
+        if (match) names.add(match[1]!);
+      }
+    } catch {
+      // Best effort — an unreadable worktree list just means nothing is flagged.
+    }
+    return names;
+  }
+
   static async fetchAndListBranches(cwd: string): Promise<BranchInfo[]> {
+    const checkedOut = await this.getCheckedOutBranches(cwd);
     // Check if origin remote exists
     let hasOrigin = false;
     try {
@@ -256,6 +276,7 @@ export class GitService {
           ref,
           shortHash: shortHash || '',
           relativeDate: dateParts.join('\t') || '',
+          checkedOut: checkedOut.has(name),
         });
       }
 
@@ -290,6 +311,7 @@ export class GitService {
           ref: name,
           shortHash: shortHash || '',
           relativeDate: dateParts.join('\t') || '',
+          checkedOut: checkedOut.has(name),
         });
       }
 
@@ -768,6 +790,60 @@ export class GitService {
       }
       if (/pathspec .* did not match/i.test(stderr)) {
         throw wrapGitError(`Branch '${branch}' not found`, error);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Fast-forward a local branch to its origin counterpart. Backs the New Task
+   * modal's "Update from remote" choice, taken when the chosen branch is behind
+   * its upstream and the user wants the remote state rather than the stale local.
+   *
+   * Works whether or not the branch is currently checked out: when it isn't, the
+   * local ref is advanced directly via a self-fetch refspec; when it is, git
+   * refuses that refspec, so we fall back to a fast-forward-only merge in `cwd`.
+   * A diverged branch (local commits absent from origin) can't fast-forward —
+   * surface that as a clear error rather than silently leaving it stale.
+   */
+  static async updateBranchToRemote(cwd: string, branch: string): Promise<void> {
+    // Refresh the remote-tracking ref first so the merge fallback below sees the
+    // latest origin/<branch>.
+    await git(cwd, ['fetch', 'origin', branch]);
+    try {
+      // Advance refs/heads/<branch> to the freshly fetched tip. Fetch refspecs
+      // are fast-forward only by default — a non-ff update is rejected, which we
+      // translate to a "diverged" error below.
+      await git(cwd, ['fetch', 'origin', `${branch}:${branch}`]);
+    } catch (error: unknown) {
+      const stderr = gitStderr(error);
+      if (/refusing to fetch into branch|checked out/i.test(stderr)) {
+        // The ref is checked out somewhere — either here or in another worktree.
+        // A merge would only be correct in the working tree that's actually on
+        // `branch`. If that's not `cwd`, the branch belongs to another task; do
+        // not move it under them — refuse instead of mutating the wrong branch.
+        const current = await GitService.getBranch(cwd);
+        if (current !== branch) {
+          throw wrapGitError(
+            `Cannot update '${branch}' from remote — it's checked out in another worktree (in use by another task).`,
+            error,
+          );
+        }
+        try {
+          await git(cwd, ['merge', '--ff-only', `origin/${branch}`]);
+        } catch (mergeError: unknown) {
+          throw wrapGitError(
+            `Cannot update '${branch}' from remote — it has diverged from origin/${branch}.`,
+            mergeError,
+          );
+        }
+        return;
+      }
+      if (/non-fast-forward|not a fast-forward|\[rejected\]/i.test(stderr)) {
+        throw wrapGitError(
+          `Cannot update '${branch}' from remote — it has diverged from origin/${branch}.`,
+          error,
+        );
       }
       throw error;
     }
