@@ -1,16 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  X,
-  GitBranch,
-  ChevronDown,
-  Loader2,
-  AlertCircle,
-  Search,
-  Upload,
-  FolderGit2,
-  ArrowUp,
-  ArrowDown,
-} from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { X, GitBranch, Loader2, Upload, FolderGit2, ArrowDown } from 'lucide-react';
 import { SearchableMultiSelect } from '../ui/SearchableMultiSelect';
 import type {
   BranchInfo,
@@ -25,7 +14,7 @@ import { Modal, useModalClose } from '../ui/Modal';
 import { PermissionModePicker, readInitialPermissionMode } from './PermissionModePicker';
 import { getTaskCreatability } from './taskModalCreatability';
 import { Expandable } from '../ui/Expandable';
-import { PrQuickStart } from './PrQuickStart';
+import { BranchPrPicker } from './BranchPrPicker';
 
 /**
  * Task creation modes. Each variant carries only the fields that are meaningful
@@ -81,7 +70,7 @@ interface TaskModalProps {
 
 export function TaskModal(props: TaskModalProps) {
   return (
-    <Modal onClose={props.onClose} size="w-[760px]" overflow="visible">
+    <Modal onClose={props.onClose} size="w-[760px] min-h-[620px]" overflow="visible">
       <TaskModalBody
         projectPath={props.projectPath}
         projectId={props.projectId}
@@ -219,9 +208,6 @@ function TaskModalBody({
     }
     return list[0] ?? null;
   });
-  const [branchSearch, setBranchSearch] = useState('');
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-
   // Issue/work item selection — show only the provider matching the remote
   const isAdo = isAdoRemote(gitRemote);
   const [selectedIssues, setSelectedIssues] = useState<GithubIssue[]>([]);
@@ -230,30 +216,11 @@ function TaskModalBody({
   const showGithub = !isAdo && !!gitRemote && ghAvailable;
   const showAdo = isAdo && adoConfigured;
 
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-
   // Fall back to fetching here when App couldn't pre-fetch — either the modal
   // opened before App's effect settled, or git was just initialized in this modal.
   useEffect(() => {
     if (gitReady && branches.length === 0) void fetchBranches();
   }, [gitReady, projectPath]);
-
-  // Close branch dropdown on click outside
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // Focus search input when branch dropdown opens
-  useEffect(() => {
-    if (dropdownOpen) searchInputRef.current?.focus();
-  }, [dropdownOpen]);
 
   // Search callbacks for SearchableMultiSelect
   const searchGithubIssues = useCallback(
@@ -300,10 +267,6 @@ function TaskModalBody({
       setGitInitLoading(false);
     }
   }
-
-  const filteredBranches = branches.filter((b) =>
-    b.name.toLowerCase().includes(branchSearch.toLowerCase()),
-  );
 
   // A fresh git repo (no commits/branches) can't host a worktree and has no
   // branch to select — surface it as an in-place task instead of dead-ending
@@ -412,14 +375,14 @@ function TaskModalBody({
         onSubmit={(e) => {
           void handleSubmit(e);
         }}
-        className="p-5"
+        className="p-5 flex flex-1 flex-col"
       >
         <div className="grid grid-cols-2 gap-x-6">
           {/* ── Left column: core settings ── */}
           <div className="min-w-0">
             {/* Task name */}
             <div className="mb-5">
-              <label className="block text-[12px] font-medium text-muted-foreground/70 mb-2">
+              <label className="block text-[12px] font-medium text-foreground/70 mb-2">
                 Task name
               </label>
               <input
@@ -523,128 +486,32 @@ function TaskModalBody({
               </div>
             )}
 
-            {/* Branch selector */}
+            {/* Branch + PR picker */}
             {gitReady && !repoHasNoCommits && (
-              <div className="mb-4" ref={dropdownRef}>
-                <label className="block text-[12px] font-medium text-muted-foreground/70 mb-2">
+              <div className="mb-4">
+                <label className="block text-[12px] font-medium text-foreground/70 mb-2">
                   {useWorktree && createNewBranch ? 'Base branch' : 'Branch'}
                 </label>
 
-                {branchError ? (
-                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-[12px] text-destructive">
-                    <AlertCircle size={13} strokeWidth={2} />
-                    <span className="flex-1 truncate">{branchError}</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void fetchBranches();
-                      }}
-                      className="text-[11px] font-medium underline underline-offset-2 hover:no-underline shrink-0"
-                    >
-                      Retry
-                    </button>
-                  </div>
-                ) : (
-                  <div className="relative">
-                    <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-background border border-input/60 focus-within:ring-2 focus-within:ring-ring/30 focus-within:border-ring/50 transition-all duration-150">
-                      {branchLoading ? (
-                        <Loader2
-                          size={12}
-                          className="animate-spin text-muted-foreground/50 shrink-0"
-                        />
-                      ) : (
-                        <GitBranch
-                          size={12}
-                          className="text-muted-foreground/40 shrink-0"
-                          strokeWidth={1.8}
-                        />
-                      )}
-                      <input
-                        ref={searchInputRef}
-                        type="text"
-                        value={dropdownOpen ? branchSearch : selectedBranch?.name || ''}
-                        onChange={(e) => {
-                          setBranchSearch(e.target.value);
-                          if (!dropdownOpen) setDropdownOpen(true);
-                        }}
-                        onFocus={() => {
-                          setBranchSearch('');
-                          setDropdownOpen(true);
-                        }}
-                        placeholder={branchLoading ? 'Fetching branches...' : 'Search branches...'}
-                        disabled={branchLoading}
-                        className="flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/30 outline-none disabled:opacity-50"
-                      />
-                      {selectedBranch && !dropdownOpen && (
-                        <span className="text-[11px] text-muted-foreground/40 font-mono shrink-0">
-                          {selectedBranch.shortHash}
-                        </span>
-                      )}
-                      <ChevronDown
-                        size={13}
-                        className={`text-muted-foreground/40 shrink-0 transition-transform duration-150 ${dropdownOpen ? 'rotate-180' : ''}`}
-                      />
-                    </div>
-
-                    {dropdownOpen && (
-                      <div className="absolute z-50 mt-1 w-full bg-card border border-border/60 rounded-lg shadow-xl shadow-black/30 overflow-hidden">
-                        <div className="max-h-[200px] overflow-y-auto">
-                          {filteredBranches.length === 0 ? (
-                            <div className="px-3 py-3 text-[12px] text-muted-foreground/40 text-center">
-                              No branches found
-                            </div>
-                          ) : (
-                            filteredBranches.map((branch) => (
-                              <button
-                                key={branch.ref}
-                                type="button"
-                                onClick={() => {
-                                  setSelectedBranch(branch);
-                                  setDropdownOpen(false);
-                                  setBranchSearch('');
-                                }}
-                                className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-accent/60 transition-colors duration-100 ${
-                                  selectedBranch?.ref === branch.ref ? 'bg-accent/40' : ''
-                                }`}
-                              >
-                                <GitBranch
-                                  size={11}
-                                  className="text-muted-foreground/40 shrink-0"
-                                  strokeWidth={1.8}
-                                />
-                                <span className="flex-1 truncate text-[12px] text-foreground/80">
-                                  {branch.name}
-                                </span>
-                                {branch.upstream && branch.upstream.ahead > 0 && (
-                                  <span className="flex items-center gap-0.5 text-[10px] text-emerald-500 font-mono shrink-0">
-                                    <ArrowUp size={9} strokeWidth={2.5} />
-                                    {branch.upstream.ahead}
-                                  </span>
-                                )}
-                                {branch.upstream && branch.upstream.behind > 0 && (
-                                  <span className="flex items-center gap-0.5 text-[10px] text-amber-500 font-mono shrink-0">
-                                    <ArrowDown size={9} strokeWidth={2.5} />
-                                    {branch.upstream.behind}
-                                  </span>
-                                )}
-                                <span className="text-[10px] text-muted-foreground/40 font-mono shrink-0">
-                                  {branch.shortHash}
-                                </span>
-                                <span className="text-[10px] text-muted-foreground/30 shrink-0">
-                                  {branch.relativeDate}
-                                </span>
-                              </button>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+                <BranchPrPicker
+                  branches={branches}
+                  selectedBranch={selectedBranch}
+                  branchLoading={branchLoading}
+                  branchError={branchError}
+                  onSelectBranch={setSelectedBranch}
+                  onRetry={() => {
+                    void fetchBranches();
+                  }}
+                  showPrs={(showGithub || showAdo) && !createNewBranch}
+                  prProvider={showAdo ? 'ado' : 'github'}
+                  projectPath={projectPath}
+                  projectId={projectId}
+                  gitRemote={gitRemote}
+                  onSelectPr={handlePrPrepared}
+                />
 
                 {/* Branch status banner */}
                 {selectedBranch &&
-                  !dropdownOpen &&
                   !branchError &&
                   (() => {
                     const behind = selectedBranch.upstream?.behind ?? 0;
@@ -700,15 +567,47 @@ function TaskModalBody({
               </div>
             )}
 
-            <div className="mb-4">
-              <PermissionModePicker
-                value={permissionMode}
-                onChange={(v) => {
-                  setPermissionMode(v);
-                  localStorage.setItem('permissionMode', v);
-                }}
-              />
-            </div>
+            {/* Per-task worktree scripts (override the project default) */}
+            {useWorktree && !repoHasNoCommits && (
+              <div className="mb-4">
+                <Expandable
+                  label="Worktree scripts"
+                  hint="setup / teardown"
+                  labelClassName="text-foreground/70"
+                  defaultOpen={false}
+                >
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[11px] font-medium text-muted-foreground/60 mb-1.5">
+                        Setup — runs in this new worktree
+                      </label>
+                      <textarea
+                        value={setupScript}
+                        onChange={(e) => setSetupScript(e.target.value)}
+                        rows={3}
+                        placeholder={'pnpm install\ncp ../.env .env'}
+                        className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[12px] font-mono placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-muted-foreground/60 mb-1.5">
+                        Teardown — runs before this worktree is removed
+                      </label>
+                      <textarea
+                        value={teardownScript}
+                        onChange={(e) => setTeardownScript(e.target.value)}
+                        rows={2}
+                        placeholder={'docker compose down'}
+                        className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[12px] font-mono placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground/40 leading-relaxed">
+                      Prefilled from the project default. Edits apply to this worktree only.
+                    </p>
+                  </div>
+                </Expandable>
+              </div>
+            )}
           </div>
 
           {/* ── Right column: content & details ── */}
@@ -718,12 +617,13 @@ function TaskModalBody({
               <Expandable
                 label="Context prompt"
                 hint="optional"
+                labelClassName="text-foreground/70"
                 defaultOpen={!!contextPrompt.trim()}
               >
                 <textarea
                   value={contextPrompt}
                   onChange={(e) => setContextPrompt(e.target.value)}
-                  rows={2}
+                  rows={8}
                   placeholder="Prepended to the task's context — e.g. coding conventions, links."
                   className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[13px] placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
                 />
@@ -733,9 +633,8 @@ function TaskModalBody({
             {/* Issue/Work Item pickers */}
             {(showGithub || showAdo) && (
               <div className="mb-4">
-                <label className="block text-[12px] font-medium text-muted-foreground/70 mb-2">
+                <label className="block text-[12px] font-medium text-foreground/70 mb-2">
                   <span className="flex items-center gap-1.5">
-                    <Search size={12} strokeWidth={1.8} />
                     {showGithub && showAdo
                       ? 'Link issues / work items'
                       : showAdo
@@ -771,17 +670,6 @@ function TaskModalBody({
               </div>
             )}
 
-            {/* From-PR quick start: check out an open PR's head branch */}
-            {(showGithub || showAdo) && gitReady && !repoHasNoCommits && (
-              <PrQuickStart
-                provider={showAdo ? 'ado' : 'github'}
-                projectPath={projectPath}
-                projectId={projectId}
-                gitRemote={gitRemote}
-                onPrepared={handlePrPrepared}
-              />
-            )}
-
             {/* Push remote branch toggle */}
             {useWorktree && createNewBranch && (
               <div className="mb-4">
@@ -809,47 +697,21 @@ function TaskModalBody({
               </div>
             )}
 
-            {/* Per-task worktree scripts (override the project default) */}
-            {useWorktree && !repoHasNoCommits && (
-              <div className="mb-4">
-                <Expandable label="Worktree scripts" hint="setup / teardown" defaultOpen={false}>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-[11px] font-medium text-muted-foreground/60 mb-1.5">
-                        Setup — runs in this new worktree
-                      </label>
-                      <textarea
-                        value={setupScript}
-                        onChange={(e) => setSetupScript(e.target.value)}
-                        rows={3}
-                        placeholder={'pnpm install\ncp ../.env .env'}
-                        className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[12px] font-mono placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-medium text-muted-foreground/60 mb-1.5">
-                        Teardown — runs before this worktree is removed
-                      </label>
-                      <textarea
-                        value={teardownScript}
-                        onChange={(e) => setTeardownScript(e.target.value)}
-                        rows={2}
-                        placeholder={'docker compose down'}
-                        className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[12px] font-mono placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
-                      />
-                    </div>
-                    <p className="text-[10px] text-muted-foreground/40 leading-relaxed">
-                      Prefilled from the project default. Edits apply to this worktree only.
-                    </p>
-                  </div>
-                </Expandable>
-              </div>
-            )}
+            {/* Permission mode */}
+            <div className="mb-4">
+              <PermissionModePicker
+                value={permissionMode}
+                onChange={(v) => {
+                  setPermissionMode(v);
+                  localStorage.setItem('permissionMode', v);
+                }}
+              />
+            </div>
           </div>
         </div>
 
         {/* Actions */}
-        <div className="flex gap-2.5 justify-end">
+        <div className="flex gap-2.5 justify-end mt-auto pt-4">
           <button
             type="button"
             onClick={close}

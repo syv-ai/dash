@@ -34,11 +34,8 @@ export function PermissionModePicker({
 }) {
   return (
     <div>
-      <label className="block text-[12px] font-medium text-muted-foreground/70 mb-2">
-        <span className="flex items-center gap-1.5">
-          <Shield size={12} strokeWidth={1.8} />
-          Permission mode
-        </span>
+      <label className="block text-[12px] font-medium text-foreground/70 mb-2">
+        Permission mode
       </label>
       <Select<PermissionMode>
         value={value}

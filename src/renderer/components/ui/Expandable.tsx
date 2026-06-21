@@ -7,20 +7,29 @@ interface ExpandableProps {
   defaultOpen?: boolean;
   /** Small trailing hint shown next to the label while collapsed (e.g. "optional"). */
   hint?: string;
+  /** Override the label text color (sans the hover). Defaults to the muted tone;
+   *  pass a lighter token where the surrounding headers are foreground-toned. */
+  labelClassName?: string;
   children: React.ReactNode;
 }
 
 /** A lightweight disclosure: a clickable label row with a chevron that toggles
  *  its children. Used to keep optional fields (context prompts) tucked away.
  *  Content height animates open/closed via the `.collapse-grid` helper. */
-export function Expandable({ label, defaultOpen = false, hint, children }: ExpandableProps) {
+export function Expandable({
+  label,
+  defaultOpen = false,
+  hint,
+  labelClassName = 'text-muted-foreground/70',
+  children,
+}: ExpandableProps) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1 text-[12px] font-medium text-muted-foreground/70 hover:text-foreground transition-colors"
+        className={`flex items-center gap-1 text-[12px] font-medium ${labelClassName} hover:text-foreground transition-colors`}
       >
         <ChevronRight
           size={13}
