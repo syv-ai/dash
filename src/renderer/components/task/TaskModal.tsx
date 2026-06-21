@@ -525,6 +525,34 @@ function TaskModalBody({
               </div>
             )}
 
+            {/* Push remote branch — only when creating a new branch; sits above
+                the picker. */}
+            {useWorktree && createNewBranch && (
+              <div className="mb-4">
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={pushRemote}
+                      onChange={(e) => setPushRemote(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-8 h-[18px] rounded-full bg-accent peer-checked:bg-primary/80 transition-colors duration-200" />
+                    <div className="absolute top-[3px] left-[3px] w-3 h-3 rounded-full bg-muted-foreground/40 peer-checked:bg-primary-foreground peer-checked:translate-x-[14px] transition-all duration-200" />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Upload size={13} className="text-muted-foreground/40" strokeWidth={1.8} />
+                    <span className="text-[13px] text-foreground/80">Push remote branch</span>
+                  </div>
+                </label>
+                {pushRemote && name.trim() && (
+                  <p className="ml-[44px] mt-1 text-[11px] text-muted-foreground/40 font-mono truncate">
+                    origin/{slugify(name.trim())}
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Branch + PR picker */}
             {gitReady && !repoHasNoCommits && (
               <div className="mb-4">
@@ -651,47 +679,16 @@ function TaskModalBody({
               </div>
             )}
 
-            {/* Per-task worktree scripts (override the project default) */}
-            {useWorktree && !repoHasNoCommits && (
-              <div className="mb-4">
-                <Expandable
-                  label="Worktree scripts"
-                  hint="setup / teardown"
-                  labelClassName="text-foreground/70"
-                  defaultOpen={false}
-                >
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-[11px] font-medium text-muted-foreground/60 mb-1.5">
-                        Setup — runs in this new worktree
-                      </label>
-                      <textarea
-                        value={setupScript}
-                        onChange={(e) => setSetupScript(e.target.value)}
-                        rows={3}
-                        placeholder={'pnpm install\ncp ../.env .env'}
-                        className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[12px] font-mono placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-medium text-muted-foreground/60 mb-1.5">
-                        Teardown — runs before this worktree is removed
-                      </label>
-                      <textarea
-                        value={teardownScript}
-                        onChange={(e) => setTeardownScript(e.target.value)}
-                        rows={2}
-                        placeholder={'docker compose down'}
-                        className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[12px] font-mono placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
-                      />
-                    </div>
-                    <p className="text-[10px] text-muted-foreground/40 leading-relaxed">
-                      Prefilled from the project default. Edits apply to this worktree only.
-                    </p>
-                  </div>
-                </Expandable>
-              </div>
-            )}
+            {/* Permission mode */}
+            <div className="mb-4">
+              <PermissionModePicker
+                value={permissionMode}
+                onChange={(v) => {
+                  setPermissionMode(v);
+                  localStorage.setItem('permissionMode', v);
+                }}
+              />
+            </div>
           </div>
 
           {/* ── Right column: content & details ── */}
@@ -754,43 +751,47 @@ function TaskModalBody({
               </div>
             )}
 
-            {/* Push remote branch toggle */}
-            {useWorktree && createNewBranch && (
+            {/* Per-task worktree scripts (override the project default) */}
+            {useWorktree && !repoHasNoCommits && (
               <div className="mb-4">
-                <label className="flex items-center gap-3 cursor-pointer group">
-                  <div className="relative">
-                    <input
-                      type="checkbox"
-                      checked={pushRemote}
-                      onChange={(e) => setPushRemote(e.target.checked)}
-                      className="sr-only peer"
-                    />
-                    <div className="w-8 h-[18px] rounded-full bg-accent peer-checked:bg-primary/80 transition-colors duration-200" />
-                    <div className="absolute top-[3px] left-[3px] w-3 h-3 rounded-full bg-muted-foreground/40 peer-checked:bg-primary-foreground peer-checked:translate-x-[14px] transition-all duration-200" />
+                <Expandable
+                  label="Worktree scripts"
+                  hint="setup / teardown"
+                  labelClassName="text-foreground/70"
+                  defaultOpen={false}
+                >
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[11px] font-medium text-muted-foreground/60 mb-1.5">
+                        Setup — runs in this new worktree
+                      </label>
+                      <textarea
+                        value={setupScript}
+                        onChange={(e) => setSetupScript(e.target.value)}
+                        rows={3}
+                        placeholder={'pnpm install\ncp ../.env .env'}
+                        className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[12px] font-mono placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-muted-foreground/60 mb-1.5">
+                        Teardown — runs before this worktree is removed
+                      </label>
+                      <textarea
+                        value={teardownScript}
+                        onChange={(e) => setTeardownScript(e.target.value)}
+                        rows={2}
+                        placeholder={'docker compose down'}
+                        className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[12px] font-mono placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground/40 leading-relaxed">
+                      Prefilled from the project default. Edits apply to this worktree only.
+                    </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Upload size={13} className="text-muted-foreground/40" strokeWidth={1.8} />
-                    <span className="text-[13px] text-foreground/80">Push remote branch</span>
-                  </div>
-                </label>
-                {pushRemote && name.trim() && (
-                  <p className="ml-[44px] mt-1 text-[11px] text-muted-foreground/40 font-mono truncate">
-                    origin/{slugify(name.trim())}
-                  </p>
-                )}
+                </Expandable>
               </div>
             )}
-
-            {/* Permission mode */}
-            <div className="mb-4">
-              <PermissionModePicker
-                value={permissionMode}
-                onChange={(v) => {
-                  setPermissionMode(v);
-                  localStorage.setItem('permissionMode', v);
-                }}
-              />
-            </div>
           </div>
         </div>
 
