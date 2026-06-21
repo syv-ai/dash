@@ -25,6 +25,7 @@ import { Modal, useModalClose } from '../ui/Modal';
 import { PermissionModePicker, readInitialPermissionMode } from './PermissionModePicker';
 import { getTaskCreatability } from './taskModalCreatability';
 import { Expandable } from '../ui/Expandable';
+import { PrQuickStart } from './PrQuickStart';
 
 /**
  * Task creation modes. Each variant carries only the fields that are meaningful
@@ -314,6 +315,18 @@ function TaskModalBody({
     branchCount: branches.length,
     hasSelectedBranch: !!selectedBranch,
   });
+
+  // From-PR quick start: the PR head has already been fetched to `branch`.
+  // Set up the modal so the normal worktree-existing create path runs on it,
+  // and prefill the name from the PR title if the user hasn't typed one.
+  function handlePrPrepared(branch: string, prTitle: string) {
+    setUseWorktree(true);
+    setCreateNewBranch(false);
+    const prBranch: BranchInfo = { name: branch, ref: branch, shortHash: '', relativeDate: '' };
+    setBranches((prev) => (prev.some((b) => b.name === branch) ? prev : [prBranch, ...prev]));
+    setSelectedBranch(prBranch);
+    if (!name.trim()) setName(prTitle.slice(0, 60));
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -756,6 +769,17 @@ function TaskModalBody({
                   />
                 )}
               </div>
+            )}
+
+            {/* From-PR quick start: check out an open PR's head branch */}
+            {(showGithub || showAdo) && gitReady && !repoHasNoCommits && (
+              <PrQuickStart
+                provider={showAdo ? 'ado' : 'github'}
+                projectPath={projectPath}
+                projectId={projectId}
+                gitRemote={gitRemote}
+                onPrepared={handlePrPrepared}
+              />
             )}
 
             {/* Push remote branch toggle */}
