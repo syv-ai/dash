@@ -21,9 +21,10 @@ export const showPortsScreen: ShowHandler = async (raw, ctx) => {
         // Blank lines (gutter-prefixed by clack's trim:false wrapping) separate
         // the pitch, the action note, and the options for breathing room.
         message:
-          'Want Dash to manage port allocation for you? Assign ports per worktree ' +
-          'automatically. No more collisions.\n\n' +
-          'This will start a new task and instruct an agent to do the thing.\n',
+          'Managing services on different ports per worktree can get messy. ' +
+          'If you add a .dash/ports.json to your project, Dash can solve this and ' +
+          'let you start and stop services directly from the UI. No more collisions.\n\n' +
+          'Do you want to set it up? This starts a new task and instructs an agent to do the thing.\n',
         options: [
           { value: 'setup', label: 'Sure. Set it up.' },
           { value: 'not-now', label: 'Not now, go away.' },
