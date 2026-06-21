@@ -359,10 +359,11 @@ export class GitService {
       return [];
     }
 
-    // Filter out Dash-managed hook files (not user content).
-    // With --untracked-files=all git lists each file individually under .claude/,
-    // so prefix-match catches them whether tracked or untracked.
-    const filtered = files.filter((f) => !f.path.startsWith('.claude/'));
+    // Hide only the one Dash-managed file: .claude/settings.local.json holds the
+    // activity-monitor hooks Dash writes per task (ephemeral hook-server port), so
+    // it's machine state, not user content. Everything else under .claude/ — skills,
+    // commands, settings.json, agents — is real content and belongs in the changes list.
+    const filtered = files.filter((f) => f.path !== '.claude/settings.local.json');
 
     // Get numstat for addition/deletion counts
     await this.enrichWithNumstat(cwd, filtered);
