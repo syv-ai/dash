@@ -387,6 +387,23 @@ export interface PullRequestInfo {
   provider: 'github' | 'ado';
 }
 
+/**
+ * A pull request as surfaced by the "From PR" task quick-start. Unlike
+ * PullRequestInfo (a per-branch lookup for the PR badge), this carries the
+ * head branch + author needed to start a task on the PR. `number` is the gh
+ * PR number / ADO pullRequestId; `headRefName` is the plain branch name
+ * (ADO's refs/heads/ prefix already stripped).
+ */
+export interface PullRequest {
+  number: number;
+  title: string;
+  url: string;
+  state: PullRequestState;
+  author: string;
+  headRefName: string;
+  provider: 'github' | 'ado';
+}
+
 // ── Remote Control Types ────────────────────────────────────
 
 export interface RemoteControlState {
