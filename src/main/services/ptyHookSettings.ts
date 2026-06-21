@@ -6,8 +6,8 @@ import { RtkService } from './RtkService';
 import { DatabaseService } from './DatabaseService';
 import { isClaudeVersionAtLeast } from './claudeCli';
 import {
+  type Hook,
   type HookEntry,
-  type HttpHook,
   type CommandHook,
   type DashHookEndpoint,
   type DashHookEvent,
@@ -59,7 +59,7 @@ function getTaskContextPrompt(taskId: string): string | null {
  * it on the next rewrite without falling back to URL/command-shape pattern
  * matching.
  */
-function tagDash<T extends HttpHook | CommandHook>(hook: T): T & { __dash: true } {
+function tagDash<T extends CommandHook>(hook: T): T & { __dash: true } {
   return { ...hook, __dash: true };
 }
 
@@ -70,9 +70,9 @@ function tagDash<T extends HttpHook | CommandHook>(hook: T): T & { __dash: true 
  * before Claude consumes it.
  */
 function buildPreToolUseHooks(
-  httpHook: (endpoint: DashHookEndpoint, async?: boolean) => HttpHook,
+  dashCmd: (endpoint: DashHookEndpoint, async?: boolean) => Hook,
 ): HookEntry[] {
-  const entries: HookEntry[] = [{ matcher: '*', hooks: [tagDash(httpHook('tool-start', true))] }];
+  const entries: HookEntry[] = [{ matcher: '*', hooks: [dashCmd('tool-start', true)] }];
   const rtkCmd = RtkService.isEnabled() ? RtkService.getHookCommand() : null;
   if (rtkCmd) {
     entries.push({ matcher: 'Bash', hooks: [tagDash({ type: 'command', command: rtkCmd })] });
@@ -154,43 +154,61 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
     return { ok: false, settingsPath, error: 'HookServer port not bound' };
   }
 
-  const base = `http://127.0.0.1:${port}`;
-  const buildHookUrl = (endpoint: DashHookEndpoint) => `${base}/hook/${endpoint}?ptyId=${ptyId}`;
+  // Hooks post to the HookServer via a guarded curl command, NOT a baked
+  // `type: "http"` URL. Two reasons, both about the URL no longer hard-coding
+  // the port:
+  //   1. The port is read at runtime from $DASH_HOOK_PORT, which ptyManager
+  //      injects into the env of the Claude process Dash spawns. A session NOT
+  //      launched by Dash (the user opening the same worktree in a plain
+  //      `claude`) has no such var, so the `[ -n … ] || exit 0` guard makes
+  //      every hook a silent no-op instead of an ECONNREFUSED error.
+  //   2. Even inside Dash, the HookServer binds a fresh ephemeral port each
+  //      launch — reading it live means a stale settings.local.json from a
+  //      prior session self-heals instead of firing at a dead port.
+  // The hook payload arrives on the command's stdin; `-d @-` forwards it as the
+  // POST body, matching what the old http hook sent.
+  const hookCommand = (endpoint: DashHookEndpoint): string => {
+    const url = `http://127.0.0.1:$DASH_HOOK_PORT/hook/${endpoint}?ptyId=${ptyId}`;
+    return (
+      `[ -n "$DASH_HOOK_PORT" ] || exit 0; ` +
+      `curl -s --max-time 2 -X POST -H 'Content-Type: application/json' -d @- "${url}" >/dev/null 2>&1`
+    );
+  };
 
-  const httpHook = (endpoint: DashHookEndpoint, async?: boolean): HttpHook => ({
-    type: 'http' as const,
-    url: buildHookUrl(endpoint),
+  const commandHook = (endpoint: DashHookEndpoint, async?: boolean): CommandHook => ({
+    type: 'command' as const,
+    command: hookCommand(endpoint),
     ...(async ? { async: true } : {}),
   });
 
-  const dashHttp = (endpoint: DashHookEndpoint, async?: boolean) =>
-    tagDash(httpHook(endpoint, async));
+  const dashCmd = (endpoint: DashHookEndpoint, async?: boolean) =>
+    tagDash(commandHook(endpoint, async));
 
   // Typed against DashHookEvent so a typo'd event key (e.g. 'PreToolUze')
   // fails the build, matching the drift-prevention DashHookEndpoint gives
   // us for endpoints.
   const dashEntries: Partial<Record<DashHookEvent, HookEntry[]>> = {
-    Stop: [{ matcher: '', hooks: [dashHttp('stop')] }],
-    UserPromptSubmit: [{ matcher: '', hooks: [dashHttp('busy')] }],
+    Stop: [{ matcher: '', hooks: [dashCmd('stop')] }],
+    UserPromptSubmit: [{ matcher: '', hooks: [dashCmd('busy')] }],
     Notification: [
-      { matcher: 'permission_prompt', hooks: [dashHttp('notification')] },
-      { matcher: 'idle_prompt', hooks: [dashHttp('notification')] },
+      { matcher: 'permission_prompt', hooks: [dashCmd('notification')] },
+      { matcher: 'idle_prompt', hooks: [dashCmd('notification')] },
     ],
-    PreToolUse: buildPreToolUseHooks(httpHook),
-    PostToolUse: [{ matcher: '*', hooks: [dashHttp('tool-end', true)] }],
-    PreCompact: [{ matcher: '*', hooks: [dashHttp('compact-start', true)] }],
-    SessionEnd: [{ matcher: '*', hooks: [dashHttp('session-end', true)] }],
+    PreToolUse: buildPreToolUseHooks(dashCmd),
+    PostToolUse: [{ matcher: '*', hooks: [dashCmd('tool-end', true)] }],
+    PreCompact: [{ matcher: '*', hooks: [dashCmd('compact-start', true)] }],
+    SessionEnd: [{ matcher: '*', hooks: [dashCmd('session-end', true)] }],
   };
 
   // PostCompact added in Claude Code 2.1.76; older CLIs reject the key and
   // skip the entire settings file (GH #127), losing all Dash hooks.
   if (isClaudeVersionAtLeast(2, 1, 76)) {
-    dashEntries.PostCompact = [{ matcher: '*', hooks: [dashHttp('compact-end', true)] }];
+    dashEntries.PostCompact = [{ matcher: '*', hooks: [dashCmd('compact-end', true)] }];
   }
 
   // StopFailure added in Claude Code 2.1.78.
   if (isClaudeVersionAtLeast(2, 1, 78)) {
-    dashEntries.StopFailure = [{ matcher: '*', hooks: [dashHttp('stop-failure')] }];
+    dashEntries.StopFailure = [{ matcher: '*', hooks: [dashCmd('stop-failure')] }];
   }
 
   // SessionStart(clear|compact) → defensive idle. /clear and auto-compact
@@ -202,8 +220,8 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
   // path; we dropped that — see PortsSetupWizard (the agent self-starts via the
   // inlined initial prompt instead).
   const sessionStartEntries: HookEntry[] = [
-    { matcher: 'clear', hooks: [dashHttp('session-start', true)] },
-    { matcher: 'compact', hooks: [dashHttp('session-start', true)] },
+    { matcher: 'clear', hooks: [dashCmd('session-start', true)] },
+    { matcher: 'compact', hooks: [dashCmd('session-start', true)] },
   ];
 
   // SessionStart context-injection: re-inject the task context (linked
@@ -297,10 +315,12 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
       hooks: mergedHooks,
     };
 
-    const contextUrl = buildHookUrl('context');
+    // The statusLine doubles as the context-usage reporter: it POSTs to the
+    // context endpoint and discards output (so the bar stays blank). Same guarded
+    // command shape as the hooks, so it too no-ops outside Dash.
     merged.statusLine = {
       type: 'command',
-      command: `curl -s --connect-timeout 2 -X POST -H "Content-Type: application/json" -d @- "${contextUrl}" >/dev/null 2>&1`,
+      command: hookCommand('context'),
     };
 
     const effectiveAttribution =

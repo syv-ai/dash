@@ -12,7 +12,7 @@
  */
 
 export type HttpHook = { type: 'http'; url: string; async?: boolean };
-export type CommandHook = { type: 'command'; command: string };
+export type CommandHook = { type: 'command'; command: string; async?: boolean };
 export type Hook = (HttpHook | CommandHook) & { __dash?: true };
 export type HookEntry = { matcher: string; hooks: Hook[] };
 
@@ -92,9 +92,15 @@ const DASH_ENDPOINT_SET: ReadonlySet<string> = new Set(DASH_HOOK_ENDPOINTS);
  * the two prevents a user-authored `url: "http://127.0.0.1:9999/hook/stop"`
  * (their own dev server happening to expose `/hook/stop`) from being
  * silently classified as Dash-owned and deleted on the next merge.
+ *
+ * The command variant also accepts a literal `$DASH_HOOK_PORT` in the port
+ * position: current Dash writes its hooks as guarded curl commands that read
+ * the port from that env var at runtime rather than baking a number, so the
+ * brand-loss fallback must recognize that shape too. (The url-field variant
+ * stays digits-only — http hooks always carry a concrete port.)
  */
 const DASH_URL_FULL_RE = /^https?:\/\/127\.0\.0\.1:\d+\/hook\/([a-z-]+)(\?|$)/i;
-const DASH_URL_SUBSTR_RE = /https?:\/\/127\.0\.0\.1:\d+\/hook\/([a-z-]+)/i;
+const DASH_URL_SUBSTR_RE = /https?:\/\/127\.0\.0\.1:(?:\d+|\$DASH_HOOK_PORT)\/hook\/([a-z-]+)/i;
 
 /**
  * Pre-brand Dash versions wrote SessionStart context-injection hooks as a

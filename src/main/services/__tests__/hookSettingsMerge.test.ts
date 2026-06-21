@@ -56,6 +56,18 @@ describe('isDashOwnedHook', () => {
     expect(isDashOwnedHook({ type: 'command', command })).toBe(true);
   });
 
+  it('recognises a brand-stripped command hook that reads the port from $DASH_HOOK_PORT', () => {
+    // Current Dash writes hooks as guarded curl commands whose port is the
+    // runtime env var, not a baked number: ".../127.0.0.1:$DASH_HOOK_PORT/hook/…".
+    // The brand is the primary signal, but if a round-trip strips __dash the
+    // structural fallback must still recognize the env-var port form — otherwise
+    // these would survive as "user content" and accumulate across upgrades.
+    const command =
+      '[ -n "$DASH_HOOK_PORT" ] || exit 0; curl -s --max-time 2 -X POST -H \'Content-Type: application/json\' ' +
+      '-d @- "http://127.0.0.1:$DASH_HOOK_PORT/hook/busy?ptyId=abc" >/dev/null 2>&1';
+    expect(isDashOwnedHook({ type: 'command', command })).toBe(true);
+  });
+
   it('recognises an untagged SessionStart base64-decode context hook (unix)', () => {
     // Dash injects task context via an `echo '<base64>' | base64 -D` hook
     // under SessionStart. Pre-brand versions wrote it without __dash; we

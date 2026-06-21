@@ -128,6 +128,9 @@ const RESERVED_ENV_KEYS = new Set([
   'COLORTERM',
   'TERM_PROGRAM',
   'COLORFGBG',
+  // Dash owns this — it points hooks at the live HookServer port. A user/ports
+  // override would misroute or break the no-op-outside-Dash guard.
+  'DASH_HOOK_PORT',
 ]);
 
 export function setCommitAttribution(value: string | undefined): void {
@@ -313,6 +316,16 @@ function buildDirectEnv(isDark: boolean, cwd?: string): Record<string, string> {
 
   // Disable Claude Code's built-in viewport scrolling — Dash uses its own terminal viewport
   env.CLAUDE_CODE_NO_FLICKER = '1';
+
+  // The HookServer port for this Dash session. ptyHookSettings writes hooks as
+  // guarded curl commands that read $DASH_HOOK_PORT at runtime: present here →
+  // they reach Dash; absent (a session the user launched outside Dash) → the
+  // `[ -n … ]` guard makes them no-op instead of erroring with ECONNREFUSED.
+  // Set last so it wins over any inherited value; only when the server is bound
+  // (port 0 = not started — leaving the var unset keeps the guard honest).
+  if (hookServer.port !== 0) {
+    env.DASH_HOOK_PORT = String(hookServer.port);
+  }
 
   return env;
 }
