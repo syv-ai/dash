@@ -1,5 +1,6 @@
 import { GitMerge, GitPullRequest } from 'lucide-react';
 import { Tooltip } from './Tooltip';
+import { prStatusPill } from './prStatusColors';
 import type { PullRequestInfo } from '../../../shared/types';
 
 interface PrBadgeProps {
@@ -8,18 +9,15 @@ interface PrBadgeProps {
 }
 
 /**
- * PR pill, color-coded by state: merged → primary, open → git-added green.
- * Closed PRs render nothing. Shared by the task header (md) and the
- * ProjectView task cards (sm).
+ * PR pill, color-coded by state (standard GitHub colors): open → green,
+ * merged → purple. Closed PRs render nothing. Shared by the task header (md)
+ * and the ProjectView task cards (sm).
  */
 export function PrBadge({ prInfo, size = 'md' }: PrBadgeProps) {
   if (prInfo.state === 'closed') return null;
   const iconSize = size === 'sm' ? 10 : 11;
   const sizeCls = size === 'sm' ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-[3px] text-[11px]';
-  const colorCls =
-    prInfo.state === 'merged'
-      ? 'bg-primary/10 text-primary hover:bg-primary/20'
-      : 'bg-[hsl(var(--git-added))]/10 text-[hsl(var(--git-added))] hover:bg-[hsl(var(--git-added))]/20';
+  const colorCls = prStatusPill(prInfo.state);
   return (
     <Tooltip content={`${prInfo.title} (${prInfo.state})`}>
       <a

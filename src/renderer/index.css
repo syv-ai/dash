@@ -44,6 +44,7 @@
     --git-modified: 38 80% 62%;
     --git-deleted: 0 84% 60%;
     --git-renamed: 217 91% 60%;
+    --pr-merged: 262 60% 55%; /* GitHub merged-PR purple */
     --git-untracked: 0 0% 50%;
     --git-conflicted: 25 95% 53%;
 
@@ -114,6 +115,7 @@
     --git-modified: 38 80% 68%; /* light amber */
     --git-deleted: 0 72% 56%; /* bright red */
     --git-renamed: 217 91% 60%; /* bright blue */
+    --pr-merged: 262 70% 72%; /* GitHub merged-PR purple, lightened for dark bg */
     --git-untracked: 0 0% 56%;
     --git-conflicted: 25 95% 53%; /* bright orange */
 
