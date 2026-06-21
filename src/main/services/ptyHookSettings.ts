@@ -167,6 +167,14 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
   //      prior session self-heals instead of firing at a dead port.
   // The hook payload arrives on the command's stdin; `-d @-` forwards it as the
   // POST body, matching what the old http hook sent.
+  //
+  // POSIX-sh only, by design. Claude Code runs command hooks via `sh -c` on
+  // macOS/Linux (so this is safe even for fish/zsh users) and via Git Bash or
+  // PowerShell on Windows. Dash ships macOS arm64 + Linux x64 only, so this
+  // syntax targets `sh` and is NOT given a win32 branch — unlike the
+  // context-injection hook below, whose base64 decode genuinely differs by OS.
+  // The `$DASH_HOOK_PORT` guard, not Windows support, is the reason it's a
+  // command rather than the old `type:"http"` hook.
   const hookCommand = (endpoint: DashHookEndpoint): string => {
     const url = `http://127.0.0.1:$DASH_HOOK_PORT/hook/${endpoint}?ptyId=${ptyId}`;
     return (
