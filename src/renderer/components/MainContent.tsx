@@ -219,13 +219,13 @@ export function MainContent({
                 href={currentBranchUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-2 py-[3px] rounded bg-foreground/5 hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition-colors font-mono text-[11px]"
+                className="inline-flex items-center gap-1.5 px-2 py-[3px] rounded-full bg-foreground/5 hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition-colors font-mono text-[11px]"
               >
                 <BranchIcon size={11} strokeWidth={2} />
                 <span className="truncate max-w-[160px]">{currentBranch}</span>
               </a>
             ) : (
-              <span className="inline-flex items-center gap-1.5 px-2 py-[3px] rounded bg-foreground/5 text-muted-foreground font-mono text-[11px]">
+              <span className="inline-flex items-center gap-1.5 px-2 py-[3px] rounded-full bg-foreground/5 text-muted-foreground font-mono text-[11px]">
                 <BranchIcon size={11} strokeWidth={2} />
                 <span className="truncate max-w-[160px]">{currentBranch}</span>
               </span>

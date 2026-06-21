@@ -27,7 +27,7 @@ export function PrBadge({ prInfo, size = 'md' }: PrBadgeProps) {
         target="_blank"
         rel="noopener noreferrer"
         onClick={(e) => e.stopPropagation()}
-        className={`inline-flex items-center gap-1 rounded font-mono transition-colors ${sizeCls} ${colorCls}`}
+        className={`inline-flex items-center gap-1 rounded-full font-mono transition-colors ${sizeCls} ${colorCls}`}
       >
         {prInfo.state === 'merged' ? (
           <GitMerge size={iconSize} strokeWidth={2} />

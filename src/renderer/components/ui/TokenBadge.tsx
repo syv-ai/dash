@@ -15,7 +15,7 @@ export function TokenBadge({ totalTokens, totalCostUsd, size = 'md' }: TokenBadg
   return (
     <Tooltip content={`${totalTokens.toLocaleString()} tokens`}>
       <span
-        className={`inline-flex items-center rounded bg-foreground/5 text-muted-foreground font-mono tabular-nums ${sizeCls}`}
+        className={`inline-flex items-center rounded-full bg-foreground/5 text-muted-foreground font-mono tabular-nums ${sizeCls}`}
       >
         <span>{formatTokens(totalTokens)}</span>
         <span className="text-foreground/30">·</span>
