@@ -1,5 +1,6 @@
 import React from 'react';
 import { formatTokens, formatCost } from '../../utils/format';
+import { useSettings } from '../../stores/settingsStore';
 import { Tooltip } from './Tooltip';
 
 interface TokenBadgeProps {
@@ -9,6 +10,7 @@ interface TokenBadgeProps {
 }
 
 export function TokenBadge({ totalTokens, totalCostUsd, size = 'md' }: TokenBadgeProps) {
+  const showCost = useSettings((s) => s.showTaskCost);
   if (totalTokens === 0) return null;
   const sizeCls =
     size === 'sm' ? 'gap-1 px-1.5 py-0.5 text-[10px]' : 'gap-1.5 px-2 py-[3px] text-[11px]';
@@ -18,8 +20,12 @@ export function TokenBadge({ totalTokens, totalCostUsd, size = 'md' }: TokenBadg
         className={`inline-flex items-center rounded-full bg-foreground/5 text-muted-foreground font-mono tabular-nums ${sizeCls}`}
       >
         <span>{formatTokens(totalTokens)}</span>
-        <span className="text-foreground/30">·</span>
-        <span>{formatCost(totalCostUsd)}</span>
+        {showCost && (
+          <>
+            <span className="text-foreground/30">·</span>
+            <span>{formatCost(totalCostUsd)}</span>
+          </>
+        )}
       </span>
     </Tooltip>
   );

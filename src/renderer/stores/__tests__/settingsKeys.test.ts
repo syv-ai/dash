@@ -16,6 +16,13 @@ describe('settings registry', () => {
     expect(e.codec.encode(false)).toBe('false');
   });
 
+  it('maps showTaskCost to a true-by-default boolean', () => {
+    const e = SETTINGS_REGISTRY.find((r) => r.field === 'showTaskCost')!;
+    expect(e.key).toBe('showTaskCost');
+    expect(e.codec.decode(null)).toBe(true);
+    expect(e.codec.encode(false)).toBe('false');
+  });
+
   it('keys are unique', () => {
     const keys = SETTINGS_REGISTRY.map((r) => r.key);
     expect(new Set(keys).size).toBe(keys.length);

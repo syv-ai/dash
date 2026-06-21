@@ -372,6 +372,8 @@ function UsageSection({ latestRateLimits }: { latestRateLimits?: RateLimits }) {
   const onShowContextUsageOnTaskCardsChange = useSettings((s) => s.setShowContextUsageOnTaskCards);
   const showTaskTokens = useSettings((s) => s.showTaskTokens);
   const onShowTaskTokensChange = useSettings((s) => s.setShowTaskTokens);
+  const showTaskCost = useSettings((s) => s.showTaskCost);
+  const onShowTaskCostChange = useSettings((s) => s.setShowTaskCost);
   const showProjectTokens = useSettings((s) => s.showProjectTokens);
   const onShowProjectTokensChange = useSettings((s) => s.setShowProjectTokens);
   return (
@@ -450,8 +452,19 @@ function UsageSection({ latestRateLimits }: { latestRateLimits?: RateLimits }) {
         />
         <SettingsRow
           label="Show task token badge"
-          description="Display total tokens and cost in the task header (right side)."
+          description="Display the token count in the task header (right side)."
           control={<Switch enabled={showTaskTokens} onToggle={onShowTaskTokensChange} />}
+        />
+        <SettingsRow
+          label="Show cost on token badge"
+          description="Include the USD cost alongside the token count."
+          control={
+            <Switch
+              enabled={showTaskCost}
+              onToggle={onShowTaskCostChange}
+              disabled={!showTaskTokens}
+            />
+          }
         />
         <SettingsRow
           label="Show project token total on hover"

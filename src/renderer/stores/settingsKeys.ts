@@ -18,6 +18,7 @@ import { parseKeybindings, type KeyBindingMap } from '../keybindings';
 export interface SettingsState {
   theme: 'light' | 'dark';
   showTaskTokens: boolean;
+  showTaskCost: boolean;
   showRateLimits: boolean;
   showUsageInline: boolean;
   showContextUsageOnTaskCards: boolean;
@@ -82,6 +83,7 @@ function entry<K extends keyof SettingsState>(
 export const SETTINGS_REGISTRY: RegistryEntry[] = [
   entry('theme', 'theme', str('dark') as Codec<SettingsState['theme']>),
   entry('showTaskTokens', 'showTaskTokens', boolDefaultTrue()),
+  entry('showTaskCost', 'showTaskCost', boolDefaultTrue()),
   entry('showRateLimits', 'showRateLimits', boolNotFalse()),
   entry('showUsageInline', 'showUsageInline', boolNotFalse()),
   entry('showContextUsageOnTaskCards', 'showContextUsageOnTaskCards', boolNotFalse()),
