@@ -99,10 +99,7 @@ export function BrowseView({ scopes, ext }: { scopes: ExtensionScopeRef[]; ext: 
 
       <div className="flex min-h-0 flex-1">
         {/* source sidebar */}
-        <div
-          className="w-[210px] flex-shrink-0 overflow-y-auto p-2"
-          style={{ background: 'hsl(var(--surface-0))' }}
-        >
+        <div className="w-[210px] flex-shrink-0 overflow-y-auto border-r border-border/40 p-2">
           {tab === 'plugins' ? (
             sidebarMode === 'add-marketplace' ? (
               <AddMarketplaceForm
