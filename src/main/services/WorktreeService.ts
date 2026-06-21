@@ -295,6 +295,16 @@ export class WorktreeService {
     }
   }
 
+  /**
+   * Fetch a single branch from origin so a worktree can be created on it.
+   * Used by the task-from-PR flow for ADO, whose PR source branch lives on
+   * origin. Returns the branch name unchanged for caller convenience.
+   */
+  async fetchRemoteBranch(projectPath: string, branch: string): Promise<string> {
+    await execFileAsync('git', ['fetch', 'origin', branch], { cwd: projectPath });
+    return branch;
+  }
+
   private async refExists(cwd: string, ref: string): Promise<boolean> {
     try {
       await execFileAsync('git', ['rev-parse', '--verify', '--quiet', ref], { cwd });

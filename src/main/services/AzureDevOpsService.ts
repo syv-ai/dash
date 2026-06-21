@@ -2,8 +2,10 @@ import type {
   AzureDevOpsConfig,
   AzureDevOpsWorkItem,
   AzureDevOpsWorkItemRef,
+  PullRequest,
   PullRequestInfo,
 } from '@shared/types';
+import { mapAdoPrList } from './adoPr';
 
 const TIMEOUT_MS = 15_000;
 const API_VERSION = '7.1';
@@ -121,6 +123,25 @@ export class AzureDevOpsService {
       state: stateMap[pr.status] ?? 'open',
       provider: 'ado',
     };
+  }
+
+  /** Active (open) PRs for `repositoryName`, most-recent first. */
+  static async listPullRequests(
+    config: AzureDevOpsConfig,
+    repositoryName: string,
+  ): Promise<PullRequest[]> {
+    const result = (await this.request(
+      config,
+      `${config.project}/_apis/git/repositories/${encodeURIComponent(
+        repositoryName,
+      )}/pullrequests?searchCriteria.status=active&$top=50`,
+    )) as { value?: unknown };
+
+    return mapAdoPrList(result.value, {
+      organizationUrl: config.organizationUrl,
+      project: config.project,
+      repository: repositoryName,
+    });
   }
 
   static async postBranchComment(
