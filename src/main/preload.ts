@@ -234,6 +234,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('github:link-branch', { cwd, issueNumber, branch }),
   githubGetPrForBranch: (cwd: string, branch: string) =>
     ipcRenderer.invoke('github:get-pr-for-branch', { cwd, branch }),
+  githubListPrs: (cwd: string) => ipcRenderer.invoke('github:list-prs', { cwd }),
+  githubPreparePrBranch: (cwd: string, prNumber: number, headRefName: string) =>
+    ipcRenderer.invoke('github:prepare-pr-branch', { cwd, prNumber, headRefName }),
 
   // Azure DevOps
   adoCheckConfigured: (projectId?: string) =>
@@ -251,6 +254,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('ado:post-branch-comment', { workItemId, branch, projectId }),
   adoGetPrForBranch: (branch: string, gitRemote: string, projectId?: string) =>
     ipcRenderer.invoke('ado:get-pr-for-branch', { branch, gitRemote, projectId }),
+  adoListPrs: (gitRemote: string, projectId?: string) =>
+    ipcRenderer.invoke('ado:list-prs', { gitRemote, projectId }),
+  adoPreparePrBranch: (cwd: string, branch: string) =>
+    ipcRenderer.invoke('ado:prepare-pr-branch', { cwd, branch }),
 
   // Git detection
   detectGit: (folderPath: string) => ipcRenderer.invoke('app:detectGit', folderPath),

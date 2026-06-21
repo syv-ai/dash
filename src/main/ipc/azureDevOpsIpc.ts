@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { parseArgs, errorResponse } from './validate';
 import { AzureDevOpsService } from '../services/AzureDevOpsService';
 import { ConnectionConfigService } from '../services/ConnectionConfigService';
+import { worktreeService } from '../services/WorktreeService';
 import type { AzureDevOpsConfig } from '@shared/types';
 import { parseAdoRemote } from '@shared/urls';
 
@@ -145,6 +146,42 @@ export function registerAzureDevOpsIpc(): void {
       }
     },
   );
+
+  ipcMain.handle(
+    'ado:list-prs',
+    async (_event, args: { gitRemote: string; projectId?: string }) => {
+      try {
+        parseArgs(
+          'ado:list-prs',
+          z.looseObject({ gitRemote: z.string(), projectId: z.string().optional() }),
+          args,
+        );
+        const config = ConnectionConfigService.getAdoConfig(args.projectId);
+        if (!config) return { success: false, error: 'Azure DevOps not configured' };
+        const parsed = parseAdoRemote(args.gitRemote);
+        if (!parsed?.repository)
+          return { success: false, error: 'Could not determine repository from remote' };
+        const prs = await AzureDevOpsService.listPullRequests(config, parsed.repository);
+        return { success: true, data: prs };
+      } catch (err) {
+        return errorResponse(err);
+      }
+    },
+  );
+
+  ipcMain.handle('ado:prepare-pr-branch', async (_event, args: { cwd: string; branch: string }) => {
+    try {
+      parseArgs(
+        'ado:prepare-pr-branch',
+        z.looseObject({ cwd: z.string(), branch: z.string() }),
+        args,
+      );
+      const branch = await worktreeService.fetchRemoteBranch(args.cwd, args.branch);
+      return { success: true, data: { branch } };
+    } catch (err) {
+      return errorResponse(err);
+    }
+  });
 
   ipcMain.handle(
     'ado:post-branch-comment',

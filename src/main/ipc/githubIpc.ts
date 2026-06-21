@@ -54,6 +54,37 @@ export function registerGithubIpc(): void {
     },
   );
 
+  ipcMain.handle('github:list-prs', async (_event, args: { cwd: string }) => {
+    try {
+      parseArgs('github:list-prs', z.looseObject({ cwd: z.string() }), args);
+      const prs = await GithubService.listPullRequests(args.cwd);
+      return { success: true, data: prs };
+    } catch (err) {
+      return errorResponse(err);
+    }
+  });
+
+  ipcMain.handle(
+    'github:prepare-pr-branch',
+    async (_event, args: { cwd: string; prNumber: number; headRefName: string }) => {
+      try {
+        parseArgs(
+          'github:prepare-pr-branch',
+          z.looseObject({ cwd: z.string(), prNumber: z.number(), headRefName: z.string() }),
+          args,
+        );
+        const branch = await GithubService.fetchPullRequestHead(
+          args.cwd,
+          args.prNumber,
+          args.headRefName,
+        );
+        return { success: true, data: { branch } };
+      } catch (err) {
+        return errorResponse(err);
+      }
+    },
+  );
+
   ipcMain.handle(
     'github:post-branch-comment',
     async (_event, args: { cwd: string; issueNumber: number; branch: string }) => {

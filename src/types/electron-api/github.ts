@@ -1,4 +1,4 @@
-import type { IpcResponse, GithubIssue, PullRequestInfo } from '../../shared/types';
+import type { IpcResponse, GithubIssue, PullRequest, PullRequestInfo } from '../../shared/types';
 
 /** GitHub issue search/linking and PR lookup (via the `gh` CLI). */
 export interface GithubApi {
@@ -19,4 +19,10 @@ export interface GithubApi {
     cwd: string,
     branch: string,
   ) => Promise<IpcResponse<PullRequestInfo | null>>;
+  githubListPrs: (cwd: string) => Promise<IpcResponse<PullRequest[]>>;
+  githubPreparePrBranch: (
+    cwd: string,
+    prNumber: number,
+    headRefName: string,
+  ) => Promise<IpcResponse<{ branch: string }>>;
 }
