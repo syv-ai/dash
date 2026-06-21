@@ -1,4 +1,5 @@
 import React from 'react';
+import { CountBadge } from './CountBadge';
 
 /**
  * Canonical segmented control: a recessed track with a sliding raised pill behind
@@ -14,7 +15,7 @@ export function Segmented<T extends string | number | null>({
   size = 'md',
 }: {
   value: T;
-  options: Array<{ value: T; label: string; icon?: React.ReactNode }>;
+  options: Array<{ value: T; label: string; icon?: React.ReactNode; count?: number }>;
   onChange: (v: T) => void;
   fullWidth?: boolean;
   size?: 'sm' | 'md';
@@ -52,6 +53,7 @@ export function Segmented<T extends string | number | null>({
           >
             {opt.icon}
             <span className="truncate">{opt.label}</span>
+            {opt.count != null && <CountBadge count={opt.count} />}
           </button>
         );
       })}

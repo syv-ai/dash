@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Globe, Folder, SquareTerminal, Loader2, ChevronRight } from 'lucide-react';
 import type { ScopeExtensions } from '../../../shared/types';
 import { buildScopeTree } from './scopeTargets';
+import { CountBadge } from '../ui/CountBadge';
 
 export function ScopeSidebar({
   scopes,
@@ -76,11 +77,7 @@ export function ScopeSidebar({
         >
           <span className={active ? 'text-foreground/80' : 'text-foreground/40'}>{icon}</span>
           <span className="truncate">{label}</span>
-          {count > 0 && (
-            <span className="ml-auto inline-flex min-w-[18px] items-center justify-center rounded-full bg-primary/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-primary">
-              {count}
-            </span>
-          )}
+          {count > 0 && <CountBadge count={count} className="ml-auto" />}
         </button>
       </div>
     );
