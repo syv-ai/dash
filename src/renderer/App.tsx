@@ -627,17 +627,73 @@ export function App() {
     [activeProjectTasks, activeTaskId],
   );
 
+  // MRU (most-recently-used) cycling for Ctrl+Tab. mruRef holds rotation task
+  // IDs most-recent-first; cyclingRef is the in-flight hold-Tab session. A quick
+  // single Ctrl+Tab jumps to the last-viewed task; holding Ctrl and tapping Tab
+  // walks further down a frozen snapshot, and releasing Ctrl commits the landing
+  // task to the front of the MRU (see commitCycle). This makes single taps
+  // toggle the two most-recent while a held walk can reach deeper tasks.
+  const mruRef = useRef<string[]>([]);
+  const cyclingRef = useRef<{ snapshot: string[]; pointer: number } | null>(null);
+
+  // Keep the MRU fresh on every ordinary task switch (click, Cmd+digit, …), but
+  // NOT while a walk is previewing tasks — those reorder only on commit, so the
+  // snapshot the walk steps through stays stable under repeated Tab.
+  useEffect(() => {
+    if (activeTaskId && !cyclingRef.current) {
+      mruRef.current = [activeTaskId, ...mruRef.current.filter((id) => id !== activeTaskId)];
+    }
+  }, [activeTaskId]);
+
   const cycleRotation = useCallback(
     (direction: 1 | -1) => {
-      if (rotationTasks.length === 0) return;
-      const currentIdx = rotationTasks.findIndex((t) => t.id === activeTaskId);
-      const nextIdx = (currentIdx + direction + rotationTasks.length) % rotationTasks.length;
-      const nextTask = rotationTasks[nextIdx]!;
-      setActiveProjectId(nextTask.projectId);
-      setActiveTaskId(nextTask.id);
+      if (!cyclingRef.current) {
+        // Start a session: order the eligible (rotation) tasks by recency. The
+        // active task is MRU[0], so the snapshot begins where we already are.
+        const eligible = rotationTasks.map((t) => t.id);
+        if (eligible.length < 2) return;
+        const pos = new Map(mruRef.current.map((id, i) => [id, i]));
+        const snapshot = [...eligible].sort(
+          (a, b) => (pos.get(a) ?? Infinity) - (pos.get(b) ?? Infinity),
+        );
+        // Begin at the active task (MRU[0]); if it isn't eligible, start at -1
+        // so the first forward step still lands on snapshot[0].
+        cyclingRef.current = { snapshot, pointer: snapshot.indexOf(activeTaskId ?? '') };
+      }
+      const session = cyclingRef.current;
+      const n = session.snapshot.length;
+      session.pointer = (session.pointer + direction + n) % n;
+      const nextTask = rotationTasks.find((t) => t.id === session.snapshot[session.pointer]);
+      if (nextTask) {
+        setActiveProjectId(nextTask.projectId);
+        setActiveTaskId(nextTask.id);
+      }
     },
     [rotationTasks, activeTaskId],
   );
+
+  // Commit the in-flight walk: bump the landed task to the front of the MRU so
+  // single taps keep toggling the two most-recent. Fires when Ctrl is released
+  // (or the window loses focus mid-walk, so a stranded session can't linger).
+  const commitCycle = useCallback(() => {
+    const session = cyclingRef.current;
+    if (!session) return;
+    const landed = session.snapshot[session.pointer]!;
+    mruRef.current = [landed, ...mruRef.current.filter((id) => id !== landed)];
+    cyclingRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Control') commitCycle();
+    };
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', commitCycle);
+    return () => {
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', commitCycle);
+    };
+  }, [commitCycle]);
 
   const removeFromRotation = useCallback((taskId: string) => {
     setRotationExclusions((prev) => {
@@ -654,10 +710,12 @@ export function App() {
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      // Ctrl+Tab / Ctrl+Shift+Tab — cycle rotation (works even when terminal is focused)
+      // Ctrl+Tab / Ctrl+Shift+Tab — MRU walk (works even when terminal is
+      // focused). Ignore auto-repeat so holding Tab doesn't spin: one step per
+      // physical press, like OS alt-tab. Release of Ctrl commits (see keyup).
       if (e.ctrlKey && !e.metaKey && !e.altKey && e.key === 'Tab') {
         e.preventDefault();
-        cycleRotation(e.shiftKey ? -1 : 1);
+        if (!e.repeat) cycleRotation(e.shiftKey ? -1 : 1);
         return;
       }
 
