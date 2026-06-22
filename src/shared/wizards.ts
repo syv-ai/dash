@@ -10,4 +10,4 @@ export interface WizardMeta {
  * Wizards offered in the drawer "+" dropdown. Single source of truth for the
  * menu — adding a wizard is one entry here (plus its main-side registration).
  */
-export const WIZARDS: WizardMeta[] = [{ id: 'ports', label: 'Port management' }];
+export const WIZARDS: WizardMeta[] = [{ id: 'ports', label: 'Service management' }];
