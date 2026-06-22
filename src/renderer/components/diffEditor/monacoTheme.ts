@@ -1,4 +1,4 @@
-import type { ITheme as XtermTheme } from 'xterm';
+import type { ITheme as XtermTheme } from '@xterm/xterm';
 
 // Bump the version suffix whenever defineMonacoThemeFromTerminal's output
 // changes — Monaco caches themes by name, and the EditorPane's theme effect

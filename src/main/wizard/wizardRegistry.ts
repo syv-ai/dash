@@ -1,5 +1,5 @@
 import type { BrowserWindow } from 'electron';
-import type { SpawnOpts } from '../tui/SidecarTuiHost';
+import type { SpawnOpts } from './WizardHost';
 
 /** Payload of the wizard:requestStart IPC (minus featureId, which routes it). */
 export interface RequestStartPayload {
@@ -8,8 +8,6 @@ export interface RequestStartPayload {
   taskName: string;
   projectName: string;
   cwd: string;
-  cols: number;
-  rows: number;
 }
 
 export interface Wizard {

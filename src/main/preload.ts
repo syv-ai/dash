@@ -117,6 +117,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('ports:tui:migrated', handler);
     return () => ipcRenderer.removeListener('ports:tui:migrated', handler);
   },
+  wizardMessage: (p: { featureId: string; taskId: string; msg: unknown }) =>
+    ipcRenderer.send('wizard:message', p),
+  onWizardShow: (cb: (data: { featureId: string; taskId: string; msg: unknown }) => void) => {
+    const handler = (_event: unknown, data: { featureId: string; taskId: string; msg: unknown }) =>
+      cb(data);
+    ipcRenderer.on('wizard:show', handler);
+    return () => ipcRenderer.removeListener('wizard:show', handler);
+  },
+  onWizardDismiss: (cb: (data: { featureId: string; taskId: string }) => void) => {
+    const handler = (_event: unknown, data: { featureId: string; taskId: string }) => cb(data);
+    ipcRenderer.on('wizard:dismiss', handler);
+    return () => ipcRenderer.removeListener('wizard:dismiss', handler);
+  },
   onPtyData: (id: string, callback: (data: string) => void) => {
     const handler = (_event: unknown, data: string) => callback(data);
     ipcRenderer.on(`pty:data:${id}`, handler);
@@ -556,14 +569,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   portsServiceLogs: (taskId: string, port: unknown) =>
     ipcRenderer.invoke('ports:service:logs', taskId, port),
   portsServiceStartAll: (taskId: string) => ipcRenderer.invoke('ports:service:startAll', taskId),
+  portsServiceStopAll: (taskId: string) => ipcRenderer.invoke('ports:service:stopAll', taskId),
   portsServiceStatus: (taskId: string) => ipcRenderer.invoke('ports:service:status', taskId),
+  portsServiceReleaseTab: (taskId: string, tabId: string) =>
+    ipcRenderer.invoke('ports:service:releaseTab', taskId, tabId),
   onPortsServiceChanged: (cb: (data: { taskId: string }) => void) => {
     const handler = (_event: unknown, data: { taskId: string }) => cb(data);
     ipcRenderer.on('ports:service:changed', handler);
     return () => ipcRenderer.removeListener('ports:service:changed', handler);
   },
-  onPortsServiceFocusTab: (cb: (data: { taskId: string; tabId: string }) => void) => {
-    const handler = (_event: unknown, data: { taskId: string; tabId: string }) => cb(data);
+  onPortsServiceFocusTab: (
+    cb: (data: { taskId: string; tabId: string; reset: boolean }) => void,
+  ) => {
+    const handler = (_event: unknown, data: { taskId: string; tabId: string; reset: boolean }) =>
+      cb(data);
     ipcRenderer.on('ports:service:focusTab', handler);
     return () => ipcRenderer.removeListener('ports:service:focusTab', handler);
   },
@@ -572,13 +591,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('ports:configChanged', handler);
     return () => {
       ipcRenderer.removeListener('ports:configChanged', handler);
-    };
-  },
-  onPortsSetupComplete: (callback: (data: { taskId: string }) => void) => {
-    const handler = (_event: unknown, data: { taskId: string }) => callback(data);
-    ipcRenderer.on('ports:setupComplete', handler);
-    return () => {
-      ipcRenderer.removeListener('ports:setupComplete', handler);
     };
   },
   onPortsLiveness: (callback: (update: import('@shared/types').PortLivenessUpdate) => void) => {

@@ -3,10 +3,9 @@ import { WizardOrchestrator, type WizardIo } from '../WizardOrchestrator';
 import type { PortsShow, PortsChoice, ExitReason } from '../../../shared/portsTuiProtocol';
 
 const PORTS_JSON_TIMEOUT_MS = 30 * 60_000; // cap waiting for ports.json
-const SENTINEL_TIMEOUT_MS = 20 * 60_000; // cap waiting for setup-complete
 
 export interface SetupServices {
-  /** Emits 'ports:config' and 'ports:setupComplete' with { taskId } payloads. */
+  /** Emits 'ports:config' and 'ports:configError' with { taskId } payloads. */
   portsEvents: EventEmitter;
   /**
    * Read-only: the watcher already re-ran WorkspacePortsRuntime.setupTask
@@ -24,8 +23,7 @@ export interface SetupServices {
  * listens for the watcher's events and walks the spinner screens.
  */
 export class PortsSetupWizard extends WizardOrchestrator<PortsShow, PortsChoice> {
-  private phase: 'pending' | 'waiting-config' | 'waiting-sentinel' | 'done' | 'restarting' =
-    'pending';
+  private phase: 'pending' | 'waiting-config' | 'done' | 'restarting' = 'pending';
   private allocatedCount = 0;
 
   constructor(
@@ -41,18 +39,13 @@ export class PortsSetupWizard extends WizardOrchestrator<PortsShow, PortsChoice>
     const onConfig = (p: { taskId: string }) => {
       if (p.taskId === this.taskId) void this.onPortsConfig();
     };
-    const onComplete = (p: { taskId: string }) => {
-      if (p.taskId === this.taskId) void this.onSetupComplete();
-    };
     const onConfigError = (p: { taskId: string; errors: string[] }) => {
       if (p.taskId === this.taskId) void this.onConfigError(p.errors);
     };
     this.services.portsEvents.on('ports:config', onConfig);
     this.services.portsEvents.on('ports:configError', onConfigError);
-    this.services.portsEvents.on('ports:setupComplete', onComplete);
     this.onCleanup(() => this.services.portsEvents.off('ports:config', onConfig));
     this.onCleanup(() => this.services.portsEvents.off('ports:configError', onConfigError));
-    this.onCleanup(() => this.services.portsEvents.off('ports:setupComplete', onComplete));
   }
 
   protected async onReady(): Promise<void> {
@@ -67,23 +60,9 @@ export class PortsSetupWizard extends WizardOrchestrator<PortsShow, PortsChoice>
     if (this.phase !== 'waiting-config') return;
     this.clearTimer('ports-json');
     this.allocatedCount = await this.services.getPortCount(this.taskId);
-    this.phase = 'waiting-sentinel';
-    await this.show({
-      type: 'show',
-      screen: 'allocated-waiting-sentinel',
-      props: { count: this.allocatedCount },
-    });
-    // Fallback: the agent keeps working (docs, wiring, AskUserQuestion rounds)
-    // for minutes after ports.json appears. If the sentinel never lands,
-    // skip to DONE with the allocation we have.
-    this.setTimer('sentinel', SENTINEL_TIMEOUT_MS, () => {
-      void this.showDone();
-    });
-  }
-
-  private async onSetupComplete(): Promise<void> {
-    if (this.phase !== 'waiting-sentinel') return;
-    this.clearTimer('sentinel');
+    // ports.json landed and the ports are allocated. The agent keeps working
+    // (docs, wiring, PR) and reports back in its own terminal — we don't wait
+    // for a separate "done" signal; surface the result + restart option now.
     await this.showDone();
   }
 

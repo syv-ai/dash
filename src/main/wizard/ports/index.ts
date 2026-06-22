@@ -2,7 +2,7 @@ import { app, type BrowserWindow } from 'electron';
 import path from 'path';
 import * as fs from 'fs';
 import { registerWizard, type RequestStartPayload } from '../wizardRegistry';
-import type { SpawnOpts } from '../../tui/SidecarTuiHost';
+import type { SpawnOpts } from '../WizardHost';
 import { getTuiHost } from '../../tui/hostInstance';
 import { PortsOnboardingWizard } from './PortsOnboardingWizard';
 import { PortsSetupWizard } from './PortsSetupWizard';
@@ -43,10 +43,6 @@ function onboardingSpawn(
     taskId: payload.taskId,
     projectId: payload.projectId,
     cwd: payload.cwd,
-    cols: payload.cols,
-    rows: payload.rows,
-    tabLabel: 'Set up ports?',
-    env: { DASH_TUI_PROJECT_NAME: payload.projectName },
     getMainWindow,
     createWizard: (wiring) =>
       new PortsOnboardingWizard(payload.taskId, payload.projectId, wiring as never, {
@@ -64,8 +60,6 @@ function onboardingSpawn(
             currentProjectId: payload.projectId,
             signals,
             guesses,
-            cols: payload.cols,
-            rows: payload.rows,
             getMainWindow,
           }),
       }),
@@ -76,10 +70,7 @@ function onboardingSpawn(
 function setupSpawn(args: {
   taskId: string;
   projectId: string;
-  projectName: string;
   cwd: string;
-  cols: number;
-  rows: number;
   getMainWindow: () => BrowserWindow | null;
 }): SpawnOpts {
   return {
@@ -87,13 +78,6 @@ function setupSpawn(args: {
     taskId: args.taskId,
     projectId: args.projectId,
     cwd: args.cwd,
-    cols: args.cols,
-    rows: args.rows,
-    tabLabel: 'Set up ports',
-    // The user picked "Set it up" — landing them on the setup TUI is the
-    // point of the migrate, unlike the unrequested onboarding CTA.
-    activate: true,
-    env: { DASH_TUI_PROJECT_NAME: args.projectName },
     getMainWindow: args.getMainWindow,
     createWizard: (wiring) =>
       new PortsSetupWizard(args.taskId, args.projectId, wiring as never, {
@@ -123,8 +107,6 @@ async function handleMigrate(args: {
   currentProjectId: string;
   signals: string[];
   guesses: string[];
-  cols: number;
-  rows: number;
   getMainWindow: () => BrowserWindow | null;
 }): Promise<void> {
   const project = DatabaseService.getProjects().find((p) => p.id === args.currentProjectId);
@@ -153,11 +135,6 @@ async function handleMigrate(args: {
   try {
     const dashDir = path.join(task.path, '.dash');
     if (!fs.existsSync(dashDir)) fs.mkdirSync(dashDir, { recursive: true });
-    // A committed setup-complete from a previous run (pre-gitignore repos)
-    // would land in the fresh worktree; the agent's step 1 deletes it too,
-    // but main owning the reset keeps the DONE trigger trustworthy even if
-    // the agent skips instructions.
-    fs.rmSync(path.join(dashDir, 'setup-complete'), { force: true });
     WorkspacePortsRuntime.setupTask({ taskId: task.id, worktreePath: task.path });
     ensurePortsConfigWatch(task.id, task.path);
   } catch (err) {
@@ -184,20 +161,13 @@ async function handleMigrate(args: {
 
   // Kick off the spawn synchronously so the host's pending set contains the
   // new task before we notify the renderer — its requestStart effect checks
-  // wizard:active (pending ∪ active ∪ suppressed) and bails.
-  //
-  // Don't await the full spawn before sending the IPC: the side-car PTY +
-  // socket dance can take long enough that the user sees the old task's
-  // "migrating" spinner stuck for seconds. We still await afterwards so
-  // failures surface to the onboarding flow's migrate() caller.
+  // wizard:active (pending ∪ active ∪ suppressed) and bails. We still await
+  // afterwards so failures surface to the onboarding flow's migrate() caller.
   const spawnPromise = getTuiHost().spawn(
     setupSpawn({
       taskId: task.id,
       projectId: args.currentProjectId,
-      projectName: project.name,
       cwd: task.path,
-      cols: args.cols,
-      rows: args.rows,
       getMainWindow: args.getMainWindow,
     }),
   );

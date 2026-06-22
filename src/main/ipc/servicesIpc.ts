@@ -90,7 +90,8 @@ export function getServiceRunner(): ServiceRunner {
       liveness: (taskId, hostPort) => portLivenessService.getStates(taskId)[hostPort] ?? 'unknown',
       notifyChanged: (taskId) => broadcast('ports:service:changed', { taskId }),
       toast: (message) => broadcast('app:toast', { message }),
-      focusTab: (taskId, tabId) => broadcast('ports:service:focusTab', { taskId, tabId }),
+      focusTab: (taskId, tabId, opts) =>
+        broadcast('ports:service:focusTab', { taskId, tabId, reset: opts?.reset ?? false }),
       shell: process.env.SHELL || '/bin/sh',
       sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
     });
@@ -127,8 +128,18 @@ export function registerServicesIpc(): void {
     parseArgs('ports:service:startAll', z.string(), taskId);
     return { success: true as const, data: await getServiceRunner().startAll(taskId) };
   });
+  ipcMain.handle('ports:service:stopAll', async (_e, taskId: string) => {
+    parseArgs('ports:service:stopAll', z.string(), taskId);
+    return { success: true as const, data: await getServiceRunner().stopAll(taskId) };
+  });
   ipcMain.handle('ports:service:status', (_e, taskId: string) => {
     parseArgs('ports:service:status', z.string(), taskId);
     return { success: true as const, data: getServiceRunner().status(taskId) };
+  });
+  ipcMain.handle('ports:service:releaseTab', (_e, taskId: string, tabId: string) => {
+    parseArgs('ports:service:releaseTab', z.string(), taskId);
+    parseArgs('ports:service:releaseTab', z.string(), tabId);
+    getServiceRunner().releaseTab(taskId, tabId);
+    return { success: true as const };
   });
 }

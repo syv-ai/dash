@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
-import type { ITheme as XtermTheme } from 'xterm';
+import type { ITheme as XtermTheme } from '@xterm/xterm';
 import type { EditorView } from './types';
 import type { LiveComment } from './comments/types';
 import { useCommentsStore } from '../../stores/commentsStore';

@@ -25,7 +25,7 @@ const STATE_DOT_CLASS: Record<PortLiveness, string> = {
 
 export function PortsPanel({ taskId, ports, liveness, serviceStates }: PortsPanelProps) {
   return (
-    <ul className="flex flex-col gap-0.5 px-2 py-1.5">
+    <ul className="flex flex-col gap-0.5 pl-2 pr-1 py-1.5">
       {ports.map((port) => (
         <PortRow
           key={port.id}
@@ -51,8 +51,13 @@ function PortRow({
   owned: boolean;
 }) {
   const [busy, setBusy] = useState(false);
-  const showStop = state === 'up';
-  const showRun = !showStop && Boolean(port.runCommand);
+  // `owned` (Dash spawned this service and its PTY is alive) is authoritative —
+  // a running service shows as up and offers Stop even before the liveness
+  // probe confirms the port is listening (it may bind late, or on a port the
+  // project didn't wire to the allocated one).
+  const running = owned || state === 'up';
+  const showStop = running;
+  const showRun = !running && Boolean(port.runCommand);
   const showLogs = owned || Boolean(port.logsCommand);
 
   const runStop = async () => {
@@ -66,14 +71,27 @@ function PortRow({
     }
   };
 
+  const dotClass = running
+    ? STATE_DOT_CLASS.up
+    : state === 'unknown'
+      ? STATE_DOT_CLASS.unknown
+      : STATE_DOT_CLASS.down;
+  const statusText =
+    state === 'up'
+      ? 'listening'
+      : owned
+        ? 'running'
+        : state === 'down'
+          ? 'not listening'
+          : 'checking…';
   const url = `http://localhost:${port.hostPort}`;
   const tooltip = `${port.label} · ${SOURCE_LABEL[port.source]}${
     port.envVar ? ` · $${port.envVar}` : ''
-  } · ${state === 'up' ? 'listening' : state === 'down' ? 'not listening' : 'checking…'}`;
+  } · ${statusText}`;
 
   return (
-    <li className="group/row flex items-center gap-1.5 px-1.5 py-[3px] rounded hover:bg-accent">
-      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATE_DOT_CLASS[state]}`} aria-hidden />
+    <li className="group/row flex items-center gap-1.5 pl-1.5 pr-0.5 py-1.5 rounded hover:bg-accent">
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotClass}`} aria-hidden />
       <Tooltip content={tooltip}>
         <button
           type="button"
@@ -102,7 +120,9 @@ function PortRow({
             onClick={() => {
               void runStop();
             }}
-            className="p-[2px] rounded text-muted-foreground/40 hover:text-foreground hover:bg-accent/60 transition-colors disabled:opacity-40"
+            className={`p-[2px] rounded text-muted-foreground/40 hover:bg-accent/60 transition-colors disabled:opacity-40 ${
+              showStop ? 'hover:text-destructive' : 'hover:text-foreground'
+            }`}
           >
             {busy ? (
               <Loader2 size={10} strokeWidth={2} className="animate-spin" />

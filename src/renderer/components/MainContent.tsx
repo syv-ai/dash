@@ -276,11 +276,15 @@ export function MainContent({
           </Tooltip>
         )}
 
-        <Tooltip content={changesPanelCollapsed ? 'Show inspector' : 'Hide inspector'}>
-          <button onClick={onToggleChangesPanel} className={ghostBtn}>
-            <RightToggleIcon size={15} strokeWidth={1.8} />
-          </button>
-        </Tooltip>
+        {/* The inspector toggles the per-task changes panel, which only exists
+            in the task view — not on the project overview. */}
+        {activeTask && (
+          <Tooltip content={changesPanelCollapsed ? 'Show inspector' : 'Hide inspector'}>
+            <button onClick={onToggleChangesPanel} className={ghostBtn}>
+              <RightToggleIcon size={15} strokeWidth={1.8} />
+            </button>
+          </Tooltip>
+        )}
       </div>
     </div>
   );

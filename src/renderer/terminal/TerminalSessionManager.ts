@@ -1,4 +1,4 @@
-import { Terminal } from 'xterm';
+import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -6,7 +6,7 @@ import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { Utf8Base64 } from './Utf8Base64';
 import type { PermissionMode, TerminalSnapshot } from '../../shared/types';
 import { FilePathLinkProvider } from './FilePathLinkProvider';
-import type { ITheme } from 'xterm';
+import type { ITheme } from '@xterm/xterm';
 import { darkTheme, lightTheme, resolveTheme } from './terminalThemes';
 import { getTerminalFont } from './terminalFonts';
 import { ptyExitFallback } from './ptyExitFallback';
@@ -89,9 +89,8 @@ export class TerminalSessionManager {
 
     this.terminal = new Terminal({
       scrollback: 100_000,
-      // Pinned clack TUIs are a compact dialog, not a code terminal — match
-      // the app's chrome size so they don't read oversized.
-      fontSize: this.pinnedTui ? 11 : 13,
+      // Side-car TUIs render at the same size as a regular terminal.
+      fontSize: 13,
       fontFamily: getTerminalFont(),
       lineHeight: 1.2,
       allowProposedApi: true,
@@ -277,16 +276,19 @@ export class TerminalSessionManager {
         });
         this.terminal.loadAddon(webgl);
         return;
-      } catch {
-        // Fall through to canvas
+      } catch (err) {
+        // Fall through to canvas. Not silent: a GPU-renderer failure silently
+        // drops to xterm's DOM renderer, which clips the last glyph of full
+        // rows — log it so that regression is visible, not mysterious.
+        console.warn('[terminal] WebGL renderer failed, trying canvas:', err);
       }
     }
 
     try {
       const { CanvasAddon } = await import('@xterm/addon-canvas');
       this.terminal.loadAddon(new CanvasAddon());
-    } catch {
-      // Software renderer fallback
+    } catch (err) {
+      console.warn('[terminal] Canvas renderer failed, using DOM renderer:', err);
     }
   }
 
@@ -367,8 +369,7 @@ export class TerminalSessionManager {
               clackBlock(
                 'error',
                 'Backing process not running for this tab.',
-                'For a service tab, press Run in the Ports panel to start it again.',
-                'For a Dash TUI tab, close it and re-open the task.',
+                'Press Run in the Ports panel to start it again.',
               ),
             );
             this.ptyStarted = true;
@@ -557,7 +558,8 @@ export class TerminalSessionManager {
         // TUI sessions keep their pinned canvas — fitting here mid-drawer
         // animation shrank the PTY to transitional dims and the side-car's
         // clack frame (which never repaints on resize) rendered garbled.
-        if (!this.pinnedTui) this.fitAddon.fit();
+        // fitTerminal() sizes the xterm grid + syncs the PTY in one place.
+        if (!this.pinnedTui) this.fitTerminal();
         if (opts?.autoFocus !== false) {
           this.terminal.focus();
         }
@@ -566,23 +568,34 @@ export class TerminalSessionManager {
           this.forceScrollToLine(this.savedViewportY);
           this.savedViewportY = null;
         }
-
-        if (this.pinnedTui) return;
-        // Use fit() dedup logic — avoid redundant SIGWINCH that can cause
-        // the shell to redraw while the user is already typing
-        const dims = this.fitAddon.proposeDimensions();
-        if (!dims) return;
-        const cols = this.ptyCols(dims.cols);
-        if (cols !== this.lastPtyCols || dims.rows !== this.lastPtyRows) {
-          this.lastPtyCols = cols;
-          this.lastPtyRows = dims.rows;
-          window.electronAPI.ptyResize({
-            id: this.id,
-            cols,
-            rows: dims.rows,
-          });
-        }
       });
+    }
+  }
+
+  /**
+   * Re-link to a backing PTY that main just respawned under the same id
+   * (service Run-again). Unlike dispose(), this does NOT kill the PTY — main
+   * already started the new process. It drops the stale data/exit listeners,
+   * wipes the dead run's output, and re-runs attach() so ptyStart reattaches
+   * to the new process (claiming ownership + replaying its mirror). Without
+   * this, the cached session keeps ptyStarted=true and never reconnects, so a
+   * live service renders a blank terminal.
+   */
+  async resetForRespawn(): Promise<void> {
+    if (this.disposed) return;
+    if (this.unsubData) {
+      this.unsubData();
+      this.unsubData = null;
+    }
+    if (this.unsubExit) {
+      this.unsubExit();
+      this.unsubExit = null;
+    }
+    this.dataBuffer = null;
+    this.ptyStarted = false;
+    this.terminal.reset();
+    if (this.currentContainer) {
+      await this.attach(this.currentContainer, { autoFocus: true });
     }
   }
 
@@ -797,10 +810,10 @@ export class TerminalSessionManager {
 
   setTerminalFont(fontFamily: string) {
     this.terminal.options.fontFamily = fontFamily;
-    // Cell metrics change when the font does; refit so the PTY's row/col
+    // Cell metrics change when the font does; refit so the grid + PTY row/col
     // dimensions match the new glyph size.
     try {
-      this.fitAddon.fit();
+      this.fitTerminal();
     } catch {
       // Fit can throw if the terminal isn't attached yet; safe to ignore —
       // the next attach() will fit anyway.
@@ -825,6 +838,27 @@ export class TerminalSessionManager {
     return Math.max(1, cols - reserve);
   }
 
+  /**
+   * Size the xterm grid to the container and sync the PTY — the single place
+   * both attach() and the resize observer route through. FitAddon already
+   * subtracts the `.xterm` padding (the gutter) when proposing columns, so the
+   * grid fits with an even margin on both sides; no extra reserve is needed.
+   */
+  private fitTerminal(): void {
+    if (this.pinnedTui) return;
+    const dims = this.fitAddon.proposeDimensions();
+    if (!dims || dims.cols <= 0 || dims.rows <= 0) return;
+    if (this.terminal.cols !== dims.cols || this.terminal.rows !== dims.rows) {
+      this.terminal.resize(dims.cols, dims.rows);
+    }
+    const cols = this.ptyCols(dims.cols);
+    // Skip redundant PTY resizes to avoid SIGWINCH prompt redraw
+    if (cols === this.lastPtyCols && dims.rows === this.lastPtyRows) return;
+    this.lastPtyCols = cols;
+    this.lastPtyRows = dims.rows;
+    window.electronAPI.ptyResize({ id: this.id, cols, rows: dims.rows });
+  }
+
   private fit() {
     // TUI sessions are pinned to TUI_COLS×TUI_ROWS — never fit or resize.
     if (this.pinnedTui) return;
@@ -833,20 +867,7 @@ export class TerminalSessionManager {
       // minimum, which would squash the PTY and desync the shell's prompt
       const containerEl = this.terminal.element?.parentElement;
       if (containerEl && containerEl.clientHeight < 10) return;
-      this.fitAddon.fit();
-      const dims = this.fitAddon.proposeDimensions();
-      if (dims && dims.cols > 0 && dims.rows > 0) {
-        const cols = this.ptyCols(dims.cols);
-        // Skip redundant PTY resizes to avoid SIGWINCH prompt redraw
-        if (cols === this.lastPtyCols && dims.rows === this.lastPtyRows) return;
-        this.lastPtyCols = cols;
-        this.lastPtyRows = dims.rows;
-        window.electronAPI.ptyResize({
-          id: this.id,
-          cols,
-          rows: dims.rows,
-        });
-      }
+      this.fitTerminal();
     } catch {
       // Ignore fit errors during transitions
     }

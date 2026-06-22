@@ -1,8 +1,8 @@
-import type { TuiSocketServer } from '../services/TuiSocketServer';
+import type { WizardChannel } from './WizardChannel';
 import type { MainToTui, TuiToMain } from '../../shared/tuiProtocol';
 
 export interface WizardIo<Show, Choice> {
-  socket: TuiSocketServer<TuiToMain<Choice>, MainToTui<Show>>;
+  socket: WizardChannel<TuiToMain<Choice>, MainToTui<Show>>;
   /**
    * Called exactly once at the end of teardown with the feature's exit
    * reason, or null when teardown was triggered without a TUI-visible exit

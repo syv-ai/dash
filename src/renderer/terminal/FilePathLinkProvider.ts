@@ -1,4 +1,4 @@
-import type { Terminal, ILinkProvider, ILink, IBufferRange } from 'xterm';
+import type { Terminal, ILinkProvider, ILink, IBufferRange } from '@xterm/xterm';
 
 // File extensions to match — strong false-positive guard
 const EXTENSIONS =

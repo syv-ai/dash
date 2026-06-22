@@ -10,6 +10,8 @@ export interface PortsState {
   anyRunnable: boolean;
   /** Every runnable port is up — disables Run-all. */
   allRunnableUp: boolean;
+  /** ≥1 service is running (Dash-owned or listening) — gates Stop-all. */
+  anyRunning: boolean;
   refreshing: boolean;
   hasContent: boolean;
   livenessSummary: { up: number; total: number };
@@ -127,12 +129,20 @@ export function usePortsState(taskId: string | null): PortsState {
     }
   };
 
+  // A service counts as "up" when Dash owns its live PTY OR the liveness probe
+  // sees the port listening — same rule the row dots use, so the header counter
+  // tracks them. A running-but-not-listening service (bound the default port,
+  // not the allocated one) would otherwise leave the counter stuck at 0.
+  const isUp = (p: TaskPort) =>
+    Boolean(serviceStates[p.label]?.ownedTabId) || liveness[p.hostPort] === 'up';
+
   let up = 0;
-  for (const p of ports) if (liveness[p.hostPort] === 'up') up++;
+  for (const p of ports) if (isUp(p)) up++;
 
   const runnable = ports.filter((p) => p.runCommand);
   const anyRunnable = runnable.length > 0;
-  const allRunnableUp = anyRunnable && runnable.every((p) => liveness[p.hostPort] === 'up');
+  const allRunnableUp = anyRunnable && runnable.every(isUp);
+  const anyRunning = ports.some(isUp);
 
   return {
     ports,
@@ -140,6 +150,7 @@ export function usePortsState(taskId: string | null): PortsState {
     serviceStates,
     anyRunnable,
     allRunnableUp,
+    anyRunning,
     refreshing,
     hasContent: ports.length > 0,
     livenessSummary: { up, total: ports.length },

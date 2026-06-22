@@ -1,4 +1,4 @@
-import type { ITheme as XtermTheme } from 'xterm';
+import type { ITheme as XtermTheme } from '@xterm/xterm';
 import { Modal } from '../ui/Modal';
 import type { EditorView } from './types';
 import { DiffEditor } from './DiffEditor';

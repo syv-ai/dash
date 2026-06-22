@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, Plug, RefreshCw, Play, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Plug, RefreshCw, Play, Square, Loader2 } from 'lucide-react';
 import { Tooltip } from '../ui/Tooltip';
 import { PortsPanel } from './PortsPanel';
 import type { PortsState } from './usePortsState';
@@ -17,11 +17,18 @@ const LABEL = 'PORTS';
 export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: PortsDrawerProps) {
   const status = `${state.livenessSummary.up}/${state.livenessSummary.total} up`;
   const [startingAll, setStartingAll] = useState(false);
+  const [stoppingAll, setStoppingAll] = useState(false);
 
   const runAll = () => {
     if (startingAll) return;
     setStartingAll(true);
     void window.electronAPI.portsServiceStartAll(taskId).finally(() => setStartingAll(false));
+  };
+
+  const stopAll = () => {
+    if (stoppingAll) return;
+    setStoppingAll(true);
+    void window.electronAPI.portsServiceStopAll(taskId).finally(() => setStoppingAll(false));
   };
 
   return (
@@ -38,13 +45,8 @@ export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: 
         </button>
       ) : (
         <>
-          <div className="ports-header flex items-center h-8 flex-shrink-0 border-t border-white/[0.08]">
-            <Plug
-              size={12}
-              strokeWidth={1.8}
-              className="flex-shrink-0 ml-3 mr-1.5 text-foreground/80"
-            />
-            <span className="ports-label text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground">
+          <div className="ports-header flex items-center h-10 flex-shrink-0 border-t border-white/[0.08]">
+            <span className="ports-label ml-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground">
               {LABEL}
             </span>
             <span className="ports-status ml-2 text-[10.5px] tabular-nums text-muted-foreground/80">
@@ -63,6 +65,22 @@ export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: 
                     <Loader2 size={11} strokeWidth={2} className="animate-spin" />
                   ) : (
                     <Play size={11} strokeWidth={2} />
+                  )}
+                </button>
+              </Tooltip>
+            )}
+            {state.anyRunnable && (
+              <Tooltip content="Stop all services">
+                <button
+                  type="button"
+                  onClick={stopAll}
+                  disabled={!state.anyRunning || stoppingAll}
+                  className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-destructive transition-colors flex-shrink-0 disabled:opacity-40"
+                >
+                  {stoppingAll ? (
+                    <Loader2 size={11} strokeWidth={2} className="animate-spin" />
+                  ) : (
+                    <Square size={11} strokeWidth={2} />
                   )}
                 </button>
               </Tooltip>

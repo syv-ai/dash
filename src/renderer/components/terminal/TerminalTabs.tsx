@@ -14,7 +14,7 @@ import {
 import { nextShellLabel } from '../../utils/shellTabLabel';
 import { useProjects } from '../../stores/projectsStore';
 import { WIZARDS } from '../../../shared/wizards';
-import { TUI_COLS, TUI_ROWS, type TuiFeatureId } from '../../../shared/tuiProtocol';
+import { type TuiFeatureId } from '../../../shared/tuiProtocol';
 import type { Tab } from '../../../shared/drawerTabs';
 
 /** Minimum drawer height (px) for a side-car TUI's CTA start screen. */
@@ -205,9 +205,17 @@ export function TerminalTabs({
 
   // Logs button with a Dash-owned tab: main asks us to surface that tab.
   useEffect(() => {
-    const off = window.electronAPI.onPortsServiceFocusTab(({ taskId: tid, tabId }) => {
+    const off = window.electronAPI.onPortsServiceFocusTab(({ taskId: tid, tabId, reset }) => {
       if (tid !== taskId) return;
       onExpand();
+      // reset: main respawned this service's PTY under the same id. The cached
+      // session is still bound to the dead process — re-link it (without
+      // killing the new PTY, which dispose() would) so the fresh run's output
+      // actually shows.
+      if (reset) {
+        const session = sessionRegistry.get(tabId);
+        if (session) void session.resetForRespawn();
+      }
       void window.electronAPI.drawerTabsSetActive(taskId, tabId);
     });
     return off;
@@ -254,14 +262,6 @@ export function TerminalTabs({
   }
 
   async function handleLaunchWizard(featureId: TuiFeatureId) {
-    // A live wizard tab already on screen (e.g. an auto-launched "Set up ports"
-    // CTA) can't be re-spawned — focus it instead of silently no-opping. A tui
-    // tab is only present here while its side-car is live; it's closed on exit.
-    const liveTab = tabs.find((t) => t.kind === 'tui' && t.featureId === featureId);
-    if (liveTab) {
-      void window.electronAPI.drawerTabsSetActive(taskId, liveTab.id);
-      return;
-    }
     const { projects, tasksByProject } = useProjects.getState();
     const task = Object.values(tasksByProject)
       .flat()
@@ -269,28 +269,30 @@ export function TerminalTabs({
     const project = task && projects.find((p) => p.id === task.projectId);
     if (!task || !project) return;
     // force: the user explicitly picked the wizard, so re-run it even when it's
-    // already complete, dismissed, or finished this session (the IPC still
-    // refuses to spawn over a genuinely live side-car).
-    const resp = await window.electronAPI.requestWizard({
+    // already dismissed or finished this session. The wizard surfaces as a
+    // persistent toast (no drawer tab).
+    void window.electronAPI.requestWizard({
       featureId,
       taskId,
       projectId: task.projectId,
       taskName: task.name,
       projectName: project.name,
       cwd,
-      cols: TUI_COLS,
-      rows: TUI_ROWS,
       force: true,
     });
-    if (resp.success && resp.data?.started && resp.data.tabId) {
-      void window.electronAPI.drawerTabsSetActive(taskId, resp.data.tabId);
-    }
   }
 
   function handleCloseTab(tabId: string) {
     if (tabs.length <= 1) return;
+    const tab = tabs.find((t) => t.id === tabId);
     void sessionRegistry.dispose(tabId);
     void window.electronAPI.drawerTabsClose(tabId);
+    // Closing a service run tab kills its PTY (dispose → ptyKill); that bypasses
+    // ServiceRunner, so tell it to release ownership and refresh the ports panel
+    // — otherwise the row keeps offering a dead "Stop".
+    if (tab?.kind === 'service') {
+      void window.electronAPI.portsServiceReleaseTab(taskId, tabId);
+    }
   }
 
   function handleSelectTab(tabId: string) {
@@ -303,14 +305,21 @@ export function TerminalTabs({
     // replaces the busy orb for this kind — a side-car is always "running",
     // so the orb carried no signal.
     const isHotTui = tab.kind === 'tui' && !seenTuiIds.has(tab.id);
+    const isActive = tab.id === activeTabId;
+    // No underline. The active (focused) tab — shell or service alike — wears
+    // the port-terminal periwinkle wash as a full-height fill. Inactive tabs
+    // keep a per-kind look so a service tab still reads differently from a
+    // plain shell at rest. Wizard TUIs stay in their own primary tint.
     const colors =
       tab.kind === 'tui'
-        ? tab.id === activeTabId
-          ? 'border-primary bg-primary/20 text-primary'
-          : 'border-transparent bg-primary/10 text-primary/80 hover:text-primary hover:bg-primary/15'
-        : tab.id === activeTabId
-          ? 'border-primary text-foreground'
-          : 'border-transparent text-muted-foreground hover:text-foreground';
+        ? isActive
+          ? 'bg-primary/20 text-primary'
+          : 'bg-primary/10 text-primary/80 hover:text-primary hover:bg-primary/15'
+        : isActive
+          ? 'bg-[hsl(var(--terminal-service)/0.16)] text-foreground'
+          : tab.kind === 'service'
+            ? 'bg-[hsl(var(--terminal-service)/0.06)] text-foreground/60 hover:text-foreground hover:bg-[hsl(var(--terminal-service)/0.11)]'
+            : 'text-muted-foreground hover:text-foreground';
     const closeable = tabs.length > 1;
     const showDot = isHotTui || (tab.kind !== 'tui' && livePtyIds.has(tab.id));
     // Hot wizard = red; live shell/service = green.
@@ -320,7 +329,7 @@ export function TerminalTabs({
     return (
       <div
         key={tab.id}
-        className={`group/tab relative flex items-center justify-center min-w-12 px-3 h-full border-b-2 cursor-pointer transition-colors flex-shrink-0 select-none drawer-tab-in ${colors}`}
+        className={`group/tab relative flex items-center justify-center min-w-12 px-3 h-full cursor-pointer transition-colors flex-shrink-0 select-none drawer-tab-in ${colors}`}
         onClick={() => handleSelectTab(tab.id)}
       >
         <span className="flex items-center gap-1">
@@ -335,10 +344,12 @@ export function TerminalTabs({
             // off with `hidden` — an opacity utility would lose to the animation.
             <span className="relative ml-0.5 inline-flex w-1.5 h-1.5">
               {showDot && (
+                // A running service is a steady state — solid green, not a
+                // pulsing attention-grab. Shells keep the pulse.
                 <span
-                  className={`absolute inset-0 rounded-full status-pulse ${dotColor} ${
-                    closeable ? 'group-hover/tab:hidden' : ''
-                  }`}
+                  className={`absolute inset-0 rounded-full ${dotColor} ${
+                    tab.kind === 'service' ? '' : 'status-pulse'
+                  } ${closeable ? 'group-hover/tab:hidden' : ''}`}
                 />
               )}
               {closeable && (
@@ -382,10 +393,13 @@ export function TerminalTabs({
           <ChevronUp size={12} strokeWidth={1.8} className="ml-auto" />
         </button>
       ) : (
-        <div className="flex items-center h-8 flex-shrink-0 border-t border-white/[0.08] pl-1">
+        <div className="flex items-center h-10 flex-shrink-0 border-t border-white/[0.08] pl-1">
           {/* Tab strip scrolls within its own track so the trailing +/collapse
               controls stay reachable when the panel is narrow or tabs are many. */}
-          <div className="flex items-center flex-1 min-w-0 overflow-x-auto scrollbar-none">
+          {/* h-full so each tab's h-full fill spans the strip top-to-bottom
+              (the wrapper would otherwise collapse to content height, leaving
+              the service-tab wash as a short pill). */}
+          <div className="flex items-center h-full flex-1 min-w-0 overflow-x-auto scrollbar-none">
             {tabs.filter((t) => t.kind !== 'tui').map(renderTab)}
           </div>
           {/* TUI tabs (e.g. ports setup) sit right-aligned and tinted so they read

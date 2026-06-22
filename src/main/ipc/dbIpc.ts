@@ -10,6 +10,7 @@ import {
   stop as stopPortsConfigWatch,
 } from '../services/PortsConfigWatcher';
 import { discardInitialPrompt } from '../services/ptyManager';
+import { getTuiHost } from '../tui/hostInstance';
 
 export function registerDbIpc(): void {
   // ── Projects ─────────────────────────────────────────────
@@ -91,10 +92,12 @@ export function registerDbIpc(): void {
     try {
       parseArgs('db:deleteTask', z.string(), id);
       DatabaseService.deleteTask(id);
-      // The worktree is gone (or about to be) — close the ports watcher
-      // and drop any never-consumed initial prompt.
+      // The worktree is gone (or about to be) — close the ports watcher,
+      // drop any never-consumed initial prompt, and dismiss a lingering
+      // ports-setup toast for this task.
       stopPortsConfigWatch(id);
       discardInitialPrompt(id);
+      void getTuiHost().cancelForTask(id);
       TelemetryService.capture('task_deleted');
       return { success: true };
     } catch (error) {

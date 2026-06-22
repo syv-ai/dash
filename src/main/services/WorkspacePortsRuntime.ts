@@ -12,7 +12,7 @@ const GITIGNORE_FILE = '.gitignore';
 // stack duplicate sections. The wording also tells humans who notice the
 // section that they shouldn't edit it by hand.
 const GITIGNORE_HEADER = '# Dash — port management (generated per-worktree; do not commit)';
-const GITIGNORE_ENTRIES = ['.dash/ports.local.json', '.dash/setup-complete'];
+const GITIGNORE_ENTRIES = ['.dash/ports.local.json'];
 
 export interface SetupTaskArgs {
   taskId: string;

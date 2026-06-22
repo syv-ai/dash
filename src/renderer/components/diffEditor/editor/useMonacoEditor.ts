@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ITheme as XtermTheme } from 'xterm';
+import type { ITheme as XtermTheme } from '@xterm/xterm';
 import type { editor as monacoEditor } from 'monaco-editor';
 import { defineMonacoThemeFromTerminal, themeNameFor } from '../monacoTheme';
 import type { LoadState } from './useFileLoad';

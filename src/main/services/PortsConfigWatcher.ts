@@ -9,7 +9,6 @@ import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
  * that need the same notifications the renderer gets via IPC. Emits:
  *   - 'ports:config'        with { taskId } when ports.json is valid
  *   - 'ports:configError'   with { taskId, errors } when ports.json is invalid
- *   - 'ports:setupComplete' with { taskId } when the sentinel exists
  */
 export const events = new EventEmitter();
 
@@ -19,12 +18,6 @@ export const events = new EventEmitter();
 const DEBOUNCE_MS = 2000;
 const DASH_DIR = '.dash';
 const PORTS_FILE = 'ports.json';
-// Sentinel written by the slash command body as its last action. Watched
-// so the renderer can defer the "Restart session" toast until the agent
-// has actually finished — ports.json appears mid-flow, but the agent
-// keeps working on docs, wiring, and AskUserQuestion rounds for minutes
-// after that, and restarting at the wrong moment kills the in-flight work.
-const SETUP_COMPLETE_FILE = 'setup-complete';
 
 interface WatcherEntry {
   // null when ensureWatching ran before .dash/ existed; every subsequent
@@ -33,7 +26,6 @@ interface WatcherEntry {
   watcher: fs.FSWatcher | null;
   worktreePath: string;
   debounceTimer: ReturnType<typeof setTimeout> | null;
-  sentinelDebounceTimer: ReturnType<typeof setTimeout> | null;
 }
 
 const entries = new Map<string, WatcherEntry>();
@@ -60,7 +52,7 @@ const entries = new Map<string, WatcherEntry>();
 export function ensureWatching(taskId: string, worktreePath: string): void {
   let entry = entries.get(taskId);
   if (!entry) {
-    entry = { watcher: null, worktreePath, debounceTimer: null, sentinelDebounceTimer: null };
+    entry = { watcher: null, worktreePath, debounceTimer: null };
     entries.set(taskId, entry);
   }
   if (!entry.watcher) armWatcher(entry, taskId);
@@ -90,17 +82,6 @@ function armWatcher(entry: WatcherEntry, taskId: string): void {
           notifyConfigChanged(taskId, errors);
         }, DEBOUNCE_MS);
         return;
-      }
-      if (filename === SETUP_COMPLETE_FILE) {
-        const e = entries.get(taskId);
-        if (!e) return;
-        const sentinelPath = path.join(dashDir, SETUP_COMPLETE_FILE);
-        if (!fs.existsSync(sentinelPath)) return;
-        if (e.sentinelDebounceTimer) clearTimeout(e.sentinelDebounceTimer);
-        e.sentinelDebounceTimer = setTimeout(() => {
-          e.sentinelDebounceTimer = null;
-          notifySetupComplete(taskId);
-        }, DEBOUNCE_MS);
       }
     });
   } catch (err) {
@@ -132,7 +113,6 @@ export function stopAll(): void {
 
 function closeEntry(entry: WatcherEntry): void {
   if (entry.debounceTimer) clearTimeout(entry.debounceTimer);
-  if (entry.sentinelDebounceTimer) clearTimeout(entry.sentinelDebounceTimer);
   if (entry.watcher) {
     try {
       entry.watcher.close();
@@ -156,14 +136,5 @@ function notifyConfigChanged(taskId: string, errors: string[]): void {
     events.emit('ports:configError', { taskId, errors });
   } else {
     events.emit('ports:config', { taskId });
-  }
-}
-
-function notifySetupComplete(taskId: string): void {
-  events.emit('ports:setupComplete', { taskId });
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      win.webContents.send('ports:setupComplete', { taskId });
-    }
   }
 }

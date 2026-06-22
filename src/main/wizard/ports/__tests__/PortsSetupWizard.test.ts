@@ -83,20 +83,15 @@ describe('PortsSetupWizard', () => {
     await flush();
     portsEvents.emit('ports:config', { taskId: 'other' });
     await flush();
-    expect(
-      sock.sent.some((m) => m.type === 'show' && m.screen === 'allocated-waiting-sentinel'),
-    ).toBe(false);
+    expect(sock.sent.some((m) => m.type === 'show' && m.screen === 'done')).toBe(false);
     void flow;
   });
 
-  it('ports:config -> ALLOCATED with count', async () => {
+  it('ports:config -> DONE with count', async () => {
     const flow = makeFlow();
     await readyAndConfig(flow);
     expect(
-      sock.sent.some(
-        (m) =>
-          m.type === 'show' && m.screen === 'allocated-waiting-sentinel' && m.props.count === 8,
-      ),
+      sock.sent.some((m) => m.type === 'show' && m.screen === 'done' && m.props.count === 8),
     ).toBe(true);
     expect(services.getPortCount).toHaveBeenCalledWith('t1');
   });
@@ -116,9 +111,7 @@ describe('PortsSetupWizard', () => {
       | undefined;
     expect(invalid?.props.errors).toEqual(['ports[0].envVar must match /^[A-Z_]/']);
     // Did NOT advance past waiting-config.
-    expect(
-      sock.sent.some((m) => m.type === 'show' && m.screen === 'allocated-waiting-sentinel'),
-    ).toBe(false);
+    expect(sock.sent.some((m) => m.type === 'show' && m.screen === 'done')).toBe(false);
     void flow;
   });
 
@@ -131,9 +124,7 @@ describe('PortsSetupWizard', () => {
     await flush();
     portsEvents.emit('ports:config', { taskId: 't1' });
     await flush();
-    expect(
-      sock.sent.some((m) => m.type === 'show' && m.screen === 'allocated-waiting-sentinel'),
-    ).toBe(true);
+    expect(sock.sent.some((m) => m.type === 'show' && m.screen === 'done')).toBe(true);
     void flow;
   });
 
@@ -157,15 +148,6 @@ describe('PortsSetupWizard', () => {
     void flow;
   });
 
-  it('setupComplete -> DONE', async () => {
-    const flow = makeFlow();
-    await readyAndConfig(flow);
-    portsEvents.emit('ports:setupComplete', { taskId: 't1' });
-    await flush();
-    expect(sock.sent.some((m) => m.type === 'show' && m.screen === 'done')).toBe(true);
-    void flow;
-  });
-
   it('duplicate ready mid-flow does not reset to waiting-ports-json', async () => {
     const flow = makeFlow();
     await readyAndConfig(flow);
@@ -175,16 +157,6 @@ describe('PortsSetupWizard', () => {
       (m) => m.type === 'show' && m.screen === 'waiting-ports-json',
     );
     expect(waitingShows).toHaveLength(1);
-    portsEvents.emit('ports:setupComplete', { taskId: 't1' });
-    await flush();
-    expect(sock.sent.some((m) => m.type === 'show' && m.screen === 'done')).toBe(true);
-    void flow;
-  });
-
-  it('sentinel fallback: 20 min after ALLOCATED skips to DONE', async () => {
-    const flow = makeFlow();
-    await readyAndConfig(flow);
-    await vi.advanceTimersByTimeAsync(20 * 60_000 + 1000);
     expect(sock.sent.some((m) => m.type === 'show' && m.screen === 'done')).toBe(true);
     void flow;
   });
@@ -205,8 +177,6 @@ describe('PortsSetupWizard', () => {
   it('DONE + restart -> RESTARTING, restarts sessions, tears down with null reason', async () => {
     const flow = makeFlow();
     await readyAndConfig(flow);
-    portsEvents.emit('ports:setupComplete', { taskId: 't1' });
-    await flush();
     sock.receive({ type: 'choice', screen: 'done', value: 'restart' });
     await vi.advanceTimersByTimeAsync(1000);
     expect(sock.sent.some((m) => m.type === 'show' && m.screen === 'restarting')).toBe(true);
@@ -218,8 +188,6 @@ describe('PortsSetupWizard', () => {
   it('DONE + later exits with later', async () => {
     const flow = makeFlow();
     await readyAndConfig(flow);
-    portsEvents.emit('ports:setupComplete', { taskId: 't1' });
-    await flush();
     sock.receive({ type: 'choice', screen: 'done', value: 'later' });
     await vi.advanceTimersByTimeAsync(300);
     expect(onTeardown).toHaveBeenCalledWith('later');
@@ -233,7 +201,6 @@ describe('PortsSetupWizard', () => {
     await vi.advanceTimersByTimeAsync(300);
     expect(portsEvents.listenerCount('ports:config')).toBe(0);
     expect(portsEvents.listenerCount('ports:configError')).toBe(0);
-    expect(portsEvents.listenerCount('ports:setupComplete')).toBe(0);
     void flow;
   });
 });

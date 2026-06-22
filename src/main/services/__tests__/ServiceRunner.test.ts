@@ -109,6 +109,13 @@ describe('start', () => {
     expect(deps.startPty).toHaveBeenCalledTimes(2);
   });
 
+  it('focuses the tab with reset:true so the renderer re-links to the new PTY', async () => {
+    // The PTY is respawned under the same id; without reset the renderer keeps
+    // a stale session bound to the dead process and the tab renders blank.
+    await runner.start('t1', port({ runCommand: 'pnpm dev' }));
+    expect(deps.focusTab).toHaveBeenCalledWith('t1', 'service:t1:web', { reset: true });
+  });
+
   it('no run command -> error result, no spawn', async () => {
     const r = await runner.start('t1', port({}));
     expect(r.ok).toBe(false);
@@ -200,6 +207,27 @@ describe('startAll', () => {
   });
 });
 
+describe('stopAll', () => {
+  it('stops only running services (Dash-owned or listening), skips idle ones', async () => {
+    const a = port({ label: 'A', hostPort: 1, runCommand: 'a' });
+    const b = port({ label: 'B', hostPort: 2, stopCommand: 'stop-b' });
+    const c = port({ label: 'C', hostPort: 3, stopCommand: 'stop-c' });
+    deps.getPorts.mockReturnValue([a, b, c]);
+    // A is Dash-owned (started below); B is listening (liveness up); C is idle.
+    deps.liveness.mockImplementation((_tid: string, p: number) => (p === 2 ? 'up' : 'down'));
+    await runner.start('t1', a);
+    deps.killPty.mockClear();
+    deps.exec.mockResolvedValue({ code: 0, stderrTail: '' });
+
+    const r = await runner.stopAll('t1');
+
+    expect(deps.killPty).toHaveBeenCalledWith('service:t1:a'); // owned -> PTY kill
+    expect(deps.exec).toHaveBeenCalledWith('stop-b', '/wt'); // listening -> stop command
+    expect(deps.exec).not.toHaveBeenCalledWith('stop-c', '/wt'); // idle -> skipped
+    expect(r.stopped.sort()).toEqual(['A', 'B']);
+  });
+});
+
 describe('service self-exit', () => {
   it('a service dying on its own drops ownership and notifies the panel', async () => {
     const p = port({ runCommand: 'pnpm dev' });
@@ -220,6 +248,21 @@ describe('service self-exit', () => {
     await runner.logs('t1', port({ logsCommand: 'docker compose logs -f web' }));
     const opts = deps.startPty.mock.calls[0]![0] as { onExit?: () => void };
     expect(opts.onExit).toBeUndefined();
+  });
+});
+
+describe('releaseTab', () => {
+  it('drops ownership for a closed run tab and notifies the panel', async () => {
+    const p = port({ runCommand: 'pnpm dev' });
+    deps.getPorts.mockReturnValue([p]);
+    await runner.start('t1', p);
+    expect(runner.status('t1').Web!.ownedTabId).toBe('service:t1:web');
+    deps.notifyChanged.mockClear();
+
+    runner.releaseTab('t1', 'service:t1:web');
+
+    expect(runner.status('t1').Web!.ownedTabId).toBe(null);
+    expect(deps.notifyChanged).toHaveBeenCalledWith('t1');
   });
 });
 

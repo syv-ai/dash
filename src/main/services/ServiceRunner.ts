@@ -51,7 +51,14 @@ export interface RunnerDeps {
   liveness(taskId: string, hostPort: number): PortLiveness;
   notifyChanged(taskId: string): void;
   toast(message: string): void;
-  focusTab(taskId: string, tabId: string): void;
+  /**
+   * Surface a service tab. `reset` tells the renderer the backing PTY was just
+   * respawned under the same id (Run-again): it must re-link its cached session
+   * to the new process instead of clinging to the dead one — otherwise the tab
+   * shows a live service with no output. Plain focus (e.g. Logs on a running
+   * service) omits it.
+   */
+  focusTab(taskId: string, tabId: string, opts?: { reset?: boolean }): void;
   shell: string;
   sleep(ms: number): Promise<void>;
 }
@@ -144,22 +151,29 @@ export class ServiceRunner {
       // id would hit the PK) — close it first; close() is a no-op when absent.
       this.deps.drawerTabsCloseIfExists(tabId);
       this.deps.clearSnapshot(tabId);
-      const tab = this.deps.drawerTabsAdd(taskId, {
+      // Spawn the PTY BEFORE adding the tab: adding the tab makes the renderer
+      // attach, and attaching to a not-yet-spawned PTY shows the "backing
+      // process not running" fallback. With the PTY up first, the tab attaches
+      // to a live process.
+      await this.spawnServicePty(taskId, {
+        id: tabId,
+        cwd: port.cwd ? path.join(taskPath, port.cwd) : taskPath,
+        shellCommand: port.runCommand,
+        // A service dying on its own is a status change the panel must hear
+        // about — start/stop notify explicitly, this covers self-death.
+        onExit: () => this.handleSelfExit(taskId, port.label, tabId),
+      });
+      this.deps.drawerTabsAdd(taskId, {
         kind: 'service',
         label: port.label,
         featureId: 'ports',
         id: tabId,
       });
-      await this.spawnServicePty(taskId, {
-        id: tab.id,
-        cwd: port.cwd ? path.join(taskPath, port.cwd) : taskPath,
-        shellCommand: port.runCommand,
-        // A service dying on its own is a status change the panel must hear
-        // about — start/stop notify explicitly, this covers self-death.
-        onExit: () => this.handleSelfExit(taskId, port.label, tab.id),
-      });
-      this.owned.set(this.key(taskId, port.label), tab.id);
+      this.owned.set(this.key(taskId, port.label), tabId);
       this.deps.notifyChanged(taskId);
+      // reset: the PTY was just (re)spawned under this id — the renderer must
+      // re-link a stale cached session rather than reattach to the dead one.
+      this.deps.focusTab(taskId, tabId, { reset: true });
       return { ok: true };
     } catch (err) {
       const message = `Couldn't start ${port.label}: ${err instanceof Error ? err.message : String(err)}`;
@@ -172,6 +186,21 @@ export class ServiceRunner {
   private handleSelfExit(taskId: string, label: string, tabId: string): void {
     if (this.owned.get(this.key(taskId, label)) !== tabId) return;
     this.owned.delete(this.key(taskId, label));
+    this.deps.notifyChanged(taskId);
+  }
+
+  /**
+   * A service run tab was closed in the UI. Closing it kills the PTY (the tab
+   * teardown calls ptyKill), but that explicit kill bypasses the self-exit hook
+   * — so without this the `owned` entry lingers and the panel keeps showing a
+   * dead "Stop". Drop ownership and notify so the row flips back to "Run". Logs
+   * tabs aren't tracked here, so a non-matching tabId just triggers a harmless
+   * refresh.
+   */
+  releaseTab(taskId: string, tabId: string): void {
+    for (const [key, owned] of this.owned) {
+      if (owned === tabId) this.owned.delete(key);
+    }
     this.deps.notifyChanged(taskId);
   }
 
@@ -241,7 +270,7 @@ export class ServiceRunner {
         cwd: port.cwd ? path.join(taskPath, port.cwd) : taskPath,
         shellCommand: port.logsCommand,
       });
-      this.deps.focusTab(taskId, tab.id);
+      this.deps.focusTab(taskId, tab.id, { reset: true });
       return { ok: true };
     } catch (err) {
       const message = `Couldn't open logs for ${port.label}: ${err instanceof Error ? err.message : String(err)}`;
@@ -267,5 +296,25 @@ export class ServiceRunner {
       this.deps.toast(`Run all: failed to start ${failed.join(', ')}`);
     }
     return { started, failed };
+  }
+
+  async stopAll(taskId: string): Promise<{ stopped: string[]; failed: string[] }> {
+    const stopped: string[] = [];
+    const failed: string[] = [];
+    for (const p of this.deps.getPorts(taskId)) {
+      // Only touch services that are actually running — Dash-owned (live PTY)
+      // or listening on the port. Skip the rest so stop-all stays a no-op on
+      // idle services rather than firing stray stop commands / SIGTERMs.
+      const running =
+        this.ownedTabId(taskId, p.label) !== null ||
+        this.deps.liveness(taskId, p.hostPort) === 'up';
+      if (!running) continue;
+      const r = await this.stop(taskId, p);
+      (r.ok ? stopped : failed).push(p.label);
+    }
+    if (failed.length > 0) {
+      this.deps.toast(`Stop all: failed to stop ${failed.join(', ')}`);
+    }
+    return { stopped, failed };
   }
 }

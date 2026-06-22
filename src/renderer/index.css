@@ -1,4 +1,4 @@
-@import 'xterm/css/xterm.css';
+@import '@xterm/xterm/css/xterm.css';
 
 @tailwind base;
 @tailwind components;
@@ -51,6 +51,11 @@
     --status-idle: 158 64% 52%; /* emerald */
     --status-wait: 25 95% 53%; /* orange */
     --status-unseen: 213 94% 68%; /* blue */
+
+    /* Service ("port") terminals — a muted periwinkle that sits in the cool
+       moonlight family but hue-shifts off the primary blue, so a service tab
+       reads as distinct from neutral shells and wizard TUIs without shouting. */
+    --terminal-service: 248 24% 50%;
 
     /* Diff-comment shade palette. shade-1 is the canonical primary; shade-2
      * is hue-shifted ~+60° and only kicks in when comments partially overlap. */
@@ -123,6 +128,9 @@
     --status-wait: 25 95% 53%; /* orange */
     --status-unseen: 213 94% 68%; /* blue */
 
+    /* Service ("port") terminals — see light-theme note above. */
+    --terminal-service: 250 32% 76%;
+
     --shade-1: 220 35% 80%;
     --shade-2: 280 38% 80%;
 
@@ -166,18 +174,18 @@
 
 /* ── Terminal ─────────────────────────────────────────────── */
 
+/* The xterm padding is the terminal's gutter. `.xterm-screen` is position:
+   relative and sits in normal flow inside this padded content box, so the
+   padding alone insets it on every side — do NOT also offset the screen with
+   `left`/`top` (that double-insets it, shoving content past the right edge).
+   FitAddon subtracts this padding when sizing columns, so the right gutter
+   matches the left. */
 .terminal-container .xterm {
   height: 100%;
   padding-left: 12px;
+  padding-right: 12px;
   padding-top: 10px;
   padding-bottom: 10px;
-}
-
-/* Inset left edge of absolutely-positioned children to match left padding. */
-.terminal-container .xterm .xterm-viewport,
-.terminal-container .xterm .xterm-screen {
-  left: 12px !important;
-  top: 10px !important;
 }
 
 /* Hide xterm scrollbar — Dash sets CLAUDE_CODE_NO_FLICKER=1 so Claude Code manages scrolling internally. */
@@ -191,12 +199,8 @@
 /* Sidebar shell terminal: tighter padding */
 .terminal-drawer .xterm {
   padding-left: 6px;
+  padding-right: 6px;
   padding-top: 4px;
-}
-.terminal-drawer .xterm .xterm-viewport,
-.terminal-drawer .xterm .xterm-screen {
-  left: 6px !important;
-  top: 4px !important;
 }
 .terminal-drawer .xterm .xterm-viewport {
   scrollbar-width: none !important;

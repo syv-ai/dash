@@ -7,7 +7,6 @@ export type PortsShow =
   | { type: 'show'; screen: 'migrating'; props: { newTaskName: string; branchName: string } }
   | { type: 'show'; screen: 'waiting-ports-json' }
   | { type: 'show'; screen: 'config-invalid'; props: { errors: string[] } }
-  | { type: 'show'; screen: 'allocated-waiting-sentinel'; props: { count: number } }
   | { type: 'show'; screen: 'done'; props: { count: number } }
   | { type: 'show'; screen: 'restarting' }
   | { type: 'show'; screen: 'exit'; props: { reason: ExitReason; errorMessage?: string } };

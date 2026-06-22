@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Terminal } from 'xterm';
+import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 
 interface ScaffoldTerminalProps {

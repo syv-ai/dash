@@ -20,8 +20,6 @@ export function registerWizardIpc(opts: { getMainWindow: () => BrowserWindow | n
           taskName: z.string(),
           projectName: z.string(),
           cwd: z.string(),
-          cols: z.number(),
-          rows: z.number(),
           force: z.boolean().optional(),
         }),
         payload,
@@ -53,14 +51,20 @@ export function registerWizardIpc(opts: { getMainWindow: () => BrowserWindow | n
         };
       }
       try {
-        const { tabId } = await host.spawn(wizard.buildSpawn(payload, opts.getMainWindow));
-        return { success: true as const, data: { started: true as const, tabId } };
+        await host.spawn(wizard.buildSpawn(payload, opts.getMainWindow));
+        return { success: true as const, data: { started: true as const } };
       } catch (err) {
         console.error('[wizardIpc] requestStart failed for', featureId, taskId, err);
         return errorResponse(err);
       }
     },
   );
+
+  // The renderer's toast controller sends user choices (and exit/close) back
+  // here; route them into the matching wizard's channel.
+  ipcMain.on('wizard:message', (_e, p: { featureId: string; taskId: string; msg: unknown }) => {
+    getTuiHost().routeMessage(p.featureId, p.taskId, p.msg);
+  });
 
   ipcMain.handle('wizard:active', async (_e, q: { featureId: string; taskId: string }) => {
     parseArgs('wizard:active', z.looseObject({ featureId: z.string(), taskId: z.string() }), q);
@@ -82,12 +86,11 @@ export function registerWizardIpc(opts: { getMainWindow: () => BrowserWindow | n
 }
 
 /**
- * Clean up wizard state left behind by the previous run: orphaned socket files
- * and drawer_tabs rows with kind='tui'/'service' (their owning wizard + side-car
- * are gone; the row would otherwise collide with the next requestStart INSERT).
+ * Clean up wizard state left behind by the previous run: drawer_tabs rows with
+ * kind='service' whose owning runner is gone (the row would otherwise collide
+ * with the next add INSERT).
  */
 export function cleanupWizardsAtBoot(): void {
-  getTuiHost().sweepSockets();
   try {
     initDrawerTabsService().sweepEphemeralTabs();
   } catch (err) {
