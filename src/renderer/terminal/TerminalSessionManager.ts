@@ -459,6 +459,11 @@ export class TerminalSessionManager {
             ? existingSnapshot.data
             : null;
         const restoreData = reattached ? (shellResp.data?.serializedState ?? null) : snapshotData;
+        // [DEBUG-TERM] temporary — diagnosing duplicate prompt repaints on
+        // attach/reattach. Remove once the cause is captured.
+        console.log(
+          `[DEBUG-TERM] attach id=${this.id} reattached=${reattached} restoreLen=${restoreData?.length ?? 0} grid=${this.terminal.cols}x${this.terminal.rows}`,
+        );
         // Fresh spawn, nothing replayed → blank for ~1.5s of dotfile init. Arm
         // the ghost prompt (painted in the rAF below, once the grid is sized).
         showShellPlaceholder = !reattached && !restoreData;
@@ -934,6 +939,12 @@ export class TerminalSessionManager {
     const cols = this.ptyCols(dims.cols);
     // Skip redundant PTY resizes to avoid SIGWINCH prompt redraw
     if (cols === this.lastPtyCols && dims.rows === this.lastPtyRows) return;
+    // [DEBUG-TERM] temporary — log every PTY resize (SIGWINCH source) with the
+    // container height, to confirm whether intermediate animation sizes drive
+    // the duplicate prompt repaints. Remove once captured.
+    console.log(
+      `[DEBUG-TERM] ptyResize id=${this.id} cols ${this.lastPtyCols}->${cols} rows ${this.lastPtyRows}->${dims.rows} containerH=${this.terminal.element?.parentElement?.clientHeight}`,
+    );
     this.lastPtyCols = cols;
     this.lastPtyRows = dims.rows;
     window.electronAPI.ptyResize({ id: this.id, cols, rows: dims.rows });
