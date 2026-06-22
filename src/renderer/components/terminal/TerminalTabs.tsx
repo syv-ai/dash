@@ -329,41 +329,41 @@ export function TerminalTabs({
     return (
       <div
         key={tab.id}
-        className={`group/tab relative flex items-center justify-center min-w-12 px-3 h-full cursor-pointer transition-colors flex-shrink-0 select-none drawer-tab-in ${colors}`}
+        className={`group/tab relative flex items-center justify-center min-w-11 px-2.5 h-full cursor-pointer transition-colors flex-shrink-0 select-none drawer-tab-in ${colors}`}
         onClick={() => handleSelectTab(tab.id)}
       >
-        <span className="flex items-center gap-1">
-          <span className="text-[11px] font-medium">{tab.label}</span>
-          {(showDot || closeable) && (
-            // The status dot and the close button share one trailing slot, so on
-            // hover the "x" lands directly over the pulsing dot rather than beside
-            // it. The dot animates its own opacity (pulse-glow), so it's toggled
-            // off with `hidden` — an opacity utility would lose to the animation.
-            <span className="relative ml-0.5 inline-flex w-1.5 h-1.5">
-              {showDot && (
-                // A running service is a steady state — solid green, not a
-                // pulsing attention-grab. Shells keep the pulse.
-                <span
-                  className={`absolute inset-0 rounded-full ${dotColor} ${
-                    tab.kind === 'service' ? '' : 'status-pulse'
-                  } ${closeable ? 'group-hover/tab:hidden' : ''}`}
-                />
-              )}
-              {closeable && (
-                <button
-                  className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded hidden group-hover/tab:flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleCloseTab(tab.id);
-                  }}
-                  aria-label={`Close terminal ${tab.label}`}
-                >
-                  <X size={10} strokeWidth={2} />
-                </button>
-              )}
-            </span>
-          )}
-        </span>
+        {/* Label is the only flow child so it stays centered in the tab; the
+            status dot / close button float in the right gutter and don't shift
+            it. The dot and "x" share that slot, so on hover the "x" lands over
+            the dot rather than beside it. The dot animates its own opacity
+            (pulse-glow), so it's toggled off with `hidden` — an opacity utility
+            would lose to the animation. */}
+        <span className="text-[11px] font-medium">{tab.label}</span>
+        {(showDot || closeable) && (
+          <span className="absolute right-1 top-1/2 -translate-y-1/2 inline-flex w-1.5 h-1.5">
+            {showDot && (
+              // A running service is a steady state — solid green, not a
+              // pulsing attention-grab. Shells keep the pulse.
+              <span
+                className={`absolute inset-0 rounded-full ${dotColor} ${
+                  tab.kind === 'service' ? '' : 'status-pulse'
+                } ${closeable ? 'group-hover/tab:hidden' : ''}`}
+              />
+            )}
+            {closeable && (
+              <button
+                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded hidden group-hover/tab:flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCloseTab(tab.id);
+                }}
+                aria-label={`Close terminal ${tab.label}`}
+              >
+                <X size={10} strokeWidth={2} />
+              </button>
+            )}
+          </span>
+        )}
       </div>
     );
   }
@@ -457,7 +457,7 @@ export function TerminalTabs({
         ref={containerRef}
         className={`terminal-container terminal-drawer flex-1 min-h-0 ${
           activeTabIsTui ? 'tui-canvas-host' : ''
-        } ${collapsed ? '' : 'px-2 pb-2'}`}
+        } ${collapsed ? '' : 'px-2 pb-1.5'}`}
         style={collapsed ? { height: 0, overflow: 'hidden' } : undefined}
       />
     </div>

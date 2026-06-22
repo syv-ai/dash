@@ -37,14 +37,16 @@ const SHELL_ZLOGIN = `\
 `;
 
 const SHELL_PROMPT = `\
-# Dash minimal prompt — just the cwd's folder name + $ (ANSI 16 colors,
-# themed by xterm.js). %1~ is the trailing path component, re-expanded by
-# zsh on every prompt, so no precmd hook is needed.
+# Dash minimal prompt — the cwd's folder name on its own line, then \`$\` on the
+# next line so the command input gets a full line (reads well even in a narrow
+# terminal). ANSI 16 colors, themed by xterm.js. %1~ is the trailing path
+# component, re-expanded by zsh on every prompt, so no precmd hook is needed.
 
 # Prevent venv from prepending (name) to the prompt.
 export VIRTUAL_ENV_DISABLE_PROMPT=1
 
-PROMPT="%F{12}%1~%f $ "
+PROMPT="%F{12}%1~%f
+$ "
 RPROMPT=""
 `;
 

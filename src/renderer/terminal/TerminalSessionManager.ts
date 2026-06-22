@@ -578,12 +578,13 @@ export class TerminalSessionManager {
           this.terminal.focus();
         }
 
-        // Paint the dim `folder $` ghost now that the grid is sized. Mirrors the
-        // zsh prompt's `%1~` (trailing path component) so the real prompt lands
-        // in the same spot — the wipe-on-first-data below makes the swap seamless.
+        // Paint the dim `folder` / `$` ghost now that the grid is sized. Mirrors
+        // the two-line zsh prompt (folder name, then `$` on the next line) so the
+        // real prompt lands in the same spot — the wipe-on-first-data below makes
+        // the swap seamless.
         if (showShellPlaceholder) {
           const folder = this.cwd.split('/').filter(Boolean).pop() ?? this.cwd;
-          this.terminal.write(`\x1b[2m${folder} $ \x1b[0m`);
+          this.terminal.write(`\x1b[2m${folder}\r\n$ \x1b[0m`);
           this.placeholderActive = true;
         }
 
