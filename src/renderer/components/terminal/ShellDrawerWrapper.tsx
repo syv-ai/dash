@@ -63,7 +63,8 @@ export function ShellDrawerWrapper({
     <div ref={groupRef} className="h-full">
       <PanelGroup direction="vertical" className="h-full">
         <Panel minSize={0}>{children}</Panel>
-        <PanelResizeHandle disabled={collapsed} className="h-[1px] bg-transparent" />
+        {/* Stays live while collapsed so the bar can be dragged back open. */}
+        <PanelResizeHandle className="h-[1px] bg-transparent" />
         <Panel
           ref={panelRef}
           className={animating ? 'panel-transition' : ''}
