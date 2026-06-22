@@ -32,11 +32,11 @@ export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: 
   };
 
   return (
-    <div className="flex flex-col flex-shrink-0 ports-drawer-enter">
+    <div className="flex flex-col h-full ports-drawer-enter">
       {collapsed ? (
         <button
           onClick={onExpand}
-          className="h-7 w-full flex items-center gap-2 px-4 text-foreground/80 hover:text-foreground transition-colors border-t border-white/[0.08] hover:bg-white/[0.04]"
+          className="h-full w-full flex items-center gap-2 px-4 text-foreground/80 hover:text-foreground transition-colors border-t border-white/[0.08] hover:bg-white/[0.04]"
         >
           <span className="text-[11px] font-semibold uppercase tracking-[0.08em]">{LABEL}</span>
           <span className="text-[10.5px] tabular-nums text-muted-foreground/80">{status}</span>
@@ -111,25 +111,19 @@ export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: 
           </button>
         </div>
       )}
-      {/* Animated body — a grid row track that eases 0fr↔1fr smoothly grows and
-          collapses the list, matching the terminal drawer's expand/collapse
-          feel. The inner wrapper clips the list while the track animates. */}
-      <div
-        className={`grid transition-[grid-template-rows] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          collapsed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'
-        }`}
-      >
-        <div className="overflow-hidden">
-          <div className="overflow-y-auto max-h-[50vh]" style={{ scrollbarGutter: 'stable' }}>
-            <PortsPanel
-              taskId={taskId}
-              ports={state.ports}
-              liveness={state.liveness}
-              serviceStates={state.serviceStates}
-            />
-          </div>
+      {/* Scrolling list fills the resizable panel below the header; the panel
+          itself governs the section's height (drag to resize, collapse to the
+          bar above), matching the terminal drawer. */}
+      {!collapsed && (
+        <div className="flex-1 min-h-0 overflow-y-auto" style={{ scrollbarGutter: 'stable' }}>
+          <PortsPanel
+            taskId={taskId}
+            ports={state.ports}
+            liveness={state.liveness}
+            serviceStates={state.serviceStates}
+          />
         </div>
-      </div>
+      )}
     </div>
   );
 }
