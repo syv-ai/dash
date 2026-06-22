@@ -540,7 +540,11 @@ export async function startPty(options: {
 
   const isWin = process.platform === 'win32';
   const shell = isWin ? 'powershell.exe' : process.env.SHELL || '/bin/bash';
-  const args = isWin ? ['-NoLogo'] : ['-il']; // Login + interactive on Unix
+  // Interactive, NOT login. The login files (.zprofile/.zlogin) add ~0.5s to
+  // every fresh shell's first paint, and their main payload — PATH — is already
+  // merged into process.env by fixPath() at boot (which runs `zsh -ilc`), so the
+  // spawned shell inherits it. Skipping login trims the startup without losing PATH.
+  const args = isWin ? ['-NoLogo'] : ['-i'];
 
   // Clean environment for shell
   const env = { ...process.env };

@@ -48,6 +48,11 @@ export class TerminalSessionManager {
   private lastPtyCols = 0;
   private lastPtyRows = 0;
   private savedViewportY: number | null = null;
+  // A fresh shell spawn stays blank for ~1.5s while the user's dotfiles load
+  // before the shell prints its first prompt. We paint a dim `folder $` ghost
+  // the instant the terminal is ready, then wipe it when real output arrives so
+  // the handoff is seamless. True only while the ghost is on screen.
+  private placeholderActive = false;
   readonly shellOnly: boolean;
   readonly isTui: boolean;
   /**
@@ -337,9 +342,15 @@ export class TerminalSessionManager {
     });
     this.resizeObserver.observe(container);
 
+    // Reset per attach — only a fresh shell spawn below re-arms the ghost, so
+    // a reattach (which already has real content) never clears the screen.
+    this.placeholderActive = false;
+
     // Start PTY if not started (first attach)
     let reattached = false;
     let isDirectSpawn = false;
+    // A fresh shell spawn with nothing to restore gets the dim `folder $` ghost.
+    let showShellPlaceholder = false;
     if (!this.ptyStarted) {
       // Buffer PTY data while we start the process and restore the snapshot.
       // connectPtyListeners() checks dataBuffer and pushes into it instead
@@ -438,6 +449,9 @@ export class TerminalSessionManager {
             ? existingSnapshot.data
             : null;
         const restoreData = reattached ? (shellResp.data?.serializedState ?? null) : snapshotData;
+        // Fresh spawn, nothing replayed → blank for ~1.5s of dotfile init. Arm
+        // the ghost prompt (painted in the rAF below, once the grid is sized).
+        showShellPlaceholder = !reattached && !restoreData;
         if (restoreData) {
           try {
             this.terminal.write(restoreData);
@@ -562,6 +576,15 @@ export class TerminalSessionManager {
         if (!this.pinnedTui) this.fitTerminal();
         if (opts?.autoFocus !== false) {
           this.terminal.focus();
+        }
+
+        // Paint the dim `folder $` ghost now that the grid is sized. Mirrors the
+        // zsh prompt's `%1~` (trailing path component) so the real prompt lands
+        // in the same spot — the wipe-on-first-data below makes the swap seamless.
+        if (showShellPlaceholder) {
+          const folder = this.cwd.split('/').filter(Boolean).pop() ?? this.cwd;
+          this.terminal.write(`\x1b[2m${folder} $ \x1b[0m`);
+          this.placeholderActive = true;
         }
 
         if (this.savedViewportY !== null) {
@@ -986,6 +1009,13 @@ export class TerminalSessionManager {
       if (this._isRestarting && !firedDataReady) {
         firedDataReady = true;
         setTimeout(() => this.fireReady(), 800);
+      }
+
+      // Real shell output has arrived — wipe the `folder $` ghost (screen +
+      // scrollback) so the shell's own prompt replaces it cleanly, not below it.
+      if (this.placeholderActive) {
+        this.placeholderActive = false;
+        this.terminal.write('\x1b[2J\x1b[3J\x1b[H');
       }
 
       this.terminal.write(data);
