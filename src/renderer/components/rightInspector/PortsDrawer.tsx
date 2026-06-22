@@ -12,7 +12,7 @@ interface PortsDrawerProps {
   onExpand: () => void;
 }
 
-const LABEL = 'PORTS';
+const LABEL = 'SERVICES';
 
 export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: PortsDrawerProps) {
   const status = `${state.livenessSummary.up}/${state.livenessSummary.total} up`;
@@ -47,70 +47,79 @@ export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: 
           <ChevronUp size={12} strokeWidth={1.8} className="ml-auto" />
         </button>
       ) : (
-        <>
-          <div className="ports-header flex items-center h-10 flex-shrink-0 border-t border-white/[0.08]">
-            <span className="ports-label ml-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground">
-              {LABEL}
-            </span>
-            <span className="ports-status ml-2 text-[10.5px] tabular-nums text-muted-foreground/80">
-              {status}
-            </span>
-            <div className="flex-1" />
-            {state.anyRunnable && (
-              <Tooltip content="Run all services">
-                <button
-                  type="button"
-                  onClick={runAll}
-                  disabled={state.allRunnableUp || startingAll}
-                  className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 disabled:opacity-40"
-                >
-                  {startingAll ? (
-                    <Loader2 size={11} strokeWidth={2} className="animate-spin" />
-                  ) : (
-                    <Play size={11} strokeWidth={2} />
-                  )}
-                </button>
-              </Tooltip>
-            )}
-            {state.anyRunnable && (
-              <Tooltip content="Stop all services">
-                <button
-                  type="button"
-                  onClick={stopAll}
-                  disabled={!state.anyRunning || stoppingAll}
-                  className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-destructive transition-colors flex-shrink-0 disabled:opacity-40"
-                >
-                  {stoppingAll ? (
-                    <Loader2 size={11} strokeWidth={2} className="animate-spin" />
-                  ) : (
-                    <Square size={11} strokeWidth={2} />
-                  )}
-                </button>
-              </Tooltip>
-            )}
-            <Tooltip content="Re-allocate from .dash/ports.json">
+        <div className="ports-header flex items-center h-10 flex-shrink-0 border-t border-white/[0.08]">
+          <span className="ports-label ml-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground">
+            {LABEL}
+          </span>
+          <span className="ports-status ml-2 text-[10.5px] tabular-nums text-muted-foreground/80">
+            {status}
+          </span>
+          <div className="flex-1" />
+          {state.anyRunnable && (
+            <Tooltip content="Run all services">
               <button
                 type="button"
-                onClick={() => {
-                  void state.refresh();
-                }}
-                disabled={state.refreshing}
+                onClick={runAll}
+                disabled={state.allRunnableUp || startingAll}
                 className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 disabled:opacity-40"
               >
-                <RefreshCw
-                  size={11}
-                  strokeWidth={2}
-                  className={state.refreshing ? 'animate-spin' : ''}
-                />
+                {startingAll ? (
+                  <Loader2 size={11} strokeWidth={2} className="animate-spin" />
+                ) : (
+                  <Play size={11} strokeWidth={2} />
+                )}
               </button>
             </Tooltip>
+          )}
+          {state.anyRunnable && (
+            <Tooltip content="Stop all services">
+              <button
+                type="button"
+                onClick={stopAll}
+                disabled={!state.anyRunning || stoppingAll}
+                className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-destructive transition-colors flex-shrink-0 disabled:opacity-40"
+              >
+                {stoppingAll ? (
+                  <Loader2 size={11} strokeWidth={2} className="animate-spin" />
+                ) : (
+                  <Square size={11} strokeWidth={2} />
+                )}
+              </button>
+            </Tooltip>
+          )}
+          <Tooltip content="Re-allocate from .dash/ports.json">
             <button
-              onClick={onCollapse}
-              className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+              type="button"
+              onClick={() => {
+                void state.refresh();
+              }}
+              disabled={state.refreshing}
+              className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 disabled:opacity-40"
             >
-              <ChevronDown size={12} strokeWidth={2} />
+              <RefreshCw
+                size={11}
+                strokeWidth={2}
+                className={state.refreshing ? 'animate-spin' : ''}
+              />
             </button>
-          </div>
+          </Tooltip>
+          <button
+            onClick={onCollapse}
+            className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+          >
+            <ChevronDown size={12} strokeWidth={2} />
+          </button>
+        </div>
+      )}
+      {/* Animated body — a grid row track that eases 0fr↔1fr smoothly grows and
+          collapses the list, matching the terminal drawer's expand/collapse
+          feel. The inner wrapper clips the list while the track animates. */}
+      <div
+        className={`grid transition-[grid-template-rows] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          collapsed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'
+        }`}
+      >
+        <div className="overflow-hidden">
           <div className="overflow-y-auto max-h-[50vh]" style={{ scrollbarGutter: 'stable' }}>
             <PortsPanel
               taskId={taskId}
@@ -119,8 +128,8 @@ export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: 
               serviceStates={state.serviceStates}
             />
           </div>
-        </>
-      )}
+        </div>
+      </div>
     </div>
   );
 }
