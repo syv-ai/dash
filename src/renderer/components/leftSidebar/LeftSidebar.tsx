@@ -85,7 +85,11 @@ export function LeftSidebar({
 
     return (
       <div className="sidebar-shell h-full flex flex-col items-center gap-1">
-        {isMac && <div className="h-[28px] w-full flex-shrink-0 titlebar-drag" />}
+        {/* Top inset: on macOS the 28px draggable strip clears the traffic
+            lights; elsewhere a smaller spacer gives the first item breathing
+            room and aligns it with the main header strip (which has no
+            titlebar spacer but a tall centered h-[52px] row). */}
+        <div className={`w-full flex-shrink-0 ${isMac ? 'h-[28px] titlebar-drag' : 'h-[14px]'}`} />
 
         {showRotation && (
           <>
@@ -245,7 +249,11 @@ export function LeftSidebar({
 
   return (
     <div className="sidebar-shell h-full min-w-0 flex flex-col">
-      {isMac && <div className="h-[28px] flex-shrink-0 titlebar-drag" />}
+      {/* Top inset: on macOS the 28px draggable strip clears the traffic
+          lights; elsewhere a smaller spacer gives "Active tasks" breathing room
+          and aligns it with the main header strip (no titlebar spacer there,
+          but a tall centered h-[52px] row). */}
+      <div className={`flex-shrink-0 ${isMac ? 'h-[28px] titlebar-drag' : 'h-[14px]'}`} />
 
       {/* Rotation section */}
       {showActiveTasksSection && rotationTasks.length > 0 && (
