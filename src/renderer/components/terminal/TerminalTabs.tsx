@@ -1,5 +1,5 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { Terminal, ChevronDown, ChevronUp, X, Plus, Check } from 'lucide-react';
+import React, { useRef, useEffect, useLayoutEffect, useState } from 'react';
+import { Terminal, ChevronDown, ChevronUp, ChevronsRight, X, Plus, Check } from 'lucide-react';
 import { sessionRegistry } from '../../terminal/SessionRegistry';
 import { Tooltip } from '../ui/Tooltip';
 import {
@@ -21,6 +21,50 @@ import type { Tab } from '../../../shared/drawerTabs';
 const MIN_TUI_DRAWER_PX = 300;
 /** Rough canvas px (52 cols × ~8px) if the real measurement never lands. */
 const TUI_COLS_FALLBACK_PX = 420;
+/** Px reserved for the `» N` overflow chip when tabs don't all fit. */
+const OVERFLOW_TRIGGER_PX = 32;
+/** Fallback width for a tab whose real width hasn't been measured yet. */
+const TAB_WIDTH_ESTIMATE_PX = 56;
+
+/**
+ * Split the tab strip into a visible prefix + an overflow set so the visible
+ * tabs fit `trackWidth`. The active tab is always kept visible (never
+ * overflowed); other tabs fill the remaining budget left-to-right and the rest
+ * collapse into the `» N` dropdown. Pure — measured widths come in via `widths`.
+ */
+function computeTabLayout(
+  tabs: Tab[],
+  activeTabId: string | null,
+  trackWidth: number,
+  widths: Map<string, number>,
+): { visibleTabs: Tab[]; overflowTabs: Tab[] } {
+  const widthOf = (t: Tab) => widths.get(t.id) ?? TAB_WIDTH_ESTIMATE_PX;
+  // Not measured yet, or everything fits → show all, no dropdown.
+  if (trackWidth <= 0) return { visibleTabs: tabs, overflowTabs: [] };
+  const total = tabs.reduce((sum, t) => sum + widthOf(t), 0);
+  if (total <= trackWidth) return { visibleTabs: tabs, overflowTabs: [] };
+
+  // Overflow exists — reserve the chip, pin the active tab, fill the rest.
+  const budget = trackWidth - OVERFLOW_TRIGGER_PX;
+  const active = tabs.find((t) => t.id === activeTabId);
+  const fitted = new Set<string>();
+  let used = 0;
+  if (active) {
+    fitted.add(active.id);
+    used += widthOf(active);
+  }
+  for (const t of tabs) {
+    if (fitted.has(t.id)) continue;
+    const w = widthOf(t);
+    if (used + w > budget) break; // contiguous prefix; stop at first that overflows
+    used += w;
+    fitted.add(t.id);
+  }
+  return {
+    visibleTabs: tabs.filter((t) => fitted.has(t.id)),
+    overflowTabs: tabs.filter((t) => !fitted.has(t.id)),
+  };
+}
 
 interface TerminalTabsProps {
   taskId: string;
@@ -57,6 +101,15 @@ export function TerminalTabs({
   // TUI tabs pulse as a "hot" notification until first activated.
   const [seenTuiIds, setSeenTuiIds] = useState<Set<string>>(new Set());
   const pendingFocusRef = useRef<string | null>(null);
+  // Tab-overflow: measured tab widths (by id) + the available track width drive
+  // the split into a visible prefix and a `» N` dropdown. A hidden row lays out
+  // every tab off-screen so even tabs currently in the dropdown have a real
+  // measured width (an estimate would over- or under-fill the bar).
+  const trackRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const tabWidthsRef = useRef<Map<string, number>>(new Map());
+  const [trackWidth, setTrackWidth] = useState(0);
+  const [, setWidthsVersion] = useState(0);
 
   // Subscribe to main's drawer-tabs feed. On first mount of a task that has no
   // rows yet, seed the default shell tab so we don't render an empty header.
@@ -299,6 +352,37 @@ export function TerminalTabs({
     void window.electronAPI.drawerTabsSetActive(taskId, tabId);
   }
 
+  // Track the available width of the tab strip; re-attach the observer when the
+  // drawer expands (the track only exists in the expanded branch).
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const ro = new ResizeObserver(() => setTrackWidth(track.clientWidth));
+    ro.observe(track);
+    setTrackWidth(track.clientWidth);
+    return () => ro.disconnect();
+  }, [collapsed]);
+
+  // Measure every tab from the hidden row (before paint) and cache its width.
+  // Bump the version only when a width actually changed, so this can't loop.
+  // Re-runs when the tab set or live-dot state changes — the inputs that affect
+  // a tab's rendered width.
+  useLayoutEffect(() => {
+    const row = measureRef.current;
+    if (!row) return;
+    let changed = false;
+    row.querySelectorAll<HTMLElement>('[data-tab-id]').forEach((el) => {
+      const id = el.dataset.tabId;
+      if (!id) return;
+      const w = el.offsetWidth;
+      if (w > 0 && tabWidthsRef.current.get(id) !== w) {
+        tabWidthsRef.current.set(id, w);
+        changed = true;
+      }
+    });
+    if (changed) setWidthsVersion((v) => v + 1);
+  }, [tabs, livePtyIds]);
+
   function renderTab(tab: Tab) {
     // TUI tabs are Dash speaking: tinted primary background plus an inline red
     // pulsing dot beside the label until first activated. The dot also
@@ -329,40 +413,37 @@ export function TerminalTabs({
     return (
       <div
         key={tab.id}
+        data-tab-id={tab.id}
         className={`group/tab relative flex items-center justify-center min-w-11 px-2.5 h-full cursor-pointer transition-colors flex-shrink-0 select-none drawer-tab-in ${colors}`}
         onClick={() => handleSelectTab(tab.id)}
       >
-        {/* Label is the only flow child so it stays centered in the tab; the
-            status dot / close button float in the right gutter and don't shift
-            it. The dot and "x" share that slot, so on hover the "x" lands over
-            the dot rather than beside it. The dot animates its own opacity
-            (pulse-glow), so it's toggled off with `hidden` — an opacity utility
-            would lose to the animation. */}
-        <span className="text-[11px] font-medium">{tab.label}</span>
-        {(showDot || closeable) && (
-          <span className="absolute right-1 top-1/2 -translate-y-1/2 inline-flex w-1.5 h-1.5">
-            {showDot && (
-              // A running service is a steady state — solid green, not a
-              // pulsing attention-grab. Shells keep the pulse.
-              <span
-                className={`absolute inset-0 rounded-full ${dotColor} ${
-                  tab.kind === 'service' ? '' : 'status-pulse'
-                } ${closeable ? 'group-hover/tab:hidden' : ''}`}
-              />
-            )}
-            {closeable && (
-              <button
-                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded hidden group-hover/tab:flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleCloseTab(tab.id);
-                }}
-                aria-label={`Close terminal ${tab.label}`}
-              >
-                <X size={10} strokeWidth={2} />
-              </button>
-            )}
-          </span>
+        {/* The label and its activity dot are centered content together — the
+            dot is on equal footing with the text, not tucked into the gutter.
+            Only the transient close button floats absolutely in the right
+            gutter so it never shifts the centered content off-center. */}
+        <span className="flex items-center gap-1">
+          <span className="text-[11px] font-medium">{tab.label}</span>
+          {showDot && (
+            // A running service is a steady state — solid green, not a pulsing
+            // attention-grab. Shells keep the pulse.
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${dotColor} ${
+                tab.kind === 'service' ? '' : 'status-pulse'
+              }`}
+            />
+          )}
+        </span>
+        {closeable && (
+          <button
+            className="absolute right-1 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded hidden group-hover/tab:flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleCloseTab(tab.id);
+            }}
+            aria-label={`Close terminal ${tab.label}`}
+          >
+            <X size={10} strokeWidth={2} />
+          </button>
         )}
       </div>
     );
@@ -371,6 +452,15 @@ export function TerminalTabs({
   const hasUnseenTui = tabs.some((t) => t.kind === 'tui' && !seenTuiIds.has(t.id));
   const hasLiveService = tabs.some((t) => t.kind === 'service' && livePtyIds.has(t.id));
   const activeTabIsTui = activeKind === 'tui';
+
+  // Shell/service tabs live in the scrolling track; TUI tabs are right-aligned.
+  const stripTabs = tabs.filter((t) => t.kind !== 'tui');
+  const { visibleTabs, overflowTabs } = computeTabLayout(
+    stripTabs,
+    activeTabId,
+    trackWidth,
+    tabWidthsRef.current,
+  );
 
   return (
     <div className="h-full flex flex-col">
@@ -396,14 +486,52 @@ export function TerminalTabs({
           <ChevronUp size={12} strokeWidth={1.8} className="ml-auto" />
         </button>
       ) : (
-        <div className="flex items-center h-10 flex-shrink-0 border-t border-white/[0.08] pl-1">
-          {/* Tab strip scrolls within its own track so the trailing +/collapse
-              controls stay reachable when the panel is narrow or tabs are many. */}
+        <div className="relative flex items-center h-10 flex-shrink-0 border-t border-white/[0.08] pl-1">
+          {/* Hidden measuring row — lays out every shell/service tab off-screen
+              so the overflow split below uses real measured widths even for tabs
+              currently collapsed into the dropdown. */}
+          <div
+            ref={measureRef}
+            aria-hidden
+            className="absolute left-0 top-0 flex items-center h-full opacity-0 pointer-events-none"
+          >
+            {stripTabs.map(renderTab)}
+          </div>
+          {/* Tabs that fit render in the track; the rest collapse into a `» N`
+              dropdown so the trailing +/collapse controls stay reachable when
+              the panel is narrow. The active tab is always kept visible. */}
           {/* h-full so each tab's h-full fill spans the strip top-to-bottom
               (the wrapper would otherwise collapse to content height, leaving
               the service-tab wash as a short pill). */}
-          <div className="flex items-center h-full flex-1 min-w-0 overflow-x-auto scrollbar-none">
-            {tabs.filter((t) => t.kind !== 'tui').map(renderTab)}
+          <div ref={trackRef} className="flex items-center h-full flex-1 min-w-0 overflow-hidden">
+            {visibleTabs.map(renderTab)}
+            {overflowTabs.length > 0 && (
+              <DropdownMenu>
+                <Tooltip
+                  content={`${overflowTabs.length} more terminal${overflowTabs.length > 1 ? 's' : ''}`}
+                >
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      className="flex items-center h-full px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors flex-shrink-0"
+                      aria-label={`${overflowTabs.length} more terminals`}
+                    >
+                      <ChevronsRight size={12} strokeWidth={2} />
+                      <span className="tabular-nums">{overflowTabs.length}</span>
+                    </button>
+                  </DropdownMenuTrigger>
+                </Tooltip>
+                <DropdownMenuContent align="end" sideOffset={6}>
+                  {overflowTabs.map((t) => (
+                    <DropdownMenuItem key={t.id} onSelect={() => handleSelectTab(t.id)}>
+                      <span className="flex-1 text-[13px]">{t.label}</span>
+                      {livePtyIds.has(t.id) && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--git-added))]" />
+                      )}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
           {/* TUI tabs (e.g. ports setup) sit right-aligned and tinted so they read
               as Dash speaking, not another terminal. */}
