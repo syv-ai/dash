@@ -64,14 +64,14 @@ class ContextUsageServiceImpl {
         (sum, v) => sum + (typeof v === 'number' ? v : 0),
         0,
       );
+    } else if (typeof cw.used_percentage === 'number') {
+      // Some statusLine payloads report only a percentage (no absolute
+      // current_usage) — a valid shape, not an error. Derive used from it.
+      used = Math.round((cw.used_percentage / 100) * total);
     } else {
-      console.warn(
-        '[ContextUsageService] current_usage missing or unexpected type for ptyId=',
-        ptyId,
-        '— falling back to used_percentage',
-      );
-      const pct = typeof cw.used_percentage === 'number' ? cw.used_percentage : 0;
-      used = Math.round((pct / 100) * total);
+      // Neither absolute usage nor a percentage — genuinely unexpected.
+      console.warn('[ContextUsageService] no current_usage or used_percentage for ptyId=', ptyId);
+      used = 0;
     }
 
     // Compute percentage from used/total to keep fields consistent

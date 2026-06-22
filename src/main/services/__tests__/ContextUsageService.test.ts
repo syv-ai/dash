@@ -48,7 +48,8 @@ describe('ContextUsageService', () => {
       expect(sl.contextUsage.total).toBe(200000);
     });
 
-    it('falls back to used_percentage when current_usage is missing', () => {
+    it('falls back to used_percentage when current_usage is missing (no warning)', () => {
+      const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       contextUsageService.updateFromStatusLine('pty1', {
         context_window: {
           context_window_size: 200000,
@@ -58,6 +59,23 @@ describe('ContextUsageService', () => {
       const sl = contextUsageService.getAllStatusLine()['pty1']!;
       expect(sl.contextUsage.used).toBe(150000);
       expect(sl.contextUsage.percentage).toBeCloseTo(75, 0);
+      // used_percentage-only is a valid payload shape, not a warn-worthy event.
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    it('warns and reports zero usage when both current_usage and used_percentage are missing', () => {
+      const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      contextUsageService.updateFromStatusLine('pty1', {
+        context_window: { context_window_size: 200000 },
+      });
+      const sl = contextUsageService.getAllStatusLine()['pty1']!;
+      expect(sl.contextUsage.used).toBe(0);
+      expect(spy).toHaveBeenCalledWith(
+        '[ContextUsageService] no current_usage or used_percentage for ptyId=',
+        'pty1',
+      );
+      spy.mockRestore();
     });
 
     it('clamps percentage to [0, 100]', () => {
