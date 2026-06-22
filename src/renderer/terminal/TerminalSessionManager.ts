@@ -812,6 +812,13 @@ export class TerminalSessionManager {
       parseInt(ps.getPropertyValue('height')) -
       (parseInt(es.getPropertyValue('padding-top')) +
         parseInt(es.getPropertyValue('padding-bottom')));
+    // A hidden / not-yet-laid-out container yields `auto` dimensions, so
+    // parseInt → NaN. `Math.max(2, NaN)` is NaN (not 2!), which would sail
+    // through the callers and ship a `ptyResize({cols:NaN})` that main drops.
+    // Bail to undefined so the resize is skipped until the layout settles.
+    if (!Number.isFinite(availW) || !Number.isFinite(availH) || availW <= 0 || availH <= 0) {
+      return undefined;
+    }
     return {
       cols: Math.max(2, Math.floor(availW / cell.width)),
       rows: Math.max(1, Math.floor(availH / cell.height)),
@@ -913,7 +920,14 @@ export class TerminalSessionManager {
   private fitTerminal(): void {
     if (this.pinnedTui) return;
     const dims = this.proposeDims();
-    if (!dims || dims.cols <= 0 || dims.rows <= 0) return;
+    if (
+      !dims ||
+      !Number.isFinite(dims.cols) ||
+      !Number.isFinite(dims.rows) ||
+      dims.cols <= 0 ||
+      dims.rows <= 0
+    )
+      return;
     if (this.terminal.cols !== dims.cols || this.terminal.rows !== dims.rows) {
       this.terminal.resize(dims.cols, dims.rows);
     }
