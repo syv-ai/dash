@@ -358,6 +358,16 @@ export class TerminalSessionManager {
       this.dataBuffer = [];
       this.connectPtyListeners();
 
+      // Size the grid to the pane before spawning so the PTY's initial cols
+      // match the visible width. Otherwise the process spawns against xterm's
+      // default 80 cols and visibly reflows once the first rAF fit lands.
+      if (!this.pinnedTui) {
+        const initDims = this.fitAddon.proposeDimensions();
+        if (initDims && initDims.cols > 0 && initDims.rows > 0) {
+          this.terminal.resize(initDims.cols, initDims.rows);
+        }
+      }
+
       if (this.shellOnly) {
         // TUI tabs are backed by a PTY that main spawned via startCommandPty
         // (Clack side-car). If the user reaches this attach path and no PTY
@@ -844,22 +854,16 @@ export class TerminalSessionManager {
     }
   }
 
-  /** Reserve columns so the TUI doesn't render into the right edge. */
-  private static readonly COL_RESERVE = 5;
-  private static readonly COL_RESERVE_SHELL = 1;
-
-  /** Reduce cols for PTY so the TUI leaves a right-side gutter. */
+  /**
+   * Columns handed to the PTY. We give it the full xterm grid width — no
+   * right-side reserve. The reserve existed to keep the old DOM renderer from
+   * clipping the last glyph, but Dash now renders via WebGL (no clip), hides
+   * the scrollbar entirely, and runs Claude Code with CLAUDE_CODE_NO_FLICKER=1
+   * (it manages its own scrolling, so the xterm scrollbar is never used). A
+   * reserve now just leaves dead space on the right.
+   */
   private ptyCols(cols: number): number {
-    // Windows: no col reserve — Ink's cursor positioning drifts from xterm's
-    // grid during streaming if PTY cols < xterm cols, producing garbled output.
-    // Scrollbar clearance is handled by paddingRight on the .xterm element.
-    if (window.electronAPI.getPlatform() === 'win32') {
-      return Math.max(1, cols);
-    }
-    const reserve = this.shellOnly
-      ? TerminalSessionManager.COL_RESERVE_SHELL
-      : TerminalSessionManager.COL_RESERVE;
-    return Math.max(1, cols - reserve);
+    return Math.max(1, cols);
   }
 
   /**

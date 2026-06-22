@@ -425,11 +425,14 @@ export function TerminalTabs({
           <span className="text-[11px] font-medium">{tab.label}</span>
           {showDot && (
             // A running service is a steady state — solid green, not a pulsing
-            // attention-grab. Shells keep the pulse.
+            // attention-grab. Shells keep the pulse. On hover the close button
+            // takes over, so hide the dot with `invisible` (keeps its layout
+            // slot — no recenter jitter — and beats the pulse opacity animation,
+            // which a plain opacity utility would lose to).
             <span
               className={`w-1.5 h-1.5 rounded-full ${dotColor} ${
                 tab.kind === 'service' ? '' : 'status-pulse'
-              }`}
+              } ${closeable ? 'group-hover/tab:invisible' : ''}`}
             />
           )}
         </span>
