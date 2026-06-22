@@ -37,33 +37,15 @@ const SHELL_ZLOGIN = `\
 `;
 
 const SHELL_PROMPT = `\
-# Dash badge-style prompt — uses ANSI 16 colors (themed by xterm.js)
-autoload -Uz add-zsh-hook
+# Dash minimal prompt — just the cwd's folder name + $ (ANSI 16 colors,
+# themed by xterm.js). %1~ is the trailing path component, re-expanded by
+# zsh on every prompt, so no precmd hook is needed.
 
-# Prevent venv from prepending (name) to prompt
+# Prevent venv from prepending (name) to the prompt.
 export VIRTUAL_ENV_DISABLE_PROMPT=1
 
-__dash_prompt_precmd() {
-  # Clack-style two-line prompt, matching the ports side-car TUI:
-  #   ◇  dash  .venv     <- green ◇ on success, red ■ on failure; %1~ dir only
-  #   │  <input>         <- gray gutter bar
-  local sym="%(?.%F{2}◇.%F{1}■)%f"
-  local dir="%F{12}%1~%f"
-
-  local venv=""
-  if [[ -n "\${VIRTUAL_ENV}" ]]; then
-    venv="  %F{6}\${VIRTUAL_ENV:t}%f"
-  fi
-
-  PROMPT="\${sym}  \${dir}\${venv}
-%F{8}│%f  "
-  RPROMPT=""
-}
-
-add-zsh-hook precmd __dash_prompt_precmd
-# Set PROMPT immediately so the first prompt is styled — precmd may not
-# fire before the initial prompt in all zsh configurations.
-__dash_prompt_precmd
+PROMPT="%F{12}%1~%f $ "
+RPROMPT=""
 `;
 
 let shellConfigDir: string | null = null;

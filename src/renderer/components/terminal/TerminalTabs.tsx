@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Terminal, ChevronDown, ChevronUp, X, Plus, ScrollText, Check } from 'lucide-react';
+import { Terminal, ChevronDown, ChevronUp, X, Plus, Check } from 'lucide-react';
 import { sessionRegistry } from '../../terminal/SessionRegistry';
 import { Tooltip } from '../ui/Tooltip';
 import {
@@ -333,9 +333,6 @@ export function TerminalTabs({
         onClick={() => handleSelectTab(tab.id)}
       >
         <span className="flex items-center gap-1">
-          {tab.kind === 'service' && (
-            <ScrollText size={11} strokeWidth={1.8} className="opacity-80" />
-          )}
           <span className="text-[11px] font-medium">{tab.label}</span>
           {(showDot || closeable) && (
             // The status dot and the close button share one trailing slot, so on
@@ -372,6 +369,7 @@ export function TerminalTabs({
   }
 
   const hasUnseenTui = tabs.some((t) => t.kind === 'tui' && !seenTuiIds.has(t.id));
+  const hasLiveService = tabs.some((t) => t.kind === 'service' && livePtyIds.has(t.id));
   const activeTabIsTui = activeKind === 'tui';
 
   return (
@@ -387,8 +385,13 @@ export function TerminalTabs({
         >
           <Terminal size={12} strokeWidth={1.8} />
           <span className="text-[11px] font-semibold uppercase tracking-[0.08em]">{label}</span>
-          {hasUnseenTui && (
+          {hasUnseenTui ? (
             <span className="w-1.5 h-1.5 rounded-full bg-destructive shadow-[0_0_6px_hsl(var(--destructive)/0.6)] status-pulse" />
+          ) : (
+            hasLiveService && (
+              // A running service is a steady state — solid green, no pulse.
+              <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--git-added))] shadow-[0_0_6px_hsl(var(--git-added)/0.55)]" />
+            )
           )}
           <ChevronUp size={12} strokeWidth={1.8} className="ml-auto" />
         </button>
@@ -454,7 +457,7 @@ export function TerminalTabs({
         ref={containerRef}
         className={`terminal-container terminal-drawer flex-1 min-h-0 ${
           activeTabIsTui ? 'tui-canvas-host' : ''
-        }`}
+        } ${collapsed ? '' : 'px-2 pb-2'}`}
         style={collapsed ? { height: 0, overflow: 'hidden' } : undefined}
       />
     </div>

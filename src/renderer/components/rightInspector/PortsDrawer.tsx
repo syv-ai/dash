@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, Plug, RefreshCw, Play, Square, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, RefreshCw, Play, Square, Loader2 } from 'lucide-react';
 import { Tooltip } from '../ui/Tooltip';
 import { PortsPanel } from './PortsPanel';
 import type { PortsState } from './usePortsState';
@@ -38,9 +38,12 @@ export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: 
           onClick={onExpand}
           className="h-7 w-full flex items-center gap-2 px-4 text-foreground/80 hover:text-foreground transition-colors border-t border-white/[0.08] hover:bg-white/[0.04]"
         >
-          <Plug size={12} strokeWidth={1.8} className="text-foreground/80" />
           <span className="text-[11px] font-semibold uppercase tracking-[0.08em]">{LABEL}</span>
           <span className="text-[10.5px] tabular-nums text-muted-foreground/80">{status}</span>
+          {state.anyRunning && (
+            // A running service is a steady state — solid green, no pulse.
+            <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--git-added))] shadow-[0_0_6px_hsl(var(--git-added)/0.55)]" />
+          )}
           <ChevronUp size={12} strokeWidth={1.8} className="ml-auto" />
         </button>
       ) : (
