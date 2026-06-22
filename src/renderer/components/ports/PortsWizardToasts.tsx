@@ -125,12 +125,17 @@ function renderScreen(
               configures them, so Dash can run them from the UI, collision-free.
             </div>
           </Status>
-          <div className="mt-2.5 flex items-center gap-1.5 justify-end">
-            <Button
+          <div className="mt-2.5 flex items-center gap-1.5">
+            {/* The permanent, project-wide dismiss is the least-likely choice, so
+                it sits left and quiet (a bare text link, no button chrome) — that
+                keeps the long label from crowding the two primary actions. */}
+            <button
+              type="button"
               onClick={() => send({ type: 'choice', screen: 'onboarding', value: 'not-relevant' })}
+              className="mr-auto whitespace-nowrap text-[11px] text-muted-foreground/70 hover:text-foreground transition-colors"
             >
-              Never
-            </Button>
+              Never for this project
+            </button>
             <Button
               onClick={() => send({ type: 'choice', screen: 'onboarding', value: 'not-now' })}
             >

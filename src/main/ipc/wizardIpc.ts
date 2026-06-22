@@ -33,9 +33,12 @@ export function registerWizardIpc(opts: { getMainWindow: () => BrowserWindow | n
       // finishes — wait so isActive doesn't report a wizard that's mid-death.
       await getTuiHost().reloadSettled();
       const host = getTuiHost();
+      // A project the user snoozed with "Not now" blocks the auto-offer on
+      // every task in it (treated like a suppressed engagement) — a forced
+      // start from the drawer dropdown still bypasses via `force`.
       const engagement = host.isLive(featureId, taskId)
         ? 'live'
-        : host.isActive(featureId, taskId)
+        : host.isActive(featureId, taskId) || host.isProjectSnoozed(featureId, projectId)
           ? 'suppressed'
           : 'none';
       const decision = decideWizardStart({

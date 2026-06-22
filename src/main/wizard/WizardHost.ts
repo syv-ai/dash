@@ -49,15 +49,29 @@ interface Engagement {
  */
 export class WizardHost {
   private engagements = new Map<string, Engagement>();
+  // Projects the user said "Not now" to this session, keyed `${featureId}:${projectId}`.
+  // Unlike "Never" (persisted in feature_dismissals), this is session-only — a
+  // Dash restart re-offers — but it spans every task in the project, so picking
+  // "Not now" on one task doesn't re-prompt on its siblings.
+  private snoozedProjects = new Set<string>();
   private reloadWork: Promise<void> | null = null;
 
   private key(featureId: string, taskId: string): string {
     return `${featureId}:${taskId}`;
   }
 
+  private projectKey(featureId: string, projectId: string): string {
+    return `${featureId}:${projectId}`;
+  }
+
   /** True once we've engaged this feature+task this session (any state). */
   isActive(featureId: string, taskId: string): boolean {
     return this.engagements.has(this.key(featureId, taskId));
+  }
+
+  /** True when the user picked "Not now" for any task in this project this session. */
+  isProjectSnoozed(featureId: string, projectId: string): boolean {
+    return this.snoozedProjects.has(this.projectKey(featureId, projectId));
   }
 
   /** True only while a wizard is genuinely running (pending or active). */
@@ -98,6 +112,12 @@ export class WizardHost {
           // the key so the user can retry by switching back to the task.
           if (reason === 'error') this.engagements.delete(key);
           else this.engagements.set(key, { state: 'suppressed' });
+          // "Not now" snoozes the whole project for the session so the offer
+          // doesn't reappear on sibling tasks (the per-task suppress above only
+          // covers this one).
+          if (reason === 'not-now') {
+            this.snoozedProjects.add(this.projectKey(opts.featureId, opts.projectId));
+          }
         },
       });
       await wizard.start();
@@ -157,6 +177,7 @@ export class WizardHost {
         }),
       );
       this.engagements.clear();
+      this.snoozedProjects.clear();
     })();
     this.reloadWork = work;
     await work;
