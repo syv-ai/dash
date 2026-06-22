@@ -362,7 +362,7 @@ export class TerminalSessionManager {
       // match the visible width. Otherwise the process spawns against xterm's
       // default 80 cols and visibly reflows once the first rAF fit lands.
       if (!this.pinnedTui) {
-        const initDims = this.fitAddon.proposeDimensions();
+        const initDims = this.proposeDims();
         if (initDims && initDims.cols > 0 && initDims.rows > 0) {
           this.terminal.resize(initDims.cols, initDims.rows);
         }
@@ -413,7 +413,7 @@ export class TerminalSessionManager {
         }
         if (gen !== this.attachGeneration) return;
 
-        const dims = this.fitAddon.proposeDimensions();
+        const dims = this.proposeDims();
         let shellResp = await window.electronAPI.ptyStart({
           id: this.id,
           cwd: this.cwd,
@@ -722,7 +722,7 @@ export class TerminalSessionManager {
     this.ptyStarted = false;
 
     if (this.shellOnly) {
-      const dims = this.fitAddon.proposeDimensions();
+      const dims = this.proposeDims();
       await window.electronAPI.ptyStart({
         id: this.id,
         cwd: this.cwd,
@@ -780,6 +780,44 @@ export class TerminalSessionManager {
     return screen?.offsetWidth ?? 0;
   }
 
+  /**
+   * Columns/rows that fill the padded content box — like FitAddon's
+   * proposeDimensions, but WITHOUT subtracting a scrollbar width. FitAddon
+   * reserves `viewport.scrollBarWidth` (~15-19px) on the right for a scrollbar
+   * we hide entirely (and that Claude's NO_FLICKER mode never uses), which left
+   * the grid short of the right edge — a lopsided gutter. We measure the same
+   * cell size FitAddon uses and divide the full content box by it. Falls back to
+   * FitAddon if xterm's internal render metrics ever move.
+   */
+  private proposeDims(): { cols: number; rows: number } | undefined {
+    const el = this.terminal.element;
+    const parent = el?.parentElement;
+    const cell = (
+      this.terminal as unknown as {
+        _core?: {
+          _renderService?: { dimensions?: { css?: { cell?: { width: number; height: number } } } };
+        };
+      }
+    )._core?._renderService?.dimensions?.css?.cell;
+    if (!el || !parent || !cell?.width || !cell?.height) {
+      return this.fitAddon.proposeDimensions();
+    }
+    const ps = window.getComputedStyle(parent);
+    const es = window.getComputedStyle(el);
+    const availW =
+      Math.max(0, parseInt(ps.getPropertyValue('width'))) -
+      (parseInt(es.getPropertyValue('padding-left')) +
+        parseInt(es.getPropertyValue('padding-right')));
+    const availH =
+      parseInt(ps.getPropertyValue('height')) -
+      (parseInt(es.getPropertyValue('padding-top')) +
+        parseInt(es.getPropertyValue('padding-bottom')));
+    return {
+      cols: Math.max(2, Math.floor(availW / cell.width)),
+      rows: Math.max(1, Math.floor(availH / cell.height)),
+    };
+  }
+
   getSearchAddon(): SearchAddon {
     return this.searchAddon;
   }
@@ -831,7 +869,7 @@ export class TerminalSessionManager {
     // for pinned TUI sessions — clack uses ANSI-16 colors, which xterm
     // re-themes without a repaint.
     if (this.ptyStarted && this.opened && !this.pinnedTui) {
-      const dims = this.fitAddon.proposeDimensions();
+      const dims = this.proposeDims();
       if (dims) {
         const cols = this.ptyCols(dims.cols);
         window.electronAPI.ptyResize({ id: this.id, cols, rows: dims.rows + 1 });
@@ -874,7 +912,7 @@ export class TerminalSessionManager {
    */
   private fitTerminal(): void {
     if (this.pinnedTui) return;
-    const dims = this.fitAddon.proposeDimensions();
+    const dims = this.proposeDims();
     if (!dims || dims.cols <= 0 || dims.rows <= 0) return;
     if (this.terminal.cols !== dims.cols || this.terminal.rows !== dims.rows) {
       this.terminal.resize(dims.cols, dims.rows);
@@ -906,7 +944,7 @@ export class TerminalSessionManager {
     isDirectSpawn: boolean;
     serializedState?: string;
   }> {
-    const dims = this.fitAddon.proposeDimensions();
+    const dims = this.proposeDims();
     const cols = this.ptyCols(dims?.cols ?? 120);
     const rows = dims?.rows ?? 30;
 
@@ -1044,7 +1082,7 @@ export class TerminalSessionManager {
       // Show xterm's real cursor for the shell fallback
       this.terminal.write('\x1b[?25h');
 
-      const dims = this.fitAddon.proposeDimensions();
+      const dims = this.proposeDims();
       void window.electronAPI
         .ptyStart({
           id: this.id,

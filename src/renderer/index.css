@@ -176,16 +176,23 @@
 
 /* The xterm padding is the terminal's gutter. `.xterm-screen` is position:
    relative and sits in normal flow inside this padded content box, so the
-   padding alone insets it on every side — do NOT also offset the screen with
+   padding alone insets it on every side — do NOT offset the screen with
    `left`/`top` (that double-insets it, shoving content past the right edge).
-   FitAddon subtracts this padding when sizing columns, so the right gutter
-   matches the left. */
+   The column math (proposeDims) subtracts this padding when sizing the grid. */
 .terminal-container .xterm {
   height: 100%;
   padding-left: 12px;
   padding-right: 12px;
   padding-top: 10px;
   padding-bottom: 10px;
+}
+
+/* The grid (cols×cellWidth) rarely divides the content box exactly; the leftover
+   floor-remainder would otherwise pile onto the right (and bottom) since the
+   grid is top-left-aligned, reading as a lopsided gutter. Center the grid so the
+   remainder splits evenly on both sides — gutters stay symmetric at any size. */
+.terminal-container .xterm-screen {
+  margin: auto;
 }
 
 /* Hide xterm scrollbar — Dash sets CLAUDE_CODE_NO_FLICKER=1 so Claude Code manages scrolling internally. */
@@ -196,11 +203,12 @@
   display: none !important;
 }
 
-/* Sidebar shell terminal: tighter padding */
+/* Sidebar shell terminal: tighter padding, with a little more breathing room
+   at the top and on the right inside the glass card. */
 .terminal-drawer .xterm {
   padding-left: 6px;
-  padding-right: 6px;
-  padding-top: 4px;
+  padding-right: 10px;
+  padding-top: 8px;
 }
 .terminal-drawer .xterm .xterm-viewport {
   scrollbar-width: none !important;
