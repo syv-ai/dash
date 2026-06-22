@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { installGlobalErrorHandlers } from './services/globalErrorHandler';
 
 const execFileAsync = promisify(execFile);
 
@@ -11,6 +12,12 @@ process.stderr.on('error', (err) => {
   if ((err as NodeJS.ErrnoException).code === 'EPIPE') return;
   throw err;
 });
+
+// ── Global Error Handlers ────────────────────────────────────
+// Last-resort uncaughtException / unhandledRejection handlers: log + report to
+// telemetry, then keep running. Installed before anything else so startup
+// errors are caught too (telemetry.capture no-ops until initialize() runs).
+installGlobalErrorHandlers();
 
 // ── PATH Fix ──────────────────────────────────────────────────
 function fixPath(): void {
@@ -30,7 +37,6 @@ function fixPath(): void {
     );
     // Try to get login shell PATH
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { execSync } = require('child_process');
       const shellPath = execSync('zsh -ilc "echo $PATH"', {
         encoding: 'utf-8',
@@ -88,14 +94,14 @@ if (!gotLock) {
 // ── App Ready ─────────────────────────────────────────────────
 let mainWindow: BrowserWindow | null = null;
 
-app.whenReady().then(async () => {
+void app.whenReady().then(async () => {
   // Initialize telemetry (before anything else, never throws)
   const { TelemetryService } = await import('./services/TelemetryService');
   TelemetryService.initialize();
 
   // Initialize database
   const { DatabaseService } = await import('./services/DatabaseService');
-  await DatabaseService.initialize();
+  DatabaseService.initialize();
 
   // Start hook server (must be ready before any PTY spawns)
   const { hookServer } = await import('./services/HookServer');
@@ -111,9 +117,14 @@ app.whenReady().then(async () => {
   const { createWindow } = await import('./window');
   mainWindow = createWindow();
 
+  // Token stats: bind sender and kick off backfill asynchronously.
+  const { tokenStatsService } = await import('./services/TokenStatsService');
+  tokenStatsService.setSender(mainWindow.webContents);
+  void tokenStatsService.backfillPending();
+
   // Kill PTYs owned by this window on close (CMD+W on macOS)
   mainWindow.on('close', () => {
-    import('./services/ptyManager').then(({ killByOwner }) => {
+    void import('./services/ptyManager').then(({ killByOwner }) => {
       killByOwner(mainWindow!.webContents);
     });
   });
@@ -143,18 +154,40 @@ app.whenReady().then(async () => {
     console.error('[RtkService.warmUp]', err);
   });
 
+  // TUI feature IPC needs the main window for feature broadcasts (e.g.
+  // ports:restart-task); register here (not in registerAllIpc) since that
+  // path doesn't have a window yet.
+  const { registerWizardIpc, cleanupWizardsAtBoot } = await import('./ipc/wizardIpc');
+  const { registerPortsWizard, migrateLegacyPortsDismissals } = await import('./wizard/ports');
+  registerPortsWizard();
+  migrateLegacyPortsDismissals();
+  cleanupWizardsAtBoot();
+  registerWizardIpc({ getMainWindow: () => mainWindow });
+  const { registerServicesIpc } = await import('./ipc/servicesIpc');
+  registerServicesIpc();
+
+  // Crash resilience: persist terminal mirrors every 60s (quit and kill
+  // paths persist too — this only bounds what a hard crash can lose).
+  setInterval(() => {
+    void import('./services/ptyManager').then(({ persistAllMirrors }) => {
+      persistAllMirrors();
+    });
+  }, 60_000);
+
   // Cleanup orphaned reserve worktrees (background, non-blocking)
-  setTimeout(async () => {
-    try {
-      const { worktreePoolService } = await import('./services/WorktreePoolService');
-      await worktreePoolService.cleanupOrphanedReserves();
-    } catch {
-      // Best effort
-    }
+  setTimeout(() => {
+    void (async () => {
+      try {
+        const { worktreePoolService } = await import('./services/WorktreePoolService');
+        await worktreePoolService.cleanupOrphanedReserves();
+      } catch {
+        // Best effort
+      }
+    })();
   }, 2000);
 
   // Detect Claude CLI (cache for settings UI)
-  detectClaudeCli();
+  void detectClaudeCli();
 });
 
 // ── Claude CLI Detection ──────────────────────────────────────
@@ -169,7 +202,7 @@ async function detectClaudeCli(): Promise<void> {
     const findCmd = process.platform === 'win32' ? 'where.exe' : 'which';
     const { stdout } = await execFileAsync(findCmd, ['claude']);
     // where.exe may return multiple lines; take the first
-    const claudePath = stdout.trim().split(/\r?\n/)[0].trim();
+    const claudePath = stdout.trim().split(/\r?\n/)[0]!.trim();
     // .cmd files on Windows must be invoked through cmd.exe
     const { stdout: versionOut } =
       process.platform === 'win32'
@@ -199,102 +232,126 @@ app.on('window-all-closed', () => {
   }
 });
 
-app.on('activate', async () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    const { createWindow } = await import('./window');
-    mainWindow = createWindow();
-    const { activityMonitor } = await import('./services/ActivityMonitor');
-    activityMonitor.start(mainWindow.webContents);
-    const { remoteControlService } = await import('./services/remoteControlService');
-    remoteControlService.setSender(mainWindow.webContents);
-    const { RtkService } = await import('./services/RtkService');
-    RtkService.setSender(mainWindow.webContents);
-    const { contextUsageService } = await import('./services/ContextUsageService');
-    contextUsageService.setSender(mainWindow.webContents);
+app.on('activate', () => {
+  void (async () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      const { createWindow } = await import('./window');
+      mainWindow = createWindow();
+      const { activityMonitor } = await import('./services/ActivityMonitor');
+      activityMonitor.start(mainWindow.webContents);
+      const { remoteControlService } = await import('./services/remoteControlService');
+      remoteControlService.setSender(mainWindow.webContents);
+      const { RtkService } = await import('./services/RtkService');
+      RtkService.setSender(mainWindow.webContents);
+      const { contextUsageService } = await import('./services/ContextUsageService');
+      contextUsageService.setSender(mainWindow.webContents);
+      const { tokenStatsService } = await import('./services/TokenStatsService');
+      tokenStatsService.setSender(mainWindow.webContents);
 
-    // Update auto-updater window reference
-    if (!process.argv.includes('--dev')) {
-      const { AutoUpdateService } = await import('./services/AutoUpdateService');
-      AutoUpdateService.setWindow(mainWindow);
-    }
-  }
-});
-
-app.on('before-quit', async () => {
-  // Signal renderer to save all terminal snapshots before we kill PTYs
-  try {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) {
-        win.webContents.send('app:beforeQuit');
+      // Update auto-updater window reference
+      if (!process.argv.includes('--dev')) {
+        const { AutoUpdateService } = await import('./services/AutoUpdateService');
+        AutoUpdateService.setWindow(mainWindow);
       }
     }
-    // Give renderer a moment to save snapshots
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  } catch {
-    // Best effort
-  }
+  })();
+});
 
-  // Stop auto-updater
-  try {
-    const { AutoUpdateService } = await import('./services/AutoUpdateService');
-    AutoUpdateService.cleanup();
-  } catch {
-    // Best effort
-  }
+// Set once cleanup has finished so the re-issued quit passes straight through.
+let quitCleanupComplete = false;
 
-  // Clean up hook settings from all settings.local.json files before stopping server
-  try {
-    const { cleanupHookSettings } = await import('./services/ptyManager');
-    cleanupHookSettings();
-  } catch {
-    // Best effort
-  }
+app.on('before-quit', (event) => {
+  // Second pass (after cleanup re-issues app.quit()): let the quit proceed.
+  if (quitCleanupComplete) return;
+  // Hold the quit so graceful PTY shutdown (killAll → SIGTERM → flush) can
+  // complete — otherwise the app exits before Claude persists its session tail.
+  event.preventDefault();
 
-  // Stop hook server
-  try {
-    const { hookServer } = await import('./services/HookServer');
-    hookServer.stop();
-  } catch {
-    // Best effort
-  }
+  // Hard safety net: never let a hung cleanup wedge the quit. app.exit bypasses
+  // before-quit entirely and force-terminates.
+  const forceExit = setTimeout(() => app.exit(0), 8000);
 
-  // Kill all PTYs (also stops activity monitor)
-  try {
-    const { killAll } = await import('./services/ptyManager');
-    killAll();
-  } catch {
-    // Best effort
-  }
+  void (async () => {
+    // Terminal persistence happens main-side: killAll() below serializes every
+    // PTY's TerminalMirror to the snapshot files before killing — the renderer
+    // is no longer involved (no app:beforeQuit round-trip needed).
 
-  // Stop context usage service (clears debounce timer)
-  try {
-    const { contextUsageService } = await import('./services/ContextUsageService');
-    contextUsageService.stop();
-  } catch {
-    // Best effort
-  }
+    // Stop auto-updater
+    try {
+      const { AutoUpdateService } = await import('./services/AutoUpdateService');
+      AutoUpdateService.cleanup();
+    } catch {
+      // Best effort
+    }
 
-  // Stop all file watchers
-  try {
-    const { stopAll } = await import('./services/FileWatcherService');
-    stopAll();
-  } catch {
-    // Best effort
-  }
+    // Clean up hook settings from all settings.local.json files before stopping server
+    try {
+      const { cleanupHookSettings } = await import('./services/ptyHookSettings');
+      cleanupHookSettings();
+    } catch {
+      // Best effort
+    }
 
-  // Stop all session watchers
-  try {
-    const { stopAll: stopSessionWatchers } = await import('./services/SessionWatcherService');
-    stopSessionWatchers();
-  } catch {
-    // Best effort
-  }
+    // Stop hook server
+    try {
+      const { hookServer } = await import('./services/HookServer');
+      hookServer.stop();
+    } catch {
+      // Best effort
+    }
 
-  // Flush telemetry
-  try {
-    const { TelemetryService } = await import('./services/TelemetryService');
-    await TelemetryService.shutdown();
-  } catch {
-    // Best effort
-  }
+    // Kill all PTYs (also stops activity monitor). Awaited so each Claude
+    // child gets its SIGTERM flush window before the app exits.
+    try {
+      const { killAll } = await import('./services/ptyManager');
+      await killAll();
+    } catch {
+      // Best effort
+    }
+
+    // Stop context usage service (clears debounce timer)
+    try {
+      const { contextUsageService } = await import('./services/ContextUsageService');
+      contextUsageService.stop();
+    } catch {
+      // Best effort
+    }
+
+    // Stop all file watchers
+    try {
+      const { stopAll } = await import('./services/FileWatcherService');
+      stopAll();
+    } catch {
+      // Best effort
+    }
+
+    // Stop all session watchers
+    try {
+      const { stopAll: stopSessionWatchers } = await import('./services/SessionWatcherService');
+      stopSessionWatchers();
+    } catch {
+      // Best effort
+    }
+
+    // Stop all ports.json watchers
+    try {
+      const { stopAll: stopPortsConfigWatchers } = await import('./services/PortsConfigWatcher');
+      stopPortsConfigWatchers();
+    } catch {
+      // Best effort
+    }
+
+    // Flush telemetry
+    try {
+      const { TelemetryService } = await import('./services/TelemetryService');
+      await TelemetryService.shutdown();
+    } catch {
+      // Best effort
+    }
+
+    // Cleanup done — cancel the safety net and let the re-issued quit through.
+    clearTimeout(forceExit);
+    quitCleanupComplete = true;
+    app.quit();
+  })();
 });

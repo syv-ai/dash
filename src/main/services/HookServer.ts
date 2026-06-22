@@ -1,10 +1,20 @@
 import * as http from 'http';
+import { EventEmitter } from 'events';
 import { BrowserWindow, Notification } from 'electron';
 import { eq } from 'drizzle-orm';
 import { activityMonitor } from './ActivityMonitor';
 import { contextUsageService } from './ContextUsageService';
 import { getDb } from '../db/client';
 import { tasks } from '../db/schema';
+
+/**
+ * In-process event bus for hook events that other main-side services may need
+ * to observe. No internal consumers right now; kept as infrastructure.
+ *
+ * Events:
+ *  - 'permission-prompt'  { ptyId }  — Notification(permission_prompt) fired
+ */
+export const hookEvents = new EventEmitter();
 
 /** Maximum JSON body size for hook payloads (64KB). */
 const MAX_HOOK_BODY_BYTES = 65_536;
@@ -189,6 +199,7 @@ class HookServerImpl {
 
               if (notificationType === 'permission_prompt') {
                 activityMonitor.setWaitingForPermission(ptyId);
+                hookEvents.emit('permission-prompt', { ptyId });
                 const taskName = this.getTaskName(ptyId);
                 const notifBody = message
                   ? `${taskName}: ${message}`
@@ -209,7 +220,6 @@ class HookServerImpl {
           if (pathname === '/hook/context') {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (data) => {
               contextUsageService.updateFromStatusLine(ptyId, data);
-              activityMonitor.noteStatusLine(ptyId);
               res.writeHead(200);
               res.end();
             });
@@ -224,7 +234,15 @@ class HookServerImpl {
                 payload.tool_input && typeof payload.tool_input === 'object'
                   ? (payload.tool_input as Record<string, unknown>)
                   : undefined;
-              activityMonitor.setToolStart(ptyId, toolName, toolInput);
+              // AskUserQuestion is "user attention required", not "Claude is
+              // working" — mirror the Notification(permission_prompt) path.
+              if (toolName === 'AskUserQuestion') {
+                activityMonitor.setWaitingForPermission(ptyId);
+                const taskName = this.getTaskName(ptyId);
+                this.showDesktopNotification(ptyId, `${taskName} is asking a question`);
+              } else {
+                activityMonitor.setToolStart(ptyId, toolName, toolInput);
+              }
               res.writeHead(200);
               res.end();
             });
@@ -232,8 +250,14 @@ class HookServerImpl {
           }
 
           if (pathname === '/hook/tool-end') {
-            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
-              activityMonitor.setToolEnd(ptyId);
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
+              const toolName = typeof payload.tool_name === 'string' ? payload.tool_name : '';
+              if (toolName === 'AskUserQuestion') {
+                // User answered — back to busy (Claude will resume working).
+                activityMonitor.setBusy(ptyId);
+              } else {
+                activityMonitor.setToolEnd(ptyId);
+              }
               res.writeHead(200);
               res.end();
             });
@@ -271,6 +295,27 @@ class HookServerImpl {
           if (pathname === '/hook/compact-end') {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
               activityMonitor.setCompacting(ptyId, false);
+              res.writeHead(200);
+              res.end();
+            });
+            return;
+          }
+
+          if (pathname === '/hook/session-end') {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
+              activityMonitor.setIdle(ptyId);
+              res.writeHead(200);
+              res.end();
+            });
+            return;
+          }
+
+          if (pathname === '/hook/session-start') {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
+              // Settings only register this hook for the `clear` and `compact`
+              // matchers, so reaching here means the session was reset and any
+              // prior busy state is stale. Defensive idle.
+              activityMonitor.setIdle(ptyId);
               res.writeHead(200);
               res.end();
             });

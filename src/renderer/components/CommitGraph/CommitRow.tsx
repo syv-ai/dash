@@ -135,7 +135,7 @@ function GithubLink({
         onClick={(e) => {
           e.stopPropagation();
           e.preventDefault();
-          window.electronAPI.openExternal(href);
+          void window.electronAPI.openExternal(href);
         }}
       >
         {children}

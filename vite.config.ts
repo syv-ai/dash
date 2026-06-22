@@ -9,6 +9,16 @@ export default defineConfig(({ command }) => ({
   build: {
     outDir: '../../dist/renderer',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('/monaco-editor/') || id.includes('/@monaco-editor/react/')) {
+            return 'monaco';
+          }
+          return undefined;
+        },
+      },
+    },
   },
   resolve: {
     alias: {

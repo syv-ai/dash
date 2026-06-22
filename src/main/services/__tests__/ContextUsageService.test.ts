@@ -26,7 +26,7 @@ describe('ContextUsageService', () => {
           current_usage: 100000,
         },
       });
-      const sl = contextUsageService.getAllStatusLine()['pty1'];
+      const sl = contextUsageService.getAllStatusLine()['pty1']!;
       expect(sl.contextUsage.used).toBe(100000);
       expect(sl.contextUsage.total).toBe(200000);
       expect(sl.contextUsage.percentage).toBeCloseTo(50, 0);
@@ -43,21 +43,39 @@ describe('ContextUsageService', () => {
           },
         },
       });
-      const sl = contextUsageService.getAllStatusLine()['pty1'];
+      const sl = contextUsageService.getAllStatusLine()['pty1']!;
       expect(sl.contextUsage.used).toBe(100000);
       expect(sl.contextUsage.total).toBe(200000);
     });
 
-    it('falls back to used_percentage when current_usage is missing', () => {
+    it('falls back to used_percentage when current_usage is missing (no warning)', () => {
+      const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       contextUsageService.updateFromStatusLine('pty1', {
         context_window: {
           context_window_size: 200000,
           used_percentage: 75,
         },
       });
-      const sl = contextUsageService.getAllStatusLine()['pty1'];
+      const sl = contextUsageService.getAllStatusLine()['pty1']!;
       expect(sl.contextUsage.used).toBe(150000);
       expect(sl.contextUsage.percentage).toBeCloseTo(75, 0);
+      // used_percentage-only is a valid payload shape, not a warn-worthy event.
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    it('warns and reports zero usage when both current_usage and used_percentage are missing', () => {
+      const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      contextUsageService.updateFromStatusLine('pty1', {
+        context_window: { context_window_size: 200000 },
+      });
+      const sl = contextUsageService.getAllStatusLine()['pty1']!;
+      expect(sl.contextUsage.used).toBe(0);
+      expect(spy).toHaveBeenCalledWith(
+        '[ContextUsageService] no current_usage or used_percentage for ptyId=',
+        'pty1',
+      );
+      spy.mockRestore();
     });
 
     it('clamps percentage to [0, 100]', () => {
@@ -67,7 +85,7 @@ describe('ContextUsageService', () => {
           current_usage: 200, // 200% of total
         },
       });
-      const sl = contextUsageService.getAllStatusLine()['pty1'];
+      const sl = contextUsageService.getAllStatusLine()['pty1']!;
       expect(sl.contextUsage.percentage).toBe(100);
     });
 
@@ -79,7 +97,7 @@ describe('ContextUsageService', () => {
           current_usage: 50000,
         },
       });
-      const sl = contextUsageService.getAllStatusLine()['pty1'];
+      const sl = contextUsageService.getAllStatusLine()['pty1']!;
       expect(sl.contextUsage.percentage).toBe(0);
       expect(spy).toHaveBeenCalledWith(
         '[ContextUsageService] context_window_size is 0 or missing for ptyId=',
@@ -99,7 +117,7 @@ describe('ContextUsageService', () => {
           total_lines_removed: 50,
         },
       });
-      const sl = contextUsageService.getAllStatusLine()['pty1'];
+      const sl = contextUsageService.getAllStatusLine()['pty1']!;
       expect(sl.cost).toEqual({
         totalCostUsd: 1.5,
         totalDurationMs: 60000,
@@ -117,7 +135,7 @@ describe('ContextUsageService', () => {
           seven_day: { used_percentage: 15, resets_at: 1700100000 },
         },
       });
-      const sl = contextUsageService.getAllStatusLine()['pty1'];
+      const sl = contextUsageService.getAllStatusLine()['pty1']!;
       expect(sl.rateLimits?.fiveHour).toEqual({ usedPercentage: 42, resetsAt: 1700000000 });
       expect(sl.rateLimits?.sevenDay).toEqual({ usedPercentage: 15, resetsAt: 1700100000 });
     });
@@ -127,7 +145,7 @@ describe('ContextUsageService', () => {
         context_window: { context_window_size: 200000, current_usage: 100000 },
         model: 'claude-sonnet-4-20250514',
       });
-      const sl = contextUsageService.getAllStatusLine()['pty1'];
+      const sl = contextUsageService.getAllStatusLine()['pty1']!;
       expect(sl.model).toBe('claude-sonnet-4-20250514');
     });
 
@@ -136,7 +154,7 @@ describe('ContextUsageService', () => {
         context_window: { context_window_size: 200000, current_usage: 100000 },
         model: { display_name: 'Claude Sonnet', id: 'claude-sonnet-4-20250514' },
       });
-      const sl = contextUsageService.getAllStatusLine()['pty1'];
+      const sl = contextUsageService.getAllStatusLine()['pty1']!;
       expect(sl.model).toBe('Claude Sonnet');
     });
 
@@ -145,7 +163,7 @@ describe('ContextUsageService', () => {
         context_window: { context_window_size: 200000, current_usage: 100000 },
         model: { id: 'claude-sonnet-4-20250514' },
       });
-      const sl = contextUsageService.getAllStatusLine()['pty1'];
+      const sl = contextUsageService.getAllStatusLine()['pty1']!;
       expect(sl.model).toBe('claude-sonnet-4-20250514');
     });
 
@@ -157,7 +175,7 @@ describe('ContextUsageService', () => {
           total_duration_ms: null as unknown as number,
         },
       });
-      const sl = contextUsageService.getAllStatusLine()['pty1'];
+      const sl = contextUsageService.getAllStatusLine()['pty1']!;
       expect(sl.cost).toEqual({
         totalCostUsd: 0,
         totalDurationMs: 0,

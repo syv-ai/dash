@@ -9,8 +9,16 @@ import { registerAzureDevOpsIpc } from './azureDevOpsIpc';
 import { registerRtkIpc } from './rtkIpc';
 import { registerTelemetryIpc } from './telemetryIpc';
 import { registerSkillsIpc } from './skillsIpc';
+import { registerPluginsIpc } from './pluginsIpc';
+import { registerExtensionsIpc } from './extensionsIpc';
 import { registerSessionIpc } from './sessionIpc';
-import { registerFileIpc } from './fileIpc';
+import { registerEditorIpc } from './editorIpc';
+import { registerDiffCommentsIpc } from './diffCommentsIpc';
+import { registerTokenStatsIpc } from './tokenStatsIpc';
+import { registerPortsIpc } from './portsIpc';
+import { registerDrawerTabsIpc } from './drawerTabsIpc';
+import { registerWorkspaceConfigIpc } from './workspaceConfigIpc';
+import { registerProjectSourceIpc } from './projectSourceIpc';
 
 export function registerAllIpc(): void {
   registerAppIpc();
@@ -24,6 +32,14 @@ export function registerAllIpc(): void {
   registerRtkIpc();
   registerTelemetryIpc();
   registerSkillsIpc();
+  registerPluginsIpc();
+  registerExtensionsIpc();
   registerSessionIpc();
-  registerFileIpc();
+  registerEditorIpc();
+  registerDiffCommentsIpc();
+  registerTokenStatsIpc();
+  registerPortsIpc();
+  registerDrawerTabsIpc();
+  registerWorkspaceConfigIpc();
+  registerProjectSourceIpc();
 }

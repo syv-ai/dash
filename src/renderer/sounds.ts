@@ -65,7 +65,7 @@ function playUrl(url: string): void {
 
 export function playPeonSound(event: PeonEvent): void {
   const sounds = PEON_SOUNDS[event];
-  const url = sounds[Math.floor(Math.random() * sounds.length)];
+  const url = sounds[Math.floor(Math.random() * sounds.length)]!;
   playUrl(url);
 }
 

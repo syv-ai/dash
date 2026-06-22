@@ -1,6 +1,6 @@
 import { useRef, useState, useCallback } from 'react';
 
-interface DragHandlers {
+export interface DragHandlers {
   onDragStart: (e: React.DragEvent<HTMLElement>) => void;
   onDragOver: (e: React.DragEvent<HTMLElement>) => void;
   onDrop: (e: React.DragEvent<HTMLElement>) => void;
@@ -63,7 +63,7 @@ export function useDragReorder<T extends { id: string }>({
         if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
         const reordered = [...items];
         const [moved] = reordered.splice(fromIdx, 1);
-        reordered.splice(toIdx, 0, moved);
+        reordered.splice(toIdx, 0, moved!);
         onReorder(groupId, reordered);
       },
 

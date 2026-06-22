@@ -1,71 +1,112 @@
 import * as os from 'os';
-import * as fs from 'fs';
-import * as path from 'path';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
-import { type WebContents, app, BrowserWindow } from 'electron';
+import { type WebContents } from 'electron';
 import { activityMonitor } from './ActivityMonitor';
 import { hookServer } from './HookServer';
 import { contextUsageService } from './ContextUsageService';
-import { DatabaseService } from './DatabaseService';
 import { RtkService } from './RtkService';
-import {
-  type Hook,
-  type HookEntry,
-  type HttpHook,
-  type CommandHook,
-  type DashHookEndpoint,
-  type DashHookEvent,
-  DASH_HOOK_EVENTS,
-  entryIsDashOwned,
-  mergeHookEntries,
-} from './hookSettingsMerge';
-import { encodeProjectPath } from '../utils/jsonlParser';
+import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
+import { TerminalMirror } from './TerminalMirror';
+import { terminalSnapshotService } from './TerminalSnapshotService';
+import { ensureShellConfig } from './ptyShellConfig';
+import { findClaudePath, findLatestSessionId } from './claudeCli';
+import { writeHookSettings, setCommitAttributionValue } from './ptyHookSettings';
+import type { PermissionMode } from '@shared/types';
 
-const execFileAsync = promisify(execFile);
-
-/** Exact-match-only project dir lookup. See SessionWatcherService.findProjectDir
- *  for the rationale (PR #117/#124) and `encodeProjectPath` for the platform rules. */
-function findClaudeProjectDir(cwd: string): string | null {
-  try {
-    const projectsDir = path.join(os.homedir(), '.claude', 'projects');
-    const pathBased = path.join(projectsDir, encodeProjectPath(cwd));
-    return fs.existsSync(pathBased) ? pathBased : null;
-  } catch (err) {
-    console.error('[findClaudeProjectDir] Failed to check projects dir:', err);
-    return null;
-  }
-}
-
-/** Check whether Claude has any jsonl history for this cwd. */
-function hasAnySessionForCwd(cwd: string): boolean {
-  const projDir = findClaudeProjectDir(cwd);
-  if (!projDir) return false;
-  try {
-    return fs.readdirSync(projDir).some((f) => f.endsWith('.jsonl'));
-  } catch {
-    return false;
-  }
-}
+export type PtyKind = 'agent' | 'shell' | 'tui' | 'service';
 
 interface PtyRecord {
   proc: any; // IPty from node-pty
   cwd: string;
   isDirectSpawn: boolean;
   owner: WebContents | null;
+  kind: PtyKind;
+  taskId: string | null;
+  featureId: string | null;
+  /**
+   * Headless xterm mirror fed every output chunk (the VS Code pty-host
+   * pattern). Serialized on reattach so a fresh renderer xterm shows the
+   * full terminal state — including output emitted while no renderer was
+   * attached. Persisted to the snapshot files on kill/exit/quit.
+   */
+  mirror: TerminalMirror | null;
 }
 
 const ptys = new Map<string, PtyRecord>();
 
-/** Tracks all settings.local.json paths Dash has written hooks to, for cleanup on exit. */
-const writtenSettingsPaths = new Set<string>();
+/** Persist a mirror's state to the snapshot files (sync — quit-safe). */
+function persistMirrorSync(id: string, mirror: TerminalMirror): void {
+  try {
+    const data = mirror.serializeNow();
+    if (!data) return;
+    const { cols, rows } = mirror.dims();
+    terminalSnapshotService
+      .saveSnapshot(id, {
+        version: 1,
+        createdAt: new Date().toISOString(),
+        cols,
+        rows,
+        data,
+      })
+      .catch(() => {
+        // Persistence is best-effort (also: no `app` under test env).
+      });
+  } catch {
+    // Persistence is best-effort.
+  }
+}
 
-const DASH_DEFAULT_ATTRIBUTION =
-  '\n\nCo-Authored-By: Claude <noreply@anthropic.com> via Dash <dash@syv.ai>';
+/** Detach, persist, and dispose a record's mirror (kill/exit paths). */
+function persistAndDisposeMirror(id: string, record: PtyRecord): void {
+  const mirror = record.mirror;
+  record.mirror = null;
+  if (!mirror) return;
+  // TUI tabs never restore from file snapshots (their side-car is torn down
+  // and re-offered instead) — persisting would only leave orphan files.
+  if (record.kind !== 'tui') persistMirrorSync(id, mirror);
+  mirror.dispose();
+}
 
-// Commit attribution setting: undefined = "default" (use Dash attribution),
-// '' = "none" (suppress attribution), any other string = custom text.
-let commitAttributionSetting: string | undefined = undefined;
+/** Serialize every live mirror to disk — before-quit + crash-resilience interval. */
+export function persistAllMirrors(): void {
+  for (const [id, record] of ptys) {
+    if (record.kind === 'tui') continue;
+    if (record.mirror) persistMirrorSync(id, record.mirror);
+  }
+}
+
+/**
+ * Per-task initial prompt to pass as `claude`'s positional argument when the
+ * task's agent PTY is spawned. Used by the ports onboarding migrate path:
+ * the full inlined setup-prompt body (see PortsSetupPrompt) is stashed here
+ * before the renderer triggers the spawn, so CC auto-submits it as soon as
+ * the trust-this-directory gate clears — no post-spawn keystroke injection
+ * needed (which previously raced first-run gates and flashed visibly in the
+ * input box).
+ *
+ * Single-use: consumed (and removed) by startDirectPty's first spawn. A
+ * re-attach to an existing PTY is a no-op — the prompt only applies to the
+ * very first claude process for the task. Consequence: if that first spawn
+ * dies before the user accepts the trust gate, the prompt is gone and a
+ * respawn starts a plain session (the ports TUI then surfaces its
+ * 30-minute timeout). The consumption breadcrumb in the ports debug log is
+ * the trail for diagnosing that.
+ */
+const pendingInitialPrompts = new Map<string, string>();
+
+export function setInitialPrompt(taskId: string, prompt: string): void {
+  pendingInitialPrompts.set(taskId, prompt);
+}
+
+function consumeInitialPrompt(taskId: string): string | undefined {
+  const prompt = pendingInitialPrompts.get(taskId);
+  if (prompt !== undefined) pendingInitialPrompts.delete(taskId);
+  return prompt;
+}
+
+/** Test/cleanup hook: drop a stashed prompt without spawning. */
+export function discardInitialPrompt(taskId: string): void {
+  pendingInitialPrompts.delete(taskId);
+}
 
 // Custom environment variables passed to spawned Claude processes (set from renderer settings).
 let claudeEnvVars: Record<string, string> = {};
@@ -73,10 +114,10 @@ let claudeEnvVars: Record<string, string> = {};
 // When true, inherit the full parent process.env as a base instead of the minimal set.
 let syncShellEnv = false;
 
-// When true, launch Claude sessions with ultracode (xhigh reasoning + workflow
-// orchestration) via `--settings '{"ultracode":true}'`. ultracode is session-only
-// and can't be set through CLAUDE_CODE_EFFORT_LEVEL or --effort, so it's applied
-// per-spawn here rather than through the effort env var.
+// When true, launch Claude sessions in ultracode (X-High reasoning + multi-agent
+// workflow orchestration) via `--settings '{"ultracode":true}'`. ultracode is
+// session-only and can't be set through CLAUDE_CODE_EFFORT_LEVEL or --effort, so
+// it's applied per-spawn here rather than through the effort env var.
 let ultracode = false;
 
 const RESERVED_ENV_KEYS = new Set([
@@ -87,10 +128,13 @@ const RESERVED_ENV_KEYS = new Set([
   'COLORTERM',
   'TERM_PROGRAM',
   'COLORFGBG',
+  // Dash owns this — it points hooks at the live HookServer port. A user/ports
+  // override would misroute or break the no-op-outside-Dash guard.
+  'DASH_HOOK_PORT',
 ]);
 
 export function setCommitAttribution(value: string | undefined): void {
-  commitAttributionSetting = value;
+  setCommitAttributionValue(value);
   refreshActivePtyHooks();
 }
 
@@ -113,6 +157,12 @@ export interface RefreshResult {
 export function refreshActivePtyHooks(): RefreshResult {
   const failures: RefreshFailure[] = [];
   for (const [id, rec] of ptys) {
+    // Shell PTYs (terminal drawer) share cwd with the task PTY but don't run
+    // Claude Code and aren't tracked by ActivityMonitor. Writing hook settings
+    // for them clobbers the task's settings.local.json with `ptyId=shell:…`,
+    // so every subsequent hook event lands in ActivityMonitor's no-op branch
+    // and the task's activity dot freezes on whatever it was last showing.
+    if (!rec.isDirectSpawn) continue;
     const result = writeHookSettings(rec.cwd, id);
     if (!result.ok) {
       failures.push({ settingsPath: result.settingsPath, error: result.error });
@@ -164,81 +214,12 @@ function getPty() {
 import { createBannerFilter } from './bannerFilter';
 import { remoteControlService } from './remoteControlService';
 
-// Cached Claude CLI path
-let cachedClaudePath: string | null = null;
-
-async function findClaudePath(): Promise<string | null> {
-  if (cachedClaudePath) return cachedClaudePath;
-
-  // 1. Check the startup-detected cache from main.ts
-  try {
-    const { claudeCliCache } = await import('../main');
-    if (claudeCliCache.path) {
-      cachedClaudePath = claudeCliCache.path;
-      return cachedClaudePath;
-    }
-  } catch {
-    // Best effort
-  }
-
-  // 2. Try `which`/`where.exe` (works when PATH is correct)
-  try {
-    const findCmd = process.platform === 'win32' ? 'where.exe' : 'which';
-    const { stdout } = await execFileAsync(findCmd, ['claude']);
-    // where.exe may return multiple lines; prefer .cmd on Windows
-    const lines = stdout.trim().split(/\r?\n/).filter(Boolean);
-    const resolved =
-      process.platform === 'win32'
-        ? (lines.find((l) => l.toLowerCase().endsWith('.cmd')) || lines[0])?.trim()
-        : lines[0]?.trim();
-    if (resolved) {
-      cachedClaudePath = resolved;
-      return cachedClaudePath;
-    }
-  } catch {
-    // Not in PATH
-  }
-
-  // 3. Direct probe common install locations
-  const home = os.homedir();
-  const candidates: string[] =
-    process.platform === 'win32'
-      ? [
-          path.join(
-            process.env.APPDATA || path.join(home, 'AppData', 'Roaming'),
-            'npm',
-            'claude.cmd',
-          ),
-          path.join(home, 'AppData', 'Local', 'Programs', 'nodejs', 'claude.cmd'),
-          path.join('C:\\Program Files\\nodejs', 'claude.cmd'),
-          // Version managers: check their env-var-based directories
-          ...(process.env.NVM_SYMLINK ? [path.join(process.env.NVM_SYMLINK, 'claude.cmd')] : []),
-          ...(process.env.VOLTA_HOME
-            ? [path.join(process.env.VOLTA_HOME, 'bin', 'claude.cmd')]
-            : []),
-        ]
-      : [path.join(home, '.local/bin/claude'), '/opt/homebrew/bin/claude', '/usr/local/bin/claude'];
-  for (const candidate of candidates) {
-    try {
-      const accessMode = process.platform === 'win32' ? fs.constants.F_OK : fs.constants.X_OK;
-      await fs.promises.access(candidate, accessMode);
-      cachedClaudePath = candidate;
-      return cachedClaudePath;
-    } catch {
-      // Not found here
-    }
-  }
-
-  console.error('[findClaudePath] Claude CLI not found in any known location');
-  return null;
-}
-
 /**
  * Build environment for direct CLI spawn.
  * When syncShellEnv is off (default), uses a minimal set for fast, predictable spawns.
  * When on, inherits the full parent process.env as a base.
  */
-function buildDirectEnv(isDark: boolean): Record<string, string> {
+function buildDirectEnv(isDark: boolean, cwd?: string): Record<string, string> {
   const isWin = process.platform === 'win32';
   const base: Record<string, string> = syncShellEnv
     ? Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => !!e[1]))
@@ -320,59 +301,33 @@ function buildDirectEnv(isDark: boolean): Record<string, string> {
     }
   }
 
+  // Merge per-task port env vars (FRONTEND_PORT=…, etc) so commands run by
+  // Claude resolve the same host port the user sees in the ports panel.
+  // After user settings so a project never accidentally clobbers an allocated
+  // port; before the CLAUDE_CODE_NO_FLICKER line so reserved-key checks above
+  // would still apply if a user declared one in .dash/ports.json (the schema
+  // enforces an allowlist regex; the RESERVED_ENV_KEYS list is a defense in
+  // depth not really expected to fire here).
+  if (cwd) {
+    for (const [key, value] of Object.entries(WorkspacePortsRuntime.getEnvForWorktree(cwd))) {
+      if (!RESERVED_ENV_KEYS.has(key)) env[key] = value;
+    }
+  }
+
   // Disable Claude Code's built-in viewport scrolling — Dash uses its own terminal viewport
   env.CLAUDE_CODE_NO_FLICKER = '1';
 
+  // The HookServer port for this Dash session. ptyHookSettings writes hooks as
+  // guarded curl commands that read $DASH_HOOK_PORT at runtime: present here →
+  // they reach Dash; absent (a session the user launched outside Dash) → the
+  // `[ -n … ]` guard makes them no-op instead of erroring with ECONNREFUSED.
+  // Set last so it wins over any inherited value; only when the server is bound
+  // (port 0 = not started — leaving the var unset keeps the guard honest).
+  if (hookServer.port !== 0) {
+    env.DASH_HOOK_PORT = String(hookServer.port);
+  }
+
   return env;
-}
-
-/** Retrieve stored task context prompt from the database. */
-function getTaskContextPrompt(taskId: string): string | null {
-  try {
-    const task = DatabaseService.getTask(taskId);
-    return task?.contextPrompt ?? null;
-  } catch (err) {
-    console.error('[getTaskContextPrompt] Failed to read context for task', taskId, err);
-    return null;
-  }
-}
-
-/**
- * Claude Code rejects an entire settings.local.json if any top-level hook key
- * is unknown to the running CLI version. Newer hook events must be gated so
- * older Claude Code installs don't lose ALL Dash hooks (see GH #127).
- *
- * Returns false when the version is unknown, which keeps the new keys out of
- * the file — the safer default. main.ts populates claudeCliCache after the
- * async --version probe; by the time a PTY spawns, it's almost always set.
- */
-function isClaudeVersionAtLeast(major: number, minor: number, patch: number): boolean {
-  let version: string | null = null;
-  try {
-    // Lazy require to avoid the circular import that a static import of main.ts
-    // would create (main → ptyManager → main). At call time, main is fully loaded.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
-    const main = require('../main') as typeof import('../main');
-    version = main.claudeCliCache.version;
-  } catch {
-    return false;
-  }
-  if (!version) return false;
-  const m = version.match(/^(\d+)\.(\d+)\.(\d+)/);
-  if (!m) return false;
-  const [a, b, c] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  if (a !== major) return a > major;
-  if (b !== minor) return b > minor;
-  return c >= patch;
-}
-
-/**
- * Mark a hook as Dash-authored. The brand lets the merge module recognize
- * it on the next rewrite without falling back to URL/command-shape pattern
- * matching.
- */
-function tagDash<T extends HttpHook | CommandHook>(hook: T): T & { __dash: true } {
-  return { ...hook, __dash: true };
 }
 
 /**
@@ -389,301 +344,61 @@ function prependUnique(dir: string, basePath: string, sep: string): string {
 }
 
 /**
- * Build the PreToolUse hook entries. `*` matcher always points at our
- * tool-start endpoint; when RTK is enabled, also add a `Bash`-matcher
- * entry that runs RTK's hook command to rewrite verbose Bash output
- * before Claude consumes it.
- */
-function buildPreToolUseHooks(
-  httpHook: (endpoint: DashHookEndpoint, async?: boolean) => HttpHook,
-): HookEntry[] {
-  const entries: HookEntry[] = [{ matcher: '*', hooks: [tagDash(httpHook('tool-start', true))] }];
-  const rtkCmd = RtkService.isEnabled() ? RtkService.getHookCommand() : null;
-  if (rtkCmd) {
-    entries.push({ matcher: 'Bash', hooks: [tagDash({ type: 'command', command: rtkCmd })] });
-  }
-  return entries;
-}
-
-/**
- * Atomic write: stage to a sibling tmp file then rename over the target.
- * POSIX rename is atomic, so a crash mid-write can never leave a half-
- * written file at `target`. Important here because settings.local.json is
- * rewritten frequently (every PTY spawn, every commit-attribution change)
- * and the corrupt-recovery path on the read side would otherwise have to
- * handle a wider class of partial-write failures than just user edits.
- *
- * On failure (write error mid-data, or rename error after a successful
- * write), unlink the tmp file best-effort before rethrowing so failed
- * writes don't accumulate orphan `*.tmp-<pid>-<ts>` files alongside the
- * user's settings.
- */
-function atomicWriteFileSync(target: string, data: string): void {
-  const tmp = `${target}.tmp-${process.pid}-${Date.now()}`;
-  try {
-    fs.writeFileSync(tmp, data);
-    fs.renameSync(tmp, target);
-  } catch (err) {
-    try {
-      fs.unlinkSync(tmp);
-    } catch {
-      // best-effort: tmp may not exist if writeFileSync failed before
-      // creating the file, or unlink may race with another process.
-    }
-    throw err;
-  }
-}
-
-function broadcastToast(message: string): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      win.webContents.send('app:toast', { message });
-    }
-  }
-}
-
-type HookWriteResult = { ok: true } | { ok: false; settingsPath: string; error: string };
-
-/**
- * Write .claude/settings.local.json with hooks for activity monitoring,
- * tool tracking, error detection, and context usage.
- *
- * Hooks use type: "http" — Claude Code POSTs the hook JSON body directly
- * to our local HookServer. The statusLine uses type: "command" with curl
- * (http type is not supported for statusLine).
- *
- * Merging preserves user-authored entries via the merge module's brand-or-
- * URL-shape detector, so users can have their own hooks under managed
- * events without losing them on every rewrite.
- *
- * Returns a result so refreshActivePtyHooks can aggregate failures across
- * tasks; toasts and console.error are still emitted inline regardless.
- */
-function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
-  const port = hookServer.port;
-  const claudeDir = path.join(cwd, '.claude');
-  const settingsPath = path.join(claudeDir, 'settings.local.json');
-
-  // The await order in main.ts (`await hookServer.start()` before IPC
-  // registration) makes this branch unreachable in normal startup; if we hit
-  // it, something has invoked writeHookSettings outside the IPC entry path.
-  // Surface it loudly rather than leaving stale on-disk hooks unchanged.
-  if (port === 0) {
-    console.error(
-      '[writeHookSettings] HookServer port not bound — settings.local.json not updated. ' +
-        `Likely a startup-ordering bug (caller invoked before hookServer.start() resolved). cwd=${cwd}`,
-    );
-    broadcastToast(
-      `Hook server not ready — task hooks couldn't be written for ${path.basename(cwd)}. Restart Dash to recover.`,
-    );
-    return { ok: false, settingsPath, error: 'HookServer port not bound' };
-  }
-
-  const base = `http://127.0.0.1:${port}`;
-  const buildHookUrl = (endpoint: DashHookEndpoint) => `${base}/hook/${endpoint}?ptyId=${ptyId}`;
-
-  const httpHook = (endpoint: DashHookEndpoint, async?: boolean): HttpHook => ({
-    type: 'http' as const,
-    url: buildHookUrl(endpoint),
-    ...(async ? { async: true } : {}),
-  });
-
-  const dashHttp = (endpoint: DashHookEndpoint, async?: boolean) =>
-    tagDash(httpHook(endpoint, async));
-
-  // Typed against DashHookEvent so a typo'd event key (e.g. 'PreToolUze')
-  // fails the build, matching the drift-prevention DashHookEndpoint gives
-  // us for endpoints.
-  const dashEntries: Partial<Record<DashHookEvent, HookEntry[]>> = {
-    Stop: [{ matcher: '', hooks: [dashHttp('stop')] }],
-    UserPromptSubmit: [{ matcher: '', hooks: [dashHttp('busy')] }],
-    Notification: [
-      { matcher: 'permission_prompt', hooks: [dashHttp('notification')] },
-      { matcher: 'idle_prompt', hooks: [dashHttp('notification')] },
-    ],
-    PreToolUse: buildPreToolUseHooks(httpHook),
-    PostToolUse: [{ matcher: '*', hooks: [dashHttp('tool-end', true)] }],
-    PreCompact: [{ matcher: '*', hooks: [dashHttp('compact-start', true)] }],
-  };
-
-  // PostCompact added in Claude Code 2.1.76; older CLIs reject the key and
-  // skip the entire settings file (GH #127), losing all Dash hooks.
-  if (isClaudeVersionAtLeast(2, 1, 76)) {
-    dashEntries.PostCompact = [{ matcher: '*', hooks: [dashHttp('compact-end', true)] }];
-  }
-
-  // StopFailure added in Claude Code 2.1.78.
-  if (isClaudeVersionAtLeast(2, 1, 78)) {
-    dashEntries.StopFailure = [{ matcher: '*', hooks: [dashHttp('stop-failure')] }];
-  }
-
-  // SessionStart hook re-injects task context (linked issue/work-item prompt)
-  // on startup, compact, and clear — NOT resume, since resumed sessions
-  // already have context in history.
-  const contextPrompt = getTaskContextPrompt(ptyId);
-  if (contextPrompt) {
-    const hookPayload = JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: 'SessionStart',
-        additionalContext: contextPrompt,
-      },
-    });
-    // Use base64 encoding to safely embed user-controlled content in a shell command.
-    // Single-quote escaping is fragile with content from GitHub issues / ADO work items.
-    const b64 = Buffer.from(hookPayload).toString('base64');
-    // Cross-platform decode: macOS uses `base64 -D`, Linux uses `base64 -d`,
-    // Windows cmd.exe doesn't have base64 so we use PowerShell instead.
-    const decodeCmd =
-      process.platform === 'win32'
-        ? `powershell.exe -NoProfile -Command "[Console]::Out.Write([System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64}')))"`
-        : `echo '${b64}' | base64 ${process.platform === 'darwin' ? '-D' : '-d'}`;
-    const contextHook: CommandHook = { type: 'command', command: decodeCmd };
-    dashEntries.SessionStart = ['startup', 'compact', 'clear'].map((matcher) => ({
-      matcher,
-      hooks: [tagDash(contextHook)],
-    }));
-  }
-
-  try {
-    if (!fs.existsSync(claudeDir)) {
-      fs.mkdirSync(claudeDir, { recursive: true });
-    }
-
-    let existing: Record<string, unknown> = {};
-    if (fs.existsSync(settingsPath)) {
-      try {
-        const parsed = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) as unknown;
-        // JSON.parse succeeds on "null", "42", "[]", etc. Only plain objects
-        // can be spread and merged safely; anything else is treated as corrupt.
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          existing = parsed as Record<string, unknown>;
-        } else {
-          throw new Error(`settings.local.json is not a JSON object (got ${typeof parsed})`);
-        }
-      } catch (err) {
-        // Back up the corrupt file before overwriting so the user can recover.
-        // If the backup rename fails, we MUST NOT proceed to overwrite — that
-        // would destroy the user's on-disk file with no copy left.
-        const backupPath = `${settingsPath}.corrupt-${Date.now()}.bak`;
-        try {
-          fs.renameSync(settingsPath, backupPath);
-          console.error(
-            `[writeHookSettings] settings.local.json corrupt at ${settingsPath}; backed up to ${backupPath}`,
-            err,
-          );
-          broadcastToast(
-            `settings.local.json was unreadable — backed up to ${path.basename(backupPath)} and rewritten.`,
-          );
-        } catch (renameErr) {
-          console.error(
-            '[writeHookSettings] Failed to back up corrupt file; leaving on-disk file intact:',
-            renameErr,
-          );
-          broadcastToast(
-            `settings.local.json is corrupt and could not be backed up — hooks are off for this task. Fix or remove ${path.basename(settingsPath)} manually.`,
-          );
-          return {
-            ok: false,
-            settingsPath,
-            error: `corrupt settings.local.json; backup rename failed: ${renameErr instanceof Error ? renameErr.message : String(renameErr)}`,
-          };
-        }
-      }
-    }
-
-    const existingHooks =
-      existing.hooks && typeof existing.hooks === 'object'
-        ? (existing.hooks as Record<string, HookEntry[] | undefined>)
-        : {};
-
-    const mergedHooks = mergeHookEntries(existingHooks, dashEntries);
-
-    const merged: Record<string, unknown> = {
-      ...existing,
-      hooks: mergedHooks,
-    };
-
-    const contextUrl = buildHookUrl('context');
-    merged.statusLine = {
-      type: 'command',
-      command: `curl -s --connect-timeout 2 -X POST -H "Content-Type: application/json" -d @- "${contextUrl}" >/dev/null 2>&1`,
-    };
-
-    const effectiveAttribution =
-      commitAttributionSetting === undefined ? DASH_DEFAULT_ATTRIBUTION : commitAttributionSetting;
-    merged.attribution = { commit: effectiveAttribution };
-
-    atomicWriteFileSync(settingsPath, JSON.stringify(merged, null, 2) + '\n');
-    writtenSettingsPaths.add(settingsPath);
-    return { ok: true };
-  } catch (err) {
-    console.error('[writeHookSettings] Failed:', err);
-    broadcastToast(`Could not write ${path.basename(settingsPath)} — hooks are off for this task.`);
-    return {
-      ok: false,
-      settingsPath,
-      error: err instanceof Error ? err.message : String(err),
-    };
-  }
-}
-
-/**
- * Remove Dash-written hooks and attribution from all settings.local.json files
- * that were written during this session. Preserves user-authored entries
- * by filtering against the merge module's Dash-owned detector instead of
- * deleting the entire managed-event keys.
- */
-export function cleanupHookSettings(): void {
-  for (const settingsPath of writtenSettingsPaths) {
-    try {
-      if (!fs.existsSync(settingsPath)) continue;
-
-      const raw = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
-      const hooks = raw.hooks;
-
-      if (hooks && typeof hooks === 'object') {
-        for (const key of DASH_HOOK_EVENTS) {
-          const entries = hooks[key];
-          if (!Array.isArray(entries)) continue;
-          const userOnly = entries.filter((e) => !entryIsDashOwned(e));
-          if (userOnly.length === 0) delete hooks[key];
-          else hooks[key] = userOnly;
-        }
-        if (Object.keys(hooks).length === 0) {
-          delete raw.hooks;
-        }
-      }
-
-      delete raw.statusLine;
-      delete raw.attribution;
-
-      if (Object.keys(raw).length === 0) {
-        fs.unlinkSync(settingsPath);
-      } else {
-        atomicWriteFileSync(settingsPath, JSON.stringify(raw, null, 2) + '\n');
-      }
-    } catch (err) {
-      console.error(`[cleanupHookSettings] Failed for ${settingsPath}:`, err);
-    }
-  }
-
-  writtenSettingsPaths.clear();
-}
-
-/**
  * Spawn Claude CLI directly (fast path, bypasses shell config).
  */
+/**
+ * Build the `claude` CLI args. Pure so the resume/name/permission policy is
+ * unit-testable without spawning. Two load-bearing rules:
+ *  - `--resume <id>` and `--name` are mutually exclusive. `--name` is a
+ *    fresh-session display label (shown in `/resume` + the terminal title);
+ *    combining it with `--resume` is undocumented (rename? ignore? new
+ *    session?), and resume already targets the right session by id.
+ *  - the initial prompt, when present, is always the LAST positional — CC
+ *    auto-submits it once the trust-this-directory gate clears.
+ */
+export function buildClaudeArgs(opts: {
+  resumeSessionId: string | null;
+  name?: string;
+  permissionMode?: PermissionMode;
+  initialPrompt?: string;
+}): string[] {
+  const args: string[] = [];
+  if (opts.resumeSessionId) {
+    args.push('--resume', opts.resumeSessionId);
+  } else if (opts.name) {
+    args.push('--name', opts.name);
+  }
+  if (opts.permissionMode === 'acceptEdits') {
+    args.push('--permission-mode', 'acceptEdits');
+  } else if (opts.permissionMode === 'bypassPermissions') {
+    args.push('--dangerously-skip-permissions');
+  }
+  // ultracode is session-scoped; re-apply on every spawn so the user's toggle
+  // effectively sticks across the sessions Dash launches. Must precede the
+  // positional prompt below.
+  if (ultracode) {
+    args.push('--settings', JSON.stringify({ ultracode: true }));
+  }
+  if (opts.initialPrompt) {
+    args.push(opts.initialPrompt);
+  }
+  return args;
+}
+
 export async function startDirectPty(options: {
   id: string;
   cwd: string;
   cols: number;
   rows: number;
-  autoApprove?: boolean;
+  permissionMode?: PermissionMode;
   isDark?: boolean;
+  /** Task name → `claude --name` on a fresh spawn (recognizable in /resume). */
+  name?: string;
   sender?: WebContents;
 }): Promise<{
   reattached: boolean;
   isDirectSpawn: boolean;
+  serializedState?: string;
 }> {
   // Re-attach to existing PTY (e.g., after renderer reload)
   const existing = ptys.get(options.id);
@@ -694,10 +409,14 @@ export async function startDirectPty(options: {
     } catch {
       /* already dead */
     }
+    persistAndDisposeMirror(options.id, existing);
     ptys.delete(options.id);
   } else if (existing) {
+    // Serialize BEFORE claiming the owner: a chunk arriving mid-serialize
+    // lands in the mirror only (next output repaints it) — never duplicated.
+    const serializedState = existing.mirror ? await existing.mirror.serialize() : undefined;
     existing.owner = options.sender || null;
-    return { reattached: true, isDirectSpawn: true };
+    return { reattached: true, isDirectSpawn: true, serializedState };
   }
 
   const claudePath = await findClaudePath();
@@ -706,33 +425,32 @@ export async function startDirectPty(options: {
     throw new Error('Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code');
   }
 
-  const args: string[] = [];
-
-  // Resume strategy depends on a load-bearing invariant: each task has a
-  // unique cwd. Worktree tasks get their own dir by construction; non-worktree
-  // tasks are capped at one per project (enforced in DatabaseService.saveTask /
-  // restoreTask, with UI gating in TaskModal as a first line). Because cwd is
-  // unique, Claude's own "most recent jsonl in this dir" pick is always the
-  // right session — including across /clear and /compact forks.
+  // Resume by the exact newest session id rather than `--continue`. Both rest
+  // on a load-bearing invariant: each task has a unique cwd (worktree tasks by
+  // construction; non-worktree tasks capped at one per project in
+  // DatabaseService.saveTask / restoreTask, UI-gated in TaskModal). Pinning the
+  // id we resolve ourselves — the same newest-mtime file SessionWatcherService
+  // tails — makes the resumed session deterministically the one Dash is showing,
+  // instead of delegating the pick to `--continue`'s undocumented selector. It
+  // still follows /clear and /compact forks (each is a newer file).
   //
-  // DO NOT relax the one-non-worktree-task cap without reintroducing per-task
-  // session pinning; see git history at 32bcdb6 for the previous implementation
-  // and the issues that drove its removal.
-  if (hasAnySessionForCwd(options.cwd)) {
-    args.push('--continue');
-  }
+  // DO NOT relax the one-non-worktree-task cap without revisiting this; see git
+  // history at 32bcdb6 for why the old SessionStart-hook pinning was removed.
+  const resumeSessionId = findLatestSessionId(options.cwd);
 
-  if (options.autoApprove) {
-    args.push('--dangerously-skip-permissions');
-  }
+  // Pre-loaded prompt (the inlined ports-setup body). Only present for the
+  // ports-migrate flow today; no-op for every other spawn. buildClaudeArgs
+  // places it last (CC auto-submits it after the trust gate clears).
+  const initialPrompt = consumeInitialPrompt(options.id);
 
-  // ultracode is session-scoped; re-apply it on every spawn so the user's
-  // toggle effectively sticks across the sessions Dash launches.
-  if (ultracode) {
-    args.push('--settings', JSON.stringify({ ultracode: true }));
-  }
+  const args = buildClaudeArgs({
+    resumeSessionId,
+    name: options.name,
+    permissionMode: options.permissionMode,
+    initialPrompt,
+  });
 
-  const env = buildDirectEnv(options.isDark ?? true);
+  const env = buildDirectEnv(options.isDark ?? true, options.cwd);
 
   writeHookSettings(options.cwd, options.id);
 
@@ -754,13 +472,20 @@ export async function startDirectPty(options: {
     cwd: options.cwd,
     isDirectSpawn: true,
     owner: options.sender || null,
+    kind: 'agent',
+    taskId: options.id,
+    featureId: null,
+    mirror: new TerminalMirror(options.cols, options.rows),
   };
 
   ptys.set(options.id, record);
-  activityMonitor.register(options.id, proc.pid, true);
+  activityMonitor.register(options.id, proc.pid);
 
-  // Forward output to renderer, replacing the Claude logo with "7" art
+  // Forward output to renderer, replacing the Claude logo with "7" art.
+  // The mirror receives the same filtered stream the renderer renders, so
+  // its serialized state matches what a reattaching xterm should show.
   const bannerFilter = createBannerFilter((filtered: string) => {
+    record.mirror?.write(filtered);
     if (record.owner && !record.owner.isDestroyed()) {
       record.owner.send(`pty:data:${options.id}`, filtered);
     }
@@ -781,6 +506,7 @@ export async function startDirectPty(options: {
     if (record.owner && !record.owner.isDestroyed()) {
       record.owner.send(`pty:exit:${options.id}`, { exitCode, signal });
     }
+    persistAndDisposeMirror(options.id, record);
     ptys.delete(options.id);
   });
 
@@ -788,106 +514,6 @@ export async function startDirectPty(options: {
     reattached: false,
     isDirectSpawn: true,
   };
-}
-
-// ---------------------------------------------------------------------------
-// Custom zsh prompt via ZDOTDIR
-// ---------------------------------------------------------------------------
-
-const SHELL_ZSHENV = `\
-# Save our ZDOTDIR so .zshrc can find prompt.zsh
-export __DASH_ZDOTDIR="\${ZDOTDIR}"
-# Source user's .zshenv from HOME
-[[ -f "$HOME/.zshenv" ]] && source "$HOME/.zshenv"
-# Keep ZDOTDIR as our dir so zsh loads .zshrc etc. from here
-ZDOTDIR="\${__DASH_ZDOTDIR}"
-`;
-
-const SHELL_ZPROFILE = `\
-[[ -f "$HOME/.zprofile" ]] && source "$HOME/.zprofile"
-`;
-
-const SHELL_ZSHRC = `\
-# Restore ZDOTDIR to HOME so user config loads normally
-ZDOTDIR="$HOME"
-[[ -f "$HOME/.zshrc" ]] && source "$HOME/.zshrc"
-# Apply our prompt after user config
-source "\${__DASH_ZDOTDIR}/prompt.zsh"
-`;
-
-const SHELL_ZLOGIN = `\
-[[ -f "$HOME/.zlogin" ]] && source "$HOME/.zlogin"
-`;
-
-const SHELL_PROMPT = `\
-# Dash badge-style prompt — uses ANSI 16 colors (themed by xterm.js)
-autoload -Uz vcs_info add-zsh-hook
-
-# Prevent venv from prepending (name) to prompt
-export VIRTUAL_ENV_DISABLE_PROMPT=1
-
-zstyle ':vcs_info:*' enable git
-zstyle ':vcs_info:*' check-for-changes false
-zstyle ':vcs_info:git:*' formats '%b'
-
-__dash_prompt_precmd() {
-  vcs_info
-
-  local dir="%F{12}%~%f"
-  local branch=""
-  if [[ -n "\${vcs_info_msg_0_}" ]]; then
-    local dirty=""
-    # Fast dirty check: staged + unstaged + untracked
-    if ! git diff --quiet HEAD -- 2>/dev/null || [[ -n "$(git ls-files --others --exclude-standard 2>/dev/null | head -1)" ]]; then
-      dirty="%F{3}*%f"
-    fi
-    branch="  %F{5}\${vcs_info_msg_0_}\${dirty}%f"
-  fi
-
-  local venv=""
-  if [[ -n "\${VIRTUAL_ENV}" ]]; then
-    venv="  %F{6}\${VIRTUAL_ENV:t}%f"
-  fi
-
-  PROMPT="\${dir}\${branch}\${venv}
-%F{%(?.2.1)}\\$%f "
-  RPROMPT=""
-}
-
-add-zsh-hook precmd __dash_prompt_precmd
-# Set PROMPT immediately so the first prompt is styled — precmd may not
-# fire before the initial prompt in all zsh configurations.
-__dash_prompt_precmd
-`;
-
-let shellConfigDir: string | null = null;
-
-function ensureShellConfig(): string {
-  if (shellConfigDir) return shellConfigDir;
-
-  const dir = path.join(app.getPath('userData'), 'shell');
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-
-  const files: Record<string, string> = {
-    '.zshenv': SHELL_ZSHENV,
-    '.zprofile': SHELL_ZPROFILE,
-    '.zshrc': SHELL_ZSHRC,
-    '.zlogin': SHELL_ZLOGIN,
-    'prompt.zsh': SHELL_PROMPT,
-  };
-
-  for (const [name, content] of Object.entries(files)) {
-    const filePath = path.join(dir, name);
-    const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : null;
-    if (existing !== content) {
-      fs.writeFileSync(filePath, content);
-    }
-  }
-
-  shellConfigDir = dir;
-  return dir;
 }
 
 /**
@@ -899,19 +525,26 @@ export async function startPty(options: {
   cols: number;
   rows: number;
   sender?: WebContents;
-}): Promise<{ reattached: boolean; isDirectSpawn: boolean }> {
+}): Promise<{ reattached: boolean; isDirectSpawn: boolean; serializedState?: string }> {
   // Re-attach to existing PTY (e.g., after renderer reload)
   const existing = ptys.get(options.id);
   if (existing) {
+    // Serialize BEFORE claiming the owner: a chunk arriving mid-serialize
+    // lands in the mirror only (next output repaints it) — never duplicated.
+    const serializedState = existing.mirror ? await existing.mirror.serialize() : undefined;
     existing.owner = options.sender || null;
-    return { reattached: true, isDirectSpawn: existing.isDirectSpawn };
+    return { reattached: true, isDirectSpawn: existing.isDirectSpawn, serializedState };
   }
 
   const pty = getPty();
 
   const isWin = process.platform === 'win32';
   const shell = isWin ? 'powershell.exe' : process.env.SHELL || '/bin/bash';
-  const args = isWin ? ['-NoLogo'] : ['-il']; // Login + interactive on Unix
+  // Interactive, NOT login. The login files (.zprofile/.zlogin) add ~0.5s to
+  // every fresh shell's first paint, and their main payload — PATH — is already
+  // merged into process.env by fixPath() at boot (which runs `zsh -ilc`), so the
+  // spawned shell inherits it. Skipping login trims the startup without losing PATH.
+  const args = isWin ? ['-NoLogo'] : ['-i'];
 
   // Clean environment for shell
   const env = { ...process.env };
@@ -931,6 +564,15 @@ export async function startPty(options: {
     }
   }
 
+  // Same port-env injection as direct PTYs — the terminal drawer shares the
+  // task's worktree, so `curl localhost:$FRONTEND_PORT` should resolve there
+  // too. RESERVED_ENV_KEYS guard is unnecessary here since we're working from
+  // a fresh `{ ...process.env }` and the allocator's env-var allowlist already
+  // excludes the reserved set.
+  for (const [key, value] of Object.entries(WorkspacePortsRuntime.getEnvForWorktree(options.cwd))) {
+    env[key] = value;
+  }
+
   const proc = pty.spawn(shell, args, {
     name: 'xterm-256color',
     cols: options.cols,
@@ -939,17 +581,33 @@ export async function startPty(options: {
     env: env as Record<string, string>,
   });
 
+  // Shell PTY IDs follow the shape `shell:<taskId>[:N]`; parse the taskId so
+  // task-scoped queries (listForTask, restartAllForTask) can find this PTY
+  // without resorting to string-prefix matching on the id.
+  const shellPrefix = 'shell:';
+  const shellRest = options.id.startsWith(shellPrefix)
+    ? options.id.slice(shellPrefix.length)
+    : options.id;
+  const shellTaskId = shellRest.split(':')[0]!;
+
   const record: PtyRecord = {
     proc,
     cwd: options.cwd,
     isDirectSpawn: false,
     owner: options.sender || null,
+    kind: 'shell',
+    taskId: shellTaskId,
+    featureId: null,
+    mirror: new TerminalMirror(options.cols, options.rows),
   };
 
   ptys.set(options.id, record);
-  activityMonitor.register(options.id, proc.pid, false);
+  // Shell PTYs are not tracked by ActivityMonitor — only direct-spawn (Claude)
+  // PTYs surface activity state to the renderer. The unregister() call on
+  // shell PTY exit (below) is a no-op for unknown ids, so it's safe.
 
   proc.onData((data: string) => {
+    record.mirror?.write(data);
     if (record.owner && !record.owner.isDestroyed()) {
       record.owner.send(`pty:data:${options.id}`, data);
     }
@@ -962,6 +620,7 @@ export async function startPty(options: {
     if (record.owner && !record.owner.isDestroyed()) {
       record.owner.send(`pty:exit:${options.id}`, { exitCode, signal });
     }
+    persistAndDisposeMirror(options.id, record);
     ptys.delete(options.id);
   });
 
@@ -995,6 +654,7 @@ export function writePty(id: string, data: string): void {
 export function resizePty(id: string, cols: number, rows: number): void {
   const record = ptys.get(id);
   if (record) {
+    record.mirror?.resize(cols, rows);
     try {
       record.proc.resize(cols, rows);
     } catch {
@@ -1003,56 +663,255 @@ export function resizePty(id: string, cols: number, rows: number): void {
   }
 }
 
+// Grace window for a SIGTERM'd child to flush and exit before we force SIGKILL.
+const GRACEFUL_KILL_TIMEOUT_MS = 3000;
+
 /**
- * Kill a specific PTY.
+ * Gracefully terminate a pty's child process: send SIGTERM so it can flush and
+ * exit cleanly, then escalate to SIGKILL only if it overstays the grace window.
+ * Resolves once the process is gone (or was already dead).
+ *
+ * node-pty's bare `kill()` sends SIGHUP, which Claude Code does not trap — so
+ * its in-memory session tail (the last several turns) was lost on every
+ * refresh/quit, and no `--resume`/`--continue` could recover what never
+ * reached the jsonl. SIGTERM + a wait gives Claude the chance to persist first.
  */
-export function killPty(id: string): void {
-  const record = ptys.get(id);
-  if (record) {
-    // Delete first so the guarded onExit handler becomes a no-op
-    ptys.delete(id);
-    activityMonitor.unregister(id);
-    remoteControlService.unregister(id);
-    contextUsageService.unregister(id);
+type KillableProc = {
+  kill: (signal?: string) => void;
+  onExit: (listener: (e: { exitCode: number; signal?: number }) => void) => {
+    dispose: () => void;
+  };
+};
+
+function gracefulKillProc(proc: KillableProc, timeoutMs = GRACEFUL_KILL_TIMEOUT_MS): Promise<void> {
+  return new Promise<void>((resolve) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let disposable: { dispose: () => void } | null = null;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      try {
+        disposable?.dispose();
+      } catch {
+        // listener already gone
+      }
+      resolve();
+    };
     try {
-      record.proc.kill();
+      disposable = proc.onExit(() => finish());
     } catch {
-      // Already dead
+      // proc doesn't expose onExit (already disposed) — rely on the timer/catch.
     }
-  }
+    timer = setTimeout(() => {
+      try {
+        proc.kill('SIGKILL');
+      } catch {
+        // already dead
+      }
+      finish();
+    }, timeoutMs);
+    try {
+      proc.kill('SIGTERM');
+    } catch {
+      // already dead — nothing to wait for
+      finish();
+    }
+  });
+}
+
+/** Detach a record from all registries and persist its mirror (shared by the
+ *  kill paths). The map delete makes the spawn-time onExit handler a no-op. */
+function teardownRecord(id: string, record: PtyRecord): void {
+  ptys.delete(id);
+  activityMonitor.unregister(id);
+  remoteControlService.unregister(id);
+  contextUsageService.unregister(id);
+  // Persist before killing — restart() relies on the snapshot for visual
+  // context when it respawns into the same id.
+  persistAndDisposeMirror(id, record);
+}
+
+function killPtyInternal(id: string): Promise<void> {
+  const record = ptys.get(id);
+  if (!record) return Promise.resolve();
+  teardownRecord(id, record);
+  return gracefulKillProc(record.proc);
 }
 
 /**
- * Kill all PTYs (on app quit).
+ * Kill a specific PTY (graceful: SIGTERM → grace → SIGKILL). Fire-and-forget;
+ * callers that must serialize a respawn against the dying process use
+ * killPtyAwait instead.
  */
-export function killAll(): void {
-  for (const [, record] of ptys) {
-    try {
-      record.proc.kill();
-    } catch {
-      // Already dead
-    }
+export function killPty(id: string): void {
+  void killPtyInternal(id);
+}
+
+/**
+ * Kill a specific PTY and resolve once it has actually exited (or the grace
+ * window elapsed). The renderer's reattach/restart paths await this before
+ * respawning so the new `claude --resume` process never races the dying one
+ * for the session jsonl (a brief two-writer overlap could corrupt the tail).
+ */
+export function killPtyAwait(id: string): Promise<void> {
+  return killPtyInternal(id);
+}
+
+/**
+ * Kill all PTYs (on app quit). Awaits every child's graceful exit in parallel
+ * so the bound is ~one grace window, not the sum — the before-quit handler
+ * awaits this so the app doesn't exit before Claude flushes its session.
+ */
+export async function killAll(): Promise<void> {
+  const pending: Promise<void>[] = [];
+  for (const [id, record] of ptys) {
+    persistAndDisposeMirror(id, record);
+    pending.push(gracefulKillProc(record.proc));
   }
   ptys.clear();
   // Bulk cleanup — don't rely on onExit during shutdown
   activityMonitor.stop();
+  await Promise.all(pending);
 }
 
 /**
  * Kill all PTYs owned by a specific WebContents (on window close).
+ * Fire-and-forget graceful kills — the app stays alive (macOS) so there's no
+ * exit to race, but the child still gets its SIGTERM flush window.
  */
 export function killByOwner(owner: WebContents): void {
   for (const [id, record] of ptys) {
     if (record.owner === owner) {
-      ptys.delete(id);
-      activityMonitor.unregister(id);
-      remoteControlService.unregister(id);
-      contextUsageService.unregister(id);
-      try {
-        record.proc.kill();
-      } catch {
-        // Already dead
-      }
+      teardownRecord(id, record);
+      void gracefulKillProc(record.proc);
     }
   }
+}
+
+/**
+ * Return all PTY ids attached to `taskId`, optionally filtered by kind /
+ * featureId. Used by SessionRegistry.restartAllForTask to find the right set
+ * without string-prefix matching on PTY ids — which would accidentally hit
+ * future task-bound PTYs (e.g. the ports TUI).
+ */
+export function listForTask(
+  taskId: string,
+  opts?: { kinds?: PtyKind[]; featureId?: string },
+): string[] {
+  const result: string[] = [];
+  for (const [id, rec] of ptys) {
+    if (rec.taskId !== taskId) continue;
+    if (opts?.kinds && !opts.kinds.includes(rec.kind)) continue;
+    if (opts?.featureId && rec.featureId !== opts.featureId) continue;
+    result.push(id);
+  }
+  return result;
+}
+
+/**
+ * Spawn an arbitrary command in a PTY tagged as kind='tui'. Used by feature
+ * orchestrators (e.g. ports onboarding) to host a side-car interactive
+ * program inside the existing drawer tab UI without polluting agent/shell
+ * code paths.
+ */
+export async function startCommandPty(options: {
+  id: string;
+  command: string;
+  args: string[];
+  cwd: string;
+  cols: number;
+  rows: number;
+  env?: Record<string, string>;
+  owner: WebContents | null;
+  taskId: string;
+  featureId: string;
+  /** PTY registry kind. Side-car TUIs (default) vs user-facing service runs. */
+  kind?: 'tui' | 'service';
+  /**
+   * Fires only when the process exits on its own — an explicit killPty()
+   * removes the record first, so the guarded handler below never reaches it.
+   * Callers that kill notify themselves; this hook covers self-death.
+   */
+  onExit?: (info: { exitCode: number; signal?: number }) => void;
+}): Promise<{ reattached: boolean }> {
+  const existing = ptys.get(options.id);
+  if (existing) {
+    existing.owner = options.owner;
+    return { reattached: true };
+  }
+
+  const pty = getPty();
+  const proc = pty.spawn(options.command, options.args, {
+    name: 'xterm-256color',
+    cols: options.cols,
+    rows: options.rows,
+    cwd: options.cwd,
+    env: { ...process.env, ...(options.env ?? {}) } as Record<string, string>,
+  });
+
+  const record: PtyRecord = {
+    proc,
+    cwd: options.cwd,
+    isDirectSpawn: false,
+    owner: options.owner,
+    kind: options.kind ?? 'tui',
+    taskId: options.taskId,
+    featureId: options.featureId,
+    mirror: new TerminalMirror(options.cols, options.rows),
+  };
+
+  ptys.set(options.id, record);
+
+  proc.onData((data: string) => {
+    // The mirror always consumes — output emitted before any renderer
+    // attaches (service startup banners) is recovered from its serialized
+    // state on reattach.
+    record.mirror?.write(data);
+    if (record.owner && !record.owner.isDestroyed()) {
+      record.owner.send(`pty:data:${options.id}`, data);
+    }
+  });
+
+  proc.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
+    if (ptys.get(options.id) !== record) return;
+    if (record.owner && !record.owner.isDestroyed()) {
+      record.owner.send(`pty:exit:${options.id}`, { exitCode, signal });
+    }
+    persistAndDisposeMirror(options.id, record);
+    ptys.delete(options.id);
+    options.onExit?.({ exitCode, signal });
+  });
+
+  return { reattached: false };
+}
+
+// ---------------------------------------------------------------------------
+// Test-only hooks — not exported via any index. The Map is module-private,
+// so unit tests need these handles to seed/clear synthetic records.
+// ---------------------------------------------------------------------------
+
+export function __testReset(): void {
+  for (const record of ptys.values()) {
+    record.mirror?.dispose();
+    record.mirror = null;
+  }
+  ptys.clear();
+}
+
+export function __registerForTest(
+  id: string,
+  rec: { kind: PtyKind; taskId: string | null; featureId: string | null },
+): void {
+  ptys.set(id, {
+    proc: null,
+    cwd: '/tmp',
+    isDirectSpawn: rec.kind === 'agent',
+    owner: null,
+    kind: rec.kind,
+    taskId: rec.taskId,
+    featureId: rec.featureId,
+    mirror: null,
+  });
 }

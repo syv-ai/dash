@@ -34,6 +34,7 @@ vi.mock('better-sqlite3', () => ({
 import { createHash } from 'crypto';
 import { SkillsService } from '../SkillsService';
 import { SkillsCache } from '../skillsCache';
+import { getRegistryEntry, __resetSkillsRegistryForTest } from '../SkillsRegistry';
 import type { RegistrySkill } from '@shared/types';
 
 const RAW = 'https://raw.githubusercontent.com';
@@ -66,6 +67,9 @@ function setRoute(match: (url: string) => boolean, respond: () => FetchStub) {
 }
 
 beforeEach(() => {
+  // The central skills registry lives under app.getPath('userData') — mocked to
+  // os.tmpdir(), which is shared across tests, so reset it each time.
+  __resetSkillsRegistryForTest();
   tmpRoot = mkdtempSync(path.join(os.tmpdir(), 'dash-skills-test-'));
   routes = [];
   fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
@@ -377,13 +381,14 @@ describe('installSkill — marker / custom-skill protection', () => {
 
     await SkillsService.installSkill({ ref: validRef, skillName: 'demo', target: projectTarget() });
 
-    const markerText = readFileSync(path.join(installDir(), '.dash-skill.json'), 'utf-8');
-    const marker = JSON.parse(markerText);
-    expect(marker.version).toBe(1);
-    expect(marker.repo).toBe(validRef.repo);
-    expect(marker.path).toBe(validRef.path);
-    expect(marker.branch).toBe(validRef.branch);
-    expect(typeof marker.installedAt).toBe('number');
+    const source = getRegistryEntry(installDir())?.source;
+    expect(source).toBeDefined();
+    expect(source!.repo).toBe(validRef.repo);
+    expect(source!.path).toBe(validRef.path);
+    expect(source!.branch).toBe(validRef.branch);
+    expect(typeof source!.installedAt).toBe('number');
+    // Dash no longer writes bookkeeping into the user's skill folder.
+    expect(existsSync(path.join(installDir(), '.dash-skill.json'))).toBe(false);
   });
 
   it('allows reinstalling over an existing Dash install (marker present)', async () => {
@@ -414,9 +419,11 @@ describe('installSkill — marker / custom-skill protection', () => {
     await SkillsService.installSkill({ ref: validRef, skillName: 'demo', target: projectTarget() });
 
     expect(readFileSync(path.join(installDir(), 'SKILL.md'), 'utf-8')).toBe('# NEW');
-    // Fresh marker should have been written (installedAt > 0).
-    const marker = JSON.parse(readFileSync(path.join(installDir(), '.dash-skill.json'), 'utf-8'));
-    expect(marker.installedAt).toBeGreaterThan(0);
+    // Fresh source binding should have been written (installedAt > 0).
+    const source = getRegistryEntry(installDir())?.source;
+    expect(source?.installedAt).toBeGreaterThan(0);
+    // The migrated legacy in-tree marker is gone from the codebase.
+    expect(existsSync(path.join(installDir(), '.dash-skill.json'))).toBe(false);
   });
 });
 
@@ -543,12 +550,12 @@ describe('listInstalled — externally-installed registry skills', () => {
 
     const result = await SkillsService.listInstalled([tmpRoot]);
 
-    const marker = JSON.parse(readFileSync(path.join(dir, '.dash-skill.json'), 'utf-8'));
-    expect(marker.repo).toBe('someone/skills');
-    expect(marker.path).toBe('skills/demo');
-    expect(result.skills[0].catalog?.repo).toBe('someone/skills');
-    // No verified-custom sentinel when we bound successfully.
-    expect(existsSync(path.join(dir, '.dash-skill-checked.json'))).toBe(false);
+    const entry = getRegistryEntry(dir);
+    expect(entry?.source?.repo).toBe('someone/skills');
+    expect(entry?.source?.path).toBe('skills/demo');
+    expect(result.skills[0]!.catalog?.repo).toBe('someone/skills');
+    // No verified-custom record when we bound successfully.
+    expect(entry?.custom).toBeUndefined();
   });
 
   it('writes a verified-custom sentinel keyed by content hash on no-match', async () => {
@@ -563,11 +570,10 @@ describe('listInstalled — externally-installed registry skills', () => {
 
     const result = await SkillsService.listInstalled([tmpRoot]);
 
-    expect(existsSync(path.join(dir, '.dash-skill.json'))).toBe(false);
-    expect(result.skills[0].catalog).toBeNull();
-
-    const sentinel = JSON.parse(readFileSync(path.join(dir, '.dash-skill-checked.json'), 'utf-8'));
-    expect(sentinel.contentSha256).toBe(sha256(localContent));
+    const entry = getRegistryEntry(dir);
+    expect(entry?.source).toBeUndefined();
+    expect(result.skills[0]!.catalog).toBeNull();
+    expect(entry?.custom?.contentSha256).toBe(sha256(localContent));
   });
 
   it('skips the fetch on later listInstalled calls when the sentinel hash still matches', async () => {
@@ -598,9 +604,9 @@ describe('listInstalled — externally-installed registry skills', () => {
       () => ({ body: '# upstream' }),
     );
     await SkillsService.listInstalled([tmpRoot]);
-    expect(existsSync(path.join(dir, '.dash-skill-checked.json'))).toBe(true);
+    expect(getRegistryEntry(dir)?.custom).toBeDefined();
 
-    // User edits the file. Sentinel hash no longer matches local content.
+    // User edits the file. Cached hash no longer matches local content.
     writeFileSync(path.join(dir, 'SKILL.md'), '# upstream', 'utf-8');
 
     // Second pass: registry happens to match the new local content → bind.
@@ -608,7 +614,7 @@ describe('listInstalled — externally-installed registry skills', () => {
     await SkillsService.listInstalled([tmpRoot]);
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(existsSync(path.join(dir, '.dash-skill.json'))).toBe(true);
+    expect(getRegistryEntry(dir)?.source).toBeDefined();
   });
 
   it('does not bind when multiple registry skills derive to the same name', async () => {
@@ -620,9 +626,8 @@ describe('listInstalled — externally-installed registry skills', () => {
 
     const result = await SkillsService.listInstalled([tmpRoot]);
 
-    expect(existsSync(path.join(dir, '.dash-skill.json'))).toBe(false);
-    expect(existsSync(path.join(dir, '.dash-skill-checked.json'))).toBe(false);
-    expect(result.skills[0].catalog).toBeNull();
+    expect(getRegistryEntry(dir)).toBeUndefined();
+    expect(result.skills[0]!.catalog).toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -632,9 +637,8 @@ describe('listInstalled — externally-installed registry skills', () => {
 
     const result = await SkillsService.listInstalled([tmpRoot]);
 
-    expect(existsSync(path.join(dir, '.dash-skill.json'))).toBe(false);
-    expect(existsSync(path.join(dir, '.dash-skill-checked.json'))).toBe(false);
-    expect(result.skills[0].catalog).toBeNull();
+    expect(getRegistryEntry(dir)).toBeUndefined();
+    expect(result.skills[0]!.catalog).toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
@@ -753,11 +757,11 @@ describe('listInstalled — corrupt sentinel re-fetches and rewrites', () => {
 
     await SkillsService.listInstalled([tmpRoot]);
 
-    // The sentinel was unreadable, so we should have re-fetched and rewritten it.
+    // The legacy sentinel was unreadable, so we should have re-fetched and written
+    // a fresh custom record into the registry — and dropped the broken in-tree file.
     expect(fetchSpy).toHaveBeenCalled();
-    const sentinel = JSON.parse(readFileSync(path.join(dir, '.dash-skill-checked.json'), 'utf-8'));
-    expect(sentinel.version).toBe(1);
-    expect(typeof sentinel.contentSha256).toBe('string');
+    expect(typeof getRegistryEntry(dir)?.custom?.contentSha256).toBe('string');
+    expect(existsSync(path.join(dir, '.dash-skill-checked.json'))).toBe(false);
   });
 
   it('one slow/failing skill does not blank the entire installed list', async () => {
@@ -796,10 +800,68 @@ describe('listInstalled — corrupt sentinel re-fetches and rewrites', () => {
       expect(demo).toBeDefined();
       expect(other).toBeDefined();
       expect(other?.catalog?.repo).toBe('someone/skills');
-      // Marker present for the one that succeeded.
-      expect(existsSync(path.join(otherDir, '.dash-skill.json'))).toBe(true);
+      // Source binding recorded for the one that succeeded.
+      expect(getRegistryEntry(otherDir)?.source).toBeDefined();
     } finally {
       homeSpy.mockRestore();
     }
+  });
+});
+
+describe('legacy in-tree bookkeeping migration', () => {
+  it('imports a valid in-tree marker into the registry and deletes the file', () => {
+    const dir = path.join(tmpRoot, '.claude', 'skills', 'demo');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, 'SKILL.md'), '# demo', 'utf-8');
+    writeFileSync(
+      path.join(dir, '.dash-skill.json'),
+      JSON.stringify({
+        version: 1,
+        repo: 'someone/skills',
+        branch: 'main',
+        path: 'skills/demo',
+        installedAt: 7,
+      }),
+      'utf-8',
+    );
+
+    // Any marker read triggers migration; checkInstalled with a matching ref does.
+    const status = SkillsService.checkInstalled('demo', [tmpRoot], {
+      repo: 'someone/skills',
+      branch: 'main',
+      path: 'skills/demo',
+    });
+
+    expect(status.installedPaths).toEqual([tmpRoot]);
+    // Imported into the central registry…
+    expect(getRegistryEntry(dir)?.source).toMatchObject({
+      repo: 'someone/skills',
+      path: 'skills/demo',
+      installedAt: 7,
+    });
+    // …and removed from the user's codebase.
+    expect(existsSync(path.join(dir, '.dash-skill.json'))).toBe(false);
+  });
+
+  it('imports a valid in-tree sentinel into the registry and deletes the file', async () => {
+    vi.spyOn(SkillsCache, 'allSkills').mockReturnValue([]);
+    const dir = path.join(tmpRoot, '.claude', 'skills', 'demo');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, 'SKILL.md'), '# demo', 'utf-8');
+    writeFileSync(
+      path.join(dir, '.dash-skill-checked.json'),
+      JSON.stringify({ version: 1, contentSha256: 'deadbeef', checkedAt: 123 }),
+      'utf-8',
+    );
+
+    // listInstalled reads the (absent) marker per folder, which migrates both
+    // legacy files in one pass — no registry candidate needed.
+    await SkillsService.listInstalled([tmpRoot]);
+
+    expect(getRegistryEntry(dir)?.custom).toMatchObject({
+      contentSha256: 'deadbeef',
+      checkedAt: 123,
+    });
+    expect(existsSync(path.join(dir, '.dash-skill-checked.json'))).toBe(false);
   });
 });

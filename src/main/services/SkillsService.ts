@@ -27,12 +27,30 @@ import type {
 } from '@shared/types';
 import { deriveSkillFolderName } from '@shared/skills';
 import { SkillsCache } from './skillsCache';
+import {
+  getRegistryEntry,
+  setSkillSource,
+  setSkillCustom,
+  removeRegistryEntry,
+} from './SkillsRegistry';
 
 // Trust boundary: this third-party GitHub repo is effectively Dash's package registry.
 // Pinning to a specific repo+branch+filename is a deliberate choice; changing this
 // constant changes who can ship code to every Dash user.
-const REGISTRY_URL =
-  'https://raw.githubusercontent.com/majiayu000/claude-skill-registry/main/registry.json';
+const REGISTRY_BASE_URL =
+  'https://raw.githubusercontent.com/majiayu000/claude-skill-registry/main/';
+const REGISTRY_URL = `${REGISTRY_BASE_URL}registry.json`;
+const REGISTRY_MANIFEST_URL = `${REGISTRY_BASE_URL}registry-manifest.json`;
+
+// In mid-2026 the upstream registry moved the skills payload from a single
+// registry.json into 256 sharded files under registry-shards/, indexed by
+// registry-manifest.json. The legacy file now ships a deprecation stub. We
+// detect that and fall back to fetching shards in parallel.
+const SHARD_CONCURRENCY = 8;
+// A shard path from the manifest must be a relative path under registry-shards/
+// to a .json file — no absolute URLs, no traversal. A compromised manifest must
+// not be able to redirect us off raw.githubusercontent.com.
+const SHARD_PATH_RE = /^registry-shards\/[\w./-]+\.json$/;
 
 // 24h matches the registry's typical update cadence (daily refresh of GitHub stars).
 // Shorter would just hammer raw.githubusercontent.com without surfacing newer data;
@@ -44,9 +62,10 @@ const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 // keeps the SQLite file under ~30 MB, and bounds the buffered JSON parse memory.
 const MAX_SKILLS = 10_000;
 
-// 60s is generous for a ~10 MB JSON payload over a slow connection. Short enough that
-// a hung server fails the open-lifecycle within the user's patience window.
-const REGISTRY_FETCH_TIMEOUT_MS = 60_000;
+// 120s is the wall-clock cap on the entire refresh. The legacy single-file path
+// finishes well within this; the sharded path fetches 256 files at SHARD_CONCURRENCY
+// in parallel and needs more headroom on slow connections.
+const REGISTRY_FETCH_TIMEOUT_MS = 120_000;
 
 // Per-file timeout for SKILL.md and sibling assets. 15s covers slow connections
 // without making a stuck connection block the install for minutes.
@@ -77,11 +96,16 @@ const MAX_RECURSION_DEPTH = 3;
 // registry that supplies attacker-hosted download_url values.
 const RAW_GITHUB_PREFIX = 'https://raw.githubusercontent.com/';
 
-// Dash-owned marker dropped into every install dir so we can distinguish skills
-// installed via Dash (and from which registry entry) from a user's pre-existing folder
-// of the same name. Without this, a registry skill named "validate" silently overwrites
-// a user's custom ~/.claude/skills/validate, and the installed-list view conflates the
-// two by sanitized-name fuzzy match.
+// Dash's record that an install dir came from a registry entry — used to
+// distinguish Dash-installed skills (and which entry) from a user's pre-existing
+// folder of the same name. Without it, a registry skill named "validate" would
+// silently overwrite a user's custom ~/.claude/skills/validate, and the
+// installed-list view would conflate the two by sanitized-name fuzzy match.
+//
+// This now lives in the central SkillsRegistry (Dash's app-data dir), keyed by
+// the skill's absolute path — not in a `.dash-skill.json` inside the user's
+// codebase. The filename/shape below are retained only to migrate pre-existing
+// in-tree markers into the registry (see migrateLegacyInTree).
 const MARKER_FILENAME = '.dash-skill.json';
 const MARKER_VERSION = 1;
 
@@ -104,56 +128,45 @@ type MarkerReadResult =
   | { kind: 'corrupt'; reason: string };
 
 function writeSkillMarker(skillDir: string, ref: SkillRef): void {
-  const marker: SkillMarker = {
-    version: MARKER_VERSION,
+  setSkillSource(skillDir, {
     repo: ref.repo,
     branch: ref.branch,
     path: ref.path,
     installedAt: Date.now(),
-  };
-  writeFileSync(path.join(skillDir, MARKER_FILENAME), JSON.stringify(marker), 'utf-8');
+  });
 }
 
 function readSkillMarker(skillDir: string): MarkerReadResult {
-  const file = path.join(skillDir, MARKER_FILENAME);
-  let text: string;
-  try {
-    text = readFileSync(file, 'utf-8');
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') return { kind: 'absent' };
-    console.error('[SkillsService.readSkillMarker] read failed', { file, code });
-    return { kind: 'corrupt', reason: code || 'read-failed' };
+  // Pull any legacy in-tree files into the registry first (and drop the
+  // parseable ones from the user's codebase). An unparseable legacy marker is
+  // left behind and reported as `corrupt`, preserving the actionable
+  // "uninstall + reinstall" UX rather than masquerading as a custom folder.
+  const legacy = migrateLegacyInTree(skillDir);
+  const source = getRegistryEntry(skillDir)?.source;
+  if (source) {
+    return {
+      kind: 'present',
+      marker: {
+        version: MARKER_VERSION,
+        repo: source.repo,
+        branch: source.branch,
+        path: source.path,
+        installedAt: source.installedAt,
+      },
+    };
   }
-  let parsed: Partial<SkillMarker>;
-  try {
-    parsed = JSON.parse(text) as Partial<SkillMarker>;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('[SkillsService.readSkillMarker] parse failed', { file, message });
-    return { kind: 'corrupt', reason: 'parse-error' };
-  }
-  if (
-    parsed.version !== MARKER_VERSION ||
-    typeof parsed.repo !== 'string' ||
-    typeof parsed.path !== 'string' ||
-    typeof parsed.branch !== 'string'
-  ) {
-    console.error('[SkillsService.readSkillMarker] schema mismatch', {
-      file,
-      version: parsed.version,
-    });
-    return { kind: 'corrupt', reason: 'schema-mismatch' };
-  }
-  return { kind: 'present', marker: parsed as SkillMarker };
+  if (legacy.markerCorrupt) return { kind: 'corrupt', reason: legacy.markerCorrupt };
+  return { kind: 'absent' };
 }
 
 // Negative-cache sentinel: when content-match against the unique registry candidate
 // fails for an orphan folder, we record the local SKILL.md hash at check time. Future
 // listInstalled calls skip the fetch as long as the local content hasn't changed.
-// Editing the skill invalidates the sentinel naturally (different hash); a new install
-// via Dash replaces the whole skill directory in the staging swap, so any stale sentinel
-// goes with it.
+// Editing the skill invalidates the cache naturally (different hash); a new install
+// via Dash binds a source instead, which clears the custom record.
+//
+// Like the marker, this now lives in the central SkillsRegistry keyed by absolute
+// path; the filename/shape below remain only to migrate legacy in-tree sentinels.
 const VERIFIED_CUSTOM_FILENAME = '.dash-skill-checked.json';
 const VERIFIED_CUSTOM_VERSION = 1;
 
@@ -179,45 +192,121 @@ function sha256(s: string): string {
 }
 
 function writeVerifiedCustom(skillDir: string, contentSha256: string): void {
-  const record: VerifiedCustomRecord = {
-    version: VERIFIED_CUSTOM_VERSION,
-    checkedAt: Date.now(),
-    contentSha256,
-  };
-  writeFileSync(path.join(skillDir, VERIFIED_CUSTOM_FILENAME), JSON.stringify(record), 'utf-8');
+  setSkillCustom(skillDir, { contentSha256, checkedAt: Date.now() });
 }
 
 function readVerifiedCustom(skillDir: string): VerifiedCustomReadResult {
-  const file = path.join(skillDir, VERIFIED_CUSTOM_FILENAME);
-  let text: string;
+  const legacy = migrateLegacyInTree(skillDir);
+  const custom = getRegistryEntry(skillDir)?.custom;
+  if (custom) {
+    return {
+      kind: 'present',
+      record: {
+        version: VERIFIED_CUSTOM_VERSION,
+        checkedAt: custom.checkedAt,
+        contentSha256: custom.contentSha256,
+      },
+    };
+  }
+  if (legacy.customCorrupt) return { kind: 'corrupt', reason: legacy.customCorrupt };
+  return { kind: 'absent' };
+}
+
+/**
+ * Drop a skill's registry entry — called on uninstall so a later same-path
+ * install isn't blocked by a stale source binding.
+ */
+function removeSkillMeta(skillDir: string): void {
+  removeRegistryEntry(skillDir);
+}
+
+/**
+ * Migrate a skill folder's legacy in-tree bookkeeping (`.dash-skill.json` /
+ * `.dash-skill-checked.json`, from the per-folder era) into the central
+ * registry, then delete the file so Dash stops touching the user's codebase.
+ * Best-effort and idempotent: a parseable file is imported (unless the registry
+ * already has a record for it) and removed; an unparseable file is left in
+ * place and surfaced via the returned `*Corrupt` reason so callers preserve the
+ * old corrupt-marker UX. Absent files are a no-op (the common steady state).
+ */
+function migrateLegacyInTree(skillDir: string): {
+  markerCorrupt?: string;
+  customCorrupt?: string;
+} {
+  const out: { markerCorrupt?: string; customCorrupt?: string } = {};
+
+  const markerFile = path.join(skillDir, MARKER_FILENAME);
+  let markerText: string | null = null;
   try {
-    text = readFileSync(file, 'utf-8');
+    markerText = readFileSync(markerFile, 'utf-8');
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') return { kind: 'absent' };
-    console.error('[SkillsService.readVerifiedCustom] read failed', { file, code });
-    return { kind: 'corrupt', reason: code || 'read-failed' };
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') out.markerCorrupt = 'read-failed';
   }
-  let parsed: Partial<VerifiedCustomRecord>;
+  if (markerText !== null) {
+    let parsed: Partial<SkillMarker> | undefined;
+    try {
+      parsed = JSON.parse(markerText) as Partial<SkillMarker>;
+    } catch {
+      out.markerCorrupt = 'parse-error';
+    }
+    if (
+      parsed &&
+      parsed.version === MARKER_VERSION &&
+      typeof parsed.repo === 'string' &&
+      typeof parsed.path === 'string' &&
+      typeof parsed.branch === 'string'
+    ) {
+      if (!getRegistryEntry(skillDir)?.source) {
+        setSkillSource(skillDir, {
+          repo: parsed.repo,
+          branch: parsed.branch,
+          path: parsed.path,
+          installedAt: typeof parsed.installedAt === 'number' ? parsed.installedAt : Date.now(),
+        });
+      }
+    } else if (!out.markerCorrupt) {
+      out.markerCorrupt = 'schema-mismatch';
+    }
+    // Always drop the in-tree file — imported or unimportable, Dash shouldn't
+    // leave it in the user's codebase. `out.markerCorrupt` still reports the bad
+    // state for this call so the caller keeps the corrupt-marker UX.
+    rmSync(markerFile, { force: true });
+  }
+
+  const customFile = path.join(skillDir, VERIFIED_CUSTOM_FILENAME);
+  let customText: string | null = null;
   try {
-    parsed = JSON.parse(text) as Partial<VerifiedCustomRecord>;
+    customText = readFileSync(customFile, 'utf-8');
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('[SkillsService.readVerifiedCustom] parse failed', { file, message });
-    return { kind: 'corrupt', reason: 'parse-error' };
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') out.customCorrupt = 'read-failed';
   }
-  if (
-    parsed.version !== VERIFIED_CUSTOM_VERSION ||
-    typeof parsed.contentSha256 !== 'string' ||
-    typeof parsed.checkedAt !== 'number'
-  ) {
-    console.error('[SkillsService.readVerifiedCustom] schema mismatch', {
-      file,
-      version: parsed.version,
-    });
-    return { kind: 'corrupt', reason: 'schema-mismatch' };
+  if (customText !== null) {
+    let parsed: Partial<VerifiedCustomRecord> | undefined;
+    try {
+      parsed = JSON.parse(customText) as Partial<VerifiedCustomRecord>;
+    } catch {
+      out.customCorrupt = 'parse-error';
+    }
+    if (
+      parsed &&
+      parsed.version === VERIFIED_CUSTOM_VERSION &&
+      typeof parsed.contentSha256 === 'string' &&
+      typeof parsed.checkedAt === 'number'
+    ) {
+      const existing = getRegistryEntry(skillDir);
+      if (!existing?.source && !existing?.custom) {
+        setSkillCustom(skillDir, {
+          contentSha256: parsed.contentSha256,
+          checkedAt: parsed.checkedAt,
+        });
+      }
+    } else if (!out.customCorrupt) {
+      out.customCorrupt = 'schema-mismatch';
+    }
+    rmSync(customFile, { force: true });
   }
-  return { kind: 'present', record: parsed as VerifiedCustomRecord };
+
+  return out;
 }
 
 const SKILL_NAME_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -359,6 +448,67 @@ function normalizeSkill(s: RawSkill): RegistrySkill | null {
   };
 }
 
+async function fetchShardedRegistry(signal: AbortSignal): Promise<RawSkill[]> {
+  const manifestResp = await fetch(REGISTRY_MANIFEST_URL, {
+    headers: { 'Accept-Encoding': 'gzip' },
+    signal,
+  });
+  if (!manifestResp.ok) {
+    throw new Error(
+      `Registry manifest fetch failed: ${manifestResp.status} ${manifestResp.statusText}`,
+    );
+  }
+  const manifestText = await manifestResp.text();
+  let manifest: { shards?: unknown };
+  try {
+    manifest = JSON.parse(manifestText) as { shards?: unknown };
+  } catch (err) {
+    throw new Error(`Registry manifest returned non-JSON body: ${String(err)}`);
+  }
+  if (!Array.isArray(manifest.shards) || manifest.shards.length === 0) {
+    throw new Error('Registry manifest has no shards');
+  }
+
+  const shardPaths: string[] = [];
+  for (const entry of manifest.shards as Array<{ path?: unknown }>) {
+    const p = entry?.path;
+    if (typeof p !== 'string' || !SHARD_PATH_RE.test(p)) {
+      throw new Error(`Refusing shard path from manifest: ${JSON.stringify(p)}`);
+    }
+    shardPaths.push(p);
+  }
+
+  const all: RawSkill[] = [];
+  // Process in capped batches so peak memory stays bounded (~SHARD_CONCURRENCY × ~500 KB
+  // uncompressed per shard) while we still saturate the network on slow connections.
+  for (let i = 0; i < shardPaths.length; i += SHARD_CONCURRENCY) {
+    const batch = shardPaths.slice(i, i + SHARD_CONCURRENCY);
+    const results = await Promise.all(
+      batch.map(async (relPath) => {
+        const resp = await fetch(`${REGISTRY_BASE_URL}${relPath}`, {
+          headers: { 'Accept-Encoding': 'gzip' },
+          signal,
+        });
+        if (!resp.ok) {
+          throw new Error(`Shard ${relPath} fetch failed: ${resp.status} ${resp.statusText}`);
+        }
+        const text = await resp.text();
+        let parsed: { skills?: unknown };
+        try {
+          parsed = JSON.parse(text) as { skills?: unknown };
+        } catch (err) {
+          throw new Error(`Shard ${relPath} returned non-JSON body: ${String(err)}`);
+        }
+        return Array.isArray(parsed.skills) ? (parsed.skills as RawSkill[]) : [];
+      }),
+    );
+    for (const shardSkills of results) {
+      all.push(...shardSkills);
+    }
+  }
+  return all;
+}
+
 // Buffered parse rather than stream-json: a Buffer/Uint8Array mismatch between
 // Readable.fromWeb and fixUtf8Stream silently yielded 0 rows in our setup. Cost is
 // ~200 MB transient memory during the JSON.parse.
@@ -376,17 +526,28 @@ async function downloadAndStoreRegistry(): Promise<{ inserted: number }> {
     }
 
     const text = await resp.text();
-    let parsed: { skills?: unknown };
+    let parsed: { skills?: unknown; deprecated_full_payload?: unknown };
     try {
-      parsed = JSON.parse(text) as { skills?: unknown };
+      parsed = JSON.parse(text) as { skills?: unknown; deprecated_full_payload?: unknown };
     } catch (err) {
       throw new Error(`Registry returned non-JSON body (${text.length} bytes): ${String(err)}`);
     }
 
-    // Registry is delivered sorted by stars descending, so a head-slice is "top N by stars".
-    const rawSkills = Array.isArray(parsed.skills)
-      ? (parsed.skills as RawSkill[]).slice(0, MAX_SKILLS)
-      : [];
+    // Upstream may serve either the legacy flat payload or a deprecation stub pointing
+    // at the sharded layout. Both reach the same merged-and-sorted list below.
+    let rawSkills: RawSkill[];
+    if (parsed.deprecated_full_payload === true || !Array.isArray(parsed.skills)) {
+      rawSkills = await fetchShardedRegistry(controller.signal);
+    } else {
+      rawSkills = parsed.skills as RawSkill[];
+    }
+
+    // Sharded delivery is keyed by an install-branch hash, not by popularity, so we
+    // must sort across the union before head-slicing. The legacy path arrives pre-sorted
+    // by stars desc; sorting again is idempotent and cheap at this size.
+    rawSkills.sort((a, b) => (b.stars ?? 0) - (a.stars ?? 0));
+    if (rawSkills.length > MAX_SKILLS) rawSkills = rawSkills.slice(0, MAX_SKILLS);
+
     const normalized: RegistrySkill[] = [];
     let skipped = 0;
     for (const raw of rawSkills) {
@@ -406,9 +567,7 @@ async function downloadAndStoreRegistry(): Promise<{ inserted: number }> {
     }
 
     if (normalized.length === 0) {
-      throw new Error(
-        `Registry parsed but yielded 0 valid skills (raw: ${rawSkills.length}, body: ${text.length} bytes)`,
-      );
+      throw new Error(`Registry parsed but yielded 0 valid skills (raw: ${rawSkills.length})`);
     }
 
     // Atomic replace: previous cache survives if this throws mid-transaction.
@@ -566,12 +725,6 @@ export class SkillsService {
           const counter = { count: 1 };
           await this.fetchSkillDirectory(ref, stagingDir, MAX_RECURSION_DEPTH, counter);
 
-          // Write the marker last. The fetch loop skips entries named SKILL.md, but
-          // .dash-skill.json isn't on that allow-list — a registry that ships its own
-          // file by that name would otherwise leave a stale marker on disk after the
-          // recursive copy. Writing here guarantees we own the final bytes.
-          writeSkillMarker(stagingDir, ref);
-
           // Atomic-ish swap: remove any pre-existing install, then rename the whole
           // staging directory in. rename within the same parent is atomic on POSIX; the
           // in-flight lock above guards against concurrent installs racing
@@ -579,6 +732,10 @@ export class SkillsService {
           // Dash-installed dir.
           rmSync(installDir, { recursive: true, force: true });
           renameSync(stagingDir, installDir);
+
+          // Record the source binding in the central registry, keyed by the final
+          // install path — after the swap so a failed install leaves no orphan entry.
+          writeSkillMarker(installDir, ref);
         })(),
         timeoutPromise,
       ]);
@@ -817,6 +974,9 @@ export class SkillsService {
       throw err;
     }
     rmSync(skillDir, { recursive: true, force: true });
+    // Drop the central-registry entry so a later install at the same path isn't
+    // blocked by a stale source binding.
+    removeSkillMeta(skillDir);
   }
 }
 
@@ -843,6 +1003,20 @@ function listSkillFolders(skillsDir: string): { names: string[]; error?: string 
     }
   }
   return { names };
+}
+
+/** Lists skill folders (those with SKILL.md) directly under `<scopePath>/.claude/skills`,
+ *  flagging those that carry the Dash install marker. Used by the Extensions overview to
+ *  show standalone skills per scope. Missing dir → []. */
+export function listScopeSkillFolders(
+  scopePath: string,
+): Array<{ name: string; fromRegistry: boolean }> {
+  const base = path.join(scopePath, '.claude', 'skills');
+  const { names } = listSkillFolders(base);
+  return names.map((name) => ({
+    name,
+    fromRegistry: readSkillMarker(path.join(base, name)).kind === 'present',
+  }));
 }
 
 interface InstalledEntry {
@@ -898,7 +1072,7 @@ async function tryBackfillOne(
   // and don't write a sentinel: there's nothing to learn from a fetch we wouldn't
   // do, and a future registry refresh might disambiguate.
   if (candidates.length !== 1) return;
-  const ref = candidates[0];
+  const ref = candidates[0]!;
 
   const dirs: string[] = [];
   if (info.globalInstalled) dirs.push(path.join(home, '.claude', 'skills', skillName));

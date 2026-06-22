@@ -7,13 +7,18 @@ const MAX_SNAPSHOT_SIZE = 8 * 1024 * 1024; // 8MB per snapshot
 const MAX_TOTAL_SIZE = 64 * 1024 * 1024; // 64MB total
 
 class TerminalSnapshotServiceImpl {
-  private snapshotsDir: string;
+  // Lazy: resolving userData at module load breaks importers under
+  // ELECTRON_RUN_AS_NODE (tests), where `app` is unavailable.
+  private snapshotsDirCache: string | null = null;
 
-  constructor() {
-    this.snapshotsDir = path.join(app.getPath('userData'), 'terminal-snapshots');
-    if (!fs.existsSync(this.snapshotsDir)) {
-      fs.mkdirSync(this.snapshotsDir, { recursive: true });
+  private get snapshotsDir(): string {
+    if (!this.snapshotsDirCache) {
+      this.snapshotsDirCache = path.join(app.getPath('userData'), 'terminal-snapshots');
+      if (!fs.existsSync(this.snapshotsDirCache)) {
+        fs.mkdirSync(this.snapshotsDirCache, { recursive: true });
+      }
     }
+    return this.snapshotsDirCache;
   }
 
   async saveSnapshot(id: string, payload: TerminalSnapshot): Promise<void> {

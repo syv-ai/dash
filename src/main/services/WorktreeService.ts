@@ -5,10 +5,28 @@ import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { BrowserWindow } from 'electron';
 import type { WorktreeInfo, RemoveWorktreeOptions } from '@shared/types';
+import { slugify } from '@shared/slug';
 import { GithubService } from './GithubService';
+import {
+  loadWorkspaceConfig,
+  resolveSetupCommand,
+  resolveTeardownCommand,
+  buildWorkspaceEnv,
+} from './WorkspaceConfigService';
 
 const execFileAsync = promisify(execFile);
 const execAsync = promisify(exec);
+
+/** Turn a newline-separated per-task script into a single shell command
+ *  (commands joined with " && " so a failure short-circuits), or null when
+ *  there are no non-empty commands. */
+function scriptStringToCommand(script: string | null | undefined): string | null {
+  const commands = (script ?? '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  return commands.length > 0 ? commands.join(' && ') : null;
+}
 
 const PRESERVE_PATTERNS = [
   '.env',
@@ -31,6 +49,7 @@ export class WorktreeService {
       projectId: string;
       linkedIssueNumbers?: number[];
       pushRemote?: boolean;
+      setupScript?: string | null;
     },
   ): Promise<WorktreeInfo> {
     const slug = this.slugify(taskName);
@@ -60,7 +79,7 @@ export class WorktreeService {
     if (pushRemote) {
       // Link branch to issues before pushing (createLinkedBranch needs the branch to not exist)
       if (options.linkedIssueNumbers && options.linkedIssueNumbers.length > 0) {
-        this.linkAndPushAsync(worktreePath, branchName, options.linkedIssueNumbers);
+        void this.linkAndPushAsync(worktreePath, branchName, options.linkedIssueNumbers);
       } else {
         // Push branch with upstream tracking (async, non-blocking)
         this.pushBranchAsync(worktreePath, branchName);
@@ -68,7 +87,7 @@ export class WorktreeService {
     }
 
     // Run worktree setup script (async, non-blocking)
-    this.runSetupScriptAsync(options.projectId, worktreePath, branchName, projectPath);
+    this.runSetupScriptAsync(worktreePath, branchName, projectPath, options.setupScript);
 
     const id = this.stableIdFromPath(worktreePath);
     return {
@@ -118,6 +137,9 @@ export class WorktreeService {
       } catch {
         // If list fails, continue with removal anyway
       }
+
+      // Run teardown before removal so the script can still read .dash/* in the worktree.
+      await this.runTeardownAsync(worktreePath, projectPath, branch, options?.teardownScript);
 
       // Remove worktree
       try {
@@ -170,7 +192,7 @@ export class WorktreeService {
         timeout: 5000,
       });
       const match = stdout.match(/HEAD branch:\s*(\S+)/);
-      if (match) return match[1];
+      if (match) return match[1]!;
     } catch {
       // Ignore
     }
@@ -273,6 +295,16 @@ export class WorktreeService {
     }
   }
 
+  /**
+   * Fetch a single branch from origin so a worktree can be created on it.
+   * Used by the task-from-PR flow for ADO, whose PR source branch lives on
+   * origin. Returns the branch name unchanged for caller convenience.
+   */
+  async fetchRemoteBranch(projectPath: string, branch: string): Promise<string> {
+    await execFileAsync('git', ['fetch', 'origin', branch], { cwd: projectPath });
+    return branch;
+  }
+
   private async refExists(cwd: string, ref: string): Promise<boolean> {
     try {
       await execFileAsync('git', ['rev-parse', '--verify', '--quiet', ref], { cwd });
@@ -289,31 +321,95 @@ export class WorktreeService {
   }
 
   /**
-   * Run the project's worktree setup script in the new worktree directory.
+   * Resolve and run workspace teardown in the worktree just before it's removed.
+   *
+   * Sources, in priority order:
+   *   1. `.dash/config.json` teardown commands (joined with ` && `)
+   *   2. `bash <projectPath>/.dash/teardown.sh` if the script exists
+   *
+   * Awaited so cleanup (e.g. `docker compose down`) finishes before files vanish.
+   * Failures are toasted but do not block removal — the user asked for the worktree gone.
+   */
+  async runTeardownAsync(
+    worktreePath: string,
+    projectPath: string,
+    branch: string,
+    teardownOverride?: string | null,
+  ): Promise<void> {
+    try {
+      const config = loadWorkspaceConfig(worktreePath);
+      let command: string | null;
+      if (teardownOverride !== undefined && teardownOverride !== null) {
+        command = scriptStringToCommand(teardownOverride);
+      } else {
+        const fallbackPath = path.join(projectPath, '.dash', 'teardown.sh');
+        const fallbackScriptPath = fs.existsSync(fallbackPath) ? fallbackPath : null;
+        command = resolveTeardownCommand({ config, fallbackScriptPath });
+      }
+      if (!command) return;
+
+      const env = buildWorkspaceEnv({ worktreePath, projectPath, branch });
+      const cwd = config?.cwd ? path.join(worktreePath, config.cwd) : worktreePath;
+
+      await execAsync(command, {
+        cwd,
+        timeout: 30_000,
+        env: { ...process.env, ...env },
+      });
+    } catch (error: unknown) {
+      const stderr =
+        error && typeof error === 'object' && 'stderr' in error
+          ? String((error as { stderr: unknown }).stderr).trim()
+          : '';
+      const msg = stderr || (error instanceof Error ? error.message : String(error));
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send('app:toast', {
+            message: `Workspace teardown failed: ${msg.slice(0, 200)}`,
+          });
+        }
+      }
+    }
+  }
+
+  /**
+   * Resolve and run workspace setup in the new worktree directory.
+   *
+   * Sources, in priority order:
+   *   1. `.dash/config.json` setup commands (joined with ` && `)
+   *   2. `bash <projectPath>/.dash/setup.sh` if the script exists
+   *
    * Async, non-blocking — sends a toast on failure.
    */
   runSetupScriptAsync(
-    projectId: string,
     worktreePath: string,
     branchName: string,
     projectPath: string,
+    setupOverride?: string | null,
   ): void {
-    (async () => {
+    void (async () => {
       try {
-        const { DatabaseService } = await import('./DatabaseService');
-        const projects = DatabaseService.getProjects();
-        const project = projects.find((p) => p.id === projectId);
-        if (!project?.worktreeSetupScript) return;
+        const config = loadWorkspaceConfig(worktreePath);
+        // A per-task override (even an empty one) supersedes the project config:
+        // empty means "this worktree intentionally has no setup".
+        const overrideCommand = scriptStringToCommand(setupOverride);
+        let command: string | null;
+        if (setupOverride !== undefined && setupOverride !== null) {
+          command = overrideCommand;
+        } else {
+          const fallbackPath = path.join(projectPath, '.dash', 'setup.sh');
+          const fallbackScriptPath = fs.existsSync(fallbackPath) ? fallbackPath : null;
+          command = resolveSetupCommand({ config, fallbackScriptPath });
+        }
+        if (!command) return;
 
-        await execAsync(project.worktreeSetupScript, {
-          cwd: worktreePath,
+        const env = buildWorkspaceEnv({ worktreePath, projectPath, branch: branchName });
+        const cwd = config?.cwd ? path.join(worktreePath, config.cwd) : worktreePath;
+
+        await execAsync(command, {
+          cwd,
           timeout: 60_000,
-          env: {
-            ...process.env,
-            DASH_WORKTREE_PATH: worktreePath,
-            DASH_PROJECT_PATH: projectPath,
-            DASH_BRANCH: branchName,
-          },
+          env: { ...process.env, ...env },
         });
       } catch (error: unknown) {
         const stderr =
@@ -324,7 +420,7 @@ export class WorktreeService {
         for (const win of BrowserWindow.getAllWindows()) {
           if (!win.isDestroyed()) {
             win.webContents.send('app:toast', {
-              message: `Worktree setup script failed: ${msg.slice(0, 200)}`,
+              message: `Workspace setup failed: ${msg.slice(0, 200)}`,
             });
           }
         }
@@ -339,7 +435,7 @@ export class WorktreeService {
     projectPath: string,
     taskName: string,
     branch: string,
-    options: { projectId: string; linkedIssueNumbers?: number[] },
+    options: { projectId: string; linkedIssueNumbers?: number[]; setupScript?: string | null },
   ): Promise<WorktreeInfo> {
     // eslint-disable-next-line no-control-regex
     const hasControlChars = /[\x00-\x1f\x7f]/.test(branch);
@@ -430,10 +526,10 @@ export class WorktreeService {
     // For existing branches, only link issues — do not push, since the branch
     // already exists and the user manages its remote state.
     if (options.linkedIssueNumbers && options.linkedIssueNumbers.length > 0) {
-      this.linkIssuesAsync(worktreePath, branch, options.linkedIssueNumbers);
+      void this.linkIssuesAsync(worktreePath, branch, options.linkedIssueNumbers);
     }
 
-    this.runSetupScriptAsync(options.projectId, worktreePath, branch, projectPath);
+    this.runSetupScriptAsync(worktreePath, branch, projectPath, options.setupScript);
 
     const id = this.stableIdFromPath(worktreePath);
     return {
@@ -451,12 +547,10 @@ export class WorktreeService {
     return path.join(path.dirname(path.resolve(projectPath)), 'worktrees');
   }
 
+  /** Thin wrapper over the shared {@link slugify} so existing
+   *  `worktreeService.slugify(...)` callers keep working. */
   slugify(name: string): string {
-    return name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 50);
+    return slugify(name);
   }
 
   generateShortHash(): string {

@@ -1,160 +1,185 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo, Suspense, lazy } from 'react';
 import {
   PanelGroup,
   Panel,
   PanelResizeHandle,
   type ImperativePanelHandle,
 } from 'react-resizable-panels';
-import { LeftSidebar } from './components/LeftSidebar';
+import { TUI_FEATURE_IDS } from '@shared/tuiProtocol';
+import { LeftSidebar } from './components/leftSidebar/LeftSidebar';
 import { MainContent } from './components/MainContent';
-import { FileChangesPanel } from './components/FileChangesPanel';
-import { StructuredView } from './components/structured/StructuredView';
-import { ShellDrawerWrapper } from './components/ShellDrawerWrapper';
-import { DiffViewer } from './components/DiffViewer';
+import { openInIde } from './lib/openInIde';
+import { RightInspector } from './components/rightInspector/RightInspector';
+import { PortsDrawerWrapper } from './components/rightInspector/PortsDrawerWrapper';
+const DiffEditorModal = lazy(() => import('./components/diffEditor/DiffEditorModal'));
+import { ShellDrawerWrapper } from './components/terminal/ShellDrawerWrapper';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
-import { SkillsBrowserModal } from './components/SkillsBrowserModal';
-import { TaskModal } from './components/TaskModal';
-import { AddProjectModal } from './components/AddProjectModal';
-import { DeleteTaskModal } from './components/DeleteTaskModal';
-import { DeleteProjectModal, type DeleteProjectOptions } from './components/DeleteProjectModal';
+import { ExtensionsModal } from './components/extensions/ExtensionsModal';
+import { TaskModal } from './components/task/TaskModal';
+import { NewProjectWizard } from './components/newProject/NewProjectWizard';
+import { DeleteTaskModal } from './components/task/DeleteTaskModal';
+import { DeleteProjectModal } from './components/project/DeleteProjectModal';
 import { RemoteControlModal } from './components/RemoteControlModal';
-import { SettingsModal } from './components/SettingsModal';
-import { ProjectSettingsModal } from './components/ProjectSettingsModal';
-import { AdoSetupModal } from './components/AdoSetupModal';
-import { UsageWidget } from './components/UsageWidget';
-import { parseAdoRemote } from '../shared/urls';
-import { ToastContainer } from './components/Toast';
+import { SettingsModal } from './components/settings/SettingsModal';
+import { ProjectSettingsModal } from './components/project/ProjectSettingsModal';
+import { TaskSettingsModal } from './components/task/TaskSettingsModal';
+import { AdoSetupModal } from './components/vcs/ado/AdoSetupModal';
+import { ToastContainer } from './components/ui/Toast';
 import { toast } from 'sonner';
+import { getBillionToastContent } from './utils/billionToast';
 import { useStatusLine } from './hooks/useStatusLine';
 import { useThresholdAlerts } from './hooks/useThresholdAlerts';
-import type {
-  Project,
-  Task,
-  GitStatus,
-  DiffResult,
-  LinkedGithubIssue,
-  LinkedAdoWorkItem,
-  RemoteControlState,
-  UsageThresholds,
-  ActivityInfo,
-  RtkStatus,
-  RtkDownloadProgress,
-} from '../shared/types';
-import type { CreateTaskOptions } from './components/TaskModal';
-import { formatTaskContextPrompt } from '../shared/taskContext';
-import { loadKeybindings, saveKeybindings, matchesBinding } from './keybindings';
-import type { KeyBindingMap } from './keybindings';
+import type { Task } from '../shared/types';
+import type { CreateTaskOptions, TaskModalDefaults } from './components/task/TaskModal';
+import { matchesBinding } from './keybindings';
 import { sessionRegistry } from './terminal/SessionRegistry';
-import { playNotificationSound, playPeonSound } from './sounds';
-import type { NotificationSound } from './sounds';
+import { resolveTheme } from './terminal/terminalThemes';
+import { resolveTerminalFontValue } from './terminal/terminalFonts';
+import { useSettings } from './stores/settingsStore';
+import { useUi } from './stores/uiStore';
+import { useGit } from './stores/gitStore';
+import { useRuntime } from './stores/runtimeStore';
+import { useAppBootstrap } from './hooks/useAppBootstrap';
+import { useShallow } from 'zustand/react/shallow';
+import {
+  useProjects,
+  selectActiveProject,
+  selectActiveTask,
+  selectActiveProjectTasks,
+} from './stores/projectsStore';
 
-const GIT_POLL_INTERVAL = 5000;
+/** Chrome around the pinned TUI canvas (panel padding + drawer gutter) added
+ *  to the measured canvas px so the panel hugs it without clipping. */
+const TUI_PANEL_CHROME_PX = 52;
+/** Trim the hugged panel width — the canvas has built-in right whitespace, so
+ *  the panel can sit narrower than the full canvas without clipping content. */
+const TUI_PANEL_WIDTH_SCALE = 0.85;
+/** Bounds for the hugged right-panel width (%) — matches the panel's min/max. */
+const TUI_PANEL_MIN_PCT = 12;
+const TUI_PANEL_MAX_PCT = 40;
 const EMPTY_CONTEXT_USAGE: Record<string, import('../shared/types').ContextUsage> = {};
 
 export function App() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(() =>
-    localStorage.getItem('activeProjectId'),
-  );
-  const [tasksByProject, setTasksByProject] = useState<Record<string, Task[]>>({});
-  const [activeTaskId, setActiveTaskId] = useState<string | null>(() =>
-    localStorage.getItem('activeTaskId'),
-  );
-  const [showTaskModal, setShowTaskModal] = useState(false);
-  const [isCreatingTask, setIsCreatingTask] = useState(false);
-  const [taskModalProjectId, setTaskModalProjectId] = useState<string | null>(null);
-  const [showAddProjectModal, setShowAddProjectModal] = useState(false);
-  const [cloneStatus, setCloneStatus] = useState<{ loading: boolean; error: string | null }>({
-    loading: false,
-    error: null,
-  });
-  const [deleteTaskTarget, setDeleteTaskTarget] = useState<Task | null>(null);
-  const [deleteProjectTarget, setDeleteProjectTarget] = useState<Project | null>(null);
-  const [projectSettingsTarget, setProjectSettingsTarget] = useState<Project | null>(null);
-  const [adoSetup, setAdoSetup] = useState<{
-    projectId: string;
-    organizationUrl: string;
-    project: string;
-  } | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showSkillsBrowser, setShowSkillsBrowser] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>();
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    return (localStorage.getItem('theme') as 'light' | 'dark') || 'dark';
-  });
-  const [diffContextLines, setDiffContextLines] = useState<number | null>(() => {
-    const stored = localStorage.getItem('diffContextLines');
-    if (stored === null || stored === 'null') return null; // null = full file
-    return parseInt(stored, 10) || 3;
-  });
-  const [keybindings, setKeybindings] = useState<KeyBindingMap>(loadKeybindings);
-  const [notificationSound, setNotificationSound] = useState<NotificationSound>(() => {
-    return (localStorage.getItem('notificationSound') as NotificationSound) || 'off';
-  });
-  const [desktopNotification, setDesktopNotification] = useState(() => {
-    return localStorage.getItem('desktopNotification') === 'true';
-  });
-  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(() => {
-    const stored = localStorage.getItem('autoUpdateEnabled');
-    return stored === null ? true : stored === 'true';
-  });
-  const [updateNotificationsEnabled, setUpdateNotificationsEnabled] = useState(() => {
-    const stored = localStorage.getItem('updateNotificationsEnabled');
-    return stored === null ? true : stored === 'true';
-  });
-  const [shellDrawerEnabled, setShellDrawerEnabled] = useState(() => {
-    const stored = localStorage.getItem('shellDrawerEnabled');
-    return stored === null ? true : stored === 'true';
-  });
-  const [shellDrawerCollapsed, setShellDrawerCollapsed] = useState(() => {
-    return localStorage.getItem('shellDrawerCollapsed') === 'true';
-  });
-  const [shellDrawerPosition, setShellDrawerPosition] = useState<'left' | 'main' | 'right'>(() => {
-    return (localStorage.getItem('shellDrawerPosition') as 'left' | 'main' | 'right') || 'right';
-  });
-  const [terminalTheme, setTerminalTheme] = useState(() => {
-    return localStorage.getItem('terminalTheme') || 'default';
-  });
-  const [preferredIDE, setPreferredIDE] = useState<string>(() => {
-    const stored = localStorage.getItem('preferredIDE');
-    if (!stored) return 'auto';
-    // Migrate legacy 'code' → 'vscode'
-    if (stored === 'code') {
-      localStorage.setItem('preferredIDE', 'vscode');
-      return 'vscode';
-    }
-    return stored;
-  });
-  const [customIDE, setCustomIDE] = useState<{ path: string; args: string[] }>(() => {
-    const raw = localStorage.getItem('customIDE');
-    if (!raw) return { path: '', args: [] };
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed.path === 'string' && Array.isArray(parsed.args)) {
-        return parsed;
+  // Projects/tasks domain state lives in projectsStore; subscribe via selectors.
+  const projects = useProjects((s) => s.projects);
+  const tasksByProject = useProjects((s) => s.tasksByProject);
+  const activeProjectId = useProjects((s) => s.activeProjectId);
+  const activeTaskId = useProjects((s) => s.activeTaskId);
+  const isCreatingTask = useProjects((s) => s.isCreatingTask);
+  // Pre-resolved for the TaskModal so the issue picker + branch banner render at
+  // their final size on first paint, instead of popping in mid-mount.
+  const ghAvailable = useProjects((s) => s.ghAvailable);
+  const adoConfiguredById = useProjects((s) => s.adoConfiguredById);
+  const branchesByProject = useProjects((s) => s.branchesByProject);
+  // Action aliases keep existing call sites compiling unchanged.
+  const setActiveProjectId = useProjects((s) => s.setActiveProject);
+  const setActiveTaskId = useProjects((s) => s.setActiveTask);
+  // ── UI / modal state (uiStore) ───────────────────────────
+  const showTaskModal = useUi((s) => s.showTaskModal);
+  const setShowTaskModal = useUi((s) => s.setShowTaskModal);
+  const taskModalProjectId = useUi((s) => s.taskModalProjectId);
+  const setTaskModalProjectId = useUi((s) => s.setTaskModalProjectId);
+  const showAddProjectModal = useUi((s) => s.showAddProjectModal);
+  const setShowAddProjectModal = useUi((s) => s.setShowAddProjectModal);
+  const finishProjectCreation = useUi((s) => s.finishProjectCreation);
+  const deleteTaskTarget = useUi((s) => s.deleteTaskTarget);
+  const setDeleteTaskTarget = useUi((s) => s.setDeleteTaskTarget);
+  const deleteProjectTarget = useUi((s) => s.deleteProjectTarget);
+  const setDeleteProjectTarget = useUi((s) => s.setDeleteProjectTarget);
+  const projectSettingsTarget = useUi((s) => s.projectSettingsTarget);
+  const setProjectSettingsTarget = useUi((s) => s.setProjectSettingsTarget);
+  const taskSettingsTarget = useUi((s) => s.taskSettingsTarget);
+  const setTaskSettingsTarget = useUi((s) => s.setTaskSettingsTarget);
+  const adoSetup = useUi((s) => s.adoSetup);
+  const setAdoSetup = useUi((s) => s.setAdoSetup);
+  const showSettings = useUi((s) => s.showSettings);
+  const setShowSettings = useUi((s) => s.setShowSettings);
+  const showSkillsBrowser = useUi((s) => s.showSkillsBrowser);
+  const setShowSkillsBrowser = useUi((s) => s.setShowSkillsBrowser);
+  const extensionsInitialScopeId = useUi((s) => s.extensionsInitialScopeId);
+  const setExtensionsInitialScopeId = useUi((s) => s.setExtensionsInitialScopeId);
+  const settingsInitialTab = useUi((s) => s.settingsInitialTab);
+  const setSettingsInitialTab = useUi((s) => s.setSettingsInitialTab);
+  const theme = useSettings((s) => s.theme);
+  const keybindings = useSettings((s) => s.keybindings);
+  const desktopNotification = useSettings((s) => s.desktopNotification);
+  const autoUpdateEnabled = useSettings((s) => s.autoUpdateEnabled);
+  const setAutoUpdateEnabled = useSettings((s) => s.setAutoUpdateEnabled);
+  const updateNotificationsEnabled = useSettings((s) => s.updateNotificationsEnabled);
+  const shellDrawerCollapsed = useSettings((s) => s.shellDrawerCollapsed);
+  const setShellDrawerCollapsed = useSettings((s) => s.setShellDrawerCollapsed);
+  // Ports drawer defaults to collapsed so it doesn't intrude on projects
+  // that aren't using port management; the collapsed bar still shows status.
+  const portsDrawerCollapsed = useSettings((s) => s.portsDrawerCollapsed);
+  const setPortsDrawerCollapsed = useSettings((s) => s.setPortsDrawerCollapsed);
+  const shellDrawerPosition = useSettings((s) => s.shellDrawerPosition);
+  const terminalTheme = useSettings((s) => s.terminalTheme);
+  const terminalFontFamily = useSettings((s) => s.terminalFontFamily);
+  const setPreferredIDE = useSettings((s) => s.setPreferredIDE);
+  const availableIDEs = useProjects((s) => s.availableIDEs);
+
+  // Store-level live subscriptions + reactive bootstrap (runtime init, token rollups,
+  // git watcher/poll, PR detection). React schedules WHEN; the stores own HOW.
+  useAppBootstrap();
+
+  // One-shot localStorage → SQLite migration for drawer tabs. After upgrading
+  // past commit 3, per-task tab state lives in the drawer_tabs table owned by
+  // main. We scrape the old `shellTabs:*` / `shellActiveTab:*` keys and hand
+  // them to drawerTabsBulkUpsert; once the IPC succeeds, the keys are deleted
+  // so subsequent mounts no-op.
+  useEffect(() => {
+    const entries: Array<{
+      taskId: string;
+      tabs: Array<{ id: string; kind: 'shell' | 'tui'; label: string; position: number }>;
+      activeTabId: string | null;
+    }> = [];
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key?.startsWith('shellTabs:')) continue;
+      const taskId = key.slice('shellTabs:'.length);
+      try {
+        const raw = JSON.parse(localStorage.getItem(key) ?? '[]');
+        if (!Array.isArray(raw)) continue;
+        entries.push({
+          taskId,
+          tabs: raw.map((t: { id: string; label?: string }, idx: number) => ({
+            id: t.id,
+            kind: 'shell' as const,
+            label: t.label ?? String(idx + 1),
+            position: idx,
+          })),
+          activeTabId: localStorage.getItem(`shellActiveTab:${taskId}`),
+        });
+      } catch {
+        /* skip corrupted */
       }
-      console.warn('[openInIDE] customIDE has unexpected shape, resetting');
-    } catch (err) {
-      console.warn('[openInIDE] Failed to parse customIDE from localStorage:', err);
     }
-    return { path: '', args: [] };
-  });
-  const [availableIDEs, setAvailableIDEs] = useState<Array<{ id: string; label: string }>>([]);
+
+    if (entries.length === 0) return;
+    void window.electronAPI.drawerTabsBulkUpsert(entries).then((resp) => {
+      if (!resp.success) return;
+      for (const e of entries) {
+        localStorage.removeItem(`shellTabs:${e.taskId}`);
+        localStorage.removeItem(`shellActiveTab:${e.taskId}`);
+      }
+    });
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    window.electronAPI.detectAvailableIDEs().then((res) => {
+    void window.electronAPI.detectAvailableIDEs().then((res) => {
       if (cancelled) return;
       if (!res.success || !res.data) {
         console.warn('[openInIDE] Failed to detect available IDEs:', res.error);
         return;
       }
-      setAvailableIDEs(res.data);
+      useProjects.getState().setAvailableIDEs(res.data);
       // Self-heal: if the stored IDE was uninstalled, fall back to auto so
       // Settings doesn't show a phantom selection and clicks don't 404.
       setPreferredIDE((current) => {
         if (current === 'auto' || current === 'custom') return current;
         if (res.data!.some((d) => d.id === current)) return current;
-        localStorage.removeItem('preferredIDE');
         return 'auto';
       });
     });
@@ -162,69 +187,11 @@ export function App() {
       cancelled = true;
     };
   }, []);
-  const [commitAttribution, setCommitAttribution] = useState<string | undefined>(() => {
-    const stored = localStorage.getItem('commitAttribution');
-    if (stored === null) return undefined; // "default" — key absent
-    return stored; // '' for "none", or custom text
-  });
-  const [effortLevel, setEffortLevel] = useState<string>(() => {
-    return localStorage.getItem('claudeEffortLevel') || 'auto';
-  });
-  const [syncShellEnv, setSyncShellEnv] = useState(() => {
-    return localStorage.getItem('syncShellEnv') === 'true';
-  });
-  const [ultracode, setUltracode] = useState(() => {
-    return localStorage.getItem('ultracode') === 'true';
-  });
-  const [customClaudeEnvVars, setCustomClaudeEnvVars] = useState<Record<string, string>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem('customClaudeEnvVars') || '{}');
-    } catch (err) {
-      console.error('Failed to parse customClaudeEnvVars from localStorage, resetting:', err);
-      localStorage.removeItem('customClaudeEnvVars');
-      return {};
-    }
-  });
-  // RTK state
-  const [rtkStatus, setRtkStatus] = useState<RtkStatus | null>(null);
-  const [rtkDownloadProgress, setRtkDownloadProgress] = useState<RtkDownloadProgress | null>(null);
-
-  useEffect(() => {
-    // Retry once on transient failure — without it, a single flake at startup
-    // leaves rtkStatus null forever and the Settings card stays stuck on
-    // "loading…".
-    let cancelled = false;
-    const tryFetch = (attempt: number): void => {
-      window.electronAPI.rtkGetStatus().then((resp) => {
-        if (cancelled) return;
-        if (resp.success && resp.data) {
-          setRtkStatus(resp.data);
-        } else if (attempt < 1) {
-          console.warn('[rtk:getStatus] retrying after transient failure:', resp.error);
-          setTimeout(() => tryFetch(attempt + 1), 500);
-        } else {
-          console.error('[rtk:getStatus] gave up after retry:', resp.error);
-          // Sentinel so the Settings card stops spinning. `enabled` is
-          // unrepresentable on the not-installed arm by design.
-          setRtkStatus({ installed: false, downloadable: false });
-        }
-      });
-    };
-    tryFetch(0);
-    const cleanup = window.electronAPI.onRtkDownloadProgress((progress) => {
-      setRtkDownloadProgress(progress);
-      if (progress.phase === 'done') {
-        window.electronAPI.rtkGetStatus().then((resp) => {
-          if (resp.success && resp.data) setRtkStatus(resp.data);
-          else console.error('[rtk:getStatus after download]', resp.error);
-        });
-      }
-    });
-    return () => {
-      cancelled = true;
-      cleanup();
-    };
-  }, []);
+  const commitAttribution = useSettings((s) => s.commitAttribution);
+  const effortLevel = useSettings((s) => s.effortLevel);
+  const syncShellEnv = useSettings((s) => s.syncShellEnv);
+  const ultracode = useSettings((s) => s.ultracode);
+  const customClaudeEnvVars = useSettings((s) => s.customClaudeEnvVars);
 
   // Sync desktop notification settings to main process
   useEffect(() => {
@@ -233,24 +200,28 @@ export function App() {
     });
   }, [desktopNotification]);
 
-  // Hydrate auto-update preference from main (file is source of truth) on mount
+  // Hydrate auto-update preference from main (file is source of truth) on mount.
+  // Gate the sync-to-main effect on this so the localStorage-derived initial
+  // value can't overwrite the file before we've read it.
+  const autoUpdateHydratedRef = useRef(false);
   useEffect(() => {
     let cancelled = false;
-    window.electronAPI.autoUpdateGetEnabled?.().then((res) => {
+    void window.electronAPI.autoUpdateGetEnabled?.().then((res) => {
       if (cancelled) return;
       if (res.success && typeof res.data === 'boolean') {
         setAutoUpdateEnabled(res.data);
-        localStorage.setItem('autoUpdateEnabled', String(res.data));
       }
+      autoUpdateHydratedRef.current = true;
     });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // Sync auto-update enabled to main process
+  // Sync auto-update enabled to main process (only after hydration)
   useEffect(() => {
-    window.electronAPI.autoUpdateSetEnabled?.(autoUpdateEnabled);
+    if (!autoUpdateHydratedRef.current) return;
+    void window.electronAPI.autoUpdateSetEnabled?.(autoUpdateEnabled);
   }, [autoUpdateEnabled]);
   // Sync commit attribution to main process
   useEffect(() => {
@@ -260,7 +231,7 @@ export function App() {
   useEffect(() => {
     window.electronAPI.setSyncShellEnv?.(syncShellEnv);
   }, [syncShellEnv]);
-  // Sync ultracode toggle to main process (applied as a spawn arg)
+  // Sync ultracode toggle to main process (applied as a spawn arg on new sessions)
   useEffect(() => {
     window.electronAPI.setUltracode?.(ultracode);
   }, [ultracode]);
@@ -271,62 +242,20 @@ export function App() {
     window.electronAPI.setClaudeEnvVars?.(vars);
   }, [effortLevel, customClaudeEnvVars]);
 
-  // Activity state — keys are PTY IDs that have active sessions
-  const [taskActivity, setTaskActivity] = useState<Record<string, ActivityInfo>>({});
-
-  // Remote control state
-  const [remoteControlStates, setRemoteControlStates] = useState<
-    Record<string, RemoteControlState>
-  >({});
-  const [remoteControlModalPtyId, setRemoteControlModalPtyId] = useState<string | null>(null);
+  // Activity + remote-control state (runtimeStore; both fed by its init() subscriptions).
+  const taskActivity = useRuntime((s) => s.taskActivity);
+  const remoteControlStates = useRuntime((s) => s.remoteControlStates);
+  const remoteControlModalPtyId = useUi((s) => s.remoteControlModalPtyId);
+  const setRemoteControlModalPtyId = useUi((s) => s.setRemoteControlModalPtyId);
 
   // Status line data (context + cost + rate limits) — derived contextUsage & latestRateLimits
   const { statusLineData, contextUsage, latestRateLimits } = useStatusLine();
 
   // Usage thresholds for popup notifications
-  const [usageThresholds, setUsageThresholds] = useState<UsageThresholds>(() => {
-    try {
-      const stored = localStorage.getItem('usageThresholds');
-      return stored
-        ? JSON.parse(stored)
-        : {
-            contextPercentage: 80,
-            fiveHourPercentage: null,
-            sevenDayPercentage: null,
-          };
-    } catch (err) {
-      console.warn('Failed to parse usageThresholds from localStorage, resetting:', err);
-      return {
-        contextPercentage: 80,
-        fiveHourPercentage: null,
-        sevenDayPercentage: null,
-      };
-    }
-  });
+  const usageThresholds = useSettings((s) => s.usageThresholds);
 
-  const notificationSoundRef = useRef(notificationSound);
-  useEffect(() => {
-    notificationSoundRef.current = notificationSound;
-  }, [notificationSound]);
-
-  const [unseenTaskIds, setUnseenTaskIds] = useState<Set<string>>(() => {
-    try {
-      const stored = localStorage.getItem('unseenTaskIds');
-      return stored ? new Set(JSON.parse(stored)) : new Set();
-    } catch {
-      return new Set();
-    }
-  });
-
-  const activeTaskIdRef = useRef(activeTaskId);
-  useEffect(() => {
-    activeTaskIdRef.current = activeTaskId;
-  }, [activeTaskId]);
-
-  // Persist unseenTaskIds to localStorage
-  useEffect(() => {
-    localStorage.setItem('unseenTaskIds', JSON.stringify([...unseenTaskIds]));
-  }, [unseenTaskIds]);
+  const unseenTaskIds = useSettings((s) => s.unseenTaskIds);
+  const setUnseenTaskIds = useSettings((s) => s.setUnseenTaskIds);
 
   // Clear unseen when a task becomes active
   useEffect(() => {
@@ -340,72 +269,46 @@ export function App() {
   }, [activeTaskId]);
 
   // Right-sidebar: 5-hour / 7-day rate limit bars
-  const [showRateLimits, setShowRateLimits] = useState(
-    () => localStorage.getItem('showRateLimits') !== 'false',
-  );
-  useEffect(() => {
-    localStorage.setItem('showRateLimits', String(showRateLimits));
-  }, [showRateLimits]);
-
-  // Right-sidebar: current session (context) usage bar
-  const [showUsageInline, setShowUsageInline] = useState(
-    () => localStorage.getItem('showUsageInline') !== 'false',
-  );
-  useEffect(() => {
-    localStorage.setItem('showUsageInline', String(showUsageInline));
-  }, [showUsageInline]);
-
-  // Left-sidebar task cards: context progress bar under each task
-  const [showContextUsageOnTaskCards, setShowContextUsageOnTaskCards] = useState(
-    () => localStorage.getItem('showContextUsageOnTaskCards') !== 'false',
-  );
-  useEffect(() => {
-    localStorage.setItem('showContextUsageOnTaskCards', String(showContextUsageOnTaskCards));
-  }, [showContextUsageOnTaskCards]);
-
-  // Right-panel: structured session view (opt-in, off by default)
-  const [showStructuredView, setShowStructuredView] = useState(
-    () => localStorage.getItem('showStructuredView') === 'true',
-  );
-  useEffect(() => {
-    localStorage.setItem('showStructuredView', String(showStructuredView));
-  }, [showStructuredView]);
+  const showRateLimits = useSettings((s) => s.showRateLimits);
+  const showUsageInline = useSettings((s) => s.showUsageInline);
+  const showContextUsageOnTaskCards = useSettings((s) => s.showContextUsageOnTaskCards);
 
   // Rotation — tasks the user cycles through with Ctrl+Tab
-  const [showActiveTasksSection, setShowActiveTasksSection] = useState(
-    () => localStorage.getItem('showActiveTasksSection') !== 'false',
-  );
-  useEffect(() => {
-    localStorage.setItem('showActiveTasksSection', String(showActiveTasksSection));
-  }, [showActiveTasksSection]);
+  const showActiveTasksSection = useSettings((s) => s.showActiveTasksSection);
+  const setShowActiveTasksSection = useSettings((s) => s.setShowActiveTasksSection);
 
-  const [rotationExclusions, setRotationExclusions] = useState<Set<string>>(() => {
-    try {
-      const stored = localStorage.getItem('rotationExclusions');
-      return stored ? new Set(JSON.parse(stored)) : new Set();
-    } catch (err) {
-      console.error('Failed to parse rotationExclusions from localStorage, resetting:', err);
-      localStorage.removeItem('rotationExclusions');
-      return new Set();
+  // Token-stats rollups (runtimeStore; live-updated via its init() tokenStats subscription).
+  const globalTokenStats = useRuntime((s) => s.globalTokenStats);
+
+  // Celebrate each billion-token milestone. The threshold filters out the
+  // initial DB load (0 → multi-billion in one step) and one-shot backfill jumps
+  // for individual tasks (can add hundreds of millions). Live recomputes
+  // increment by a few thousand at a time, so any plausible single-step delta
+  // is well under 50M.
+  const prevGlobalTotalRef = useRef<number | null>(null);
+  useEffect(() => {
+    const newTotal = globalTokenStats.totalTokens;
+    const prev = prevGlobalTotalRef.current;
+    prevGlobalTotalRef.current = newTotal;
+
+    if (prev === null) return;
+    const delta = newTotal - prev;
+    if (delta <= 0 || delta >= 50_000_000) return;
+
+    const prevB = Math.floor(prev / 1_000_000_000);
+    const newB = Math.floor(newTotal / 1_000_000_000);
+    if (newB <= prevB) return;
+    for (let b = prevB + 1; b <= newB; b++) {
+      const { title, description } = getBillionToastContent(b, newTotal);
+      toast.success(title, { description, duration: 8000 });
     }
-  });
+  }, [globalTokenStats.totalTokens]);
 
-  useEffect(() => {
-    localStorage.setItem('rotationExclusions', JSON.stringify([...rotationExclusions]));
-  }, [rotationExclusions]);
+  const rotationExclusions = useSettings((s) => s.rotationExclusions);
+  const setRotationExclusions = useSettings((s) => s.setRotationExclusions);
 
-  const [rotationOrder, setRotationOrder] = useState<string[]>(() => {
-    try {
-      const stored = localStorage.getItem('rotationOrder');
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  useEffect(() => {
-    localStorage.setItem('rotationOrder', JSON.stringify(rotationOrder));
-  }, [rotationOrder]);
+  const rotationOrder = useSettings((s) => s.rotationOrder);
+  const setRotationOrder = useSettings((s) => s.setRotationOrder);
 
   // Clean up rotationOrder: prune IDs for tasks that no longer exist
   useEffect(() => {
@@ -422,51 +325,109 @@ export function App() {
     }
   }, [tasksByProject]);
 
-  // Git state
-  const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
-  const [gitLoading, setGitLoading] = useState(false);
-  const [diffResult, setDiffResult] = useState<DiffResult | null>(null);
-  const [diffLoading, setDiffLoading] = useState(false);
-  const [showDiff, setShowDiff] = useState(false);
-  const [showCommitGraph, setShowCommitGraph] = useState(false);
+  // ── Git state (gitStore) ─────────────────────────────────
+  const gitStatus = useGit((s) => s.gitStatus);
+  const diffFile = useGit((s) => s.diffFile);
+  const setDiffFile = useGit((s) => s.setDiffFile);
+  const showCommitGraph = useGit((s) => s.showCommitGraph);
+  const setShowCommitGraph = useGit((s) => s.setShowCommitGraph);
 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    return localStorage.getItem('sidebarCollapsed') === 'true';
-  });
-  const [changesPanelCollapsed, setChangesPanelCollapsed] = useState(() => {
-    return localStorage.getItem('changesPanelCollapsed') === 'true';
-  });
-  const [rightPanelTab, setRightPanelTab] = useState<'changes' | 'structured'>(() => {
-    return (localStorage.getItem('rightPanelTab') as 'changes' | 'structured') || 'structured';
-  });
+  const sidebarCollapsed = useSettings((s) => s.sidebarCollapsed);
+  const setSidebarCollapsed = useSettings((s) => s.setSidebarCollapsed);
+  const changesPanelCollapsed = useSettings((s) => s.changesPanelCollapsed);
+  const setChangesPanelCollapsed = useSettings((s) => s.setChangesPanelCollapsed);
 
   const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
   const changesPanelRef = useRef<ImperativePanelHandle>(null);
   const shellDrawerPanelRef = useRef<ImperativePanelHandle>(null);
-  const [sidebarAnimating, setSidebarAnimating] = useState(false);
-  const [changesAnimating, setChangesAnimating] = useState(false);
-  const [shellDrawerAnimating, setShellDrawerAnimating] = useState(false);
-  const fileWatcherCleanup = useRef<(() => void) | null>(null);
-  const gitPollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const activeProject = projects.find((p) => p.id === activeProjectId) ?? null;
+  const sidebarAnimating = useUi((s) => s.sidebarAnimating);
+  const setSidebarAnimating = useUi((s) => s.setSidebarAnimating);
+  const changesAnimating = useUi((s) => s.changesAnimating);
+  const setChangesAnimating = useUi((s) => s.setChangesAnimating);
+  const shellDrawerAnimating = useUi((s) => s.shellDrawerAnimating);
+  const setShellDrawerAnimating = useUi((s) => s.setShellDrawerAnimating);
+  const activeProject = useProjects(selectActiveProject);
 
-  // Find activeTask across all projects
-  const activeTask = (() => {
-    for (const tasks of Object.values(tasksByProject)) {
-      const found = tasks.find((t) => t.id === activeTaskId);
-      if (found) return found;
+  // Color of the active terminal bg — used to make the main-pane header strip
+  // blend with whatever palette the user has selected (default / Dracula / Tokyo Night / …)
+  const terminalBg = useMemo(
+    () => resolveTheme(terminalTheme, theme === 'dark').background || undefined,
+    [terminalTheme, theme],
+  );
+  // Full ITheme passed to the file editor so its Monaco view matches the terminal.
+  const resolvedTerminalTheme = useMemo(
+    () => resolveTheme(terminalTheme, theme === 'dark'),
+    [terminalTheme, theme],
+  );
+
+  const activeTask = useProjects(selectActiveTask);
+  // All non-archived tasks for the active project (for cycling).
+  // selectActiveProjectTasks filters → a fresh array every call, so it must be wrapped in
+  // useShallow; a raw subscription feeds useSyncExternalStore an ever-changing snapshot and
+  // loops infinitely. (selectActiveProject/Task return existing objects, so they're stable.)
+  const activeProjectTasks = useProjects(useShallow(selectActiveProjectTasks));
+
+  // Side-car TUI features (ports onboarding today). On active-task change,
+  // ask main to spawn each feature's flow + Clack TUI inside a drawer tab —
+  // unless the project dismissed the feature, or a TUI is already active or
+  // suppressed for this task. Main owns the state machine; the renderer just
+  // kicks it off.
+  useEffect(() => {
+    if (!activeTask || !activeTask.projectId) return;
+    const project = projects.find((p) => p.id === activeTask.projectId);
+    if (!project) return;
+    const taskId = activeTask.id;
+    const projectId = activeTask.projectId;
+    const taskName = activeTask.name;
+    const projectName = project.name;
+    const cwd = activeTask.path;
+
+    for (const featureId of TUI_FEATURE_IDS) {
+      void window.electronAPI.wizardActive({ featureId, taskId }).then((resp) => {
+        if (resp.success && resp.data) return;
+        void window.electronAPI.requestWizard({
+          featureId,
+          taskId,
+          projectId,
+          taskName,
+          projectName,
+          cwd,
+        });
+      });
     }
-    return null;
-  })();
+  }, [activeTask, projects]);
 
-  // All non-archived tasks for the active project (for cycling)
-  const activeProjectTasks = activeProjectId
-    ? (tasksByProject[activeProjectId] || []).filter((t) => !t.archivedAt)
-    : [];
+  // Orchestrator broadcasts ports:restart-task when the user picks 'restart'
+  // on the DONE screen. SessionRegistry restarts both agent + shell PTYs so
+  // they pick up the freshly allocated env vars (Dash injects them from
+  // SQLite at spawn time).
+  useEffect(() => {
+    const off = window.electronAPI.onPortsRestartTask((tid) => {
+      void sessionRegistry.restartAllForTask(tid);
+    });
+    return off;
+  }, []);
 
-  // Memoized props for SkillsBrowserModal. Without these, App.tsx re-renders (terminal
+  // Ports TUI migrate flow: main created a `port-setup` worktree task and
+  // already spawned the new orchestrator + side-car in its drawer. We need
+  // to (a) refresh the source project's task list so the new task shows up
+  // in the sidebar and (b) switch active to it so the user lands on the new
+  // TUI. The payload's projectId (not activeProjectId) targets the right
+  // project even if the user switched projects during the migrate window.
+  useEffect(() => {
+    const off = window.electronAPI.onPortsTuiMigrated(({ toTaskId, projectId }) => {
+      void (async () => {
+        await loadTasksForProject(projectId);
+        setActiveProjectId(projectId);
+        setActiveTaskId(toTaskId);
+      })();
+    });
+    return off;
+  }, []);
+
+  // Memoized props for ExtensionsModal. Without these, App.tsx re-renders (terminal
   // activity, git polls, PTY events) hand the modal new array references every time,
-  // and the modal's loadInstalled useCallback re-fires its refetch effect — flickering
+  // and the modal's overview useCallback re-fires its refetch effect — flickering
   // the list back to a loading state on every unrelated re-render.
   const skillsModalProjects = useMemo(
     () => projects.map((p) => ({ id: p.id, name: p.name, path: p.path })),
@@ -482,10 +443,9 @@ export function App() {
           .filter((t) => t.useWorktree && !t.archivedAt)
           .map((t) => ({
             taskId: t.id,
-            taskName: t.name,
+            name: t.name,
             worktreePath: t.path,
             projectId: p.id,
-            projectName: p.name,
           }));
       }),
     [projects, tasksByProject],
@@ -515,123 +475,42 @@ export function App() {
 
   // Load projects on mount
   useEffect(() => {
-    loadProjects();
+    void loadProjects();
   }, []);
 
-  // Save all terminal snapshots when app is about to quit
+  // `gh auth status` spawns a subprocess (100-500ms); warm it once so the
+  // TaskModal can read the result synchronously instead of mid-mount.
   useEffect(() => {
-    return window.electronAPI.onBeforeQuit(() => {
-      sessionRegistry.saveAllSnapshots();
+    void window.electronAPI.githubCheckAvailable().then((r) => {
+      if (r.success) useProjects.getState().setGhAvailable(!!r.data);
     });
   }, []);
+
+  // Pre-fetch ADO config + branches for the active project so the TaskModal
+  // opens with its final layout. Narrow deps so unrelated re-renders don't refetch.
+  const activeProjectIdForFetch = activeProject?.id;
+  const activeProjectPathForFetch = activeProject?.path;
+  const activeProjectIsGit = activeProject?.isGitRepo ?? false;
+  useEffect(() => {
+    if (!activeProjectIdForFetch) return;
+    const id = activeProjectIdForFetch;
+    void window.electronAPI.adoCheckConfigured(id).then((r) => {
+      if (r.success) useProjects.getState().setAdoConfigured(id, !!r.data);
+    });
+    if (activeProjectIsGit && activeProjectPathForFetch) {
+      void window.electronAPI.gitListBranches(activeProjectPathForFetch).then((r) => {
+        if (r.success && r.data) {
+          useProjects.getState().setBranchesForProject(id, r.data);
+        }
+      });
+    }
+  }, [activeProjectIdForFetch, activeProjectPathForFetch, activeProjectIsGit]);
 
   // Focus a specific task when notification is clicked
   useEffect(() => {
     return window.electronAPI.onFocusTask((taskId) => {
       setActiveTaskId(taskId);
     });
-  }, []);
-
-  // Activity monitor — subscribe first, then query to avoid race
-  useEffect(() => {
-    const prevState: Record<string, string> = {};
-    // Track PTYs that have been idle at least once, so we skip the initial
-    // busy→idle transition that fires when a direct-spawn PTY first registers.
-    const hasBeenIdle = new Set<string>();
-    // Track when each PTY entered busy state, so we can ignore brief flashes
-    // (e.g. startup child processes) that shouldn't trigger "done" notifications.
-    const busySince: Record<string, number> = {};
-    const MIN_BUSY_DURATION_MS = 3000;
-
-    const unsubscribe = window.electronAPI.onPtyActivity((newActivity) => {
-      // Peon mode: detect idle→busy transitions (user submits query)
-      if (notificationSoundRef.current === 'peon') {
-        for (const [id, info] of Object.entries(newActivity)) {
-          if (prevState[id] === 'idle' && info.state === 'busy' && hasBeenIdle.has(id)) {
-            playPeonSound('yes');
-            break;
-          }
-        }
-      }
-      // Detect any busy→idle transition (only for PTYs that completed a full work cycle)
-      // Skip transitions from 'waiting' — those are not task completions
-      // Skip brief busy flashes (< 3s) — these are startup artifacts, not real work
-      const newlyDoneIds: string[] = [];
-      for (const [id, info] of Object.entries(newActivity)) {
-        if (prevState[id] === 'busy' && info.state === 'idle' && hasBeenIdle.has(id)) {
-          const elapsed = Date.now() - (busySince[id] ?? Date.now());
-          if (elapsed >= MIN_BUSY_DURATION_MS) {
-            newlyDoneIds.push(id);
-          }
-        }
-      }
-
-      // Track busy start times (after detection, so busySince is still available above)
-      for (const [id, info] of Object.entries(newActivity)) {
-        if (info.state === 'busy' && prevState[id] !== 'busy') {
-          busySince[id] = Date.now();
-        } else if (info.state !== 'busy') {
-          delete busySince[id];
-        }
-      }
-      if (newlyDoneIds.length > 0) {
-        playNotificationSound(notificationSoundRef.current);
-        const currentActiveId = activeTaskIdRef.current;
-        const toMarkUnseen = newlyDoneIds.filter((id) => id !== currentActiveId);
-        if (toMarkUnseen.length > 0) {
-          setUnseenTaskIds((prev) => new Set([...prev, ...toMarkUnseen]));
-        }
-      }
-      // Mark PTYs that have reached idle (so the *next* busy→idle triggers)
-      for (const [id, info] of Object.entries(newActivity)) {
-        if (info.state === 'idle') hasBeenIdle.add(id);
-      }
-      // Clean up removed PTYs
-      for (const id of hasBeenIdle) {
-        if (!(id in newActivity)) hasBeenIdle.delete(id);
-      }
-      // Update previous state (shallow copy of states only)
-      for (const k of Object.keys(prevState)) delete prevState[k];
-      for (const [id, info] of Object.entries(newActivity)) {
-        prevState[id] = info.state;
-      }
-
-      setTaskActivity(newActivity);
-    });
-
-    window.electronAPI.ptyGetAllActivity().then((resp) => {
-      if (resp.success && resp.data) {
-        for (const [id, info] of Object.entries(resp.data)) {
-          prevState[id] = info.state;
-          if (info.state === 'idle') hasBeenIdle.add(id);
-        }
-        setTaskActivity(resp.data);
-      }
-    });
-
-    return unsubscribe;
-  }, []);
-
-  // Remote control — subscribe to state changes
-  useEffect(() => {
-    const unsubscribe = window.electronAPI.onRemoteControlStateChanged(({ ptyId, state }) => {
-      setRemoteControlStates((prev) => {
-        if (!state) {
-          const next = { ...prev };
-          delete next[ptyId];
-          return next;
-        }
-        return { ...prev, [ptyId]: state };
-      });
-    });
-
-    window.electronAPI.ptyRemoteControlGetAllStates().then((resp) => {
-      if (resp.success && resp.data) {
-        setRemoteControlStates(resp.data);
-      }
-    });
-
-    return unsubscribe;
   }, []);
 
   // Task name lookup (used for threshold alerts and settings)
@@ -647,20 +526,9 @@ export function App() {
   useThresholdAlerts(statusLineData, latestRateLimits, usageThresholds, taskNames);
 
   // Persist usage thresholds
-  useEffect(() => {
-    localStorage.setItem('usageThresholds', JSON.stringify(usageThresholds));
-  }, [usageThresholds]);
 
-  // Persist selection to localStorage (survives CMD+R reload)
-  useEffect(() => {
-    if (activeProjectId) localStorage.setItem('activeProjectId', activeProjectId);
-    else localStorage.removeItem('activeProjectId');
-  }, [activeProjectId]);
-
-  useEffect(() => {
-    if (activeTaskId) localStorage.setItem('activeTaskId', activeTaskId);
-    else localStorage.removeItem('activeTaskId');
-  }, [activeTaskId]);
+  // (Selection persistence to localStorage is handled by projectsStore's
+  // setActiveProject/setActiveTask actions.)
 
   // Clear stale activeTaskId if it no longer exists in loaded tasks.
   // Wait until all projects have had their tasks loaded to avoid clearing
@@ -677,13 +545,13 @@ export function App() {
   // Load tasks for all projects when projects change
   useEffect(() => {
     for (const project of projects) {
-      loadTasksForProject(project.id);
+      void loadTasksForProject(project.id);
     }
     // Ensure reserve worktree for active project
     if (activeProjectId) {
       const project = projects.find((p) => p.id === activeProjectId);
       if (project) {
-        window.electronAPI.worktreeEnsureReserve({
+        void window.electronAPI.worktreeEnsureReserve({
           projectId: activeProjectId,
           projectPath: project.path,
         });
@@ -740,52 +608,11 @@ export function App() {
     sessionRegistry.setAllTerminalThemes(terminalTheme, theme === 'dark');
   }, [theme, terminalTheme]);
 
-  // Git: watch active task directory + poll
   useEffect(() => {
-    if (fileWatcherCleanup.current) {
-      fileWatcherCleanup.current();
-      fileWatcherCleanup.current = null;
-    }
-    if (gitPollTimer.current) {
-      clearInterval(gitPollTimer.current);
-      gitPollTimer.current = null;
-    }
-
-    if (!activeTask) {
-      setGitStatus(null);
-      return;
-    }
-
-    const taskCwd = activeTask.path;
-    refreshGitStatus(taskCwd);
-
-    window.electronAPI.gitWatch({ id: activeTask.id, cwd: taskCwd });
-    const unsubscribe = window.electronAPI.onGitFileChanged((id) => {
-      if (id === activeTask.id) {
-        refreshGitStatus(taskCwd);
-      }
-    });
-
-    gitPollTimer.current = setInterval(() => {
-      refreshGitStatus(taskCwd);
-    }, GIT_POLL_INTERVAL);
-
-    fileWatcherCleanup.current = () => {
-      unsubscribe();
-      window.electronAPI.gitUnwatch(activeTask.id);
-      if (gitPollTimer.current) {
-        clearInterval(gitPollTimer.current);
-        gitPollTimer.current = null;
-      }
-    };
-
-    return () => {
-      if (fileWatcherCleanup.current) {
-        fileWatcherCleanup.current();
-        fileWatcherCleanup.current = null;
-      }
-    };
-  }, [activeTask?.id, activeTask?.path]);
+    const resolved = resolveTerminalFontValue(terminalFontFamily);
+    document.documentElement.style.setProperty('--terminal-font', resolved);
+    sessionRegistry.setAllTerminalFonts(resolved);
+  }, [terminalFontFamily]);
 
   const cycleTask = useCallback(
     (direction: 1 | -1) => {
@@ -793,22 +620,78 @@ export function App() {
       const currentIdx = activeProjectTasks.findIndex((t) => t.id === activeTaskId);
       const nextIdx =
         (currentIdx + direction + activeProjectTasks.length) % activeProjectTasks.length;
-      setActiveTaskId(activeProjectTasks[nextIdx].id);
+      setActiveTaskId(activeProjectTasks[nextIdx]!.id);
     },
     [activeProjectTasks, activeTaskId],
   );
 
+  // MRU (most-recently-used) cycling for Ctrl+Tab. mruRef holds rotation task
+  // IDs most-recent-first; cyclingRef is the in-flight hold-Tab session. A quick
+  // single Ctrl+Tab jumps to the last-viewed task; holding Ctrl and tapping Tab
+  // walks further down a frozen snapshot, and releasing Ctrl commits the landing
+  // task to the front of the MRU (see commitCycle). This makes single taps
+  // toggle the two most-recent while a held walk can reach deeper tasks.
+  const mruRef = useRef<string[]>([]);
+  const cyclingRef = useRef<{ snapshot: string[]; pointer: number } | null>(null);
+
+  // Keep the MRU fresh on every ordinary task switch (click, Cmd+digit, …), but
+  // NOT while a walk is previewing tasks — those reorder only on commit, so the
+  // snapshot the walk steps through stays stable under repeated Tab.
+  useEffect(() => {
+    if (activeTaskId && !cyclingRef.current) {
+      mruRef.current = [activeTaskId, ...mruRef.current.filter((id) => id !== activeTaskId)];
+    }
+  }, [activeTaskId]);
+
   const cycleRotation = useCallback(
     (direction: 1 | -1) => {
-      if (rotationTasks.length === 0) return;
-      const currentIdx = rotationTasks.findIndex((t) => t.id === activeTaskId);
-      const nextIdx = (currentIdx + direction + rotationTasks.length) % rotationTasks.length;
-      const nextTask = rotationTasks[nextIdx];
-      setActiveProjectId(nextTask.projectId);
-      setActiveTaskId(nextTask.id);
+      if (!cyclingRef.current) {
+        // Start a session: order the eligible (rotation) tasks by recency. The
+        // active task is MRU[0], so the snapshot begins where we already are.
+        const eligible = rotationTasks.map((t) => t.id);
+        if (eligible.length < 2) return;
+        const pos = new Map(mruRef.current.map((id, i) => [id, i]));
+        const snapshot = [...eligible].sort(
+          (a, b) => (pos.get(a) ?? Infinity) - (pos.get(b) ?? Infinity),
+        );
+        // Begin at the active task (MRU[0]); if it isn't eligible, start at -1
+        // so the first forward step still lands on snapshot[0].
+        cyclingRef.current = { snapshot, pointer: snapshot.indexOf(activeTaskId ?? '') };
+      }
+      const session = cyclingRef.current;
+      const n = session.snapshot.length;
+      session.pointer = (session.pointer + direction + n) % n;
+      const nextTask = rotationTasks.find((t) => t.id === session.snapshot[session.pointer]);
+      if (nextTask) {
+        setActiveProjectId(nextTask.projectId);
+        setActiveTaskId(nextTask.id);
+      }
     },
     [rotationTasks, activeTaskId],
   );
+
+  // Commit the in-flight walk: bump the landed task to the front of the MRU so
+  // single taps keep toggling the two most-recent. Fires when Ctrl is released
+  // (or the window loses focus mid-walk, so a stranded session can't linger).
+  const commitCycle = useCallback(() => {
+    const session = cyclingRef.current;
+    if (!session) return;
+    const landed = session.snapshot[session.pointer]!;
+    mruRef.current = [landed, ...mruRef.current.filter((id) => id !== landed)];
+    cyclingRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Control') commitCycle();
+    };
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', commitCycle);
+    return () => {
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', commitCycle);
+    };
+  }, [commitCycle]);
 
   const removeFromRotation = useCallback((taskId: string) => {
     setRotationExclusions((prev) => {
@@ -825,10 +708,12 @@ export function App() {
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      // Ctrl+Tab / Ctrl+Shift+Tab — cycle rotation (works even when terminal is focused)
+      // Ctrl+Tab / Ctrl+Shift+Tab — MRU walk (works even when terminal is
+      // focused). Ignore auto-repeat so holding Tab doesn't spin: one step per
+      // physical press, like OS alt-tab. Release of Ctrl commits (see keyup).
       if (e.ctrlKey && !e.metaKey && !e.altKey && e.key === 'Tab') {
         e.preventDefault();
-        cycleRotation(e.shiftKey ? -1 : 1);
+        if (!e.repeat) cycleRotation(e.shiftKey ? -1 : 1);
         return;
       }
 
@@ -839,10 +724,7 @@ export function App() {
       // Tasks
       if (keybindings.newTask && matchesBinding(e, keybindings.newTask)) {
         e.preventDefault();
-        if (activeProjectId) {
-          setTaskModalProjectId(activeProjectId);
-          setShowTaskModal(true);
-        }
+        if (activeProjectId) void handleNewTask(activeProjectId);
       }
       if (keybindings.nextTask && matchesBinding(e, keybindings.nextTask)) {
         e.preventDefault();
@@ -855,11 +737,11 @@ export function App() {
       // Git
       if (keybindings.stageAll && matchesBinding(e, keybindings.stageAll)) {
         e.preventDefault();
-        handleStageAll();
+        void handleStageAll();
       }
       if (keybindings.unstageAll && matchesBinding(e, keybindings.unstageAll)) {
         e.preventDefault();
-        handleUnstageAll();
+        void handleUnstageAll();
       }
       if (keybindings.commitGraph && matchesBinding(e, keybindings.commitGraph)) {
         e.preventDefault();
@@ -872,7 +754,6 @@ export function App() {
       }
       if (keybindings.openFolder && matchesBinding(e, keybindings.openFolder)) {
         e.preventDefault();
-        setCloneStatus({ loading: false, error: null });
         setShowAddProjectModal(true);
       }
       if (keybindings.closeDiff && matchesBinding(e, keybindings.closeDiff)) {
@@ -885,10 +766,9 @@ export function App() {
         } else if (deleteProjectTarget) {
           e.preventDefault();
           setDeleteProjectTarget(null);
-        } else if (showDiff) {
+        } else if (diffFile) {
           e.preventDefault();
-          setShowDiff(false);
-          setDiffResult(null);
+          setDiffFile(null);
         } else if (showCommitGraph) {
           e.preventDefault();
           setShowCommitGraph(false);
@@ -908,13 +788,13 @@ export function App() {
       }
       // Cmd+Shift+1..9 to jump to project by index
       if (e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey) {
-        const digit = e.code >= 'Digit1' && e.code <= 'Digit9' ? parseInt(e.code[5], 10) : 0;
+        const digit = e.code >= 'Digit1' && e.code <= 'Digit9' ? parseInt(e.code[5]!, 10) : 0;
         if (digit > 0 && digit <= projects.length) {
           e.preventDefault();
-          const projectId = projects[digit - 1].id;
+          const projectId = projects[digit - 1]!.id;
           setActiveProjectId(projectId);
           const tasks = (tasksByProject[projectId] || []).filter((t) => !t.archivedAt);
-          if (tasks.length > 0) setActiveTaskId(tasks[0].id);
+          if (tasks.length > 0) setActiveTaskId(tasks[0]!.id);
         }
       }
       // Cmd+1..9 to jump to task by index
@@ -922,7 +802,7 @@ export function App() {
         const digit = e.key >= '1' && e.key <= '9' ? parseInt(e.key, 10) : 0;
         if (digit > 0 && digit <= activeProjectTasks.length) {
           e.preventDefault();
-          setActiveTaskId(activeProjectTasks[digit - 1].id);
+          setActiveTaskId(activeProjectTasks[digit - 1]!.id);
         }
       }
       if (keybindings.focusTerminal && matchesBinding(e, keybindings.focusTerminal)) {
@@ -948,7 +828,7 @@ export function App() {
     remoteControlModalPtyId,
     deleteTaskTarget,
     deleteProjectTarget,
-    showDiff,
+    diffFile,
     showCommitGraph,
     showSkillsBrowser,
     showSettings,
@@ -982,7 +862,6 @@ export function App() {
   }, [changesPanelCollapsed]);
 
   const toggleShellDrawer = useCallback(() => {
-    if (!shellDrawerEnabled) return;
     const panel = shellDrawerPanelRef.current;
     if (!panel) return;
     setShellDrawerAnimating(true);
@@ -991,232 +870,66 @@ export function App() {
     } else {
       panel.collapse();
     }
-  }, [shellDrawerEnabled, shellDrawerCollapsed]);
+  }, [shellDrawerCollapsed]);
 
-  // ── Data Loading ─────────────────────────────────────────
-
-  function applyProjectOrder(projectList: Project[]): Project[] {
-    try {
-      const saved = localStorage.getItem('projectOrder');
-      if (!saved) return projectList;
-      const order: string[] = JSON.parse(saved);
-      const validIds = new Set(projectList.map((p) => p.id));
-      const cleanOrder = order.filter((id) => validIds.has(id));
-      // Prune stale IDs from storage
-      if (cleanOrder.length !== order.length) {
-        localStorage.setItem('projectOrder', JSON.stringify(cleanOrder));
-      }
-      const orderMap = new Map(cleanOrder.map((id, i) => [id, i]));
-      return [...projectList].sort((a, b) => {
-        const ai = orderMap.get(a.id) ?? Infinity;
-        const bi = orderMap.get(b.id) ?? Infinity;
-        return ai - bi;
-      });
-    } catch {
-      return projectList;
+  // While a side-car TUI is the active drawer tab, smoothly size the right
+  // panel (the drawer lives inside it) to hug the TUI's pinned canvas — clack
+  // can't reflow, so the panel fits the canvas, not the reverse. Restore the
+  // user's width when the TUI finishes / closes / is cancelled.
+  const changesSizeBeforeTui = useRef<number | null>(null);
+  const handleTuiPanelActive = useCallback((active: boolean, canvasPx?: number) => {
+    const panel = changesPanelRef.current;
+    if (!panel) return;
+    if (active) {
+      // canvasPx may arrive 0/undefined on the first frame; ignore until a
+      // real measurement lands so we don't snap to a bogus width.
+      if (!canvasPx || changesSizeBeforeTui.current !== null) return;
+      const targetPct = Math.max(
+        TUI_PANEL_MIN_PCT,
+        Math.min(
+          TUI_PANEL_MAX_PCT,
+          (((canvasPx + TUI_PANEL_CHROME_PX) * TUI_PANEL_WIDTH_SCALE) / window.innerWidth) * 100,
+        ),
+      );
+      changesSizeBeforeTui.current = panel.getSize();
+      setChangesAnimating(true);
+      panel.resize(targetPct);
+      setTimeout(() => setChangesAnimating(false), 200);
+    } else {
+      const prev = changesSizeBeforeTui.current;
+      changesSizeBeforeTui.current = null;
+      if (prev === null) return;
+      setChangesAnimating(true);
+      panel.resize(prev);
+      setTimeout(() => setChangesAnimating(false), 200);
     }
-  }
+  }, []);
 
-  function handleReorderProjects(reordered: Project[]) {
-    setProjects(reordered);
-    // Only persist IDs that still exist, pruning stale entries
-    localStorage.setItem('projectOrder', JSON.stringify(reordered.map((p) => p.id)));
-  }
+  // ── Data Loading (projectsStore actions) ─────────────────
 
-  function handleReorderTasks(projectId: string, reordered: Task[]) {
-    setTasksByProject((prev) => {
-      const current = prev[projectId] || [];
-      const archived = current.filter((t) => t.archivedAt);
-      return { ...prev, [projectId]: [...reordered, ...archived] };
-    });
-  }
+  const loadProjects = useProjects((s) => s.loadProjects);
+  const loadTasksForProject = useProjects((s) => s.loadTasks);
+  const handleReorderProjects = useProjects((s) => s.reorderProjects);
+  const handleReorderTasks = useProjects((s) => s.reorderTasks);
+  const handleReorderTasksCommit = useProjects((s) => s.commitTaskReorder);
+  const handleArchiveTask = useProjects((s) => s.archiveTask);
+  const handleRestoreTask = useProjects((s) => s.restoreTask);
+  const handleCloseTask = useProjects((s) => s.closeTask);
+  // Data-mutating UI flows live in uiStore (own their modal state).
+  const handleDeleteProjectConfirm = useUi((s) => s.confirmDeleteProject);
+  const handleDeleteTaskConfirm = useUi((s) => s.confirmDeleteTask);
 
-  async function handleReorderTasksCommit(projectId: string, reordered: Task[]) {
-    const ids = reordered.map((t) => t.id);
-    const resp = await window.electronAPI.reorderTasks(projectId, ids);
-    if (!resp.success) {
-      console.error('Failed to persist task reorder:', resp.error);
-      toast.error('Failed to save task order');
-      const refetch = await window.electronAPI.getTasks(projectId);
-      if (refetch.success && refetch.data) {
-        setTasksByProject((prev) => ({ ...prev, [projectId]: refetch.data! }));
-      } else {
-        // Refetch also failed — force reload to avoid stale optimistic state
-        toast.error('Could not recover task list — reloading');
-        const allProjects = await window.electronAPI.getProjects();
-        if (allProjects.success && allProjects.data) {
-          const project = allProjects.data.find((p) => p.id === projectId);
-          if (project) {
-            const retry = await window.electronAPI.getTasks(projectId);
-            if (retry.success && retry.data) {
-              setTasksByProject((prev) => ({ ...prev, [projectId]: retry.data! }));
-            }
-          }
-        }
-      }
-    }
-  }
-
-  async function loadProjects() {
-    const resp = await window.electronAPI.getProjects();
-    if (resp.success && resp.data) {
-      // On Windows, older projects may have been saved with the full path as the name.
-      // Derive the folder name from the path so the sidebar shows short names.
-      const projects = resp.data.map((p) => {
-        const looksLikePath = p.name.includes('\\') || p.name.includes('/');
-        if (looksLikePath) {
-          return { ...p, name: p.name.split(/[\\/]/).pop() || p.name };
-        }
-        return p;
-      });
-      setProjects(applyProjectOrder(projects));
-      if (projects.length > 0) {
-        // Only default to first project if no valid selection exists
-        setActiveProjectId((prev) => {
-          if (prev && projects.some((p) => p.id === prev)) return prev;
-          return projects[0].id;
-        });
-      }
-    }
-  }
-
-  async function loadTasksForProject(projectId: string) {
-    const resp = await window.electronAPI.getTasks(projectId);
-    if (resp.success && resp.data) {
-      setTasksByProject((prev) => ({ ...prev, [projectId]: resp.data! }));
-    }
-  }
-
-  async function refreshGitStatus(cwd: string) {
-    setGitLoading(true);
-    try {
-      const resp = await window.electronAPI.gitGetStatus(cwd);
-      if (resp.success && resp.data) {
-        setGitStatus(resp.data);
-      }
-    } catch {
-      // Ignore
-    } finally {
-      setGitLoading(false);
-    }
-  }
+  // Git actions live in gitStore (they resolve the active task themselves).
+  const refreshGitStatus = useGit((s) => s.refreshGitStatus);
+  // Kept as App aliases because the stage-all / unstage-all keybindings call them.
+  const handleStageAll = useGit((s) => s.stageAll);
+  const handleUnstageAll = useGit((s) => s.unstageAll);
 
   // ── Handlers ─────────────────────────────────────────────
-
-  function promptAdoSetupIfNeeded(projectId: string, remote: string | null) {
-    if (!remote) return;
-    const adoInfo = parseAdoRemote(remote);
-    if (adoInfo) {
-      setAdoSetup({
-        projectId,
-        organizationUrl: adoInfo.organizationUrl,
-        project: adoInfo.project,
-      });
-    }
-  }
-
-  async function handleOpenFolder() {
-    setShowAddProjectModal(false);
-    const resp = await window.electronAPI.showOpenDialog();
-    if (resp.success && resp.data && resp.data.length > 0) {
-      const folderPath = resp.data[0];
-      const name = folderPath.split(/[\\/]/).pop() || 'Untitled';
-
-      const gitResp = await window.electronAPI.detectGit(folderPath);
-      const gitInfo = gitResp.success ? gitResp.data : null;
-
-      const saveResp = await window.electronAPI.saveProject({
-        name,
-        path: folderPath,
-        isGitRepo: gitInfo?.isGitRepo ?? false,
-        gitRemote: gitInfo?.remote ?? null,
-        gitBranch: gitInfo?.branch ?? null,
-      });
-
-      if (saveResp.success && saveResp.data) {
-        await loadProjects();
-        setActiveProjectId(saveResp.data.id);
-        promptAdoSetupIfNeeded(saveResp.data.id, gitInfo?.remote ?? null);
-      }
-    }
-  }
-
-  async function handleCloneRepo(url: string) {
-    setCloneStatus({ loading: true, error: null });
-    try {
-      const cloneResp = await window.electronAPI.gitClone({ url });
-      if (!cloneResp.success) {
-        setCloneStatus({ loading: false, error: cloneResp.error || 'Clone failed' });
-        return;
-      }
-
-      const { path: clonedPath, name } = cloneResp.data!;
-
-      const gitResp = await window.electronAPI.detectGit(clonedPath);
-      const gitInfo = gitResp.success ? gitResp.data : null;
-
-      const saveResp = await window.electronAPI.saveProject({
-        name,
-        path: clonedPath,
-        isGitRepo: gitInfo?.isGitRepo ?? true,
-        gitRemote: gitInfo?.remote ?? null,
-        gitBranch: gitInfo?.branch ?? null,
-      });
-
-      if (saveResp.success && saveResp.data) {
-        await loadProjects();
-        setActiveProjectId(saveResp.data.id);
-        promptAdoSetupIfNeeded(saveResp.data.id, gitInfo?.remote ?? null);
-      }
-
-      setCloneStatus({ loading: false, error: null });
-      setShowAddProjectModal(false);
-    } catch (err) {
-      setCloneStatus({ loading: false, error: String(err) });
-    }
-  }
 
   function handleDeleteProject(id: string) {
     const project = projects.find((p) => p.id === id);
     if (project) setDeleteProjectTarget(project);
-  }
-
-  async function handleDeleteProjectConfirm(options: DeleteProjectOptions) {
-    const project = deleteProjectTarget;
-    if (!project) return;
-
-    const projectTasks = tasksByProject[project.id] ?? [];
-
-    // Clean up worktrees and branches for each task
-    for (const task of projectTasks) {
-      if (task.useWorktree) {
-        await window.electronAPI.worktreeRemove({
-          projectPath: project.path,
-          worktreePath: task.path,
-          branch: task.branch,
-          options: {
-            deleteWorktreeDir: options.deleteWorktreeDirs,
-            deleteLocalBranch: options.deleteLocalBranches && task.branchCreatedByDash,
-            deleteRemoteBranch: options.deleteRemoteBranches && task.branchCreatedByDash,
-          },
-        });
-      }
-      sessionRegistry.dispose(`shell:${task.id}`);
-      sessionRegistry.disposeByPrefix(`shell:${task.id}:`);
-    }
-
-    await window.electronAPI.deleteProject(project.id);
-    if (activeProjectId === project.id) {
-      setActiveProjectId(null);
-      setActiveTaskId(null);
-    }
-    setTasksByProject((prev) => {
-      const next = { ...prev };
-      delete next[project.id];
-      return next;
-    });
-    setDeleteProjectTarget(null);
-    await loadProjects();
   }
 
   function handleSelectTask(projectId: string, taskId: string) {
@@ -1230,188 +943,40 @@ export function App() {
     });
   }
 
-  function handleNewTask(projectId: string) {
+  // Loaded before the modal mounts so its fields render with the project's
+  // taskDefaults + default worktree scripts already applied (prefill only).
+  const [taskModalDefaults, setTaskModalDefaults] = useState<TaskModalDefaults | null>(null);
+  const [taskModalDefaultScripts, setTaskModalDefaultScripts] = useState<{
+    setup: string;
+    teardown: string;
+  } | null>(null);
+
+  async function handleNewTask(projectId: string) {
     setActiveProjectId(projectId);
     setTaskModalProjectId(projectId);
+    // Read from the store (not a closure) so a freshly-created project resolves.
+    const project = useProjects.getState().projects.find((p) => p.id === projectId);
+    let defaults: TaskModalDefaults | null = null;
+    let scripts: { setup: string; teardown: string } | null = null;
+    if (project) {
+      const resp = await window.electronAPI.readWorkspaceConfig(project.path);
+      const config = resp.success ? resp.data : null;
+      defaults = config?.taskDefaults ?? null;
+      scripts = {
+        setup: (config?.setup ?? []).join('\n'),
+        teardown: (config?.teardown ?? []).join('\n'),
+      };
+    }
+    setTaskModalDefaults(defaults);
+    setTaskModalDefaultScripts(scripts);
     setShowTaskModal(true);
   }
 
-  async function handleCreateTask(options: CreateTaskOptions): Promise<boolean> {
-    const { name, autoApprove, linkedItems } = options;
-
-    const targetProjectId = taskModalProjectId || activeProjectId;
-    const targetProject = projects.find((p) => p.id === targetProjectId);
-    if (!targetProject) return false;
-
-    setIsCreatingTask(true);
-    try {
-      let worktreeInfo: { branch: string; path: string } | null = null;
-
-      const ghItems =
-        linkedItems?.filter((i): i is LinkedGithubIssue => i.provider === 'github') ?? [];
-      const adoItems =
-        linkedItems?.filter((i): i is LinkedAdoWorkItem => i.provider === 'ado') ?? [];
-      const ghIssueNumbers = ghItems.map((i) => i.id);
-
-      switch (options.kind) {
-        case 'worktree-new-branch': {
-          // New branch: try reserve pool, fall back to direct creation
-          const claimResp = await window.electronAPI.worktreeClaimReserve({
-            projectId: targetProject.id,
-            taskName: name,
-            baseRef: options.baseRef,
-            linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
-            pushRemote: options.pushRemote,
-          });
-
-          if (claimResp.success && claimResp.data) {
-            worktreeInfo = { branch: claimResp.data.branch, path: claimResp.data.path };
-          } else {
-            const createResp = await window.electronAPI.worktreeCreate({
-              projectPath: targetProject.path,
-              taskName: name,
-              baseRef: options.baseRef,
-              projectId: targetProject.id,
-              linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
-              pushRemote: options.pushRemote,
-            });
-            if (createResp.success && createResp.data) {
-              worktreeInfo = { branch: createResp.data.branch, path: createResp.data.path };
-            } else {
-              toast.error(createResp.error || 'Failed to create worktree');
-              return false;
-            }
-          }
-          break;
-        }
-        case 'worktree-existing': {
-          const createResp = await window.electronAPI.worktreeCreateFromExisting({
-            projectPath: targetProject.path,
-            taskName: name,
-            branch: options.branch,
-            projectId: targetProject.id,
-            linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
-          });
-          if (createResp.success && createResp.data) {
-            worktreeInfo = { branch: createResp.data.branch, path: createResp.data.path };
-          } else {
-            toast.error(createResp.error || 'Failed to create worktree from existing branch');
-            return false;
-          }
-          break;
-        }
-        case 'in-place-checkout': {
-          const checkoutResp = await window.electronAPI.gitCheckoutBranch({
-            cwd: targetProject.path,
-            branch: options.branch,
-          });
-          if (!checkoutResp.success) {
-            toast.error(checkoutResp.error || 'Failed to checkout branch');
-            return false;
-          }
-          break;
-        }
-        case 'in-place-no-git':
-          break;
-      }
-
-      const useWorktree =
-        options.kind === 'worktree-new-branch' || options.kind === 'worktree-existing';
-      const fallbackBranch =
-        options.kind === 'worktree-existing' || options.kind === 'in-place-checkout'
-          ? options.branch
-          : options.kind === 'worktree-new-branch'
-            ? options.baseRef
-            : 'main';
-      const branch = worktreeInfo?.branch ?? fallbackBranch;
-      const taskPath = worktreeInfo?.path ?? targetProject.path;
-
-      const saveResp = await window.electronAPI.saveTask({
-        projectId: targetProject.id,
-        name,
-        branch,
-        path: taskPath,
-        useWorktree,
-        autoApprove,
-        // Only Dash-created branches should be auto-deleted on task removal.
-        branchCreatedByDash: options.kind === 'worktree-new-branch' && !!worktreeInfo,
-        linkedItems: linkedItems ?? null,
-      });
-
-      if (!saveResp.success || !saveResp.data) {
-        toast.error(saveResp.error || 'Failed to save task');
-        return false;
-      }
-      {
-        const taskId = saveResp.data.id;
-
-        // Store task context so the SessionStart hook can inject it
-        if (linkedItems && linkedItems.length > 0) {
-          const prompt = formatTaskContextPrompt(linkedItems);
-          if (prompt) {
-            await window.electronAPI.ptyWriteTaskContext({
-              taskId,
-              prompt,
-            });
-
-            // Notify the user that linked context will be injected
-            const maxVisible = 3;
-            const visible = linkedItems.slice(0, maxVisible);
-            const overflow = linkedItems.length - maxVisible;
-            toast(
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-muted-foreground">Context injected</span>
-                {visible.map((item) => (
-                  <a
-                    key={`${item.provider}-${item.id}`}
-                    href={item.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium hover:bg-primary/20 transition-colors"
-                  >
-                    #{item.id}
-                  </a>
-                ))}
-                {overflow > 0 && (
-                  <span className="text-[10px] text-muted-foreground">+{overflow} more</span>
-                )}
-              </div>,
-            );
-          }
-        }
-
-        await window.electronAPI.getOrCreateDefaultConversation(taskId);
-        await loadTasksForProject(targetProject.id);
-        setActiveProjectId(targetProject.id);
-        setActiveTaskId(taskId);
-
-        if (notificationSoundRef.current === 'peon') {
-          playPeonSound('what');
-        }
-
-        window.electronAPI.worktreeEnsureReserve({
-          projectId: targetProject.id,
-          projectPath: targetProject.path,
-        });
-
-        // Fire-and-forget: post branch comment on each linked GitHub issue
-        for (const num of ghIssueNumbers) {
-          window.electronAPI
-            .githubPostBranchComment(targetProject.path, num, branch)
-            .catch(() => toast.error(`Failed to link branch to issue #${num}`));
-        }
-
-        // Fire-and-forget: post branch comment on each linked ADO work item
-        for (const wi of adoItems) {
-          window.electronAPI
-            .adoPostBranchComment(wi.id, branch, targetProject.id)
-            .catch(() => toast.error(`Failed to link branch to work item #${wi.id}`));
-        }
-      }
-      return true;
-    } finally {
-      setIsCreatingTask(false);
-    }
+  function handleCreateTask(options: CreateTaskOptions): Promise<boolean> {
+    // Modal-selected project (App-owned) takes precedence over the active one.
+    return useProjects
+      .getState()
+      .createTask(options, taskModalProjectId || activeProjectId || undefined);
   }
 
   function handleDeleteTask(id: string) {
@@ -1425,169 +990,38 @@ export function App() {
     }
   }
 
-  async function handleDeleteTaskConfirm(options?: {
-    deleteWorktreeDir: boolean;
-    deleteLocalBranch: boolean;
-    deleteRemoteBranch: boolean;
-  }) {
-    const task = deleteTaskTarget;
-    if (!task) return;
-
-    const taskProjectId = task.projectId;
-
-    try {
-      if (task.useWorktree) {
-        const project = projects.find((p) => p.id === taskProjectId);
-        if (project) {
-          await window.electronAPI.worktreeRemove({
-            projectPath: project.path,
-            worktreePath: task.path,
-            branch: task.branch,
-            options: options
-              ? {
-                  deleteWorktreeDir: options.deleteWorktreeDir,
-                  deleteLocalBranch: options.deleteLocalBranch && task.branchCreatedByDash,
-                  deleteRemoteBranch: options.deleteRemoteBranch && task.branchCreatedByDash,
-                }
-              : undefined,
-          });
-        }
-      }
-
-      // Clean up all terminal sessions: Claude main session + shell tabs
-      sessionRegistry.dispose(task.id);
-      sessionRegistry.dispose(`shell:${task.id}`);
-      sessionRegistry.disposeByPrefix(`shell:${task.id}:`);
-
-      // Kill PTY and clear snapshot so a new task in the same cwd starts fresh
-      window.electronAPI.ptyKill(task.id);
-      window.electronAPI.ptyClearSnapshot(task.id);
-
-      await window.electronAPI.deleteTask(task.id);
-      if (activeTaskId === task.id) {
-        setActiveTaskId(null);
-      }
-      await loadTasksForProject(taskProjectId);
-    } finally {
-      setDeleteTaskTarget(null);
-    }
-  }
-
-  async function handleArchiveTask(id: string) {
-    await window.electronAPI.archiveTask(id);
-    // Find which project this task belongs to and reload
-    for (const [projectId, tasks] of Object.entries(tasksByProject)) {
-      if (tasks.some((t) => t.id === id)) {
-        await loadTasksForProject(projectId);
-        break;
+  function handleTaskSettings(id: string) {
+    for (const tasks of Object.values(tasksByProject)) {
+      const found = tasks.find((t) => t.id === id);
+      if (found) {
+        setTaskSettingsTarget(found);
+        return;
       }
     }
   }
 
-  async function handleRestoreTask(id: string) {
-    await window.electronAPI.restoreTask(id);
-    for (const [projectId, tasks] of Object.entries(tasksByProject)) {
-      if (tasks.some((t) => t.id === id)) {
-        await loadTasksForProject(projectId);
-        break;
-      }
-    }
+  async function persistTaskUpdate(task: Task, patch: Partial<Task>): Promise<Task | null> {
+    const updated = await useProjects.getState().updateTask(task, patch);
+    // Keep the (App-owned) task-settings modal target in sync with the save.
+    if (updated) setTaskSettingsTarget((prev) => (prev?.id === updated.id ? updated : prev));
+    return updated;
   }
 
   // ── Git Handlers ─────────────────────────────────────────
 
-  async function handleStageFile(filePath: string) {
+  function handleViewDiff(filePath: string, staged: boolean) {
     if (!activeTask) return;
-    await window.electronAPI.gitStageFile({ cwd: activeTask.path, filePath });
-    refreshGitStatus(activeTask.path);
-  }
-
-  async function handleUnstageFile(filePath: string) {
-    if (!activeTask) return;
-    await window.electronAPI.gitUnstageFile({ cwd: activeTask.path, filePath });
-    refreshGitStatus(activeTask.path);
-  }
-
-  async function handleStageAll() {
-    if (!activeTask) return;
-    await window.electronAPI.gitStageAll(activeTask.path);
-    refreshGitStatus(activeTask.path);
-  }
-
-  async function handleUnstageAll() {
-    if (!activeTask) return;
-    await window.electronAPI.gitUnstageAll(activeTask.path);
-    refreshGitStatus(activeTask.path);
-  }
-
-  async function handleCommit(message: string) {
-    if (!activeTask) return;
-    const res = await window.electronAPI.gitCommit({ cwd: activeTask.path, message });
-    if (!res.success) throw new Error(res.error || 'Commit failed');
-    refreshGitStatus(activeTask.path);
-  }
-
-  async function handlePush() {
-    if (!activeTask) return;
-    const res = await window.electronAPI.gitPush(activeTask.path);
-    if (!res.success) throw new Error(res.error || 'Push failed');
-    refreshGitStatus(activeTask.path);
-  }
-
-  async function handleDiscardFile(filePath: string) {
-    if (!activeTask) return;
-    await window.electronAPI.gitDiscardFile({ cwd: activeTask.path, filePath });
-    refreshGitStatus(activeTask.path);
-  }
-
-  async function handleViewDiff(filePath: string, staged: boolean) {
-    if (!activeTask) return;
-    setShowDiff(true);
-    setDiffLoading(true);
-    setDiffResult(null);
-
-    try {
-      const file = gitStatus?.files.find((f) => f.path === filePath && !f.staged);
-      let resp;
-      const ctx = diffContextLines ?? undefined;
-      if (file?.status === 'untracked' || file?.status === 'conflicted') {
-        // For conflicted files, `git diff` produces a combined-diff format that
-        // our parser doesn't understand. Show the working-tree file (with the
-        // conflict markers) as additions, the same way we render untracked files.
-        resp = await window.electronAPI.gitGetDiffUntracked({
-          cwd: activeTask.path,
-          filePath,
-          contextLines: ctx,
-        });
-      } else {
-        resp = await window.electronAPI.gitGetDiff({
-          cwd: activeTask.path,
-          filePath,
-          staged,
-          contextLines: ctx,
-        });
-      }
-      if (resp.success && resp.data) {
-        setDiffResult(resp.data);
-      }
-    } catch {
-      // Ignore
-    } finally {
-      setDiffLoading(false);
-    }
+    // Monaco loads HEAD/index + working copy itself via files:readForEdit;
+    // App.tsx just opens the modal with the file identity.
+    setDiffFile({ cwd: activeTask.path, filePath, staged });
   }
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden">
-      {window.electronAPI.getPlatform() === 'darwin' && (
-        <div
-          className="titlebar-drag h-[38px] flex-shrink-0 border-b border-border/40"
-          style={{ background: 'hsl(var(--surface-1))' }}
-        />
-      )}
-
       <PanelGroup direction="horizontal" className="flex-1">
         <Panel
+          id="sidebar"
+          order={1}
           ref={sidebarPanelRef}
           className={sidebarAnimating ? 'panel-transition' : ''}
           defaultSize={sidebarCollapsed ? 3 : 18}
@@ -1595,94 +1029,90 @@ export function App() {
           maxSize={28}
           collapsible
           collapsedSize={3}
+          style={{
+            overflow: 'visible',
+            position: 'relative',
+            zIndex: 1,
+            minWidth: 0,
+            background: terminalBg,
+          }}
           onCollapse={() => {
             setSidebarCollapsed(true);
-            localStorage.setItem('sidebarCollapsed', 'true');
             setTimeout(() => setSidebarAnimating(false), 200);
           }}
           onExpand={() => {
             setSidebarCollapsed(false);
-            localStorage.setItem('sidebarCollapsed', 'false');
             setTimeout(() => setSidebarAnimating(false), 200);
           }}
         >
-          <ShellDrawerWrapper
-            enabled={shellDrawerEnabled && shellDrawerPosition === 'left' && !sidebarCollapsed}
-            taskId={activeTask?.id ?? null}
-            cwd={activeTask?.path ?? null}
-            collapsed={shellDrawerCollapsed}
-            label={activeTask?.useWorktree ? 'Worktree' : 'Terminal'}
-            panelRef={shellDrawerPanelRef}
-            animating={shellDrawerAnimating}
-            onAnimate={() => setShellDrawerAnimating(true)}
-            onCollapse={() => {
-              setShellDrawerCollapsed(true);
-              localStorage.setItem('shellDrawerCollapsed', 'true');
-              setTimeout(() => setShellDrawerAnimating(false), 200);
+          <LeftSidebar
+            projects={projects}
+            activeProjectId={activeProjectId}
+            onSelectProject={(id) => {
+              setActiveProjectId(id);
+              setActiveTaskId(null);
             }}
-            onExpand={() => {
-              setShellDrawerCollapsed(false);
-              localStorage.setItem('shellDrawerCollapsed', 'false');
-              setTimeout(() => setShellDrawerAnimating(false), 200);
+            onOpenFolder={() => {
+              setShowAddProjectModal(true);
             }}
-          >
-            <LeftSidebar
-              projects={projects}
-              activeProjectId={activeProjectId}
-              onSelectProject={(id) => {
-                setActiveProjectId(id);
-                setActiveTaskId(null);
-              }}
-              onOpenFolder={() => {
-                setCloneStatus({ loading: false, error: null });
-                setShowAddProjectModal(true);
-              }}
-              onDeleteProject={handleDeleteProject}
-              onProjectSettings={(id) => {
-                const p = projects.find((proj) => proj.id === id);
-                if (p) setProjectSettingsTarget(p);
-              }}
-              tasksByProject={tasksByProject}
-              activeTaskId={activeTaskId}
-              onSelectTask={handleSelectTask}
-              onNewTask={handleNewTask}
-              onDeleteTask={handleDeleteTask}
-              onArchiveTask={handleArchiveTask}
-              onRestoreTask={handleRestoreTask}
-              onOpenSettings={() => {
-                setSettingsInitialTab(undefined);
-                setShowSettings(true);
-              }}
-              onShowCommitGraph={(projectId) => {
-                setActiveProjectId(projectId);
-                setShowCommitGraph(true);
-              }}
-              collapsed={sidebarCollapsed}
-              onToggleCollapse={toggleSidebar}
-              taskActivity={taskActivity}
-              unseenTaskIds={unseenTaskIds}
-              remoteControlStates={remoteControlStates}
-              contextUsage={showContextUsageOnTaskCards ? contextUsage : EMPTY_CONTEXT_USAGE}
-              onReorderProjects={handleReorderProjects}
-              onReorderTasks={handleReorderTasks}
-              onReorderTasksCommit={handleReorderTasksCommit}
-              rotationTasks={rotationTasks}
-              onReorderRotation={handleReorderRotation}
-              onRemoveFromRotation={removeFromRotation}
-              showActiveTasksSection={showActiveTasksSection}
-              onToggleActiveTasksSection={() => setShowActiveTasksSection((v) => !v)}
-              onOpenSkillsBrowser={() => setShowSkillsBrowser(true)}
-            />
-          </ShellDrawerWrapper>
+            onDeleteProject={handleDeleteProject}
+            onProjectSettings={(id) => {
+              const p = projects.find((proj) => proj.id === id);
+              if (p) setProjectSettingsTarget(p);
+            }}
+            tasksByProject={tasksByProject}
+            activeTaskId={activeTaskId}
+            onSelectTask={handleSelectTask}
+            onNewTask={(id) => void handleNewTask(id)}
+            onDeleteTask={handleDeleteTask}
+            onArchiveTask={(id) => {
+              void handleArchiveTask(id);
+            }}
+            onRestoreTask={(id) => {
+              void handleRestoreTask(id);
+            }}
+            onCloseTask={handleCloseTask}
+            onTaskSettings={handleTaskSettings}
+            onOpenSettings={() => {
+              setSettingsInitialTab(undefined);
+              setShowSettings(true);
+            }}
+            onShowCommitGraph={(projectId) => {
+              setActiveProjectId(projectId);
+              setShowCommitGraph(true);
+            }}
+            collapsed={sidebarCollapsed}
+            onToggleCollapse={toggleSidebar}
+            unseenTaskIds={unseenTaskIds}
+            contextUsage={showContextUsageOnTaskCards ? contextUsage : EMPTY_CONTEXT_USAGE}
+            onReorderProjects={handleReorderProjects}
+            onReorderTasks={handleReorderTasks}
+            onReorderTasksCommit={(projectId, reordered) => {
+              void handleReorderTasksCommit(projectId, reordered);
+            }}
+            rotationTasks={rotationTasks}
+            onReorderRotation={handleReorderRotation}
+            onRemoveFromRotation={removeFromRotation}
+            onToggleActiveTasksSection={() => setShowActiveTasksSection(!showActiveTasksSection)}
+            onOpenSkillsBrowser={() => {
+              setExtensionsInitialScopeId(null);
+              setShowSkillsBrowser(true);
+            }}
+          />
         </Panel>
-        <PanelResizeHandle disabled={sidebarCollapsed} className="w-[1px] bg-border/40" />
+        <PanelResizeHandle
+          disabled={sidebarCollapsed}
+          className="resize-handle-quiet w-[1px] bg-border/40"
+        />
 
         <Panel
+          id="main"
+          order={2}
           className={sidebarAnimating || changesAnimating ? 'panel-transition' : ''}
           minSize={35}
         >
           <ShellDrawerWrapper
-            enabled={shellDrawerEnabled && shellDrawerPosition === 'main'}
+            enabled={shellDrawerPosition === 'main'}
             taskId={activeTask?.id ?? null}
             cwd={activeTask?.path ?? null}
             collapsed={shellDrawerCollapsed}
@@ -1692,27 +1122,35 @@ export function App() {
             onAnimate={() => setShellDrawerAnimating(true)}
             onCollapse={() => {
               setShellDrawerCollapsed(true);
-              localStorage.setItem('shellDrawerCollapsed', 'true');
               setTimeout(() => setShellDrawerAnimating(false), 200);
             }}
             onExpand={() => {
               setShellDrawerCollapsed(false);
-              localStorage.setItem('shellDrawerCollapsed', 'false');
               setTimeout(() => setShellDrawerAnimating(false), 200);
             }}
           >
             <MainContent
               activeTask={activeTask}
               activeProject={activeProject}
-              sidebarCollapsed={sidebarCollapsed}
               tasks={activeProjectTasks}
-              activeTaskId={activeTaskId}
-              taskActivity={taskActivity}
-              unseenTaskIds={unseenTaskIds}
-              remoteControlStates={remoteControlStates}
+              isMac={window.electronAPI.getPlatform() === 'darwin'}
+              terminalBg={terminalBg}
+              sidebarCollapsed={sidebarCollapsed}
+              changesPanelCollapsed={changesPanelCollapsed}
+              onToggleSidebar={toggleSidebar}
+              onToggleChangesPanel={toggleChangesPanel}
               onSelectTask={setActiveTaskId}
-              onEnableRemoteControl={(taskId) => setRemoteControlModalPtyId(taskId)}
-              onNewTask={() => activeProjectId && handleNewTask(activeProjectId)}
+              onEnableRemoteControl={() => activeTask && setRemoteControlModalPtyId(activeTask.id)}
+              onOpenIde={() => {
+                if (activeTask) void openInIde(activeTask.path);
+              }}
+              onOpenExtensions={(scopeId) => {
+                setExtensionsInitialScopeId(scopeId);
+                setShowSkillsBrowser(true);
+              }}
+              onNewTask={() => {
+                if (activeProjectId) void handleNewTask(activeProjectId);
+              }}
               onProjectSettings={() => {
                 if (activeProject) setProjectSettingsTarget(activeProject);
               }}
@@ -1730,108 +1168,124 @@ export function App() {
                   ? (tasksByProject[activeProjectId] || []).filter((t) => t.archivedAt)
                   : []
               }
+              onCloseTask={handleCloseTask}
+              onTaskSettings={handleTaskSettings}
               onDeleteTask={handleDeleteTask}
-              onArchiveTask={handleArchiveTask}
-              onRestoreTask={handleRestoreTask}
-              gitStatus={gitStatus}
+              onArchiveTask={(id) => {
+                void handleArchiveTask(id);
+              }}
+              onRestoreTask={(id) => {
+                void handleRestoreTask(id);
+              }}
             />
           </ShellDrawerWrapper>
         </Panel>
 
         {activeTask && (
           <>
-            <PanelResizeHandle disabled={changesPanelCollapsed} className="w-[1px] bg-border/40" />
+            <PanelResizeHandle
+              disabled={changesPanelCollapsed}
+              className="resize-handle-floating w-[1px] bg-transparent"
+            />
             <Panel
+              id="changes"
+              order={3}
               ref={changesPanelRef}
               className={changesAnimating ? 'panel-transition' : ''}
-              defaultSize={changesPanelCollapsed ? 3 : 22}
+              style={
+                changesPanelCollapsed
+                  ? { background: terminalBg }
+                  : { background: terminalBg, padding: '24px 24px 24px 0' }
+              }
+              defaultSize={changesPanelCollapsed ? 0.5 : 22}
               minSize={12}
               maxSize={40}
               collapsible
-              collapsedSize={3}
+              collapsedSize={0.5}
               onCollapse={() => {
                 setChangesPanelCollapsed(true);
-                localStorage.setItem('changesPanelCollapsed', 'true');
                 setTimeout(() => setChangesAnimating(false), 200);
               }}
               onExpand={() => {
                 setChangesPanelCollapsed(false);
-                localStorage.setItem('changesPanelCollapsed', 'false');
                 setTimeout(() => setChangesAnimating(false), 200);
               }}
             >
-              <div className="h-full flex flex-col overflow-hidden">
-                {!changesPanelCollapsed &&
-                  (() => {
-                    const rawCtx = activeTask ? contextUsage[activeTask.id] : undefined;
-                    const activeCtx = showUsageInline ? rawCtx : undefined;
-                    const rateLimits = showRateLimits && latestRateLimits ? latestRateLimits : {};
-                    const hasRateLimits = rateLimits.fiveHour || rateLimits.sevenDay;
-                    const hasCtx = activeCtx && activeCtx.percentage > 0;
-                    if (!hasRateLimits && !hasCtx) return null;
-                    return <UsageWidget rateLimits={rateLimits} contextUsage={activeCtx} />;
-                  })()}
+              <div
+                className={
+                  changesPanelCollapsed
+                    ? 'h-full flex flex-col overflow-hidden'
+                    : 'right-inspector-shell h-full flex flex-col overflow-hidden rounded-[14px]'
+                }
+              >
                 <ShellDrawerWrapper
-                  enabled={
-                    shellDrawerEnabled && shellDrawerPosition === 'right' && !changesPanelCollapsed
-                  }
+                  enabled={shellDrawerPosition === 'right' && !changesPanelCollapsed}
                   taskId={activeTask?.id ?? null}
                   cwd={activeTask?.path ?? null}
                   collapsed={shellDrawerCollapsed}
                   panelRef={shellDrawerPanelRef}
                   animating={shellDrawerAnimating}
+                  onTuiActiveChange={handleTuiPanelActive}
                   onAnimate={() => setShellDrawerAnimating(true)}
                   onCollapse={() => {
                     setShellDrawerCollapsed(true);
-                    localStorage.setItem('shellDrawerCollapsed', 'true');
                     setTimeout(() => setShellDrawerAnimating(false), 200);
                   }}
                   onExpand={() => {
                     setShellDrawerCollapsed(false);
-                    localStorage.setItem('shellDrawerCollapsed', 'false');
                     setTimeout(() => setShellDrawerAnimating(false), 200);
                   }}
                 >
-                  <FileChangesPanel
-                    gitStatus={gitStatus}
-                    loading={gitLoading}
-                    onStageFile={handleStageFile}
-                    onUnstageFile={handleUnstageFile}
-                    onStageAll={handleStageAll}
-                    onUnstageAll={handleUnstageAll}
-                    onDiscardFile={handleDiscardFile}
-                    onViewDiff={handleViewDiff}
-                    onCommit={handleCommit}
-                    onPush={handlePush}
-                    collapsed={changesPanelCollapsed}
-                    onToggleCollapse={toggleChangesPanel}
-                    onShowCommitGraph={() => setShowCommitGraph(true)}
-                    tabs={
-                      showStructuredView
-                        ? {
-                            options: [
-                              { id: 'structured', label: 'Tool use' },
-                              { id: 'changes', label: 'Changes' },
-                            ],
-                            activeId: changesPanelCollapsed ? 'changes' : rightPanelTab,
-                            onChange: (id) => {
-                              const next = id === 'structured' ? 'structured' : 'changes';
-                              setRightPanelTab(next);
-                              localStorage.setItem('rightPanelTab', next);
-                            },
+                  {!changesPanelCollapsed && (
+                    <PortsDrawerWrapper
+                      taskId={activeTask?.id ?? null}
+                      collapsed={portsDrawerCollapsed}
+                      onCollapse={() => {
+                        setPortsDrawerCollapsed(true);
+                      }}
+                      onExpand={() => {
+                        setPortsDrawerCollapsed(false);
+                      }}
+                    >
+                      <RightInspector
+                        activeTask={activeTask}
+                        rateLimits={showRateLimits && latestRateLimits ? latestRateLimits : {}}
+                        contextUsage={
+                          showUsageInline && activeTask ? contextUsage[activeTask.id] : undefined
+                        }
+                        onViewDiff={handleViewDiff}
+                        onCommitFinished={() => {
+                          if (activeTask) void refreshGitStatus(activeTask.path);
+                        }}
+                        onShowCommitGraph={() => setShowCommitGraph(true)}
+                        onOpenEditor={() => {
+                          if (!activeTask) return;
+                          const files = gitStatus?.files ?? [];
+                          if (files.length > 0) {
+                            // Prefer the first unstaged file; otherwise first staged.
+                            const target = files.find((f) => !f.staged) ?? files[0]!;
+                            setDiffFile({
+                              cwd: activeTask.path,
+                              filePath: target.path,
+                              staged: target.staged,
+                            });
+                          } else {
+                            // No working changes — open at the latest commit.
+                            // The 'HEAD' sentinel resolves to the real sha once
+                            // the editor loads its commit list.
+                            setDiffFile({
+                              cwd: activeTask.path,
+                              filePath: '',
+                              staged: false,
+                              initialView: { kind: 'commit', hash: 'HEAD' },
+                            });
                           }
-                        : undefined
-                    }
-                    alternateBody={
-                      showStructuredView && activeTask ? (
-                        <StructuredView
-                          key={`structured-${activeTask.id}`}
-                          taskId={activeTask.id}
-                          taskPath={activeTask.path}
-                        />
-                      ) : null
-                    }
-                  />
+                        }}
+                        collapsed={changesPanelCollapsed}
+                        onToggleCollapse={toggleChangesPanel}
+                      />
+                    </PortsDrawerWrapper>
+                  )}
                 </ShellDrawerWrapper>
               </div>
             </Panel>
@@ -1840,11 +1294,9 @@ export function App() {
       </PanelGroup>
 
       {showAddProjectModal && (
-        <AddProjectModal
+        <NewProjectWizard
           onClose={() => setShowAddProjectModal(false)}
-          onOpenFolder={handleOpenFolder}
-          onCloneRepo={handleCloneRepo}
-          cloneStatus={cloneStatus}
+          onCreated={(projectId) => void finishProjectCreation(projectId)}
         />
       )}
 
@@ -1866,11 +1318,16 @@ export function App() {
                   ? { id: existingNonWorktreeTask.id, name: existingNonWorktreeTask.name }
                   : null
               }
+              ghAvailable={ghAvailable}
+              adoConfigured={modalProjectId ? (adoConfiguredById[modalProjectId] ?? false) : false}
+              initialBranches={modalProjectId ? branchesByProject[modalProjectId] : undefined}
+              taskDefaults={taskModalDefaults}
+              defaultScripts={taskModalDefaultScripts}
               onClose={() => setShowTaskModal(false)}
               onCreate={handleCreateTask}
               onGitInit={() => {
                 if (modalProject) {
-                  window.electronAPI.detectGit(modalProject.path).then(async (gitResp) => {
+                  void window.electronAPI.detectGit(modalProject.path).then(async (gitResp) => {
                     const gitInfo = gitResp.success ? gitResp.data : null;
                     await window.electronAPI.saveProject({
                       ...modalProject,
@@ -1878,7 +1335,7 @@ export function App() {
                       gitRemote: gitInfo?.remote ?? null,
                       gitBranch: gitInfo?.branch ?? null,
                     });
-                    loadProjects();
+                    await loadProjects();
                   });
                 }
               }}
@@ -1895,24 +1352,49 @@ export function App() {
         />
       )}
 
+      {taskSettingsTarget && (
+        <TaskSettingsModal
+          task={taskSettingsTarget}
+          hasActiveSession={!!taskActivity[taskSettingsTarget.id]?.state}
+          onClose={() => setTaskSettingsTarget(null)}
+          onRename={(id, newName) => {
+            if (!taskSettingsTarget || taskSettingsTarget.id !== id) return;
+            void persistTaskUpdate(taskSettingsTarget, { name: newName });
+          }}
+          onPermissionModeChange={(id, mode) => {
+            if (!taskSettingsTarget || taskSettingsTarget.id !== id) return;
+            void persistTaskUpdate(taskSettingsTarget, { permissionMode: mode });
+          }}
+          onScriptsChange={(id, setupScript, teardownScript) => {
+            void (async () => {
+              const resp = await window.electronAPI.setTaskScripts({
+                id,
+                setupScript: setupScript.trim() ? setupScript : null,
+                teardownScript: teardownScript.trim() ? teardownScript : null,
+              });
+              if (resp.success && resp.data) {
+                setTaskSettingsTarget((prev) => (prev?.id === id ? resp.data! : prev));
+                if (taskSettingsTarget) await loadTasksForProject(taskSettingsTarget.projectId);
+              }
+            })();
+          }}
+        />
+      )}
+
       {projectSettingsTarget && (
         <ProjectSettingsModal
           project={projectSettingsTarget}
           onClose={() => setProjectSettingsTarget(null)}
-          onRename={async (id, newName) => {
+          onRename={(id, newName) => {
             const proj = projects.find((p) => p.id === id);
             if (!proj) return;
-            await window.electronAPI.saveProject({ ...proj, name: newName });
-            await loadProjects();
-            setProjectSettingsTarget((prev) =>
-              prev?.id === id ? { ...prev, name: newName } : prev,
-            );
-          }}
-          onWorktreeSetupScriptChange={async (id, script) => {
-            const proj = projects.find((p) => p.id === id);
-            if (!proj) return;
-            await window.electronAPI.saveProject({ ...proj, worktreeSetupScript: script });
-            await loadProjects();
+            void (async () => {
+              await window.electronAPI.saveProject({ ...proj, name: newName });
+              await loadProjects();
+              setProjectSettingsTarget((prev) =>
+                prev?.id === id ? { ...prev, name: newName } : prev,
+              );
+            })();
           }}
         />
       )}
@@ -1920,160 +1402,9 @@ export function App() {
       {showSettings && (
         <SettingsModal
           initialTab={settingsInitialTab}
-          theme={theme}
-          onThemeChange={(t) => {
-            setTheme(t);
-            localStorage.setItem('theme', t);
-            sessionRegistry.setAllTerminalThemes(terminalTheme, t === 'dark');
-          }}
-          showRateLimits={showRateLimits}
-          onShowRateLimitsChange={setShowRateLimits}
-          showUsageInline={showUsageInline}
-          onShowUsageInlineChange={setShowUsageInline}
-          showContextUsageOnTaskCards={showContextUsageOnTaskCards}
-          onShowContextUsageOnTaskCardsChange={setShowContextUsageOnTaskCards}
-          showStructuredView={showStructuredView}
-          onShowStructuredViewChange={setShowStructuredView}
-          showActiveTasksSection={showActiveTasksSection}
-          onShowActiveTasksSectionChange={setShowActiveTasksSection}
-          shellDrawerEnabled={shellDrawerEnabled}
-          onShellDrawerEnabledChange={(v) => {
-            setShellDrawerEnabled(v);
-            localStorage.setItem('shellDrawerEnabled', String(v));
-          }}
-          shellDrawerPosition={shellDrawerPosition}
-          onShellDrawerPositionChange={(v) => {
-            setShellDrawerPosition(v);
-            localStorage.setItem('shellDrawerPosition', v);
-          }}
-          terminalTheme={terminalTheme}
-          onTerminalThemeChange={(id) => {
-            setTerminalTheme(id);
-            localStorage.setItem('terminalTheme', id);
-            sessionRegistry.setAllTerminalThemes(id, theme === 'dark');
-          }}
-          diffContextLines={diffContextLines}
-          onDiffContextLinesChange={(v) => {
-            setDiffContextLines(v);
-            localStorage.setItem('diffContextLines', String(v));
-          }}
-          notificationSound={notificationSound}
-          onNotificationSoundChange={(v) => {
-            setNotificationSound(v);
-            localStorage.setItem('notificationSound', v);
-            if (v !== 'off') playNotificationSound(v);
-          }}
-          desktopNotification={desktopNotification}
-          onDesktopNotificationChange={(v) => {
-            setDesktopNotification(v);
-            localStorage.setItem('desktopNotification', String(v));
-          }}
-          autoUpdateEnabled={autoUpdateEnabled}
-          onAutoUpdateEnabledChange={(v) => {
-            setAutoUpdateEnabled(v);
-            localStorage.setItem('autoUpdateEnabled', String(v));
-          }}
-          updateNotificationsEnabled={updateNotificationsEnabled}
-          onUpdateNotificationsEnabledChange={(v) => {
-            setUpdateNotificationsEnabled(v);
-            localStorage.setItem('updateNotificationsEnabled', String(v));
-          }}
           activeProjectPath={activeProject?.path}
-          preferredIDE={preferredIDE}
-          onPreferredIDEChange={(v) => {
-            setPreferredIDE(v);
-            if (v === 'auto') {
-              localStorage.removeItem('preferredIDE');
-            } else {
-              localStorage.setItem('preferredIDE', v);
-            }
-          }}
           availableIDEs={availableIDEs}
-          customIDE={customIDE}
-          onCustomIDEChange={(v) => {
-            setCustomIDE(v);
-            if (!v.path && v.args.length === 0) {
-              localStorage.removeItem('customIDE');
-            } else {
-              localStorage.setItem('customIDE', JSON.stringify(v));
-            }
-          }}
-          commitAttribution={commitAttribution}
-          onCommitAttributionChange={(v) => {
-            setCommitAttribution(v);
-            if (v === undefined) {
-              localStorage.removeItem('commitAttribution');
-            } else {
-              localStorage.setItem('commitAttribution', v);
-            }
-          }}
-          effortLevel={effortLevel}
-          onEffortLevelChange={(v) => {
-            setEffortLevel(v);
-            if (v === 'auto') {
-              localStorage.removeItem('claudeEffortLevel');
-            } else {
-              localStorage.setItem('claudeEffortLevel', v);
-            }
-          }}
-          syncShellEnv={syncShellEnv}
-          onSyncShellEnvChange={(v) => {
-            setSyncShellEnv(v);
-            localStorage.setItem('syncShellEnv', String(v));
-          }}
-          ultracode={ultracode}
-          onUltracodeChange={(v) => {
-            setUltracode(v);
-            localStorage.setItem('ultracode', String(v));
-          }}
-          customClaudeEnvVars={customClaudeEnvVars}
-          onCustomClaudeEnvVarsChange={(v) => {
-            setCustomClaudeEnvVars(v);
-            localStorage.setItem('customClaudeEnvVars', JSON.stringify(v));
-          }}
-          keybindings={keybindings}
-          onKeybindingsChange={(b) => {
-            setKeybindings(b);
-            saveKeybindings(b);
-          }}
-          rtkStatus={rtkStatus}
-          onRtkEnabledChange={(enabled) => {
-            // Optimistic update only applies to the installed arm — the type
-            // forbids `enabled` on { installed: false }.
-            setRtkStatus((prev) => (prev?.installed ? { ...prev, enabled } : prev));
-            window.electronAPI.rtkSetEnabled(enabled).then((resp) => {
-              if (!resp.success) {
-                toast.error(resp.error ?? 'Failed to toggle RTK');
-                window.electronAPI.rtkGetStatus().then((s) => {
-                  if (s.success && s.data) setRtkStatus(s.data);
-                  else console.error('[rtk:getStatus after setEnabled failure]', s.error);
-                });
-                return;
-              }
-              if (resp.data?.warning) {
-                toast.warning(resp.data.warning);
-              }
-            });
-          }}
-          onRtkDownload={() => {
-            setRtkDownloadProgress({ phase: 'downloading', percent: 0 });
-            window.electronAPI.rtkDownload().then((resp) => {
-              if (!resp.success) {
-                setRtkDownloadProgress({
-                  phase: 'error',
-                  error: resp.error ?? 'download failed',
-                });
-                return;
-              }
-              if (resp.data?.warning) {
-                toast.warning(resp.data.warning);
-              }
-            });
-          }}
-          rtkDownloadProgress={rtkDownloadProgress}
           latestRateLimits={latestRateLimits}
-          usageThresholds={usageThresholds}
-          onUsageThresholdsChange={setUsageThresholds}
           onClose={() => setShowSettings(false)}
         />
       )}
@@ -2124,26 +1455,34 @@ export function App() {
       )}
 
       {showSkillsBrowser && (
-        <SkillsBrowserModal
+        <ExtensionsModal
           projects={skillsModalProjects}
-          activeProjectId={activeProjectId ?? undefined}
           activeTasks={skillsModalActiveTasks}
-          currentTaskId={activeTaskId ?? undefined}
+          initialScopeId={extensionsInitialScopeId}
           onClose={() => setShowSkillsBrowser(false)}
         />
       )}
 
-      {showDiff && (
-        <DiffViewer
-          diff={diffResult}
-          loading={diffLoading}
-          activeTaskId={activeTaskId}
-          taskPath={activeTask?.path ?? ''}
-          onClose={() => {
-            setShowDiff(false);
-            setDiffResult(null);
-          }}
-        />
+      {diffFile && (
+        <Suspense fallback={null}>
+          <DiffEditorModal
+            cwd={diffFile.cwd}
+            initialFilePath={diffFile.filePath}
+            initialStaged={diffFile.staged}
+            initialView={diffFile.initialView}
+            activeTaskId={activeTaskId}
+            terminalTheme={resolvedTerminalTheme}
+            isDark={theme === 'dark'}
+            onClose={() => {
+              setDiffFile(null);
+              // Refocus the active task's Claude Code TUI so the user can
+              // keep typing without an extra click. RAF defers past React's
+              // commit so the modal's DOM is gone before xterm grabs focus.
+              const id = activeTaskId;
+              if (id) requestAnimationFrame(() => sessionRegistry.get(id)?.focus());
+            }}
+          />
+        </Suspense>
       )}
 
       <ToastContainer updateNotificationsEnabled={updateNotificationsEnabled} />

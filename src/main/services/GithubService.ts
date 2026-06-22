@@ -1,6 +1,7 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import type { GithubIssue, PullRequestInfo } from '@shared/types';
+import type { GithubIssue, PullRequest, PullRequestInfo } from '@shared/types';
+import { mapGithubPrList, buildPrHeadRefspec } from './githubPr';
 
 const execFileAsync = promisify(execFile);
 
@@ -84,6 +85,75 @@ export class GithubService {
         sorted[0].state === 'MERGED' ? 'merged' : sorted[0].state === 'OPEN' ? 'open' : 'closed',
       provider: 'github',
     };
+  }
+
+  /** Open PRs for the repo at `cwd`, newest first (gh's default order). */
+  static async listPullRequests(cwd: string): Promise<PullRequest[]> {
+    const { stdout } = await execFileAsync(
+      'gh',
+      [
+        'pr',
+        'list',
+        '--state',
+        'open',
+        '--json',
+        'number,title,url,state,headRefName,baseRefName,author',
+        '--limit',
+        '50',
+      ],
+      { cwd, timeout: TIMEOUT_MS, env: process.env as Record<string, string> },
+    );
+    return mapGithubPrList(JSON.parse(stdout));
+  }
+
+  /**
+   * Fetch a PR's head into a local branch so a worktree can be created on it.
+   * Uses refs/pull/<n>/head, which covers fork PRs. Returns the local branch
+   * name (= the PR head branch name). If the local branch already exists (the
+   * PR was prepared before), the fetch fails with a non-fast-forward / exists
+   * error — we treat that as "already present" and reuse it.
+   */
+  static async fetchPullRequestHead(
+    cwd: string,
+    prNumber: number,
+    headRefName: string,
+  ): Promise<string> {
+    // No leading '+': git fast-forwards an existing local branch to the PR head
+    // when it can, and creates the branch when it's absent — so a stale local
+    // copy is refreshed for free, without ever rewinding local work.
+    const refspec = buildPrHeadRefspec(prNumber, headRefName);
+    try {
+      await execFileAsync('git', ['fetch', 'origin', refspec], { cwd, timeout: TIMEOUT_MS });
+    } catch (err) {
+      // Reuse the existing local branch only for the *expected* fast-forward
+      // conflicts: it has diverged from the PR head (non-ff), or it's checked out
+      // in a worktree. Forcing either would clobber work, so keep what's there.
+      // Any other failure (network, auth, a deleted PR ref) must not be masked as
+      // "reuse stale" — surface it.
+      const stderr =
+        err && typeof err === 'object' && 'stderr' in err
+          ? String((err as { stderr?: unknown }).stderr)
+          : err instanceof Error
+            ? err.message
+            : String(err);
+      const ffConflict =
+        /non-fast-forward|\[rejected\]|refusing to fetch into branch|checked out/i.test(stderr);
+      const exists = await GithubService.localBranchExists(cwd, headRefName);
+      if (!ffConflict || !exists) throw err;
+    }
+    return headRefName;
+  }
+
+  private static async localBranchExists(cwd: string, branch: string): Promise<boolean> {
+    try {
+      await execFileAsync('git', ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], {
+        cwd,
+        timeout: TIMEOUT_MS,
+      });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   static async postBranchComment(cwd: string, issueNumber: number, branch: string): Promise<void> {

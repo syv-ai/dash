@@ -56,6 +56,18 @@ describe('isDashOwnedHook', () => {
     expect(isDashOwnedHook({ type: 'command', command })).toBe(true);
   });
 
+  it('recognises a brand-stripped command hook that reads the port from $DASH_HOOK_PORT', () => {
+    // Current Dash writes hooks as guarded curl commands whose port is the
+    // runtime env var, not a baked number: ".../127.0.0.1:$DASH_HOOK_PORT/hook/…".
+    // The brand is the primary signal, but if a round-trip strips __dash the
+    // structural fallback must still recognize the env-var port form — otherwise
+    // these would survive as "user content" and accumulate across upgrades.
+    const command =
+      '[ -n "$DASH_HOOK_PORT" ] || exit 0; curl -s --max-time 2 -X POST -H \'Content-Type: application/json\' ' +
+      '-d @- "http://127.0.0.1:$DASH_HOOK_PORT/hook/busy?ptyId=abc" >/dev/null 2>&1';
+    expect(isDashOwnedHook({ type: 'command', command })).toBe(true);
+  });
+
   it('recognises an untagged SessionStart base64-decode context hook (unix)', () => {
     // Dash injects task context via an `echo '<base64>' | base64 -D` hook
     // under SessionStart. Pre-brand versions wrote it without __dash; we
@@ -176,9 +188,9 @@ describe('mergeHookEntries — user content preservation', () => {
 
     expect(merged.PreToolUse).toHaveLength(2);
     // User entry must survive verbatim (deep equality).
-    expect(merged.PreToolUse[0]).toEqual(userHook);
+    expect(merged.PreToolUse![0]).toEqual(userHook);
     // Dash entry appended after.
-    expect(merged.PreToolUse[1].hooks[0]).toMatchObject({ __dash: true });
+    expect(merged.PreToolUse![1]!.hooks[0]).toMatchObject({ __dash: true });
   });
 
   it('drops a mixed entry (user hook + Dash hook spliced together) wholesale', () => {
@@ -200,7 +212,7 @@ describe('mergeHookEntries — user content preservation', () => {
 
     // Mixed entry gone; only the fresh Dash entry remains.
     expect(merged.PreToolUse).toHaveLength(1);
-    expect(merged.PreToolUse[0].hooks[0]).toMatchObject({ __dash: true });
+    expect(merged.PreToolUse![0]!.hooks[0]).toMatchObject({ __dash: true });
   });
 
   it('passes a brand-tagged hook through unchanged on a non-Dash event', () => {
@@ -268,7 +280,7 @@ describe('mergeHookEntries — user content preservation', () => {
     const merged = mergeHookEntries(existing, dash);
 
     expect(merged.PreToolUse).toHaveLength(1);
-    expect(merged.PreToolUse[0].hooks[0]).toMatchObject({ __dash: true });
+    expect(merged.PreToolUse![0]!.hooks[0]).toMatchObject({ __dash: true });
   });
 
   it('drops stale curl-command Dash entries on legacy event names and removes the empty key', () => {
@@ -364,7 +376,7 @@ describe('mergeHookEntries — user content preservation', () => {
     const merged = mergeHookEntries(existing, dash);
 
     expect(merged.PreToolUse).toHaveLength(1);
-    expect(merged.PreToolUse[0].hooks[0]).toMatchObject({ __dash: true });
+    expect(merged.PreToolUse![0]!.hooks[0]).toMatchObject({ __dash: true });
   });
 
   it('handles a fully empty existing object', () => {
@@ -396,5 +408,84 @@ describe('mergeHookEntries — user content preservation', () => {
     expect(merged.PostToolUse).toContainEqual(userPost);
     expect(merged.PreToolUse).toHaveLength(2);
     expect(merged.PostToolUse).toHaveLength(2);
+  });
+});
+
+describe('legacy permission-request endpoint cleanup', () => {
+  it('recognises a stale permission-request hook from a prior Dash version', () => {
+    // Older Dash versions wrote a `/hook/permission-request` URL that the
+    // current HookServer no longer serves. Without recognition, the entry
+    // survives the merge as "user content" and accumulates one stale
+    // ECONNREFUSED-on-every-tool-call entry per upgrade.
+    expect(
+      isDashOwnedHook({
+        type: 'http',
+        url: 'http://127.0.0.1:59273/hook/permission-request?ptyId=abc',
+      }),
+    ).toBe(true);
+  });
+
+  it('drops a stale permission-request entry under the legacy PermissionRequest event', () => {
+    // Older Dash versions wrote this hook under a dedicated PermissionRequest
+    // event that the current code no longer manages. Without listing the
+    // event in DASH_HOOK_EVENTS, the merger's pass-through branch preserves
+    // the entry verbatim on every write and the stale URL never gets cleaned.
+    const stale: HookEntry = {
+      matcher: '*',
+      hooks: [
+        {
+          type: 'http',
+          url: 'http://127.0.0.1:59273/hook/permission-request?ptyId=abc',
+          __dash: true,
+        },
+      ],
+    };
+    const merged = mergeHookEntries({ PermissionRequest: [stale] }, {});
+    // Stale entry filtered out and the now-empty event key removed entirely.
+    expect(merged.PermissionRequest).toBeUndefined();
+  });
+});
+
+describe('SessionEnd allowlist', () => {
+  it('recognises Dash SessionEnd HTTP hook by URL shape', () => {
+    const entry: HookEntry = {
+      matcher: '*',
+      hooks: [{ type: 'http', url: 'http://127.0.0.1:54321/hook/session-end?ptyId=abc' }],
+    };
+    expect(entryIsDashOwned(entry)).toBe(true);
+  });
+
+  it('treats SessionEnd as a Dash-managed event so stale entries are replaced (not stacked)', () => {
+    // Simulates the "user upgrades Dash and restarts" case: a prior-session
+    // Dash hook is on disk with a dead port. On the next launch, the merger
+    // must drop it and write a fresh one — otherwise stale entries accumulate.
+    const userEntry: HookEntry = {
+      matcher: '*',
+      hooks: [{ type: 'command', command: 'echo user-hook' }],
+    };
+    const staleDash: HookEntry = {
+      matcher: '*',
+      hooks: [{ type: 'http', url: 'http://127.0.0.1:55555/hook/session-end?ptyId=old' }],
+    };
+    const freshDash: HookEntry = {
+      matcher: '*',
+      hooks: [
+        {
+          type: 'http',
+          url: 'http://127.0.0.1:54321/hook/session-end?ptyId=new',
+          __dash: true,
+        },
+      ],
+    };
+    const merged = mergeHookEntries(
+      { SessionEnd: [userEntry, staleDash] },
+      { SessionEnd: [freshDash] },
+    );
+    // Stale Dash entry filtered out; user entry preserved; fresh Dash entry appended.
+    expect(merged.SessionEnd).toHaveLength(2);
+    expect(merged.SessionEnd![0]!.hooks[0]).toMatchObject({ command: 'echo user-hook' });
+    expect(merged.SessionEnd![1]!.hooks[0]).toMatchObject({
+      url: expect.stringContaining(':54321/'),
+    });
   });
 });

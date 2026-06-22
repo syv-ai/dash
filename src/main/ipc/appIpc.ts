@@ -1,4 +1,6 @@
 import { ipcMain, dialog, app, shell, BrowserWindow, Notification, clipboard } from 'electron';
+import { z } from 'zod';
+import { parseArgs, parseArgsSafe, errorResponse, ipcError } from './validate';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { existsSync, readFileSync } from 'fs';
@@ -152,12 +154,47 @@ async function detectEditor(): Promise<string> {
   return cachedEditor;
 }
 
+// In dev (pnpm dev) we display "{latest-published}.DEV" so the version surface
+// matches what a packaged user would see, plus a clear DEV marker. Cached for
+// the session: GitHub API is rate-limited and the answer doesn't change mid-run.
+let cachedDevVersion: string | null = null;
+
+async function getDevVersion(): Promise<string> {
+  if (cachedDevVersion) return cachedDevVersion;
+  const localVersion = app.getVersion();
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const response = await fetch('https://api.github.com/repos/syv-ai/dash/releases/latest', {
+      headers: { 'User-Agent': 'dash-app', Accept: 'application/vnd.github+json' },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (response.ok) {
+      const data = (await response.json()) as { tag_name?: string };
+      const tag = (data.tag_name || '').replace(/^v/, '').trim();
+      if (tag) {
+        cachedDevVersion = `${tag}.DEV`;
+        return cachedDevVersion;
+      }
+    }
+  } catch {
+    // Best effort — fall through to local version
+  }
+  cachedDevVersion = `${localVersion}.DEV`;
+  return cachedDevVersion;
+}
+
 export function registerAppIpc(): void {
-  ipcMain.handle('app:getVersion', () => {
+  ipcMain.handle('app:getVersion', async () => {
+    if (!app.isPackaged) {
+      return getDevVersion();
+    }
     return app.getVersion();
   });
 
   ipcMain.handle('app:openExternal', async (_event, url: string) => {
+    parseArgs('app:openExternal', z.string(), url);
     await shell.openExternal(url);
   });
 
@@ -165,6 +202,8 @@ export function registerAppIpc(): void {
   // unreliable on Linux (Wayland permission prompts, silent failures when
   // the page loses focus between keydown and the async write).
   ipcMain.on('app:clipboardWriteText', (_event, text: string) => {
+    const v = parseArgsSafe('app:clipboardWriteText', z.string(), text);
+    if (v === undefined) return;
     clipboard.writeText(text);
   });
   ipcMain.handle('app:clipboardReadText', () => {
@@ -184,7 +223,7 @@ export function registerAppIpc(): void {
 
       return { success: true, data: result.filePaths };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
@@ -205,12 +244,13 @@ export function registerAppIpc(): void {
       }
       return { success: true, data: result.filePaths[0] };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
   ipcMain.handle('app:detectGit', async (_event, folderPath: string) => {
     try {
+      parseArgs('app:detectGit', z.string(), folderPath);
       const gitDir = join(folderPath, '.git');
       if (!existsSync(gitDir)) {
         return { success: true, data: { isGitRepo: false, remote: null, branch: null } };
@@ -239,42 +279,51 @@ export function registerAppIpc(): void {
 
       return { success: true, data: { isGitRepo: true, remote, branch } };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
   ipcMain.handle('git:init', async (_event, folderPath: string) => {
     try {
+      parseArgs('git:init', z.string(), folderPath);
       await execFileAsync('git', ['init'], { cwd: folderPath, timeout: 10000 });
       return { success: true, data: null };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
-  ipcMain.on('app:setDesktopNotification', async (_event, opts: { enabled: boolean }) => {
-    try {
-      const { setDesktopNotification } = await import('../services/ptyManager');
-      setDesktopNotification(opts);
+  ipcMain.on('app:setDesktopNotification', (_event, opts: { enabled: boolean }) => {
+    const v = parseArgsSafe(
+      'app:setDesktopNotification',
+      z.looseObject({ enabled: z.boolean() }),
+      opts,
+    );
+    if (v === undefined) return;
+    void (async () => {
+      try {
+        const { setDesktopNotification } = await import('../services/ptyManager');
+        setDesktopNotification(opts);
 
-      // Fire a test notification when newly enabled so macOS prompts for permission
-      if (opts.enabled) {
-        try {
-          const n = new Notification({
-            title: 'Dash',
-            body: 'Notifications enabled!',
-          });
-          n.show();
-        } catch (err) {
-          console.error(
-            '[app:setDesktopNotification] Test notification failed (permission denied?):',
-            err,
-          );
+        // Fire a test notification when newly enabled so macOS prompts for permission
+        if (opts.enabled) {
+          try {
+            const n = new Notification({
+              title: 'Dash',
+              body: 'Notifications enabled!',
+            });
+            n.show();
+          } catch (err) {
+            console.error(
+              '[app:setDesktopNotification] Test notification failed (permission denied?):',
+              err,
+            );
+          }
         }
+      } catch (err) {
+        console.error('[app:setDesktopNotification] Failed:', err);
       }
-    } catch (err) {
-      console.error('[app:setDesktopNotification] Failed:', err);
-    }
+    })();
   });
 
   // Read effective commit attribution from Claude Code settings hierarchy
@@ -282,6 +331,7 @@ export function registerAppIpc(): void {
     'app:getClaudeAttribution',
     (_event, projectPath?: string): { success: boolean; data?: string | null; error?: string } => {
       try {
+        parseArgs('app:getClaudeAttribution', z.string().optional(), projectPath);
         // Check project-level settings first (higher precedence)
         if (projectPath) {
           const repoSettings = join(projectPath, '.claude', 'settings.json');
@@ -306,45 +356,65 @@ export function registerAppIpc(): void {
         return { success: true, data: null };
       } catch (err) {
         console.error('[app:getClaudeAttribution] Failed to read settings:', err);
-        return { success: false, error: String(err) };
+        return errorResponse(err);
       }
     },
   );
 
-  ipcMain.on('app:setCommitAttribution', async (_event, value: string | undefined) => {
-    try {
-      const { setCommitAttribution } = await import('../services/ptyManager');
-      setCommitAttribution(value);
-    } catch (err) {
-      console.error('[app:setCommitAttribution] Failed:', err);
+  ipcMain.on('app:setCommitAttribution', (_event, value: string | undefined) => {
+    if (
+      value !== undefined &&
+      parseArgsSafe('app:setCommitAttribution', z.string(), value) === undefined
+    ) {
+      return;
     }
+    void (async () => {
+      try {
+        const { setCommitAttribution } = await import('../services/ptyManager');
+        setCommitAttribution(value);
+      } catch (err) {
+        console.error('[app:setCommitAttribution] Failed:', err);
+      }
+    })();
   });
 
-  ipcMain.on('app:setClaudeEnvVars', async (_event, vars: Record<string, string>) => {
-    try {
-      const { setClaudeEnvVars } = await import('../services/ptyManager');
-      setClaudeEnvVars(vars);
-    } catch (err) {
-      console.error('[app:setClaudeEnvVars] Failed:', err);
-    }
+  ipcMain.on('app:setClaudeEnvVars', (_event, vars: Record<string, string>) => {
+    const v = parseArgsSafe('app:setClaudeEnvVars', z.record(z.string(), z.string()), vars);
+    if (v === undefined) return;
+    void (async () => {
+      try {
+        const { setClaudeEnvVars } = await import('../services/ptyManager');
+        setClaudeEnvVars(vars);
+      } catch (err) {
+        console.error('[app:setClaudeEnvVars] Failed:', err);
+      }
+    })();
   });
 
-  ipcMain.on('app:setSyncShellEnv', async (_event, enabled: boolean) => {
-    try {
-      const { setSyncShellEnv } = await import('../services/ptyManager');
-      setSyncShellEnv(enabled);
-    } catch (err) {
-      console.error('[app:setSyncShellEnv] Failed:', err);
-    }
+  ipcMain.on('app:setSyncShellEnv', (_event, enabled: boolean) => {
+    const v = parseArgsSafe('app:setSyncShellEnv', z.boolean(), enabled);
+    if (v === undefined) return;
+    void (async () => {
+      try {
+        const { setSyncShellEnv } = await import('../services/ptyManager');
+        setSyncShellEnv(enabled);
+      } catch (err) {
+        console.error('[app:setSyncShellEnv] Failed:', err);
+      }
+    })();
   });
 
-  ipcMain.on('app:setUltracode', async (_event, enabled: boolean) => {
-    try {
-      const { setUltracode } = await import('../services/ptyManager');
-      setUltracode(enabled);
-    } catch (err) {
-      console.error('[app:setUltracode] Failed:', err);
-    }
+  ipcMain.on('app:setUltracode', (_event, enabled: boolean) => {
+    const v = parseArgsSafe('app:setUltracode', z.boolean(), enabled);
+    if (v === undefined) return;
+    void (async () => {
+      try {
+        const { setUltracode } = await import('../services/ptyManager');
+        setUltracode(v);
+      } catch (err) {
+        console.error('[app:setUltracode] Failed:', err);
+      }
+    })();
   });
 
   ipcMain.handle('app:detectClaude', async () => {
@@ -377,8 +447,19 @@ export function registerAppIpc(): void {
       },
     ) => {
       try {
+        parseArgs(
+          'app:openInIDE',
+          z.looseObject({
+            folderPath: z.string(),
+            ide: z.string().optional(),
+            customCommand: z
+              .looseObject({ path: z.string(), args: z.array(z.string()) })
+              .optional(),
+          }),
+          args,
+        );
         if (!existsSync(args.folderPath)) {
-          return { success: false, error: `Path not found: ${args.folderPath}` };
+          return ipcError(`Path not found: ${args.folderPath}`, 'NOT_FOUND');
         }
 
         if (args.ide === 'custom') {
@@ -387,7 +468,7 @@ export function registerAppIpc(): void {
             return { success: false, error: 'No custom IDE configured' };
           }
           if (!existsSync(custom.path)) {
-            return { success: false, error: `Custom IDE not found: ${custom.path}` };
+            return ipcError(`Custom IDE not found: ${custom.path}`, 'NOT_FOUND');
           }
           const substituted = custom.args.map((a) => a.replace('{path}', args.folderPath));
           const finalArgs = custom.args.some((a) => a.includes('{path}'))
@@ -427,7 +508,7 @@ export function registerAppIpc(): void {
         }
         return { success: true, data: null };
       } catch (error) {
-        return { success: false, error: String(error) };
+        return errorResponse(error);
       }
     },
   );
@@ -440,7 +521,7 @@ export function registerAppIpc(): void {
         data: detected.map(({ id, label }) => ({ id, label })),
       };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 
@@ -448,9 +529,19 @@ export function registerAppIpc(): void {
     'app:openInEditor',
     async (_event, args: { cwd: string; filePath: string; line?: number; col?: number }) => {
       try {
+        parseArgs(
+          'app:openInEditor',
+          z.looseObject({
+            cwd: z.string(),
+            filePath: z.string(),
+            line: z.number().optional(),
+            col: z.number().optional(),
+          }),
+          args,
+        );
         const resolved = resolve(args.cwd, args.filePath);
         if (!existsSync(resolved)) {
-          return { success: false, error: `File not found: ${resolved}` };
+          return ipcError(`File not found: ${resolved}`, 'NOT_FOUND');
         }
 
         const editor = await detectEditor();
@@ -482,7 +573,7 @@ export function registerAppIpc(): void {
 
         return { success: true, data: null };
       } catch (error) {
-        return { success: false, error: String(error) };
+        return errorResponse(error);
       }
     },
   );

@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import type {
-  CommitGraphData,
-  CommitDetail as CommitDetailType,
-} from '../../../shared/types';
+import type { CommitGraphData, CommitDetail as CommitDetailType } from '../../../shared/types';
 import { GraphSvg } from './GraphSvg';
 import { CommitRow } from './CommitRow';
 import { CommitDetailPanel } from './CommitDetail';
 import { ROW_HEIGHT } from './graphLayout';
+import { githubSlug as parseGithubSlug } from '../../../shared/urls';
 
 import type { TaskBranchInfo } from './CommitGraphModal';
 
@@ -19,17 +17,12 @@ interface CommitGraphViewProps {
 
 const PAGE_SIZE = 150;
 
-/** Extract GitHub org/repo slug from a remote URL */
-function getGithubSlug(remote: string | null): string | null {
-  if (!remote) return null;
-  const ssh = remote.match(/git@github\.com:(.+?)(?:\.git)?$/);
-  if (ssh) return ssh[1];
-  const https = remote.match(/https:\/\/github\.com\/(.+?)(?:\.git)?$/);
-  if (https) return https[1];
-  return null;
-}
-
-export function CommitGraphView({ projectPath, gitRemote, taskBranches, onSelectTask }: CommitGraphViewProps) {
+export function CommitGraphView({
+  projectPath,
+  gitRemote,
+  taskBranches,
+  onSelectTask,
+}: CommitGraphViewProps) {
   const [graphData, setGraphData] = useState<CommitGraphData | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -40,7 +33,7 @@ export function CommitGraphView({ projectPath, gitRemote, taskBranches, onSelect
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // taskBranches is already a Map, no need to transform
-  const githubSlug = useMemo(() => getGithubSlug(gitRemote), [gitRemote]);
+  const githubSlug = useMemo(() => parseGithubSlug(gitRemote), [gitRemote]);
 
   const fetchGraph = useCallback(
     async (skip = 0) => {
@@ -58,7 +51,7 @@ export function CommitGraphView({ projectPath, gitRemote, taskBranches, onSelect
     setLoading(true);
     setSelectedRow(null);
     setDetail(null);
-    fetchGraph(0).then((data) => {
+    void fetchGraph(0).then((data) => {
       setGraphData(data);
       setLoading(false);
     });
@@ -111,7 +104,7 @@ export function CommitGraphView({ projectPath, gitRemote, taskBranches, onSelect
     setDetailClosing(false);
     setSelectedRow(row);
     setDetailLoading(true);
-    const commit = graphData!.commits[row].commit;
+    const commit = graphData!.commits[row]!.commit;
     const res = await window.electronAPI.gitGetCommitDetail({
       cwd: projectPath,
       hash: commit.hash,
@@ -169,7 +162,9 @@ export function CommitGraphView({ projectPath, gitRemote, taskBranches, onSelect
                 refColors={refColors}
                 rowIndex={row}
                 githubSlug={githubSlug}
-                onClick={() => handleSelectCommit(row)}
+                onClick={() => {
+                  void handleSelectCommit(row);
+                }}
               />
             ))}
 
@@ -177,11 +172,15 @@ export function CommitGraphView({ projectPath, gitRemote, taskBranches, onSelect
             {hasMore && (
               <div className="flex justify-center py-3" style={{ height: ROW_HEIGHT + 16 }}>
                 <button
-                  onClick={handleLoadMore}
+                  onClick={() => {
+                    void handleLoadMore();
+                  }}
                   disabled={loadingMore}
                   className="px-4 py-1.5 rounded-md text-[11px] font-medium bg-accent hover:bg-accent/80 text-foreground/80 hover:text-foreground transition-colors disabled:opacity-40"
                 >
-                  {loadingMore ? 'Loading...' : `Load more (${graphData.totalCount - graphData.commits.length} remaining)`}
+                  {loadingMore
+                    ? 'Loading...'
+                    : `Load more (${graphData.totalCount - graphData.commits.length} remaining)`}
                 </button>
               </div>
             )}

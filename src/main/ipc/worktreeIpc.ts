@@ -1,4 +1,6 @@
 import { ipcMain } from 'electron';
+import { z } from 'zod';
+import { parseArgs, errorResponse } from './validate';
 import { worktreeService } from '../services/WorktreeService';
 import { worktreePoolService } from '../services/WorktreePoolService';
 import { TelemetryService } from '../services/TelemetryService';
@@ -15,19 +17,34 @@ export function registerWorktreeIpc(): void {
         projectId: string;
         linkedIssueNumbers?: number[];
         pushRemote?: boolean;
+        setupScript?: string | null;
       },
     ) => {
       try {
+        parseArgs(
+          'worktree:create',
+          z.looseObject({
+            projectPath: z.string(),
+            taskName: z.string(),
+            baseRef: z.string().optional(),
+            projectId: z.string(),
+            linkedIssueNumbers: z.array(z.number()).optional(),
+            pushRemote: z.boolean().optional(),
+            setupScript: z.string().nullable().optional(),
+          }),
+          args,
+        );
         const data = await worktreeService.createWorktree(args.projectPath, args.taskName, {
           baseRef: args.baseRef,
           projectId: args.projectId,
           linkedIssueNumbers: args.linkedIssueNumbers,
           pushRemote: args.pushRemote,
+          setupScript: args.setupScript,
         });
         TelemetryService.capture('worktree_created');
         return { success: true, data };
       } catch (error) {
-        return { success: false, error: String(error) };
+        return errorResponse(error);
       }
     },
   );
@@ -44,10 +61,28 @@ export function registerWorktreeIpc(): void {
           deleteWorktreeDir?: boolean;
           deleteLocalBranch?: boolean;
           deleteRemoteBranch?: boolean;
+          teardownScript?: string | null;
         };
       },
     ) => {
       try {
+        parseArgs(
+          'worktree:remove',
+          z.looseObject({
+            projectPath: z.string(),
+            worktreePath: z.string(),
+            branch: z.string(),
+            options: z
+              .looseObject({
+                deleteWorktreeDir: z.boolean().optional(),
+                deleteLocalBranch: z.boolean().optional(),
+                deleteRemoteBranch: z.boolean().optional(),
+                teardownScript: z.string().nullable().optional(),
+              })
+              .optional(),
+          }),
+          args,
+        );
         await worktreeService.removeWorktree(
           args.projectPath,
           args.worktreePath,
@@ -57,7 +92,7 @@ export function registerWorktreeIpc(): void {
         TelemetryService.capture('worktree_removed');
         return { success: true };
       } catch (error) {
-        return { success: false, error: String(error) };
+        return errorResponse(error);
       }
     },
   );
@@ -66,10 +101,15 @@ export function registerWorktreeIpc(): void {
     'worktree:ensureReserve',
     async (_event, args: { projectId: string; projectPath: string }) => {
       try {
+        parseArgs(
+          'worktree:ensureReserve',
+          z.looseObject({ projectId: z.string(), projectPath: z.string() }),
+          args,
+        );
         await worktreePoolService.ensureReserve(args.projectId, args.projectPath);
         return { success: true };
       } catch (error) {
-        return { success: false, error: String(error) };
+        return errorResponse(error);
       }
     },
   );
@@ -84,22 +124,36 @@ export function registerWorktreeIpc(): void {
         baseRef?: string;
         linkedIssueNumbers?: number[];
         pushRemote?: boolean;
+        setupScript?: string | null;
       },
     ) => {
       try {
+        parseArgs(
+          'worktree:claimReserve',
+          z.looseObject({
+            projectId: z.string(),
+            taskName: z.string(),
+            baseRef: z.string().optional(),
+            linkedIssueNumbers: z.array(z.number()).optional(),
+            pushRemote: z.boolean().optional(),
+            setupScript: z.string().nullable().optional(),
+          }),
+          args,
+        );
         const data = await worktreePoolService.claimReserve(
           args.projectId,
           args.taskName,
           args.baseRef,
           args.linkedIssueNumbers,
           args.pushRemote,
+          args.setupScript,
         );
         if (data) {
           return { success: true, data };
         }
         return { success: false, error: 'No reserve available' };
       } catch (error) {
-        return { success: false, error: String(error) };
+        return errorResponse(error);
       }
     },
   );
@@ -114,9 +168,22 @@ export function registerWorktreeIpc(): void {
         branch: string;
         projectId: string;
         linkedIssueNumbers?: number[];
+        setupScript?: string | null;
       },
     ) => {
       try {
+        parseArgs(
+          'worktree:createFromExisting',
+          z.looseObject({
+            projectPath: z.string(),
+            taskName: z.string(),
+            branch: z.string(),
+            projectId: z.string(),
+            linkedIssueNumbers: z.array(z.number()).optional(),
+            setupScript: z.string().nullable().optional(),
+          }),
+          args,
+        );
         const data = await worktreeService.createWorktreeFromExistingBranch(
           args.projectPath,
           args.taskName,
@@ -124,6 +191,7 @@ export function registerWorktreeIpc(): void {
           {
             projectId: args.projectId,
             linkedIssueNumbers: args.linkedIssueNumbers,
+            setupScript: args.setupScript,
           },
         );
         TelemetryService.capture('worktree_created_existing_branch');
@@ -139,9 +207,10 @@ export function registerWorktreeIpc(): void {
 
   ipcMain.handle('worktree:hasReserve', async (_event, projectId: string) => {
     try {
+      parseArgs('worktree:hasReserve', z.string(), projectId);
       return { success: true, data: worktreePoolService.hasReserve(projectId) };
     } catch (error) {
-      return { success: false, error: String(error) };
+      return errorResponse(error);
     }
   });
 }

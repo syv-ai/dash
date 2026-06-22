@@ -1,4 +1,4 @@
-@import 'xterm/css/xterm.css';
+@import '@xterm/xterm/css/xterm.css';
 
 @tailwind base;
 @tailwind components;
@@ -8,39 +8,59 @@
 
 @layer base {
   :root {
-    /* Light — matches terminal lightTheme (#ffffff bg, #383a42 fg) */
-    --background: 0 0% 100%;
-    --foreground: 228 8% 24%;
+    /* Light — warm paper + deep moonlight. Matches refined terminal lightTheme. */
+    --background: 40 38% 96%; /* #faf8f3 warm paper */
+    --foreground: 36 11% 10%; /* #1c1b18 deep warm graphite */
     --card: 0 0% 100%;
-    --card-foreground: 228 8% 24%;
+    --card-foreground: 36 11% 10%;
     --popover: 0 0% 100%;
-    --popover-foreground: 228 8% 24%;
-    --primary: 32 95% 52%;
+    --popover-foreground: 36 11% 10%;
+    --primary: 218 34% 35%; /* #3b5078 deep moonlight */
     --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 95%;
-    --secondary-foreground: 228 8% 24%;
-    --muted: 0 0% 95%;
-    --muted-foreground: 0 0% 45%;
-    --accent: 0 0% 93%;
-    --accent-foreground: 228 8% 24%;
-    --destructive: 0 72% 51%;
+    --secondary: 40 30% 94%;
+    --secondary-foreground: 36 11% 10%;
+    --muted: 40 30% 94%;
+    --muted-foreground: 36 11% 36%;
+    --accent: 40 30% 92%;
+    --accent-foreground: 36 11% 10%;
+    --destructive: 0 72% 51%; /* bright red */
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 89%;
+    --border: 0 0% 89%; /* kept — consumers use /alpha */
     --input: 0 0% 89%;
-    --ring: 32 95% 52%;
+    --ring: 218 34% 35%;
     --radius: 0.5rem;
 
     --surface-0: 0 0% 100%;
-    --surface-1: 0 0% 98%;
-    --surface-2: 0 0% 96%;
-    --surface-3: 0 0% 93%;
+    --surface-1: 40 38% 98%; /* off-paper for sidebar */
+    --surface-2: 40 30% 93%;
+    --surface-3: 38 30% 88%; /* #ece6d5 */
+
+    --shadow-card: 0 1px 0 hsl(0 0% 100% / 0.6), 0 8px 22px hsl(36 11% 10% / 0.12);
+
+    --warn: 38 92% 50%; /* bright amber */
+    --warn-foreground: 0 0% 100%;
 
     --git-added: 142 71% 45%;
-    --git-modified: 38 92% 50%;
+    --git-modified: 38 80% 62%;
     --git-deleted: 0 84% 60%;
     --git-renamed: 217 91% 60%;
+    --pr-merged: 262 60% 55%; /* GitHub merged-PR purple */
     --git-untracked: 0 0% 50%;
     --git-conflicted: 25 95% 53%;
+
+    --status-idle: 158 64% 52%; /* emerald */
+    --status-wait: 25 95% 53%; /* orange */
+    --status-unseen: 213 94% 68%; /* blue */
+
+    /* Service ("port") terminals — a muted periwinkle that sits in the cool
+       moonlight family but hue-shifts off the primary blue, so a service tab
+       reads as distinct from neutral shells and wizard TUIs without shouting. */
+    --terminal-service: 248 24% 50%;
+
+    /* Diff-comment shade palette. shade-1 is the canonical primary; shade-2
+     * is hue-shifted ~+60° and only kicks in when comments partially overlap. */
+    --shade-1: 218 34% 35%;
+    --shade-2: 278 36% 38%;
 
     /* Category palette — hashed category names map deterministically to a slot 1..8.
        Hues spread evenly around the wheel so adjacent slots stay distinguishable. */
@@ -52,42 +72,67 @@
     --cat-6: 175 55% 38%; /* teal */
     --cat-7: 45 80% 45%; /* gold */
     --cat-8: 245 55% 58%; /* indigo */
+
+    --font-sans:
+      'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --font-mono:
+      ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+      monospace;
+    /* Terminal-only override. Defaults to --font-mono so xterm stays aligned with
+       font-mono UI chrome until the user picks something specific in Settings. */
+    --terminal-font: var(--font-mono);
   }
 
   .dark {
-    /* Dark — matches terminal darkTheme (#1a1a1a bg, #d4d4d4 fg) */
-    --background: 0 0% 10%;
-    --foreground: 0 0% 83%;
-    --card: 0 0% 12%;
-    --card-foreground: 0 0% 83%;
-    --popover: 0 0% 13%;
-    --popover-foreground: 0 0% 83%;
-    --primary: 36 100% 57%;
-    --primary-foreground: 0 0% 6%;
-    --secondary: 0 0% 14%;
-    --secondary-foreground: 0 0% 83%;
-    --muted: 0 0% 14%;
-    --muted-foreground: 0 0% 63%;
-    --accent: 0 0% 16%;
-    --accent-foreground: 0 0% 83%;
-    --destructive: 0 63% 45%;
-    --destructive-foreground: 0 0% 95%;
-    --border: 0 0% 16%;
-    --input: 0 0% 18%;
-    --ring: 36 100% 57%;
+    /* Dark — graphite + moonlight. Matches refined terminal darkTheme (#0d0d11 bg, #f1eee5 fg). */
+    --background: 240 7% 7%; /* #0d0d11 */
+    --foreground: 40 18% 92%; /* #f1eee5 warm off-white */
+    --card: 240 8% 9%; /* #14141a */
+    --card-foreground: 40 18% 92%;
+    --popover: 240 7% 10%;
+    --popover-foreground: 40 18% 92%;
+    --primary: 220 35% 80%; /* #b8c5e0 moonlight */
+    --primary-foreground: 240 10% 5%;
+    --secondary: 240 7% 12%;
+    --secondary-foreground: 40 18% 92%;
+    --muted: 240 7% 12%;
+    --muted-foreground: 40 12% 70%;
+    --accent: 240 7% 14%;
+    --accent-foreground: 40 18% 92%;
+    --destructive: 0 72% 56%; /* bright red — vivid for delete / error */
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 16%; /* kept — consumers use /alpha */
+    --input: 240 7% 16%;
+    --ring: 220 35% 80%;
     --radius: 0.5rem;
 
-    --surface-0: 0 0% 10%;
-    --surface-1: 0 0% 12%;
-    --surface-2: 0 0% 15%;
-    --surface-3: 0 0% 18%;
+    --surface-0: 240 7% 6%; /* #0d0d11 */
+    --surface-1: 240 8% 9%; /* #14141a */
+    --surface-2: 240 7% 12%; /* #1c1c22 */
+    --surface-3: 240 8% 15%; /* #24242c */
 
-    --git-added: 142 71% 45%;
-    --git-modified: 38 92% 50%;
-    --git-deleted: 0 72% 56%;
-    --git-renamed: 217 91% 60%;
+    --shadow-card: 0 1px 0 hsl(0 0% 100% / 0.04), 0 12px 28px hsl(0 0% 0% / 0.45);
+
+    --warn: 42 95% 60%; /* bright amber for usage warn tier */
+    --warn-foreground: 240 10% 5%;
+
+    --git-added: 142 71% 45%; /* bright green — vivid */
+    --git-modified: 38 80% 68%; /* light amber */
+    --git-deleted: 0 72% 56%; /* bright red */
+    --git-renamed: 217 91% 60%; /* bright blue */
+    --pr-merged: 262 70% 72%; /* GitHub merged-PR purple, lightened for dark bg */
     --git-untracked: 0 0% 56%;
-    --git-conflicted: 25 95% 53%;
+    --git-conflicted: 25 95% 53%; /* bright orange */
+
+    --status-idle: 158 64% 52%; /* emerald */
+    --status-wait: 25 95% 53%; /* orange */
+    --status-unseen: 213 94% 68%; /* blue */
+
+    /* Service ("port") terminals — see light-theme note above. */
+    --terminal-service: 250 32% 76%;
+
+    --shade-1: 220 35% 80%;
+    --shade-2: 280 38% 80%;
 
     /* Category palette (dark) — bumped lightness so badges stay legible on dark surfaces. */
     --cat-1: 210 75% 65%;
@@ -107,13 +152,7 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family:
-      'SF Pro Text',
-      -apple-system,
-      BlinkMacSystemFont,
-      'Segoe UI',
-      system-ui,
-      sans-serif;
+    font-family: var(--font-sans);
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -135,18 +174,25 @@
 
 /* ── Terminal ─────────────────────────────────────────────── */
 
+/* The xterm padding is the terminal's gutter. `.xterm-screen` is position:
+   relative and sits in normal flow inside this padded content box, so the
+   padding alone insets it on every side — do NOT offset the screen with
+   `left`/`top` (that double-insets it, shoving content past the right edge).
+   The column math (proposeDims) subtracts this padding when sizing the grid. */
 .terminal-container .xterm {
   height: 100%;
   padding-left: 12px;
+  padding-right: 12px;
   padding-top: 10px;
   padding-bottom: 10px;
 }
 
-/* Inset left edge of absolutely-positioned children to match left padding. */
-.terminal-container .xterm .xterm-viewport,
-.terminal-container .xterm .xterm-screen {
-  left: 12px !important;
-  top: 10px !important;
+/* The grid (cols×cellWidth) rarely divides the content box exactly; the leftover
+   floor-remainder would otherwise pile onto the right (and bottom) since the
+   grid is top-left-aligned, reading as a lopsided gutter. Center the grid so the
+   remainder splits evenly on both sides — gutters stay symmetric at any size. */
+.terminal-container .xterm-screen {
+  margin: auto;
 }
 
 /* Hide xterm scrollbar — Dash sets CLAUDE_CODE_NO_FLICKER=1 so Claude Code manages scrolling internally. */
@@ -157,15 +203,12 @@
   display: none !important;
 }
 
-/* Sidebar shell terminal: tighter padding */
+/* Sidebar shell terminal: tighter padding, with a little more breathing room
+   at the top and on the right inside the glass card. */
 .terminal-drawer .xterm {
   padding-left: 6px;
-  padding-top: 4px;
-}
-.terminal-drawer .xterm .xterm-viewport,
-.terminal-drawer .xterm .xterm-screen {
-  left: 6px !important;
-  top: 4px !important;
+  padding-right: 10px;
+  padding-top: 8px;
 }
 .terminal-drawer .xterm .xterm-viewport {
   scrollbar-width: none !important;
@@ -193,6 +236,32 @@
 
 .scrollbar-none::-webkit-scrollbar {
   display: none;
+}
+
+/* Slim hover-only scrollbar with a backdrop-blur track so whatever sits
+   beneath the thumb reads as frosted glass. */
+.scrollbar-thin-hover::-webkit-scrollbar {
+  width: 3px;
+  height: 3px;
+}
+.scrollbar-thin-hover::-webkit-scrollbar-track {
+  background: transparent;
+  transition: backdrop-filter 150ms ease;
+}
+.scrollbar-thin-hover::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 2px;
+  transition: background-color 150ms ease;
+}
+.scrollbar-thin-hover:hover::-webkit-scrollbar-track {
+  backdrop-filter: blur(8px) saturate(1.3);
+  -webkit-backdrop-filter: blur(8px) saturate(1.3);
+}
+.scrollbar-thin-hover:hover::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+}
+.scrollbar-thin-hover:hover::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.45);
 }
 
 /* ── Panel Resize Handle ──────────────────────────────────── */
@@ -238,6 +307,74 @@
 [data-panel-group-direction='horizontal']
   > [data-panel-resize-handle-id][data-resize-handle-active]::after {
   background: hsl(var(--primary) / 0.5);
+}
+
+/* Floating-card pane handle: inset the active strip to align with the card. */
+[data-panel-group-direction='horizontal'] > .resize-handle-floating::after {
+  inset: 14px 0;
+}
+/* Quiet handles: suppress the brand-color hover/drag strip. The chrome doesn't
+   need a flashy affordance, and the strip reads as noise next to the sidebars. */
+[data-panel-group-direction='horizontal'] > .resize-handle-floating:hover::after,
+[data-panel-group-direction='horizontal']
+  > .resize-handle-floating[data-resize-handle-active]::after,
+[data-panel-group-direction='horizontal'] > .resize-handle-quiet:hover::after,
+[data-panel-group-direction='horizontal'] > .resize-handle-quiet[data-resize-handle-active]::after {
+  background: transparent;
+}
+
+/* ── Usage Strip Responsive Detail ────────────────────────── */
+
+.usage-strip {
+  container-type: inline-size;
+  container-name: usage;
+}
+
+@container usage (max-width: 220px) {
+  .usage-detail-prefix {
+    display: none;
+  }
+}
+@container usage (max-width: 160px) {
+  .usage-detail {
+    display: none;
+  }
+}
+
+/* ── Right-sidebar headers: responsive to panel width ─────────
+   The right inspector can be resized narrow; its header rows pack more than
+   fits and the trailing elements clip off the right edge. Mirror the usage
+   strip's container-query approach: drop non-essential bits as the panel
+   narrows so the always-relevant controls stay visible. */
+
+.inspector-controls {
+  container-type: inline-size;
+  container-name: inspector;
+}
+@container inspector (max-width: 230px) {
+  .inspector-aheadbehind {
+    display: none;
+  }
+}
+@container inspector (max-width: 190px) {
+  .inspector-gitstats {
+    display: none;
+  }
+}
+
+.ports-header {
+  container-type: inline-size;
+  container-name: portshead;
+}
+@container portshead (max-width: 210px) {
+  .ports-status {
+    display: none;
+  }
+}
+@container portshead (max-width: 165px) {
+  .ports-label {
+    display: none;
+  }
 }
 
 /* ── Animations ───────────────────────────────────────────── */
@@ -287,11 +424,59 @@
 .animate-fade-in {
   animation: fadeIn 200ms ease-out;
 }
+
+/* Height-animated disclosure — expands from 0 to auto without measuring.
+   Use as `.collapse-grid[data-open] > <single child>`; the child is clipped
+   while collapsing. */
+.collapse-grid {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.collapse-grid[data-open='true'] {
+  grid-template-rows: 1fr;
+}
+.collapse-grid > * {
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Save-button success flash: brief pulse toward git-added green, soft glow. */
+@keyframes save-flash {
+  0% {
+    background-color: hsl(var(--primary) / 0.7);
+    box-shadow: 0 0 0 0 hsl(var(--git-added) / 0);
+  }
+  30% {
+    background-color: hsl(var(--git-added) / 0.85);
+    box-shadow: 0 0 18px 2px hsl(var(--git-added) / 0.45);
+  }
+  100% {
+    background-color: hsl(var(--primary) / 0.7);
+    box-shadow: 0 0 0 0 hsl(var(--git-added) / 0);
+  }
+}
+.animate-save-flash {
+  animation: save-flash 700ms cubic-bezier(0.16, 1, 0.3, 1);
+}
 .animate-slide-up {
   animation: slideUp 250ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 .animate-scale-in {
   animation: scaleIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes popoverIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.animate-popover-in {
+  animation: popoverIn 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 @keyframes slideInRight {
   from {
@@ -363,6 +548,206 @@
 
 .status-pulse {
   animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* ── Drawer tabs ──────────────────────────────────────────── */
+
+@keyframes drawerTabIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.drawer-tab-in {
+  animation: drawerTabIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* Side-car TUI tabs render on a fixed-size xterm canvas (see TUI_COLS /
+   TUI_ROWS). Left-align it: the canvas can be wider than a narrow panel, and
+   centering would push its left gutter (the │ ◆ ● markers) off-screen —
+   left-aligning keeps the gutter and clips only wrapped-line tails. */
+.tui-canvas-host {
+  display: flex;
+  justify-content: flex-start;
+}
+
+/* ── Sidebar atmosphere (A1 · Soft Pill) ─────────────────── */
+
+.sidebar-shell {
+  position: relative;
+  background: linear-gradient(
+    180deg,
+    hsl(0 0% 100% / 0.1) 0%,
+    hsl(var(--surface-2) / 0.5) 40%,
+    hsl(var(--surface-1) / 0.72) 100%
+  );
+  backdrop-filter: blur(24px) saturate(1.8);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  box-shadow:
+    inset 0 1px 0 0 hsl(0 0% 100% / 0.18),
+    inset 0 -1px 0 0 hsl(0 0% 0% / 0.22);
+}
+.sidebar-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    hsl(0 0% 100% / 0.1) 30%,
+    hsl(0 0% 100% / 0.1) 70%,
+    transparent
+  );
+  pointer-events: none;
+}
+
+/* ── Right inspector glass card ──────────────────────────── */
+
+.right-inspector-shell {
+  position: relative;
+  background: linear-gradient(
+    180deg,
+    hsl(0 0% 100% / 0.1) 0%,
+    hsl(var(--surface-2) / 0.5) 40%,
+    hsl(var(--surface-1) / 0.72) 100%
+  );
+  backdrop-filter: blur(24px) saturate(1.8);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  box-shadow:
+    inset 0 1px 0 0 hsl(0 0% 100% / 0.18),
+    inset 0 -1px 0 0 hsl(0 0% 0% / 0.22),
+    0 20px 40px -20px hsl(0 0% 0% / 0.5);
+  outline: 1px solid hsl(0 0% 100% / 0.1);
+  outline-offset: -1px;
+}
+
+/* ── Modal glass card ────────────────────────────────────────
+   Same frosted-glass treatment as the sidebars / right inspector so dialogs
+   read as the same surface family, just floating. A deeper drop shadow lifts
+   the centered card off the dimmed backdrop. */
+.modal-shell {
+  position: relative;
+  background: linear-gradient(
+    180deg,
+    hsl(0 0% 100% / 0.1) 0%,
+    hsl(var(--surface-2) / 0.5) 40%,
+    hsl(var(--surface-1) / 0.72) 100%
+  );
+  backdrop-filter: blur(24px) saturate(1.8);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  box-shadow:
+    inset 0 1px 0 0 hsl(0 0% 100% / 0.18),
+    inset 0 -1px 0 0 hsl(0 0% 0% / 0.22),
+    0 24px 60px -20px hsl(0 0% 0% / 0.6);
+  outline: 1px solid hsl(0 0% 100% / 0.1);
+  outline-offset: -1px;
+}
+
+/* Soft horizontal hairline used inside the inspector to separate sections
+   without breaking the glass surface. Use via `.glass-hairline` on a 1px
+   element, or `.glass-hairline-b` / `.glass-hairline-t` as a border substitute. */
+.glass-hairline {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    hsl(0 0% 100% / 0.1) 30%,
+    hsl(0 0% 100% / 0.1) 70%,
+    transparent
+  );
+  pointer-events: none;
+}
+.glass-hairline-b {
+  position: relative;
+}
+.glass-hairline-b::after,
+.glass-hairline-t::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    hsl(0 0% 100% / 0.1) 30%,
+    hsl(0 0% 100% / 0.1) 70%,
+    transparent
+  );
+  pointer-events: none;
+}
+.glass-hairline-b::after {
+  bottom: 0;
+}
+.glass-hairline-t {
+  position: relative;
+}
+.glass-hairline-t::before {
+  top: 0;
+}
+
+.sidebar-pill-active {
+  background: linear-gradient(180deg, hsl(var(--primary) / 0.14), hsl(var(--primary) / 0.08));
+}
+
+/* Task row "pill" — same gradient as .sidebar-pill-active, but the alpha is
+   driven by a custom property so the active state can transition smoothly
+   without resorting to an absolutely-positioned overlay (which gets clipped
+   by the row's grid layout). */
+@property --pill-opacity {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+.task-row-pill {
+  --pill-opacity: 0;
+  background: linear-gradient(
+    180deg,
+    hsl(var(--primary) / calc(0.14 * var(--pill-opacity))),
+    hsl(var(--primary) / calc(0.08 * var(--pill-opacity)))
+  );
+  transition:
+    --pill-opacity 200ms ease,
+    color 200ms ease;
+}
+.task-row-pill.is-active {
+  --pill-opacity: 1;
+}
+
+.sidebar-row-hover:hover {
+  background:
+    radial-gradient(120% 80% at 0% 50%, hsl(var(--foreground) / 0.06), transparent 70%),
+    hsl(var(--accent) / 0.5);
+}
+
+/* Status dots with soft colored halos. `status-pulse` (busy) already animates its glow. */
+.status-dot-idle {
+  background: hsl(var(--status-idle));
+  box-shadow:
+    0 0 0 1px hsl(var(--status-idle) / 0.4),
+    0 0 10px hsl(var(--status-idle) / 0.55);
+}
+.status-dot-wait {
+  background: hsl(var(--status-wait));
+  box-shadow:
+    0 0 0 1px hsl(var(--status-wait) / 0.4),
+    0 0 10px hsl(var(--status-wait) / 0.6);
+}
+.status-dot-unseen {
+  background: hsl(var(--status-unseen));
+  box-shadow:
+    0 0 0 1px hsl(var(--status-unseen) / 0.4),
+    0 0 10px hsl(var(--status-unseen) / 0.55);
+}
+.status-dot-err {
+  background: hsl(var(--destructive));
+  box-shadow:
+    0 0 0 1px hsl(var(--destructive) / 0.4),
+    0 0 10px hsl(var(--destructive) / 0.55);
 }
 
 /* ── Status Bar Pulse (left-edge indicator) ──────────────── */
@@ -485,21 +870,6 @@
     flex-shrink 200ms ease-out;
 }
 
-/* ── File Item Enter Animation ───────────────────────────── */
-@keyframes file-item-enter {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.file-item-enter {
-  animation: file-item-enter 200ms ease-out;
-}
-
 /* Settings button: swap "1 office" ↔ "1" based on container width */
 .settings-btn {
   container-type: inline-size;
@@ -514,4 +884,201 @@
   .settings-btn .office-count {
     display: inline;
   }
+}
+
+/* Monaco inline-comment decorations. The line band tint is a quiet
+ * primary wash; the widget on top is a denser puddle of the *same*
+ * primary tint. Three alpha steps in one color family — band → widget
+ * → write-popover — so they read as one continuous material at
+ * different densities, not as separate elements. Selection (active
+ * gesture) gets more alpha than the passive comment marker; the gutter
+ * is denser still since the gutter is the drag origin. */
+/* Shade-aware band tints. Single-shade variants are solid washes; the
+ * combined '-12' variant uses a 50/50 vertical gradient so a row owned by
+ * two distinctly-shaded ranges stays legible (top half shade 1, bottom
+ * half shade 2). Monaco renders these via the isWholeLine decoration's
+ * className. */
+.monaco-comment-line-shade-1 {
+  background: hsl(var(--shade-1) / 0.1);
+}
+.monaco-comment-line-shade-2 {
+  background: hsl(var(--shade-2) / 0.1);
+}
+.monaco-comment-line-shade-12 {
+  background: linear-gradient(
+    to bottom,
+    hsl(var(--shade-1) / 0.12) 50%,
+    hsl(var(--shade-2) / 0.12) 50%
+  );
+}
+
+/* Highlighted variants — applied to rows owned by the hovered comment so
+ * the bidirectional hover-highlight makes the band visibly pop. */
+.monaco-comment-line-shade-1-hi {
+  background: hsl(var(--shade-1) / 0.2);
+}
+.monaco-comment-line-shade-2-hi {
+  background: hsl(var(--shade-2) / 0.2);
+}
+.monaco-comment-line-shade-12-hi {
+  background: linear-gradient(
+    to bottom,
+    hsl(var(--shade-1) / 0.2) 50%,
+    hsl(var(--shade-2) / 0.2) 50%
+  );
+}
+
+/* Line numbers in commented ranges take the band's shade. Monaco supports
+ * a per-decoration `lineNumberClassName` which we use to apply these. */
+.monaco-comment-ln-shade-1 {
+  color: hsl(var(--shade-1)) !important;
+  font-weight: 600;
+}
+.monaco-comment-ln-shade-2 {
+  color: hsl(var(--shade-2)) !important;
+  font-weight: 600;
+}
+.monaco-comment-ln-shade-12 {
+  color: hsl(var(--primary)) !important;
+  font-weight: 600;
+}
+.monaco-select-line {
+  background-color: hsl(var(--primary) / 0.18);
+}
+.monaco-select-line-margin {
+  background-color: hsl(var(--primary) / 0.32);
+}
+
+/* Only render the *active* indent guide — the column for the block the
+ * cursor is currently inside. Inactive guides get hidden. Monaco tags the
+ * active one with `.indent-active` (indentGuides.js); we suppress the
+ * box-shadow that draws the rest. `guides.highlightActiveIndentation` must
+ * stay enabled for the active class to be applied. */
+.monaco-editor .core-guide-indent:not(.indent-active) {
+  box-shadow: none !important;
+}
+
+/* Diff +/- marks sit in the lineDecorations column flush against the
+ * line-number column. Push them a touch right so the number has breathing
+ * room. */
+.monaco-diff-editor .insert-sign,
+.monaco-diff-editor .delete-sign {
+  padding-left: 6px;
+}
+
+/* Shared glass surface for commenting popovers (WIP input + dropdown).
+ * Overrides the base PopoverContent inline `background` via !important —
+ * the inline default is fine for opaque popovers (settings, project menu)
+ * but we want commenting surfaces to feel like the same vapor as the
+ * persistent comment widget. Coupled with `backdrop-filter`, this reads
+ * as "frosted glass on top of the code" rather than a flat panel. */
+.glass-popover {
+  background:
+    linear-gradient(180deg, hsl(var(--primary) / 0.04), hsl(var(--primary) / 0)),
+    hsl(var(--surface-2) / 0.55) !important;
+  backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  border-color: hsl(var(--border) / 0.4) !important;
+  box-shadow:
+    0 18px 40px -16px hsl(0 0% 0% / 0.45),
+    inset 0 1px 0 hsl(0 0% 100% / 0.06) !important;
+}
+.dark .glass-popover {
+  background:
+    linear-gradient(180deg, hsl(var(--primary) / 0.05), hsl(var(--primary) / 0)),
+    hsl(var(--surface-2) / 0.6) !important;
+  border-color: hsl(0 0% 100% / 0.08) !important;
+  box-shadow:
+    0 22px 48px -18px hsl(0 0% 0% / 0.65),
+    inset 0 1px 0 hsl(0 0% 100% / 0.08) !important;
+}
+/* Breathing room between the code area and the minimap on the right.
+ * Monaco renders the minimap as an absolutely-positioned sibling of the
+ * scrollable view; shifting it right and clipping the canvas keeps the
+ * visual width unchanged while the column reads as detached from the code. */
+.monaco-diff-editor .minimap {
+  margin-left: 8px;
+}
+
+/* Monaco diff editor: kill the tint on the right-side overview ruler / diff-
+ * decoration strip / scrollbar shadow so the editor blends edge-to-edge with
+ * whatever background the theme sets. Monaco sets some of these via inline
+ * `background-color` styles which beat regular CSS, so we use `!important`.
+ * Targeting both the parent ruler element AND its inner canvas covers the
+ * variants the diff editor renders in inline mode. */
+.monaco-editor .decorationsOverviewRuler,
+.monaco-editor canvas.decorationsOverviewRuler,
+.monaco-editor [class*='OverviewRuler'],
+.monaco-diff-editor .decorationsOverviewRuler,
+.monaco-diff-editor canvas.decorationsOverviewRuler,
+.monaco-diff-editor [class*='OverviewRuler'] {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+.monaco-editor .scroll-decoration,
+.monaco-diff-editor .scroll-decoration {
+  box-shadow: none !important;
+}
+.monaco-editor .monaco-scrollable-element > .shadow,
+.monaco-diff-editor .monaco-scrollable-element > .shadow {
+  display: none !important;
+}
+
+/* ── Sonner toasts: frosted glass ─────────────────────────────
+ *
+ * Match the same gradient + backdrop-blur language used by .sidebar-shell
+ * and .right-inspector-shell so toasts read as the same surface as the rest
+ * of the chrome instead of an opaque card pasted on top. We override the
+ * built-in CSS variables sonner exposes (--normal-bg, --normal-border,
+ * --normal-text) for the background fill and palette, then patch the toast
+ * element directly with the gradient + backdrop-filter that sonner's
+ * variables don't cover. */
+[data-sonner-toaster] {
+  --normal-bg: transparent;
+  --normal-border: hsl(0 0% 100% / 0.12);
+  --normal-text: hsl(var(--foreground));
+}
+[data-sonner-toast] {
+  background: linear-gradient(
+    180deg,
+    hsl(0 0% 100% / 0.08) 0%,
+    hsl(var(--surface-2) / 0.55) 40%,
+    hsl(var(--surface-1) / 0.75) 100%
+  ) !important;
+  backdrop-filter: blur(24px) saturate(1.8);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  border: 1px solid hsl(0 0% 100% / 0.12) !important;
+  box-shadow:
+    inset 0 1px 0 0 hsl(0 0% 100% / 0.14),
+    inset 0 -1px 0 0 hsl(0 0% 0% / 0.18),
+    0 8px 24px hsl(0 0% 0% / 0.25) !important;
+  color: hsl(var(--foreground)) !important;
+}
+/* Suppress sonner's slide-in for the second (and later) appearance of the
+ * ports-onboarding toast in this session. Users who project-hop see it pop
+ * back into the viewport without the attention-grabbing entry effect.
+ * Targets both the keyframe-driven and transition-driven entry — sonner's
+ * implementation has varied across versions. */
+[data-sonner-toast].no-entry-anim {
+  animation: none !important;
+  transition-property: none !important;
+  opacity: 1 !important;
+  transform: translateY(0) translateX(0) !important;
+}
+
+/* Ports drawer entrance — plays once when the section first appears
+   (post-onboarding, or on task switch). Collapse/expand does not replay
+   it because the component stays mounted. */
+@keyframes ports-drawer-in {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.ports-drawer-enter {
+  animation: ports-drawer-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
 }

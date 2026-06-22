@@ -1,11 +1,13 @@
 import { TerminalSessionManager } from './TerminalSessionManager';
+import type { PermissionMode } from '../../shared/types';
 
 interface AttachOptions {
   id: string;
   cwd: string;
   container: HTMLElement;
-  autoApprove?: boolean;
+  permissionMode?: PermissionMode;
   shellOnly?: boolean;
+  isTui?: boolean;
   themeId?: string;
 }
 
@@ -20,9 +22,10 @@ class SessionRegistryImpl {
       session = new TerminalSessionManager({
         id: opts.id,
         cwd: opts.cwd,
-        autoApprove: opts.autoApprove,
+        permissionMode: opts.permissionMode,
         isDark: this._isDark,
         shellOnly: opts.shellOnly,
+        isTui: opts.isTui,
         themeId: opts.themeId ?? this._themeId,
       });
       this.sessions.set(opts.id, session);
@@ -32,7 +35,7 @@ class SessionRegistryImpl {
 
   attach(opts: AttachOptions): TerminalSessionManager {
     const session = this.getOrCreate(opts);
-    session.attach(opts.container);
+    void session.attach(opts.container);
     return session;
   }
 
@@ -54,7 +57,7 @@ class SessionRegistryImpl {
   async dispose(id: string): Promise<void> {
     const session = this.sessions.get(id);
     if (session) {
-      await session.dispose();
+      session.dispose();
       this.sessions.delete(id);
     }
   }
@@ -62,10 +65,30 @@ class SessionRegistryImpl {
   async disposeByPrefix(prefix: string): Promise<void> {
     for (const [id, session] of this.sessions) {
       if (id.startsWith(prefix)) {
-        await session.dispose();
+        session.dispose();
         this.sessions.delete(id);
       }
     }
+  }
+
+  /**
+   * Restart every agent + shell PTY associated with a task. Used by the
+   * port-management flow so new env vars are picked up without losing the
+   * agent's Claude session. TUI PTYs (e.g. the ports onboarding TUI) are
+   * filtered out — they don't read the same env and a forced restart would
+   * tear down their state machine mid-flow.
+   */
+  async restartAllForTask(taskId: string): Promise<void> {
+    const resp = await window.electronAPI.ptyListForTask(taskId, {
+      kinds: ['agent', 'shell'],
+    });
+    if (!resp.success || !resp.data) return;
+    const targets: TerminalSessionManager[] = [];
+    for (const id of resp.data) {
+      const session = this.sessions.get(id);
+      if (session) targets.push(session);
+    }
+    await Promise.all(targets.map((s) => s.restart()));
   }
 
   setAllThemes(isDark: boolean): void {
@@ -81,20 +104,16 @@ class SessionRegistryImpl {
     }
   }
 
-  async disposeAll(): Promise<void> {
-    for (const [id, session] of this.sessions) {
-      await session.dispose();
-      this.sessions.delete(id);
+  setAllTerminalFonts(fontFamily: string): void {
+    for (const session of this.sessions.values()) {
+      session.setTerminalFont(fontFamily);
     }
   }
 
-  /**
-   * Force-save snapshots for all active sessions.
-   * Called before app quit so terminal state persists across restarts.
-   */
-  async saveAllSnapshots(): Promise<void> {
-    for (const session of this.sessions.values()) {
-      await session.forceSaveSnapshot();
+  async disposeAll(): Promise<void> {
+    for (const [id, session] of this.sessions) {
+      session.dispose();
+      this.sessions.delete(id);
     }
   }
 }

@@ -1,0 +1,138 @@
+import React, { useRef, useEffect, useState, useCallback } from 'react';
+import type { SearchAddon } from '@xterm/addon-search';
+import { sessionRegistry } from '../../terminal/SessionRegistry';
+import type { PermissionMode } from '../../../shared/types';
+import { TerminalSearch } from './TerminalSearch';
+
+const OVERLAY_MIN_MS = 2000;
+const OVERLAY_FADE_MS = 300;
+
+interface TerminalPaneProps {
+  id: string;
+  cwd: string;
+  permissionMode?: PermissionMode;
+  terminalBg?: string;
+}
+
+export function TerminalPane({ id, cwd, permissionMode, terminalBg }: TerminalPaneProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [showOverlay, setShowOverlay] = useState(false);
+  const [overlayVisible, setOverlayVisible] = useState(false);
+  const [searchAddon, setSearchAddon] = useState<SearchAddon | null>(null);
+  const [showSearch, setShowSearch] = useState(false);
+
+  const hideOverlay = useCallback(() => {
+    // Start fade-out
+    setOverlayVisible(false);
+    // Remove from DOM after transition
+    setTimeout(() => setShowOverlay(false), OVERLAY_FADE_MS);
+  }, []);
+
+  const overlayStartRef = useRef(0);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    // Get or create session first so we can register callbacks
+    // before the async attach() work detects a restart
+    const session = sessionRegistry.getOrCreate({ id, cwd, permissionMode });
+
+    session.onRestarting(() => {
+      overlayStartRef.current = Date.now();
+      setShowOverlay(true);
+      setOverlayVisible(true);
+    });
+
+    session.onReady(() => {
+      const elapsed = Date.now() - overlayStartRef.current;
+      const remaining = Math.max(0, OVERLAY_MIN_MS - elapsed);
+      setTimeout(hideOverlay, remaining);
+    });
+
+    // Wire find shortcut: xterm consumes keystrokes while focused, so the
+    // intercept lives at the session layer (see TerminalSessionManager).
+    session.setOnFindKey(() => setShowSearch(true));
+    setSearchAddon(session.getSearchAddon());
+
+    // Now attach — the async work will call onRestarting/onReady as needed
+    void session.attach(container);
+
+    return () => {
+      session.setOnFindKey(null);
+      sessionRegistry.detach(id);
+    };
+  }, [id, cwd, permissionMode, hideOverlay]);
+
+  return (
+    <div
+      className={`w-full h-full relative transition-shadow duration-150 ${
+        isDragOver ? 'ring-2 ring-inset ring-primary/30' : ''
+      }`}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragOver(true);
+      }}
+      onDragLeave={() => setIsDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setIsDragOver(false);
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+          const paths = Array.from(files).map((f) => (f as File & { path: string }).path);
+          const session = sessionRegistry.get(id);
+          if (session) {
+            session.writeInput(paths.join(' '));
+          }
+        }
+      }}
+    >
+      <div ref={containerRef} className="terminal-container w-full h-full" />
+      {showSearch && searchAddon && (
+        <TerminalSearch searchAddon={searchAddon} onClose={() => setShowSearch(false)} />
+      )}
+      {showOverlay && (
+        <div
+          className="absolute inset-0 z-10 pointer-events-none flex flex-col items-center justify-center gap-4"
+          style={{
+            background: terminalBg,
+            opacity: overlayVisible ? 1 : 0,
+            transition: `opacity ${OVERLAY_FADE_MS}ms ease-out`,
+          }}
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 512 512"
+            className="w-16 h-16 opacity-60 animate-pulse"
+          >
+            <defs>
+              <linearGradient id="restart-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style={{ stopColor: '#0a0a0a' }} />
+                <stop offset="100%" style={{ stopColor: '#1a1a2e' }} />
+              </linearGradient>
+              <linearGradient id="restart-dash" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" style={{ stopColor: '#00ff88' }} />
+                <stop offset="100%" style={{ stopColor: '#00cc6a' }} />
+              </linearGradient>
+            </defs>
+            <rect width="512" height="512" rx="108" fill="url(#restart-bg)" />
+            <rect x="136" y="240" width="240" height="36" rx="18" fill="url(#restart-dash)" />
+            <rect x="396" y="232" width="4" height="52" rx="2" fill="#00ff88" opacity="0.7" />
+          </svg>
+          <span className="text-[13px] dark:text-neutral-400 text-neutral-500 font-medium">
+            Resuming your session...
+          </span>
+        </div>
+      )}
+      {isDragOver && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-primary/5 pointer-events-none animate-fade-in">
+          <div className="px-4 py-2 rounded-lg bg-primary/15 text-primary text-[12px] font-medium">
+            Drop files to paste paths
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

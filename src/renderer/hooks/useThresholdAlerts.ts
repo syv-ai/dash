@@ -15,7 +15,7 @@ export function useThresholdAlerts(
     // rate-limit keys ('global:*') are kept across PTY churn.
     for (const key of firedRef.current) {
       if (key.startsWith('global:')) continue;
-      const ptyId = key.split(':')[0];
+      const ptyId = key.split(':')[0]!;
       if (!statusLineData[ptyId]) {
         firedRef.current.delete(key);
       }

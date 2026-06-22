@@ -1,5 +1,6 @@
-import { execFile } from 'child_process';
-import { unlinkSync } from 'fs';
+import { execFile, spawn } from 'child_process';
+import { createParser, type ParserEvent } from './preCommitParser';
+import { unlinkSync, promises as fsPromises } from 'fs';
 import { join } from 'path';
 import { promisify } from 'util';
 import type {
@@ -50,11 +51,151 @@ function wrapGitError(message: string, cause: unknown): Error {
   return err;
 }
 
+function statusFromChar(c: string): FileChangeStatus {
+  switch (c) {
+    case 'M':
+      return 'modified';
+    case 'A':
+      return 'added';
+    case 'D':
+      return 'deleted';
+    case 'R':
+      return 'renamed';
+    case 'C':
+      return 'added'; // copied → treat as added
+    case 'U':
+      return 'conflicted';
+    default:
+      return 'modified';
+  }
+}
+
+// Split the first `n` space-delimited header fields off a porcelain v2 record,
+// returning the remainder as the path. The path is the trailing remainder, so
+// it may itself contain spaces (and, under -z, any other byte but NUL).
+function splitV2Header(rec: string, n: number): { fields: string[]; path: string } {
+  const fields: string[] = [];
+  let idx = 0;
+  for (let f = 0; f < n; f++) {
+    const sp = rec.indexOf(' ', idx);
+    if (sp === -1) {
+      // Malformed record (fewer fields than expected) — bail with what we have.
+      fields.push(rec.slice(idx));
+      return { fields, path: '' };
+    }
+    fields.push(rec.slice(idx, sp));
+    idx = sp + 1;
+  }
+  return { fields, path: rec.slice(idx) };
+}
+
+/**
+ * Parse `git status --porcelain=v2 -z` output into FileChange entries.
+ *
+ * Why `-z` and a dedicated parser: in the default (LF-terminated) porcelain v2,
+ * git C-quotes any path with a quote/control/non-ASCII byte and inlines a
+ * rename's origPath after a literal tab — both of which a naive `split(' ')` /
+ * `split('\t')` mangles. Under `-z`, records are NUL-terminated, paths are
+ * emitted verbatim (never quoted), and a rename's origPath is a SEPARATE
+ * trailing NUL field. additions/deletions are left at 0 here and filled in
+ * later by numstat enrichment.
+ *
+ * Exported for unit testing the field-slicing against tricky paths.
+ */
+export function parsePorcelainV2Z(raw: string): FileChange[] {
+  const files: FileChange[] = [];
+  const records = raw.split('\0');
+  for (let i = 0; i < records.length; i++) {
+    const rec = records[i];
+    if (!rec) continue;
+    const type = rec[0];
+
+    if (type === '1' || type === '2') {
+      const isRename = type === '2';
+      // Ordinary: `1 XY sub mH mI mW hH hI <path>` → 8 header fields.
+      // Rename:   `2 XY sub mH mI mW hH hI Xscore <path>` → 9, with origPath in
+      //           the next NUL field.
+      const { fields, path } = splitV2Header(rec, isRename ? 9 : 8);
+      const xy = fields[1] ?? '..';
+      let oldPath: string | undefined;
+      if (isRename) {
+        oldPath = records[i + 1];
+        i++; // consume the trailing origPath field
+      }
+      const x = xy[0];
+      const y = xy[1];
+      // X is the staged (index) status, Y the worktree status. '.' = unchanged,
+      // '?' never appears for changed entries — skip both.
+      if (x && x !== '.' && x !== '?') {
+        files.push({
+          path,
+          status: statusFromChar(x),
+          staged: true,
+          additions: 0,
+          deletions: 0,
+          oldPath: isRename ? oldPath : undefined,
+        });
+      }
+      if (y && y !== '.' && y !== '?') {
+        files.push({
+          path,
+          status: statusFromChar(y),
+          staged: false,
+          additions: 0,
+          deletions: 0,
+        });
+      }
+    } else if (type === '?') {
+      // `? <path>`
+      files.push({
+        path: rec.slice(2),
+        status: 'untracked',
+        staged: false,
+        additions: 0,
+        deletions: 0,
+      });
+    } else if (type === 'u') {
+      // `u XY sub m1 m2 m3 mW h1 h2 h3 <path>` → 10 header fields.
+      const { path } = splitV2Header(rec, 10);
+      files.push({
+        path,
+        status: 'conflicted',
+        staged: false,
+        additions: 0,
+        deletions: 0,
+      });
+    }
+    // '#' header lines (only with --branch) and '!' ignored lines (only with
+    // --ignored) are never requested here, so anything else is dropped.
+  }
+  return files;
+}
+
 export class GitService {
   /**
    * Fetch from remote and list remote branches sorted by most recent commit.
    */
+  /**
+   * Names of branches currently checked out in the primary repo or any linked
+   * worktree. Git won't allow a branch into a second worktree, so the caller can
+   * flag these as unavailable for worktree-existing.
+   */
+  static async getCheckedOutBranches(cwd: string): Promise<Set<string>> {
+    const names = new Set<string>();
+    try {
+      const out = await git(cwd, ['worktree', 'list', '--porcelain']);
+      for (const line of out.split('\n')) {
+        const match = line.match(/^branch refs\/heads\/(.+)$/);
+        if (match) names.add(match[1]!);
+      }
+    } catch {
+      // Best effort — an unreadable worktree list just means nothing is flagged.
+    }
+    return names;
+  }
+
   static async fetchAndListBranches(cwd: string): Promise<BranchInfo[]> {
+    const checkedOut = await this.getCheckedOutBranches(cwd);
     // Check if origin remote exists
     let hasOrigin = false;
     try {
@@ -65,7 +206,24 @@ export class GitService {
     }
 
     if (hasOrigin) {
-      // Fetch with prune to sync with remote (30s timeout)
+      // Consolidate loose refs into packed-refs first. Prevents "cannot lock ref:
+      // is at X but expected Y" errors during fetch — those come from a loose ref
+      // disagreeing with packed-refs (common in repos with frequent force-pushes).
+      // Best-effort: a failure here isn't fatal, fetch may still succeed.
+      try {
+        await execFileAsync('git', ['pack-refs', '--all', '--prune'], {
+          cwd,
+          timeout: 10000,
+        });
+      } catch {
+        // ignore — fetch will report its own error if there's a real problem
+      }
+
+      // Fetch with prune to sync with remote (30s timeout). Fetch failure is
+      // non-fatal: we can still list remote-tracking refs from local state,
+      // which is more useful than blocking the dialog. Only surface the error
+      // if we end up with nothing to show.
+      let fetchError: Error | null = null;
       try {
         await execFileAsync('git', ['fetch', '--prune', 'origin'], {
           cwd,
@@ -74,25 +232,26 @@ export class GitService {
       } catch (err: unknown) {
         const msg = String((err as { stderr?: string }).stderr || err);
         if (/could not read from remote repository/i.test(msg)) {
-          throw new Error(
+          fetchError = new Error(
             'Could not connect to remote repository. Check your network connection and SSH/HTTPS credentials.',
           );
         } else if (/authentication failed/i.test(msg) || /could not resolve host/i.test(msg)) {
-          throw new Error(
+          fetchError = new Error(
             'Authentication failed or host not reachable. Check your credentials and network.',
           );
         } else if (/not a git repository/i.test(msg)) {
-          throw new Error('This directory is not a git repository.');
+          fetchError = new Error('This directory is not a git repository.');
         } else if (/timed out/i.test(msg) || (err as { killed?: boolean }).killed) {
-          throw new Error('Fetch timed out. Check your network connection and try again.');
+          fetchError = new Error('Fetch timed out. Check your network connection and try again.');
         } else {
           const fatalMatch = msg.match(/fatal:\s*(.+)/i);
-          throw new Error(
+          fetchError = new Error(
             fatalMatch
-              ? `Git fetch failed: ${fatalMatch[1].trim()}`
-              : `Git fetch failed: ${msg.split('\n')[0].trim()}`,
+              ? `Git fetch failed: ${fatalMatch[1]!.trim()}`
+              : `Git fetch failed: ${msg.split('\n')[0]!.trim()}`,
           );
         }
+        console.warn(`[GitService] fetch failed for ${cwd}: ${fetchError.message}`);
       }
 
       // List remote branches sorted by committerdate descending
@@ -117,8 +276,13 @@ export class GitService {
           ref,
           shortHash: shortHash || '',
           relativeDate: dateParts.join('\t') || '',
+          checkedOut: checkedOut.has(name),
         });
       }
+
+      // If fetch failed AND there's nothing cached locally, the failure is
+      // genuinely actionable (auth, network, never-fetched remote) — surface it.
+      if (fetchError && branches.length === 0) throw fetchError;
 
       // Enrich top branches with ahead/behind counts (limit to avoid slowness)
       await this.enrichBranchesWithAheadBehind(cwd, branches, 20);
@@ -147,6 +311,7 @@ export class GitService {
           ref: name,
           shortHash: shortHash || '',
           relativeDate: dateParts.join('\t') || '',
+          checkedOut: checkedOut.has(name),
         });
       }
 
@@ -192,8 +357,8 @@ export class GitService {
       const parts = out.trim().split(/\s+/);
       return {
         hasUpstream: true,
-        behind: parseInt(parts[0], 10) || 0,
-        ahead: parseInt(parts[1], 10) || 0,
+        behind: parseInt(parts[0] ?? '', 10) || 0,
+        ahead: parseInt(parts[1] ?? '', 10) || 0,
       };
     } catch {
       return { hasUpstream: false, ahead: 0, behind: 0 };
@@ -204,101 +369,62 @@ export class GitService {
    * Get list of changed files with their status and stat counts.
    */
   static async getFileChanges(cwd: string): Promise<FileChange[]> {
-    const files: FileChange[] = [];
+    let files: FileChange[];
 
-    // Get staged + unstaged changes via porcelain v2
+    // Staged + unstaged changes via porcelain v2, NUL-delimited so paths with
+    // spaces/quotes/non-ASCII bytes survive intact (see parsePorcelainV2Z).
     try {
-      const out = await git(cwd, ['status', '--porcelain=v2', '--untracked-files=normal']);
-      const lines = out.split('\n').filter(Boolean);
-
-      for (const line of lines) {
-        if (line.startsWith('1 ') || line.startsWith('2 ')) {
-          // Changed entry (1 = ordinary, 2 = rename)
-          const parts = line.split(' ');
-          const xy = parts[1]; // XY status codes
-          const isRename = line.startsWith('2 ');
-
-          let filePath: string;
-          let oldPath: string | undefined;
-
-          if (isRename) {
-            // Format: 2 XY sub mH mI mW hH hI score path\torigPath
-            const rest = parts.slice(8).join(' ');
-            const tabIdx = rest.indexOf('\t');
-            filePath = rest.substring(tabIdx + 1);
-            oldPath = rest.substring(0, tabIdx);
-          } else {
-            // Format: 1 XY sub mH mI mW hH hI path
-            filePath = parts.slice(8).join(' ');
-          }
-
-          const x = xy[0]; // Index (staged) status
-          const y = xy[1]; // Working tree status
-
-          // If staged (X is not '.' and not '?')
-          if (x !== '.' && x !== '?') {
-            files.push({
-              path: filePath,
-              status: this.parseStatusChar(x),
-              staged: true,
-              additions: 0,
-              deletions: 0,
-              oldPath: isRename ? oldPath : undefined,
-            });
-          }
-
-          // If unstaged (Y is not '.' and not '?')
-          if (y !== '.' && y !== '?') {
-            files.push({
-              path: filePath,
-              status: this.parseStatusChar(y),
-              staged: false,
-              additions: 0,
-              deletions: 0,
-            });
-          }
-        } else if (line.startsWith('? ')) {
-          // Untracked file
-          const filePath = line.substring(2);
-          files.push({
-            path: filePath,
-            status: 'untracked',
-            staged: false,
-            additions: 0,
-            deletions: 0,
-          });
-        } else if (line.startsWith('u ')) {
-          // Unmerged (conflicted)
-          const parts = line.split(' ');
-          const filePath = parts.slice(10).join(' ');
-          files.push({
-            path: filePath,
-            status: 'conflicted',
-            staged: false,
-            additions: 0,
-            deletions: 0,
-          });
-        }
-      }
+      const out = await git(cwd, ['status', '--porcelain=v2', '-z', '--untracked-files=all']);
+      files = parsePorcelainV2Z(out);
     } catch {
       // Not a git repo or git error
       return [];
     }
 
-    // Filter out Dash-managed hook files (not user content).
-    // Git may report individual files or the whole .claude/ directory
-    // (when untracked with --untracked-files=normal).
-    const dashManagedFiles = new Set([
-      '.claude/',
-      '.claude/settings.local.json',
-      '.claude/task-context.json',
-    ]);
-    const filtered = files.filter((f) => !dashManagedFiles.has(f.path));
+    // Hide only the one Dash-managed file: .claude/settings.local.json holds the
+    // activity-monitor hooks Dash writes per task (ephemeral hook-server port), so
+    // it's machine state, not user content. Everything else under .claude/ — skills,
+    // commands, settings.json, agents — is real content and belongs in the changes list.
+    const filtered = files.filter((f) => f.path !== '.claude/settings.local.json');
 
     // Get numstat for addition/deletion counts
     await this.enrichWithNumstat(cwd, filtered);
+    // Count lines in untracked files (numstat doesn't cover them)
+    await this.enrichUntrackedLineCounts(cwd, filtered);
 
     return filtered;
+  }
+
+  /**
+   * For untracked files, populate `additions` with the file's total line count
+   * (since `git diff --numstat` doesn't cover them). Skips files over 1 MB and
+   * silently caps if there are too many untracked entries to keep getStatus
+   * snappy on repos with huge unignored vendor dumps.
+   */
+  private static async enrichUntrackedLineCounts(cwd: string, files: FileChange[]): Promise<void> {
+    const UNTRACKED_ENRICHMENT_CAP = 500;
+    const UNTRACKED_FILE_SIZE_CAP = 1024 * 1024;
+    const untracked = files.filter((f) => f.status === 'untracked');
+    if (untracked.length === 0 || untracked.length > UNTRACKED_ENRICHMENT_CAP) return;
+    await Promise.all(
+      untracked.map(async (file) => {
+        try {
+          const abs = join(cwd, file.path);
+          const stats = await fsPromises.stat(abs);
+          if (!stats.isFile()) return;
+          if (stats.size > UNTRACKED_FILE_SIZE_CAP) return;
+          const buffer = await fsPromises.readFile(abs);
+          let count = 0;
+          for (let i = 0; i < buffer.length; i++) {
+            if (buffer[i] === 0x0a) count++;
+          }
+          if (buffer.length > 0 && buffer[buffer.length - 1] !== 0x0a) count++;
+          file.additions = count;
+        } catch {
+          // File vanished, unreadable, or permission denied — leave 0.
+        }
+      }),
+    );
   }
 
   /**
@@ -326,8 +452,8 @@ export class GitService {
     for (const line of output.split('\n').filter(Boolean)) {
       const parts = line.split('\t');
       if (parts.length < 3) continue;
-      const additions = parts[0] === '-' ? 0 : parseInt(parts[0], 10) || 0;
-      const deletions = parts[1] === '-' ? 0 : parseInt(parts[1], 10) || 0;
+      const additions = parts[0] === '-' ? 0 : parseInt(parts[0]!, 10) || 0;
+      const deletions = parts[1] === '-' ? 0 : parseInt(parts[1]!, 10) || 0;
       const filePath = parts[2];
       const match = files.find((f) => f.path === filePath && f.staged === staged);
       if (match) {
@@ -396,52 +522,154 @@ export class GitService {
   }
 
   /**
-   * Stage a file.
+   * Stage one or more files in a single git invocation. Atomic — either all
+   * paths are added or none are, and we don't race on `.git/index.lock`.
    */
-  static async stageFile(cwd: string, filePath: string): Promise<void> {
-    await git(cwd, ['add', '--', filePath]);
+  static async stageFiles(cwd: string, filePaths: string[]): Promise<void> {
+    if (filePaths.length === 0) return;
+    await git(cwd, ['add', '--', ...filePaths]);
   }
 
   /**
-   * Stage all files.
+   * Stage every changed file in the working tree.
    */
   static async stageAll(cwd: string): Promise<void> {
     await git(cwd, ['add', '-A']);
   }
 
   /**
-   * Unstage a file.
+   * Unstage one or more files in a single git invocation.
    */
-  static async unstageFile(cwd: string, filePath: string): Promise<void> {
-    await git(cwd, ['reset', 'HEAD', '--', filePath]);
+  static async unstageFiles(cwd: string, filePaths: string[]): Promise<void> {
+    if (filePaths.length === 0) return;
+    await git(cwd, ['reset', 'HEAD', '--', ...filePaths]);
   }
 
   /**
-   * Unstage all files.
+   * Unstage everything currently in the index.
    */
   static async unstageAll(cwd: string): Promise<void> {
     await git(cwd, ['reset', 'HEAD']);
   }
 
   /**
-   * Discard changes to a file (restore from HEAD).
+   * Discard changes for one or more files. Splits the input into tracked vs.
+   * untracked via a single status call so the tracked side becomes one
+   * `git checkout` invocation and the untracked side becomes plain unlinks.
    */
-  static async discardFile(cwd: string, filePath: string): Promise<void> {
-    // First check if it's untracked
-    const out = await git(cwd, ['status', '--porcelain', '--', filePath]);
-    if (out.trimStart().startsWith('??')) {
-      // Untracked — remove it
-      unlinkSync(join(cwd, filePath));
-    } else {
-      await git(cwd, ['checkout', 'HEAD', '--', filePath]);
+  static async discardFiles(cwd: string, filePaths: string[]): Promise<void> {
+    if (filePaths.length === 0) return;
+    // `-z` gives NUL-delimited, unquoted paths so filenames with spaces or
+    // non-ASCII bytes are reported verbatim (default `core.quotePath` would
+    // wrap them in escaped quotes and break the exact-match against filePaths).
+    const statusOut = await git(cwd, ['status', '--porcelain', '-z', '--', ...filePaths]);
+    const untracked = new Set<string>();
+    for (const entry of statusOut.split('\0')) {
+      if (entry.startsWith('?? ')) {
+        untracked.add(entry.slice(3));
+      }
+    }
+    const tracked = filePaths.filter((p) => !untracked.has(p));
+    if (tracked.length > 0) {
+      await git(cwd, ['checkout', 'HEAD', '--', ...tracked]);
+    }
+    for (const p of untracked) {
+      try {
+        unlinkSync(join(cwd, p));
+      } catch {
+        // Already gone or unwritable — keep going.
+      }
     }
   }
 
   /**
    * Commit staged changes.
    */
-  static async commit(cwd: string, message: string): Promise<void> {
-    await git(cwd, ['commit', '-m', message]);
+  static async commit(
+    cwd: string,
+    message: string,
+    options: { allowEmpty?: boolean } = {},
+  ): Promise<void> {
+    const args = ['commit'];
+    if (options.allowEmpty) args.push('--allow-empty');
+    args.push('-m', message);
+    await git(cwd, args);
+  }
+
+  /**
+   * Append a path to the repo's root `.gitignore`. Creates the file if it
+   * doesn't exist. No-ops if the path already appears as a literal entry.
+   */
+  static async addToGitignore(cwd: string, relPath: string): Promise<void> {
+    const gitignorePath = join(cwd, '.gitignore');
+    let existing = '';
+    try {
+      existing = await fsPromises.readFile(gitignorePath, 'utf8');
+    } catch {
+      // Doesn't exist yet — we'll create it.
+    }
+    const lines = existing.split('\n');
+    const trimmed = lines.map((l) => l.trim());
+    if (trimmed.includes(relPath)) return;
+    const needsLeadingNewline = existing.length > 0 && !existing.endsWith('\n');
+    const next = `${existing}${needsLeadingNewline ? '\n' : ''}${relPath}\n`;
+    await fsPromises.writeFile(gitignorePath, next, 'utf8');
+  }
+
+  /**
+   * Spawn `git commit` and stream parsed pre-commit/prek events.
+   * Returns a cancel function that sends SIGTERM to the child.
+   * `onClose` is called exactly once after the child exits.
+   */
+  static commitStreamed(
+    cwd: string,
+    message: string,
+    options: { allowEmpty?: boolean },
+    onEvent: (event: ParserEvent) => void,
+    onClose: (result: { exitCode: number | null; signal: NodeJS.Signals | null }) => void,
+  ): { cancel: () => void } {
+    const args = ['commit'];
+    if (options.allowEmpty) args.push('--allow-empty');
+    args.push('-m', message);
+
+    const child = spawn('git', args, { cwd });
+    const parser = createParser();
+
+    let outBuf = '';
+    let errBuf = '';
+    function pumpLines(chunk: Buffer, kind: 'out' | 'err') {
+      const ref = kind === 'out' ? outBuf : errBuf;
+      const combined = ref + chunk.toString('utf8');
+      const parts = combined.split('\n');
+      const tail = parts.pop() ?? '';
+      if (kind === 'out') outBuf = tail;
+      else errBuf = tail;
+      for (const line of parts) {
+        for (const ev of parser.feed(line)) onEvent(ev);
+      }
+    }
+
+    child.stdout.on('data', (c: Buffer) => pumpLines(c, 'out'));
+    child.stderr.on('data', (c: Buffer) => pumpLines(c, 'err'));
+    child.on('close', (exitCode, signal) => {
+      for (const tail of [outBuf, errBuf]) {
+        if (tail.length > 0) {
+          for (const ev of parser.feed(tail)) onEvent(ev);
+        }
+      }
+      for (const ev of parser.flush()) onEvent(ev);
+      onClose({ exitCode, signal });
+    });
+
+    return {
+      cancel: () => {
+        try {
+          child.kill('SIGTERM');
+        } catch {
+          // Process may already be gone; close handler will fire regardless.
+        }
+      },
+    };
   }
 
   /**
@@ -465,8 +693,8 @@ export class GitService {
         const parts = out.trim().split(/\s+/);
         return {
           hasUpstream: true,
-          behind: parseInt(parts[0], 10) || 0,
-          ahead: parseInt(parts[1], 10) || 0,
+          behind: parseInt(parts[0] ?? '', 10) || 0,
+          ahead: parseInt(parts[1] ?? '', 10) || 0,
         };
       } catch (error) {
         // Expected when this ref isn't a valid upstream (no tracking branch,
@@ -476,7 +704,9 @@ export class GitService {
         const expected =
           /unknown revision/i.test(stderr) ||
           /bad revision/i.test(stderr) ||
-          /ambiguous argument/i.test(stderr);
+          /ambiguous argument/i.test(stderr) ||
+          /no such branch/i.test(stderr) ||
+          /no upstream configured/i.test(stderr);
         if (!expected) {
           console.error('[GitService.getBranchAheadBehind] unexpected error', { branch, stderr });
         }
@@ -486,24 +716,47 @@ export class GitService {
   }
 
   /**
+   * Local branch names (short form). Used to gate ahead/behind enrichment: a
+   * remote branch with no local counterpart has nothing to be ahead/behind of,
+   * and `<name>@{upstream}`/`origin/<name>...<name>` would just fail on the
+   * missing local ref.
+   */
+  private static async getLocalBranchNames(cwd: string): Promise<Set<string>> {
+    try {
+      const out = await git(cwd, ['branch', '--format=%(refname:short)']);
+      return new Set(
+        out
+          .split('\n')
+          .map((l) => l.trim())
+          .filter(Boolean),
+      );
+    } catch {
+      return new Set();
+    }
+  }
+
+  /**
    * Enrich a list of branches with ahead/behind counts (best-effort, in-place).
+   * Only branches that exist locally are enriched — ahead/behind relative to an
+   * upstream is undefined for a remote branch that was never checked out.
    */
   private static async enrichBranchesWithAheadBehind(
     cwd: string,
     branches: BranchInfo[],
     limit: number,
   ): Promise<void> {
-    const slice = branches.slice(0, limit);
+    const localNames = await this.getLocalBranchNames(cwd);
+    const slice = branches.slice(0, limit).filter((b) => localNames.has(b.name));
     const results = await Promise.allSettled(
       slice.map((b) => this.getBranchAheadBehind(cwd, b.name)),
     );
     for (let i = 0; i < results.length; i++) {
-      const r = results[i];
+      const r = results[i]!;
       if (r.status === 'fulfilled' && r.value.hasUpstream) {
-        slice[i].upstream = { ahead: r.value.ahead, behind: r.value.behind };
+        slice[i]!.upstream = { ahead: r.value.ahead, behind: r.value.behind };
       } else if (r.status === 'rejected') {
         console.error('[GitService.enrichBranchesWithAheadBehind] rejected', {
-          branch: slice[i].name,
+          branch: slice[i]!.name,
           reason: r.reason,
         });
       }
@@ -542,6 +795,60 @@ export class GitService {
     }
   }
 
+  /**
+   * Fast-forward a local branch to its origin counterpart. Backs the New Task
+   * modal's "Update from remote" choice, taken when the chosen branch is behind
+   * its upstream and the user wants the remote state rather than the stale local.
+   *
+   * Works whether or not the branch is currently checked out: when it isn't, the
+   * local ref is advanced directly via a self-fetch refspec; when it is, git
+   * refuses that refspec, so we fall back to a fast-forward-only merge in `cwd`.
+   * A diverged branch (local commits absent from origin) can't fast-forward —
+   * surface that as a clear error rather than silently leaving it stale.
+   */
+  static async updateBranchToRemote(cwd: string, branch: string): Promise<void> {
+    // Refresh the remote-tracking ref first so the merge fallback below sees the
+    // latest origin/<branch>.
+    await git(cwd, ['fetch', 'origin', branch]);
+    try {
+      // Advance refs/heads/<branch> to the freshly fetched tip. Fetch refspecs
+      // are fast-forward only by default — a non-ff update is rejected, which we
+      // translate to a "diverged" error below.
+      await git(cwd, ['fetch', 'origin', `${branch}:${branch}`]);
+    } catch (error: unknown) {
+      const stderr = gitStderr(error);
+      if (/refusing to fetch into branch|checked out/i.test(stderr)) {
+        // The ref is checked out somewhere — either here or in another worktree.
+        // A merge would only be correct in the working tree that's actually on
+        // `branch`. If that's not `cwd`, the branch belongs to another task; do
+        // not move it under them — refuse instead of mutating the wrong branch.
+        const current = await GitService.getBranch(cwd);
+        if (current !== branch) {
+          throw wrapGitError(
+            `Cannot update '${branch}' from remote — it's checked out in another worktree (in use by another task).`,
+            error,
+          );
+        }
+        try {
+          await git(cwd, ['merge', '--ff-only', `origin/${branch}`]);
+        } catch (mergeError: unknown) {
+          throw wrapGitError(
+            `Cannot update '${branch}' from remote — it has diverged from origin/${branch}.`,
+            mergeError,
+          );
+        }
+        return;
+      }
+      if (/non-fast-forward|not a fast-forward|\[rejected\]/i.test(stderr)) {
+        throw wrapGitError(
+          `Cannot update '${branch}' from remote — it has diverged from origin/${branch}.`,
+          error,
+        );
+      }
+      throw error;
+    }
+  }
+
   static async remoteBranchExists(cwd: string, branch: string): Promise<boolean> {
     try {
       const output = await git(cwd, ['ls-remote', '--heads', 'origin', branch]);
@@ -575,12 +882,12 @@ export class GitService {
     const commits: CommitNode[] = lines.map((line) => {
       const parts = line.split('\0');
       return {
-        hash: parts[0],
-        shortHash: parts[1],
+        hash: parts[0]!,
+        shortHash: parts[1]!,
         parents: parts[2] ? parts[2].split(' ') : [],
-        authorName: parts[3],
-        authorDate: parseInt(parts[4], 10) || 0,
-        subject: parts[5],
+        authorName: parts[3]!,
+        authorDate: parseInt(parts[4]!, 10) || 0,
+        subject: parts[5]!,
         refs: this.parseRefs(parts[6] || ''),
       };
     });
@@ -607,12 +914,12 @@ export class GitService {
     const out = await git(cwd, ['log', '-1', `--format=${format}`, hash]);
     const parts = out.trim().split('\0');
     const commit: CommitNode = {
-      hash: parts[0],
-      shortHash: parts[1],
+      hash: parts[0]!,
+      shortHash: parts[1]!,
       parents: parts[2] ? parts[2].split(' ') : [],
-      authorName: parts[3],
-      authorDate: parseInt(parts[4], 10) || 0,
-      subject: parts[5],
+      authorName: parts[3]!,
+      authorDate: parseInt(parts[4]!, 10) || 0,
+      subject: parts[5]!,
       refs: this.parseRefs(parts[6] || ''),
     };
 
@@ -634,9 +941,9 @@ export class GitService {
         /(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/,
       );
       if (match) {
-        filesChanged = parseInt(match[1], 10) || 0;
-        additions = parseInt(match[2], 10) || 0;
-        deletions = parseInt(match[3], 10) || 0;
+        filesChanged = parseInt(match[1]!, 10) || 0;
+        additions = parseInt(match[2] ?? '', 10) || 0;
+        deletions = parseInt(match[3] ?? '', 10) || 0;
       }
     } catch {
       // root commit or error
@@ -679,11 +986,11 @@ export class GitService {
     // Build a map from hash → row index for connection endpoints
     const rowIndex = new Map<string, number>();
     for (let i = 0; i < commits.length; i++) {
-      rowIndex.set(commits[i].hash, i);
+      rowIndex.set(commits[i]!.hash, i);
     }
 
     for (let row = 0; row < commits.length; row++) {
-      const commit = commits[row];
+      const commit = commits[row]!;
       const connections: GraphConnection[] = [];
 
       // Determine this commit's lane
@@ -698,7 +1005,7 @@ export class GitService {
 
       // Process parents
       for (let pi = 0; pi < commit.parents.length; pi++) {
-        const parentHash = commit.parents[pi];
+        const parentHash = commit.parents[pi]!;
         const parentRow = rowIndex.get(parentHash);
 
         if (activeLanes.has(parentHash)) {
@@ -788,8 +1095,8 @@ export class GitService {
           lines: [],
         };
         hunks.push(currentHunk);
-        oldLine = parseInt(hunkMatch[1], 10);
-        newLine = parseInt(hunkMatch[2], 10);
+        oldLine = parseInt(hunkMatch[1]!, 10);
+        newLine = parseInt(hunkMatch[2]!, 10);
         continue;
       }
 
@@ -826,24 +1133,5 @@ export class GitService {
     }
 
     return { filePath, hunks, isBinary: false, additions: totalAdd, deletions: totalDel };
-  }
-
-  private static parseStatusChar(c: string): FileChangeStatus {
-    switch (c) {
-      case 'M':
-        return 'modified';
-      case 'A':
-        return 'added';
-      case 'D':
-        return 'deleted';
-      case 'R':
-        return 'renamed';
-      case 'C':
-        return 'added'; // copied → treat as added
-      case 'U':
-        return 'conflicted';
-      default:
-        return 'modified';
-    }
   }
 }

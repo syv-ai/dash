@@ -13,6 +13,7 @@ pnpm dev                  # Vite on :3000 + Electron
 pnpm dev:main             # main process only
 pnpm dev:renderer         # Vite dev server only
 pnpm build                # compile main (tsc) + renderer (vite)
+pnpm test                 # vitest under Electron's Node (ELECTRON_RUN_AS_NODE)
 pnpm type-check           # typecheck both processes
 pnpm package:mac          # build + package as .dmg (arm64)
 pnpm package:linux        # build + package as .AppImage (x64)
@@ -21,12 +22,16 @@ pnpm drizzle:generate     # generate Drizzle migrations
 
 Renderer hot-reloads; main process changes require restart. Husky pre-commit runs lint-staged (Prettier + ESLint on staged `.ts`/`.tsx`).
 
+### Native modules and test ABI
+
+`better-sqlite3` and `node-pty` are native modules with one binary per Node ABI. Production runs under Electron's bundled Node (its own ABI); plain `node` has a different one. `pnpm test` runs vitest under Electron's Node via `ELECTRON_RUN_AS_NODE=1 electron …` so it uses the same binding as production. **Always rebuild for Electron** (`pnpm rebuild` or `npx electron-rebuild`) — never `npm rebuild` the native modules, which builds for the wrong ABI and breaks both dev and tests.
+
 ## Architecture
 
 Two-process Electron app, strict context isolation (nodeIntegration disabled).
 
 - **Main** (`src/main/`): `entry.ts` → `main.ts` boots PATH fix, DB, hook server, IPC handlers, activity monitor, window.
-- **Renderer** (`src/renderer/`): React SPA, all state in `App.tsx` (no Redux). Communicates via `window.electronAPI` (preload bridge, typed in `src/types/electron-api.d.ts`).
+- **Renderer** (`src/renderer/`): React SPA. State lives in **Zustand stores** under `src/renderer/stores/` (`settingsStore`, `projectsStore`, `uiStore`, `gitStore`, `runtimeStore`); components subscribe with selectors instead of receiving drilled props, and stores read each other via `getState()`. `App.tsx` is a thin composition root (layout + modals + bootstrap). Communicates via `window.electronAPI` (preload bridge, typed in `src/types/electron-api.d.ts`). **Selector caveat:** a selector that returns a _derived_ array/object (`.filter`/`.map`/object-literal) must be wrapped in `useShallow` (`zustand/react/shallow`) or it re-renders infinitely; plain `s => s.field` selectors are stable.
 - **IPC**: `electronAPI.method()` → `ipcRenderer.invoke()` → handler in `src/main/ipc/` → `IpcResponse<T>` `{ success, data?, error? }`. Fire-and-forget via `send()` for ptyInput/resize/kill/snapshot-save.
 - **Services** (`src/main/services/`): Stateless singletons with static methods.
 - **Database** (`src/main/db/`): SQLite via better-sqlite3 + Drizzle ORM. WAL mode, foreign keys ON. Migrations run on startup. Tables: projects → tasks → conversations (cascade deletes).
@@ -46,6 +51,7 @@ Main process `entry.ts` rewrites at runtime: `@shared/*` → `dist/main/shared/*
 - **Tailwind CSS** for all styling; dark/light via class on root
 - **Colors**: HSL CSS custom properties only (no raw hex/rgb). Tokens: `foreground`, `muted-foreground`, `background`, `surface-0..3`, `primary`, `destructive`, `border`, `git-added/modified/deleted/renamed/untracked/conflicted`
 - **Icons**: lucide-react, 14px default, stroke-width 1.8
+- **File naming**: PascalCase for component/class files, camelCase for function/value modules (utils, hooks, stores); enforced by the `check-file` ESLint rule (runs in the pre-commit hook)
 
 ## Data Storage
 

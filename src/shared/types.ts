@@ -6,7 +6,6 @@ export interface Project {
   gitRemote: string | null;
   gitBranch: string | null;
   baseRef: string | null;
-  worktreeSetupScript: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -37,20 +36,42 @@ export interface LinkedAdoWorkItem {
 
 export type LinkedItem = LinkedGithubIssue | LinkedAdoWorkItem;
 
+/**
+ * Permission strategy passed to Claude CLI when a task PTY is spawned.
+ * - `default`: prompt for every tool use (no flag)
+ * - `acceptEdits`: auto-accept file edits, still prompt for shell (--permission-mode acceptEdits)
+ * - `bypassPermissions`: skip all permission prompts (--dangerously-skip-permissions)
+ */
+export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions';
+
+/**
+ * Lifecycle state of a task row. `idle` is the DB default; `active` is set when
+ * a worktree is created. Archival is tracked separately via `archivedAt`, not a
+ * status value. Legacy/unknown values are normalized to `idle` on read.
+ */
+export type TaskStatus = 'idle' | 'active';
+
 export interface Task {
   id: string;
   projectId: string;
   name: string;
   branch: string;
   path: string;
-  status: string;
+  status: TaskStatus;
   useWorktree: boolean;
-  autoApprove: boolean;
+  permissionMode: PermissionMode;
   branchCreatedByDash: boolean;
   linkedItems: LinkedItem[] | null;
   contextPrompt: string | null;
+  /** Per-task override of the project's default worktree setup/teardown scripts
+   *  (newline-separated commands). Null = no per-task scripts. */
+  setupScript: string | null;
+  teardownScript: string | null;
   archivedAt: string | null;
   sortOrder: number;
+  totalTokens: number;
+  totalCostUsd: number;
+  tokensBackfilledAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -66,10 +87,27 @@ export interface Conversation {
   updatedAt: string;
 }
 
+export interface TokenStatsRollup {
+  totalTokens: number;
+  totalCostUsd: number;
+  taskCount: number;
+}
+
+/**
+ * Machine-readable error category on a failed IpcResponse, so the renderer can
+ * branch on the kind of failure instead of pattern-matching the message string.
+ * - `VALIDATION`: arguments failed the handler's zod schema (a renderer bug).
+ * - `NOT_FOUND`: the referenced entity (task, file, branch, commit…) is missing.
+ * - `UNKNOWN`: any other caught error (the default).
+ */
+export type IpcErrorCode = 'VALIDATION' | 'NOT_FOUND' | 'UNKNOWN';
+
 export interface IpcResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
+  /** Present on failures (`success: false`); absent on success. */
+  code?: IpcErrorCode;
 }
 
 export interface WorktreeInfo {
@@ -96,6 +134,9 @@ export interface RemoveWorktreeOptions {
   deleteWorktreeDir?: boolean;
   deleteLocalBranch?: boolean;
   deleteRemoteBranch?: boolean;
+  /** Per-task teardown override (newline-separated commands) run before removal.
+   *  Undefined → fall back to the project's .dash/config.json teardown. */
+  teardownScript?: string | null;
 }
 
 export interface PtyOptions {
@@ -103,7 +144,7 @@ export interface PtyOptions {
   cwd: string;
   cols: number;
   rows: number;
-  autoApprove?: boolean;
+  permissionMode?: PermissionMode;
 }
 
 export interface TerminalSnapshot {
@@ -199,6 +240,10 @@ export interface BranchInfo {
   // Present iff the branch tracks a remote and we successfully measured.
   // Both fields move together — never one without the other.
   upstream?: { ahead: number; behind: number };
+  // True when this branch is currently checked out in the primary repo or any
+  // worktree. Git refuses a second worktree on an already-checked-out branch, so
+  // the New Task modal steers worktree-existing away from these.
+  checkedOut?: boolean;
 }
 
 // ── Git Types ────────────────────────────────────────────────
@@ -346,6 +391,25 @@ export interface PullRequestInfo {
   provider: 'github' | 'ado';
 }
 
+/**
+ * A pull request as surfaced by the "From PR" task quick-start. Unlike
+ * PullRequestInfo (a per-branch lookup for the PR badge), this carries the
+ * head branch + author needed to start a task on the PR. `number` is the gh
+ * PR number / ADO pullRequestId; `headRefName` (the source, "from") and
+ * `baseRefName` (the target, "against") are plain branch names (ADO's
+ * refs/heads/ prefix already stripped).
+ */
+export interface PullRequest {
+  number: number;
+  title: string;
+  url: string;
+  state: PullRequestState;
+  author: string;
+  headRefName: string;
+  baseRefName: string;
+  provider: 'github' | 'ado';
+}
+
 // ── Remote Control Types ────────────────────────────────────
 
 export interface RemoteControlState {
@@ -459,6 +523,102 @@ export interface SkillUninstallArgs {
   target: SkillInstallTarget;
 }
 
+/* ── Plugins (Claude Code native plugin system) ──────────────────────────────
+ * Dash manages plugins by driving the `claude plugin …` CLI and reading the
+ * on-disk catalog (each marketplace's .claude-plugin/marketplace.json). The
+ * three scopes mirror the skills install targets:
+ *   user    → Global   (~/.claude/settings.json)
+ *   project → Project  (<project>/.claude/settings.json, shared via git)
+ *   local   → Task     (this worktree/repo only, not shared)
+ * Project/local operations must run with the CLI's cwd set to the relevant
+ * directory so Claude Code resolves the right repo. */
+
+export type PluginScope = 'user' | 'project' | 'local';
+
+/** Where a plugin operation runs. `cwd` is the directory the `claude` CLI is
+ *  invoked from — required for project/local so the correct repo is targeted. */
+export type PluginInstallTarget =
+  | { scope: 'user' }
+  | { scope: 'project'; cwd: string }
+  | { scope: 'local'; cwd: string };
+
+/** A marketplace registered with Claude Code (from `claude plugin marketplace list`). */
+export interface PluginMarketplace {
+  name: string;
+  /** Source kind reported by the CLI: 'github' | 'git' | 'local' | 'url' | … */
+  source: string;
+  repo?: string;
+  url?: string;
+  path?: string;
+  installLocation?: string;
+}
+
+/** An available plugin from a marketplace's catalog (marketplace.json `plugins[]`). */
+export interface CatalogPlugin {
+  /** `${name}@${marketplace}` — the identifier all CLI commands take. */
+  id: string;
+  name: string;
+  marketplace: string;
+  description?: string;
+  author?: string;
+  category?: string;
+  homepage?: string;
+  version?: string;
+}
+
+/** A plugin install record from `claude plugin list --json`. A single plugin can
+ *  appear multiple times (once per scope it's installed in). */
+export interface InstalledPlugin {
+  id: string;
+  name: string;
+  marketplace: string;
+  version?: string;
+  /** 'user' | 'project' | 'local' | 'managed' (managed = admin, read-only). */
+  scope: string;
+  enabled: boolean;
+  /** Set for project/local scopes — the repo the install belongs to. */
+  projectPath?: string;
+}
+
+/** Everything the Plugins panel needs in one read. */
+export interface PluginsOverview {
+  /** The `claude` CLI was located; without it the panel is read-only/empty. */
+  claudeAvailable: boolean;
+  marketplaces: PluginMarketplace[];
+  catalog: CatalogPlugin[];
+  installed: InstalledPlugin[];
+}
+
+export interface AddMarketplaceArgs {
+  source: string;
+  scope?: PluginScope;
+  cwd?: string;
+  /** Git sparse-checkout filter paths for monorepo marketplaces (--sparse). */
+  sparse?: string[];
+}
+
+export interface RemoveMarketplaceArgs {
+  name: string;
+  scope?: PluginScope;
+  cwd?: string;
+}
+
+export interface PluginInstallArgs {
+  id: string;
+  target: PluginInstallTarget;
+}
+
+export interface PluginUninstallArgs {
+  id: string;
+  target: PluginInstallTarget;
+}
+
+export interface PluginSetEnabledArgs {
+  id: string;
+  enabled: boolean;
+  target: PluginInstallTarget;
+}
+
 // ── RTK (Rust Token Killer) Types ───────────────────────────
 
 export type RtkSource = 'path' | 'managed';
@@ -536,3 +696,268 @@ export type RtkTestOutcome =
   // rtk emitted a rewrite. execDiff is best-effort visualization, not a
   // correctness signal — its absence/failure does not invalidate the rewrite.
   | { kind: 'rewritten'; rewrittenCommand: string; execDiff?: RtkExecDiff };
+
+// ── Diff editor IPC ───────────────────────────────────────────
+
+/** Reference for the "original" side of a working-tree diff: HEAD or staged index. */
+export type WorkingRef = 'HEAD' | 'index';
+
+/** Working-tree read: original (HEAD/index) + working copy with disk metadata. */
+export interface EditorReadWorkingResult {
+  originalContent: string; // '' for untracked / new files
+  workingContent: string | null; // null when the file is deleted on disk
+  mtimeMs: number; // 0 when working file is absent
+  sizeBytes: number; // 0 when working file is absent
+  isBinary: boolean; // true → content fields are ''
+  isLargeFile: boolean; // true → content fields are ''
+  language: string; // Monaco language id; '' fallback
+}
+
+/** Commit read: parent (original) vs commit (modified). No disk metadata; read-only. */
+export interface EditorReadCommitResult {
+  originalContent: string; // parent commit's content; '' for root commit / added files
+  modifiedContent: string; // this commit's content; '' for deleted files
+  isBinary: boolean;
+  isLargeFile: boolean;
+  language: string;
+}
+
+/** Branch-diff read: file content at the base branch (original) + working
+ *  copy on disk (modified). Editable, like working-view: disk metadata is
+ *  returned so the existing stale-check + writeWorking path works unchanged. */
+export interface EditorReadBranchResult {
+  originalContent: string; // git show <base>:<path>; '' when missing in base
+  workingContent: string | null; // null when deleted on disk
+  mtimeMs: number; // 0 when working file is absent
+  sizeBytes: number; // 0 when working file is absent
+  isBinary: boolean;
+  isLargeFile: boolean;
+  language: string;
+}
+
+export type EditorWriteResult =
+  | { ok: true; mtimeMs: number; sizeBytes: number }
+  | { ok: false; stale: true; currentMtimeMs: number; currentSizeBytes: number };
+
+/** Commit summary for the diff editor's commit drawer. Includes the body so
+ *  hover popovers can render the full message without a second IPC. */
+export interface EditorCommitListItem {
+  hash: string;
+  shortHash: string;
+  authorName: string;
+  authorDate: number;
+  subject: string;
+  body: string;
+}
+
+// ── Workspace ports ──────────────────────────────────────────
+
+/** Where a host port came from. Surfaced in the ports panel tooltip. */
+export type PortSource = 'fixed' | 'hash' | 'override' | 'probe';
+
+export interface TaskPort {
+  id: string;
+  taskId: string;
+  label: string;
+  /** null for Tier 1 (fixed) entries — they have no env var. */
+  envVar: string | null;
+  /** null for Tier 1 entries; the schema-declared port the assignment was derived from. */
+  defaultPort: number | null;
+  hostPort: number;
+  source: PortSource;
+  /** Optional repo-specific service commands from .dash/ports.json. */
+  runCommand: string | null;
+  stopCommand: string | null;
+  logsCommand: string | null;
+  cwd: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Per-task liveness map keyed by host port. 'unknown' = first probe pending. */
+export type PortLiveness = 'up' | 'down' | 'unknown';
+
+export interface PortLivenessUpdate {
+  taskId: string;
+  results: Record<number, PortLiveness>;
+}
+
+export interface PortHeuristicGuess {
+  label: string;
+  envVar: string;
+  defaultPort: number;
+}
+
+/** Result of the project-shape heuristic. `alreadyConfigured` short-circuits
+ *  the panel's onboarding card when .dash/ports.json already exists, so the
+ *  renderer can call detect unconditionally without first probing the list.
+ *  `configError` is set when the file exists but failed to parse — distinct
+ *  from "file doesn't exist" so the onboarding poll can stop and surface
+ *  the error to the user instead of waiting forever for a file that's there
+ *  but malformed. */
+export interface PortHeuristicResult {
+  needsPorts: boolean;
+  signals: string[];
+  guesses: PortHeuristicGuess[];
+  alreadyConfigured: boolean;
+  configError?: string;
+}
+
+// ── Diff editor comments ──────────────────────────────────────
+
+/** A persisted annotation on a working-tree file in the diff editor.
+ *  Modal-session UX, but stored in SQLite so reopens restore prior state.
+ *  Keyed by (taskId, filePath); `sent` is a per-comment flag that excludes
+ *  the comment from the next prompt bundle by default. */
+export interface DiffComment {
+  id: string;
+  taskId: string;
+  filePath: string;
+  /** 1-based, inclusive. */
+  startLine: number;
+  /** 1-based, inclusive. */
+  endLine: number;
+  text: string;
+  sent: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Payload for `diffComments:upsert` from the renderer. The handler stamps
+ *  createdAt/updatedAt and reflects the row back as a full DiffComment. */
+export interface DiffCommentInput {
+  id: string;
+  taskId: string;
+  filePath: string;
+  startLine: number;
+  endLine: number;
+  text: string;
+  sent: boolean;
+}
+
+/* ── Unified Extensions model (Skills + Plugins across scopes) ──────────────
+ * See docs/specs/2026-06-17-skills-plugins-extensions-design.md. Phase 1 lists
+ * what is installed/enabled at each scope; inheritance resolution is Phase 2. */
+
+/** skillOverrides visibility values (per Claude Code settings). */
+export type SkillVisibility = 'on' | 'name-only' | 'user-invocable-only' | 'off';
+
+/** A concrete scope the Extensions surface can read/write. */
+export interface ExtensionScopeRef {
+  /** Stable id: 'global' | `project:${projectId}` | `task:${taskId}`. */
+  id: string;
+  kind: 'global' | 'project' | 'task';
+  /** Display label: 'Global', project name, or task name. */
+  name: string;
+  /** Root directory whose `.claude/` this scope owns (home dir for global). */
+  path: string;
+  /** Owning project id (task scope only). */
+  projectId?: string;
+}
+
+/** What the renderer passes so the main process can enumerate Project/Task scopes. */
+export interface ExtensionScopeInput {
+  projects: { id: string; name: string; path: string }[];
+  tasks: { taskId: string; name: string; worktreePath: string; projectId: string }[];
+}
+
+export interface OverviewPlugin {
+  /** plugin@marketplace */
+  id: string;
+  name: string;
+  marketplace: string;
+  enabled: boolean;
+  version?: string;
+}
+
+export interface OverviewSkill {
+  /** Skill folder name under .claude/skills. */
+  name: string;
+  /** Resolved from this scope's skillOverrides; defaults to 'on' when unset. */
+  visibility: SkillVisibility;
+  /** True when a Dash install marker is present (installed from the registry). */
+  fromRegistry: boolean;
+}
+
+export interface ScopeExtensions {
+  scope: ExtensionScopeRef;
+  plugins: OverviewPlugin[];
+  skills: OverviewSkill[];
+  /** Raw skill-visibility overrides set in THIS scope's settings (not inherited).
+   *  Lets the renderer detect a child scope overriding an inherited skill whose
+   *  folder isn't local. */
+  skillOverrides: Record<string, SkillVisibility>;
+}
+
+export interface ExtensionsOverview {
+  claudeAvailable: boolean;
+  scopes: ScopeExtensions[];
+}
+
+export interface SetSkillOverrideArgs {
+  scope: ExtensionScopeRef;
+  skillName: string;
+  /** null clears the override (reverts to the skill's own default). */
+  visibility: SkillVisibility | null;
+}
+
+export type PluginComponentKind = 'skill' | 'agent' | 'command' | 'hook';
+
+/** One read-only component bundled inside a plugin (name + optional description). */
+export interface PluginComponentSummary {
+  name: string;
+  description?: string;
+}
+
+/** Full detail for one bundled plugin component, read from the plugin's install dir. */
+export interface ComponentDetail {
+  kind: PluginComponentKind;
+  name: string;
+  description?: string;
+  allowedTools?: string[];
+  model?: string;
+  /** The component's source: SKILL.md / agent .md / command .md text, or a hook's
+   *  config JSON. */
+  raw?: string;
+  /** Bundled files (skills only) as POSIX-relative paths, excluding SKILL.md. */
+  files?: string[];
+}
+
+export interface GetPluginComponentDetailArgs {
+  pluginId: string;
+  kind: PluginComponentKind;
+  /** Component name (command names may contain `/` for namespacing). */
+  name: string;
+}
+
+/** Everything a plugin bundles, grouped by component type. Read-only — Claude Code
+ *  enables/disables a plugin's components as a unit. */
+export interface PluginComponents {
+  skills: PluginComponentSummary[];
+  agents: PluginComponentSummary[];
+  commands: PluginComponentSummary[];
+  hooks: PluginComponentSummary[];
+}
+
+/** Standalone skill detail parsed from its SKILL.md. */
+export interface SkillDetail {
+  name?: string;
+  description?: string;
+  allowedTools?: string[];
+  model?: string;
+  /** Full raw SKILL.md contents (frontmatter + body) for the detail drawer. */
+  raw?: string;
+  /** Other files bundled in the skill folder (scripts, references, assets) as
+   *  POSIX-relative paths, excluding SKILL.md itself. Sorted. */
+  files?: string[];
+}
+
+export interface GetPluginComponentsArgs {
+  /** plugin@marketplace */
+  pluginId: string;
+}
+
+export interface GetSkillDetailArgs {
+  scope: ExtensionScopeRef;
+  skillName: string;
+}

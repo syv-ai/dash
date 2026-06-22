@@ -2,8 +2,10 @@ import type {
   AzureDevOpsConfig,
   AzureDevOpsWorkItem,
   AzureDevOpsWorkItemRef,
+  PullRequest,
   PullRequestInfo,
 } from '@shared/types';
+import { mapAdoPrList } from './adoPr';
 
 const TIMEOUT_MS = 15_000;
 const API_VERSION = '7.1';
@@ -79,7 +81,7 @@ export class AzureDevOpsService {
   static async getWorkItem(config: AzureDevOpsConfig, id: number): Promise<AzureDevOpsWorkItem> {
     const items = await this.getWorkItemsByIds(config, [id], { expand: true });
     if (items.length === 0) throw new Error(`Work item ${id} not found`);
-    return items[0];
+    return items[0]!;
   }
 
   static async getPullRequestForBranch(
@@ -104,7 +106,7 @@ export class AzureDevOpsService {
       return (order[a.status] ?? 3) - (order[b.status] ?? 3);
     });
 
-    const pr = sorted[0];
+    const pr = sorted[0]!;
     const baseUrl = config.organizationUrl.replace(/\/+$/, '');
     const prUrl = `${baseUrl}/${config.project}/_git/${repositoryName}/pullrequest/${pr.pullRequestId}`;
 
@@ -121,6 +123,25 @@ export class AzureDevOpsService {
       state: stateMap[pr.status] ?? 'open',
       provider: 'ado',
     };
+  }
+
+  /** Active (open) PRs for `repositoryName`, most-recent first. */
+  static async listPullRequests(
+    config: AzureDevOpsConfig,
+    repositoryName: string,
+  ): Promise<PullRequest[]> {
+    const result = (await this.request(
+      config,
+      `${config.project}/_apis/git/repositories/${encodeURIComponent(
+        repositoryName,
+      )}/pullrequests?searchCriteria.status=active&$top=50`,
+    )) as { value?: unknown };
+
+    return mapAdoPrList(result.value, {
+      organizationUrl: config.organizationUrl,
+      project: config.project,
+      repository: repositoryName,
+    });
   }
 
   static async postBranchComment(
@@ -198,7 +219,7 @@ export class AzureDevOpsService {
     for (let level = 0; level < 3; level++) {
       const idsToFetch = new Set<number>();
       for (const chain of parentIdMap.values()) {
-        const lastId = chain[chain.length - 1];
+        const lastId = chain[chain.length - 1]!;
         if (!fetched.has(lastId)) idsToFetch.add(lastId);
       }
       // Remove already-fetched
@@ -254,7 +275,7 @@ export class AzureDevOpsService {
 
   private static extractIdFromUrl(url: string): number | null {
     const match = url.match(/\/workItems\/(\d+)$/i);
-    return match ? parseInt(match[1], 10) : null;
+    return match ? parseInt(match[1]!, 10) : null;
   }
 
   private static mapWorkItem(raw: RawWorkItem, config: AzureDevOpsConfig): AzureDevOpsWorkItem {
