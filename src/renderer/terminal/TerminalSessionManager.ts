@@ -454,8 +454,12 @@ export class TerminalSessionManager {
         // snapshot (app-restart restore) — unless it holds nothing but an
         // idle prompt: the new shell prints its own, and replaying would
         // stack a duplicate.
+        // The shell prompt's first line is the cwd basename — pass it so a
+        // bare `<folder>\n$ ` snapshot is recognized as prompt-only and not
+        // replayed under the fresh shell's own prompt (which would duplicate).
+        const promptLabel = this.cwd.split('/').filter(Boolean).pop() ?? this.cwd;
         const snapshotData =
-          existingSnapshot?.data && !isPromptOnlySnapshot(existingSnapshot.data)
+          existingSnapshot?.data && !isPromptOnlySnapshot(existingSnapshot.data, promptLabel)
             ? existingSnapshot.data
             : null;
         const restoreData = reattached ? (shellResp.data?.serializedState ?? null) : snapshotData;

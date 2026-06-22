@@ -1,39 +1,39 @@
 import { describe, it, expect } from 'vitest';
 import { isPromptOnlySnapshot } from '../snapshotFilter';
 
-// Real serialized idle prompt captured from a live PTY mirror (zsh with the
-// Dash clack prompt): green ◇, dir, gutter bar, bracketed-paste enable.
-const IDLE_PROMPT = '[32m◇[0m  [94m/tmp\r\n[90m│[0m  [?2004h';
+// Real serialized idle prompt captured from a live drawer shell: Dash's plain
+// two-line prompt — the dim cwd basename, then a bare `$` with bracketed-paste
+// enable. `\x1b[2m`…`\x1b[0m` dim, `\x1b[?2004h` bracketed paste.
+const LABEL = 'feat-integrate-with-reminders-97b';
+const IDLE_PROMPT = `\x1b[2m${LABEL}\x1b[0m\r\n$ \x1b[?2004h`;
 
 describe('isPromptOnlySnapshot', () => {
-  it('a single idle prompt is prompt-only', () => {
-    expect(isPromptOnlySnapshot(IDLE_PROMPT)).toBe(true);
-  });
-
-  it('a failure-status prompt (■) is prompt-only', () => {
-    expect(isPromptOnlySnapshot('[31m■[0m  [94mdash\r\n[90m│[0m  ')).toBe(true);
+  it('a single idle two-line prompt is prompt-only', () => {
+    expect(isPromptOnlySnapshot(IDLE_PROMPT, LABEL)).toBe(true);
   });
 
   it('stacked idle prompts (old dup artifacts) are prompt-only', () => {
-    expect(isPromptOnlySnapshot(`${IDLE_PROMPT.replace('[?2004h', '')}\r\n${IDLE_PROMPT}`)).toBe(
-      true,
-    );
+    expect(isPromptOnlySnapshot(`${LABEL}\r\n$ \r\n${LABEL}\r\n$ `, LABEL)).toBe(true);
   });
 
-  it('a prompt with a venv suffix is prompt-only', () => {
-    expect(isPromptOnlySnapshot('[32m◇[0m  [94mdash[0m  [36m.venv[0m\r\n[90m│[0m  ')).toBe(true);
+  it('a zsh `%` sigil prompt is prompt-only', () => {
+    expect(isPromptOnlySnapshot(`${LABEL}\r\n% `, LABEL)).toBe(true);
   });
 
   it('command output means real content — not prompt-only', () => {
     expect(
-      isPromptOnlySnapshot(
-        `${IDLE_PROMPT.replace('[?2004h', '')}ls\r\nREADME.md  package.json\r\n${IDLE_PROMPT}`,
-      ),
+      isPromptOnlySnapshot(`${LABEL}\r\n$ ls\r\nREADME.md  package.json\r\n${LABEL}\r\n$ `, LABEL),
     ).toBe(false);
   });
 
-  it('typed-but-unsubmitted input on the gutter line is real content', () => {
-    expect(isPromptOnlySnapshot('[32m◇[0m  dash\r\n[90m│[0m  git sta')).toBe(false);
+  it('typed-but-unsubmitted input on the prompt line is real content', () => {
+    expect(isPromptOnlySnapshot(`${LABEL}\r\n$ git sta`, LABEL)).toBe(false);
+  });
+
+  it('without a label, the folder line reads as real content', () => {
+    // Defensive: the caller always passes the cwd basename, but a bare prompt
+    // with no label should not be silently treated as content-free.
+    expect(isPromptOnlySnapshot(IDLE_PROMPT)).toBe(false);
   });
 
   it('empty or whitespace-only snapshots are prompt-only (nothing to replay)', () => {
