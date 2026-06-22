@@ -55,8 +55,11 @@ export default tseslint.config(
       'check-file/filename-naming-convention': [
         'error',
         {
-          // Components are PascalCase (MainContent.tsx, TaskModal.tsx).
-          'src/renderer/components/**/*.tsx': 'PASCAL_CASE',
+          // Components are PascalCase (MainContent.tsx, TaskModal.tsx)…
+          'src/renderer/components/**/!(use*).tsx': 'PASCAL_CASE',
+          // …but a co-located hook stays camelCase even when it needs JSX and
+          // must therefore be .tsx (useWizardToasts.tsx).
+          'src/renderer/components/**/use*.tsx': 'CAMEL_CASE',
           // Function/value modules are camelCase (hooks, stores, utils).
           'src/renderer/hooks/**/*.ts': 'CAMEL_CASE',
           'src/renderer/stores/**/*.{ts,tsx}': 'CAMEL_CASE',
