@@ -489,7 +489,7 @@ export function TerminalTabs({
           <ChevronUp size={12} strokeWidth={1.8} className="ml-auto" />
         </button>
       ) : (
-        <div className="relative flex items-center h-10 flex-shrink-0 border-t border-white/[0.08] pl-1">
+        <div className="relative flex items-center h-7 flex-shrink-0 border-t border-white/[0.08] pl-1">
           {/* Hidden measuring row — lays out every shell/service tab off-screen
               so the overflow split below uses real measured widths even for tabs
               currently collapsed into the dropdown. */}
