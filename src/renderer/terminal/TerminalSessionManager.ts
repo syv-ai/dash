@@ -267,33 +267,26 @@ export class TerminalSessionManager {
   }
 
   private async loadGpuAddon() {
-    // On Linux, WebGL has compositing bugs that cause the terminal canvas to
-    // go blank when content updates (typing, output). Skip straight to Canvas.
+    // xterm 6 removed the canvas renderer; the choices are WebGL or xterm's
+    // built-in DOM renderer. On Linux, WebGL has had compositing bugs that
+    // blank the terminal on content updates (typing, output), so we use the
+    // DOM renderer there. NOTE: the DOM renderer historically clips the last
+    // glyph of full rows — re-verify on Linux under the current Chromium.
     const isLinux = navigator.userAgent.includes('Linux');
-
-    if (!isLinux) {
-      try {
-        const { WebglAddon } = await import('@xterm/addon-webgl');
-        const webgl = new WebglAddon();
-        webgl.onContextLoss(() => {
-          webgl.dispose();
-          void this.loadGpuAddon();
-        });
-        this.terminal.loadAddon(webgl);
-        return;
-      } catch (err) {
-        // Fall through to canvas. Not silent: a GPU-renderer failure silently
-        // drops to xterm's DOM renderer, which clips the last glyph of full
-        // rows — log it so that regression is visible, not mysterious.
-        console.warn('[terminal] WebGL renderer failed, trying canvas:', err);
-      }
-    }
+    if (isLinux) return; // built-in DOM renderer
 
     try {
-      const { CanvasAddon } = await import('@xterm/addon-canvas');
-      this.terminal.loadAddon(new CanvasAddon());
+      const { WebglAddon } = await import('@xterm/addon-webgl');
+      const webgl = new WebglAddon();
+      webgl.onContextLoss(() => {
+        webgl.dispose();
+        void this.loadGpuAddon();
+      });
+      this.terminal.loadAddon(webgl);
     } catch (err) {
-      console.warn('[terminal] Canvas renderer failed, using DOM renderer:', err);
+      // A GPU-renderer failure drops to xterm's DOM renderer; log it so that
+      // regression is visible, not mysterious.
+      console.warn('[terminal] WebGL renderer failed, using DOM renderer:', err);
     }
   }
 
