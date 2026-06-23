@@ -48,6 +48,7 @@ export interface SettingsState {
   portsDrawerCollapsed: boolean;
   autoUpdateEnabled: boolean;
   updateNotificationsEnabled: boolean;
+  lastSeenReleaseNotesVersion: string | undefined;
 }
 
 /** One entry per managed setting: the store field, its existing localStorage
@@ -125,6 +126,7 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   entry('portsDrawerCollapsed', 'portsDrawerCollapsed', boolDefaultTrue()),
   entry('autoUpdateEnabled', 'autoUpdateEnabled', boolDefaultTrue()),
   entry('updateNotificationsEnabled', 'updateNotificationsEnabled', boolDefaultTrue()),
+  entry('lastSeenReleaseNotesVersion', 'lastSeenReleaseNotesVersion', strOrUndefined()),
 ];
 
 /** Initial state = every field decoded from an absent key (its default). */

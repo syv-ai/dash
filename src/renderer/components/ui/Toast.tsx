@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Toaster, toast } from 'sonner';
 import { useWizardToasts } from '../ports/useWizardToasts';
+import { useReleaseNotesToast } from './useReleaseNotesToast';
 
 interface ToastContainerProps {
   updateNotificationsEnabled: boolean;
@@ -8,6 +9,7 @@ interface ToastContainerProps {
 
 export function ToastContainer({ updateNotificationsEnabled }: ToastContainerProps) {
   useWizardToasts();
+  useReleaseNotesToast();
   const updateNotificationsRef = useRef(updateNotificationsEnabled);
   useEffect(() => {
     updateNotificationsRef.current = updateNotificationsEnabled;
