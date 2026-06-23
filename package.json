@@ -21,7 +21,8 @@
     "type-check": "tsc --noEmit && tsc -p tsconfig.main.json --noEmit",
     "lint": "eslint src",
     "drizzle:generate": "drizzle-kit generate",
-    "prepare": "husky"
+    "prepare": "husky",
+    "postinstall": "node scripts/sign-dev-electron.mjs"
   },
   "build": {
     "appId": "com.syv.dash",
@@ -128,7 +129,7 @@
     "marked": "^18.0.5",
     "monaco-editor": "^0.55.1",
     "motion": "^12.40.0",
-    "node-pty": "^1.0.0",
+    "node-pty": "^1.2.0-beta.13",
     "posthog-node": "^5.28.2",
     "qrcode": "^1.5.4",
     "react": "^19.2.0",
@@ -138,7 +139,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
-    "@electron/rebuild": "^3.6.0",
+    "@electron/rebuild": "^4.0.4",
     "@eslint/js": "^9.39.4",
     "@radix-ui/react-dialog": "^1.1.17",
     "@radix-ui/react-dropdown-menu": "^2.1.18",
@@ -157,7 +158,7 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "concurrently": "^8.2.0",
-    "electron": "^30.5.1",
+    "electron": "^42.4.1",
     "electron-builder": "^26.15.5",
     "eslint": "^9.39.4",
     "eslint-plugin-check-file": "^3.3.1",
