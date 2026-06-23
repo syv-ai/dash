@@ -13,7 +13,7 @@ interface ShellDrawerWrapperProps {
   cwd: string | null;
   collapsed: boolean;
   label?: string;
-  panelRef: React.RefObject<ImperativePanelHandle>;
+  panelRef: React.RefObject<ImperativePanelHandle | null>;
   animating: boolean;
   onAnimate: () => void;
   onCollapse: () => void;
