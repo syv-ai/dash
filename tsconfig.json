@@ -13,7 +13,6 @@
     "isolatedModules": true,
     "noEmit": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/renderer/*"],
       "@shared/*": ["./src/shared/*"]

@@ -23,3 +23,7 @@ declare module 'monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/o
     static ENTIRE_DIFF_OVERVIEW_WIDTH: number;
   }
 }
+
+// Monaco's deep language-contribution modules ship no type declarations.
+// TypeScript 6's stricter side-effect-import check (TS2882) needs them declared.
+declare module 'monaco-editor/esm/vs/basic-languages/*';
