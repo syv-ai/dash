@@ -234,6 +234,11 @@
 /* Hide xterm scrollbar — Dash sets CLAUDE_CODE_NO_FLICKER=1 so Claude Code manages scrolling internally. */
 .terminal-container .xterm .xterm-viewport {
   scrollbar-width: none !important;
+  /* xterm 6's stylesheet hardcodes the viewport background to #000. Our grid
+     is centered (.xterm-screen margin:auto), so that black shows in the gutter
+     around the grid. Make it transparent so the .xterm theme background (or the
+     glass, for shell-only terminals) shows instead. */
+  background-color: transparent !important;
 }
 .terminal-container .xterm .xterm-viewport::-webkit-scrollbar {
   display: none !important;
@@ -248,6 +253,7 @@
 }
 .terminal-drawer .xterm .xterm-viewport {
   scrollbar-width: none !important;
+  background-color: transparent !important; /* see note above — let the glass show */
 }
 .terminal-drawer .xterm .xterm-viewport::-webkit-scrollbar {
   display: none !important;
