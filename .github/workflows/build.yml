@@ -72,7 +72,7 @@ jobs:
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_TEAM_ID: 2DD8ZKZ975
         run: |
           DMG_PATH=$(ls release/*.dmg 2>/dev/null | head -1)
           if [ -z "$DMG_PATH" ]; then
