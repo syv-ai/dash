@@ -258,6 +258,17 @@
 .terminal-drawer .xterm .xterm-viewport::-webkit-scrollbar {
   display: none !important;
 }
+/* xterm 6's DOM renderer (used for the transparent shell-only drawer) sizes
+   each row to `cols × css.cell.width` and clips it with `overflow: hidden`,
+   but the browser lays the glyphs out at the font's real advance — a hair
+   wider per cell — so the last glyph overflows the row box and gets clipped
+   (a visibly "capped" final character). Let rows overflow so the last glyph
+   renders in full; proposeDims() sizes columns against the real advance, so
+   the overflow lands inside the padding gutter, not past the glass.
+   WebGL terminals render to a canvas and are unaffected. */
+.terminal-drawer .xterm .xterm-rows > div {
+  overflow: visible !important;
+}
 
 /* ── Scrollbar ────────────────────────────────────────────── */
 
