@@ -108,4 +108,12 @@ describe('settings registry', () => {
     expect(byField.autoUpdateEnabled!.codec.decode('false')).toBe(false);
     expect(byField.updateNotificationsEnabled!.codec.decode(null)).toBe(true);
   });
+
+  it('registers lastSeenReleaseNotesVersion, undefined when absent', () => {
+    const e = SETTINGS_REGISTRY.find((r) => r.field === 'lastSeenReleaseNotesVersion')!;
+    expect(e.key).toBe('lastSeenReleaseNotesVersion');
+    expect(e.codec.decode(null)).toBeUndefined();
+    expect(e.codec.decode('0.13.0')).toBe('0.13.0');
+    expect(e.codec.encode('0.13.0')).toBe('0.13.0');
+  });
 });
