@@ -7,7 +7,9 @@ interface TooltipProps {
   content: string;
   side?: 'top' | 'bottom';
   delay?: number;
-  children: React.ReactElement;
+  children: React.ReactElement<
+    React.HTMLAttributes<HTMLElement> & React.RefAttributes<HTMLElement>
+  >;
 }
 
 export function Tooltip({ content, side = 'top', delay = 150, children }: TooltipProps) {
