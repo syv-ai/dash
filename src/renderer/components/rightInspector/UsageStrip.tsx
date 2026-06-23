@@ -52,7 +52,7 @@ function Row({ label, pct, detail }: { label: string; pct: number; detail?: Deta
       </div>
       <div className="h-[3px] rounded-sm bg-foreground/5 overflow-hidden relative">
         <div
-          className={`absolute inset-y-0 left-0 rounded-sm transition-[width] duration-[600ms] ease-[cubic-bezier(0.2,0.8,0.2,1)] ${TIER_FILL[tier]}`}
+          className={`absolute inset-y-0 left-0 rounded-sm transition-[width] duration-600 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${TIER_FILL[tier]}`}
           style={{ width: `${width}%` }}
         />
       </div>

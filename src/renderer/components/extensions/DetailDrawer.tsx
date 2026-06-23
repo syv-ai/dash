@@ -31,7 +31,7 @@ function SourceBlock({ label, raw, files }: { label: string; raw?: string; files
         {label}
       </div>
       <pre
-        className="whitespace-pre-wrap break-words rounded-lg px-3 py-2.5 font-mono text-[11px] leading-relaxed text-foreground/80"
+        className="whitespace-pre-wrap wrap-break-word rounded-lg px-3 py-2.5 font-mono text-[11px] leading-relaxed text-foreground/80"
         style={{ background: 'hsl(var(--surface-0))' }}
       >
         {raw?.trim() || 'No source found.'}
@@ -48,11 +48,7 @@ function SourceBlock({ label, raw, files }: { label: string; raw?: string; files
                 className="flex items-center gap-2 rounded-md px-2.5 py-1.5 font-mono text-[11px] text-foreground/70"
                 style={{ background: 'hsl(var(--surface-3))' }}
               >
-                <FileCode2
-                  size={12}
-                  strokeWidth={1.8}
-                  className="flex-shrink-0 text-foreground/40"
-                />
+                <FileCode2 size={12} strokeWidth={1.8} className="shrink-0 text-foreground/40" />
                 <span className="truncate">{f}</span>
               </div>
             ))}
@@ -138,7 +134,7 @@ export function DetailDrawer({ ext }: { ext: Ext }) {
         {/* header */}
         <div className="flex items-start gap-3 border-b border-border/40 px-5 py-4">
           <div
-            className={`flex h-[38px] w-[38px] flex-shrink-0 items-center justify-center rounded-lg ${style.accent}`}
+            className={`flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-lg ${style.accent}`}
           >
             <HeaderIcon size={18} strokeWidth={1.8} />
           </div>
@@ -173,7 +169,7 @@ export function DetailDrawer({ ext }: { ext: Ext }) {
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
           {installedIn && (
             <div className="text-[11px] text-foreground/55">
-              <span className="font-mono uppercase tracking-[0.1em] text-foreground/40">
+              <span className="font-mono uppercase tracking-widest text-foreground/40">
                 Installed in
               </span>
               <div className="mt-1 text-foreground/80">{installedIn}</div>

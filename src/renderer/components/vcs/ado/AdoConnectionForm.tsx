@@ -49,7 +49,7 @@ export function AdoConnectionForm({ projectId }: AdoConnectionFormProps) {
           className={`flex items-center gap-3.5 flex-1 min-w-0 text-left ${enabled ? 'cursor-pointer' : 'cursor-default'}`}
         >
           <div
-            className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+            className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
               configured ? 'bg-[hsl(var(--git-added)/0.12)]' : 'bg-accent/60'
             }`}
           >
@@ -71,7 +71,7 @@ export function AdoConnectionForm({ projectId }: AdoConnectionFormProps) {
           onClick={() => {
             void handleToggle();
           }}
-          className="flex-shrink-0"
+          className="shrink-0"
         >
           <div
             className={`w-8 h-[18px] rounded-full relative transition-colors duration-150 ${
@@ -79,7 +79,7 @@ export function AdoConnectionForm({ projectId }: AdoConnectionFormProps) {
             }`}
           >
             <div
-              className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-transform duration-150 ${
+              className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-xs transition-transform duration-150 ${
                 enabled ? 'translate-x-[16px]' : 'translate-x-[2px]'
               }`}
             />

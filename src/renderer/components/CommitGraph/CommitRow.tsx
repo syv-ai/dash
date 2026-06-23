@@ -21,11 +21,10 @@ function BadgeIcon({ commitRef, taskInfo }: { commitRef: CommitRef; taskInfo?: T
   const size = 9;
   const sw = 2;
   if (taskInfo?.useWorktree)
-    return <FolderGit2 size={size} strokeWidth={sw} className="flex-shrink-0" />;
-  if (taskInfo) return <SquareTerminal size={size} strokeWidth={sw} className="flex-shrink-0" />;
-  if (commitRef.type === 'tag')
-    return <Tag size={size} strokeWidth={sw} className="flex-shrink-0" />;
-  return <GitBranch size={size} strokeWidth={sw} className="flex-shrink-0" />;
+    return <FolderGit2 size={size} strokeWidth={sw} className="shrink-0" />;
+  if (taskInfo) return <SquareTerminal size={size} strokeWidth={sw} className="shrink-0" />;
+  if (commitRef.type === 'tag') return <Tag size={size} strokeWidth={sw} className="shrink-0" />;
+  return <GitBranch size={size} strokeWidth={sw} className="shrink-0" />;
 }
 
 function RefBadge({
@@ -181,7 +180,7 @@ export function CommitRow({
               (r) => r.type !== 'remote' || !localNames.has(r.name.replace(/^[^/]+\//, '')),
             );
             return filtered.length > 0 ? (
-              <div className="flex items-center flex-shrink-0">
+              <div className="flex items-center shrink-0">
                 {filtered.map((r) => {
                   const colorIdx = refColors.get(r.name);
                   const task = taskBranches.get(r.name);
@@ -207,12 +206,12 @@ export function CommitRow({
       {authorUrl ? (
         <GithubLink
           href={authorUrl}
-          className="text-[10px] text-muted-foreground/70 flex-shrink-0 truncate max-w-[120px]"
+          className="text-[10px] text-muted-foreground/70 shrink-0 truncate max-w-[120px]"
         >
           {commit.authorName}
         </GithubLink>
       ) : (
-        <span className="text-[10px] text-muted-foreground/70 flex-shrink-0 truncate max-w-[120px]">
+        <span className="text-[10px] text-muted-foreground/70 shrink-0 truncate max-w-[120px]">
           {commit.authorName}
         </span>
       )}
@@ -221,18 +220,18 @@ export function CommitRow({
       {commitUrl ? (
         <GithubLink
           href={commitUrl}
-          className="text-[10px] font-mono text-muted-foreground flex-shrink-0 tabular-nums"
+          className="text-[10px] font-mono text-muted-foreground shrink-0 tabular-nums"
         >
           {commit.shortHash}
         </GithubLink>
       ) : (
-        <span className="text-[10px] font-mono text-muted-foreground flex-shrink-0 tabular-nums">
+        <span className="text-[10px] font-mono text-muted-foreground shrink-0 tabular-nums">
           {commit.shortHash}
         </span>
       )}
 
       {/* Relative date */}
-      <span className="text-[10px] text-muted-foreground/70 flex-shrink-0 w-14 text-right tabular-nums">
+      <span className="text-[10px] text-muted-foreground/70 shrink-0 w-14 text-right tabular-nums">
         {formatRelativeDate(commit.authorDate)}
       </span>
     </div>

@@ -45,7 +45,7 @@ export function defineMonacoThemeFromTerminal(
       'editorGutter.commentRangeForeground': bg,
       // Scrollbar track inherits editor.background; slider becomes a faint
       // overlay rather than a distinct tinted strip.
-      'scrollbar.shadow': '#00000000',
+      'scrollbar.shadow-sm': '#00000000',
       'scrollbarSlider.background': sliderBg,
       'scrollbarSlider.hoverBackground': sliderHover,
       'scrollbarSlider.activeBackground': sliderActive,

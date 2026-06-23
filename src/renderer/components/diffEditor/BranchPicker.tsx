@@ -44,14 +44,14 @@ export function BranchPicker({ cwd, selectedRef, onSelect }: BranchPickerProps) 
   return (
     <div className="w-[280px] max-h-[360px] flex flex-col">
       <div className="px-2.5 py-2 border-b border-border/40 flex items-center gap-1.5">
-        <Search size={12} strokeWidth={1.8} className="text-muted-foreground/60 flex-shrink-0" />
+        <Search size={12} strokeWidth={1.8} className="text-muted-foreground/60 shrink-0" />
         <input
           type="text"
           autoFocus
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Filter branches"
-          className="flex-1 bg-transparent outline-none text-[12px] placeholder:text-muted-foreground/40"
+          className="flex-1 bg-transparent outline-hidden text-[12px] placeholder:text-muted-foreground/40"
         />
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto py-1">

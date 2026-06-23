@@ -6,7 +6,7 @@ interface Props {
 
 export function StaleBanner({ onOverwrite, onReload, onCancel }: Props) {
   return (
-    <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-amber-500/40 bg-amber-500/10 text-[11px] flex-shrink-0">
+    <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-amber-500/40 bg-amber-500/10 text-[11px] shrink-0">
       <span className="text-amber-700 dark:text-amber-300">
         This file changed on disk since you opened it.
       </span>

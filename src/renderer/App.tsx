@@ -689,7 +689,7 @@ export function App() {
     window.addEventListener('blur', commitCycle);
     return () => {
       window.removeEventListener('keyup', onKeyUp);
-      window.removeEventListener('blur', commitCycle);
+      window.removeEventListener('blur-sm', commitCycle);
     };
   }, [commitCycle]);
 
@@ -1102,7 +1102,7 @@ export function App() {
         </Panel>
         <PanelResizeHandle
           disabled={sidebarCollapsed}
-          className="resize-handle-quiet w-[1px] bg-border/40"
+          className="resize-handle-quiet w-px bg-border/40"
         />
 
         <Panel
@@ -1185,7 +1185,7 @@ export function App() {
           <>
             <PanelResizeHandle
               disabled={changesPanelCollapsed}
-              className="resize-handle-floating w-[1px] bg-transparent"
+              className="resize-handle-floating w-px bg-transparent"
             />
             <Panel
               id="changes"

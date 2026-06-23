@@ -81,16 +81,16 @@ function EditCommentsBody({
             }
           }}
           spellCheck={false}
-          className="min-h-[520px] max-h-[70vh] w-full text-[12px] leading-relaxed font-mono bg-foreground/[0.04] rounded-md px-3 py-2 resize-y placeholder:text-muted-foreground/40 focus:outline-none"
+          className="min-h-[520px] max-h-[70vh] w-full text-[12px] leading-relaxed font-mono bg-foreground/4 rounded-md px-3 py-2 resize-y placeholder:text-muted-foreground/40 focus:outline-hidden"
         />
 
         <div className="flex items-center justify-between gap-3">
           <span className="text-[10.5px] text-muted-foreground/55">
-            <kbd className="font-mono px-1 py-0.5 rounded bg-foreground/[0.06] border border-white/[0.06]">
+            <kbd className="font-mono px-1 py-0.5 rounded bg-foreground/6 border border-white/6">
               ⌘
             </kbd>
             <span className="mx-0.5">+</span>
-            <kbd className="font-mono px-1 py-0.5 rounded bg-foreground/[0.06] border border-white/[0.06]">
+            <kbd className="font-mono px-1 py-0.5 rounded bg-foreground/6 border border-white/6">
               ↵
             </kbd>
             <span className="ml-1.5">to send</span>

@@ -47,7 +47,7 @@ export function CommitRunView({
           <HookItem key={`${h.name}-${i}`} hook={h} />
         ))}
         {state.raw && (
-          <pre className="mt-2 mx-2 p-2 rounded bg-[hsl(var(--surface-0))] text-[11px] font-mono text-foreground/80 whitespace-pre-wrap break-words">
+          <pre className="mt-2 mx-2 p-2 rounded bg-[hsl(var(--surface-0))] text-[11px] font-mono text-foreground/80 whitespace-pre-wrap wrap-break-word">
             {state.raw}
           </pre>
         )}
@@ -105,9 +105,9 @@ function Header({ state, onCancel }: { state: CommitRunViewProps['state']; onCan
       ? 'no commit created'
       : 'pre-commit';
   return (
-    <div className="flex-shrink-0 flex items-center gap-2.5 px-3.5 pt-3 pb-2.5 border-b border-border/40">
+    <div className="shrink-0 flex items-center gap-2.5 px-3.5 pt-3 pb-2.5 border-b border-border/40">
       <span
-        className={`w-7 h-7 rounded-md inline-flex items-center justify-center flex-shrink-0 ${bgClass}`}
+        className={`w-7 h-7 rounded-md inline-flex items-center justify-center shrink-0 ${bgClass}`}
       >
         {isRunning ? <Spinner /> : <X size={14} strokeWidth={2.5} />}
       </span>
@@ -148,7 +148,7 @@ function HookItem({ hook }: { hook: HookRecord }) {
           expandable ? 'cursor-pointer' : 'cursor-default'
         }`}
       >
-        <span className="w-3.5 h-3.5 flex items-center justify-center flex-shrink-0">
+        <span className="w-3.5 h-3.5 flex items-center justify-center shrink-0">
           {STATUS_ICON[hook.status]}
         </span>
         <span
@@ -193,7 +193,7 @@ function Footer({
   secondary?: { label: string; icon: React.ReactNode; onClick: () => void };
 }) {
   return (
-    <div className="flex-shrink-0 border-t border-border/40 p-2.5 flex flex-col gap-2">
+    <div className="shrink-0 border-t border-border/40 p-2.5 flex flex-col gap-2">
       {hint && <span className="text-[10.5px] text-muted-foreground px-1">{hint}</span>}
       <div className="flex gap-1.5">
         {primary && (

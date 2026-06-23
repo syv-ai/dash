@@ -142,7 +142,7 @@ export function CommitGraphView({
       <div ref={scrollRef} className="flex-1 overflow-y-auto min-w-0">
         <div className="flex">
           {/* SVG graph column */}
-          <div className="flex-shrink-0 sticky left-0 z-10 bg-card">
+          <div className="shrink-0 sticky left-0 z-10 bg-card">
             <GraphSvg
               commits={graphData.commits}
               maxLanes={graphData.maxLanes}

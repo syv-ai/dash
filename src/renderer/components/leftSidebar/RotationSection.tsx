@@ -201,15 +201,15 @@ export function RotationSection({
                 >
                   {/* Status indicator — nudged down to align with title baseline */}
                   {activity === 'error' ? (
-                    <div className="status-dot-err w-[6px] h-[6px] rounded-full flex-shrink-0 mt-[7px]" />
+                    <div className="status-dot-err w-[6px] h-[6px] rounded-full shrink-0 mt-[7px]" />
                   ) : activity === 'waiting' ? (
-                    <div className="status-dot-wait w-[6px] h-[6px] rounded-full flex-shrink-0 mt-[7px]" />
+                    <div className="status-dot-wait w-[6px] h-[6px] rounded-full shrink-0 mt-[7px]" />
                   ) : activity === 'busy' ? (
-                    <div className="w-[6px] h-[6px] rounded-full bg-amber-400 status-pulse flex-shrink-0 mt-[7px]" />
+                    <div className="w-[6px] h-[6px] rounded-full bg-amber-400 status-pulse shrink-0 mt-[7px]" />
                   ) : activity === 'idle' && unseenTaskIds?.has(task.id) ? (
-                    <div className="status-dot-unseen w-[6px] h-[6px] rounded-full flex-shrink-0 mt-[7px]" />
+                    <div className="status-dot-unseen w-[6px] h-[6px] rounded-full shrink-0 mt-[7px]" />
                   ) : activity === 'idle' ? (
-                    <div className="status-dot-idle w-[6px] h-[6px] rounded-full flex-shrink-0 mt-[7px]" />
+                    <div className="status-dot-idle w-[6px] h-[6px] rounded-full shrink-0 mt-[7px]" />
                   ) : null}
 
                   <div className="flex flex-col flex-1 min-w-0 leading-tight">
@@ -220,14 +220,14 @@ export function RotationSection({
 
                       {ctx && ctx.percentage > 0 && (
                         <span
-                          className="text-[11px] tabular-nums flex-shrink-0 group-hover/rot:hidden text-muted-foreground"
+                          className="text-[11px] tabular-nums shrink-0 group-hover/rot:hidden text-muted-foreground"
                           title={`Context: ${ctx.used.toLocaleString()} / ${ctx.total.toLocaleString()} tokens (${Math.round(ctx.percentage)}%)`}
                         >
                           {Math.round(ctx.percentage)}%
                         </span>
                       )}
 
-                      <div className="hidden group-hover/rot:flex gap-0.5 flex-shrink-0">
+                      <div className="hidden group-hover/rot:flex gap-0.5 shrink-0">
                         <IconButton
                           onClick={(e) => {
                             e.stopPropagation();

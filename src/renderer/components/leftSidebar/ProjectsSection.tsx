@@ -236,7 +236,7 @@ export function ProjectsSection({
                       e.stopPropagation();
                       toggleCollapse(project.id);
                     }}
-                    className={`p-0.5 rounded flex-shrink-0 hover:text-foreground transition-colors ${
+                    className={`p-0.5 rounded shrink-0 hover:text-foreground transition-colors ${
                       isProjectCollapsed ? 'text-muted-foreground/60' : ''
                     }`}
                   >
@@ -269,14 +269,14 @@ export function ProjectsSection({
                     })()}
                     {isProjectCollapsed && hasActiveTask && (
                       <Tooltip content="Active task in this project">
-                        <div className="status-dot-idle w-[6px] h-[6px] rounded-full flex-shrink-0" />
+                        <div className="status-dot-idle w-[6px] h-[6px] rounded-full shrink-0" />
                       </Tooltip>
                     )}
                   </div>
 
                   {projectTasks.length > 0 && (
                     <span
-                      className={`text-xs text-muted-foreground tabular-nums flex-shrink-0 mr-0.5 leading-none group-hover:invisible ${
+                      className={`text-xs text-muted-foreground tabular-nums shrink-0 mr-0.5 leading-none group-hover:invisible ${
                         isProjectCollapsed ? 'opacity-50' : ''
                       }`}
                     >
@@ -395,7 +395,7 @@ export function ProjectsSection({
                                     className="group/archived flex items-center gap-2 pl-3.5 pr-2 py-[6px] rounded-md text-[13px] text-muted-foreground/50"
                                   >
                                     <span className="truncate flex-1 min-w-0">{task.name}</span>
-                                    <div className="hidden group-hover/archived:flex gap-0.5 flex-shrink-0">
+                                    <div className="hidden group-hover/archived:flex gap-0.5 shrink-0">
                                       <IconButton
                                         onClick={() => onRestoreTask(task.id)}
                                         title="Restore task"

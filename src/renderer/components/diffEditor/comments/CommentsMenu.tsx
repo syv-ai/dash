@@ -105,8 +105,8 @@ export function CommentsMenu({
         <button
           className={`group/trigger flex items-center gap-2 pl-2.5 pr-2 py-1.5 rounded-full text-[11px] font-medium border backdrop-blur-md transition-all duration-200 ease-out ${
             noUnsent
-              ? 'border-border/40 bg-foreground/[0.025] text-muted-foreground/80 hover:bg-foreground/[0.06] hover:border-border/55 hover:text-foreground/90'
-              : 'border-primary/30 bg-primary/[0.09] text-primary hover:bg-primary/[0.14] hover:border-primary/45'
+              ? 'border-border/40 bg-foreground/2.5 text-muted-foreground/80 hover:bg-foreground/6 hover:border-border/55 hover:text-foreground/90'
+              : 'border-primary/30 bg-primary/9 text-primary hover:bg-primary/[0.14] hover:border-primary/45'
           }`}
           style={{
             // Inner glass-lip highlight on the active pill — barely
@@ -143,7 +143,7 @@ export function CommentsMenu({
       >
         {/* Header. The hairline uses `foreground/0.06` so it reads in both
             themes as a soft fold in the glass, not a hard division line. */}
-        <div className="flex items-baseline justify-between px-4 pt-3 pb-2.5 border-b border-foreground/[0.06]">
+        <div className="flex items-baseline justify-between px-4 pt-3 pb-2.5 border-b border-foreground/6">
           <h3 className="text-[12px] font-semibold tracking-tight text-foreground/90">Comments</h3>
           <span className="text-[10.5px] text-muted-foreground/60 tabular-nums tracking-tight">
             {unsentCount + sentCount} total
@@ -194,7 +194,7 @@ export function CommentsMenu({
 
         {/* Footer. Mirror the header's soft hairline; subtle tinted ground
             so the CTA still has its own visual lane. */}
-        <div className="flex items-center justify-between gap-3 px-3 py-2.5 border-t border-foreground/[0.06] bg-foreground/[0.02]">
+        <div className="flex items-center justify-between gap-3 px-3 py-2.5 border-t border-foreground/6 bg-foreground/2">
           <span className="text-[10.5px] text-muted-foreground/65 leading-tight">
             {noUnsent ? (
               <>All caught up</>
@@ -214,7 +214,7 @@ export function CommentsMenu({
                 onEditAndSend();
               }}
               title="Edit the assembled prompt before sending"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium text-muted-foreground/80 hover:text-foreground hover:bg-foreground/[0.06] active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium text-muted-foreground/80 hover:text-foreground hover:bg-foreground/6 active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
             >
               <Pencil size={11} strokeWidth={2.2} />
               <span>Edit</span>
@@ -274,7 +274,7 @@ function AccordionSection({
   const isSent = accent === 'muted';
   const dotClass = isSent ? 'bg-muted-foreground/40' : 'bg-primary/70';
   return (
-    <div className="border-b border-foreground/[0.05] last:border-b-0">
+    <div className="border-b border-foreground/5 last:border-b-0">
       <button
         type="button"
         onClick={onToggle}
@@ -370,7 +370,7 @@ function FileGroup({
           <span className="text-foreground/80">{base}</span>
         </span>
         {isCurrent && (
-          <span className="flex-shrink-0 text-[9px] uppercase tracking-wider font-medium text-primary/75">
+          <span className="shrink-0 text-[9px] uppercase tracking-wider font-medium text-primary/75">
             current
           </span>
         )}
@@ -390,11 +390,11 @@ function FileGroup({
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
                 transition={ROW_TRANSITION}
-                className="group/item relative flex rounded-md overflow-hidden transition-colors hover:bg-foreground/[0.04]"
+                className="group/item relative flex rounded-md overflow-hidden transition-colors hover:bg-foreground/4"
               >
                 <span
                   aria-hidden
-                  className={`flex-shrink-0 w-[3px] rounded-full my-1 transition-colors ${
+                  className={`shrink-0 w-[3px] rounded-full my-1 transition-colors ${
                     isSent ? 'bg-muted-foreground/25' : 'bg-primary/70'
                   }`}
                 />
@@ -404,11 +404,11 @@ function FileGroup({
                   title="Jump to this comment"
                   className="flex-1 min-w-0 flex flex-col gap-1 px-2.5 py-1.5 pr-14 text-left rounded-md"
                 >
-                  <span className="font-mono text-[10px] tabular-nums text-muted-foreground/70 flex-shrink-0">
+                  <span className="font-mono text-[10px] tabular-nums text-muted-foreground/70 shrink-0">
                     {lineLabel}
                   </span>
                   <span
-                    className={`text-[12.5px] leading-snug whitespace-pre-wrap break-words ${
+                    className={`text-[12.5px] leading-snug whitespace-pre-wrap wrap-break-word ${
                       isSent ? 'text-foreground/55' : 'text-foreground/90'
                     }`}
                   >

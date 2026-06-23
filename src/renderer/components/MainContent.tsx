@@ -143,7 +143,7 @@ export function MainContent({
   if (!activeProject) {
     return (
       <div className="h-full flex flex-col bg-background">
-        {isMac && <div className="h-[28px] flex-shrink-0 titlebar-drag" />}
+        {isMac && <div className="h-[28px] shrink-0 titlebar-drag" />}
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center animate-fade-in">
             <div className="w-14 h-14 rounded-2xl bg-accent/60 flex items-center justify-center mx-auto mb-4">
@@ -178,7 +178,7 @@ export function MainContent({
 
   const strip = (
     <div
-      className={`flex-shrink-0 flex items-center justify-between gap-3 px-4 titlebar-drag ${
+      className={`shrink-0 flex items-center justify-between gap-3 px-4 titlebar-drag ${
         isMac ? 'h-[56px]' : 'h-[52px]'
       }`}
       style={terminalBg ? { background: terminalBg } : undefined}
@@ -208,7 +208,7 @@ export function MainContent({
       </div>
 
       {/* Right cluster: controls + right-inspector toggle */}
-      <div className="inline-flex items-center gap-1.5 flex-shrink-0 titlebar-no-drag">
+      <div className="inline-flex items-center gap-1.5 shrink-0 titlebar-no-drag">
         {activeTask && showTaskTokens && (
           <TokenBadge totalTokens={activeTask.totalTokens} totalCostUsd={activeTask.totalCostUsd} />
         )}
@@ -292,7 +292,7 @@ export function MainContent({
   return (
     <div className="h-full flex flex-col bg-background">
       <div
-        className="h-[16px] flex-shrink-0 titlebar-drag"
+        className="h-[16px] shrink-0 titlebar-drag"
         style={terminalBg ? { background: terminalBg } : undefined}
       />
       {strip}

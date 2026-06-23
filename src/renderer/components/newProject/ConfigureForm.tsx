@@ -11,7 +11,7 @@ interface ConfigureFormProps {
 }
 
 const inputClass =
-  'w-full px-3.5 py-2.5 rounded-lg bg-transparent border border-input/60 text-foreground text-[13px] placeholder:text-muted-foreground/30 focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150';
+  'w-full px-3.5 py-2.5 rounded-lg bg-transparent border border-input/60 text-foreground text-[13px] placeholder:text-muted-foreground/30 focus:outline-hidden focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150';
 const labelClass = 'block text-[12px] font-medium text-muted-foreground/70 mb-2';
 const sectionLabel =
   'block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/50 mb-2';

@@ -25,9 +25,8 @@ import { IconButton } from '../ui/IconButton';
 const CARD = 'rounded-[13px] px-3.5 py-3 shadow-[inset_0_1px_0_hsl(0_0%_100%/0.04)]';
 const CARD_BG = { background: 'hsl(var(--surface-3))' } as const;
 const NESTED_BG = { background: 'hsl(var(--surface-1))' } as const;
-export const PILL =
-  'rounded-[5px] px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.05em]';
-const TILE = 'flex flex-shrink-0 items-center justify-center rounded-lg';
+export const PILL = 'rounded-[5px] px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider';
+const TILE = 'flex shrink-0 items-center justify-center rounded-lg';
 
 interface KindStyle {
   Icon: typeof Sparkles;

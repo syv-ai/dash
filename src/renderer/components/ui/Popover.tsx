@@ -21,7 +21,7 @@ export const PopoverContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       align={align}
-      className={`z-50 rounded-lg border border-border/60 shadow-xl shadow-black/30 outline-none animate-popover-in ${className}`}
+      className={`z-50 rounded-lg border border-border/60 shadow-xl shadow-black/30 outline-hidden animate-popover-in ${className}`}
       style={{
         background: 'hsl(var(--popover))',
         color: 'hsl(var(--popover-foreground))',

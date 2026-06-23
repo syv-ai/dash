@@ -20,7 +20,7 @@ export function CascadeConfirm({
     <Modal onClose={onCancel} size="w-[420px]">
       <div className="flex flex-col gap-4 p-5">
         <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--warn)/0.15)] text-[hsl(var(--warn))]">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--warn)/0.15)] text-[hsl(var(--warn))]">
             <AlertTriangle size={18} strokeWidth={1.8} />
           </div>
           <div className="pt-0.5 text-[12.5px] leading-relaxed text-foreground/80">{message}</div>
