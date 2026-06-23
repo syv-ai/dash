@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { EventEmitter } from 'events';
 import { PortsSetupWizard } from '../PortsSetupWizard';
 import type { PortsMainToTui } from '../../../../shared/portsTuiProtocol';
@@ -29,22 +29,22 @@ class FakeSocket {
 
 let sock: FakeSocket;
 let portsEvents: EventEmitter;
-let services: {
-  portsEvents: EventEmitter;
-  getPortCount: ReturnType<typeof vi.fn>;
-  restartAllForTask: ReturnType<typeof vi.fn>;
-};
-let onTeardown: ReturnType<typeof vi.fn>;
+let services: ReturnType<typeof makeServices>;
+let onTeardown: Mock<(reason: string | null) => void>;
 
-function makeFlow() {
-  sock = new FakeSocket();
+function makeServices() {
   portsEvents = new EventEmitter();
-  services = {
+  return {
     portsEvents,
     getPortCount: vi.fn(async () => 8),
     restartAllForTask: vi.fn(async () => {}),
   };
-  onTeardown = vi.fn();
+}
+
+function makeFlow() {
+  sock = new FakeSocket();
+  services = makeServices();
+  onTeardown = vi.fn<(reason: string | null) => void>();
   return new PortsSetupWizard('t1', 'p1', { socket: sock as never, onTeardown }, services);
 }
 
