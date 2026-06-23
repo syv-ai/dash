@@ -11,6 +11,7 @@ function c(over: Partial<DiffComment>): DiffComment {
     endLine: 1,
     text: '',
     sent: false,
+    viewScope: 'live',
     createdAt: '2026-06-05T00:00:00Z',
     updatedAt: '2026-06-05T00:00:00Z',
     ...over,

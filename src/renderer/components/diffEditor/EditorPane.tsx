@@ -6,6 +6,7 @@ import type { LiveComment } from './comments/types';
 import { useCommentsStore } from '../../stores/commentsStore';
 import { useGutterSelection } from './comments/useGutterSelection';
 import { useFileComments } from './comments/useFileComments';
+import { commentScope, scopeLabel } from './comments/commentScope';
 import { useCommentShades } from './comments/useCommentShades';
 import { useCommentBands } from './comments/useCommentBands';
 import { useCommentDraft } from './comments/useCommentDraft';
@@ -46,7 +47,8 @@ interface EditorPaneProps {
   /** When set, the editor reveals the comment with this id once it lives in
    *  the current file's hydrated decorations, then calls onClearReveal. */
   revealCommentId: string | null;
-  onNavigateAcrossFile: (filePath: string, commentId: string) => void;
+  /** Jump to a comment, switching to its view (scope) + file as needed. */
+  onNavigateToComment: (scope: string, filePath: string, commentId: string) => void;
   onClearReveal: () => void;
   onClose: () => void;
   /** Branch-view header chip wiring. Owned by parent so the changed-files
@@ -66,7 +68,7 @@ export function EditorPane({
   terminalTheme,
   isDark,
   revealCommentId,
-  onNavigateAcrossFile,
+  onNavigateToComment,
   onClearReveal,
   onClose,
   onSelectBase,
@@ -102,6 +104,19 @@ export function EditorPane({
   const [hoveredCommentId, setHoveredCommentId] = useState<string | null>(null);
 
   const isCommitView = view.kind === 'commit';
+  // Comments anchor to the view's content state: 'live' (working/branch share
+  // the working file) vs 'commit:<hash>'. The editor shows only this scope's
+  // comments; the menu spans all scopes (grouped by view).
+  const scope = commentScope(view);
+  // Origin tag on bubbles whenever the open view isn't the plain working tree.
+  const bubbleScopeLabel = view.kind === 'working' ? undefined : scopeLabel(scope);
+  // Comment count for the open view — surfaced in the header's "Showing …" pill.
+  const scopeCommentCount = useMemo(() => {
+    let n = 0;
+    for (const list of Object.values(commentsByFile))
+      for (const c of list) if (c.viewScope === scope) n++;
+    return n;
+  }, [commentsByFile, scope]);
 
   const { editor, monaco, themeName, displayed, handleBeforeMount, handleMount } = useMonacoEditor({
     isDark,
@@ -195,6 +210,7 @@ export function EditorPane({
     isFileLoaded,
     editor,
     monaco,
+    scope,
   });
   const liveComments = binding.liveComments;
   const shadeById = useCommentShades(liveComments);
@@ -286,6 +302,7 @@ export function EditorPane({
     monaco,
     liveComments,
     language: state.kind === 'loaded' ? state.language : '',
+    scope,
     onClose,
   });
 
@@ -316,6 +333,7 @@ export function EditorPane({
         onSelectBase={onSelectBase}
         onExitBranchView={onExitBranchView}
         defaultBase={defaultBase}
+        commentCount={scopeCommentCount}
         backgroundColor={terminalTheme.background ?? (isDark ? '#0d0d11' : '#faf8f3')}
       />
 
@@ -363,6 +381,7 @@ export function EditorPane({
               <CommentsMenu
                 commentsByFile={commentsByFile}
                 currentFilePath={filePath}
+                currentScope={scope}
                 getLiveRangeForCurrent={(commentId) => {
                   const target = liveComments.find((c) => c.id === commentId);
                   if (!target) return null;
@@ -370,17 +389,11 @@ export function EditorPane({
                   const r = model?.getDecorationRange(target.decorationId);
                   return r ? { start: r.startLineNumber, end: r.endLineNumber } : null;
                 }}
-                onNavigate={(targetPath, commentId) => {
-                  if (targetPath === filePath) {
-                    const target = liveComments.find((c) => c.id === commentId);
-                    if (target) revealLive(target);
-                  } else {
-                    onNavigateAcrossFile(targetPath, commentId);
-                  }
-                }}
+                onNavigate={onNavigateToComment}
                 onRemove={(_path, id) => useCommentsStore.getState().remove(id)}
                 onUnsend={(id) => useCommentsStore.getState().markUnsent(id)}
-                onSend={promptApi.sendAllUnsent}
+                onSendScope={promptApi.sendScope}
+                onSendAll={promptApi.sendAllUnsent}
                 onEditAndSend={promptApi.openEditAndSend}
                 onSendOne={promptApi.sendOne}
               />
@@ -390,6 +403,7 @@ export function EditorPane({
           <CommentOverlay
             liveComments={liveComments}
             shadeById={shadeById}
+            scopeLabel={bubbleScopeLabel}
             modifiedEditor={modifiedEditor}
             monaco={monaco}
             area={editorAreaEl}

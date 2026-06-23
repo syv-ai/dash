@@ -9,6 +9,7 @@ import type { DiffEditorModalProps } from './DiffEditorModal';
 import { useEditorViewData } from './data/useEditorViewData';
 import { resolveHeadSentinel, pickFirstChangedFile } from './data/viewData';
 import { useCommentsStore } from '../../stores/commentsStore';
+import { commentScope, commentCountsByScope } from './comments/commentScope';
 
 /** Composition-root workspace: owns view state, drives the data loaders, and
  *  lays out the sidebar + editor pane. Rendered inside <DiffEditorModal>. */
@@ -86,20 +87,36 @@ export function DiffEditor({
   // once hydration completes, then clears it via onClearReveal.
   const [revealCommentId, setRevealCommentId] = useState<string | null>(null);
 
-  const navigateAcrossFile = useCallback((path: string, commentId: string) => {
+  // Jump to a comment from the menu: switch to its view (scope) if needed,
+  // select the file, and let EditorPane reveal it once it hydrates. A 'live'
+  // comment stays in the current live view (working OR branch); only a commit
+  // comment forces a view change (and a live comment pulls us off a commit).
+  const navigateToComment = useCallback((scope: string, path: string, commentId: string) => {
+    if (scope.startsWith('commit:')) {
+      setView({ kind: 'commit', hash: scope.slice(7) });
+    } else {
+      setView((cur) => (cur.kind === 'commit' ? { kind: 'working', ref: 'HEAD' } : cur));
+    }
     setSelectedPath(path);
     setRevealCommentId(commentId);
   }, []);
 
   const clearReveal = useCallback(() => setRevealCommentId(null), []);
 
+  // File-tree badges reflect only the open view's scope, so a file never shows
+  // "3 comments" when the diff you're looking at has none of them.
+  const currentScope = commentScope(view);
   const commentCounts = useMemo(() => {
     const map = new Map<string, number>();
     for (const [path, list] of Object.entries(commentsByFile)) {
-      if (list.length > 0) map.set(path, list.length);
+      const n = list.filter((c) => c.viewScope === currentScope).length;
+      if (n > 0) map.set(path, n);
     }
     return map;
-  }, [commentsByFile]);
+  }, [commentsByFile, currentScope]);
+
+  // Per-view totals for the commits-drawer badges (all scopes, not just open).
+  const commentCountByScope = useMemo(() => commentCountsByScope(commentsByFile), [commentsByFile]);
 
   // Once the working tree's file list is known, hard-delete any persisted
   // comments whose path no longer exists. Runs once per modal session per
@@ -127,6 +144,7 @@ export function DiffEditor({
             commits={commits}
             commitsLoading={commitsLoading}
             showWorkingTreeRow={workingFiles.length > 0}
+            commentCountByScope={commentCountByScope}
             view={view}
             onSelectView={changeView}
           />
@@ -141,7 +159,7 @@ export function DiffEditor({
             terminalTheme={terminalTheme}
             isDark={isDark}
             revealCommentId={revealCommentId}
-            onNavigateAcrossFile={navigateAcrossFile}
+            onNavigateToComment={navigateToComment}
             onClearReveal={clearReveal}
             onClose={onClose}
             onSelectBase={selectBase}

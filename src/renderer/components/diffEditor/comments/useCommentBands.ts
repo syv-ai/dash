@@ -70,7 +70,9 @@ export function useCommentBands({
           isWholeLine: true,
           className: cls,
           lineNumberClassName: `monaco-comment-ln-shade-${r.signature}`,
-          minimap: { color: commentMarker, position: monaco.editor.MinimapPosition.Inline },
+          // Gutter (not Inline) so the marker is a crisp tick in the minimap's
+          // dedicated lane rather than a faint line tint that's easy to miss.
+          minimap: { color: commentMarker, position: monaco.editor.MinimapPosition.Gutter },
           overviewRuler: {
             color: commentMarker,
             position: monaco.editor.OverviewRulerLane.Right,

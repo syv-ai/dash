@@ -69,6 +69,7 @@ export function runMigrations(): void {
       end_line    INTEGER NOT NULL,
       text        TEXT NOT NULL,
       sent        INTEGER NOT NULL DEFAULT 0,
+      view_scope  TEXT NOT NULL DEFAULT 'live',
       created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -305,6 +306,16 @@ export function runMigrations(): void {
       WHERE ports_setup_dismissed_at IS NOT NULL;
     `);
     rawDb.exec(`ALTER TABLE projects DROP COLUMN ports_setup_dismissed_at`);
+  }
+
+  // Diff comments gained a view scope (anchor to 'live' working/branch diff vs
+  // a frozen 'commit:<hash>'). Existing rows predate scoping → default 'live'.
+  try {
+    rawDb.exec(
+      `ALTER TABLE diff_editor_comments ADD COLUMN view_scope TEXT NOT NULL DEFAULT 'live'`,
+    );
+  } catch {
+    /* already exists */
   }
 
   rawDb.pragma('foreign_keys = ON');

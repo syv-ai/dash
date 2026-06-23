@@ -78,4 +78,5 @@ export const diffCommentInputSchema = z.object({
   endLine: z.number(),
   text: z.string(),
   sent: z.boolean(),
+  viewScope: z.string(),
 });

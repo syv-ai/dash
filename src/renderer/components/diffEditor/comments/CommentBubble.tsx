@@ -7,6 +7,12 @@ interface Props {
   /** Short label like 'L15-18' rendered above the body text. */
   meta: string;
   text: string;
+  /** Already pushed to the agent — the card dims to read as "done". */
+  sent: boolean;
+  /** Origin tag (e.g. 'Working tree', 'Commit abc1234') shown when the open
+   *  view isn't the plain working tree, so it's clear which diff this anchors
+   *  to. Undefined → no tag. */
+  scopeLabel?: string;
   /** Only the bottom-most bubble in a stack shows a tail. */
   hasTail: boolean;
   /** Bubble fill intensifies when the row OR this bubble is hovered. */
@@ -32,6 +38,8 @@ export function CommentBubble({
   shade,
   meta,
   text,
+  sent,
+  scopeLabel,
   hasTail,
   isHighlighted,
   tailLeftPx,
@@ -41,10 +49,14 @@ export function CommentBubble({
   onDelete,
   isFadingOut,
 }: Props) {
+  // A sent comment fades back so it reads as "already pushed" without
+  // disappearing (it stays editable/removable). A bubble mid-edit takes
+  // precedence and fades fully out as the draft crossfades in.
+  const opacity = isFadingOut ? 0 : sent ? 0.4 : 1;
   return (
     <div
       style={{
-        opacity: isFadingOut ? 0 : 1,
+        opacity,
         transition: 'opacity 240ms ease-out',
         pointerEvents: isFadingOut ? 'none' : 'auto',
       }}
@@ -71,8 +83,20 @@ export function CommentBubble({
           >
             <X size={13} strokeWidth={1.8} />
           </button>
-          <div className="font-mono text-[10px] text-muted-foreground/55 mb-[2px] tracking-normal">
-            {meta}
+          <div className="flex items-center gap-[6px] mb-[2px]">
+            <span className="font-mono text-[10px] text-muted-foreground/55 tracking-normal">
+              {meta}
+            </span>
+            {scopeLabel && (
+              <span className="rounded-[3px] bg-primary/12 px-[5px] py-[1px] text-[9px] font-medium text-primary/80">
+                {scopeLabel}
+              </span>
+            )}
+            {sent && (
+              <span className="rounded-[3px] bg-foreground/10 px-[5px] py-[1px] text-[9px] font-medium uppercase tracking-[0.04em] text-muted-foreground/75">
+                Sent
+              </span>
+            )}
           </div>
           <div className="whitespace-pre-wrap wrap-break-word">{text}</div>
         </div>

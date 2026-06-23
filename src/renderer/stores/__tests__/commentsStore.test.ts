@@ -10,6 +10,7 @@ const cmt = (over: Partial<DiffComment> = {}): DiffComment => ({
   endLine: over.endLine ?? 2,
   text: over.text ?? 'hello',
   sent: over.sent ?? false,
+  viewScope: over.viewScope ?? 'live',
   createdAt: over.createdAt ?? '2026-01-01T00:00:00Z',
   updatedAt: over.updatedAt ?? '2026-01-01T00:00:00Z',
 });
@@ -48,7 +49,7 @@ describe('commentsStore', () => {
     await useCommentsStore.getState().loadForTask('t1');
     const created = useCommentsStore
       .getState()
-      .addComment({ filePath: 'a.ts', startLine: 3, endLine: 3, text: 'x' });
+      .addComment({ filePath: 'a.ts', startLine: 3, endLine: 3, text: 'x', viewScope: 'live' });
     expect(created).not.toBeNull();
     expect(useCommentsStore.getState().byFile['a.ts']).toHaveLength(1);
     expect(api.diffCommentsUpsert).toHaveBeenCalledTimes(1);
@@ -59,7 +60,7 @@ describe('commentsStore', () => {
     // never loadForTask → taskId null
     const created = useCommentsStore
       .getState()
-      .addComment({ filePath: 'a.ts', startLine: 1, endLine: 1, text: 'x' });
+      .addComment({ filePath: 'a.ts', startLine: 1, endLine: 1, text: 'x', viewScope: 'live' });
     expect(created).toBeNull();
     expect(useCommentsStore.getState().disabled).toBe(true);
     expect(api.diffCommentsUpsert).not.toHaveBeenCalled();

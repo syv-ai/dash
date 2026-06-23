@@ -819,6 +819,9 @@ export interface DiffComment {
   endLine: number;
   text: string;
   sent: boolean;
+  /** Diff state the anchor is meaningful against: 'live' (working/branch
+   *  views share the working file) or 'commit:<hash>' for a frozen commit. */
+  viewScope: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -833,6 +836,7 @@ export interface DiffCommentInput {
   endLine: number;
   text: string;
   sent: boolean;
+  viewScope: string;
 }
 
 /* ── Unified Extensions model (Skills + Plugins across scopes) ──────────────
