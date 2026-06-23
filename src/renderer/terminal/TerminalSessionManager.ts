@@ -48,6 +48,15 @@ export class TerminalSessionManager {
   private lastPtyCols = 0;
   private lastPtyRows = 0;
   private savedViewportY: number | null = null;
+  // Shell-only sessions use xterm 6's DOM renderer (WebGL paints their
+  // transparent background black). The DOM renderer lays each row's glyphs at
+  // the font's real advance, which runs slightly wider than xterm's reported
+  // `css.cell.width`; over a full row that drift pushes the last glyph past the
+  // right gutter. We measure the real advance from a rendered row and divide by
+  // it (instead of the under-reported cell width) when sizing the grid. Unset
+  // until the first row has rendered. WebGL terminals snap to the cell grid, so
+  // this stays undefined for them.
+  private domCellWidth?: number;
   // A fresh shell spawn stays blank for ~1.5s while the user's dotfiles load
   // before the shell prints its first prompt. We paint a dim `folder $` ghost
   // the instant the terminal is ready, then wipe it when real output arrives so
@@ -267,33 +276,33 @@ export class TerminalSessionManager {
   }
 
   private async loadGpuAddon() {
-    // On Linux, WebGL has compositing bugs that cause the terminal canvas to
-    // go blank when content updates (typing, output). Skip straight to Canvas.
-    const isLinux = navigator.userAgent.includes('Linux');
+    // Shell-only sessions render transparent (allowTransparency: true, theme
+    // background rgba(0,0,0,0)) so the floating right-pane glass shows through.
+    // xterm 6's WebGL renderer paints a transparent background as solid black,
+    // so use the built-in DOM renderer for these — it composites alpha
+    // correctly. (Opaque main terminals keep WebGL for output performance.)
+    if (this.shellOnly) return; // built-in DOM renderer — alpha-correct
 
-    if (!isLinux) {
-      try {
-        const { WebglAddon } = await import('@xterm/addon-webgl');
-        const webgl = new WebglAddon();
-        webgl.onContextLoss(() => {
-          webgl.dispose();
-          void this.loadGpuAddon();
-        });
-        this.terminal.loadAddon(webgl);
-        return;
-      } catch (err) {
-        // Fall through to canvas. Not silent: a GPU-renderer failure silently
-        // drops to xterm's DOM renderer, which clips the last glyph of full
-        // rows — log it so that regression is visible, not mysterious.
-        console.warn('[terminal] WebGL renderer failed, trying canvas:', err);
-      }
-    }
+    // xterm 6 removed the canvas renderer; the choices are WebGL or xterm's
+    // built-in DOM renderer. On Linux, WebGL has had compositing bugs that
+    // blank the terminal on content updates (typing, output), so we use the
+    // DOM renderer there. NOTE: the DOM renderer historically clips the last
+    // glyph of full rows — re-verify on Linux under the current Chromium.
+    const isLinux = navigator.userAgent.includes('Linux');
+    if (isLinux) return; // built-in DOM renderer
 
     try {
-      const { CanvasAddon } = await import('@xterm/addon-canvas');
-      this.terminal.loadAddon(new CanvasAddon());
+      const { WebglAddon } = await import('@xterm/addon-webgl');
+      const webgl = new WebglAddon();
+      webgl.onContextLoss(() => {
+        webgl.dispose();
+        void this.loadGpuAddon();
+      });
+      this.terminal.loadAddon(webgl);
     } catch (err) {
-      console.warn('[terminal] Canvas renderer failed, using DOM renderer:', err);
+      // A GPU-renderer failure drops to xterm's DOM renderer; log it so that
+      // regression is visible, not mysterious.
+      console.warn('[terminal] WebGL renderer failed, using DOM renderer:', err);
     }
   }
 
@@ -786,16 +795,16 @@ export class TerminalSessionManager {
 
   /**
    * Columns/rows that fill the padded content box — like FitAddon's
-   * proposeDimensions, but WITHOUT subtracting a scrollbar width. FitAddon
-   * reserves `viewport.scrollBarWidth` (~15-19px) on the right for a scrollbar
-   * we hide entirely (and that Claude's NO_FLICKER mode never uses), which left
-   * the grid short of the right edge — a lopsided gutter. We measure the same
-   * cell size FitAddon uses and divide the full content box by it. Falls back to
-   * FitAddon if xterm's internal render metrics ever move.
+   * proposeDimensions, but WITHOUT subtracting a fixed scrollbar reserve.
+   * FitAddon reserves `viewport.scrollBarWidth` (~15-19px) on the right for a
+   * scrollbar we hide entirely (and that Claude's NO_FLICKER mode never uses),
+   * which left the grid short of the right edge — a lopsided gutter. We measure
+   * the same cell size FitAddon uses and divide the `.xterm` element's real
+   * content box (clientWidth, which already subtracts any actual scrollbar) by
+   * it. Falls back to FitAddon if xterm's internal render metrics ever move.
    */
   private proposeDims(): { cols: number; rows: number } | undefined {
     const el = this.terminal.element;
-    const parent = el?.parentElement;
     const cell = (
       this.terminal as unknown as {
         _core?: {
@@ -803,30 +812,64 @@ export class TerminalSessionManager {
         };
       }
     )._core?._renderService?.dimensions?.css?.cell;
-    if (!el || !parent || !cell?.width || !cell?.height) {
+    if (!el || !cell?.width || !cell?.height) {
       return this.fitAddon.proposeDimensions();
     }
-    const ps = window.getComputedStyle(parent);
+    // Measure the `.xterm` element's OWN content box via clientWidth/Height
+    // (not the parent's computed width): clientWidth subtracts any ancestor
+    // scrollbar that the element doesn't actually get to paint into, whereas
+    // getComputedStyle().width does not. Using the parent width over-measured
+    // by the scrollbar's ~16px, handing out columns that don't fit — invisible
+    // under WebGL (it clips) but a visible right-edge overlap under the DOM
+    // renderer. clientWidth already includes padding, so subtract it back out.
     const es = window.getComputedStyle(el);
     const availW =
-      Math.max(0, parseInt(ps.getPropertyValue('width'))) -
+      el.clientWidth -
       (parseInt(es.getPropertyValue('padding-left')) +
         parseInt(es.getPropertyValue('padding-right')));
     const availH =
-      parseInt(ps.getPropertyValue('height')) -
+      el.clientHeight -
       (parseInt(es.getPropertyValue('padding-top')) +
         parseInt(es.getPropertyValue('padding-bottom')));
-    // A hidden / not-yet-laid-out container yields `auto` dimensions, so
-    // parseInt → NaN. `Math.max(2, NaN)` is NaN (not 2!), which would sail
-    // through the callers and ship a `ptyResize({cols:NaN})` that main drops.
-    // Bail to undefined so the resize is skipped until the layout settles.
+    // A hidden / not-yet-laid-out element has clientWidth/Height 0, so availW/H
+    // go non-positive. Bail to undefined so the resize is skipped (rather than
+    // shipping a squashed grid) until the layout settles.
     if (!Number.isFinite(availW) || !Number.isFinite(availH) || availW <= 0 || availH <= 0) {
       return undefined;
     }
+    // Shell-only (DOM renderer) lays glyphs wider than `cell.width`; once we've
+    // measured the real advance, size columns against it so the grid fits.
+    const colWidth = this.shellOnly && this.domCellWidth ? this.domCellWidth : cell.width;
     return {
-      cols: Math.max(2, Math.floor(availW / cell.width)),
+      cols: Math.max(2, Math.floor(availW / colWidth)),
       rows: Math.max(1, Math.floor(availH / cell.height)),
     };
+  }
+
+  /**
+   * Read the DOM renderer's actual per-column advance from a rendered row and
+   * cache it in `domCellWidth`. xterm's reported `css.cell.width` under-counts
+   * the real glyph advance, so rows render wider than the grid xterm sizes and
+   * the last glyph spills past the right padding. When the measured advance
+   * changes the answer, re-fit once so the corrected column count takes effect;
+   * a stable measurement (within 0.05px) is a no-op, so this converges. No-op
+   * for WebGL terminals, whose grid is pixel-snapped to the cell.
+   */
+  private measureDomCellWidth(): void {
+    if (!this.shellOnly) return;
+    const el = this.terminal.element;
+    requestAnimationFrame(() => {
+      const row = el?.querySelector('.xterm-rows > div') as HTMLElement | null;
+      const renderedCols = this.terminal.cols;
+      if (!row || renderedCols <= 0) return;
+      const advance = row.scrollWidth / renderedCols;
+      // Ignore bogus reads during layout transitions (collapsed/empty rows).
+      if (!Number.isFinite(advance) || advance <= 0) return;
+      const prev = this.domCellWidth;
+      if (prev !== undefined && Math.abs(prev - advance) < 0.05) return;
+      this.domCellWidth = advance;
+      this.fit();
+    });
   }
 
   getSearchAddon(): SearchAddon {
@@ -935,6 +978,11 @@ export class TerminalSessionManager {
     if (this.terminal.cols !== dims.cols || this.terminal.rows !== dims.rows) {
       this.terminal.resize(dims.cols, dims.rows);
     }
+    // Measure the DOM renderer's real glyph advance and re-fit if it differs
+    // from what we sized with — see `domCellWidth`. The first fit sizes with
+    // the under-reported cell width, this reads the actual rendered width, and
+    // the follow-up fit lands the column count that fits the padded box.
+    this.measureDomCellWidth();
     const cols = this.ptyCols(dims.cols);
     // Skip redundant PTY resizes to avoid SIGWINCH prompt redraw
     if (cols === this.lastPtyCols && dims.rows === this.lastPtyRows) return;
