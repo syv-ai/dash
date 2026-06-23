@@ -7,7 +7,7 @@ import { cva, type VariantProps } from 'class-variance-authority';
  * secondary = quiet outline, ghost = bare). Based on the shadcn Button API.
  */
 const buttonVariants = cva(
-  'inline-flex items-center justify-center font-medium transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[hsl(var(--surface-2))]',
+  'inline-flex items-center justify-center font-medium transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[hsl(var(--surface-2))]',
   {
     variants: {
       variant: {

@@ -138,12 +138,12 @@ export function ProjectOverview({
   return (
     <div className="h-full flex flex-col bg-background">
       {/* Fixed header */}
-      <div className="flex-shrink-0 border-b border-border/40 px-14 pt-8 pb-6">
+      <div className="shrink-0 border-b border-border/40 px-14 pt-8 pb-6">
         <div className="w-full">
           <div className="flex items-start justify-between">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 mb-2">
-                <div className="w-9 h-9 rounded-lg bg-accent/60 flex items-center justify-center flex-shrink-0">
+                <div className="w-9 h-9 rounded-lg bg-accent/60 flex items-center justify-center shrink-0">
                   <FolderOpen size={16} className="text-muted-foreground" strokeWidth={1.8} />
                 </div>
                 <h1 className="text-lg font-semibold text-foreground truncate">{project.name}</h1>
@@ -183,7 +183,7 @@ export function ProjectOverview({
             </div>
 
             {/* Actions */}
-            <div className="flex items-center gap-1 flex-shrink-0 ml-4">
+            <div className="flex items-center gap-1 shrink-0 ml-4">
               <IconButton onClick={onShowCommitGraph} title="Commit graph">
                 <GitGraph size={15} strokeWidth={1.8} />
               </IconButton>
@@ -292,10 +292,10 @@ export function ProjectOverview({
                   >
                     {/* Task name + status */}
                     <div className="flex items-start gap-2.5 mb-3 pr-6 min-w-0">
-                      <div className="mt-1.5 flex-shrink-0">
+                      <div className="mt-1.5 shrink-0">
                         <ActivityDot info={activity} />
                       </div>
-                      <span className="text-[13px] font-medium text-foreground flex-1 min-w-0 break-words">
+                      <span className="text-[13px] font-medium text-foreground flex-1 min-w-0 wrap-break-word">
                         {task.name}
                       </span>
                     </div>
@@ -330,7 +330,7 @@ export function ProjectOverview({
                               : 'Issues:';
                           return (
                             <div className="flex items-start gap-1.5 text-muted-foreground">
-                              <span className="flex-shrink-0 text-muted-foreground/70 mt-0.5">
+                              <span className="shrink-0 text-muted-foreground/70 mt-0.5">
                                 {label}
                               </span>
                               <div className="flex flex-wrap gap-1.5">
@@ -380,7 +380,7 @@ export function ProjectOverview({
 
                       {prByTask[task.id] && (
                         <div className="flex items-start gap-1.5 text-muted-foreground">
-                          <span className="flex-shrink-0 text-muted-foreground/70 mt-0.5">PR:</span>
+                          <span className="shrink-0 text-muted-foreground/70 mt-0.5">PR:</span>
                           <PrBadge prInfo={prByTask[task.id]!} size="sm" />
                         </div>
                       )}
@@ -391,7 +391,7 @@ export function ProjectOverview({
                         opacity-0 still reserves layout, so nothing shifts. */}
                     <div className="mt-3 pt-2.5 border-t border-border/50 flex items-center justify-between gap-2 min-w-0">
                       <div className="flex items-center gap-2 min-w-0 text-[10px] text-muted-foreground">
-                        <span className="flex-shrink-0">Updated {timeAgo(task.updatedAt)}</span>
+                        <span className="shrink-0">Updated {timeAgo(task.updatedAt)}</span>
                         {task.totalTokens > 0 && (
                           <TokenBadge
                             totalTokens={task.totalTokens}
@@ -400,7 +400,7 @@ export function ProjectOverview({
                           />
                         )}
                       </div>
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                         <TaskActions
                           hasActiveSession={!!activity?.state}
                           onOpenIde={() => void openInIde(task.path || project.path)}
@@ -447,7 +447,7 @@ export function ProjectOverview({
 
                       {task.branch && (
                         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/70 mb-1.5">
-                          <span className="flex-shrink-0 text-muted-foreground/50">Branch:</span>
+                          <span className="shrink-0 text-muted-foreground/50">Branch:</span>
                           <span className="truncate">{task.branch}</span>
                         </div>
                       )}

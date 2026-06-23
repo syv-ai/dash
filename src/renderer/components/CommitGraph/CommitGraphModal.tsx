@@ -52,9 +52,9 @@ function CommitGraphBody({
   return (
     <>
       {/* Header */}
-      <div className="flex items-center justify-between px-5 h-12 border-b border-border/40 flex-shrink-0">
+      <div className="flex items-center justify-between px-5 h-12 border-b border-border/40 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
-          <GitBranch size={14} className="text-muted-foreground flex-shrink-0" strokeWidth={1.8} />
+          <GitBranch size={14} className="text-muted-foreground shrink-0" strokeWidth={1.8} />
           <span className="text-[13px] font-medium text-foreground truncate">Commit History</span>
           <span className="text-[11px] text-muted-foreground truncate">{projectName}</span>
         </div>

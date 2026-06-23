@@ -21,7 +21,7 @@ export function CommentInputBar({ lineRange, initialText, onSubmit, onCancel }: 
     : '';
   return (
     <>
-      <div className="flex-shrink-0 font-mono text-[10px] text-muted-foreground/60 tabular-nums tracking-tight">
+      <div className="shrink-0 font-mono text-[10px] text-muted-foreground/60 tabular-nums tracking-tight">
         {rangeLabel}
       </div>
       <textarea
@@ -46,14 +46,14 @@ export function CommentInputBar({ lineRange, initialText, onSubmit, onCancel }: 
           }
         }}
         placeholder="Describe the change…"
-        className="flex-1 min-h-0 w-full text-[12.5px] leading-relaxed tracking-[-0.005em] bg-transparent px-0 py-0 resize-none placeholder:text-muted-foreground/35 focus:outline-none"
+        className="flex-1 min-h-0 w-full text-[12.5px] leading-relaxed tracking-[-0.005em] bg-transparent px-0 py-0 resize-none placeholder:text-muted-foreground/35 focus:outline-hidden"
       />
-      <div className="flex items-center gap-2 flex-shrink-0">
+      <div className="flex items-center gap-2 shrink-0">
         <span className="text-[10.5px] text-muted-foreground/65 font-mono">
-          <kbd className="px-1.5 py-0.5 rounded-[5px] border border-foreground/10 bg-foreground/[0.04] text-foreground/70">
+          <kbd className="px-1.5 py-0.5 rounded-[5px] border border-foreground/10 bg-foreground/4 text-foreground/70">
             ⌘
           </kbd>
-          <kbd className="px-1.5 py-0.5 rounded-[5px] border border-foreground/10 bg-foreground/[0.04] text-foreground/70 ml-1">
+          <kbd className="px-1.5 py-0.5 rounded-[5px] border border-foreground/10 bg-foreground/4 text-foreground/70 ml-1">
             ↵
           </kbd>
           <span className="ml-1.5">to add</span>

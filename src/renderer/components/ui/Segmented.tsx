@@ -31,7 +31,7 @@ export function Segmented<T extends string | number | null>({
       {activeIdx >= 0 && (
         <span
           aria-hidden
-          className="absolute top-[3px] bottom-[3px] rounded-md transition-all duration-[220ms] ease-[cubic-bezier(0.16,1,0.3,1)] shadow-[0_1px_2px_hsl(0_0%_0%/0.18),inset_0_1px_0_hsl(0_0%_100%/0.06)]"
+          className="absolute top-[3px] bottom-[3px] rounded-md transition-all duration-220 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-[0_1px_2px_hsl(0_0%_0%/0.18),inset_0_1px_0_hsl(0_0%_100%/0.06)]"
           style={{
             background: 'hsl(var(--surface-3))',
             border: '1px solid hsl(var(--primary) / 0.28)',

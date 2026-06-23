@@ -414,7 +414,7 @@ export function TerminalTabs({
       <div
         key={tab.id}
         data-tab-id={tab.id}
-        className={`group/tab relative flex items-center justify-center min-w-11 px-2.5 h-full cursor-pointer transition-colors flex-shrink-0 select-none drawer-tab-in ${colors}`}
+        className={`group/tab relative flex items-center justify-center min-w-11 px-2.5 h-full cursor-pointer transition-colors shrink-0 select-none drawer-tab-in ${colors}`}
         onClick={() => handleSelectTab(tab.id)}
       >
         {/* The label and its activity dot are centered content together — the
@@ -470,10 +470,10 @@ export function TerminalTabs({
       {collapsed ? (
         <button
           onClick={onExpand}
-          className={`h-full w-full flex items-center gap-2 px-4 transition-colors border-t border-white/[0.08] ${
+          className={`h-full w-full flex items-center gap-2 px-4 transition-colors border-t border-white/8 ${
             hasUnseenTui
               ? 'bg-primary/10 text-primary hover:bg-primary/15'
-              : 'text-foreground/80 hover:text-foreground hover:bg-white/[0.04]'
+              : 'text-foreground/80 hover:text-foreground hover:bg-white/4'
           }`}
         >
           <Terminal size={12} strokeWidth={1.8} />
@@ -489,7 +489,7 @@ export function TerminalTabs({
           <ChevronUp size={12} strokeWidth={1.8} className="ml-auto" />
         </button>
       ) : (
-        <div className="relative flex items-center h-7 flex-shrink-0 border-t border-white/[0.08] pl-1">
+        <div className="relative flex items-center h-7 shrink-0 border-t border-white/8 pl-1">
           {/* Hidden measuring row — lays out every shell/service tab off-screen
               so the overflow split below uses real measured widths even for tabs
               currently collapsed into the dropdown. */}
@@ -515,7 +515,7 @@ export function TerminalTabs({
                 >
                   <DropdownMenuTrigger asChild>
                     <button
-                      className="flex items-center h-full px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors flex-shrink-0"
+                      className="flex items-center h-full px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors shrink-0"
                       aria-label={`${overflowTabs.length} more terminals`}
                     >
                       <ChevronsRight size={12} strokeWidth={2} />
@@ -547,7 +547,7 @@ export function TerminalTabs({
             <Tooltip content="New terminal or wizard">
               <DropdownMenuTrigger asChild>
                 <button
-                  className="w-5 h-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors flex-shrink-0"
+                  className="w-5 h-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors shrink-0"
                   aria-label="New terminal or wizard"
                 >
                   <Plus size={11} strokeWidth={2} />
@@ -575,7 +575,7 @@ export function TerminalTabs({
           </DropdownMenu>
           <button
             onClick={onCollapse}
-            className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+            className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0"
           >
             <ChevronDown size={12} strokeWidth={2} />
           </button>

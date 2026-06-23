@@ -24,7 +24,7 @@ export function AdoFormFields({ state, autoFocusPat }: AdoFormFieldsProps) {
             setTestResult(null);
           }}
           placeholder="https://dev.azure.com/myorg"
-          className={`w-full px-3 py-2 rounded-lg bg-background border text-foreground text-[12px] font-mono placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 ${
+          className={`w-full px-3 py-2 rounded-lg bg-background border text-foreground text-[12px] font-mono placeholder:text-muted-foreground/30 focus:outline-hidden focus:ring-1 focus:ring-primary/40 focus:border-primary/40 ${
             orgUrl && !isUrlValid ? 'border-destructive/60' : 'border-input/60'
           }`}
         />
@@ -42,7 +42,7 @@ export function AdoFormFields({ state, autoFocusPat }: AdoFormFieldsProps) {
             setTestResult(null);
           }}
           placeholder="MyProject"
-          className="w-full px-3 py-2 rounded-lg bg-background border border-input/60 text-foreground text-[12px] placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40"
+          className="w-full px-3 py-2 rounded-lg bg-background border border-input/60 text-foreground text-[12px] placeholder:text-muted-foreground/30 focus:outline-hidden focus:ring-1 focus:ring-primary/40 focus:border-primary/40"
         />
       </div>
       <div>
@@ -56,7 +56,7 @@ export function AdoFormFields({ state, autoFocusPat }: AdoFormFieldsProps) {
           }}
           placeholder="Enter PAT..."
           autoFocus={autoFocusPat}
-          className="w-full px-3 py-2 rounded-lg bg-background border border-input/60 text-foreground text-[12px] font-mono placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40"
+          className="w-full px-3 py-2 rounded-lg bg-background border border-input/60 text-foreground text-[12px] font-mono placeholder:text-muted-foreground/30 focus:outline-hidden focus:ring-1 focus:ring-primary/40 focus:border-primary/40"
         />
       </div>
     </>

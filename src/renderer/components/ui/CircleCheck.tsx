@@ -16,7 +16,7 @@ export function CircleCheck({ checked, onChange, label, className = '' }: Circle
       className={`flex items-center gap-2.5 group text-left ${className}`}
     >
       <span
-        className={`w-4 h-4 rounded-full border flex items-center justify-center flex-shrink-0 transition-colors duration-150 ${
+        className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-colors duration-150 ${
           checked
             ? 'bg-primary border-primary'
             : 'border-border bg-transparent group-hover:border-foreground/40'

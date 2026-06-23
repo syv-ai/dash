@@ -33,7 +33,7 @@ function SettingsModalShellBody({ title, children }: { title: string; children: 
   const close = useModalClose();
   return (
     <>
-      <div className="flex items-center justify-between px-5 h-12 border-b border-border/40 flex-shrink-0">
+      <div className="flex items-center justify-between px-5 h-12 border-b border-border/40 shrink-0">
         <h2 className="text-[14px] font-semibold text-foreground">{title}</h2>
         <button
           onClick={close}

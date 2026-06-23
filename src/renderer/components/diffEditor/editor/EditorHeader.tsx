@@ -72,7 +72,7 @@ export function EditorHeader({
 
   return (
     <div
-      className="flex items-center justify-between px-3 h-9 border-b border-white/[0.06] flex-shrink-0"
+      className="flex items-center justify-between px-3 h-9 border-b border-white/6 shrink-0"
       style={{ background: backgroundColor }}
     >
       <div className="flex items-center gap-3 min-w-0">
@@ -127,7 +127,7 @@ export function EditorHeader({
                     : 'text-muted-foreground/60 hover:text-foreground hover:bg-accent/60'
                 }`}
               >
-                <GitCompare size={12} strokeWidth={1.8} className="flex-shrink-0" />
+                <GitCompare size={12} strokeWidth={1.8} className="shrink-0" />
                 {isBranch ? (
                   <span className="truncate max-w-[420px]">base: {view.base}</span>
                 ) : (

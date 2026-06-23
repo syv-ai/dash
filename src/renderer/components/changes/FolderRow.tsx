@@ -68,11 +68,11 @@ export function FolderRow({
     >
       <Checkbox checked={agg.stageState} onChange={onToggleStage} />
       {Array.from({ length: indent }, (_, i) => (
-        <span key={i} className="w-1 h-full relative inline-block flex-shrink-0">
-          <span className="absolute left-[1px] top-[-2px] bottom-[-2px] w-px bg-[hsl(var(--border)/0.5)]" />
+        <span key={i} className="w-1 h-full relative inline-block shrink-0">
+          <span className="absolute left-px top-[-2px] bottom-[-2px] w-px bg-[hsl(var(--border)/0.5)]" />
         </span>
       ))}
-      <span className="flex-shrink-0 w-[14px] h-[14px] inline-flex items-center justify-center text-muted-foreground/55">
+      <span className="shrink-0 w-[14px] h-[14px] inline-flex items-center justify-center text-muted-foreground/55">
         {open ? (
           <ChevronDown size={12} strokeWidth={1.8} />
         ) : (
@@ -82,11 +82,11 @@ export function FolderRow({
       <span className={`flex-1 min-w-0 font-mono text-[11.5px] truncate font-medium ${nameTint}`}>
         {displayName}/
       </span>
-      <span className="font-mono text-[10px] font-semibold tabular-nums flex-shrink-0 text-muted-foreground/70">
+      <span className="font-mono text-[10px] font-semibold tabular-nums shrink-0 text-muted-foreground/70">
         {agg.count}
       </span>
       {!open && (
-        <span className="font-mono text-[10px] flex gap-1.5 flex-shrink-0 group-hover:invisible">
+        <span className="font-mono text-[10px] flex gap-1.5 shrink-0 group-hover:invisible">
           {agg.add || agg.del ? (
             <>
               {agg.add ? (

@@ -80,7 +80,7 @@ export function ScopeMultiSelect({
         {chevron ? (
           <button
             onClick={chevron.onToggle}
-            className="flex-shrink-0 p-1 text-foreground/35 hover:text-foreground/70"
+            className="shrink-0 p-1 text-foreground/35 hover:text-foreground/70"
             aria-label={chevron.open ? 'Collapse' : 'Expand'}
           >
             <ChevronRight
@@ -89,7 +89,7 @@ export function ScopeMultiSelect({
             />
           </button>
         ) : (
-          <span className={indent ? 'w-7 flex-shrink-0' : 'w-6 flex-shrink-0'} />
+          <span className={indent ? 'w-7 shrink-0' : 'w-6 shrink-0'} />
         )}
         <button
           onClick={() => !installed && toggleSel(id)}
@@ -101,7 +101,7 @@ export function ScopeMultiSelect({
           }`}
         >
           <span
-            className={`flex h-[15px] w-[15px] flex-shrink-0 items-center justify-center rounded-[4px] border ${
+            className={`flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-[4px] border ${
               checked ? 'border-transparent bg-primary text-primary-foreground' : 'border-border/70'
             }`}
           >

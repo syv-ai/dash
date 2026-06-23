@@ -211,7 +211,7 @@ function FileTreePanel({
   const tree = useMemo(() => buildRepoTree(paths, changedFiles), [paths, changedFiles]);
   return (
     <div className="h-full min-h-0 flex flex-col">
-      <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-mono flex items-center justify-between flex-shrink-0">
+      <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-mono flex items-center justify-between shrink-0">
         <span>
           Files{' '}
           {tree.changedCount > 0 && (
@@ -219,7 +219,7 @@ function FileTreePanel({
           )}
         </span>
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto [scrollbar-gutter:stable] scrollbar-thin-hover pb-2 px-1">
+      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-gutter-stable scrollbar-thin-hover pb-2 px-1">
         {loading && paths.length === 0 ? (
           <div className="px-3 py-2 text-[11px] text-muted-foreground/40">Loading…</div>
         ) : (
@@ -327,7 +327,7 @@ function FolderEntry({
         style={{ paddingLeft: 4 + indent * INDENT_STEP, paddingRight: 8 }}
       >
         <span
-          className="flex-shrink-0 inline-flex items-center justify-center"
+          className="shrink-0 inline-flex items-center justify-center"
           style={{ width: ICON_SLOT }}
         >
           {open ? (
@@ -343,7 +343,7 @@ function FolderEntry({
         {commentCount > 0 && <CommentBadge count={commentCount} />}
         {folder.changedCount > 0 && (
           <span
-            className={`flex-shrink-0 font-mono text-[10px] font-semibold tabular-nums ${
+            className={`shrink-0 font-mono text-[10px] font-semibold tabular-nums ${
               folder.dominantStatus
                 ? STATUS_TEXT[folder.dominantStatus]
                 : 'text-muted-foreground/70'
@@ -372,7 +372,7 @@ function CommentBadge({ count }: { count: number }) {
     <span
       title={`${count} comment${count !== 1 ? 's' : ''}`}
       aria-label={`${count} comment${count !== 1 ? 's' : ''}`}
-      className="flex-shrink-0 inline-flex items-center justify-center min-w-[14px] h-[14px] px-1 rounded-full font-mono text-[9.5px] font-semibold tabular-nums bg-primary/20 text-primary"
+      className="shrink-0 inline-flex items-center justify-center min-w-[14px] h-[14px] px-1 rounded-full font-mono text-[9.5px] font-semibold tabular-nums bg-primary/20 text-primary"
     >
       {count}
     </span>
@@ -410,13 +410,13 @@ function FileEntry({
     >
       {/* Empty icon slot keeps file names aligned with folder names at the
           same indent (the chevron column for folders). */}
-      <span className="flex-shrink-0" style={{ width: ICON_SLOT }} />
+      <span className="shrink-0" style={{ width: ICON_SLOT }} />
       <span className={`flex-1 min-w-0 font-mono text-[11.5px] truncate text-left ${tint}`}>
         {file.name}
       </span>
       {commentCount > 0 && <CommentBadge count={commentCount} />}
       {change && (change.additions > 0 || change.deletions > 0) && (
-        <span className="font-mono text-[10.5px] flex gap-1.5 flex-shrink-0">
+        <span className="font-mono text-[10.5px] flex gap-1.5 shrink-0">
           {change.additions > 0 && (
             <span
               className={
@@ -435,7 +435,7 @@ function FileEntry({
       )}
       {change && (
         <span
-          className={`font-mono text-[10px] font-semibold w-3 text-center flex-shrink-0 ${
+          className={`font-mono text-[10px] font-semibold w-3 text-center shrink-0 ${
             selected ? 'text-primary' : STATUS_TEXT[change.status]
           }`}
         >
@@ -476,14 +476,14 @@ function CommitsDrawer({
 
   return (
     <div className="h-full min-h-0 flex flex-col">
-      <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-mono flex items-center gap-1.5 flex-shrink-0">
+      <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-mono flex items-center gap-1.5 shrink-0">
         <History size={11} strokeWidth={1.8} />
         <span>Commits</span>
         {commits.length > 0 && <span className="ml-auto tabular-nums">{commits.length}</span>}
       </div>
       <div
         ref={listRef}
-        className="flex-1 min-h-0 overflow-y-auto [scrollbar-gutter:stable] scrollbar-thin-hover pb-2 px-1"
+        className="flex-1 min-h-0 overflow-y-auto scrollbar-gutter-stable scrollbar-thin-hover pb-2 px-1"
       >
         {showWorkingTreeRow && (
           <button
@@ -496,7 +496,7 @@ function CommitsDrawer({
                 : 'text-foreground/85 hover:bg-[hsl(var(--surface-2)/0.6)]'
             }`}
           >
-            <GitCommit size={11} strokeWidth={1.8} className="opacity-60 flex-shrink-0" />
+            <GitCommit size={11} strokeWidth={1.8} className="opacity-60 shrink-0" />
             <span className="truncate flex-1 font-mono text-[11.5px]">Working tree</span>
           </button>
         )}
@@ -570,13 +570,13 @@ function CommitRow({ commit, active, onSelect }: CommitRowProps) {
               : 'text-foreground/85 hover:bg-[hsl(var(--surface-2)/0.6)]'
           }`}
         >
-          <span className="text-[10px] font-mono text-muted-foreground/60 tabular-nums flex-shrink-0">
+          <span className="text-[10px] font-mono text-muted-foreground/60 tabular-nums shrink-0">
             {commit.shortHash}
           </span>
           <span className="truncate flex-1 font-mono text-[11.5px]">
             {commit.subject || '(no subject)'}
           </span>
-          <span className="text-[10px] text-muted-foreground/40 flex-shrink-0 tabular-nums">
+          <span className="text-[10px] text-muted-foreground/40 shrink-0 tabular-nums">
             {relativeTime(commit.authorDate)}
           </span>
         </button>

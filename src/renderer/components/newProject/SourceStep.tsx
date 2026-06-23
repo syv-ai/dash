@@ -37,7 +37,7 @@ export function SourceStep({ onPick }: SourceStepProps) {
           onClick={() => onPick(card.id)}
           className="flex items-center gap-3 px-4 py-3.5 rounded-lg border border-border/60 hover:border-border hover:bg-accent/40 transition-all duration-150 text-left group"
         >
-          <div className="w-9 h-9 rounded-lg bg-accent/80 flex items-center justify-center flex-shrink-0 group-hover:bg-accent">
+          <div className="w-9 h-9 rounded-lg bg-accent/80 flex items-center justify-center shrink-0 group-hover:bg-accent">
             {card.icon}
           </div>
           <div>

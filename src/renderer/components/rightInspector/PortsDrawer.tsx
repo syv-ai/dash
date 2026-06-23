@@ -36,7 +36,7 @@ export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: 
       {collapsed ? (
         <button
           onClick={onExpand}
-          className="h-full w-full flex items-center gap-2 px-4 text-foreground/80 hover:text-foreground transition-colors border-t border-white/[0.08] hover:bg-white/[0.04]"
+          className="h-full w-full flex items-center gap-2 px-4 text-foreground/80 hover:text-foreground transition-colors border-t border-white/8 hover:bg-white/4"
         >
           <span className="text-[11px] font-semibold uppercase tracking-[0.08em]">{LABEL}</span>
           <span className="text-[10.5px] tabular-nums text-muted-foreground/80">{status}</span>
@@ -47,7 +47,7 @@ export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: 
           <ChevronUp size={12} strokeWidth={1.8} className="ml-auto" />
         </button>
       ) : (
-        <div className="ports-header flex items-center h-10 flex-shrink-0 border-t border-white/[0.08]">
+        <div className="ports-header flex items-center h-10 shrink-0 border-t border-white/8">
           <span className="ports-label ml-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground">
             {LABEL}
           </span>
@@ -61,7 +61,7 @@ export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: 
                 type="button"
                 onClick={runAll}
                 disabled={state.allRunnableUp || startingAll}
-                className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 disabled:opacity-40"
+                className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0 disabled:opacity-40"
               >
                 {startingAll ? (
                   <Loader2 size={11} strokeWidth={2} className="animate-spin" />
@@ -77,7 +77,7 @@ export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: 
                 type="button"
                 onClick={stopAll}
                 disabled={!state.anyRunning || stoppingAll}
-                className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-destructive transition-colors flex-shrink-0 disabled:opacity-40"
+                className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-destructive transition-colors shrink-0 disabled:opacity-40"
               >
                 {stoppingAll ? (
                   <Loader2 size={11} strokeWidth={2} className="animate-spin" />
@@ -94,7 +94,7 @@ export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: 
                 void state.refresh();
               }}
               disabled={state.refreshing}
-              className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 disabled:opacity-40"
+              className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0 disabled:opacity-40"
             >
               <RefreshCw
                 size={11}
@@ -105,7 +105,7 @@ export function PortsDrawer({ taskId, state, collapsed, onCollapse, onExpand }: 
           </Tooltip>
           <button
             onClick={onCollapse}
-            className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+            className="p-1 mr-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0"
           >
             <ChevronDown size={12} strokeWidth={2} />
           </button>

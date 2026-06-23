@@ -81,7 +81,7 @@ export function TerminalSearch({ searchAddon, onClose }: TerminalSearchProps) {
       : `${results.resultIndex + 1}/${results.resultCount}`;
 
   return (
-    <div className="absolute top-1 right-1 z-20 flex items-center gap-1 pl-2 pr-1 py-1 rounded-md bg-[hsl(var(--surface-1)/0.95)] border border-input/40 backdrop-blur shadow-md">
+    <div className="absolute top-1 right-1 z-20 flex items-center gap-1 pl-2 pr-1 py-1 rounded-md bg-[hsl(var(--surface-1)/0.95)] border border-input/40 backdrop-blur-sm shadow-md">
       <input
         ref={inputRef}
         type="text"
@@ -89,7 +89,7 @@ export function TerminalSearch({ searchAddon, onClose }: TerminalSearchProps) {
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={onKeyDown}
         placeholder="Find"
-        className="w-44 px-1 py-0.5 text-[12px] bg-transparent text-foreground placeholder:text-muted-foreground/40 outline-none"
+        className="w-44 px-1 py-0.5 text-[12px] bg-transparent text-foreground placeholder:text-muted-foreground/40 outline-hidden"
       />
       <span className="text-[10px] text-muted-foreground/70 font-mono min-w-[56px] text-right select-none">
         {counter}

@@ -96,7 +96,7 @@ export function TaskCard({
       {/* Main row */}
       <div className="row-start-1 col-start-2 flex items-center gap-2 min-w-0">
         {hasRemoteControl && (
-          <Globe size={10} strokeWidth={2} className="text-primary flex-shrink-0 -ml-0.5" />
+          <Globe size={10} strokeWidth={2} className="text-primary shrink-0 -ml-0.5" />
         )}
 
         <span
@@ -107,13 +107,13 @@ export function TaskCard({
 
         {/* Context percentage (visible when data available, hidden on hover to show actions) */}
         {ctx && ctx.percentage > 0 && (
-          <span className="text-[11px] tabular-nums flex-shrink-0 group-hover/task:hidden text-muted-foreground">
+          <span className="text-[11px] tabular-nums shrink-0 group-hover/task:hidden text-muted-foreground">
             {Math.round(ctx.percentage)}%
           </span>
         )}
 
         {/* Right slot: branch icon by default, actions on hover */}
-        <div className="flex items-center gap-0.5 flex-shrink-0">
+        <div className="flex items-center gap-0.5 shrink-0">
           {isActive && !ctx && (
             <GitBranch
               size={11}
