@@ -11,7 +11,7 @@ release/
 .claude/settings.local.json.tmp-*
 .claude/task-context.json
 claude.local.md
-docs/
+docs/plans/
 state.md
 .superpowers/
 mockups/sidebar/
