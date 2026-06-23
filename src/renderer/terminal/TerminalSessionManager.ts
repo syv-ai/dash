@@ -267,6 +267,13 @@ export class TerminalSessionManager {
   }
 
   private async loadGpuAddon() {
+    // Shell-only sessions render transparent (allowTransparency: true, theme
+    // background rgba(0,0,0,0)) so the floating right-pane glass shows through.
+    // xterm 6's WebGL renderer paints a transparent background as solid black,
+    // so use the built-in DOM renderer for these — it composites alpha
+    // correctly. (Opaque main terminals keep WebGL for output performance.)
+    if (this.shellOnly) return; // built-in DOM renderer — alpha-correct
+
     // xterm 6 removed the canvas renderer; the choices are WebGL or xterm's
     // built-in DOM renderer. On Linux, WebGL has had compositing bugs that
     // blank the terminal on content updates (typing, output), so we use the
