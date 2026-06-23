@@ -39,7 +39,7 @@ export function CommitDetailPanel({
 
   return (
     <div
-      className="flex-shrink-0 border-l border-border/60 flex flex-col overflow-hidden"
+      className="shrink-0 border-l border-border/60 flex flex-col overflow-hidden"
       style={{
         width: visible ? 340 : 0,
         opacity: visible ? 1 : 0,
@@ -52,7 +52,7 @@ export function CommitDetailPanel({
       {/* Inner wrapper with fixed width so content clips instead of reflowing */}
       <div className="flex flex-col flex-1 min-w-[340px] min-h-0">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 h-10 border-b border-border/60 flex-shrink-0">
+        <div className="flex items-center justify-between px-4 h-10 border-b border-border/60 shrink-0">
           <span className="text-[11px] font-semibold uppercase text-foreground/80 tracking-[0.08em]">
             Details
           </span>
@@ -89,7 +89,7 @@ export function CommitDetailPanel({
               {/* Meta */}
               <div className="flex flex-col gap-2 pt-2 border-t border-border/40">
                 <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                  <GitCommit size={12} strokeWidth={1.8} className="flex-shrink-0" />
+                  <GitCommit size={12} strokeWidth={1.8} className="shrink-0" />
                   {githubSlug ? (
                     <a
                       href={`https://github.com/${githubSlug}/commit/${detail.commit.hash}`}
@@ -110,7 +110,7 @@ export function CommitDetailPanel({
                   )}
                 </div>
                 <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                  <User size={12} strokeWidth={1.8} className="flex-shrink-0" />
+                  <User size={12} strokeWidth={1.8} className="shrink-0" />
                   {githubSlug ? (
                     <a
                       href={`https://github.com/${githubSlug}/commits?author=${encodeURIComponent(detail.commit.authorName)}`}

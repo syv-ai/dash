@@ -197,10 +197,10 @@ export function FileChangesPanel({
       ) : (
         <div key="changes" className="flex-1 min-h-0 flex flex-col animate-fade-in">
           {/* File list */}
-          <div className="flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+          <div className="flex-1 overflow-y-auto scrollbar-gutter-stable">
             {totalChanges === 0 && (
               <div className="flex flex-col items-center justify-center h-full gap-2">
-                <div className="w-8 h-8 rounded-xl bg-foreground/[0.05] flex items-center justify-center">
+                <div className="w-8 h-8 rounded-xl bg-foreground/5 flex items-center justify-center">
                   <FileDiff size={14} className="text-foreground/50" strokeWidth={1.5} />
                 </div>
                 <p className="text-[11px] text-foreground/60">No changes</p>
@@ -282,7 +282,7 @@ export function FileChangesPanel({
 
           {/* Commit area — always rendered to preserve textarea focus & state across git refreshes */}
           {stagedFiles.length > 0 && (
-            <div className="flex-shrink-0 glass-hairline-t p-2">
+            <div className="shrink-0 glass-hairline-t p-2">
               <Popover
                 open={commitOpen}
                 onOpenChange={(open) => {
@@ -309,7 +309,7 @@ export function FileChangesPanel({
                   onInteractOutside={(e) => e.preventDefault()}
                   className="w-[400px] h-[440px] p-3.5 flex flex-col gap-2.5"
                 >
-                  <div className="flex items-baseline justify-between flex-shrink-0">
+                  <div className="flex items-baseline justify-between shrink-0">
                     <h4 className="text-[12px] font-semibold text-foreground tracking-tight">
                       Commit{' '}
                       <span className="text-primary tabular-nums">
@@ -323,12 +323,12 @@ export function FileChangesPanel({
                     </span>
                   </div>
                   {error && (
-                    <div className="text-[11px] text-destructive bg-destructive/10 rounded px-2 py-1.5 flex items-start gap-1.5 flex-shrink-0">
-                      <span className="break-words flex-1 min-w-0">{error}</span>
+                    <div className="text-[11px] text-destructive bg-destructive/10 rounded px-2 py-1.5 flex items-start gap-1.5 shrink-0">
+                      <span className="wrap-break-word flex-1 min-w-0">{error}</span>
                       <button
                         onClick={() => setError(null)}
                         aria-label="Dismiss error"
-                        className="flex-shrink-0 -mr-0.5 -mt-0.5 p-0.5 rounded hover:bg-destructive/20 transition-colors"
+                        className="shrink-0 -mr-0.5 -mt-0.5 p-0.5 rounded hover:bg-destructive/20 transition-colors"
                       >
                         <X size={11} strokeWidth={2.5} />
                       </button>
@@ -349,7 +349,7 @@ export function FileChangesPanel({
                       }
                     }}
                     placeholder="Describe the change…"
-                    className="flex-1 min-h-0 w-full text-[12.5px] leading-relaxed bg-foreground/[0.04] border border-white/[0.08] rounded-md px-3 py-2 resize-none placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/40"
+                    className="flex-1 min-h-0 w-full text-[12.5px] leading-relaxed bg-foreground/4 border border-white/8 rounded-md px-3 py-2 resize-none placeholder:text-muted-foreground/40 focus:outline-hidden focus:border-primary/40"
                   />
                   <CircleCheck
                     checked={allowEmpty}
@@ -364,9 +364,9 @@ export function FileChangesPanel({
                         </Tooltip>
                       </span>
                     }
-                    className="flex-shrink-0"
+                    className="shrink-0"
                   />
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex items-center gap-2 shrink-0">
                     <span className="text-[10.5px] text-muted-foreground/70 font-mono">
                       <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-foreground/5 text-foreground/70">
                         ⌘

@@ -89,7 +89,7 @@ export function LeftSidebar({
             lights; elsewhere a smaller spacer gives the first item breathing
             room and aligns it with the main header strip (which has no
             titlebar spacer but a tall centered h-[52px] row). */}
-        <div className={`w-full flex-shrink-0 ${isMac ? 'h-[28px] titlebar-drag' : 'h-[14px]'}`} />
+        <div className={`w-full shrink-0 ${isMac ? 'h-[28px] titlebar-drag' : 'h-[14px]'}`} />
 
         {showRotation && (
           <>
@@ -102,7 +102,7 @@ export function LeftSidebar({
                     <Tooltip content={task.name}>
                       <button
                         onClick={() => onSelectTask(task.projectId, task.id)}
-                        className={`w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 text-[11px] font-medium transition-colors titlebar-no-drag ${
+                        className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 text-[11px] font-medium transition-colors titlebar-no-drag ${
                           isActiveTask
                             ? 'sidebar-pill-active text-primary'
                             : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
@@ -112,15 +112,15 @@ export function LeftSidebar({
                       </button>
                     </Tooltip>
                     {activity === 'error' ? (
-                      <div className="status-dot-err absolute -right-1 top-1/2 -mt-[3px] w-2 h-2 rounded-full" />
+                      <div className="status-dot-err absolute -right-1 top-1/2 mt-[-3px] w-2 h-2 rounded-full" />
                     ) : activity === 'waiting' ? (
-                      <div className="status-dot-wait absolute -right-1 top-1/2 -mt-[3px] w-2 h-2 rounded-full" />
+                      <div className="status-dot-wait absolute -right-1 top-1/2 mt-[-3px] w-2 h-2 rounded-full" />
                     ) : activity === 'busy' ? (
-                      <div className="absolute -right-1 top-1/2 -mt-[3px] w-2 h-2 rounded-full bg-amber-400 status-pulse" />
+                      <div className="absolute -right-1 top-1/2 mt-[-3px] w-2 h-2 rounded-full bg-amber-400 status-pulse" />
                     ) : activity === 'idle' && unseenTaskIds?.has(task.id) ? (
-                      <div className="status-dot-unseen absolute -right-1 top-1/2 -mt-[3px] w-2 h-2 rounded-full" />
+                      <div className="status-dot-unseen absolute -right-1 top-1/2 mt-[-3px] w-2 h-2 rounded-full" />
                     ) : activity === 'idle' ? (
-                      <div className="status-dot-idle absolute -right-1 top-1/2 -mt-[3px] w-2 h-2 rounded-full" />
+                      <div className="status-dot-idle absolute -right-1 top-1/2 mt-[-3px] w-2 h-2 rounded-full" />
                     ) : null}
                   </div>
                 );
@@ -133,7 +133,7 @@ export function LeftSidebar({
         <Tooltip content="Create project">
           <button
             onClick={onOpenFolder}
-            className="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0 hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
+            className="w-8 h-8 rounded-md flex items-center justify-center shrink-0 hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
           >
             <Plus size={16} strokeWidth={1.8} />
           </button>
@@ -192,7 +192,7 @@ export function LeftSidebar({
                       setDraggingId(null);
                     }}
                     onClick={() => onSelectProject(project.id)}
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-medium transition-transform duration-200 ease-in-out titlebar-no-drag ${
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-medium transition-transform duration-200 ease-in-out titlebar-no-drag ${
                       isActive
                         ? 'sidebar-pill-active text-primary'
                         : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
@@ -204,7 +204,7 @@ export function LeftSidebar({
                 {activity && (
                   <Tooltip content={activityLabel}>
                     <div
-                      className={`absolute -right-1 top-1/2 -mt-[3px] w-2 h-2 rounded-full ${
+                      className={`absolute -right-1 top-1/2 mt-[-3px] w-2 h-2 rounded-full ${
                         activity === 'error'
                           ? 'status-dot-err'
                           : activity === 'waiting'
@@ -226,7 +226,7 @@ export function LeftSidebar({
         <Tooltip content="Extensions">
           <button
             onClick={onOpenSkillsBrowser}
-            className="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0 hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
+            className="w-8 h-8 rounded-md flex items-center justify-center shrink-0 hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
           >
             <Blocks size={16} strokeWidth={1.5} />
           </button>
@@ -235,12 +235,12 @@ export function LeftSidebar({
         <Tooltip content="Settings">
           <button
             onClick={onOpenSettings}
-            className="relative w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0 hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
+            className="relative w-8 h-8 rounded-md flex items-center justify-center shrink-0 hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
           >
             <Settings size={16} strokeWidth={1.5} />
           </button>
         </Tooltip>
-        <div className="h-3 flex-shrink-0" />
+        <div className="h-3 shrink-0" />
       </div>
     );
   }
@@ -253,7 +253,7 @@ export function LeftSidebar({
           lights; elsewhere a smaller spacer gives "Active tasks" breathing room
           and aligns it with the main header strip (no titlebar spacer there,
           but a tall centered h-[52px] row). */}
-      <div className={`flex-shrink-0 ${isMac ? 'h-[28px] titlebar-drag' : 'h-[14px]'}`} />
+      <div className={`shrink-0 ${isMac ? 'h-[28px] titlebar-drag' : 'h-[14px]'}`} />
 
       {/* Rotation section */}
       {showActiveTasksSection && rotationTasks.length > 0 && (

@@ -31,7 +31,7 @@ export function Switch({
         e.stopPropagation();
         if (!disabled) onToggle(!enabled);
       }}
-      className={`relative inline-flex items-center rounded-full flex-shrink-0 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[hsl(var(--surface-2))] ${
+      className={`relative inline-flex items-center rounded-full shrink-0 transition-colors duration-200 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[hsl(var(--surface-2))] ${
         enabled ? 'bg-primary' : 'bg-border'
       } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
       style={{
@@ -44,7 +44,7 @@ export function Switch({
     >
       <span
         aria-hidden
-        className="absolute rounded-full bg-white shadow-[0_1px_2px_hsl(0_0%_0%/0.3),0_0_0_0.5px_hsl(0_0%_0%/0.05)] transition-transform duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
+        className="absolute rounded-full bg-white shadow-[0_1px_2px_hsl(0_0%_0%/0.3),0_0_0_0.5px_hsl(0_0%_0%/0.05)] transition-transform duration-200 ease-in-out"
         style={{
           width: dims.puck,
           height: dims.puck,

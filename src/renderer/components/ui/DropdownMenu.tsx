@@ -14,7 +14,7 @@ export const DropdownMenuContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       align={align}
-      className={`z-50 min-w-[10rem] rounded-lg border border-border/60 p-1 shadow-xl shadow-black/30 outline-none animate-popover-in ${className}`}
+      className={`z-50 min-w-40 rounded-lg border border-border/60 p-1 shadow-xl shadow-black/30 outline-hidden animate-popover-in ${className}`}
       style={{
         background: 'hsl(var(--popover))',
         color: 'hsl(var(--popover-foreground))',
@@ -32,7 +32,7 @@ export const DropdownMenuItem = React.forwardRef<
 >(({ className = '', ...props }, ref) => (
   <DropdownMenuPrimitive.Item
     ref={ref}
-    className={`relative flex cursor-pointer select-none items-center gap-2 rounded px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent data-[highlighted]:bg-accent data-[disabled]:pointer-events-none data-[disabled]:opacity-50 ${className}`}
+    className={`relative flex cursor-pointer select-none items-center gap-2 rounded px-2 py-1.5 text-sm outline-hidden transition-colors focus:bg-accent data-highlighted:bg-accent data-disabled:pointer-events-none data-disabled:opacity-50 ${className}`}
     {...props}
   />
 ));

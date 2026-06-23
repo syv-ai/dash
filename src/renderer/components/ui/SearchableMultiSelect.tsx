@@ -150,7 +150,7 @@ export function SearchableMultiSelect<T>({
               void fetchRecent();
             }}
             placeholder={placeholder}
-            className="flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/30 outline-none"
+            className="flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/30 outline-hidden"
           />
         </div>
 

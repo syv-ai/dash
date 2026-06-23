@@ -1,8 +1,44 @@
-@import '@xterm/xterm/css/xterm.css';
+@import '@xterm/xterm/css/xterm.css' layer(base);
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-warn: hsl(var(--warn));
+  --color-warn-foreground: hsl(var(--warn-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
 
 /* ── Obsidian Console Design System ─────────────────────── */
 
@@ -198,6 +234,11 @@
 /* Hide xterm scrollbar — Dash sets CLAUDE_CODE_NO_FLICKER=1 so Claude Code manages scrolling internally. */
 .terminal-container .xterm .xterm-viewport {
   scrollbar-width: none !important;
+  /* xterm 6's stylesheet hardcodes the viewport background to #000. Our grid
+     is centered (.xterm-screen margin:auto), so that black shows in the gutter
+     around the grid. Make it transparent so the .xterm theme background (or the
+     glass, for shell-only terminals) shows instead. */
+  background-color: transparent !important;
 }
 .terminal-container .xterm .xterm-viewport::-webkit-scrollbar {
   display: none !important;
@@ -212,9 +253,21 @@
 }
 .terminal-drawer .xterm .xterm-viewport {
   scrollbar-width: none !important;
+  background-color: transparent !important; /* see note above — let the glass show */
 }
 .terminal-drawer .xterm .xterm-viewport::-webkit-scrollbar {
   display: none !important;
+}
+/* xterm 6's DOM renderer (used for the transparent shell-only drawer) sizes
+   each row to `cols × css.cell.width` and clips it with `overflow: hidden`,
+   but the browser lays the glyphs out at the font's real advance — a hair
+   wider per cell — so the last glyph overflows the row box and gets clipped
+   (a visibly "capped" final character). Let rows overflow so the last glyph
+   renders in full; proposeDims() sizes columns against the real advance, so
+   the overflow lands inside the padding gutter, not past the glass.
+   WebGL terminals render to a canvas and are unaffected. */
+.terminal-drawer .xterm .xterm-rows > div {
+  overflow: visible !important;
 }
 
 /* ── Scrollbar ────────────────────────────────────────────── */

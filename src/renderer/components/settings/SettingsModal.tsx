@@ -204,7 +204,7 @@ function SettingsCard({
       {(title || hint) && (
         <header className="mb-2 px-1 flex items-baseline justify-between gap-3">
           {title && (
-            <h4 className="text-[10px] font-semibold tracking-[0.1em] uppercase text-foreground/55">
+            <h4 className="text-[10px] font-semibold tracking-widest uppercase text-foreground/55">
               {title}
             </h4>
           )}
@@ -251,7 +251,7 @@ function SettingsRow({
           <div className="text-[11px] text-foreground/45 mt-1 leading-relaxed">{description}</div>
         )}
       </div>
-      {control !== undefined && <div className="flex-shrink-0">{control}</div>}
+      {control !== undefined && <div className="shrink-0">{control}</div>}
     </div>
   );
 }
@@ -282,7 +282,7 @@ function KeyCap({ label, highlighted = false }: { label: string; highlighted?: b
       className={`inline-flex items-center justify-center min-w-[24px] h-[24px] px-1.5 rounded-[5px] text-[11px] font-medium leading-none font-mono transition-colors duration-150 ${
         highlighted
           ? 'border border-primary/45 bg-primary/12 text-foreground shadow-[0_1px_0_1px_hsl(var(--primary)/0.18),inset_0_1px_0_hsl(var(--primary)/0.12)]'
-          : 'border border-border/80 bg-gradient-to-b from-white/[0.06] to-transparent text-foreground/80 shadow-[0_1px_0_1px_hsl(var(--border)/0.4),inset_0_1px_0_hsl(var(--foreground)/0.04)]'
+          : 'border border-border/80 bg-linear-to-b from-white/6 to-transparent text-foreground/80 shadow-[0_1px_0_1px_hsl(var(--border)/0.4),inset_0_1px_0_hsl(var(--foreground)/0.04)]'
       }`}
     >
       {label}
@@ -532,7 +532,7 @@ function ThresholdInputInline({
           onChange(raw === '' || !Number.isFinite(n) || n < 0 ? null : Math.min(100, n));
         }}
         placeholder={placeholder ?? 'Off'}
-        className="w-[80px] px-3 py-1.5 rounded-md text-[12px] text-right tabular-nums border border-border/60 bg-transparent text-foreground placeholder:text-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        className="w-[80px] px-3 py-1.5 rounded-md text-[12px] text-right tabular-nums border border-border/60 bg-transparent text-foreground placeholder:text-foreground/30 focus:outline-hidden focus:ring-1 focus:ring-primary/40 focus:border-primary/40 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
       />
       <span className="text-[11px] text-foreground/40">%</span>
     </div>
@@ -579,7 +579,7 @@ function ClaudeCodeTab({
         style={{ background: 'hsl(var(--surface-2))' }}
       >
         <div
-          className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
+          className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
             claudeInfo?.installed
               ? 'bg-[hsl(var(--git-added)/0.12)] ring-1 ring-[hsl(var(--git-added))/0.25]'
               : 'bg-[hsl(var(--git-modified)/0.12)] ring-1 ring-[hsl(var(--git-modified))/0.25]'
@@ -679,7 +679,7 @@ function ClaudeCodeTab({
                 </span>
                 <button
                   onClick={() => removeEntry(key)}
-                  className="p-1.5 rounded-md hover:bg-destructive/10 text-foreground/40 hover:text-destructive transition-all duration-150 flex-shrink-0"
+                  className="p-1.5 rounded-md hover:bg-destructive/10 text-foreground/40 hover:text-destructive transition-all duration-150 shrink-0"
                 >
                   <Trash2 size={13} strokeWidth={1.8} />
                 </button>
@@ -694,7 +694,7 @@ function ClaudeCodeTab({
                   if (e.key === 'Enter') addEntry();
                 }}
                 placeholder="VARIABLE_NAME"
-                className="flex-1 min-w-0 px-2.5 py-1.5 rounded-md text-[11.5px] font-mono border border-border/60 bg-transparent text-foreground placeholder:text-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40"
+                className="flex-1 min-w-0 px-2.5 py-1.5 rounded-md text-[11.5px] font-mono border border-border/60 bg-transparent text-foreground placeholder:text-foreground/30 focus:outline-hidden focus:ring-1 focus:ring-primary/40 focus:border-primary/40"
               />
               <span className="text-foreground/30 text-[12px]">=</span>
               <input
@@ -705,12 +705,12 @@ function ClaudeCodeTab({
                   if (e.key === 'Enter') addEntry();
                 }}
                 placeholder="value"
-                className="flex-1 min-w-0 px-2.5 py-1.5 rounded-md text-[11.5px] font-mono border border-border/60 bg-transparent text-foreground placeholder:text-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40"
+                className="flex-1 min-w-0 px-2.5 py-1.5 rounded-md text-[11.5px] font-mono border border-border/60 bg-transparent text-foreground placeholder:text-foreground/30 focus:outline-hidden focus:ring-1 focus:ring-primary/40 focus:border-primary/40"
               />
               <button
                 onClick={addEntry}
                 disabled={!newKey.trim()}
-                className="p-1.5 rounded-md hover:bg-primary/10 text-foreground/40 hover:text-primary transition-all duration-150 flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
+                className="p-1.5 rounded-md hover:bg-primary/10 text-foreground/40 hover:text-primary transition-all duration-150 shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 <Plus size={13} strokeWidth={1.8} />
               </button>
@@ -889,7 +889,7 @@ export function SettingsModal({
       <div className="flex-1 flex min-h-0">
         {/* Sidebar */}
         <nav
-          className="sidebar-shell w-[224px] flex-shrink-0 flex flex-col border-r border-border/40"
+          className="sidebar-shell w-[224px] shrink-0 flex flex-col border-r border-border/40"
           aria-label="Settings sections"
         >
           <div className="px-5 pt-5 pb-3 flex items-center justify-between">
@@ -943,7 +943,7 @@ export function SettingsModal({
                             <item.Icon
                               size={13}
                               strokeWidth={1.8}
-                              className={`flex-shrink-0 transition-colors duration-150 ${
+                              className={`shrink-0 transition-colors duration-150 ${
                                 active
                                   ? 'text-primary'
                                   : 'text-muted-foreground/70 group-hover:text-foreground/80'
@@ -951,7 +951,7 @@ export function SettingsModal({
                             />
                             <span className="flex-1 text-left truncate">{item.label}</span>
                             {showDot && (
-                              <span className="w-[6px] h-[6px] rounded-full bg-[hsl(var(--git-added))] shadow-[0_0_6px_hsl(var(--git-added)/0.6)] flex-shrink-0" />
+                              <span className="w-[6px] h-[6px] rounded-full bg-[hsl(var(--git-added))] shadow-[0_0_6px_hsl(var(--git-added)/0.6)] shrink-0" />
                             )}
                           </button>
                         </li>
@@ -963,7 +963,7 @@ export function SettingsModal({
             </div>
           </div>
           <div className="px-5 py-3 border-t border-border/30 flex items-center justify-between">
-            <span className="text-[10px] font-medium tracking-[0.1em] uppercase text-muted-foreground/45">
+            <span className="text-[10px] font-medium tracking-widest uppercase text-muted-foreground/45">
               Dash
             </span>
             <span className="text-[10px] font-mono text-muted-foreground/55">
@@ -1044,7 +1044,7 @@ export function SettingsModal({
                         className={`w-full px-3 py-2.5 rounded-lg text-[12px] font-mono border bg-transparent resize-none ${
                           commitAttribution === undefined
                             ? 'border-border/40 text-foreground/40 cursor-default'
-                            : 'border-border/60 text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40'
+                            : 'border-border/60 text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary/40 focus:border-primary/40'
                         }`}
                       />
                     </SettingsBlock>
@@ -1136,7 +1136,7 @@ export function SettingsModal({
                                   onCustomIDEChange({ ...customIDE, path: e.target.value })
                                 }
                                 placeholder="/Applications/MyIDE.app/Contents/MacOS/myide"
-                                className="flex-1 px-3 py-2 text-[11.5px] rounded-md border border-border/60 bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-1 focus:ring-primary/40 font-mono"
+                                className="flex-1 px-3 py-2 text-[11.5px] rounded-md border border-border/60 bg-background text-foreground placeholder:text-foreground/40 focus:outline-hidden focus:ring-1 focus:ring-primary/40 font-mono"
                               />
                               <button
                                 onClick={() => {
@@ -1174,7 +1174,7 @@ export function SettingsModal({
                               }
                               rows={3}
                               placeholder={'--new-window\n{path}'}
-                              className="w-full px-3 py-2 text-[11.5px] rounded-md border border-border/60 bg-background text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-1 focus:ring-primary/40 font-mono resize-y"
+                              className="w-full px-3 py-2 text-[11.5px] rounded-md border border-border/60 bg-background text-foreground placeholder:text-foreground/40 focus:outline-hidden focus:ring-1 focus:ring-primary/40 font-mono resize-y"
                             />
                             <p className="text-[10.5px] text-foreground/45 mt-1.5 leading-relaxed">
                               Use <code className="text-foreground/65">{'{path}'}</code> to place
@@ -1273,7 +1273,7 @@ export function SettingsModal({
                   <SettingsCard title="Status">
                     <div className="flex items-center gap-3 px-4 py-3.5">
                       <div
-                        className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                        className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
                           updateStatus === 'ready' || updateStatus === 'available'
                             ? 'bg-[hsl(var(--git-added)/0.12)] ring-1 ring-[hsl(var(--git-added))/0.25]'
                             : 'bg-[hsl(var(--surface-3))] ring-1 ring-border/40'
@@ -1604,7 +1604,7 @@ export function SettingsModal({
                             key={binding.id}
                             className={`relative group flex items-center justify-between gap-3 px-4 py-2 transition-colors duration-150 ${
                               modified
-                                ? 'bg-primary/[0.04] hover:bg-primary/[0.07]'
+                                ? 'bg-primary/4 hover:bg-primary/[0.07]'
                                 : 'hover:bg-accent/20'
                             }`}
                           >
@@ -1619,12 +1619,12 @@ export function SettingsModal({
                                 {binding.label}
                               </span>
                               {modified && (
-                                <span className="text-[9.5px] font-medium tracking-[0.08em] uppercase text-primary/90 px-1.5 py-0.5 rounded-md bg-primary/10 border border-primary/20 flex-shrink-0">
+                                <span className="text-[9.5px] font-medium tracking-[0.08em] uppercase text-primary/90 px-1.5 py-0.5 rounded-md bg-primary/10 border border-primary/20 shrink-0">
                                   Modified
                                 </span>
                               )}
                             </div>
-                            <div className="flex items-center gap-1 flex-shrink-0">
+                            <div className="flex items-center gap-1 shrink-0">
                               <KeyRecorder
                                 binding={binding}
                                 modified={modified}
@@ -1767,7 +1767,7 @@ function StatusOrb({ state }: { state: 'active' | 'inactive' | 'pending' | 'erro
   const c = palette[state];
   return (
     <span
-      className="inline-block w-[8px] h-[8px] rounded-full flex-shrink-0"
+      className="inline-block w-[8px] h-[8px] rounded-full shrink-0"
       style={{
         background: c.dot,
         boxShadow: state === 'inactive' ? 'none' : `0 0 0 1px ${c.halo}, 0 0 8px ${c.halo}`,
@@ -1818,7 +1818,7 @@ function AddOnAccordion({
         <ChevronDown
           size={14}
           strokeWidth={1.8}
-          className={`text-foreground/40 flex-shrink-0 transition-transform duration-200 ${
+          className={`text-foreground/40 shrink-0 transition-transform duration-200 ${
             open ? 'rotate-180' : 'rotate-0'
           }`}
         />
@@ -1882,7 +1882,7 @@ function RtkSection({
         style={{ background: 'hsl(var(--surface-2))' }}
       >
         <div
-          className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+          className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
             status?.installed
               ? 'bg-[hsl(var(--git-added)/0.12)]'
               : 'bg-[hsl(var(--git-modified)/0.12)]'
@@ -2077,7 +2077,7 @@ function RtkTestResultCard({ result }: { result: RtkTestResult }) {
               </span>
               <p className="text-[11px] text-foreground/70">{failedDiff.reason}</p>
               {failedDiff.stderr && (
-                <pre className="text-[10px] text-foreground/50 font-mono whitespace-pre-wrap break-words">
+                <pre className="text-[10px] text-foreground/50 font-mono whitespace-pre-wrap wrap-break-word">
                   {failedDiff.stderr}
                 </pre>
               )}
@@ -2146,7 +2146,7 @@ function OutputPanel({
       >
         {label}
       </div>
-      <pre className="px-2 py-1.5 max-h-48 overflow-auto whitespace-pre-wrap break-words text-foreground/80">
+      <pre className="px-2 py-1.5 max-h-48 overflow-auto whitespace-pre-wrap wrap-break-word text-foreground/80">
         {displayBody}
       </pre>
     </div>

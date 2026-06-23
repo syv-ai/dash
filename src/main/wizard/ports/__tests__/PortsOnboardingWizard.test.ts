@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { PortsOnboardingWizard } from '../PortsOnboardingWizard';
 import type { PortsMainToTui } from '../../../../shared/portsTuiProtocol';
 
@@ -36,12 +36,12 @@ function makeServices() {
 
 let sock: FakeSocket;
 let services: ReturnType<typeof makeServices>;
-let onTeardown: ReturnType<typeof vi.fn>;
+let onTeardown: Mock<(reason: string | null) => void>;
 
 function makeFlow() {
   sock = new FakeSocket();
   services = makeServices();
-  onTeardown = vi.fn();
+  onTeardown = vi.fn<(reason: string | null) => void>();
   return new PortsOnboardingWizard('t1', 'p1', { socket: sock as never, onTeardown }, services);
 }
 
@@ -96,7 +96,7 @@ describe('PortsOnboardingWizard', () => {
     services.migrate = vi.fn(async () => {
       throw new Error('git worktree add failed');
     });
-    onTeardown = vi.fn();
+    onTeardown = vi.fn<(reason: string | null) => void>();
     const failing = new PortsOnboardingWizard(
       't1',
       'p1',

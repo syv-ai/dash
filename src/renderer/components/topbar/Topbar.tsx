@@ -13,7 +13,7 @@ export function Topbar({ isMac = false }: TopbarProps) {
   if (!isMac) return null;
   return (
     <header
-      className="h-[32px] flex-shrink-0 titlebar-drag"
+      className="h-[32px] shrink-0 titlebar-drag"
       style={{ background: 'hsl(var(--surface-1))' }}
     />
   );

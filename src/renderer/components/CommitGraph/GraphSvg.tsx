@@ -1,13 +1,7 @@
 import React from 'react';
 import type { GraphCommit } from '../../../shared/types';
 import { getLaneColor } from './graphColors';
-import {
-  LANE_WIDTH,
-  ROW_HEIGHT,
-  NODE_RADIUS,
-  LINE_WIDTH,
-  GRAPH_PADDING_LEFT,
-} from './graphLayout';
+import { LANE_WIDTH, ROW_HEIGHT, NODE_RADIUS, LINE_WIDTH, GRAPH_PADDING_LEFT } from './graphLayout';
 
 interface GraphSvgProps {
   commits: GraphCommit[];
@@ -28,12 +22,7 @@ export function GraphSvg({ commits, maxLanes, selectedRow }: GraphSvgProps) {
   }
 
   return (
-    <svg
-      width={width}
-      height={height}
-      className="flex-shrink-0"
-      style={{ minWidth: width }}
-    >
+    <svg width={width} height={height} className="shrink-0" style={{ minWidth: width }}>
       {/* Connection lines */}
       {commits.map((gc, row) =>
         gc.connections.map((conn, ci) => {
@@ -86,12 +75,7 @@ export function GraphSvg({ commits, maxLanes, selectedRow }: GraphSvgProps) {
         return (
           <g key={gc.commit.hash}>
             {/* Background ring for contrast */}
-            <circle
-              cx={x}
-              cy={y}
-              r={NODE_RADIUS + 1.5}
-              fill="hsl(var(--background))"
-            />
+            <circle cx={x} cy={y} r={NODE_RADIUS + 1.5} fill="hsl(var(--background))" />
             {/* Commit dot */}
             <circle
               cx={x}

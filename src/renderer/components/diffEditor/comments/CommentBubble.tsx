@@ -74,7 +74,7 @@ export function CommentBubble({
           <div className="font-mono text-[10px] text-muted-foreground/55 mb-[2px] tracking-normal">
             {meta}
           </div>
-          <div className="whitespace-pre-wrap break-words">{text}</div>
+          <div className="whitespace-pre-wrap wrap-break-word">{text}</div>
         </div>
       </BubbleShell>
     </div>

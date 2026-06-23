@@ -52,7 +52,7 @@ export function PortsDrawerWrapper({
         {children}
       </Panel>
       {/* Stays live while collapsed so the bar can be dragged back open. */}
-      <PanelResizeHandle className="h-[1px] bg-transparent" />
+      <PanelResizeHandle className="h-px bg-transparent" />
       <Panel
         id="ports-list"
         order={2}

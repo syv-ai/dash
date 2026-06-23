@@ -56,7 +56,7 @@ export function ScopeSidebar({
         {chevron ? (
           <button
             onClick={chevron.onToggle}
-            className="flex-shrink-0 py-1.5 pl-1.5 pr-0.5 text-foreground/35 hover:text-foreground/70"
+            className="shrink-0 py-1.5 pl-1.5 pr-0.5 text-foreground/35 hover:text-foreground/70"
             aria-label={chevron.open ? 'Collapse' : 'Expand'}
           >
             <ChevronRight
@@ -67,7 +67,7 @@ export function ScopeSidebar({
             />
           </button>
         ) : (
-          <span className={indent ? 'w-6 flex-shrink-0' : 'w-2 flex-shrink-0'} />
+          <span className={indent ? 'w-6 shrink-0' : 'w-2 shrink-0'} />
         )}
         <button
           onClick={() => onSelect(id)}
@@ -84,7 +84,7 @@ export function ScopeSidebar({
   };
 
   return (
-    <div className="w-[262px] flex-shrink-0 space-y-0.5 overflow-y-auto border-r border-border/40 p-2">
+    <div className="w-[262px] shrink-0 space-y-0.5 overflow-y-auto border-r border-border/40 p-2">
       {loading && (
         <div className="flex justify-center p-4 text-foreground/40">
           <Loader2 size={16} className="animate-spin" />
