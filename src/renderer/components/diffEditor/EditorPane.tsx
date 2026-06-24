@@ -307,7 +307,7 @@ export function EditorPane({
   // Inline git blame: on hover, a same-commit block highlight in the editor body
   // plus a band + info card on the right overview-ruler strip. Toggled from the
   // header (and the card's ×) via `blameEnabled`.
-  const { rulerMark, rulerVisible, rulerHost, holdLabel, releaseLabel } = useGitBlame({
+  const { rulerMark, rulerVisible, rulerSlide, rulerHost, holdLabel, releaseLabel } = useGitBlame({
     cwd,
     filePath,
     view,
@@ -457,6 +457,7 @@ export function EditorPane({
                 <div
                   className="monaco-blame-ruler-band"
                   data-visible={rulerVisible}
+                  data-slide={rulerSlide}
                   style={{ top: rulerMark.top, height: rulerMark.height }}
                 />
               );
@@ -467,6 +468,7 @@ export function EditorPane({
                     ref={blameLabelRef}
                     className="monaco-blame-ruler-label"
                     data-visible={rulerVisible}
+                    data-slide={rulerSlide}
                     style={{ top: rulerMark.top }}
                     onMouseEnter={holdLabel}
                     onMouseLeave={releaseLabel}

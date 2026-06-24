@@ -55,6 +55,10 @@ export function useGitBlame({
 }: Args): {
   rulerMark: BlameRulerMark | null;
   rulerVisible: boolean;
+  /** True only when the card moves directly between two commits (visible→visible)
+   *  — drives the eased top/height slide. False on a fresh appear so the card
+   *  doesn't glide in from the previous commit's position. */
+  rulerSlide: boolean;
   rulerHost: HTMLElement | null;
   /** Keep blame shown while the pointer is over the label (cancels the hide). */
   holdLabel: () => void;
@@ -66,6 +70,7 @@ export function useGitBlame({
   // OUT in place; `rulerVisible` drives the in/out transition.
   const [rulerMark, setRulerMark] = useState<BlameRulerMark | null>(null);
   const [rulerVisible, setRulerVisible] = useState(false);
+  const [rulerSlide, setRulerSlide] = useState(false);
   // A div inserted as the first child of Monaco's `.diffOverview` so the band
   // paints BEHIND the ruler's diff add/delete marks; null until located.
   const [rulerHost, setRulerHost] = useState<HTMLElement | null>(null);
@@ -190,10 +195,14 @@ export function useGitBlame({
         return;
       }
       clearOutTimer(); // cancel any pending fade-out clear
+      // A move between two already-shown commits should slide; a fresh appear
+      // (was hidden) should snap to position, then fade in.
+      const moving = shownRun !== null;
       shownRun = run;
       paintBlock(run, 'monaco-blame-block');
       const mark = buildMark(run);
       if (mark) {
+        setRulerSlide(moving);
         setRulerMark(mark);
         setRulerVisible(true);
       }
@@ -285,5 +294,5 @@ export function useGitBlame({
     };
   }, [modifiedEditor, monaco, lines, enabled]);
 
-  return { rulerMark, rulerVisible, rulerHost, holdLabel, releaseLabel };
+  return { rulerMark, rulerVisible, rulerSlide, rulerHost, holdLabel, releaseLabel };
 }

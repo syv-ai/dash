@@ -1003,23 +1003,19 @@
 }
 
 /* Inline git blame — the contiguous run of lines from the hovered line's commit.
- * Faint enough to read under the comment shade bands. Fades in on appear; the
- * hook swaps to the -out class to fade it back out before dropping the
- * decoration. The blame text itself lives in the ruler label below. */
+ * Faint enough to read under the comment shade bands. The blame text itself lives
+ * in the ruler label below.
+ *
+ * The steady tint is a STATIC background (no keyframe): Monaco recreates a line
+ * decoration's DOM node on every cursor/selection change, which would replay any
+ * keyframe on that node — so an in-animation here flickered the whole block on a
+ * click inside it. Only the deliberate fade-OUT (set once, on hide, when nobody
+ * is clicking) keeps a keyframe. */
 .monaco-blame-block {
   background-color: hsl(var(--primary) / 0.07);
-  animation: blame-block-in 340ms ease;
 }
 .monaco-blame-block-out {
   animation: blame-block-out 340ms ease forwards;
-}
-@keyframes blame-block-in {
-  from {
-    background-color: hsl(var(--primary) / 0);
-  }
-  to {
-    background-color: hsl(var(--primary) / 0.07);
-  }
 }
 @keyframes blame-block-out {
   from {
@@ -1061,6 +1057,14 @@
 .monaco-blame-ruler-band[data-visible='true'] {
   opacity: 1;
 }
+/* Slide between commits (visible→visible) — gated on data-slide so a fresh
+ * appear snaps to position instead of gliding in from the previous commit. */
+.monaco-blame-ruler-band[data-slide='true'] {
+  transition:
+    opacity 340ms ease,
+    top 260ms cubic-bezier(0.4, 0, 0.2, 1),
+    height 260ms cubic-bezier(0.4, 0, 0.2, 1);
+}
 
 /* Commit card butted against the band's left edge (square inner corner, primary
  * right border tying it to the band). Narrow + stacked: author, then sha · age,
@@ -1091,6 +1095,17 @@
 }
 .monaco-blame-ruler-label[data-visible='true'] {
   opacity: 1;
+}
+/* Slide the card to the new commit (visible→visible). The top is set
+ * imperatively (clamped) in EditorPane, so this transition eases that change;
+ * a fresh appear (data-slide='false') snaps, then fades in. */
+.monaco-blame-ruler-label[data-slide='true'] {
+  transition:
+    opacity 340ms ease,
+    top 260ms cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease;
 }
 /* Hover feedback — the card lifts slightly and firms up its surface/border. */
 .monaco-blame-ruler-label:hover {
