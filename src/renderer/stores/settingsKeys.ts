@@ -7,7 +7,6 @@ import {
   strEnum,
   json,
   stringSet,
-  nullableInt,
   strOrUndefined,
 } from './settingsCodecs';
 import type { NotificationSound } from '../sounds';
@@ -38,7 +37,6 @@ export interface SettingsState {
   rotationOrder: string[];
   rotationExclusions: Set<string>;
   unseenTaskIds: Set<string>;
-  diffContextLines: number | null;
   commitAttribution: string | undefined;
   preferredIDE: string;
   keybindings: KeyBindingMap;
@@ -116,7 +114,6 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   entry('rotationOrder', 'rotationOrder', json<string[]>([])),
   entry('rotationExclusions', 'rotationExclusions', stringSet()),
   entry('unseenTaskIds', 'unseenTaskIds', stringSet()),
-  entry('diffContextLines', 'diffContextLines', nullableInt(3)),
   entry('commitAttribution', 'commitAttribution', strOrUndefined()),
   entry('preferredIDE', 'preferredIDE', str('auto')),
   entry('keybindings', 'keybindings', keybindingsCodec()),

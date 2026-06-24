@@ -24,7 +24,6 @@ import {
   Info,
   ChevronDown,
   PanelLeft,
-  GitCompare,
   Terminal as TerminalIcon,
   GitCommit,
   Shield,
@@ -65,7 +64,6 @@ type SettingsTab =
   | 'sidebar'
   | 'appearance'
   | 'notifications'
-  | 'diff'
   | 'terminal'
   | 'ide'
   | 'attribution'
@@ -79,7 +77,7 @@ type SettingsTab =
 
 const NAV_GROUPS: Array<{ label: string; ids: SettingsTab[] }> = [
   { label: 'Interface', ids: ['sidebar', 'appearance', 'notifications'] },
-  { label: 'Editor', ids: ['diff', 'terminal', 'ide'] },
+  { label: 'Editor', ids: ['terminal', 'ide'] },
   { label: 'Workflow', ids: ['attribution', 'claude-code', 'keybindings', 'usage'] },
   { label: 'System', ids: ['add-ons', 'updates', 'privacy', 'about'] },
 ];
@@ -107,12 +105,6 @@ const NAV_ITEMS: Array<{
     label: 'Notifications',
     description: 'Sound and desktop alerts when tasks need attention.',
     Icon: Bell,
-  },
-  {
-    id: 'diff',
-    label: 'Diff',
-    description: 'How file diffs are displayed.',
-    Icon: GitCompare,
   },
   {
     id: 'terminal',
@@ -735,8 +727,6 @@ export function SettingsModal({
   const onRtkDownload = useRuntime((s) => s.downloadRtk);
   const theme = useSettings((s) => s.theme);
   const onThemeChange = useSettings((s) => s.setTheme);
-  const diffContextLines = useSettings((s) => s.diffContextLines);
-  const onDiffContextLinesChange = useSettings((s) => s.setDiffContextLines);
   const notificationSound = useSettings((s) => s.notificationSound);
   const setNotificationSound = useSettings((s) => s.setNotificationSound);
   const onNotificationSoundChange = (v: NotificationSound) => {
@@ -1048,34 +1038,6 @@ export function SettingsModal({
                         }`}
                       />
                     </SettingsBlock>
-                  </SettingsCard>
-                </SettingsPane>
-              )}
-
-              {tab === 'diff' && (
-                <SettingsPane key={`pane-${tab}`}>
-                  <SettingsCard title="Context">
-                    <SettingsRow
-                      label="Context lines"
-                      description="Unchanged lines shown around each change."
-                      align="start"
-                      control={
-                        <Segmented
-                          fullWidth={false}
-                          size="sm"
-                          value={diffContextLines === null ? 'full' : String(diffContextLines)}
-                          options={[
-                            { value: 'full', label: 'Full' },
-                            { value: '3', label: '3' },
-                            { value: '10', label: '10' },
-                            { value: '50', label: '50' },
-                          ]}
-                          onChange={(v) =>
-                            onDiffContextLinesChange(v === 'full' ? null : Number(v))
-                          }
-                        />
-                      }
-                    />
                   </SettingsCard>
                 </SettingsPane>
               )}
