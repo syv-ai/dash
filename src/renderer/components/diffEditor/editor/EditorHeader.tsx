@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Code2, Eye, GitCommit, GitCompare, MessageSquare, WrapText, X } from 'lucide-react';
+import {
+  Code2,
+  Eye,
+  GitCommit,
+  GitCompare,
+  History,
+  MessageSquare,
+  WrapText,
+  X,
+} from 'lucide-react';
 import type { EditorView } from '../types';
 import { Popover, PopoverAnchor, PopoverContent } from '../../ui/Popover';
 import { Tooltip } from '../../ui/Tooltip';
@@ -11,6 +20,9 @@ interface Props {
   view: EditorView;
   wordWrap: boolean;
   onToggleWordWrap(): void;
+  /** Inline git-blame toggle (default on, persisted). */
+  blameEnabled: boolean;
+  onToggleBlame(): void;
   /** Show the Code | Preview toggle (HTML files only). */
   canPreview: boolean;
   /** True when the rendered preview is showing instead of the editor. */
@@ -36,6 +48,8 @@ export function EditorHeader({
   view,
   wordWrap,
   onToggleWordWrap,
+  blameEnabled,
+  onToggleBlame,
   canPreview,
   previewing,
   onTogglePreview,
@@ -191,6 +205,17 @@ export function EditorHeader({
             />
           </PopoverContent>
         </Popover>
+        <button
+          onClick={onToggleBlame}
+          title={blameEnabled ? 'Hide git blame' : 'Show git blame'}
+          className={`p-1.5 rounded-md transition-colors ${
+            blameEnabled
+              ? 'bg-primary/15 text-primary'
+              : 'text-muted-foreground/60 hover:text-foreground hover:bg-accent/60'
+          }`}
+        >
+          <History size={14} strokeWidth={1.8} />
+        </button>
         <button
           onClick={onToggleWordWrap}
           title={wordWrap ? 'Disable word wrap' : 'Enable word wrap'}

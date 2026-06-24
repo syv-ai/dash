@@ -2,6 +2,7 @@ import { useMemo, useRef, useState, useEffect } from 'react';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 import { ChevronDown, ChevronRight, GitCommit, History } from 'lucide-react';
 import type { FileChange, FileChangeStatus } from '../../../shared/types';
+import { formatRelativeTime } from '@shared/relativeTime';
 import type { CommitSummary, EditorView } from './types';
 import { Popover, PopoverAnchor, PopoverContent } from '../ui/Popover';
 import { Tooltip } from '../ui/Tooltip';
@@ -579,7 +580,7 @@ function CommitRow({ commit, active, commentCount, onSelect }: CommitRowProps) {
           </span>
           {commentCount > 0 && <CommentBadge count={commentCount} />}
           <span className="text-[10px] text-muted-foreground/40 shrink-0 tabular-nums">
-            {relativeTime(commit.authorDate)}
+            {formatRelativeTime(commit.authorDate, Date.now() / 1000)}
           </span>
         </button>
       </PopoverAnchor>
@@ -615,20 +616,11 @@ function CommitRow({ commit, active, commentCount, onSelect }: CommitRowProps) {
           <span className="opacity-50">·</span>
           <span className="truncate">{commit.authorName}</span>
           <span className="opacity-50">·</span>
-          <span className="tabular-nums">{relativeTime(commit.authorDate)}</span>
+          <span className="tabular-nums">
+            {formatRelativeTime(commit.authorDate, Date.now() / 1000)}
+          </span>
         </div>
       </PopoverContent>
     </Popover>
   );
-}
-
-function relativeTime(unixSeconds: number): string {
-  if (!unixSeconds) return '';
-  const s = Math.floor(Date.now() / 1000 - unixSeconds);
-  if (s < 60) return `${s}s`;
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  if (s < 86400 * 30) return `${Math.floor(s / 86400)}d`;
-  if (s < 86400 * 365) return `${Math.floor(s / (86400 * 30))}mo`;
-  return `${Math.floor(s / (86400 * 365))}y`;
 }

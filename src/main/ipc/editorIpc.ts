@@ -5,7 +5,9 @@ import { execFile } from 'child_process';
 import path from 'path';
 import { promisify } from 'util';
 import { parseArgs, errorResponse, ipcError } from './validate';
+import { parseBlameIncremental } from '../services/blameParser';
 import type {
+  EditorBlameResult,
   EditorCommitListItem,
   EditorReadBranchResult,
   EditorReadCommitResult,
@@ -385,6 +387,58 @@ export function registerEditorIpc(): void {
             language: detectLanguage(args.filePath),
           },
         };
+      } catch (err) {
+        return errorResponse(err);
+      }
+    },
+  );
+
+  // ── editor:blame ──────────────────────────────────────────────
+  ipcMain.handle(
+    'editor:blame',
+    async (
+      _event,
+      args: { cwd: string; filePath: string; ref: string | null },
+    ): Promise<IpcResponse<EditorBlameResult>> => {
+      try {
+        parseArgs(
+          'editor:blame',
+          z.looseObject({
+            cwd: z.string(),
+            filePath: z.string(),
+            ref: z.string().nullable(),
+          }),
+          args,
+        );
+        const abs = resolveInsideCwd(args.cwd, args.filePath);
+        const cwdAbs = path.resolve(args.cwd);
+        let cwdReal = cwdAbs;
+        try {
+          cwdReal = safeRealpath(cwdAbs);
+        } catch {
+          /* cwdAbs is fine */
+        }
+        const relForGit = path.relative(cwdReal, abs);
+        const blameArgs = [
+          'blame',
+          '--incremental',
+          ...(args.ref ? [args.ref] : []),
+          '--',
+          relForGit,
+        ];
+
+        let stdout = '';
+        try {
+          ({ stdout } = await execFileAsync('git', blameArgs, {
+            cwd: args.cwd,
+            maxBuffer: LARGE_FILE_BYTES,
+            timeout: 15000,
+          }));
+        } catch {
+          // Untracked / new / binary / unreadable files have no blame.
+          return { success: true, data: { lines: [] } };
+        }
+        return { success: true, data: { lines: parseBlameIncremental(stdout) } };
       } catch (err) {
         return errorResponse(err);
       }

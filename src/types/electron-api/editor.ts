@@ -5,6 +5,7 @@ import type {
   EditorReadBranchResult,
   EditorWriteResult,
   EditorCommitListItem,
+  EditorBlameResult,
   FileChange,
   DiffComment,
   DiffCommentInput,
@@ -52,6 +53,11 @@ export interface EditorApi {
     filePath: string;
     base: string;
   }) => Promise<IpcResponse<EditorReadBranchResult>>;
+  editorBlame: (args: {
+    cwd: string;
+    filePath: string;
+    ref: string | null;
+  }) => Promise<IpcResponse<EditorBlameResult>>;
 
   // Diff review comments
   diffCommentsList: (args: { taskId: string }) => Promise<IpcResponse<DiffComment[]>>;

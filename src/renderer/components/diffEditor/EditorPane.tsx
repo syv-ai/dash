@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { X } from 'lucide-react';
 import type { editor as monacoEditor } from 'monaco-editor';
 import type { ITheme as XtermTheme } from '@xterm/xterm';
 import type { EditorView } from './types';
@@ -15,6 +17,7 @@ import { useFileFade } from './comments/useFileFade';
 import { CommentOverlay } from './comments/overlay/CommentOverlay';
 import { CommentsMenu } from './comments/CommentsMenu';
 import { EditCommentsModal } from './comments/EditCommentsModal';
+import { useGitBlame } from './blame/useGitBlame';
 import { useFileLoad, type LoadState } from './editor/useFileLoad';
 import { useEditorSave } from './editor/useEditorSave';
 import { useMonacoEditor } from './editor/useMonacoEditor';
@@ -28,6 +31,7 @@ import { SaveErrorBanner } from './editor/SaveErrorBanner';
 import '../../monaco-workers';
 
 const WORDWRAP_KEY = 'diffEditor.wordWrap';
+const BLAME_KEY = 'diffEditor.blame';
 
 /** Which files get a Code | Preview toggle, and how their preview is rendered.
  *  HTML renders as-is; markdown is converted to a styled HTML document. */
@@ -83,6 +87,10 @@ export function EditorPane({
   const [wordWrap, setWordWrap] = useState<boolean>(
     () => localStorage.getItem(WORDWRAP_KEY) === 'on',
   );
+  // Inline git blame defaults ON; only an explicit 'off' disables it.
+  const [blameEnabled, setBlameEnabled] = useState<boolean>(
+    () => localStorage.getItem(BLAME_KEY) !== 'off',
+  );
   const [previewing, setPreviewing] = useState(false);
   const kind = previewKind(filePath);
   const canPreview = kind !== null;
@@ -93,6 +101,7 @@ export function EditorPane({
     setPreviewing(false);
   }, [filePath]);
 
+  const blameLabelRef = useRef<HTMLDivElement | null>(null);
   const selectionDecorations = useRef<monacoEditor.IEditorDecorationsCollection | null>(null);
   const saveCmdRef = useRef<(() => void) | null>(null);
   // State (not ref) so the popover's `container` prop sees the actual node
@@ -248,6 +257,10 @@ export function EditorPane({
     localStorage.setItem(WORDWRAP_KEY, wordWrap ? 'on' : 'off');
   }, [wordWrap]);
 
+  useEffect(() => {
+    localStorage.setItem(BLAME_KEY, blameEnabled ? 'on' : 'off');
+  }, [blameEnabled]);
+
   // Bridge useEditorSave → useMonacoEditor's ⌘S binding. The hook fires
   // saveCmdRef.current() from the keybinding; we keep this ref pointed at
   // the latest save callback so it never goes stale on re-render.
@@ -291,8 +304,44 @@ export function EditorPane({
     hoveredCommentId,
   });
 
+  // Inline git blame: on hover, a same-commit block highlight in the editor body
+  // plus a band + info card on the right overview-ruler strip. Toggled from the
+  // header (and the card's ×) via `blameEnabled`.
+  const { rulerMark, rulerVisible, rulerHost, holdLabel, releaseLabel } = useGitBlame({
+    cwd,
+    filePath,
+    view,
+    modifiedEditor,
+    monaco,
+    enabled: blameEnabled,
+    canBlame: state.kind === 'loaded' && !state.isBinary && !state.isLargeFile,
+  });
+
+  // Keep the blame card fully visible: clamp its top so it never spills past the
+  // editor area's bottom (commits on the last lines of a file). Runs before paint
+  // so the clamp is never seen unapplied.
+  useLayoutEffect(() => {
+    const el = blameLabelRef.current;
+    if (!el || !rulerMark || !editorAreaEl) return;
+    const maxTop = editorAreaEl.clientHeight - el.offsetHeight - 4;
+    el.style.top = `${Math.max(4, Math.min(rulerMark.top, maxTop))}px`;
+  }, [rulerMark, editorAreaEl]);
+
   // In-progress comment (fresh-create vs dbl-click-to-edit) state.
   const draftApi = useCommentDraft({ modifiedEditor, setPendingRange, binding });
+
+  // When a fresh comment draft opens, scroll its anchor line into the centre so
+  // there's room above for the bubble (which renders above the line). Without
+  // this, a draft placed on the last line(s) of a file is clipped at the editor's
+  // bottom with no way to scroll to it (scrollBeyondLastLine is off). Deferred a
+  // frame so the bubble's view-zone exists and the reveal accounts for it.
+  useEffect(() => {
+    if (dragging || !pendingRange || draftApi.editingId || !modifiedEditor || !monaco) return;
+    const raf = requestAnimationFrame(() => {
+      modifiedEditor.revealLineInCenter(pendingRange.start, monaco.editor.ScrollType.Smooth);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [pendingRange, dragging, draftApi.editingId, modifiedEditor, monaco]);
 
   // Prompt assembly + send-to-TUI + edit-and-send modal.
   const promptApi = useCommentPrompt({
@@ -326,6 +375,8 @@ export function EditorPane({
         view={view}
         wordWrap={wordWrap}
         onToggleWordWrap={() => setWordWrap((w) => !w)}
+        blameEnabled={blameEnabled}
+        onToggleBlame={() => setBlameEnabled((b) => !b)}
         canPreview={canPreview}
         previewing={previewing}
         onTogglePreview={setPreviewing}
@@ -400,6 +451,50 @@ export function EditorPane({
             </div>
           )}
           {state.kind === 'loading' && displayed.kind === 'loaded' && <LoadingPill />}
+          {rulerMark &&
+            (() => {
+              const band = (
+                <div
+                  className="monaco-blame-ruler-band"
+                  data-visible={rulerVisible}
+                  style={{ top: rulerMark.top, height: rulerMark.height }}
+                />
+              );
+              return (
+                <>
+                  {rulerHost ? createPortal(band, rulerHost) : band}
+                  <div
+                    ref={blameLabelRef}
+                    className="monaco-blame-ruler-label"
+                    data-visible={rulerVisible}
+                    style={{ top: rulerMark.top }}
+                    onMouseEnter={holdLabel}
+                    onMouseLeave={releaseLabel}
+                  >
+                    <button
+                      type="button"
+                      className="blame-label-close"
+                      title="Hide git blame"
+                      onClick={() => setBlameEnabled(false)}
+                    >
+                      <X size={11} strokeWidth={2} />
+                    </button>
+                    <span className="blame-label-author">{rulerMark.label.author}</span>
+                    {!rulerMark.label.uncommitted && (
+                      <>
+                        <span className="blame-label-meta">
+                          <span className="blame-label-sha">{rulerMark.label.shortSha}</span>
+                          {rulerMark.label.age && <span>{rulerMark.label.age} ago</span>}
+                        </span>
+                        {rulerMark.label.summary && (
+                          <span className="blame-label-summary">{rulerMark.label.summary}</span>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
           <CommentOverlay
             liveComments={liveComments}
             shadeById={shadeById}

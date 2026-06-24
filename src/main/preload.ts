@@ -402,6 +402,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('editor:listFilesAgainstBase', args),
   editorReadAgainstBase: (args: { cwd: string; filePath: string; base: string }) =>
     ipcRenderer.invoke('editor:readAgainstBase', args),
+  editorBlame: (args: { cwd: string; filePath: string; ref: string | null }) =>
+    ipcRenderer.invoke('editor:blame', args),
 
   // Diff editor comments
   diffCommentsList: (args: { taskId: string }) => ipcRenderer.invoke('diffComments:list', args),
