@@ -306,11 +306,22 @@ function FolderEntry({
   commentCounts: Map<string, number>;
 }) {
   // Default-open if the folder has changes OR it contains the file the editor
-  // opened to — so that file is never hidden in a collapsed folder. Computed
-  // once at mount (lazy init); the user's collapse/expand fully owns it after.
+  // opened to — so that file is never hidden in a collapsed folder. The user's
+  // collapse/expand owns it after.
   const [open, setOpen] = useState<boolean>(
     () => folder.changedCount > 0 || selectedPath.startsWith(`${folder.fullPath}/`),
   );
+  // `changedFiles` load async, so at mount `changedCount` is often still 0 and
+  // the lazy init above misses changed folders (an intermittent "collapsed on
+  // open" race). Re-seed open exactly once when a folder *first* gains changed
+  // files; the guard means a later manual collapse is never clobbered.
+  const seededFromChanges = useRef(folder.changedCount > 0);
+  useEffect(() => {
+    if (!seededFromChanges.current && folder.changedCount > 0) {
+      seededFromChanges.current = true;
+      setOpen(true);
+    }
+  }, [folder.changedCount]);
   const tint = folder.dominantStatus ? FOLDER_TINT[folder.dominantStatus] : 'text-foreground/90';
   return (
     <>
