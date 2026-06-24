@@ -739,6 +739,24 @@ export type EditorWriteResult =
   | { ok: true; mtimeMs: number; sizeBytes: number }
   | { ok: false; stale: true; currentMtimeMs: number; currentSizeBytes: number };
 
+/** One git-blame record per final line of a file (line is 1-indexed). Faithful
+ *  to `git blame --incremental`; presentation decisions live in the renderer. */
+export interface BlameLine {
+  line: number; // 1-indexed final line number
+  sha: string; // 40-char commit hash; all-zeros when uncommitted
+  shortSha: string; // 7-char abbreviation (of sha, so '0000000' when uncommitted)
+  author: string; // author name as reported by git
+  authorEmail: string; // author email, angle brackets stripped
+  authorTime: number; // author time, unix seconds (0 when absent)
+  summary: string; // commit subject line
+  uncommitted: boolean; // true → not-yet-committed working-tree line
+}
+
+/** Result of editor:blame — one entry per line, in ascending line order. */
+export interface EditorBlameResult {
+  lines: BlameLine[];
+}
+
 /** Commit summary for the diff editor's commit drawer. Includes the body so
  *  hover popovers can render the full message without a second IPC. */
 export interface EditorCommitListItem {
@@ -819,6 +837,9 @@ export interface DiffComment {
   endLine: number;
   text: string;
   sent: boolean;
+  /** Diff state the anchor is meaningful against: 'live' (working/branch
+   *  views share the working file) or 'commit:<hash>' for a frozen commit. */
+  viewScope: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -833,6 +854,7 @@ export interface DiffCommentInput {
   endLine: number;
   text: string;
   sent: boolean;
+  viewScope: string;
 }
 
 /* ── Unified Extensions model (Skills + Plugins across scopes) ──────────────

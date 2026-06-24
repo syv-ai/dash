@@ -1002,6 +1002,166 @@
   background-color: hsl(var(--primary) / 0.32);
 }
 
+/* Inline git blame — the contiguous run of lines from the hovered line's commit.
+ * Faint enough to read under the comment shade bands. The blame text itself lives
+ * in the ruler label below.
+ *
+ * The steady tint is a STATIC background (no keyframe): Monaco recreates a line
+ * decoration's DOM node on every cursor/selection change, which would replay any
+ * keyframe on that node — so an in-animation here flickered the whole block on a
+ * click inside it. Only the deliberate fade-OUT (set once, on hide, when nobody
+ * is clicking) keeps a keyframe. */
+.monaco-blame-block {
+  background-color: hsl(var(--primary) / 0.07);
+}
+.monaco-blame-block-out {
+  animation: blame-block-out 340ms ease forwards;
+}
+@keyframes blame-block-out {
+  from {
+    background-color: hsl(var(--primary) / 0.07);
+  }
+  to {
+    background-color: hsl(var(--primary) / 0);
+  }
+}
+
+/* Host injected as the first child of Monaco's `.diffOverview` so the blame band
+ * paints BEHIND the ruler's diff add/delete marks and the viewport box. */
+.monaco-blame-ruler-host {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Make the diff scroll-viewport indicator more opaque (Monaco's scrollbar-slider
+ * default is very faint) so it stays clearly legible against the blame band that
+ * now shares this overview strip. */
+.monaco-diff-editor .diffOverview .diffViewport {
+  background: hsl(var(--primary) / 0.3) !important;
+}
+
+/* The hovered commit's extent on the overview-ruler strip — subtle, behind the
+ * diff marks, fades in/out. Narrow slice on the modified lane (rightmost). */
+.monaco-blame-ruler-band {
+  position: absolute;
+  right: 0;
+  width: 9px;
+  /* Desaturated neutral (muted-foreground) — reads distinct from the primary
+   * viewport indicator and the green/red diff marks without being vibrant. */
+  background-color: hsl(var(--muted-foreground) / 0.2);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 340ms ease;
+}
+.monaco-blame-ruler-band[data-visible='true'] {
+  opacity: 1;
+}
+/* Slide between commits (visible→visible) — gated on data-slide so a fresh
+ * appear snaps to position instead of gliding in from the previous commit. */
+.monaco-blame-ruler-band[data-slide='true'] {
+  transition:
+    opacity 340ms ease,
+    top 260ms cubic-bezier(0.4, 0, 0.2, 1),
+    height 260ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Commit card butted against the band's left edge (square inner corner, primary
+ * right border tying it to the band). Narrow + stacked: author, then sha · age,
+ * then the wrapped subject. Fades with the band. */
+.monaco-blame-ruler-label {
+  position: absolute;
+  right: 14px;
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 162px;
+  padding: 6px 9px;
+  border-radius: 5px 0 0 5px;
+  border: 1px solid hsl(var(--border) / 0.5);
+  background-color: hsl(var(--surface-3) / 0.45);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 14px hsl(0 0% 0% / 0.18);
+  /* Interactive so the × is clickable; the hook's grace period keeps it shown
+   * while the pointer travels here from the code. */
+  pointer-events: auto;
+  opacity: 0;
+  transition:
+    opacity 340ms ease,
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+.monaco-blame-ruler-label[data-visible='true'] {
+  opacity: 1;
+}
+/* Slide the card to the new commit (visible→visible). The top is set
+ * imperatively (clamped) in EditorPane, so this transition eases that change;
+ * a fresh appear (data-slide='false') snaps, then fades in. */
+.monaco-blame-ruler-label[data-slide='true'] {
+  transition:
+    opacity 340ms ease,
+    top 260ms cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+/* Hover feedback — the card lifts slightly and firms up its surface/border. */
+.monaco-blame-ruler-label:hover {
+  background-color: hsl(var(--surface-3) / 0.72);
+  border-color: hsl(var(--border) / 0.9);
+  box-shadow: 0 6px 18px hsl(0 0% 0% / 0.26);
+}
+.blame-label-close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  color: hsl(var(--muted-foreground) / 0.55);
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
+}
+.blame-label-close:hover {
+  color: hsl(var(--foreground));
+  background-color: hsl(var(--surface-2));
+}
+.blame-label-author {
+  font-size: 11px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  padding-right: 16px; /* clear the × button */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.blame-label-meta {
+  display: flex;
+  gap: 7px;
+  font-size: 10px;
+  color: hsl(var(--muted-foreground));
+}
+.blame-label-sha {
+  font-family: 'SF Mono', ui-monospace, Menlo, monospace;
+  color: hsl(var(--primary));
+}
+.blame-label-summary {
+  font-size: 10px;
+  line-height: 1.4;
+  color: hsl(var(--muted-foreground));
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 /* Only render the *active* indent guide — the column for the block the
  * cursor is currently inside. Inactive guides get hidden. Monaco tags the
  * active one with `.indent-active` (indentGuides.js); we suppress the

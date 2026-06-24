@@ -16,6 +16,9 @@ interface Props {
   onEdit(comment: LiveComment): void;
   /** Click the in-bubble × → delete this comment. */
   onDelete(id: string): void;
+  /** Origin tag for every bubble in this view (e.g. 'Commit abc1234'), or
+   *  undefined in the plain working view where no tag is needed. */
+  scopeLabel?: string;
   /** Id of the comment currently being edited — its persisted card fades
    *  out as the DraftBubble crossfades in beside it. Null when nothing is
    *  being edited. */
@@ -38,6 +41,7 @@ export function BubbleStack({
   onEdit,
   onDelete,
   editingId,
+  scopeLabel,
 }: Props) {
   const stacked = comments.length >= 2;
   return (
@@ -53,6 +57,8 @@ export function BubbleStack({
               stacked ? `${metaLabel(c)} — comment ${i + 1} of ${comments.length}` : metaLabel(c)
             }
             text={c.text}
+            sent={c.sent}
+            scopeLabel={scopeLabel}
             hasTail={isLast}
             isHighlighted={hoveredId === c.id}
             tailLeftPx={tailLeftPx}

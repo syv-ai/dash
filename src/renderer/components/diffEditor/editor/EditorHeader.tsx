@@ -1,7 +1,17 @@
 import { useEffect, useState } from 'react';
-import { Code2, Eye, GitCompare, WrapText, X } from 'lucide-react';
+import {
+  Code2,
+  Eye,
+  GitCommit,
+  GitCompare,
+  History,
+  MessageSquare,
+  WrapText,
+  X,
+} from 'lucide-react';
 import type { EditorView } from '../types';
 import { Popover, PopoverAnchor, PopoverContent } from '../../ui/Popover';
+import { Tooltip } from '../../ui/Tooltip';
 import { BranchPicker } from '../BranchPicker';
 
 interface Props {
@@ -10,6 +20,9 @@ interface Props {
   view: EditorView;
   wordWrap: boolean;
   onToggleWordWrap(): void;
+  /** Inline git-blame toggle (default on, persisted). */
+  blameEnabled: boolean;
+  onToggleBlame(): void;
   /** Show the Code | Preview toggle (HTML files only). */
   canPreview: boolean;
   /** True when the rendered preview is showing instead of the editor. */
@@ -24,6 +37,8 @@ interface Props {
    *  in non-branch view. Null when neither origin/HEAD nor main/master is
    *  available — clicking the chip then just opens the picker. */
   defaultBase: string | null;
+  /** Comments anchored to the open view — shown after the "Showing …" label. */
+  commentCount: number;
   backgroundColor: string;
 }
 
@@ -33,6 +48,8 @@ export function EditorHeader({
   view,
   wordWrap,
   onToggleWordWrap,
+  blameEnabled,
+  onToggleBlame,
   canPreview,
   previewing,
   onTogglePreview,
@@ -40,10 +57,26 @@ export function EditorHeader({
   onSelectBase,
   onExitBranchView,
   defaultBase,
+  commentCount,
   backgroundColor,
 }: Props) {
-  const isCommit = view.kind === 'commit';
   const isBranch = view.kind === 'branch';
+  // "Showing …" pill — only for non-working views (the working tree is the
+  // default and needs no callout). Tooltip carries the full ref.
+  const viewMeta =
+    view.kind === 'branch'
+      ? {
+          label: `Showing vs ${view.base}`,
+          tooltip: `Comparing against ${view.base}`,
+          Icon: GitCompare,
+        }
+      : view.kind === 'commit'
+        ? {
+            label: `Showing commit ${view.hash.slice(0, 7)}`,
+            tooltip: `Commit ${view.hash}`,
+            Icon: GitCommit,
+          }
+        : null;
   const [pickerOpen, setPickerOpen] = useState(false);
 
   // Close the picker when the host switches view (e.g. user clicks a commit
@@ -76,12 +109,30 @@ export function EditorHeader({
       style={{ background: backgroundColor }}
     >
       <div className="flex items-center gap-3 min-w-0">
-        <span className="text-[13px] font-medium text-foreground truncate">{filePath}</span>
-        {isCommit && (
-          <span className="text-[11px] tabular-nums text-muted-foreground/50 font-mono">
-            {view.hash.slice(0, 7)}
-          </span>
+        {viewMeta && (
+          <Tooltip
+            content={
+              commentCount > 0
+                ? `${viewMeta.tooltip} · ${commentCount} comment${commentCount !== 1 ? 's' : ''}`
+                : viewMeta.tooltip
+            }
+          >
+            <span className="inline-flex items-center gap-1.5 px-2 h-6 rounded-md text-[11px] font-medium shrink-0 bg-primary/15 text-primary">
+              <viewMeta.Icon size={12} strokeWidth={1.8} className="shrink-0" />
+              <span className="font-mono whitespace-nowrap max-w-[260px] truncate">
+                {viewMeta.label}
+              </span>
+              {commentCount > 0 && (
+                <>
+                  <span className="opacity-40">·</span>
+                  <MessageSquare size={11} strokeWidth={2} className="opacity-80 shrink-0" />
+                  <span className="tabular-nums">{commentCount}</span>
+                </>
+              )}
+            </span>
+          </Tooltip>
         )}
+        <span className="text-[13px] font-medium text-foreground truncate">{filePath}</span>
       </div>
       <div className="flex items-center gap-2">
         {canPreview && (
@@ -154,6 +205,17 @@ export function EditorHeader({
             />
           </PopoverContent>
         </Popover>
+        <button
+          onClick={onToggleBlame}
+          title={blameEnabled ? 'Hide git blame' : 'Show git blame'}
+          className={`p-1.5 rounded-md transition-colors ${
+            blameEnabled
+              ? 'bg-primary/15 text-primary'
+              : 'text-muted-foreground/60 hover:text-foreground hover:bg-accent/60'
+          }`}
+        >
+          <History size={14} strokeWidth={1.8} />
+        </button>
         <button
           onClick={onToggleWordWrap}
           title={wordWrap ? 'Disable word wrap' : 'Enable word wrap'}

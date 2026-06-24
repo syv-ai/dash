@@ -14,6 +14,7 @@ interface DiffCommentRow {
   end_line: number;
   text: string;
   sent: number;
+  view_scope: string;
   created_at: string;
   updated_at: string;
 }
@@ -27,6 +28,7 @@ function rowToComment(r: DiffCommentRow): DiffComment {
     endLine: r.end_line,
     text: r.text,
     sent: r.sent === 1,
+    viewScope: r.view_scope,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -42,7 +44,8 @@ export function computeOrphans(
   return rows.filter((r) => !existing.has(r.file_path)).map((r) => r.id);
 }
 
-const COLS = 'id, task_id, file_path, start_line, end_line, text, sent, created_at, updated_at';
+const COLS =
+  'id, task_id, file_path, start_line, end_line, text, sent, view_scope, created_at, updated_at';
 
 interface Stmts {
   listByTask: Statement;
@@ -71,13 +74,14 @@ function getStmts(): Stmts {
     upsert: db.prepare(
       `INSERT INTO diff_editor_comments
           (${COLS})
-        VALUES (@id, @taskId, @filePath, @startLine, @endLine, @text, @sent, @now, @now)
+        VALUES (@id, @taskId, @filePath, @startLine, @endLine, @text, @sent, @viewScope, @now, @now)
         ON CONFLICT(id) DO UPDATE SET
           file_path  = excluded.file_path,
           start_line = excluded.start_line,
           end_line   = excluded.end_line,
           text       = excluded.text,
           sent       = excluded.sent,
+          view_scope = excluded.view_scope,
           updated_at = excluded.updated_at`,
     ),
     getById: db.prepare(`SELECT ${COLS} FROM diff_editor_comments WHERE id = ?`),

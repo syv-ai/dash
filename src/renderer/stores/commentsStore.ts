@@ -6,6 +6,7 @@ interface AddInput {
   startLine: number;
   endLine: number;
   text: string;
+  viewScope: string;
 }
 export interface RangeSnapshot {
   id: string;
@@ -85,6 +86,7 @@ function persist(c: DiffComment, patch: Partial<DiffComment> = {}): void {
     endLine: c.endLine,
     text: c.text,
     sent: c.sent,
+    viewScope: c.viewScope,
     ...patch,
   });
 }
@@ -124,6 +126,7 @@ export const useCommentsStore = create<CommentsStore>((set, get) => ({
       endLine: input.endLine,
       text: input.text,
       sent: false,
+      viewScope: input.viewScope,
       createdAt: now,
       updatedAt: now,
     };

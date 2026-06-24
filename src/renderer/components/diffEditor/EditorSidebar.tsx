@@ -2,8 +2,10 @@ import { useMemo, useRef, useState, useEffect } from 'react';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 import { ChevronDown, ChevronRight, GitCommit, History } from 'lucide-react';
 import type { FileChange, FileChangeStatus } from '../../../shared/types';
+import { formatRelativeTime } from '@shared/relativeTime';
 import type { CommitSummary, EditorView } from './types';
 import { Popover, PopoverAnchor, PopoverContent } from '../ui/Popover';
+import { Tooltip } from '../ui/Tooltip';
 
 interface EditorSidebarProps {
   /** All file paths in the current view's source (whole repo, sorted). */
@@ -21,6 +23,8 @@ interface EditorSidebarProps {
   commitsLoading: boolean;
   /** Whether to surface the "Working tree" pinned entry in the commits drawer. */
   showWorkingTreeRow: boolean;
+  /** Comment count per scope ('live' / 'commit:<hash>') → badge on each row. */
+  commentCountByScope: Map<string, number>;
   view: EditorView;
   onSelectView: (view: EditorView) => void;
 }
@@ -55,6 +59,7 @@ export function EditorSidebar(props: EditorSidebarProps) {
             commits={props.commits}
             loading={props.commitsLoading}
             showWorkingTreeRow={props.showWorkingTreeRow}
+            commentCountByScope={props.commentCountByScope}
             view={props.view}
             onSelectView={props.onSelectView}
           />
@@ -236,16 +241,6 @@ function FileTreePanel({
   );
 }
 
-/** Aggregate comment counts for everything under a folder. Mirrors the
- *  changed-count walk in buildRepoTree but uses the external commentCounts
- *  map (which can change without the tree changing). */
-function folderCommentCount(node: TreeFolder, commentCounts: Map<string, number>): number {
-  let total = 0;
-  for (const file of node.files) total += commentCounts.get(file.fullPath) ?? 0;
-  for (const child of node.children.values()) total += folderCommentCount(child, commentCounts);
-  return total;
-}
-
 interface FolderContentsProps {
   node: TreeFolder;
   indent: number;
@@ -311,13 +306,23 @@ function FolderEntry({
   commentCounts: Map<string, number>;
 }) {
   // Default-open if the folder has changes OR it contains the file the editor
-  // opened to — so that file is never hidden in a collapsed folder. Computed
-  // once at mount (lazy init); the user's collapse/expand fully owns it after.
+  // opened to — so that file is never hidden in a collapsed folder. The user's
+  // collapse/expand owns it after.
   const [open, setOpen] = useState<boolean>(
     () => folder.changedCount > 0 || selectedPath.startsWith(`${folder.fullPath}/`),
   );
+  // `changedFiles` load async, so at mount `changedCount` is often still 0 and
+  // the lazy init above misses changed folders (an intermittent "collapsed on
+  // open" race). Re-seed open exactly once when a folder *first* gains changed
+  // files; the guard means a later manual collapse is never clobbered.
+  const seededFromChanges = useRef(folder.changedCount > 0);
+  useEffect(() => {
+    if (!seededFromChanges.current && folder.changedCount > 0) {
+      seededFromChanges.current = true;
+      setOpen(true);
+    }
+  }, [folder.changedCount]);
   const tint = folder.dominantStatus ? FOLDER_TINT[folder.dominantStatus] : 'text-foreground/90';
-  const commentCount = folderCommentCount(folder, commentCounts);
   return (
     <>
       <button
@@ -340,7 +345,6 @@ function FolderEntry({
           {folder.name}
           <span className="text-muted-foreground/40">/</span>
         </span>
-        {commentCount > 0 && <CommentBadge count={commentCount} />}
         {folder.changedCount > 0 && (
           <span
             className={`shrink-0 font-mono text-[10px] font-semibold tabular-nums ${
@@ -368,14 +372,16 @@ function FolderEntry({
 }
 
 function CommentBadge({ count }: { count: number }) {
+  const label = `${count} comment${count !== 1 ? 's' : ''}`;
   return (
-    <span
-      title={`${count} comment${count !== 1 ? 's' : ''}`}
-      aria-label={`${count} comment${count !== 1 ? 's' : ''}`}
-      className="shrink-0 inline-flex items-center justify-center min-w-[14px] h-[14px] px-1 rounded-full font-mono text-[9.5px] font-semibold tabular-nums bg-primary/20 text-primary"
-    >
-      {count}
-    </span>
+    <Tooltip content={label}>
+      <span
+        aria-label={label}
+        className="shrink-0 inline-flex items-center justify-center min-w-[14px] h-[14px] px-1 rounded-full font-mono text-[9.5px] font-semibold tabular-nums bg-primary/20 text-primary"
+      >
+        {count}
+      </span>
+    </Tooltip>
   );
 }
 
@@ -452,6 +458,7 @@ interface CommitsDrawerProps {
   commits: CommitSummary[];
   loading: boolean;
   showWorkingTreeRow: boolean;
+  commentCountByScope: Map<string, number>;
   view: EditorView;
   onSelectView: (view: EditorView) => void;
 }
@@ -460,6 +467,7 @@ function CommitsDrawer({
   commits,
   loading,
   showWorkingTreeRow,
+  commentCountByScope,
   view,
   onSelectView,
 }: CommitsDrawerProps) {
@@ -498,6 +506,9 @@ function CommitsDrawer({
           >
             <GitCommit size={11} strokeWidth={1.8} className="opacity-60 shrink-0" />
             <span className="truncate flex-1 font-mono text-[11.5px]">Working tree</span>
+            {(commentCountByScope.get('live') ?? 0) > 0 && (
+              <CommentBadge count={commentCountByScope.get('live')!} />
+            )}
           </button>
         )}
         {loading && commits.length === 0 && (
@@ -510,6 +521,7 @@ function CommitsDrawer({
               key={c.hash}
               commit={c}
               active={active}
+              commentCount={commentCountByScope.get(`commit:${c.hash}`) ?? 0}
               onSelect={() => onSelectView({ kind: 'commit', hash: c.hash })}
             />
           );
@@ -522,10 +534,11 @@ function CommitsDrawer({
 interface CommitRowProps {
   commit: CommitSummary;
   active: boolean;
+  commentCount: number;
   onSelect: () => void;
 }
 
-function CommitRow({ commit, active, onSelect }: CommitRowProps) {
+function CommitRow({ commit, active, commentCount, onSelect }: CommitRowProps) {
   const [hovered, setHovered] = useState(false);
   const openTimer = useRef<number | null>(null);
   const closeTimer = useRef<number | null>(null);
@@ -576,8 +589,9 @@ function CommitRow({ commit, active, onSelect }: CommitRowProps) {
           <span className="truncate flex-1 font-mono text-[11.5px]">
             {commit.subject || '(no subject)'}
           </span>
+          {commentCount > 0 && <CommentBadge count={commentCount} />}
           <span className="text-[10px] text-muted-foreground/40 shrink-0 tabular-nums">
-            {relativeTime(commit.authorDate)}
+            {formatRelativeTime(commit.authorDate, Date.now() / 1000)}
           </span>
         </button>
       </PopoverAnchor>
@@ -613,20 +627,11 @@ function CommitRow({ commit, active, onSelect }: CommitRowProps) {
           <span className="opacity-50">·</span>
           <span className="truncate">{commit.authorName}</span>
           <span className="opacity-50">·</span>
-          <span className="tabular-nums">{relativeTime(commit.authorDate)}</span>
+          <span className="tabular-nums">
+            {formatRelativeTime(commit.authorDate, Date.now() / 1000)}
+          </span>
         </div>
       </PopoverContent>
     </Popover>
   );
-}
-
-function relativeTime(unixSeconds: number): string {
-  if (!unixSeconds) return '';
-  const s = Math.floor(Date.now() / 1000 - unixSeconds);
-  if (s < 60) return `${s}s`;
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  if (s < 86400 * 30) return `${Math.floor(s / 86400)}d`;
-  if (s < 86400 * 365) return `${Math.floor(s / (86400 * 30))}mo`;
-  return `${Math.floor(s / (86400 * 365))}y`;
 }

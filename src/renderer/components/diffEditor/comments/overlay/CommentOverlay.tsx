@@ -34,6 +34,9 @@ interface Props {
   editingId: string | null;
   onSubmitDraft(text: string): void;
   onCancelDraft(): void;
+  /** Origin tag for every bubble (e.g. 'Commit abc1234') when the open view
+   *  isn't the plain working tree; undefined otherwise. */
+  scopeLabel?: string;
   /** Bubble width as a fraction of the editor's content width. */
   bubbleWidthFraction?: number;
 }
@@ -61,6 +64,7 @@ export function CommentOverlay({
   editingId,
   onSubmitDraft,
   onCancelDraft,
+  scopeLabel,
   bubbleWidthFraction = DEFAULT_BUBBLE_FRACTION,
 }: Props) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
@@ -246,6 +250,7 @@ export function CommentOverlay({
                 onEdit={onEditComment}
                 onDelete={onDeleteComment}
                 editingId={editingId}
+                scopeLabel={scopeLabel}
               />
             </div>
             {editingComment && pendingRange && (

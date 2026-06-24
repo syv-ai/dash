@@ -105,6 +105,9 @@ export const diffEditorComments = sqliteTable(
     endLine: integer('end_line').notNull(),
     text: text('text').notNull(),
     sent: integer('sent', { mode: 'boolean' }).notNull().default(false),
+    /** Diff state the comment is anchored to: 'live' (working/branch views,
+     *  which share the working file) or 'commit:<hash>' for a frozen commit. */
+    viewScope: text('view_scope').notNull().default('live'),
     createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
   },
