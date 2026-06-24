@@ -24,14 +24,18 @@ export function scopeLabel(scope: string): string {
   return short ? `Commit ${short}` : 'Working tree';
 }
 
-/** Total comments per scope across all files — feeds the commits-drawer
- *  per-view count badges. */
-export function commentCountsByScope<T extends { viewScope: string }>(
+/** Total *unsent* comments per scope across all files — feeds the commits-drawer
+ *  per-view count badges. Sent comments no longer need attention, so they drop
+ *  out of the counters. */
+export function commentCountsByScope<T extends { viewScope: string; sent?: boolean }>(
   byFile: Record<string, T[]>,
 ): Map<string, number> {
   const counts = new Map<string, number>();
   for (const list of Object.values(byFile)) {
-    for (const c of list) counts.set(c.viewScope, (counts.get(c.viewScope) ?? 0) + 1);
+    for (const c of list) {
+      if (c.sent) continue;
+      counts.set(c.viewScope, (counts.get(c.viewScope) ?? 0) + 1);
+    }
   }
   return counts;
 }

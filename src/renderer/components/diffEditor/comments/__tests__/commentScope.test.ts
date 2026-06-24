@@ -68,4 +68,19 @@ describe('commentCountsByScope', () => {
     expect(counts.get('live')).toBe(3);
     expect(counts.get('commit:abc')).toBe(1);
   });
+
+  it('excludes already-sent comments from the per-scope tallies', () => {
+    const byFile = {
+      'a.ts': [
+        { id: '1', viewScope: 'live', sent: false },
+        { id: '2', viewScope: 'live', sent: true },
+        { id: '3', viewScope: 'commit:abc', sent: true },
+      ],
+      'b.ts': [{ id: '4', viewScope: 'live', sent: false }],
+    };
+    const counts = commentCountsByScope(byFile);
+    expect(counts.get('live')).toBe(2);
+    // Every commit-scoped comment was sent → scope drops out of the map.
+    expect(counts.get('commit:abc')).toBeUndefined();
+  });
 });

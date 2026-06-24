@@ -104,12 +104,13 @@ export function DiffEditor({
   const clearReveal = useCallback(() => setRevealCommentId(null), []);
 
   // File-tree badges reflect only the open view's scope, so a file never shows
-  // "3 comments" when the diff you're looking at has none of them.
+  // "3 comments" when the diff you're looking at has none of them. Already-sent
+  // comments don't need attention, so they're excluded from the count.
   const currentScope = commentScope(view);
   const commentCounts = useMemo(() => {
     const map = new Map<string, number>();
     for (const [path, list] of Object.entries(commentsByFile)) {
-      const n = list.filter((c) => c.viewScope === currentScope).length;
+      const n = list.filter((c) => c.viewScope === currentScope && !c.sent).length;
       if (n > 0) map.set(path, n);
     }
     return map;
