@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { ArrowDown, ArrowUp, GitBranch, Maximize2, Minus, Plus } from 'lucide-react';
+import { ArrowDown, ArrowUp, GitBranch, MessageSquareCode, Minus, Plus } from 'lucide-react';
 import { FileChangesPanel } from '../changes/FileChangesPanel';
 import { Tooltip } from '../ui/Tooltip';
 import { UsageStrip } from './UsageStrip';
@@ -125,7 +125,7 @@ export function RightInspector({
             onClick={onOpenEditor}
             className="p-[3px] rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0"
           >
-            <Maximize2 size={11} strokeWidth={2} />
+            <MessageSquareCode size={11} strokeWidth={2} />
           </button>
         </Tooltip>
       </div>
