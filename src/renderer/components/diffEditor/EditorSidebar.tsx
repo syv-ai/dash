@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
-import { ChevronDown, ChevronRight, GitCommit, History } from 'lucide-react';
+import { ChevronDown, ChevronRight, GitCommit, History, ListFilter } from 'lucide-react';
 import type { FileChange, FileChangeStatus } from '../../../shared/types';
 import { formatRelativeTime } from '@shared/relativeTime';
 import type { CommitSummary, EditorView } from './types';
@@ -30,6 +30,7 @@ interface EditorSidebarProps {
 }
 
 const COMMITS_DRAWER_KEY = 'diffEditor.commitsDrawerSize';
+const CHANGED_ONLY_KEY = 'diffEditor.changedOnly';
 
 export function EditorSidebar(props: EditorSidebarProps) {
   const initialDrawerSize = parseInitial(localStorage.getItem(COMMITS_DRAWER_KEY), 35);
@@ -213,20 +214,72 @@ function FileTreePanel({
   onSelectFile,
   commentCounts,
 }: FileTreePanelProps) {
-  const tree = useMemo(() => buildRepoTree(paths, changedFiles), [paths, changedFiles]);
+  const [changedOnly, setChangedOnly] = useState<boolean>(
+    () => localStorage.getItem(CHANGED_ONLY_KEY) === 'true',
+  );
+  const toggleChangedOnly = () =>
+    setChangedOnly((v) => {
+      const next = !v;
+      localStorage.setItem(CHANGED_ONLY_KEY, String(next));
+      return next;
+    });
+  // In changed-only mode, seed the tree from an empty repo-path set so
+  // buildRepoTree's union reduces to just the changed files and their parent
+  // folders (unchanged siblings never enter the tree).
+  const tree = useMemo(
+    () => buildRepoTree(changedOnly ? [] : paths, changedFiles),
+    [changedOnly, paths, changedFiles],
+  );
+  const totals = useMemo(() => {
+    let additions = 0;
+    let deletions = 0;
+    for (const f of changedFiles) {
+      additions += f.additions;
+      deletions += f.deletions;
+    }
+    return { additions, deletions };
+  }, [changedFiles]);
   return (
     <div className="h-full min-h-0 flex flex-col">
       <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-mono flex items-center justify-between shrink-0">
-        <span>
-          Files{' '}
-          {tree.changedCount > 0 && (
-            <span className="tabular-nums">· {tree.changedCount} changed</span>
+        <span className="flex items-center gap-2">
+          <span>
+            Files{' '}
+            {tree.changedCount > 0 && (
+              <span className="tabular-nums">· {tree.changedCount} changed</span>
+            )}
+          </span>
+          {(totals.additions > 0 || totals.deletions > 0) && (
+            <span className="flex gap-1.5 tabular-nums normal-case tracking-normal">
+              {totals.additions > 0 && (
+                <span className="text-[hsl(var(--git-added))]">+{totals.additions}</span>
+              )}
+              {totals.deletions > 0 && (
+                <span className="text-[hsl(var(--git-deleted))]">−{totals.deletions}</span>
+              )}
+            </span>
           )}
         </span>
+        <Tooltip content={changedOnly ? 'Show all files' : 'Show changed files only'}>
+          <button
+            type="button"
+            onClick={toggleChangedOnly}
+            aria-pressed={changedOnly}
+            className={`shrink-0 p-1 -mr-1 rounded transition-colors ${
+              changedOnly
+                ? 'text-primary'
+                : 'text-muted-foreground/50 hover:text-foreground hover:bg-[hsl(var(--surface-2)/0.6)]'
+            }`}
+          >
+            <ListFilter size={13} strokeWidth={1.8} />
+          </button>
+        </Tooltip>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-gutter-stable scrollbar-thin-hover pb-2 px-1">
         {loading && paths.length === 0 ? (
           <div className="px-3 py-2 text-[11px] text-muted-foreground/40">Loading…</div>
+        ) : changedOnly && tree.changedCount === 0 ? (
+          <div className="px-3 py-2 text-[11px] text-muted-foreground/40">No changed files</div>
         ) : (
           <FolderContents
             node={tree}
@@ -590,6 +643,16 @@ function CommitRow({ commit, active, commentCount, onSelect }: CommitRowProps) {
             {commit.subject || '(no subject)'}
           </span>
           {commentCount > 0 && <CommentBadge count={commentCount} />}
+          {(commit.additions > 0 || commit.deletions > 0) && (
+            <span className="font-mono text-[10px] flex gap-1 shrink-0 tabular-nums">
+              {commit.additions > 0 && (
+                <span className="text-[hsl(var(--git-added))]">+{commit.additions}</span>
+              )}
+              {commit.deletions > 0 && (
+                <span className="text-[hsl(var(--git-deleted))]">−{commit.deletions}</span>
+              )}
+            </span>
+          )}
           <span className="text-[10px] text-muted-foreground/40 shrink-0 tabular-nums">
             {formatRelativeTime(commit.authorDate, Date.now() / 1000)}
           </span>

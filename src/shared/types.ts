@@ -766,6 +766,10 @@ export interface EditorCommitListItem {
   authorDate: number;
   subject: string;
   body: string;
+  /** Lines added/removed by this commit (summed across its files). 0 for merge
+   *  commits, which carry no diffstat. */
+  additions: number;
+  deletions: number;
 }
 
 // ── Workspace ports ──────────────────────────────────────────

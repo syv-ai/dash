@@ -24,6 +24,8 @@ interface Props {
   onEditComment(comment: LiveComment): void;
   /** Click the × on a bubble → permanently delete that comment. */
   onDeleteComment(id: string): void;
+  /** Click the reopen control on a sent bubble → mark that comment unsent. */
+  onReopenComment(id: string): void;
   /** When non-null, the overlay renders a DraftBubble at the range's
    *  start line — for both fresh creation and editing. */
   pendingRange: LineRange | null;
@@ -59,6 +61,7 @@ export function CommentOverlay({
   onHoveredIdChange,
   onEditComment,
   onDeleteComment,
+  onReopenComment,
   pendingRange,
   pendingText,
   editingId,
@@ -249,6 +252,7 @@ export function CommentOverlay({
                 onBubbleHover={onHoveredIdChange}
                 onEdit={onEditComment}
                 onDelete={onDeleteComment}
+                onReopen={onReopenComment}
                 editingId={editingId}
                 scopeLabel={scopeLabel}
               />

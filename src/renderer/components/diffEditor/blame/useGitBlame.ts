@@ -31,6 +31,9 @@ export interface BlameRulerMark {
   top: number;
   height: number;
   label: BlameLabel;
+  /** 1-indexed inclusive line run of the hovered commit, surfaced on the card. */
+  lineStart: number;
+  lineEnd: number;
 }
 
 /**
@@ -168,6 +171,8 @@ export function useGitBlame({
         top,
         height: Math.max(2, bottom - top),
         label: blameLabel(blame, Date.now() / 1000),
+        lineStart: run.start,
+        lineEnd: run.end,
       };
     };
 

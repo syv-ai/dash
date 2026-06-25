@@ -16,6 +16,8 @@ interface Props {
   onEdit(comment: LiveComment): void;
   /** Click the in-bubble × → delete this comment. */
   onDelete(id: string): void;
+  /** Click the in-bubble reopen control on a sent comment → mark it unsent. */
+  onReopen(id: string): void;
   /** Origin tag for every bubble in this view (e.g. 'Commit abc1234'), or
    *  undefined in the plain working view where no tag is needed. */
   scopeLabel?: string;
@@ -40,6 +42,7 @@ export function BubbleStack({
   onBubbleHover,
   onEdit,
   onDelete,
+  onReopen,
   editingId,
   scopeLabel,
 }: Props) {
@@ -66,6 +69,7 @@ export function BubbleStack({
             onMouseLeave={() => onBubbleHover(null)}
             onDoubleClick={() => onEdit(c)}
             onDelete={() => onDelete(c.id)}
+            onReopen={() => onReopen(c.id)}
             isFadingOut={c.id === editingId}
           />
         );

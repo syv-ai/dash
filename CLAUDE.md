@@ -62,4 +62,4 @@ Main process `entry.ts` rewrites at runtime: `@shared/*` → `dist/main/shared/*
 
 ## Requirements
 
-Node.js 22+ (`.nvmrc`), pnpm (`shamefully-hoist` in `.npmrc`), Claude Code CLI, Git. macOS arm64 or Linux x64.
+Node.js 24 (`.nvmrc`), pnpm (`shamefully-hoist` in `.npmrc`), Claude Code CLI, Git. macOS arm64 or Linux x64.

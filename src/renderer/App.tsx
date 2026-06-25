@@ -331,6 +331,8 @@ export function App() {
   const setDiffFile = useGit((s) => s.setDiffFile);
   const showCommitGraph = useGit((s) => s.showCommitGraph);
   const setShowCommitGraph = useGit((s) => s.setShowCommitGraph);
+  const commitGraphFocusHash = useGit((s) => s.commitGraphFocusHash);
+  const setCommitGraphFocusHash = useGit((s) => s.setCommitGraphFocusHash);
 
   const sidebarCollapsed = useSettings((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useSettings((s) => s.setSidebarCollapsed);
@@ -1012,8 +1014,15 @@ export function App() {
   function handleViewDiff(filePath: string, staged: boolean) {
     if (!activeTask) return;
     // Monaco loads HEAD/index + working copy itself via files:readForEdit;
-    // App.tsx just opens the modal with the file identity.
-    setDiffFile({ cwd: activeTask.path, filePath, staged });
+    // App.tsx just opens the modal with the file identity. Pin the working view
+    // explicitly so clicking a specific file always shows its working diff
+    // rather than restoring the editor's last (possibly commit/branch) view.
+    setDiffFile({
+      cwd: activeTask.path,
+      filePath,
+      staged,
+      initialView: { kind: 'working', ref: staged ? 'index' : 'HEAD' },
+    });
   }
 
   return (
@@ -1446,10 +1455,16 @@ export function App() {
                 .map((t) => [t.branch, { id: t.id, name: t.name, useWorktree: t.useWorktree }]),
             )
           }
-          onClose={() => setShowCommitGraph(false)}
+          focusHash={commitGraphFocusHash}
+          elevated={!!diffFile}
+          onClose={() => {
+            setShowCommitGraph(false);
+            setCommitGraphFocusHash(null);
+          }}
           onSelectTask={(taskId) => {
             setActiveTaskId(taskId);
             setShowCommitGraph(false);
+            setCommitGraphFocusHash(null);
           }}
         />
       )}

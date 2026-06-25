@@ -13,6 +13,9 @@ interface CommitGraphViewProps {
   gitRemote: string | null;
   taskBranches: Map<string, TaskBranchInfo>;
   onSelectTask: (taskId: string) => void;
+  /** Select + scroll to the commit whose hash starts with this prefix, once,
+   *  after the graph loads. Null/no-match leaves the graph at the top. */
+  focusHash?: string | null;
 }
 
 const PAGE_SIZE = 150;
@@ -22,6 +25,7 @@ export function CommitGraphView({
   gitRemote,
   taskBranches,
   onSelectTask,
+  focusHash,
 }: CommitGraphViewProps) {
   const [graphData, setGraphData] = useState<CommitGraphData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,6 +35,9 @@ export function CommitGraphView({
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailClosing, setDetailClosing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Guards the one-shot focus effect so it doesn't re-fire on subsequent loads
+  // (e.g. "load more") or steal a selection the user has since made.
+  const focusedHashRef = useRef<string | null>(null);
 
   // taskBranches is already a Map, no need to transform
   const githubSlug = useMemo(() => parseGithubSlug(gitRemote), [gitRemote]);
@@ -85,6 +92,26 @@ export function CommitGraphView({
     }
     return map;
   }, [graphData]);
+
+  // One-shot: once the graph has loaded, select + scroll to the focused commit.
+  useEffect(() => {
+    if (!graphData || !focusHash || focusedHashRef.current === focusHash) return;
+    const row = graphData.commits.findIndex((gc) => gc.commit.hash.startsWith(focusHash));
+    if (row < 0) return; // not in the loaded page — leave the graph at the top
+    focusedHashRef.current = focusHash;
+    setDetailClosing(false);
+    setSelectedRow(row);
+    setDetailLoading(true);
+    const hash = graphData.commits[row]!.commit.hash;
+    void window.electronAPI.gitGetCommitDetail({ cwd: projectPath, hash }).then((res) => {
+      if (res.success && res.data) setDetail(res.data);
+      setDetailLoading(false);
+    });
+    const el = scrollRef.current;
+    if (el) {
+      el.scrollTo({ top: Math.max(0, row * ROW_HEIGHT - el.clientHeight / 2), behavior: 'smooth' });
+    }
+  }, [graphData, focusHash, projectPath]);
 
   function handleCloseDetail() {
     setDetailClosing(true);

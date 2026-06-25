@@ -6,6 +6,7 @@ import type { ITheme as XtermTheme } from '@xterm/xterm';
 import type { EditorView } from './types';
 import type { LiveComment } from './comments/types';
 import { useCommentsStore } from '../../stores/commentsStore';
+import { useGit } from '../../stores/gitStore';
 import { useGutterSelection } from './comments/useGutterSelection';
 import { useFileComments } from './comments/useFileComments';
 import { commentScope, scopeLabel } from './comments/commentScope';
@@ -443,6 +444,7 @@ export function EditorPane({
                 onNavigate={onNavigateToComment}
                 onRemove={(_path, id) => useCommentsStore.getState().remove(id)}
                 onUnsend={(id) => useCommentsStore.getState().markUnsent(id)}
+                onClearSent={(scope) => useCommentsStore.getState().clearSent(scope)}
                 onSendScope={promptApi.sendScope}
                 onSendAll={promptApi.sendAllUnsent}
                 onEditAndSend={promptApi.openEditAndSend}
@@ -453,6 +455,10 @@ export function EditorPane({
           {state.kind === 'loading' && displayed.kind === 'loaded' && <LoadingPill />}
           {rulerMark &&
             (() => {
+              const lineRange =
+                rulerMark.lineStart === rulerMark.lineEnd
+                  ? `L${rulerMark.lineStart}`
+                  : `L${rulerMark.lineStart}–${rulerMark.lineEnd}`;
               const band = (
                 <div
                   className="monaco-blame-ruler-band"
@@ -482,16 +488,28 @@ export function EditorPane({
                       <X size={11} strokeWidth={2} />
                     </button>
                     <span className="blame-label-author">{rulerMark.label.author}</span>
-                    {!rulerMark.label.uncommitted && (
-                      <>
-                        <span className="blame-label-meta">
-                          <span className="blame-label-sha">{rulerMark.label.shortSha}</span>
-                          {rulerMark.label.age && <span>{rulerMark.label.age} ago</span>}
-                        </span>
-                        {rulerMark.label.summary && (
-                          <span className="blame-label-summary">{rulerMark.label.summary}</span>
-                        )}
-                      </>
+                    <span className="blame-label-meta">
+                      {!rulerMark.label.uncommitted && (
+                        <>
+                          <button
+                            type="button"
+                            className="blame-label-sha"
+                            title="Open this commit in the graph"
+                            onClick={() =>
+                              useGit.getState().openCommitGraphAtCommit(rulerMark.label.shortSha)
+                            }
+                          >
+                            {rulerMark.label.shortSha}
+                          </button>
+                          {rulerMark.label.age && (
+                            <span className="blame-label-age">{rulerMark.label.age} ago</span>
+                          )}
+                        </>
+                      )}
+                      <span className="blame-label-lines">{lineRange}</span>
+                    </span>
+                    {!rulerMark.label.uncommitted && rulerMark.label.summary && (
+                      <span className="blame-label-summary">{rulerMark.label.summary}</span>
                     )}
                   </div>
                 </>
@@ -508,6 +526,7 @@ export function EditorPane({
             onHoveredIdChange={setHoveredCommentId}
             onEditComment={draftApi.beginEdit}
             onDeleteComment={binding.remove}
+            onReopenComment={(id) => useCommentsStore.getState().markUnsent(id)}
             pendingRange={dragging ? null : pendingRange}
             pendingText={draftApi.pendingText}
             editingId={draftApi.editingId}
