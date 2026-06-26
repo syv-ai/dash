@@ -7,6 +7,56 @@ export interface TerminalThemeDef {
   theme: ITheme;
 }
 
+/** Old Dash "Default" terminal palette (One-Dark), used by the Legacy theme. */
+export const legacyDarkTheme: ITheme = {
+  background: '#1f1f1f',
+  foreground: '#d4d4d4',
+  cursor: '#d4d4d4',
+  cursorAccent: '#1f1f1f',
+  selectionBackground: '#3a3a5a',
+  black: '#000000',
+  red: '#e06c75',
+  green: '#98c379',
+  yellow: '#e5c07b',
+  blue: '#61afef',
+  magenta: '#c678dd',
+  cyan: '#56b6c2',
+  white: '#d4d4d4',
+  brightBlack: '#5c6370',
+  brightRed: '#e06c75',
+  brightGreen: '#98c379',
+  brightYellow: '#e5c07b',
+  brightBlue: '#61afef',
+  brightMagenta: '#c678dd',
+  brightCyan: '#56b6c2',
+  brightWhite: '#ffffff',
+};
+
+/** Old Dash "Default" terminal palette (One-Light), used by the Legacy theme. */
+export const legacyLightTheme: ITheme = {
+  background: '#fafafa',
+  foreground: '#383a42',
+  cursor: '#383a42',
+  cursorAccent: '#fafafa',
+  selectionBackground: '#bfceff',
+  black: '#383a42',
+  red: '#e45649',
+  green: '#50a14f',
+  yellow: '#c18401',
+  blue: '#4078f2',
+  magenta: '#a626a4',
+  cyan: '#0184bc',
+  white: '#a0a1a7',
+  brightBlack: '#696c77',
+  brightRed: '#e45649',
+  brightGreen: '#50a14f',
+  brightYellow: '#c18401',
+  brightBlue: '#4078f2',
+  brightMagenta: '#a626a4',
+  brightCyan: '#0184bc',
+  brightWhite: '#ffffff',
+};
+
 export const darkTheme: ITheme = {
   background: '#0d0d11',
   foreground: '#f1eee5',
@@ -426,12 +476,21 @@ export const TERMINAL_THEMES: TerminalThemeDef[] = [
       brightWhite: '#d3c6aa',
     },
   },
+  {
+    id: 'legacy',
+    name: 'Legacy',
+    isDark: true, // follows app theme
+    theme: legacyDarkTheme, // resolved dynamically
+  },
 ];
 
 /** Resolve the ITheme for a given theme ID and app dark/light mode. */
 export function resolveTheme(themeId: string, isDark: boolean): ITheme {
   if (themeId === 'default') {
     return isDark ? darkTheme : lightTheme;
+  }
+  if (themeId === 'legacy') {
+    return isDark ? legacyDarkTheme : legacyLightTheme;
   }
   const def = TERMINAL_THEMES.find((t) => t.id === themeId);
   return def ? def.theme : isDark ? darkTheme : lightTheme;
