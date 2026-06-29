@@ -36,6 +36,23 @@ export interface WorkspacePorts {
   /** Spacing between adjacent slots. Default 100. */
   stride?: number;
   ports: PortDeclaration[];
+  /**
+   * Composed env vars derived from the allocated ports — templates that
+   * interpolate `${PORT_VAR}` references, e.g.
+   * `{ "VITE_API_URL": "http://localhost:${BACKEND_PORT}" }`. Dash evaluates
+   * these against the worktree's allocated ports and emits them into both the
+   * PTY env and the generated export file, so a value built from a port (an
+   * API URL, a CORS origin list) is computed once and identical everywhere.
+   * Every `${VAR}` must reference a declared Tier-2 port envVar.
+   */
+  derived?: Record<string, string>;
+  /**
+   * Path, relative to the worktree root, for the sourceable export file Dash
+   * writes with every allocation (`export VAR='…'` lines for all Tier-2 ports
+   * + derived vars). Lets tools outside a Dash PTY — pytest, alembic, compose,
+   * CI — read the worktree's ports. Defaults to `.env.worktree`.
+   */
+  exportFile?: string;
 }
 
 const ENV_VAR_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
@@ -77,6 +94,60 @@ function isValidPort(value: unknown): value is number {
   );
 }
 
+/** A path is worktree-safe if it's relative and never climbs out via `..`. */
+function isSafeRelativePath(p: string): boolean {
+  return !path.isAbsolute(p) && !path.normalize(p).split(path.sep).includes('..');
+}
+
+// Matches `${VAR}` interpolations in a derived template. The inner text is
+// captured so we can check it resolves to a declared port env var.
+const TEMPLATE_REF_PATTERN = /\$\{([^}]*)\}/g;
+
+/**
+ * Validate the optional `derived` map: composed env vars whose templates
+ * interpolate declared Tier-2 port env vars. Returns null on any error (after
+ * reporting it); undefined-but-valid (absent) is signalled by the caller not
+ * calling this.
+ */
+function parseDerived(
+  raw: unknown,
+  portEnvVars: Set<string>,
+  source: string,
+): Record<string, string> | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    report(`${source}: 'derived' must be an object`);
+    return null;
+  }
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!ENV_VAR_PATTERN.test(key)) {
+      report(`${source}: derived key '${key}' must match /^[A-Z_][A-Z0-9_]*$/`);
+      return null;
+    }
+    // A derived var can't shadow a declared port var — they share the env
+    // namespace and the collision would be ambiguous.
+    if (portEnvVars.has(key)) {
+      report(`${source}: derived key '${key}' collides with a declared port envVar`);
+      return null;
+    }
+    if (typeof value !== 'string' || value.length === 0) {
+      report(`${source}: derived['${key}'] must be a non-empty string`);
+      return null;
+    }
+    for (const match of value.matchAll(TEMPLATE_REF_PATTERN)) {
+      const ref = match[1]!;
+      if (!portEnvVars.has(ref)) {
+        report(
+          `${source}: derived['${key}'] references \${${ref}}, which is not a declared port envVar`,
+        );
+        return null;
+      }
+    }
+    out[key] = value;
+  }
+  return out;
+}
+
 /** Validate + collect the optional command fields. Returns null on invalid. */
 function parseCommandFields(
   obj: Record<string, unknown>,
@@ -99,7 +170,7 @@ function parseCommandFields(
       return null;
     }
     const cwd = obj.cwd.trim();
-    if (path.isAbsolute(cwd) || path.normalize(cwd).split(path.sep).includes('..')) {
+    if (!isSafeRelativePath(cwd)) {
       report(`${source}: ports[${index}].cwd must be a relative path inside the worktree`);
       return null;
     }
@@ -219,6 +290,25 @@ function parseConfig(parsed: unknown, source: string): WorkspacePorts | null {
       seenEnvVars.add(entry.envVar);
     }
     result.ports.push(entry);
+  }
+
+  if (obj?.derived !== undefined) {
+    const derived = parseDerived(obj.derived, seenEnvVars, source);
+    if (derived === null) return null;
+    if (Object.keys(derived).length > 0) result.derived = derived;
+  }
+
+  if (obj?.exportFile !== undefined) {
+    if (typeof obj.exportFile !== 'string' || obj.exportFile.trim().length === 0) {
+      report(`${source}: 'exportFile' must be a non-empty string`);
+      return null;
+    }
+    const exportFile = obj.exportFile.trim();
+    if (!isSafeRelativePath(exportFile)) {
+      report(`${source}: 'exportFile' must be a relative path inside the worktree`);
+      return null;
+    }
+    result.exportFile = exportFile;
   }
 
   return result;
