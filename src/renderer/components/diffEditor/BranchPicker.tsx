@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Search } from 'lucide-react';
+import { GitCompare, Search, X } from 'lucide-react';
 import type { BranchInfo } from '@shared/types';
 
 interface BranchPickerProps {
@@ -8,11 +8,14 @@ interface BranchPickerProps {
   selectedRef: string | null;
   /** Picker has no internal "close" — the host owns that lifecycle. */
   onSelect: (ref: string) => void;
+  /** When in branch view, leave the comparison (back to working tree). Shown as
+   *  a row at the top of the picker. Omitted outside branch view. */
+  onExit?: () => void;
 }
 
 /** Compact branch list with a search input. Uses the existing
  *  gitListBranches IPC, so it reflects fetched-remote branches. */
-export function BranchPicker({ cwd, selectedRef, onSelect }: BranchPickerProps) {
+export function BranchPicker({ cwd, selectedRef, onSelect, onExit }: BranchPickerProps) {
   const [branches, setBranches] = useState<BranchInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +57,17 @@ export function BranchPicker({ cwd, selectedRef, onSelect }: BranchPickerProps) 
           className="flex-1 bg-transparent outline-hidden text-[12px] placeholder:text-muted-foreground/40"
         />
       </div>
+      {onExit && (
+        <button
+          type="button"
+          onClick={onExit}
+          className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-[12px] border-b border-border/40 text-muted-foreground/80 hover:text-foreground hover:bg-[hsl(var(--surface-2)/0.6)] transition-colors"
+        >
+          <X size={12} strokeWidth={1.8} className="shrink-0" />
+          <span className="flex-1">Exit comparison</span>
+          <GitCompare size={11} strokeWidth={1.8} className="shrink-0 opacity-50" />
+        </button>
+      )}
       <div className="flex-1 min-h-0 overflow-y-auto py-1">
         {loading && <div className="px-3 py-2 text-[11px] text-muted-foreground/40">Loading…</div>}
         {error && <div className="px-3 py-2 text-[11px] text-destructive">{error}</div>}

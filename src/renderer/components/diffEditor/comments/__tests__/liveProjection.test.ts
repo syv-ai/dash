@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
   isFullModelReplace,
+  isWholeBlockDeleted,
+  commentsDeletedByEdit,
   projectRanges,
   rangesEqual,
+  type EditChange,
   type RangeReader,
 } from '../liveProjection';
 import type { LiveComment } from '../types';
@@ -41,6 +44,68 @@ describe('rangesEqual', () => {
   });
   it('false when membership differs', () => {
     expect(rangesEqual([live('a', 1, 2)], [live('a', 1, 2), live('b', 4, 4)])).toBe(false);
+  });
+});
+
+describe('isWholeBlockDeleted', () => {
+  // A whole-line comment spanning lines [start, end]; the deletion is a pure
+  // removal (text: '') of the range (sl,sc)-(el, *).
+  const del = (startLine: number, startColumn: number, endLine: number): EditChange => ({
+    startLine,
+    startColumn,
+    endLine,
+    text: '',
+  });
+
+  it('removes a mid-file block deleted from its first col through past its last line', () => {
+    // comment 5-8, delete (5,1)-(9,1)
+    expect(isWholeBlockDeleted(5, 8, del(5, 1, 9))).toBe(true);
+  });
+
+  it('removes a single-line comment whose line is deleted', () => {
+    expect(isWholeBlockDeleted(5, 5, del(5, 1, 6))).toBe(true);
+  });
+
+  it('removes when the deletion starts on an earlier line', () => {
+    // delete the trailing newline of line 4 through line 9 → lines 5-8 gone
+    expect(isWholeBlockDeleted(5, 8, del(4, 20, 9))).toBe(true);
+  });
+
+  it('keeps the comment when replacement text is non-empty (edit to one line)', () => {
+    expect(isWholeBlockDeleted(5, 8, { startLine: 5, startColumn: 1, endLine: 9, text: 'x' })).toBe(
+      false,
+    );
+  });
+
+  it('keeps the comment when its first line survives (deletion starts mid-line)', () => {
+    expect(isWholeBlockDeleted(5, 8, del(5, 4, 9))).toBe(false);
+  });
+
+  it('keeps the comment when its last line survives (deletion ends on it)', () => {
+    // delete (5,1)-(8,1) removes lines 5-7, line 8 remains as a valid anchor
+    expect(isWholeBlockDeleted(5, 8, del(5, 1, 8))).toBe(false);
+  });
+
+  it('keeps the comment when only a leading subset of lines is deleted', () => {
+    // delete (6,1)-(9,1): line 5 survives
+    expect(isWholeBlockDeleted(5, 8, del(6, 1, 9))).toBe(false);
+  });
+});
+
+describe('commentsDeletedByEdit', () => {
+  it('collects ids whose whole block any change deletes', () => {
+    const comments = [
+      { id: 'a', startLine: 5, endLine: 8 },
+      { id: 'b', startLine: 20, endLine: 20 },
+    ];
+    const changes: EditChange[] = [{ startLine: 5, startColumn: 1, endLine: 9, text: '' }];
+    expect(commentsDeletedByEdit(comments, changes)).toEqual(['a']);
+  });
+
+  it('returns empty when no block is fully deleted', () => {
+    const comments = [{ id: 'a', startLine: 5, endLine: 8 }];
+    const changes: EditChange[] = [{ startLine: 6, startColumn: 1, endLine: 7, text: '' }];
+    expect(commentsDeletedByEdit(comments, changes)).toEqual([]);
   });
 });
 

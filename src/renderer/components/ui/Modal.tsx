@@ -36,6 +36,10 @@ interface ModalProps {
   /** Inline style merged onto the card div. Use for one-off overrides (e.g.
    *  a more transparent background) — beats class-based bg utilities. */
   cardStyle?: React.CSSProperties;
+  /** Raise the backdrop above the default z-50 so this modal stacks over
+   *  another already-open modal (e.g. the commit graph opened from the diff
+   *  editor's blame card). */
+  elevated?: boolean;
   children: React.ReactNode;
 }
 
@@ -43,7 +47,14 @@ interface ModalProps {
 // pushes onto this stack so the outer's keydown handler bows out for Esc.
 const modalCloseStack: Array<() => void> = [];
 
-export function Modal({ onClose, size, overflow = 'hidden', cardStyle, children }: ModalProps) {
+export function Modal({
+  onClose,
+  size,
+  overflow = 'hidden',
+  cardStyle,
+  elevated = false,
+  children,
+}: ModalProps) {
   const [closing, setClosing] = useState(false);
   const requestClose = useCallback(() => setClosing(true), []);
   // Backdrop click should ONLY close when both mousedown and mouseup land on
@@ -94,7 +105,7 @@ export function Modal({ onClose, size, overflow = 'hidden', cardStyle, children 
           softer dim + blur lets the underlying app peek through the translucent
           card without dominating it. */}
       <div
-        className={`fixed inset-0 z-50 flex items-center justify-center bg-[hsl(0_0%_0%/0.55)] backdrop-blur-md ${closing ? 'animate-fade-out' : 'animate-fade-in'}`}
+        className={`fixed inset-0 ${elevated ? 'z-[60]' : 'z-50'} flex items-center justify-center bg-[hsl(0_0%_0%/0.55)] backdrop-blur-md ${closing ? 'animate-fade-out' : 'animate-fade-in'}`}
         onMouseDown={(e) => {
           mouseDownOnBackdrop.current = e.target === e.currentTarget;
         }}

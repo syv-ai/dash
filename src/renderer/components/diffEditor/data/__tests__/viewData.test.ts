@@ -10,6 +10,8 @@ const commit = (hash: string): CommitSummary => ({
   body: '',
   authorName: 'a',
   authorDate: 0,
+  additions: 0,
+  deletions: 0,
 });
 const fc = (path: string): FileChange => ({
   path,

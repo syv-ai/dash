@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { Undo2, X } from 'lucide-react';
 import type { Shade } from './types';
 import { BubbleShell } from './BubbleShell';
 
@@ -25,6 +25,9 @@ interface Props {
   /** Click the in-bubble × → delete this comment. ESC is taken by the
    *  surrounding Modal, so a button is the keyboard-free path. */
   onDelete(): void;
+  /** Click the in-bubble reopen control on a SENT comment → mark it unsent so
+   *  it rejoins the next prompt. Only rendered when `sent`. */
+  onReopen(): void;
   /** True when this comment is currently being edited — the persisted
    *  card fades to opacity 0 while the DraftBubble crossfades in beside
    *  it, so the read-only → editable transition reads as a single morph
@@ -47,6 +50,7 @@ export function CommentBubble({
   onMouseLeave,
   onDoubleClick,
   onDelete,
+  onReopen,
   isFadingOut,
 }: Props) {
   // A sent comment fades back so it reads as "already pushed" without
@@ -71,18 +75,34 @@ export function CommentBubble({
         onDoubleClick={onDoubleClick}
       >
         <div className="group/bubble">
-          <button
-            type="button"
-            aria-label="Delete comment"
-            title="Delete comment"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            className="absolute top-[6px] right-[6px] flex h-[20px] w-[20px] items-center justify-center rounded-[4px] text-muted-foreground/60 opacity-40 hover:opacity-100 hover:text-foreground hover:bg-foreground/10 transition-opacity z-10"
-          >
-            <X size={13} strokeWidth={1.8} />
-          </button>
+          <div className="absolute top-[6px] right-[6px] flex items-center gap-[2px] z-10">
+            {sent && (
+              <button
+                type="button"
+                aria-label="Reopen comment"
+                title="Reopen — include in next prompt"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onReopen();
+                }}
+                className="flex h-[20px] w-[20px] items-center justify-center rounded-[4px] text-muted-foreground/60 opacity-40 hover:opacity-100 hover:text-primary hover:bg-primary/10 transition-opacity"
+              >
+                <Undo2 size={12} strokeWidth={1.8} />
+              </button>
+            )}
+            <button
+              type="button"
+              aria-label="Delete comment"
+              title="Delete comment"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              className="flex h-[20px] w-[20px] items-center justify-center rounded-[4px] text-muted-foreground/60 opacity-40 hover:opacity-100 hover:text-foreground hover:bg-foreground/10 transition-opacity"
+            >
+              <X size={13} strokeWidth={1.8} />
+            </button>
+          </div>
           <div className="flex items-center gap-[6px] mb-[2px]">
             <span className="font-mono text-[10px] text-muted-foreground/55 tracking-normal">
               {meta}

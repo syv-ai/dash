@@ -43,6 +43,50 @@ export function isFullModelReplace(e: ContentChangeLite, currentValue: string): 
   return only.rangeOffset === 0 && only.text === currentValue;
 }
 
+/** A single content edit, reduced to the fields needed to decide whether it
+ *  deleted a comment's anchor block. Mirrors Monaco's IModelContentChange
+ *  (range + replacement text). */
+export interface EditChange {
+  startLine: number;
+  startColumn: number;
+  endLine: number;
+  text: string;
+}
+
+/** True when an incremental edit deletes EVERY line a whole-line comment is
+ *  anchored to, leaving no line to re-anchor on. Only a *pure deletion* (empty
+ *  replacement) whose removed range starts at/before the comment's first line
+ *  (at column 1) and extends past its last line qualifies: replacing the block
+ *  with new text is an edit (the comment keeps that line as a single anchor),
+ *  and any surviving boundary line keeps the comment. A deletion ending exactly
+ *  on the comment's last line (e.g. an end-of-file block) is conservatively
+ *  kept — far better to leave a stale comment than to drop a valid one. */
+export function isWholeBlockDeleted(
+  commentStart: number,
+  commentEnd: number,
+  change: EditChange,
+): boolean {
+  if (change.text.length > 0) return false;
+  const coversStart =
+    change.startLine < commentStart ||
+    (change.startLine === commentStart && change.startColumn === 1);
+  const coversEnd = change.endLine > commentEnd;
+  return coversStart && coversEnd;
+}
+
+/** Ids of the comments whose whole anchor block was deleted by `changes`.
+ *  Comment ranges and change ranges are both in pre-edit model coordinates. */
+export function commentsDeletedByEdit(
+  comments: ReadonlyArray<{ id: string; startLine: number; endLine: number }>,
+  changes: ReadonlyArray<EditChange>,
+): string[] {
+  const ids: string[] = [];
+  for (const c of comments) {
+    if (changes.some((ch) => isWholeBlockDeleted(c.startLine, c.endLine, ch))) ids.push(c.id);
+  }
+  return ids;
+}
+
 /** True when both arrays have the same ids in the same order with identical
  *  ranges. Used to avoid publishing a new reference when nothing moved. */
 export function rangesEqual(a: ReadonlyArray<LiveComment>, b: ReadonlyArray<LiveComment>): boolean {

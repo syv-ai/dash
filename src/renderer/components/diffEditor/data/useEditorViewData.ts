@@ -74,6 +74,8 @@ export function useEditorViewData(
               body: c.body,
               authorName: c.authorName,
               authorDate: c.authorDate,
+              additions: c.additions,
+              deletions: c.deletions,
             }))
           : NO_COMMITS,
       ),

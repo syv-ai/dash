@@ -28,11 +28,17 @@ export interface GitState {
   /** PR per task for the ProjectView cards, keyed by task id (null = none). */
   prByTask: Record<string, PullRequestInfo | null>;
   showCommitGraph: boolean;
+  /** When set, the commit-graph modal selects + scrolls to this commit on open
+   *  (e.g. opened from the diff editor's blame card). Cleared on close. */
+  commitGraphFocusHash: string | null;
 }
 
 export interface GitActions {
   setDiffFile: (v: DiffFileTarget | null) => void;
   setShowCommitGraph: (v: Updater<boolean>) => void;
+  /** Open the commit-graph modal scrolled to a specific commit. */
+  openCommitGraphAtCommit: (hash: string) => void;
+  setCommitGraphFocusHash: (hash: string | null) => void;
   refreshGitStatus: (cwd: string) => Promise<void>;
   // Mutating ops — resolve the active task themselves, then refresh its status.
   stageFiles: (filePaths: string[]) => Promise<void>;
@@ -65,9 +71,12 @@ export const useGit = create<GitStore>((set, get) => ({
   prInfo: null,
   prByTask: {},
   showCommitGraph: false,
+  commitGraphFocusHash: null,
 
   setDiffFile: (v) => set({ diffFile: v }),
   setShowCommitGraph: (v) => set((s) => ({ showCommitGraph: apply(v, s.showCommitGraph) })),
+  openCommitGraphAtCommit: (hash) => set({ commitGraphFocusHash: hash, showCommitGraph: true }),
+  setCommitGraphFocusHash: (hash) => set({ commitGraphFocusHash: hash }),
 
   refreshGitStatus: async (cwd) => {
     set({ gitLoading: true });
