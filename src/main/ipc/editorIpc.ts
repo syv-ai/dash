@@ -306,6 +306,16 @@ export function parseCommitNumstatLog(
   return map;
 }
 
+/** Git object specs (`<rev>:<path>`) and pathspecs require forward slashes.
+ *  On Windows, path.relative() yields '\\' separators, which make
+ *  `git show HEAD:sub\file` fail and return '' — rendering the whole file as
+ *  added in the diff view. Gated to Windows on purpose: there '\\' is never a
+ *  legal filename character so converting it is unambiguous, whereas on POSIX a
+ *  backslash IS a valid character in a filename and must be left untouched. */
+export function toGitPath(relPath: string): string {
+  return process.platform === 'win32' ? relPath.replace(/\\/g, '/') : relPath;
+}
+
 export function registerEditorIpc(): void {
   // ── editor:readWorking ────────────────────────────────────────
   ipcMain.handle(
@@ -332,7 +342,7 @@ export function registerEditorIpc(): void {
         } catch {
           /* cwdAbs is fine */
         }
-        const relForGit = path.relative(cwdReal, abs);
+        const relForGit = toGitPath(path.relative(cwdReal, abs));
         const spec = args.ref === 'HEAD' ? `HEAD:${relForGit}` : `:0:${relForGit}`;
         const originalContent = await gitShow(args.cwd, spec);
 
@@ -400,7 +410,7 @@ export function registerEditorIpc(): void {
         } catch {
           /* cwdAbs is fine */
         }
-        const relForGit = path.relative(cwdReal, abs);
+        const relForGit = toGitPath(path.relative(cwdReal, abs));
 
         // Try parent for original. If the hash has no parent (root commit),
         // gitShow falls through to '' — every file is then an addition.
@@ -452,7 +462,7 @@ export function registerEditorIpc(): void {
         } catch {
           /* cwdAbs is fine */
         }
-        const relForGit = path.relative(cwdReal, abs);
+        const relForGit = toGitPath(path.relative(cwdReal, abs));
         const blameArgs = [
           'blame',
           '--incremental',
@@ -843,7 +853,7 @@ export function registerEditorIpc(): void {
         } catch {
           /* cwdAbs is fine */
         }
-        const relForGit = path.relative(cwdReal, abs);
+        const relForGit = toGitPath(path.relative(cwdReal, abs));
         const originalContent = await gitShow(args.cwd, `${args.base}:${relForGit}`);
 
         let workingContent: string | null = null;
