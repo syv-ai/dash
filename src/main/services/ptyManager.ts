@@ -361,6 +361,10 @@ export function buildClaudeArgs(opts: {
   name?: string;
   permissionMode?: PermissionMode;
   initialPrompt?: string;
+  /** Pin a model (loop agents: worker strong, manager ≥ worker). */
+  model?: string;
+  /** Extra `--settings` JSON, merged with ultracode (loop manager write-deny). */
+  extraSettings?: Record<string, unknown>;
 }): string[] {
   const args: string[] = [];
   if (opts.resumeSessionId) {
@@ -373,11 +377,19 @@ export function buildClaudeArgs(opts: {
   } else if (opts.permissionMode === 'bypassPermissions') {
     args.push('--dangerously-skip-permissions');
   }
+  if (opts.model) {
+    args.push('--model', opts.model);
+  }
   // ultracode is session-scoped; re-apply on every spawn so the user's toggle
-  // effectively sticks across the sessions Dash launches. Must precede the
-  // positional prompt below.
-  if (ultracode) {
-    args.push('--settings', JSON.stringify({ ultracode: true }));
+  // effectively sticks across the sessions Dash launches. Merge any per-spawn
+  // extraSettings (the loop manager's write-deny policy) into the same object.
+  // Must precede the positional prompt below.
+  const settings: Record<string, unknown> = {
+    ...(ultracode ? { ultracode: true } : {}),
+    ...(opts.extraSettings ?? {}),
+  };
+  if (Object.keys(settings).length > 0) {
+    args.push('--settings', JSON.stringify(settings));
   }
   if (opts.initialPrompt) {
     args.push(opts.initialPrompt);
@@ -394,6 +406,29 @@ export async function startDirectPty(options: {
   isDark?: boolean;
   /** Task name → `claude --name` on a fresh spawn (recognizable in /resume). */
   name?: string;
+  /**
+   * Owning task id, when it differs from the PTY id. Agentic-loop PTYs use
+   * composite ids (`loop:<taskId>` / `mgr:<taskId>`) but must report the real
+   * task id so listForTask/restartAllForTask still group them. Defaults to `id`.
+   */
+  taskId?: string;
+  /**
+   * Skip `--resume`: spawn a brand-new Claude session every time. This is the
+   * Ralph reset — a loop worker re-reads its goal + STATE.md from disk each
+   * iteration instead of accumulating conversation context. Also avoids the
+   * session-file collision when two agents (worker + manager) share a cwd.
+   */
+  freshContext?: boolean;
+  /**
+   * Initial prompt auto-submitted after the trust gate (CC positional arg).
+   * Takes precedence over any prompt stashed via setInitialPrompt. The loop
+   * scheduler passes the per-iteration worker prompt here.
+   */
+  initialPrompt?: string;
+  /** Pin a model (loop agents). */
+  model?: string;
+  /** Extra `--settings` JSON merged at spawn (loop manager write-deny policy). */
+  extraSettings?: Record<string, unknown>;
   sender?: WebContents;
 }): Promise<{
   reattached: boolean;
@@ -436,18 +471,23 @@ export async function startDirectPty(options: {
   //
   // DO NOT relax the one-non-worktree-task cap without revisiting this; see git
   // history at 32bcdb6 for why the old SessionStart-hook pinning was removed.
-  const resumeSessionId = findLatestSessionId(options.cwd);
+  // freshContext (Ralph reset / loop agents) deliberately never resumes — each
+  // spawn is a new session reading its goal + STATE.md from disk.
+  const resumeSessionId = options.freshContext ? null : findLatestSessionId(options.cwd);
 
   // Pre-loaded prompt (the inlined ports-setup body). Only present for the
   // ports-migrate flow today; no-op for every other spawn. buildClaudeArgs
-  // places it last (CC auto-submits it after the trust gate clears).
-  const initialPrompt = consumeInitialPrompt(options.id);
+  // places it last (CC auto-submits it after the trust gate clears). An explicit
+  // initialPrompt (loop scheduler) wins over the stashed one.
+  const initialPrompt = options.initialPrompt ?? consumeInitialPrompt(options.id);
 
   const args = buildClaudeArgs({
     resumeSessionId,
     name: options.name,
     permissionMode: options.permissionMode,
     initialPrompt,
+    model: options.model,
+    extraSettings: options.extraSettings,
   });
 
   const env = buildDirectEnv(options.isDark ?? true, options.cwd);
@@ -473,7 +513,7 @@ export async function startDirectPty(options: {
     isDirectSpawn: true,
     owner: options.sender || null,
     kind: 'agent',
-    taskId: options.id,
+    taskId: options.taskId ?? options.id,
     featureId: null,
     mirror: new TerminalMirror(options.cols, options.rows),
   };

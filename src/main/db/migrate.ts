@@ -318,5 +318,18 @@ export function runMigrations(): void {
     /* already exists */
   }
 
+  // Agentic loops: a task can be a `loop` (Ralph worker + manager) carrying a
+  // JSON LoopConfig. Existing rows predate loops → default 'standard' / null.
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN task_kind TEXT NOT NULL DEFAULT 'standard'`);
+  } catch {
+    /* already exists */
+  }
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN loop_config TEXT`);
+  } catch {
+    /* already exists */
+  }
+
   rawDb.pragma('foreign_keys = ON');
 }

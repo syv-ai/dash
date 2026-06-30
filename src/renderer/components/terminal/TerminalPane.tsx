@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import type { SearchAddon } from '@xterm/addon-search';
 import { sessionRegistry } from '../../terminal/SessionRegistry';
-import type { PermissionMode } from '../../../shared/types';
+import type { LoopRole, PermissionMode } from '../../../shared/types';
 import { TerminalSearch } from './TerminalSearch';
 
 const OVERLAY_MIN_MS = 2000;
@@ -12,9 +12,26 @@ interface TerminalPaneProps {
   cwd: string;
   permissionMode?: PermissionMode;
   terminalBg?: string;
+  /** Owning task id when it differs from the PTY id (loop:/mgr: composite ids). */
+  loopTaskId?: string;
+  /** Skip --resume: spawn a fresh Claude session (loop agents; Ralph reset). */
+  freshContext?: boolean;
+  /** Prompt auto-submitted after the trust gate (loop worker/manager seed). */
+  initialPrompt?: string;
+  /** Loop agent role; main derives model/permission/prompt/deny-settings from it. */
+  loopRole?: LoopRole;
 }
 
-export function TerminalPane({ id, cwd, permissionMode, terminalBg }: TerminalPaneProps) {
+export function TerminalPane({
+  id,
+  cwd,
+  permissionMode,
+  terminalBg,
+  loopTaskId,
+  freshContext,
+  initialPrompt,
+  loopRole,
+}: TerminalPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [showOverlay, setShowOverlay] = useState(false);
@@ -37,7 +54,15 @@ export function TerminalPane({ id, cwd, permissionMode, terminalBg }: TerminalPa
 
     // Get or create session first so we can register callbacks
     // before the async attach() work detects a restart
-    const session = sessionRegistry.getOrCreate({ id, cwd, permissionMode });
+    const session = sessionRegistry.getOrCreate({
+      id,
+      cwd,
+      permissionMode,
+      loopTaskId,
+      freshContext,
+      initialPrompt,
+      loopRole,
+    });
 
     session.onRestarting(() => {
       overlayStartRef.current = Date.now();

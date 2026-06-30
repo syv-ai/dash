@@ -1,6 +1,7 @@
 import type {
   IpcResponse,
   PermissionMode,
+  LoopRole,
   TerminalSnapshot,
   ActivityInfo,
   RemoteControlState,
@@ -18,6 +19,14 @@ export interface PtyApi {
     rows: number;
     permissionMode?: PermissionMode;
     isDark?: boolean;
+    /** Owning task id when it differs from the PTY id (loop:/mgr: composite ids). */
+    taskId?: string;
+    /** Skip --resume: spawn a fresh Claude session (loop agents; Ralph reset). */
+    freshContext?: boolean;
+    /** Prompt auto-submitted after the trust gate (loop worker/manager seed). */
+    initialPrompt?: string;
+    /** Loop agent role; main derives model/permission/prompt/deny-settings from it. */
+    loopRole?: LoopRole;
   }) => Promise<
     IpcResponse<{
       reattached: boolean;
