@@ -4,7 +4,7 @@ import { SearchAddon } from '@xterm/addon-search';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { Utf8Base64 } from './Utf8Base64';
-import type { PermissionMode, TerminalSnapshot } from '../../shared/types';
+import type { LoopRole, PermissionMode, TerminalSnapshot } from '../../shared/types';
 import { FilePathLinkProvider } from './FilePathLinkProvider';
 import type { ITheme } from '@xterm/xterm';
 import { darkTheme, lightTheme, resolveTheme } from './terminalThemes';
@@ -87,6 +87,7 @@ export class TerminalSessionManager {
   private readonly loopTaskId?: string;
   private readonly freshContext: boolean;
   private readonly initialPrompt?: string;
+  private readonly loopRole?: LoopRole;
   // Claude Code's TUI rewrites cells continuously, which causes xterm to drop
   // the visible selection before the user can press the copy shortcut. Cache
   // the last non-empty selection on every change so Ctrl+Shift+C / Cmd+C can
@@ -111,6 +112,8 @@ export class TerminalSessionManager {
     freshContext?: boolean;
     /** Prompt auto-submitted after the trust gate (loop worker/manager seed). */
     initialPrompt?: string;
+    /** Loop agent role; main derives model/permission/prompt/deny-settings from it. */
+    loopRole?: LoopRole;
   }) {
     this.id = opts.id;
     this.cwd = opts.cwd;
@@ -124,6 +127,7 @@ export class TerminalSessionManager {
     this.loopTaskId = opts.loopTaskId;
     this.freshContext = opts.freshContext ?? false;
     this.initialPrompt = opts.initialPrompt;
+    this.loopRole = opts.loopRole;
 
     this.terminal = new Terminal({
       scrollback: 100_000,
@@ -1051,6 +1055,7 @@ export class TerminalSessionManager {
       taskId: this.loopTaskId,
       freshContext: this.freshContext,
       initialPrompt: this.initialPrompt,
+      loopRole: this.loopRole,
     });
 
     if (resp.success) {

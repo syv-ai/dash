@@ -1,5 +1,5 @@
 import { TerminalSessionManager } from './TerminalSessionManager';
-import type { PermissionMode } from '../../shared/types';
+import type { LoopRole, PermissionMode } from '../../shared/types';
 
 interface AttachOptions {
   id: string;
@@ -15,6 +15,8 @@ interface AttachOptions {
   freshContext?: boolean;
   /** Prompt auto-submitted after the trust gate (loop worker/manager seed). */
   initialPrompt?: string;
+  /** Loop agent role; main derives model/permission/prompt/deny-settings from it. */
+  loopRole?: LoopRole;
 }
 
 class SessionRegistryImpl {
@@ -36,6 +38,7 @@ class SessionRegistryImpl {
         loopTaskId: opts.loopTaskId,
         freshContext: opts.freshContext,
         initialPrompt: opts.initialPrompt,
+        loopRole: opts.loopRole,
       });
       this.sessions.set(opts.id, session);
     }

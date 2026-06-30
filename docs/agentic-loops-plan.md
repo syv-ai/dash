@@ -278,6 +278,45 @@ round out the product.
 
 ---
 
+## 11a. Authority, manager model & worktree cohabitation (locked)
+
+**Manager model ≥ worker.** The manager is an _overseer_; evaluation is at least as hard
+as generation, so a model weaker than the worker can't reliably grade it. Default the
+manager to the worker's tier (`resolveAgentModel` mirrors it); `managerWeakerThanWorker`
+flags the anti-pattern for a modal warning. Cost is contained because the manager runs
+**episodically** (between iterations) while the worker runs continuously, and the
+manager's mechanical work (state reads, run-log, status) is offloaded to MCP tools, not
+model tokens.
+
+**How the manager manages — capabilities, not vibes.** Its _decisions_ are its own
+judgment; its _actions_ are a fixed, enforced set:
+
+- **Enforced by Dash:** can't edit code (separate process + write-deny settings); can't
+  exceed budget (scheduler auto-pause); pause/resume/kill are real scheduler ops, gated
+  by level and logged to the run-log.
+- **Soft (its judgment):** priorities, when to intervene, what to escalate.
+- **Steering channel:** because the worker resets context each pass, the manager steers
+  by appending to `manager-notes.md`, which the next fresh worker reads. Urgent control
+  goes through the loop MCP (pause/kill). It shapes the _inputs_ of the next iteration,
+  never a live session it's about to discard.
+
+**Permission is the wrong lever; capability shaping is right.** `default` prompts on
+_every_ tool (including reads) → an autonomous manager would stall on `grep`/`git log`.
+None of the three modes is "reads yes, writes no." So the manager runs **unprompted**
+(`bypassPermissions`) with a **write-deny policy passed via `claude --settings`** —
+per-process, because the two agents share a worktree and a cwd settings file can't differ
+per agent. Deny beats every allow and PreToolUse denial is independent of permission mode,
+so `Write/Edit/MultiEdit/NotebookEdit` are a hard block and the git-write/destructive Bash
+patterns cover the rest (see `MANAGER_DENY` in `loopSpawn.ts`).
+
+**Worktree cohabitation.** Dash's rule is really "one _non-worktree_ task per path," whose
+deeper invariant is "unique cwd → deterministic `--resume`." A loop is **one task**, so it
+doesn't violate the rule; the resume invariant is preserved because **both loop agents
+spawn `freshContext`** (never resume-by-mtime → no session-file collision). Git-write
+safety in the shared worktree holds because **only the worker writes** (single writer → no
+`index.lock` races). A shared worktree is correct by design — the manager must see the
+worker's _actual_ state — so we make cohabitation safe rather than splitting it.
+
 ## 12. Open questions
 
 - Worker visibility: run the worker interactive (visible, your two-PTY vision) while Dash

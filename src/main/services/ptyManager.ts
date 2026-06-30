@@ -361,6 +361,10 @@ export function buildClaudeArgs(opts: {
   name?: string;
   permissionMode?: PermissionMode;
   initialPrompt?: string;
+  /** Pin a model (loop agents: worker strong, manager ≥ worker). */
+  model?: string;
+  /** Extra `--settings` JSON, merged with ultracode (loop manager write-deny). */
+  extraSettings?: Record<string, unknown>;
 }): string[] {
   const args: string[] = [];
   if (opts.resumeSessionId) {
@@ -373,11 +377,19 @@ export function buildClaudeArgs(opts: {
   } else if (opts.permissionMode === 'bypassPermissions') {
     args.push('--dangerously-skip-permissions');
   }
+  if (opts.model) {
+    args.push('--model', opts.model);
+  }
   // ultracode is session-scoped; re-apply on every spawn so the user's toggle
-  // effectively sticks across the sessions Dash launches. Must precede the
-  // positional prompt below.
-  if (ultracode) {
-    args.push('--settings', JSON.stringify({ ultracode: true }));
+  // effectively sticks across the sessions Dash launches. Merge any per-spawn
+  // extraSettings (the loop manager's write-deny policy) into the same object.
+  // Must precede the positional prompt below.
+  const settings: Record<string, unknown> = {
+    ...(ultracode ? { ultracode: true } : {}),
+    ...(opts.extraSettings ?? {}),
+  };
+  if (Object.keys(settings).length > 0) {
+    args.push('--settings', JSON.stringify(settings));
   }
   if (opts.initialPrompt) {
     args.push(opts.initialPrompt);
@@ -413,6 +425,10 @@ export async function startDirectPty(options: {
    * scheduler passes the per-iteration worker prompt here.
    */
   initialPrompt?: string;
+  /** Pin a model (loop agents). */
+  model?: string;
+  /** Extra `--settings` JSON merged at spawn (loop manager write-deny policy). */
+  extraSettings?: Record<string, unknown>;
   sender?: WebContents;
 }): Promise<{
   reattached: boolean;
@@ -470,6 +486,8 @@ export async function startDirectPty(options: {
     name: options.name,
     permissionMode: options.permissionMode,
     initialPrompt,
+    model: options.model,
+    extraSettings: options.extraSettings,
   });
 
   const env = buildDirectEnv(options.isDark ?? true, options.cwd);

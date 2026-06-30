@@ -30,6 +30,9 @@ export class LoopService {
     state: 'STATE.md',
     constraints: 'loop-constraints.md',
     runLog: 'loop-run-log.md',
+    // The manager's steering channel: it writes guidance here (it can't touch a
+    // worker that resets context each pass), and the next fresh worker reads it.
+    managerNotes: 'manager-notes.md',
   } as const;
 
   /** Absolute path to the loop's state directory inside a worktree. */
@@ -77,6 +80,10 @@ export class LoopService {
     const runLogPath = LoopService.file(worktreePath, LoopService.FILES.runLog);
     if (!(await LoopService.exists(runLogPath))) {
       await fs.writeFile(runLogPath, runLogMd(taskName));
+    }
+    const notesPath = LoopService.file(worktreePath, LoopService.FILES.managerNotes);
+    if (!(await LoopService.exists(notesPath))) {
+      await fs.writeFile(notesPath, managerNotesMd(taskName));
     }
   }
 
@@ -127,7 +134,8 @@ export class LoopService {
       config.goal.trim(),
       ``,
       `Before doing anything, read ${rel(LoopService.FILES.constraints)} and obey every rule in it.`,
-      `Then read ${rel(LoopService.FILES.state)} for current priorities and what past iterations already did.`,
+      `Then read ${rel(LoopService.FILES.state)} for current priorities and what past iterations already did,`,
+      `and ${rel(LoopService.FILES.managerNotes)} for any steering the manager left for this pass.`,
       ``,
       `Do ONE focused unit of work this iteration (one task / one fix). Keep the`,
       `change small and committable. Run the project's tests/lint before finishing.`,
@@ -138,6 +146,31 @@ export class LoopService {
       `${rel(LoopService.FILES.state)} under "Needs human" and stop.`,
     ];
     return lines.join('\n');
+  }
+
+  /**
+   * The manager's role prompt. The manager is a persistent OVERSEER: it reads
+   * and investigates freely (grep/read/inspect/git) but never writes code — that
+   * guarantee is enforced by a write-deny settings policy, not this prose. It
+   * steers by writing to manager-notes.md, which the next fresh worker reads.
+   */
+  static managerPrompt(config: LoopConfig): string {
+    if (config.managerPrompt?.trim()) return config.managerPrompt.trim();
+    const rel = (name: string) => path.posix.join('.dash', 'loop', name);
+    return [
+      `You are the LOOP MANAGER — a persistent overseer of a Ralph worker.`,
+      `Read ${rel(LoopService.FILES.loop)} (the loop definition) and ${rel(LoopService.FILES.state)}.`,
+      ``,
+      `Your job is judgment, not typing: assess whether the worker is on track, keep`,
+      `priorities current in ${rel(LoopService.FILES.state)}, and decide what needs a human.`,
+      `Investigate freely with read-only tools (read, grep, git log/diff) — but you`,
+      `NEVER edit code or commit; the worker is the only writer.`,
+      ``,
+      `To steer the worker, append guidance to ${rel(LoopService.FILES.managerNotes)} — the next`,
+      `iteration reads it. For urgent control, use the loop MCP tools (pause / resume /`,
+      `kill / escalate). Surface anything risky or ambiguous to the human rather than`,
+      `pushing the worker through it.`,
+    ].join('\n');
   }
 }
 
@@ -240,5 +273,13 @@ function runLogMd(taskName: string): string {
   return `# Loop run log — ${taskName}
 
 _Append-only. One line per iteration: timestamp · iteration · outcome · notes._
+`;
+}
+
+function managerNotesMd(taskName: string): string {
+  return `# Manager notes — ${taskName}
+
+_The manager appends steering guidance here; the next fresh worker iteration
+reads it. Keep entries short and actionable (the worker has limited context)._
 `;
 }
