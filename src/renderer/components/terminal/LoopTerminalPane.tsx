@@ -1,36 +1,26 @@
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { Repeat, Compass } from 'lucide-react';
-import type { LoopConfig, PermissionMode } from '../../../shared/types';
 import { TerminalPane } from './TerminalPane';
 
 interface LoopTerminalPaneProps {
   taskId: string;
   cwd: string;
-  permissionMode?: PermissionMode;
-  loopConfig: LoopConfig | null;
   terminalBg?: string;
 }
 
 /**
  * The two-terminal main pane for an agentic loop (see docs/agentic-loops-plan.md).
  * Left = the Ralph WORKER (fresh context each iteration, acts), right = the
- * persistent MANAGER (orchestrates, never edits code). Both spawn fresh-context
- * so their Claude sessions don't collide on the shared worktree cwd; each reads
- * the on-disk loop spine (.dash/loop/*) that LoopService seeds.
+ * persistent MANAGER (orchestrates, never edits code).
  *
- * The PTY ids (`loop:<taskId>` / `mgr:<taskId>`) are what the LoopScheduler and
- * MCP bridge target for steer/pause/kill.
+ * The renderer only declares which role each terminal hosts (`loopRole`) and
+ * that it spawns fresh-context (so the two Claude sessions don't collide on the
+ * shared worktree cwd). Main owns the rest of the per-role policy — model,
+ * permission, the seed prompt, and the manager's write-deny settings — derived
+ * from the task's LoopConfig (see loopSpawn.ts). The PTY ids (`loop:<taskId>` /
+ * `mgr:<taskId>`) are what the LoopScheduler and MCP bridge target.
  */
-export function LoopTerminalPane({
-  taskId,
-  cwd,
-  permissionMode,
-  loopConfig,
-  terminalBg,
-}: LoopTerminalPaneProps) {
-  const workerPrompt = seedWorkerPrompt();
-  const managerPrompt = loopConfig?.managerPrompt?.trim() || seedManagerPrompt();
-
+export function LoopTerminalPane({ taskId, cwd, terminalBg }: LoopTerminalPaneProps) {
   return (
     <PanelGroup direction="horizontal" className="h-full w-full" autoSaveId={`loop:${taskId}`}>
       <Panel id="loop-worker" order={1} minSize={25} defaultSize={50}>
@@ -43,11 +33,10 @@ export function LoopTerminalPane({
             key={`loop:${taskId}`}
             id={`loop:${taskId}`}
             loopTaskId={taskId}
+            loopRole="worker"
             cwd={cwd}
-            permissionMode={permissionMode}
             terminalBg={terminalBg}
             freshContext
-            initialPrompt={workerPrompt}
           />
         </LoopColumn>
       </Panel>
@@ -62,12 +51,10 @@ export function LoopTerminalPane({
             key={`mgr:${taskId}`}
             id={`mgr:${taskId}`}
             loopTaskId={taskId}
+            loopRole="manager"
             cwd={cwd}
-            // Manager triages/steers; default permission keeps it from editing code.
-            permissionMode="default"
             terminalBg={terminalBg}
             freshContext
-            initialPrompt={managerPrompt}
           />
         </LoopColumn>
       </Panel>
@@ -96,24 +83,4 @@ function LoopColumn({
       <div className="flex-1 min-h-0">{children}</div>
     </div>
   );
-}
-
-function seedWorkerPrompt(): string {
-  return [
-    'You are the LOOP WORKER. First read .dash/loop/loop-constraints.md and obey every rule.',
-    'Then read .dash/loop/PROMPT.md (the goal) and .dash/loop/STATE.md (what past iterations did).',
-    'Do ONE focused, committable unit of work toward the goal. Run the project tests/lint.',
-    'Update .dash/loop/STATE.md with what you did and what remains, then commit.',
-    'Do NOT declare the overall goal done yourself — an external check decides that.',
-    'If blocked or ambiguous, write it under "Needs human" in STATE.md and stop.',
-  ].join(' ');
-}
-
-function seedManagerPrompt(): string {
-  return [
-    'You are the LOOP MANAGER. Read .dash/loop/LOOP.md and .dash/loop/STATE.md.',
-    'Track progress, keep priorities current in STATE.md, and decide what needs human attention.',
-    'You NEVER edit code — the worker is the only writer. You orchestrate: observe, prioritise,',
-    'and steer or pause the worker when needed.',
-  ].join(' ');
 }

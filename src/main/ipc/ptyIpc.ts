@@ -17,12 +17,13 @@ import {
   type PtyKind,
 } from '../services/ptyManager';
 import { DatabaseService } from '../services/DatabaseService';
+import { buildLoopSpawn } from '../services/loopSpawn';
 import { terminalSnapshotService } from '../services/TerminalSnapshotService';
 import { activityMonitor } from '../services/ActivityMonitor';
 import { contextUsageService } from '../services/ContextUsageService';
 import { remoteControlService } from '../services/remoteControlService';
 import { TelemetryService } from '../services/TelemetryService';
-import type { PermissionMode } from '@shared/types';
+import type { LoopRole, PermissionMode } from '@shared/types';
 
 export function registerPtyIpc(): void {
   ipcMain.handle(
@@ -39,6 +40,7 @@ export function registerPtyIpc(): void {
         taskId?: string;
         freshContext?: boolean;
         initialPrompt?: string;
+        loopRole?: LoopRole;
       },
     ) => {
       try {
@@ -54,6 +56,7 @@ export function registerPtyIpc(): void {
             taskId: z.string().optional(),
             freshContext: z.boolean().optional(),
             initialPrompt: z.string().optional(),
+            loopRole: z.enum(['worker', 'manager']).optional(),
           }),
           args,
         );
@@ -65,10 +68,20 @@ export function registerPtyIpc(): void {
         // threading through the renderer, since both are stable task settings
         // resolved at spawn time.
         const task = DatabaseService.getTask(args.taskId ?? args.id);
+        // For a loop agent, main owns the per-role spawn policy (model, the seed
+        // prompt, the worker's level-permission, and the manager's write-deny
+        // settings) — derived here so it can't be spoofed from the renderer.
+        const loopPolicy =
+          args.loopRole && task?.loopConfig
+            ? buildLoopSpawn(args.loopRole, task.loopConfig)
+            : undefined;
         const result = await startDirectPty({
           ...args,
           name: task?.name,
           model: task?.model,
+          // Spread last: for a loop agent the per-role policy is authoritative
+          // and overrides the task-level model.
+          ...(loopPolicy ?? {}),
           sender: event.sender,
         });
         TelemetryService.capture('terminal_started', { source: 'direct' });

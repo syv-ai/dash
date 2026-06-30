@@ -304,8 +304,6 @@ export function MainContent({
               key={`loop-pane:${activeTask.id}`}
               taskId={activeTask.id}
               cwd={activeTask.path}
-              permissionMode={activeTask.permissionMode}
-              loopConfig={activeTask.loopConfig}
               terminalBg={terminalBg}
             />
           ) : (
