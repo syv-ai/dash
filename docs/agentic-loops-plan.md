@@ -1,8 +1,57 @@
 # Agentic Loops in Dash — Implementation Plan
 
-> Status: design / pre-implementation
+> Status: in progress — backend core + split-pane UI landed; runtime wiring remains
 > Branch: `claude/agentic-loops-dash-ka6xwn`
 > Owner: Dash team
+
+## Implementation status
+
+**Landed (type-checked; scheduler core unit-tested — 10 tests):**
+
+1. **Data foundation** — `taskKind` (`standard|loop`) + `loopConfig` JSON across shared
+   types, Drizzle schema, a guarded ALTER migration, and DatabaseService
+   (map/persist as INSERT-only deep config + `duplicateTask`).
+2. **State spine** — `LoopService` seeds/reads `<worktree>/.dash/loop/`
+   (PROMPT/LOOP/STATE/loop-constraints/loop-run-log); derived files refresh, evolving
+   files preserved.
+3. **Fresh-context spawn** — `ptyManager.startDirectPty` gained opt-in `freshContext`
+   (no `--resume`, the Ralph reset), a distinct `taskId` for `loop:`/`mgr:` composite
+   ids, and a direct `initialPrompt`. Threaded through the renderer spawn path
+   (TerminalPane → SessionRegistry → session manager → `pty:startDirect` IPC).
+4. **Scheduler core** — `LoopScheduler`, a dependency-injected state machine owning the
+   Ralph iteration `while` (per-policy stop check, maxIterations, cadence waits, token
+   budget auto-pause, pause/resume/stop). Only busy→idle edges advance it. +
+   `ActivityMonitor.subscribe()` for in-process idle signals.
+5. **Two-terminal split pane** — `LoopTerminalPane` renders worker|manager; MainContent
+   branches on `taskKind`; both spawn fresh-context so their sessions don't collide;
+   `projectsStore` disposes `loop:`/`mgr:` PTYs. Standard tasks untouched.
+
+**Remaining (needs a machine that can run the Electron app to verify):**
+
+6. **Scheduler↔PTY adapter (`LoopController`) + IPC** — construct `LoopDriver` from
+   ptyManager (`startDirectPty`/`killPtyAwait`/`writePty`) + `child_process` (stop
+   check) + `LoopService` (run log) + `webContents` (status); register the worker id
+   with `ActivityMonitor.subscribe`; expose `loop:start/pause/resume/stop/status`.
+   **Open: worker-spawn ownership.** Today `LoopTerminalPane` spawns the initial
+   worker on mount. Recommended resolution: the renderer spawns the _manager_ and the
+   _first_ worker iteration; the scheduler owns subsequent Ralph resets
+   (`killPtyAwait(loop:<taskId>)` → `startDirectPty(freshContext, initialPrompt =
+LoopService.workerIterationPrompt)`), and the renderer's loop terminals do **not**
+   auto-respawn on exit (a `managedExternally` flag on the session) so they don't race
+   the scheduler.
+7. **Loop MCP bridge** — task-scoped MCP server exposing
+   `loop_status/get_state/update_state/steer/pause/resume/kill/escalate/append_run_log`,
+   attached to the manager via its `.mcp.json`/env. Drives `LoopController`, not the
+   CLI's loop.
+8. **TaskModal loop mode + duplicate-as-loop** — "Loop" creation mode (goal/policy/
+   level/budget/constraints) writing `taskKind='loop'` + `loopConfig`; on create, run
+   the worktree path then `LoopService.seed`. Duplicate action → `duplicateTask` with
+   `taskKind:'loop'`. Until this lands, a loop task can be created by inserting a row
+   with `task_kind='loop'` for manual end-to-end testing.
+
+---
+
+> Original design follows.
 
 First-class support for **agentic loops**: a task can be started _as a loop_, or an
 existing task can be _duplicated as a loop_. A loop runs **two terminals side-by-side**
@@ -19,11 +68,11 @@ self-grading_.
 
 ## 1. Design decisions (locked)
 
-| Decision | Choice | Why |
-|---|---|---|
-| Cadence ownership | **Dash-driven scheduler** | Dash owns the iteration boundary → clean control points for budget gates, manager steer, pause/kill. |
-| Manager authority | **Observe + steer + pause/kill** | Full orchestrator role (loop-engineering's "manager"), gated by loop level. |
-| Loop mechanism | **Both policies, Ralph-primary** | Ralph (fresh-context reset) is the default and most important; `goal`/`cadence` are additional policies. |
+| Decision          | Choice                           | Why                                                                                                      |
+| ----------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Cadence ownership | **Dash-driven scheduler**        | Dash owns the iteration boundary → clean control points for budget gates, manager steer, pause/kill.     |
+| Manager authority | **Observe + steer + pause/kill** | Full orchestrator role (loop-engineering's "manager"), gated by loop level.                              |
+| Loop mechanism    | **Both policies, Ralph-primary** | Ralph (fresh-context reset) is the default and most important; `goal`/`cadence` are additional policies. |
 
 ### Why Dash owns the loop (not the CLI's `/loop` / `/ralph-loop`)
 
@@ -75,12 +124,12 @@ Two properties are non-negotiable and come straight from Ralph:
 `loopConfig.policy` selects the termination mode. The scheduler `while` is identical;
 only the **stop predicate** changes.
 
-| Policy | Mirrors | Stop predicate | Worker context | Use case |
-|---|---|---|---|---|
-| **`ralph`** (default) | classic Ralph | external signal (tests/lint) **or** manager verdict; optional max-iterations | **reset each pass** | "build/refactor this until correct" |
-| `goal` | CC `/goal` | a measurable condition checked each iteration | reset each pass | "all tests on main pass and lint is clean" |
-| `cadence` | CC `/loop` | timer — run every N; never self-terminates | reset each pass | triage / babysitter (PR watcher, CI sweeper) |
-| `count` | `/ralph-loop` | N iterations or completion-promise string | reset each pass | bounded mechanical sweeps |
+| Policy                | Mirrors       | Stop predicate                                                               | Worker context      | Use case                                     |
+| --------------------- | ------------- | ---------------------------------------------------------------------------- | ------------------- | -------------------------------------------- |
+| **`ralph`** (default) | classic Ralph | external signal (tests/lint) **or** manager verdict; optional max-iterations | **reset each pass** | "build/refactor this until correct"          |
+| `goal`                | CC `/goal`    | a measurable condition checked each iteration                                | reset each pass     | "all tests on main pass and lint is clean"   |
+| `cadence`             | CC `/loop`    | timer — run every N; never self-terminates                                   | reset each pass     | triage / babysitter (PR watcher, CI sweeper) |
+| `count`               | `/ralph-loop` | N iterations or completion-promise string                                    | reset each pass     | bounded mechanical sweeps                    |
 
 `ralph` and `goal` are nearly the same; `ralph` defaults the predicate to the project's
 test+lint command and adds a safety `maxIterations`. `cadence` is the loop-engineering
@@ -90,14 +139,14 @@ test+lint command and adds a safety `maxIterations`. `cadence` is the loop-engin
 
 ## 4. Two-terminal model & role split
 
-| | **Loop terminal (worker)** | **Manager terminal** |
-|---|---|---|
-| PTY id | `loop:{taskId}` | `mgr:{taskId}` |
-| Lifecycle | **ephemeral** — fresh spawn per iteration, killed between passes | **persistent** — one session, `--resume`, context accumulates |
-| Job | _acts_: edits code, runs tests, updates STATE.md, commits | _orchestrates_: triage, priorities, budget, escalation decisions |
-| Hard rule | — | **never edits code** (loop-engineering) |
-| cwd | task worktree | task worktree (read/triage role) |
-| MCP | minimal | **Dash Loop MCP attached** |
+|           | **Loop terminal (worker)**                                       | **Manager terminal**                                             |
+| --------- | ---------------------------------------------------------------- | ---------------------------------------------------------------- |
+| PTY id    | `loop:{taskId}`                                                  | `mgr:{taskId}`                                                   |
+| Lifecycle | **ephemeral** — fresh spawn per iteration, killed between passes | **persistent** — one session, `--resume`, context accumulates    |
+| Job       | _acts_: edits code, runs tests, updates STATE.md, commits        | _orchestrates_: triage, priorities, budget, escalation decisions |
+| Hard rule | —                                                                | **never edits code** (loop-engineering)                          |
+| cwd       | task worktree                                                    | task worktree (read/triage role)                                 |
+| MCP       | minimal                                                          | **Dash Loop MCP attached**                                       |
 
 This is both the Ralph insight (worker resets) **and** loop-engineering's role split
 (worker acts / manager orchestrates; implementer never grades its own homework — the
@@ -111,15 +160,15 @@ A small **Dash Loop MCP server**, task-scoped, attached to the manager (and opti
 the worker). Hung off the existing hook-server infrastructure (`DASH_HOOK_PORT`) or
 spawned per loop task. Surface:
 
-| Tool | Direction | Effect |
-|---|---|---|
-| `loop_status` | read | current iteration, last run, idle/busy, token spend vs budget |
-| `loop_get_state` / `loop_update_state` | read/write | structured `STATE.md` access |
-| `loop_steer(message)` | manager → worker | inject guidance into the next iteration's prompt |
-| `loop_pause` / `loop_resume` | manager → scheduler | halt/continue the `while` |
-| `loop_kill` | manager → scheduler | stop the loop (SIGTERM + grace via `ptyManager`) |
-| `loop_escalate(summary)` | worker → human | raise a human-gate item the manager surfaces |
-| `loop_append_run_log(entry)` | write | observability into `loop-run-log.md` |
+| Tool                                   | Direction           | Effect                                                        |
+| -------------------------------------- | ------------------- | ------------------------------------------------------------- |
+| `loop_status`                          | read                | current iteration, last run, idle/busy, token spend vs budget |
+| `loop_get_state` / `loop_update_state` | read/write          | structured `STATE.md` access                                  |
+| `loop_steer(message)`                  | manager → worker    | inject guidance into the next iteration's prompt              |
+| `loop_pause` / `loop_resume`           | manager → scheduler | halt/continue the `while`                                     |
+| `loop_kill`                            | manager → scheduler | stop the loop (SIGTERM + grace via `ptyManager`)              |
+| `loop_escalate(summary)`               | worker → human      | raise a human-gate item the manager surfaces                  |
+| `loop_append_run_log(entry)`           | write               | observability into `loop-run-log.md`                          |
 
 These drive **Dash's scheduler**, not the CLI's internal loop. Manager authority
 (`steer` / `pause` / `kill`) is gated by loop **level** (§7).
@@ -131,13 +180,13 @@ These drive **Dash's scheduler**, not the CLI's internal loop. Manager authority
 Seeded into the worktree (or `.dash/loop/`) on loop creation, from templates filled from
 `loopConfig`. This is what makes it a real loop, not two chat windows.
 
-| File | Role |
-|---|---|
-| `PROMPT.md` | the goal re-read fresh by the worker every iteration |
-| `LOOP.md` | loop definition: name, level (L1/L2/L3), policy, cadence, handoff rules |
-| `STATE.md` | live priorities / watchlist / recent-noise (worker + manager read/write) |
+| File                  | Role                                                                               |
+| --------------------- | ---------------------------------------------------------------------------------- |
+| `PROMPT.md`           | the goal re-read fresh by the worker every iteration                               |
+| `LOOP.md`             | loop definition: name, level (L1/L2/L3), policy, cadence, handoff rules            |
+| `STATE.md`            | live priorities / watchlist / recent-noise (worker + manager read/write)           |
 | `loop-constraints.md` | hard rules injected before every iteration ("never edit auth/", "run tests first") |
-| `loop-run-log.md` | per-run: timestamp, items, actions, escalations, token estimate |
+| `loop-run-log.md`     | per-run: timestamp, items, actions, escalations, token estimate                    |
 
 ---
 
@@ -197,19 +246,19 @@ Run `pnpm drizzle:generate` for the migration.
 
 ## 10. File-by-file change list
 
-| Area | File(s) | Change |
-|---|---|---|
-| Schema + migration | `src/main/db/schema.ts` + `drizzle:generate` | `taskKind`, `loopConfig` |
-| Task save / duplicate | `src/main/services/DatabaseService.ts`, `src/main/ipc/dbIpc.ts` | persist loop fields; add `duplicateTask` |
-| **Fresh-context spawn** | `src/main/services/ptyManager.ts` (`buildClaudeArgs`, `startDirectPty` ≈359–517) | spawn mode that does **not** `--resume`; allow 2 agent PTYs per task (drop `id===taskId` assumptions) |
-| **Scheduler** | new `src/main/services/LoopScheduler.ts` | owns the `while`; idle-detect → stop predicate → re-spawn fresh worker / stop; budget auto-pause |
-| Stop predicate | new `src/main/services/loopPredicates.ts` | per-policy: test/lint exit code, timer, counter, completion-promise |
-| State seeding | new `src/main/services/LoopService.ts` | write PROMPT/LOOP/STATE/constraints/run-log from templates |
-| MCP bridge | new `src/main/services/loopMcpServer.ts` (+ hook-server wiring) | tool surface in §5 |
-| Split UI | new `src/renderer/components/terminal/LoopTerminalPane.tsx`; `src/renderer/components/MainContent.tsx` (≈300) | branch on `taskKind==='loop'` → horizontal `PanelGroup` of two `TerminalPane`s |
-| Disposal | `src/renderer/stores/projectsStore.ts` (`disposeTaskSessions`) | dispose `loop:` + `mgr:` ids |
-| Modal | `src/renderer/components/task/TaskModal.tsx` | loop mode (policy/level/budget/constraints) + duplicate-as-loop action |
-| Types | `src/shared/types.ts`, `src/types/electron-api.d.ts` | loop config + new IPC |
+| Area                    | File(s)                                                                                                       | Change                                                                                                |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Schema + migration      | `src/main/db/schema.ts` + `drizzle:generate`                                                                  | `taskKind`, `loopConfig`                                                                              |
+| Task save / duplicate   | `src/main/services/DatabaseService.ts`, `src/main/ipc/dbIpc.ts`                                               | persist loop fields; add `duplicateTask`                                                              |
+| **Fresh-context spawn** | `src/main/services/ptyManager.ts` (`buildClaudeArgs`, `startDirectPty` ≈359–517)                              | spawn mode that does **not** `--resume`; allow 2 agent PTYs per task (drop `id===taskId` assumptions) |
+| **Scheduler**           | new `src/main/services/LoopScheduler.ts`                                                                      | owns the `while`; idle-detect → stop predicate → re-spawn fresh worker / stop; budget auto-pause      |
+| Stop predicate          | new `src/main/services/loopPredicates.ts`                                                                     | per-policy: test/lint exit code, timer, counter, completion-promise                                   |
+| State seeding           | new `src/main/services/LoopService.ts`                                                                        | write PROMPT/LOOP/STATE/constraints/run-log from templates                                            |
+| MCP bridge              | new `src/main/services/loopMcpServer.ts` (+ hook-server wiring)                                               | tool surface in §5                                                                                    |
+| Split UI                | new `src/renderer/components/terminal/LoopTerminalPane.tsx`; `src/renderer/components/MainContent.tsx` (≈300) | branch on `taskKind==='loop'` → horizontal `PanelGroup` of two `TerminalPane`s                        |
+| Disposal                | `src/renderer/stores/projectsStore.ts` (`disposeTaskSessions`)                                                | dispose `loop:` + `mgr:` ids                                                                          |
+| Modal                   | `src/renderer/components/task/TaskModal.tsx`                                                                  | loop mode (policy/level/budget/constraints) + duplicate-as-loop action                                |
+| Types                   | `src/shared/types.ts`, `src/types/electron-api.d.ts`                                                          | loop config + new IPC                                                                                 |
 
 ---
 
