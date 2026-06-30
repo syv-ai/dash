@@ -162,6 +162,30 @@ describe('LoopScheduler', () => {
     expect(driver.spawns).toEqual([1, 2]);
   });
 
+  it('does not spawn a next iteration when pause() races the stop check', async () => {
+    // runShellCheck resolves on a later microtask; pause() lands during the await.
+    let resolveCheck: (v: boolean) => void = () => {};
+    const s = new LoopScheduler('t1', makeConfig({ stopPredicate: 'x' }), 'P', driver);
+    driver.runShellCheck = () => new Promise<boolean>((r) => (resolveCheck = r));
+    await s.start();
+    s.notifyWorkerState('busy');
+    s.notifyWorkerState('idle'); // begins onIterationComplete, now awaiting the check
+    s.pause(); // races the in-flight check
+    resolveCheck(false); // check says "continue"
+    await flush();
+    expect(driver.spawns).toEqual([1]); // paused → no respawn
+    expect(s.getStatus().state).toBe('paused');
+  });
+
+  it('cadence with no interval pauses instead of busy-spawning', async () => {
+    const s = new LoopScheduler('t1', makeConfig({ policy: 'cadence' }), 'P', driver);
+    await s.start();
+    await completeIteration(s);
+    expect(driver.spawns).toEqual([1]); // did not respawn
+    expect(s.getStatus().state).toBe('paused');
+    expect(s.getStatus().reason).toContain('interval');
+  });
+
   it('stop kills the worker and is terminal', async () => {
     const s = new LoopScheduler('t1', makeConfig({}), 'P', driver);
     await s.start();

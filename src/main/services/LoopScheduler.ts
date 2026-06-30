@@ -162,12 +162,21 @@ export class LoopScheduler {
         this.finish('stopped', `reached max iterations (${max})`);
         return;
       }
+      // A pause()/stop() that raced the (awaited) stop check must not be
+      // overridden by spawning the next iteration. Re-check after the await.
+      if (this.state !== 'running') return;
       // Continue. Cadence policy waits between runs; the rest reset immediately.
-      if (this.config.policy === 'cadence' && this.config.cadenceMs) {
-        this.cancelTimer = this.driver.setTimer(this.config.cadenceMs, () => {
-          this.cancelTimer = null;
-          if (this.state === 'running') void this.nextIteration();
-        });
+      if (this.config.policy === 'cadence') {
+        if (this.config.cadenceMs && this.config.cadenceMs > 0) {
+          this.cancelTimer = this.driver.setTimer(this.config.cadenceMs, () => {
+            this.cancelTimer = null;
+            if (this.state === 'running') void this.nextIteration();
+          });
+        } else {
+          // Misconfigured cadence loop: pause rather than busy-spawn workers
+          // with no delay (a runaway). A human can set an interval and resume.
+          this.pause('cadence loop has no interval configured');
+        }
       } else {
         await this.nextIteration();
       }
