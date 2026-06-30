@@ -9,6 +9,12 @@ interface AttachOptions {
   shellOnly?: boolean;
   isTui?: boolean;
   themeId?: string;
+  /** Owning task id when it differs from the PTY id (loop:/mgr: composite ids). */
+  loopTaskId?: string;
+  /** Skip --resume: spawn a fresh Claude session (loop agents; Ralph reset). */
+  freshContext?: boolean;
+  /** Prompt auto-submitted after the trust gate (loop worker/manager seed). */
+  initialPrompt?: string;
 }
 
 class SessionRegistryImpl {
@@ -27,6 +33,9 @@ class SessionRegistryImpl {
         shellOnly: opts.shellOnly,
         isTui: opts.isTui,
         themeId: opts.themeId ?? this._themeId,
+        loopTaskId: opts.loopTaskId,
+        freshContext: opts.freshContext,
+        initialPrompt: opts.initialPrompt,
       });
       this.sessions.set(opts.id, session);
     }
