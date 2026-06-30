@@ -51,6 +51,64 @@ export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions';
  */
 export type TaskStatus = 'idle' | 'active';
 
+// ── Agentic Loops ───────────────────────────────────────────
+// See docs/agentic-loops-plan.md. A `loop` task runs two agent PTYs (a Ralph
+// worker that resets context every iteration + a persistent manager) driven by
+// Dash's own scheduler. `standard` is the classic single-agent task.
+
+export type TaskKind = 'standard' | 'loop';
+
+/**
+ * How a loop decides to run the next iteration / when to stop. The scheduler
+ * `while` is identical across policies — only the stop predicate changes.
+ * - `ralph`  : the default. Re-run the goal until an external check passes
+ *              (tests/lint), with a safety `maxIterations`. Context resets each pass.
+ * - `goal`   : iterate until a measurable shell condition exits 0 (mirrors `/goal`).
+ * - `cadence`: run every `cadenceMs` indefinitely (mirrors `/loop`); triage shape.
+ * - `count`  : run `maxIterations` times or until `completionPromise` appears.
+ */
+export type LoopPolicy = 'ralph' | 'goal' | 'cadence' | 'count';
+
+/** Phased-trust level (loop-engineering). Gates worker permission + manager authority. */
+export type LoopLevel = 'L1' | 'L2' | 'L3';
+
+export interface LoopConfig {
+  policy: LoopPolicy;
+  /** The recurring goal re-read fresh by the worker each iteration (→ PROMPT.md). */
+  goal: string;
+  level: LoopLevel;
+  /** Shell command whose exit code 0 means "done" (ralph/goal). Null → no auto-stop. */
+  stopPredicate?: string | null;
+  /** Milliseconds between iterations for the `cadence` policy. */
+  cadenceMs?: number | null;
+  /** Hard cap on iterations (ralph/count) — a runaway backstop. */
+  maxIterations?: number | null;
+  /** Completion phrase for `count`; exact substring match in worker output. */
+  completionPromise?: string | null;
+  /** Token budget; the scheduler auto-pauses when exceeded and notifies the human. */
+  tokenBudget?: number | null;
+  /** Role/system prompt seeded for the manager agent. */
+  managerPrompt?: string | null;
+  /** Hard rules injected before every iteration (→ loop-constraints.md). */
+  constraints?: string[];
+}
+
+/** Runtime state of a loop's scheduler, mirrored to the renderer. */
+export type LoopRunState = 'idle' | 'running' | 'paused' | 'stopped' | 'done' | 'error';
+
+export interface LoopStatus {
+  taskId: string;
+  state: LoopRunState;
+  iteration: number;
+  maxIterations: number | null;
+  /** Why the loop stopped, when `state` is `done`/`stopped`/`error`. */
+  reason?: string;
+  /** Token spend the scheduler has observed for this loop. */
+  tokensSpent: number;
+  tokenBudget: number | null;
+  updatedAt: number;
+}
+
 export interface Task {
   id: string;
   projectId: string;
@@ -58,6 +116,10 @@ export interface Task {
   branch: string;
   path: string;
   status: TaskStatus;
+  /** `standard` (single agent) or `loop` (Ralph worker + manager). Immutable after creation. */
+  taskKind: TaskKind;
+  /** Loop definition; non-null iff `taskKind === 'loop'`. */
+  loopConfig: LoopConfig | null;
   useWorktree: boolean;
   permissionMode: PermissionMode;
   branchCreatedByDash: boolean;
