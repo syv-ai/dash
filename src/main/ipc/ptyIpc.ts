@@ -35,6 +35,9 @@ export function registerPtyIpc(): void {
         rows: number;
         permissionMode?: PermissionMode;
         isDark?: boolean;
+        taskId?: string;
+        freshContext?: boolean;
+        initialPrompt?: string;
       },
     ) => {
       try {
@@ -47,12 +50,16 @@ export function registerPtyIpc(): void {
             rows: z.number(),
             permissionMode: permissionModeSchema.optional(),
             isDark: z.boolean().optional(),
+            taskId: z.string().optional(),
+            freshContext: z.boolean().optional(),
+            initialPrompt: z.string().optional(),
           }),
           args,
         );
-        // The agent PTY id is the bare task id — look up its name so a fresh
-        // spawn gets `claude --name <task>` (recognizable in /resume + title).
-        const task = DatabaseService.getTask(args.id);
+        // The agent PTY id is the bare task id for standard tasks; loop PTYs use
+        // composite ids (loop:/mgr:) and pass the real task id separately. Look
+        // up the name so a fresh spawn gets `claude --name <task>`.
+        const task = DatabaseService.getTask(args.taskId ?? args.id);
         const result = await startDirectPty({
           ...args,
           name: task?.name,

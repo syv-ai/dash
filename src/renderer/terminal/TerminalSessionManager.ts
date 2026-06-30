@@ -83,6 +83,10 @@ export class TerminalSessionManager {
    */
   private readonly pinnedTui: boolean;
   private themeId: string;
+  /** Loop-agent spawn metadata; undefined/false for standard sessions. */
+  private readonly loopTaskId?: string;
+  private readonly freshContext: boolean;
+  private readonly initialPrompt?: string;
   // Claude Code's TUI rewrites cells continuously, which causes xterm to drop
   // the visible selection before the user can press the copy shortcut. Cache
   // the last non-empty selection on every change so Ctrl+Shift+C / Cmd+C can
@@ -101,6 +105,12 @@ export class TerminalSessionManager {
      */
     isTui?: boolean;
     themeId?: string;
+    /** Owning task id when it differs from the PTY id (loop:/mgr: composite ids). */
+    loopTaskId?: string;
+    /** Skip --resume: spawn a fresh Claude session (loop agents; Ralph reset). */
+    freshContext?: boolean;
+    /** Prompt auto-submitted after the trust gate (loop worker/manager seed). */
+    initialPrompt?: string;
   }) {
     this.id = opts.id;
     this.cwd = opts.cwd;
@@ -111,6 +121,9 @@ export class TerminalSessionManager {
     this.isTui = opts.isTui ?? false;
     this.pinnedTui = this.isTui && opts.id.startsWith('tui:');
     this.themeId = opts.themeId ?? 'default';
+    this.loopTaskId = opts.loopTaskId;
+    this.freshContext = opts.freshContext ?? false;
+    this.initialPrompt = opts.initialPrompt;
 
     this.terminal = new Terminal({
       scrollback: 100_000,
@@ -1035,6 +1048,9 @@ export class TerminalSessionManager {
       rows,
       permissionMode: this.permissionMode,
       isDark: this.isDark,
+      taskId: this.loopTaskId,
+      freshContext: this.freshContext,
+      initialPrompt: this.initialPrompt,
     });
 
     if (resp.success) {

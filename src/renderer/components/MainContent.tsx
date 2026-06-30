@@ -1,5 +1,6 @@
 import React from 'react';
 import { TerminalPane } from './terminal/TerminalPane';
+import { LoopTerminalPane } from './terminal/LoopTerminalPane';
 import { ProjectOverview } from './project/ProjectOverview';
 import { useSettings } from '../stores/settingsStore';
 import { useGit } from '../stores/gitStore';
@@ -298,13 +299,24 @@ export function MainContent({
       {strip}
       <div className="flex-1 min-h-0 relative">
         {activeTask ? (
-          <TerminalPane
-            key={activeTask.id}
-            id={activeTask.id}
-            cwd={activeTask.path}
-            permissionMode={activeTask.permissionMode}
-            terminalBg={terminalBg}
-          />
+          activeTask.taskKind === 'loop' ? (
+            <LoopTerminalPane
+              key={`loop-pane:${activeTask.id}`}
+              taskId={activeTask.id}
+              cwd={activeTask.path}
+              permissionMode={activeTask.permissionMode}
+              loopConfig={activeTask.loopConfig}
+              terminalBg={terminalBg}
+            />
+          ) : (
+            <TerminalPane
+              key={activeTask.id}
+              id={activeTask.id}
+              cwd={activeTask.path}
+              permissionMode={activeTask.permissionMode}
+              terminalBg={terminalBg}
+            />
+          )
         ) : (
           <ProjectOverview
             project={activeProject}
