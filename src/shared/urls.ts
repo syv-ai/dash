@@ -17,69 +17,81 @@ export function githubIssueUrl(remote: string, num: number): string | null {
   return null;
 }
 
-/** Parse ADO org URL, project name, and repo name from a git remote URL. Returns null for non-ADO remotes. */
+/**
+ * Parse ADO org URL, project name, and (when present) repo name from a git remote.
+ * Returns null for non-ADO remotes.
+ *
+ * Real-world ADO remotes vary more than a rigid regex tolerates: HTTPS clone URLs
+ * carry an `org@` userinfo prefix (`https://org@dev.azure.com/org/proj/_git/repo`,
+ * the default from ADO's "Clone" dialog), and remotes can have a trailing slash or
+ * `.git` suffix. The old end-anchored regexes rejected all of these and fell back
+ * to a repo-less parse — enough for project-scoped work-item search to work, but
+ * the PR badge and "From PR" list both need `repository`, so they silently failed.
+ * Parse via the URL API (which discards userinfo) so those variants resolve.
+ */
 export function parseAdoRemote(
   remote: string,
 ): { organizationUrl: string; project: string; repository?: string } | null {
-  // https://dev.azure.com/{org}/{project}/_git/{repo}
-  const https = remote.match(
-    /^https:\/\/dev\.azure\.com\/([^/]+)\/([^/]+)\/_git\/([^/]+?)(?:\.git)?$/,
-  );
-  if (https) {
-    return {
-      organizationUrl: `https://dev.azure.com/${https[1]}`,
-      project: decodeURIComponent(https[2]!),
-      repository: decodeURIComponent(https[3]!),
-    };
-  }
-  // Fallback without /_git/ segment
-  const httpsNoGit = remote.match(/^https:\/\/dev\.azure\.com\/([^/]+)\/([^/]+)/);
-  if (httpsNoGit) {
-    return {
-      organizationUrl: `https://dev.azure.com/${httpsNoGit[1]}`,
-      project: decodeURIComponent(httpsNoGit[2]!),
-    };
-  }
+  const trimmed = remote
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\.git$/, '');
 
-  // git@ssh.dev.azure.com:v3/{org}/{project}/{repo}
-  const ssh = remote.match(/^git@ssh\.dev\.azure\.com:v3\/([^/]+)\/([^/]+)\/([^/]+?)(?:\.git)?$/);
+  // SSH form: git@ssh.dev.azure.com:v3/{org}/{project}[/{repo}] — not a URL.
+  const ssh = trimmed.match(/^git@ssh\.dev\.azure\.com:v3\/([^/]+)\/([^/]+)(?:\/([^/]+))?$/);
   if (ssh) {
     return {
       organizationUrl: `https://dev.azure.com/${ssh[1]}`,
       project: decodeURIComponent(ssh[2]!),
-      repository: decodeURIComponent(ssh[3]!),
-    };
-  }
-  // Fallback without repo
-  const sshNoRepo = remote.match(/^git@ssh\.dev\.azure\.com:v3\/([^/]+)\/([^/]+)/);
-  if (sshNoRepo) {
-    return {
-      organizationUrl: `https://dev.azure.com/${sshNoRepo[1]}`,
-      project: decodeURIComponent(sshNoRepo[2]!),
+      repository: ssh[3] ? decodeURIComponent(ssh[3]) : undefined,
     };
   }
 
-  // https://{org}.visualstudio.com/{project}/_git/{repo}
-  const vs = remote.match(
-    /^https:\/\/([^.]+)\.visualstudio\.com\/([^/]+)\/_git\/([^/]+?)(?:\.git)?$/,
-  );
-  if (vs) {
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+  // URL() parses (and drops) any `user@` userinfo into url.username, so an
+  // `org@dev.azure.com` host resolves to the bare hostname here.
+  const host = url.hostname.toLowerCase();
+  const segments = url.pathname.split('/').filter(Boolean).map(safeDecode);
+
+  // dev.azure.com/{org}/{project}[/_git/{repo}]
+  if (host === 'dev.azure.com') {
+    const [org, project, gitMarker, repo] = segments;
+    if (!org || !project) return null;
     return {
-      organizationUrl: `https://dev.azure.com/${vs[1]}`,
-      project: decodeURIComponent(vs[2]!),
-      repository: decodeURIComponent(vs[3]!),
+      organizationUrl: `https://dev.azure.com/${org}`,
+      project,
+      repository: gitMarker === '_git' && repo ? repo : undefined,
     };
   }
-  // Fallback without /_git/ segment
-  const vsNoGit = remote.match(/^https:\/\/([^.]+)\.visualstudio\.com\/([^/]+)/);
-  if (vsNoGit) {
+
+  // {org}.visualstudio.com/{project}[/_git/{repo}] — org is the subdomain.
+  const vs = host.match(/^([^.]+)\.visualstudio\.com$/);
+  if (vs) {
+    const [project, gitMarker, repo] = segments;
+    if (!project) return null;
     return {
-      organizationUrl: `https://dev.azure.com/${vsNoGit[1]}`,
-      project: decodeURIComponent(vsNoGit[2]!),
+      organizationUrl: `https://dev.azure.com/${vs[1]}`,
+      project,
+      repository: gitMarker === '_git' && repo ? repo : undefined,
     };
   }
 
   return null;
+}
+
+/** decodeURIComponent that returns the input unchanged on malformed escapes. */
+function safeDecode(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
 }
 
 /** Convert a git remote URL + branch name to a branch URL on the hosting provider */
