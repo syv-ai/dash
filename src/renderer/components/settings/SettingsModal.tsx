@@ -42,7 +42,7 @@ import {
 } from '../../keybindings';
 import { NOTIFICATION_SOUNDS, SOUND_LABELS, playNotificationSound } from '../../sounds';
 import type { NotificationSound } from '../../sounds';
-import { TERMINAL_THEMES, darkTheme, lightTheme } from '../../terminal/terminalThemes';
+import { TERMINAL_THEMES, resolveTheme } from '../../terminal/terminalThemes';
 import { TERMINAL_FONTS, resolveTerminalFontValue } from '../../terminal/terminalFonts';
 import { Select } from '../ui/Select';
 import { Segmented } from '../ui/Segmented';
@@ -1412,12 +1412,8 @@ export function SettingsModal({
                       <div className="grid grid-cols-3 gap-2.5">
                         {TERMINAL_THEMES.map((t) => {
                           const isActive = terminalTheme === t.id;
-                          const bg =
-                            t.id === 'default'
-                              ? theme === 'dark'
-                                ? (darkTheme.background ?? '#0d0d11')
-                                : (lightTheme.background ?? '#faf8f3')
-                              : t.theme.background || '#000';
+                          // 'default' and 'legacy' follow the app light/dark; the rest are fixed.
+                          const bg = resolveTheme(t.id, theme === 'dark').background || '#000';
                           const colors = [
                             t.theme.red || '#f00',
                             t.theme.green || '#0f0',
@@ -1455,7 +1451,7 @@ export function SettingsModal({
                                 <span className="text-[10.5px] font-medium truncate text-foreground/85">
                                   {t.name}
                                 </span>
-                                {t.id === 'default' && (
+                                {(t.id === 'default' || t.id === 'legacy') && (
                                   <span className="text-[9px] text-foreground/40 font-mono uppercase tracking-wide">
                                     auto
                                   </span>

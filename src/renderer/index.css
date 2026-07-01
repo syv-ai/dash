@@ -180,6 +180,126 @@
     --cat-7: 45 80% 60%;
     --cat-8: 245 65% 72%;
   }
+
+  /* Legacy light — old "Obsidian Console": white + orange. */
+  .light.legacy {
+    --background: 0 0% 100%;
+    --foreground: 228 8% 24%;
+    --card: 0 0% 100%;
+    --card-foreground: 228 8% 24%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 228 8% 24%;
+    --primary: 32 95% 52%; /* orange accent */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 95%;
+    --secondary-foreground: 228 8% 24%;
+    --muted: 0 0% 95%;
+    --muted-foreground: 0 0% 45%;
+    --accent: 0 0% 93%;
+    --accent-foreground: 228 8% 24%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 89%;
+    --input: 0 0% 89%;
+    --ring: 32 95% 52%;
+    --radius: 0.5rem;
+
+    --surface-0: 0 0% 100%;
+    --surface-1: 0 0% 98%;
+    --surface-2: 0 0% 96%;
+    --surface-3: 0 0% 93%;
+
+    --shadow-card: 0 1px 0 hsl(0 0% 100% / 0.6), 0 8px 22px hsl(0 0% 0% / 0.12);
+
+    --warn: 38 92% 50%;
+    --warn-foreground: 0 0% 100%;
+
+    --git-added: 142 71% 45%;
+    --git-modified: 38 92% 50%;
+    --git-deleted: 0 84% 60%;
+    --git-renamed: 217 91% 60%;
+    --pr-merged: 262 60% 55%;
+    --git-untracked: 0 0% 50%;
+    --git-conflicted: 25 95% 53%;
+
+    --status-idle: 158 64% 52%;
+    --status-wait: 25 95% 53%;
+    --status-unseen: 213 94% 68%;
+
+    --terminal-service: 210 50% 50%;
+
+    --shade-1: 32 95% 52%;
+    --shade-2: 196 70% 45%;
+
+    --cat-1: 210 70% 48%;
+    --cat-2: 142 55% 40%;
+    --cat-3: 25 85% 50%;
+    --cat-4: 280 55% 55%;
+    --cat-5: 340 65% 50%;
+    --cat-6: 175 55% 38%;
+    --cat-7: 45 80% 45%;
+    --cat-8: 245 55% 58%;
+  }
+
+  /* Legacy dark — old "Obsidian Console": neutral grey + orange. */
+  .dark.legacy {
+    --background: 0 0% 10%;
+    --foreground: 0 0% 83%;
+    --card: 0 0% 12%;
+    --card-foreground: 0 0% 83%;
+    --popover: 0 0% 13%;
+    --popover-foreground: 0 0% 83%;
+    --primary: 36 100% 57%; /* orange accent */
+    --primary-foreground: 0 0% 6%;
+    --secondary: 0 0% 14%;
+    --secondary-foreground: 0 0% 83%;
+    --muted: 0 0% 14%;
+    --muted-foreground: 0 0% 63%;
+    --accent: 0 0% 16%;
+    --accent-foreground: 0 0% 83%;
+    --destructive: 0 63% 45%;
+    --destructive-foreground: 0 0% 95%;
+    --border: 0 0% 16%;
+    --input: 0 0% 18%;
+    --ring: 36 100% 57%;
+    --radius: 0.5rem;
+
+    --surface-0: 0 0% 10%;
+    --surface-1: 0 0% 12%;
+    --surface-2: 0 0% 15%;
+    --surface-3: 0 0% 18%;
+
+    --shadow-card: 0 1px 0 hsl(0 0% 100% / 0.04), 0 12px 28px hsl(0 0% 0% / 0.45);
+
+    --warn: 38 92% 50%;
+    --warn-foreground: 0 0% 6%;
+
+    --git-added: 142 71% 45%;
+    --git-modified: 38 92% 50%;
+    --git-deleted: 0 72% 56%;
+    --git-renamed: 217 91% 60%;
+    --pr-merged: 262 70% 72%;
+    --git-untracked: 0 0% 56%;
+    --git-conflicted: 25 95% 53%;
+
+    --status-idle: 158 64% 52%;
+    --status-wait: 25 95% 53%;
+    --status-unseen: 213 94% 68%;
+
+    --terminal-service: 210 50% 62%;
+
+    --shade-1: 36 100% 57%;
+    --shade-2: 196 65% 55%;
+
+    --cat-1: 210 75% 65%;
+    --cat-2: 142 50% 55%;
+    --cat-3: 25 85% 62%;
+    --cat-4: 280 60% 70%;
+    --cat-5: 340 65% 65%;
+    --cat-6: 175 55% 55%;
+    --cat-7: 45 80% 60%;
+    --cat-8: 245 65% 72%;
+  }
 }
 
 @layer base {
@@ -676,6 +796,18 @@
     0 20px 40px -20px hsl(0 0% 0% / 0.5);
   outline: 1px solid hsl(0 0% 100% / 0.1);
   outline-offset: -1px;
+}
+
+/* Legacy: flat side panels — old Dash had no gradient here. Remove to restore. */
+.legacy .sidebar-shell,
+.legacy .right-inspector-shell {
+  background: hsl(var(--background));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+.legacy .right-inspector-shell {
+  outline: none;
 }
 
 /* ── Modal glass card ────────────────────────────────────────

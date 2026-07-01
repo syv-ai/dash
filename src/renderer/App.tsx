@@ -607,6 +607,8 @@ export function App() {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
     document.documentElement.classList.toggle('light', theme === 'light');
+    // The Legacy terminal palette also restyles the app chrome to the old Dash look.
+    document.documentElement.classList.toggle('legacy', terminalTheme === 'legacy');
     sessionRegistry.setAllTerminalThemes(terminalTheme, theme === 'dark');
   }, [theme, terminalTheme]);
 
