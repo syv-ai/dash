@@ -28,7 +28,27 @@ The main idea: you open a project, create tasks, and each task gets an isolated 
 
 ## Install
 
-Download the latest build from [Releases](https://github.com/syv-ai/dash/releases/latest). Open the `.dmg` and drag `Dash.app` to `/Applications`.
+### macOS
+
+The macOS build is Apple Silicon (arm64) only; there is currently no Intel Mac build.
+
+Install with Homebrew:
+
+```bash
+brew install --cask syv-ai-dash
+```
+
+The cask token is `syv-ai-dash` (not `dash`, which is taken by Kapeli's Dash). Homebrew handles updates, though the app can also update itself in the background.
+
+Or download the `.dmg` from [Releases](https://github.com/syv-ai/dash/releases/latest), open it, and drag `Dash.app` to `/Applications`.
+
+### Windows
+
+Download the `.exe` from [Releases](https://github.com/syv-ai/dash/releases/latest) and run it.
+
+### Linux
+
+Download the `.AppImage` from [Releases](https://github.com/syv-ai/dash/releases/latest), make it executable (`chmod +x`), and run it.
 
 ## Prerequisites
 
