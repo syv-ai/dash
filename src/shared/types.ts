@@ -45,6 +45,13 @@ export type LinkedItem = LinkedGithubIssue | LinkedAdoWorkItem;
 export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions';
 
 /**
+ * Which Claude model a task's `claude` session starts with. 'default' omits the
+ * `--model` flag entirely so the user's own Claude Code config decides; the rest
+ * map to the CLI's model aliases (`--model opus|sonnet|haiku|fable`).
+ */
+export type TaskModel = 'default' | 'opus' | 'sonnet' | 'haiku' | 'fable';
+
+/**
  * Lifecycle state of a task row. `idle` is the DB default; `active` is set when
  * a worktree is created. Archival is tracked separately via `archivedAt`, not a
  * status value. Legacy/unknown values are normalized to `idle` on read.
@@ -60,6 +67,9 @@ export interface Task {
   status: TaskStatus;
   useWorktree: boolean;
   permissionMode: PermissionMode;
+  /** Model the task's `claude` session starts with. 'default' = respect the
+   *  user's own Claude Code config (no `--model` flag). */
+  model: TaskModel;
   branchCreatedByDash: boolean;
   linkedItems: LinkedItem[] | null;
   contextPrompt: string | null;
@@ -254,7 +264,11 @@ export type FileChangeStatus =
   | 'deleted'
   | 'renamed'
   | 'untracked'
-  | 'conflicted';
+  | 'conflicted'
+  // Gitignored — only surfaced in the diff-editor tree when the user opts in via
+  // the "show ignored" toggle. Never produced by `git status`; synthesized for
+  // display. Not counted as a "changed" file.
+  | 'ignored';
 
 export interface FileChange {
   path: string;

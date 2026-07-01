@@ -7,11 +7,13 @@ import type {
   AzureDevOpsWorkItem,
   LinkedItem,
   PermissionMode,
+  TaskModel,
 } from '../../../shared/types';
 import { isAdoRemote } from '../../../shared/urls';
 import { slugify } from '../../../shared/slug';
 import { Modal, useModalClose } from '../ui/Modal';
 import { PermissionModePicker, readInitialPermissionMode } from './PermissionModePicker';
+import { ModelPicker, readInitialModel, persistModelChoice } from './ModelPicker';
 import { getTaskCreatability } from './taskModalCreatability';
 import { Expandable } from '../ui/Expandable';
 import { Segmented } from '../ui/Segmented';
@@ -27,6 +29,7 @@ import { BranchPrPicker } from './BranchPrPicker';
 export type CreateTaskOptions = {
   name: string;
   permissionMode: PermissionMode;
+  model: TaskModel;
   linkedItems?: LinkedItem[];
   contextPrompt?: string;
   /** Per-task worktree scripts (newline-separated), snapshotted from the project
@@ -181,6 +184,7 @@ function TaskModalBody({
   const [permissionMode, setPermissionMode] = useState<PermissionMode>(
     () => taskDefaults?.permissionMode ?? readInitialPermissionMode(),
   );
+  const [model, setModel] = useState<TaskModel>(() => readInitialModel());
   const [contextPrompt, setContextPrompt] = useState(taskDefaults?.contextPrompt ?? '');
   // Per-task worktree scripts, prefilled from the project default; edit to
   // override for just this worktree.
@@ -342,6 +346,7 @@ function TaskModalBody({
     const base = {
       name: name.trim(),
       permissionMode,
+      model,
       linkedItems,
       contextPrompt: contextPrompt.trim() || undefined,
       setupScript: scriptsApply ? setupScript : null,
@@ -648,19 +653,20 @@ function TaskModalBody({
                       );
                     }
                     if (behind > 0) {
+                      // New-branch case: the branch is cut from the freshly-fetched
+                      // remote ref (origin/<name>), so it already has the latest
+                      // commits. The "behind" count reflects only the *local* branch
+                      // lagging, which isn't used — say so instead of implying the
+                      // new task starts from a stale base.
                       return (
                         <p className="mt-1.5 text-[11px] text-muted-foreground/50">
-                          Base branch is{' '}
-                          <span className="text-amber-500 font-medium">
-                            {behind} commit{behind !== 1 ? 's' : ''} behind
+                          New branch will be based on the latest{' '}
+                          <span className="text-foreground/70 font-medium">
+                            origin/{selectedBranch.name}
                           </span>{' '}
-                          remote
-                          {ahead > 0 && (
-                            <>
-                              {', '}
-                              <span className="text-emerald-500 font-medium">{ahead} ahead</span>
-                            </>
-                          )}
+                          <span className="text-muted-foreground/40">
+                            (local {selectedBranch.name} is {behind} behind — not used)
+                          </span>
                         </p>
                       );
                     }
@@ -686,6 +692,17 @@ function TaskModalBody({
                 onChange={(v) => {
                   setPermissionMode(v);
                   localStorage.setItem('permissionMode', v);
+                }}
+              />
+            </div>
+
+            {/* Model */}
+            <div className="mb-4">
+              <ModelPicker
+                value={model}
+                onChange={(v) => {
+                  setModel(v);
+                  persistModelChoice(v);
                 }}
               />
             </div>

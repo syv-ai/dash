@@ -43,6 +43,7 @@ export interface EditorApi {
     cwd: string;
     source: { kind: 'working' } | { kind: 'commit'; hash: string };
   }) => Promise<IpcResponse<string[]>>;
+  editorListIgnoredFiles: (args: { cwd: string }) => Promise<IpcResponse<string[]>>;
   editorResolveDefaultBase: (args: { cwd: string }) => Promise<IpcResponse<string | null>>;
   editorListFilesAgainstBase: (args: {
     cwd: string;

@@ -1376,6 +1376,10 @@ export function App() {
             if (!taskSettingsTarget || taskSettingsTarget.id !== id) return;
             void persistTaskUpdate(taskSettingsTarget, { permissionMode: mode });
           }}
+          onModelChange={(id, model) => {
+            if (!taskSettingsTarget || taskSettingsTarget.id !== id) return;
+            void persistTaskUpdate(taskSettingsTarget, { model });
+          }}
           onScriptsChange={(id, setupScript, teardownScript) => {
             void (async () => {
               const resp = await window.electronAPI.setTaskScripts({

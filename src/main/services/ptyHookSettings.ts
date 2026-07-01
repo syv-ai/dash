@@ -232,10 +232,13 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
     { matcher: 'compact', hooks: [dashCmd('session-start', true)] },
   ];
 
-  // SessionStart context-injection: re-inject the task context (linked
-  // issue/work-item prompt) on startup, compact, and clear — NOT resume,
-  // since resumed sessions already have context in history. Coexists with
-  // the defensive-idle HTTP hooks on the same clear/compact matchers.
+  // SessionStart context-injection: re-inject the task context (context prompt +
+  // linked issue/work-item prompt) on compact and clear — which drop it from
+  // history — but NOT startup or resume. Startup is covered by the initial-prompt
+  // auto-submit (see setInitialPrompt / createTask): the first spawn submits the
+  // same context as a real message the agent acts on, so a startup matcher here
+  // would inject it a second time as silent context. Resume already has it in
+  // history. Coexists with the defensive-idle HTTP hooks on the same matchers.
   const contextPrompt = getTaskContextPrompt(ptyId);
   if (contextPrompt) {
     const hookPayload = JSON.stringify({
@@ -259,7 +262,6 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
       // the idle hook so both fire from the same matcher.
       entry.hooks.push(tagDash(contextHook));
     }
-    sessionStartEntries.push({ matcher: 'startup', hooks: [tagDash(contextHook)] });
   }
 
   dashEntries.SessionStart = sessionStartEntries;

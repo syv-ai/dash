@@ -234,6 +234,14 @@ export function runMigrations(): void {
     /* already exists */
   }
 
+  // Per-task starting model. 'default' = no `--model` flag (respect the user's
+  // Claude Code config); see TaskModel in shared/types.
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN model TEXT NOT NULL DEFAULT 'default'`);
+  } catch {
+    /* already exists */
+  }
+
   try {
     rawDb.exec(`ALTER TABLE tasks ADD COLUMN total_tokens INTEGER NOT NULL DEFAULT 0`);
   } catch {

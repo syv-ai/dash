@@ -10,7 +10,7 @@ import { terminalSnapshotService } from './TerminalSnapshotService';
 import { ensureShellConfig } from './ptyShellConfig';
 import { findClaudePath, findLatestSessionId } from './claudeCli';
 import { writeHookSettings, setCommitAttributionValue } from './ptyHookSettings';
-import type { PermissionMode } from '@shared/types';
+import type { PermissionMode, TaskModel } from '@shared/types';
 
 export type PtyKind = 'agent' | 'shell' | 'tui' | 'service';
 
@@ -360,6 +360,8 @@ export function buildClaudeArgs(opts: {
   resumeSessionId: string | null;
   name?: string;
   permissionMode?: PermissionMode;
+  /** Model alias (opus|sonnet|haiku|fable). 'default'/undefined → no --model. */
+  model?: TaskModel;
   initialPrompt?: string;
 }): string[] {
   const args: string[] = [];
@@ -372,6 +374,12 @@ export function buildClaudeArgs(opts: {
     args.push('--permission-mode', 'acceptEdits');
   } else if (opts.permissionMode === 'bypassPermissions') {
     args.push('--dangerously-skip-permissions');
+  }
+  // Pin the starting model when the user chose a non-default one. 'default' omits
+  // the flag so the user's own Claude Code config decides. Orthogonal to
+  // resume/name, so it applies to both fresh and resumed sessions.
+  if (opts.model && opts.model !== 'default') {
+    args.push('--model', opts.model);
   }
   // ultracode is session-scoped; re-apply on every spawn so the user's toggle
   // effectively sticks across the sessions Dash launches. Must precede the
@@ -391,6 +399,8 @@ export async function startDirectPty(options: {
   cols: number;
   rows: number;
   permissionMode?: PermissionMode;
+  /** Starting model → `claude --model <alias>`. 'default'/undefined omits it. */
+  model?: TaskModel;
   isDark?: boolean;
   /** Task name → `claude --name` on a fresh spawn (recognizable in /resume). */
   name?: string;
@@ -447,6 +457,7 @@ export async function startDirectPty(options: {
     resumeSessionId,
     name: options.name,
     permissionMode: options.permissionMode,
+    model: options.model,
     initialPrompt,
   });
 

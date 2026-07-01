@@ -220,6 +220,7 @@ export const useProjects = create<ProjectsStore>((set) => ({
       path: taskItem.path,
       useWorktree: taskItem.useWorktree,
       permissionMode: patch.permissionMode ?? taskItem.permissionMode,
+      model: patch.model ?? taskItem.model,
       branchCreatedByDash: taskItem.branchCreatedByDash,
       linkedItems: taskItem.linkedItems,
     });
@@ -294,7 +295,7 @@ export const useProjects = create<ProjectsStore>((set) => ({
     await useProjects.getState().loadProjects();
   },
   createTask: async (options, projectId) => {
-    const { name, permissionMode, linkedItems, contextPrompt, setupScript, teardownScript } =
+    const { name, permissionMode, model, linkedItems, contextPrompt, setupScript, teardownScript } =
       options;
     const targetProjectId = projectId ?? useProjects.getState().activeProjectId;
     const targetProject = useProjects.getState().projects.find((p) => p.id === targetProjectId);
@@ -416,6 +417,7 @@ export const useProjects = create<ProjectsStore>((set) => ({
         path: taskPath,
         useWorktree,
         permissionMode,
+        model,
         // Only Dash-created branches should be auto-deleted on task removal.
         branchCreatedByDash: options.kind === 'worktree-new-branch' && !!worktreeInfo,
         linkedItems: linkedItems ?? null,
@@ -429,9 +431,8 @@ export const useProjects = create<ProjectsStore>((set) => ({
       }
 
       const taskId = saveResp.data.id;
-      // Store task context so the SessionStart hook can inject it. The user's
-      // context prompt (project default or per-task) is combined with any
-      // linked-issue context.
+      // Combine the user's context prompt (project default or per-task) with any
+      // linked-issue context into one prompt.
       const hasLinkedItems = !!linkedItems && linkedItems.length > 0;
       const prompt = [
         contextPrompt?.trim(),
@@ -440,6 +441,14 @@ export const useProjects = create<ProjectsStore>((set) => ({
         .filter((part): part is string => !!part)
         .join('\n\n');
       if (prompt) {
+        // Auto-submit it as the first message so the agent actually acts on the
+        // instruction, instead of only receiving it as silent SessionStart
+        // context (which read as "lost"). Must be stashed before the terminal
+        // mounts below, hence awaited here.
+        await window.electronAPI.ptySetInitialPrompt({ taskId, prompt });
+        // Also persist it so the SessionStart hook re-injects it on /clear and
+        // /compact (which drop it from history) — the auto-submit only covers
+        // the first spawn.
         await window.electronAPI.ptyWriteTaskContext({ taskId, prompt });
         if (hasLinkedItems) notifyContextInjected(linkedItems);
       }

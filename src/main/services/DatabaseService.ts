@@ -10,6 +10,7 @@ import type {
   LinkedItem,
   TokenStatsRollup,
   PermissionMode,
+  TaskModel,
   TaskStatus,
   TaskPort,
   PortSource,
@@ -17,6 +18,11 @@ import type {
 
 function normalizePermissionMode(value: string | null | undefined): PermissionMode {
   return value === 'acceptEdits' || value === 'bypassPermissions' ? value : 'default';
+}
+
+const TASK_MODELS: readonly TaskModel[] = ['default', 'opus', 'sonnet', 'haiku', 'fable'];
+function normalizeModel(value: string | null | undefined): TaskModel {
+  return TASK_MODELS.includes(value as TaskModel) ? (value as TaskModel) : 'default';
 }
 
 function normalizeTaskStatus(value: string | null | undefined): TaskStatus {
@@ -187,6 +193,7 @@ export class DatabaseService {
           status: data.status ?? 'idle',
           useWorktree: data.useWorktree ?? true,
           permissionMode: data.permissionMode ?? 'default',
+          model: data.model ?? 'default',
           branchCreatedByDash: data.branchCreatedByDash ?? false,
           linkedItems: linkedItemsJson,
           contextPrompt: data.contextPrompt ?? null,
@@ -212,6 +219,7 @@ export class DatabaseService {
             path: data.path,
             status: data.status ?? 'idle',
             permissionMode: data.permissionMode ?? 'default',
+            model: data.model ?? 'default',
             linkedItems: linkedItemsJson,
             updatedAt: now,
           },
@@ -522,6 +530,7 @@ export class DatabaseService {
       status: normalizeTaskStatus(row.status),
       useWorktree: row.useWorktree ?? true,
       permissionMode: normalizePermissionMode(row.permissionMode),
+      model: normalizeModel(row.model),
       branchCreatedByDash: row.branchCreatedByDash ?? false,
       linkedItems,
       contextPrompt: row.contextPrompt ?? null,

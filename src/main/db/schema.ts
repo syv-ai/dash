@@ -47,6 +47,9 @@ export const tasks = sqliteTable(
     autoApprove: integer('auto_approve', { mode: 'boolean' }).default(false),
     // 'default' | 'acceptEdits' | 'bypassPermissions' — see PermissionMode in shared/types
     permissionMode: text('permission_mode').notNull().default('default'),
+    // 'default' | 'opus' | 'sonnet' | 'haiku' | 'fable' — see TaskModel in shared/types.
+    // 'default' → no `--model` flag (respect the user's Claude Code config).
+    model: text('model').notNull().default('default'),
     linkedItems: text('linked_items'),
     contextPrompt: text('context_prompt'),
     // Per-task overrides of the project's default worktree scripts (newline-

@@ -27,6 +27,7 @@ function task(p: Partial<Task> = {}): Task {
     status: 'idle',
     useWorktree: true,
     permissionMode: 'default',
+    model: 'default',
     branchCreatedByDash: true,
     linkedItems: null,
     contextPrompt: null,

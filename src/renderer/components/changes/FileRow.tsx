@@ -22,6 +22,9 @@ const STATUS_LABEL: Record<FileChangeStatus, string> = {
   renamed: 'R',
   untracked: 'U',
   conflicted: 'C',
+  // The Changes panel is fed by `git status`, which never emits 'ignored' — the
+  // key exists only to satisfy the exhaustive record type.
+  ignored: 'I',
 };
 
 const STATUS_CLASS: Record<FileChangeStatus, string> = {
@@ -31,6 +34,7 @@ const STATUS_CLASS: Record<FileChangeStatus, string> = {
   renamed: 'text-[hsl(var(--git-renamed))]',
   untracked: 'text-[hsl(var(--git-untracked))]',
   conflicted: 'text-[hsl(var(--git-conflicted))]',
+  ignored: 'text-muted-foreground/40',
 };
 
 function basename(p: string): string {

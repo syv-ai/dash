@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
-import type { PermissionMode, Task } from '../../../shared/types';
+import type { PermissionMode, TaskModel, Task } from '../../../shared/types';
 import { SettingsModalShell } from '../ui/SettingsModalShell';
 import { PermissionModePicker } from './PermissionModePicker';
+import { ModelPicker } from './ModelPicker';
 import { Expandable } from '../ui/Expandable';
 
 interface TaskSettingsModalProps {
   task: Task;
   /** True when a Claude PTY is currently attached to the task — drives the
-   *  "applies on next start" hint under the permission mode picker. */
+   *  "applies on next start" hint under the permission mode / model pickers. */
   hasActiveSession: boolean;
   onClose: () => void;
   onRename: (id: string, name: string) => void;
   onPermissionModeChange: (id: string, mode: PermissionMode) => void;
+  onModelChange: (id: string, model: TaskModel) => void;
   onScriptsChange: (id: string, setupScript: string, teardownScript: string) => void;
 }
 
@@ -21,6 +23,7 @@ export function TaskSettingsModal({
   onClose,
   onRename,
   onPermissionModeChange,
+  onModelChange,
   onScriptsChange,
 }: TaskSettingsModalProps) {
   const [name, setName] = useState(task.name);
@@ -67,6 +70,12 @@ export function TaskSettingsModal({
       <PermissionModePicker
         value={task.permissionMode}
         onChange={(mode) => onPermissionModeChange(task.id, mode)}
+        helperText={hasActiveSession ? 'Applies the next time this session starts' : undefined}
+      />
+
+      <ModelPicker
+        value={task.model}
+        onChange={(model) => onModelChange(task.id, model)}
         helperText={hasActiveSession ? 'Applies the next time this session starts' : undefined}
       />
 

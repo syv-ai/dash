@@ -31,6 +31,8 @@ const FOLDER_TINT: Record<FileChangeStatus, string> = {
   renamed: 'text-[hsl(var(--git-renamed)/0.85)]',
   untracked: 'text-[hsl(var(--git-untracked))]',
   conflicted: 'text-[hsl(var(--git-conflicted)/0.85)]',
+  // `git status` never emits 'ignored'; key present only for the record type.
+  ignored: 'text-muted-foreground/40',
 };
 
 export function FolderRow({

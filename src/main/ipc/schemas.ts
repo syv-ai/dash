@@ -12,6 +12,8 @@ import { z } from 'zod';
 
 export const permissionModeSchema = z.enum(['default', 'acceptEdits', 'bypassPermissions']);
 
+export const taskModelSchema = z.enum(['default', 'opus', 'sonnet', 'haiku', 'fable']);
+
 /** A single linked issue / work item. Kept permissive (passthrough) — the
  *  provider-specific fields are renderer-built and reflected back as-is. */
 const linkedItemSchema = z.looseObject({
@@ -45,6 +47,7 @@ export const taskInputSchema = z.looseObject({
   status: z.enum(['idle', 'active']).optional(),
   useWorktree: z.boolean().optional(),
   permissionMode: permissionModeSchema.optional(),
+  model: taskModelSchema.optional(),
   branchCreatedByDash: z.boolean().optional(),
   linkedItems: z.array(linkedItemSchema).nullable().optional(),
   contextPrompt: z.string().nullable().optional(),

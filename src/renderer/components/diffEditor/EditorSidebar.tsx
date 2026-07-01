@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
-import { ChevronDown, ChevronRight, GitCommit, History, ListFilter } from 'lucide-react';
+import { ChevronDown, ChevronRight, GitCommit, History, ListFilter, EyeOff } from 'lucide-react';
 import type { FileChange, FileChangeStatus } from '../../../shared/types';
 import { formatRelativeTime } from '@shared/relativeTime';
 import type { CommitSummary, EditorView } from './types';
@@ -8,6 +8,8 @@ import { Popover, PopoverAnchor, PopoverContent } from '../ui/Popover';
 import { Tooltip } from '../ui/Tooltip';
 
 interface EditorSidebarProps {
+  /** Repo root — needed to lazily list gitignored files for the tree toggle. */
+  cwd: string;
   /** All file paths in the current view's source (whole repo, sorted). */
   allPaths: string[];
   /** Subset of paths that have a diff for this view, with status + line stats. */
@@ -31,6 +33,7 @@ interface EditorSidebarProps {
 
 const COMMITS_DRAWER_KEY = 'diffEditor.commitsDrawerSize';
 const CHANGED_ONLY_KEY = 'diffEditor.changedOnly';
+const SHOW_IGNORED_KEY = 'diffEditor.showIgnored';
 
 export function EditorSidebar(props: EditorSidebarProps) {
   const initialDrawerSize = parseInitial(localStorage.getItem(COMMITS_DRAWER_KEY), 35);
@@ -46,6 +49,8 @@ export function EditorSidebar(props: EditorSidebarProps) {
       >
         <Panel minSize={20}>
           <FileTreePanel
+            cwd={props.cwd}
+            view={props.view}
             paths={props.allPaths}
             changedFiles={props.changedFiles}
             loading={props.filesLoading}
@@ -113,14 +118,21 @@ function newFolder(name: string, fullPath: string): TreeFolder {
   };
 }
 
-function buildRepoTree(paths: string[], changedFiles: FileChange[]): TreeFolder {
+function buildRepoTree(
+  paths: string[],
+  changedFiles: FileChange[],
+  ignoredPaths: string[] = [],
+): TreeFolder {
   const changedByPath = new Map<string, FileChange>();
   for (const f of changedFiles) changedByPath.set(f.path, f);
+  const ignoredSet = new Set<string>(ignoredPaths);
 
-  // Use the union of repo paths and changed paths (e.g. deleted files may not
-  // be in `paths` for the working view but are still in changedFiles).
+  // Use the union of repo paths, changed paths (e.g. deleted files may not be in
+  // `paths` for the working view but are still in changedFiles), and any opted-in
+  // ignored paths.
   const all = new Set<string>(paths);
   for (const f of changedFiles) all.add(f.path);
+  for (const p of ignoredPaths) all.add(p);
 
   const root = newFolder('', '');
   for (const p of Array.from(all).sort()) {
@@ -136,10 +148,18 @@ function buildRepoTree(paths: string[], changedFiles: FileChange[]): TreeFolder 
       }
       node = child;
     }
+    // A tracked change wins over an ignored marker (a path can't be both, but be
+    // deterministic). Ignored paths get a synthetic, zero-stat change so they
+    // render with the low-emphasis "I" badge.
+    const change: FileChange | null =
+      changedByPath.get(p) ??
+      (ignoredSet.has(p)
+        ? { path: p, status: 'ignored', staged: false, additions: 0, deletions: 0 }
+        : null);
     node.files.push({
       name: parts[parts.length - 1]!,
       fullPath: p,
-      change: changedByPath.get(p) ?? null,
+      change,
     });
   }
 
@@ -147,7 +167,9 @@ function buildRepoTree(paths: string[], changedFiles: FileChange[]): TreeFolder 
     const statuses = new Set<FileChangeStatus>();
     let changed = 0;
     for (const file of node.files) {
-      if (file.change) {
+      // Ignored files are shown but never counted as "changed" or allowed to
+      // tint their parent folders.
+      if (file.change && file.change.status !== 'ignored') {
         statuses.add(file.change.status);
         changed++;
       }
@@ -177,6 +199,7 @@ const STATUS_LABEL: Record<FileChangeStatus, string> = {
   renamed: 'R',
   untracked: 'U',
   conflicted: 'C',
+  ignored: 'I',
 };
 
 const STATUS_TEXT: Record<FileChangeStatus, string> = {
@@ -186,6 +209,8 @@ const STATUS_TEXT: Record<FileChangeStatus, string> = {
   renamed: 'text-[hsl(var(--git-renamed))]',
   untracked: 'text-[hsl(var(--git-untracked))]',
   conflicted: 'text-[hsl(var(--git-conflicted))]',
+  // No dedicated token — ignored files are intentionally low-emphasis (muted).
+  ignored: 'text-muted-foreground/40',
 };
 
 const FOLDER_TINT: Record<FileChangeStatus, string> = {
@@ -195,9 +220,14 @@ const FOLDER_TINT: Record<FileChangeStatus, string> = {
   renamed: 'text-[hsl(var(--git-renamed)/0.85)]',
   untracked: 'text-[hsl(var(--git-untracked))]',
   conflicted: 'text-[hsl(var(--git-conflicted)/0.85)]',
+  // Never used for folder tint (ignored is absent from STATUS_PRIORITY, so
+  // pickDominant won't select it) — present only to satisfy the record type.
+  ignored: 'text-muted-foreground/40',
 };
 
 interface FileTreePanelProps {
+  cwd: string;
+  view: EditorView;
   paths: string[];
   changedFiles: FileChange[];
   loading: boolean;
@@ -207,6 +237,8 @@ interface FileTreePanelProps {
 }
 
 function FileTreePanel({
+  cwd,
+  view,
   paths,
   changedFiles,
   loading,
@@ -223,12 +255,43 @@ function FileTreePanel({
       localStorage.setItem(CHANGED_ONLY_KEY, String(next));
       return next;
     });
+
+  // Ignored files are a working-tree concept, so the toggle only applies there.
+  const ignoredAvailable = view.kind === 'working';
+  const [showIgnored, setShowIgnored] = useState<boolean>(
+    () => localStorage.getItem(SHOW_IGNORED_KEY) === 'true',
+  );
+  const toggleShowIgnored = () =>
+    setShowIgnored((v) => {
+      const next = !v;
+      localStorage.setItem(SHOW_IGNORED_KEY, String(next));
+      return next;
+    });
+  const [ignoredPaths, setIgnoredPaths] = useState<string[]>([]);
+  // Fetch gitignored paths lazily — only when the toggle is on and we're in the
+  // working view. Cheap to re-run on cwd change; git collapses ignored dirs.
+  useEffect(() => {
+    if (!showIgnored || !ignoredAvailable) {
+      setIgnoredPaths([]);
+      return;
+    }
+    let cancelled = false;
+    void window.electronAPI.editorListIgnoredFiles({ cwd }).then((resp) => {
+      if (cancelled) return;
+      setIgnoredPaths(resp.success && resp.data ? resp.data : []);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [showIgnored, ignoredAvailable, cwd]);
+
   // In changed-only mode, seed the tree from an empty repo-path set so
   // buildRepoTree's union reduces to just the changed files and their parent
-  // folders (unchanged siblings never enter the tree).
+  // folders (unchanged siblings never enter the tree). Ignored files aren't
+  // changes, so they're likewise excluded there.
   const tree = useMemo(
-    () => buildRepoTree(changedOnly ? [] : paths, changedFiles),
-    [changedOnly, paths, changedFiles],
+    () => buildRepoTree(changedOnly ? [] : paths, changedFiles, changedOnly ? [] : ignoredPaths),
+    [changedOnly, paths, changedFiles, ignoredPaths],
   );
   const totals = useMemo(() => {
     let additions = 0;
@@ -260,20 +323,38 @@ function FileTreePanel({
             </span>
           )}
         </span>
-        <Tooltip content={changedOnly ? 'Show all files' : 'Show changed files only'}>
-          <button
-            type="button"
-            onClick={toggleChangedOnly}
-            aria-pressed={changedOnly}
-            className={`shrink-0 p-1 -mr-1 rounded transition-colors ${
-              changedOnly
-                ? 'text-primary'
-                : 'text-muted-foreground/50 hover:text-foreground hover:bg-[hsl(var(--surface-2)/0.6)]'
-            }`}
-          >
-            <ListFilter size={13} strokeWidth={1.8} />
-          </button>
-        </Tooltip>
+        <span className="flex items-center gap-0.5">
+          {ignoredAvailable && (
+            <Tooltip content={showIgnored ? 'Hide ignored files' : 'Show ignored files'}>
+              <button
+                type="button"
+                onClick={toggleShowIgnored}
+                aria-pressed={showIgnored}
+                className={`shrink-0 p-1 rounded transition-colors ${
+                  showIgnored
+                    ? 'text-primary'
+                    : 'text-muted-foreground/50 hover:text-foreground hover:bg-[hsl(var(--surface-2)/0.6)]'
+                }`}
+              >
+                <EyeOff size={13} strokeWidth={1.8} />
+              </button>
+            </Tooltip>
+          )}
+          <Tooltip content={changedOnly ? 'Show all files' : 'Show changed files only'}>
+            <button
+              type="button"
+              onClick={toggleChangedOnly}
+              aria-pressed={changedOnly}
+              className={`shrink-0 p-1 -mr-1 rounded transition-colors ${
+                changedOnly
+                  ? 'text-primary'
+                  : 'text-muted-foreground/50 hover:text-foreground hover:bg-[hsl(var(--surface-2)/0.6)]'
+              }`}
+            >
+              <ListFilter size={13} strokeWidth={1.8} />
+            </button>
+          </Tooltip>
+        </span>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-gutter-stable scrollbar-thin-hover pb-2 px-1">
         {loading && paths.length === 0 ? (

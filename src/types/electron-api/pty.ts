@@ -70,4 +70,6 @@ export interface PtyApi {
 
   // Task context for the SessionStart hook
   ptyWriteTaskContext: (args: { taskId: string; prompt: string }) => Promise<IpcResponse<void>>;
+  // Initial prompt the first `claude` spawn auto-submits (one-shot)
+  ptySetInitialPrompt: (args: { taskId: string; prompt: string }) => Promise<IpcResponse<void>>;
 }

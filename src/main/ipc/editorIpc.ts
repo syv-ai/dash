@@ -167,6 +167,32 @@ async function listWorkingRepoFiles(cwd: string): Promise<string[]> {
   return Array.from(new Set([...tracked, ...untracked])).sort();
 }
 
+/**
+ * Gitignored paths in the working tree. `--directory` collapses a fully-ignored
+ * directory (e.g. `node_modules/`, `dist/`) to one entry instead of listing every
+ * file inside it, so the tree stays usable. Trailing slashes are stripped so the
+ * paths slot into the same tree builder as tracked/untracked files. Best-effort:
+ * a repo with no ignores (or a git error) yields an empty list.
+ */
+async function listIgnoredRepoFiles(cwd: string): Promise<string[]> {
+  try {
+    const out = (
+      await execFileAsync(
+        'git',
+        ['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory'],
+        { cwd, maxBuffer: 50 * 1024 * 1024, timeout: 15000 },
+      )
+    ).stdout;
+    return out
+      .split('\0')
+      .filter(Boolean)
+      .map((p) => p.replace(/\/$/, ''))
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
 async function listCommitRepoFiles(cwd: string, hash: string): Promise<string[]> {
   const out = (
     await execFileAsync('git', ['ls-tree', '-r', '-z', '--name-only', hash], {
@@ -723,6 +749,21 @@ export function registerEditorIpc(): void {
             ? await listWorkingRepoFiles(args.cwd)
             : await listCommitRepoFiles(args.cwd, args.source.hash);
         return { success: true, data: paths };
+      } catch (err) {
+        return errorResponse(err);
+      }
+    },
+  );
+
+  // ── editor:listIgnoredFiles ───────────────────────────────────
+  // Gitignored paths in the working tree, fully-ignored directories collapsed
+  // to a single entry. Fetched lazily when the user toggles "show ignored".
+  ipcMain.handle(
+    'editor:listIgnoredFiles',
+    async (_event, args: { cwd: string }): Promise<IpcResponse<string[]>> => {
+      try {
+        parseArgs('editor:listIgnoredFiles', z.looseObject({ cwd: z.string() }), args);
+        return { success: true, data: await listIgnoredRepoFiles(args.cwd) };
       } catch (err) {
         return errorResponse(err);
       }

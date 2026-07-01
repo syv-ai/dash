@@ -32,6 +32,9 @@ export function SearchableMultiSelect<T>({
   const [results, setResults] = useState<T[]>([]);
   const [loading, setLoading] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  // When a search fails (e.g. ADO auth/404/timeout), show the real reason rather
+  // than a misleading "No results found" empty state.
+  const [error, setError] = useState<string | null>(null);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -63,9 +66,12 @@ export function SearchableMultiSelect<T>({
       const resp = await onSearch('');
       if (resp.success && resp.data) {
         setResults(resp.data);
+        setError(null);
+      } else {
+        setError(resp.error || 'Search failed');
       }
-    } catch {
-      // Best effort
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -83,9 +89,13 @@ export function SearchableMultiSelect<T>({
             if (gen !== searchGenRef.current) return; // discard stale results
             if (resp.success && resp.data) {
               setResults(resp.data);
+              setError(null);
+            } else {
+              setError(resp.error || 'Search failed');
             }
-          } catch {
-            // Best effort
+          } catch (err) {
+            if (gen !== searchGenRef.current) return;
+            setError(err instanceof Error ? err.message : String(err));
           } finally {
             if (gen === searchGenRef.current) setLoading(false);
           }
@@ -161,6 +171,10 @@ export function SearchableMultiSelect<T>({
                 <div className="px-3 py-3 text-[12px] text-muted-foreground/40 text-center flex items-center justify-center gap-2">
                   <Loader2 size={12} className="animate-spin" />
                   Searching...
+                </div>
+              ) : error && results.length === 0 ? (
+                <div className="px-3 py-3 text-[12px] text-destructive/80 text-center break-words">
+                  {error}
                 </div>
               ) : results.length === 0 ? (
                 <div className="px-3 py-3 text-[12px] text-muted-foreground/40 text-center">

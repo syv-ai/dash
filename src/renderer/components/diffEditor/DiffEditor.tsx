@@ -175,6 +175,7 @@ export function DiffEditor({
       <PanelGroup direction="horizontal" autoSaveId="diff-editor-shell" className="h-full">
         <Panel defaultSize={22} minSize={14} maxSize={45}>
           <EditorSidebar
+            cwd={cwd}
             allPaths={repoPaths}
             changedFiles={changedFiles}
             filesLoading={repoPathsLoading || changedFilesLoading}

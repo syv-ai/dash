@@ -13,6 +13,7 @@ import {
   killByOwner,
   sendRemoteControl,
   listForTask,
+  setInitialPrompt,
   type PtyKind,
 } from '../services/ptyManager';
 import { DatabaseService } from '../services/DatabaseService';
@@ -50,12 +51,16 @@ export function registerPtyIpc(): void {
           }),
           args,
         );
-        // The agent PTY id is the bare task id — look up its name so a fresh
-        // spawn gets `claude --name <task>` (recognizable in /resume + title).
+        // The agent PTY id is the bare task id — look up its name and model so a
+        // fresh spawn gets `claude --name <task>` (recognizable in /resume +
+        // title) and `--model <alias>` (the user's per-task model choice). Read
+        // from the DB here rather than threading through the renderer, since both
+        // are stable task settings resolved at spawn time.
         const task = DatabaseService.getTask(args.id);
         const result = await startDirectPty({
           ...args,
           name: task?.name,
+          model: task?.model,
           sender: event.sender,
         });
         TelemetryService.capture('terminal_started', { source: 'direct' });
@@ -162,6 +167,25 @@ export function registerPtyIpc(): void {
         args,
       );
       DatabaseService.setTaskContextPrompt(args.taskId, args.prompt);
+      return { success: true };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
+  // Stash the task's initial prompt so the first `claude` spawn auto-submits it
+  // (positional arg, submitted once the trust gate clears) instead of injecting
+  // it as silent SessionStart context the agent never acts on. One-shot: consumed
+  // by the first startDirectPty for the task. Must be set before the terminal
+  // mounts, which the renderer guarantees by awaiting this in createTask.
+  ipcMain.handle('pty:setInitialPrompt', (_event, args: { taskId: string; prompt: string }) => {
+    try {
+      parseArgs(
+        'pty:setInitialPrompt',
+        z.looseObject({ taskId: z.string(), prompt: z.string() }),
+        args,
+      );
+      setInitialPrompt(args.taskId, args.prompt);
       return { success: true };
     } catch (error) {
       return errorResponse(error);

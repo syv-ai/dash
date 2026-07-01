@@ -15,6 +15,17 @@ export class AzureDevOpsService {
     return 'Basic ' + Buffer.from(':' + pat).toString('base64');
   }
 
+  /**
+   * URL-encode the project name for use as a path segment. ADO project names can
+   * contain spaces and other characters that are invalid in a raw URL path; left
+   * unencoded they produce a malformed URL → 404, which the pickers surface as a
+   * misleading "No results found". Repository names are already encoded at their
+   * call sites; this does the same for the project segment.
+   */
+  private static proj(config: AzureDevOpsConfig): string {
+    return encodeURIComponent(config.project);
+  }
+
   private static async request(
     config: AzureDevOpsConfig,
     path: string,
@@ -51,7 +62,7 @@ export class AzureDevOpsService {
 
   static async testConnection(config: AzureDevOpsConfig): Promise<boolean> {
     try {
-      await this.request(config, `${config.project}/_apis/wit/queries`, { method: 'GET' });
+      await this.request(config, `${this.proj(config)}/_apis/wit/queries`, { method: 'GET' });
       return true;
     } catch {
       return false;
@@ -62,13 +73,30 @@ export class AzureDevOpsService {
     config: AzureDevOpsConfig,
     query: string,
   ): Promise<AzureDevOpsWorkItem[]> {
-    const sanitized = query.trim().replace(/[^a-zA-Z0-9\s\-_]/g, '');
+    const trimmed = query.trim();
+
+    // A purely numeric query (optionally "#123") is almost always a work-item ID
+    // — the most natural way ADO users reference an item. Title CONTAINS wouldn't
+    // match it. Try a direct ID lookup first and fall through to the title search
+    // only if that turns up nothing (so "123" can still match a titled item).
+    const idMatch = trimmed.match(/^#?(\d+)$/);
+    if (idMatch) {
+      const id = parseInt(idMatch[1]!, 10);
+      try {
+        const byId = await this.getWorkItemsByIds(config, [id], { expand: true });
+        if (byId.length > 0) return byId;
+      } catch {
+        // Nonexistent id → 404; fall through to the title search below.
+      }
+    }
+
+    const sanitized = trimmed.replace(/[^a-zA-Z0-9\s\-_]/g, '');
     // Endpoint is project-scoped, so no need to filter by TeamProject
     const wiql = sanitized
       ? `SELECT [System.Id] FROM WorkItems WHERE [System.Title] CONTAINS '${sanitized}' ORDER BY [System.ChangedDate] DESC`
       : `SELECT [System.Id] FROM WorkItems WHERE [System.State] <> 'Closed' AND [System.State] <> 'Removed' ORDER BY [System.ChangedDate] DESC`;
 
-    const wiqlResult = (await this.request(config, `${config.project}/_apis/wit/wiql`, {
+    const wiqlResult = (await this.request(config, `${this.proj(config)}/_apis/wit/wiql`, {
       method: 'POST',
       body: { query: wiql },
     })) as { workItems?: { id: number }[] };
@@ -92,7 +120,7 @@ export class AzureDevOpsService {
     const sourceRef = `refs/heads/${branch}`;
     const result = (await this.request(
       config,
-      `${config.project}/_apis/git/repositories/${encodeURIComponent(repositoryName)}/pullrequests?searchCriteria.sourceRefName=${encodeURIComponent(sourceRef)}&searchCriteria.status=all&$top=5`,
+      `${this.proj(config)}/_apis/git/repositories/${encodeURIComponent(repositoryName)}/pullrequests?searchCriteria.sourceRefName=${encodeURIComponent(sourceRef)}&searchCriteria.status=all&$top=5`,
     )) as {
       value?: Array<{ pullRequestId: number; title: string; status: string; url?: string }>;
     };
@@ -132,7 +160,7 @@ export class AzureDevOpsService {
   ): Promise<PullRequest[]> {
     const result = (await this.request(
       config,
-      `${config.project}/_apis/git/repositories/${encodeURIComponent(
+      `${this.proj(config)}/_apis/git/repositories/${encodeURIComponent(
         repositoryName,
       )}/pullrequests?searchCriteria.status=active&$top=50`,
     )) as { value?: unknown };
@@ -151,7 +179,7 @@ export class AzureDevOpsService {
   ): Promise<void> {
     const comment = `A task branch has been created for this work item:\n\n<code>${branch}</code>`;
 
-    await this.request(config, `${config.project}/_apis/wit/workitems/${workItemId}`, {
+    await this.request(config, `${this.proj(config)}/_apis/wit/workitems/${workItemId}`, {
       method: 'PATCH',
       contentType: 'application/json-patch+json',
       body: [
@@ -177,7 +205,7 @@ export class AzureDevOpsService {
     const expand = options?.expand ? '&$expand=relations' : '';
     const result = (await this.request(
       config,
-      `${config.project}/_apis/wit/workitems?ids=${idsParam}${fields}${expand}`,
+      `${this.proj(config)}/_apis/wit/workitems?ids=${idsParam}${fields}${expand}`,
     )) as {
       value: Array<RawWorkItem>;
     };
@@ -230,7 +258,7 @@ export class AzureDevOpsService {
         // Fetch with relations expanded (cannot combine $expand with fields)
         const result = (await this.request(
           config,
-          `${config.project}/_apis/wit/workitems?ids=${[...idsToFetch].join(',')}&$expand=relations`,
+          `${this.proj(config)}/_apis/wit/workitems?ids=${[...idsToFetch].join(',')}&$expand=relations`,
         )) as { value: Array<RawWorkItem> };
 
         for (const raw of result.value) {

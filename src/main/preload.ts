@@ -199,6 +199,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Task context for SessionStart hook
   ptyWriteTaskContext: (args: { taskId: string; prompt: string }) =>
     ipcRenderer.invoke('pty:writeTaskContext', args),
+  ptySetInitialPrompt: (args: { taskId: string; prompt: string }) =>
+    ipcRenderer.invoke('pty:setInitialPrompt', args),
 
   // App lifecycle
   onBeforeQuit: (callback: () => void) => {
@@ -396,6 +398,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     cwd: string;
     source: { kind: 'working' } | { kind: 'commit'; hash: string };
   }) => ipcRenderer.invoke('editor:listRepoFiles', args),
+  editorListIgnoredFiles: (args: { cwd: string }) =>
+    ipcRenderer.invoke('editor:listIgnoredFiles', args),
   editorResolveDefaultBase: (args: { cwd: string }) =>
     ipcRenderer.invoke('editor:resolveDefaultBase', args),
   editorListFilesAgainstBase: (args: { cwd: string; base: string }) =>
