@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import type { FileChange } from '../../../shared/types';
 import { useGit } from '../../stores/gitStore';
@@ -8,6 +8,7 @@ import type { EditorView } from './types';
 import type { DiffEditorModalProps } from './DiffEditorModal';
 import { useEditorViewData } from './data/useEditorViewData';
 import { resolveHeadSentinel, pickFirstChangedFile } from './data/viewData';
+import { readStoredView, writeStoredView } from './data/viewPersistence';
 import { useCommentsStore } from '../../stores/commentsStore';
 import { commentScope, commentCountsByScope } from './comments/commentScope';
 
@@ -24,10 +25,18 @@ export function DiffEditor({
   onClose,
 }: DiffEditorModalProps) {
   const gitStatus = useGit((s) => s.gitStatus);
-  const [view, setView] = useState<EditorView>(
-    () => initialView ?? { kind: 'working', ref: initialStaged ? 'index' : 'HEAD' },
-  );
+  // View precedence: an explicit caller intent (initialView) wins, so clicking
+  // a specific file always shows its working diff and "open at HEAD" is honored.
+  // Otherwise restore the last view for this repo, falling back to working.
+  const [view, setView] = useState<EditorView>(() => {
+    if (initialView) return initialView;
+    return readStoredView(cwd) ?? { kind: 'working', ref: initialStaged ? 'index' : 'HEAD' };
+  });
   const [selectedPath, setSelectedPath] = useState<string>(initialFilePath);
+  // One-shot guard: a restored commit/branch ref may no longer exist (branch
+  // deleted, history rewritten). Validate the *initial* view once and fall back
+  // to working if it's stale — without ejecting the user from later choices.
+  const validatedInitialView = useRef(false);
 
   // ── View-dependent git data (changed files, repo tree, commits, base) ──
   const workingFiles: FileChange[] = useMemo(() => gitStatus?.files ?? [], [gitStatus]);
@@ -47,6 +56,36 @@ export function DiffEditor({
   useEffect(() => {
     setView((current) => resolveHeadSentinel(current, commits));
   }, [commits]);
+
+  // Persist the active view per-repo so reopening lands back here. The 'HEAD'
+  // sentinel is skipped inside writeStoredView until it resolves to a sha.
+  useEffect(() => {
+    writeStoredView(cwd, view);
+  }, [cwd, view]);
+
+  // Validate the restored initial view exactly once. A commit lists every file
+  // in its tree, so an empty repoPaths after load means the sha is gone; a
+  // branch base is checked against the live branch list. Either miss → working.
+  useEffect(() => {
+    if (validatedInitialView.current) return;
+    if (view.kind === 'working') {
+      validatedInitialView.current = true;
+      return;
+    }
+    if (view.kind === 'commit') {
+      if (repoPathsLoading) return; // wait for the tree listing to settle
+      validatedInitialView.current = true;
+      if (repoPaths.length === 0) changeView({ kind: 'working', ref: 'HEAD' });
+      return;
+    }
+    // branch
+    validatedInitialView.current = true;
+    const base = view.base;
+    void window.electronAPI.gitListBranches(cwd).then((resp) => {
+      const exists = resp.success && !!resp.data?.some((b) => b.ref === base);
+      if (!exists) changeView({ kind: 'working', ref: 'HEAD' });
+    });
+  }, [view, repoPaths, repoPathsLoading, cwd]);
 
   // Auto-pick the first changed file ONLY when nothing is selected. User
   // clicks must stay sticky — even on an unchanged file. Resetting on every

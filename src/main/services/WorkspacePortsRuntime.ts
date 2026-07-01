@@ -2,17 +2,21 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { loadWorkspacePorts, loadPortOverrides } from './WorkspacePortsService';
 import { allocatePorts } from './PortAllocator';
+import { composeWorktreeEnv, formatEnvExport } from './derivedEnv';
 import { DatabaseService } from './DatabaseService';
 import type { TaskPort } from '@shared/types';
 
 const GITIGNORE_FILE = '.gitignore';
 
-// Header marker is the idempotency check — if the file already contains
-// this exact line we skip the append so multiple worktree creations don't
-// stack duplicate sections. The wording also tells humans who notice the
-// section that they shouldn't edit it by hand.
+// Header marker introduces the Dash-managed section; entries are kept in sync
+// per-line (see ensureGitignoreEntries) so adding a new managed file ignores it
+// even on worktrees onboarded before that file existed.
 const GITIGNORE_HEADER = '# Dash — port management (generated per-worktree; do not commit)';
-const GITIGNORE_ENTRIES = ['.dash/ports.local.json'];
+
+// Default path (relative to the worktree root) for the sourceable export file.
+// Matches the conventional name a hand-rolled dev.sh writes, so existing
+// `source .env.worktree` workflows keep working.
+const DEFAULT_EXPORT_FILE = '.env.worktree';
 
 export interface SetupTaskArgs {
   taskId: string;
@@ -30,12 +34,12 @@ export interface SetupTaskArgs {
 /**
  * Orchestrates the per-task port lifecycle:
  *   load schema + overrides → query DB for taken host ports → allocate →
- *   persist to task_ports.
+ *   persist to task_ports → write the sourceable export file.
  *
- * The DB is the single source of truth: Dash's PTY spawn reads the env from
- * the DB at spawn time. Nothing else needs the allocations on disk — the
- * "outside Dash = defaults" contract (see PortsSetupPrompt) means no tool
- * is supposed to source a `.env` mirror.
+ * Two surfaces consume the result and must stay identical: the PTY env Dash
+ * injects at spawn, and the on-disk export file that tools outside a Dash PTY
+ * (pytest, alembic, docker compose, CI) source. Both are built from
+ * `buildEnv`, so the same ports + derived vars land in each.
  */
 export class WorkspacePortsRuntime {
   /**
@@ -52,8 +56,10 @@ export class WorkspacePortsRuntime {
     const ports = loadWorkspacePorts(args.worktreePath, errors);
     if (!ports) {
       // Either no .dash/ports.json or invalid. Clear any stale rows from a
-      // previous good config so the task doesn't keep ghost assignments.
+      // previous good config, and remove the stale export file so nothing
+      // outside Dash sources defunct ports.
       DatabaseService.setTaskPorts(args.taskId, []);
+      WorkspacePortsRuntime.removeExportFile(args.worktreePath, DEFAULT_EXPORT_FILE);
       return [];
     }
 
@@ -77,7 +83,9 @@ export class WorkspacePortsRuntime {
       })),
     );
 
-    WorkspacePortsRuntime.ensureGitignoreEntries(args.worktreePath);
+    const exportFile = ports.exportFile ?? DEFAULT_EXPORT_FILE;
+    WorkspacePortsRuntime.writeExportFile(args.worktreePath, exportFile, persisted, ports.derived);
+    WorkspacePortsRuntime.ensureGitignoreEntries(args.worktreePath, exportFile);
     return persisted;
   }
 
@@ -86,67 +94,128 @@ export class WorkspacePortsRuntime {
   }
 
   /**
-   * `KEY=VALUE` env lookup for a task's Tier 2 ports. Returned shape is
-   * `Record<string, string>` so ptyManager can spread it directly into the
-   * spawn env without type juggling.
+   * Full env for a task's worktree: Tier-2 port vars plus the resolved
+   * `derived` composites. Shape is `Record<string, string>` so ptyManager can
+   * spread it straight into the spawn env.
    */
   static getEnvForTask(taskId: string): Record<string, string> {
-    const env: Record<string, string> = {};
-    for (const p of DatabaseService.getTaskPorts(taskId)) {
-      if (p.envVar) env[p.envVar] = String(p.hostPort);
-    }
-    return env;
+    const task = DatabaseService.getTask(taskId);
+    if (!task) return {};
+    return WorkspacePortsRuntime.buildEnv(task.path, DatabaseService.getTaskPorts(taskId));
   }
 
-  /** Same as getEnvForTask but looks up the task by worktree path. */
+  /** Same as getEnvForTask but keyed by worktree path (ptyManager's spawn cwd). */
   static getEnvForWorktree(worktreePath: string): Record<string, string> {
     const task = DatabaseService.getTaskByPath(worktreePath);
     if (!task) return {};
-    return WorkspacePortsRuntime.getEnvForTask(task.id);
+    return WorkspacePortsRuntime.buildEnv(worktreePath, DatabaseService.getTaskPorts(task.id));
   }
 
   /**
-   * Append the Dash-managed local-files section to the worktree's
-   * .gitignore so per-dev overrides + the completion sentinel don't show up
-   * in `git status`. Idempotent via the header marker — re-running on every
-   * task creation is a no-op once the section is already there.
-   *
-   * Writes to the worktree's own .gitignore so the change appears as a
-   * normal uncommitted edit in the setup task's diff — the user sees what
-   * Dash added and commits it as part of "set up port management." A
-   * shared `core.excludesFile` would hide the addition, which we don't
-   * want.
+   * Build the worktree's full env from its persisted ports + the `derived`
+   * templates in `.dash/ports.json`. The single source both the PTY env and the
+   * export file flow through, so they can't disagree. Reloads ports.json each
+   * call (cheap; the file is tiny) so a `derived` edit takes effect without
+   * re-running allocation.
    */
-  private static ensureGitignoreEntries(worktreePath: string): void {
+  private static buildEnv(worktreePath: string, ports: TaskPort[]): Record<string, string> {
+    const portEntries = WorkspacePortsRuntime.portEntries(ports);
+    // No allocated ports → nothing to inject. Short-circuit before touching the
+    // filesystem: it's the common case (most tasks have no ports.json, so this
+    // runs on every PTY spawn) and it avoids resolving `derived` templates
+    // against missing ports, which would otherwise leak literal `${VAR}` text
+    // into the env.
+    if (portEntries.length === 0) return {};
+    const config = loadWorkspacePorts(worktreePath);
+    return Object.fromEntries(composeWorktreeEnv(portEntries, config?.derived));
+  }
+
+  /** Ordered [envVar, hostPort] pairs for a task's Tier-2 ports. */
+  private static portEntries(ports: TaskPort[]): Array<[string, number]> {
+    const entries: Array<[string, number]> = [];
+    for (const p of ports) {
+      if (p.envVar) entries.push([p.envVar, p.hostPort]);
+    }
+    return entries;
+  }
+
+  /**
+   * Write the sourceable export file: `export VAR='…'` lines for every Tier-2
+   * port plus the resolved derived vars, in declaration order. Removed instead
+   * of written when there's nothing to export. Best-effort — a write failure
+   * logs but never blocks setup.
+   */
+  private static writeExportFile(
+    worktreePath: string,
+    exportFile: string,
+    ports: TaskPort[],
+    derived: Record<string, string> | undefined,
+  ): void {
+    const entries = composeWorktreeEnv(WorkspacePortsRuntime.portEntries(ports), derived);
+    if (entries.length === 0) {
+      WorkspacePortsRuntime.removeExportFile(worktreePath, exportFile);
+      return;
+    }
+    const target = path.join(worktreePath, exportFile);
+    try {
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, formatEnvExport(entries), 'utf-8');
+    } catch (err) {
+      console.error(
+        `[WorkspacePortsRuntime] Failed to write ${target}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  private static removeExportFile(worktreePath: string, exportFile: string): void {
+    try {
+      fs.rmSync(path.join(worktreePath, exportFile), { force: true });
+    } catch {
+      /* best effort */
+    }
+  }
+
+  /**
+   * Ensure the worktree's .gitignore ignores Dash's generated per-worktree
+   * files (per-dev overrides + the export file) so they never show up in
+   * `git status`. Idempotent per line — each required entry is added only if
+   * absent, so a worktree onboarded before the export file existed picks it up
+   * on the next allocation.
+   *
+   * Writes to the worktree's own .gitignore (not core.excludesFile) so the
+   * addition appears as a normal uncommitted edit the user can see and commit.
+   */
+  private static ensureGitignoreEntries(worktreePath: string, exportFile: string): void {
+    const required = ['.dash/ports.local.json', exportFile];
     const gitignorePath = path.join(worktreePath, GITIGNORE_FILE);
+
     let existing = '';
     try {
-      if (fs.existsSync(gitignorePath)) {
-        existing = fs.readFileSync(gitignorePath, 'utf-8');
-      }
+      if (fs.existsSync(gitignorePath)) existing = fs.readFileSync(gitignorePath, 'utf-8');
     } catch (err) {
       console.error(
         `[WorkspacePortsRuntime] Failed to read ${gitignorePath}: ${err instanceof Error ? err.message : String(err)}`,
       );
       return;
     }
-    if (existing.includes(GITIGNORE_HEADER)) return;
 
-    // One blank line of separation from whatever came before (if anything),
-    // then header + entries + trailing newline. POSIX convention: text
-    // files end with a newline.
-    const separator =
-      existing.length === 0
-        ? ''
-        : existing.endsWith('\n\n')
-          ? ''
-          : existing.endsWith('\n')
-            ? '\n'
-            : '\n\n';
-    const section = [GITIGNORE_HEADER, ...GITIGNORE_ENTRIES, ''].join('\n');
+    const present = new Set(existing.split('\n').map((l) => l.trim()));
+    const missing = required.filter((entry) => !present.has(entry));
+    if (missing.length === 0) return;
+
+    // Append: header (only if the section isn't already there) + the missing
+    // entries. One blank line of separation from prior content.
+    const parts: string[] = [];
+    let body = existing;
+    if (body.length > 0 && !body.endsWith('\n')) body += '\n';
+    if (!body.includes(GITIGNORE_HEADER)) {
+      if (body.length > 0 && !body.endsWith('\n\n')) parts.push('');
+      parts.push(GITIGNORE_HEADER);
+    }
+    parts.push(...missing, '');
 
     try {
-      fs.writeFileSync(gitignorePath, existing + separator + section, 'utf-8');
+      fs.writeFileSync(gitignorePath, body + parts.join('\n'), 'utf-8');
     } catch (err) {
       console.error(
         `[WorkspacePortsRuntime] Failed to write ${gitignorePath}: ${err instanceof Error ? err.message : String(err)}`,

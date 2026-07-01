@@ -14,6 +14,9 @@ export interface CommitSummary {
   body: string;
   authorName: string;
   authorDate: number;
+  /** Lines added/removed by this commit (0 for merges). */
+  additions: number;
+  deletions: number;
 }
 
 /** A file in the current view's tree. Reuses the project's FileChange shape. */

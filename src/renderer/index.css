@@ -1207,9 +1207,9 @@
   z-index: 7;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  width: 162px;
-  padding: 6px 9px;
+  gap: 3px;
+  width: 172px;
+  padding: 8px 10px;
   border-radius: 5px 0 0 5px;
   border: 1px solid hsl(var(--border) / 0.5);
   background-color: hsl(var(--surface-3) / 0.45);
@@ -1267,8 +1267,8 @@
 }
 .blame-label-author {
   font-size: 11px;
-  font-weight: 500;
-  color: hsl(var(--muted-foreground));
+  font-weight: 600;
+  color: hsl(var(--foreground) / 0.9); /* the card's title line */
   padding-right: 16px; /* clear the × button */
   white-space: nowrap;
   overflow: hidden;
@@ -1276,13 +1276,36 @@
 }
 .blame-label-meta {
   display: flex;
-  gap: 7px;
+  align-items: center;
+  gap: 6px;
   font-size: 10px;
   color: hsl(var(--muted-foreground));
 }
 .blame-label-sha {
   font-family: 'SF Mono', ui-monospace, Menlo, monospace;
+  font-size: 10px;
   color: hsl(var(--primary));
+  /* Rendered as a <button> (opens the commit in the graph) — strip the native
+   * chrome and read as an inline link. */
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+.blame-label-sha:hover {
+  text-decoration: underline;
+}
+.blame-label-age {
+  white-space: nowrap;
+}
+.blame-label-lines {
+  /* Quiet, right-aligned annotation — secondary to the sha · age metadata. */
+  margin-left: auto;
+  padding-left: 6px;
+  font-family: 'SF Mono', ui-monospace, Menlo, monospace;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  color: hsl(var(--muted-foreground) / 0.5);
 }
 .blame-label-summary {
   font-size: 10px;

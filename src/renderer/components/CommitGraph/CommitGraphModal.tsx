@@ -16,17 +16,22 @@ interface CommitGraphModalProps {
   taskBranches: Map<string, TaskBranchInfo>;
   onClose: () => void;
   onSelectTask: (taskId: string) => void;
+  /** Select + scroll to this commit on open (e.g. from the blame card). */
+  focusHash?: string | null;
+  /** Stack above another open modal (the diff editor). */
+  elevated?: boolean;
 }
 
 export function CommitGraphModal(props: CommitGraphModalProps) {
   return (
-    <Modal onClose={props.onClose} size="w-[94vw] max-w-6xl h-[88vh]">
+    <Modal onClose={props.onClose} size="w-[94vw] max-w-6xl h-[88vh]" elevated={props.elevated}>
       <CommitGraphBody
         projectPath={props.projectPath}
         projectName={props.projectName}
         gitRemote={props.gitRemote}
         taskBranches={props.taskBranches}
         onSelectTask={props.onSelectTask}
+        focusHash={props.focusHash}
       />
     </Modal>
   );
@@ -38,6 +43,7 @@ interface CommitGraphBodyProps {
   gitRemote: string | null;
   taskBranches: Map<string, TaskBranchInfo>;
   onSelectTask: (taskId: string) => void;
+  focusHash?: string | null;
 }
 
 function CommitGraphBody({
@@ -46,6 +52,7 @@ function CommitGraphBody({
   gitRemote,
   taskBranches,
   onSelectTask,
+  focusHash,
 }: CommitGraphBodyProps) {
   const close = useModalClose();
 
@@ -73,6 +80,7 @@ function CommitGraphBody({
         gitRemote={gitRemote}
         taskBranches={taskBranches}
         onSelectTask={onSelectTask}
+        focusHash={focusHash}
       />
     </>
   );

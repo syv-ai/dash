@@ -90,6 +90,46 @@ describe('commentsStore', () => {
     expect(api.diffCommentsDelete).toHaveBeenCalledWith({ id: 'a' });
   });
 
+  it('clearSent removes only sent comments and deletes each via IPC', async () => {
+    api.diffCommentsList = vi.fn(() =>
+      Promise.resolve({
+        success: true,
+        data: [
+          cmt({ id: 'a', sent: true }),
+          cmt({ id: 'b', sent: false }),
+          cmt({ id: 'c', filePath: 'b.ts', sent: true }),
+        ],
+      }),
+    );
+    const useCommentsStore = await freshStore();
+    await useCommentsStore.getState().loadForTask('t1');
+    useCommentsStore.getState().clearSent();
+    const byFile = useCommentsStore.getState().byFile;
+    expect(byFile['a.ts']!.map((c) => c.id)).toEqual(['b']);
+    expect(byFile['b.ts']).toBeUndefined();
+    expect(api.diffCommentsDelete).toHaveBeenCalledWith({ id: 'a' });
+    expect(api.diffCommentsDelete).toHaveBeenCalledWith({ id: 'c' });
+    expect(api.diffCommentsDelete).toHaveBeenCalledTimes(2);
+  });
+
+  it('clearSent(scope) only clears sent comments in that scope', async () => {
+    api.diffCommentsList = vi.fn(() =>
+      Promise.resolve({
+        success: true,
+        data: [
+          cmt({ id: 'a', sent: true, viewScope: 'live' }),
+          cmt({ id: 'b', sent: true, viewScope: 'commit:abc' }),
+        ],
+      }),
+    );
+    const useCommentsStore = await freshStore();
+    await useCommentsStore.getState().loadForTask('t1');
+    useCommentsStore.getState().clearSent('commit:abc');
+    expect(useCommentsStore.getState().byFile['a.ts']!.map((c) => c.id)).toEqual(['a']);
+    expect(api.diffCommentsDelete).toHaveBeenCalledWith({ id: 'b' });
+    expect(api.diffCommentsDelete).toHaveBeenCalledTimes(1);
+  });
+
   it('snapshotRanges patches start/end and persists', async () => {
     api.diffCommentsList = vi.fn(() =>
       Promise.resolve({ success: true, data: [cmt({ id: 'a', startLine: 1, endLine: 1 })] }),

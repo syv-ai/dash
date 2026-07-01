@@ -1,14 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  Code2,
-  Eye,
-  GitCommit,
-  GitCompare,
-  History,
-  MessageSquare,
-  WrapText,
-  X,
-} from 'lucide-react';
+import { Eye, GitCommit, GitCompare, History, MessageSquare, WrapText, X } from 'lucide-react';
 import type { EditorView } from '../types';
 import { Popover, PopoverAnchor, PopoverContent } from '../../ui/Popover';
 import { Tooltip } from '../../ui/Tooltip';
@@ -90,6 +81,18 @@ export function EditorHeader({
     setPickerOpen(false);
   }
 
+  function handleExit() {
+    onExitBranchView();
+    setPickerOpen(false);
+  }
+
+  // Plain icon button: no persistent fill — an active toggle just tints the
+  // icon primary; hover gives a subtle surface for affordance.
+  const iconBtn = (active: boolean) =>
+    `p-1.5 rounded-md transition-colors hover:bg-accent/60 ${
+      active ? 'text-primary' : 'text-muted-foreground/60 hover:text-foreground'
+    }`;
+
   function handleChipClick() {
     if (isBranch) {
       setPickerOpen((v) => !v);
@@ -117,7 +120,7 @@ export function EditorHeader({
                 : viewMeta.tooltip
             }
           >
-            <span className="inline-flex items-center gap-1.5 px-2 h-6 rounded-md text-[11px] font-medium shrink-0 bg-primary/15 text-primary">
+            <span className="inline-flex items-center gap-1.5 h-6 text-[11px] font-medium shrink-0 text-primary">
               <viewMeta.Icon size={12} strokeWidth={1.8} className="shrink-0" />
               <span className="font-mono whitespace-nowrap max-w-[260px] truncate">
                 {viewMeta.label}
@@ -134,67 +137,37 @@ export function EditorHeader({
         )}
         <span className="text-[13px] font-medium text-foreground truncate">{filePath}</span>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         {canPreview && (
-          <div className="flex items-center gap-0.5 rounded-md bg-[hsl(var(--surface-3))] p-0.5">
+          <Tooltip content={previewing ? 'Show source' : 'Show rendered preview'}>
             <button
               type="button"
-              onClick={() => onTogglePreview(false)}
-              title="Show source"
-              className={`flex items-center gap-1.5 rounded px-2 py-1 text-[11px] font-medium transition-colors ${
-                previewing
-                  ? 'text-muted-foreground/60 hover:text-foreground'
-                  : 'bg-primary/15 text-primary'
-              }`}
+              onClick={() => onTogglePreview(!previewing)}
+              className={iconBtn(previewing)}
             >
-              <Code2 size={12} strokeWidth={1.8} />
-              Code
+              <Eye size={14} strokeWidth={1.8} />
             </button>
-            <button
-              type="button"
-              onClick={() => onTogglePreview(true)}
-              title="Show rendered preview"
-              className={`flex items-center gap-1.5 rounded px-2 py-1 text-[11px] font-medium transition-colors ${
-                previewing
-                  ? 'bg-primary/15 text-primary'
-                  : 'text-muted-foreground/60 hover:text-foreground'
-              }`}
-            >
-              <Eye size={12} strokeWidth={1.8} />
-              Preview
-            </button>
-          </div>
+          </Tooltip>
         )}
         <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
           <PopoverAnchor asChild>
             <div className="inline-flex items-center">
-              <button
-                type="button"
-                onClick={handleChipClick}
-                title={isBranch ? 'Change base branch' : 'Compare with another branch'}
-                className={`inline-flex items-center gap-1.5 px-2 h-6 rounded-md text-[11px] font-mono transition-colors ${
-                  isBranch
-                    ? 'bg-primary/15 text-primary'
-                    : 'text-muted-foreground/60 hover:text-foreground hover:bg-accent/60'
-                }`}
-              >
-                <GitCompare size={12} strokeWidth={1.8} className="shrink-0" />
-                {isBranch ? (
-                  <span className="truncate max-w-[420px]">base: {view.base}</span>
-                ) : (
-                  <span className="whitespace-nowrap">Compare with branch…</span>
-                )}
-              </button>
-              {isBranch && (
+              <Tooltip content={isBranch ? 'Change base branch' : 'Compare with another branch'}>
                 <button
                   type="button"
-                  onClick={onExitBranchView}
-                  title="Exit branch comparison"
-                  className="ml-0.5 p-0.5 rounded-md text-muted-foreground/50 hover:text-foreground hover:bg-accent/60 transition-colors"
+                  onClick={handleChipClick}
+                  className={`inline-flex items-center gap-1.5 px-2 h-6 rounded-md text-[11px] font-mono transition-colors hover:bg-accent/60 ${
+                    isBranch ? 'text-primary' : 'text-muted-foreground/60 hover:text-foreground'
+                  }`}
                 >
-                  <X size={12} strokeWidth={2} />
+                  <GitCompare size={12} strokeWidth={1.8} className="shrink-0" />
+                  {isBranch ? (
+                    <span className="truncate max-w-[420px]">base: {view.base}</span>
+                  ) : (
+                    <span className="whitespace-nowrap">Compare with branch…</span>
+                  )}
                 </button>
-              )}
+              </Tooltip>
             </div>
           </PopoverAnchor>
           <PopoverContent side="bottom" align="end" sideOffset={6} className="p-0">
@@ -202,37 +175,28 @@ export function EditorHeader({
               cwd={cwd}
               selectedRef={isBranch ? view.base : null}
               onSelect={handleSelect}
+              onExit={isBranch ? handleExit : undefined}
             />
           </PopoverContent>
         </Popover>
-        <button
-          onClick={onToggleBlame}
-          title={blameEnabled ? 'Hide git blame' : 'Show git blame'}
-          className={`p-1.5 rounded-md transition-colors ${
-            blameEnabled
-              ? 'bg-primary/15 text-primary'
-              : 'text-muted-foreground/60 hover:text-foreground hover:bg-accent/60'
-          }`}
-        >
-          <History size={14} strokeWidth={1.8} />
-        </button>
-        <button
-          onClick={onToggleWordWrap}
-          title={wordWrap ? 'Disable word wrap' : 'Enable word wrap'}
-          className={`p-1.5 rounded-md transition-colors ${
-            wordWrap
-              ? 'bg-primary/15 text-primary'
-              : 'text-muted-foreground/60 hover:text-foreground hover:bg-accent/60'
-          }`}
-        >
-          <WrapText size={14} strokeWidth={1.8} />
-        </button>
-        <button
-          onClick={onClose}
-          className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground/50 hover:text-foreground transition-all duration-150"
-        >
-          <X size={14} strokeWidth={2} />
-        </button>
+        <Tooltip content={blameEnabled ? 'Hide git blame' : 'Show git blame'}>
+          <button onClick={onToggleBlame} className={iconBtn(blameEnabled)}>
+            <History size={14} strokeWidth={1.8} />
+          </button>
+        </Tooltip>
+        <Tooltip content={wordWrap ? 'Disable word wrap' : 'Enable word wrap'}>
+          <button onClick={onToggleWordWrap} className={iconBtn(wordWrap)}>
+            <WrapText size={14} strokeWidth={1.8} />
+          </button>
+        </Tooltip>
+        <Tooltip content="Close">
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-md text-muted-foreground/60 hover:text-foreground hover:bg-accent/60 transition-colors"
+          >
+            <X size={14} strokeWidth={2} />
+          </button>
+        </Tooltip>
       </div>
     </div>
   );

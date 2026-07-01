@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
 import { useCommentsStore } from '../../../stores/commentsStore';
-import { isFullModelReplace, projectRanges, rangesEqual, type RangeReader } from './liveProjection';
+import {
+  commentsDeletedByEdit,
+  isFullModelReplace,
+  projectRanges,
+  rangesEqual,
+  type RangeReader,
+} from './liveProjection';
 import type { DiffComment, LineRange, LiveComment } from './types';
 
 // Frozen empty default so `?? EMPTY_STORED` doesn't allocate a fresh array
@@ -150,11 +156,41 @@ export function useFileComments({
     if (!modifiedEditor) return;
     const sub = modifiedEditor.onDidChangeModelContent((e) => {
       const model = modifiedEditor.getModel();
-      if (model && isFullModelReplace(e, model.getValue())) hydrate();
-      else republish();
+      if (model && isFullModelReplace(e, model.getValue())) {
+        hydrate();
+        return;
+      }
+      // Incremental edit. If it deleted a comment's entire anchor block, drop
+      // that comment (store + decoration); otherwise just re-project ranges.
+      // Both comment ranges (liveCommentsRef) and the change ranges are in the
+      // pre-edit coordinate space, so they're directly comparable.
+      const editChanges = e.changes.map((ch) => ({
+        startLine: ch.range.startLineNumber,
+        startColumn: ch.range.startColumn,
+        endLine: ch.range.endLineNumber,
+        text: ch.text,
+      }));
+      const removedIds = commentsDeletedByEdit(liveCommentsRef.current, editChanges);
+      if (removedIds.length === 0) {
+        republish();
+        return;
+      }
+      const removeSet = new Set(removedIds);
+      const removedDecos = liveCommentsRef.current
+        .filter((c) => removeSet.has(c.id))
+        .map((c) => c.decorationId);
+      for (const id of removedIds) useCommentsStore.getState().remove(id);
+      if (model && removedDecos.length > 0) model.deltaDecorations(removedDecos, []);
+      // Project the survivors to their post-edit ranges in the same pass so the
+      // re-add bug (republish reading the stale ref) can't resurrect a removal.
+      const survivors = projectRanges(
+        liveCommentsRef.current.filter((c) => !removeSet.has(c.id)),
+        makeReader(),
+      );
+      setLiveComments(survivors);
     });
     return () => sub.dispose();
-  }, [modifiedEditor, hydrate, republish]);
+  }, [modifiedEditor, hydrate, republish, makeReader]);
 
   // ── Reconcile store removals → drop decorations ──
   useEffect(() => {
@@ -203,15 +239,13 @@ export function useFileComments({
     (range: LineRange, text: string): LiveComment | null => {
       const model = modifiedEditor?.getModel();
       if (!modifiedEditor || !monaco || !model) return null;
-      const created = useCommentsStore
-        .getState()
-        .addComment({
-          filePath,
-          startLine: range.start,
-          endLine: range.end,
-          text,
-          viewScope: scope,
-        });
+      const created = useCommentsStore.getState().addComment({
+        filePath,
+        startLine: range.start,
+        endLine: range.end,
+        text,
+        viewScope: scope,
+      });
       if (!created) return null;
       const ids = model.deltaDecorations(
         [],

@@ -156,6 +156,63 @@ describe('loadWorkspacePorts — validation', () => {
   });
 });
 
+describe('loadWorkspacePorts — derived + exportFile', () => {
+  const basePorts = [
+    { label: 'Frontend', envVar: 'FRONTEND_PORT', defaultPort: 5173 },
+    { label: 'Backend', envVar: 'BACKEND_PORT', defaultPort: 8000 },
+  ];
+
+  it('parses a derived block referencing declared port envVars', () => {
+    writeJson('.dash/ports.json', {
+      ports: basePorts,
+      derived: {
+        VITE_API_URL: 'http://localhost:${BACKEND_PORT}',
+        BACKEND_CORS_ORIGINS: 'http://localhost:${FRONTEND_PORT},http://localhost',
+      },
+    });
+    expect(loadWorkspacePorts(tmpDir)?.derived).toEqual({
+      VITE_API_URL: 'http://localhost:${BACKEND_PORT}',
+      BACKEND_CORS_ORIGINS: 'http://localhost:${FRONTEND_PORT},http://localhost',
+    });
+  });
+
+  it('rejects a derived template referencing an unknown var', () => {
+    writeJson('.dash/ports.json', {
+      ports: basePorts,
+      derived: { API_URL: 'http://localhost:${NOPE_PORT}' },
+    });
+    const errors: string[] = [];
+    expect(loadWorkspacePorts(tmpDir, errors)).toBeNull();
+    expect(errors.join(' ')).toContain('NOPE_PORT');
+  });
+
+  it('rejects a derived key that collides with a declared port envVar', () => {
+    writeJson('.dash/ports.json', {
+      ports: basePorts,
+      derived: { BACKEND_PORT: 'http://localhost:${FRONTEND_PORT}' },
+    });
+    expect(loadWorkspacePorts(tmpDir)).toBeNull();
+  });
+
+  it('rejects a derived key with an invalid env-var name', () => {
+    writeJson('.dash/ports.json', {
+      ports: basePorts,
+      derived: { 'bad-key': 'http://localhost:${BACKEND_PORT}' },
+    });
+    expect(loadWorkspacePorts(tmpDir)).toBeNull();
+  });
+
+  it('parses a custom exportFile path', () => {
+    writeJson('.dash/ports.json', { ports: basePorts, exportFile: 'config/.env.dash' });
+    expect(loadWorkspacePorts(tmpDir)?.exportFile).toBe('config/.env.dash');
+  });
+
+  it('rejects an exportFile that escapes the worktree', () => {
+    writeJson('.dash/ports.json', { ports: basePorts, exportFile: '../escape.env' });
+    expect(loadWorkspacePorts(tmpDir)).toBeNull();
+  });
+});
+
 describe('loadPortOverrides', () => {
   it('returns an empty map when no .dash/ports.local.json exists', () => {
     expect(loadPortOverrides(tmpDir)).toEqual({});

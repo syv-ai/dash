@@ -28,6 +28,8 @@ export interface CommentsActions {
   remove: (id: string) => void;
   markSent: (ids: ReadonlyArray<string>) => void;
   markUnsent: (id: string) => void;
+  /** Remove all sent comments, optionally limited to one view scope. */
+  clearSent: (scope?: string) => void;
   snapshotRanges: (filePath: string, snapshots: ReadonlyArray<RangeSnapshot>) => void;
   prune: (existingFilePaths: ReadonlySet<string>) => Promise<{ deleted: number }>;
 }
@@ -48,6 +50,17 @@ function stripById(
   const next: Record<string, DiffComment[]> = {};
   for (const [path, list] of Object.entries(byFile)) {
     const filtered = list.filter((c) => c.id !== id);
+    if (filtered.length > 0) next[path] = filtered;
+  }
+  return next;
+}
+function stripByIds(
+  byFile: Record<string, DiffComment[]>,
+  ids: ReadonlySet<string>,
+): Record<string, DiffComment[]> {
+  const next: Record<string, DiffComment[]> = {};
+  for (const [path, list] of Object.entries(byFile)) {
+    const filtered = list.filter((c) => !ids.has(c.id));
     if (filtered.length > 0) next[path] = filtered;
   }
   return next;
@@ -165,6 +178,20 @@ export const useCommentsStore = create<CommentsStore>((set, get) => ({
     set((s) => ({ byFile: mapAll(s.byFile, (c) => (c.id === id ? { ...c, sent: false } : c)) }));
     const existing = findById(get().byFile, id);
     if (existing) persist(existing, { sent: false });
+  },
+
+  clearSent: (scope) => {
+    if (!get().taskId) return;
+    const ids: string[] = [];
+    for (const list of Object.values(get().byFile)) {
+      for (const c of list) {
+        if (c.sent && (scope === undefined || c.viewScope === scope)) ids.push(c.id);
+      }
+    }
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    set((s) => ({ byFile: stripByIds(s.byFile, idSet) }));
+    for (const id of ids) void window.electronAPI.diffCommentsDelete({ id });
   },
 
   snapshotRanges: (filePath, snapshots) => {

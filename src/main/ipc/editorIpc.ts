@@ -272,6 +272,50 @@ export function parseDiffNumstatZ(
   return map;
 }
 
+/** Parse `git log --numstat --format=%x1f%H` into a commit-hash → {adds, dels}
+ *  map, summing per-file numstat across each commit. A line beginning with the
+ *  unit-separator (\x1f) starts a new commit; numstat rows are `<adds>\t<dels>
+ *  \t<path>` (binary files use '-'). Locale-independent (numbers only); merge
+ *  commits emit no numstat and stay at 0/0. */
+export function parseCommitNumstatLog(
+  stdout: string,
+): Map<string, { additions: number; deletions: number }> {
+  const map = new Map<string, { additions: number; deletions: number }>();
+  let current: { additions: number; deletions: number } | null = null;
+  for (const line of stdout.split('\n')) {
+    if (line.startsWith('\x1f')) {
+      const hash = line.slice(1).trim();
+      if (!hash) {
+        current = null;
+        continue;
+      }
+      current = { additions: 0, deletions: 0 };
+      map.set(hash, current);
+      continue;
+    }
+    if (!current || !line) continue;
+    const t1 = line.indexOf('\t');
+    if (t1 < 0) continue;
+    const t2 = line.indexOf('\t', t1 + 1);
+    if (t2 < 0) continue;
+    const addsStr = line.slice(0, t1);
+    const delsStr = line.slice(t1 + 1, t2);
+    current.additions += addsStr === '-' ? 0 : parseInt(addsStr, 10) || 0;
+    current.deletions += delsStr === '-' ? 0 : parseInt(delsStr, 10) || 0;
+  }
+  return map;
+}
+
+/** Git object specs (`<rev>:<path>`) and pathspecs require forward slashes.
+ *  On Windows, path.relative() yields '\\' separators, which make
+ *  `git show HEAD:sub\file` fail and return '' — rendering the whole file as
+ *  added in the diff view. Gated to Windows on purpose: there '\\' is never a
+ *  legal filename character so converting it is unambiguous, whereas on POSIX a
+ *  backslash IS a valid character in a filename and must be left untouched. */
+export function toGitPath(relPath: string): string {
+  return process.platform === 'win32' ? relPath.replace(/\\/g, '/') : relPath;
+}
+
 export function registerEditorIpc(): void {
   // ── editor:readWorking ────────────────────────────────────────
   ipcMain.handle(
@@ -298,7 +342,7 @@ export function registerEditorIpc(): void {
         } catch {
           /* cwdAbs is fine */
         }
-        const relForGit = path.relative(cwdReal, abs);
+        const relForGit = toGitPath(path.relative(cwdReal, abs));
         const spec = args.ref === 'HEAD' ? `HEAD:${relForGit}` : `:0:${relForGit}`;
         const originalContent = await gitShow(args.cwd, spec);
 
@@ -366,7 +410,7 @@ export function registerEditorIpc(): void {
         } catch {
           /* cwdAbs is fine */
         }
-        const relForGit = path.relative(cwdReal, abs);
+        const relForGit = toGitPath(path.relative(cwdReal, abs));
 
         // Try parent for original. If the hash has no parent (root commit),
         // gitShow falls through to '' — every file is then an addition.
@@ -418,7 +462,7 @@ export function registerEditorIpc(): void {
         } catch {
           /* cwdAbs is fine */
         }
-        const relForGit = path.relative(cwdReal, abs);
+        const relForGit = toGitPath(path.relative(cwdReal, abs));
         const blameArgs = [
           'blame',
           '--incremental',
@@ -546,18 +590,36 @@ export function registerEditorIpc(): void {
           ['log', '-z', `--max-count=${limit}`, `--format=${format}`, 'HEAD'],
           { cwd: args.cwd, maxBuffer: 5 * 1024 * 1024, timeout: 15000 },
         );
+        // Second single pass over the same range for per-commit line stats —
+        // O(1) git calls, not one numstat call per commit. The \x1f-prefixed
+        // hash line delimits each commit's numstat block.
+        let lineStats = new Map<string, { additions: number; deletions: number }>();
+        try {
+          const { stdout: numstatOut } = await execFileAsync(
+            'git',
+            ['log', '--numstat', `--max-count=${limit}`, '--format=%x1f%H', 'HEAD'],
+            { cwd: args.cwd, maxBuffer: 5 * 1024 * 1024, timeout: 15000 },
+          );
+          lineStats = parseCommitNumstatLog(numstatOut);
+        } catch {
+          // Stats are best-effort; fall back to 0/0 if the numstat pass fails.
+        }
         const commits: EditorCommitListItem[] = [];
         for (const record of stdout.split('\0')) {
           if (!record) continue;
           const parts = record.split('\x1f');
           if (parts.length < 6) continue;
+          const hash = parts[0]!;
+          const stat = lineStats.get(hash);
           commits.push({
-            hash: parts[0]!,
+            hash,
             shortHash: parts[1]!,
             authorName: parts[2] || '',
             authorDate: parseInt(parts[3]!, 10) || 0,
             subject: parts[4] || '',
             body: (parts[5] || '').trim(),
+            additions: stat?.additions ?? 0,
+            deletions: stat?.deletions ?? 0,
           });
         }
         return { success: true, data: commits };
@@ -791,7 +853,7 @@ export function registerEditorIpc(): void {
         } catch {
           /* cwdAbs is fine */
         }
-        const relForGit = path.relative(cwdReal, abs);
+        const relForGit = toGitPath(path.relative(cwdReal, abs));
         const originalContent = await gitShow(args.cwd, `${args.base}:${relForGit}`);
 
         let workingContent: string | null = null;

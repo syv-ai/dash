@@ -7,6 +7,7 @@ import {
   MessageSquare,
   Pencil,
   Send,
+  Trash2,
   Undo2,
   X,
 } from 'lucide-react';
@@ -29,6 +30,8 @@ interface Props {
   onNavigate: (scope: string, filePath: string, commentId: string) => void;
   onRemove: (filePath: string, commentId: string) => void;
   onUnsend: (commentId: string) => void;
+  /** Remove sent comments — all of them, or just one scope's when given. */
+  onClearSent: (scope?: string) => void;
   /** Send all unsent comments of one view. */
   onSendScope: (scope: string) => void;
   /** Send every unsent comment across all views. Closes the menu. */
@@ -79,6 +82,7 @@ export function CommentsMenu({
   onNavigate,
   onRemove,
   onUnsend,
+  onClearSent,
   onSendScope,
   onSendAll,
   onEditAndSend,
@@ -196,6 +200,7 @@ export function CommentsMenu({
               views={sentViews}
               total={totalSent}
               currentFilePath={currentFilePath}
+              onClearSent={onClearSent}
               {...rowHandlers}
             />
           )}
@@ -357,33 +362,61 @@ function SentSection({
   views,
   total,
   currentFilePath,
+  onClearSent,
   getLiveRangeForCurrent,
   onNavigate,
   onRemove,
   onSendOne,
   onUnsend,
   closeMenu,
-}: { views: ScopeView[]; total: number; currentFilePath: string } & RowHandlers) {
+}: {
+  views: ScopeView[];
+  total: number;
+  currentFilePath: string;
+  onClearSent: (scope?: string) => void;
+} & RowHandlers) {
   const [open, setOpen] = useState(false);
   return (
     <div className="border-b border-foreground/5 last:border-b-0">
       <StickyHeader>
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-foreground/[0.035] transition-colors"
-        >
-          {open ? (
-            <ChevronDown size={12} strokeWidth={2} className="text-muted-foreground/70 shrink-0" />
-          ) : (
-            <ChevronRight size={12} strokeWidth={2} className="text-muted-foreground/70 shrink-0" />
-          )}
-          <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 shrink-0" aria-hidden />
-          <span className="text-[11px] font-semibold tracking-tight text-muted-foreground/85">
-            Sent
-          </span>
-          <span className="text-[10.5px] text-muted-foreground/60 tabular-nums">{total}</span>
-        </button>
+        <div className="flex items-center gap-2 px-3 py-2 hover:bg-foreground/[0.035] transition-colors">
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            className="flex items-center gap-2 flex-1 min-w-0 text-left"
+          >
+            {open ? (
+              <ChevronDown
+                size={12}
+                strokeWidth={2}
+                className="text-muted-foreground/70 shrink-0"
+              />
+            ) : (
+              <ChevronRight
+                size={12}
+                strokeWidth={2}
+                className="text-muted-foreground/70 shrink-0"
+              />
+            )}
+            <span
+              className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 shrink-0"
+              aria-hidden
+            />
+            <span className="text-[11px] font-semibold tracking-tight text-muted-foreground/85">
+              Sent
+            </span>
+            <span className="text-[10.5px] text-muted-foreground/60 tabular-nums">{total}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onClearSent()}
+            title={`Clear ${total} sent comment${total !== 1 ? 's' : ''}`}
+            className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-medium text-muted-foreground/65 hover:text-destructive hover:bg-destructive/10 active:scale-[0.98] transition"
+          >
+            <Trash2 size={10} strokeWidth={2.2} />
+            Clear
+          </button>
+        </div>
       </StickyHeader>
       <SectionBody open={open}>
         {views.map((v) => (
@@ -392,6 +425,18 @@ function SentSection({
               <span className="text-[9px] uppercase tracking-wider font-medium text-muted-foreground/50">
                 {v.label}
               </span>
+              <span className="text-[9px] text-muted-foreground/40 tabular-nums">{v.count}</span>
+              {views.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => onClearSent(v.scope)}
+                  title={`Clear ${v.count} sent comment${v.count !== 1 ? 's' : ''} in ${v.label}`}
+                  className="ml-auto shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-medium text-muted-foreground/55 hover:text-destructive hover:bg-destructive/10 transition"
+                >
+                  <Trash2 size={9} strokeWidth={2.2} />
+                  Clear
+                </button>
+              )}
             </div>
             {v.groups.map(([path, list], gi) => (
               <FileGroup
