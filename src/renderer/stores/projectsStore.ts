@@ -91,6 +91,9 @@ function disposeTaskSessions(taskId: string) {
   void sessionRegistry.dispose(taskId);
   void sessionRegistry.dispose(`shell:${taskId}`);
   void sessionRegistry.disposeByPrefix(`shell:${taskId}:`);
+  // Agentic-loop tasks own two agent PTYs instead of the single bare-id one.
+  void sessionRegistry.dispose(`loop:${taskId}`);
+  void sessionRegistry.dispose(`mgr:${taskId}`);
 }
 
 /** Sort projects by the saved projectOrder, pruning stale ids from storage. */
