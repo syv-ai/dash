@@ -4,6 +4,7 @@ import { activityMonitor } from './ActivityMonitor';
 import { hookServer } from './HookServer';
 import { contextUsageService } from './ContextUsageService';
 import { RtkService } from './RtkService';
+import { stripHostTerminalEnv } from './hostTerminalEnv';
 import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
 import { TerminalMirror } from './TerminalMirror';
 import { terminalSnapshotService } from './TerminalSnapshotService';
@@ -222,7 +223,11 @@ import { remoteControlService } from './remoteControlService';
 function buildDirectEnv(isDark: boolean, cwd?: string): Record<string, string> {
   const isWin = process.platform === 'win32';
   const base: Record<string, string> = syncShellEnv
-    ? Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => !!e[1]))
+    ? stripHostTerminalEnv(
+        Object.fromEntries(
+          Object.entries(process.env).filter((e): e is [string, string] => !!e[1]),
+        ),
+      )
     : {};
 
   // rtk's rewrite output invokes the bare name `rtk`; when the binary is
@@ -557,8 +562,10 @@ export async function startPty(options: {
   // spawned shell inherits it. Skipping login trims the startup without losing PATH.
   const args = isWin ? ['-NoLogo'] : ['-i'];
 
-  // Clean environment for shell
-  const env = { ...process.env };
+  // Clean environment for shell. stripHostTerminalEnv drops the identity of the
+  // terminal Dash was launched from (dev only) so this shell doesn't boot that
+  // terminal's shell integration and report itself as one of its sessions.
+  const env = stripHostTerminalEnv({ ...process.env });
   // Remove Electron packaging artifacts
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.ELECTRON_NO_ATTACH_CONSOLE;
@@ -859,7 +866,7 @@ export async function startCommandPty(options: {
     cols: options.cols,
     rows: options.rows,
     cwd: options.cwd,
-    env: { ...process.env, ...(options.env ?? {}) } as Record<string, string>,
+    env: { ...stripHostTerminalEnv(process.env), ...(options.env ?? {}) } as Record<string, string>,
   });
 
   const record: PtyRecord = {

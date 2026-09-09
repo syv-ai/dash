@@ -10,6 +10,7 @@ import { initDrawerTabsService } from './drawerTabsIpc';
 import { startCommandPty, killPty, hasPty } from '../services/ptyManager';
 import { terminalSnapshotService } from '../services/TerminalSnapshotService';
 import type { TaskPort } from '@shared/types';
+import { stripHostTerminalEnv } from '../services/hostTerminalEnv';
 
 function broadcast(channel: string, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -21,7 +22,12 @@ function broadcast(channel: string, payload: unknown): void {
 function execViaShell(command: string, cwd: string): Promise<{ code: number; stderrTail: string }> {
   return new Promise((resolve) => {
     const shell = process.env.SHELL || '/bin/sh';
-    const child = spawn(shell, ['-lc', command], { cwd });
+    // A login shell sources the user's rc files, so it would boot the host
+    // terminal's shell integration off inherited env (see hostTerminalEnv).
+    const child = spawn(shell, ['-lc', command], {
+      cwd,
+      env: stripHostTerminalEnv(process.env),
+    });
     let stderr = '';
     child.stderr.on('data', (c) => {
       stderr = (stderr + String(c)).slice(-400);
