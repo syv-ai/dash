@@ -86,7 +86,14 @@ export function useEditorSave({
           return;
         }
         setLoadedBuffer(draft);
-        patchLoadedState({ mtimeMs: resp.data.mtimeMs, sizeBytes: resp.data.sizeBytes });
+        // `modifiedContent` mirrors what's on disk — after a successful write
+        // that's the draft. Leaving it at the pre-edit text makes any later
+        // consumer (reload guard, commit-view render) work from stale content.
+        patchLoadedState({
+          modifiedContent: draft,
+          mtimeMs: resp.data.mtimeMs,
+          sizeBytes: resp.data.sizeBytes,
+        });
         setStale(null);
         setSavedPill(true);
         window.setTimeout(() => setSavedPill(false), 1000);

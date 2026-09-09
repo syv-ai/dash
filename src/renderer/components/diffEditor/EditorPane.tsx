@@ -196,15 +196,24 @@ export function EditorPane({
   // content loads. Comment lifecycle / pending range / stale flag are
   // owned by their respective hooks; only the draft/loadedBuffer mirror
   // lives here because the save hook owns them by reference.
+  //
+  // Keyed on loadId, NOT the state object: a save patches mtime/size in place,
+  // which makes a new state object while `modifiedContent` still holds the
+  // pre-edit text. Depending on `state` re-ran this after every save and reset
+  // the draft back to that stale text — the edit visibly reverted on ⌘S.
+  const loadId = state.kind === 'loaded' ? state.loadId : 0;
+  const stateRef = useRef(state);
+  stateRef.current = state;
   useEffect(() => {
-    if (state.kind !== 'loaded') return;
-    const initial = state.modifiedContent;
+    const loaded = stateRef.current;
+    if (loaded.kind !== 'loaded') return;
+    const initial = loaded.modifiedContent;
     setLoadedBuffer(initial);
     setDraft(initial);
     setPendingRange(null);
     setStale(null);
     setSaveError(null);
-  }, [state, setPendingRange, setStale, setSaveError]);
+  }, [loadId, setPendingRange, setStale, setSaveError]);
 
   // Fade-on-file-change: bumps only after the new file's content has actually
   // loaded (not on the click), so the fade-in coincides with the visual swap.

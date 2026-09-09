@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { EditorView } from '../types';
 
 export type LoadState =
@@ -6,6 +6,11 @@ export type LoadState =
   | { kind: 'error'; message: string }
   | {
       kind: 'loaded';
+      /** Monotonic id, bumped once per completed read. Consumers that must
+       *  reset their buffers on a *fresh load* key off this instead of the
+       *  state object's identity — in-place patches (save updating mtime/size)
+       *  create a new object but keep the same loadId. */
+      loadId: number;
       originalContent: string;
       modifiedContent: string;
       mtimeMs: number;
@@ -29,6 +34,7 @@ export function useFileLoad(
   setState: React.Dispatch<React.SetStateAction<LoadState>>;
 } {
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
+  const loadSeq = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,6 +59,7 @@ export function useFileLoad(
         const initial = resp.data.workingContent ?? '';
         setState({
           kind: 'loaded',
+          loadId: ++loadSeq.current,
           originalContent: resp.data.originalContent,
           modifiedContent: initial,
           mtimeMs: resp.data.mtimeMs,
@@ -75,6 +82,7 @@ export function useFileLoad(
         }
         setState({
           kind: 'loaded',
+          loadId: ++loadSeq.current,
           originalContent: resp.data.originalContent,
           modifiedContent: resp.data.modifiedContent,
           mtimeMs: 0,
@@ -100,6 +108,7 @@ export function useFileLoad(
         const initial = resp.data.workingContent ?? '';
         setState({
           kind: 'loaded',
+          loadId: ++loadSeq.current,
           originalContent: resp.data.originalContent,
           modifiedContent: initial,
           mtimeMs: resp.data.mtimeMs,
