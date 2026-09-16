@@ -14,6 +14,7 @@ import { clackBlock, clackExitBlock } from './clackLines';
 import { isPromptOnlySnapshot } from './snapshotFilter';
 import { FitScheduler } from './FitScheduler';
 import { TUI_COLS, TUI_ROWS } from '../../shared/tuiProtocol';
+import { maybeShowWindowsPasteToast } from './windowsPasteToast';
 
 // Heap mark above which a terminal trims its own scrollback to relieve pressure.
 // `performance.memory.usedJSHeapSize` is the WHOLE renderer heap (React, Monaco,
@@ -88,6 +89,9 @@ export class TerminalSessionManager {
   // the last non-empty selection on every change so Ctrl+Shift+C / Cmd+C can
   // still copy it even after xterm has cleared the highlight.
   private lastSelection = '';
+  // Cached: getPlatform() is a synchronous preload bridge; avoid reading it
+  // per-keystroke in the key handler. Gates the Windows paste nudge (Alt+V).
+  private readonly isWindows = window.electronAPI.getPlatform() === 'win32';
   constructor(opts: {
     id: string;
     cwd: string;
@@ -202,6 +206,13 @@ export class TerminalSessionManager {
       // Ctrl+Shift+C reports e.key as something other than 'C' still work.
       const isKeyC = e.code === 'KeyC';
       const isKeyV = e.code === 'KeyV';
+
+      // Nudge Windows users toward Alt+V (see windowsPasteToast). Side-effect
+      // only — no preventDefault/return, so existing paste handling still runs
+      // and Alt+V (excluded here) still passes through untouched.
+      if (this.isWindows && isKeyV && e.ctrlKey && !e.altKey && !e.metaKey) {
+        maybeShowWindowsPasteToast();
+      }
 
       // Copy: Cmd+C (macOS) or Ctrl+Shift+C (Linux) — copy terminal selection.
       // Also Ctrl+C on any platform when there's an active selection (matches

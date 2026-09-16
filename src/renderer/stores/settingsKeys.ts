@@ -47,6 +47,7 @@ export interface SettingsState {
   autoUpdateEnabled: boolean;
   updateNotificationsEnabled: boolean;
   lastSeenReleaseNotesVersion: string | undefined;
+  hasDismissedWindowsPasteToast: boolean;
 }
 
 /** One entry per managed setting: the store field, its existing localStorage
@@ -124,6 +125,7 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   entry('autoUpdateEnabled', 'autoUpdateEnabled', boolDefaultTrue()),
   entry('updateNotificationsEnabled', 'updateNotificationsEnabled', boolDefaultTrue()),
   entry('lastSeenReleaseNotesVersion', 'lastSeenReleaseNotesVersion', strOrUndefined()),
+  entry('hasDismissedWindowsPasteToast', 'hasDismissedWindowsPasteToast', boolDefaultFalse()),
 ];
 
 /** Initial state = every field decoded from an absent key (its default). */
