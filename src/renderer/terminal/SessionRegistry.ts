@@ -1,5 +1,5 @@
 import { TerminalSessionManager } from './TerminalSessionManager';
-import type { PermissionMode } from '../../shared/types';
+import type { LoopRole, PermissionMode } from '../../shared/types';
 
 interface AttachOptions {
   id: string;
@@ -9,6 +9,20 @@ interface AttachOptions {
   shellOnly?: boolean;
   isTui?: boolean;
   themeId?: string;
+  /** Owning task id when it differs from the PTY id (loop:/mgr: composite ids). */
+  loopTaskId?: string;
+  /** Skip --resume: spawn a fresh Claude session (loop agents; Ralph reset). */
+  freshContext?: boolean;
+  /** Prompt auto-submitted after the trust gate (loop worker/manager seed). */
+  initialPrompt?: string;
+  /** Loop agent role; main derives model/permission/prompt/deny-settings from it. */
+  loopRole?: LoopRole;
+  /**
+   * Display-only pane: main (LoopController) owns the PTY lifecycle. The session
+   * never spawns on attach (it reattaches if the PTY exists, else shows a
+   * placeholder) and never respawns a shell when the PTY exits.
+   */
+  managedExternally?: boolean;
 }
 
 class SessionRegistryImpl {
@@ -27,6 +41,11 @@ class SessionRegistryImpl {
         shellOnly: opts.shellOnly,
         isTui: opts.isTui,
         themeId: opts.themeId ?? this._themeId,
+        loopTaskId: opts.loopTaskId,
+        freshContext: opts.freshContext,
+        initialPrompt: opts.initialPrompt,
+        loopRole: opts.loopRole,
+        managedExternally: opts.managedExternally,
       });
       this.sessions.set(opts.id, session);
     }

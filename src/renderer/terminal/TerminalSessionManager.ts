@@ -4,7 +4,7 @@ import { SearchAddon } from '@xterm/addon-search';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { Utf8Base64 } from './Utf8Base64';
-import type { PermissionMode, TerminalSnapshot } from '../../shared/types';
+import type { LoopRole, PermissionMode, TerminalSnapshot } from '../../shared/types';
 import { FilePathLinkProvider } from './FilePathLinkProvider';
 import type { ITheme } from '@xterm/xterm';
 import { darkTheme, lightTheme, resolveTheme } from './terminalThemes';
@@ -83,6 +83,13 @@ export class TerminalSessionManager {
    */
   private readonly pinnedTui: boolean;
   private themeId: string;
+  /** Loop-agent spawn metadata; undefined/false for standard sessions. */
+  private readonly loopTaskId?: string;
+  private readonly freshContext: boolean;
+  private readonly initialPrompt?: string;
+  private readonly loopRole?: LoopRole;
+  /** Display-only loop pane — main owns the PTY; never spawn or respawn here. */
+  private readonly managedExternally: boolean;
   // Claude Code's TUI rewrites cells continuously, which causes xterm to drop
   // the visible selection before the user can press the copy shortcut. Cache
   // the last non-empty selection on every change so Ctrl+Shift+C / Cmd+C can
@@ -101,6 +108,16 @@ export class TerminalSessionManager {
      */
     isTui?: boolean;
     themeId?: string;
+    /** Owning task id when it differs from the PTY id (loop:/mgr: composite ids). */
+    loopTaskId?: string;
+    /** Skip --resume: spawn a fresh Claude session (loop agents; Ralph reset). */
+    freshContext?: boolean;
+    /** Prompt auto-submitted after the trust gate (loop worker/manager seed). */
+    initialPrompt?: string;
+    /** Loop agent role; main derives model/permission/prompt/deny-settings from it. */
+    loopRole?: LoopRole;
+    /** Display-only loop pane — main (LoopController) owns the PTY lifecycle. */
+    managedExternally?: boolean;
   }) {
     this.id = opts.id;
     this.cwd = opts.cwd;
@@ -111,6 +128,11 @@ export class TerminalSessionManager {
     this.isTui = opts.isTui ?? false;
     this.pinnedTui = this.isTui && opts.id.startsWith('tui:');
     this.themeId = opts.themeId ?? 'default';
+    this.loopTaskId = opts.loopTaskId;
+    this.freshContext = opts.freshContext ?? false;
+    this.initialPrompt = opts.initialPrompt;
+    this.loopRole = opts.loopRole;
+    this.managedExternally = opts.managedExternally ?? false;
 
     this.terminal = new Terminal({
       scrollback: 100_000,
@@ -388,7 +410,46 @@ export class TerminalSessionManager {
         }
       }
 
-      if (this.shellOnly) {
+      if (this.managedExternally) {
+        // Display-only loop pane: main's LoopController owns spawning the worker
+        // (`loop:`) / manager (`mgr:`) PTYs. Never spawn here — that would race
+        // the controller and could leave a rogue Claude session. Reattach with
+        // `attachOnly` so we repaint from the mirror IF the controller already
+        // started the PTY (e.g. after a renderer reload mid-loop); otherwise show
+        // a placeholder and wait for the first `pty:data` once the user hits Start.
+        const dims = this.proposeDims();
+        let serializedState: string | undefined;
+        try {
+          const resp = await window.electronAPI.ptyStartDirect({
+            id: this.id,
+            cwd: this.cwd,
+            cols: this.ptyCols(dims?.cols ?? 120),
+            rows: dims?.rows ?? 30,
+            attachOnly: true,
+          });
+          if (resp.success) serializedState = resp.data?.serializedState;
+        } catch (err) {
+          console.warn('[terminal] managed reattach failed:', err);
+        }
+        if (gen !== this.attachGeneration) return;
+        this.ptyStarted = true;
+
+        if (serializedState) {
+          try {
+            this.terminal.write(serializedState);
+          } catch (err) {
+            console.warn('[terminal] writing managed mirror state failed:', err);
+          }
+        } else {
+          // No live PTY — the loop hasn't been started. The dim hint is wiped by
+          // connectPtyListeners on the first byte of the controller's spawn.
+          const role = this.loopRole === 'manager' ? 'manager' : 'worker';
+          this.terminal.write(
+            `\x1b[2mLoop ${role} ready — press Start to run the loop.\x1b[0m\r\n`,
+          );
+          this.placeholderActive = true;
+        }
+      } else if (this.shellOnly) {
         // TUI tabs are backed by a PTY that main spawned via startCommandPty
         // (Clack side-car). If the user reaches this attach path and no PTY
         // exists for the id, the orchestrator/side-car died — falling back to
@@ -1035,6 +1096,10 @@ export class TerminalSessionManager {
       rows,
       permissionMode: this.permissionMode,
       isDark: this.isDark,
+      taskId: this.loopTaskId,
+      freshContext: this.freshContext,
+      initialPrompt: this.initialPrompt,
+      loopRole: this.loopRole,
     });
 
     if (resp.success) {
@@ -1149,9 +1214,13 @@ export class TerminalSessionManager {
       // Ensure PTY is cleaned up in main process
       window.electronAPI.ptyKill(this.id);
 
-      const fallback = ptyExitFallback(this.id, this.isTui);
+      const fallback = ptyExitFallback(this.id, this.isTui, this.managedExternally);
       if (fallback.action === 'message') {
-        this.terminal.write(clackExitBlock(info.exitCode, fallback.message));
+        // Empty message (managed loop panes) → stay silent between Ralph resets;
+        // the controller respawns and the next pty:data repaints this terminal.
+        if (fallback.message) {
+          this.terminal.write(clackExitBlock(info.exitCode, fallback.message));
+        }
         return;
       }
       this.terminal.write(clackExitBlock(info.exitCode));

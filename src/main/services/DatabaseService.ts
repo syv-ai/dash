@@ -8,10 +8,12 @@ import type {
   Task,
   Conversation,
   LinkedItem,
+  LoopConfig,
   TokenStatsRollup,
   PermissionMode,
   TaskModel,
   TaskStatus,
+  TaskKind,
   TaskPort,
   PortSource,
 } from '@shared/types';
@@ -27,6 +29,19 @@ function normalizeModel(value: string | null | undefined): TaskModel {
 
 function normalizeTaskStatus(value: string | null | undefined): TaskStatus {
   return value === 'active' ? 'active' : 'idle';
+}
+
+function normalizeTaskKind(value: string | null | undefined): TaskKind {
+  return value === 'loop' ? 'loop' : 'standard';
+}
+
+function parseLoopConfig(value: string | null | undefined): LoopConfig | null {
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as LoopConfig;
+  } catch {
+    return null; // Corrupted JSON — treat as a standard task at the data layer.
+  }
 }
 
 export class DatabaseService {
@@ -169,6 +184,7 @@ export class DatabaseService {
     }
 
     const linkedItemsJson = data.linkedItems ? JSON.stringify(data.linkedItems) : null;
+    const loopConfigJson = data.loopConfig ? JSON.stringify(data.loopConfig) : null;
 
     // Wrap read-min + insert in a transaction so concurrent creates don't race on sortOrder
     db.transaction((tx) => {
@@ -191,6 +207,8 @@ export class DatabaseService {
           branch: data.branch,
           path: data.path,
           status: data.status ?? 'idle',
+          taskKind: data.taskKind ?? 'standard',
+          loopConfig: loopConfigJson,
           useWorktree: data.useWorktree ?? true,
           permissionMode: data.permissionMode ?? 'default',
           model: data.model ?? 'default',
@@ -235,6 +253,38 @@ export class DatabaseService {
     const db = getDb();
     const row = db.select().from(tasks).where(eq(tasks.id, id)).get();
     return row ? this.mapTask(row) : undefined;
+  }
+
+  /**
+   * Clone an existing task's config into a NEW row. The caller supplies the
+   * already-provisioned identity (fresh worktree path + branch) and may override
+   * the kind/config — e.g. "duplicate as loop" passes taskKind:'loop' + loopConfig.
+   * Deep-config fields (contextPrompt, scripts) are carried over; runtime fields
+   * (tokens, archivedAt, sortOrder) reset to defaults via saveTask.
+   */
+  static duplicateTask(
+    sourceId: string,
+    identity: { name: string; branch: string; path: string },
+    overrides?: Partial<Task>,
+  ): Task {
+    const source = this.getTask(sourceId);
+    if (!source) throw new Error(`Cannot duplicate: task "${sourceId}" not found`);
+
+    return this.saveTask({
+      projectId: source.projectId,
+      name: identity.name,
+      branch: identity.branch,
+      path: identity.path,
+      useWorktree: source.useWorktree,
+      permissionMode: source.permissionMode,
+      linkedItems: source.linkedItems,
+      contextPrompt: source.contextPrompt,
+      setupScript: source.setupScript,
+      teardownScript: source.teardownScript,
+      taskKind: source.taskKind,
+      loopConfig: source.loopConfig,
+      ...overrides,
+    });
   }
 
   static setTaskContextPrompt(id: string, prompt: string): void {
@@ -528,6 +578,8 @@ export class DatabaseService {
       branch: row.branch,
       path: row.path,
       status: normalizeTaskStatus(row.status),
+      taskKind: normalizeTaskKind(row.taskKind),
+      loopConfig: parseLoopConfig(row.loopConfig),
       useWorktree: row.useWorktree ?? true,
       permissionMode: normalizePermissionMode(row.permissionMode),
       model: normalizeModel(row.model),

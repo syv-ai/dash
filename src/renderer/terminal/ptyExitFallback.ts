@@ -6,8 +6,18 @@ export type PtyExitFallback = { action: 'respawn-shell' } | { action: 'message';
  * (service runs, side-car TUIs) must NOT — a respawned shell would make
  * `hasPty(tabId)` true again, so ServiceRunner.status would report the dead
  * service as Dash-owned and Stop would kill an innocent shell.
+ *
+ * `managedExternally` covers the loop panes: main's LoopController owns the
+ * worker's kill→respawn cadence (the Ralph reset), so the renderer must neither
+ * respawn a shell nor print an exit block on each iteration boundary — an empty
+ * message tells the caller to do nothing and wait for the next spawn's data.
  */
-export function ptyExitFallback(tabId: string, isTui: boolean): PtyExitFallback {
+export function ptyExitFallback(
+  tabId: string,
+  isTui: boolean,
+  managedExternally = false,
+): PtyExitFallback {
+  if (managedExternally) return { action: 'message', message: '' };
   if (!isTui) return { action: 'respawn-shell' };
   if (tabId.startsWith('service:') && !tabId.endsWith(':logs')) {
     return {

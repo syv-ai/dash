@@ -159,6 +159,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 
+  // Agentic loops
+  loopStart: (taskId: string) => ipcRenderer.invoke('loop:start', taskId),
+  loopPause: (taskId: string) => ipcRenderer.invoke('loop:pause', taskId),
+  loopResume: (taskId: string) => ipcRenderer.invoke('loop:resume', taskId),
+  loopStop: (taskId: string) => ipcRenderer.invoke('loop:stop', taskId),
+  loopGetAllStatus: () => ipcRenderer.invoke('loop:status:getAll'),
+  onLoopStatus: (callback: (status: import('@shared/types').LoopStatus) => void) => {
+    const handler = (_event: unknown, status: import('@shared/types').LoopStatus) =>
+      callback(status);
+    ipcRenderer.on('loop:status', handler);
+    return () => {
+      ipcRenderer.removeListener('loop:status', handler);
+    };
+  },
+
   // Remote control
   ptyRemoteControlEnable: (ptyId: string) => ipcRenderer.invoke('pty:remoteControl:enable', ptyId),
   ptyRemoteControlGetAllStates: () => ipcRenderer.invoke('pty:remoteControl:getAllStates'),

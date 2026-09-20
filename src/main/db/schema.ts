@@ -41,6 +41,11 @@ export const tasks = sqliteTable(
     branch: text('branch').notNull(),
     path: text('path').notNull(),
     status: text('status').notNull().default('idle'),
+    // 'standard' | 'loop' — see TaskKind in shared/types. Immutable after creation.
+    taskKind: text('task_kind').notNull().default('standard'),
+    // JSON-stringified LoopConfig; null for standard tasks. Like contextPrompt,
+    // this is an INSERT-only deep-config field (see DatabaseService.saveTask).
+    loopConfig: text('loop_config'),
     useWorktree: integer('use_worktree', { mode: 'boolean' }).default(true),
     // Deprecated since 0.10: replaced by permission_mode. Kept so existing DBs
     // don't break; do not read or write. New rows leave this at default (false).

@@ -6,7 +6,9 @@ import type {
   GithubIssue,
   AzureDevOpsWorkItem,
   LinkedItem,
+  LoopConfig,
   PermissionMode,
+  TaskKind,
   TaskModel,
 } from '../../../shared/types';
 import { isAdoRemote } from '../../../shared/urls';
@@ -18,6 +20,13 @@ import { getTaskCreatability } from './taskModalCreatability';
 import { Expandable } from '../ui/Expandable';
 import { Segmented } from '../ui/Segmented';
 import { BranchPrPicker } from './BranchPrPicker';
+import {
+  LoopFields,
+  type LoopDraft,
+  defaultLoopDraft,
+  loopDraftValid,
+  buildLoopConfig,
+} from './LoopFields';
 
 /**
  * Task creation modes. Each variant carries only the fields that are meaningful
@@ -36,6 +45,9 @@ export type CreateTaskOptions = {
    *  default and editable per task. Only meaningful for worktree tasks. */
   setupScript?: string | null;
   teardownScript?: string | null;
+  /** Agentic-loop task: carries the LoopConfig; standard tasks omit both. */
+  taskKind?: TaskKind;
+  loopConfig?: LoopConfig;
 } & (
   | { kind: 'worktree-new-branch'; baseRef: string; pushRemote: boolean }
   | { kind: 'worktree-existing'; branch: string; updateFromRemote?: boolean }
@@ -176,6 +188,11 @@ function TaskModalBody({
 }: TaskModalBodyProps) {
   const close = useModalClose();
   const [name, setName] = useState('');
+  // 'standard' | 'loop' — a loop always runs in an isolated worktree on a new
+  // branch (worker commits; worker + manager share the cwd).
+  const [taskKind, setTaskKind] = useState<TaskKind>('standard');
+  const [loopDraft, setLoopDraft] = useState<LoopDraft>(defaultLoopDraft);
+  const isLoop = taskKind === 'loop';
   const [gitReady, setGitReady] = useState(isGitRepo);
   const worktreeForced = !!existingNonWorktreeTask;
   const [useWorktree, setUseWorktree] = useState(
@@ -229,6 +246,15 @@ function TaskModalBody({
   useEffect(() => {
     if (gitReady && branches.length === 0) void fetchBranches();
   }, [gitReady, projectPath]);
+
+  // A loop needs its own worktree on a new branch — force those toggles on when
+  // switching into loop mode (the toggles are hidden in that mode).
+  useEffect(() => {
+    if (isLoop) {
+      setUseWorktree(true);
+      setCreateNewBranch(true);
+    }
+  }, [isLoop]);
 
   // Search callbacks for SearchableMultiSelect
   const searchGithubIssues = useCallback(
@@ -360,7 +386,19 @@ function TaskModalBody({
     const wantRemote = updateFromRemote && behind > 0 && isDirectCheckout;
 
     let options: CreateTaskOptions;
-    if (repoHasNoCommits) {
+    if (isLoop) {
+      // A loop is always a new-branch worktree carrying its LoopConfig. Gated by
+      // the disabled check (needs git + commits + a base branch + a goal).
+      if (!loopDraftValid(loopDraft) || !selectedBranch) return;
+      options = {
+        ...base,
+        kind: 'worktree-new-branch',
+        baseRef: selectedBranch.ref,
+        pushRemote,
+        taskKind: 'loop',
+        loopConfig: buildLoopConfig(loopDraft),
+      };
+    } else if (repoHasNoCommits) {
       // No commits yet → run in the project dir; worktrees need a base commit.
       options = { ...base, kind: 'in-place-no-git' };
     } else if (useWorktree) {
@@ -400,7 +438,9 @@ function TaskModalBody({
     <>
       {/* Header */}
       <div className="flex items-center justify-between px-5 h-12 border-b border-border/40 rounded-t-xl">
-        <h2 className="text-[14px] font-semibold text-foreground">New Task</h2>
+        <h2 className="text-[14px] font-semibold text-foreground">
+          {isLoop ? 'New Loop' : 'New Task'}
+        </h2>
         <button
           onClick={close}
           disabled={isCreating}
@@ -416,6 +456,19 @@ function TaskModalBody({
         }}
         className="p-5 flex flex-1 flex-col"
       >
+        {/* Task vs Loop mode. A loop pairs a Ralph worker with a manager and runs
+            on a Dash-driven scheduler (docs/agentic-loops-plan.md). */}
+        <div className="mb-5">
+          <Segmented<TaskKind>
+            value={taskKind}
+            onChange={setTaskKind}
+            options={[
+              { value: 'standard', label: 'Task' },
+              { value: 'loop', label: 'Loop' },
+            ]}
+          />
+        </div>
+
         <div className="grid grid-cols-2 gap-x-6">
           {/* ── Left column: core settings ── */}
           <div className="min-w-0">
@@ -446,6 +499,18 @@ function TaskModalBody({
                 <span className="text-[12px] text-muted-foreground/45">
                   No commits yet — this task runs in the project folder. Make an initial commit to
                   enable worktrees and branches.
+                </span>
+              </div>
+            ) : gitReady && isLoop ? (
+              <div className="mb-4 flex items-start gap-2 px-3 py-2.5 rounded-lg bg-[hsl(var(--surface-1))]">
+                <FolderGit2
+                  size={13}
+                  className="text-muted-foreground/40 mt-0.5 shrink-0"
+                  strokeWidth={1.8}
+                />
+                <span className="text-[12px] text-muted-foreground/60">
+                  Loops run in an isolated worktree on a new branch — the worker commits there while
+                  the manager oversees.
                 </span>
               </div>
             ) : gitReady ? (
@@ -500,8 +565,8 @@ function TaskModalBody({
               </div>
             )}
 
-            {/* Use existing branch toggle */}
-            {useWorktree && !repoHasNoCommits && (
+            {/* Use existing branch toggle (a loop always creates a new branch) */}
+            {useWorktree && !repoHasNoCommits && !isLoop && (
               <div className="mb-4">
                 <label className="flex items-center gap-3 cursor-pointer group">
                   <div className="relative">
@@ -710,104 +775,110 @@ function TaskModalBody({
 
           {/* ── Right column: content & details ── */}
           <div className="min-w-0">
-            {/* Context prompt (optional) */}
-            <div className="mb-5">
-              <Expandable
-                label="Context prompt"
-                hint="optional"
-                labelClassName="text-foreground/70"
-                defaultOpen={!!contextPrompt.trim()}
-              >
-                <textarea
-                  value={contextPrompt}
-                  onChange={(e) => setContextPrompt(e.target.value)}
-                  rows={8}
-                  placeholder="Prepended to the task's context — e.g. coding conventions, links."
-                  className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[13px] placeholder:text-muted-foreground/30 focus:outline-hidden focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
-                />
-              </Expandable>
-            </div>
+            {isLoop ? (
+              <LoopFields draft={loopDraft} onChange={setLoopDraft} />
+            ) : (
+              <>
+                {/* Context prompt (optional) */}
+                <div className="mb-5">
+                  <Expandable
+                    label="Context prompt"
+                    hint="optional"
+                    labelClassName="text-foreground/70"
+                    defaultOpen={!!contextPrompt.trim()}
+                  >
+                    <textarea
+                      value={contextPrompt}
+                      onChange={(e) => setContextPrompt(e.target.value)}
+                      rows={8}
+                      placeholder="Prepended to the task's context — e.g. coding conventions, links."
+                      className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[13px] placeholder:text-muted-foreground/30 focus:outline-hidden focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
+                    />
+                  </Expandable>
+                </div>
 
-            {/* Issue/Work Item pickers */}
-            {(showGithub || showAdo) && (
-              <div className="mb-4">
-                <label className="block text-[12px] font-medium text-foreground/70 mb-2">
-                  <span className="flex items-center gap-1.5">
-                    {showGithub && showAdo
-                      ? 'Link issues / work items'
-                      : showAdo
-                        ? 'Link work items'
-                        : 'Link issues'}
-                    <span className="text-muted-foreground/40 font-normal">optional</span>
-                  </span>
-                </label>
+                {/* Issue/Work Item pickers */}
+                {(showGithub || showAdo) && (
+                  <div className="mb-4">
+                    <label className="block text-[12px] font-medium text-foreground/70 mb-2">
+                      <span className="flex items-center gap-1.5">
+                        {showGithub && showAdo
+                          ? 'Link issues / work items'
+                          : showAdo
+                            ? 'Link work items'
+                            : 'Link issues'}
+                        <span className="text-muted-foreground/40 font-normal">optional</span>
+                      </span>
+                    </label>
 
-                {showGithub && (
-                  <SearchableMultiSelect<GithubIssue>
-                    onSearch={searchGithubIssues}
-                    selected={selectedIssues}
-                    onSelect={setSelectedIssues}
-                    getKey={(i) => i.number}
-                    getLabel={(i) => `#${i.number}`}
-                    renderItem={(issue) => <GithubIssueRow issue={issue} />}
-                    placeholder="Search GitHub issues..."
-                  />
-                )}
-
-                {showAdo && (
-                  <SearchableMultiSelect<AzureDevOpsWorkItem>
-                    onSearch={searchAdoWorkItems}
-                    selected={selectedWorkItems}
-                    onSelect={setSelectedWorkItems}
-                    getKey={(i) => i.id}
-                    getLabel={(i) => `#${i.id}`}
-                    renderItem={(item) => <AdoWorkItemRow item={item} />}
-                    placeholder="Search work items..."
-                  />
-                )}
-              </div>
-            )}
-
-            {/* Per-task worktree scripts (override the project default) */}
-            {useWorktree && !repoHasNoCommits && (
-              <div className="mb-4">
-                <Expandable
-                  label="Worktree scripts"
-                  hint="setup / teardown"
-                  labelClassName="text-foreground/70"
-                  defaultOpen={false}
-                >
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-[11px] font-medium text-muted-foreground/60 mb-1.5">
-                        Setup — runs in this new worktree
-                      </label>
-                      <textarea
-                        value={setupScript}
-                        onChange={(e) => setSetupScript(e.target.value)}
-                        rows={3}
-                        placeholder={'pnpm install\ncp ../.env .env'}
-                        className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[12px] font-mono placeholder:text-muted-foreground/30 focus:outline-hidden focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
+                    {showGithub && (
+                      <SearchableMultiSelect<GithubIssue>
+                        onSearch={searchGithubIssues}
+                        selected={selectedIssues}
+                        onSelect={setSelectedIssues}
+                        getKey={(i) => i.number}
+                        getLabel={(i) => `#${i.number}`}
+                        renderItem={(issue) => <GithubIssueRow issue={issue} />}
+                        placeholder="Search GitHub issues..."
                       />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-medium text-muted-foreground/60 mb-1.5">
-                        Teardown — runs before this worktree is removed
-                      </label>
-                      <textarea
-                        value={teardownScript}
-                        onChange={(e) => setTeardownScript(e.target.value)}
-                        rows={2}
-                        placeholder={'docker compose down'}
-                        className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[12px] font-mono placeholder:text-muted-foreground/30 focus:outline-hidden focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
+                    )}
+
+                    {showAdo && (
+                      <SearchableMultiSelect<AzureDevOpsWorkItem>
+                        onSearch={searchAdoWorkItems}
+                        selected={selectedWorkItems}
+                        onSelect={setSelectedWorkItems}
+                        getKey={(i) => i.id}
+                        getLabel={(i) => `#${i.id}`}
+                        renderItem={(item) => <AdoWorkItemRow item={item} />}
+                        placeholder="Search work items..."
                       />
-                    </div>
-                    <p className="text-[10px] text-muted-foreground/40 leading-relaxed">
-                      Prefilled from the project default. Edits apply to this worktree only.
-                    </p>
+                    )}
                   </div>
-                </Expandable>
-              </div>
+                )}
+
+                {/* Per-task worktree scripts (override the project default) */}
+                {useWorktree && !repoHasNoCommits && (
+                  <div className="mb-4">
+                    <Expandable
+                      label="Worktree scripts"
+                      hint="setup / teardown"
+                      labelClassName="text-foreground/70"
+                      defaultOpen={false}
+                    >
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-[11px] font-medium text-muted-foreground/60 mb-1.5">
+                            Setup — runs in this new worktree
+                          </label>
+                          <textarea
+                            value={setupScript}
+                            onChange={(e) => setSetupScript(e.target.value)}
+                            rows={3}
+                            placeholder={'pnpm install\ncp ../.env .env'}
+                            className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[12px] font-mono placeholder:text-muted-foreground/30 focus:outline-hidden focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-medium text-muted-foreground/60 mb-1.5">
+                            Teardown — runs before this worktree is removed
+                          </label>
+                          <textarea
+                            value={teardownScript}
+                            onChange={(e) => setTeardownScript(e.target.value)}
+                            rows={2}
+                            placeholder={'docker compose down'}
+                            className="w-full px-3.5 py-2.5 rounded-lg bg-background border border-input/60 text-foreground text-[12px] font-mono placeholder:text-muted-foreground/30 focus:outline-hidden focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150 resize-none"
+                          />
+                        </div>
+                        <p className="text-[10px] text-muted-foreground/40 leading-relaxed">
+                          Prefilled from the project default. Edits apply to this worktree only.
+                        </p>
+                      </div>
+                    </Expandable>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -833,12 +904,14 @@ function TaskModalBody({
               // commitless repo, which legitimately has no branch to select.
               requiresBranchSelection ||
               // Worktree on an already-checked-out branch would fail at create.
-              branchInUse
+              branchInUse ||
+              // A loop needs a goal and a worktree-capable repo (git + commits).
+              (isLoop && (!loopDraftValid(loopDraft) || !gitReady || repoHasNoCommits))
             }
             className="px-5 py-2 rounded-lg text-[13px] font-medium bg-primary text-primary-foreground hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150 flex items-center gap-2"
           >
             {isCreating && <Loader2 size={14} className="animate-spin" />}
-            {isCreating ? 'Creating…' : 'Create Task'}
+            {isCreating ? 'Creating…' : isLoop ? 'Create Loop' : 'Create Task'}
           </button>
         </div>
       </form>

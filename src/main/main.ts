@@ -124,6 +124,11 @@ void app.whenReady().then(async () => {
 
   // Kill PTYs owned by this window on close (CMD+W on macOS)
   mainWindow.on('close', () => {
+    // Tear down loop schedulers first so they don't respawn a worker into a PTY
+    // that killByOwner is about to reap (orphaned scheduler waiting on an edge).
+    void import('./services/LoopController').then(({ loopController }) => {
+      void loopController.stopAll();
+    });
     void import('./services/ptyManager').then(({ killByOwner }) => {
       killByOwner(mainWindow!.webContents);
     });
@@ -140,6 +145,11 @@ void app.whenReady().then(async () => {
   // Start context usage service — broadcasts status line data to renderer
   const { contextUsageService } = await import('./services/ContextUsageService');
   contextUsageService.setSender(mainWindow.webContents);
+
+  // Loop controller: reads the live window (a provider, so status pushes survive
+  // window recreation). It owns spawning both loop agents + the scheduler.
+  const { loopController } = await import('./services/LoopController');
+  loopController.setWebContentsProvider(() => mainWindow?.webContents ?? null);
 
   // Initialize auto-updater (production only, disabled on Windows custom builds)
   if (!process.argv.includes('--dev') && process.platform !== 'win32') {

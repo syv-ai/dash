@@ -91,6 +91,9 @@ function disposeTaskSessions(taskId: string) {
   void sessionRegistry.dispose(taskId);
   void sessionRegistry.dispose(`shell:${taskId}`);
   void sessionRegistry.disposeByPrefix(`shell:${taskId}:`);
+  // Agentic-loop tasks own two agent PTYs instead of the single bare-id one.
+  void sessionRegistry.dispose(`loop:${taskId}`);
+  void sessionRegistry.dispose(`mgr:${taskId}`);
 }
 
 /** Sort projects by the saved projectOrder, pruning stale ids from storage. */
@@ -297,6 +300,7 @@ export const useProjects = create<ProjectsStore>((set) => ({
   createTask: async (options, projectId) => {
     const { name, permissionMode, model, linkedItems, contextPrompt, setupScript, teardownScript } =
       options;
+    const { taskKind, loopConfig } = options;
     const targetProjectId = projectId ?? useProjects.getState().activeProjectId;
     const targetProject = useProjects.getState().projects.find((p) => p.id === targetProjectId);
     if (!targetProject) return false;
@@ -424,6 +428,8 @@ export const useProjects = create<ProjectsStore>((set) => ({
         contextPrompt: contextPrompt ?? null,
         setupScript: setupScript ?? null,
         teardownScript: teardownScript ?? null,
+        taskKind: taskKind ?? 'standard',
+        loopConfig: loopConfig ?? null,
       });
       if (!saveResp.success || !saveResp.data) {
         toast.error(saveResp.error || 'Failed to save task');

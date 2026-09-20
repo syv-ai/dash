@@ -73,6 +73,17 @@ class ActivityMonitorImpl {
   private activities = new Map<string, PtyActivity>();
   private sender: WebContents | null = null;
   private safetyValveTimer: ReturnType<typeof setInterval> | null = null;
+  private listeners = new Set<(all: Record<string, ActivityInfo>) => void>();
+
+  /**
+   * Observe activity-state changes in-process (the LoopScheduler watches its
+   * worker PTY for busy→idle transitions). Fires after every emit with the full
+   * map, mirroring what the renderer receives. Returns an unsubscribe fn.
+   */
+  subscribe(cb: (all: Record<string, ActivityInfo>) => void): () => void {
+    this.listeners.add(cb);
+    return () => this.listeners.delete(cb);
+  }
 
   register(ptyId: string, pid: number): void {
     const now = Date.now();
@@ -227,8 +238,18 @@ class ActivityMonitorImpl {
   }
 
   private emitAll(): void {
+    const all = this.getAll();
     if (this.sender && !this.sender.isDestroyed()) {
-      this.sender.send('pty:activity', this.getAll());
+      this.sender.send('pty:activity', all);
+    }
+    if (this.listeners.size > 0) {
+      for (const cb of this.listeners) {
+        try {
+          cb(all);
+        } catch (err) {
+          console.error('[ActivityMonitor] listener threw', err);
+        }
+      }
     }
   }
 }

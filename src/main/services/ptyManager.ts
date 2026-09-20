@@ -11,7 +11,7 @@ import { terminalSnapshotService } from './TerminalSnapshotService';
 import { ensureShellConfig } from './ptyShellConfig';
 import { findClaudePath, findLatestSessionId } from './claudeCli';
 import { writeHookSettings, setCommitAttributionValue } from './ptyHookSettings';
-import type { PermissionMode, TaskModel } from '@shared/types';
+import type { PermissionMode, SpawnModel } from '@shared/types';
 
 export type PtyKind = 'agent' | 'shell' | 'tui' | 'service';
 
@@ -33,6 +33,18 @@ interface PtyRecord {
 }
 
 const ptys = new Map<string, PtyRecord>();
+
+// Bounded tail of a loop worker's raw output, keyed by PTY id. Only `loop:` ids
+// are tracked (the LoopController's `count` policy probes it for the completion
+// promise). Reset on each fresh worker spawn, dropped on exit. Kept out of
+// PtyRecord so no other terminal pays for the concat.
+const RECENT_OUTPUT_CAP = 64 * 1024;
+const recentLoopOutput = new Map<string, string>();
+
+/** Recent raw output of a loop worker PTY (empty if untracked). */
+export function getRecentOutput(id: string): string {
+  return recentLoopOutput.get(id) ?? '';
+}
 
 /** Persist a mirror's state to the snapshot files (sync — quit-safe). */
 function persistMirrorSync(id: string, mirror: TerminalMirror): void {
@@ -365,9 +377,13 @@ export function buildClaudeArgs(opts: {
   resumeSessionId: string | null;
   name?: string;
   permissionMode?: PermissionMode;
-  /** Model alias (opus|sonnet|haiku|fable). 'default'/undefined → no --model. */
-  model?: TaskModel;
+  /** Alias (opus|sonnet|haiku|fable) or raw CLI id. 'default'/undefined → no --model. */
+  model?: SpawnModel;
   initialPrompt?: string;
+  /** Extra `--settings` JSON, merged with ultracode (loop manager write-deny). */
+  extraSettings?: Record<string, unknown>;
+  /** Inline `--mcp-config` JSON string (loop manager's loop-MCP bridge). */
+  mcpConfig?: string;
 }): string[] {
   const args: string[] = [];
   if (opts.resumeSessionId) {
@@ -382,15 +398,26 @@ export function buildClaudeArgs(opts: {
   }
   // Pin the starting model when the user chose a non-default one. 'default' omits
   // the flag so the user's own Claude Code config decides. Orthogonal to
-  // resume/name, so it applies to both fresh and resumed sessions.
+  // resume/name, so it applies to both fresh and resumed sessions. Loop agents
+  // always pass a concrete model, so the sentinel check never fires for them.
   if (opts.model && opts.model !== 'default') {
     args.push('--model', opts.model);
   }
   // ultracode is session-scoped; re-apply on every spawn so the user's toggle
-  // effectively sticks across the sessions Dash launches. Must precede the
-  // positional prompt below.
-  if (ultracode) {
-    args.push('--settings', JSON.stringify({ ultracode: true }));
+  // effectively sticks across the sessions Dash launches. Merge any per-spawn
+  // extraSettings (the loop manager's write-deny policy) into the same object.
+  // Must precede the positional prompt below.
+  const settings: Record<string, unknown> = {
+    ...(ultracode ? { ultracode: true } : {}),
+    ...(opts.extraSettings ?? {}),
+  };
+  if (Object.keys(settings).length > 0) {
+    args.push('--settings', JSON.stringify(settings));
+  }
+  // Loop manager's MCP bridge. Passed at launch → trusted (no approval prompt);
+  // per-process, so only the manager gets it. Non-strict: keep project servers.
+  if (opts.mcpConfig) {
+    args.push('--mcp-config', opts.mcpConfig);
   }
   if (opts.initialPrompt) {
     args.push(opts.initialPrompt);
@@ -404,17 +431,59 @@ export async function startDirectPty(options: {
   cols: number;
   rows: number;
   permissionMode?: PermissionMode;
-  /** Starting model → `claude --model <alias>`. 'default'/undefined omits it. */
-  model?: TaskModel;
+  /** Starting model → `claude --model <value>`. 'default'/undefined omits it. */
+  model?: SpawnModel;
   isDark?: boolean;
   /** Task name → `claude --name` on a fresh spawn (recognizable in /resume). */
   name?: string;
+  /**
+   * Owning task id, when it differs from the PTY id. Agentic-loop PTYs use
+   * composite ids (`loop:<taskId>` / `mgr:<taskId>`) but must report the real
+   * task id so listForTask/restartAllForTask still group them. Defaults to `id`.
+   */
+  taskId?: string;
+  /**
+   * Skip `--resume`: spawn a brand-new Claude session every time. This is the
+   * Ralph reset — a loop worker re-reads its goal + STATE.md from disk each
+   * iteration instead of accumulating conversation context. Also avoids the
+   * session-file collision when two agents (worker + manager) share a cwd.
+   */
+  freshContext?: boolean;
+  /**
+   * Initial prompt auto-submitted after the trust gate (CC positional arg).
+   * Takes precedence over any prompt stashed via setInitialPrompt. The loop
+   * scheduler passes the per-iteration worker prompt here.
+   */
+  initialPrompt?: string;
+  /** Extra `--settings` JSON merged at spawn (loop manager write-deny policy). */
+  extraSettings?: Record<string, unknown>;
+  /** Inline `--mcp-config` JSON string (loop manager's loop-MCP bridge). */
+  mcpConfig?: string;
+  /**
+   * Reattach if a direct-spawn PTY already exists for this id, otherwise return
+   * WITHOUT spawning. Display-only loop panes use this so a mount/reload never
+   * spawns a rogue Claude — the LoopController is the sole spawner of `loop:`/
+   * `mgr:` PTYs. Race-safe: the existence check and the (no-)spawn are one step.
+   */
+  attachOnly?: boolean;
   sender?: WebContents;
 }): Promise<{
   reattached: boolean;
   isDirectSpawn: boolean;
   serializedState?: string;
 }> {
+  // Attach-only (display-only loop panes): reattach to a live direct-spawn PTY
+  // if present, else no-op. Never kills a shell / spawns Claude.
+  if (options.attachOnly) {
+    const live = ptys.get(options.id);
+    if (live && live.isDirectSpawn) {
+      const serializedState = live.mirror ? await live.mirror.serialize() : undefined;
+      live.owner = options.sender || null;
+      return { reattached: true, isDirectSpawn: true, serializedState };
+    }
+    return { reattached: false, isDirectSpawn: false };
+  }
+
   // Re-attach to existing PTY (e.g., after renderer reload)
   const existing = ptys.get(options.id);
   if (existing && !existing.isDirectSpawn) {
@@ -451,12 +520,15 @@ export async function startDirectPty(options: {
   //
   // DO NOT relax the one-non-worktree-task cap without revisiting this; see git
   // history at 32bcdb6 for why the old SessionStart-hook pinning was removed.
-  const resumeSessionId = findLatestSessionId(options.cwd);
+  // freshContext (Ralph reset / loop agents) deliberately never resumes — each
+  // spawn is a new session reading its goal + STATE.md from disk.
+  const resumeSessionId = options.freshContext ? null : findLatestSessionId(options.cwd);
 
   // Pre-loaded prompt (the inlined ports-setup body). Only present for the
   // ports-migrate flow today; no-op for every other spawn. buildClaudeArgs
-  // places it last (CC auto-submits it after the trust gate clears).
-  const initialPrompt = consumeInitialPrompt(options.id);
+  // places it last (CC auto-submits it after the trust gate clears). An explicit
+  // initialPrompt (loop scheduler) wins over the stashed one.
+  const initialPrompt = options.initialPrompt ?? consumeInitialPrompt(options.id);
 
   const args = buildClaudeArgs({
     resumeSessionId,
@@ -464,6 +536,8 @@ export async function startDirectPty(options: {
     permissionMode: options.permissionMode,
     model: options.model,
     initialPrompt,
+    extraSettings: options.extraSettings,
+    mcpConfig: options.mcpConfig,
   });
 
   const env = buildDirectEnv(options.isDark ?? true, options.cwd);
@@ -489,13 +563,17 @@ export async function startDirectPty(options: {
     isDirectSpawn: true,
     owner: options.sender || null,
     kind: 'agent',
-    taskId: options.id,
+    taskId: options.taskId ?? options.id,
     featureId: null,
     mirror: new TerminalMirror(options.cols, options.rows),
   };
 
   ptys.set(options.id, record);
   activityMonitor.register(options.id, proc.pid);
+
+  // Loop worker output tap: start each fresh iteration with an empty tail.
+  const trackOutput = options.id.startsWith('loop:');
+  if (trackOutput) recentLoopOutput.set(options.id, '');
 
   // Forward output to renderer, replacing the Claude logo with "7" art.
   // The mirror receives the same filtered stream the renderer renders, so
@@ -511,6 +589,13 @@ export async function startDirectPty(options: {
     bannerFilter(data);
     activityMonitor.noteData(options.id);
     remoteControlService.onPtyData(options.id, data);
+    if (trackOutput) {
+      const next = (recentLoopOutput.get(options.id) ?? '') + data;
+      recentLoopOutput.set(
+        options.id,
+        next.length > RECENT_OUTPUT_CAP ? next.slice(-RECENT_OUTPUT_CAP) : next,
+      );
+    }
   });
 
   proc.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
@@ -524,6 +609,7 @@ export async function startDirectPty(options: {
     }
     persistAndDisposeMirror(options.id, record);
     ptys.delete(options.id);
+    if (trackOutput) recentLoopOutput.delete(options.id);
   });
 
   return {
