@@ -1,12 +1,12 @@
 # Agentic Loops in Dash — Implementation Plan
 
-> Status: in progress — backend core + split-pane UI landed; runtime wiring remains
+> Status: runnable end-to-end — Ralph core + manager MCP + loop creation UI landed; duplicate-as-loop remains
 > Branch: `claude/agentic-loops-dash-ka6xwn`
 > Owner: Dash team
 
 ## Implementation status
 
-**Landed (type-checked; scheduler core unit-tested — 10 tests):**
+**Landed (type-checked; unit-tested):**
 
 1. **Data foundation** — `taskKind` (`standard|loop`) + `loopConfig` JSON across shared
    types, Drizzle schema, a guarded ALTER migration, and DatabaseService
@@ -23,31 +23,41 @@
    budget auto-pause, pause/resume/stop). Only busy→idle edges advance it. +
    `ActivityMonitor.subscribe()` for in-process idle signals.
 5. **Two-terminal split pane** — `LoopTerminalPane` renders worker|manager; MainContent
-   branches on `taskKind`; both spawn fresh-context so their sessions don't collide;
-   `projectsStore` disposes `loop:`/`mgr:` PTYs. Standard tasks untouched.
+   branches on `taskKind`; `projectsStore` disposes `loop:`/`mgr:` PTYs. Standard tasks
+   untouched.
+6. **Scheduler↔PTY adapter (`LoopController`) + IPC** — `LoopController` implements
+   `LoopDriver` over ptyManager (`startDirectPty`/`killPtyAwait` + a `loop:` output
+   tap for the `count` policy) + `child_process` (stop check) + `LoopService` (seed +
+   run log) + `webContents` (status), and subscribes the worker id to
+   `ActivityMonitor`. It is the **single owner** of both agents: the renderer panes are
+   `managedExternally` (display-only — reattach via `attachOnly`, never spawn, never
+   respawn-shell on the Ralph kill), so there's no spawn race. `loop:start/pause/
+resume/stop/status` IPC + a `loop:status` push feed a control bar in `LoopTerminalPane`.
+   The manager is spawned once and kept alive (persistent); the worker is reset each pass.
+   _(Cross-restart manager `--resume` by pinned session id is a remaining follow-up.)_
+7. **Loop MCP bridge** — a per-task, stateless streamable-HTTP MCP server hosted on the
+   existing HookServer (`/mcp/loop?taskId=`), exposing `loop_status / get_state /
+update_state / steer / append_run_log / escalate / pause / resume / kill` (control
+   tools level-gated: L1 keeps pause/kill human-only). Attached to the **manager only**
+   via an inline `--mcp-config` at spawn (per-process; auto-trusted, no approval prompt).
 
-**Remaining (needs a machine that can run the Electron app to verify):**
+8. **TaskModal loop mode** — a "Task | Loop" toggle; Loop mode collects goal / policy /
+   level / stop-check / max-iterations / cadence / token-budget / constraints
+   (`LoopFields.tsx`), forces a new-branch worktree, and creates the task with
+   `taskKind='loop'` + `loopConfig`. The spine is seeded lazily on first Start
+   (`LoopController.start` → `LoopService.seed`), so no creation-time seed is needed.
 
-6. **Scheduler↔PTY adapter (`LoopController`) + IPC** — construct `LoopDriver` from
-   ptyManager (`startDirectPty`/`killPtyAwait`/`writePty`) + `child_process` (stop
-   check) + `LoopService` (run log) + `webContents` (status); register the worker id
-   with `ActivityMonitor.subscribe`; expose `loop:start/pause/resume/stop/status`.
-   **Open: worker-spawn ownership.** Today `LoopTerminalPane` spawns the initial
-   worker on mount. Recommended resolution: the renderer spawns the _manager_ and the
-   _first_ worker iteration; the scheduler owns subsequent Ralph resets
-   (`killPtyAwait(loop:<taskId>)` → `startDirectPty(freshContext, initialPrompt =
-LoopService.workerIterationPrompt)`), and the renderer's loop terminals do **not**
-   auto-respawn on exit (a `managedExternally` flag on the session) so they don't race
-   the scheduler.
-7. **Loop MCP bridge** — task-scoped MCP server exposing
-   `loop_status/get_state/update_state/steer/pause/resume/kill/escalate/append_run_log`,
-   attached to the manager via its `.mcp.json`/env. Drives `LoopController`, not the
-   CLI's loop.
-8. **TaskModal loop mode + duplicate-as-loop** — "Loop" creation mode (goal/policy/
-   level/budget/constraints) writing `taskKind='loop'` + `loopConfig`; on create, run
-   the worktree path then `LoopService.seed`. Duplicate action → `duplicateTask` with
-   `taskKind:'loop'`. Until this lands, a loop task can be created by inserting a row
-   with `task_kind='loop'` for manual end-to-end testing.
+**Remaining:**
+
+9. **Duplicate-as-loop** — a task action that turns an existing task into a fresh loop
+   (`DatabaseService.duplicateTask` with `taskKind:'loop'`), which also needs the first
+   task→new-worktree duplication path. Not yet built; use the Loop creation mode.
+
+**Verify first (exercised by unit tests + type-check, not yet in the live app):** the
+manager's write-deny `--settings` actually blocking `Write`/`Edit`, and the manager's
+`--mcp-config` loop tools connecting without an approval prompt under `--dangerously-skip-permissions`.
+
+CLI drift since this branch started is assessed in §1 → _Why not Claude Code agent teams_.
 
 ---
 
@@ -86,6 +96,54 @@ tracks idle via `ActivityMonitor`, owns worktrees and the hook server).
 
 We **mirror** the CLI's proven termination semantics as Dash _loop policies_ rather than
 reinventing them (see §3).
+
+### Why not Claude Code agent teams (evaluated 2026-09-09, CLI v2.1.240)
+
+Since this plan was written, Claude Code shipped a family of parallelism surfaces:
+[subagents](https://code.claude.com/docs/en/sub-agents), agent view (`claude agents`),
+[**agent teams**](https://code.claude.com/docs/en/agent-teams) (lead + teammates, shared
+task list, mailbox messaging, `TeammateIdle` / `TaskCreated` / `TaskCompleted` hooks), and
+[dynamic workflows](https://code.claude.com/docs/en/workflows). There is no Claude Code
+feature named "workstreams" — that is [Claude
+Cowork](https://support.claude.com/en/articles/13345190-get-started-with-claude-cowork)
+vocabulary.
+
+Agent teams is the surface that superficially matches our manager/worker split. It is
+**rejected as the loop engine**; four reasons, each hitting a locked decision:
+
+1. **Coordination lives inside the lead's process** — the same objection as `/loop` and
+   `/ralph-loop` above. There is no insertion point for the scheduler tick, budget gate,
+   or pause/kill. Dash owning the `while` is the whole thesis.
+2. **No fresh-context reset.** Teammates are long-lived, context-accumulating sessions.
+   §2's non-negotiable worker reset is not a primitive, and a lead shutting down and
+   re-spawning a teammate is model judgment, not a scheduler.
+3. **Permissions are inverted and unshapeable.** Teammates inherit the lead's permission
+   mode, and per the docs _"you can't set per-teammate modes at spawn time."_ §11a needs
+   the opposite: the manager write-denied per-process while the worker runs at L1/L2/L3.
+4. **No PTY to render.** Teammates display in the lead's in-process agent panel or in
+   tmux/iTerm2 split panes — neither is an xterm.js PTY Dash can attach to. §4's
+   two-terminal model would degrade into "embed tmux".
+
+Also disqualifying on their own: experimental and off by default
+(`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`), one team per session, the lead is fixed for
+the session's lifetime, and in-process teammates do not survive `/resume`.
+
+**What to adopt from the newer CLI instead:**
+
+- `--agents <json>` — define the manager role inline at spawn (description + prompt +
+  `tools` allowlist). A second capability lever alongside `MANAGER_DENY`, and a cleaner
+  home for the manager prompt than system-prompt injection.
+- `--permission-mode auto` — new classifier-backed mode (the list is now
+  `acceptEdits | auto | bypassPermissions | manual | plan`). Candidate for the L2 worker,
+  and possibly for the manager — it may retire the `bypassPermissions` + write-deny
+  pairing in §11a, which exists only because no mode meant "reads yes, writes no".
+- _Post-MVP:_ enable agent teams **inside the manager session only**, letting the manager
+  fan out read-only reviewer teammates for the verification verdict. They inherit its
+  write-deny, so they are safe by construction.
+
+Verified present at v2.1.240 — the branch's spawn path depends on all of them:
+`--settings`, `--mcp-config`, `--strict-mcp-config`, `--session-id`, `--fork-session`,
+`--resume`.
 
 ---
 
