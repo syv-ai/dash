@@ -41,6 +41,7 @@ export function registerPtyIpc(): void {
         freshContext?: boolean;
         initialPrompt?: string;
         loopRole?: LoopRole;
+        attachOnly?: boolean;
       },
     ) => {
       try {
@@ -57,6 +58,7 @@ export function registerPtyIpc(): void {
             freshContext: z.boolean().optional(),
             initialPrompt: z.string().optional(),
             loopRole: z.enum(['worker', 'manager']).optional(),
+            attachOnly: z.boolean().optional(),
           }),
           args,
         );

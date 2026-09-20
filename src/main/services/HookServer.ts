@@ -4,6 +4,7 @@ import { BrowserWindow, Notification } from 'electron';
 import { eq } from 'drizzle-orm';
 import { activityMonitor } from './ActivityMonitor';
 import { contextUsageService } from './ContextUsageService';
+import { handleLoopMcpRequest } from './loopMcpServer';
 import { getDb } from '../db/client';
 import { tasks } from '../db/schema';
 
@@ -145,6 +146,21 @@ class HookServerImpl {
     return new Promise((resolve, reject) => {
       this.server = http.createServer((req, res) => {
         try {
+          // The loop MCP bridge (manager overseer tools) rides this server —
+          // routed before the hook checks below because it is not a POST-only
+          // `?ptyId=` hook: it uses GET+POST (streamable HTTP) and `?taskId=`.
+          const reqUrl = new URL(req.url || '', `http://127.0.0.1:${this._port}`);
+          if (reqUrl.pathname === '/mcp/loop') {
+            const taskId = reqUrl.searchParams.get('taskId');
+            if (!taskId) {
+              res.writeHead(400);
+              res.end('missing taskId');
+              return;
+            }
+            void handleLoopMcpRequest(req, res, taskId);
+            return;
+          }
+
           if (req.method !== 'POST') {
             res.writeHead(405);
             res.end();

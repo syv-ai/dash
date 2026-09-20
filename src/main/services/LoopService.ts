@@ -108,6 +108,23 @@ export class LoopService {
     }
   }
 
+  /**
+   * The manager's steering channel. The manager can't touch a worker that resets
+   * context each pass, so it appends guidance here and the next fresh worker
+   * reads it (see workerIterationPrompt). Best-effort, never throws.
+   */
+  static async appendManagerNotes(worktreePath: string, entry: string): Promise<void> {
+    try {
+      await fs.mkdir(LoopService.dir(worktreePath), { recursive: true });
+      await fs.appendFile(
+        LoopService.file(worktreePath, LoopService.FILES.managerNotes),
+        entry.endsWith('\n') ? entry : entry + '\n',
+      );
+    } catch (err) {
+      console.error('[LoopService.appendManagerNotes] failed', err);
+    }
+  }
+
   /** Append one run-log entry. Best-effort; never throws into the scheduler. */
   static async appendRunLog(worktreePath: string, entry: string): Promise<void> {
     try {

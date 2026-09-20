@@ -11,7 +11,7 @@ import { terminalSnapshotService } from './TerminalSnapshotService';
 import { ensureShellConfig } from './ptyShellConfig';
 import { findClaudePath, findLatestSessionId } from './claudeCli';
 import { writeHookSettings, setCommitAttributionValue } from './ptyHookSettings';
-import type { PermissionMode, TaskModel } from '@shared/types';
+import type { PermissionMode, SpawnModel } from '@shared/types';
 
 export type PtyKind = 'agent' | 'shell' | 'tui' | 'service';
 
@@ -33,6 +33,18 @@ interface PtyRecord {
 }
 
 const ptys = new Map<string, PtyRecord>();
+
+// Bounded tail of a loop worker's raw output, keyed by PTY id. Only `loop:` ids
+// are tracked (the LoopController's `count` policy probes it for the completion
+// promise). Reset on each fresh worker spawn, dropped on exit. Kept out of
+// PtyRecord so no other terminal pays for the concat.
+const RECENT_OUTPUT_CAP = 64 * 1024;
+const recentLoopOutput = new Map<string, string>();
+
+/** Recent raw output of a loop worker PTY (empty if untracked). */
+export function getRecentOutput(id: string): string {
+  return recentLoopOutput.get(id) ?? '';
+}
 
 /** Persist a mirror's state to the snapshot files (sync — quit-safe). */
 function persistMirrorSync(id: string, mirror: TerminalMirror): void {
@@ -365,13 +377,13 @@ export function buildClaudeArgs(opts: {
   resumeSessionId: string | null;
   name?: string;
   permissionMode?: PermissionMode;
-  /** Model alias (opus|sonnet|haiku|fable). 'default'/undefined → no --model. */
-  model?: TaskModel;
+  /** Alias (opus|sonnet|haiku|fable) or raw CLI id. 'default'/undefined → no --model. */
+  model?: SpawnModel;
   initialPrompt?: string;
-  /** Pin a model (loop agents: worker strong, manager ≥ worker). */
-  model?: string;
   /** Extra `--settings` JSON, merged with ultracode (loop manager write-deny). */
   extraSettings?: Record<string, unknown>;
+  /** Inline `--mcp-config` JSON string (loop manager's loop-MCP bridge). */
+  mcpConfig?: string;
 }): string[] {
   const args: string[] = [];
   if (opts.resumeSessionId) {
@@ -402,6 +414,11 @@ export function buildClaudeArgs(opts: {
   if (Object.keys(settings).length > 0) {
     args.push('--settings', JSON.stringify(settings));
   }
+  // Loop manager's MCP bridge. Passed at launch → trusted (no approval prompt);
+  // per-process, so only the manager gets it. Non-strict: keep project servers.
+  if (opts.mcpConfig) {
+    args.push('--mcp-config', opts.mcpConfig);
+  }
   if (opts.initialPrompt) {
     args.push(opts.initialPrompt);
   }
@@ -414,8 +431,8 @@ export async function startDirectPty(options: {
   cols: number;
   rows: number;
   permissionMode?: PermissionMode;
-  /** Starting model → `claude --model <alias>`. 'default'/undefined omits it. */
-  model?: TaskModel;
+  /** Starting model → `claude --model <value>`. 'default'/undefined omits it. */
+  model?: SpawnModel;
   isDark?: boolean;
   /** Task name → `claude --name` on a fresh spawn (recognizable in /resume). */
   name?: string;
@@ -438,16 +455,35 @@ export async function startDirectPty(options: {
    * scheduler passes the per-iteration worker prompt here.
    */
   initialPrompt?: string;
-  /** Pin a model (loop agents). */
-  model?: string;
   /** Extra `--settings` JSON merged at spawn (loop manager write-deny policy). */
   extraSettings?: Record<string, unknown>;
+  /** Inline `--mcp-config` JSON string (loop manager's loop-MCP bridge). */
+  mcpConfig?: string;
+  /**
+   * Reattach if a direct-spawn PTY already exists for this id, otherwise return
+   * WITHOUT spawning. Display-only loop panes use this so a mount/reload never
+   * spawns a rogue Claude — the LoopController is the sole spawner of `loop:`/
+   * `mgr:` PTYs. Race-safe: the existence check and the (no-)spawn are one step.
+   */
+  attachOnly?: boolean;
   sender?: WebContents;
 }): Promise<{
   reattached: boolean;
   isDirectSpawn: boolean;
   serializedState?: string;
 }> {
+  // Attach-only (display-only loop panes): reattach to a live direct-spawn PTY
+  // if present, else no-op. Never kills a shell / spawns Claude.
+  if (options.attachOnly) {
+    const live = ptys.get(options.id);
+    if (live && live.isDirectSpawn) {
+      const serializedState = live.mirror ? await live.mirror.serialize() : undefined;
+      live.owner = options.sender || null;
+      return { reattached: true, isDirectSpawn: true, serializedState };
+    }
+    return { reattached: false, isDirectSpawn: false };
+  }
+
   // Re-attach to existing PTY (e.g., after renderer reload)
   const existing = ptys.get(options.id);
   if (existing && !existing.isDirectSpawn) {
@@ -500,8 +536,8 @@ export async function startDirectPty(options: {
     permissionMode: options.permissionMode,
     model: options.model,
     initialPrompt,
-    model: options.model,
     extraSettings: options.extraSettings,
+    mcpConfig: options.mcpConfig,
   });
 
   const env = buildDirectEnv(options.isDark ?? true, options.cwd);
@@ -535,6 +571,10 @@ export async function startDirectPty(options: {
   ptys.set(options.id, record);
   activityMonitor.register(options.id, proc.pid);
 
+  // Loop worker output tap: start each fresh iteration with an empty tail.
+  const trackOutput = options.id.startsWith('loop:');
+  if (trackOutput) recentLoopOutput.set(options.id, '');
+
   // Forward output to renderer, replacing the Claude logo with "7" art.
   // The mirror receives the same filtered stream the renderer renders, so
   // its serialized state matches what a reattaching xterm should show.
@@ -549,6 +589,13 @@ export async function startDirectPty(options: {
     bannerFilter(data);
     activityMonitor.noteData(options.id);
     remoteControlService.onPtyData(options.id, data);
+    if (trackOutput) {
+      const next = (recentLoopOutput.get(options.id) ?? '') + data;
+      recentLoopOutput.set(
+        options.id,
+        next.length > RECENT_OUTPUT_CAP ? next.slice(-RECENT_OUTPUT_CAP) : next,
+      );
+    }
   });
 
   proc.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
@@ -562,6 +609,7 @@ export async function startDirectPty(options: {
     }
     persistAndDisposeMirror(options.id, record);
     ptys.delete(options.id);
+    if (trackOutput) recentLoopOutput.delete(options.id);
   });
 
   return {

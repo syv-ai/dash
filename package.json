@@ -114,6 +114,7 @@
     ]
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-popover": "^1.1.17",
     "@types/qrcode": "^1.5.6",

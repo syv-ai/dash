@@ -43,6 +43,8 @@ export function makeElectronApiMock(overrides: Record<string, unknown> = {}) {
     ptyGetAllActivity: vi.fn(() => ok({})),
     onRemoteControlStateChanged: vi.fn((_cb: (u: unknown) => void) => () => {}),
     ptyRemoteControlGetAllStates: vi.fn(() => ok({})),
+    onLoopStatus: vi.fn((_cb: (s: unknown) => void) => () => {}),
+    loopGetAllStatus: vi.fn(() => ok({})),
     onTokenStatsUpdated: vi.fn((_cb: (u: unknown) => void) => () => {}),
     getGlobalTokenStats: vi.fn(() => ok({ totalTokens: 0, totalCostUsd: 0, taskCount: 0 })),
     getProjectTokenStats: vi.fn((_id: string) =>

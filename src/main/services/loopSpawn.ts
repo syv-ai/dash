@@ -1,4 +1,4 @@
-import type { LoopConfig, LoopRole, PermissionMode } from '@shared/types';
+import type { LoopConfig, LoopRole, PermissionMode, SpawnModel } from '@shared/types';
 import { LoopService } from './LoopService';
 
 /**
@@ -50,7 +50,7 @@ function modelRank(model: string | undefined): number {
 }
 
 /** The manager mirrors the worker's model unless explicitly overridden. */
-export function resolveAgentModel(role: LoopRole, config: LoopConfig): string | undefined {
+export function resolveAgentModel(role: LoopRole, config: LoopConfig): SpawnModel | undefined {
   const worker = config.worker?.model;
   if (role === 'worker') return worker;
   return config.manager?.model ?? worker;
@@ -78,7 +78,7 @@ export function workerPermissionForLevel(config: LoopConfig): PermissionMode {
 export interface LoopSpawnPolicy {
   permissionMode: PermissionMode;
   initialPrompt: string;
-  model?: string;
+  model?: SpawnModel;
   effort?: string;
   /** Extra `claude --settings` JSON merged at spawn (manager write-deny). */
   extraSettings?: Record<string, unknown>;

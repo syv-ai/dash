@@ -254,10 +254,12 @@ describe('runtimeStore.init — rtk + cleanup', () => {
     const rcUnsub = vi.fn();
     const tokenUnsub = vi.fn();
     const rtkUnsub = vi.fn();
+    const loopUnsub = vi.fn();
     api.onPtyActivity = vi.fn(() => activityUnsub);
     api.onRemoteControlStateChanged = vi.fn(() => rcUnsub);
     api.onTokenStatsUpdated = vi.fn(() => tokenUnsub);
     api.onRtkDownloadProgress = vi.fn(() => rtkUnsub);
+    api.onLoopStatus = vi.fn(() => loopUnsub);
 
     const { useRuntime } = await freshStores();
     const cleanup = useRuntime.getState().init();
@@ -270,5 +272,40 @@ describe('runtimeStore.init — rtk + cleanup', () => {
     expect(rcUnsub).toHaveBeenCalled();
     expect(tokenUnsub).toHaveBeenCalled();
     expect(rtkUnsub).toHaveBeenCalled();
+    expect(loopUnsub).toHaveBeenCalled();
+  });
+});
+
+describe('runtimeStore.init — loop status', () => {
+  let api: ReturnType<typeof makeElectronApiMock>;
+  beforeEach(() => {
+    api = makeElectronApiMock();
+    installWindow(api);
+  });
+  afterEach(() => resetWindow());
+
+  it('hydrates from loopGetAllStatus and merges pushed loop:status by taskId', async () => {
+    let push: (s: unknown) => void = () => {};
+    api.onLoopStatus = vi.fn((cb: (s: unknown) => void) => {
+      push = cb;
+      return () => {};
+    });
+    api.loopGetAllStatus = vi.fn(() =>
+      Promise.resolve({
+        success: true,
+        data: { t1: { taskId: 't1', state: 'running', iteration: 2 } },
+      }),
+    );
+
+    const { useRuntime } = await freshStores();
+    useRuntime.getState().init();
+    await Promise.resolve();
+
+    expect(useRuntime.getState().loopStatuses.t1).toMatchObject({ state: 'running', iteration: 2 });
+
+    push({ taskId: 't2', state: 'paused', iteration: 5 });
+    expect(useRuntime.getState().loopStatuses.t2).toMatchObject({ state: 'paused', iteration: 5 });
+    // Existing entry is preserved (merge, not replace).
+    expect(useRuntime.getState().loopStatuses.t1).toMatchObject({ state: 'running' });
   });
 });

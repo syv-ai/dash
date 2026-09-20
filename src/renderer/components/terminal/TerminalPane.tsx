@@ -20,6 +20,8 @@ interface TerminalPaneProps {
   initialPrompt?: string;
   /** Loop agent role; main derives model/permission/prompt/deny-settings from it. */
   loopRole?: LoopRole;
+  /** Display-only loop pane — main (LoopController) owns the PTY; never spawn here. */
+  managedExternally?: boolean;
 }
 
 export function TerminalPane({
@@ -31,6 +33,7 @@ export function TerminalPane({
   freshContext,
   initialPrompt,
   loopRole,
+  managedExternally,
 }: TerminalPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -62,6 +65,7 @@ export function TerminalPane({
       freshContext,
       initialPrompt,
       loopRole,
+      managedExternally,
     });
 
     session.onRestarting(() => {

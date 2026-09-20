@@ -52,6 +52,14 @@ export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions';
 export type TaskModel = 'default' | 'opus' | 'sonnet' | 'haiku' | 'fable';
 
 /**
+ * What `claude --model` will accept at spawn time: a Dash alias, or a raw CLI
+ * model id. Task settings use the narrow `TaskModel` alias set; loop agents may
+ * pin an arbitrary id, so the PTY boundary is deliberately wider than the
+ * picker. `(string & {})` keeps alias autocomplete while allowing any id.
+ */
+export type SpawnModel = TaskModel | (string & {});
+
+/**
  * Lifecycle state of a task row. `idle` is the DB default; `active` is set when
  * a worktree is created. Archival is tracked separately via `archivedAt`, not a
  * status value. Legacy/unknown values are normalized to `idle` on read.

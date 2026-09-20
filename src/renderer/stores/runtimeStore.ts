@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { toast } from 'sonner';
 import type {
   ActivityInfo,
+  LoopStatus,
   RemoteControlState,
   RtkStatus,
   RtkDownloadProgress,
@@ -21,6 +22,8 @@ interface TokenStatsRollup {
 
 export interface RuntimeState {
   taskActivity: Record<string, ActivityInfo>;
+  /** Live agentic-loop status, keyed by taskId. Absent = loop not running. */
+  loopStatuses: Record<string, LoopStatus>;
   remoteControlStates: Record<string, RemoteControlState>;
   projectTokenStats: Record<string, TokenStatsRollup>;
   globalTokenStats: TokenStatsRollup;
@@ -40,6 +43,7 @@ export type RuntimeStore = RuntimeState & RuntimeActions;
 
 export const useRuntime = create<RuntimeStore>((set, get) => ({
   taskActivity: {},
+  loopStatuses: {},
   remoteControlStates: {},
   projectTokenStats: {},
   globalTokenStats: { totalTokens: 0, totalCostUsd: 0, taskCount: 0 },
@@ -154,6 +158,18 @@ export const useRuntime = create<RuntimeStore>((set, get) => ({
           }
           set({ taskActivity: resp.data });
         }
+      });
+    }
+
+    // ── Agentic loop status ────────────────────────────────
+    {
+      const unsub = window.electronAPI.onLoopStatus((status) => {
+        set((s) => ({ loopStatuses: { ...s.loopStatuses, [status.taskId]: status } }));
+      });
+      cleanups.push(unsub);
+
+      void window.electronAPI.loopGetAllStatus().then((resp) => {
+        if (resp.success && resp.data) set({ loopStatuses: resp.data });
       });
     }
 

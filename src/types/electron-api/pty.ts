@@ -27,6 +27,8 @@ export interface PtyApi {
     initialPrompt?: string;
     /** Loop agent role; main derives model/permission/prompt/deny-settings from it. */
     loopRole?: LoopRole;
+    /** Reattach if the PTY exists, else no-op — display-only loop panes never spawn. */
+    attachOnly?: boolean;
   }) => Promise<
     IpcResponse<{
       reattached: boolean;

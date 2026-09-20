@@ -17,6 +17,12 @@ interface AttachOptions {
   initialPrompt?: string;
   /** Loop agent role; main derives model/permission/prompt/deny-settings from it. */
   loopRole?: LoopRole;
+  /**
+   * Display-only pane: main (LoopController) owns the PTY lifecycle. The session
+   * never spawns on attach (it reattaches if the PTY exists, else shows a
+   * placeholder) and never respawns a shell when the PTY exits.
+   */
+  managedExternally?: boolean;
 }
 
 class SessionRegistryImpl {
@@ -39,6 +45,7 @@ class SessionRegistryImpl {
         freshContext: opts.freshContext,
         initialPrompt: opts.initialPrompt,
         loopRole: opts.loopRole,
+        managedExternally: opts.managedExternally,
       });
       this.sessions.set(opts.id, session);
     }
