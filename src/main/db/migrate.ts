@@ -1,6 +1,7 @@
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { getRawDb } from './client';
+import { ensureAddonTables } from '../addonHost/addonStore';
 
 /**
  * Run schema migrations using raw SQL.
@@ -346,6 +347,9 @@ export function runMigrations(): void {
       /* already exists */
     }
   }
+
+  // Add-on enable state and scoped key/value data (src/main/addonHost).
+  ensureAddonTables(rawDb);
 
   rawDb.pragma('foreign_keys = ON');
 }

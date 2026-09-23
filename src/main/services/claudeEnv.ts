@@ -2,6 +2,7 @@ import * as os from 'os';
 import { RtkService } from './RtkService';
 import { stripHostTerminalEnv } from './hostTerminalEnv';
 import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
+import { addonSessionEnv } from '../addonHost/registry';
 
 /**
  * Environment and launch options shared by every `claude` process Dash starts
@@ -29,7 +30,7 @@ let ultracode = false;
  * HookServer.portFilePath) because the supervisor reuses the dispatch-time env
  * on every respawn while Dash binds a new port each launch.
  */
-const RESERVED_ENV_KEYS = new Set([
+export const RESERVED_ENV_KEYS: ReadonlySet<string> = new Set([
   'PATH',
   'HOME',
   'USER',
@@ -61,7 +62,7 @@ export function isUltracode(): boolean {
  * what users actually do). Used when injecting Dash-managed binary
  * directories into the spawned process's PATH.
  */
-function prependUnique(dir: string, basePath: string, sep: string): string {
+export function prependUnique(dir: string, basePath: string, sep: string): string {
   if (!basePath) return dir;
   const parts = basePath.split(sep);
   if (parts.includes(dir)) return basePath;
@@ -88,7 +89,11 @@ export function buildClaudeEnv(isDark: boolean, cwd?: string): Record<string, st
   const rtkBinDir = RtkService.getManagedBinDirForPath();
   const pathSep = isWin ? ';' : ':';
   const basePath = process.env.PATH || '';
-  const mergedPath = rtkBinDir ? prependUnique(rtkBinDir, basePath, pathSep) : basePath;
+  let mergedPath = rtkBinDir ? prependUnique(rtkBinDir, basePath, pathSep) : basePath;
+  const addons = addonSessionEnv(cwd);
+  for (const dir of [...addons.pathDirs].reverse()) {
+    mergedPath = prependUnique(dir, mergedPath, pathSep);
+  }
 
   const env: Record<string, string> = {
     ...base,
@@ -169,6 +174,10 @@ export function buildClaudeEnv(isDark: boolean, cwd?: string): Record<string, st
       if (!RESERVED_ENV_KEYS.has(key)) env[key] = value;
     }
   }
+
+  // Add-on env (src/main/addons), after ports and user settings. Reserved keys
+  // are already dropped by the host.
+  Object.assign(env, addons.env);
 
   // Disable Claude Code's built-in viewport scrolling — Dash uses its own terminal viewport
   env.CLAUDE_CODE_NO_FLICKER = '1';
