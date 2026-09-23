@@ -169,6 +169,14 @@ void app.whenReady().then(async () => {
     console.error('[RtkService.warmUp]', err);
   });
 
+  // Add-ons (src/main/addons): activate before any PTY needs their env or hooks.
+  const { getAddonHost } = await import('./addonHost/registry');
+  const { setAddonsSender } = await import('./addonHost/hostDeps');
+  setAddonsSender(mainWindow.webContents);
+  await getAddonHost()
+    .start()
+    .catch((err) => console.error('[addons] start failed', err));
+
   // TUI feature IPC needs the main window for feature broadcasts (e.g.
   // ports:restart-task); register here (not in registerAllIpc) since that
   // path doesn't have a window yet.
@@ -278,6 +286,8 @@ app.on('activate', () => {
       remoteControlService.setSender(mainWindow.webContents);
       const { RtkService } = await import('./services/RtkService');
       RtkService.setSender(mainWindow.webContents);
+      const { setAddonsSender } = await import('./addonHost/hostDeps');
+      setAddonsSender(mainWindow.webContents);
       const { contextUsageService } = await import('./services/ContextUsageService');
       contextUsageService.setSender(mainWindow.webContents);
       const { tokenStatsService } = await import('./services/TokenStatsService');
@@ -339,6 +349,14 @@ app.on('before-quit', (event) => {
     try {
       const { supervisorService } = await import('./services/SupervisorService');
       supervisorService.stopPolling();
+    } catch {
+      // Best effort
+    }
+
+    // Tear add-ons down (their watchers, timers and service terminals).
+    try {
+      const { peekAddonHost } = await import('./addonHost/registry');
+      await peekAddonHost()?.stop();
     } catch {
       // Best effort
     }

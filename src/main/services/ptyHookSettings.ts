@@ -4,6 +4,7 @@ import { BrowserWindow } from 'electron';
 import { hookServer, getHookPortFilePath } from './HookServer';
 import { RtkService } from './RtkService';
 import { DatabaseService } from './DatabaseService';
+import { peekAddonHost } from '../addonHost/registry';
 import {
   type Hook,
   type HookEntry,
@@ -75,6 +76,11 @@ function buildPreToolUseHooks(
   const rtkCmd = RtkService.isEnabled() ? RtkService.getHookCommand() : null;
   if (rtkCmd) {
     entries.push({ matcher: 'Bash', hooks: [tagDash({ type: 'command', command: rtkCmd })] });
+  }
+  // Add-on contributions (src/main/addons), tagged so cleanup removes them.
+  for (const c of peekAddonHost()?.hookEntries() ?? []) {
+    if (c.event !== 'PreToolUse') continue;
+    entries.push({ matcher: c.matcher, hooks: [tagDash({ type: 'command', command: c.command })] });
   }
   return entries;
 }

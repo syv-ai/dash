@@ -9,7 +9,8 @@ import { TerminalMirror } from './TerminalMirror';
 import { terminalSnapshotService } from './TerminalSnapshotService';
 import { ensureShellConfig, shellHistoryPath } from './ptyShellConfig';
 import { findClaudePath, findLatestSessionId } from './claudeCli';
-import { buildClaudeEnv } from './claudeEnv';
+import { buildClaudeEnv, prependUnique } from './claudeEnv';
+import { addonSessionEnv } from '../addonHost/registry';
 import { supervisorService } from './SupervisorService';
 import { DatabaseService } from './DatabaseService';
 import { writeHookSettings, setCommitAttributionValue } from './ptyHookSettings';
@@ -571,6 +572,14 @@ export async function startPty(options: {
   // excludes the reserved set.
   for (const [key, value] of Object.entries(WorkspacePortsRuntime.getEnvForWorktree(options.cwd))) {
     env[key] = value;
+  }
+
+  // Add-on env and PATH dirs (src/main/addons), same as the task's Claude env.
+  const addons = addonSessionEnv(options.cwd);
+  Object.assign(env, addons.env);
+  const pathSep = isWin ? ';' : ':';
+  for (const dir of [...addons.pathDirs].reverse()) {
+    env.PATH = prependUnique(dir, env.PATH ?? '', pathSep);
   }
 
   const proc = pty.spawn(shell, args, {

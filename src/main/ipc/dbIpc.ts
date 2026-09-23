@@ -12,6 +12,8 @@ import {
 import { discardInitialPrompt, stopTaskSession, removeTaskSession } from '../services/ptyManager';
 import { getTuiHost } from '../tui/hostInstance';
 import { removeShellHistory } from '../services/ptyShellConfig';
+import { peekAddonHost, getAddonStore } from '../addonHost/registry';
+import { toTaskInfo } from '../addonHost/hostDeps';
 
 export function registerDbIpc(): void {
   // ── Projects ─────────────────────────────────────────────
@@ -40,7 +42,13 @@ export function registerDbIpc(): void {
   ipcMain.handle('db:deleteProject', (_event, id: string) => {
     try {
       parseArgs('db:deleteProject', z.string(), id);
+      // The project's tasks go with it (FK cascade): tell add-ons first, and
+      // drop their task- and project-scoped data, which has no FK.
+      const projectTasks = DatabaseService.getTasks(id);
+      for (const t of projectTasks) peekAddonHost()?.emit('taskDeleted', toTaskInfo(t));
       DatabaseService.deleteProject(id);
+      for (const t of projectTasks) getAddonStore().deleteScope('task', t.id);
+      getAddonStore().deleteScope('project', id);
       TelemetryService.capture('project_deleted');
       return { success: true };
     } catch (error) {
@@ -66,6 +74,7 @@ export function registerDbIpc(): void {
       const isNew = !task.id;
       const data = DatabaseService.saveTask(task);
       if (isNew) TelemetryService.capture('task_created');
+      if (isNew) peekAddonHost()?.emit('taskCreated', toTaskInfo(data));
       // Allocate per-task ports the first time the row is saved. setupTask
       // persists to SQLite (the only source of truth for what ports are
       // taken); the renderer's later agent-PTY spawn reads the env from
@@ -97,7 +106,10 @@ export function registerDbIpc(): void {
       await removeTaskSession(id).catch((err) =>
         console.warn('[db:deleteTask] session removal failed:', err),
       );
+      const deleted = DatabaseService.getTask(id);
+      if (deleted) peekAddonHost()?.emit('taskDeleted', toTaskInfo(deleted));
       DatabaseService.deleteTask(id);
+      getAddonStore().deleteScope('task', id);
       // The worktree is gone (or about to be) — close the ports watcher,
       // drop any never-consumed initial prompt, and dismiss a lingering
       // ports-setup toast for this task.
