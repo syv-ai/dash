@@ -9,6 +9,7 @@ import { useSettings } from '../../stores/settingsStore';
 import { useRuntime } from '../../stores/runtimeStore';
 import { getProjectActivity } from './projectActivity';
 import { UpdateBanner } from './UpdateBanner';
+import { AddonDock } from '../addons/AddonDock';
 
 interface LeftSidebarProps {
   projects: Project[];
@@ -266,49 +267,51 @@ export function LeftSidebar({
           but a tall centered h-[52px] row). */}
       <div className={`shrink-0 ${isMac ? 'h-[28px] titlebar-drag' : 'h-[14px]'}`} />
 
-      {/* Rotation section */}
-      {showActiveTasksSection && rotationTasks.length > 0 && (
-        <RotationSection
-          rotationTasks={rotationTasks}
-          activeTaskId={activeTaskId}
-          unseenTaskIds={unseenTaskIds}
-          projects={projects}
-          onSelectTask={onSelectTask}
-          onReorderRotation={onReorderRotation}
-          onRemoveFromRotation={onRemoveFromRotation}
-          contextUsage={contextUsage}
-        />
-      )}
+      <AddonDock side="left" taskId={activeTaskId ?? null} className="flex-1 min-h-0">
+        {/* Rotation section */}
+        {showActiveTasksSection && rotationTasks.length > 0 && (
+          <RotationSection
+            rotationTasks={rotationTasks}
+            activeTaskId={activeTaskId}
+            unseenTaskIds={unseenTaskIds}
+            projects={projects}
+            onSelectTask={onSelectTask}
+            onReorderRotation={onReorderRotation}
+            onRemoveFromRotation={onRemoveFromRotation}
+            contextUsage={contextUsage}
+          />
+        )}
 
-      {/* Project list — rows extend to the full sidebar width on the right
+        {/* Project list — rows extend to the full sidebar width on the right
           (no reserved gutter). When content overflows, the scrollbar takes
           its slot at the right edge and rows shift to the same 8→W-8 range
           as the active-tasks rows; otherwise rows fill 8→W with no gap.
           The "Projects" header sits outside the scroll container so it stays
           pinned to the top while the list scrolls. */}
-      <ProjectsSection
-        projects={projects}
-        activeProjectId={activeProjectId}
-        tasksByProject={tasksByProject}
-        activeTaskId={activeTaskId}
-        unseenTaskIds={unseenTaskIds}
-        contextUsage={contextUsage}
-        onSelectProject={onSelectProject}
-        onOpenFolder={onOpenFolder}
-        onDeleteProject={onDeleteProject}
-        onProjectSettings={onProjectSettings}
-        onShowCommitGraph={onShowCommitGraph}
-        onSelectTask={onSelectTask}
-        onNewTask={onNewTask}
-        onDeleteTask={onDeleteTask}
-        onArchiveTask={onArchiveTask}
-        onRestoreTask={onRestoreTask}
-        onCloseTask={onCloseTask}
-        onTaskSettings={onTaskSettings}
-        onReorderProjects={onReorderProjects}
-        onReorderTasks={onReorderTasks}
-        onReorderTasksCommit={onReorderTasksCommit}
-      />
+        <ProjectsSection
+          projects={projects}
+          activeProjectId={activeProjectId}
+          tasksByProject={tasksByProject}
+          activeTaskId={activeTaskId}
+          unseenTaskIds={unseenTaskIds}
+          contextUsage={contextUsage}
+          onSelectProject={onSelectProject}
+          onOpenFolder={onOpenFolder}
+          onDeleteProject={onDeleteProject}
+          onProjectSettings={onProjectSettings}
+          onShowCommitGraph={onShowCommitGraph}
+          onSelectTask={onSelectTask}
+          onNewTask={onNewTask}
+          onDeleteTask={onDeleteTask}
+          onArchiveTask={onArchiveTask}
+          onRestoreTask={onRestoreTask}
+          onCloseTask={onCloseTask}
+          onTaskSettings={onTaskSettings}
+          onReorderProjects={onReorderProjects}
+          onReorderTasks={onReorderTasks}
+          onReorderTasksCommit={onReorderTasksCommit}
+        />
+      </AddonDock>
 
       {/* Update banner — persistent, above the footer actions */}
       <UpdateBanner />

@@ -43,6 +43,67 @@ export default tseslint.config(
       'react-hooks/exhaustive-deps': 'warn',
     },
   },
+  // Add-on boundary (docs/specs/2026-09-23-addons.md). An add-on imports only
+  // the add-on API, its own files, Node built-ins and npm packages; core imports
+  // add-ons only through the registry; the API imports nothing from main/renderer.
+  {
+    files: ['src/main/addons/*/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [{ name: 'electron', message: 'Add-ons reach Electron only through ctx.' }],
+          patterns: [
+            {
+              group: ['@/*'],
+              message: 'Add-ons may not import Dash core; use ctx from @shared/addon-api.',
+            },
+            {
+              group: ['@shared/*', '!@shared/addon-api', '!@shared/addon-api/*'],
+              message: 'Add-ons may import only @shared/addon-api from src/shared.',
+            },
+            {
+              group: ['../../*', '../../**'],
+              message: 'Add-ons may not import outside their own folder.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/main/**/*.ts'],
+    ignores: ['src/main/addons/**', 'src/main/addonHost/registry.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@/addons', '@/addons/*', '**/addons', '**/addons/*', '!@shared/addons'],
+              message: 'Only src/main/addonHost/registry.ts imports add-ons.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/shared/addon-api/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@/*', '**/main/**', '**/renderer/**'],
+              message: 'The add-on API must not depend on main or renderer code.',
+            },
+          ],
+        },
+      ],
+    },
+  },
   // File-naming convention (see CLAUDE.md > Code Style > File naming): PascalCase
   // for files whose primary export is a React component or class, camelCase for
   // function/value modules. Enforced where it maps cleanly to a directory;

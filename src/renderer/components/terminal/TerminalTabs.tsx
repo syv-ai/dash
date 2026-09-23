@@ -256,9 +256,18 @@ export function TerminalTabs({
     };
   }, [activeTabId, cwd, tabs]);
 
-  // Logs button with a Dash-owned tab: main asks us to surface that tab.
+  // Logs button with a Dash-owned tab, or an add-on terminal (re)started: main
+  // asks us to surface that tab.
   useEffect(() => {
-    const off = window.electronAPI.onPortsServiceFocusTab(({ taskId: tid, tabId, reset }) => {
+    const focus = ({
+      taskId: tid,
+      tabId,
+      reset,
+    }: {
+      taskId: string;
+      tabId: string;
+      reset: boolean;
+    }) => {
       if (tid !== taskId) return;
       onExpand();
       // reset: main respawned this service's PTY under the same id. The cached
@@ -270,8 +279,13 @@ export function TerminalTabs({
         if (session) void session.resetForRespawn();
       }
       void window.electronAPI.drawerTabsSetActive(taskId, tabId);
-    });
-    return off;
+    };
+    const offPorts = window.electronAPI.onPortsServiceFocusTab(focus);
+    const offAddons = window.electronAPI.onAddonsFocusTab(focus);
+    return () => {
+      offPorts();
+      offAddons();
+    };
   }, [taskId, onExpand]);
 
   // Focus terminal when the user explicitly expands the drawer
@@ -344,7 +358,8 @@ export function TerminalTabs({
     // ServiceRunner, so tell it to release ownership and refresh the ports panel
     // — otherwise the row keeps offering a dead "Stop".
     if (tab?.kind === 'service') {
-      void window.electronAPI.portsServiceReleaseTab(taskId, tabId);
+      if (tab.featureId === 'ports') void window.electronAPI.portsServiceReleaseTab(taskId, tabId);
+      else void window.electronAPI.addonsTerminalClosed({ taskId, tabId });
     }
   }
 
