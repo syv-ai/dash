@@ -162,25 +162,17 @@ void app.whenReady().then(async () => {
     AutoUpdateService.initialize(mainWindow);
   }
 
-  // Add-ons (src/main/addons): activate before any PTY needs their env or hooks.
+  // Add-ons (src/main/addons): sweep the service tabs their terminals left
+  // behind (those processes died with the last Dash), then activate before any
+  // PTY needs their env or hooks.
+  const { initDrawerTabsService } = await import('./ipc/drawerTabsIpc');
+  initDrawerTabsService().sweepEphemeralTabs();
   const { getAddonHost } = await import('./addonHost/registry');
   const { setAddonsSender } = await import('./addonHost/hostDeps');
   setAddonsSender(mainWindow.webContents);
   await getAddonHost()
     .start()
     .catch((err) => console.error('[addons] start failed', err));
-
-  // TUI feature IPC needs the main window for feature broadcasts (e.g.
-  // ports:restart-task); register here (not in registerAllIpc) since that
-  // path doesn't have a window yet.
-  const { registerWizardIpc, cleanupWizardsAtBoot } = await import('./ipc/wizardIpc');
-  const { registerPortsWizard, migrateLegacyPortsDismissals } = await import('./wizard/ports');
-  registerPortsWizard();
-  migrateLegacyPortsDismissals();
-  cleanupWizardsAtBoot();
-  registerWizardIpc({ getMainWindow: () => mainWindow });
-  const { registerServicesIpc } = await import('./ipc/servicesIpc');
-  registerServicesIpc();
 
   // Crash resilience: persist terminal mirrors every 60s (quit and kill
   // paths persist too — this only bounds what a hard crash can lose).
@@ -373,14 +365,6 @@ app.on('before-quit', (event) => {
     try {
       const { stopAll } = await import('./services/FileWatcherService');
       stopAll();
-    } catch {
-      // Best effort
-    }
-
-    // Stop all ports.json watchers
-    try {
-      const { stopAll: stopPortsConfigWatchers } = await import('./services/PortsConfigWatcher');
-      stopPortsConfigWatchers();
     } catch {
       // Best effort
     }

@@ -7,6 +7,7 @@ import {
   createAddonStore,
   ensureAddonTables,
   importLegacyAddonSettings,
+  importLegacyPortsData,
   type AddonStore,
 } from '../addonStore';
 
@@ -103,6 +104,65 @@ describe('addonStore', () => {
 
     it('does nothing without a file', () => {
       expect(() => importLegacyAddonSettings(store, userData())).not.toThrow();
+    });
+  });
+
+  describe('importLegacyPortsData', () => {
+    const seed = () => {
+      db.exec(`
+        CREATE TABLE task_ports (
+          id TEXT PRIMARY KEY, task_id TEXT NOT NULL, label TEXT NOT NULL, env_var TEXT,
+          default_port INTEGER, host_port INTEGER NOT NULL, source TEXT NOT NULL,
+          run_command TEXT, stop_command TEXT, logs_command TEXT, cwd TEXT,
+          created_at TEXT, updated_at TEXT);
+        INSERT INTO task_ports VALUES
+          ('a', 't1', 'web', 'WEB_PORT', 3000, 3100, 'hash', 'pnpm dev', NULL, NULL, NULL, 'c', 'u'),
+          ('b', 't1', 'api', 'API_PORT', 4000, 4100, 'hash', NULL, NULL, NULL, 'apps/api', 'c', 'u'),
+          ('c', 't2', 'web', NULL, NULL, 9323, 'fixed', NULL, NULL, NULL, NULL, NULL, NULL);
+        CREATE TABLE feature_dismissals (project_id TEXT, feature_id TEXT, dismissed_at TEXT);
+        INSERT INTO feature_dismissals VALUES ('p1', 'ports', 'x');
+        CREATE TABLE drawer_tabs (id TEXT PRIMARY KEY, kind TEXT NOT NULL);
+        INSERT INTO drawer_tabs VALUES ('shell:t1', 'shell'), ('ports-tui:t1', 'tui');
+      `);
+    };
+    const tables = () =>
+      (
+        db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table'`).all() as Array<{
+          name: string;
+        }>
+      )
+        .map((r) => r.name)
+        .sort();
+
+    it('moves each task’s ports into add-on storage, sorted by label', () => {
+      seed();
+      importLegacyPortsData(db);
+      const t1 = store.get<Array<{ label: string; hostPort: number; cwd: string | null }>>(
+        'ports',
+        { task: 't1' },
+        'ports',
+      )!;
+      expect(t1.map((p) => [p.label, p.hostPort, p.cwd])).toEqual([
+        ['api', 4100, 'apps/api'],
+        ['web', 3100, null],
+      ]);
+      expect(
+        store.get<Array<{ createdAt: string }>>('ports', { task: 't2' }, 'ports')![0]!.createdAt,
+      ).toBe('');
+    });
+
+    it('drops the old tables and tui drawer tabs', () => {
+      seed();
+      importLegacyPortsData(db);
+      expect(tables()).toEqual(['addon_data', 'addons', 'drawer_tabs']);
+      expect(db.prepare(`SELECT id FROM drawer_tabs`).all()).toEqual([{ id: 'shell:t1' }]);
+    });
+
+    it('is idempotent and harmless without old tables', () => {
+      seed();
+      importLegacyPortsData(db);
+      expect(() => importLegacyPortsData(db)).not.toThrow();
+      expect(store.list('ports', 'task', 'ports')).toHaveLength(2);
     });
   });
 

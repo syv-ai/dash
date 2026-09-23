@@ -44,21 +44,20 @@ describe('DrawerTabsService', () => {
   it('add() preserves position order across multiple tabs', () => {
     const a = svc.add('t1', { kind: 'shell', label: '1' });
     const b = svc.add('t1', { kind: 'shell', label: '2' });
-    const c = svc.add('t1', { kind: 'tui', label: 'Ports', featureId: 'ports' });
+    const c = svc.add('t1', { kind: 'service', label: 'Web', featureId: 'ports' });
     expect(svc.list('t1').map((t) => t.id)).toEqual([a.id, b.id, c.id]);
     expect(c.featureId).toBe('ports');
   });
 
-  it('add() never auto-activates a tui tab, even as the first tab', () => {
-    const tui = svc.add('t1', { kind: 'tui', label: 'Ports', featureId: 'ports' });
-    expect(svc.getActive('t1')).toBeNull();
-    expect(svc.list('t1').map((t) => t.id)).toEqual([tui.id]);
+  it('add() activates the first tab and leaves a later one inactive', () => {
+    const shell = svc.add('t1', { kind: 'shell', label: '1' });
+    svc.add('t1', { kind: 'service', label: 'Web', featureId: 'ports' });
+    expect(svc.getActive('t1')).toBe(shell.id);
   });
 
-  it('add() activates a non-tui tab when the task has no active tab', () => {
-    svc.add('t1', { kind: 'tui', label: 'Ports', featureId: 'ports' });
-    const shell = svc.add('t1', { kind: 'shell', label: '1' });
-    expect(svc.getActive('t1')).toBe(shell.id);
+  it('add() gives a service tab without an id a service-prefixed one', () => {
+    const tab = svc.add('t1', { kind: 'service', label: 'Web', featureId: 'ports' });
+    expect(tab.id.startsWith('service:ports:t1:')).toBe(true);
   });
 
   it('close() removes the tab and reassigns active to the next remaining', () => {
@@ -107,18 +106,18 @@ describe('DrawerTabsService', () => {
     expect(svc.getActive('t1')).toBe('shell:t1:1');
   });
 
-  it('sweepEphemeralTabs() removes all tui rows and clears stale active pointers', () => {
+  it('sweepEphemeralTabs() removes service rows and clears stale active pointers', () => {
     const shell = svc.add('t1', { kind: 'shell', label: '1' });
-    const tui = svc.add('t1', { kind: 'tui', featureId: 'ports', label: 'Ports' });
-    svc.setActive('t1', tui.id);
-    expect(svc.getActive('t1')).toBe(tui.id);
+    const service = svc.add('t1', { kind: 'service', featureId: 'ports', label: 'Web' });
+    svc.setActive('t1', service.id);
+    expect(svc.getActive('t1')).toBe(service.id);
 
     const swept = svc.sweepEphemeralTabs();
 
     expect(swept).toEqual(['t1']);
     expect(svc.list('t1').map((t) => t.id)).toEqual([shell.id]);
-    // Active pointed at the TUI — it gets cleared (renderer will pick another
-    // tab the next time it refreshes).
+    // Active pointed at the service tab — it gets cleared (the renderer picks
+    // another tab the next time it refreshes).
     expect(svc.getActive('t1')).toBeNull();
   });
 

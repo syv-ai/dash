@@ -4,7 +4,6 @@ import { activityMonitor } from './ActivityMonitor';
 import { hookServer } from './HookServer';
 import { contextUsageService } from './ContextUsageService';
 import { stripHostTerminalEnv } from './hostTerminalEnv';
-import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
 import { TerminalMirror } from './TerminalMirror';
 import { terminalSnapshotService } from './TerminalSnapshotService';
 import { ensureShellConfig, shellHistoryPath } from './ptyShellConfig';
@@ -20,7 +19,7 @@ import type { PermissionMode, TaskModel } from '@shared/types';
 // dispatch); re-exported so the IPC layer keeps one import site.
 export { setClaudeEnvVars, setSyncShellEnv, setUltracode } from './claudeEnv';
 
-export type PtyKind = 'agent' | 'shell' | 'tui' | 'service';
+export type PtyKind = 'agent' | 'shell' | 'service';
 
 interface PtyRecord {
   proc: any; // IPty from node-pty
@@ -75,16 +74,13 @@ function persistAndDisposeMirror(id: string, record: PtyRecord): void {
   const mirror = record.mirror;
   record.mirror = null;
   if (!mirror) return;
-  // TUI tabs never restore from file snapshots (their side-car is torn down
-  // and re-offered instead) — persisting would only leave orphan files.
-  if (record.kind !== 'tui') persistMirrorSync(id, mirror);
+  persistMirrorSync(id, mirror);
   mirror.dispose();
 }
 
 /** Serialize every live mirror to disk — before-quit + crash-resilience interval. */
 export function persistAllMirrors(): void {
   for (const [id, record] of ptys) {
-    if (record.kind === 'tui') continue;
     if (record.mirror) persistMirrorSync(id, record.mirror);
   }
 }
@@ -565,15 +561,6 @@ export async function startPty(options: {
     if (shell.endsWith('/bash') || shell === 'bash') env.HISTFILE = historyFile;
   }
 
-  // Same port-env injection as direct PTYs — the terminal drawer shares the
-  // task's worktree, so `curl localhost:$FRONTEND_PORT` should resolve there
-  // too. RESERVED_ENV_KEYS guard is unnecessary here since we're working from
-  // a fresh `{ ...process.env }` and the allocator's env-var allowlist already
-  // excludes the reserved set.
-  for (const [key, value] of Object.entries(WorkspacePortsRuntime.getEnvForWorktree(options.cwd))) {
-    env[key] = value;
-  }
-
   // Add-on env and PATH dirs (src/main/addons), same as the task's Claude env.
   const addons = addonSessionEnv(options.cwd);
   Object.assign(env, addons.env);
@@ -836,10 +823,9 @@ export function listForTask(
 }
 
 /**
- * Spawn an arbitrary command in a PTY tagged as kind='tui'. Used by feature
- * orchestrators (e.g. ports onboarding) to host a side-car interactive
- * program inside the existing drawer tab UI without polluting agent/shell
- * code paths.
+ * Spawn an arbitrary command in a PTY tagged as kind='service'. Used by the
+ * add-on host (ctx.terminals.run) to run a command as a drawer tab without
+ * touching agent/shell code paths.
  */
 export async function startCommandPty(options: {
   id: string;
@@ -852,8 +838,8 @@ export async function startCommandPty(options: {
   owner: WebContents | null;
   taskId: string;
   featureId: string;
-  /** PTY registry kind. Side-car TUIs (default) vs user-facing service runs. */
-  kind?: 'tui' | 'service';
+  /** PTY registry kind. Only service runs (add-on terminals) today. */
+  kind: 'service';
   /**
    * Fires only when the process exits on its own — an explicit killPty()
    * removes the record first, so the guarded handler below never reaches it.
@@ -881,7 +867,7 @@ export async function startCommandPty(options: {
     cwd: options.cwd,
     isDirectSpawn: false,
     owner: options.owner,
-    kind: options.kind ?? 'tui',
+    kind: options.kind,
     taskId: options.taskId,
     featureId: options.featureId,
     jobId: null,

@@ -3,8 +3,7 @@ import * as path from 'path';
 import { loadWorkspacePorts, loadPortOverrides } from './WorkspacePortsService';
 import { allocatePorts } from './PortAllocator';
 import { composeWorktreeEnv, formatEnvExport } from './derivedEnv';
-import { DatabaseService } from './DatabaseService';
-import type { TaskPort } from '@shared/types';
+import type { TaskPort } from './types';
 
 const GITIGNORE_FILE = '.gitignore';
 
@@ -17,6 +16,17 @@ const GITIGNORE_HEADER = '# Dash — port management (generated per-worktree; do
 // Matches the conventional name a hand-rolled dev.sh writes, so existing
 // `source .env.worktree` workflows keep working.
 const DEFAULT_EXPORT_FILE = '.env.worktree';
+
+/**
+ * Where allocated ports are kept. The add-on backs this with task-scoped
+ * add-on storage; the allocator only needs "what's taken elsewhere".
+ */
+export interface PortsStore {
+  get(taskId: string): TaskPort[];
+  set(taskId: string, ports: TaskPort[]): void;
+  /** Host ports held by other, non-archived tasks. */
+  takenHostPorts(excludeTaskId: string): Set<number>;
+}
 
 export interface SetupTaskArgs {
   taskId: string;
@@ -42,6 +52,8 @@ export interface SetupTaskArgs {
  * `buildEnv`, so the same ports + derived vars land in each.
  */
 export class WorkspacePortsRuntime {
+  constructor(private readonly store: PortsStore) {}
+
   /**
    * Resolve and persist port assignments for a task. No-op (returns empty
    * array) when `.dash/ports.json` is missing or malformed — we keep going
@@ -52,25 +64,27 @@ export class WorkspacePortsRuntime {
    * empty). The watcher uses this to surface a recoverable error in the setup
    * wizard instead of silently advancing with zero ports.
    */
-  static setupTask(args: SetupTaskArgs, errors?: string[]): TaskPort[] {
+  setupTask(args: SetupTaskArgs, errors?: string[]): TaskPort[] {
     const ports = loadWorkspacePorts(args.worktreePath, errors);
     if (!ports) {
       // Either no .dash/ports.json or invalid. Clear any stale rows from a
       // previous good config, and remove the stale export file so nothing
       // outside Dash sources defunct ports.
-      DatabaseService.setTaskPorts(args.taskId, []);
+      this.store.set(args.taskId, []);
       WorkspacePortsRuntime.removeExportFile(args.worktreePath, DEFAULT_EXPORT_FILE);
       return [];
     }
 
     const overrides = loadPortOverrides(args.worktreePath);
-    const taken = DatabaseService.getTakenHostPorts(args.taskId);
+    const taken = this.store.takenHostPorts(args.taskId);
     const hashKey = args.hashKey ?? path.basename(args.worktreePath);
     const assignments = allocatePorts({ ports, worktreeName: hashKey, overrides, taken });
 
-    const persisted = DatabaseService.setTaskPorts(
-      args.taskId,
-      assignments.map((a) => ({
+    const now = new Date().toISOString();
+    const persisted: TaskPort[] = assignments
+      .map((a) => ({
+        id: `${args.taskId}:${a.label}`,
+        taskId: args.taskId,
         label: a.label,
         envVar: a.envVar ?? null,
         defaultPort: a.defaultPort ?? null,
@@ -80,8 +94,11 @@ export class WorkspacePortsRuntime {
         stopCommand: a.stop ?? null,
         logsCommand: a.logs ?? null,
         cwd: a.cwd ?? null,
-      })),
-    );
+        createdAt: now,
+        updatedAt: now,
+      }))
+      .sort((x, y) => (x.label < y.label ? -1 : x.label > y.label ? 1 : 0));
+    this.store.set(args.taskId, persisted);
 
     const exportFile = ports.exportFile ?? DEFAULT_EXPORT_FILE;
     WorkspacePortsRuntime.writeExportFile(args.worktreePath, exportFile, persisted, ports.derived);
@@ -89,8 +106,8 @@ export class WorkspacePortsRuntime {
     return persisted;
   }
 
-  static getPortsForTask(taskId: string): TaskPort[] {
-    return DatabaseService.getTaskPorts(taskId);
+  getPortsForTask(taskId: string): TaskPort[] {
+    return this.store.get(taskId);
   }
 
   /**
@@ -98,17 +115,8 @@ export class WorkspacePortsRuntime {
    * `derived` composites. Shape is `Record<string, string>` so ptyManager can
    * spread it straight into the spawn env.
    */
-  static getEnvForTask(taskId: string): Record<string, string> {
-    const task = DatabaseService.getTask(taskId);
-    if (!task) return {};
-    return WorkspacePortsRuntime.buildEnv(task.path, DatabaseService.getTaskPorts(taskId));
-  }
-
-  /** Same as getEnvForTask but keyed by worktree path (ptyManager's spawn cwd). */
-  static getEnvForWorktree(worktreePath: string): Record<string, string> {
-    const task = DatabaseService.getTaskByPath(worktreePath);
-    if (!task) return {};
-    return WorkspacePortsRuntime.buildEnv(worktreePath, DatabaseService.getTaskPorts(task.id));
+  getEnvForTask(taskId: string, worktreePath: string): Record<string, string> {
+    return WorkspacePortsRuntime.buildEnv(worktreePath, this.store.get(taskId));
   }
 
   /**

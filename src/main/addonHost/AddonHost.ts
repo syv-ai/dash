@@ -38,6 +38,7 @@ export interface HostDeps {
   toast(t: { kind: 'info' | 'success' | 'warning' | 'error'; title: string; body?: string }): void;
   openUrl(url: string): void;
   copy(text: string): void;
+  exec(command: string, cwd: string): Promise<{ code: number; stderrTail: string }>;
   emitChanged(addonId: string): void;
   notifyEnvChanged(addonId: string): void;
   log: Pick<Console, 'info' | 'warn' | 'error'>;
@@ -264,12 +265,20 @@ export class AddonHost {
       },
       files: {
         watch: (taskId, relDir, fn) => {
-          if (!live()) return;
-          rt.disposers.push(deps.watchDir(taskId, relDir, fn));
+          if (!live()) return () => {};
+          // Disposers must be idempotent: the add-on may stop a watch early and
+          // the host disposes every registration again on disable.
+          const dispose = deps.watchDir(taskId, relDir, fn);
+          rt.disposers.push(dispose);
+          return dispose;
         },
       },
       notify: { toast: (t) => deps.toast(t) },
-      shell: { openUrl: (url) => deps.openUrl(url), copy: (text) => deps.copy(text) },
+      shell: {
+        openUrl: (url) => deps.openUrl(url),
+        copy: (text) => deps.copy(text),
+        exec: (command, cwd) => deps.exec(command, cwd),
+      },
       paths: {
         get data() {
           dataDir ??= deps.dataDir(id);

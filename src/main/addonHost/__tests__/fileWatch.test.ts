@@ -4,11 +4,17 @@ import * as os from 'os';
 import * as path from 'path';
 import { watchDirectory } from '../fileWatch';
 
-const until = async (check: () => boolean, ms = 3000) => {
+/**
+ * Poll until `check` passes, running `poke` each round. macOS fs.watch can miss
+ * a write made right after the watcher arms (worse under load), so the tests
+ * keep rewriting the file instead of depending on one event being seen.
+ */
+const until = async (check: () => boolean, poke: () => void = () => {}, ms = 5000) => {
   const start = Date.now();
   while (!check()) {
     if (Date.now() - start > ms) throw new Error('timed out');
-    await new Promise((r) => setTimeout(r, 20));
+    poke();
+    await new Promise((r) => setTimeout(r, 50));
   }
 };
 
@@ -30,9 +36,10 @@ describe('watchDirectory', () => {
     const dir = tmp();
     const calls: string[][] = [];
     disposers.push(watchDirectory(dir, (f) => calls.push(f), { debounceMs: 20 }));
-    fs.writeFileSync(path.join(dir, 'ports.json'), '{}');
-    await until(() => calls.length > 0);
-    expect(calls.flat()).toContain('ports.json');
+    await until(
+      () => calls.flat().includes('ports.json'),
+      () => fs.writeFileSync(path.join(dir, 'ports.json'), '{}'),
+    );
   });
 
   it('waits for a missing directory, then watches it', async () => {
@@ -41,9 +48,10 @@ describe('watchDirectory', () => {
     disposers.push(watchDirectory(dir, (f) => calls.push(f), { debounceMs: 20, retryMs: 30 }));
     await new Promise((r) => setTimeout(r, 60));
     fs.mkdirSync(dir);
-    await new Promise((r) => setTimeout(r, 80)); // let the retry arm the watcher
-    fs.writeFileSync(path.join(dir, 'ports.json'), '{}');
-    await until(() => calls.flat().includes('ports.json'));
+    await until(
+      () => calls.flat().includes('ports.json'),
+      () => fs.writeFileSync(path.join(dir, 'ports.json'), '{}'),
+    );
   });
 
   it('stops after dispose', async () => {

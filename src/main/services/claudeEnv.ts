@@ -1,6 +1,5 @@
 import * as os from 'os';
 import { stripHostTerminalEnv } from './hostTerminalEnv';
-import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
 import { addonSessionEnv } from '../addonHost/registry';
 
 /**
@@ -161,19 +160,10 @@ export function buildClaudeEnv(isDark: boolean, cwd?: string): Record<string, st
     }
   }
 
-  // Merge per-task port env vars (FRONTEND_PORT=…, etc) so commands run by
-  // Claude resolve the same host port the user sees in the ports panel.
-  // After user settings so a project never accidentally clobbers an allocated
-  // port. The supervisor freezes these into the job at dispatch, so a port
-  // change after dispatch needs a re-dispatch (ptyManager.restartTaskSession).
-  if (cwd) {
-    for (const [key, value] of Object.entries(WorkspacePortsRuntime.getEnvForWorktree(cwd))) {
-      if (!RESERVED_ENV_KEYS.has(key)) env[key] = value;
-    }
-  }
-
-  // Add-on env (src/main/addons), after ports and user settings. Reserved keys
-  // are already dropped by the host.
+  // Add-on env (src/main/addons, e.g. per-task ports), after user settings so a
+  // project never clobbers an allocated port. Reserved keys are already dropped
+  // by the host. The supervisor freezes this env at dispatch, so a change needs
+  // a re-dispatch (restart the task's sessions).
   Object.assign(env, addons.env);
 
   // Disable Claude Code's built-in viewport scrolling — Dash uses its own terminal viewport

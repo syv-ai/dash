@@ -221,10 +221,9 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
   // reset the session, so any prior busy state on the activity dot is stale.
   // SessionStart(resume) is NOT wired — register() already initialises and a
   // resumed session's busy state will be re-established by the next
-  // UserPromptSubmit / PreToolUse hook. SessionStart(startup) was previously
-  // wired to /hook/agent-startup for the ports onboarding TUI's auto-detect
-  // path; we dropped that — see PortsSetupWizard (the agent self-starts via the
-  // inlined initial prompt instead).
+  // UserPromptSubmit / PreToolUse hook. SessionStart(startup) is not wired: a
+  // task that needs to start working (e.g. a port-setup task) gets an inlined
+  // initial prompt at dispatch instead.
   const sessionStartEntries: HookEntry[] = [
     { matcher: 'clear', hooks: [dashCmd('session-start', true)] },
     { matcher: 'compact', hooks: [dashCmd('session-start', true)] },

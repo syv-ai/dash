@@ -1,7 +1,7 @@
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { getRawDb } from './client';
-import { ensureAddonTables } from '../addonHost/addonStore';
+import { ensureAddonTables, importLegacyPortsData } from '../addonHost/addonStore';
 
 /**
  * Run schema migrations using raw SQL.
@@ -80,22 +80,6 @@ export function runMigrations(): void {
     `CREATE INDEX IF NOT EXISTS idx_diff_editor_comments_task_file
        ON diff_editor_comments(task_id, file_path);`,
   );
-
-  rawDb.exec(`
-    CREATE TABLE IF NOT EXISTS task_ports (
-      id            TEXT PRIMARY KEY,
-      task_id       TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-      label         TEXT NOT NULL,
-      env_var       TEXT,
-      default_port  INTEGER,
-      host_port     INTEGER NOT NULL,
-      source        TEXT NOT NULL,
-      created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
-      updated_at    TEXT DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-  rawDb.exec(`CREATE INDEX IF NOT EXISTS idx_task_ports_task_id ON task_ports(task_id);`);
-  rawDb.exec(`CREATE INDEX IF NOT EXISTS idx_task_ports_host_port ON task_ports(host_port);`);
 
   // Migrations for existing databases
   try {
@@ -280,25 +264,7 @@ export function runMigrations(): void {
     /* already exists */
   }
 
-  for (const col of ['run_command', 'stop_command', 'logs_command', 'cwd']) {
-    try {
-      rawDb.exec(`ALTER TABLE task_ports ADD COLUMN ${col} TEXT`);
-    } catch {
-      /* already exists */
-    }
-  }
-
-  rawDb.exec(`
-    CREATE TABLE IF NOT EXISTS feature_dismissals (
-      project_id   TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-      feature_id   TEXT NOT NULL,
-      dismissed_at TEXT NOT NULL,
-      PRIMARY KEY (project_id, feature_id)
-    );
-  `);
-
-  // One-time move of the old ports dismissal column into feature_dismissals,
-  // then drop the column. Guarded by a pragma check so it runs exactly once.
+  // The pre-add-on ports dismissal column; dismissals no longer exist.
   const hadPortsDismissCol =
     (
       rawDb
@@ -308,14 +274,7 @@ export function runMigrations(): void {
         )
         .get() as { c: number }
     ).c > 0;
-  if (hadPortsDismissCol) {
-    rawDb.exec(`
-      INSERT OR IGNORE INTO feature_dismissals (project_id, feature_id, dismissed_at)
-      SELECT id, 'ports', ports_setup_dismissed_at FROM projects
-      WHERE ports_setup_dismissed_at IS NOT NULL;
-    `);
-    rawDb.exec(`ALTER TABLE projects DROP COLUMN ports_setup_dismissed_at`);
-  }
+  if (hadPortsDismissCol) rawDb.exec(`ALTER TABLE projects DROP COLUMN ports_setup_dismissed_at`);
 
   // Diff comments gained a view scope (anchor to 'live' working/branch diff vs
   // a frozen 'commit:<hash>'). Existing rows predate scoping → default 'live'.
@@ -348,8 +307,10 @@ export function runMigrations(): void {
     }
   }
 
-  // Add-on enable state and scoped key/value data (src/main/addonHost).
+  // Add-on enable state and scoped key/value data (src/main/addonHost), then
+  // the one-time move of the old ports tables into the ports add-on.
   ensureAddonTables(rawDb);
+  importLegacyPortsData(rawDb);
 
   rawDb.pragma('foreign_keys = ON');
 }

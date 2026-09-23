@@ -36,12 +36,16 @@ describe('writePty — Escape interrupt', () => {
     expect(activityMonitor.getAll()['t1']!.state).toBe('busy');
   });
 
-  it('Escape typed into a shell or side-car TUI leaves the task alone', () => {
+  it('Escape typed into a shell or service terminal leaves the task alone', () => {
     busyAgent('t1', 't1');
     __registerForTest('shell:t1', { kind: 'shell', taskId: 't1', featureId: null });
-    __registerForTest('ports-tui:t1', { kind: 'tui', taskId: 't1', featureId: 'ports' });
+    __registerForTest('service:t1:ports:web', {
+      kind: 'service',
+      taskId: 't1',
+      featureId: 'ports',
+    });
     writePty('shell:t1', ESC);
-    writePty('ports-tui:t1', ESC);
+    writePty('service:t1:ports:web', ESC);
     expect(activityMonitor.getAll()['t1']!.state).toBe('busy');
   });
 

@@ -1,6 +1,5 @@
 import * as net from 'net';
-import { BrowserWindow } from 'electron';
-import type { PortLiveness, PortLivenessUpdate } from '@shared/types';
+import type { PortLiveness } from './types';
 
 const POLL_INTERVAL_MS = 2000;
 const CONNECT_TIMEOUT_MS = 200;
@@ -19,10 +18,13 @@ interface WatchEntry {
  *
  * One timer per watched task instead of one global tick so that adding/
  * removing a task doesn't reshuffle every other task's probe phase, and so
- * task removal cleans up cleanly without a sweep.
+ * task removal cleans up cleanly without a sweep. `onChange(taskId)` fires
+ * whenever a task's states change (the add-on refreshes its drawer).
  */
-class PortLivenessService {
+export class PortLivenessService {
   private watches = new Map<string, WatchEntry>();
+
+  constructor(private readonly onChange: (taskId: string) => void) {}
 
   /**
    * Start (or refresh) liveness polling for a task. Replacing the port set
@@ -41,7 +43,7 @@ class PortLivenessService {
 
     if (ports.length === 0) {
       this.watches.delete(taskId);
-      this.broadcast({ taskId, results: {} });
+      this.onChange(taskId);
       return;
     }
 
@@ -97,13 +99,7 @@ class PortLivenessService {
     }
     if (!changed) return;
 
-    this.broadcast({ taskId, results: Object.fromEntries(current.states) });
-  }
-
-  private broadcast(update: PortLivenessUpdate): void {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) win.webContents.send('ports:liveness', update);
-    }
+    this.onChange(taskId);
   }
 }
 
@@ -130,5 +126,3 @@ function probePort(port: number): Promise<PortLiveness> {
     }
   });
 }
-
-export const portLivenessService = new PortLivenessService();

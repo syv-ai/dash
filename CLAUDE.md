@@ -22,6 +22,7 @@ Renderer hot-reloads; main process changes require restart. Husky pre-commit run
 
 - `DASH_USER_DATA_DIR` and `DASH_DEV_URL` env vars point a second dev instance at its own data dir and Vite port (needed to run a checkout beside an installed Dash).
 - Main-process specifics (task sessions under Claude Code's supervisor, per-worktree hooks) are in `src/main/CLAUDE.md`; renderer state rules are in `src/renderer/CLAUDE.md`. Both load when you work under those directories.
+- **Add-ons** (ports, RTK) live in `src/main/addons/<id>/` and import only `@shared/addon-api` (lint-enforced); the host that runs them is `src/main/addonHost/`, and core never names an add-on. They show UI as data (blocks) in an optional settings section and an optional drawer in either sidebar. Design: `docs/specs/2026-09-23-addons.md`.
 - Main process `entry.ts` rewrites the `@shared/*` and `@/*` path aliases at runtime: `@shared/*` → `dist/main/shared/*`, `@/*` → `dist/main/main/*`.
 
 ## Code Style
