@@ -48,7 +48,6 @@ export function makeElectronApiMock(overrides: Record<string, unknown> = {}) {
     getProjectTokenStats: vi.fn((_id: string) =>
       ok({ totalTokens: 0, totalCostUsd: 0, taskCount: 0 }),
     ),
-    rtkGetStatus: vi.fn(() => ok({ installed: false, downloadable: false })),
     detectClaude: vi.fn(() =>
       ok({
         installed: true,
@@ -59,9 +58,6 @@ export function makeElectronApiMock(overrides: Record<string, unknown> = {}) {
         unsupportedReason: null,
       }),
     ),
-    rtkSetEnabled: vi.fn(() => ok({})),
-    rtkDownload: vi.fn(() => ok({})),
-    onRtkDownloadProgress: vi.fn((_cb: (p: unknown) => void) => () => {}),
     autoUpdateGetStatus: vi.fn(() => ok(null)),
     autoUpdateCheck: vi.fn(() => ok(undefined)),
     autoUpdateQuitAndInstall: vi.fn(() => ok(undefined)),

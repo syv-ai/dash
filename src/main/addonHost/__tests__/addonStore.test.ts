@@ -1,6 +1,14 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import Database from 'better-sqlite3';
-import { createAddonStore, ensureAddonTables, type AddonStore } from '../addonStore';
+import {
+  createAddonStore,
+  ensureAddonTables,
+  importLegacyAddonSettings,
+  type AddonStore,
+} from '../addonStore';
 
 describe('addonStore', () => {
   let db: Database.Database;
@@ -54,6 +62,48 @@ describe('addonStore', () => {
       { scopeId: 't1', value: [3000] },
       { scopeId: 't2', value: [3001] },
     ]);
+  });
+
+  describe('importLegacyAddonSettings', () => {
+    const dirs: string[] = [];
+    afterEach(() => {
+      for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
+    });
+    const userData = (config?: string) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-addons-'));
+      dirs.push(dir);
+      if (config !== undefined) fs.writeFileSync(path.join(dir, 'rtk-config.json'), config);
+      return dir;
+    };
+
+    it('turns RTK on when the old config had it on, then removes the file', () => {
+      const dir = userData('{"enabled": true}');
+      importLegacyAddonSettings(store, dir);
+      expect(store.getEnabled('rtk')).toBe(true);
+      expect(fs.existsSync(path.join(dir, 'rtk-config.json'))).toBe(false);
+    });
+
+    it('leaves RTK at its default when the old config had it off', () => {
+      importLegacyAddonSettings(store, userData('{"enabled": false}'));
+      expect(store.getEnabled('rtk')).toBeUndefined();
+    });
+
+    it('does not override a choice already made', () => {
+      store.setEnabled('rtk', false);
+      importLegacyAddonSettings(store, userData('{"enabled": true}'));
+      expect(store.getEnabled('rtk')).toBe(false);
+    });
+
+    it('survives a corrupt file and still removes it', () => {
+      const dir = userData('{nope');
+      importLegacyAddonSettings(store, dir);
+      expect(store.getEnabled('rtk')).toBeUndefined();
+      expect(fs.existsSync(path.join(dir, 'rtk-config.json'))).toBe(false);
+    });
+
+    it('does nothing without a file', () => {
+      expect(() => importLegacyAddonSettings(store, userData())).not.toThrow();
+    });
   });
 
   it('deleteScope removes only that scope', () => {

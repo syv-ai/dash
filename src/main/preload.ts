@@ -503,22 +503,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 
-  // RTK (Rust Token Killer)
-  rtkGetStatus: () => ipcRenderer.invoke('rtk:getStatus'),
-  rtkSetEnabled: (enabled: boolean) => ipcRenderer.invoke('rtk:setEnabled', enabled),
-  rtkDownload: () => ipcRenderer.invoke('rtk:download'),
-  rtkTest: () => ipcRenderer.invoke('rtk:test'),
-  onRtkDownloadProgress: (
-    callback: (progress: import('@shared/types').RtkDownloadProgress) => void,
-  ) => {
-    const handler = (_event: unknown, progress: import('@shared/types').RtkDownloadProgress) =>
-      callback(progress);
-    ipcRenderer.on('rtk:downloadProgress', handler);
-    return () => {
-      ipcRenderer.removeListener('rtk:downloadProgress', handler);
-    };
-  },
-
   // Skills
   skillsRefresh: (args?: { force?: boolean }) => ipcRenderer.invoke('skills:refresh', args),
   skillsGetMeta: () => ipcRenderer.invoke('skills:getMeta'),

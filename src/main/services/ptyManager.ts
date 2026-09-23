@@ -145,7 +145,7 @@ export interface RefreshResult {
  * Rewrite settings.local.json for every task with a live session. Claude Code
  * re-reads settings per tool call, so this flips hooks live — also for a
  * session nobody is attached to right now. Returns per-task write failures so
- * callers (RTK toggle, attribution change) can surface a "saved, but N tasks
+ * callers (add-on toggle, attribution change) can surface a "saved, but N tasks
  * didn't pick it up" message instead of silently returning success.
  */
 export function refreshActivePtyHooks(): RefreshResult {

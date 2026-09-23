@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   writeFileSync,
   mkdirSync,
@@ -13,15 +13,11 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 
-// RtkService imports `app` from electron for userData paths, which isn't
-// available in the vitest Node env. The helpers we test don't touch it.
-vi.mock('electron', () => ({ default: {}, app: {} }));
-
-import { __test__ } from '../RtkService';
+import { __test__ } from '../helpers';
 
 // These unit tests exercise the URL allowlist, archive-member safety checks,
-// and JSON-extraction helpers. Imported from RtkService's __test__ export so
-// the real module code is what's being verified — no re-implementation drift.
+// and JSON-extraction helpers, through the helpers module's __test__ export so
+// the real code is what's verified — no re-implementation drift.
 
 const {
   assertTrustedDownloadUrl,
@@ -343,6 +339,13 @@ describe('ensureUserBinSymlink', () => {
     const oldTarget = join(tmpRoot, 'old-rtk');
     writeFileSync(oldTarget, 'old');
     symlinkSync(oldTarget, linkPath);
+    ensureUserBinSymlink(target, linkPath);
+    expect(readlinkSync(linkPath)).toBe(target);
+  });
+
+  it('repoints a dangling symlink (its old target was moved away)', () => {
+    const linkPath = join(tmpRoot, 'bin', 'rtk');
+    symlinkSync(join(tmpRoot, 'gone', 'rtk'), linkPath);
     ensureUserBinSymlink(target, linkPath);
     expect(readlinkSync(linkPath)).toBe(target);
   });

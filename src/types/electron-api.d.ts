@@ -9,7 +9,6 @@ import type { ProjectSourceApi } from './electron-api/projectSource';
 import type { GithubApi } from './electron-api/github';
 import type { AdoApi } from './electron-api/ado';
 import type { EditorApi } from './electron-api/editor';
-import type { RtkApi } from './electron-api/rtk';
 import type { AddonsApi } from './electron-api/addons';
 import type { SkillsApi } from './electron-api/skills';
 import type { PluginsApi } from './electron-api/plugins';
@@ -43,7 +42,6 @@ export interface ElectronAPI
     GithubApi,
     AdoApi,
     EditorApi,
-    RtkApi,
     AddonsApi,
     SkillsApi,
     PluginsApi,
