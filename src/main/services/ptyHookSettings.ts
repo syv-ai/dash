@@ -2,7 +2,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { BrowserWindow } from 'electron';
 import { hookServer, getHookPortFilePath } from './HookServer';
-import { RtkService } from './RtkService';
 import { DatabaseService } from './DatabaseService';
 import { peekAddonHost } from '../addonHost/registry';
 import {
@@ -65,18 +64,14 @@ function tagDash<T extends CommandHook>(hook: T): T & { __dash: true } {
 
 /**
  * Build the PreToolUse hook entries. `*` matcher always points at our
- * tool-start endpoint; when RTK is enabled, also add a `Bash`-matcher
- * entry that runs RTK's hook command to rewrite verbose Bash output
- * before Claude consumes it.
+ * tool-start endpoint; add-ons (src/main/addons) contribute the rest, e.g.
+ * RTK's `Bash`-matcher entry that rewrites verbose Bash output before Claude
+ * consumes it.
  */
 function buildPreToolUseHooks(
   dashCmd: (endpoint: DashHookEndpoint, async?: boolean) => Hook,
 ): HookEntry[] {
   const entries: HookEntry[] = [{ matcher: '*', hooks: [dashCmd('tool-start', true)] }];
-  const rtkCmd = RtkService.isEnabled() ? RtkService.getHookCommand() : null;
-  if (rtkCmd) {
-    entries.push({ matcher: 'Bash', hooks: [tagDash({ type: 'command', command: rtkCmd })] });
-  }
   // Add-on contributions (src/main/addons), tagged so cleanup removes them.
   for (const c of peekAddonHost()?.hookEntries() ?? []) {
     if (c.event !== 'PreToolUse') continue;

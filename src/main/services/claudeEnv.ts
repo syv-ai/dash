@@ -1,5 +1,4 @@
 import * as os from 'os';
-import { RtkService } from './RtkService';
 import { stripHostTerminalEnv } from './hostTerminalEnv';
 import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
 import { addonSessionEnv } from '../addonHost/registry';
@@ -84,12 +83,10 @@ export function buildClaudeEnv(isDark: boolean, cwd?: string): Record<string, st
       )
     : {};
 
-  // rtk's rewrite output invokes the bare name `rtk`; when the binary is
-  // Dash-managed (userData/bin), prepend that dir so the rewrite resolves.
-  const rtkBinDir = RtkService.getManagedBinDirForPath();
+  // Add-ons may put directories on PATH (e.g. RTK's managed binary, which its
+  // rewritten commands invoke by bare name).
   const pathSep = isWin ? ';' : ':';
-  const basePath = process.env.PATH || '';
-  let mergedPath = rtkBinDir ? prependUnique(rtkBinDir, basePath, pathSep) : basePath;
+  let mergedPath = process.env.PATH || '';
   const addons = addonSessionEnv(cwd);
   for (const dir of [...addons.pathDirs].reverse()) {
     mergedPath = prependUnique(dir, mergedPath, pathSep);

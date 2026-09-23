@@ -1,8 +1,9 @@
+import { app } from 'electron';
 import { ADDONS } from '../addons';
 import { getRawDb } from '../db/client';
 import { DatabaseService } from '../services/DatabaseService';
 import { AddonHost } from './AddonHost';
-import { createAddonStore, type AddonStore } from './addonStore';
+import { createAddonStore, importLegacyAddonSettings, type AddonStore } from './addonStore';
 import { createHostDeps } from './hostDeps';
 
 // The one place core wires the add-on list to the host. Nothing else outside
@@ -43,6 +44,7 @@ export function peekAddonHost(): AddonHost | null {
 
 export function getAddonHost(): AddonHost {
   if (!host) {
+    importLegacyAddonSettings(getAddonStore(), app.getPath('userData'));
     const deps = createHostDeps(getAddonStore(), () => getAddonHost());
     host = new AddonHost(ADDONS, deps);
   }

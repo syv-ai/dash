@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import type Database from 'better-sqlite3';
 import type { StorageScope } from '@shared/addon-api';
 
@@ -23,6 +25,29 @@ export function ensureAddonTables(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_addon_data_scope ON addon_data (scope, scope_id);
   `);
+}
+
+/**
+ * One-time import of pre-add-on settings that lived in their own userData
+ * files. RTK's `rtk-config.json` `{enabled}` becomes the RTK add-on's switch;
+ * the file is removed afterwards so the import never repeats. An existing
+ * `addons` row wins (the user already chose).
+ */
+export function importLegacyAddonSettings(store: AddonStore, userDataDir: string): void {
+  const rtkConfig = path.join(userDataDir, 'rtk-config.json');
+  if (!fs.existsSync(rtkConfig)) return;
+  try {
+    const raw = JSON.parse(fs.readFileSync(rtkConfig, 'utf-8')) as { enabled?: unknown };
+    if (raw.enabled === true && store.getEnabled('rtk') === undefined)
+      store.setEnabled('rtk', true);
+  } catch (err) {
+    console.warn('[addons] rtk-config.json unreadable; RTK stays off:', err);
+  }
+  try {
+    fs.rmSync(rtkConfig, { force: true });
+  } catch {
+    /* next boot retries */
+  }
 }
 
 type ScopeKind = 'global' | 'project' | 'task';

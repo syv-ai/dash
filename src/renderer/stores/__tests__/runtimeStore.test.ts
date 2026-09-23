@@ -86,46 +86,6 @@ describe('runtimeStore.refreshTokenRollups', () => {
   });
 });
 
-describe('runtimeStore RTK actions', () => {
-  let api: ReturnType<typeof makeElectronApiMock>;
-  beforeEach(() => {
-    api = makeElectronApiMock();
-    installWindow(api);
-  });
-  afterEach(() => resetWindow());
-
-  it('enableRtk optimistically flips the installed status then calls IPC', async () => {
-    api.rtkSetEnabled = vi.fn(() => Promise.resolve({ success: true, data: {} }));
-    const { useRuntime } = await freshStores();
-    useRuntime.setState({ rtkStatus: { installed: true, enabled: false } as never });
-
-    await useRuntime.getState().enableRtk(true);
-
-    expect((useRuntime.getState().rtkStatus as { enabled: boolean }).enabled).toBe(true);
-    expect(api.rtkSetEnabled).toHaveBeenCalledWith(true);
-  });
-
-  it('enableRtk re-fetches status when the IPC call fails', async () => {
-    api.rtkSetEnabled = vi.fn(() => Promise.resolve({ success: false, error: 'no' }));
-    api.rtkGetStatus = vi.fn(() =>
-      Promise.resolve({ success: true, data: { installed: true, enabled: false } }),
-    );
-    const { useRuntime } = await freshStores();
-    useRuntime.setState({ rtkStatus: { installed: true, enabled: false } as never });
-
-    await useRuntime.getState().enableRtk(true);
-
-    expect(api.rtkGetStatus).toHaveBeenCalled();
-  });
-
-  it('downloadRtk sets downloading then records an error on failure', async () => {
-    api.rtkDownload = vi.fn(() => Promise.resolve({ success: false, error: 'boom' }));
-    const { useRuntime } = await freshStores();
-    await useRuntime.getState().downloadRtk();
-    expect(useRuntime.getState().rtkDownloadProgress).toEqual({ phase: 'error', error: 'boom' });
-  });
-});
-
 describe('runtimeStore.init — activity', () => {
   let api: ReturnType<typeof makeElectronApiMock>;
   let activityCb: ((data: Record<string, { state: string }>) => void) | null;
@@ -297,38 +257,30 @@ describe('runtimeStore.init — token stats writeback', () => {
   });
 });
 
-describe('runtimeStore.init — rtk + cleanup', () => {
+describe('runtimeStore.init — cleanup', () => {
   let api: ReturnType<typeof makeElectronApiMock>;
   beforeEach(() => {
     api = makeElectronApiMock();
-    api.rtkGetStatus = vi.fn(() =>
-      Promise.resolve({ success: true, data: { installed: true, enabled: true } }),
-    );
     installWindow(api);
   });
   afterEach(() => resetWindow());
 
-  it('loads rtk status on init and unsubscribes everything on cleanup', async () => {
+  it('unsubscribes everything on cleanup', async () => {
     const activityUnsub = vi.fn();
     const rcUnsub = vi.fn();
     const tokenUnsub = vi.fn();
-    const rtkUnsub = vi.fn();
     api.onPtyActivity = vi.fn(() => activityUnsub);
     api.onRemoteControlStateChanged = vi.fn(() => rcUnsub);
     api.onTokenStatsUpdated = vi.fn(() => tokenUnsub);
-    api.onRtkDownloadProgress = vi.fn(() => rtkUnsub);
 
     const { useRuntime } = await freshStores();
     const cleanup = useRuntime.getState().init();
     await Promise.resolve();
 
-    expect(useRuntime.getState().rtkStatus).toEqual({ installed: true, enabled: true });
-
     cleanup();
     expect(activityUnsub).toHaveBeenCalled();
     expect(rcUnsub).toHaveBeenCalled();
     expect(tokenUnsub).toHaveBeenCalled();
-    expect(rtkUnsub).toHaveBeenCalled();
   });
 });
 

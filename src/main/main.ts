@@ -162,13 +162,6 @@ void app.whenReady().then(async () => {
     AutoUpdateService.initialize(mainWindow);
   }
 
-  // Resolve rtk synchronously at startup; getHookCommand() is called on PTY spawn.
-  const { RtkService } = await import('./services/RtkService');
-  RtkService.setSender(mainWindow.webContents);
-  await RtkService.warmUp().catch((err) => {
-    console.error('[RtkService.warmUp]', err);
-  });
-
   // Add-ons (src/main/addons): activate before any PTY needs their env or hooks.
   const { getAddonHost } = await import('./addonHost/registry');
   const { setAddonsSender } = await import('./addonHost/hostDeps');
@@ -284,8 +277,6 @@ app.on('activate', () => {
       supervisorService.setSender(mainWindow.webContents);
       const { remoteControlService } = await import('./services/remoteControlService');
       remoteControlService.setSender(mainWindow.webContents);
-      const { RtkService } = await import('./services/RtkService');
-      RtkService.setSender(mainWindow.webContents);
       const { setAddonsSender } = await import('./addonHost/hostDeps');
       setAddonsSender(mainWindow.webContents);
       const { contextUsageService } = await import('./services/ContextUsageService');
