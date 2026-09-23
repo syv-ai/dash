@@ -12,6 +12,7 @@ import { openInIde } from './lib/openInIde';
 import { headerModelName } from './lib/modelName';
 import { RightInspector } from './components/rightInspector/RightInspector';
 import { PortsDrawerWrapper } from './components/rightInspector/PortsDrawerWrapper';
+import { AddonDock } from './components/addons/AddonDock';
 const DiffEditorModal = lazy(() => import('./components/diffEditor/DiffEditorModal'));
 import { ShellDrawerWrapper } from './components/terminal/ShellDrawerWrapper';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
@@ -418,6 +419,46 @@ export function App() {
       void sessionRegistry.restartAllForTask(tid);
     });
     return off;
+  }, []);
+
+  // Add-on task actions (src/main/addons): a created task is loaded and made
+  // active the same way the ports migrate flow does; restart re-dispatches
+  // every session of the task so frozen env (ports, PATH) is picked up.
+  useEffect(() => {
+    const switchTo = async ({ taskId, projectId }: { taskId: string; projectId: string }) => {
+      await loadTasksForProject(projectId);
+      setActiveProjectId(projectId);
+      setActiveTaskId(taskId);
+    };
+    const offCreated = window.electronAPI.onAddonsTaskCreated((d) => {
+      void loadTasksForProject(d.projectId);
+    });
+    const offActivate = window.electronAPI.onAddonsActivateTask((d) => {
+      void switchTo(d);
+    });
+    const offRestart = window.electronAPI.onAddonsRestartTask((tid) => {
+      void sessionRegistry.restartAllForTask(tid);
+    });
+    const offEnv = window.electronAPI.onAddonsEnvChanged(() => {
+      const taskId = useProjects.getState().activeTaskId;
+      toast('Restart sessions to apply', {
+        description: 'Running sessions keep the environment they started with.',
+        action: taskId
+          ? {
+              label: 'Restart',
+              onClick: () => {
+                void sessionRegistry.restartAllForTask(taskId);
+              },
+            }
+          : undefined,
+      });
+    });
+    return () => {
+      offCreated();
+      offActivate();
+      offRestart();
+      offEnv();
+    };
   }, []);
 
   // Ports TUI migrate flow: main created a `port-setup` worktree task and
@@ -1300,55 +1341,57 @@ export function App() {
                   }}
                 >
                   {!changesPanelCollapsed && (
-                    <PortsDrawerWrapper
-                      taskId={activeTask?.id ?? null}
-                      collapsed={portsDrawerCollapsed}
-                      onCollapse={() => {
-                        setPortsDrawerCollapsed(true);
-                      }}
-                      onExpand={() => {
-                        setPortsDrawerCollapsed(false);
-                      }}
-                    >
-                      <RightInspector
-                        activeTask={activeTask}
-                        rateLimits={showRateLimits && latestRateLimits ? latestRateLimits : {}}
-                        contextUsage={
-                          showUsageInline && activeTask ? contextUsage[activeTask.id] : undefined
-                        }
-                        onViewDiff={handleViewDiff}
-                        onCommitFinished={() => {
-                          if (activeTask) void refreshGitStatus(activeTask.path);
+                    <AddonDock side="right" taskId={activeTask?.id ?? null} className="h-full">
+                      <PortsDrawerWrapper
+                        taskId={activeTask?.id ?? null}
+                        collapsed={portsDrawerCollapsed}
+                        onCollapse={() => {
+                          setPortsDrawerCollapsed(true);
                         }}
-                        onShowCommitGraph={() => setShowCommitGraph(true)}
-                        onOpenEditor={() => {
-                          if (!activeTask) return;
-                          const files = gitStatus?.files ?? [];
-                          if (files.length > 0) {
-                            // Prefer the first unstaged file; otherwise first staged.
-                            const target = files.find((f) => !f.staged) ?? files[0]!;
-                            setDiffFile({
-                              cwd: activeTask.path,
-                              filePath: target.path,
-                              staged: target.staged,
-                            });
-                          } else {
-                            // No working changes — still open the working
-                            // tree, not the last commit: the editor is only
-                            // editable there, and a save shows up in this
-                            // panel as an unstaged change via the git watcher.
-                            setDiffFile({
-                              cwd: activeTask.path,
-                              filePath: '',
-                              staged: false,
-                              initialView: { kind: 'working', ref: 'HEAD' },
-                            });
+                        onExpand={() => {
+                          setPortsDrawerCollapsed(false);
+                        }}
+                      >
+                        <RightInspector
+                          activeTask={activeTask}
+                          rateLimits={showRateLimits && latestRateLimits ? latestRateLimits : {}}
+                          contextUsage={
+                            showUsageInline && activeTask ? contextUsage[activeTask.id] : undefined
                           }
-                        }}
-                        collapsed={changesPanelCollapsed}
-                        onToggleCollapse={toggleChangesPanel}
-                      />
-                    </PortsDrawerWrapper>
+                          onViewDiff={handleViewDiff}
+                          onCommitFinished={() => {
+                            if (activeTask) void refreshGitStatus(activeTask.path);
+                          }}
+                          onShowCommitGraph={() => setShowCommitGraph(true)}
+                          onOpenEditor={() => {
+                            if (!activeTask) return;
+                            const files = gitStatus?.files ?? [];
+                            if (files.length > 0) {
+                              // Prefer the first unstaged file; otherwise first staged.
+                              const target = files.find((f) => !f.staged) ?? files[0]!;
+                              setDiffFile({
+                                cwd: activeTask.path,
+                                filePath: target.path,
+                                staged: target.staged,
+                              });
+                            } else {
+                              // No working changes — still open the working
+                              // tree, not the last commit: the editor is only
+                              // editable there, and a save shows up in this
+                              // panel as an unstaged change via the git watcher.
+                              setDiffFile({
+                                cwd: activeTask.path,
+                                filePath: '',
+                                staged: false,
+                                initialView: { kind: 'working', ref: 'HEAD' },
+                              });
+                            }
+                          }}
+                          collapsed={changesPanelCollapsed}
+                          onToggleCollapse={toggleChangesPanel}
+                        />
+                      </PortsDrawerWrapper>
+                    </AddonDock>
                   )}
                 </ShellDrawerWrapper>
               </div>

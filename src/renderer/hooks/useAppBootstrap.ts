@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useProjects, selectActiveProject, selectActiveTask } from '../stores/projectsStore';
 import { useGit } from '../stores/gitStore';
 import { useRuntime } from '../stores/runtimeStore';
+import { useAddons } from '../stores/addonsStore';
 
 /**
  * Wires the store-level live subscriptions + reactive bootstrap effects that used
@@ -22,6 +23,12 @@ export function useAppBootstrap() {
 
   // Runtime IPC subscriptions (activity, remote control, token writeback, RTK).
   useEffect(() => useRuntime.getState().init(), []);
+
+  // Add-on list + surfaces (src/main/addons); drawers follow the active task.
+  useEffect(() => useAddons.getState().init(), []);
+  useEffect(() => {
+    void useAddons.getState().setTask(activeTask?.id ?? null);
+  }, [activeTask?.id]);
 
   // Token rollups re-fetch when the project list changes (initial load + add/remove).
   useEffect(() => {

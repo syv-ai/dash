@@ -423,6 +423,86 @@ contextBridge.exposeInMainWorld('electronAPI', {
   diffCommentsPruneForTask: (args: { taskId: string; existingFilePaths: string[] }) =>
     ipcRenderer.invoke('diffComments:pruneForTask', args),
 
+  // Add-ons (src/main/addons)
+  addonsList: () => ipcRenderer.invoke('addons:list'),
+  addonsSetEnabled: (args: { id: string; enabled: boolean }) =>
+    ipcRenderer.invoke('addons:setEnabled', args),
+  addonsSurfaces: (args: { taskId: string | null }) => ipcRenderer.invoke('addons:surfaces', args),
+  addonsAction: (args: {
+    addonId: string;
+    ref: { surface: 'settings' | 'drawer'; taskId?: string };
+    actionId: string;
+  }) => ipcRenderer.invoke('addons:action', args),
+  addonsTerminalClosed: (args: { taskId: string; tabId: string }) =>
+    ipcRenderer.invoke('addons:terminalClosed', args),
+  onAddonsChanged: (callback: (data: { addonId: string }) => void) => {
+    const handler = (_event: unknown, data: { addonId: string }) => callback(data);
+    ipcRenderer.on('addons:changed', handler);
+    return () => {
+      ipcRenderer.removeListener('addons:changed', handler);
+    };
+  },
+  onAddonsEnvChanged: (callback: (data: { addonId: string }) => void) => {
+    const handler = (_event: unknown, data: { addonId: string }) => callback(data);
+    ipcRenderer.on('addons:envChanged', handler);
+    return () => {
+      ipcRenderer.removeListener('addons:envChanged', handler);
+    };
+  },
+  onAddonsTaskCreated: (callback: (data: { taskId: string; projectId: string }) => void) => {
+    const handler = (_event: unknown, data: { taskId: string; projectId: string }) =>
+      callback(data);
+    ipcRenderer.on('addons:taskCreated', handler);
+    return () => {
+      ipcRenderer.removeListener('addons:taskCreated', handler);
+    };
+  },
+  onAddonsActivateTask: (callback: (data: { taskId: string; projectId: string }) => void) => {
+    const handler = (_event: unknown, data: { taskId: string; projectId: string }) =>
+      callback(data);
+    ipcRenderer.on('addons:activateTask', handler);
+    return () => {
+      ipcRenderer.removeListener('addons:activateTask', handler);
+    };
+  },
+  onAddonsRestartTask: (callback: (data: string) => void) => {
+    const handler = (_event: unknown, data: string) => callback(data);
+    ipcRenderer.on('addons:restartTask', handler);
+    return () => {
+      ipcRenderer.removeListener('addons:restartTask', handler);
+    };
+  },
+  onAddonsFocusTab: (
+    callback: (data: { taskId: string; tabId: string; reset: boolean }) => void,
+  ) => {
+    const handler = (_event: unknown, data: { taskId: string; tabId: string; reset: boolean }) =>
+      callback(data);
+    ipcRenderer.on('addons:focusTab', handler);
+    return () => {
+      ipcRenderer.removeListener('addons:focusTab', handler);
+    };
+  },
+  onAddonsToast: (
+    callback: (data: {
+      kind: 'info' | 'success' | 'warning' | 'error';
+      title: string;
+      body?: string;
+    }) => void,
+  ) => {
+    const handler = (
+      _event: unknown,
+      data: {
+        kind: 'info' | 'success' | 'warning' | 'error';
+        title: string;
+        body?: string;
+      },
+    ) => callback(data);
+    ipcRenderer.on('addons:toast', handler);
+    return () => {
+      ipcRenderer.removeListener('addons:toast', handler);
+    };
+  },
+
   // RTK (Rust Token Killer)
   rtkGetStatus: () => ipcRenderer.invoke('rtk:getStatus'),
   rtkSetEnabled: (enabled: boolean) => ipcRenderer.invoke('rtk:setEnabled', enabled),

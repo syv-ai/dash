@@ -48,6 +48,10 @@ export interface SettingsState {
   changesPanelCollapsed: boolean;
   shellDrawerCollapsed: boolean;
   portsDrawerCollapsed: boolean;
+  /** Per add-on: which sidebar its drawer sits in (absent = the add-on's default). */
+  addonDrawerSide: Record<string, 'left' | 'right'>;
+  /** Per add-on: drawer collapsed (absent = expanded). */
+  addonDrawerCollapsed: Record<string, boolean>;
   autoUpdateEnabled: boolean;
   updateNotificationsEnabled: boolean;
   lastSeenReleaseNotesVersion: string | undefined;
@@ -127,6 +131,8 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   entry('changesPanelCollapsed', 'changesPanelCollapsed', boolDefaultFalse()),
   entry('shellDrawerCollapsed', 'shellDrawerCollapsed', boolDefaultFalse()),
   entry('portsDrawerCollapsed', 'portsDrawerCollapsed', boolDefaultTrue()),
+  entry('addonDrawerSide', 'addonDrawerSide', json<Record<string, 'left' | 'right'>>({})),
+  entry('addonDrawerCollapsed', 'addonDrawerCollapsed', json<Record<string, boolean>>({})),
   entry('autoUpdateEnabled', 'autoUpdateEnabled', boolDefaultTrue()),
   entry('updateNotificationsEnabled', 'updateNotificationsEnabled', boolDefaultTrue()),
   entry('lastSeenReleaseNotesVersion', 'lastSeenReleaseNotesVersion', strOrUndefined()),
