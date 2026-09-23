@@ -7,22 +7,34 @@ describe('ptyManager.listForTask', () => {
   it('returns all PTYs for a task when no filter is given', () => {
     __registerForTest('t1', { kind: 'agent', taskId: 't1', featureId: null });
     __registerForTest('shell:t1', { kind: 'shell', taskId: 't1', featureId: null });
-    __registerForTest('ports-tui:t1', { kind: 'tui', taskId: 't1', featureId: 'ports' });
-    expect(listForTask('t1').sort()).toEqual(['ports-tui:t1', 'shell:t1', 't1']);
+    __registerForTest('service:t1:ports:web', {
+      kind: 'service',
+      taskId: 't1',
+      featureId: 'ports',
+    });
+    expect(listForTask('t1').sort()).toEqual(['service:t1:ports:web', 'shell:t1', 't1']);
   });
 
   it('filters by kinds', () => {
     __registerForTest('t1', { kind: 'agent', taskId: 't1', featureId: null });
     __registerForTest('shell:t1', { kind: 'shell', taskId: 't1', featureId: null });
-    __registerForTest('ports-tui:t1', { kind: 'tui', taskId: 't1', featureId: 'ports' });
+    __registerForTest('service:t1:ports:web', {
+      kind: 'service',
+      taskId: 't1',
+      featureId: 'ports',
+    });
     expect(listForTask('t1', { kinds: ['agent', 'shell'] }).sort()).toEqual(['shell:t1', 't1']);
-    expect(listForTask('t1', { kinds: ['tui'] })).toEqual(['ports-tui:t1']);
+    expect(listForTask('t1', { kinds: ['service'] })).toEqual(['service:t1:ports:web']);
   });
 
   it('filters by featureId', () => {
-    __registerForTest('ports-tui:t1', { kind: 'tui', taskId: 't1', featureId: 'ports' });
-    __registerForTest('other-tui:t1', { kind: 'tui', taskId: 't1', featureId: 'other' });
-    expect(listForTask('t1', { featureId: 'ports' })).toEqual(['ports-tui:t1']);
+    __registerForTest('service:t1:ports:web', {
+      kind: 'service',
+      taskId: 't1',
+      featureId: 'ports',
+    });
+    __registerForTest('service:t1:other:x', { kind: 'service', taskId: 't1', featureId: 'other' });
+    expect(listForTask('t1', { featureId: 'ports' })).toEqual(['service:t1:ports:web']);
   });
 
   it('does not return PTYs for other tasks', () => {

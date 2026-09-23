@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { spawn } from 'child_process';
 import { app, BrowserWindow, clipboard, shell, type WebContents } from 'electron';
 import type { TaskInfo } from '@shared/addon-api';
 import type { Task } from '@shared/types';
@@ -16,6 +17,7 @@ import {
 import { terminalSnapshotService } from '../services/TerminalSnapshotService';
 import { initDrawerTabsService } from '../ipc/drawerTabsIpc';
 import { RESERVED_ENV_KEYS } from '../services/claudeEnv';
+import { stripHostTerminalEnv } from '../services/hostTerminalEnv';
 import type { AddonHost, HostDeps } from './AddonHost';
 import type { AddonStore } from './addonStore';
 import { watchDirectory } from './fileWatch';
@@ -48,9 +50,13 @@ export function toTaskInfo(task: Task): TaskInfo {
   };
 }
 
-/** Drawer tab / PTY id for an add-on terminal; stable per (add-on, task, key). */
+/**
+ * Drawer tab / PTY id for an add-on terminal; stable per (add-on, task, key).
+ * The task id stays the second segment: the renderer reads it from there to
+ * check that a service tab's PTY is still alive.
+ */
 export function terminalTabId(addonId: string, taskId: string, key: string): string {
-  return `service:${addonId}:${taskId}:${slugify(key)}`;
+  return `service:${taskId}:${addonId}:${slugify(key)}`;
 }
 
 /** Production implementation of HostDeps over Dash's core services. */
@@ -183,6 +189,22 @@ export function createHostDeps(store: AddonStore, getHost: () => AddonHost): Hos
     },
     copy(text) {
       clipboard.writeText(text);
+    },
+    exec(command, cwd) {
+      return new Promise((resolve) => {
+        // A login shell sources the user's rc files, so strip the host
+        // terminal's identity or it boots that terminal's shell integration.
+        const child = spawn(process.env.SHELL || '/bin/sh', ['-lc', command], {
+          cwd,
+          env: stripHostTerminalEnv(process.env),
+        });
+        let stderr = '';
+        child.stderr.on('data', (c) => {
+          stderr = (stderr + String(c)).slice(-400);
+        });
+        child.on('error', (err) => resolve({ code: 127, stderrTail: String(err.message) }));
+        child.on('close', (code) => resolve({ code: code ?? 1, stderrTail: stderr.trim() }));
+      });
     },
     emitChanged(addonId) {
       send('addons:changed', { addonId });

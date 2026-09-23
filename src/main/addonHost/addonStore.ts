@@ -50,6 +50,47 @@ export function importLegacyAddonSettings(store: AddonStore, userDataDir: string
   }
 }
 
+/**
+ * One-time move of the pre-add-on ports tables into the ports add-on's storage:
+ * each task's `task_ports` rows become its `ports` value (a TaskPort[] sorted by
+ * label, the shape the add-on keeps). `feature_dismissals` has no successor —
+ * setup is no longer offered unprompted — so it is dropped, as are drawer tabs
+ * of the removed `tui` kind. Idempotent: does nothing once the tables are gone.
+ */
+export function importLegacyPortsData(db: Database.Database): void {
+  const hasTable = (name: string) =>
+    db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`).get(name) !==
+    undefined;
+
+  if (hasTable('task_ports')) {
+    const rows = db
+      .prepare(
+        `SELECT id, task_id AS taskId, label, env_var AS envVar, default_port AS defaultPort,
+                host_port AS hostPort, source, run_command AS runCommand,
+                stop_command AS stopCommand, logs_command AS logsCommand, cwd,
+                created_at AS createdAt, updated_at AS updatedAt
+         FROM task_ports ORDER BY task_id, label`,
+      )
+      .all() as Array<Record<string, unknown> & { taskId: string }>;
+    const byTask = new Map<string, unknown[]>();
+    for (const r of rows) {
+      const list = byTask.get(r.taskId) ?? [];
+      list.push({ ...r, createdAt: r.createdAt ?? '', updatedAt: r.updatedAt ?? '' });
+      byTask.set(r.taskId, list);
+    }
+    const insert = db.prepare(
+      `INSERT OR IGNORE INTO addon_data (addon_id, scope, scope_id, key, value)
+       VALUES ('ports', 'task', ?, 'ports', ?)`,
+    );
+    db.transaction(() => {
+      for (const [taskId, ports] of byTask) insert.run(taskId, JSON.stringify(ports));
+      db.exec(`DROP TABLE task_ports`);
+    })();
+  }
+  if (hasTable('feature_dismissals')) db.exec(`DROP TABLE feature_dismissals`);
+  if (hasTable('drawer_tabs')) db.exec(`DELETE FROM drawer_tabs WHERE kind = 'tui'`);
+}
+
 type ScopeKind = 'global' | 'project' | 'task';
 
 function splitScope(scope: StorageScope): [ScopeKind, string] {

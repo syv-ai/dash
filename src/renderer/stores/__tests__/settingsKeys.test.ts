@@ -97,7 +97,8 @@ describe('settings registry', () => {
     expect(byField.sidebarCollapsed!.codec.decode(null)).toBe(false);
     expect(byField.changesPanelCollapsed!.codec.decode('true')).toBe(true);
     expect(byField.shellDrawerCollapsed!.codec.decode(null)).toBe(false);
-    expect(byField.portsDrawerCollapsed!.codec.decode(null)).toBe(true); // boolDefaultTrue
+    expect(byField.addonDrawerCollapsed!.codec.decode(null)).toEqual({});
+    expect(byField.addonDrawerSide!.codec.decode('{"ports":"left"}')).toEqual({ ports: 'left' });
   });
 
   it('registers the phase-1j update settings (default true)', () => {

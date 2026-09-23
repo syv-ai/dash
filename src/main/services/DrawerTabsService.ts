@@ -29,7 +29,7 @@ export class DrawerTabsService {
     const existing = this.list(taskId);
     const id =
       opts.id ??
-      `${opts.kind === 'tui' ? `${opts.featureId ?? 'tui'}-tui` : 'shell'}:${taskId}:${crypto
+      `${opts.kind === 'service' ? `service:${opts.featureId ?? 'addon'}` : 'shell'}:${taskId}:${crypto
         .randomBytes(3)
         .toString('hex')}`;
     const position = existing.length;
@@ -53,10 +53,8 @@ export class DrawerTabsService {
       createdAt,
     };
 
-    // TUI tabs never steal focus — they announce themselves via the tab
-    // header styling instead. Any other kind becomes active when the task
-    // has no active tab yet (covers the shell seeded after a TUI tab).
-    if (opts.kind !== 'tui' && this.getActive(taskId) === null) {
+    // A tab becomes active when the task has no active tab yet.
+    if (this.getActive(taskId) === null) {
       this.setActiveInternal(taskId, id);
     }
     this.emit(taskId);
@@ -118,22 +116,20 @@ export class DrawerTabsService {
   }
 
   /**
-   * Delete every drawer-tab row whose kind is 'tui' or 'service'. Both are
-   * tied to a live process Dash spawned; when Dash exits, those terminate and
-   * the row becomes stale. Called once at boot so the next wizard:requestStart
-   * (or service run) can re-add the tab without hitting a PK collision.
+   * Delete every drawer-tab row of kind 'service'. Each is tied to a process
+   * an add-on started; when Dash exits those terminate and the row goes stale.
+   * Called once at boot so the next run can re-add the tab without hitting a
+   * PK collision.
    *
    * Returns the task_ids that had rows cleared so callers can notify
    * subscribers if they care.
    */
   sweepEphemeralTabs(): string[] {
     const rows = this.db
-      .prepare(
-        `SELECT DISTINCT task_id as taskId FROM drawer_tabs WHERE kind IN ('tui', 'service')`,
-      )
+      .prepare(`SELECT DISTINCT task_id as taskId FROM drawer_tabs WHERE kind = 'service'`)
       .all() as Array<{ taskId: string }>;
     if (rows.length === 0) return [];
-    this.db.exec(`DELETE FROM drawer_tabs WHERE kind IN ('tui', 'service')`);
+    this.db.exec(`DELETE FROM drawer_tabs WHERE kind = 'service'`);
     // Clear active pointer if it pointed at one of the swept tabs.
     this.db.exec(
       `UPDATE tasks SET active_drawer_tab_id = NULL

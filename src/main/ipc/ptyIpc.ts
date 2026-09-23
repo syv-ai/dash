@@ -5,7 +5,6 @@ import { permissionModeSchema } from './schemas';
 import {
   startDirectPty,
   startPty,
-  startCommandPty,
   writePty,
   resizePty,
   killPty,
@@ -276,53 +275,13 @@ export function registerPtyIpc(): void {
         'pty:listForTask',
         z
           .looseObject({
-            kinds: z.array(z.enum(['agent', 'shell', 'tui', 'service'])).optional(),
+            kinds: z.array(z.enum(['agent', 'shell', 'service'])).optional(),
             featureId: z.string().optional(),
           })
           .optional(),
         opts,
       );
       return { success: true, data: listForTask(taskId, opts) };
-    },
-  );
-
-  ipcMain.handle(
-    'pty:startCommand',
-    async (
-      event,
-      opts: {
-        id: string;
-        command: string;
-        args: string[];
-        cwd: string;
-        cols: number;
-        rows: number;
-        env?: Record<string, string>;
-        taskId: string;
-        featureId: string;
-      },
-    ) => {
-      try {
-        parseArgs(
-          'pty:startCommand',
-          z.looseObject({
-            id: z.string(),
-            command: z.string(),
-            args: z.array(z.string()),
-            cwd: z.string(),
-            cols: z.number(),
-            rows: z.number(),
-            env: z.record(z.string(), z.string()).optional(),
-            taskId: z.string(),
-            featureId: z.string(),
-          }),
-          opts,
-        );
-        const result = await startCommandPty({ ...opts, owner: event.sender });
-        return { success: true, data: result };
-      } catch (error) {
-        return errorResponse(error);
-      }
     },
   );
 }

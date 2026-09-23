@@ -141,7 +141,7 @@ export const drawerTabs = sqliteTable(
     taskId: text('task_id')
       .notNull()
       .references(() => tasks.id, { onDelete: 'cascade' }),
-    kind: text('kind').notNull(), // 'shell' | 'tui'
+    kind: text('kind').notNull(), // 'shell' | 'service'
     featureId: text('feature_id'),
     label: text('label').notNull(),
     position: integer('position').notNull(),
@@ -149,54 +149,5 @@ export const drawerTabs = sqliteTable(
   },
   (table) => ({
     taskPosIdx: index('idx_drawer_tabs_task').on(table.taskId, table.position),
-  }),
-);
-
-// One row per port assignment surfaced to the task. Tier 1 (fixed) entries
-// have null env_var / default_port; Tier 2 (allocated) entries carry both.
-// Re-allocated on every worktree setup, so rows are transient — the DB is the
-// source of truth for "which host ports are currently taken" during cross-task
-// collision avoidance.
-export const taskPorts = sqliteTable(
-  'task_ports',
-  {
-    id: text('id').primaryKey(),
-    taskId: text('task_id')
-      .notNull()
-      .references(() => tasks.id, { onDelete: 'cascade' }),
-    label: text('label').notNull(),
-    envVar: text('env_var'),
-    defaultPort: integer('default_port'),
-    hostPort: integer('host_port').notNull(),
-    // 'fixed' | 'hash' | 'override' | 'probe' — see PortSource in PortAllocator
-    source: text('source').notNull(),
-    // Optional repo-specific service commands (see WorkspacePortsService.ServiceCommands).
-    runCommand: text('run_command'),
-    stopCommand: text('stop_command'),
-    logsCommand: text('logs_command'),
-    cwd: text('cwd'),
-    createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
-    updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
-  },
-  (table) => ({
-    taskIdIdx: index('idx_task_ports_task_id').on(table.taskId),
-    hostPortIdx: index('idx_task_ports_host_port').on(table.hostPort),
-  }),
-);
-
-// Per-project dismissal of a Dash TUI feature ("Never for this project").
-// One row per (project, feature); absence = never dismissed. Replaces the
-// old projects.ports_setup_dismissed_at column.
-export const featureDismissals = sqliteTable(
-  'feature_dismissals',
-  {
-    projectId: text('project_id')
-      .notNull()
-      .references(() => projects.id, { onDelete: 'cascade' }),
-    featureId: text('feature_id').notNull(),
-    dismissedAt: text('dismissed_at').notNull(),
-  },
-  (table) => ({
-    pk: primaryKey({ columns: [table.projectId, table.featureId] }),
   }),
 );

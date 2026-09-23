@@ -53,6 +53,7 @@ function makeDeps(overrides: Partial<HostDeps> = {}) {
     toast: vi.fn(),
     openUrl: vi.fn(),
     copy: vi.fn(),
+    exec: vi.fn(async () => ({ code: 0, stderrTail: '' })),
     emitChanged: vi.fn(),
     notifyEnvChanged: vi.fn(),
     log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },

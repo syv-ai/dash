@@ -5,13 +5,11 @@ import {
   PanelResizeHandle,
   type ImperativePanelHandle,
 } from 'react-resizable-panels';
-import { TUI_FEATURE_IDS } from '@shared/tuiProtocol';
 import { LeftSidebar } from './components/leftSidebar/LeftSidebar';
 import { MainContent } from './components/MainContent';
 import { openInIde } from './lib/openInIde';
 import { headerModelName } from './lib/modelName';
 import { RightInspector } from './components/rightInspector/RightInspector';
-import { PortsDrawerWrapper } from './components/rightInspector/PortsDrawerWrapper';
 import { AddonDock } from './components/addons/AddonDock';
 const DiffEditorModal = lazy(() => import('./components/diffEditor/DiffEditorModal'));
 import { ShellDrawerWrapper } from './components/terminal/ShellDrawerWrapper';
@@ -54,15 +52,6 @@ import {
   selectActiveProjectTasks,
 } from './stores/projectsStore';
 
-/** Chrome around the pinned TUI canvas (panel padding + drawer gutter) added
- *  to the measured canvas px so the panel hugs it without clipping. */
-const TUI_PANEL_CHROME_PX = 52;
-/** Trim the hugged panel width — the canvas has built-in right whitespace, so
- *  the panel can sit narrower than the full canvas without clipping content. */
-const TUI_PANEL_WIDTH_SCALE = 0.85;
-/** Bounds for the hugged right-panel width (%) — matches the panel's min/max. */
-const TUI_PANEL_MIN_PCT = 12;
-const TUI_PANEL_MAX_PCT = 40;
 const EMPTY_CONTEXT_USAGE: Record<string, import('../shared/types').ContextUsage> = {};
 
 export function App() {
@@ -115,8 +104,6 @@ export function App() {
   const setShellDrawerCollapsed = useSettings((s) => s.setShellDrawerCollapsed);
   // Ports drawer defaults to collapsed so it doesn't intrude on projects
   // that aren't using port management; the collapsed bar still shows status.
-  const portsDrawerCollapsed = useSettings((s) => s.portsDrawerCollapsed);
-  const setPortsDrawerCollapsed = useSettings((s) => s.setPortsDrawerCollapsed);
   const shellDrawerPosition = useSettings((s) => s.shellDrawerPosition);
   const terminalTheme = useSettings((s) => s.terminalTheme);
   const terminalFontFamily = useSettings((s) => s.terminalFontFamily);
@@ -135,7 +122,7 @@ export function App() {
   useEffect(() => {
     const entries: Array<{
       taskId: string;
-      tabs: Array<{ id: string; kind: 'shell' | 'tui'; label: string; position: number }>;
+      tabs: Array<{ id: string; kind: 'shell'; label: string; position: number }>;
       activeTabId: string | null;
     }> = [];
 
@@ -380,50 +367,9 @@ export function App() {
   // loops infinitely. (selectActiveProject/Task return existing objects, so they're stable.)
   const activeProjectTasks = useProjects(useShallow(selectActiveProjectTasks));
 
-  // Side-car TUI features (ports onboarding today). On active-task change,
-  // ask main to spawn each feature's flow + Clack TUI inside a drawer tab —
-  // unless the project dismissed the feature, or a TUI is already active or
-  // suppressed for this task. Main owns the state machine; the renderer just
-  // kicks it off.
-  useEffect(() => {
-    if (!activeTask || !activeTask.projectId) return;
-    const project = projects.find((p) => p.id === activeTask.projectId);
-    if (!project) return;
-    const taskId = activeTask.id;
-    const projectId = activeTask.projectId;
-    const taskName = activeTask.name;
-    const projectName = project.name;
-    const cwd = activeTask.path;
-
-    for (const featureId of TUI_FEATURE_IDS) {
-      void window.electronAPI.wizardActive({ featureId, taskId }).then((resp) => {
-        if (resp.success && resp.data) return;
-        void window.electronAPI.requestWizard({
-          featureId,
-          taskId,
-          projectId,
-          taskName,
-          projectName,
-          cwd,
-        });
-      });
-    }
-  }, [activeTask, projects]);
-
-  // Orchestrator broadcasts ports:restart-task when the user picks 'restart'
-  // on the DONE screen. SessionRegistry restarts both agent + shell PTYs so
-  // they pick up the freshly allocated env vars (Dash injects them from
-  // SQLite at spawn time).
-  useEffect(() => {
-    const off = window.electronAPI.onPortsRestartTask((tid) => {
-      void sessionRegistry.restartAllForTask(tid);
-    });
-    return off;
-  }, []);
-
-  // Add-on task actions (src/main/addons): a created task is loaded and made
-  // active the same way the ports migrate flow does; restart re-dispatches
-  // every session of the task so frozen env (ports, PATH) is picked up.
+  // Add-on task actions (src/main/addons): a created task is loaded, and an
+  // activated one made active; restart re-dispatches every session of the task
+  // so frozen env (ports, PATH) is picked up.
   useEffect(() => {
     const switchTo = async ({ taskId, projectId }: { taskId: string; projectId: string }) => {
       await loadTasksForProject(projectId);
@@ -459,23 +405,6 @@ export function App() {
       offRestart();
       offEnv();
     };
-  }, []);
-
-  // Ports TUI migrate flow: main created a `port-setup` worktree task and
-  // already spawned the new orchestrator + side-car in its drawer. We need
-  // to (a) refresh the source project's task list so the new task shows up
-  // in the sidebar and (b) switch active to it so the user lands on the new
-  // TUI. The payload's projectId (not activeProjectId) targets the right
-  // project even if the user switched projects during the migrate window.
-  useEffect(() => {
-    const off = window.electronAPI.onPortsTuiMigrated(({ toTaskId, projectId }) => {
-      void (async () => {
-        await loadTasksForProject(projectId);
-        setActiveProjectId(projectId);
-        setActiveTaskId(toTaskId);
-      })();
-    });
-    return off;
   }, []);
 
   // Memoized props for ExtensionsModal. Without these, App.tsx re-renders (terminal
@@ -960,39 +889,6 @@ export function App() {
     }
   }, [shellDrawerCollapsed]);
 
-  // While a side-car TUI is the active drawer tab, smoothly size the right
-  // panel (the drawer lives inside it) to hug the TUI's pinned canvas — clack
-  // can't reflow, so the panel fits the canvas, not the reverse. Restore the
-  // user's width when the TUI finishes / closes / is cancelled.
-  const changesSizeBeforeTui = useRef<number | null>(null);
-  const handleTuiPanelActive = useCallback((active: boolean, canvasPx?: number) => {
-    const panel = changesPanelRef.current;
-    if (!panel) return;
-    if (active) {
-      // canvasPx may arrive 0/undefined on the first frame; ignore until a
-      // real measurement lands so we don't snap to a bogus width.
-      if (!canvasPx || changesSizeBeforeTui.current !== null) return;
-      const targetPct = Math.max(
-        TUI_PANEL_MIN_PCT,
-        Math.min(
-          TUI_PANEL_MAX_PCT,
-          (((canvasPx + TUI_PANEL_CHROME_PX) * TUI_PANEL_WIDTH_SCALE) / window.innerWidth) * 100,
-        ),
-      );
-      changesSizeBeforeTui.current = panel.getSize();
-      setChangesAnimating(true);
-      panel.resize(targetPct);
-      setTimeout(() => setChangesAnimating(false), 200);
-    } else {
-      const prev = changesSizeBeforeTui.current;
-      changesSizeBeforeTui.current = null;
-      if (prev === null) return;
-      setChangesAnimating(true);
-      panel.resize(prev);
-      setTimeout(() => setChangesAnimating(false), 200);
-    }
-  }, []);
-
   // ── Data Loading (projectsStore actions) ─────────────────
 
   const loadProjects = useProjects((s) => s.loadProjects);
@@ -1329,7 +1225,6 @@ export function App() {
                   collapsed={shellDrawerCollapsed}
                   panelRef={shellDrawerPanelRef}
                   animating={shellDrawerAnimating}
-                  onTuiActiveChange={handleTuiPanelActive}
                   onAnimate={() => setShellDrawerAnimating(true)}
                   onCollapse={() => {
                     setShellDrawerCollapsed(true);
@@ -1342,55 +1237,44 @@ export function App() {
                 >
                   {!changesPanelCollapsed && (
                     <AddonDock side="right" taskId={activeTask?.id ?? null} className="h-full">
-                      <PortsDrawerWrapper
-                        taskId={activeTask?.id ?? null}
-                        collapsed={portsDrawerCollapsed}
-                        onCollapse={() => {
-                          setPortsDrawerCollapsed(true);
+                      <RightInspector
+                        activeTask={activeTask}
+                        rateLimits={showRateLimits && latestRateLimits ? latestRateLimits : {}}
+                        contextUsage={
+                          showUsageInline && activeTask ? contextUsage[activeTask.id] : undefined
+                        }
+                        onViewDiff={handleViewDiff}
+                        onCommitFinished={() => {
+                          if (activeTask) void refreshGitStatus(activeTask.path);
                         }}
-                        onExpand={() => {
-                          setPortsDrawerCollapsed(false);
-                        }}
-                      >
-                        <RightInspector
-                          activeTask={activeTask}
-                          rateLimits={showRateLimits && latestRateLimits ? latestRateLimits : {}}
-                          contextUsage={
-                            showUsageInline && activeTask ? contextUsage[activeTask.id] : undefined
+                        onShowCommitGraph={() => setShowCommitGraph(true)}
+                        onOpenEditor={() => {
+                          if (!activeTask) return;
+                          const files = gitStatus?.files ?? [];
+                          if (files.length > 0) {
+                            // Prefer the first unstaged file; otherwise first staged.
+                            const target = files.find((f) => !f.staged) ?? files[0]!;
+                            setDiffFile({
+                              cwd: activeTask.path,
+                              filePath: target.path,
+                              staged: target.staged,
+                            });
+                          } else {
+                            // No working changes — still open the working
+                            // tree, not the last commit: the editor is only
+                            // editable there, and a save shows up in this
+                            // panel as an unstaged change via the git watcher.
+                            setDiffFile({
+                              cwd: activeTask.path,
+                              filePath: '',
+                              staged: false,
+                              initialView: { kind: 'working', ref: 'HEAD' },
+                            });
                           }
-                          onViewDiff={handleViewDiff}
-                          onCommitFinished={() => {
-                            if (activeTask) void refreshGitStatus(activeTask.path);
-                          }}
-                          onShowCommitGraph={() => setShowCommitGraph(true)}
-                          onOpenEditor={() => {
-                            if (!activeTask) return;
-                            const files = gitStatus?.files ?? [];
-                            if (files.length > 0) {
-                              // Prefer the first unstaged file; otherwise first staged.
-                              const target = files.find((f) => !f.staged) ?? files[0]!;
-                              setDiffFile({
-                                cwd: activeTask.path,
-                                filePath: target.path,
-                                staged: target.staged,
-                              });
-                            } else {
-                              // No working changes — still open the working
-                              // tree, not the last commit: the editor is only
-                              // editable there, and a save shows up in this
-                              // panel as an unstaged change via the git watcher.
-                              setDiffFile({
-                                cwd: activeTask.path,
-                                filePath: '',
-                                staged: false,
-                                initialView: { kind: 'working', ref: 'HEAD' },
-                              });
-                            }
-                          }}
-                          collapsed={changesPanelCollapsed}
-                          onToggleCollapse={toggleChangesPanel}
-                        />
-                      </PortsDrawerWrapper>
+                        }}
+                        collapsed={changesPanelCollapsed}
+                        onToggleCollapse={toggleChangesPanel}
+                      />
                     </AddonDock>
                   )}
                 </ShellDrawerWrapper>

@@ -100,7 +100,7 @@ export interface AddonContext {
   };
   files: {
     /** Watch a directory in the task's worktree, retrying until it exists. */
-    watch(taskId: string, relDir: string, fn: (changedFiles: string[]) => void): void;
+    watch(taskId: string, relDir: string, fn: (changedFiles: string[]) => void): () => void;
   };
   notify: {
     toast(t: {
@@ -112,6 +112,8 @@ export interface AddonContext {
   shell: {
     openUrl(url: string): void;
     copy(text: string): void;
+    /** Run a short-lived command in the user's login shell. Never rejects. */
+    exec(command: string, cwd: string): Promise<{ code: number; stderrTail: string }>;
   };
   paths: {
     /** The add-on's own directory under userData, created on first access. */

@@ -1,4 +1,5 @@
 import type { Addon } from '@shared/addon-api';
+import ports from './ports';
 import rtk from './rtk';
 
 /**
@@ -6,4 +7,4 @@ import rtk from './rtk';
  * (later wins). Each lives in its own folder here and imports only
  * @shared/addon-api. See docs/specs/2026-09-23-addons.md.
  */
-export const ADDONS: Addon[] = [rtk];
+export const ADDONS: Addon[] = [ports, rtk];

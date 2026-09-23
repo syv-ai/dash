@@ -4,13 +4,7 @@ import { parseArgs, errorResponse } from './validate';
 import { projectInputSchema, taskInputSchema } from './schemas';
 import { DatabaseService } from '../services/DatabaseService';
 import { TelemetryService } from '../services/TelemetryService';
-import { WorkspacePortsRuntime } from '../services/WorkspacePortsRuntime';
-import {
-  ensureWatching as ensurePortsConfigWatch,
-  stop as stopPortsConfigWatch,
-} from '../services/PortsConfigWatcher';
 import { discardInitialPrompt, stopTaskSession, removeTaskSession } from '../services/ptyManager';
-import { getTuiHost } from '../tui/hostInstance';
 import { removeShellHistory } from '../services/ptyShellConfig';
 import { peekAddonHost, getAddonStore } from '../addonHost/registry';
 import { toTaskInfo } from '../addonHost/hostDeps';
@@ -75,23 +69,6 @@ export function registerDbIpc(): void {
       const data = DatabaseService.saveTask(task);
       if (isNew) TelemetryService.capture('task_created');
       if (isNew) peekAddonHost()?.emit('taskCreated', toTaskInfo(data));
-      // Allocate per-task ports the first time the row is saved. setupTask
-      // persists to SQLite (the only source of truth for what ports are
-      // taken); the renderer's later agent-PTY spawn reads the env from
-      // there. Skipped for in-place (non-worktree) tasks — they share the
-      // project dir and shouldn't get re-allocated on every save.
-      if (isNew && data.useWorktree) {
-        try {
-          WorkspacePortsRuntime.setupTask({ taskId: data.id, worktreePath: data.path });
-          // Arm the watcher even if .dash/ doesn't exist yet — ensureWatching
-          // keeps the entry and retries the fs.watch on every subsequent
-          // call, so it auto-attaches as soon as the agent creates .dash/.
-          // The watcher lives until db:deleteTask stops it.
-          ensurePortsConfigWatch(data.id, data.path);
-        } catch (err) {
-          console.error('[dbIpc] setupTask ports allocation failed:', err);
-        }
-      }
       return { success: true, data };
     } catch (error) {
       return errorResponse(error);
@@ -110,13 +87,9 @@ export function registerDbIpc(): void {
       if (deleted) peekAddonHost()?.emit('taskDeleted', toTaskInfo(deleted));
       DatabaseService.deleteTask(id);
       getAddonStore().deleteScope('task', id);
-      // The worktree is gone (or about to be) — close the ports watcher,
-      // drop any never-consumed initial prompt, and dismiss a lingering
-      // ports-setup toast for this task.
-      stopPortsConfigWatch(id);
+      // Drop any never-consumed initial prompt and the task's shell history.
       discardInitialPrompt(id);
       removeShellHistory(id);
-      void getTuiHost().cancelForTask(id);
       TelemetryService.capture('task_deleted');
       return { success: true };
     } catch (error) {

@@ -5,7 +5,7 @@ import { DrawerTabsService } from '../services/DrawerTabsService';
 import { getRawDb } from '../db/client';
 import type { AddTabOpts, BulkUpsertEntry } from '../../shared/drawerTabs';
 
-const tabKindSchema = z.enum(['shell', 'tui', 'service']);
+const tabKindSchema = z.enum(['shell', 'service']);
 
 const addTabOptsSchema = z.looseObject({
   kind: tabKindSchema,

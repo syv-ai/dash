@@ -3,7 +3,6 @@ import type { DatabaseApi } from './electron-api/database';
 import type { WorktreeApi } from './electron-api/worktree';
 import type { PtyApi } from './electron-api/pty';
 import type { DrawerTabsApi } from './electron-api/drawerTabs';
-import type { PortsApi } from './electron-api/ports';
 import type { GitApi } from './electron-api/git';
 import type { ProjectSourceApi } from './electron-api/projectSource';
 import type { GithubApi } from './electron-api/github';
@@ -36,7 +35,6 @@ export interface ElectronAPI
     WorktreeApi,
     PtyApi,
     DrawerTabsApi,
-    PortsApi,
     GitApi,
     ProjectSourceApi,
     GithubApi,

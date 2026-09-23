@@ -46,7 +46,7 @@ export interface PtyApi {
   ptyRestartSession: (taskId: string) => Promise<IpcResponse<void>>;
   ptyListForTask: (
     taskId: string,
-    opts?: { kinds?: ('agent' | 'shell' | 'tui' | 'service')[]; featureId?: string },
+    opts?: { kinds?: ('agent' | 'shell' | 'service')[]; featureId?: string },
   ) => Promise<IpcResponse<string[]>>;
   onPtyData: (id: string, callback: (data: string) => void) => () => void;
   onPtyExit: (
