@@ -195,6 +195,15 @@ describe('ports add-on', () => {
     expect(list.summary).toMatch(/\/1 up$/);
   });
 
+  it('a ports.json written while Dash was closed is picked up at activation', async () => {
+    const setupTask = addTask('setup1');
+    writeConfig(setupTask);
+    const f = fakeCtx();
+    f.ctx.storage.set({ task: 'setup1' }, 'setup', { kind: 'waiting', since: 0 });
+    const surfaces = (await createPortsAddon(deps()).activate(f.ctx)) as AddonSurfaces;
+    expect(buttonIds(surfaces.drawer!(setupTask)!.blocks)).toEqual(['restart', 'dismiss']);
+  });
+
   it('a configured task lists its ports and injects their env', async () => {
     const f = await activate();
     const t = addTask('t1');

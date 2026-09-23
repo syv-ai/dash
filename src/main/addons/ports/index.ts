@@ -208,10 +208,14 @@ export function createPortsAddon(deps: PortsDeps = realDeps): Addon {
         watches.delete(task.id);
       });
 
-      // Setup tasks keep waiting across restarts: re-arm their watchers.
-      for (const { scopeId } of ctx.storage.list<Setup>('task', 'setup')) {
+      // Setup tasks keep waiting across restarts: re-arm their watchers, and
+      // catch a ports.json the agent wrote while Dash was closed (a watcher
+      // only reports changes after it arms).
+      for (const { scopeId, value } of ctx.storage.list<Setup>('task', 'setup')) {
         const task = ctx.tasks.get(scopeId);
-        if (task) watch(task);
+        if (!task) continue;
+        watch(task);
+        if (value.kind === 'waiting' && deps.isConfigured(task.path)) onConfigChange(task);
       }
 
       ctx.setInterval(() => {

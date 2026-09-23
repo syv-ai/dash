@@ -6,7 +6,7 @@ import { DatabaseService } from '../services/DatabaseService';
 import { TelemetryService } from '../services/TelemetryService';
 import { discardInitialPrompt, stopTaskSession, removeTaskSession } from '../services/ptyManager';
 import { removeShellHistory } from '../services/ptyShellConfig';
-import { peekAddonHost, getAddonStore } from '../addonHost/registry';
+import { peekAddonHost, getAddonStore, deleteTaskWithAddons } from '../addonHost/registry';
 import { toTaskInfo } from '../addonHost/hostDeps';
 
 export function registerDbIpc(): void {
@@ -83,10 +83,7 @@ export function registerDbIpc(): void {
       await removeTaskSession(id).catch((err) =>
         console.warn('[db:deleteTask] session removal failed:', err),
       );
-      const deleted = DatabaseService.getTask(id);
-      if (deleted) peekAddonHost()?.emit('taskDeleted', toTaskInfo(deleted));
-      DatabaseService.deleteTask(id);
-      getAddonStore().deleteScope('task', id);
+      deleteTaskWithAddons(id);
       // Drop any never-consumed initial prompt and the task's shell history.
       discardInitialPrompt(id);
       removeShellHistory(id);

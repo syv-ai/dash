@@ -100,6 +100,18 @@ describe('AddonHost', () => {
     ]);
   });
 
+  it('announces each add-on once its activation settles, failed or not', async () => {
+    const good = probe('good', () => ({}));
+    const bad = probe('bad', () => {
+      throw new Error('boom');
+    });
+    const { deps } = makeDeps();
+    const host = new AddonHost([good, bad], deps);
+    await host.start();
+    expect(deps.emitChanged).toHaveBeenCalledWith('good');
+    expect(deps.emitChanged).toHaveBeenCalledWith('bad');
+  });
+
   it('a stored enable state overrides the default', async () => {
     const off = probe('off', () => ({}), { defaultEnabled: false });
     const { deps } = makeDeps();
@@ -325,6 +337,7 @@ describe('AddonHost', () => {
     const { deps } = makeDeps();
     const host = new AddonHost([addon], deps);
     await host.start();
+    vi.mocked(deps.emitChanged).mockClear(); // activation announces itself once
     addon.ctx!.refresh();
     addon.ctx!.refresh();
     await new Promise((r) => setTimeout(r, 5));

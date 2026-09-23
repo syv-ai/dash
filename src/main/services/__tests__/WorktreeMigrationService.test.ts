@@ -32,6 +32,16 @@ vi.mock('../DatabaseService', () => ({
   },
 }));
 
+// Task deletion goes through the add-on registry (add-ons are told, their
+// task data dropped); here it just deletes from the in-memory rows.
+const addonDeletes: string[] = [];
+vi.mock('../../addonHost/registry', () => ({
+  deleteTaskWithAddons: (id: string) => {
+    addonDeletes.push(id);
+    db.tasks = db.tasks.filter((x) => x.id !== id);
+  },
+}));
+
 const killed: string[] = [];
 const sessionsRemoved: string[] = [];
 vi.mock('../ptyManager', () => ({
@@ -55,6 +65,7 @@ beforeEach(() => {
   db.tasks = [];
   killed.length = 0;
   sessionsRemoved.length = 0;
+  addonDeletes.length = 0;
 });
 
 /** Turn the legacy worktree into the husk Dash used to leave behind: git has
@@ -162,6 +173,7 @@ describe('WorktreeMigrationService', () => {
     expect(killed).toEqual(['t1', 'shell:t1']);
     expect(sessionsRemoved).toEqual(['t1']);
     expect(db.tasks).toEqual([]);
+    expect(addonDeletes).toEqual(['t1']);
     expect(fs.existsSync(from)).toBe(false);
     // Nothing else left at the old location, so the legacy dir goes too.
     expect(fs.existsSync(legacyDir)).toBe(false);

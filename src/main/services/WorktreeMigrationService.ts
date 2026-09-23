@@ -8,6 +8,7 @@ import { worktreeService } from './WorktreeService';
 import { listForTask, killPtyAwait, removeTaskSession } from './ptyManager';
 import { supervisorService } from './SupervisorService';
 import { buildMigrationPlan, isWorktreeLockedError } from './worktreeMigrationPlan';
+import { deleteTaskWithAddons } from '../addonHost/registry';
 
 const execFileAsync = promisify(execFile);
 
@@ -135,7 +136,7 @@ class WorktreeMigrationServiceImpl {
     await removeTaskSession(task.taskId).catch((err) =>
       console.warn(`[WorktreeMigration] session removal failed for ${task.taskName}:`, err),
     );
-    DatabaseService.deleteTask(task.taskId);
+    deleteTaskWithAddons(task.taskId);
     if (fs.existsSync(task.fromPath) && !fs.existsSync(path.join(task.fromPath, '.git'))) {
       fs.rmSync(task.fromPath, { recursive: true, force: true });
     }

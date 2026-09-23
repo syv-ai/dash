@@ -46,8 +46,18 @@ export default tseslint.config(
   // Add-on boundary (docs/specs/2026-09-23-addons.md). An add-on imports only
   // the add-on API, its own files, Node built-ins and npm packages; core imports
   // add-ons only through the registry; the API imports nothing from main/renderer.
-  {
-    files: ['src/main/addons/*/**/*.ts'],
+  ...[
+    // An add-on's top-level files: `../` already leaves the add-on's folder.
+    { files: ['src/main/addons/*/*.ts'], ignores: [], outside: ['../*', '../**'] },
+    // Its nested files (e.g. __tests__): `../` stays inside, `../../` leaves.
+    {
+      files: ['src/main/addons/*/**/*.ts'],
+      ignores: ['src/main/addons/*/*.ts'],
+      outside: ['../../*', '../../**'],
+    },
+  ].map(({ files, ignores, outside }) => ({
+    files,
+    ignores,
     rules: {
       'no-restricted-imports': [
         'error',
@@ -63,14 +73,14 @@ export default tseslint.config(
               message: 'Add-ons may import only @shared/addon-api from src/shared.',
             },
             {
-              group: ['../../*', '../../**'],
-              message: 'Add-ons may not import outside their own folder.',
+              group: outside,
+              message: 'Add-ons may not import outside their own folder (including other add-ons).',
             },
           ],
         },
       ],
     },
-  },
+  })),
   {
     files: ['src/main/**/*.ts'],
     ignores: ['src/main/addons/**', 'src/main/addonHost/registry.ts'],

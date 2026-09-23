@@ -149,6 +149,9 @@ export class AddonHost {
       activation.then((s) => s.dispose?.()).catch(() => {});
     } finally {
       clearTimeout(timer);
+      // The renderer may have loaded while this add-on was still activating
+      // (boot runs after the window opens): tell it to fetch again.
+      if (rt.session.live || rt.status === 'failed') this.deps.emitChanged(addonId);
     }
   }
 

@@ -4,7 +4,7 @@ import { getRawDb } from '../db/client';
 import { DatabaseService } from '../services/DatabaseService';
 import { AddonHost } from './AddonHost';
 import { createAddonStore, importLegacyAddonSettings, type AddonStore } from './addonStore';
-import { createHostDeps } from './hostDeps';
+import { createHostDeps, toTaskInfo } from './hostDeps';
 
 // The one place core wires the add-on list to the host. Nothing else outside
 // src/main/addons imports an add-on.
@@ -35,6 +35,18 @@ export function addonSessionEnv(cwd: string | undefined): {
     env: cwd ? host.envFor({ path: cwd, taskId }) : {},
     pathDirs: host.pathDirs(),
   };
+}
+
+/**
+ * Delete a task row, telling add-ons first (they stop its services and
+ * watchers) and dropping their task-scoped data after. Every task deletion
+ * goes through here: addon_data has no foreign key to cascade on.
+ */
+export function deleteTaskWithAddons(taskId: string): void {
+  const task = DatabaseService.getTask(taskId);
+  if (task) host?.emit('taskDeleted', toTaskInfo(task));
+  DatabaseService.deleteTask(taskId);
+  getAddonStore().deleteScope('task', taskId);
 }
 
 /** The host if it has been created (boot), else null — for code that also runs in tests. */
