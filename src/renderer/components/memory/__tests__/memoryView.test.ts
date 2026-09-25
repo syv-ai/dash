@@ -9,6 +9,7 @@ import {
   MEMORY_LINK_PREFIX,
   MEMORY_PREVIEW_SANDBOX,
 } from '../memoryView';
+import { memoryLinkFiles } from '../../../../shared/memoryLinks';
 
 function entry(p: Partial<MemoryEntry> & { file: string }): MemoryEntry {
   return {
@@ -128,5 +129,16 @@ describe('MEMORY_PREVIEW_SANDBOX', () => {
   it('never lets untrusted memory HTML run scripts', () => {
     // With allow-same-origin present, allow-scripts would escape the sandbox.
     expect(MEMORY_PREVIEW_SANDBOX.split(/\s+/)).not.toContain('allow-scripts');
+  });
+});
+
+describe('indexed ⇔ linked', () => {
+  // MemoryService flags `inIndex` with memoryLinkFiles; the preview must make
+  // exactly those links clickable, or the list and the index disagree.
+  it.each(['x.md', './x.md', 'sub/x.md', '../other/x.md', '/abs/x.md'])('%s', (target) => {
+    const md = `- [X](${target})`;
+    const indexed = memoryLinkFiles(md).has('x.md');
+    const linked = rewriteMemoryLinks(md, [entry({ file: 'x.md' })]).includes(MEMORY_LINK_PREFIX);
+    expect(linked).toBe(indexed);
   });
 });

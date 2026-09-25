@@ -1,5 +1,6 @@
 import { MEMORY_INDEX_FILE, MEMORY_TYPES } from '../../../shared/types';
 import type { MemoryEntry, MemoryType, ProjectMemory } from '../../../shared/types';
+import { mapMemoryLinks } from '../../../shared/memoryLinks';
 
 /** Href prefix the preview intercepts to open another memory in the modal. */
 export const MEMORY_LINK_PREFIX = '#memory:';
@@ -89,7 +90,7 @@ function escapeHtml(s: string): string {
 /**
  * Point memory cross-references at `#memory:<file>` so the preview can route
  * clicks back into the modal. `[[name]]` resolves by frontmatter name, then by
- * basename; `(x.md)` / `(./x.md)` links are rewritten only when that file exists.
+ * basename; memory links (see mapMemoryLinks) are rewritten only when that file exists.
  */
 export function rewriteMemoryLinks(markdown: string, entries: MemoryEntry[]): string {
   const byName = new Map(entries.map((e) => [e.name, e.file]));
@@ -97,18 +98,16 @@ export function rewriteMemoryLinks(markdown: string, entries: MemoryEntry[]): st
   const resolve = (ref: string): string | undefined =>
     byName.get(ref) ?? (files.has(`${ref}.md`) ? `${ref}.md` : undefined);
 
-  // The second pass matches the links parseIndexLinks (main/services/memoryFiles.ts)
-  // counts as indexed, limited to files in the memory folder itself.
-  return markdown
-    .replace(/\[\[([^\]\n]+)\]\]/g, (_m, ref: string) => {
+  return mapMemoryLinks(
+    markdown.replace(/\[\[([^\]\n]+)\]\]/g, (_m, ref: string) => {
       const file = resolve(ref.trim());
       return file
         ? `[${ref}](${MEMORY_LINK_PREFIX}${encodeURIComponent(file)})`
         : `<span class="memory-missing">${escapeHtml(ref)}</span>`;
-    })
-    .replace(/\]\((?:\.\/)?([^)\s:/]+\.md)\)/g, (m, file: string) =>
-      files.has(file) ? `](${MEMORY_LINK_PREFIX}${encodeURIComponent(file)})` : m,
-    );
+    }),
+    (file, match) =>
+      files.has(file) ? `](${MEMORY_LINK_PREFIX}${encodeURIComponent(file)})` : match,
+  );
 }
 
 /**

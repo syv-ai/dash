@@ -1,4 +1,3 @@
-import * as path from 'path';
 import { MEMORY_TYPES, type MemoryType } from '@shared/types';
 import { stripQuotes } from './skillFrontmatter';
 
@@ -41,19 +40,4 @@ export function parseMemoryFile(content: string): ParsedMemory {
     else if (key === 'type') out.type = toMemoryType(value);
   }
   return out;
-}
-
-/**
- * Basenames of the local `.md` files MEMORY.md links to. Keep in step with
- * rewriteMemoryLinks (renderer/components/memory/memoryView.ts), which makes
- * the same links clickable in the preview.
- */
-export function parseIndexLinks(index: string): Set<string> {
-  const files = new Set<string>();
-  for (const match of index.matchAll(/\]\(([^)\s]+\.md)\)/g)) {
-    const target = match[1];
-    if (!target || target.includes('://')) continue;
-    files.add(path.basename(target));
-  }
-  return files;
 }

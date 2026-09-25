@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseMemoryFile, parseIndexLinks, toMemoryType } from '../memoryFiles';
+import { parseMemoryFile, toMemoryType } from '../memoryFiles';
 
 describe('parseMemoryFile', () => {
   it('reads the current shape (type under metadata:)', () => {
@@ -59,18 +59,5 @@ describe('toMemoryType', () => {
     expect(toMemoryType('Feedback')).toBe('feedback');
     expect(toMemoryType('bogus')).toBe('other');
     expect(toMemoryType('')).toBe('other');
-  });
-});
-
-describe('parseIndexLinks', () => {
-  it('collects the .md basenames the index links to', () => {
-    const index = [
-      '- [Profile](user_profile.md) — who the user is',
-      '- [CI](feedback_ci.md) — see also [x](https://example.com/a.md)',
-      '- [Nested](sub/dir/thing.md)',
-    ].join('\n');
-    expect(parseIndexLinks(index)).toEqual(
-      new Set(['user_profile.md', 'feedback_ci.md', 'thing.md']),
-    );
   });
 });

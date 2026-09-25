@@ -4,7 +4,8 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { MEMORY_INDEX_FILE, type MemoryEntry, type ProjectMemory } from '@shared/types';
 import { claudeProjectDir } from '../utils/claudePaths';
-import { parseIndexLinks, parseMemoryFile } from './memoryFiles';
+import { memoryLinkFiles } from '@shared/memoryLinks';
+import { parseMemoryFile } from './memoryFiles';
 
 const execFileAsync = promisify(execFile);
 
@@ -101,7 +102,7 @@ export async function readProjectMemory(projectPath: string): Promise<ProjectMem
           throw err;
         })
     : null;
-  const indexed = index ? parseIndexLinks(index) : new Set<string>();
+  const indexed = index ? memoryLinkFiles(index) : new Set<string>();
   const entries = await Promise.all(
     names
       .filter((n) => n.endsWith('.md') && n !== MEMORY_INDEX_FILE)
