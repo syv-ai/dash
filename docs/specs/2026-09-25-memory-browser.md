@@ -31,7 +31,8 @@ It then reads and parses the files. A `MemoryWatcher` watches only one project, 
 | 10 | Freshness: **watch only while the modal is open, one project at a time**. |
 | 11 | Actions: **Open in editor** (the memory, or the folder via the preferred IDE), **reveal folder**, **copy path**. No delete, no send-to-task. |
 | 12 | Empty state: **explain + show the exact path that was checked** (copyable), and mention `autoMemoryDirectory`/`autoMemoryEnabled`. Dash doesn't read settings to diagnose this. |
-| 13 | Follow-ups (a separate issue): an "N new memories" badge on project rows with always-on watchers, and "Send to task prompt". |
+| 13 | The modal treats the index and the memories as one `MemoryDoc` list, converted in the renderer (`memoryDocs`). Search filters the list only; the preview changes only on click. |
+| 14 | Follow-ups (a separate issue): an "N new memories" badge on project rows with always-on watchers, and "Send to task prompt". |
 
 Ground truth used for 5–6: the Claude Code 2.1.282 binary contains `function E(e){let r=e.replace(/[^a-zA-Z0-9]/g,"-");if(r.length<=200)return r;return\`${r.slice(0,200)}-${Math.abs(yX(e)).toString(36)}\`}` with `yX` = Java `String.hashCode`. On disk, worktree project dirs (`…--claude-worktrees-…`) have no `memory/`; the main repo dir does.
 
@@ -1054,8 +1055,14 @@ git commit -m "Expose project memory over IPC"
 
 ```ts
 import { describe, it, expect } from 'vitest';
-import type { MemoryEntry } from '../../../../shared/types';
-import { groupMemories, rewriteMemoryLinks, MEMORY_LINK_PREFIX } from '../memoryView';
+import type { MemoryEntry, ProjectMemory } from '../../../../shared/types';
+import {
+  groupMemories,
+  memoryDocs,
+  pickCurrent,
+  rewriteMemoryLinks,
+  MEMORY_LINK_PREFIX,
+} from '../memoryView';
 
 function entry(p: Partial<MemoryEntry> & { file: string }): MemoryEntry {
   return {
@@ -1090,6 +1097,46 @@ describe('groupMemories', () => {
     expect(groupMemories(entries, 'POSTGRES').flatMap((g) => g.entries.map((e) => e.file))).toEqual(
       ['d.md'],
     );
+  });
+});
+
+describe('memoryDocs / pickCurrent', () => {
+  const memory: ProjectMemory = {
+    dir: '/m',
+    exists: true,
+    index: '- [A](a.md)',
+    entries: [
+      entry({ file: 'a.md', type: 'feedback', mtimeMs: 1, body: 'A' }),
+      entry({ file: 'b.md', type: 'user', mtimeMs: 2 }),
+    ],
+  };
+
+  it('puts the index first as an untyped doc, then memories in list order', () => {
+    const docs = memoryDocs(memory);
+    expect(docs.map((d) => d.key)).toEqual(['MEMORY.md', 'b.md', 'a.md']);
+    expect(docs[0]).toEqual({
+      key: 'MEMORY.md',
+      file: 'MEMORY.md',
+      title: 'Index',
+      markdown: '- [A](a.md)',
+    });
+    expect(docs[2]).toMatchObject({ title: 'a', markdown: 'A', type: 'feedback' });
+  });
+
+  it('keeps the selected doc', () => {
+    expect(pickCurrent(memoryDocs(memory), 'a.md')?.key).toBe('a.md');
+  });
+
+  it('falls back to the index when the selected file was deleted', () => {
+    expect(pickCurrent(memoryDocs(memory), 'gone.md')?.key).toBe('MEMORY.md');
+  });
+
+  it('falls back to the first memory in list order when there is no index', () => {
+    expect(pickCurrent(memoryDocs({ ...memory, index: null }), null)?.key).toBe('b.md');
+  });
+
+  it('returns null for an empty folder', () => {
+    expect(pickCurrent(memoryDocs({ ...memory, index: null, entries: [] }), null)).toBeNull();
   });
 });
 
@@ -1129,7 +1176,7 @@ Expected: FAIL, module not found.
 - [ ] **Step 3: Implement** `src/renderer/components/memory/memoryView.ts`
 
 ```ts
-import type { MemoryEntry, MemoryType } from '../../../shared/types';
+import type { MemoryEntry, MemoryType, ProjectMemory } from '../../../shared/types';
 
 export const MEMORY_INDEX_KEY = 'MEMORY.md';
 
@@ -1165,6 +1212,46 @@ export function groupMemories(entries: MemoryEntry[], query: string): MemoryGrou
     type,
     entries: matches.filter((e) => e.type === type).sort((a, b) => b.mtimeMs - a.mtimeMs),
   })).filter((g) => g.entries.length > 0);
+}
+
+/** What the modal lists and previews: a memory, or the MEMORY.md index (untyped). */
+export interface MemoryDoc {
+  key: string;
+  file: string;
+  title: string;
+  markdown: string;
+  type?: MemoryType;
+  description?: string;
+}
+
+/**
+ * The index and the memories as one uniform list, so the modal never branches
+ * on "is this the index?". Order is the fallback order: the index first, then
+ * memories in list order (group order, newest first).
+ */
+export function memoryDocs(memory: ProjectMemory): MemoryDoc[] {
+  const docs: MemoryDoc[] =
+    memory.index != null
+      ? [{ key: MEMORY_INDEX_KEY, file: MEMORY_INDEX_KEY, title: 'Index', markdown: memory.index }]
+      : [];
+  for (const group of groupMemories(memory.entries, '')) {
+    for (const e of group.entries) {
+      docs.push({
+        key: e.file,
+        file: e.file,
+        title: e.name,
+        markdown: e.body,
+        type: e.type,
+        description: e.description,
+      });
+    }
+  }
+  return docs;
+}
+
+/** The chosen doc while it exists, else the first in fallback order. */
+export function pickCurrent(docs: MemoryDoc[], selectedKey: string | null): MemoryDoc | null {
+  return docs.find((d) => d.key === selectedKey) ?? docs[0] ?? null;
 }
 
 function escapeHtml(s: string): string {
@@ -1222,7 +1309,7 @@ Expected: PASS.
 
 ```bash
 git add src/renderer/components/memory/memoryView.ts src/renderer/components/memory/__tests__/memoryView.test.ts
-git commit -m "Group, search, and cross-link memories for the memory view"
+git commit -m "Group, search, select, and cross-link memories for the memory view"
 ```
 
 ---
@@ -1377,14 +1464,20 @@ export function useProjectMemory(projectPath: string): {
 ```tsx
 import { useCallback, useMemo, useState } from 'react';
 import { Brain, Copy, ExternalLink, FolderOpen, Search, X } from 'lucide-react';
-import type { MemoryEntry, Project } from '../../../shared/types';
+import type { Project } from '../../../shared/types';
 import { formatRelativeTime } from '../../../shared/relativeTime';
 import { Modal, useModalClose } from '../ui/Modal';
 import { IconButton } from '../ui/IconButton';
 import { openInIde } from '../../lib/openInIde';
 import { MemoryPreview } from './MemoryPreview';
 import { useProjectMemory } from './useProjectMemory';
-import { groupMemories, MEMORY_INDEX_KEY, MEMORY_TYPE_LABELS } from './memoryView';
+import {
+  groupMemories,
+  memoryDocs,
+  pickCurrent,
+  MEMORY_INDEX_KEY,
+  MEMORY_TYPE_LABELS,
+} from './memoryView';
 
 interface Props {
   project: Project;
@@ -1412,14 +1505,9 @@ function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) 
 
   const entries = memory?.entries ?? [];
   const groups = useMemo(() => groupMemories(entries, query), [entries, query]);
-  // Fall back when nothing is chosen yet, or the chosen file was deleted.
-  const current: MemoryEntry | 'index' | null = useMemo(() => {
-    if (selected === MEMORY_INDEX_KEY && memory?.index != null) return 'index';
-    const hit = entries.find((e) => e.file === selected);
-    if (hit) return hit;
-    if (memory?.index != null) return 'index';
-    return groups[0]?.entries[0] ?? null;
-  }, [selected, entries, groups, memory?.index]);
+  const docs = useMemo(() => (memory ? memoryDocs(memory) : []), [memory]);
+  // Search filters the list only; the preview changes on click, never on typing.
+  const current = pickCurrent(docs, selected);
 
   const openMemory = useCallback((file: string) => setSelected(file), []);
   const now = Date.now() / 1000;
@@ -1479,7 +1567,7 @@ function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) 
             <div className="min-h-0 flex-1 overflow-y-auto py-1">
               {memory?.index != null && !query && (
                 <ListRow
-                  active={current === 'index'}
+                  active={current?.key === MEMORY_INDEX_KEY}
                   title="Index"
                   subtitle={MEMORY_INDEX_KEY}
                   onClick={() => setSelected(MEMORY_INDEX_KEY)}
@@ -1493,7 +1581,7 @@ function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) 
                   {g.entries.map((e) => (
                     <ListRow
                       key={e.file}
-                      active={current !== 'index' && current?.file === e.file}
+                      active={current?.key === e.file}
                       title={e.name}
                       subtitle={e.description}
                       meta={formatRelativeTime(e.mtimeMs / 1000, now)}
@@ -1516,43 +1604,35 @@ function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) 
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="truncate text-[13px] font-semibold text-foreground">
-                        {current === 'index' ? 'Index' : current.name}
+                        {current.title}
                       </span>
-                      {current !== 'index' && (
+                      {current.type && (
                         <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] text-muted-foreground">
                           {MEMORY_TYPE_LABELS[current.type]}
                         </span>
                       )}
                     </div>
-                    {current !== 'index' && current.description && (
+                    {current.description && (
                       <p className="mt-0.5 text-[12px] text-muted-foreground">{current.description}</p>
                     )}
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     <IconButton
                       onClick={() =>
-                        void window.electronAPI.openInEditor({
-                          cwd: memory.dir,
-                          filePath: current === 'index' ? MEMORY_INDEX_KEY : current.file,
-                        })
+                        void window.electronAPI.openInEditor({ cwd: memory.dir, filePath: current.file })
                       }
                       title="Open in editor"
                     >
                       <ExternalLink size={14} strokeWidth={1.8} />
                     </IconButton>
-                    <IconButton
-                      onClick={() =>
-                        copy(`${memory.dir}/${current === 'index' ? MEMORY_INDEX_KEY : current.file}`)
-                      }
-                      title="Copy path"
-                    >
+                    <IconButton onClick={() => copy(`${memory.dir}/${current.file}`)} title="Copy path">
                       <Copy size={14} strokeWidth={1.8} />
                     </IconButton>
                   </div>
                 </div>
                 <div className="min-h-0 flex-1">
                   <MemoryPreview
-                    markdown={current === 'index' ? (memory.index ?? '') : current.body}
+                    markdown={current.markdown}
                     entries={entries}
                     isDark={isDark}
                     onOpenMemory={openMemory}
