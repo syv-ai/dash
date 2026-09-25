@@ -1,9 +1,12 @@
-import { Settings, Archive, Trash2 } from 'lucide-react';
+import { Settings, Archive, Trash2, Brain } from 'lucide-react';
 import { DropdownMenuItem, DropdownMenuSeparator } from '../ui/DropdownMenu';
 import { IdeIcon } from '../ui/IdeIcon';
 import { usePreferredIde } from '../../hooks/usePreferredIde';
+import { useUi } from '../../stores/uiStore';
 
 export interface TaskMenuHandlers {
+  /** The task's project: "Claude memory" opens it (worktrees share their repo's memory). */
+  projectId: string;
   onOpenIde: () => void;
   onSettings: () => void;
   onArchive: () => void;
@@ -15,8 +18,15 @@ export interface TaskMenuHandlers {
  * header's. Both render this list, so the two can't drift apart; a menu adds
  * its own extras around it.
  */
-export function TaskMenuItems({ onOpenIde, onSettings, onArchive, onDelete }: TaskMenuHandlers) {
+export function TaskMenuItems({
+  projectId,
+  onOpenIde,
+  onSettings,
+  onArchive,
+  onDelete,
+}: TaskMenuHandlers) {
   const { ideId, openLabel } = usePreferredIde();
+  const setMemoryProjectId = useUi((s) => s.setMemoryProjectId);
   return (
     <>
       <DropdownMenuItem onSelect={onOpenIde}>
@@ -28,6 +38,10 @@ export function TaskMenuItems({ onOpenIde, onSettings, onArchive, onDelete }: Ta
       <DropdownMenuItem onSelect={onSettings}>
         <Settings size={13} strokeWidth={1.8} className="text-muted-foreground" />
         Task settings
+      </DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => setMemoryProjectId(projectId)}>
+        <Brain size={13} strokeWidth={1.8} className="text-muted-foreground" />
+        Claude memory
       </DropdownMenuItem>
       <DropdownMenuItem onSelect={onArchive}>
         <Archive size={13} strokeWidth={1.8} className="text-muted-foreground" />
