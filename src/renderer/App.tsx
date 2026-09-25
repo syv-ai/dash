@@ -1558,8 +1558,6 @@ export function App() {
       {memoryProject && (
         <MemoryModal
           project={memoryProject}
-          projects={projects}
-          onSwitchProject={setMemoryProjectId}
           isDark={theme === 'dark'}
           onClose={() => setMemoryProjectId(null)}
         />

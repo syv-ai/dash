@@ -7,6 +7,8 @@ import { formatRelativeTime } from '../../../shared/relativeTime';
 import { Modal, useModalClose } from '../ui/Modal';
 import { IconButton } from '../ui/IconButton';
 import { Select } from '../ui/Select';
+import { useProjects } from '../../stores/projectsStore';
+import { useUi } from '../../stores/uiStore';
 import { openInIde } from '../../lib/openInIde';
 import { MemoryPreview } from './MemoryPreview';
 import { useProjectMemory } from './useProjectMemory';
@@ -14,24 +16,15 @@ import { groupMemories, memoryDocs, pickCurrent, MEMORY_TYPE_LABELS } from './me
 
 interface Props {
   project: Project;
-  /** Every project, for the header switcher. */
-  projects: Project[];
-  onSwitchProject: (projectId: string) => void;
   isDark: boolean;
   onClose: () => void;
 }
 
-export function MemoryModal({ project, projects, onSwitchProject, isDark, onClose }: Props) {
+export function MemoryModal({ project, isDark, onClose }: Props) {
   return (
     <Modal onClose={onClose} size="w-[1040px] max-w-[94vw] h-[86vh] max-h-[760px]">
       {/* Keyed so switching project resets the selection and search. */}
-      <MemoryBody
-        key={project.id}
-        project={project}
-        projects={projects}
-        onSwitchProject={onSwitchProject}
-        isDark={isDark}
-      />
+      <MemoryBody key={project.id} project={project} isDark={isDark} />
     </Modal>
   );
 }
@@ -47,7 +40,9 @@ async function reportFailure(action: Promise<IpcResponse<null>>, fallback: strin
   if (!res.success) toast.error(res.error || fallback);
 }
 
-function MemoryBody({ project, projects, onSwitchProject, isDark }: Omit<Props, 'onClose'>) {
+function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) {
+  const projects = useProjects((s) => s.projects);
+  const switchProject = useUi((s) => s.setMemoryProjectId);
   const handleClose = useModalClose();
   const { memory, error } = useProjectMemory(project.path);
   const [query, setQuery] = useState('');
@@ -73,7 +68,7 @@ function MemoryBody({ project, projects, onSwitchProject, isDark }: Omit<Props, 
           <h2 className="text-[14px] font-semibold tracking-tight text-foreground">Memory</h2>
           <Select
             value={project.id}
-            onValueChange={onSwitchProject}
+            onValueChange={switchProject}
             options={projectOptions}
             className="w-auto max-w-[260px] px-2 py-1"
           />
@@ -114,7 +109,8 @@ function MemoryBody({ project, projects, onSwitchProject, isDark }: Omit<Props, 
         </div>
       )}
 
-      {memory && !memory.exists ? (
+      {/* A missing folder and an empty one (Claude creates it before writing) look the same. */}
+      {memory && docs.length === 0 ? (
         <EmptyState dir={memory.dir} projectName={project.name} />
       ) : (
         <div className="flex min-h-0 flex-1">
