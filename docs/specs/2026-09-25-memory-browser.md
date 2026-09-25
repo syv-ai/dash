@@ -32,7 +32,8 @@ It then reads and parses the files. A `MemoryWatcher` watches only one project, 
 | 11 | Actions: **Open in editor** (the memory, or the folder via the preferred IDE), **reveal folder**, **copy path**. No delete, no send-to-task. |
 | 12 | Empty state: **explain + show the exact path that was checked** (copyable), and mention `autoMemoryDirectory`/`autoMemoryEnabled`. Dash doesn't read settings to diagnose this. |
 | 13 | The modal treats the index and the memories as one `MemoryDoc` list, converted in the renderer (`memoryDocs`). Search filters the list only; the preview changes only on click. |
-| 14 | Follow-ups (a separate issue): an "N new memories" badge on project rows with always-on watchers, and "Send to task prompt". |
+| 14 | One `resolveMemoryDir(projectPath)` is the only way to find a memory folder; the list's group order is `MEMORY_TYPES` itself. |
+| 15 | Follow-ups (a separate issue): an "N new memories" badge on project rows with always-on watchers, and "Send to task prompt". |
 
 Ground truth used for 5–6: the Claude Code 2.1.282 binary contains `function E(e){let r=e.replace(/[^a-zA-Z0-9]/g,"-");if(r.length<=200)return r;return\`${r.slice(0,200)}-${Math.abs(yX(e)).toString(36)}\`}` with `yX` = Java `String.hashCode`. On disk, worktree project dirs (`…--claude-worktrees-…`) have no `memory/`; the main repo dir does.
 
@@ -41,7 +42,7 @@ Ground truth used for 5–6: the Claude Code 2.1.282 binary contains `function E
 **Create**
 - `src/main/utils/claudePaths.ts`: Claude Code's user-config layout. It holds `claudeConfigDir()` (the one place `CLAUDE_CONFIG_DIR` is read), `encodeProjectPath()` (moved from `jsonlParser.ts`) and `claudeProjectDir(cwd)`.
 - `src/main/services/memoryFiles.ts`: pure parsing (`parseMemoryFile`, `parseIndexLinks`, `toMemoryType`).
-- `src/main/services/MemoryService.ts`: `resolveMemoryRoot`, `memoryDirFor`, `readProjectMemory`.
+- `src/main/services/MemoryService.ts`: `resolveMemoryDir` (the only way to find a project's memory folder) and `readProjectMemory`.
 - `src/main/services/MemoryWatcher.ts`: a single modal-scoped watcher (`watchProjectMemory`, `stopWatchingMemory`).
 - `src/main/ipc/memoryIpc.ts`: `memory:get`, `memory:watch`, `memory:unwatch`, `memory:openDir`.
 - `src/types/electron-api/memory.ts`: `MemoryApi`.
@@ -482,7 +483,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
 import { claudeProjectDir } from '../../utils/claudePaths';
-import { resolveMemoryRoot, memoryDirFor, readProjectMemory } from '../MemoryService';
+import { resolveMemoryDir, readProjectMemory } from '../MemoryService';
 
 function git(cwd: string, ...args: string[]): void {
   execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd });
@@ -512,39 +513,38 @@ afterEach(() => {
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-describe('resolveMemoryRoot', () => {
-  it('returns the repo root for the repo itself', async () => {
-    expect(await resolveMemoryRoot(repo)).toBe(repo);
+describe('resolveMemoryDir', () => {
+  const memoryOf = (root: string) => path.join(claudeProjectDir(root), 'memory');
+
+  it("uses the repo root's Claude project dir for the repo itself", async () => {
+    expect(await resolveMemoryDir(repo)).toBe(memoryOf(repo));
   });
-  it('returns the main checkout for a linked worktree', async () => {
-    expect(await resolveMemoryRoot(worktree)).toBe(repo);
+  it('uses the main checkout for a linked worktree', async () => {
+    expect(await resolveMemoryDir(worktree)).toBe(memoryOf(repo));
   });
-  it('returns the repo root for a subfolder project', async () => {
-    expect(await resolveMemoryRoot(path.join(repo, 'packages', 'web'))).toBe(repo);
+  it('uses the repo root for a subfolder project', async () => {
+    expect(await resolveMemoryDir(path.join(repo, 'packages', 'web'))).toBe(memoryOf(repo));
   });
   it('falls back to the path itself outside git', async () => {
     const plain = path.join(tmp, 'plain');
     fs.mkdirSync(plain);
-    expect(await resolveMemoryRoot(plain)).toBe(plain);
-  });
-});
-
-describe('memoryDirFor', () => {
-  it('places the folder in the root\'s Claude project dir', () => {
-    expect(memoryDirFor(repo)).toBe(
-      path.join(claudeProjectDir(repo), 'memory'),
-    );
+    expect(await resolveMemoryDir(plain)).toBe(memoryOf(plain));
   });
 });
 
 describe('readProjectMemory', () => {
   it('reports a missing folder without throwing', async () => {
     const memory = await readProjectMemory(repo);
-    expect(memory).toEqual({ dir: memoryDirFor(repo), exists: false, index: null, entries: [] });
+    expect(memory).toEqual({
+      dir: await resolveMemoryDir(repo),
+      exists: false,
+      index: null,
+      entries: [],
+    });
   });
 
   it('reads entries, the index, and index membership, from a worktree path', async () => {
-    const dir = memoryDirFor(repo);
+    const dir = await resolveMemoryDir(repo);
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'MEMORY.md'), '- [CI](feedback_ci.md) — hook\n');
     fs.writeFileSync(
@@ -595,7 +595,7 @@ const execFileAsync = promisify(execFile);
  * checkout of the git repo `projectPath` lives in, so every linked worktree
  * (and a monorepo subfolder) shares one memory. Outside git, the path itself.
  */
-export async function resolveMemoryRoot(projectPath: string): Promise<string> {
+async function resolveMemoryRoot(projectPath: string): Promise<string> {
   try {
     const { stdout } = await execFileAsync(
       'git',
@@ -609,8 +609,10 @@ export async function resolveMemoryRoot(projectPath: string): Promise<string> {
   }
 }
 
-export function memoryDirFor(memoryRoot: string): string {
-  return path.join(claudeProjectDir(memoryRoot), 'memory');
+/** A project's auto-memory folder. Every caller goes through this: how the
+ *  folder is found (root resolution, encoding, config dir) stays private. */
+export async function resolveMemoryDir(projectPath: string): Promise<string> {
+  return path.join(claudeProjectDir(await resolveMemoryRoot(projectPath)), 'memory');
 }
 
 async function readEntry(dir: string, file: string, indexed: Set<string>): Promise<MemoryEntry | null> {
@@ -638,7 +640,7 @@ async function readEntry(dir: string, file: string, indexed: Set<string>): Promi
 
 /** Read the project's memory folder. A missing folder is a normal state, not an error. */
 export async function readProjectMemory(projectPath: string): Promise<ProjectMemory> {
-  const dir = memoryDirFor(await resolveMemoryRoot(projectPath));
+  const dir = await resolveMemoryDir(projectPath);
   let names: string[];
   try {
     names = await fs.promises.readdir(dir);
@@ -666,7 +668,7 @@ export async function readProjectMemory(projectPath: string): Promise<ProjectMem
 - [ ] **Step 4: Run it and check it passes**
 
 Run: `pnpm test src/main/services/__tests__/MemoryService.test.ts`
-Expected: PASS. If `resolveMemoryRoot(repo)` returns a path with a different realpath on macOS (`/private/var` vs `/var`), that's why the test uses `fs.realpathSync` on the tmp dir. Keep it.
+Expected: PASS. If `resolveMemoryDir(repo)` encodes a path with a different realpath on macOS (`/private/var` vs `/var`), that's why the test uses `fs.realpathSync` on the tmp dir. Keep it.
 
 - [ ] **Step 5: Commit**
 
@@ -697,7 +699,7 @@ import * as path from 'path';
 vi.mock('electron', () => ({ BrowserWindow: { getAllWindows: () => [] } }));
 
 import { watchProjectMemory, stopWatchingMemory, setMemoryChangeNotifier } from '../MemoryWatcher';
-import { memoryDirFor } from '../MemoryService';
+import { resolveMemoryDir } from '../MemoryService';
 
 let tmp: string;
 const originalConfigDir = process.env.CLAUDE_CONFIG_DIR;
@@ -727,7 +729,7 @@ describe('MemoryWatcher', () => {
   it('notifies when a memory is written into an existing folder', async () => {
     const project = path.join(tmp, 'plain-a');
     fs.mkdirSync(project);
-    const dir = memoryDirFor(project);
+    const dir = await resolveMemoryDir(project);
     fs.mkdirSync(dir, { recursive: true });
     const seen: string[] = [];
     setMemoryChangeNotifier((p) => seen.push(p));
@@ -743,7 +745,7 @@ describe('MemoryWatcher', () => {
     const seen: string[] = [];
     setMemoryChangeNotifier((p) => seen.push(p));
     await watchProjectMemory(project);
-    const dir = memoryDirFor(project);
+    const dir = await resolveMemoryDir(project);
     fs.mkdirSync(dir, { recursive: true });
     await waitFor(() => seen.length > 0);
     seen.length = 0;
@@ -755,7 +757,7 @@ describe('MemoryWatcher', () => {
   it('stops notifying after stopWatchingMemory', async () => {
     const project = path.join(tmp, 'plain-c');
     fs.mkdirSync(project);
-    const dir = memoryDirFor(project);
+    const dir = await resolveMemoryDir(project);
     fs.mkdirSync(dir, { recursive: true });
     const seen: string[] = [];
     setMemoryChangeNotifier((p) => seen.push(p));
@@ -779,7 +781,7 @@ Expected: FAIL, module not found.
 import * as fs from 'fs';
 import * as path from 'path';
 import { BrowserWindow } from 'electron';
-import { memoryDirFor, resolveMemoryRoot } from './MemoryService';
+import { resolveMemoryDir } from './MemoryService';
 
 // Claude writes a memory and then its MEMORY.md line in quick succession;
 // one refresh covers both.
@@ -850,7 +852,7 @@ function arm(entry: ActiveWatch): void {
 export async function watchProjectMemory(projectPath: string): Promise<void> {
   stopWatchingMemory();
   const mine = ++generation;
-  const memoryDir = memoryDirFor(await resolveMemoryRoot(projectPath));
+  const memoryDir = await resolveMemoryDir(projectPath);
   if (mine !== generation) return;
   active = { projectPath, memoryDir, watcher: null, watchedDir: null, timer: null };
   arm(active);
@@ -944,7 +946,7 @@ import * as path from 'path';
 import { ipcMain, shell } from 'electron';
 import { z } from 'zod';
 import { parseArgs, errorResponse, ipcError } from './validate';
-import { memoryDirFor, readProjectMemory, resolveMemoryRoot } from '../services/MemoryService';
+import { readProjectMemory, resolveMemoryDir } from '../services/MemoryService';
 import { stopWatchingMemory, watchProjectMemory } from '../services/MemoryWatcher';
 
 export const memoryProjectArgsSchema = z.object({
@@ -981,7 +983,7 @@ export function registerMemoryIpc(): void {
   ipcMain.handle('memory:openDir', async (_event, raw: unknown) => {
     try {
       const { projectPath } = parseArgs('memory:openDir', memoryProjectArgsSchema, raw);
-      const dir = memoryDirFor(await resolveMemoryRoot(projectPath));
+      const dir = await resolveMemoryDir(projectPath);
       if (!fs.existsSync(dir)) return ipcError(`No memory folder at ${dir}`, 'NOT_FOUND');
       const failure = await shell.openPath(dir);
       if (failure) return ipcError(failure, 'UNKNOWN');
@@ -1055,6 +1057,7 @@ git commit -m "Expose project memory over IPC"
 
 ```ts
 import { describe, it, expect } from 'vitest';
+import { MEMORY_TYPES } from '../../../../shared/types';
 import type { MemoryEntry, ProjectMemory } from '../../../../shared/types';
 import {
   groupMemories,
@@ -1088,6 +1091,11 @@ describe('groupMemories', () => {
     const groups = groupMemories(entries, '');
     expect(groups.map((g) => g.type)).toEqual(['user', 'feedback', 'other']);
     expect(groups[1]!.entries.map((e) => e.file)).toEqual(['b.md', 'a.md']);
+  });
+
+  it('gives every memory type a group, so none can be hidden', () => {
+    const all = MEMORY_TYPES.map((type, i) => entry({ file: `${type}.md`, type, mtimeMs: i }));
+    expect(groupMemories(all, '').map((g) => g.type)).toEqual([...MEMORY_TYPES]);
   });
 
   it('filters case-insensitively on name, description, and body', () => {
@@ -1176,6 +1184,7 @@ Expected: FAIL, module not found.
 - [ ] **Step 3: Implement** `src/renderer/components/memory/memoryView.ts`
 
 ```ts
+import { MEMORY_TYPES } from '../../../shared/types';
 import type { MemoryEntry, MemoryType, ProjectMemory } from '../../../shared/types';
 
 export const MEMORY_INDEX_KEY = 'MEMORY.md';
@@ -1185,8 +1194,6 @@ export const MEMORY_LINK_PREFIX = '#memory:';
 
 /** Message the preview iframe posts when a memory link is clicked. */
 export const MEMORY_LINK_MESSAGE = 'dash:memory-link';
-
-const GROUP_ORDER: MemoryType[] = ['user', 'feedback', 'project', 'reference', 'other'];
 
 export const MEMORY_TYPE_LABELS: Record<MemoryType, string> = {
   user: 'User',
@@ -1208,7 +1215,8 @@ export function groupMemories(entries: MemoryEntry[], query: string): MemoryGrou
         [e.name, e.description, e.body].some((f) => f.toLowerCase().includes(q)),
       )
     : entries;
-  return GROUP_ORDER.map((type) => ({
+  // MEMORY_TYPES is the display order, so a new type can't be left out of the list.
+  return MEMORY_TYPES.map((type) => ({
     type,
     entries: matches.filter((e) => e.type === type).sort((a, b) => b.mtimeMs - a.mtimeMs),
   })).filter((g) => g.entries.length > 0);
