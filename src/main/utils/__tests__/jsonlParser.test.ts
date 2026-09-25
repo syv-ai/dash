@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  parseJsonlLine,
-  deduplicateByRequestId,
-  calculateMetrics,
-  encodeProjectPath,
-} from '../jsonlParser';
+import { parseJsonlLine, deduplicateByRequestId, calculateMetrics } from '../jsonlParser';
 import type { ParsedSessionMessage } from '../../../shared/sessionTypes';
 
 function msg(partial: Partial<ParsedSessionMessage>): ParsedSessionMessage {
@@ -131,29 +126,5 @@ describe('calculateMetrics', () => {
   it('returns durationMs=0 when only one valid timestamp exists', () => {
     const a = msg({ timestamp: '2025-01-01T00:00:00Z' });
     expect(calculateMetrics([a]).durationMs).toBe(0);
-  });
-});
-
-describe('encodeProjectPath', () => {
-  it('replaces forward slashes with hyphens (POSIX behavior)', () => {
-    // This branch runs on whatever platform the tests execute on; on Windows
-    // CI the colon would also be replaced. The POSIX assertion is the
-    // contract on Linux/macOS hosts.
-    if (process.platform !== 'win32') {
-      expect(encodeProjectPath('/Users/foo/bar')).toBe('-Users-foo-bar');
-    }
-  });
-
-  it('does NOT replace colons on POSIX (a path can legally contain :)', () => {
-    if (process.platform !== 'win32') {
-      expect(encodeProjectPath('/tmp/a:b')).toBe('-tmp-a:b');
-    }
-  });
-
-  it('replaces \\, /, and : on Windows', () => {
-    if (process.platform === 'win32') {
-      expect(encodeProjectPath('C:\\Users\\foo')).toBe('C--Users-foo');
-      expect(encodeProjectPath('C:/Users/foo')).toBe('C--Users-foo');
-    }
   });
 });

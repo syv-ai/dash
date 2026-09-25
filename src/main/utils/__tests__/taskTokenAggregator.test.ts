@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { aggregateTokenStatsForTaskPath } from '../taskTokenAggregator';
-import { encodeProjectPath } from '../jsonlParser';
+import { encodeProjectPath } from '../claudePaths';
 
 let tmpHome: string;
 const ORIGINAL_HOME = process.env.HOME;

@@ -1,12 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import {
-  encodeProjectPath,
-  parseJsonlLine,
-  deduplicateByRequestId,
-  calculateMetrics,
-} from './jsonlParser';
+import { parseJsonlLine, deduplicateByRequestId, calculateMetrics } from './jsonlParser';
+import { encodeProjectPath } from './claudePaths';
 import { computeCostUsd } from './claudePricing';
 import type { ParsedSessionMessage } from '../../shared/sessionTypes';
 
