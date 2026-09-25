@@ -6,6 +6,7 @@ import type { IpcResponse, Project } from '../../../shared/types';
 import { formatRelativeTime } from '../../../shared/relativeTime';
 import { Modal, useModalClose } from '../ui/Modal';
 import { IconButton } from '../ui/IconButton';
+import { Select } from '../ui/Select';
 import { openInIde } from '../../lib/openInIde';
 import { MemoryPreview } from './MemoryPreview';
 import { useProjectMemory } from './useProjectMemory';
@@ -13,14 +14,24 @@ import { groupMemories, memoryDocs, pickCurrent, MEMORY_TYPE_LABELS } from './me
 
 interface Props {
   project: Project;
+  /** Every project, for the header switcher. */
+  projects: Project[];
+  onSwitchProject: (projectId: string) => void;
   isDark: boolean;
   onClose: () => void;
 }
 
-export function MemoryModal({ project, isDark, onClose }: Props) {
+export function MemoryModal({ project, projects, onSwitchProject, isDark, onClose }: Props) {
   return (
     <Modal onClose={onClose} size="w-[1040px] max-w-[94vw] h-[86vh] max-h-[760px]">
-      <MemoryBody project={project} isDark={isDark} />
+      {/* Keyed so switching project resets the selection and search. */}
+      <MemoryBody
+        key={project.id}
+        project={project}
+        projects={projects}
+        onSwitchProject={onSwitchProject}
+        isDark={isDark}
+      />
     </Modal>
   );
 }
@@ -36,7 +47,7 @@ async function reportFailure(action: Promise<IpcResponse<null>>, fallback: strin
   if (!res.success) toast.error(res.error || fallback);
 }
 
-function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) {
+function MemoryBody({ project, projects, onSwitchProject, isDark }: Omit<Props, 'onClose'>) {
   const handleClose = useModalClose();
   const { memory, error } = useProjectMemory(project.path);
   const [query, setQuery] = useState('');
@@ -50,13 +61,22 @@ function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) 
 
   const openMemory = useCallback((file: string) => setSelected(file), []);
   const now = Date.now() / 1000;
+  const projectOptions = useMemo(
+    () => projects.map((p) => ({ value: p.id, label: p.name })),
+    [projects],
+  );
 
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-border/40 px-5">
-        <div className="flex min-w-0 items-baseline gap-2.5">
+        <div className="flex min-w-0 items-center gap-2.5">
           <h2 className="text-[14px] font-semibold tracking-tight text-foreground">Memory</h2>
-          <span className="truncate font-mono text-[11px] text-fg-fade-40">{project.name}</span>
+          <Select
+            value={project.id}
+            onValueChange={onSwitchProject}
+            options={projectOptions}
+            className="w-auto max-w-[260px] px-2 py-1"
+          />
         </div>
         <div className="flex items-center gap-1">
           {memory?.exists && (

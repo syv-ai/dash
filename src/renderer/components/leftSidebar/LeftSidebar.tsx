@@ -75,8 +75,10 @@ export function LeftSidebar({
   const showActiveTasksSection = useSettings((s) => s.showActiveTasksSection);
   const taskActivity = useRuntime((s) => s.taskActivity);
   const setMemoryProjectId = useUi((s) => s.setMemoryProjectId);
-  const openMemory = () => activeProjectId && setMemoryProjectId(activeProjectId);
-  const memoryTitle = activeProjectId ? 'Claude memory' : 'Select a project to view its memory';
+  // Opens on the active project; the modal's header switches to any other.
+  const memoryProjectId = activeProjectId ?? projects[0]?.id ?? null;
+  const openMemory = () => memoryProjectId && setMemoryProjectId(memoryProjectId);
+  const memoryTitle = memoryProjectId ? 'Claude memory' : 'Add a project to view its memory';
   // Project-reorder drag state for the collapsed rail. The expanded view owns
   // its own drag state inside ProjectsSection (the two views never coexist).
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -250,7 +252,7 @@ export function LeftSidebar({
         <Tooltip content={memoryTitle}>
           <button
             onClick={openMemory}
-            disabled={!activeProjectId}
+            disabled={!memoryProjectId}
             className="w-8 h-8 rounded-md flex items-center justify-center shrink-0 hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
           >
             <Brain size={16} strokeWidth={1.5} />
@@ -339,7 +341,7 @@ export function LeftSidebar({
         </IconButton>
         <IconButton
           onClick={openMemory}
-          disabled={!activeProjectId}
+          disabled={!memoryProjectId}
           title={memoryTitle}
           variant="muted"
           className="titlebar-no-drag disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"

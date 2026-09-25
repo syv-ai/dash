@@ -809,7 +809,8 @@ export function App() {
       }
       if (keybindings.openMemory && matchesBinding(e, keybindings.openMemory)) {
         e.preventDefault();
-        if (activeProjectId) setMemoryProjectId(memoryProjectId ? null : activeProjectId);
+        const target = activeProjectId ?? projects[0]?.id;
+        if (target) setMemoryProjectId(memoryProjectId ? null : target);
       }
       if (keybindings.closeDiff && matchesBinding(e, keybindings.closeDiff)) {
         if (remoteControlModalPtyId) {
@@ -1557,6 +1558,8 @@ export function App() {
       {memoryProject && (
         <MemoryModal
           project={memoryProject}
+          projects={projects}
+          onSwitchProject={setMemoryProjectId}
           isDark={theme === 'dark'}
           onClose={() => setMemoryProjectId(null)}
         />
