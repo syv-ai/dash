@@ -1,6 +1,6 @@
 import type { SkillDetail } from '@shared/types';
 
-function stripQuotes(v: string): string {
+export function stripQuotes(v: string): string {
   const t = v.trim();
   if (t.length >= 2 && ((t[0] === '"' && t.endsWith('"')) || (t[0] === "'" && t.endsWith("'")))) {
     return t.slice(1, -1);
