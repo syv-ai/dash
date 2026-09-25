@@ -61,6 +61,58 @@ describe('MemoryWatcher', () => {
     expect(seen[0]).toBe(project);
   });
 
+  it('keeps notifying after the memory folder is deleted and recreated', async () => {
+    const project = path.join(tmp, 'plain-d');
+    fs.mkdirSync(project);
+    const dir = await resolveMemoryDir(project);
+    fs.mkdirSync(dir, { recursive: true });
+    const seen: string[] = [];
+    setMemoryChangeNotifier((p) => seen.push(p));
+    await watchProjectMemory(project);
+    fs.rmSync(dir, { recursive: true });
+    fs.mkdirSync(dir);
+    await waitFor(() => seen.length > 0);
+    seen.length = 0;
+    fs.writeFileSync(path.join(dir, 'after.md'), 'x');
+    await waitFor(() => seen.length > 0);
+    expect(seen[0]).toBe(project);
+  });
+
+  it('ignores transcript writes while memory/ does not exist yet', async () => {
+    const project = path.join(tmp, 'plain-e');
+    fs.mkdirSync(project);
+    const transcripts = path.dirname(await resolveMemoryDir(project));
+    fs.mkdirSync(transcripts, { recursive: true });
+    const seen: string[] = [];
+    setMemoryChangeNotifier((p) => seen.push(p));
+    await watchProjectMemory(project);
+    fs.writeFileSync(path.join(transcripts, 'session.jsonl'), '{}\n');
+    fs.appendFileSync(path.join(transcripts, 'session.jsonl'), '{}\n');
+    await new Promise((r) => setTimeout(r, 600));
+    expect(seen).toEqual([]);
+  });
+
+  it('drops a watch whose folder lookup resolves after it was superseded', async () => {
+    const stale = path.join(tmp, 'plain-f');
+    const current = path.join(tmp, 'plain-g');
+    fs.mkdirSync(stale);
+    fs.mkdirSync(current);
+    const staleDir = await resolveMemoryDir(stale);
+    const currentDir = await resolveMemoryDir(current);
+    fs.mkdirSync(staleDir, { recursive: true });
+    fs.mkdirSync(currentDir, { recursive: true });
+    const seen: string[] = [];
+    setMemoryChangeNotifier((p) => seen.push(p));
+    const superseded = watchProjectMemory(stale); // not awaited: the modal switched project
+    await watchProjectMemory(current);
+    await superseded;
+    fs.writeFileSync(path.join(staleDir, 'a.md'), 'x');
+    fs.writeFileSync(path.join(currentDir, 'b.md'), 'x');
+    await waitFor(() => seen.length > 0);
+    await new Promise((r) => setTimeout(r, 400));
+    expect(seen).toEqual([current]);
+  });
+
   it('stops notifying after stopWatchingMemory', async () => {
     const project = path.join(tmp, 'plain-c');
     fs.mkdirSync(project);

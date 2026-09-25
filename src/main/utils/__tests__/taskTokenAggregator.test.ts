@@ -76,6 +76,23 @@ describe('aggregateTokenStatsForTaskPath', () => {
     expect(result.totalCostUsd).toBeCloseTo(0.0315, 6);
   });
 
+  it('reads a worktree task from the directory Claude Code writes under CLAUDE_CONFIG_DIR', async () => {
+    const configDir = path.join(tmpHome, 'alt-claude');
+    process.env.CLAUDE_CONFIG_DIR = configDir;
+    // Written by hand, not via claudeProjectDir, so the path is an oracle: the
+    // `.` of `.claude` encodes to `-` just like the `/` before it.
+    const dir = path.join(configDir, 'projects', '-tmp-repo--claude-worktrees-fix-1a2b');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'session-1.jsonl'),
+      JSON.stringify(asstLine({ uuid: 'a', requestId: 'r1', input: 1000, output: 500 })) + '\n',
+    );
+
+    const result = await aggregateTokenStatsForTaskPath('/tmp/repo/.claude/worktrees/fix-1a2b');
+
+    expect(result.totalTokens).toBe(1500);
+  });
+
   it('dedupes by requestId across multiple session files', async () => {
     const taskPath = '/tmp/test-task-b';
     writeSession(taskPath, 'session-1', [

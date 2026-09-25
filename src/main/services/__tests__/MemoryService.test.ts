@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -46,10 +46,25 @@ describe('resolveMemoryDir', () => {
   it('uses the repo root for a subfolder project', async () => {
     expect(await resolveMemoryDir(path.join(repo, 'packages', 'web'))).toBe(memoryOf(repo));
   });
-  it('falls back to the path itself outside git', async () => {
+  it('falls back to the path itself outside git, quietly', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const plain = path.join(tmp, 'plain');
     fs.mkdirSync(plain);
     expect(await resolveMemoryDir(plain)).toBe(memoryOf(plain));
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('warns when git itself fails rather than reporting "not a repo"', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const gone = path.join(tmp, 'deleted-project');
+    expect(await resolveMemoryDir(gone)).toBe(memoryOf(gone));
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('git root lookup failed'),
+      gone,
+      expect.anything(),
+    );
+    warn.mockRestore();
   });
 });
 
@@ -62,6 +77,19 @@ describe('readProjectMemory', () => {
       index: null,
       entries: [],
     });
+  });
+
+  it('throws when the memory folder exists but cannot be read', async () => {
+    const dir = await resolveMemoryDir(repo);
+    fs.mkdirSync(path.dirname(dir), { recursive: true });
+    fs.writeFileSync(dir, 'a file where the folder should be');
+    await expect(readProjectMemory(repo)).rejects.toThrow(/ENOTDIR/);
+  });
+
+  it('throws when MEMORY.md exists but cannot be read', async () => {
+    const dir = await resolveMemoryDir(repo);
+    fs.mkdirSync(path.join(dir, 'MEMORY.md'), { recursive: true });
+    await expect(readProjectMemory(repo)).rejects.toThrow(/EISDIR/);
   });
 
   it('reads entries, the index, and index membership, from a worktree path', async () => {

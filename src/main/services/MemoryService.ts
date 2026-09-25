@@ -8,10 +8,16 @@ import { parseIndexLinks, parseMemoryFile } from './memoryFiles';
 
 const execFileAsync = promisify(execFile);
 
+/** The one read failure that means "not there": anything else is a real error. */
+function isMissing(err: unknown): boolean {
+  return (err as NodeJS.ErrnoException)?.code === 'ENOENT';
+}
+
 /**
  * The directory Claude Code keys a project's auto-memory by: the main
  * checkout of the git repo `projectPath` lives in, so every linked worktree
- * (and a monorepo subfolder) shares one memory. Outside git, the path itself.
+ * (and a monorepo subfolder) shares one memory. Outside git, or when there is
+ * no main checkout (bare repo, submodule), the path itself.
  */
 async function resolveMemoryRoot(projectPath: string): Promise<string> {
   try {
@@ -21,8 +27,17 @@ async function resolveMemoryRoot(projectPath: string): Promise<string> {
       { cwd: projectPath },
     );
     const commonDir = stdout.trim();
-    return path.basename(commonDir) === '.git' ? path.dirname(commonDir) : projectPath;
-  } catch {
+    if (path.basename(commonDir) === '.git') return path.dirname(commonDir);
+    // Bare repo, submodule or --separate-git-dir: no main checkout to key by.
+    console.warn('[MemoryService] no main checkout for', projectPath, 'git dir:', commonDir);
+    return projectPath;
+  } catch (err) {
+    // Only "not a repo" is the expected outside-git case; a missing git, an
+    // unsafe directory or an old git would otherwise show the wrong folder.
+    const stderr = (err as { stderr?: unknown }).stderr;
+    if (typeof stderr !== 'string' || !/not a git repository/i.test(stderr)) {
+      console.warn('[MemoryService] git root lookup failed; using', projectPath, err);
+    }
     return projectPath;
   }
 }
@@ -54,23 +69,37 @@ async function readEntry(
       mtimeMs: stat.mtimeMs,
       inIndex: indexed.has(file),
     };
-  } catch {
-    // Deleted between readdir and read (Claude rewrites memories mid-session).
+  } catch (err) {
+    // ENOENT: deleted between readdir and read (Claude rewrites memories
+    // mid-session). Anything else hides a memory that exists, so say so.
+    if (!isMissing(err)) console.warn('[MemoryService] unreadable memory', full, err);
     return null;
   }
 }
 
-/** Read the project's memory folder. A missing folder is a normal state, not an error. */
+/**
+ * Read the project's memory folder. A missing folder (or MEMORY.md) is a normal
+ * state, not an error; any other read failure throws, so the modal reports it
+ * instead of showing an empty or unindexed memory.
+ */
 export async function readProjectMemory(projectPath: string): Promise<ProjectMemory> {
   const dir = await resolveMemoryDir(projectPath);
   let names: string[];
   try {
     names = await fs.promises.readdir(dir);
-  } catch {
-    return { dir, exists: false, index: null, entries: [] };
+  } catch (err) {
+    if (isMissing(err)) return { dir, exists: false, index: null, entries: [] };
+    console.error('[MemoryService] cannot read memory folder', dir, err);
+    throw err;
   }
   const index = names.includes(MEMORY_INDEX_FILE)
-    ? await fs.promises.readFile(path.join(dir, MEMORY_INDEX_FILE), 'utf8').catch(() => null)
+    ? await fs.promises
+        .readFile(path.join(dir, MEMORY_INDEX_FILE), 'utf8')
+        .catch((err: unknown) => {
+          if (isMissing(err)) return null;
+          console.error('[MemoryService] cannot read', MEMORY_INDEX_FILE, dir, err);
+          throw err;
+        })
     : null;
   const indexed = index ? parseIndexLinks(index) : new Set<string>();
   const entries = await Promise.all(

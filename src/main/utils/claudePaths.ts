@@ -1,6 +1,8 @@
 /**
  * Claude Code's user-config layout (`CLAUDE_CONFIG_DIR`, else `~/.claude`):
- * the one module that knows where Claude keeps per-user state on disk. A
+ * where Claude keeps per-project transcripts and memory (`projects/`) and
+ * background jobs (`jobs/`). Other user-config paths (skills, plugins,
+ * settings) still resolve `~/.claude` themselves until they move here. A
  * project's own `<repo>/.claude/` folder is a different thing and lives with
  * its consumers.
  */

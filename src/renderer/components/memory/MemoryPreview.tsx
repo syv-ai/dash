@@ -1,7 +1,12 @@
 import { useCallback, useMemo, useRef } from 'react';
 import type { MemoryEntry } from '../../../shared/types';
 import { markdownToDocument } from '../diffEditor/editor/markdownPreview';
-import { MEMORY_LINK_PREFIX, MEMORY_PREVIEW_HEAD, rewriteMemoryLinks } from './memoryView';
+import {
+  MEMORY_LINK_PREFIX,
+  MEMORY_PREVIEW_HEAD,
+  MEMORY_PREVIEW_SANDBOX,
+  rewriteMemoryLinks,
+} from './memoryView';
 
 interface Props {
   markdown: string;
@@ -11,11 +16,10 @@ interface Props {
 }
 
 /**
- * Rendered memory in a sandboxed iframe that runs no scripts at all (memory
- * text is untrusted). The renderer CSP (`script-src 'self'`) is inherited by
- * srcdoc frames, so an in-frame link bridge can't run anyway; instead the
- * frame keeps same-origin and this component wires its document from outside:
- * memory links open in the modal, Esc reaches the modal's close handler.
+ * Rendered memory in a sandboxed iframe that runs no scripts (memory text is
+ * untrusted; see MEMORY_PREVIEW_SANDBOX). This component wires the frame's
+ * document from outside: memory links open in the modal, and Esc reaches the
+ * modal's close handler.
  */
 export function MemoryPreview({ markdown, entries, isDark, onOpenMemory }: Props) {
   const html = useMemo(
@@ -48,7 +52,7 @@ export function MemoryPreview({ markdown, entries, isDark, onOpenMemory }: Props
     <iframe
       title="Memory preview"
       srcDoc={html}
-      sandbox="allow-same-origin allow-popups"
+      sandbox={MEMORY_PREVIEW_SANDBOX}
       onLoad={(e) => wireDocument(e.currentTarget)}
       className="h-full w-full border-0"
     />

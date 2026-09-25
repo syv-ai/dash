@@ -43,7 +43,11 @@ export function parseMemoryFile(content: string): ParsedMemory {
   return out;
 }
 
-/** Basenames of the local `.md` files MEMORY.md links to. */
+/**
+ * Basenames of the local `.md` files MEMORY.md links to. Keep in step with
+ * rewriteMemoryLinks (renderer/components/memory/memoryView.ts), which makes
+ * the same links clickable in the preview.
+ */
 export function parseIndexLinks(index: string): Set<string> {
   const files = new Set<string>();
   for (const match of index.matchAll(/\]\(([^)\s]+\.md)\)/g)) {

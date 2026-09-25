@@ -7,6 +7,7 @@ import {
   pickCurrent,
   rewriteMemoryLinks,
   MEMORY_LINK_PREFIX,
+  MEMORY_PREVIEW_SANDBOX,
 } from '../memoryView';
 
 function entry(p: Partial<MemoryEntry> & { file: string }): MemoryEntry {
@@ -114,5 +115,18 @@ describe('rewriteMemoryLinks', () => {
     expect(rewriteMemoryLinks(md, entries)).toBe(
       `[CI](${MEMORY_LINK_PREFIX}feedback_ci.md) [web](https://x.dev/a.md) [nope](missing.md)`,
     );
+  });
+
+  it('rewrites ./x.md links, which the index also counts as indexed', () => {
+    expect(rewriteMemoryLinks('[CI](./feedback_ci.md)', entries)).toBe(
+      `[CI](${MEMORY_LINK_PREFIX}feedback_ci.md)`,
+    );
+  });
+});
+
+describe('MEMORY_PREVIEW_SANDBOX', () => {
+  it('never lets untrusted memory HTML run scripts', () => {
+    // With allow-same-origin present, allow-scripts would escape the sandbox.
+    expect(MEMORY_PREVIEW_SANDBOX.split(/\s+/)).not.toContain('allow-scripts');
   });
 });

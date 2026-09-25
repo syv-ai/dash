@@ -89,7 +89,7 @@ function escapeHtml(s: string): string {
 /**
  * Point memory cross-references at `#memory:<file>` so the preview can route
  * clicks back into the modal. `[[name]]` resolves by frontmatter name, then by
- * basename; relative `(x.md)` links resolve only to files that exist.
+ * basename; `(x.md)` / `(./x.md)` links are rewritten only when that file exists.
  */
 export function rewriteMemoryLinks(markdown: string, entries: MemoryEntry[]): string {
   const byName = new Map(entries.map((e) => [e.name, e.file]));
@@ -97,6 +97,8 @@ export function rewriteMemoryLinks(markdown: string, entries: MemoryEntry[]): st
   const resolve = (ref: string): string | undefined =>
     byName.get(ref) ?? (files.has(`${ref}.md`) ? `${ref}.md` : undefined);
 
+  // The second pass matches the links parseIndexLinks (main/services/memoryFiles.ts)
+  // counts as indexed, limited to files in the memory folder itself.
   return markdown
     .replace(/\[\[([^\]\n]+)\]\]/g, (_m, ref: string) => {
       const file = resolve(ref.trim());
@@ -104,7 +106,7 @@ export function rewriteMemoryLinks(markdown: string, entries: MemoryEntry[]): st
         ? `[${ref}](${MEMORY_LINK_PREFIX}${encodeURIComponent(file)})`
         : `<span class="memory-missing">${escapeHtml(ref)}</span>`;
     })
-    .replace(/\]\(([^)\s:/]+\.md)\)/g, (m, file: string) =>
+    .replace(/\]\((?:\.\/)?([^)\s:/]+\.md)\)/g, (m, file: string) =>
       files.has(file) ? `](${MEMORY_LINK_PREFIX}${encodeURIComponent(file)})` : m,
     );
 }
@@ -114,5 +116,14 @@ export function rewriteMemoryLinks(markdown: string, entries: MemoryEntry[]): st
  * ordinary links to the window-open handler (→ system browser); memory links
  * are intercepted by MemoryPreview before that happens.
  */
+/**
+ * The preview frame's sandbox. It must never gain `allow-scripts`: with
+ * `allow-same-origin` that would let untrusted memory HTML script the renderer
+ * (and `window.electronAPI`). Same-origin is what lets MemoryPreview wire the
+ * frame's links and Esc from outside; `allow-popups` lets `<base target=_blank>`
+ * links reach the window-open handler.
+ */
+export const MEMORY_PREVIEW_SANDBOX = 'allow-same-origin allow-popups';
+
 export const MEMORY_PREVIEW_HEAD = `<base target="_blank" />
 <style>.memory-missing{opacity:.55;text-decoration:underline dotted}</style>`;

@@ -49,19 +49,41 @@ function schedule(entry: ActiveWatch): void {
   }, DEBOUNCE_MS);
 }
 
-function arm(entry: ActiveWatch): void {
-  const target = nearestExisting(entry.memoryDir);
-  if (!target || target === entry.watchedDir) return;
+function disarm(entry: ActiveWatch): void {
   entry.watcher?.close();
   entry.watcher = null;
   entry.watchedDir = null;
+}
+
+/**
+ * Point the watch at the memory dir, or its nearest existing ancestor. `force`
+ * re-opens it even on the same path: a deleted folder's watch never fires
+ * again, and a recreated one can even reuse the inode, so only a fresh
+ * `fs.watch` is reliable.
+ */
+function arm(entry: ActiveWatch, force = false): void {
+  const target = nearestExisting(entry.memoryDir);
+  if (!target || (!force && target === entry.watchedDir)) return;
+  disarm(entry);
   try {
-    entry.watcher = fs.watch(target, () => {
-      // Watching an ancestor: re-aim at the memory dir once it exists.
-      if (entry.watchedDir !== entry.memoryDir) arm(entry);
+    const watcher = fs.watch(target, (event) => {
+      if (active !== entry) return;
+      const before = entry.watchedDir;
+      // 'rename' covers memory/ appearing under an ancestor and the watched
+      // folder itself being deleted.
+      arm(entry, event === 'rename');
+      // An ancestor is usually the project's transcript folder, written on
+      // every turn: only the watch moving (memory/ appearing) matters there.
+      if (entry.watchedDir === entry.memoryDir || entry.watchedDir !== before) schedule(entry);
+    });
+    watcher.on('error', (err) => {
+      console.warn('[MemoryWatcher] watch lost; re-arming', target, err);
+      if (active !== entry || entry.watcher !== watcher) return;
+      disarm(entry);
+      arm(entry);
       schedule(entry);
     });
-    entry.watcher.on('error', () => {}); // the folder may be deleted under us
+    entry.watcher = watcher;
     entry.watchedDir = target;
   } catch (err) {
     console.error('[MemoryWatcher] fs.watch failed', target, err);
@@ -76,6 +98,9 @@ export async function watchProjectMemory(projectPath: string): Promise<void> {
   if (mine !== generation) return;
   active = { projectPath, memoryDir, watcher: null, watchedDir: null, timer: null };
   arm(active);
+  // Later re-arms only log; a watch that can't start at all (e.g. ENOSPC, out
+  // of inotify watches) is reported so the modal can say it isn't live.
+  if (!active.watcher) throw new Error(`Could not watch ${memoryDir} for changes`);
 }
 
 /** Close the watch. Idempotent; also called at quit. */

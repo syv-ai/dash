@@ -34,10 +34,18 @@ function copy(text: string): void {
   toast('Copied path', { description: text.length > 80 ? undefined : text, duration: 1800 });
 }
 
-/** Surface a failed open/reveal instead of dropping it. */
-async function reportFailure(action: Promise<IpcResponse<null>>, fallback: string): Promise<void> {
-  const res = await action;
-  if (!res.success) toast.error(res.error || fallback);
+/** Surface a failed or rejected open/reveal instead of dropping it. */
+async function reportFailure(
+  action: Promise<IpcResponse<null> | void>,
+  fallback: string,
+): Promise<void> {
+  try {
+    const res = await action;
+    if (res && !res.success) toast.error(res.error || fallback);
+  } catch (err) {
+    console.error(fallback, err);
+    toast.error(fallback);
+  }
 }
 
 function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) {
@@ -76,7 +84,12 @@ function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) 
         <div className="flex items-center gap-1">
           {memory?.exists && (
             <>
-              <IconButton onClick={() => void openInIde(memory.dir)} title="Open folder in editor">
+              <IconButton
+                onClick={() =>
+                  void reportFailure(openInIde(memory.dir), 'Could not open the memory folder')
+                }
+                title="Open folder in editor"
+              >
                 <ExternalLink size={14} strokeWidth={1.8} />
               </IconButton>
               <IconButton
