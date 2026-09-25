@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { encodeProjectPath } from '../utils/claudePaths';
+import { claudeProjectDir } from '../utils/claudePaths';
 
 const execFileAsync = promisify(execFile);
 
@@ -12,8 +12,7 @@ const execFileAsync = promisify(execFile);
  *  encoding rules. */
 function findClaudeProjectDir(cwd: string): string | null {
   try {
-    const projectsDir = path.join(os.homedir(), '.claude', 'projects');
-    const pathBased = path.join(projectsDir, encodeProjectPath(cwd));
+    const pathBased = claudeProjectDir(cwd);
     return fs.existsSync(pathBased) ? pathBased : null;
   } catch (err) {
     console.error('[findClaudeProjectDir] Failed to check projects dir:', err);

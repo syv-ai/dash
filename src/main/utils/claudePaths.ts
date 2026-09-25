@@ -5,6 +5,9 @@
  * its consumers.
  */
 
+import * as os from 'os';
+import * as path from 'path';
+
 /** Claude Code caps encoded dir names at this length and appends a hash. */
 const MAX_ENCODED_LENGTH = 200;
 
@@ -27,4 +30,15 @@ export function encodeProjectPath(absolutePath: string): string {
   if (encoded.length <= MAX_ENCODED_LENGTH) return encoded;
   const hash = Math.abs(javaStringHash(absolutePath)).toString(36);
   return `${encoded.slice(0, MAX_ENCODED_LENGTH)}-${hash}`;
+}
+
+/** Claude Code's config root: `CLAUDE_CONFIG_DIR` when set, else `~/.claude`.
+ *  Read per call so a changed env is picked up without a restart. */
+export function claudeConfigDir(): string {
+  return process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
+}
+
+/** Where Claude keeps a cwd's transcripts (and, for a repo root, its `memory/`). */
+export function claudeProjectDir(cwd: string): string {
+  return path.join(claudeConfigDir(), 'projects', encodeProjectPath(cwd));
 }

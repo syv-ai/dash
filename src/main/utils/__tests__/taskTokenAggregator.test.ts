@@ -3,23 +3,27 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { aggregateTokenStatsForTaskPath } from '../taskTokenAggregator';
-import { encodeProjectPath } from '../claudePaths';
+import { claudeProjectDir } from '../claudePaths';
 
 let tmpHome: string;
 const ORIGINAL_HOME = process.env.HOME;
+const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
 
 beforeEach(() => {
   tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-tokens-'));
   process.env.HOME = tmpHome;
+  delete process.env.CLAUDE_CONFIG_DIR;
 });
 
 afterEach(() => {
   process.env.HOME = ORIGINAL_HOME;
+  if (ORIGINAL_CONFIG_DIR === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+  else process.env.CLAUDE_CONFIG_DIR = ORIGINAL_CONFIG_DIR;
   fs.rmSync(tmpHome, { recursive: true, force: true });
 });
 
 function writeSession(taskPath: string, sessionId: string, lines: object[]) {
-  const dir = path.join(tmpHome, '.claude', 'projects', encodeProjectPath(taskPath));
+  const dir = claudeProjectDir(taskPath);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(
     path.join(dir, `${sessionId}.jsonl`),
@@ -116,7 +120,7 @@ describe('aggregateTokenStatsForTaskPath', () => {
     writeSession(taskPath, 'session-1', [
       asstLine({ uuid: 'a', requestId: 'r1', input: 1000, output: 500 }),
     ]);
-    const dir = path.join(tmpHome, '.claude', 'projects', encodeProjectPath(taskPath));
+    const dir = claudeProjectDir(taskPath);
     fs.writeFileSync(path.join(dir, 'notes.txt'), 'should be ignored');
 
     const result = await aggregateTokenStatsForTaskPath(taskPath);
