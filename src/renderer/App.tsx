@@ -16,6 +16,7 @@ const DiffEditorModal = lazy(() => import('./components/diffEditor/DiffEditorMod
 import { ShellDrawerWrapper } from './components/terminal/ShellDrawerWrapper';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
 import { ExtensionsModal } from './components/extensions/ExtensionsModal';
+import { MemoryModal } from './components/memory/MemoryModal';
 import { TaskModal } from './components/task/TaskModal';
 import { NewProjectWizard } from './components/newProject/NewProjectWizard';
 import { DeleteTaskModal } from './components/task/DeleteTaskModal';
@@ -103,6 +104,9 @@ export function App() {
   const setShowSkillsBrowser = useUi((s) => s.setShowSkillsBrowser);
   const extensionsInitialScopeId = useUi((s) => s.extensionsInitialScopeId);
   const setExtensionsInitialScopeId = useUi((s) => s.setExtensionsInitialScopeId);
+  const memoryProjectId = useUi((s) => s.memoryProjectId);
+  const setMemoryProjectId = useUi((s) => s.setMemoryProjectId);
+  const memoryProject = projects.find((p) => p.id === memoryProjectId) ?? null;
   const settingsInitialTab = useUi((s) => s.settingsInitialTab);
   const setSettingsInitialTab = useUi((s) => s.setSettingsInitialTab);
   const theme = useSettings((s) => s.theme);
@@ -803,6 +807,11 @@ export function App() {
         e.preventDefault();
         setShowAddProjectModal(true);
       }
+      if (keybindings.openMemory && matchesBinding(e, keybindings.openMemory)) {
+        e.preventDefault();
+        const target = activeProjectId ?? projects[0]?.id;
+        if (target) setMemoryProjectId(memoryProjectId ? null : target);
+      }
       if (keybindings.closeDiff && matchesBinding(e, keybindings.closeDiff)) {
         if (remoteControlModalPtyId) {
           e.preventDefault();
@@ -881,6 +890,7 @@ export function App() {
     showSettings,
     showTaskModal,
     showAddProjectModal,
+    memoryProjectId,
     keybindings,
     cycleTask,
     cycleRotation,
@@ -1542,6 +1552,14 @@ export function App() {
           activeTasks={skillsModalActiveTasks}
           initialScopeId={extensionsInitialScopeId}
           onClose={() => setShowSkillsBrowser(false)}
+        />
+      )}
+
+      {memoryProject && (
+        <MemoryModal
+          project={memoryProject}
+          isDark={theme === 'dark'}
+          onClose={() => setMemoryProjectId(null)}
         />
       )}
 

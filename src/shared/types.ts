@@ -1116,3 +1116,35 @@ export interface AutoUpdateStatus {
   /** False when the updater isn't wired up: dev builds and Windows. */
   initialized: boolean;
 }
+
+/** Claude Code auto-memory categories; `other` catches missing or unknown types. */
+export const MEMORY_TYPES = ['user', 'feedback', 'project', 'reference', 'other'] as const;
+export type MemoryType = (typeof MEMORY_TYPES)[number];
+
+/** The index file Claude keeps beside the memories. */
+export const MEMORY_INDEX_FILE = 'MEMORY.md';
+
+/** One `<name>.md` file in a project's auto-memory folder. */
+export interface MemoryEntry {
+  /** Basename, e.g. `feedback_testing.md`: the stable id within a folder. */
+  file: string;
+  /** Frontmatter `name`, falling back to the basename without `.md`. */
+  name: string;
+  description: string;
+  type: MemoryType;
+  /** Markdown without the frontmatter block. */
+  body: string;
+  mtimeMs: number;
+  /** Whether MEMORY.md links to this file. */
+  inIndex: boolean;
+}
+
+/** A project's auto-memory, as Claude Code stores it. */
+export interface ProjectMemory {
+  /** Absolute memory folder Dash resolved (shown even when it doesn't exist). */
+  dir: string;
+  exists: boolean;
+  /** MEMORY.md contents, or null when absent. */
+  index: string | null;
+  entries: MemoryEntry[];
+}

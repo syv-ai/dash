@@ -8,6 +8,7 @@ import {
   ChevronRight,
   ChevronDown,
   MoreHorizontal,
+  Brain,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -30,6 +31,7 @@ import { useSettings } from '../../stores/settingsStore';
 import { useRuntime } from '../../stores/runtimeStore';
 import { useProjects } from '../../stores/projectsStore';
 import { useGit } from '../../stores/gitStore';
+import { useUi } from '../../stores/uiStore';
 
 /** How often the sidebar re-checks visible tasks for PRs. */
 const SIDEBAR_PR_REFRESH_MS = 5 * 60_000;
@@ -92,6 +94,7 @@ export function ProjectsSection({
   const newRowRef = useRef<HTMLDivElement | null>(null);
   const prByTask = useGit((s) => s.prByTask);
   const detectProjectPrs = useGit((s) => s.detectProjectPrs);
+  const setMemoryProjectId = useUi((s) => s.setMemoryProjectId);
 
   // One-shot: scroll the freshly-created project's row into view, then clear the
   // signal so we never scroll again on unrelated re-renders.
@@ -406,6 +409,14 @@ export function ProjectsSection({
                                 className="text-muted-foreground"
                               />
                               Project settings
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => setMemoryProjectId(project.id)}>
+                              <Brain
+                                size={13}
+                                strokeWidth={1.8}
+                                className="text-muted-foreground"
+                              />
+                              Claude memory
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem

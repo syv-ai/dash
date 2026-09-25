@@ -36,6 +36,8 @@ export interface UiState {
   // Scope the Extensions browser opens to ('global', a projectId, or a taskId).
   // null → defaults to global. Mirrors settingsInitialTab/showSettings.
   extensionsInitialScopeId: string | null;
+  // Project whose Claude memory the memory modal shows; null → closed.
+  memoryProjectId: string | null;
   settingsInitialTab: string | undefined;
   remoteControlModalPtyId: string | null;
   // Panel-animation flags (driven by App's panel toggle handlers)
@@ -56,6 +58,7 @@ export interface UiActions {
   setShowSettings: (v: Updater<boolean>) => void;
   setShowSkillsBrowser: (v: boolean) => void;
   setExtensionsInitialScopeId: (v: string | null) => void;
+  setMemoryProjectId: (v: string | null) => void;
   setSettingsInitialTab: (v: string | undefined) => void;
   setRemoteControlModalPtyId: (v: string | null) => void;
   setSidebarAnimating: (v: boolean) => void;
@@ -81,6 +84,7 @@ const initialState: UiState = {
   showSettings: false,
   showSkillsBrowser: false,
   extensionsInitialScopeId: null,
+  memoryProjectId: null,
   settingsInitialTab: undefined,
   remoteControlModalPtyId: null,
   sidebarAnimating: false,
@@ -104,6 +108,7 @@ export const useUi = create<UiStore>((set, get) => ({
   setShowSettings: (v) => set((s) => ({ showSettings: apply(v, s.showSettings) })),
   setShowSkillsBrowser: (v) => set({ showSkillsBrowser: v }),
   setExtensionsInitialScopeId: (v) => set({ extensionsInitialScopeId: v }),
+  setMemoryProjectId: (v) => set({ memoryProjectId: v }),
   setSettingsInitialTab: (v) => set({ settingsInitialTab: v }),
   setRemoteControlModalPtyId: (v) => set({ remoteControlModalPtyId: v }),
   setSidebarAnimating: (v) => set({ sidebarAnimating: v }),

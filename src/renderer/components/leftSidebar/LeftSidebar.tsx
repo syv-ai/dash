@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Plus, Settings, Blocks } from 'lucide-react';
+import { Plus, Settings, Blocks, Brain } from 'lucide-react';
 import type { Project, Task, ContextUsage } from '../../../shared/types';
 import { Tooltip } from '../ui/Tooltip';
 import { IconButton } from '../ui/IconButton';
@@ -7,6 +7,7 @@ import { RotationSection } from './RotationSection';
 import { ProjectsSection } from './ProjectsSection';
 import { useSettings } from '../../stores/settingsStore';
 import { useRuntime } from '../../stores/runtimeStore';
+import { useUi } from '../../stores/uiStore';
 import { getProjectActivity } from './projectActivity';
 import { UpdateBanner } from './UpdateBanner';
 
@@ -73,6 +74,11 @@ export function LeftSidebar({
 }: LeftSidebarProps) {
   const showActiveTasksSection = useSettings((s) => s.showActiveTasksSection);
   const taskActivity = useRuntime((s) => s.taskActivity);
+  const setMemoryProjectId = useUi((s) => s.setMemoryProjectId);
+  // Opens on the active project; the modal's header switches to any other.
+  const memoryProjectId = activeProjectId ?? projects[0]?.id ?? null;
+  const openMemory = () => memoryProjectId && setMemoryProjectId(memoryProjectId);
+  const memoryTitle = memoryProjectId ? 'Claude memory' : 'Add a project to view its memory';
   // Project-reorder drag state for the collapsed rail. The expanded view owns
   // its own drag state inside ProjectsSection (the two views never coexist).
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -243,6 +249,16 @@ export function LeftSidebar({
           </button>
         </Tooltip>
 
+        <Tooltip content={memoryTitle}>
+          <button
+            onClick={openMemory}
+            disabled={!memoryProjectId}
+            className="w-8 h-8 rounded-md flex items-center justify-center shrink-0 hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+          >
+            <Brain size={16} strokeWidth={1.5} />
+          </button>
+        </Tooltip>
+
         <Tooltip content="Settings">
           <button
             onClick={onOpenSettings}
@@ -322,6 +338,15 @@ export function LeftSidebar({
           className="titlebar-no-drag"
         >
           <Blocks size={14} strokeWidth={1.8} />
+        </IconButton>
+        <IconButton
+          onClick={openMemory}
+          disabled={!memoryProjectId}
+          title={memoryTitle}
+          variant="muted"
+          className="titlebar-no-drag disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+        >
+          <Brain size={14} strokeWidth={1.8} />
         </IconButton>
         <IconButton
           onClick={onOpenSettings}
