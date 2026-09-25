@@ -5,6 +5,7 @@
 **Goal:** Let users browse Claude Code's auto-memory for a project (`<claude config dir>/projects/<encoded repo root>/memory/*.md` plus the `MEMORY.md` index) from inside Dash. The memories are read-only in Dash and can be handed off to an external editor.
 
 **Architecture:** A main-process `MemoryService` works out the memory folder the same way Claude Code does:
+
 - take the git main-checkout root, falling back to the project path;
 - encode it with a corrected `encodeProjectPath`;
 - place it under `claudeConfigDir()/projects`.
@@ -17,29 +18,30 @@ It then reads and parses the files. A `MemoryWatcher` watches only one project, 
 
 ## Decisions (settled in the grill session, 2026-09-25)
 
-| # | Decision |
-|---|----------|
-| 1 | Scope: **auto-memory only**. No CLAUDE.md files. |
-| 2 | Display: **in Dash, list + preview**, read-only. Editing goes to the external editor. |
-| 3 | Container: **modal**, like Extensions. Opened for a **project**. Worktree tasks share their repo's memory. |
-| 4 | Entry points: **sidebar footer button** (both layouts), **`openMemory` keybinding (mod+shift+M)**, **project "…" menu**, **task "…" menus**. A task menu opens its parent project's memory. |
-| 5 | Encoder: **fix the shared `encodeProjectPath`** to match Claude Code: `[^a-zA-Z0-9]` becomes `-`, and names over 200 characters are cut to 200 and get a `-<base36 abs(javaHash)>` suffix. This also fixes the transcript/token-stats lookup for `.claude/worktrees/` tasks. |
-| 6 | Memory root: **git main-checkout root** (the parent of `--git-common-dir` when that ends in `.git`), **falling back to `project.path`**. |
-| 7 | Overrides: honour **`CLAUDE_CONFIG_DIR`** through `claudePaths.ts`, which owns Claude's whole user-config layout. This PR moves only the projects- and jobs-related consumers; the rest are follow-up #188. Don't read `autoMemoryDirectory`. |
-| 8 | List: **grouped by type** (User, Feedback, Project, Reference, Other), **newest first** within a group. Search filters on name, description and body. `MEMORY.md` is pinned as "Index". Both frontmatter shapes are parsed (`type:` at the top level, or under `metadata:`). |
-| 9 | Preview: **rendered markdown with clickable `[[name]]` and relative `*.md` links**, kept in the sandboxed iframe and wired back through `postMessage`. No sanitiser dependency. Frontmatter is shown as a React header. |
-| 10 | Freshness: **watch only while the modal is open, one project at a time**. |
-| 11 | Actions: **Open in editor** (the memory, or the folder via the preferred IDE), **reveal folder**, **copy path**. No delete, no send-to-task. |
-| 12 | Empty state: **explain + show the exact path that was checked** (copyable), and mention `autoMemoryDirectory`/`autoMemoryEnabled`. Dash doesn't read settings to diagnose this. |
-| 13 | The modal treats the index and the memories as one `MemoryDoc` list, converted in the renderer (`memoryDocs`). Search filters the list only; the preview changes only on click. |
-| 14 | One `resolveMemoryDir(projectPath)` is the only way to find a memory folder; the list's group order is `MEMORY_TYPES` itself. |
-| 15 | Follow-ups (a separate issue): an "N new memories" badge on project rows with always-on watchers, and "Send to task prompt". |
+| #   | Decision                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Scope: **auto-memory only**. No CLAUDE.md files.                                                                                                                                                                                                                                                                                                                                                                                                         |
+| 2   | Display: **in Dash, list + preview**, read-only. Editing goes to the external editor.                                                                                                                                                                                                                                                                                                                                                                    |
+| 3   | Container: **modal**, like Extensions. Opened for a **project**. Worktree tasks share their repo's memory.                                                                                                                                                                                                                                                                                                                                               |
+| 4   | Entry points: **sidebar footer button** (both layouts), **`openMemory` keybinding (mod+shift+M)**, **project "…" menu**, **task "…" menus**. A task menu opens its parent project's memory.                                                                                                                                                                                                                                                              |
+| 5   | Encoder: **fix the shared `encodeProjectPath`** to match Claude Code: `[^a-zA-Z0-9]` becomes `-`, and names over 200 characters are cut to 200 and get a `-<base36 abs(javaHash)>` suffix. This also fixes the transcript/token-stats lookup for `.claude/worktrees/` tasks.                                                                                                                                                                             |
+| 6   | Memory root: **git main-checkout root** (the parent of `--git-common-dir` when that ends in `.git`), **falling back to `project.path`**.                                                                                                                                                                                                                                                                                                                 |
+| 7   | Overrides: honour **`CLAUDE_CONFIG_DIR`** through `claudePaths.ts`, which owns Claude's whole user-config layout. This PR moves only the projects- and jobs-related consumers; the rest are follow-up #188. Don't read `autoMemoryDirectory`.                                                                                                                                                                                                            |
+| 8   | List: **grouped by type** (User, Feedback, Project, Reference, Other), **newest first** within a group. Search filters on name, description and body. `MEMORY.md` is pinned as "Index". Both frontmatter shapes are parsed (`type:` at the top level, or under `metadata:`).                                                                                                                                                                             |
+| 9   | Preview: **rendered markdown with clickable `[[name]]` and relative `*.md` links** in a sandboxed iframe that runs **no scripts** (`allow-same-origin allow-popups`); `MemoryPreview` wires link clicks and Esc from the parent. No sanitiser dependency. Frontmatter is shown as a React header. _(Changed during execution: the planned in-frame `postMessage` bridge can't run, because srcdoc frames inherit the renderer CSP `script-src 'self'`.)_ |
+| 10  | Freshness: **watch only while the modal is open, one project at a time**.                                                                                                                                                                                                                                                                                                                                                                                |
+| 11  | Actions: **Open in editor** (the memory, or the folder via the preferred IDE), **reveal folder**, **copy path**. No delete, no send-to-task.                                                                                                                                                                                                                                                                                                             |
+| 12  | Empty state: **explain + show the exact path that was checked** (copyable), and mention `autoMemoryDirectory`/`autoMemoryEnabled`. Dash doesn't read settings to diagnose this.                                                                                                                                                                                                                                                                          |
+| 13  | The modal treats the index and the memories as one `MemoryDoc` list, converted in the renderer (`memoryDocs`). Search filters the list only; the preview changes only on click.                                                                                                                                                                                                                                                                          |
+| 14  | One `resolveMemoryDir(projectPath)` is the only way to find a memory folder; the list's group order is `MEMORY_TYPES` itself.                                                                                                                                                                                                                                                                                                                            |
+| 15  | Follow-ups (a separate issue): an "N new memories" badge on project rows with always-on watchers, and "Send to task prompt".                                                                                                                                                                                                                                                                                                                             |
 
-Ground truth used for 5–6: the Claude Code 2.1.282 binary contains `function E(e){let r=e.replace(/[^a-zA-Z0-9]/g,"-");if(r.length<=200)return r;return\`${r.slice(0,200)}-${Math.abs(yX(e)).toString(36)}\`}` with `yX` = Java `String.hashCode`. On disk, worktree project dirs (`…--claude-worktrees-…`) have no `memory/`; the main repo dir does.
+Ground truth used for 5–6: the Claude Code 2.1.282 binary contains `function E(e){let r=e.replace(/[^a-zA-Z0-9]/g,"-");if(r.length<=200)return r;return\`${r.slice(0,200)}-${Math.abs(yX(e)).toString(36)}\`}`with`yX`= Java`String.hashCode`. On disk, worktree project dirs (`…--claude-worktrees-…`) have no `memory/`; the main repo dir does.
 
 ## File map
 
 **Create**
+
 - `src/main/utils/claudePaths.ts`: Claude Code's user-config layout. It holds `claudeConfigDir()` (the one place `CLAUDE_CONFIG_DIR` is read), `encodeProjectPath()` (moved from `jsonlParser.ts`) and `claudeProjectDir(cwd)`.
 - `src/main/services/memoryFiles.ts`: pure parsing (`parseMemoryFile`, `parseIndexLinks`, `toMemoryType`).
 - `src/main/services/MemoryService.ts`: `resolveMemoryDir` (the only way to find a project's memory folder) and `readProjectMemory`.
@@ -53,6 +55,7 @@ Ground truth used for 5–6: the Claude Code 2.1.282 binary contains `function E
 - Tests: `src/main/utils/__tests__/claudePaths.test.ts`, `src/main/services/__tests__/memoryFiles.test.ts`, `src/main/services/__tests__/MemoryService.test.ts`, `src/main/services/__tests__/MemoryWatcher.test.ts`, `src/main/ipc/__tests__/memoryIpc.test.ts`, `src/renderer/components/memory/__tests__/memoryView.test.ts`.
 
 **Modify**
+
 - `src/main/utils/jsonlParser.ts:12-23`: the encoder moves out, and its tests (`jsonlParser.test.ts:137-159`) move to `claudePaths.test.ts`.
 - `src/main/services/SupervisorService.ts:50-54`, `src/main/services/claudeCli.ts:13-22`, `src/main/utils/taskTokenAggregator.ts:36` (and its test): use `claudePaths`.
 - `src/main/services/skillFrontmatter.ts`: export `stripQuotes`.
@@ -73,6 +76,7 @@ Run one test file with: `pnpm test src/path/to/file.test.ts`. Never `npm rebuild
 `src/main/utils/claudePaths.ts` is the single owner of Claude Code's **user config** layout: everything under `CLAUDE_CONFIG_DIR` / `~/.claude`. A project's or worktree's own `<repo>/.claude/…` folder is a different concept and stays where it is. This PR moves only the projects-related consumers. Issue #188 covers the other user-config paths (skills, plugins, global settings).
 
 **Files:**
+
 - Create: `src/main/utils/claudePaths.ts`, `src/main/utils/__tests__/claudePaths.test.ts`
 - Modify: `src/main/utils/jsonlParser.ts:12-23` (delete the encoder), `src/main/utils/__tests__/jsonlParser.test.ts` (delete the `encodeProjectPath` import and its `describe` block at 137-159), `src/main/services/claudeCli.ts:6`, `src/main/utils/taskTokenAggregator.ts:4-9`, `src/main/utils/__tests__/taskTokenAggregator.test.ts` (import)
 
@@ -85,7 +89,10 @@ import { encodeProjectPath } from '../claudePaths';
 describe('encodeProjectPath', () => {
   // Real directory names Claude Code 2.1.282 created under ~/.claude/projects.
   it.each([
-    ['/home/fabian-scott/Documents/Git-Projects/dash', '-home-fabian-scott-Documents-Git-Projects-dash'],
+    [
+      '/home/fabian-scott/Documents/Git-Projects/dash',
+      '-home-fabian-scott-Documents-Git-Projects-dash',
+    ],
     [
       '/home/fabian-scott/Documents/Git-Projects/dash/.claude/worktrees/claude-s-memories-f6c',
       '-home-fabian-scott-Documents-Git-Projects-dash--claude-worktrees-claude-s-memories-f6c',
@@ -154,6 +161,7 @@ export function encodeProjectPath(absolutePath: string): string {
 ```
 
 Delete `encodeProjectPath` and its doc comment from `src/main/utils/jsonlParser.ts`. Delete the `encodeProjectPath` import and `describe` block from `jsonlParser.test.ts`. Repoint the importers (no re-export shim):
+
 - `src/main/services/claudeCli.ts:6` → `import { encodeProjectPath } from '../utils/claudePaths';`
 - `src/main/utils/taskTokenAggregator.ts`: remove `encodeProjectPath` from the `./jsonlParser` import list and add `import { encodeProjectPath } from './claudePaths';`
 - `src/main/utils/__tests__/taskTokenAggregator.test.ts`: import `encodeProjectPath` from `'../claudePaths'`
@@ -181,6 +189,7 @@ Claude's user-config layout."
 ### Task 2: `claudeConfigDir()` + `claudeProjectDir()`, and move the projects-related consumers over
 
 **Files:**
+
 - Modify: `src/main/utils/claudePaths.ts`, `src/main/utils/__tests__/claudePaths.test.ts`, `src/main/services/SupervisorService.ts:50-54`, `src/main/services/claudeCli.ts:13-22`, `src/main/utils/taskTokenAggregator.ts:36`, `src/main/utils/__tests__/taskTokenAggregator.test.ts:22,119`
 
 - [ ] **Step 1: Write the failing tests** (append to `claudePaths.test.ts`, and add `afterEach`, `os`, `path` to the imports)
@@ -240,6 +249,7 @@ export function claudeProjectDir(cwd: string): string {
 ```
 
 Consumers:
+
 - `SupervisorService.ts` `jobsDir()` → `return path.join(claudeConfigDir(), 'jobs');` (doc: "`<claude config dir>/jobs`: watched as a change trigger only."). Import from `'../utils/claudePaths'`. Drop `os` if it's now unused.
 - `claudeCli.ts` `findClaudeProjectDir` → `const pathBased = claudeProjectDir(cwd);`. Delete the `projectsDir` local, and drop `os` and `encodeProjectPath` imports if they're now unused.
 - `taskTokenAggregator.ts:36` → `const projectDir = claudeProjectDir(p);`. Drop `os`, `path` and `encodeProjectPath` imports if they're now unused.
@@ -262,6 +272,7 @@ git commit -m "Resolve Claude's projects and jobs dirs through claudePaths, hono
 ### Task 3: Shared types + pure memory-file parsing
 
 **Files:**
+
 - Modify: `src/shared/types.ts` (append), `src/main/services/skillFrontmatter.ts` (export `stripQuotes`)
 - Create: `src/main/services/memoryFiles.ts`
 - Test: `src/main/services/__tests__/memoryFiles.test.ts`
@@ -471,6 +482,7 @@ git commit -m "Parse Claude auto-memory files and their index"
 ### Task 4: `MemoryService`: resolve and read a project's memory
 
 **Files:**
+
 - Create: `src/main/services/MemoryService.ts`
 - Test: `src/main/services/__tests__/MemoryService.test.ts`
 
@@ -615,7 +627,11 @@ export async function resolveMemoryDir(projectPath: string): Promise<string> {
   return path.join(claudeProjectDir(await resolveMemoryRoot(projectPath)), 'memory');
 }
 
-async function readEntry(dir: string, file: string, indexed: Set<string>): Promise<MemoryEntry | null> {
+async function readEntry(
+  dir: string,
+  file: string,
+  indexed: Set<string>,
+): Promise<MemoryEntry | null> {
   const full = path.join(dir, file);
   try {
     const [content, stat] = await Promise.all([
@@ -682,6 +698,7 @@ git commit -m "Resolve and read a project's Claude auto-memory"
 ### Task 5: `MemoryWatcher`: one watcher, only while the modal is open
 
 **Files:**
+
 - Create: `src/main/services/MemoryWatcher.ts`
 - Modify: `src/main/main.ts` (quit cleanup, next to the PortsConfigWatcher block around line 372)
 - Test: `src/main/services/__tests__/MemoryWatcher.test.ts`
@@ -875,13 +892,13 @@ export function stopWatchingMemory(): void {
 In `src/main/main.ts`, after the "Stop all ports.json watchers" block:
 
 ```ts
-    // Stop the memory-modal watcher
-    try {
-      const { stopWatchingMemory } = await import('./services/MemoryWatcher');
-      stopWatchingMemory();
-    } catch {
-      // Best effort
-    }
+// Stop the memory-modal watcher
+try {
+  const { stopWatchingMemory } = await import('./services/MemoryWatcher');
+  stopWatchingMemory();
+} catch {
+  // Best effort
+}
 ```
 
 - [ ] **Step 4: Run it and check it passes**
@@ -901,6 +918,7 @@ git commit -m "Watch a project's memory folder while the memory view is open"
 ### Task 6: IPC + preload + API types
 
 **Files:**
+
 - Create: `src/main/ipc/memoryIpc.ts`, `src/types/electron-api/memory.ts`
 - Modify: `src/main/ipc/index.ts`, `src/main/preload.ts`, `src/types/electron-api.d.ts`
 - Test: `src/main/ipc/__tests__/memoryIpc.test.ts`
@@ -1050,6 +1068,7 @@ git commit -m "Expose project memory over IPC"
 ### Task 7: Renderer view logic (pure): grouping, search, link rewriting
 
 **Files:**
+
 - Create: `src/renderer/components/memory/memoryView.ts`
 - Test: `src/renderer/components/memory/__tests__/memoryView.test.ts`
 
@@ -1263,7 +1282,11 @@ export function pickCurrent(docs: MemoryDoc[], selectedKey: string | null): Memo
 }
 
 function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 /**
@@ -1325,6 +1348,7 @@ git commit -m "Group, search, select, and cross-link memories for the memory vie
 ### Task 8: Preview component + `markdownToDocument` head hook
 
 **Files:**
+
 - Modify: `src/renderer/components/diffEditor/editor/markdownPreview.ts` (the `markdownToDocument` signature)
 - Create: `src/renderer/components/memory/MemoryPreview.tsx`
 
@@ -1409,6 +1433,7 @@ git commit -m "Render memories in the sandboxed preview with in-app cross-links"
 ### Task 9: Data hook + modal + uiStore flag
 
 **Files:**
+
 - Modify: `src/renderer/stores/uiStore.ts`
 - Create: `src/renderer/components/memory/useProjectMemory.ts`, `src/renderer/components/memory/MemoryModal.tsx`
 
@@ -1417,8 +1442,8 @@ git commit -m "Render memories in the sandboxed preview with in-app cross-links"
 In `UiState`, after `extensionsInitialScopeId`:
 
 ```ts
-  // Project whose Claude memory the memory modal shows; null → closed.
-  memoryProjectId: string | null;
+// Project whose Claude memory the memory modal shows; null → closed.
+memoryProjectId: string | null;
 ```
 
 In `UiActions`: `setMemoryProjectId: (v: string | null) => void;`
@@ -1621,19 +1646,27 @@ function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) 
                       )}
                     </div>
                     {current.description && (
-                      <p className="mt-0.5 text-[12px] text-muted-foreground">{current.description}</p>
+                      <p className="mt-0.5 text-[12px] text-muted-foreground">
+                        {current.description}
+                      </p>
                     )}
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     <IconButton
                       onClick={() =>
-                        void window.electronAPI.openInEditor({ cwd: memory.dir, filePath: current.file })
+                        void window.electronAPI.openInEditor({
+                          cwd: memory.dir,
+                          filePath: current.file,
+                        })
                       }
                       title="Open in editor"
                     >
                       <ExternalLink size={14} strokeWidth={1.8} />
                     </IconButton>
-                    <IconButton onClick={() => copy(`${memory.dir}/${current.file}`)} title="Copy path">
+                    <IconButton
+                      onClick={() => copy(`${memory.dir}/${current.file}`)}
+                      title="Copy path"
+                    >
                       <Copy size={14} strokeWidth={1.8} />
                     </IconButton>
                   </div>
@@ -1696,8 +1729,8 @@ function EmptyState({ dir, projectName }: { dir: string; projectName: string }) 
       </button>
       <p className="max-w-md text-[12px] text-muted-foreground">
         Claude writes memories here as it learns about the project. If you set{' '}
-        <code>autoMemoryDirectory</code> or turned off <code>autoMemoryEnabled</code> in your
-        Claude settings, they live elsewhere or are off.
+        <code>autoMemoryDirectory</code> or turned off <code>autoMemoryEnabled</code> in your Claude
+        settings, they live elsewhere or are off.
       </p>
     </div>
   );
@@ -1721,6 +1754,7 @@ git commit -m "Add the memory modal"
 ### Task 10: Entry points: mount, keybinding, footer, project menu, task menus
 
 **Files:**
+
 - Modify: `src/renderer/keybindings.ts`, `src/renderer/App.tsx`, `src/renderer/components/leftSidebar/LeftSidebar.tsx`, `src/renderer/components/leftSidebar/ProjectsSection.tsx`, `src/renderer/components/task/TaskMenuItems.tsx`, `src/renderer/components/task/TaskActions.tsx`, `src/renderer/components/leftSidebar/TaskCard.tsx`, `src/renderer/components/project/ProjectOverview.tsx`, `src/renderer/components/MainContent.tsx`
 
 - [ ] **Step 1: Keybinding.** In `DEFAULT_KEYBINDINGS` (`src/renderer/keybindings.ts`), after `openFolder`:
@@ -1744,18 +1778,18 @@ Stored keybindings are merged onto the defaults (`keybindings.ts:142`), so exist
 Near the other `useUi` selectors (around line 102):
 
 ```ts
-  const memoryProjectId = useUi((s) => s.memoryProjectId);
-  const setMemoryProjectId = useUi((s) => s.setMemoryProjectId);
-  const memoryProject = projects.find((p) => p.id === memoryProjectId) ?? null;
+const memoryProjectId = useUi((s) => s.memoryProjectId);
+const setMemoryProjectId = useUi((s) => s.setMemoryProjectId);
+const memoryProject = projects.find((p) => p.id === memoryProjectId) ?? null;
 ```
 
 In the keydown handler, after the `openFolder` block:
 
 ```ts
-      if (keybindings.openMemory && matchesBinding(e, keybindings.openMemory)) {
-        e.preventDefault();
-        if (activeProjectId) setMemoryProjectId(memoryProjectId ? null : activeProjectId);
-      }
+if (keybindings.openMemory && matchesBinding(e, keybindings.openMemory)) {
+  e.preventDefault();
+  if (activeProjectId) setMemoryProjectId(memoryProjectId ? null : activeProjectId);
+}
 ```
 
 Add `memoryProjectId` to that effect's dependency array.
@@ -1763,13 +1797,15 @@ Add `memoryProjectId` to that effect's dependency array.
 Next to `{showSkillsBrowser && (<ExtensionsModal …/>)}`:
 
 ```tsx
-      {memoryProject && (
-        <MemoryModal
-          project={memoryProject}
-          isDark={theme === 'dark'}
-          onClose={() => setMemoryProjectId(null)}
-        />
-      )}
+{
+  memoryProject && (
+    <MemoryModal
+      project={memoryProject}
+      isDark={theme === 'dark'}
+      onClose={() => setMemoryProjectId(null)}
+    />
+  );
+}
 ```
 
 with `import { MemoryModal } from './components/memory/MemoryModal';`. `Modal` already handles Esc (`Modal.tsx:76`), so the `closeDiff` chain needs no new branch.
@@ -1781,36 +1817,36 @@ import { Plus, Settings, Blocks, Brain } from 'lucide-react';
 import { useUi } from '../../stores/uiStore';
 import { useProjects } from '../../stores/projectsStore';
 // inside the component:
-  const activeProjectId = useProjects((s) => s.activeProjectId);
-  const setMemoryProjectId = useUi((s) => s.setMemoryProjectId);
+const activeProjectId = useProjects((s) => s.activeProjectId);
+const setMemoryProjectId = useUi((s) => s.setMemoryProjectId);
 ```
 
 (If `useProjects`/`useUi` are already imported there, reuse those imports.) Collapsed rail, after the Extensions `<Tooltip>`:
 
 ```tsx
-        <Tooltip content={activeProjectId ? 'Claude memory' : 'Select a project to view its memory'}>
-          <button
-            onClick={() => activeProjectId && setMemoryProjectId(activeProjectId)}
-            disabled={!activeProjectId}
-            className="w-8 h-8 rounded-md flex items-center justify-center shrink-0 hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag disabled:pointer-events-none disabled:opacity-50"
-          >
-            <Brain size={16} strokeWidth={1.5} />
-          </button>
-        </Tooltip>
+<Tooltip content={activeProjectId ? 'Claude memory' : 'Select a project to view its memory'}>
+  <button
+    onClick={() => activeProjectId && setMemoryProjectId(activeProjectId)}
+    disabled={!activeProjectId}
+    className="w-8 h-8 rounded-md flex items-center justify-center shrink-0 hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag disabled:pointer-events-none disabled:opacity-50"
+  >
+    <Brain size={16} strokeWidth={1.5} />
+  </button>
+</Tooltip>
 ```
 
 Expanded footer, after the Extensions `IconButton`:
 
 ```tsx
-        <IconButton
-          onClick={() => activeProjectId && setMemoryProjectId(activeProjectId)}
-          disabled={!activeProjectId}
-          title={activeProjectId ? 'Claude memory' : 'Select a project to view its memory'}
-          variant="muted"
-          className="titlebar-no-drag"
-        >
-          <Brain size={14} strokeWidth={1.8} />
-        </IconButton>
+<IconButton
+  onClick={() => activeProjectId && setMemoryProjectId(activeProjectId)}
+  disabled={!activeProjectId}
+  title={activeProjectId ? 'Claude memory' : 'Select a project to view its memory'}
+  variant="muted"
+  className="titlebar-no-drag"
+>
+  <Brain size={14} strokeWidth={1.8} />
+</IconButton>
 ```
 
 `IconButton` extends the native button attributes, so `disabled` passes straight through.
@@ -1818,10 +1854,10 @@ Expanded footer, after the Extensions `IconButton`:
 - [ ] **Step 4: Project "…" menu** in `ProjectsSection.tsx`, after the "Project settings" item (around line 409):
 
 ```tsx
-                            <DropdownMenuItem onSelect={() => setMemoryProjectId(project.id)}>
-                              <Brain size={13} strokeWidth={1.8} className="text-muted-foreground" />
-                              Claude memory
-                            </DropdownMenuItem>
+<DropdownMenuItem onSelect={() => setMemoryProjectId(project.id)}>
+  <Brain size={13} strokeWidth={1.8} className="text-muted-foreground" />
+  Claude memory
+</DropdownMenuItem>
 ```
 
 with `Brain` added to the lucide import and `const setMemoryProjectId = useUi((s) => s.setMemoryProjectId);` in the component (import `useUi` from `../../stores/uiStore` if it isn't there already).
@@ -1843,7 +1879,13 @@ export interface TaskMenuHandlers {
   onDelete: () => void;
 }
 
-export function TaskMenuItems({ projectId, onOpenIde, onSettings, onArchive, onDelete }: TaskMenuHandlers) {
+export function TaskMenuItems({
+  projectId,
+  onOpenIde,
+  onSettings,
+  onArchive,
+  onDelete,
+}: TaskMenuHandlers) {
   const { ideId, openLabel } = usePreferredIde();
   const setMemoryProjectId = useUi((s) => s.setMemoryProjectId);
   return (
@@ -1860,6 +1902,7 @@ export function TaskMenuItems({ projectId, onOpenIde, onSettings, onArchive, onD
 ```
 
 Then pass `projectId` through:
+
 - `TaskActions.tsx`: add `projectId: string` to `TaskActionsProps`, destructure it, and pass `projectId={projectId}` to `<TaskMenuItems>`.
 - `TaskCard.tsx:174`: `<TaskActions projectId={task.projectId} …>`.
 - `ProjectOverview.tsx:416`: `<TaskActions projectId={task.projectId} …>`.
@@ -1896,5 +1939,6 @@ git commit -m "Open Claude memory from the sidebar, project and task menus, and 
 ## Follow-up issue (file separately; not in this plan)
 
 **"Memory: new-memory badge on project rows + send memory to task prompt"**
+
 - Always-on watchers for all projects (cheap: one inotify/FSEvents watch per folder, no polling), an "N new" dot on a project row since its memory was last opened, and a persisted last-seen time per project.
 - A "Send to task prompt" action that types `@<memory path> ` into the target task's agent pane without submitting. Target: the task the modal was opened from, else the active task if it's in the same project, else disabled.

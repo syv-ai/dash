@@ -1,11 +1,8 @@
 import { MEMORY_INDEX_FILE, MEMORY_TYPES } from '../../../shared/types';
 import type { MemoryEntry, MemoryType, ProjectMemory } from '../../../shared/types';
 
-/** Href prefix the preview iframe intercepts and posts back to the modal. */
+/** Href prefix the preview intercepts to open another memory in the modal. */
 export const MEMORY_LINK_PREFIX = '#memory:';
-
-/** Message the preview iframe posts when a memory link is clicked. */
-export const MEMORY_LINK_MESSAGE = 'dash:memory-link';
 
 export const MEMORY_TYPE_LABELS: Record<MemoryType, string> = {
   user: 'User',
@@ -115,17 +112,7 @@ export function rewriteMemoryLinks(markdown: string, entries: MemoryEntry[]): st
 /**
  * Injected into the preview document's <head>. `<base target=_blank>` sends
  * ordinary links to the window-open handler (→ system browser); memory links
- * are intercepted and posted to the parent. The iframe has no same-origin, so
- * postMessage is the only way out.
+ * are intercepted by MemoryPreview before that happens.
  */
 export const MEMORY_PREVIEW_HEAD = `<base target="_blank" />
-<style>.memory-missing{opacity:.55;text-decoration:underline dotted}</style>
-<script>
-document.addEventListener('click', function (e) {
-  var a = e.target && e.target.closest && e.target.closest('a[href^="${MEMORY_LINK_PREFIX}"]');
-  if (!a) return;
-  e.preventDefault();
-  var file = decodeURIComponent(a.getAttribute('href').slice(${MEMORY_LINK_PREFIX.length}));
-  parent.postMessage({ type: '${MEMORY_LINK_MESSAGE}', file: file }, '*');
-});
-</script>`;
+<style>.memory-missing{opacity:.55;text-decoration:underline dotted}</style>`;
