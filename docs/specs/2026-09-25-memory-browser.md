@@ -25,7 +25,7 @@ It then reads and parses the files. A `MemoryWatcher` watches only one project, 
 | 4 | Entry points: **sidebar footer button** (both layouts), **`openMemory` keybinding (mod+shift+M)**, **project "…" menu**, **task "…" menus**. A task menu opens its parent project's memory. |
 | 5 | Encoder: **fix the shared `encodeProjectPath`** to match Claude Code: `[^a-zA-Z0-9]` becomes `-`, and names over 200 characters are cut to 200 and get a `-<base36 abs(javaHash)>` suffix. This also fixes the transcript/token-stats lookup for `.claude/worktrees/` tasks. |
 | 6 | Memory root: **git main-checkout root** (the parent of `--git-common-dir` when that ends in `.git`), **falling back to `project.path`**. |
-| 7 | Overrides: honour **`CLAUDE_CONFIG_DIR`** through a shared `claudeConfigDir()`. Don't read `autoMemoryDirectory`. |
+| 7 | Overrides: honour **`CLAUDE_CONFIG_DIR`** through `claudePaths.ts`, which owns Claude's whole user-config layout. This PR moves only the projects- and jobs-related consumers; the rest are follow-up #188. Don't read `autoMemoryDirectory`. |
 | 8 | List: **grouped by type** (User, Feedback, Project, Reference, Other), **newest first** within a group. Search filters on name, description and body. `MEMORY.md` is pinned as "Index". Both frontmatter shapes are parsed (`type:` at the top level, or under `metadata:`). |
 | 9 | Preview: **rendered markdown with clickable `[[name]]` and relative `*.md` links**, kept in the sandboxed iframe and wired back through `postMessage`. No sanitiser dependency. Frontmatter is shown as a React header. |
 | 10 | Freshness: **watch only while the modal is open, one project at a time**. |
@@ -38,7 +38,7 @@ Ground truth used for 5–6: the Claude Code 2.1.282 binary contains `function E
 ## File map
 
 **Create**
-- `src/main/utils/claudeConfigDir.ts`: `claudeConfigDir()`, the single place that honours `CLAUDE_CONFIG_DIR`.
+- `src/main/utils/claudePaths.ts`: Claude Code's user-config layout. It holds `claudeConfigDir()` (the one place `CLAUDE_CONFIG_DIR` is read), `encodeProjectPath()` (moved from `jsonlParser.ts`) and `claudeProjectDir(cwd)`.
 - `src/main/services/memoryFiles.ts`: pure parsing (`parseMemoryFile`, `parseIndexLinks`, `toMemoryType`).
 - `src/main/services/MemoryService.ts`: `resolveMemoryRoot`, `memoryDirFor`, `readProjectMemory`.
 - `src/main/services/MemoryWatcher.ts`: a single modal-scoped watcher (`watchProjectMemory`, `stopWatchingMemory`).
@@ -48,11 +48,11 @@ Ground truth used for 5–6: the Claude Code 2.1.282 binary contains `function E
 - `src/renderer/components/memory/useProjectMemory.ts`: loads the memory, subscribes, and manages the watch lifecycle.
 - `src/renderer/components/memory/MemoryPreview.tsx`: iframe + postMessage bridge.
 - `src/renderer/components/memory/MemoryModal.tsx`: the modal.
-- Tests: `src/main/utils/__tests__/claudeConfigDir.test.ts`, `src/main/services/__tests__/memoryFiles.test.ts`, `src/main/services/__tests__/MemoryService.test.ts`, `src/main/services/__tests__/MemoryWatcher.test.ts`, `src/main/ipc/__tests__/memoryIpc.test.ts`, `src/renderer/components/memory/__tests__/memoryView.test.ts`.
+- Tests: `src/main/utils/__tests__/claudePaths.test.ts`, `src/main/services/__tests__/memoryFiles.test.ts`, `src/main/services/__tests__/MemoryService.test.ts`, `src/main/services/__tests__/MemoryWatcher.test.ts`, `src/main/ipc/__tests__/memoryIpc.test.ts`, `src/renderer/components/memory/__tests__/memoryView.test.ts`.
 
 **Modify**
-- `src/main/utils/jsonlParser.ts:12-23`: the encoder, plus its tests in `src/main/utils/__tests__/jsonlParser.test.ts:137-159`.
-- `src/main/services/SupervisorService.ts:50-54`, `src/main/services/claudeCli.ts:13-22`, `src/main/utils/taskTokenAggregator.ts:36`: use `claudeConfigDir()`.
+- `src/main/utils/jsonlParser.ts:12-23`: the encoder moves out, and its tests (`jsonlParser.test.ts:137-159`) move to `claudePaths.test.ts`.
+- `src/main/services/SupervisorService.ts:50-54`, `src/main/services/claudeCli.ts:13-22`, `src/main/utils/taskTokenAggregator.ts:36` (and its test): use `claudePaths`.
 - `src/main/services/skillFrontmatter.ts`: export `stripQuotes`.
 - `src/shared/types.ts`: `MemoryType`, `MemoryEntry`, `ProjectMemory`.
 - `src/main/ipc/index.ts`, `src/main/preload.ts`, `src/types/electron-api.d.ts`, `src/main/main.ts` (quit cleanup).
@@ -66,15 +66,20 @@ Run one test file with: `pnpm test src/path/to/file.test.ts`. Never `npm rebuild
 
 ---
 
-### Task 1: Make `encodeProjectPath` match Claude Code
+### Task 1: `claudePaths.ts`: move `encodeProjectPath` there and make it match Claude Code
+
+`src/main/utils/claudePaths.ts` is the single owner of Claude Code's **user config** layout: everything under `CLAUDE_CONFIG_DIR` / `~/.claude`. A project's or worktree's own `<repo>/.claude/…` folder is a different concept and stays where it is. This PR moves only the projects-related consumers. Issue #188 covers the other user-config paths (skills, plugins, global settings).
 
 **Files:**
-- Modify: `src/main/utils/jsonlParser.ts:12-23`
-- Test: `src/main/utils/__tests__/jsonlParser.test.ts:137-159`
+- Create: `src/main/utils/claudePaths.ts`, `src/main/utils/__tests__/claudePaths.test.ts`
+- Modify: `src/main/utils/jsonlParser.ts:12-23` (delete the encoder), `src/main/utils/__tests__/jsonlParser.test.ts` (delete the `encodeProjectPath` import and its `describe` block at 137-159), `src/main/services/claudeCli.ts:6`, `src/main/utils/taskTokenAggregator.ts:4-9`, `src/main/utils/__tests__/taskTokenAggregator.test.ts` (import)
 
-- [ ] **Step 1: Replace the `describe('encodeProjectPath')` block with the new contract**
+- [ ] **Step 1: Write the failing test** `src/main/utils/__tests__/claudePaths.test.ts`
 
 ```ts
+import { describe, it, expect } from 'vitest';
+import { encodeProjectPath } from '../claudePaths';
+
 describe('encodeProjectPath', () => {
   // Real directory names Claude Code 2.1.282 created under ~/.claude/projects.
   it.each([
@@ -94,8 +99,7 @@ describe('encodeProjectPath', () => {
 
   it('truncates names over 200 chars and appends a base36 hash of the raw path', () => {
     const long = '/home/u/' + 'very-long-directory-name/'.repeat(9) + 'repo';
-    const encoded = encodeProjectPath(long);
-    expect(encoded).toBe(
+    expect(encodeProjectPath(long)).toBe(
       '-home-u-very-long-directory-name-very-long-directory-name-very-long-directory-name-very-long-directory-name-very-long-directory-name-very-long-directory-name-very-long-directory-name-very-long-directo-xabdzz',
     );
   });
@@ -109,14 +113,19 @@ describe('encodeProjectPath', () => {
 
 - [ ] **Step 2: Run it and check it fails**
 
-Run: `pnpm test src/main/utils/__tests__/jsonlParser.test.ts`
-Expected: FAIL on the worktree case (`dash-.claude-…` ≠ `dash--claude-…`), the punctuation case and the truncation case.
+Run: `pnpm test src/main/utils/__tests__/claudePaths.test.ts`
+Expected: FAIL, "Cannot find module '../claudePaths'".
 
-- [ ] **Step 3: Implement**
-
-Replace lines 12-23 of `src/main/utils/jsonlParser.ts`:
+- [ ] **Step 3: Implement.** Create `src/main/utils/claudePaths.ts`:
 
 ```ts
+/**
+ * Claude Code's user-config layout (`CLAUDE_CONFIG_DIR`, else `~/.claude`):
+ * the one module that knows where Claude keeps per-user state on disk. A
+ * project's own `<repo>/.claude/` folder is a different thing and lives with
+ * its consumers.
+ */
+
 /** Claude Code caps encoded dir names at this length and appends a hash. */
 const MAX_ENCODED_LENGTH = 200;
 
@@ -128,12 +137,11 @@ function javaStringHash(s: string): number {
 }
 
 /**
- * Encode a cwd to the directory name Claude Code uses under
- * `<config dir>/projects/`: every non-alphanumeric character becomes `-` (so
- * `/`, `\`, `:` and the `.` of `.claude/worktrees` alike), and names past 200
- * characters are cut and suffixed with a base36 hash of the raw path. Mirrors
- * Claude Code 2.1.x exactly; a mismatch makes transcript and memory lookups
- * silently miss.
+ * Encode a cwd to the directory name Claude Code uses under `projects/`:
+ * every non-alphanumeric character becomes `-` (so `/`, `\`, `:` and the `.`
+ * of `.claude/worktrees` alike), and names past 200 characters are cut and
+ * suffixed with a base36 hash of the raw path. Mirrors Claude Code 2.1.x
+ * exactly; a mismatch makes transcript and memory lookups silently miss.
  */
 export function encodeProjectPath(absolutePath: string): string {
   const encoded = absolutePath.replace(/[^a-zA-Z0-9]/g, '-');
@@ -143,40 +151,45 @@ export function encodeProjectPath(absolutePath: string): string {
 }
 ```
 
-- [ ] **Step 4: Run it and check it passes. Then run the dependants' tests.**
+Delete `encodeProjectPath` and its doc comment from `src/main/utils/jsonlParser.ts`. Delete the `encodeProjectPath` import and `describe` block from `jsonlParser.test.ts`. Repoint the importers (no re-export shim):
+- `src/main/services/claudeCli.ts:6` → `import { encodeProjectPath } from '../utils/claudePaths';`
+- `src/main/utils/taskTokenAggregator.ts`: remove `encodeProjectPath` from the `./jsonlParser` import list and add `import { encodeProjectPath } from './claudePaths';`
+- `src/main/utils/__tests__/taskTokenAggregator.test.ts`: import `encodeProjectPath` from `'../claudePaths'`
 
-Run: `pnpm test src/main/utils/__tests__/jsonlParser.test.ts src/main/utils/__tests__/taskTokenAggregator.test.ts src/main/services/__tests__/claudeCli.test.ts`
+- [ ] **Step 4: Run the tests**
+
+Run: `pnpm test src/main/utils src/main/services/__tests__/claudeCli.test.ts && pnpm type-check`
 Expected: PASS. If a dependant test hard-codes an old-style encoding such as `-repo-.claude-…`, update the fixture to the new encoding. That old value was the bug.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/main/utils/jsonlParser.ts src/main/utils/__tests__/jsonlParser.test.ts
-git commit -m "Encode project dirs exactly like Claude Code
+git add src/main/utils src/main/services/claudeCli.ts
+git commit -m "Encode project dirs exactly like Claude Code, in a claudePaths module
 
 Dash only hyphenated '/', so every .claude/worktrees task encoded to a
 dir Claude never writes (it hyphenates all non-alphanumerics and hashes
-names past 200 chars), and transcript and token-stat lookups missed."
+names past 200 chars), and transcript and token-stat lookups missed. The
+encoder moves out of the JSONL parser into claudePaths, which owns
+Claude's user-config layout."
 ```
 
 ---
 
-### Task 2: A single `claudeConfigDir()` that honours `CLAUDE_CONFIG_DIR`
+### Task 2: `claudeConfigDir()` + `claudeProjectDir()`, and move the projects-related consumers over
 
 **Files:**
-- Create: `src/main/utils/claudeConfigDir.ts`
-- Modify: `src/main/services/SupervisorService.ts:50-54`, `src/main/services/claudeCli.ts:13-22`, `src/main/utils/taskTokenAggregator.ts:36`
-- Test: `src/main/utils/__tests__/claudeConfigDir.test.ts`
+- Modify: `src/main/utils/claudePaths.ts`, `src/main/utils/__tests__/claudePaths.test.ts`, `src/main/services/SupervisorService.ts:50-54`, `src/main/services/claudeCli.ts:13-22`, `src/main/utils/taskTokenAggregator.ts:36`, `src/main/utils/__tests__/taskTokenAggregator.test.ts:22,119`
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing tests** (append to `claudePaths.test.ts`, and add `afterEach`, `os`, `path` to the imports)
 
 ```ts
-import { describe, it, expect, afterEach } from 'vitest';
+import { afterEach } from 'vitest';
 import * as os from 'os';
 import * as path from 'path';
-import { claudeConfigDir } from '../claudeConfigDir';
+import { claudeConfigDir, claudeProjectDir } from '../claudePaths';
 
-describe('claudeConfigDir', () => {
+describe('claudeConfigDir / claudeProjectDir', () => {
   const original = process.env.CLAUDE_CONFIG_DIR;
   afterEach(() => {
     if (original === undefined) delete process.env.CLAUDE_CONFIG_DIR;
@@ -188,75 +201,58 @@ describe('claudeConfigDir', () => {
     expect(claudeConfigDir()).toBe(path.join(os.homedir(), '.claude'));
   });
 
-  it('honours CLAUDE_CONFIG_DIR', () => {
+  it('honours CLAUDE_CONFIG_DIR, treating empty as unset', () => {
     process.env.CLAUDE_CONFIG_DIR = '/tmp/alt-claude';
     expect(claudeConfigDir()).toBe('/tmp/alt-claude');
-  });
-
-  it('treats an empty CLAUDE_CONFIG_DIR as unset', () => {
     process.env.CLAUDE_CONFIG_DIR = '';
     expect(claudeConfigDir()).toBe(path.join(os.homedir(), '.claude'));
+  });
+
+  it('places a cwd under <config dir>/projects/<encoded>', () => {
+    process.env.CLAUDE_CONFIG_DIR = '/tmp/alt-claude';
+    expect(claudeProjectDir('/repo/.claude/worktrees/x')).toBe(
+      '/tmp/alt-claude/projects/-repo--claude-worktrees-x',
+    );
   });
 });
 ```
 
 - [ ] **Step 2: Run it and check it fails**
 
-Run: `pnpm test src/main/utils/__tests__/claudeConfigDir.test.ts`
-Expected: FAIL, "Cannot find module '../claudeConfigDir'".
+Run: `pnpm test src/main/utils/__tests__/claudePaths.test.ts`
+Expected: FAIL, `claudeConfigDir` is not exported.
 
-- [ ] **Step 3: Implement it and switch the callers over**
-
-`src/main/utils/claudeConfigDir.ts`:
+- [ ] **Step 3: Implement and move the consumers.** Add to `claudePaths.ts` (plus `import * as os from 'os'; import * as path from 'path';`):
 
 ```ts
-import * as os from 'os';
-import * as path from 'path';
-
 /** Claude Code's config root: `CLAUDE_CONFIG_DIR` when set, else `~/.claude`.
  *  Read per call so a changed env is picked up without a restart. */
 export function claudeConfigDir(): string {
   return process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
 }
-```
 
-`src/main/services/SupervisorService.ts`: replace the body of `jobsDir()`:
-
-```ts
-/** `<claude config dir>/jobs`: watched as a change trigger only. */
-function jobsDir(): string {
-  return path.join(claudeConfigDir(), 'jobs');
+/** Where Claude keeps a cwd's transcripts (and, for a repo root, its `memory/`). */
+export function claudeProjectDir(cwd: string): string {
+  return path.join(claudeConfigDir(), 'projects', encodeProjectPath(cwd));
 }
 ```
 
-and add `import { claudeConfigDir } from '../utils/claudeConfigDir';`. Remove the `os` import if nothing else uses it (`grep -n "os\." src/main/services/SupervisorService.ts`).
-
-`src/main/services/claudeCli.ts:15`:
-
-```ts
-    const projectsDir = path.join(claudeConfigDir(), 'projects');
-```
-
-with `import { claudeConfigDir } from '../utils/claudeConfigDir';`. Drop `os` if it's now unused.
-
-`src/main/utils/taskTokenAggregator.ts:36`:
-
-```ts
-    const projectDir = path.join(claudeConfigDir(), 'projects', encodeProjectPath(p));
-```
-
-with `import { claudeConfigDir } from './claudeConfigDir';`. Drop `os` if it's now unused.
+Consumers:
+- `SupervisorService.ts` `jobsDir()` → `return path.join(claudeConfigDir(), 'jobs');` (doc: "`<claude config dir>/jobs`: watched as a change trigger only."). Import from `'../utils/claudePaths'`. Drop `os` if it's now unused.
+- `claudeCli.ts` `findClaudeProjectDir` → `const pathBased = claudeProjectDir(cwd);`. Delete the `projectsDir` local, and drop `os` and `encodeProjectPath` imports if they're now unused.
+- `taskTokenAggregator.ts:36` → `const projectDir = claudeProjectDir(p);`. Drop `os`, `path` and `encodeProjectPath` imports if they're now unused.
+- `taskTokenAggregator.test.ts`: the tests set `HOME`, so add `delete process.env.CLAUDE_CONFIG_DIR` to `beforeEach` (restoring it in `afterEach`), and replace the two hand-built paths at :22 and :119 with `claudeProjectDir(taskPath)`.
 
 - [ ] **Step 4: Run the tests**
 
-Run: `pnpm test src/main/utils src/main/services/__tests__/SupervisorService.test.ts src/main/services/__tests__/claudeCli.test.ts`
+Run: `pnpm test src/main/utils src/main/services/__tests__/SupervisorService.test.ts src/main/services/__tests__/claudeCli.test.ts && pnpm type-check`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/main/utils/claudeConfigDir.ts src/main/utils/__tests__/claudeConfigDir.test.ts src/main/services/SupervisorService.ts src/main/services/claudeCli.ts src/main/utils/taskTokenAggregator.ts
-git commit -m "Resolve Claude's config dir in one place, honouring CLAUDE_CONFIG_DIR"
+git add src/main/utils src/main/services/SupervisorService.ts src/main/services/claudeCli.ts
+git commit -m "Resolve Claude's projects and jobs dirs through claudePaths, honouring CLAUDE_CONFIG_DIR"
 ```
 
 ---
@@ -484,7 +480,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
-import { encodeProjectPath } from '../../utils/jsonlParser';
+import { claudeProjectDir } from '../../utils/claudePaths';
 import { resolveMemoryRoot, memoryDirFor, readProjectMemory } from '../MemoryService';
 
 function git(cwd: string, ...args: string[]): void {
@@ -533,9 +529,9 @@ describe('resolveMemoryRoot', () => {
 });
 
 describe('memoryDirFor', () => {
-  it('places the folder under <config dir>/projects/<encoded root>/memory', () => {
+  it('places the folder in the root\'s Claude project dir', () => {
     expect(memoryDirFor(repo)).toBe(
-      path.join(tmp, 'claude', 'projects', encodeProjectPath(repo), 'memory'),
+      path.join(claudeProjectDir(repo), 'memory'),
     );
   });
 });
@@ -588,8 +584,7 @@ import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { MemoryEntry, ProjectMemory } from '@shared/types';
-import { claudeConfigDir } from '../utils/claudeConfigDir';
-import { encodeProjectPath } from '../utils/jsonlParser';
+import { claudeProjectDir } from '../utils/claudePaths';
 import { MEMORY_INDEX_FILE, parseIndexLinks, parseMemoryFile } from './memoryFiles';
 
 const execFileAsync = promisify(execFile);
@@ -614,7 +609,7 @@ export async function resolveMemoryRoot(projectPath: string): Promise<string> {
 }
 
 export function memoryDirFor(memoryRoot: string): string {
-  return path.join(claudeConfigDir(), 'projects', encodeProjectPath(memoryRoot), 'memory');
+  return path.join(claudeProjectDir(memoryRoot), 'memory');
 }
 
 async function readEntry(dir: string, file: string, indexed: Set<string>): Promise<MemoryEntry | null> {
