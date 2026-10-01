@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { MEMORY_TYPES } from '../../../../shared/types';
 import type { MemoryEntry, ProjectMemory } from '../../../../shared/types';
 import {
-  groupMemories,
+  listMemories,
+  memoryCounts,
+  memorySections,
   memoryDocs,
   pickCurrent,
   rewriteMemoryLinks,
@@ -12,8 +14,12 @@ import {
   isDraftDirty,
   canSaveDraft,
   draftTypes,
+  memoryScaffold,
+  retypeDraft,
+  KNOWN_MEMORY_TYPES,
   MEMORY_LINK_PREFIX,
   MEMORY_PREVIEW_SANDBOX,
+  type MemorySection,
 } from '../memoryView';
 import { memoryLinkFiles } from '../../../../shared/memoryLinks';
 
@@ -30,32 +36,103 @@ function entry(p: Partial<MemoryEntry> & { file: string }): MemoryEntry {
   };
 }
 
-describe('groupMemories', () => {
+const DAY = 24 * 60 * 60 * 1000;
+const NOW = 1000 * DAY;
+const files = (sections: MemorySection[]) =>
+  sections.map((s) => [s.id, ...s.entries.map((m) => m.entry.file)]);
+
+describe('listMemories', () => {
+  it('flags what Claude will not recall, cannot file, or cannot follow', () => {
+    const listed = listMemories([
+      entry({ file: 'fine.md', type: 'user', name: 'fine', body: '[[linked]] [x](linked.md)' }),
+      entry({
+        file: 'linked.md',
+        type: 'user',
+        body: 'see [index](MEMORY.md), [web](https://x/y.md)',
+      }),
+      entry({ file: 'loose.md', type: 'user', inIndex: false }),
+      entry({ file: 'untyped.md' }),
+      entry({ file: 'dead-ref.md', type: 'user', body: '[[gone]]' }),
+      entry({ file: 'dead-link.md', type: 'user', body: '[x](gone.md)' }),
+      entry({ file: 'all.md', inIndex: false, body: '[[gone]]' }),
+    ]);
+    expect(Object.fromEntries(listed.map((m) => [m.entry.file, m.issues]))).toEqual({
+      'fine.md': [],
+      'linked.md': [],
+      'loose.md': ['unindexed'],
+      'untyped.md': ['untyped'],
+      'dead-ref.md': ['dead-link'],
+      'dead-link.md': ['dead-link'],
+      'all.md': ['unindexed', 'untyped', 'dead-link'],
+    });
+  });
+
+  it('calls a link dead exactly when the preview cannot open it', () => {
+    const entries = [
+      entry({ file: 'a.md', type: 'user', name: 'A name', body: '[[b]] [[A name]] [[nope]]' }),
+      entry({ file: 'b.md', type: 'user', body: '[[A name]] [a](./a.md)' }),
+    ];
+    for (const { entry: e, issues } of listMemories(entries)) {
+      const missing = rewriteMemoryLinks(e.body, entries).includes('memory-missing');
+      expect(issues.includes('dead-link')).toBe(missing);
+    }
+  });
+});
+
+describe('memorySections', () => {
   const entries = [
-    entry({ file: 'a.md', type: 'feedback', mtimeMs: 1 }),
-    entry({ file: 'b.md', type: 'feedback', mtimeMs: 5 }),
-    entry({ file: 'c.md', type: 'user', mtimeMs: 2, description: 'Senior engineer' }),
-    entry({ file: 'd.md', type: 'other', body: 'mentions Postgres' }),
+    entry({ file: 'old.md', type: 'feedback', mtimeMs: NOW - 31 * DAY }),
+    entry({ file: 'new.md', type: 'feedback', mtimeMs: NOW - DAY }),
+    entry({ file: 'newer.md', type: 'feedback', mtimeMs: NOW }),
+    entry({ file: 'loose.md', type: 'feedback', mtimeMs: NOW, inIndex: false }),
+    entry({ file: 'me.md', type: 'user', mtimeMs: NOW, description: 'Senior engineer' }),
+    entry({ file: 'fact.md', type: 'project', mtimeMs: NOW - 90 * DAY }),
+    entry({ file: 'untyped.md', mtimeMs: NOW - 90 * DAY, body: 'mentions Postgres' }),
   ];
 
-  it('orders groups user → feedback → project → reference → other, newest first, skipping empty groups', () => {
-    const groups = groupMemories(entries, '');
-    expect(groups.map((g) => g.type)).toEqual(['user', 'feedback', 'other']);
-    expect(groups[1]!.entries.map((e) => e.file)).toEqual(['b.md', 'a.md']);
-  });
-
-  it('gives every memory type a group, so none can be hidden', () => {
-    const all = MEMORY_TYPES.map((type, i) => entry({ file: `${type}.md`, type, mtimeMs: i }));
-    expect(groupMemories(all, '').map((g) => g.type)).toEqual([...MEMORY_TYPES]);
-  });
-
-  it('filters case-insensitively on name, description, and body', () => {
-    expect(groupMemories(entries, 'senior').flatMap((g) => g.entries.map((e) => e.file))).toEqual([
-      'c.md',
+  it('files a type by state: needing attention, recent, then older, newest first', () => {
+    expect(files(memorySections(entries, 'feedback', '', NOW))).toEqual([
+      ['attention', 'loose.md'],
+      ['recent', 'newer.md', 'new.md'],
+      ['older', 'old.md'],
     ]);
-    expect(groupMemories(entries, 'POSTGRES').flatMap((g) => g.entries.map((e) => e.file))).toEqual(
-      ['d.md'],
+  });
+
+  it('files "all" by type in display order, under the ones needing attention', () => {
+    expect(files(memorySections(entries, 'all', '', NOW))).toEqual([
+      ['attention', 'loose.md', 'untyped.md'],
+      ['feedback', 'newer.md', 'new.md', 'old.md'],
+      ['user', 'me.md'],
+      ['project', 'fact.md'],
+    ]);
+  });
+
+  it('shows every memory exactly once under "all", so none can be hidden', () => {
+    const all = MEMORY_TYPES.map((type, i) => entry({ file: `${type}.md`, type, mtimeMs: i }));
+    const sections = memorySections(all, 'all', '', NOW);
+    expect(sections.map((s) => s.id)).toEqual(['attention', ...KNOWN_MEMORY_TYPES]);
+    expect(sections.flatMap((s) => s.entries.map((m) => m.entry.file)).sort()).toEqual(
+      all.map((e) => e.file).sort(),
     );
+  });
+
+  it('filters case-insensitively on name, description, and body, within the filter', () => {
+    expect(files(memorySections(entries, 'all', 'senior', NOW))).toEqual([['user', 'me.md']]);
+    expect(files(memorySections(entries, 'all', 'POSTGRES', NOW))).toEqual([
+      ['attention', 'untyped.md'],
+    ]);
+    expect(memorySections(entries, 'feedback', 'senior', NOW)).toEqual([]);
+  });
+
+  it('counts the matches under each tab; an untyped memory only counts under "all"', () => {
+    expect(memoryCounts(entries, '')).toEqual({
+      all: 7,
+      feedback: 4,
+      user: 1,
+      reference: 0,
+      project: 1,
+    });
+    expect(memoryCounts(entries, 'senior')).toMatchObject({ all: 1, user: 1, feedback: 0 });
   });
 });
 
@@ -65,33 +142,34 @@ describe('memoryDocs / pickCurrent', () => {
     exists: true,
     index: '- [A](a.md)',
     entries: [
-      entry({ file: 'a.md', type: 'feedback', mtimeMs: 1, body: 'A' }),
+      entry({ file: 'a.md', type: 'project', mtimeMs: 1, body: 'A' }),
       entry({ file: 'b.md', type: 'user', mtimeMs: 2 }),
     ],
   };
 
-  it('puts the index first as an untyped doc, then memories in list order', () => {
+  it('lists memories in "all" order, then the index as an untyped doc', () => {
     const docs = memoryDocs(memory);
-    expect(docs.map((d) => d.key)).toEqual(['MEMORY.md', 'b.md', 'a.md']);
-    expect(docs[0]).toEqual({
+    expect(docs.map((d) => d.key)).toEqual(['b.md', 'a.md', 'MEMORY.md']);
+    expect(docs[2]).toEqual({
       key: 'MEMORY.md',
       file: 'MEMORY.md',
       title: 'Index',
       markdown: '- [A](a.md)',
     });
-    expect(docs[2]).toMatchObject({ title: 'a', markdown: 'A', type: 'feedback' });
+    expect(docs[1]).toMatchObject({ title: 'a', markdown: 'A', type: 'project' });
   });
 
   it('keeps the selected doc', () => {
     expect(pickCurrent(memoryDocs(memory), 'a.md')?.key).toBe('a.md');
+    expect(pickCurrent(memoryDocs(memory), 'MEMORY.md')?.key).toBe('MEMORY.md');
   });
 
-  it('falls back to the index when the selected file was deleted', () => {
-    expect(pickCurrent(memoryDocs(memory), 'gone.md')?.key).toBe('MEMORY.md');
+  it('falls back to the first memory in list order when the selected file was deleted', () => {
+    expect(pickCurrent(memoryDocs(memory), 'gone.md')?.key).toBe('b.md');
   });
 
-  it('falls back to the first memory in list order when there is no index', () => {
-    expect(pickCurrent(memoryDocs({ ...memory, index: null }), null)?.key).toBe('b.md');
+  it('falls back to the index when it is all the folder has', () => {
+    expect(pickCurrent(memoryDocs({ ...memory, entries: [] }), null)?.key).toBe('MEMORY.md');
   });
 
   it('returns null for an empty folder', () => {
@@ -194,7 +272,7 @@ describe('memory drafts', () => {
   });
 
   it('offers `other` only to a memory that already has no known type', () => {
-    expect(draftTypes(newMemoryDraft())).toEqual(['user', 'feedback', 'project', 'reference']);
+    expect(draftTypes(newMemoryDraft())).toEqual([...KNOWN_MEMORY_TYPES]);
     expect(draftTypes(editMemoryDraft(saved))).not.toContain('other');
     expect(draftTypes(editMemoryDraft(entry({ file: 'o.md', type: 'other' })))).toEqual([
       ...MEMORY_TYPES,
@@ -203,7 +281,33 @@ describe('memory drafts', () => {
 
   it('keeps a memory as the doc behind its row, and none behind the index', () => {
     const docs = memoryDocs({ dir: '/m', exists: true, index: '', entries: [saved] });
-    expect(docs.map((d) => d.entry)).toEqual([undefined, saved]);
+    expect(docs.map((d) => d.entry)).toEqual([saved, undefined]);
+  });
+
+  it('starts a new memory as the given type, with the reasoning scaffold where one applies', () => {
+    expect(newMemoryDraft().fields.type).toBe('project');
+    const draft = newMemoryDraft('feedback');
+    expect(draft.fields).toMatchObject({ type: 'feedback', body: memoryScaffold('feedback') });
+    expect(draft.fields.body).toContain('**Why:**');
+    expect(draft.fields.body).toContain('**How to apply:**');
+    expect(newMemoryDraft('reference').fields.body).toBe('');
+    // The scaffold alone is nothing to lose.
+    expect(isDraftDirty(draft)).toBe(false);
+  });
+
+  it('moves an untouched scaffold with the type, and never touches written text', () => {
+    const draft = newMemoryDraft('feedback');
+    expect(retypeDraft(draft, 'user')).toMatchObject({ type: 'user', body: '' });
+    const asUser = { ...draft, fields: retypeDraft(draft, 'user') };
+    // Only a type was picked: cancelling loses nothing, so it must not ask.
+    expect(isDraftDirty(asUser)).toBe(false);
+    expect(retypeDraft(asUser, 'project').body).toBe(memoryScaffold('project'));
+    const written = { ...draft, fields: { ...draft.fields, body: 'Use CI.' } };
+    expect(retypeDraft(written, 'user')).toMatchObject({ type: 'user', body: 'Use CI.' });
+    expect(isDraftDirty(written)).toBe(true);
+    // An existing memory's body is its own, even when empty.
+    const existing = editMemoryDraft(entry({ file: 'e.md', type: 'user' }));
+    expect(retypeDraft(existing, 'feedback')).toMatchObject({ type: 'feedback', body: '' });
   });
 });
 

@@ -1,11 +1,12 @@
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
-import type { MemoryEntry, MemoryFields, ProjectMemory } from '../../../shared/types';
+import type { MemoryEntry, MemoryFields, MemoryType, ProjectMemory } from '../../../shared/types';
 import {
   canSaveDraft,
   editMemoryDraft,
   isDraftDirty,
   newMemoryDraft,
+  type KnownMemoryType,
   type MemoryDraft,
 } from './memoryView';
 
@@ -18,7 +19,8 @@ export interface MemoryDraftApi {
   /** The file changed on disk since the draft was opened; nothing was written. */
   stale: boolean;
   saveError: string | null;
-  startNew(): void;
+  /** Start a memory of `type` (the list's current type, when it has one). */
+  startNew(type?: KnownMemoryType): void;
   startEdit(entry: MemoryEntry): void;
   change(fields: MemoryFields): void;
   save(): Promise<void>;
@@ -35,8 +37,8 @@ export interface MemoryDraftApi {
 interface Args {
   projectPath: string;
   reload: () => Promise<ProjectMemory | null>;
-  /** Called with the saved memory's file once the list has it. */
-  onSaved: (file: string) => void;
+  /** Called with the saved memory's file and type once the list has it. */
+  onSaved: (file: string, type: MemoryType) => void;
 }
 
 /** Create/edit state for the memory modal, with the diff editor's stale-save flow. */
@@ -100,7 +102,7 @@ export function useMemoryDraft({ projectPath, reload, onSaved }: Args): MemoryDr
         }
         await reload();
         open(null);
-        onSaved(file);
+        onSaved(file, draft.fields.type);
       } catch (err) {
         setSaveError(err instanceof Error ? err.message : String(err));
       } finally {
@@ -124,8 +126,8 @@ export function useMemoryDraft({ projectPath, reload, onSaved }: Args): MemoryDr
     saving,
     stale: stale !== null,
     saveError,
-    startNew: () => {
-      if (discard()) open(newMemoryDraft());
+    startNew: (type) => {
+      if (discard()) open(newMemoryDraft(type));
     },
     startEdit: (entry) => {
       if (discard()) open(editMemoryDraft(entry));

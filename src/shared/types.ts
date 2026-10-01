@@ -1117,8 +1117,11 @@ export interface AutoUpdateStatus {
   initialized: boolean;
 }
 
-/** Claude Code auto-memory categories; `other` catches missing or unknown types. */
-export const MEMORY_TYPES = ['user', 'feedback', 'project', 'reference', 'other'] as const;
+/**
+ * Claude Code auto-memory categories, in display order: standing rules first,
+ * facts that go stale last. `other` catches missing or unknown types.
+ */
+export const MEMORY_TYPES = ['feedback', 'user', 'reference', 'project', 'other'] as const;
 export type MemoryType = (typeof MEMORY_TYPES)[number];
 
 /** The index file Claude keeps beside the memories. */

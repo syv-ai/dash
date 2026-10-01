@@ -4,11 +4,17 @@ import { Loader2 } from 'lucide-react';
 import type { MemoryEntry } from '../../../shared/types';
 import { Button } from '../ui/Button';
 import { Segmented } from '../ui/Segmented';
-import { Select } from '../ui/Select';
 import { SaveErrorBanner } from '../diffEditor/editor/SaveErrorBanner';
 import { StaleBanner } from '../diffEditor/editor/StaleBanner';
 import { MemoryPreview } from './MemoryPreview';
-import { canSaveDraft, draftTypes, MEMORY_TYPE_LABELS, type MemoryDraft } from './memoryView';
+import {
+  canSaveDraft,
+  draftTypes,
+  retypeDraft,
+  MEMORY_TYPE_HINTS,
+  MEMORY_TYPE_LABELS,
+  type MemoryDraft,
+} from './memoryView';
 import type { MemoryDraftApi } from './useMemoryDraft';
 
 interface Props {
@@ -55,7 +61,20 @@ export function MemoryEditor({ draft, api, entries, isDark }: Props) {
         />
       )}
 
-      <div className="grid shrink-0 grid-cols-[minmax(0,1fr)_160px] gap-x-3 gap-y-2.5 border-b border-border/40 px-5 py-3">
+      <div className="shrink-0 space-y-2.5 border-b border-border/40 px-5 py-3">
+        {/* The type comes first: it decides what the memory is for and how it starts. */}
+        <div className="space-y-1">
+          <span className="block text-[10px] uppercase tracking-[0.08em] text-fg-fade-45">
+            Type
+          </span>
+          <Segmented
+            size="sm"
+            value={fields.type}
+            onChange={(type) => api.change(retypeDraft(draft, type))}
+            options={draftTypes(draft).map((t) => ({ value: t, label: MEMORY_TYPE_LABELS[t] }))}
+          />
+          <p className="text-[11px] text-muted-foreground">{MEMORY_TYPE_HINTS[fields.type]}</p>
+        </div>
         <Field label="Name">
           <input
             autoFocus
@@ -65,15 +84,7 @@ export function MemoryEditor({ draft, api, entries, isDark }: Props) {
             className={fieldClass}
           />
         </Field>
-        <Field label="Type">
-          <Select
-            value={fields.type}
-            onValueChange={(type) => set({ type })}
-            options={draftTypes(draft).map((t) => ({ value: t, label: MEMORY_TYPE_LABELS[t] }))}
-            className="rounded-lg px-2.5 py-1.5"
-          />
-        </Field>
-        <Field label="Description" className="col-span-2">
+        <Field label="Description">
           <input
             value={fields.description}
             onChange={(e) => set({ description: e.target.value })}
@@ -133,9 +144,9 @@ export function MemoryEditor({ draft, api, entries, isDark }: Props) {
   );
 }
 
-function Field(props: { label: string; className?: string; children: ReactNode }) {
+function Field(props: { label: string; children: ReactNode }) {
   return (
-    <label className={`block space-y-1 ${props.className ?? ''}`}>
+    <label className="block space-y-1">
       <span className="block text-[10px] uppercase tracking-[0.08em] text-fg-fade-45">
         {props.label}
       </span>
