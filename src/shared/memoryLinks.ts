@@ -7,21 +7,37 @@
  * Memories also point at each other by name, as `[[name]]`. The preview
  * resolves those, a rename moves them, and a delete warns about them, all
  * through `mapMemoryRefs`.
+ *
+ * Neither is looked for in code (a fenced block or an inline span): `[[` there
+ * is a shell test or a TOML table, not a memory.
  */
 
-const LINK_RE = /\]\(([^)\s]+)\)/g;
+// A target is bare, or in angle brackets when it has spaces or parentheses.
+const LINK_RE = /\]\((?:<([^>\n]+)>|([^)\s]+))\)/g;
 const REF_RE = /\[\[([^\]\n]+)\]\]/g;
 const SAME_FOLDER_MD_RE = /^(?:\.\/)?([^/\\:]+\.md)$/;
+const CODE_RE = /(^[ \t]*(?:```|~~~)[\s\S]*?^[ \t]*(?:```|~~~)|`[^`\n]+`)/m;
+
+/** `markdown` with `edit` applied to everything but its code. */
+function outsideCode(markdown: string, edit: (text: string) => string): string {
+  // Split on a capturing pattern: the odd parts are the code.
+  return markdown
+    .split(CODE_RE)
+    .map((part, i) => (i % 2 ? part : edit(part)))
+    .join('');
+}
 
 /** Rewrite each memory link in `markdown`; `replace` gets the file and the `](target)` match. */
 export function mapMemoryLinks(
   markdown: string,
   replace: (file: string, match: string) => string,
 ): string {
-  return markdown.replace(LINK_RE, (match, target: string) => {
-    const file = SAME_FOLDER_MD_RE.exec(target)?.[1];
-    return file ? replace(file, match) : match;
-  });
+  return outsideCode(markdown, (text) =>
+    text.replace(LINK_RE, (match: string, angled?: string, bare?: string) => {
+      const file = SAME_FOLDER_MD_RE.exec(angled ?? bare ?? '')?.[1];
+      return file ? replace(file, match) : match;
+    }),
+  );
 }
 
 /** The memory files `markdown` links to. */
@@ -39,5 +55,7 @@ export function mapMemoryRefs(
   markdown: string,
   replace: (ref: string, match: string) => string,
 ): string {
-  return markdown.replace(REF_RE, (match, ref: string) => replace(ref, match));
+  return outsideCode(markdown, (text) =>
+    text.replace(REF_RE, (match, ref: string) => replace(ref, match)),
+  );
 }

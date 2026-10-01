@@ -30,21 +30,20 @@ function isMissing(err: unknown): boolean {
 /**
  * The directory Claude Code keys a project's auto-memory by: the main
  * checkout of the git repo `projectPath` lives in, so every linked worktree
- * (and a monorepo subfolder) shares one memory. Outside git, or when there is
- * no main checkout (bare repo, submodule), the path itself.
+ * (and a monorepo subfolder) shares one memory. With no main checkout, a bare
+ * repo's worktrees share its git dir and a submodule or --separate-git-dir
+ * checkout is its own root. Outside git, the path itself.
  */
 async function resolveMemoryRoot(projectPath: string): Promise<string> {
   try {
     const { stdout } = await execFileAsync(
       'git',
-      ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+      ['rev-parse', '--path-format=absolute', '--git-common-dir', '--git-dir', '--show-toplevel'],
       { cwd: projectPath },
     );
-    const commonDir = stdout.trim();
+    const [commonDir = '', gitDir, toplevel] = stdout.trim().split('\n');
     if (path.basename(commonDir) === '.git') return path.dirname(commonDir);
-    // Bare repo, submodule or --separate-git-dir: no main checkout to key by.
-    console.warn('[MemoryService] no main checkout for', projectPath, 'git dir:', commonDir);
-    return projectPath;
+    return gitDir !== commonDir ? commonDir : toplevel || projectPath;
   } catch (err) {
     // Only "not a repo" is the expected outside-git case; a missing git, an
     // unsafe directory or an old git would otherwise show the wrong folder.
@@ -231,12 +230,12 @@ export async function updateMemory(
   // new description, and a memory the index never linked gets its line. A body
   // edit leaves an existing line alone: its hook may be Claude's own wording.
   const before = parseMemoryFile(existing);
-  const relabelled = before.name !== fields.name || before.description !== fields.description;
+  // What it answered to, in the list and in `[[links]]`: its name, or its basename when it had none.
+  const oldName = before.name || file.replace(/\.md$/, '');
+  const relabelled = oldName !== fields.name || before.description !== fields.description;
   await editIndex(dir, (index) =>
     relabelled || !memoryLinkFiles(index).has(file) ? setIndexLine(index, file, fields) : index,
   );
-  // What `[[links]]` knew it as: its name, or its basename when it had none.
-  const oldName = before.name || file.replace(/\.md$/, '');
   // A name with `]` can't be written as a link, so there is nothing to move to.
   const renamed = oldName !== fields.name && !fields.name.includes(']');
   const relinked = renamed ? await relinkMemories(dir, file, oldName, fields.name) : [];

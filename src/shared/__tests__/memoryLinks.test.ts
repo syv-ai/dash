@@ -16,6 +16,29 @@ describe('memoryLinkFiles', () => {
       expect(memoryLinkFiles(`[X](${target})`)).toEqual(new Set());
     },
   );
+
+  it('reads an angle-bracketed target, which is how a name with spaces is linked', () => {
+    expect(memoryLinkFiles('- [A](<my note.md>) [B](<notes (old).md>)')).toEqual(
+      new Set(['my note.md', 'notes (old).md']),
+    );
+  });
+});
+
+describe('code', () => {
+  it('is not searched for links or refs: `[[` there is shell or TOML, not a memory', () => {
+    const md = [
+      'See [[one]] and `[[ -f x ]]`.',
+      '```toml',
+      '[[servers]]',
+      '[a](a.md)',
+      '```',
+      '[b](b.md)',
+    ].join('\n');
+    const refs: string[] = [];
+    expect(mapMemoryRefs(md, (ref, match) => (refs.push(ref), match))).toBe(md);
+    expect(refs).toEqual(['one']);
+    expect(memoryLinkFiles(md)).toEqual(new Set(['b.md']));
+  });
 });
 
 describe('mapMemoryLinks', () => {

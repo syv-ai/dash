@@ -15,13 +15,18 @@ export function useProjectMemory(projectPath: string): {
 
   useEffect(() => {
     let cancelled = false;
+    let latest = 0;
     const load = async (): Promise<ProjectMemory | null> => {
+      const seq = ++latest;
       try {
         const res = await window.electronAPI.memoryGet({ projectPath });
         if (cancelled) return null;
         if (res.success && res.data) {
-          setMemory(res.data);
-          setError(null);
+          // A read overtaken by a later one is still returned, but not shown.
+          if (seq === latest) {
+            setMemory(res.data);
+            setError(null);
+          }
           return res.data;
         }
         setError(res.error ?? 'Could not read memory');

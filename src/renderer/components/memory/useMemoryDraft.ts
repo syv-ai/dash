@@ -62,7 +62,7 @@ export function useMemoryDraft({ projectPath, reload, onSaved }: Args): MemoryDr
 
   const save = useCallback(
     async (expected?: FileStat) => {
-      if (!draft || !canSaveDraft(draft)) return;
+      if (!draft || !canSaveDraft(draft) || saving) return;
       setSaving(true);
       setSaveError(null);
       try {
@@ -109,7 +109,7 @@ export function useMemoryDraft({ projectPath, reload, onSaved }: Args): MemoryDr
         setSaving(false);
       }
     },
-    [draft, projectPath, reload, open, onSaved],
+    [draft, saving, projectPath, reload, open, onSaved],
   );
 
   const reloadFromDisk = useCallback(async () => {

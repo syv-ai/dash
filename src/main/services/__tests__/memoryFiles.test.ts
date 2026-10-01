@@ -240,6 +240,13 @@ describe('index lines', () => {
     );
   });
 
+  it('links a file name a bare target cannot hold, and finds that line again', () => {
+    const once = setIndexLine('', 'my note (old).md', fields);
+    expect(once).toBe('- [CI fast](<my note (old).md>) — hook\n');
+    expect(setIndexLine(once, 'my note (old).md', fields)).toBe(once);
+    expect(removeIndexLines(once, 'my note (old).md')).toBe('');
+  });
+
   it('leaves a line shared with another memory alone', () => {
     const index = '- see [CI](ci.md) and [B](b.md)\n';
     expect(setIndexLine(index, 'ci.md', fields)).toBe(index);

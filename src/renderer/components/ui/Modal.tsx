@@ -75,6 +75,11 @@ interface ModalProps {
 // pushes onto this stack so the outer's keydown handler bows out for Esc.
 const modalCloseStack: Array<() => void> = [];
 
+/** Close the topmost modal as Esc would: through its close guard, animated. */
+export function closeTopModal(): void {
+  modalCloseStack[modalCloseStack.length - 1]?.();
+}
+
 export function Modal({
   onClose,
   size,

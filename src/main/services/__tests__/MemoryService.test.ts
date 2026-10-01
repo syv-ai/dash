@@ -61,6 +61,20 @@ describe('resolveMemoryDir', () => {
     warn.mockRestore();
   });
 
+  it("uses a bare repo's git dir for its worktrees, and a submodule's own root", async () => {
+    // Where Claude Code keys them: neither has a main checkout to share.
+    const bare = path.join(tmp, 'bare.git');
+    git(tmp, 'clone', '-q', '--bare', repo, bare);
+    const checkout = path.join(tmp, 'bare-main');
+    git(bare, 'worktree', 'add', '-q', checkout, 'main');
+    expect(await resolveMemoryDir(checkout)).toBe(memoryOf(bare));
+
+    git(repo, '-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', bare, 'sub');
+    const sub = path.join(repo, 'sub');
+    fs.mkdirSync(path.join(sub, 'inner'));
+    expect(await resolveMemoryDir(path.join(sub, 'inner'))).toBe(memoryOf(sub));
+  });
+
   it('warns when git itself fails rather than reporting "not a repo"', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const gone = path.join(tmp, 'deleted-project');
@@ -256,6 +270,19 @@ describe('writing memories', () => {
     const result = await updateMemory(repo, 'notes.md', edit, await entryOf('notes.md'));
     expect(result).toMatchObject({ relinked: ['a.md'] });
     expect(fs.readFileSync(path.join(dir, 'a.md'), 'utf8')).toBe('See [[Team notes]].');
+  });
+
+  it('keeps the index line of a memory with no name when only its body is edited', async () => {
+    const dir = await resolveMemoryDir(repo);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'notes.md'), 'no frontmatter');
+    const index = "- [Notes](notes.md) — Claude's hook\n";
+    fs.writeFileSync(path.join(dir, 'MEMORY.md'), index);
+
+    // The name it is shown under is its basename: saving that back is no rename.
+    const edit = { name: 'notes', description: '', type: 'other', body: 'x' } as const;
+    await updateMemory(repo, 'notes.md', edit, await entryOf('notes.md'));
+    expect(fs.readFileSync(path.join(dir, 'MEMORY.md'), 'utf8')).toBe(index);
   });
 
   it('leaves links alone when another memory still has the old name', async () => {

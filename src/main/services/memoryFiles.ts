@@ -150,7 +150,9 @@ export function setIndexLine(index: string, file: string, fields: MemoryFields):
   // Brackets would end the link text early.
   const title = fields.name.replace(/[[\]]/g, '');
   const hook = fields.description ? ` — ${fields.description}` : '';
-  const pointer = `- [${title}](${file})${hook}`;
+  // A bare link target ends at a space or a parenthesis.
+  const target = /[\s()]/.test(file) ? `<${file}>` : file;
+  const pointer = `- [${title}](${target})${hook}`;
 
   const lines = index.split('\n');
   const at = lines.findIndex((line) => pointsOnlyAt(line, file));
