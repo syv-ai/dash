@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mapMemoryLinks, memoryLinkFiles } from '../memoryLinks';
+import { mapMemoryLinks, mapMemoryRefs, memoryLinkFiles } from '../memoryLinks';
 
 describe('memoryLinkFiles', () => {
   it('collects same-folder .md links, with or without ./', () => {
@@ -24,5 +24,17 @@ describe('mapMemoryLinks', () => {
     expect(mapMemoryLinks(md, (file) => `](#${file})`)).toBe(
       'a [x](#x.md) b [y](sub/y.md) c [z](https://z.md)',
     );
+  });
+});
+
+describe('mapMemoryRefs', () => {
+  it('hands over each [[name]] as written and keeps everything else verbatim', () => {
+    const seen: string[] = [];
+    const out = mapMemoryRefs('a [[one]] b [[ two ]] c [x](y.md) [[\nnot a ref]]', (ref) => {
+      seen.push(ref);
+      return `<${ref.trim()}>`;
+    });
+    expect(seen).toEqual(['one', ' two ']);
+    expect(out).toBe('a <one> b <two> c [x](y.md) [[\nnot a ref]]');
   });
 });

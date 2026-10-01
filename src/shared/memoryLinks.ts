@@ -3,9 +3,14 @@
  * file in the memory folder itself (`x.md` or `./x.md`). The main process uses
  * it to flag memories MEMORY.md indexes; the preview uses it to make the same
  * links clickable, so "indexed" and "linked" can't disagree.
+ *
+ * Memories also point at each other by name, as `[[name]]`. The preview
+ * resolves those, a rename moves them, and a delete warns about them, all
+ * through `mapMemoryRefs`.
  */
 
 const LINK_RE = /\]\(([^)\s]+)\)/g;
+const REF_RE = /\[\[([^\]\n]+)\]\]/g;
 const SAME_FOLDER_MD_RE = /^(?:\.\/)?([^/\\:]+\.md)$/;
 
 /** Rewrite each memory link in `markdown`; `replace` gets the file and the `](target)` match. */
@@ -27,4 +32,12 @@ export function memoryLinkFiles(markdown: string): Set<string> {
     return match;
   });
   return files;
+}
+
+/** Rewrite each `[[name]]` reference in `markdown`; `replace` gets the name as written and the match. */
+export function mapMemoryRefs(
+  markdown: string,
+  replace: (ref: string, match: string) => string,
+): string {
+  return markdown.replace(REF_RE, (match, ref: string) => replace(ref, match));
 }

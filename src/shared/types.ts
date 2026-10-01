@@ -1124,20 +1124,36 @@ export type MemoryType = (typeof MEMORY_TYPES)[number];
 /** The index file Claude keeps beside the memories. */
 export const MEMORY_INDEX_FILE = 'MEMORY.md';
 
-/** One `<name>.md` file in a project's auto-memory folder. */
-export interface MemoryEntry {
-  /** Basename, e.g. `feedback_testing.md`: the stable id within a folder. */
-  file: string;
-  /** Frontmatter `name`, falling back to the basename without `.md`. */
+/** The part of a memory a person writes: what Dash reads from and saves to its file. */
+export interface MemoryFields {
+  /** Frontmatter `name`. */
   name: string;
   description: string;
   type: MemoryType;
   /** Markdown without the frontmatter block. */
   body: string;
+}
+
+/** One `<name>.md` file in a project's auto-memory folder. */
+export interface MemoryEntry extends MemoryFields {
+  /** Basename, e.g. `feedback_testing.md`: the stable id within a folder. */
+  file: string;
+  /** Frontmatter `name`, falling back to the basename without `.md`. */
+  name: string;
+  /** With `sizeBytes`, what a save is checked against so it can't clobber a newer write. */
   mtimeMs: number;
+  sizeBytes: number;
   /** Whether MEMORY.md links to this file. */
   inIndex: boolean;
 }
+
+/**
+ * A memory save: the editor's write result, plus (when it was written) the
+ * other memory files whose `[[name]]` links were moved to a new name.
+ */
+export type MemoryUpdateResult =
+  | (Extract<EditorWriteResult, { ok: true }> & { relinked: string[] })
+  | Extract<EditorWriteResult, { ok: false }>;
 
 /** A project's auto-memory, as Claude Code stores it. */
 export interface ProjectMemory {

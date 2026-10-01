@@ -3,12 +3,44 @@ import * as path from 'path';
 import { ipcMain, shell } from 'electron';
 import { z } from 'zod';
 import { parseArgs, errorResponse, ipcError } from './validate';
-import { readProjectMemory, resolveMemoryDir } from '../services/MemoryService';
+import { MEMORY_INDEX_FILE, MEMORY_TYPES } from '@shared/types';
+import {
+  createMemory,
+  deleteMemory,
+  readProjectMemory,
+  resolveMemoryDir,
+  updateMemory,
+} from '../services/MemoryService';
 import { stopWatchingMemory, watchProjectMemory } from '../services/MemoryWatcher';
 
 export const memoryProjectArgsSchema = z.object({
   projectPath: z.string().refine((p) => path.isAbsolute(p), 'must be an absolute path'),
 });
+
+const singleLine = z.string().regex(/^[^\r\n]*$/, 'must be a single line');
+
+const memoryFieldsSchema = z.object({
+  name: singleLine.trim().min(1).max(200),
+  description: singleLine.trim().max(1000),
+  type: z.enum(MEMORY_TYPES),
+  body: z.string().max(1_000_000),
+});
+
+/** A memory's basename: a `.md` file in the memory folder itself, never the index. */
+const memoryFileSchema = z
+  .string()
+  .regex(/^[^/\\:]+\.md$/, 'must be a .md file name')
+  .refine((f) => f.toLowerCase() !== MEMORY_INDEX_FILE.toLowerCase(), 'cannot be the index');
+
+export const memoryCreateArgsSchema = memoryProjectArgsSchema.extend(memoryFieldsSchema.shape);
+
+export const memoryUpdateArgsSchema = memoryCreateArgsSchema.extend({
+  file: memoryFileSchema,
+  expectedMtimeMs: z.number(),
+  expectedSizeBytes: z.number(),
+});
+
+export const memoryDeleteArgsSchema = memoryProjectArgsSchema.extend({ file: memoryFileSchema });
 
 export function registerMemoryIpc(): void {
   ipcMain.handle('memory:get', async (_event, raw: unknown) => {
@@ -44,6 +76,44 @@ export function registerMemoryIpc(): void {
       if (!fs.existsSync(dir)) return ipcError(`No memory folder at ${dir}`, 'NOT_FOUND');
       const failure = await shell.openPath(dir);
       if (failure) return ipcError(failure, 'UNKNOWN');
+      return { success: true, data: null };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
+  // The writes below take a project path and a basename, never a full path:
+  // like openDir, they can only ever touch a memory folder.
+  ipcMain.handle('memory:create', async (_event, raw: unknown) => {
+    try {
+      const { projectPath, ...fields } = parseArgs('memory:create', memoryCreateArgsSchema, raw);
+      return { success: true, data: { file: await createMemory(projectPath, fields) } };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
+  ipcMain.handle('memory:update', async (_event, raw: unknown) => {
+    try {
+      const { projectPath, file, expectedMtimeMs, expectedSizeBytes, ...fields } = parseArgs(
+        'memory:update',
+        memoryUpdateArgsSchema,
+        raw,
+      );
+      const data = await updateMemory(projectPath, file, fields, {
+        mtimeMs: expectedMtimeMs,
+        sizeBytes: expectedSizeBytes,
+      });
+      return { success: true, data };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
+  ipcMain.handle('memory:delete', async (_event, raw: unknown) => {
+    try {
+      const { projectPath, file } = parseArgs('memory:delete', memoryDeleteArgsSchema, raw);
+      await deleteMemory(projectPath, file, (full) => shell.trashItem(full));
       return { success: true, data: null };
     } catch (error) {
       return errorResponse(error);
