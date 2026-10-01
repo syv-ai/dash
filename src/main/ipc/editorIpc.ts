@@ -6,6 +6,7 @@ import path from 'path';
 import { promisify } from 'util';
 import { parseArgs, errorResponse, ipcError } from './validate';
 import { parseBlameIncremental } from '../services/blameParser';
+import { writeFileIfUnchanged } from '../utils/guardedWrite';
 import type {
   EditorBlameResult,
   EditorCommitListItem,
@@ -569,51 +570,11 @@ export function registerEditorIpc(): void {
         );
         const abs = resolveInsideCwd(args.cwd, args.filePath);
 
-        try {
-          const stat = await fs.stat(abs);
-          if (stat.mtimeMs !== args.expectedMtimeMs || stat.size !== args.expectedSizeBytes) {
-            return {
-              success: true,
-              data: {
-                ok: false,
-                stale: true,
-                currentMtimeMs: stat.mtimeMs,
-                currentSizeBytes: stat.size,
-              },
-            };
-          }
-        } catch (err: unknown) {
-          if ((err as { code?: string }).code !== 'ENOENT') throw err;
-          if (args.expectedMtimeMs !== 0 || args.expectedSizeBytes !== 0) {
-            return {
-              success: true,
-              data: {
-                ok: false,
-                stale: true,
-                currentMtimeMs: 0,
-                currentSizeBytes: 0,
-              },
-            };
-          }
-        }
-
-        const dir = path.dirname(abs);
-        const base = path.basename(abs);
-        const rand = Math.floor(Math.random() * 0xffffffff).toString(16);
-        const tmp = path.join(dir, `.${base}.dash-tmp-${rand}`);
-        await fs.writeFile(tmp, args.content, { encoding: 'utf8', mode: 0o644 });
-        try {
-          await fs.rename(tmp, abs);
-        } catch (err) {
-          await fs.unlink(tmp).catch(() => {});
-          throw err;
-        }
-
-        const stat = await fs.stat(abs);
-        return {
-          success: true,
-          data: { ok: true, mtimeMs: stat.mtimeMs, sizeBytes: stat.size },
-        };
+        const data = await writeFileIfUnchanged(abs, args.content, {
+          mtimeMs: args.expectedMtimeMs,
+          sizeBytes: args.expectedSizeBytes,
+        });
+        return { success: true, data };
       } catch (err) {
         return errorResponse(err);
       }
