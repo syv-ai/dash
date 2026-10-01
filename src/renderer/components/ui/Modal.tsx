@@ -1,9 +1,23 @@
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 // Lets nested close buttons (Settings's sidebar X, Skills's header X) trigger the
 // fade-out + scale-out animation instead of calling the parent's onClose directly,
 // which would unmount the modal mid-animation.
-const ModalCloseContext = createContext<(() => void) | undefined>(undefined);
+interface ModalCloseApi {
+  close: () => void;
+  /** Asked before the modal closes; set through useModalCloseGuard. */
+  guard: React.MutableRefObject<(() => boolean) | null>;
+}
+
+const ModalCloseContext = createContext<ModalCloseApi | undefined>(undefined);
 
 /** Use inside a <Modal>. Returns the animated close fn — backs out via fade-out and
  *  scale-out before unmounting. Throws if called outside <Modal>; use
@@ -13,7 +27,7 @@ export function useModalClose(): () => void {
   if (!ctx) {
     throw new Error('useModalClose must be called from inside <Modal>');
   }
-  return ctx;
+  return ctx.close;
 }
 
 /** Like useModalClose, but for components that may render in both modal and
@@ -21,7 +35,21 @@ export function useModalClose(): () => void {
  *  otherwise the supplied fallback (typically the parent's onClose prop,
  *  which dismisses immediately). */
 export function useCloseHandler(fallback: () => void): () => void {
-  return useContext(ModalCloseContext) ?? fallback;
+  return useContext(ModalCloseContext)?.close ?? fallback;
+}
+
+/** Use inside a <Modal>. `canClose` is asked before Esc, a backdrop click or a
+ *  close button dismisses the modal; returning false keeps it open (e.g. the
+ *  user chose not to discard unsaved edits). */
+export function useModalCloseGuard(canClose: () => boolean): void {
+  const guard = useContext(ModalCloseContext)?.guard;
+  useEffect(() => {
+    if (!guard) return;
+    guard.current = canClose;
+    return () => {
+      guard.current = null;
+    };
+  }, [guard, canClose]);
 }
 
 interface ModalProps {
@@ -56,7 +84,12 @@ export function Modal({
   children,
 }: ModalProps) {
   const [closing, setClosing] = useState(false);
-  const requestClose = useCallback(() => setClosing(true), []);
+  const closeGuard = useRef<(() => boolean) | null>(null);
+  const requestClose = useCallback(() => {
+    if (closeGuard.current && !closeGuard.current()) return;
+    setClosing(true);
+  }, []);
+  const closeApi = useMemo(() => ({ close: requestClose, guard: closeGuard }), [requestClose]);
   // Backdrop click should ONLY close when both mousedown and mouseup land on
   // the backdrop itself. Without this, a drag that starts on a card child
   // (e.g. a react-resizable-panels handle) and releases outside the card
@@ -100,7 +133,7 @@ export function Modal({
   }, [requestClose]);
 
   return (
-    <ModalCloseContext.Provider value={requestClose}>
+    <ModalCloseContext.Provider value={closeApi}>
       {/* A soft dim + blur lets the underlying app peek through the translucent
           card without dominating it. `bg-scrim` is dark ink in the light theme. */}
       <div

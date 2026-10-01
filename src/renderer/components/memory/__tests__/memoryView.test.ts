@@ -6,6 +6,12 @@ import {
   memoryDocs,
   pickCurrent,
   rewriteMemoryLinks,
+  memoryReferrers,
+  newMemoryDraft,
+  editMemoryDraft,
+  isDraftDirty,
+  canSaveDraft,
+  draftTypes,
   MEMORY_LINK_PREFIX,
   MEMORY_PREVIEW_SANDBOX,
 } from '../memoryView';
@@ -18,6 +24,7 @@ function entry(p: Partial<MemoryEntry> & { file: string }): MemoryEntry {
     type: 'other',
     body: '',
     mtimeMs: 0,
+    sizeBytes: 0,
     inIndex: true,
     ...p,
   };
@@ -140,5 +147,91 @@ describe('indexed ⇔ linked', () => {
     const indexed = memoryLinkFiles(md).has('x.md');
     const linked = rewriteMemoryLinks(md, [entry({ file: 'x.md' })]).includes(MEMORY_LINK_PREFIX);
     expect(linked).toBe(indexed);
+  });
+});
+
+describe('memory drafts', () => {
+  const saved = entry({
+    file: 'ci.md',
+    name: 'prefer-ci',
+    description: 'CI over local',
+    type: 'feedback',
+    body: '\nUse CI.\n',
+    mtimeMs: 7,
+    sizeBytes: 42,
+  });
+
+  it('opens an edit on the memory as shown, guarded by the stat it was read at', () => {
+    const draft = editMemoryDraft(saved);
+    expect(draft.target).toEqual({ file: 'ci.md', mtimeMs: 7, sizeBytes: 42 });
+    expect(draft.fields).toEqual({
+      name: 'prefer-ci',
+      description: 'CI over local',
+      type: 'feedback',
+      body: 'Use CI.',
+    });
+    expect(isDraftDirty(draft)).toBe(false);
+    expect(canSaveDraft(draft)).toBe(false);
+  });
+
+  it('is dirty and saveable once any field differs, and clean again when put back', () => {
+    const draft = editMemoryDraft(saved);
+    for (const patch of [{ name: 'x' }, { description: 'x' }, { type: 'user' }, { body: 'x' }]) {
+      const edited = { ...draft, fields: { ...draft.fields, ...patch } as typeof draft.fields };
+      expect(isDraftDirty(edited)).toBe(true);
+      expect(canSaveDraft(edited)).toBe(true);
+    }
+    expect(isDraftDirty({ ...draft, fields: { ...draft.fields } })).toBe(false);
+  });
+
+  it('cannot save a memory without a name', () => {
+    const draft = newMemoryDraft();
+    expect(draft.target).toBeNull();
+    expect(canSaveDraft(draft)).toBe(false);
+    expect(canSaveDraft({ ...draft, fields: { ...draft.fields, body: 'text' } })).toBe(false);
+    expect(canSaveDraft({ ...draft, fields: { ...draft.fields, name: '  ' } })).toBe(false);
+    expect(canSaveDraft({ ...draft, fields: { ...draft.fields, name: 'a' } })).toBe(true);
+  });
+
+  it('offers `other` only to a memory that already has no known type', () => {
+    expect(draftTypes(newMemoryDraft())).toEqual(['user', 'feedback', 'project', 'reference']);
+    expect(draftTypes(editMemoryDraft(saved))).not.toContain('other');
+    expect(draftTypes(editMemoryDraft(entry({ file: 'o.md', type: 'other' })))).toEqual([
+      ...MEMORY_TYPES,
+    ]);
+  });
+
+  it('keeps a memory as the doc behind its row, and none behind the index', () => {
+    const docs = memoryDocs({ dir: '/m', exists: true, index: '', entries: [saved] });
+    expect(docs.map((d) => d.entry)).toEqual([undefined, saved]);
+  });
+});
+
+describe('memoryReferrers', () => {
+  const target = entry({ file: 'feedback_ci.md', name: 'prefer-ci' });
+  const entries = [
+    target,
+    entry({ file: 'by-name.md', body: 'see [[prefer-ci]]' }),
+    entry({ file: 'by-basename.md', body: 'see [[ feedback_ci ]]' }),
+    entry({ file: 'by-link.md', body: 'see [CI](./feedback_ci.md)' }),
+    entry({ file: 'unrelated.md', body: 'see [[by-name]] and [x](https://x/feedback_ci.md)' }),
+  ];
+
+  it('finds the memories that name or link the target, and not the target itself', () => {
+    const self = { ...target, body: 'I am [[prefer-ci]]' };
+    expect(memoryReferrers([self, ...entries.slice(1)], self).map((e) => e.file)).toEqual([
+      'by-name.md',
+      'by-basename.md',
+      'by-link.md',
+    ]);
+  });
+
+  it('agrees with the preview about what a [[ref]] means', () => {
+    // `[[feedback_ci]]` names another memory outright, so it is not a link to the target.
+    const shadow = entry({ file: 'shadow.md', name: 'feedback_ci' });
+    expect(memoryReferrers([...entries, shadow], target).map((e) => e.file)).toEqual([
+      'by-name.md',
+      'by-link.md',
+    ]);
   });
 });
