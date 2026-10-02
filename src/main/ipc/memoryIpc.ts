@@ -135,8 +135,8 @@ export function registerMemoryIpc(): void {
   ipcMain.handle('memory:delete', async (_event, raw: unknown) => {
     try {
       const { projectPath, file } = parseArgs('memory:delete', memoryDeleteArgsSchema, raw);
-      await deleteMemory(projectPath, file, (full) => shell.trashItem(full));
-      return { success: true, data: null };
+      const data = await deleteMemory(projectPath, file, (full) => shell.trashItem(full));
+      return { success: true, data };
     } catch (error) {
       return errorResponse(error);
     }

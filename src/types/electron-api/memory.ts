@@ -1,6 +1,7 @@
 import type {
   IpcResponse,
   MemoryCreateResult,
+  MemoryDeleteResult,
   MemoryFields,
   MemoryUpdateResult,
   ProjectMemory,
@@ -31,7 +32,10 @@ export interface MemoryApi {
     } & MemoryFields,
   ) => Promise<IpcResponse<MemoryUpdateResult>>;
   /** Moves the memory to the OS trash and drops its MEMORY.md line. */
-  memoryDelete: (args: { projectPath: string; file: string }) => Promise<IpcResponse<null>>;
+  memoryDelete: (args: {
+    projectPath: string;
+    file: string;
+  }) => Promise<IpcResponse<MemoryDeleteResult>>;
   /** Drops MEMORY.md's lines for memories that no longer exist; resolves with their files. */
   memoryPrune: (args: { projectPath: string }) => Promise<IpcResponse<{ removed: string[] }>>;
   /** Fires with the watched project's path; returns an unsubscribe. */

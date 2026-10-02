@@ -1183,6 +1183,11 @@ export interface MemoryCreateResult {
   warning?: string;
 }
 
+/** A deleted memory: its file is gone. `warning` says its MEMORY.md line could not follow. */
+export interface MemoryDeleteResult {
+  warning?: string;
+}
+
 /** A project's auto-memory, as Claude Code stores it. */
 export interface ProjectMemory {
   /** Absolute memory folder Dash resolved (shown even when it doesn't exist). */

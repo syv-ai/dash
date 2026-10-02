@@ -331,12 +331,13 @@ export function redescribeDraft(draft: MemoryDraft, description: string): Memory
 /**
  * The hook a save should write on the memory's MEMORY.md line, or undefined to
  * leave the line's hook as it is: when it isn't ours to reword, and when it
- * wasn't edited (Claude may have reworded it since the draft was opened). A
- * line that doesn't exist yet takes the description unless a hook was written.
+ * wasn't edited (Claude may have reworded it since the draft was opened). For
+ * a line that doesn't exist yet only a written hook is sent: the save gives a
+ * new line the description, and leaves one Claude added meanwhile alone.
  */
 export function draftHook(draft: MemoryDraft): string | undefined {
   const hook = draft.fields.hook.trim();
-  if (draft.line === 'missing') return hook || draft.fields.description.trim();
+  if (draft.line === 'missing') return hook || undefined;
   if (draft.line === 'shared' || hook === draft.saved.hook) return undefined;
   return hook;
 }

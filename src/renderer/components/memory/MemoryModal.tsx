@@ -144,11 +144,19 @@ function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) 
   const startNew = () => editor.startNew(filter === 'all' ? undefined : filter);
   const confirmDelete = async (entry: MemoryEntry) => {
     setDeleting(null);
-    const deleted = await reportFailure(
-      window.electronAPI.memoryDelete({ projectPath: project.path, file: entry.file }),
-      'Could not delete the memory',
-    );
-    if (deleted) toast(`Moved ${entry.file} to the trash`, { duration: 1800 });
+    try {
+      const res = await window.electronAPI.memoryDelete({
+        projectPath: project.path,
+        file: entry.file,
+      });
+      if (!res.success) toast.error(res.error || 'Could not delete the memory');
+      // The file is gone; its dangling line shows above the list, with a way to drop it.
+      else if (res.data?.warning) toast.error(res.data.warning);
+      else toast(`Moved ${entry.file} to the trash`, { duration: 1800 });
+    } catch (err) {
+      console.error('Could not delete the memory', err);
+      toast.error('Could not delete the memory');
+    }
     await reload();
   };
   const prune = async () => {

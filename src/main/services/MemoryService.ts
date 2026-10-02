@@ -6,12 +6,18 @@ import { promisify } from 'util';
 import {
   MEMORY_INDEX_FILE,
   type MemoryCreateResult,
+  type MemoryDeleteResult,
   type MemoryEntry,
   type MemoryFields,
   type MemoryUpdateResult,
   type ProjectMemory,
 } from '@shared/types';
-import { claudeConfigDir, claudeProjectDir, claudeStateFile } from '../utils/claudePaths';
+import { claudeProjectDir } from '../utils/claudePaths';
+import {
+  isWorkspaceTrusted,
+  readClaudeSettings,
+  type ClaudeSettingsFile,
+} from '../utils/claudeSettings';
 import { writeFileIfUnchanged } from '../utils/guardedWrite';
 import { mapMemoryRefs, memoryLinkFiles } from '@shared/memoryLinks';
 import {
@@ -59,89 +65,6 @@ async function resolveMemoryRoot(projectPath: string): Promise<string> {
   }
 }
 
-/** Claude Code's managed (policy) settings file. */
-function managedSettingsFile(): string {
-  if (process.platform === 'darwin') {
-    return '/Library/Application Support/ClaudeCode/managed-settings.json';
-  }
-  if (process.platform === 'win32') return 'C:\\Program Files\\ClaudeCode\\managed-settings.json';
-  return '/etc/claude-code/managed-settings.json';
-}
-
-/** The part of a Claude settings file that bears on auto memory. */
-interface MemorySettings {
-  file: string;
-  /** Whether the repository supplies the file, rather than the user or their organisation. */
-  fromRepo: boolean;
-  autoMemoryDirectory?: unknown;
-  autoMemoryEnabled?: unknown;
-  env?: Record<string, unknown>;
-}
-
-/**
- * The settings files a Claude session started in `projectPath` reads, in
- * Claude's precedence: policy, then the project's local and shared settings,
- * then the user's. Missing and unreadable files are left out.
- */
-async function readClaudeSettings(projectPath: string): Promise<MemorySettings[]> {
-  const local = path.join(projectPath, '.claude', 'settings.local.json');
-  const files = [
-    { file: managedSettingsFile(), fromRepo: () => false },
-    // The user's own file, unless the repository supplies it.
-    { file: local, fromRepo: () => isRepoSupplied(local) },
-    { file: path.join(projectPath, '.claude', 'settings.json'), fromRepo: () => true },
-    { file: path.join(claudeConfigDir(), 'settings.json'), fromRepo: () => false },
-  ];
-  const read = await Promise.all(
-    files.map(async ({ file, fromRepo }): Promise<MemorySettings | null> => {
-      try {
-        const settings: unknown = JSON.parse(await fs.promises.readFile(file, 'utf8'));
-        if (!settings || typeof settings !== 'object') return null;
-        return { ...settings, file, fromRepo: await fromRepo() };
-      } catch (err) {
-        if (!isMissing(err)) console.warn('[MemoryService] unreadable Claude settings', file, err);
-        return null;
-      }
-    }),
-  );
-  return read.filter((s) => s !== null);
-}
-
-/**
- * Whether a project's `settings.local.json` comes with the repository rather
- * than from the user: git tracks it, or `.claude` is a symlink.
- */
-async function isRepoSupplied(file: string): Promise<boolean> {
-  const linked = await fs.promises.lstat(path.dirname(file)).then(
-    (stat) => stat.isSymbolicLink(),
-    () => false,
-  );
-  if (linked) return true;
-  return execFileAsync('git', ['ls-files', '--error-unmatch', '--', path.basename(file)], {
-    cwd: path.dirname(file),
-  }).then(
-    () => true,
-    () => false,
-  );
-}
-
-/**
- * Whether the user accepted Claude Code's workspace trust dialog for the
- * project: recorded in its state file, keyed on `root` (the main checkout, or
- * the folder itself outside git).
- */
-async function isTrusted(root: string): Promise<boolean> {
-  try {
-    const state: unknown = JSON.parse(await fs.promises.readFile(claudeStateFile(), 'utf8'));
-    const projects = (state as { projects?: Record<string, { hasTrustDialogAccepted?: unknown }> })
-      ?.projects;
-    return projects?.[root]?.hasTrustDialogAccepted === true;
-  } catch (err) {
-    if (!isMissing(err)) console.warn('[MemoryService] unreadable Claude state file', err);
-    return false;
-  }
-}
-
 /**
  * The `autoMemoryDirectory` Claude would use, or null when no settings file
  * sets one. Like Claude, a folder the repository itself names is only taken
@@ -149,12 +72,13 @@ async function isTrusted(root: string): Promise<boolean> {
  * reads and writes somewhere of its choosing unasked.
  */
 async function configuredMemoryDir(
-  settings: MemorySettings[],
+  settings: ClaudeSettingsFile[],
   root: string,
 ): Promise<string | null> {
-  for (const { autoMemoryDirectory: dir, fromRepo, file } of settings) {
+  for (const { values, fromRepo, file } of settings) {
+    const dir = values.autoMemoryDirectory;
     if (typeof dir !== 'string') continue;
-    if (fromRepo && !(await isTrusted(root))) {
+    if (fromRepo && !(await isWorkspaceTrusted(root))) {
       console.warn('[MemoryService] untrusted workspace; ignoring autoMemoryDirectory in', file);
       continue;
     }
@@ -174,23 +98,46 @@ const isSet = (value: unknown): boolean => value === '1' || value === 'true' || 
  * (which the sessions it starts inherit) or a settings file's `env`, or the
  * `autoMemoryEnabled` setting, where the first file to set it decides.
  */
-function memoryDisabledBy(settings: MemorySettings[]): string | null {
+function memoryDisabledBy(settings: ClaudeSettingsFile[]): string | null {
   if (isSet(process.env[DISABLE_ENV])) return DISABLE_ENV;
-  const env = settings.find((s) => isSet(s.env?.[DISABLE_ENV]));
+  const env = settings.find(({ values }) => {
+    const vars = values.env;
+    return isSet(
+      vars && typeof vars === 'object' && (vars as Record<string, unknown>)[DISABLE_ENV],
+    );
+  });
   if (env) return `${DISABLE_ENV} in ${env.file}`;
-  const decides = settings.find((s) => typeof s.autoMemoryEnabled === 'boolean');
-  return decides?.autoMemoryEnabled === false ? `autoMemoryEnabled in ${decides.file}` : null;
+  const decides = settings.find((s) => typeof s.values.autoMemoryEnabled === 'boolean');
+  return decides?.values.autoMemoryEnabled === false
+    ? `autoMemoryEnabled in ${decides.file}`
+    : null;
+}
+
+/**
+ * Where a project's memory is and what its sessions' settings say about it.
+ * The memory rules here are Claude Code's, copied as documented on 2026-10-02
+ * (code.claude.com/docs/en/memory): the folder is keyed on the repository,
+ * `autoMemoryDirectory` moves it from any settings file (an absolute path or
+ * `~/…`, a repository's own file only once trusted), and `autoMemoryEnabled`
+ * or `CLAUDE_CODE_DISABLE_AUTO_MEMORY` turns it off. Which files a session
+ * reads and what trust is belong to `claudeSettings`. Not copied: the
+ * `permissions.blockReadsOutsideWorkingDirectories` refusal of a
+ * repository-chosen folder, and self-hosted sessions starting with memory off.
+ */
+async function resolveMemory(
+  projectPath: string,
+): Promise<{ dir: string; settings: ClaudeSettingsFile[] }> {
+  const root = await resolveMemoryRoot(projectPath);
+  const settings = await readClaudeSettings(projectPath, root);
+  const dir =
+    (await configuredMemoryDir(settings, root)) ?? path.join(claudeProjectDir(root), 'memory');
+  return { dir, settings };
 }
 
 /** A project's auto-memory folder. Every caller goes through this: how the
  *  folder is found (settings, root resolution, encoding, config dir) stays private. */
 export async function resolveMemoryDir(projectPath: string): Promise<string> {
-  return memoryDirFor(projectPath, await readClaudeSettings(projectPath));
-}
-
-async function memoryDirFor(projectPath: string, settings: MemorySettings[]): Promise<string> {
-  const root = await resolveMemoryRoot(projectPath);
-  return (await configuredMemoryDir(settings, root)) ?? path.join(claudeProjectDir(root), 'memory');
+  return (await resolveMemory(projectPath)).dir;
 }
 
 async function readEntry(
@@ -233,8 +180,7 @@ async function readEntry(
  * instead of showing an empty or unindexed memory.
  */
 export async function readProjectMemory(projectPath: string): Promise<ProjectMemory> {
-  const settings = await readClaudeSettings(projectPath);
-  const dir = await memoryDirFor(projectPath, settings);
+  const { dir, settings } = await resolveMemory(projectPath);
   const disabledBy = memoryDisabledBy(settings);
   let names: string[];
   try {
@@ -308,21 +254,23 @@ async function editIndex(dir: string, edit: (index: string) => string): Promise<
 }
 
 /**
- * Run what follows a memory's own write (its index line, other memories'
- * links). The memory is saved by then, so a failure here is told, not thrown:
- * a thrown one would have the save retried against a file it already changed.
+ * Run what follows a memory's own write or removal (its index line, other
+ * memories' links). The memory is saved or gone by then (`done` says which),
+ * so a failure here is told, not thrown: a thrown one would have the act
+ * retried against a file it already changed.
  */
 async function afterSave<T>(
   what: string,
   fallback: T,
   step: () => Promise<T>,
+  done = 'Saved',
 ): Promise<{ value: T; warning?: string }> {
   try {
     return { value: await step() };
   } catch (err) {
-    console.error('[MemoryService] saved, but could not update', what, err);
+    console.error(`[MemoryService] ${done.toLowerCase()}, but could not update`, what, err);
     const reason = err instanceof Error ? err.message : String(err);
-    return { value: fallback, warning: `Saved, but ${what} could not be updated: ${reason}` };
+    return { value: fallback, warning: `${done}, but ${what} could not be updated: ${reason}` };
   }
 }
 
@@ -453,16 +401,24 @@ export async function updateMemory(
 
 /**
  * Remove a memory and its MEMORY.md pointer. `remove` disposes of the file
- * (the IPC layer moves it to the OS trash).
+ * (the IPC layer moves it to the OS trash). A file that can't be removed
+ * throws and leaves the index alone; a pointer that can't be dropped after
+ * the file went is a `warning`, like a save's.
  */
 export async function deleteMemory(
   projectPath: string,
   file: string,
   remove: (full: string) => Promise<void> = (full) => fs.promises.unlink(full),
-): Promise<void> {
+): Promise<MemoryDeleteResult> {
   const dir = await resolveMemoryDir(projectPath);
   const full = path.join(dir, file);
   // Already gone (Claude deleted it meanwhile): its pointer is still there to drop.
   if (fs.existsSync(full)) await remove(full);
-  await editIndex(dir, (index) => removeIndexLines(index, file));
+  const { warning } = await afterSave(
+    MEMORY_INDEX_FILE,
+    undefined,
+    () => editIndex(dir, (index) => removeIndexLines(index, file)),
+    'Moved to the trash',
+  );
+  return { warning };
 }

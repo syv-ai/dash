@@ -324,17 +324,19 @@ describe('memory drafts', () => {
     expect(draftHook(edit(''))).toBe('');
   });
 
-  it('gives a memory with no index line the description for a hook, unless one is written', () => {
+  it('sends a hook for a memory with no index line only when one is written', () => {
+    // The save defaults the new line to the description; sent from here, that
+    // default would pass for a typed hook and reword a line Claude added since.
     const orphan = editMemoryDraft({ ...saved, inIndex: false, hook: null });
     expect(orphan.line).toBe('missing');
-    expect(draftHook(orphan)).toBe('CI over local');
+    expect(draftHook(orphan)).toBeUndefined();
     expect(draftHook({ ...orphan, fields: { ...orphan.fields, hook: 'mine' } })).toBe('mine');
 
     const fresh = newMemoryDraft();
     expect(fresh.line).toBe('missing');
     const described = { ...fresh, fields: redescribeDraft(fresh, 'What it is') };
     expect(described.fields.hook).toBe('');
-    expect(draftHook(described)).toBe('What it is');
+    expect(draftHook(described)).toBeUndefined();
     expect(isDraftDirty({ ...fresh, fields: { ...fresh.fields, hook: 'x' } })).toBe(true);
   });
 

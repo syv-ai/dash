@@ -114,6 +114,12 @@ describe('resolveMemoryDir', () => {
     warn.mockRestore();
   });
 
+  it("finds the user's settings.local.json at the repo root from a subfolder project", async () => {
+    const local = path.join(repo, '.claude', 'settings.local.json');
+    fs.writeFileSync(local, JSON.stringify({ autoMemoryDirectory: path.join(tmp, 'mine') }));
+    expect(await resolveMemoryDir(path.join(repo, 'packages', 'web'))).toBe(path.join(tmp, 'mine'));
+  });
+
   it("takes the user's own settings.local.json untrusted, but not one the repo checks in", async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const local = path.join(repo, '.claude', 'settings.local.json');

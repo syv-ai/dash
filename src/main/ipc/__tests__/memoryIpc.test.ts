@@ -155,10 +155,60 @@ describe('memory handlers', () => {
     });
     expect(await invoke('memory:delete', { projectPath: project, file: 'prefer-ci.md' })).toEqual({
       success: true,
-      data: null,
+      data: {},
     });
     expect(shell.trashItem).toHaveBeenCalledWith(path.join(dir, 'prefer-ci.md'));
     expect(await readProjectMemory(project)).toMatchObject({ entries: [], index: '' });
+  });
+
+  it('decides a hook nobody wrote here, not in the caller', async () => {
+    const fields = { name: 'Prefer CI', description: 'CI over local', type: 'feedback' };
+    await invoke('memory:create', { projectPath: project, ...fields, body: 'Use CI.' });
+    const dir = await resolveMemoryDir(project);
+    const index = path.join(dir, 'MEMORY.md');
+    // A new line takes the description.
+    expect(fs.readFileSync(index, 'utf8')).toBe('- [Prefer CI](prefer-ci.md) — CI over local\n');
+
+    // Claude rewords the line while the memory is open in the editor: a save
+    // that sends no hook leaves it as Claude wrote it.
+    fs.writeFileSync(index, '- [CI first](prefer-ci.md) — when tests are slow\n');
+    const stat = fs.statSync(path.join(dir, 'prefer-ci.md'));
+    expect(
+      await invoke('memory:update', {
+        projectPath: project,
+        file: 'prefer-ci.md',
+        ...fields,
+        body: 'Always.',
+        expectedMtimeMs: stat.mtimeMs,
+        expectedSizeBytes: stat.size,
+      }),
+    ).toMatchObject({ success: true, data: { ok: true } });
+    expect(fs.readFileSync(index, 'utf8')).toBe(
+      '- [CI first](prefer-ci.md) — when tests are slow\n',
+    );
+  });
+
+  it('says the memory is in the trash when its index line could not be dropped', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await invoke('memory:create', {
+      projectPath: project,
+      name: 'Prefer CI',
+      description: '',
+      type: 'feedback',
+      body: 'Use CI.',
+    });
+    const dir = await resolveMemoryDir(project);
+    // An index that can't be read as a file.
+    fs.rmSync(path.join(dir, 'MEMORY.md'));
+    fs.mkdirSync(path.join(dir, 'MEMORY.md'));
+
+    const res = await invoke('memory:delete', { projectPath: project, file: 'prefer-ci.md' });
+    expect(res).toMatchObject({
+      success: true,
+      data: { warning: expect.stringMatching(/^Moved to the trash, but MEMORY\.md could not/) },
+    });
+    expect(fs.existsSync(path.join(dir, 'prefer-ci.md'))).toBe(false);
+    error.mockRestore();
   });
 
   it('reports a name that is already taken instead of replacing the memory', async () => {
