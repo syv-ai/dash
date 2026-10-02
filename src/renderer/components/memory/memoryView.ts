@@ -1,4 +1,9 @@
-import { MEMORY_INDEX_FILE, MEMORY_TYPES } from '../../../shared/types';
+import {
+  MEMORY_INDEX_FILE,
+  MEMORY_INDEX_MAX_BYTES,
+  MEMORY_INDEX_MAX_LINES,
+  MEMORY_TYPES,
+} from '../../../shared/types';
 import type { MemoryEntry, MemoryFields, MemoryType, ProjectMemory } from '../../../shared/types';
 import { mapMemoryLinks, mapMemoryRefs, memoryLinkFiles } from '../../../shared/memoryLinks';
 
@@ -31,10 +36,11 @@ export const KNOWN_MEMORY_TYPES = MEMORY_TYPES.filter((t): t is KnownMemoryType 
 export type MemoryFilter = 'all' | KnownMemoryType;
 
 /** Why a memory needs a look: Claude won't recall it, can't file it, or it points at nothing. */
-export type MemoryIssue = 'unindexed' | 'untyped' | 'dead-link';
+export type MemoryIssue = 'unindexed' | 'not-loaded' | 'untyped' | 'dead-link';
 
 export const MEMORY_ISSUE_LABELS: Record<MemoryIssue, string> = {
   unindexed: 'not indexed',
+  'not-loaded': 'past index limit',
   untyped: 'untyped',
   'dead-link': 'dead link',
 };
@@ -93,6 +99,7 @@ export function listMemories(entries: MemoryEntry[]): ListedMemory[] {
     });
     const issues: MemoryIssue[] = [];
     if (!entry.inIndex) issues.push('unindexed');
+    if (entry.pastIndexLimit) issues.push('not-loaded');
     if (entry.type === 'other') issues.push('untyped');
     if (dead) issues.push('dead-link');
     return { entry, issues };
@@ -146,6 +153,26 @@ export function memorySections(
   return sections.filter((s) => s.entries.length > 0);
 }
 
+/**
+ * What the modal says above the list when Claude won't see what is in it:
+ * auto memory is off, or the index has outgrown what a session loads.
+ */
+export function memoryNotices(memory: ProjectMemory): string[] {
+  const notices: string[] = [];
+  if (memory.disabledBy) {
+    notices.push(
+      `Auto memory is off for this project (${memory.disabledBy}): Claude neither loads nor adds to these memories.`,
+    );
+  }
+  const cut = memory.entries.filter((e) => e.pastIndexLimit).length;
+  if (cut > 0) {
+    notices.push(
+      `${MEMORY_INDEX_FILE} is over the ${MEMORY_INDEX_MAX_LINES} lines or ${MEMORY_INDEX_MAX_BYTES / 1000}KB Claude loads into a session: ${cut} ${cut === 1 ? 'memory sits' : 'memories sit'} past the cut and ${cut === 1 ? "isn't" : "aren't"} seen. Shorten the hooks or drop stale lines.`,
+    );
+  }
+  return notices;
+}
+
 /** What the modal previews: a memory, or the MEMORY.md index (untyped). */
 export interface MemoryDoc {
   key: string;
@@ -191,17 +218,34 @@ export function pickCurrent(docs: MemoryDoc[], selectedKey: string | null): Memo
   return docs.find((d) => d.key === selectedKey) ?? docs[0] ?? null;
 }
 
+/** What the editor edits: the memory file's fields, and its MEMORY.md line's hook. */
+export type MemoryDraftFields = MemoryFields & { hook: string };
+
+/**
+ * The memory's line in MEMORY.md: its `own` (the hook is editable), `missing`
+ * (a save adds one), or `shared` with something else (not ours to reword).
+ */
+export type MemoryDraftLine = 'own' | 'missing' | 'shared';
+
+/** What the editor's hook field says while empty. */
+export const MEMORY_HOOK_PLACEHOLDERS: Record<MemoryDraftLine, string> = {
+  own: 'No hook: Claude sees only the title until it opens the memory',
+  missing: 'Same as the description, unless you write one',
+  shared: `Shares its ${MEMORY_INDEX_FILE} line with another link: edit the index by hand`,
+};
+
 /** An unsaved create or edit. */
 export interface MemoryDraft {
   /** The file being edited and the stat it was read at (the save's overwrite
    *  guard); null for a memory that doesn't exist yet. */
   target: { file: string; mtimeMs: number; sizeBytes: number } | null;
+  line: MemoryDraftLine;
   /** What `fields` started as: the draft is dirty once they differ. */
-  saved: MemoryFields;
-  fields: MemoryFields;
+  saved: MemoryDraftFields;
+  fields: MemoryDraftFields;
 }
 
-const FIELD_KEYS = ['name', 'description', 'type', 'body'] as const;
+const FIELD_KEYS = ['name', 'description', 'hook', 'type', 'body'] as const;
 
 /**
  * What a new memory of `type` starts with. Feedback and project memories carry
@@ -212,27 +256,35 @@ export function memoryScaffold(type: MemoryType): string {
 }
 
 export function newMemoryDraft(type: KnownMemoryType = 'project'): MemoryDraft {
-  const fields: MemoryFields = { name: '', description: '', type, body: memoryScaffold(type) };
-  return { target: null, saved: fields, fields };
+  const fields: MemoryDraftFields = {
+    name: '',
+    description: '',
+    hook: '',
+    type,
+    body: memoryScaffold(type),
+  };
+  return { target: null, line: 'missing', saved: fields, fields };
 }
 
 /** `draft`'s fields as `type`. A new memory's untouched scaffold follows the type. */
-export function retypeDraft(draft: MemoryDraft, type: MemoryType): MemoryFields {
+export function retypeDraft(draft: MemoryDraft, type: MemoryType): MemoryDraftFields {
   const { fields } = draft;
   const untouched = !draft.target && fields.body === memoryScaffold(fields.type);
   return { ...fields, type, body: untouched ? memoryScaffold(type) : fields.body };
 }
 
 export function editMemoryDraft(entry: MemoryEntry): MemoryDraft {
-  const fields: MemoryFields = {
+  const fields: MemoryDraftFields = {
     name: entry.name,
     description: entry.description,
+    hook: entry.hook ?? '',
     type: entry.type,
     // The blank line after the frontmatter and the final newline belong to the file.
     body: entry.body.trim(),
   };
   return {
     target: { file: entry.file, mtimeMs: entry.mtimeMs, sizeBytes: entry.sizeBytes },
+    line: entry.hook !== null ? 'own' : entry.inIndex ? 'shared' : 'missing',
     saved: fields,
     fields,
   };
@@ -243,10 +295,36 @@ export function isDraftDirty(draft: MemoryDraft): boolean {
   // A new memory has nothing to lose until something is written: picking a type isn't that.
   if (!draft.target) {
     return (
-      fields.name !== '' || fields.description !== '' || fields.body !== memoryScaffold(fields.type)
+      fields.name !== '' ||
+      fields.description !== '' ||
+      fields.hook !== '' ||
+      fields.body !== memoryScaffold(fields.type)
     );
   }
   return FIELD_KEYS.some((k) => fields[k] !== draft.saved[k]);
+}
+
+/**
+ * `draft`'s fields with a new description. A hook that says what the
+ * description says (as one Dash wrote does) is moved along with it, in view.
+ */
+export function redescribeDraft(draft: MemoryDraft, description: string): MemoryDraftFields {
+  const { fields } = draft;
+  const mirrors = draft.line === 'own' && fields.hook !== '' && fields.hook === fields.description;
+  return { ...fields, description, hook: mirrors ? description : fields.hook };
+}
+
+/**
+ * The hook a save should write on the memory's MEMORY.md line, or undefined to
+ * leave the line's hook as it is: when it isn't ours to reword, and when it
+ * wasn't edited (Claude may have reworded it since the draft was opened). A
+ * line that doesn't exist yet takes the description unless a hook was written.
+ */
+export function draftHook(draft: MemoryDraft): string | undefined {
+  const hook = draft.fields.hook.trim();
+  if (draft.line === 'missing') return hook || draft.fields.description.trim();
+  if (draft.line === 'shared' || hook === draft.saved.hook) return undefined;
+  return hook;
 }
 
 export function canSaveDraft(draft: MemoryDraft): boolean {

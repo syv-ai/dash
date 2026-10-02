@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import type { MemoryFields } from '@shared/types';
 import {
+  indexHook,
+  loadedIndex,
   memoryFileName,
   parseMemoryFile,
   removeIndexLines,
@@ -87,7 +89,7 @@ describe('serializeMemoryFile', () => {
   };
 
   it('writes a new memory in the current shape', () => {
-    expect(serializeMemoryFile(fields)).toBe(
+    expect(serializeMemoryFile(fields, '', now)).toBe(
       [
         '---',
         'name: prefer-ci',
@@ -95,6 +97,7 @@ describe('serializeMemoryFile', () => {
         'metadata:',
         '  node_type: memory',
         '  type: feedback',
+        '  modified: 2026-10-01T12:00:00.000Z',
         '---',
         '',
         'Use CI.',
@@ -119,8 +122,8 @@ describe('serializeMemoryFile', () => {
   });
 
   it('leaves out the description and type it was not given', () => {
-    expect(serializeMemoryFile({ ...fields, description: '', type: 'other' })).toBe(
-      '---\nname: prefer-ci\nmetadata:\n  node_type: memory\n---\n\nUse CI.\n',
+    expect(serializeMemoryFile({ ...fields, description: '', type: 'other' }, '', now)).toBe(
+      '---\nname: prefer-ci\nmetadata:\n  node_type: memory\n  modified: 2026-10-01T12:00:00.000Z\n---\n\nUse CI.\n',
     );
   });
 
@@ -206,10 +209,60 @@ describe('serializeMemoryFile', () => {
   });
 
   it('changes nothing but the stamp when saving what was read', () => {
-    const once = serializeMemoryFile(fields);
+    const once = serializeMemoryFile(fields, '', new Date('2026-09-01T00:00:00.000Z'));
     expect(serializeMemoryFile(readBack(once), once, now)).toBe(
-      once.replace('  type: feedback', '  type: feedback\n  modified: 2026-10-01T12:00:00.000Z'),
+      once.replace('2026-09-01T00:00:00.000Z', '2026-10-01T12:00:00.000Z'),
     );
+  });
+
+  it("keeps a value that hasn't changed as Claude wrote it", () => {
+    // Bare where Dash would quote, quoted where Dash would not.
+    const claudes = [
+      '---',
+      "name: 'prefer-ci'",
+      'description: Pulling+embedding the corpus; how to monitor: it — and recover',
+      'metadata:',
+      '  type: "feedback"',
+      '---',
+      '',
+      'Use CI.',
+      '',
+    ].join('\n');
+    const read = readBack(claudes);
+    expect(read).toMatchObject({ name: 'prefer-ci', type: 'feedback' });
+    expect(serializeMemoryFile({ ...read, body: 'Always.' }, claudes, now)).toBe(
+      claudes
+        .replace('Use CI.', 'Always.')
+        .replace('"feedback"', '"feedback"\n  modified: 2026-10-01T12:00:00.000Z'),
+    );
+  });
+
+  it('reads a block-scalar description as one line and replaces all of it', () => {
+    const block = [
+      '---',
+      'name: a',
+      'description: >-',
+      '  Folded over',
+      '  two lines, type: not a key',
+      'metadata:',
+      '  type: project',
+      '---',
+      'body',
+    ].join('\n');
+    const read = parseMemoryFile(block);
+    expect(read).toMatchObject({
+      description: 'Folded over two lines, type: not a key',
+      type: 'project',
+    });
+    // Untouched, the block stays a block.
+    expect(serializeMemoryFile(read, block, now)).toContain('description: >-\n  Folded over\n');
+    const edited = serializeMemoryFile({ ...read, description: 'Short' }, block, now);
+    expect(edited).toContain('name: a\ndescription: Short\nmetadata:\n');
+    expect(edited).not.toContain('Folded');
+  });
+
+  it("reads YAML's doubled single quote", () => {
+    expect(parseMemoryFile("---\nname: 'it''s fine'\n---\n").name).toBe("it's fine");
   });
 });
 
@@ -219,7 +272,11 @@ describe('memoryFileName', () => {
   });
   it('never yields the index or an empty name', () => {
     expect(memoryFileName('Memory')).toBe('memory-note.md');
-    expect(memoryFileName('日本語')).toBe('memory-note.md');
+    expect(memoryFileName('?!')).toBe('memory-note.md');
+  });
+  it('keeps letters of any script, so such names do not collide', () => {
+    expect(memoryFileName('Ærø færge')).toBe('ærø-færge.md');
+    expect(memoryFileName('日本語')).toBe('日本語.md');
   });
 });
 
@@ -233,11 +290,68 @@ describe('index lines', () => {
     );
   });
 
-  it('rewrites the pointer where it stands instead of adding a second one', () => {
-    const index = '# Index\n\n- [Old name](ci.md) — old hook\n- [B](b.md) — two\n';
-    expect(setIndexLine(index, 'ci.md', fields)).toBe(
-      '# Index\n\n- [CI fast](ci.md) — hook\n- [B](b.md) — two\n',
+  it('appends with the hook it is given instead of the description', () => {
+    expect(setIndexLine('', 'ci.md', fields, { hook: 'when CI is slow' })).toBe(
+      '- [CI fast](ci.md) — when CI is slow\n',
     );
+    expect(setIndexLine('', 'ci.md', fields, { hook: '' })).toBe('- [CI fast](ci.md)\n');
+  });
+
+  it('moves a title that was the old name, and writes a given hook, where the line stands', () => {
+    const index = '# Index\n\n- [Old name](ci.md) — old hook\n- [B](b.md) — two\n';
+    expect(setIndexLine(index, 'ci.md', fields, { wasName: 'Old [name]', hook: 'new hook' })).toBe(
+      '# Index\n\n- [CI fast](ci.md) — new hook\n- [B](b.md) — two\n',
+    );
+    // A hook appears when first given, and goes when cleared.
+    expect(setIndexLine('- [x](ci.md)\n', 'ci.md', fields, { hook: 'now' })).toBe(
+      '- [x](ci.md) — now\n',
+    );
+    expect(setIndexLine('* [CI fast](ci.md) - hook\n', 'ci.md', fields, { hook: '' })).toBe(
+      '* [CI fast](ci.md)\n',
+    );
+  });
+
+  it("keeps Claude's own title and hook when the save gives no hook", () => {
+    // How Claude writes it: a title that isn't the name, a hook that isn't the description.
+    const index = '- [Keep review fixes small](ci.md) — minimal diffs, one test per fix \n';
+    const wasName = 'feedback-small-review-fixes';
+    expect(setIndexLine(index, 'ci.md', fields, { wasName })).toBe(index);
+    // Given the hook it already has, the line keeps its bytes too.
+    expect(
+      setIndexLine(index, 'ci.md', fields, { wasName, hook: 'minimal diffs, one test per fix' }),
+    ).toBe(index);
+    // A line in some other shape isn't reworded at all.
+    const prose = 'See [feedback-small-review-fixes](ci.md), which matters.\n';
+    expect(setIndexLine(prose, 'ci.md', fields, { wasName, hook: 'x' })).toBe(prose);
+  });
+
+  it('cuts the index where Claude stops loading it: 200 lines or 25KB of whole lines', () => {
+    const short = '# Index\n\n- [A](a.md) — one\n';
+    expect(loadedIndex(short)).toBe(short);
+
+    const lines = Array.from({ length: 250 }, (_, i) => `- [m${i}](m${i}.md)`);
+    expect(loadedIndex(lines.join('\n')).split('\n')).toEqual(lines.slice(0, 200));
+
+    // Twenty-six 1000-byte lines, 'é' being two bytes: the 25th is the last whole one in.
+    const wide = Array.from({ length: 26 }, (_, i) => `- [w${i}](w${i}.md) ${'é'.repeat(490)}`);
+    const fat = wide.map((l) => l.padEnd(999 - 490, ' '));
+    expect(Buffer.byteLength(fat[0]!)).toBe(999);
+    expect(loadedIndex(fat.join('\n')).split('\n')).toHaveLength(25);
+  });
+
+  it("reads a memory's hook from its own line only", () => {
+    const index = [
+      '- [A](a.md) — one ',
+      '- [B](b.md)',
+      '- see [C](c.md) and [A](a.md)',
+      'Prose about [D](d.md).',
+      '',
+    ].join('\n');
+    expect(indexHook(index, 'a.md')).toBe('one');
+    expect(indexHook(index, 'b.md')).toBe('');
+    expect(indexHook(index, 'c.md')).toBeNull();
+    expect(indexHook(index, 'd.md')).toBeNull();
+    expect(indexHook(index, 'missing.md')).toBeNull();
   });
 
   it('links a file name a bare target cannot hold, and finds that line again', () => {

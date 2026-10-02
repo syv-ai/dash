@@ -1,13 +1,15 @@
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
-import type { MemoryEntry, MemoryFields, MemoryType, ProjectMemory } from '../../../shared/types';
+import type { MemoryEntry, MemoryType, ProjectMemory } from '../../../shared/types';
 import {
   canSaveDraft,
+  draftHook,
   editMemoryDraft,
   isDraftDirty,
   newMemoryDraft,
   type KnownMemoryType,
   type MemoryDraft,
+  type MemoryDraftFields,
 } from './memoryView';
 
 type FileStat = { mtimeMs: number; sizeBytes: number };
@@ -22,7 +24,7 @@ export interface MemoryDraftApi {
   /** Start a memory of `type` (the list's current type, when it has one). */
   startNew(type?: KnownMemoryType): void;
   startEdit(entry: MemoryEntry): void;
-  change(fields: MemoryFields): void;
+  change(fields: MemoryDraftFields): void;
   save(): Promise<void>;
   /** Save over the newer file on disk. */
   overwrite(): Promise<void>;
@@ -67,8 +69,10 @@ export function useMemoryDraft({ projectPath, reload, onSaved }: Args): MemoryDr
       setSaveError(null);
       try {
         let file: string;
+        // What the index line should say, not always what the field holds (see draftHook).
+        const fields = { ...draft.fields, hook: draftHook(draft) };
         if (!draft.target) {
-          const res = await window.electronAPI.memoryCreate({ projectPath, ...draft.fields });
+          const res = await window.electronAPI.memoryCreate({ projectPath, ...fields });
           if (!res.success || !res.data) {
             setSaveError(res.error ?? 'Could not create the memory.');
             return;
@@ -79,7 +83,7 @@ export function useMemoryDraft({ projectPath, reload, onSaved }: Args): MemoryDr
           const res = await window.electronAPI.memoryUpdate({
             projectPath,
             file: draft.target.file,
-            ...draft.fields,
+            ...fields,
             expectedMtimeMs: guard.mtimeMs,
             expectedSizeBytes: guard.sizeBytes,
           });

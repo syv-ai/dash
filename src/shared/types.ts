@@ -1127,6 +1127,13 @@ export type MemoryType = (typeof MEMORY_TYPES)[number];
 /** The index file Claude keeps beside the memories. */
 export const MEMORY_INDEX_FILE = 'MEMORY.md';
 
+/**
+ * How much of the index Claude Code loads into a session: its first lines, or
+ * its first bytes, whichever runs out first. Nothing past that is seen.
+ */
+export const MEMORY_INDEX_MAX_LINES = 200;
+export const MEMORY_INDEX_MAX_BYTES = 25_000;
+
 /** The part of a memory a person writes: what Dash reads from and saves to its file. */
 export interface MemoryFields {
   /** Frontmatter `name`. */
@@ -1148,6 +1155,14 @@ export interface MemoryEntry extends MemoryFields {
   sizeBytes: number;
   /** Whether MEMORY.md links to this file. */
   inIndex: boolean;
+  /** Linked, but only past the part of MEMORY.md Claude loads: as good as unindexed. */
+  pastIndexLimit: boolean;
+  /**
+   * The text after the dash on this memory's own MEMORY.md line: what Claude
+   * reads of it in every session. Null when it has no line of its own (not
+   * indexed, or only linked from a line shared with something else).
+   */
+  hook: string | null;
 }
 
 /**
@@ -1166,4 +1181,10 @@ export interface ProjectMemory {
   /** MEMORY.md contents, or null when absent. */
   index: string | null;
   entries: MemoryEntry[];
+  /**
+   * What turned auto memory off for sessions in this project (a settings file
+   * or an environment variable), or null while it is on. Off, Claude neither
+   * loads nor writes any of this.
+   */
+  disabledBy: string | null;
 }

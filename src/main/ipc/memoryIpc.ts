@@ -32,7 +32,11 @@ const memoryFileSchema = z
   .regex(/^[^/\\:]+\.md$/, 'must be a .md file name')
   .refine((f) => f.toLowerCase() !== MEMORY_INDEX_FILE.toLowerCase(), 'cannot be the index');
 
-export const memoryCreateArgsSchema = memoryProjectArgsSchema.extend(memoryFieldsSchema.shape);
+export const memoryCreateArgsSchema = memoryProjectArgsSchema.extend({
+  ...memoryFieldsSchema.shape,
+  /** The memory's MEMORY.md line; left out, the line keeps (or defaults) its own. */
+  hook: singleLine.trim().max(1000).optional(),
+});
 
 export const memoryUpdateArgsSchema = memoryCreateArgsSchema.extend({
   file: memoryFileSchema,
@@ -83,11 +87,16 @@ export function registerMemoryIpc(): void {
   });
 
   // The writes below take a project path and a basename, never a full path:
-  // like openDir, they can only ever touch a memory folder.
+  // like openDir, they can only ever touch a memory folder (the default one, or
+  // the `autoMemoryDirectory` Claude's own settings name).
   ipcMain.handle('memory:create', async (_event, raw: unknown) => {
     try {
-      const { projectPath, ...fields } = parseArgs('memory:create', memoryCreateArgsSchema, raw);
-      return { success: true, data: { file: await createMemory(projectPath, fields) } };
+      const { projectPath, hook, ...fields } = parseArgs(
+        'memory:create',
+        memoryCreateArgsSchema,
+        raw,
+      );
+      return { success: true, data: { file: await createMemory(projectPath, fields, hook) } };
     } catch (error) {
       return errorResponse(error);
     }
@@ -95,15 +104,18 @@ export function registerMemoryIpc(): void {
 
   ipcMain.handle('memory:update', async (_event, raw: unknown) => {
     try {
-      const { projectPath, file, expectedMtimeMs, expectedSizeBytes, ...fields } = parseArgs(
+      const { projectPath, file, expectedMtimeMs, expectedSizeBytes, hook, ...fields } = parseArgs(
         'memory:update',
         memoryUpdateArgsSchema,
         raw,
       );
-      const data = await updateMemory(projectPath, file, fields, {
-        mtimeMs: expectedMtimeMs,
-        sizeBytes: expectedSizeBytes,
-      });
+      const data = await updateMemory(
+        projectPath,
+        file,
+        fields,
+        { mtimeMs: expectedMtimeMs, sizeBytes: expectedSizeBytes },
+        hook,
+      );
       return { success: true, data };
     } catch (error) {
       return errorResponse(error);

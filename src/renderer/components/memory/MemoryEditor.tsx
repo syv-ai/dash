@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Loader2 } from 'lucide-react';
+import { MEMORY_INDEX_FILE } from '../../../shared/types';
 import type { MemoryEntry } from '../../../shared/types';
 import { Button } from '../ui/Button';
 import { Segmented } from '../ui/Segmented';
@@ -10,7 +11,9 @@ import { MemoryPreview } from './MemoryPreview';
 import {
   canSaveDraft,
   draftTypes,
+  redescribeDraft,
   retypeDraft,
+  MEMORY_HOOK_PLACEHOLDERS,
   MEMORY_TYPE_HINTS,
   MEMORY_TYPE_LABELS,
   type MemoryDraft,
@@ -87,9 +90,19 @@ export function MemoryEditor({ draft, api, entries, isDark }: Props) {
         <Field label="Description">
           <input
             value={fields.description}
-            onChange={(e) => set({ description: e.target.value })}
+            onChange={(e) => api.change(redescribeDraft(draft, e.target.value))}
             placeholder="One line Claude uses to decide when this memory is relevant"
             className={fieldClass}
+          />
+        </Field>
+        <Field label={`Hook in ${MEMORY_INDEX_FILE}`}>
+          <input
+            value={fields.hook}
+            onChange={(e) => set({ hook: e.target.value })}
+            disabled={draft.line === 'shared'}
+            placeholder={MEMORY_HOOK_PLACEHOLDERS[draft.line]}
+            title="The one line of this memory Claude reads at the start of every session"
+            className={`${fieldClass} disabled:cursor-not-allowed disabled:text-muted-foreground`}
           />
         </Field>
       </div>

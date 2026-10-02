@@ -75,6 +75,34 @@ describe('resolveMemoryDir', () => {
     expect(await resolveMemoryDir(path.join(sub, 'inner'))).toBe(memoryOf(sub));
   });
 
+  it("uses Claude's autoMemoryDirectory setting, the project's over the user's", async () => {
+    const settings = (file: string, autoMemoryDirectory: unknown) => {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, JSON.stringify({ autoMemoryDirectory }));
+    };
+    const userSettings = path.join(tmp, 'claude', 'settings.json');
+    settings(userSettings, '~/notes/claude');
+    expect(await resolveMemoryDir(repo)).toBe(path.join(os.homedir(), 'notes', 'claude'));
+
+    settings(path.join(repo, '.claude', 'settings.json'), path.join(tmp, 'shared'));
+    expect(await resolveMemoryDir(repo)).toBe(path.join(tmp, 'shared'));
+    settings(path.join(repo, '.claude', 'settings.local.json'), path.join(tmp, 'mine'));
+    expect(await resolveMemoryDir(repo)).toBe(path.join(tmp, 'mine'));
+
+    // A value Claude would not accept, or a broken file, is passed over.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    settings(path.join(repo, '.claude', 'settings.local.json'), 'relative/dir');
+    fs.writeFileSync(path.join(repo, '.claude', 'settings.json'), '{ not json');
+    settings(userSettings, 42);
+    expect(await resolveMemoryDir(repo)).toBe(memoryOf(repo));
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('unreadable Claude settings'),
+      path.join(repo, '.claude', 'settings.json'),
+      expect.anything(),
+    );
+    warn.mockRestore();
+  });
+
   it('warns when git itself fails rather than reporting "not a repo"', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const gone = path.join(tmp, 'deleted-project');
@@ -96,6 +124,7 @@ describe('readProjectMemory', () => {
       exists: false,
       index: null,
       entries: [],
+      disabledBy: null,
     });
   });
 
@@ -135,8 +164,74 @@ describe('readProjectMemory', () => {
       body: 'Use CI.',
       inIndex: true,
     });
-    expect(byFile['orphan.md']).toMatchObject({ name: 'orphan', type: 'other', inIndex: false });
+    expect(byFile['feedback_ci.md']!.hook).toBe('hook');
+    expect(byFile['orphan.md']).toMatchObject({
+      name: 'orphan',
+      type: 'other',
+      inIndex: false,
+      hook: null,
+    });
     expect(byFile['orphan.md']!.mtimeMs).toBeGreaterThan(0);
+  });
+});
+
+describe('what Claude will not see', () => {
+  const settings = (file: string, value: unknown) => {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(value));
+  };
+  const disabledBy = async () => (await readProjectMemory(repo)).disabledBy;
+
+  it('flags a memory indexed only past the part of MEMORY.md Claude loads', async () => {
+    const dir = await resolveMemoryDir(repo);
+    fs.mkdirSync(dir, { recursive: true });
+    const filler = Array.from({ length: 199 }, (_, i) => `- note ${i}`);
+    fs.writeFileSync(
+      path.join(dir, 'MEMORY.md'),
+      ['- [In](in.md) — seen', ...filler, '- [Out](out.md) — never loaded', ''].join('\n'),
+    );
+    fs.writeFileSync(path.join(dir, 'in.md'), 'in');
+    fs.writeFileSync(path.join(dir, 'out.md'), 'out');
+    fs.writeFileSync(path.join(dir, 'loose.md'), 'loose');
+
+    const byFile = Object.fromEntries(
+      (await readProjectMemory(repo)).entries.map((e) => [e.file, e]),
+    );
+    expect(byFile['in.md']).toMatchObject({ inIndex: true, pastIndexLimit: false });
+    expect(byFile['out.md']).toMatchObject({ inIndex: true, pastIndexLimit: true });
+    expect(byFile['loose.md']).toMatchObject({ inIndex: false, pastIndexLimit: false });
+  });
+
+  it('reports the setting that turned auto memory off, the nearest file deciding', async () => {
+    expect(await disabledBy()).toBeNull();
+    const user = path.join(tmp, 'claude', 'settings.json');
+    settings(user, { autoMemoryEnabled: false });
+    expect(await disabledBy()).toBe(`autoMemoryEnabled in ${user}`);
+    // The project turns it back on for itself.
+    settings(path.join(repo, '.claude', 'settings.json'), { autoMemoryEnabled: true });
+    expect(await disabledBy()).toBeNull();
+    // Off, the folder is still shown.
+    settings(path.join(repo, '.claude', 'settings.local.json'), { autoMemoryEnabled: false });
+    expect(await readProjectMemory(repo)).toMatchObject({
+      exists: false,
+      dir: await resolveMemoryDir(repo),
+      disabledBy: `autoMemoryEnabled in ${path.join(repo, '.claude', 'settings.local.json')}`,
+    });
+  });
+
+  it('reports the environment variable, from a settings file or Dash itself', async () => {
+    const user = path.join(tmp, 'claude', 'settings.json');
+    settings(user, { env: { CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' }, autoMemoryEnabled: true });
+    expect(await disabledBy()).toBe(`CLAUDE_CODE_DISABLE_AUTO_MEMORY in ${user}`);
+    settings(user, { env: { CLAUDE_CODE_DISABLE_AUTO_MEMORY: '0' } });
+    expect(await disabledBy()).toBeNull();
+
+    vi.stubEnv('CLAUDE_CODE_DISABLE_AUTO_MEMORY', '1');
+    try {
+      expect(await disabledBy()).toBe('CLAUDE_CODE_DISABLE_AUTO_MEMORY');
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
 
@@ -223,11 +318,56 @@ describe('writing memories', () => {
     await updateMemory(repo, file, { ...fields, body: 'Always.' }, await entryOf(file));
     expect(fs.readFileSync(indexPath, 'utf8')).toContain('— when tests are slow');
 
-    // A new name or description is: the line follows, in place.
+    // A rename moves a title that was the old name, in place; a new
+    // description is the file's business, and the hook stays Claude's.
     const renamed = { ...fields, name: 'CI first', description: 'Run the suite in CI' };
     await updateMemory(repo, file, renamed, await entryOf(file));
     expect(fs.readFileSync(indexPath, 'utf8')).toBe(
-      '- [CI first](prefer-ci.md) — Run the suite in CI\n- [Other](other.md) — two\n',
+      '- [CI first](prefer-ci.md) — when tests are slow\n- [Other](other.md) — two\n',
+    );
+    expect((await entryOf(file)).hook).toBe('when tests are slow');
+
+    // The hook changes when the save says so.
+    await updateMemory(repo, file, renamed, await entryOf(file), 'when CI is green');
+    expect(fs.readFileSync(indexPath, 'utf8')).toBe(
+      '- [CI first](prefer-ci.md) — when CI is green\n- [Other](other.md) — two\n',
+    );
+  });
+
+  it('indexes a new memory under the hook it is given', async () => {
+    const file = await createMemory(repo, fields, 'tests are slow locally');
+    const memory = await readProjectMemory(repo);
+    expect(memory.index).toBe('- [Prefer CI](prefer-ci.md) — tests are slow locally\n');
+    expect(memory.entries[0]).toMatchObject({ file, hook: 'tests are slow locally' });
+  });
+
+  it('keeps a line Claude adds to the index while Dash is editing it', async () => {
+    const dir = await resolveMemoryDir(repo);
+    const indexPath = path.join(dir, 'MEMORY.md');
+    await createMemory(repo, fields);
+    // Claude's write lands between Dash reading the index and replacing it.
+    const readFile = fs.promises.readFile.bind(fs.promises);
+    const spy = vi.spyOn(fs.promises, 'readFile').mockImplementation((async (
+      ...args: Parameters<typeof fs.promises.readFile>
+    ) => {
+      const content = await readFile(...args);
+      if (args[0] === indexPath && spy.mock.calls.filter((c) => c[0] === indexPath).length === 1) {
+        fs.appendFileSync(indexPath, '- [From Claude](claude.md) — just saved\n');
+      }
+      return content;
+    }) as typeof fs.promises.readFile);
+    try {
+      await createMemory(repo, { ...fields, name: 'Other' });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(fs.readFileSync(indexPath, 'utf8')).toBe(
+      [
+        '- [Prefer CI](prefer-ci.md) — CI over local',
+        '- [From Claude](claude.md) — just saved',
+        '- [Other](other.md) — CI over local',
+        '',
+      ].join('\n'),
     );
   });
 
@@ -364,6 +504,14 @@ describe('writing memories', () => {
     const memory = await readProjectMemory(repo);
     expect(memory.entries.map((e) => e.file)).toEqual(['other.md']);
     expect(memory.index).toBe('- [Other](other.md) — CI over local\n');
+  });
+
+  it('drops the index line of a memory that is already gone', async () => {
+    const dir = await resolveMemoryDir(repo);
+    await createMemory(repo, fields);
+    fs.unlinkSync(path.join(dir, 'prefer-ci.md'));
+    await deleteMemory(repo, 'prefer-ci.md', () => Promise.reject(new Error('nothing to trash')));
+    expect(fs.readFileSync(path.join(dir, 'MEMORY.md'), 'utf8')).toBe('');
   });
 
   it('keeps the index when the file could not be removed', async () => {

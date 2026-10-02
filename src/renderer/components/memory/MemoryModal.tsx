@@ -32,6 +32,7 @@ import { useProjectMemory } from './useProjectMemory';
 import {
   memoryCounts,
   memoryDocs,
+  memoryNotices,
   memoryReferrers,
   memorySections,
   pickCurrent,
@@ -228,6 +229,16 @@ function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) 
           {error}
         </div>
       )}
+
+      {memory &&
+        memoryNotices(memory).map((notice) => (
+          <div
+            key={notice}
+            className="shrink-0 border-b border-border/40 bg-surface-2 px-5 py-2 text-[11px] text-muted-foreground"
+          >
+            {notice}
+          </div>
+        ))}
 
       {/* A missing folder and an empty one (Claude creates it before writing) look the same. */}
       {memory && docs.length === 0 && !editor.draft ? (
@@ -450,9 +461,7 @@ function EmptyState(props: { dir: string; projectName: string; onCreate: () => v
         {dir}
       </button>
       <p className="max-w-md text-[12px] text-muted-foreground">
-        Claude writes memories here as it learns about the project. If you set{' '}
-        <code>autoMemoryDirectory</code> or turned off <code>autoMemoryEnabled</code> in your Claude
-        settings, they live elsewhere or are off.
+        Claude writes memories here as it learns about the project.
       </p>
       <Button variant="secondary" size="sm" onClick={onCreate}>
         <Plus size={13} strokeWidth={1.8} /> New memory

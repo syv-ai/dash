@@ -6,6 +6,7 @@ import {
   memoryCounts,
   memorySections,
   memoryDocs,
+  memoryNotices,
   pickCurrent,
   rewriteMemoryLinks,
   memoryReferrers,
@@ -13,7 +14,9 @@ import {
   editMemoryDraft,
   isDraftDirty,
   canSaveDraft,
+  draftHook,
   draftTypes,
+  redescribeDraft,
   memoryScaffold,
   retypeDraft,
   KNOWN_MEMORY_TYPES,
@@ -32,6 +35,8 @@ function entry(p: Partial<MemoryEntry> & { file: string }): MemoryEntry {
     mtimeMs: 0,
     sizeBytes: 0,
     inIndex: true,
+    pastIndexLimit: false,
+    hook: '',
     ...p,
   };
 }
@@ -136,10 +141,38 @@ describe('memorySections', () => {
   });
 });
 
+describe('memoryNotices', () => {
+  const memory: ProjectMemory = {
+    dir: '/m',
+    exists: true,
+    index: '',
+    entries: [entry({ file: 'a.md' })],
+    disabledBy: null,
+  };
+
+  it('says nothing while Claude sees everything', () => {
+    expect(memoryNotices(memory)).toEqual([]);
+  });
+
+  it('says what turned auto memory off', () => {
+    const [notice] = memoryNotices({ ...memory, disabledBy: 'autoMemoryEnabled in /s.json' });
+    expect(notice).toContain('off for this project (autoMemoryEnabled in /s.json)');
+  });
+
+  it('counts the memories past the part of the index Claude loads, and flags each', () => {
+    const cut = entry({ file: 'b.md', pastIndexLimit: true });
+    const [notice] = memoryNotices({ ...memory, entries: [...memory.entries, cut] });
+    expect(notice).toContain('200 lines or 25KB');
+    expect(notice).toContain("1 memory sits past the cut and isn't seen");
+    expect(listMemories([cut])[0]!.issues).toContain('not-loaded');
+  });
+});
+
 describe('memoryDocs / pickCurrent', () => {
   const memory: ProjectMemory = {
     dir: '/m',
     exists: true,
+    disabledBy: null,
     index: '- [A](a.md)',
     entries: [
       entry({ file: 'a.md', type: 'project', mtimeMs: 1, body: 'A' }),
@@ -237,6 +270,7 @@ describe('memory drafts', () => {
     body: '\nUse CI.\n',
     mtimeMs: 7,
     sizeBytes: 42,
+    hook: 'when tests are slow',
   });
 
   it('opens an edit on the memory as shown, guarded by the stat it was read at', () => {
@@ -245,6 +279,7 @@ describe('memory drafts', () => {
     expect(draft.fields).toEqual({
       name: 'prefer-ci',
       description: 'CI over local',
+      hook: 'when tests are slow',
       type: 'feedback',
       body: 'Use CI.',
     });
@@ -254,12 +289,61 @@ describe('memory drafts', () => {
 
   it('is dirty and saveable once any field differs, and clean again when put back', () => {
     const draft = editMemoryDraft(saved);
-    for (const patch of [{ name: 'x' }, { description: 'x' }, { type: 'user' }, { body: 'x' }]) {
+    const patches = [
+      { name: 'x' },
+      { description: 'x' },
+      { hook: 'x' },
+      { type: 'user' },
+      { body: 'x' },
+    ];
+    for (const patch of patches) {
       const edited = { ...draft, fields: { ...draft.fields, ...patch } as typeof draft.fields };
       expect(isDraftDirty(edited)).toBe(true);
       expect(canSaveDraft(edited)).toBe(true);
     }
     expect(isDraftDirty({ ...draft, fields: { ...draft.fields } })).toBe(false);
+  });
+
+  it("sends the hook only when it was edited, so Claude's rewording isn't undone", () => {
+    const draft = editMemoryDraft(saved);
+    expect(draft.line).toBe('own');
+    expect(draftHook(draft)).toBeUndefined();
+    const edit = (hook: string) => ({ ...draft, fields: { ...draft.fields, hook } });
+    expect(draftHook(edit(' when CI is green '))).toBe('when CI is green');
+    // Cleared is a hook too: the line keeps only its title.
+    expect(draftHook(edit(''))).toBe('');
+  });
+
+  it('gives a memory with no index line the description for a hook, unless one is written', () => {
+    const orphan = editMemoryDraft({ ...saved, inIndex: false, hook: null });
+    expect(orphan.line).toBe('missing');
+    expect(draftHook(orphan)).toBe('CI over local');
+    expect(draftHook({ ...orphan, fields: { ...orphan.fields, hook: 'mine' } })).toBe('mine');
+
+    const fresh = newMemoryDraft();
+    expect(fresh.line).toBe('missing');
+    const described = { ...fresh, fields: redescribeDraft(fresh, 'What it is') };
+    expect(described.fields.hook).toBe('');
+    expect(draftHook(described)).toBe('What it is');
+    expect(isDraftDirty({ ...fresh, fields: { ...fresh.fields, hook: 'x' } })).toBe(true);
+  });
+
+  it('never rewords a line the memory shares with another link', () => {
+    const shared = editMemoryDraft({ ...saved, hook: null });
+    expect(shared.line).toBe('shared');
+    expect(draftHook({ ...shared, fields: { ...shared.fields, hook: 'x' } })).toBeUndefined();
+  });
+
+  it('moves a hook that mirrors the description along with it, and no other', () => {
+    const own = editMemoryDraft(saved);
+    expect(redescribeDraft(own, 'CI first')).toMatchObject({
+      description: 'CI first',
+      hook: 'when tests are slow',
+    });
+    const mirrored = editMemoryDraft({ ...saved, hook: 'CI over local' });
+    const moved = { ...mirrored, fields: redescribeDraft(mirrored, 'CI first') };
+    expect(moved.fields).toMatchObject({ description: 'CI first', hook: 'CI first' });
+    expect(draftHook(moved)).toBe('CI first');
   });
 
   it('cannot save a memory without a name', () => {
@@ -280,7 +364,13 @@ describe('memory drafts', () => {
   });
 
   it('keeps a memory as the doc behind its row, and none behind the index', () => {
-    const docs = memoryDocs({ dir: '/m', exists: true, index: '', entries: [saved] });
+    const docs = memoryDocs({
+      dir: '/m',
+      exists: true,
+      index: '',
+      entries: [saved],
+      disabledBy: null,
+    });
     expect(docs.map((d) => d.entry)).toEqual([saved, undefined]);
   });
 

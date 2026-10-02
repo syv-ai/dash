@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
@@ -9,10 +10,12 @@ import {
   type MemoryUpdateResult,
   type ProjectMemory,
 } from '@shared/types';
-import { claudeProjectDir } from '../utils/claudePaths';
-import { writeFileAtomic, writeFileIfUnchanged } from '../utils/guardedWrite';
+import { claudeConfigDir, claudeProjectDir } from '../utils/claudePaths';
+import { writeFileIfUnchanged } from '../utils/guardedWrite';
 import { mapMemoryRefs, memoryLinkFiles } from '@shared/memoryLinks';
 import {
+  indexHook,
+  loadedIndex,
   memoryFileName,
   parseMemoryFile,
   removeIndexLines,
@@ -55,16 +58,96 @@ async function resolveMemoryRoot(projectPath: string): Promise<string> {
   }
 }
 
+/** Claude Code's managed (policy) settings file. */
+function managedSettingsFile(): string {
+  if (process.platform === 'darwin') {
+    return '/Library/Application Support/ClaudeCode/managed-settings.json';
+  }
+  if (process.platform === 'win32') return 'C:\\Program Files\\ClaudeCode\\managed-settings.json';
+  return '/etc/claude-code/managed-settings.json';
+}
+
+/** The part of a Claude settings file that bears on auto memory. */
+interface MemorySettings {
+  file: string;
+  autoMemoryDirectory?: unknown;
+  autoMemoryEnabled?: unknown;
+  env?: Record<string, unknown>;
+}
+
+/**
+ * The settings files a Claude session started in `projectPath` reads, in
+ * Claude's precedence: policy, then the project's local and shared settings,
+ * then the user's. Missing and unreadable files are left out.
+ */
+async function readClaudeSettings(projectPath: string): Promise<MemorySettings[]> {
+  const files = [
+    managedSettingsFile(),
+    path.join(projectPath, '.claude', 'settings.local.json'),
+    path.join(projectPath, '.claude', 'settings.json'),
+    path.join(claudeConfigDir(), 'settings.json'),
+  ];
+  const read = await Promise.all(
+    files.map(async (file): Promise<MemorySettings | null> => {
+      try {
+        const settings: unknown = JSON.parse(await fs.promises.readFile(file, 'utf8'));
+        return settings && typeof settings === 'object' ? { ...settings, file } : null;
+      } catch (err) {
+        if (!isMissing(err)) console.warn('[MemoryService] unreadable Claude settings', file, err);
+        return null;
+      }
+    }),
+  );
+  return read.filter((s) => s !== null);
+}
+
+/** The `autoMemoryDirectory` Claude would use, or null when no settings file sets one. */
+function configuredMemoryDir(settings: MemorySettings[]): string | null {
+  for (const { autoMemoryDirectory: dir } of settings) {
+    if (typeof dir !== 'string') continue;
+    // Claude accepts an absolute path or one under the home directory, nothing else.
+    if (dir.startsWith('~/')) return path.join(os.homedir(), dir.slice(2));
+    if (path.isAbsolute(dir)) return dir;
+  }
+  return null;
+}
+
+const DISABLE_ENV = 'CLAUDE_CODE_DISABLE_AUTO_MEMORY';
+const isSet = (value: unknown): boolean => value === '1' || value === 'true' || value === 1;
+
+/**
+ * What turns auto memory off for a session with these settings, or null while
+ * it is on (the default): the environment variable, in Dash's own environment
+ * (which the sessions it starts inherit) or a settings file's `env`, or the
+ * `autoMemoryEnabled` setting, where the first file to set it decides.
+ */
+function memoryDisabledBy(settings: MemorySettings[]): string | null {
+  if (isSet(process.env[DISABLE_ENV])) return DISABLE_ENV;
+  const env = settings.find((s) => isSet(s.env?.[DISABLE_ENV]));
+  if (env) return `${DISABLE_ENV} in ${env.file}`;
+  const decides = settings.find((s) => typeof s.autoMemoryEnabled === 'boolean');
+  return decides?.autoMemoryEnabled === false ? `autoMemoryEnabled in ${decides.file}` : null;
+}
+
 /** A project's auto-memory folder. Every caller goes through this: how the
- *  folder is found (root resolution, encoding, config dir) stays private. */
+ *  folder is found (settings, root resolution, encoding, config dir) stays private. */
 export async function resolveMemoryDir(projectPath: string): Promise<string> {
-  return path.join(claudeProjectDir(await resolveMemoryRoot(projectPath)), 'memory');
+  return memoryDirFor(projectPath, await readClaudeSettings(projectPath));
+}
+
+async function memoryDirFor(projectPath: string, settings: MemorySettings[]): Promise<string> {
+  return (
+    configuredMemoryDir(settings) ??
+    path.join(claudeProjectDir(await resolveMemoryRoot(projectPath)), 'memory')
+  );
 }
 
 async function readEntry(
   dir: string,
   file: string,
+  index: string,
   indexed: Set<string>,
+  loaded: Set<string>,
 ): Promise<MemoryEntry | null> {
   const full = path.join(dir, file);
   try {
@@ -82,6 +165,8 @@ async function readEntry(
       mtimeMs: stat.mtimeMs,
       sizeBytes: stat.size,
       inIndex: indexed.has(file),
+      pastIndexLimit: indexed.has(file) && !loaded.has(file),
+      hook: indexHook(index, file),
     };
   } catch (err) {
     // ENOENT: deleted between readdir and read (Claude rewrites memories
@@ -97,12 +182,14 @@ async function readEntry(
  * instead of showing an empty or unindexed memory.
  */
 export async function readProjectMemory(projectPath: string): Promise<ProjectMemory> {
-  const dir = await resolveMemoryDir(projectPath);
+  const settings = await readClaudeSettings(projectPath);
+  const dir = await memoryDirFor(projectPath, settings);
+  const disabledBy = memoryDisabledBy(settings);
   let names: string[];
   try {
     names = await fs.promises.readdir(dir);
   } catch (err) {
-    if (isMissing(err)) return { dir, exists: false, index: null, entries: [] };
+    if (isMissing(err)) return { dir, exists: false, index: null, entries: [], disabledBy };
     console.error('[MemoryService] cannot read memory folder', dir, err);
     throw err;
   }
@@ -115,17 +202,19 @@ export async function readProjectMemory(projectPath: string): Promise<ProjectMem
           throw err;
         })
     : null;
-  const indexed = index ? memoryLinkFiles(index) : new Set<string>();
+  const indexed = memoryLinkFiles(index ?? '');
+  const loaded = memoryLinkFiles(loadedIndex(index ?? ''));
   const entries = await Promise.all(
     names
       .filter((n) => n.endsWith('.md') && n !== MEMORY_INDEX_FILE)
-      .map((file) => readEntry(dir, file, indexed)),
+      .map((file) => readEntry(dir, file, index ?? '', indexed, loaded)),
   );
   return {
     dir,
     exists: true,
     index,
     entries: entries.filter((e): e is MemoryEntry => e !== null),
+    disabledBy,
   };
 }
 
@@ -137,19 +226,37 @@ async function readOrEmpty(full: string): Promise<string> {
   });
 }
 
-/** Rewrite MEMORY.md through `edit`; a missing index is edited as empty. */
+/**
+ * Rewrite MEMORY.md through `edit`; a missing index is edited as empty. Claude
+ * adds its own line right after writing a memory, so the write is guarded like
+ * any save and the edit redone on whatever landed in between.
+ */
 async function editIndex(dir: string, edit: (index: string) => string): Promise<void> {
   const full = path.join(dir, MEMORY_INDEX_FILE);
-  const before = await readOrEmpty(full);
-  const after = edit(before);
-  if (after !== before) await writeFileAtomic(full, after);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const stat = await fs.promises.stat(full).catch((err: unknown) => {
+      if (isMissing(err)) return null;
+      throw err;
+    });
+    const before = await readOrEmpty(full);
+    const after = edit(before);
+    if (after === before) return;
+    const expected = { mtimeMs: stat?.mtimeMs ?? 0, sizeBytes: stat?.size ?? 0 };
+    if ((await writeFileIfUnchanged(full, after, expected)).ok) return;
+  }
+  throw new Error(`${MEMORY_INDEX_FILE} kept changing while it was being updated`);
 }
 
 /**
  * Write a new memory and index it, creating the folder if Claude hasn't yet.
  * The file is named after the memory; an existing one is never replaced.
+ * `hook` is its line's text in MEMORY.md: the description unless given.
  */
-export async function createMemory(projectPath: string, fields: MemoryFields): Promise<string> {
+export async function createMemory(
+  projectPath: string,
+  fields: MemoryFields,
+  hook?: string,
+): Promise<string> {
   const dir = await resolveMemoryDir(projectPath);
   const file = memoryFileName(fields.name);
   await fs.promises.mkdir(dir, { recursive: true });
@@ -159,7 +266,7 @@ export async function createMemory(projectPath: string, fields: MemoryFields): P
   });
   if (!written.ok) throw new Error(`A memory file named ${file} already exists`);
   // Unindexed, Claude never loads it: the index line is part of creating it.
-  await editIndex(dir, (index) => setIndexLine(index, file, fields));
+  await editIndex(dir, (index) => setIndexLine(index, file, fields, { hook }));
   return file;
 }
 
@@ -214,28 +321,26 @@ async function relinkMemories(
  * keep its MEMORY.md line in step, and move other memories' links on a rename.
  * `expected` is the mtime and size the caller edited from: if the file has
  * changed since (Claude rewrites memories mid-session) nothing is written.
+ * `hook` rewords its MEMORY.md line; without one the line's hook is kept.
  */
 export async function updateMemory(
   projectPath: string,
   file: string,
   fields: MemoryFields,
   expected: { mtimeMs: number; sizeBytes: number },
+  hook?: string,
 ): Promise<MemoryUpdateResult> {
   const dir = await resolveMemoryDir(projectPath);
   const full = path.join(dir, file);
   const existing = await readOrEmpty(full);
   const result = await writeFileIfUnchanged(full, serializeMemoryFile(fields, existing), expected);
   if (!result.ok) return result;
-  // The index line is how Claude finds the memory, so it follows a rename or a
-  // new description, and a memory the index never linked gets its line. A body
-  // edit leaves an existing line alone: its hook may be Claude's own wording.
   const before = parseMemoryFile(existing);
   // What it answered to, in the list and in `[[links]]`: its name, or its basename when it had none.
   const oldName = before.name || file.replace(/\.md$/, '');
-  const relabelled = oldName !== fields.name || before.description !== fields.description;
-  await editIndex(dir, (index) =>
-    relabelled || !memoryLinkFiles(index).has(file) ? setIndexLine(index, file, fields) : index,
-  );
+  // The index line is how Claude finds the memory: one the index never linked
+  // gets its line, and an existing line follows the edit (see setIndexLine).
+  await editIndex(dir, (index) => setIndexLine(index, file, fields, { wasName: oldName, hook }));
   // A name with `]` can't be written as a link, so there is nothing to move to.
   const renamed = oldName !== fields.name && !fields.name.includes(']');
   const relinked = renamed ? await relinkMemories(dir, file, oldName, fields.name) : [];
@@ -252,6 +357,8 @@ export async function deleteMemory(
   remove: (full: string) => Promise<void> = (full) => fs.promises.unlink(full),
 ): Promise<void> {
   const dir = await resolveMemoryDir(projectPath);
-  await remove(path.join(dir, file));
+  const full = path.join(dir, file);
+  // Already gone (Claude deleted it meanwhile): its pointer is still there to drop.
+  if (fs.existsSync(full)) await remove(full);
   await editIndex(dir, (index) => removeIndexLines(index, file));
 }

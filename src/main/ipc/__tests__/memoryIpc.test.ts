@@ -49,6 +49,7 @@ describe('memory file arguments', () => {
     expect(() => memoryUpdateArgsSchema.parse({ ...update, name: 'a\nmetadata:' })).toThrow();
     expect(() => memoryUpdateArgsSchema.parse({ ...update, description: 'a\nb' })).toThrow();
     expect(() => memoryUpdateArgsSchema.parse({ ...update, type: 'bogus' })).toThrow();
+    expect(() => memoryUpdateArgsSchema.parse({ ...update, hook: 'a\n- [x](y.md)' })).toThrow();
   });
 });
 
@@ -125,11 +126,15 @@ describe('memory handlers', () => {
         file: 'prefer-ci.md',
         ...fields,
         body: 'Always.',
+        hook: 'when tests are slow',
         expectedMtimeMs: entry!.mtimeMs,
         expectedSizeBytes: entry!.sizeBytes,
       }),
     ).toMatchObject({ success: true, data: { ok: true } });
-    expect((await readProjectMemory(project)).entries[0]!.body).toBe('\nAlways.\n');
+    expect((await readProjectMemory(project)).entries[0]).toMatchObject({
+      body: '\nAlways.\n',
+      hook: 'when tests are slow',
+    });
 
     // The same expectation is now out of date: reported, not written.
     expect(
