@@ -20,11 +20,9 @@ afterEach(() => {
 
 function writeSession(taskPath: string, sessionId: string, lines: object[]) {
   const dir = path.join(tmpHome, '.claude', 'projects', encodeProjectPath(taskPath));
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(
-    path.join(dir, `${sessionId}.jsonl`),
-    lines.map((l) => JSON.stringify(l)).join('\n') + '\n',
-  );
+  const file = path.join(dir, `${sessionId}.jsonl`);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, lines.map((l) => JSON.stringify(l)).join('\n') + '\n');
 }
 
 function asstLine(opts: {
@@ -109,6 +107,27 @@ describe('aggregateTokenStatsForTaskPath', () => {
     const result = await aggregateTokenStatsForTaskPath(taskPath);
 
     expect(result.totalCostUsd).toBeCloseTo(15 + 3, 6);
+  });
+
+  it('counts subagent and workflow transcripts nested under a session', async () => {
+    const taskPath = '/tmp/test-task-e';
+    writeSession(taskPath, 'session-1', [
+      asstLine({ uuid: 'a', requestId: 'r1', input: 1000, output: 500 }),
+    ]);
+    writeSession(taskPath, 'session-1/subagents/agent-abc', [
+      asstLine({ uuid: 'b', requestId: 'r2', input: 2000, output: 1000 }),
+    ]);
+    writeSession(taskPath, 'session-1/subagents/workflows/wf_1/agent-def', [
+      asstLine({ uuid: 'c', requestId: 'r3', input: 4000, output: 2000 }),
+    ]);
+    // Workflow journal lines have no uuid/usage and must not affect the total.
+    writeSession(taskPath, 'session-1/subagents/workflows/wf_1/journal', [
+      { type: 'started', key: 'v2:x', agentId: 'def' },
+    ]);
+
+    const result = await aggregateTokenStatsForTaskPath(taskPath);
+
+    expect(result.totalTokens).toBe(10500);
   });
 
   it('skips non-jsonl files in the project dir', async () => {
