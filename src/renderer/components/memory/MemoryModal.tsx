@@ -151,6 +151,23 @@ function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) 
     if (deleted) toast(`Moved ${entry.file} to the trash`, { duration: 1800 });
     await reload();
   };
+  const prune = async () => {
+    try {
+      const res = await window.electronAPI.memoryPrune({ projectPath: project.path });
+      if (!res.success || !res.data) throw new Error(res.error);
+      const kept = (memory?.dangling.length ?? 0) - res.data.removed.length;
+      // A line that also links something else isn't dropped for one dead link.
+      if (kept > 0) {
+        toast(`${kept} ${kept === 1 ? 'link shares' : 'links share'} a line with another`, {
+          description: `Edit ${MEMORY_INDEX_FILE} by hand to remove ${kept === 1 ? 'it' : 'them'}.`,
+        });
+      }
+    } catch (err) {
+      console.error('Could not tidy the memory index', err);
+      toast.error(`Could not tidy ${MEMORY_INDEX_FILE}`);
+    }
+    await reload();
+  };
   const now = Date.now() / 1000;
   const projectOptions = useMemo(
     () => projects.map((p) => ({ value: p.id, label: p.name })),
@@ -233,10 +250,15 @@ function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) 
       {memory &&
         memoryNotices(memory).map((notice) => (
           <div
-            key={notice}
-            className="shrink-0 border-b border-border/40 bg-surface-2 px-5 py-2 text-[11px] text-muted-foreground"
+            key={notice.text}
+            className="flex shrink-0 items-center justify-between gap-3 border-b border-border/40 bg-surface-2 px-5 py-2 text-[11px] text-muted-foreground"
           >
-            {notice}
+            <span className="min-w-0">{notice.text}</span>
+            {notice.action === 'prune' && (
+              <Button variant="secondary" size="sm" onClick={() => void prune()}>
+                Remove {memory.dangling.length === 1 ? 'its line' : 'their lines'}
+              </Button>
+            )}
           </div>
         ))}
 

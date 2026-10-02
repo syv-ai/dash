@@ -1,7 +1,12 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import * as os from 'os';
 import * as path from 'path';
-import { claudeConfigDir, claudeProjectDir, encodeProjectPath } from '../claudePaths';
+import {
+  claudeConfigDir,
+  claudeProjectDir,
+  claudeStateFile,
+  encodeProjectPath,
+} from '../claudePaths';
 
 describe('encodeProjectPath', () => {
   // Real directory names Claude Code 2.1.282 created under ~/.claude/projects.
@@ -38,9 +43,38 @@ describe('encodeProjectPath', () => {
 
 describe('claudeConfigDir / claudeProjectDir', () => {
   const original = process.env.CLAUDE_CONFIG_DIR;
+  const originalName = process.env.CLAUDE_CODE_PROJECT_DIR_NAME;
   afterEach(() => {
     if (original === undefined) delete process.env.CLAUDE_CONFIG_DIR;
     else process.env.CLAUDE_CONFIG_DIR = original;
+    if (originalName === undefined) delete process.env.CLAUDE_CODE_PROJECT_DIR_NAME;
+    else process.env.CLAUDE_CODE_PROJECT_DIR_NAME = originalName;
+  });
+
+  it('uses CLAUDE_CODE_PROJECT_DIR_NAME for every cwd, beside a custom config dir only', () => {
+    process.env.CLAUDE_CODE_PROJECT_DIR_NAME = 'work';
+    delete process.env.CLAUDE_CONFIG_DIR;
+    expect(claudeProjectDir('/repo')).toBe(path.join(os.homedir(), '.claude', 'projects', '-repo'));
+
+    process.env.CLAUDE_CONFIG_DIR = '/srv/tenant-a';
+    expect(claudeProjectDir('/repo')).toBe('/srv/tenant-a/projects/work');
+    expect(claudeProjectDir('/elsewhere')).toBe('/srv/tenant-a/projects/work');
+  });
+
+  it.each(['', 'has space', '../up', 'con', 'a'.repeat(65)])(
+    'ignores the project dir name %j, as Claude Code does',
+    (name) => {
+      process.env.CLAUDE_CONFIG_DIR = '/srv/tenant-a';
+      process.env.CLAUDE_CODE_PROJECT_DIR_NAME = name;
+      expect(claudeProjectDir('/repo')).toBe('/srv/tenant-a/projects/-repo');
+    },
+  );
+
+  it('keeps its state file beside a custom config dir, else in the home directory', () => {
+    delete process.env.CLAUDE_CONFIG_DIR;
+    expect(claudeStateFile()).toBe(path.join(os.homedir(), '.claude.json'));
+    process.env.CLAUDE_CONFIG_DIR = '/srv/tenant-a';
+    expect(claudeStateFile()).toBe('/srv/tenant-a/.claude.json');
   });
 
   it('defaults to ~/.claude', () => {

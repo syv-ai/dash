@@ -64,6 +64,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   memoryCreate: (args: unknown) => ipcRenderer.invoke('memory:create', args),
   memoryUpdate: (args: unknown) => ipcRenderer.invoke('memory:update', args),
   memoryDelete: (args: unknown) => ipcRenderer.invoke('memory:delete', args),
+  memoryPrune: (args: { projectPath: string }) => ipcRenderer.invoke('memory:prune', args),
   onMemoryChanged: (callback: (projectPath: string) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, projectPath: string) =>
       callback(projectPath);

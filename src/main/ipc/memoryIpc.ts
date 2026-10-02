@@ -7,6 +7,7 @@ import { MEMORY_INDEX_FILE, MEMORY_TYPES } from '@shared/types';
 import {
   createMemory,
   deleteMemory,
+  pruneIndex,
   readProjectMemory,
   resolveMemoryDir,
   updateMemory,
@@ -96,7 +97,7 @@ export function registerMemoryIpc(): void {
         memoryCreateArgsSchema,
         raw,
       );
-      return { success: true, data: { file: await createMemory(projectPath, fields, hook) } };
+      return { success: true, data: await createMemory(projectPath, fields, hook) };
     } catch (error) {
       return errorResponse(error);
     }
@@ -117,6 +118,15 @@ export function registerMemoryIpc(): void {
         hook,
       );
       return { success: true, data };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
+  ipcMain.handle('memory:prune', async (_event, raw: unknown) => {
+    try {
+      const { projectPath } = parseArgs('memory:prune', memoryProjectArgsSchema, raw);
+      return { success: true, data: { removed: await pruneIndex(projectPath) } };
     } catch (error) {
       return errorResponse(error);
     }

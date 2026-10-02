@@ -137,18 +137,25 @@ describe('serializeMemoryFile', () => {
       '---',
       'Old body',
     ].join('\n');
-    expect(serializeMemoryFile({ ...fields, type: 'reference' }, legacy)).toBe(
+    // The stamp goes where Claude Code 2.1.287 puts it in this shape: last,
+    // at the top level. The body stays right under the frontmatter, as it was.
+    expect(serializeMemoryFile({ ...fields, type: 'reference' }, legacy, now)).toBe(
       [
         '---',
         'name: prefer-ci',
         'description: Run tests in CI, not locally',
         'type: reference',
         'originSessionId: 6eabdf28',
+        'modified: 2026-10-01T12:00:00.000Z',
         '---',
-        '',
         'Use CI.',
         '',
       ].join('\n'),
+    );
+    const later = new Date('2026-10-02T08:30:00.000Z');
+    const again = serializeMemoryFile({ ...fields, type: 'reference' }, legacy, later);
+    expect(serializeMemoryFile({ ...fields, type: 'reference' }, again, now)).toBe(
+      again.replace('2026-10-02T08:30:00.000Z', '2026-10-01T12:00:00.000Z'),
     );
   });
 
@@ -171,7 +178,6 @@ describe('serializeMemoryFile', () => {
         'name: prefer-ci',
         'description: Run tests in CI, not locally',
         '---',
-        '',
         'Use CI.',
         '',
       ].join('\n'),
@@ -308,6 +314,10 @@ describe('index lines', () => {
     );
     expect(setIndexLine('* [CI fast](ci.md) - hook\n', 'ci.md', fields, { hook: '' })).toBe(
       '* [CI fast](ci.md)\n',
+    );
+    // The line keeps the dash it was written with.
+    expect(setIndexLine('* [CI fast](ci.md) - hook\n', 'ci.md', fields, { hook: 'new' })).toBe(
+      '* [CI fast](ci.md) - new\n',
     );
   });
 

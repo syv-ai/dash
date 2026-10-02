@@ -40,7 +40,28 @@ export function claudeConfigDir(): string {
   return process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
 }
 
+// Names Windows reserves for devices: Claude Code won't use one as a directory.
+const DEVICE_NAME_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+
+/**
+ * The project dir name `CLAUDE_CODE_PROJECT_DIR_NAME` pins for every cwd, or
+ * null when Claude Code would ignore it: without `CLAUDE_CONFIG_DIR` (one name
+ * under `~/.claude` would merge every project), or unless it is 1-64 letters,
+ * digits, hyphens or underscores. Sessions Dash starts inherit its environment,
+ * so its own is the one to read.
+ */
+function pinnedProjectDirName(): string | null {
+  const name = process.env.CLAUDE_CODE_PROJECT_DIR_NAME;
+  if (!name || !process.env.CLAUDE_CONFIG_DIR) return null;
+  return /^[A-Za-z0-9_-]{1,64}$/.test(name) && !DEVICE_NAME_RE.test(name) ? name : null;
+}
+
 /** Where Claude keeps a cwd's transcripts (and, for a repo root, its `memory/`). */
 export function claudeProjectDir(cwd: string): string {
-  return path.join(claudeConfigDir(), 'projects', encodeProjectPath(cwd));
+  return path.join(claudeConfigDir(), 'projects', pinnedProjectDirName() ?? encodeProjectPath(cwd));
+}
+
+/** Claude Code's global state file (workspace trust among it): beside a custom config dir, else in the home directory. */
+export function claudeStateFile(): string {
+  return path.join(process.env.CLAUDE_CONFIG_DIR || os.homedir(), '.claude.json');
 }

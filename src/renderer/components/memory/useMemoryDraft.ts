@@ -69,6 +69,7 @@ export function useMemoryDraft({ projectPath, reload, onSaved }: Args): MemoryDr
       setSaveError(null);
       try {
         let file: string;
+        let warning: string | undefined;
         // What the index line should say, not always what the field holds (see draftHook).
         const fields = { ...draft.fields, hook: draftHook(draft) };
         if (!draft.target) {
@@ -77,7 +78,7 @@ export function useMemoryDraft({ projectPath, reload, onSaved }: Args): MemoryDr
             setSaveError(res.error ?? 'Could not create the memory.');
             return;
           }
-          file = res.data.file;
+          ({ file, warning } = res.data);
         } else {
           const guard = expected ?? draft.target;
           const res = await window.electronAPI.memoryUpdate({
@@ -97,6 +98,7 @@ export function useMemoryDraft({ projectPath, reload, onSaved }: Args): MemoryDr
           }
           file = draft.target.file;
           const { relinked } = res.data;
+          warning = res.data.warning;
           if (relinked.length > 0) {
             toast(
               `Moved links in ${relinked.length} other ${relinked.length === 1 ? 'memory' : 'memories'} to the new name`,
@@ -104,6 +106,8 @@ export function useMemoryDraft({ projectPath, reload, onSaved }: Args): MemoryDr
             );
           }
         }
+        // The memory is saved; what couldn't follow it shows in the list (e.g. "not indexed").
+        if (warning) toast.error(warning);
         await reload();
         open(null);
         onSaved(file, draft.fields.type);

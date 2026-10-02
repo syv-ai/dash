@@ -148,6 +148,11 @@ describe('memory handlers', () => {
     ).toMatchObject({ success: true, data: { ok: false, stale: true } });
 
     const dir = await resolveMemoryDir(project);
+    fs.appendFileSync(path.join(dir, 'MEMORY.md'), '- [Gone](gone.md) — deleted by hand\n');
+    expect(await invoke('memory:prune', { projectPath: project })).toEqual({
+      success: true,
+      data: { removed: ['gone.md'] },
+    });
     expect(await invoke('memory:delete', { projectPath: project, file: 'prefer-ci.md' })).toEqual({
       success: true,
       data: null,

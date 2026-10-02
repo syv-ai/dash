@@ -115,8 +115,9 @@ function newFrontmatter(fields: MemoryFields, now: Date): string[] {
 /**
  * `existing` frontmatter lines with `fields` applied; every other line is kept
  * as is, and so is a value that hasn't changed, however it was written (its
- * quoting is Claude's). A file with a `metadata:` block also gets Claude's
- * `modified` stamp.
+ * quoting is Claude's). The file also gets Claude's `modified` stamp, where
+ * Claude Code puts it: in the `metadata:` block, or last at the top level of
+ * a file without one.
  */
 function editedFrontmatter(existing: string[], fields: MemoryFields, now: Date): string[] {
   const seen = new Set<string>();
@@ -131,7 +132,7 @@ function editedFrontmatter(existing: string[], fields: MemoryFields, now: Date):
       if (value === fields[key]) lines.push(...existing.slice(i, i + span));
       else lines.push(`${key}: ${yamlScalar(fields[key])}`);
       i += span - 1;
-    } else if (indent && key === 'modified') {
+    } else if (key === 'modified') {
       seen.add(key);
       lines.push(`${indent}modified: ${now.toISOString()}`);
     } else if (key === 'type') {
@@ -157,6 +158,8 @@ function editedFrontmatter(existing: string[], fields: MemoryFields, now: Date):
     let end = metadata + 1;
     while (end < lines.length && /^\s+\S/.test(lines[end] ?? '')) end++;
     lines.splice(end, 0, `  modified: ${now.toISOString()}`);
+  } else if (!seen.has('modified')) {
+    lines.push(`modified: ${now.toISOString()}`);
   }
   return lines;
 }
@@ -172,7 +175,9 @@ export function serializeMemoryFile(fields: MemoryFields, existing = '', now = n
     ? editedFrontmatter(m[1].split(/\r?\n/), fields, now)
     : newFrontmatter(fields, now);
   const body = fields.body.replace(/^(?:[ \t]*\r?\n)+/, '').trimEnd();
-  return `---\n${lines.join('\n')}\n---\n\n${body}\n`;
+  // A body that started right under the frontmatter stays there.
+  const tight = m !== null && /^[ \t]*\S/.test(existing.slice(m[0].length));
+  return `---\n${lines.join('\n')}\n---\n${tight ? '' : '\n'}${body}\n`;
 }
 
 /** The file a new memory called `name` is saved as. Never the index, in any casing. */
@@ -194,7 +199,7 @@ function pointsOnlyAt(line: string, file: string): boolean {
 }
 
 // `- [Title](target) — hook`, the hook optional: the line Claude writes per memory.
-const POINTER_RE = /^(\s*[-*+]\s+)\[([^\]]*)\](\((?:<[^>\n]+>|[^)\s]+)\))(?:\s+[—–-]\s+(.*))?$/;
+const POINTER_RE = /^(\s*[-*+]\s+)\[([^\]]*)\](\((?:<[^>\n]+>|[^)\s]+)\))(?:(\s+[—–-]\s+)(.*))?$/;
 
 /** A memory's name as link text: brackets would end it early. */
 function indexTitle(name: string): string {
@@ -221,12 +226,19 @@ export function loadedIndex(index: string): string {
 function ownPointer(
   lines: string[],
   file: string,
-): { at: number; bullet: string; title: string; target: string; hook: string } | null {
+): {
+  at: number;
+  bullet: string;
+  title: string;
+  target: string;
+  dash: string;
+  hook: string;
+} | null {
   const at = lines.findIndex((line) => pointsOnlyAt(line, file));
   const m = POINTER_RE.exec(lines[at] ?? '');
   if (!m) return null;
-  const [, bullet = '', title = '', target = '', hook = ''] = m;
-  return { at, bullet, title, target, hook };
+  const [, bullet = '', title = '', target = '', dash = ' — ', hook = ''] = m;
+  return { at, bullet, title, target, dash, hook };
 }
 
 /** The hook on `file`'s own line of `index`, or null when it has no such line. */
@@ -256,7 +268,7 @@ export function setIndexLine(
     const newHook = hook ?? own.hook;
     // Rejoined only when something moved, so an untouched line keeps its bytes.
     if (title === own.title && newHook === own.hook.trim()) return index;
-    lines[own.at] = `${own.bullet}[${title}]${own.target}${newHook ? ` — ${newHook}` : ''}`;
+    lines[own.at] = `${own.bullet}[${title}]${own.target}${newHook ? own.dash + newHook : ''}`;
     return lines.join('\n');
   }
   if (memoryLinkFiles(index).has(file)) return index;

@@ -153,22 +153,36 @@ export function memorySections(
   return sections.filter((s) => s.entries.length > 0);
 }
 
+export interface MemoryNotice {
+  text: string;
+  /** What the modal can do about it: `prune` drops the index's dangling lines. */
+  action?: 'prune';
+}
+
 /**
- * What the modal says above the list when Claude won't see what is in it:
- * auto memory is off, or the index has outgrown what a session loads.
+ * What the modal says above the list when the index and what Claude sees have
+ * come apart: auto memory is off, the index has outgrown what a session
+ * loads, or it points at memories that are gone.
  */
-export function memoryNotices(memory: ProjectMemory): string[] {
-  const notices: string[] = [];
+export function memoryNotices(memory: ProjectMemory): MemoryNotice[] {
+  const notices: MemoryNotice[] = [];
   if (memory.disabledBy) {
-    notices.push(
-      `Auto memory is off for this project (${memory.disabledBy}): Claude neither loads nor adds to these memories.`,
-    );
+    notices.push({
+      text: `Auto memory is off for this project (${memory.disabledBy}): Claude neither loads nor adds to these memories.`,
+    });
   }
   const cut = memory.entries.filter((e) => e.pastIndexLimit).length;
   if (cut > 0) {
-    notices.push(
-      `${MEMORY_INDEX_FILE} is over the ${MEMORY_INDEX_MAX_LINES} lines or ${MEMORY_INDEX_MAX_BYTES / 1000}KB Claude loads into a session: ${cut} ${cut === 1 ? 'memory sits' : 'memories sit'} past the cut and ${cut === 1 ? "isn't" : "aren't"} seen. Shorten the hooks or drop stale lines.`,
-    );
+    notices.push({
+      text: `${MEMORY_INDEX_FILE} is over the ${MEMORY_INDEX_MAX_LINES} lines or ${MEMORY_INDEX_MAX_BYTES / 1000}KB Claude loads into a session: ${cut} ${cut === 1 ? 'memory sits' : 'memories sit'} past the cut and ${cut === 1 ? "isn't" : "aren't"} seen. Shorten the hooks or drop stale lines.`,
+    });
+  }
+  const gone = memory.dangling;
+  if (gone.length > 0) {
+    notices.push({
+      text: `${MEMORY_INDEX_FILE} points at ${gone.length === 1 ? 'a memory that no longer exists' : `${gone.length} memories that no longer exist`}: ${gone.join(', ')}.`,
+      action: 'prune',
+    });
   }
   return notices;
 }

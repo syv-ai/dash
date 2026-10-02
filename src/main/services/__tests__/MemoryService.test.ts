@@ -7,6 +7,7 @@ import { claudeProjectDir } from '../../utils/claudePaths';
 import {
   createMemory,
   deleteMemory,
+  pruneIndex,
   readProjectMemory,
   resolveMemoryDir,
   updateMemory,
@@ -80,17 +81,27 @@ describe('resolveMemoryDir', () => {
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, JSON.stringify({ autoMemoryDirectory }));
     };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const userSettings = path.join(tmp, 'claude', 'settings.json');
     settings(userSettings, '~/notes/claude');
     expect(await resolveMemoryDir(repo)).toBe(path.join(os.homedir(), 'notes', 'claude'));
 
+    // The repository's own file counts only once the workspace is trusted.
     settings(path.join(repo, '.claude', 'settings.json'), path.join(tmp, 'shared'));
+    expect(await resolveMemoryDir(repo)).toBe(path.join(os.homedir(), 'notes', 'claude'));
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('untrusted workspace'),
+      path.join(repo, '.claude', 'settings.json'),
+    );
+    fs.writeFileSync(
+      path.join(tmp, 'claude', '.claude.json'),
+      JSON.stringify({ projects: { [repo]: { hasTrustDialogAccepted: true } } }),
+    );
     expect(await resolveMemoryDir(repo)).toBe(path.join(tmp, 'shared'));
     settings(path.join(repo, '.claude', 'settings.local.json'), path.join(tmp, 'mine'));
     expect(await resolveMemoryDir(repo)).toBe(path.join(tmp, 'mine'));
 
     // A value Claude would not accept, or a broken file, is passed over.
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     settings(path.join(repo, '.claude', 'settings.local.json'), 'relative/dir');
     fs.writeFileSync(path.join(repo, '.claude', 'settings.json'), '{ not json');
     settings(userSettings, 42);
@@ -100,6 +111,17 @@ describe('resolveMemoryDir', () => {
       path.join(repo, '.claude', 'settings.json'),
       expect.anything(),
     );
+    warn.mockRestore();
+  });
+
+  it("takes the user's own settings.local.json untrusted, but not one the repo checks in", async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const local = path.join(repo, '.claude', 'settings.local.json');
+    fs.writeFileSync(local, JSON.stringify({ autoMemoryDirectory: path.join(tmp, 'mine') }));
+    expect(await resolveMemoryDir(repo)).toBe(path.join(tmp, 'mine'));
+
+    git(repo, 'add', '-f', local);
+    expect(await resolveMemoryDir(repo)).toBe(memoryOf(repo));
     warn.mockRestore();
   });
 
@@ -124,6 +146,7 @@ describe('readProjectMemory', () => {
       exists: false,
       index: null,
       entries: [],
+      dangling: [],
       disabledBy: null,
     });
   });
@@ -246,7 +269,7 @@ describe('writing memories', () => {
     (await readProjectMemory(repo)).entries.find((e) => e.file === file)!;
 
   it('creates the folder, the memory and its index line, from a worktree path', async () => {
-    const file = await createMemory(worktree, fields);
+    const { file } = await createMemory(worktree, fields);
     expect(file).toBe('prefer-ci.md');
 
     const memory = await readProjectMemory(repo);
@@ -291,8 +314,8 @@ describe('writing memories', () => {
 
     const result = await updateMemory(repo, 'ci.md', fields, before);
     expect(result).toMatchObject({ ok: true });
-    expect(fs.readFileSync(path.join(dir, 'ci.md'), 'utf8')).toBe(
-      '---\nname: Prefer CI\ndescription: CI over local\ntype: feedback\noriginSessionId: abc\n---\n\nUse CI.\n',
+    expect(fs.readFileSync(path.join(dir, 'ci.md'), 'utf8')).toMatch(
+      /^---\nname: Prefer CI\ndescription: CI over local\ntype: feedback\noriginSessionId: abc\nmodified: \S+Z\n---\nUse CI\.\n$/,
     );
     const after = await entryOf('ci.md');
     expect(result).toEqual({
@@ -306,7 +329,7 @@ describe('writing memories', () => {
   it('keeps the index line in step with an edit', async () => {
     const dir = await resolveMemoryDir(repo);
     const indexPath = path.join(dir, 'MEMORY.md');
-    const file = await createMemory(repo, fields);
+    const { file } = await createMemory(repo, fields);
     await createMemory(repo, { ...fields, name: 'Other' });
     // Claude's own wording for the hook.
     fs.writeFileSync(
@@ -335,7 +358,7 @@ describe('writing memories', () => {
   });
 
   it('indexes a new memory under the hook it is given', async () => {
-    const file = await createMemory(repo, fields, 'tests are slow locally');
+    const { file } = await createMemory(repo, fields, 'tests are slow locally');
     const memory = await readProjectMemory(repo);
     expect(memory.index).toBe('- [Prefer CI](prefer-ci.md) — tests are slow locally\n');
     expect(memory.entries[0]).toMatchObject({ file, hook: 'tests are slow locally' });
@@ -373,7 +396,7 @@ describe('writing memories', () => {
 
   it("moves other memories' [[links]] when a memory is renamed", async () => {
     const dir = await resolveMemoryDir(repo);
-    const file = await createMemory(repo, fields);
+    const { file } = await createMemory(repo, fields);
     const write = (name: string, body: string) =>
       fs.writeFileSync(path.join(dir, name), `---\nname: ${name.replace('.md', '')}\n---\n${body}`);
     write('a.md', 'See [[Prefer CI]] and [[ Prefer CI ]], not [[Prefer]].');
@@ -427,7 +450,7 @@ describe('writing memories', () => {
 
   it('leaves links alone when another memory still has the old name', async () => {
     const dir = await resolveMemoryDir(repo);
-    const file = await createMemory(repo, fields);
+    const { file } = await createMemory(repo, fields);
     fs.writeFileSync(path.join(dir, 'twin.md'), '---\nname: Prefer CI\n---\nI am the other one.');
     fs.writeFileSync(path.join(dir, 'a.md'), 'See [[Prefer CI]].');
 
@@ -454,7 +477,7 @@ describe('writing memories', () => {
   });
 
   it('leaves the index alone when the save was refused as stale', async () => {
-    const file = await createMemory(repo, fields);
+    const { file } = await createMemory(repo, fields);
     const indexPath = path.join(await resolveMemoryDir(repo), 'MEMORY.md');
     const before = fs.readFileSync(indexPath, 'utf8');
     const stale = await updateMemory(
@@ -468,7 +491,7 @@ describe('writing memories', () => {
   });
 
   it('does not overwrite a memory that changed since it was read', async () => {
-    const file = await createMemory(repo, fields);
+    const { file } = await createMemory(repo, fields);
     const seen = await entryOf(file);
     const full = path.join(await resolveMemoryDir(repo), file);
     fs.writeFileSync(full, '---\nname: Prefer CI\n---\nClaude rewrote this, and it is longer.');
@@ -486,7 +509,7 @@ describe('writing memories', () => {
       { mtimeMs: stale.currentMtimeMs, sizeBytes: stale.currentSizeBytes },
     );
     expect(forced.ok).toBe(true);
-    expect((await entryOf(file)).body).toBe('\nmine\n');
+    expect((await entryOf(file)).body).toBe('mine\n');
   });
 
   it('deletes a memory and its index line, leaving the others', async () => {
@@ -504,6 +527,54 @@ describe('writing memories', () => {
     const memory = await readProjectMemory(repo);
     expect(memory.entries.map((e) => e.file)).toEqual(['other.md']);
     expect(memory.index).toBe('- [Other](other.md) — CI over local\n');
+  });
+
+  it('saves the memory and says so when its index line could not follow', async () => {
+    const dir = await resolveMemoryDir(repo);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // An index that can't be read as a file.
+    fs.mkdirSync(path.join(dir, 'MEMORY.md'), { recursive: true });
+
+    const created = await createMemory(repo, fields);
+    expect(created).toMatchObject({ file: 'prefer-ci.md' });
+    expect(created.warning).toMatch(/^Saved, but MEMORY\.md could not be updated: .*EISDIR/);
+    expect(fs.existsSync(path.join(dir, 'prefer-ci.md'))).toBe(true);
+
+    const stat = fs.statSync(path.join(dir, 'prefer-ci.md'));
+    const saved = await updateMemory(
+      repo,
+      'prefer-ci.md',
+      { ...fields, body: 'Always.' },
+      { mtimeMs: stat.mtimeMs, sizeBytes: stat.size },
+    );
+    expect(saved).toMatchObject({ ok: true, relinked: [] });
+    expect(saved.ok && saved.warning).toMatch(/MEMORY\.md could not be updated/);
+    expect(fs.readFileSync(path.join(dir, 'prefer-ci.md'), 'utf8')).toContain('Always.');
+    error.mockRestore();
+  });
+
+  it('reports and prunes index lines for memories that are gone', async () => {
+    const dir = await resolveMemoryDir(repo);
+    await createMemory(repo, fields);
+    fs.writeFileSync(
+      path.join(dir, 'MEMORY.md'),
+      [
+        '- [Prefer CI](prefer-ci.md) — CI over local',
+        '- [Gone](gone.md) — deleted by hand',
+        '- see [Lost](lost.md) and [Prefer CI](prefer-ci.md)',
+        '',
+      ].join('\n'),
+    );
+    expect((await readProjectMemory(repo)).dangling).toEqual(['gone.md', 'lost.md']);
+
+    // A line shared with a memory that exists stays, dead link and all.
+    expect(await pruneIndex(repo)).toEqual(['gone.md']);
+    const memory = await readProjectMemory(repo);
+    expect(memory.index).toBe(
+      '- [Prefer CI](prefer-ci.md) — CI over local\n- see [Lost](lost.md) and [Prefer CI](prefer-ci.md)\n',
+    );
+    expect(memory.dangling).toEqual(['lost.md']);
+    expect(await pruneIndex(repo)).toEqual([]);
   });
 
   it('drops the index line of a memory that is already gone', async () => {

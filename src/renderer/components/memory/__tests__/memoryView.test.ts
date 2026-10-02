@@ -147,6 +147,7 @@ describe('memoryNotices', () => {
     exists: true,
     index: '',
     entries: [entry({ file: 'a.md' })],
+    dangling: [],
     disabledBy: null,
   };
 
@@ -156,15 +157,23 @@ describe('memoryNotices', () => {
 
   it('says what turned auto memory off', () => {
     const [notice] = memoryNotices({ ...memory, disabledBy: 'autoMemoryEnabled in /s.json' });
-    expect(notice).toContain('off for this project (autoMemoryEnabled in /s.json)');
+    expect(notice!.text).toContain('off for this project (autoMemoryEnabled in /s.json)');
   });
 
   it('counts the memories past the part of the index Claude loads, and flags each', () => {
     const cut = entry({ file: 'b.md', pastIndexLimit: true });
     const [notice] = memoryNotices({ ...memory, entries: [...memory.entries, cut] });
-    expect(notice).toContain('200 lines or 25KB');
-    expect(notice).toContain("1 memory sits past the cut and isn't seen");
+    expect(notice!.text).toContain('200 lines or 25KB');
+    expect(notice!.text).toContain("1 memory sits past the cut and isn't seen");
     expect(listMemories([cut])[0]!.issues).toContain('not-loaded');
+  });
+
+  it('offers to drop index lines for memories that are gone', () => {
+    expect(memoryNotices({ ...memory, dangling: ['old.md'] })).toEqual([
+      { text: 'MEMORY.md points at a memory that no longer exists: old.md.', action: 'prune' },
+    ]);
+    const [two] = memoryNotices({ ...memory, dangling: ['a.md', 'b.md'] });
+    expect(two!.text).toContain('2 memories that no longer exist: a.md, b.md');
   });
 });
 
@@ -172,6 +181,7 @@ describe('memoryDocs / pickCurrent', () => {
   const memory: ProjectMemory = {
     dir: '/m',
     exists: true,
+    dangling: [],
     disabledBy: null,
     index: '- [A](a.md)',
     entries: [
@@ -369,6 +379,7 @@ describe('memory drafts', () => {
       exists: true,
       index: '',
       entries: [saved],
+      dangling: [],
       disabledBy: null,
     });
     expect(docs.map((d) => d.entry)).toEqual([saved, undefined]);

@@ -5,12 +5,13 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import {
   MEMORY_INDEX_FILE,
+  type MemoryCreateResult,
   type MemoryEntry,
   type MemoryFields,
   type MemoryUpdateResult,
   type ProjectMemory,
 } from '@shared/types';
-import { claudeConfigDir, claudeProjectDir } from '../utils/claudePaths';
+import { claudeConfigDir, claudeProjectDir, claudeStateFile } from '../utils/claudePaths';
 import { writeFileIfUnchanged } from '../utils/guardedWrite';
 import { mapMemoryRefs, memoryLinkFiles } from '@shared/memoryLinks';
 import {
@@ -70,6 +71,8 @@ function managedSettingsFile(): string {
 /** The part of a Claude settings file that bears on auto memory. */
 interface MemorySettings {
   file: string;
+  /** Whether the repository supplies the file, rather than the user or their organisation. */
+  fromRepo: boolean;
   autoMemoryDirectory?: unknown;
   autoMemoryEnabled?: unknown;
   env?: Record<string, unknown>;
@@ -81,17 +84,20 @@ interface MemorySettings {
  * then the user's. Missing and unreadable files are left out.
  */
 async function readClaudeSettings(projectPath: string): Promise<MemorySettings[]> {
+  const local = path.join(projectPath, '.claude', 'settings.local.json');
   const files = [
-    managedSettingsFile(),
-    path.join(projectPath, '.claude', 'settings.local.json'),
-    path.join(projectPath, '.claude', 'settings.json'),
-    path.join(claudeConfigDir(), 'settings.json'),
+    { file: managedSettingsFile(), fromRepo: () => false },
+    // The user's own file, unless the repository supplies it.
+    { file: local, fromRepo: () => isRepoSupplied(local) },
+    { file: path.join(projectPath, '.claude', 'settings.json'), fromRepo: () => true },
+    { file: path.join(claudeConfigDir(), 'settings.json'), fromRepo: () => false },
   ];
   const read = await Promise.all(
-    files.map(async (file): Promise<MemorySettings | null> => {
+    files.map(async ({ file, fromRepo }): Promise<MemorySettings | null> => {
       try {
         const settings: unknown = JSON.parse(await fs.promises.readFile(file, 'utf8'));
-        return settings && typeof settings === 'object' ? { ...settings, file } : null;
+        if (!settings || typeof settings !== 'object') return null;
+        return { ...settings, file, fromRepo: await fromRepo() };
       } catch (err) {
         if (!isMissing(err)) console.warn('[MemoryService] unreadable Claude settings', file, err);
         return null;
@@ -101,10 +107,57 @@ async function readClaudeSettings(projectPath: string): Promise<MemorySettings[]
   return read.filter((s) => s !== null);
 }
 
-/** The `autoMemoryDirectory` Claude would use, or null when no settings file sets one. */
-function configuredMemoryDir(settings: MemorySettings[]): string | null {
-  for (const { autoMemoryDirectory: dir } of settings) {
+/**
+ * Whether a project's `settings.local.json` comes with the repository rather
+ * than from the user: git tracks it, or `.claude` is a symlink.
+ */
+async function isRepoSupplied(file: string): Promise<boolean> {
+  const linked = await fs.promises.lstat(path.dirname(file)).then(
+    (stat) => stat.isSymbolicLink(),
+    () => false,
+  );
+  if (linked) return true;
+  return execFileAsync('git', ['ls-files', '--error-unmatch', '--', path.basename(file)], {
+    cwd: path.dirname(file),
+  }).then(
+    () => true,
+    () => false,
+  );
+}
+
+/**
+ * Whether the user accepted Claude Code's workspace trust dialog for the
+ * project: recorded in its state file, keyed on `root` (the main checkout, or
+ * the folder itself outside git).
+ */
+async function isTrusted(root: string): Promise<boolean> {
+  try {
+    const state: unknown = JSON.parse(await fs.promises.readFile(claudeStateFile(), 'utf8'));
+    const projects = (state as { projects?: Record<string, { hasTrustDialogAccepted?: unknown }> })
+      ?.projects;
+    return projects?.[root]?.hasTrustDialogAccepted === true;
+  } catch (err) {
+    if (!isMissing(err)) console.warn('[MemoryService] unreadable Claude state file', err);
+    return false;
+  }
+}
+
+/**
+ * The `autoMemoryDirectory` Claude would use, or null when no settings file
+ * sets one. Like Claude, a folder the repository itself names is only taken
+ * once the user has trusted the workspace: a checkout can't point memory
+ * reads and writes somewhere of its choosing unasked.
+ */
+async function configuredMemoryDir(
+  settings: MemorySettings[],
+  root: string,
+): Promise<string | null> {
+  for (const { autoMemoryDirectory: dir, fromRepo, file } of settings) {
     if (typeof dir !== 'string') continue;
+    if (fromRepo && !(await isTrusted(root))) {
+      console.warn('[MemoryService] untrusted workspace; ignoring autoMemoryDirectory in', file);
+      continue;
+    }
     // Claude accepts an absolute path or one under the home directory, nothing else.
     if (dir.startsWith('~/')) return path.join(os.homedir(), dir.slice(2));
     if (path.isAbsolute(dir)) return dir;
@@ -136,10 +189,8 @@ export async function resolveMemoryDir(projectPath: string): Promise<string> {
 }
 
 async function memoryDirFor(projectPath: string, settings: MemorySettings[]): Promise<string> {
-  return (
-    configuredMemoryDir(settings) ??
-    path.join(claudeProjectDir(await resolveMemoryRoot(projectPath)), 'memory')
-  );
+  const root = await resolveMemoryRoot(projectPath);
+  return (await configuredMemoryDir(settings, root)) ?? path.join(claudeProjectDir(root), 'memory');
 }
 
 async function readEntry(
@@ -189,7 +240,9 @@ export async function readProjectMemory(projectPath: string): Promise<ProjectMem
   try {
     names = await fs.promises.readdir(dir);
   } catch (err) {
-    if (isMissing(err)) return { dir, exists: false, index: null, entries: [], disabledBy };
+    if (isMissing(err)) {
+      return { dir, exists: false, index: null, entries: [], dangling: [], disabledBy };
+    }
     console.error('[MemoryService] cannot read memory folder', dir, err);
     throw err;
   }
@@ -214,8 +267,15 @@ export async function readProjectMemory(projectPath: string): Promise<ProjectMem
     exists: true,
     index,
     entries: entries.filter((e): e is MemoryEntry => e !== null),
+    dangling: danglingLinks(index ?? '', names),
     disabledBy,
   };
+}
+
+/** The memory files `index` links to that aren't among `names`, the folder's files. */
+function danglingLinks(index: string, names: string[]): string[] {
+  const present = new Set(names);
+  return [...memoryLinkFiles(index)].filter((f) => f !== MEMORY_INDEX_FILE && !present.has(f));
 }
 
 /** Read `full`, with a missing file as the empty string. */
@@ -248,6 +308,44 @@ async function editIndex(dir: string, edit: (index: string) => string): Promise<
 }
 
 /**
+ * Run what follows a memory's own write (its index line, other memories'
+ * links). The memory is saved by then, so a failure here is told, not thrown:
+ * a thrown one would have the save retried against a file it already changed.
+ */
+async function afterSave<T>(
+  what: string,
+  fallback: T,
+  step: () => Promise<T>,
+): Promise<{ value: T; warning?: string }> {
+  try {
+    return { value: await step() };
+  } catch (err) {
+    console.error('[MemoryService] saved, but could not update', what, err);
+    const reason = err instanceof Error ? err.message : String(err);
+    return { value: fallback, warning: `Saved, but ${what} could not be updated: ${reason}` };
+  }
+}
+
+/**
+ * Drop MEMORY.md's pointers to memories that no longer exist (Claude or the
+ * user deleted the file and left the line). Resolves with the files whose
+ * lines went; a line shared with another link is kept.
+ */
+export async function pruneIndex(projectPath: string): Promise<string[]> {
+  const dir = await resolveMemoryDir(projectPath);
+  let removed: string[] = [];
+  await editIndex(dir, (index) => {
+    // Checked against the folder as it is now, not as the caller last saw it.
+    const dangling = danglingLinks(index, fs.readdirSync(dir));
+    const pruned = dangling.reduce(removeIndexLines, index);
+    const left = memoryLinkFiles(pruned);
+    removed = dangling.filter((f) => !left.has(f));
+    return pruned;
+  });
+  return removed;
+}
+
+/**
  * Write a new memory and index it, creating the folder if Claude hasn't yet.
  * The file is named after the memory; an existing one is never replaced.
  * `hook` is its line's text in MEMORY.md: the description unless given.
@@ -256,7 +354,7 @@ export async function createMemory(
   projectPath: string,
   fields: MemoryFields,
   hook?: string,
-): Promise<string> {
+): Promise<MemoryCreateResult> {
   const dir = await resolveMemoryDir(projectPath);
   const file = memoryFileName(fields.name);
   await fs.promises.mkdir(dir, { recursive: true });
@@ -266,8 +364,10 @@ export async function createMemory(
   });
   if (!written.ok) throw new Error(`A memory file named ${file} already exists`);
   // Unindexed, Claude never loads it: the index line is part of creating it.
-  await editIndex(dir, (index) => setIndexLine(index, file, fields, { hook }));
-  return file;
+  const { warning } = await afterSave(MEMORY_INDEX_FILE, undefined, () =>
+    editIndex(dir, (index) => setIndexLine(index, file, fields, { hook })),
+  );
+  return { file, warning };
 }
 
 /**
@@ -340,11 +440,15 @@ export async function updateMemory(
   const oldName = before.name || file.replace(/\.md$/, '');
   // The index line is how Claude finds the memory: one the index never linked
   // gets its line, and an existing line follows the edit (see setIndexLine).
-  await editIndex(dir, (index) => setIndexLine(index, file, fields, { wasName: oldName, hook }));
+  const indexed = await afterSave(MEMORY_INDEX_FILE, undefined, () =>
+    editIndex(dir, (index) => setIndexLine(index, file, fields, { wasName: oldName, hook })),
+  );
   // A name with `]` can't be written as a link, so there is nothing to move to.
   const renamed = oldName !== fields.name && !fields.name.includes(']');
-  const relinked = renamed ? await relinkMemories(dir, file, oldName, fields.name) : [];
-  return { ...result, relinked };
+  const relinked = await afterSave('links to its old name', [], async () =>
+    renamed ? relinkMemories(dir, file, oldName, fields.name) : [],
+  );
+  return { ...result, relinked: relinked.value, warning: indexed.warning ?? relinked.warning };
 }
 
 /**

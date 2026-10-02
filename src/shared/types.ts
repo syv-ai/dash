@@ -1170,8 +1170,18 @@ export interface MemoryEntry extends MemoryFields {
  * other memory files whose `[[name]]` links were moved to a new name.
  */
 export type MemoryUpdateResult =
-  | (Extract<EditorWriteResult, { ok: true }> & { relinked: string[] })
+  | (Extract<EditorWriteResult, { ok: true }> & { relinked: string[]; warning?: string })
   | Extract<EditorWriteResult, { ok: false }>;
+
+/**
+ * A created memory: the file it was saved as. `warning` (here and on a save)
+ * says what could not follow the write, e.g. its MEMORY.md line: the memory
+ * itself is saved.
+ */
+export interface MemoryCreateResult {
+  file: string;
+  warning?: string;
+}
 
 /** A project's auto-memory, as Claude Code stores it. */
 export interface ProjectMemory {
@@ -1181,6 +1191,8 @@ export interface ProjectMemory {
   /** MEMORY.md contents, or null when absent. */
   index: string | null;
   entries: MemoryEntry[];
+  /** Memory files MEMORY.md links to that aren't in the folder. */
+  dangling: string[];
   /**
    * What turned auto memory off for sessions in this project (a settings file
    * or an environment variable), or null while it is on. Off, Claude neither
