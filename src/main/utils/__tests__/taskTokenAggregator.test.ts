@@ -3,23 +3,27 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { aggregateTokenStatsForTaskPath } from '../taskTokenAggregator';
-import { encodeProjectPath } from '../jsonlParser';
+import { claudeProjectDir } from '../claudePaths';
 
 let tmpHome: string;
 const ORIGINAL_HOME = process.env.HOME;
+const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
 
 beforeEach(() => {
   tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-tokens-'));
   process.env.HOME = tmpHome;
+  delete process.env.CLAUDE_CONFIG_DIR;
 });
 
 afterEach(() => {
   process.env.HOME = ORIGINAL_HOME;
+  if (ORIGINAL_CONFIG_DIR === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+  else process.env.CLAUDE_CONFIG_DIR = ORIGINAL_CONFIG_DIR;
   fs.rmSync(tmpHome, { recursive: true, force: true });
 });
 
 function writeSession(taskPath: string, sessionId: string, lines: object[]) {
-  const dir = path.join(tmpHome, '.claude', 'projects', encodeProjectPath(taskPath));
+  const dir = claudeProjectDir(taskPath);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(
     path.join(dir, `${sessionId}.jsonl`),
@@ -72,6 +76,23 @@ describe('aggregateTokenStatsForTaskPath', () => {
     expect(result.totalCostUsd).toBeCloseTo(0.0315, 6);
   });
 
+  it('reads a worktree task from the directory Claude Code writes under CLAUDE_CONFIG_DIR', async () => {
+    const configDir = path.join(tmpHome, 'alt-claude');
+    process.env.CLAUDE_CONFIG_DIR = configDir;
+    // Written by hand, not via claudeProjectDir, so the path is an oracle: the
+    // `.` of `.claude` encodes to `-` just like the `/` before it.
+    const dir = path.join(configDir, 'projects', '-tmp-repo--claude-worktrees-fix-1a2b');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'session-1.jsonl'),
+      JSON.stringify(asstLine({ uuid: 'a', requestId: 'r1', input: 1000, output: 500 })) + '\n',
+    );
+
+    const result = await aggregateTokenStatsForTaskPath('/tmp/repo/.claude/worktrees/fix-1a2b');
+
+    expect(result.totalTokens).toBe(1500);
+  });
+
   it('dedupes by requestId across multiple session files', async () => {
     const taskPath = '/tmp/test-task-b';
     writeSession(taskPath, 'session-1', [
@@ -116,7 +137,7 @@ describe('aggregateTokenStatsForTaskPath', () => {
     writeSession(taskPath, 'session-1', [
       asstLine({ uuid: 'a', requestId: 'r1', input: 1000, output: 500 }),
     ]);
-    const dir = path.join(tmpHome, '.claude', 'projects', encodeProjectPath(taskPath));
+    const dir = claudeProjectDir(taskPath);
     fs.writeFileSync(path.join(dir, 'notes.txt'), 'should be ignored');
 
     const result = await aggregateTokenStatsForTaskPath(taskPath);
