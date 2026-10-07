@@ -19,14 +19,13 @@ import {
   type ClaudeSettingsFile,
 } from '../utils/claudeSettings';
 import { writeFileIfUnchanged } from '../utils/guardedWrite';
-import { mapMemoryRefs, memoryLinkFiles } from '@shared/memoryLinks';
+import { mapMemoryRefs, memoryLinkFiles, resolveMemoryRef } from '@shared/memoryLinks';
 import {
-  hasOwnIndexLine,
-  indexHook,
-  loadedIndex,
   memoryFileName,
-  parseMemoryFile,
   raiseIndexLine,
+  readIndex,
+  readMemoryFields,
+  type MemoryIndexLine,
   removeIndexLines,
   serializeMemoryFile,
   setIndexLine,
@@ -145,9 +144,7 @@ export async function resolveMemoryDir(projectPath: string): Promise<string> {
 async function readEntry(
   dir: string,
   file: string,
-  index: string,
-  indexed: Set<string>,
-  loaded: Set<string>,
+  indexLine: (file: string) => MemoryIndexLine,
 ): Promise<MemoryEntry | null> {
   const full = path.join(dir, file);
   try {
@@ -155,19 +152,12 @@ async function readEntry(
       fs.promises.readFile(full, 'utf8'),
       fs.promises.stat(full),
     ]);
-    const parsed = parseMemoryFile(content);
     return {
       file,
-      name: parsed.name || file.replace(/\.md$/, ''),
-      description: parsed.description,
-      type: parsed.type,
-      body: parsed.body,
+      ...readMemoryFields(content, file),
       mtimeMs: stat.mtimeMs,
       sizeBytes: stat.size,
-      inIndex: indexed.has(file),
-      ownLine: hasOwnIndexLine(index, file),
-      pastIndexLimit: indexed.has(file) && !loaded.has(file),
-      hook: indexHook(index, file),
+      ...indexLine(file),
     };
   } catch (err) {
     // ENOENT: deleted between readdir and read (Claude rewrites memories
@@ -204,12 +194,11 @@ export async function readProjectMemory(projectPath: string): Promise<ProjectMem
           throw err;
         })
     : null;
-  const indexed = memoryLinkFiles(index ?? '');
-  const loaded = memoryLinkFiles(loadedIndex(index ?? ''));
+  const indexLine = readIndex(index ?? '');
   const entries = await Promise.all(
     names
       .filter((n) => n.endsWith('.md') && n !== MEMORY_INDEX_FILE)
-      .map((file) => readEntry(dir, file, index ?? '', indexed, loaded)),
+      .map((file) => readEntry(dir, file, indexLine)),
   );
   return {
     dir,
@@ -303,15 +292,15 @@ export async function pruneIndex(projectPath: string): Promise<string[]> {
  */
 export async function indexMemory(projectPath: string, file: string): Promise<void> {
   const dir = await resolveMemoryDir(projectPath);
-  const parsed = parseMemoryFile(await fs.promises.readFile(path.join(dir, file), 'utf8'));
-  const fields = { ...parsed, name: parsed.name || file.replace(/\.md$/, '') };
+  const fields = readMemoryFields(await fs.promises.readFile(path.join(dir, file), 'utf8'), file);
   await editIndex(dir, (index) => setIndexLine(index, file, fields));
 }
 
 /**
- * Move a memory's MEMORY.md line to the top of the list, into the part Claude
- * loads. The index is no shorter for it: what was last in that part falls
- * past the cut instead.
+ * Move a memory's own MEMORY.md line to the top of the list, into the part
+ * Claude loads. The index is no shorter for it: what was last in that part
+ * falls past the cut instead. Throws when the memory has no line of its own,
+ * or the move would not bring it into that part.
  */
 export async function raiseMemory(projectPath: string, file: string): Promise<void> {
   const dir = await resolveMemoryDir(projectPath);
@@ -372,13 +361,19 @@ async function relinkMemories(
     }),
   );
   const readable = others.filter((o) => o !== null);
+  const named = readable.map((o) => ({
+    file: o.file,
+    name: readMemoryFields(o.content, o.file).name,
+  }));
   // Another memory still answers to the old name: those links are its own now.
-  if (readable.some((o) => parseMemoryFile(o.content).name === oldName)) return [];
+  if (named.some((o) => o.name === oldName)) return [];
+  // The links to move are the ones that meant this memory, as the preview resolves them.
+  const meant = resolveMemoryRef([...named, { file: renamed, name: oldName }]);
 
   const relinked: string[] = [];
   for (const other of readable) {
     const content = mapMemoryRefs(other.content, (ref, match) =>
-      ref.trim() === oldName ? `[[${newName}]]` : match,
+      ref.trim() === oldName && meant(ref) === renamed ? `[[${newName}]]` : match,
     );
     if (content === other.content) continue;
     // Guarded like any save: a memory Claude is rewriting right now is skipped.
@@ -408,9 +403,8 @@ export async function updateMemory(
   const existing = await readOrEmpty(full);
   const result = await writeFileIfUnchanged(full, serializeMemoryFile(fields, existing), expected);
   if (!result.ok) return result;
-  const before = parseMemoryFile(existing);
   // What it answered to, in the list and in `[[links]]`: its name, or its basename when it had none.
-  const oldName = before.name || file.replace(/\.md$/, '');
+  const oldName = readMemoryFields(existing, file).name;
   // The index line is how Claude finds the memory: one the index never linked
   // gets its line, and an existing line follows the edit (see setIndexLine).
   const indexed = await afterSave(MEMORY_INDEX_FILE, undefined, () =>

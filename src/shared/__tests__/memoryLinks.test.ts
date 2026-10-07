@@ -77,19 +77,20 @@ describe('mapWholeMemoryLinks', () => {
   });
 
   it('is the one answer to what a memory link is: a target without its text is none', () => {
-    for (const md of [
-      'a [x](x.md) b',
-      'see ](x.md) here',
-      '[a]b](x.md)',
-      '[split\n\nby a blank line](x.md)',
-      '[outer [in](y.md) more](x.md)',
-      '- **[T](x.md)** and ![img](<y z.md>)',
-    ]) {
+    for (const [md, files] of [
+      ['a [x](x.md) b', ['x.md']],
+      ['see ](x.md) here', []],
+      ['[a]b](x.md)', []],
+      ['[split\n\nby a blank line](x.md)', []],
+      // Links don't nest: the inner one is the link.
+      ['[outer [in](y.md) more](x.md)', ['y.md']],
+      ['- **[T](x.md)** and ![img](<y z.md>)', ['x.md', 'y z.md']],
+    ] as const) {
       const whole: string[] = [];
       mapWholeMemoryLinks(md, (file, _text, match) => (whole.push(file), match));
       const targets: string[] = [];
       mapMemoryLinks(md, (file, match) => (targets.push(file), match));
-      expect([md, targets]).toEqual([md, whole]);
+      expect([md, whole, targets]).toEqual([md, files, files]);
     }
     expect(memoryLinkFiles('see ](x.md) and [a]b](y.md)')).toEqual(new Set());
     expect(mapMemoryLinks('[outer [in](y.md) more](x.md)', (file) => `](#${file})`)).toBe(

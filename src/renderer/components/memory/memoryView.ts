@@ -9,8 +9,10 @@ import {
   mapMemoryLinks,
   mapMemoryRefs,
   mapWholeMemoryLinks,
+  memoryBaseName,
   memoryLinkFiles,
   memoryLinkTarget,
+  resolveMemoryRef,
 } from '../../../shared/memoryLinks';
 
 /** Href prefix the preview intercepts to open another memory in the modal. */
@@ -157,7 +159,7 @@ function suggestMemory(target: string, entries: MemoryEntry[]): string | undefin
  */
 export function brokenLinks(body: string, entries: MemoryEntry[], self?: string): BrokenLink[] {
   const files = new Set(entries.map((e) => e.file));
-  const resolve = refResolver(entries);
+  const resolve = resolveMemoryRef(entries);
   const others = entries.filter((e) => e.file !== self);
   const broken = new Map<string, BrokenLink>();
   const add = (kind: BrokenLink['kind'], target: string) => {
@@ -206,8 +208,8 @@ export function repointLink(
     );
   }
   // Its basename, when its name can't be written as a link or means another memory.
-  const named = !to.name.includes(']') && refResolver(entries)(to.name) === to.file;
-  const name = named ? to.name : to.file.replace(/\.md$/, '');
+  const named = !to.name.includes(']') && resolveMemoryRef(entries)(to.name) === to.file;
+  const name = named ? to.name : memoryBaseName(to.file);
   return mapMemoryRefs(body, (ref, match) => (ref.trim() === link.target ? `[[${name}]]` : match));
 }
 
@@ -478,22 +480,12 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;');
 }
 
-/** Which file a `[[ref]]` means: the memory with that name, else the one with that basename. */
-function refResolver(entries: MemoryEntry[]): (ref: string) => string | undefined {
-  const byName = new Map(entries.map((e) => [e.name, e.file]));
-  const files = new Set(entries.map((e) => e.file));
-  return (ref) => {
-    const name = ref.trim();
-    return byName.get(name) ?? (files.has(`${name}.md`) ? `${name}.md` : undefined);
-  };
-}
-
 /**
  * The other memories whose text points at `target`, by `[[name]]` or by a
  * link to its file: what a delete would leave dangling.
  */
 export function memoryReferrers(entries: MemoryEntry[], target: MemoryEntry): MemoryEntry[] {
-  const resolve = refResolver(entries);
+  const resolve = resolveMemoryRef(entries);
   return entries.filter((e) => {
     if (e.file === target.file) return false;
     if (memoryLinkFiles(e.body).has(target.file)) return true;
@@ -509,13 +501,14 @@ export function memoryReferrers(entries: MemoryEntry[], target: MemoryEntry): Me
 /**
  * Point memory cross-references at `#memory:<file>` so the preview can route
  * clicks back into the modal. `[[name]]` resolves by frontmatter name, then by
- * basename; memory links (see mapMemoryLinks) are rewritten only when that file
- * exists. What points at nothing is shown as muted text, not a link: followed,
- * a dead file link would only hand the browser a file that isn't there.
+ * basename (see resolveMemoryRef); a memory link (see mapWholeMemoryLinks) is
+ * rewritten when its file exists and left as written when it is MEMORY.md. Any
+ * other points at nothing and is shown as muted text, not a link: followed, a
+ * dead file link would only hand the browser a file that isn't there.
  */
 export function rewriteMemoryLinks(markdown: string, entries: MemoryEntry[]): string {
   const files = new Set(entries.map((e) => e.file));
-  const resolve = refResolver(entries);
+  const resolve = resolveMemoryRef(entries);
 
   const missing = (text: string) => `<span class="memory-missing">${escapeHtml(text)}</span>`;
   const open = (text: string, file: string) =>
@@ -531,11 +524,6 @@ export function rewriteMemoryLinks(markdown: string, entries: MemoryEntry[]): st
 }
 
 /**
- * Injected into the preview document's <head>. `<base target=_blank>` sends
- * ordinary links to the window-open handler (→ system browser); memory links
- * are intercepted by MemoryPreview before that happens.
- */
-/**
  * The preview frame's sandbox. It must never gain `allow-scripts`: with
  * `allow-same-origin` that would let untrusted memory HTML script the renderer
  * (and `window.electronAPI`). Same-origin is what lets MemoryPreview wire the
@@ -544,5 +532,12 @@ export function rewriteMemoryLinks(markdown: string, entries: MemoryEntry[]): st
  */
 export const MEMORY_PREVIEW_SANDBOX = 'allow-same-origin allow-popups';
 
+/**
+ * Injected into the preview document's <head>. `<base target=_blank>` sends
+ * ordinary links to the window-open handler (→ system browser); memory links
+ * are intercepted by MemoryPreview before that happens. Also styles
+ * `.memory-missing`, the span rewriteMemoryLinks writes for a link that points
+ * at nothing.
+ */
 export const MEMORY_PREVIEW_HEAD = `<base target="_blank" />
 <style>.memory-missing{opacity:.55;text-decoration:underline dotted}</style>`;

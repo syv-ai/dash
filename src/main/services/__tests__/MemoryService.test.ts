@@ -472,6 +472,33 @@ describe('writing memories', () => {
     expect(fs.readFileSync(path.join(dir, 'a.md'), 'utf8')).toBe('See [[Prefer CI]].');
   });
 
+  it('leaves a link the preview opens as another memory when this one is renamed', async () => {
+    const dir = await resolveMemoryDir(repo);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'a.md'), '---\nname: notes\n---\nA');
+    // No frontmatter name: it answers to its basename, the same `notes`.
+    fs.writeFileSync(path.join(dir, 'notes.md'), 'no frontmatter');
+    fs.writeFileSync(path.join(dir, 'c.md'), 'See [[notes]].');
+
+    const edit = { name: 'journal', description: '', type: 'other', body: 'A' } as const;
+    const result = await updateMemory(repo, 'a.md', edit, await entryOf('a.md'));
+    expect(result).toMatchObject({ ok: true, relinked: [] });
+    expect(fs.readFileSync(path.join(dir, 'c.md'), 'utf8')).toBe('See [[notes]].');
+  });
+
+  it('says so when a raise cannot bring the line into what Claude loads', async () => {
+    const dir = await resolveMemoryDir(repo);
+    await createMemory(repo, fields);
+    const prose = Array.from({ length: 205 }, (_, i) => `prose ${i}`);
+    const index = [...prose, '- [A](a.md)', '- [Prefer CI](prefer-ci.md)', ''].join('\n');
+    fs.writeFileSync(path.join(dir, 'MEMORY.md'), index);
+    await expect(raiseMemory(repo, 'prefer-ci.md')).rejects.toThrow(/before its first memory line/);
+    expect(fs.readFileSync(path.join(dir, 'MEMORY.md'), 'utf8')).toBe(index);
+    // Nor one that is not the memory's own to move.
+    fs.writeFileSync(path.join(dir, 'MEMORY.md'), '- [A](a.md) and [P](prefer-ci.md)\n');
+    await expect(raiseMemory(repo, 'prefer-ci.md')).rejects.toThrow(/no line of its own/);
+  });
+
   it('indexes an unindexed memory when it is saved', async () => {
     const dir = await resolveMemoryDir(repo);
     fs.mkdirSync(dir, { recursive: true });
@@ -650,18 +677,18 @@ describe('writing memories', () => {
     const dir = await resolveMemoryDir(repo);
     await createMemory(repo, fields);
     const top = '- [Z](z.md)';
-    for (const line of [
-      '- [Prefer CI](prefer-ci.md) — CI over local',
-      '- [Prefer CI](prefer-ci.md): CI over local',
-      '1. [Prefer CI](prefer-ci.md) — CI over local',
-      '- **[Prefer CI](prefer-ci.md)** — CI over local',
-      '- [Prefer CI](prefer-ci.md) and [Z](z.md)',
-    ]) {
+    for (const [line, own] of [
+      ['- [Prefer CI](prefer-ci.md) — CI over local', true],
+      ['- [Prefer CI](prefer-ci.md): CI over local', true],
+      ['1. [Prefer CI](prefer-ci.md) — CI over local', true],
+      ['- **[Prefer CI](prefer-ci.md)** — CI over local', true],
+      ['- [Prefer CI](prefer-ci.md) and [Z](z.md)', false],
+    ] as const) {
       fs.writeFileSync(path.join(dir, 'MEMORY.md'), `${top}\n${line}\n`);
       const { ownLine } = await entryOf('prefer-ci.md');
-      await raiseMemory(repo, 'prefer-ci.md');
+      await raiseMemory(repo, 'prefer-ci.md').catch(() => {});
       const moved = fs.readFileSync(path.join(dir, 'MEMORY.md'), 'utf8') === `${line}\n${top}\n`;
-      expect([line, ownLine]).toEqual([line, moved]);
+      expect([line, ownLine, moved]).toEqual([line, own, own]);
     }
     // Only the first is in the shape whose hook can be read and reworded.
     expect(await entryOf('prefer-ci.md')).toMatchObject({ ownLine: false, hook: null });

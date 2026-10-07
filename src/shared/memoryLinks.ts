@@ -50,7 +50,8 @@ function findMemoryLinks(markdown: string): FoundLink[] {
         const file = SAME_FOLDER_MD_RE.exec(m[1] ?? m[2] ?? '')?.[1];
         const close = offset + m.index;
         const start = file ? linkTextStart(markdown, close) : -1;
-        // A target with no text before it isn't a link, and neither is one inside the last.
+        // A target with no text before it isn't a link, and neither is one whose
+        // text holds the link before it: the inner link wins.
         if (!file || start < (links.at(-1)?.end ?? 0)) continue;
         links.push({ file, start, close, end: close + m[0].length });
       }
@@ -115,6 +116,25 @@ export function memoryLinkTarget(file: string): string {
   return /[\s()]/.test(file) ? `<${file}>` : file;
 }
 
+/**
+ * The memory files each line of `markdown` links to, a link counted on the
+ * line its target is on. Read off the whole text, so a line inside a code
+ * block links nothing: asked of one line alone, the fence around it is unseen.
+ */
+export function memoryLinkFilesByLine(markdown: string): Set<string>[] {
+  const lines = markdown.split('\n').map(() => new Set<string>());
+  let line = 0;
+  let lineEnd = markdown.indexOf('\n');
+  for (const link of findMemoryLinks(markdown)) {
+    while (lineEnd !== -1 && lineEnd < link.close) {
+      line++;
+      lineEnd = markdown.indexOf('\n', lineEnd + 1);
+    }
+    lines[line]?.add(link.file);
+  }
+  return lines;
+}
+
 /** The memory files `markdown` links to. */
 export function memoryLinkFiles(markdown: string): Set<string> {
   const files = new Set<string>();
@@ -133,4 +153,25 @@ export function mapMemoryRefs(
   return outsideCode(markdown, (text) =>
     text.replace(REF_RE, (match, ref: string) => replace(ref, match)),
   );
+}
+
+/** A memory file's basename without `.md`: what it answers to when it has no name. */
+export function memoryBaseName(file: string): string {
+  return file.replace(/\.md$/, '');
+}
+
+/**
+ * Which file a `[[ref]]` means among `memories`: the memory with that name,
+ * else the one with that basename. The preview follows it, and a rename moves
+ * the refs it gives to the renamed memory.
+ */
+export function resolveMemoryRef(
+  memories: { file: string; name: string }[],
+): (ref: string) => string | undefined {
+  const byName = new Map(memories.map((m) => [m.name, m.file]));
+  const files = new Set(memories.map((m) => m.file));
+  return (ref) => {
+    const name = ref.trim();
+    return byName.get(name) ?? (files.has(`${name}.md`) ? `${name}.md` : undefined);
+  };
 }

@@ -344,7 +344,7 @@ describe('index lines', () => {
       '- [CI fast](ci.md) — hook',
       '- [m0](m0.md)',
     ]);
-    // With room left, at the end as before.
+    // With room left, at the end.
     const roomy = ['# Index', ...lines.slice(0, 5), ''].join('\n');
     expect(setIndexLine(roomy, 'ci.md', fields)).toBe(`${roomy}- [CI fast](ci.md) — hook\n`);
   });
@@ -402,9 +402,60 @@ describe('index lines', () => {
     ]);
     // Already on top, not indexed, or sharing its line: nothing to move.
     expect(raiseIndexLine(index.join('\n'), 'a.md')).toBe(index.join('\n'));
-    expect(raiseIndexLine(index.join('\n'), 'missing.md')).toBe(index.join('\n'));
+    expect(() => raiseIndexLine(index.join('\n'), 'missing.md')).toThrow(/no line of its own/);
     const shared = '- [A](a.md)\n- see [C](c.md) and [B](b.md)\n';
-    expect(raiseIndexLine(shared, 'c.md')).toBe(shared);
+    expect(() => raiseIndexLine(shared, 'c.md')).toThrow(/no line of its own/);
+  });
+
+  describe('code in the index', () => {
+    const fence = '```';
+    const sample = ['# Memory', fence, '- [X](x.md) — sample', fence, '- [A](a.md) — a', ''];
+    const x: MemoryFields = { name: 'X', description: 'real', type: 'user', body: '' };
+
+    it('is no line of any memory: a fenced sample is not reworded, dropped or counted', () => {
+      const index = sample.join('\n');
+      expect(indexHook(index, 'x.md')).toBeNull();
+      expect(removeIndexLines(index, 'x.md')).toBe(index);
+      expect(setIndexLine(index, 'x.md', x)).toBe(`${index}- [X](x.md) — real\n`);
+    });
+
+    it('is never where a line is raised to', () => {
+      const filler = Array.from({ length: 200 }, (_, i) => `- [m${i}](m${i}.md)`);
+      const index = [...sample.slice(0, 4), ...filler, ''].join('\n');
+      const out = setIndexLine(index, 'ci.md', { ...x, name: 'CI' });
+      expect(out.split('\n').slice(0, 6)).toEqual([
+        ...sample.slice(0, 4),
+        '- [CI](ci.md) — real',
+        '- [m0](m0.md)',
+      ]);
+    });
+  });
+
+  it('refuses to write a line that would not read as the link it is', () => {
+    const tick = { ...fields, name: 'use ` char', description: 'the ` thing' };
+    expect(() => setIndexLine('', 'x.md', tick)).toThrow(/would not read as a link/);
+  });
+
+  it('puts a new line on top even when its hook links another memory', () => {
+    const lines = Array.from({ length: 201 }, (_, i) => `- [m${i}](m${i}.md)`);
+    const out = setIndexLine([...lines, ''].join('\n'), 'x.md', {
+      ...fields,
+      description: 'see [M1](m1.md)',
+    });
+    expect(out.split('\n')[0]).toBe('- [CI fast](x.md) — see [M1](m1.md)');
+  });
+
+  it('refuses a line it cannot put where Claude loads it', () => {
+    const prose = Array.from({ length: 205 }, (_, i) => `prose ${i}`);
+    const index = [...prose, '- [A](a.md) — a', ''].join('\n');
+    expect(() => setIndexLine(index, 'x.md', fields)).toThrow(/before its first memory line/);
+  });
+
+  it('raises below a heading, even one that links a file', () => {
+    const index = '# Memory ([how](README.md))\n\n- [A](a.md)\n- [B](b.md)\n';
+    expect(raiseIndexLine(index, 'b.md')).toBe(
+      '# Memory ([how](README.md))\n\n- [B](b.md)\n- [A](a.md)\n',
+    );
   });
 
   it('removes only the lines that point at just that file', () => {

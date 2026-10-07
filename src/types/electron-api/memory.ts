@@ -38,7 +38,8 @@ export interface MemoryApi {
   }) => Promise<IpcResponse<MemoryDeleteResult>>;
   /** Adds the MEMORY.md line a memory lacks, hooked with its description; its file isn't touched. */
   memoryIndex: (args: { projectPath: string; file: string }) => Promise<IpcResponse<null>>;
-  /** Moves a memory's own MEMORY.md line to the top of the list, into the part Claude loads. */
+  /** Moves a memory's own MEMORY.md line to the top of the list, into the part Claude loads.
+   *  Fails when it has no line of its own, or the move would not bring it into that part. */
   memoryRaise: (args: { projectPath: string; file: string }) => Promise<IpcResponse<null>>;
   /** Drops MEMORY.md's lines for memories that no longer exist; resolves with their files. */
   memoryPrune: (args: { projectPath: string }) => Promise<IpcResponse<{ removed: string[] }>>;

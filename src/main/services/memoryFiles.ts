@@ -4,8 +4,8 @@ import {
   MEMORY_INDEX_MAX_LINES,
   MEMORY_TYPES,
 } from '@shared/types';
-import type { MemoryFields, MemoryType } from '@shared/types';
-import { memoryLinkFiles, memoryLinkTarget } from '@shared/memoryLinks';
+import type { MemoryEntry, MemoryFields, MemoryType } from '@shared/types';
+import { memoryBaseName, memoryLinkFilesByLine, memoryLinkTarget } from '@shared/memoryLinks';
 import { stripQuotes } from './skillFrontmatter';
 
 const FRONTMATTER_RE = /^---\s*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
@@ -100,6 +100,12 @@ export function parseMemoryFile(content: string): MemoryFields {
   return out;
 }
 
+/** A memory file's fields, named as it answers to: its frontmatter name, else its basename. */
+export function readMemoryFields(content: string, file: string): MemoryFields {
+  const parsed = parseMemoryFile(content);
+  return { ...parsed, name: parsed.name || memoryBaseName(file) };
+}
+
 /** Frontmatter for a memory Dash creates, in the shape Claude Code writes today. */
 function newFrontmatter(fields: MemoryFields, now: Date): string[] {
   return [
@@ -192,12 +198,6 @@ export function memoryFileName(name: string): string {
   return file.toLowerCase() === MEMORY_INDEX_FILE.toLowerCase() ? 'memory-note.md' : file;
 }
 
-/** Whether `line` is the index's pointer to `file`: a line linking that memory and no other. */
-function pointsOnlyAt(line: string, file: string): boolean {
-  const links = memoryLinkFiles(line);
-  return links.size === 1 && links.has(file);
-}
-
 // `- [Title](target) — hook`, the hook optional: the line Claude writes per memory.
 const POINTER_RE = /^(\s*[-*+]\s+)\[([^\]]*)\](\((?:<[^>\n]+>|[^)\s]+)\))(?:(\s+[—–-]\s+)(.*))?$/;
 
@@ -206,25 +206,56 @@ function indexTitle(name: string): string {
   return name.replace(/[[\]]/g, '');
 }
 
+/** How many of `lines` Claude Code loads: whole lines, up to its line and byte limits. */
+function loadedLineCount(lines: string[]): number {
+  let bytes = 0;
+  let count = 0;
+  for (const line of lines.slice(0, MEMORY_INDEX_MAX_LINES)) {
+    bytes += Buffer.byteLength(line) + 1;
+    if (bytes > MEMORY_INDEX_MAX_BYTES + 1) break;
+    count++;
+  }
+  return count;
+}
+
 /**
  * The part of `index` Claude Code loads into a session: whole lines, up to
  * its line and byte limits. A line the byte limit cuts through isn't counted:
  * its link may not have made it.
  */
 export function loadedIndex(index: string): string {
-  const loaded: string[] = [];
-  let bytes = 0;
-  for (const line of index.split('\n').slice(0, MEMORY_INDEX_MAX_LINES)) {
-    bytes += Buffer.byteLength(line) + 1;
-    if (bytes > MEMORY_INDEX_MAX_BYTES + 1) break;
-    loaded.push(line);
-  }
-  return loaded.join('\n');
+  const lines = index.split('\n');
+  return lines.slice(0, loadedLineCount(lines)).join('\n');
 }
 
-/** `file`'s own pointer in `lines`: where it is and its parts, or null when it has none in that shape. */
+/**
+ * MEMORY.md as its lines and the memories each one links: every question
+ * about a memory's line is asked of this, so they are all answered by the
+ * one link finder, read over the whole index (a line in a code block links
+ * nothing).
+ */
+interface IndexLines {
+  lines: string[];
+  links: Set<string>[];
+}
+
+function indexLines(index: string): IndexLines {
+  return { lines: index.split('\n'), links: memoryLinkFilesByLine(index) };
+}
+
+/** Where `file`'s own line is: the first that links it and no other memory. -1 without one. */
+function ownLineAt({ links }: IndexLines, file: string): number {
+  return links.findIndex((on) => on.size === 1 && on.has(file));
+}
+
+/** Where the list of memories starts: its first line linking one, headings aside. -1 without one. */
+function listTop({ lines, links }: IndexLines): number {
+  return links.findIndex((on, i) => on.size > 0 && !/^\s*#/.test(lines[i] ?? ''));
+}
+
+/** `file`'s own pointer: where it is and its parts, or null when it has none in that shape. */
 function ownPointer(
-  lines: string[],
+  parsed: IndexLines,
   file: string,
 ): {
   at: number;
@@ -234,32 +265,49 @@ function ownPointer(
   dash: string;
   hook: string;
 } | null {
-  const at = lines.findIndex((line) => pointsOnlyAt(line, file));
-  const m = POINTER_RE.exec(lines[at] ?? '');
+  const at = ownLineAt(parsed, file);
+  const m = POINTER_RE.exec(parsed.lines[at] ?? '');
   if (!m) return null;
   const [, bullet = '', title = '', target = '', dash = ' — ', hook = ''] = m;
   return { at, bullet, title, target, dash, hook };
 }
 
-/** Whether `index` has a line of `file`'s own: the one a raise moves and a delete drops. */
-export function hasOwnIndexLine(index: string, file: string): boolean {
-  return index.split('\n').some((line) => pointsOnlyAt(line, file));
+/** What MEMORY.md says of one memory: the index half of a `MemoryEntry`. */
+export type MemoryIndexLine = Pick<MemoryEntry, 'inIndex' | 'ownLine' | 'pastIndexLimit' | 'hook'>;
+
+/** Read `index` once, to ask what it says of each memory. */
+export function readIndex(index: string): (file: string) => MemoryIndexLine {
+  const parsed = indexLines(index);
+  const loaded = loadedLineCount(parsed.lines);
+  return (file) => {
+    const first = parsed.links.findIndex((on) => on.has(file));
+    return {
+      inIndex: first >= 0,
+      ownLine: ownLineAt(parsed, file) >= 0,
+      pastIndexLimit: first >= loaded,
+      hook: ownPointer(parsed, file)?.hook.trim() ?? null,
+    };
+  };
 }
 
 /** The hook on `file`'s own line of `index`, or null when it has no such line in the pointer shape. */
 export function indexHook(index: string, file: string): string | null {
-  return ownPointer(index.split('\n'), file)?.hook.trim() ?? null;
+  return readIndex(index)(file).hook;
 }
+
+const FULL_BEFORE_LIST = `the part of ${MEMORY_INDEX_FILE} Claude loads is full before its first memory line`;
 
 /**
  * `index` with `file`'s pointer (the line that makes Claude recall it) in step
- * with a save: added when the index doesn't link the memory at all, with the
- * description for a hook unless one is given, at the end or (in an index past
- * what Claude loads) on top. An existing line takes
- * `hook` when one is given, and its title follows a rename only if it was the
- * old name (`wasName`): Claude titles and hooks the line in its own words,
- * apart from the frontmatter, and those stay as written. A line shared with
- * another memory, or in some other shape, is left alone: it isn't ours to reword.
+ * with a save. A memory the index doesn't link gets a line, with the
+ * description for a hook unless one is given: at the end, or at the top of the
+ * list once the end is past what Claude loads. Throws when that line would not
+ * be read as its link, or can't be put where Claude loads it. An existing line
+ * takes `hook` when one is given, and its title follows a rename only if it
+ * was the old name (`wasName`): Claude titles and hooks the line in its own
+ * words, apart from the frontmatter, and those stay as written. It is never
+ * moved here (see raiseIndexLine). A line shared with another memory, or in
+ * some other shape, is left alone: it isn't ours to reword.
  */
 export function setIndexLine(
   index: string,
@@ -267,23 +315,36 @@ export function setIndexLine(
   fields: MemoryFields,
   { wasName = fields.name, hook }: { wasName?: string; hook?: string } = {},
 ): string {
-  const lines = index.split('\n');
-  const own = ownPointer(lines, file);
+  const parsed = indexLines(index);
+  const { lines } = parsed;
+  const own = ownPointer(parsed, file);
   if (own) {
     const title = own.title === indexTitle(wasName) ? indexTitle(fields.name) : own.title;
     const newHook = hook ?? own.hook;
-    // Rejoined only when something moved, so an untouched line keeps its bytes.
+    // Rejoined only when something changed, so an untouched line keeps its bytes.
     if (title === own.title && newHook === own.hook.trim()) return index;
     lines[own.at] = `${own.bullet}[${title}]${own.target}${newHook ? own.dash + newHook : ''}`;
     return lines.join('\n');
   }
-  if (memoryLinkFiles(index).has(file)) return index;
+  if (parsed.links.some((on) => on.has(file))) return index;
+
   const text = hook ?? fields.description;
-  const target = memoryLinkTarget(file);
+  const line = `- [${indexTitle(fields.name)}](${memoryLinkTarget(file)})${text ? ` — ${text}` : ''}`;
   const gap = index && !index.endsWith('\n') ? '\n' : '';
-  const added = `${index}${gap}- [${indexTitle(fields.name)}](${target})${text ? ` — ${text}` : ''}\n`;
-  // Past what Claude loads, a line at the end would go unseen: there it goes on top.
-  return memoryLinkFiles(loadedIndex(added)).has(file) ? added : raiseIndexLine(added, file);
+  const atEnd = `${index}${gap}${line}\n`;
+  const top = listTop(parsed);
+  const added =
+    top < 0 || !readIndex(atEnd)(file).pastIndexLimit
+      ? atEnd
+      : [...lines.slice(0, top), line, ...lines.slice(top)].join('\n');
+  const result = readIndex(added)(file);
+  if (!result.inIndex) {
+    throw new Error(
+      `its line would not read as a link to ${file}: a backtick or bracket in the name or hook breaks it`,
+    );
+  }
+  if (result.pastIndexLimit) throw new Error(FULL_BEFORE_LIST);
+  return added;
 }
 
 /**
@@ -291,22 +352,30 @@ export function setIndexLine(
  * memory is kept: dropping it would unindex that one too.
  */
 export function removeIndexLines(index: string, file: string): string {
-  return index
-    .split('\n')
-    .filter((line) => !pointsOnlyAt(line, file))
-    .join('\n');
+  const { lines, links } = indexLines(index);
+  return lines.filter((_, i) => !(links[i]?.size === 1 && links[i]?.has(file))).join('\n');
 }
 
 /**
- * `index` with `file`'s own line moved above every other memory's, where the
- * part Claude loads starts: whatever heads the index stays on top. A line
- * shared with another memory stays put, like everywhere else.
+ * `index` with `file`'s own line moved to the top of the list: above the
+ * first line that links a memory, inside the part Claude loads. Whatever heads
+ * the index stays above it. Returned unchanged when the line is already there.
+ * Throws when `file` has no line of its own (a line shared with another memory
+ * stays put, like everywhere else), or when even the top of the list is past
+ * what Claude loads.
  */
 export function raiseIndexLine(index: string, file: string): string {
-  const lines = index.split('\n');
-  const at = lines.findIndex((line) => pointsOnlyAt(line, file));
-  const top = lines.findIndex((line) => memoryLinkFiles(line).size > 0);
-  if (at <= top) return index;
-  lines.splice(top, 0, ...lines.splice(at, 1));
-  return lines.join('\n');
+  const parsed = indexLines(index);
+  const { lines } = parsed;
+  const at = ownLineAt(parsed, file);
+  if (at < 0) throw new Error(`${file} has no line of its own in ${MEMORY_INDEX_FILE} to move`);
+  const top = listTop(parsed);
+  const raised =
+    at <= top
+      ? index
+      : [...lines.slice(0, top), lines[at], ...lines.slice(top, at), ...lines.slice(at + 1)].join(
+          '\n',
+        );
+  if (readIndex(raised)(file).pastIndexLimit) throw new Error(FULL_BEFORE_LIST);
+  return raised;
 }

@@ -1156,7 +1156,7 @@ export interface MemoryEntry extends MemoryFields {
   /** Whether MEMORY.md links to this file. */
   inIndex: boolean;
   /**
-   * Whether a MEMORY.md line links this memory and nothing else: a line that
+   * Whether a MEMORY.md line links this memory and no other memory: a line that
    * can be moved or dropped with it, whatever its shape.
    */
   ownLine: boolean;
