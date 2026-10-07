@@ -1,3 +1,5 @@
+import { MEMORY_INDEX_FILE } from './types';
+
 /**
  * What counts as a markdown link to another memory: `[text](target)` with a
  * target naming a `.md` file in the memory folder itself (`x.md` or `./x.md`).
@@ -16,6 +18,7 @@
 // A target is bare, or in angle brackets when it has spaces or parentheses.
 const LINK_RE = /\]\((?:<([^>\n]+)>|([^)\s]+))\)/g;
 const REF_RE = /\[\[([^\]\n]+)\]\]/g;
+const INDEX_FILE_LOWER = MEMORY_INDEX_FILE.toLowerCase();
 const SAME_FOLDER_MD_RE = /^(?:\.\/)?([^/\\:]+\.md)$/;
 const CODE_RE = /(^[ \t]*(?:```|~~~)[\s\S]*?^[ \t]*(?:```|~~~)|`[^`\n]+`)/m;
 
@@ -174,4 +177,13 @@ export function resolveMemoryRef(
     const name = ref.trim();
     return byName.get(name) ?? (files.has(`${name}.md`) ? `${name}.md` : undefined);
   };
+}
+
+/**
+ * Whether `name` is a memory's file: a `.md` in the memory folder itself that
+ * a link can name, and never the index in any casing. The list shows exactly
+ * the files the writes accept.
+ */
+export function isMemoryFileName(name: string): boolean {
+  return SAME_FOLDER_MD_RE.exec(name)?.[1] === name && name.toLowerCase() !== INDEX_FILE_LOWER;
 }

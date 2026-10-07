@@ -194,7 +194,8 @@ export function listMemories(entries: MemoryEntry[]): ListedMemory[] {
 
 /**
  * `body` with a broken link pointed at the memory `to` instead: a `[[name]]`
- * by the name that memory answers to, a file link by its file.
+ * by the name that memory answers to (by its file, when no name can be
+ * written as one), a file link by its file.
  */
 export function repointLink(
   body: string,
@@ -207,10 +208,23 @@ export function repointLink(
       file === link.target ? `](${memoryLinkTarget(to.file)})` : match,
     );
   }
-  // Its basename, when its name can't be written as a link or means another memory.
-  const named = !to.name.includes(']') && resolveMemoryRef(entries)(to.name) === to.file;
-  const name = named ? to.name : memoryBaseName(to.file);
-  return mapMemoryRefs(body, (ref, match) => (ref.trim() === link.target ? `[[${name}]]` : match));
+  // By its name, else its basename: whichever a `[[ref]]` can carry and the
+  // preview reads back as this memory. A link to its file when neither does.
+  const resolve = resolveMemoryRef(entries);
+  const carried = [to.name, memoryBaseName(to.file)].find((name) => {
+    let means: string | undefined;
+    mapMemoryRefs(`[[${name}]]`, (ref, match) => {
+      means = resolve(ref);
+      return match;
+    });
+    return means === to.file;
+  });
+  return mapMemoryRefs(body, (ref, match) => {
+    if (ref.trim() !== link.target) return match;
+    return carried !== undefined
+      ? `[[${carried}]]`
+      : `[${ref.trim()}](${memoryLinkTarget(to.file)})`;
+  });
 }
 
 /** `body` with a broken link left as the plain text it showed. */
@@ -420,6 +434,19 @@ export function editMemoryDraft(entry: MemoryEntry): MemoryDraft {
     saved: fields,
     fields,
   };
+}
+
+/**
+ * An edit of `entry` with `fix` applied to its fields up front: unsaved, for
+ * the user to review. What it was on disk stays in `saved`, so the fix is what
+ * makes the draft dirty.
+ */
+export function fixedDraft(
+  entry: MemoryEntry,
+  fix: (fields: MemoryDraftFields) => MemoryDraftFields,
+): MemoryDraft {
+  const edit = editMemoryDraft(entry);
+  return { ...edit, fields: fix(edit.fields) };
 }
 
 export function isDraftDirty(draft: MemoryDraft): boolean {

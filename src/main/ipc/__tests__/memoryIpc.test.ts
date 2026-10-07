@@ -171,12 +171,25 @@ describe('memory handlers', () => {
     expect(await invoke('memory:index', args)).toEqual({ success: true, data: null });
     expect(await invoke('memory:raise', args)).toEqual({ success: true, data: null });
     expect(fs.readFileSync(path.join(dir, 'MEMORY.md'), 'utf8')).toBe('- [A](a.md)\n- [B](b.md)\n');
+    const before = fs.readFileSync(path.join(dir, 'MEMORY.md'), 'utf8');
     for (const channel of ['memory:index', 'memory:raise']) {
-      expect(await invoke(channel, { ...args, file: '../a.md' })).toMatchObject({ success: false });
-      expect(await invoke(channel, { ...args, file: 'MEMORY.md' })).toMatchObject({
-        success: false,
-      });
+      for (const file of ['../a.md', 'MEMORY.md', path.join(dir, 'a.md')]) {
+        expect(await invoke(channel, { ...args, file })).toMatchObject({
+          success: false,
+          code: 'VALIDATION',
+        });
+      }
     }
+    // A failure in the service reaches the caller with its reason.
+    expect(await invoke('memory:index', { ...args, file: 'gone.md' })).toMatchObject({
+      success: false,
+      error: expect.stringContaining('ENOENT'),
+    });
+    expect(await invoke('memory:raise', { ...args, file: 'gone.md' })).toMatchObject({
+      success: false,
+      error: expect.stringContaining('no line of its own'),
+    });
+    expect(fs.readFileSync(path.join(dir, 'MEMORY.md'), 'utf8')).toBe(before);
   });
 
   it('decides a hook nobody wrote here, not in the caller', async () => {

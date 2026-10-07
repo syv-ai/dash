@@ -3,7 +3,8 @@ import * as path from 'path';
 import { ipcMain, shell } from 'electron';
 import { z } from 'zod';
 import { parseArgs, errorResponse, ipcError } from './validate';
-import { MEMORY_INDEX_FILE, MEMORY_TYPES } from '@shared/types';
+import { MEMORY_TYPES } from '@shared/types';
+import { isMemoryFileName } from '@shared/memoryLinks';
 import {
   createMemory,
   deleteMemory,
@@ -32,8 +33,10 @@ const memoryFieldsSchema = z.object({
 /** A memory's basename: a `.md` file in the memory folder itself, never the index. */
 const memoryFileSchema = z
   .string()
-  .regex(/^[^/\\:]+\.md$/, 'must be a .md file name')
-  .refine((f) => f.toLowerCase() !== MEMORY_INDEX_FILE.toLowerCase(), 'cannot be the index');
+  .refine(
+    isMemoryFileName,
+    'must be a memory file name: a .md in the memory folder, not the index',
+  );
 
 export const memoryCreateArgsSchema = memoryProjectArgsSchema.extend({
   ...memoryFieldsSchema.shape,

@@ -12,18 +12,20 @@ import {
 } from './memoryView';
 
 interface Props {
-  issues: MemoryIssue[];
   broken: BrokenLink[];
   /** The memories a broken link can be pointed at instead. */
   candidates: MemoryEntry[];
   onRepoint: (link: BrokenLink, to: MemoryEntry) => void;
   onUnlink: (link: BrokenLink) => void;
-  /** The fixes only a saved memory has; the editor leaves them out. */
-  onCreate?: (name: string) => void;
-  onIndex?: () => void;
-  /** Left out when the memory's index line isn't its own to move. */
-  onRaise?: () => void;
-  onRetype?: (type: KnownMemoryType) => void;
+  /** A saved memory's own issues with their fixes; a draft has only its links. */
+  saved?: {
+    issues: MemoryIssue[];
+    onCreate: (name: string) => void;
+    onIndex: () => void;
+    /** Null when the memory's index line isn't its own to move. */
+    onRaise: (() => void) | null;
+    onRetype: (type: KnownMemoryType) => void;
+  };
 }
 
 /**
@@ -31,37 +33,38 @@ interface Props {
  * right there. Shown above the memory, and above a draft for its links.
  */
 export function MemoryIssues(props: Props) {
-  const { issues, broken, candidates, onRepoint, onUnlink } = props;
+  const { broken, candidates, onRepoint, onUnlink, saved } = props;
+  const issues = saved?.issues ?? [];
   const rows: ReactNode[] = [];
-  if (issues.includes('unindexed') && props.onIndex) {
+  if (saved && issues.includes('unindexed')) {
     rows.push(
       <Row key="unindexed" text={`Not in ${MEMORY_INDEX_FILE}, so Claude never recalls it.`}>
-        <Button variant="secondary" size="sm" onClick={props.onIndex}>
+        <Button variant="secondary" size="sm" onClick={saved.onIndex}>
           Add to index
         </Button>
       </Row>,
     );
   }
-  if (issues.includes('not-loaded')) {
+  if (saved && issues.includes('not-loaded')) {
     rows.push(
       <Row
         key="not-loaded"
         text={
-          props.onRaise
+          saved.onRaise
             ? `Its line sits past the part of ${MEMORY_INDEX_FILE} Claude loads. Moved to the top it is seen, and the last line in that part falls past the cut instead.`
             : `Its line sits past the part of ${MEMORY_INDEX_FILE} Claude loads, and isn't a line of its own that can be moved: edit the index by hand.`
         }
       >
-        {props.onRaise && (
-          <Button variant="secondary" size="sm" onClick={props.onRaise}>
+        {saved.onRaise && (
+          <Button variant="secondary" size="sm" onClick={saved.onRaise}>
             Move to top
           </Button>
         )}
       </Row>,
     );
   }
-  if (issues.includes('untyped') && props.onRetype) {
-    const { onRetype } = props;
+  if (saved && issues.includes('untyped')) {
+    const { onRetype } = saved;
     rows.push(
       <Row key="untyped" text="No known type, so it isn't filed with the rest. File it as:">
         {KNOWN_MEMORY_TYPES.map((type) => (
@@ -74,7 +77,7 @@ export function MemoryIssues(props: Props) {
   }
   for (const link of broken) {
     const suggested = candidates.find((e) => e.file === link.suggestion);
-    const { onCreate } = props;
+    const onCreate = saved?.onCreate;
     rows.push(
       <Row
         key={`${link.kind}:${link.target}`}

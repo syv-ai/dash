@@ -349,6 +349,12 @@ describe('index lines', () => {
     expect(setIndexLine(roomy, 'ci.md', fields)).toBe(`${roomy}- [CI fast](ci.md) — hook\n`);
   });
 
+  it('puts a new pointer on top when the 25KB limit, not the line limit, is what cuts', () => {
+    const wide = Array.from({ length: 30 }, (_, i) => `- [w${i}](w${i}.md) — ${'x'.repeat(980)}`);
+    const out = setIndexLine(['# Index', ...wide, ''].join('\n'), 'ci.md', fields);
+    expect(out.split('\n')[1]).toBe('- [CI fast](ci.md) — hook');
+  });
+
   it('cuts the index where Claude stops loading it: 200 lines or 25KB of whole lines', () => {
     const short = '# Index\n\n- [A](a.md) — one\n';
     expect(loadedIndex(short)).toBe(short);

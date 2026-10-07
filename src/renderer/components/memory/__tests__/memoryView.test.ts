@@ -6,6 +6,7 @@ import {
   brokenLinks,
   repointLink,
   unlinkLink,
+  fixedDraft,
   memoryCounts,
   memorySections,
   memoryDocs,
@@ -97,15 +98,42 @@ describe('listMemories', () => {
     ]);
   });
 
-  it('calls a link dead exactly when the preview cannot open it', () => {
+  it('calls a link broken exactly when the preview cannot open it', () => {
     const entries = [
       entry({ file: 'a.md', type: 'user', name: 'A name', body: '[[b]] [[A name]] [[nope]]' }),
       entry({ file: 'b.md', type: 'user', body: '[[A name]] [a](./a.md)' }),
+      entry({ file: 'c.md', type: 'user', body: '[x](gone.md) [i](MEMORY.md) `[y](gone2.md)`' }),
+      entry({
+        file: 'd.md',
+        type: 'user',
+        body: '[i](MEMORY.md) `[y](gone2.md)` [w](https://x/y.md)',
+      }),
     ];
-    for (const { entry: e, issues } of listMemories(entries)) {
-      const missing = rewriteMemoryLinks(e.body, entries).includes('memory-missing');
-      expect(issues.includes('dead-link') || issues.includes('unwritten')).toBe(missing);
-    }
+    const muted = (e: MemoryEntry) =>
+      rewriteMemoryLinks(e.body, entries).split('memory-missing').length - 1;
+    const listed = listMemories(entries);
+    expect(listed.map((m) => [m.entry.file, m.broken.length, m.issues])).toEqual([
+      ['a.md', 1, ['unwritten']],
+      ['b.md', 0, []],
+      ['c.md', 1, ['dead-link']],
+      ['d.md', 0, []],
+    ]);
+    for (const m of listed)
+      expect([m.entry.file, muted(m.entry)]).toEqual([m.entry.file, m.broken.length]);
+  });
+
+  it('guesses the memory a broken link meant: same but for punctuation, then contained, then one slip', () => {
+    const es = [
+      entry({ file: 'deploy-notes.md' }),
+      entry({ file: 'deploy-notes-old.md' }),
+      entry({ file: 'user_profile.md' }),
+    ];
+    const guess = (body: string, self?: string) => brokenLinks(body, es, self)[0]?.suggestion;
+    expect(guess('[[Deploy Notes]]')).toBe('deploy-notes.md');
+    expect(guess('[[deploy_note]]', 'deploy-notes.md')).toBe('deploy-notes-old.md');
+    expect(guess('[[user_profole]]')).toBe('user_profile.md');
+    expect(guess('[[usr_profile]]')).toBe('user_profile.md');
+    expect(guess('[[profiles-x]]')).toBeUndefined();
   });
 });
 
@@ -504,13 +532,31 @@ describe('fixing a broken link', () => {
     );
   });
 
-  it('writes a [[name]] the preview resolves to that memory, whatever its name', () => {
-    for (const to of entries) {
-      const fixed = repointLink('[[ci]]', ref, to, entries);
-      expect(rewriteMemoryLinks(fixed, entries)).toContain(
+  it('writes a link the preview resolves to that memory, whatever its name', () => {
+    const tricky = [
+      ...entries,
+      // Neither can be carried by a [[name]]: code hides one, the bracket ends the other.
+      entry({ file: 'use-pnpm.md', name: 'Use `pnpm` here' }),
+      entry({ file: 'a]b.md', name: 'x ] y' }),
+    ];
+    for (const to of tricky) {
+      const fixed = repointLink('[[ci]]', ref, to, tricky);
+      expect(rewriteMemoryLinks(fixed, tricky)).toContain(
         `(${MEMORY_LINK_PREFIX}${encodeURIComponent(to.file)})`,
       );
+      expect(brokenLinks(fixed, tricky)).toEqual([]);
     }
+    expect(repointLink('[[ci]]', ref, tricky[4]!, tricky)).toBe('[[use-pnpm]]');
+    expect(repointLink('[[ci]]', ref, tricky[5]!, tricky)).toBe('[ci](a]b.md)');
+  });
+
+  it('opens a fix as an unsaved edit of the memory as it is on disk', () => {
+    const m = listMemories([entry({ file: 'a.md', type: 'user', body: '[x](gone.md)\n' })])[0]!;
+    const draft = fixedDraft(m.entry, (f) => ({ ...f, body: unlinkLink(f.body, m.broken[0]!) }));
+    expect(draft.fields.body).toBe('x');
+    expect(draft.saved.body).toBe('[x](gone.md)');
+    expect(draft.target).toMatchObject({ file: 'a.md' });
+    expect(canSaveDraft(draft)).toBe(true);
   });
 
   it('unlinks it down to the text it showed', () => {

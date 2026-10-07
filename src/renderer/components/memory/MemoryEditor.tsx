@@ -71,7 +71,6 @@ export function MemoryEditor({ draft, api, entries, isDark }: Props) {
 
       {/* The links as written so far: fixed here, they are saved with the rest. */}
       <MemoryIssues
-        issues={[]}
         broken={brokenLinks(fields.body, entries, self)}
         candidates={entries.filter((e) => e.file !== self)}
         onRepoint={(link, to) => set({ body: repointLink(fields.body, link, to, entries) })}

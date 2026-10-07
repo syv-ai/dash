@@ -186,7 +186,10 @@ function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) 
   const prune = async () => {
     try {
       const res = await window.electronAPI.memoryPrune({ projectPath: project.path });
-      if (!res.success || !res.data) throw new Error(res.error);
+      if (!res.success || !res.data) {
+        toast.error(res.error || `Could not tidy ${MEMORY_INDEX_FILE}`);
+        return;
+      }
       const kept = (memory?.dangling.length ?? 0) - res.data.removed.length;
       // A line that also links something else isn't dropped for one dead link.
       if (kept > 0) {
@@ -197,8 +200,9 @@ function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) 
     } catch (err) {
       console.error('Could not tidy the memory index', err);
       toast.error(`Could not tidy ${MEMORY_INDEX_FILE}`);
+    } finally {
+      await reload();
     }
-    await reload();
   };
   const now = Date.now() / 1000;
   const projectOptions = useMemo(
@@ -448,7 +452,6 @@ function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) 
                     </div>
                     {currentListed && (
                       <MemoryIssues
-                        issues={currentListed.issues}
                         broken={currentListed.broken}
                         candidates={entries.filter((e) => e.file !== currentListed.entry.file)}
                         // A fix to the memory's file opens as an unsaved edit, to be read before it is saved.
@@ -464,16 +467,16 @@ function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) 
                             body: unlinkLink(f.body, link),
                           }))
                         }
-                        onCreate={startNew}
-                        onIndex={() => void fixIndex('memoryIndex', currentListed.entry)}
-                        onRaise={
-                          currentListed.entry.ownLine
+                        saved={{
+                          issues: currentListed.issues,
+                          onCreate: startNew,
+                          onIndex: () => void fixIndex('memoryIndex', currentListed.entry),
+                          onRaise: currentListed.entry.ownLine
                             ? () => void fixIndex('memoryRaise', currentListed.entry)
-                            : undefined
-                        }
-                        onRetype={(type) =>
-                          editor.startEdit(currentListed.entry, (f) => ({ ...f, type }))
-                        }
+                            : null,
+                          onRetype: (type) =>
+                            editor.startEdit(currentListed.entry, (f) => ({ ...f, type })),
+                        }}
                       />
                     )}
                     <div className="min-h-0 flex-1">

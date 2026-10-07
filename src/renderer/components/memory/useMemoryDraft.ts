@@ -5,6 +5,7 @@ import {
   canSaveDraft,
   draftHook,
   editMemoryDraft,
+  fixedDraft,
   isDraftDirty,
   newMemoryDraft,
   type KnownMemoryType,
@@ -140,8 +141,7 @@ export function useMemoryDraft({ projectPath, reload, onSaved }: Args): MemoryDr
     },
     startEdit: (entry, fix) => {
       if (!discard()) return;
-      const edit = editMemoryDraft(entry);
-      open(fix ? { ...edit, fields: fix(edit.fields) } : edit);
+      open(fix ? fixedDraft(entry, fix) : editMemoryDraft(entry));
     },
     change: (fields) => setDraft((d) => (d ? { ...d, fields } : d)),
     save: () => save(),

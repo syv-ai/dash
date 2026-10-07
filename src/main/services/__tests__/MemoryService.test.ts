@@ -233,6 +233,15 @@ describe('what Claude will not see', () => {
     expect(byFile['loose.md']).toMatchObject({ inIndex: false, pastIndexLimit: false });
   });
 
+  it('lists only files its writes accept, so nothing shown is beyond editing', async () => {
+    const dir = await resolveMemoryDir(repo);
+    fs.mkdirSync(dir, { recursive: true });
+    for (const name of ['ok.md', 'todo: later.md', 'notes.txt']) {
+      fs.writeFileSync(path.join(dir, name), 'x');
+    }
+    expect((await readProjectMemory(repo)).entries.map((e) => e.file)).toEqual(['ok.md']);
+  });
+
   it('reports the setting that turned auto memory off, the nearest file deciding', async () => {
     expect(await disabledBy()).toBeNull();
     const user = path.join(tmp, 'claude', 'settings.json');

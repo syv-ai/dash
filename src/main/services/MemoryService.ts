@@ -19,7 +19,12 @@ import {
   type ClaudeSettingsFile,
 } from '../utils/claudeSettings';
 import { writeFileIfUnchanged } from '../utils/guardedWrite';
-import { mapMemoryRefs, memoryLinkFiles, resolveMemoryRef } from '@shared/memoryLinks';
+import {
+  isMemoryFileName,
+  mapMemoryRefs,
+  memoryLinkFiles,
+  resolveMemoryRef,
+} from '@shared/memoryLinks';
 import {
   memoryFileName,
   raiseIndexLine,
@@ -196,9 +201,7 @@ export async function readProjectMemory(projectPath: string): Promise<ProjectMem
     : null;
   const indexLine = readIndex(index ?? '');
   const entries = await Promise.all(
-    names
-      .filter((n) => n.endsWith('.md') && n !== MEMORY_INDEX_FILE)
-      .map((file) => readEntry(dir, file, indexLine)),
+    names.filter(isMemoryFileName).map((file) => readEntry(dir, file, indexLine)),
   );
   return {
     dir,
@@ -343,7 +346,7 @@ async function relinkMemories(
   newName: string,
 ): Promise<string[]> {
   const names = (await fs.promises.readdir(dir)).filter(
-    (n) => n.endsWith('.md') && n !== MEMORY_INDEX_FILE && n !== renamed,
+    (n) => isMemoryFileName(n) && n !== renamed,
   );
   const others = await Promise.all(
     names.map(async (file) => {
