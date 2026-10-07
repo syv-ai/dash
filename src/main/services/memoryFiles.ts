@@ -241,7 +241,12 @@ function ownPointer(
   return { at, bullet, title, target, dash, hook };
 }
 
-/** The hook on `file`'s own line of `index`, or null when it has no such line. */
+/** Whether `index` has a line of `file`'s own: the one a raise moves and a delete drops. */
+export function hasOwnIndexLine(index: string, file: string): boolean {
+  return index.split('\n').some((line) => pointsOnlyAt(line, file));
+}
+
+/** The hook on `file`'s own line of `index`, or null when it has no such line in the pointer shape. */
 export function indexHook(index: string, file: string): string | null {
   return ownPointer(index.split('\n'), file)?.hook.trim() ?? null;
 }

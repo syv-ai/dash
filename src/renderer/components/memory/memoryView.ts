@@ -352,15 +352,16 @@ export type MemoryDraftFields = MemoryFields & { hook: string };
 
 /**
  * The memory's line in MEMORY.md: its `own` (the hook is editable), `missing`
- * (a save adds one), or `shared` with something else (not ours to reword).
+ * (a save adds one), or `fixed`: shared with another link, or its own but not
+ * in the shape Claude writes, so not ours to reword.
  */
-export type MemoryDraftLine = 'own' | 'missing' | 'shared';
+export type MemoryDraftLine = 'own' | 'missing' | 'fixed';
 
 /** What the editor's hook field says while empty. */
 export const MEMORY_HOOK_PLACEHOLDERS: Record<MemoryDraftLine, string> = {
   own: 'No hook: Claude sees only the title until it opens the memory',
   missing: 'Same as the description, unless you write one',
-  shared: `Shares its ${MEMORY_INDEX_FILE} line with another link: edit the index by hand`,
+  fixed: `Its ${MEMORY_INDEX_FILE} line is shared or in another shape: edit the index by hand`,
 };
 
 /** An unsaved create or edit. */
@@ -414,7 +415,7 @@ export function editMemoryDraft(entry: MemoryEntry): MemoryDraft {
   };
   return {
     target: { file: entry.file, mtimeMs: entry.mtimeMs, sizeBytes: entry.sizeBytes },
-    line: entry.hook !== null ? 'own' : entry.inIndex ? 'shared' : 'missing',
+    line: entry.hook !== null ? 'own' : entry.inIndex ? 'fixed' : 'missing',
     saved: fields,
     fields,
   };
@@ -454,7 +455,7 @@ export function redescribeDraft(draft: MemoryDraft, description: string): Memory
 export function draftHook(draft: MemoryDraft): string | undefined {
   const hook = draft.fields.hook.trim();
   if (draft.line === 'missing') return hook || undefined;
-  if (draft.line === 'shared' || hook === draft.saved.hook) return undefined;
+  if (draft.line === 'fixed' || hook === draft.saved.hook) return undefined;
   return hook;
 }
 

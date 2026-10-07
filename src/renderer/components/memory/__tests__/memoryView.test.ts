@@ -38,6 +38,7 @@ function entry(p: Partial<MemoryEntry> & { file: string }): MemoryEntry {
     mtimeMs: 0,
     sizeBytes: 0,
     inIndex: true,
+    ownLine: true,
     pastIndexLimit: false,
     hook: '',
     ...p,
@@ -365,7 +366,7 @@ describe('memory drafts', () => {
   it('sends a hook for a memory with no index line only when one is written', () => {
     // The save defaults the new line to the description; sent from here, that
     // default would pass for a typed hook and reword a line Claude added since.
-    const orphan = editMemoryDraft({ ...saved, inIndex: false, hook: null });
+    const orphan = editMemoryDraft({ ...saved, inIndex: false, ownLine: false, hook: null });
     expect(orphan.line).toBe('missing');
     expect(draftHook(orphan)).toBeUndefined();
     expect(draftHook({ ...orphan, fields: { ...orphan.fields, hook: 'mine' } })).toBe('mine');
@@ -378,10 +379,12 @@ describe('memory drafts', () => {
     expect(isDraftDirty({ ...fresh, fields: { ...fresh.fields, hook: 'x' } })).toBe(true);
   });
 
-  it('never rewords a line the memory shares with another link', () => {
-    const shared = editMemoryDraft({ ...saved, hook: null });
-    expect(shared.line).toBe('shared');
-    expect(draftHook({ ...shared, fields: { ...shared.fields, hook: 'x' } })).toBeUndefined();
+  it('never rewords a line shared with another link, or its own in another shape', () => {
+    for (const ownLine of [false, true]) {
+      const fixed = editMemoryDraft({ ...saved, ownLine, hook: null });
+      expect(fixed.line).toBe('fixed');
+      expect(draftHook({ ...fixed, fields: { ...fixed.fields, hook: 'x' } })).toBeUndefined();
+    }
   });
 
   it('moves a hook that mirrors the description along with it, and no other', () => {

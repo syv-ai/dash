@@ -113,7 +113,7 @@ export function MemoryEditor({ draft, api, entries, isDark }: Props) {
           <input
             value={fields.hook}
             onChange={(e) => set({ hook: e.target.value })}
-            disabled={draft.line === 'shared'}
+            disabled={draft.line === 'fixed'}
             placeholder={MEMORY_HOOK_PLACEHOLDERS[draft.line]}
             title="The one line of this memory Claude reads at the start of every session"
             className={`${fieldClass} disabled:cursor-not-allowed disabled:text-muted-foreground`}

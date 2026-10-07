@@ -21,6 +21,7 @@ import {
 import { writeFileIfUnchanged } from '../utils/guardedWrite';
 import { mapMemoryRefs, memoryLinkFiles } from '@shared/memoryLinks';
 import {
+  hasOwnIndexLine,
   indexHook,
   loadedIndex,
   memoryFileName,
@@ -164,6 +165,7 @@ async function readEntry(
       mtimeMs: stat.mtimeMs,
       sizeBytes: stat.size,
       inIndex: indexed.has(file),
+      ownLine: hasOwnIndexLine(index, file),
       pastIndexLimit: indexed.has(file) && !loaded.has(file),
       hook: indexHook(index, file),
     };

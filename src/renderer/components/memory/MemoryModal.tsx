@@ -467,7 +467,7 @@ function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) 
                         onCreate={startNew}
                         onIndex={() => void fixIndex('memoryIndex', currentListed.entry)}
                         onRaise={
-                          currentListed.entry.hook !== null
+                          currentListed.entry.ownLine
                             ? () => void fixIndex('memoryRaise', currentListed.entry)
                             : undefined
                         }

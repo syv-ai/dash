@@ -646,6 +646,29 @@ describe('writing memories', () => {
     ]);
   });
 
+  it("says a line is the memory's own exactly when it can be moved, whatever its shape", async () => {
+    const dir = await resolveMemoryDir(repo);
+    await createMemory(repo, fields);
+    const top = '- [Z](z.md)';
+    for (const line of [
+      '- [Prefer CI](prefer-ci.md) — CI over local',
+      '- [Prefer CI](prefer-ci.md): CI over local',
+      '1. [Prefer CI](prefer-ci.md) — CI over local',
+      '- **[Prefer CI](prefer-ci.md)** — CI over local',
+      '- [Prefer CI](prefer-ci.md) and [Z](z.md)',
+    ]) {
+      fs.writeFileSync(path.join(dir, 'MEMORY.md'), `${top}\n${line}\n`);
+      const { ownLine } = await entryOf('prefer-ci.md');
+      await raiseMemory(repo, 'prefer-ci.md');
+      const moved = fs.readFileSync(path.join(dir, 'MEMORY.md'), 'utf8') === `${line}\n${top}\n`;
+      expect([line, ownLine]).toEqual([line, moved]);
+    }
+    // Only the first is in the shape whose hook can be read and reworded.
+    expect(await entryOf('prefer-ci.md')).toMatchObject({ ownLine: false, hook: null });
+    fs.writeFileSync(path.join(dir, 'MEMORY.md'), '- [Prefer CI](prefer-ci.md): CI over local\n');
+    expect(await entryOf('prefer-ci.md')).toMatchObject({ ownLine: true, hook: null });
+  });
+
   it('drops the index line of a memory that is already gone', async () => {
     const dir = await resolveMemoryDir(repo);
     await createMemory(repo, fields);

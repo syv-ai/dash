@@ -1155,12 +1155,18 @@ export interface MemoryEntry extends MemoryFields {
   sizeBytes: number;
   /** Whether MEMORY.md links to this file. */
   inIndex: boolean;
+  /**
+   * Whether a MEMORY.md line links this memory and nothing else: a line that
+   * can be moved or dropped with it, whatever its shape.
+   */
+  ownLine: boolean;
   /** Linked, but only past the part of MEMORY.md Claude loads: as good as unindexed. */
   pastIndexLimit: boolean;
   /**
    * The text after the dash on this memory's own MEMORY.md line: what Claude
-   * reads of it in every session. Null when it has no line of its own (not
-   * indexed, or only linked from a line shared with something else).
+   * reads of it in every session. Null when there is no hook to read or
+   * reword: no line of its own, or one not in the `- [Title](file) — hook`
+   * shape Claude writes.
    */
   hook: string | null;
 }
