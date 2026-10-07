@@ -112,7 +112,8 @@ export function MemoryIssues(props: Props) {
             }}
             options={candidates.map((e) => ({ value: e.file, label: e.name }))}
             placeholder="Point at…"
-            // The header's project picker overrides the same two, so these are known to win.
+            // Select appends className unmerged: w-auto and px-2 py-1 beat its w-full and
+            // px-3 py-2 by stylesheet order (MemoryModal's project picker relies on the same).
             className="w-auto px-2 py-1"
             contentClassName="max-w-[320px]"
           />

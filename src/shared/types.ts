@@ -1164,9 +1164,9 @@ export interface MemoryEntry extends MemoryFields {
   pastIndexLimit: boolean;
   /**
    * The text after the dash on this memory's own MEMORY.md line: what Claude
-   * reads of it in every session. Null when there is no hook to read or
-   * reword: no line of its own, or one not in the `- [Title](file) — hook`
-   * shape Claude writes.
+   * reads of it in a session that loads the line. Empty when the line has only
+   * a title. Null when there is no hook to read or reword: no line of its own,
+   * or one not in the `- [Title](file) — hook` shape Claude writes.
    */
   hook: string | null;
 }

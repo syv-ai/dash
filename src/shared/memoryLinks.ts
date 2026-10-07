@@ -102,7 +102,7 @@ export function mapWholeMemoryLinks(
   );
 }
 
-/** Where the `[` matching the `]` at `close` is, or -1: a link's text ends at a blank line. */
+/** Where the `[` matching the `]` at `close` is, or -1 when there is none before an empty line (`\n\n`), which link text cannot span. */
 function linkTextStart(markdown: string, close: number): number {
   let depth = 0;
   for (let i = close - 1; i >= 0; i--) {

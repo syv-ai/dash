@@ -26,6 +26,7 @@ import {
   KNOWN_MEMORY_TYPES,
   MEMORY_LINK_PREFIX,
   MEMORY_PREVIEW_SANDBOX,
+  type MemoryFilter,
   type MemorySection,
 } from '../memoryView';
 import { memoryLinkFiles } from '../../../../shared/memoryLinks';
@@ -46,13 +47,17 @@ function entry(p: Partial<MemoryEntry> & { file: string }): MemoryEntry {
   };
 }
 
+const sectionsOf = (entries: MemoryEntry[], ...rest: [MemoryFilter, string, number]) =>
+  memorySections(listMemories(entries), ...rest);
+const docsOf = (memory: ProjectMemory) => memoryDocs(memory, listMemories(memory.entries));
+
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = 1000 * DAY;
 const files = (sections: MemorySection[]) =>
   sections.map((s) => [s.id, ...s.entries.map((m) => m.entry.file)]);
 
 describe('listMemories', () => {
-  it('flags what Claude will not recall, cannot file, or cannot follow', () => {
+  it('flags what Claude will not recall, what has no type, and what cannot be followed', () => {
     const listed = listMemories([
       entry({ file: 'fine.md', type: 'user', name: 'fine', body: '[[linked]] [x](linked.md)' }),
       entry({
@@ -149,7 +154,7 @@ describe('memorySections', () => {
   ];
 
   it('files a type by state: needing attention, recent, then older, newest first', () => {
-    expect(files(memorySections(entries, 'feedback', '', NOW))).toEqual([
+    expect(files(sectionsOf(entries, 'feedback', '', NOW))).toEqual([
       ['attention', 'loose.md'],
       ['recent', 'newer.md', 'new.md'],
       ['older', 'old.md'],
@@ -157,7 +162,7 @@ describe('memorySections', () => {
   });
 
   it('files "all" by type in display order, under the ones needing attention', () => {
-    expect(files(memorySections(entries, 'all', '', NOW))).toEqual([
+    expect(files(sectionsOf(entries, 'all', '', NOW))).toEqual([
       ['attention', 'loose.md', 'untyped.md'],
       ['feedback', 'newer.md', 'new.md', 'old.md'],
       ['user', 'me.md'],
@@ -165,17 +170,17 @@ describe('memorySections', () => {
     ]);
   });
 
-  it('leaves a memory whose only issue is an unwritten link where it was, flag and all', () => {
+  it('files a memory whose only issue is an unwritten link under its type, flag and all', () => {
     const later = [entry({ file: 'plan.md', type: 'project', mtimeMs: NOW, body: '[[to-write]]' })];
-    const [section] = memorySections(later, 'all', '', NOW);
+    const [section] = sectionsOf(later, 'all', '', NOW);
     expect(section).toMatchObject({ id: 'project', entries: [{ issues: ['unwritten'] }] });
     const dead = [{ ...later[0]!, body: '[x](gone.md)' }];
-    expect(memorySections(dead, 'all', '', NOW).map((s) => s.id)).toEqual(['attention']);
+    expect(sectionsOf(dead, 'all', '', NOW).map((s) => s.id)).toEqual(['attention']);
   });
 
   it('shows every memory exactly once under "all", so none can be hidden', () => {
     const all = MEMORY_TYPES.map((type, i) => entry({ file: `${type}.md`, type, mtimeMs: i }));
-    const sections = memorySections(all, 'all', '', NOW);
+    const sections = sectionsOf(all, 'all', '', NOW);
     expect(sections.map((s) => s.id)).toEqual(['attention', ...KNOWN_MEMORY_TYPES]);
     expect(sections.flatMap((s) => s.entries.map((m) => m.entry.file)).sort()).toEqual(
       all.map((e) => e.file).sort(),
@@ -183,11 +188,11 @@ describe('memorySections', () => {
   });
 
   it('filters case-insensitively on name, description, and body, within the filter', () => {
-    expect(files(memorySections(entries, 'all', 'senior', NOW))).toEqual([['user', 'me.md']]);
-    expect(files(memorySections(entries, 'all', 'POSTGRES', NOW))).toEqual([
+    expect(files(sectionsOf(entries, 'all', 'senior', NOW))).toEqual([['user', 'me.md']]);
+    expect(files(sectionsOf(entries, 'all', 'POSTGRES', NOW))).toEqual([
       ['attention', 'untyped.md'],
     ]);
-    expect(memorySections(entries, 'feedback', 'senior', NOW)).toEqual([]);
+    expect(sectionsOf(entries, 'feedback', 'senior', NOW)).toEqual([]);
   });
 
   it('counts the matches under each tab; an untyped memory only counts under "all"', () => {
@@ -252,7 +257,7 @@ describe('memoryDocs / pickCurrent', () => {
   };
 
   it('lists memories in "all" order, then the index as an untyped doc', () => {
-    const docs = memoryDocs(memory);
+    const docs = docsOf(memory);
     expect(docs.map((d) => d.key)).toEqual(['b.md', 'a.md', 'MEMORY.md']);
     expect(docs[2]).toEqual({
       key: 'MEMORY.md',
@@ -264,20 +269,20 @@ describe('memoryDocs / pickCurrent', () => {
   });
 
   it('keeps the selected doc', () => {
-    expect(pickCurrent(memoryDocs(memory), 'a.md')?.key).toBe('a.md');
-    expect(pickCurrent(memoryDocs(memory), 'MEMORY.md')?.key).toBe('MEMORY.md');
+    expect(pickCurrent(docsOf(memory), 'a.md')?.key).toBe('a.md');
+    expect(pickCurrent(docsOf(memory), 'MEMORY.md')?.key).toBe('MEMORY.md');
   });
 
   it('falls back to the first memory in list order when the selected file was deleted', () => {
-    expect(pickCurrent(memoryDocs(memory), 'gone.md')?.key).toBe('b.md');
+    expect(pickCurrent(docsOf(memory), 'gone.md')?.key).toBe('b.md');
   });
 
   it('falls back to the index when it is all the folder has', () => {
-    expect(pickCurrent(memoryDocs({ ...memory, entries: [] }), null)?.key).toBe('MEMORY.md');
+    expect(pickCurrent(docsOf({ ...memory, entries: [] }), null)?.key).toBe('MEMORY.md');
   });
 
   it('returns null for an empty folder', () => {
-    expect(pickCurrent(memoryDocs({ ...memory, index: null, entries: [] }), null)).toBeNull();
+    expect(pickCurrent(docsOf({ ...memory, index: null, entries: [] }), null)).toBeNull();
   });
 });
 
@@ -300,7 +305,7 @@ describe('rewriteMemoryLinks', () => {
     );
   });
 
-  it('rewrites relative links to known .md files and leaves other sites alone', () => {
+  it('rewrites relative links to known .md files and leaves other sites and the index link alone', () => {
     const md = '[CI](feedback_ci.md) [web](https://x.dev/a.md) [index](MEMORY.md)';
     expect(rewriteMemoryLinks(md, entries)).toBe(
       `[CI](${MEMORY_LINK_PREFIX}feedback_ci.md) [web](https://x.dev/a.md) [index](MEMORY.md)`,
@@ -407,7 +412,7 @@ describe('memory drafts', () => {
     expect(isDraftDirty({ ...fresh, fields: { ...fresh.fields, hook: 'x' } })).toBe(true);
   });
 
-  it('never rewords a line shared with another link, or its own in another shape', () => {
+  it('never rewords a line shared with another memory, or its own in another shape', () => {
     for (const ownLine of [false, true]) {
       const fixed = editMemoryDraft({ ...saved, ownLine, hook: null });
       expect(fixed.line).toBe('fixed');
@@ -445,7 +450,7 @@ describe('memory drafts', () => {
   });
 
   it('keeps a memory as the doc behind its row, and none behind the index', () => {
-    const docs = memoryDocs({
+    const docs = docsOf({
       dir: '/m',
       exists: true,
       index: '',
@@ -579,7 +584,7 @@ describe('fixing a broken link', () => {
     expect(rewriteMemoryLinks(odd, entries)).not.toContain('[`cfg`](gone.md)');
   });
 
-  it('leaves nothing broken behind', () => {
+  it('leaves the fixed link unflagged and the other broken ones as they were', () => {
     for (const fixed of [repointLink(body, ref, entries[0]!, entries), unlinkLink(body, ref)]) {
       expect(brokenLinks(fixed, entries).map((l) => l.target)).toEqual(['other', 'ci.md']);
     }

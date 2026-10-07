@@ -122,18 +122,20 @@ function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) 
   useModalCloseGuard(editor.discard);
 
   const entries = useMemo(() => memory?.entries ?? [], [memory]);
+  // Each memory with what is off about it, worked out once per change on disk.
+  const listed = useMemo(() => listMemories(entries), [entries]);
   const sections = useMemo(
-    () => memorySections(entries, filter, query, openedAt),
-    [entries, filter, query, openedAt],
+    () => memorySections(listed, filter, query, openedAt),
+    [listed, filter, query, openedAt],
   );
   const counts = useMemo(() => memoryCounts(entries, query), [entries, query]);
-  const docs = useMemo(() => (memory ? memoryDocs(memory) : []), [memory]);
+  const docs = useMemo(() => (memory ? memoryDocs(memory, listed) : []), [memory, listed]);
   // Search filters the list only; the preview changes on click, never on typing.
   const current = pickCurrent(docs, selected);
   const currentEntry = current?.entry;
   const currentListed = useMemo(
-    () => listMemories(entries).find((m) => m.entry.file === currentEntry?.file),
-    [entries, currentEntry],
+    () => listed.find((m) => m.entry.file === currentEntry?.file),
+    [listed, currentEntry],
   );
   // A new memory has no row yet; an edit keeps its own row lit.
   const creating = editor.draft?.target === null;
@@ -151,7 +153,7 @@ function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) 
   };
   const startNew = (name?: string) => editor.startNew(filter === 'all' ? undefined : filter, name);
   // The fixes that leave the memory's own file alone are applied on the spot,
-  // one at a time: a second click lands before the list shows the first.
+  // one at a time, since a second click can land before the list shows the first.
   const fixing = useRef(false);
   const fixIndex = async (fix: 'memoryIndex' | 'memoryRaise', entry: MemoryEntry) => {
     if (fixing.current) return;
@@ -193,7 +195,7 @@ function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) 
       const kept = (memory?.dangling.length ?? 0) - res.data.removed.length;
       // A line that also links something else isn't dropped for one dead link.
       if (kept > 0) {
-        toast(`${kept} ${kept === 1 ? 'link shares' : 'links share'} a line with another`, {
+        toast(`${kept} ${kept === 1 ? 'link shares' : 'links share'} a line with another memory`, {
           description: `Edit ${MEMORY_INDEX_FILE} by hand to remove ${kept === 1 ? 'it' : 'them'}.`,
         });
       }

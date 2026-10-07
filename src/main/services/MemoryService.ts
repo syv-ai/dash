@@ -272,7 +272,7 @@ async function afterSave<T>(
 /**
  * Drop MEMORY.md's pointers to memories that no longer exist (Claude or the
  * user deleted the file and left the line). Resolves with the files whose
- * lines went; a line shared with another link is kept.
+ * lines went; a line shared with another memory is kept.
  */
 export async function pruneIndex(projectPath: string): Promise<string[]> {
   const dir = await resolveMemoryDir(projectPath);

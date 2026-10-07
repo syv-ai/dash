@@ -44,7 +44,7 @@ export const KNOWN_MEMORY_TYPES = MEMORY_TYPES.filter((t): t is KnownMemoryType 
 export type MemoryFilter = 'all' | KnownMemoryType;
 
 /**
- * What is off about a memory: Claude won't recall it, can't file it, or it
+ * What is off about a memory: Claude won't recall it, it has no type to be filed under, or it
  * points at nothing. `unwritten` is the mild one, a `[[name]]` no memory
  * answers to yet: Claude leaves those on purpose, for a memory worth writing later.
  */
@@ -250,18 +250,18 @@ export function memoryCounts(entries: MemoryEntry[], query: string): Record<Memo
 }
 
 /**
- * The memories under `filter` matching `query`, each in exactly one section,
+ * The `memories` (see listMemories) under `filter` matching `query`, each in exactly one section,
  * newest first; empty sections are dropped. An untyped memory has no type to
  * be filed under, so it only shows under "all", as needing attention. A memory
  * whose only issue is an unwritten link stays where it would be without it.
  */
 export function memorySections(
-  entries: MemoryEntry[],
+  memories: ListedMemory[],
   filter: MemoryFilter,
   query: string,
   nowMs: number,
 ): MemorySection[] {
-  const listed = listMemories(entries)
+  const listed = memories
     .filter((m) => matchesQuery(m.entry, query))
     .filter((m) => filter === 'all' || m.entry.type === filter)
     .sort((a, b) => b.entry.mtimeMs - a.entry.mtimeMs);
@@ -334,8 +334,8 @@ export interface MemoryDoc {
  * on "is this the index?". Order is the fallback order: memories as "all"
  * lists them, then the index, which is what an index-only folder shows.
  */
-export function memoryDocs(memory: ProjectMemory): MemoryDoc[] {
-  const docs: MemoryDoc[] = memorySections(memory.entries, 'all', '', 0).flatMap((section) =>
+export function memoryDocs(memory: ProjectMemory, memories: ListedMemory[]): MemoryDoc[] {
+  const docs: MemoryDoc[] = memorySections(memories, 'all', '', 0).flatMap((section) =>
     section.entries.map(({ entry: e }) => ({
       key: e.file,
       file: e.file,
@@ -367,7 +367,7 @@ export type MemoryDraftFields = MemoryFields & { hook: string };
 
 /**
  * The memory's line in MEMORY.md: its `own` (the hook is editable), `missing`
- * (a save adds one), or `fixed`: shared with another link, or its own but not
+ * (a save adds one), or `fixed`: shared with another memory, or its own but not
  * in the shape Claude writes, so not ours to reword.
  */
 export type MemoryDraftLine = 'own' | 'missing' | 'fixed';

@@ -649,7 +649,7 @@ describe('writing memories', () => {
     expect((await readProjectMemory(repo)).index?.split('\n')[1]).toBe('- [Loose](loose.md)');
   });
 
-  it('gives a created or saved memory a line Claude loads, like one indexed by hand', async () => {
+  it("gives a created memory, and a saved one the index didn't link, a line Claude loads", async () => {
     const dir = await resolveMemoryDir(repo);
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'orphan.md'), '---\nname: orphan\n---\nOld');
