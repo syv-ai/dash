@@ -169,7 +169,6 @@ export function brokenLinks(body: string, entries: MemoryEntry[], self?: string)
     if (resolve(ref) === undefined) add('ref', ref.trim());
     return match;
   });
-  // Whole links, as the preview mutes and an unlink removes: a bare `](x.md)` is no link.
   mapWholeMemoryLinks(body, (file, _text, match) => {
     if (!files.has(file) && file !== MEMORY_INDEX_FILE) add('file', file);
     return match;
@@ -519,16 +518,16 @@ export function rewriteMemoryLinks(markdown: string, entries: MemoryEntry[]): st
   const resolve = refResolver(entries);
 
   const missing = (text: string) => `<span class="memory-missing">${escapeHtml(text)}</span>`;
+  const open = (text: string, file: string) =>
+    `[${text}](${MEMORY_LINK_PREFIX}${encodeURIComponent(file)})`;
   const refsDone = mapMemoryRefs(markdown, (ref) => {
     const file = resolve(ref);
-    return file ? `[${ref}](${MEMORY_LINK_PREFIX}${encodeURIComponent(file)})` : missing(ref);
+    return file ? open(ref, file) : missing(ref);
   });
-  const deadDone = mapWholeMemoryLinks(refsDone, (file, text, match) =>
-    files.has(file) || file === MEMORY_INDEX_FILE ? match : missing(text),
-  );
-  return mapMemoryLinks(deadDone, (file, match) =>
-    files.has(file) ? `](${MEMORY_LINK_PREFIX}${encodeURIComponent(file)})` : match,
-  );
+  return mapWholeMemoryLinks(refsDone, (file, text, match) => {
+    if (files.has(file)) return open(text, file);
+    return file === MEMORY_INDEX_FILE ? match : missing(text);
+  });
 }
 
 /**

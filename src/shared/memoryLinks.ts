@@ -1,12 +1,13 @@
 /**
- * What counts as a markdown link to another memory: a target naming a `.md`
- * file in the memory folder itself (`x.md` or `./x.md`). The main process uses
- * it to flag memories MEMORY.md indexes; the preview uses it to make the same
- * links clickable, so "indexed" and "linked" can't disagree.
+ * What counts as a markdown link to another memory: `[text](target)` with a
+ * target naming a `.md` file in the memory folder itself (`x.md` or `./x.md`).
+ * The main process uses it to flag memories MEMORY.md indexes; the modal uses
+ * it to make the same links clickable, to call one dead and to repoint or
+ * unlink it, so "indexed", "linked" and "dead" can't disagree.
  *
  * Memories also point at each other by name, as `[[name]]`. The preview
- * resolves those, a rename moves them, and a delete warns about them, all
- * through `mapMemoryRefs`.
+ * resolves those, a rename moves them, a delete warns about them and a fix
+ * repoints them, all through `mapMemoryRefs`.
  *
  * Neither is looked for in code (a fenced block or an inline span): `[[` there
  * is a shell test or a TOML table, not a memory.
@@ -27,16 +28,59 @@ function outsideCode(markdown: string, edit: (text: string) => string): string {
     .join('');
 }
 
-/** Rewrite each memory link in `markdown`; `replace` gets the file and the `](target)` match. */
+interface FoundLink {
+  file: string;
+  /** Where its `[` is, where its `](` starts, and where the link ends. */
+  start: number;
+  close: number;
+  end: number;
+}
+
+/**
+ * Every memory link in `markdown`, in order: the one place that decides what
+ * is one. Each target is traced back to where its text opens, since that text
+ * may hold code or brackets of its own.
+ */
+function findMemoryLinks(markdown: string): FoundLink[] {
+  const links: FoundLink[] = [];
+  let offset = 0;
+  markdown.split(CODE_RE).forEach((part, i) => {
+    if (i % 2 === 0) {
+      for (const m of part.matchAll(LINK_RE)) {
+        const file = SAME_FOLDER_MD_RE.exec(m[1] ?? m[2] ?? '')?.[1];
+        const close = offset + m.index;
+        const start = file ? linkTextStart(markdown, close) : -1;
+        // A target with no text before it isn't a link, and neither is one inside the last.
+        if (!file || start < (links.at(-1)?.end ?? 0)) continue;
+        links.push({ file, start, close, end: close + m[0].length });
+      }
+    }
+    offset += part.length;
+  });
+  return links;
+}
+
+/** `markdown` with each found link's `from`…`end` replaced by what `text` returns for it. */
+function replaceLinks(
+  markdown: string,
+  from: 'start' | 'close',
+  text: (link: FoundLink) => string,
+): string {
+  // Asked in reading order, spliced in from the end so earlier offsets hold.
+  const edits = findMemoryLinks(markdown).map((link) => ({ link, text: text(link) }));
+  return edits.reduceRight(
+    (out, { link, text }) => out.slice(0, link[from]) + text + out.slice(link.end),
+    markdown,
+  );
+}
+
+/** Rewrite each memory link's target in `markdown`; `replace` gets the file and the `](target)` match. */
 export function mapMemoryLinks(
   markdown: string,
   replace: (file: string, match: string) => string,
 ): string {
-  return outsideCode(markdown, (text) =>
-    text.replace(LINK_RE, (match: string, angled?: string, bare?: string) => {
-      const file = SAME_FOLDER_MD_RE.exec(angled ?? bare ?? '')?.[1];
-      return file ? replace(file, match) : match;
-    }),
+  return replaceLinks(markdown, 'close', ({ file, close, end }) =>
+    replace(file, markdown.slice(close, end)),
   );
 }
 
@@ -49,28 +93,8 @@ export function mapWholeMemoryLinks(
   markdown: string,
   replace: (file: string, text: string, match: string) => string,
 ): string {
-  // The same targets mapMemoryLinks finds, each traced back to where its text
-  // opens: that text may hold code or brackets of its own.
-  const edits: { start: number; end: number; text: string }[] = [];
-  let offset = 0;
-  markdown.split(CODE_RE).forEach((part, i) => {
-    if (i % 2 === 0) {
-      for (const m of part.matchAll(LINK_RE)) {
-        const file = SAME_FOLDER_MD_RE.exec(m[1] ?? m[2] ?? '')?.[1];
-        const close = offset + m.index;
-        const start = file ? linkTextStart(markdown, close) : -1;
-        // A target with no text before it isn't a link, and neither is one inside the last.
-        if (!file || start < (edits.at(-1)?.end ?? 0)) continue;
-        const end = close + m[0].length;
-        const text = replace(file, markdown.slice(start + 1, close), markdown.slice(start, end));
-        edits.push({ start, end, text });
-      }
-    }
-    offset += part.length;
-  });
-  return edits.reduceRight(
-    (out, { start, end, text }) => out.slice(0, start) + text + out.slice(end),
-    markdown,
+  return replaceLinks(markdown, 'start', ({ file, start, close, end }) =>
+    replace(file, markdown.slice(start + 1, close), markdown.slice(start, end)),
   );
 }
 

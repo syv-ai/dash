@@ -64,7 +64,7 @@ describe('mapWholeMemoryLinks', () => {
     );
   });
 
-  it('finds the text of every link mapMemoryLinks finds, code and brackets in it or not', () => {
+  it('finds the text of each link, code and brackets in it or not', () => {
     const md =
       'a [`cfg` file](x.md) b [see [1]](y.md) c [two\nlines](z.md) d ](loose.md)\n\ne](far.md)';
     const seen: string[] = [];
@@ -74,6 +74,27 @@ describe('mapWholeMemoryLinks', () => {
     });
     expect(out).toBe('a `cfg` file b see [1] c two\nlines d ](loose.md)\n\ne](far.md)');
     expect(seen).toEqual(['x.md', 'y.md', 'z.md']);
+  });
+
+  it('is the one answer to what a memory link is: a target without its text is none', () => {
+    for (const md of [
+      'a [x](x.md) b',
+      'see ](x.md) here',
+      '[a]b](x.md)',
+      '[split\n\nby a blank line](x.md)',
+      '[outer [in](y.md) more](x.md)',
+      '- **[T](x.md)** and ![img](<y z.md>)',
+    ]) {
+      const whole: string[] = [];
+      mapWholeMemoryLinks(md, (file, _text, match) => (whole.push(file), match));
+      const targets: string[] = [];
+      mapMemoryLinks(md, (file, match) => (targets.push(file), match));
+      expect([md, targets]).toEqual([md, whole]);
+    }
+    expect(memoryLinkFiles('see ](x.md) and [a]b](y.md)')).toEqual(new Set());
+    expect(mapMemoryLinks('[outer [in](y.md) more](x.md)', (file) => `](#${file})`)).toBe(
+      '[outer [in](#y.md) more](x.md)',
+    );
   });
 
   it('writes a target the link pattern reads back', () => {
