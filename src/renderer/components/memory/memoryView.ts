@@ -5,7 +5,13 @@ import {
   MEMORY_TYPES,
 } from '../../../shared/types';
 import type { MemoryEntry, MemoryFields, MemoryType, ProjectMemory } from '../../../shared/types';
-import { mapMemoryLinks, mapMemoryRefs, memoryLinkFiles } from '../../../shared/memoryLinks';
+import {
+  mapMemoryLinks,
+  mapMemoryRefs,
+  mapWholeMemoryLinks,
+  memoryLinkFiles,
+  memoryLinkTarget,
+} from '../../../shared/memoryLinks';
 
 /** Href prefix the preview intercepts to open another memory in the modal. */
 export const MEMORY_LINK_PREFIX = '#memory:';
@@ -35,19 +41,40 @@ export const KNOWN_MEMORY_TYPES = MEMORY_TYPES.filter((t): t is KnownMemoryType 
 /** The list's top level: every memory, or one type. */
 export type MemoryFilter = 'all' | KnownMemoryType;
 
-/** Why a memory needs a look: Claude won't recall it, can't file it, or it points at nothing. */
-export type MemoryIssue = 'unindexed' | 'not-loaded' | 'untyped' | 'dead-link';
+/**
+ * What is off about a memory: Claude won't recall it, can't file it, or it
+ * points at nothing. `unwritten` is the mild one, a `[[name]]` no memory
+ * answers to yet: Claude leaves those on purpose, for a memory worth writing later.
+ */
+export type MemoryIssue = 'unindexed' | 'not-loaded' | 'untyped' | 'dead-link' | 'unwritten';
 
 export const MEMORY_ISSUE_LABELS: Record<MemoryIssue, string> = {
   unindexed: 'not indexed',
   'not-loaded': 'past index limit',
   untyped: 'untyped',
   'dead-link': 'dead link',
+  unwritten: 'unwritten link',
 };
+
+/** A cross-reference that opens nothing. */
+export interface BrokenLink {
+  /** A `[[name]]` with no memory of that name, or a link to a `file` that isn't there. */
+  kind: 'ref' | 'file';
+  /** The name as written (trimmed), or the file linked. */
+  target: string;
+  /** The file of the memory it most likely meant, when one comes close. */
+  suggestion?: string;
+}
 
 export interface ListedMemory {
   entry: MemoryEntry;
   issues: MemoryIssue[];
+  broken: BrokenLink[];
+}
+
+/** Whether a memory belongs under "Needs attention": an unwritten link alone is no fault. */
+export function needsAttention(memory: ListedMemory): boolean {
+  return memory.issues.some((i) => i !== 'unwritten');
 }
 
 /**
@@ -83,27 +110,114 @@ function matchesQuery(entry: MemoryEntry, query: string): boolean {
   return !q || [entry.name, entry.description, entry.body].some((f) => f.toLowerCase().includes(q));
 }
 
-/** Each memory with what is wrong with it, by the preview's own rule for a working link. */
-export function listMemories(entries: MemoryEntry[]): ListedMemory[] {
+/** A name or file as compared when guessing what a broken link meant: letters and digits only. */
+function linkKey(text: string): string {
+  return text
+    .replace(/\.md$/, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+/** Whether two keys are one slip apart: a character added, dropped or swapped for another. */
+function oneSlipApart(a: string, b: string): boolean {
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  if (long.length - short.length > 1) return false;
+  let i = 0;
+  while (i < short.length && short[i] === long[i]) i++;
+  const rest = short.length === long.length ? i + 1 : i;
+  return short.slice(rest) === long.slice(i + 1);
+}
+
+/**
+ * The memory a broken link to `target` most likely meant: one whose name or
+ * file says the same but for case and punctuation, else contains it or is
+ * contained in it, else is one slip away. Undefined when nothing comes close.
+ */
+function suggestMemory(target: string, entries: MemoryEntry[]): string | undefined {
+  const key = linkKey(target);
+  // Too short to tell a near miss from another word.
+  if (key.length < 4) return undefined;
+  const keyed = entries.map((e) => ({ file: e.file, keys: [linkKey(e.name), linkKey(e.file)] }));
+  const tests: ((k: string) => boolean)[] = [
+    (k) => k === key,
+    (k) => k.length >= 4 && (k.includes(key) || key.includes(k)),
+    (k) => oneSlipApart(k, key),
+  ];
+  for (const test of tests) {
+    const hit = keyed.find((e) => e.keys.some(test));
+    if (hit) return hit.file;
+  }
+  return undefined;
+}
+
+/**
+ * The cross-references in `body` that open nothing, each once, `[[names]]`
+ * first: by the preview's own rule for a working link. `self` is the file
+ * `body` belongs to, which a link is never guessed to have meant.
+ */
+export function brokenLinks(body: string, entries: MemoryEntry[], self?: string): BrokenLink[] {
   const files = new Set(entries.map((e) => e.file));
   const resolve = refResolver(entries);
+  const others = entries.filter((e) => e.file !== self);
+  const broken = new Map<string, BrokenLink>();
+  const add = (kind: BrokenLink['kind'], target: string) => {
+    const key = `${kind}:${target}`;
+    if (!broken.has(key))
+      broken.set(key, { kind, target, suggestion: suggestMemory(target, others) });
+  };
+  mapMemoryRefs(body, (ref, match) => {
+    if (resolve(ref) === undefined) add('ref', ref.trim());
+    return match;
+  });
+  // Whole links, as the preview mutes and an unlink removes: a bare `](x.md)` is no link.
+  mapWholeMemoryLinks(body, (file, _text, match) => {
+    if (!files.has(file) && file !== MEMORY_INDEX_FILE) add('file', file);
+    return match;
+  });
+  return [...broken.values()];
+}
+
+/** Each memory with what is off about it. */
+export function listMemories(entries: MemoryEntry[]): ListedMemory[] {
   return entries.map((entry) => {
-    let dead = false;
-    mapMemoryRefs(entry.body, (ref, match) => {
-      dead ||= resolve(ref) === undefined;
-      return match;
-    });
-    mapMemoryLinks(entry.body, (file, match) => {
-      dead ||= !files.has(file) && file !== MEMORY_INDEX_FILE;
-      return match;
-    });
+    const broken = brokenLinks(entry.body, entries, entry.file);
     const issues: MemoryIssue[] = [];
     if (!entry.inIndex) issues.push('unindexed');
     if (entry.pastIndexLimit) issues.push('not-loaded');
     if (entry.type === 'other') issues.push('untyped');
-    if (dead) issues.push('dead-link');
-    return { entry, issues };
+    if (broken.some((l) => l.kind === 'file')) issues.push('dead-link');
+    if (broken.some((l) => l.kind === 'ref')) issues.push('unwritten');
+    return { entry, issues, broken };
   });
+}
+
+/**
+ * `body` with a broken link pointed at the memory `to` instead: a `[[name]]`
+ * by the name that memory answers to, a file link by its file.
+ */
+export function repointLink(
+  body: string,
+  link: BrokenLink,
+  to: MemoryEntry,
+  entries: MemoryEntry[],
+): string {
+  if (link.kind === 'file') {
+    return mapMemoryLinks(body, (file, match) =>
+      file === link.target ? `](${memoryLinkTarget(to.file)})` : match,
+    );
+  }
+  // Its basename, when its name can't be written as a link or means another memory.
+  const named = !to.name.includes(']') && refResolver(entries)(to.name) === to.file;
+  const name = named ? to.name : to.file.replace(/\.md$/, '');
+  return mapMemoryRefs(body, (ref, match) => (ref.trim() === link.target ? `[[${name}]]` : match));
+}
+
+/** `body` with a broken link left as the plain text it showed. */
+export function unlinkLink(body: string, link: BrokenLink): string {
+  if (link.kind === 'file') {
+    return mapWholeMemoryLinks(body, (file, text, match) => (file === link.target ? text : match));
+  }
+  return mapMemoryRefs(body, (ref, match) => (ref.trim() === link.target ? ref.trim() : match));
 }
 
 /** How many memories match `query` under each filter. */
@@ -123,7 +237,8 @@ export function memoryCounts(entries: MemoryEntry[], query: string): Record<Memo
 /**
  * The memories under `filter` matching `query`, each in exactly one section,
  * newest first; empty sections are dropped. An untyped memory has no type to
- * be filed under, so it only shows under "all", as needing attention.
+ * be filed under, so it only shows under "all", as needing attention. A memory
+ * whose only issue is an unwritten link stays where it would be without it.
  */
 export function memorySections(
   entries: MemoryEntry[],
@@ -135,10 +250,10 @@ export function memorySections(
     .filter((m) => matchesQuery(m.entry, query))
     .filter((m) => filter === 'all' || m.entry.type === filter)
     .sort((a, b) => b.entry.mtimeMs - a.entry.mtimeMs);
-  const fine = listed.filter((m) => m.issues.length === 0);
+  const fine = listed.filter((m) => !needsAttention(m));
   const isRecent = (m: ListedMemory) => nowMs - m.entry.mtimeMs <= MEMORY_RECENT_MS;
   const sections: MemorySection[] = [
-    { id: 'attention', entries: listed.filter((m) => m.issues.length > 0) },
+    { id: 'attention', entries: listed.filter(needsAttention) },
     ...(filter === 'all'
       ? // KNOWN_MEMORY_TYPES is the display order, so a new type can't be left out of the list.
         KNOWN_MEMORY_TYPES.map((type) => ({
@@ -269,9 +384,10 @@ export function memoryScaffold(type: MemoryType): string {
   return type === 'feedback' || type === 'project' ? '\n\n**Why:** \n\n**How to apply:** ' : '';
 }
 
-export function newMemoryDraft(type: KnownMemoryType = 'project'): MemoryDraft {
+/** A new memory's draft. `name` is given when it is written to answer a `[[name]]`. */
+export function newMemoryDraft(type: KnownMemoryType = 'project', name = ''): MemoryDraft {
   const fields: MemoryDraftFields = {
-    name: '',
+    name,
     description: '',
     hook: '',
     type,
@@ -393,21 +509,24 @@ export function memoryReferrers(entries: MemoryEntry[], target: MemoryEntry): Me
 /**
  * Point memory cross-references at `#memory:<file>` so the preview can route
  * clicks back into the modal. `[[name]]` resolves by frontmatter name, then by
- * basename; memory links (see mapMemoryLinks) are rewritten only when that file exists.
+ * basename; memory links (see mapMemoryLinks) are rewritten only when that file
+ * exists. What points at nothing is shown as muted text, not a link: followed,
+ * a dead file link would only hand the browser a file that isn't there.
  */
 export function rewriteMemoryLinks(markdown: string, entries: MemoryEntry[]): string {
   const files = new Set(entries.map((e) => e.file));
   const resolve = refResolver(entries);
 
-  return mapMemoryLinks(
-    mapMemoryRefs(markdown, (ref) => {
-      const file = resolve(ref);
-      return file
-        ? `[${ref}](${MEMORY_LINK_PREFIX}${encodeURIComponent(file)})`
-        : `<span class="memory-missing">${escapeHtml(ref)}</span>`;
-    }),
-    (file, match) =>
-      files.has(file) ? `](${MEMORY_LINK_PREFIX}${encodeURIComponent(file)})` : match,
+  const missing = (text: string) => `<span class="memory-missing">${escapeHtml(text)}</span>`;
+  const refsDone = mapMemoryRefs(markdown, (ref) => {
+    const file = resolve(ref);
+    return file ? `[${ref}](${MEMORY_LINK_PREFIX}${encodeURIComponent(file)})` : missing(ref);
+  });
+  const deadDone = mapWholeMemoryLinks(refsDone, (file, text, match) =>
+    files.has(file) || file === MEMORY_INDEX_FILE ? match : missing(text),
+  );
+  return mapMemoryLinks(deadDone, (file, match) =>
+    files.has(file) ? `](${MEMORY_LINK_PREFIX}${encodeURIComponent(file)})` : match,
   );
 }
 

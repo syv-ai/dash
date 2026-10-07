@@ -7,12 +7,16 @@ import { Button } from '../ui/Button';
 import { Segmented } from '../ui/Segmented';
 import { SaveErrorBanner } from '../diffEditor/editor/SaveErrorBanner';
 import { StaleBanner } from '../diffEditor/editor/StaleBanner';
+import { MemoryIssues } from './MemoryIssues';
 import { MemoryPreview } from './MemoryPreview';
 import {
+  brokenLinks,
   canSaveDraft,
   draftTypes,
   redescribeDraft,
+  repointLink,
   retypeDraft,
+  unlinkLink,
   MEMORY_HOOK_PLACEHOLDERS,
   MEMORY_TYPE_HINTS,
   MEMORY_TYPE_LABELS,
@@ -38,6 +42,7 @@ export function MemoryEditor({ draft, api, entries, isDark }: Props) {
   const { fields } = draft;
   const set = (patch: Partial<typeof fields>) => api.change({ ...fields, ...patch });
   const canSave = canSaveDraft(draft) && !api.saving;
+  const self = draft.target?.file;
 
   return (
     <div
@@ -63,6 +68,15 @@ export function MemoryEditor({ draft, api, entries, isDark }: Props) {
           onDismiss={api.dismissError}
         />
       )}
+
+      {/* The links as written so far: fixed here, they are saved with the rest. */}
+      <MemoryIssues
+        issues={[]}
+        broken={brokenLinks(fields.body, entries, self)}
+        candidates={entries.filter((e) => e.file !== self)}
+        onRepoint={(link, to) => set({ body: repointLink(fields.body, link, to, entries) })}
+        onUnlink={(link) => set({ body: unlinkLink(fields.body, link) })}
+      />
 
       <div className="shrink-0 space-y-2.5 border-b border-border/40 px-5 py-3">
         {/* The type comes first: it decides what the memory is for and how it starts. */}

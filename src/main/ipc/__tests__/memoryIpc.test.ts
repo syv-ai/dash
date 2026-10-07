@@ -11,7 +11,7 @@ vi.mock('electron', () => ({
 
 import { ipcMain, shell } from 'electron';
 import {
-  memoryDeleteArgsSchema,
+  memoryFileArgsSchema,
   memoryProjectArgsSchema,
   memoryUpdateArgsSchema,
   registerMemoryIpc,
@@ -40,7 +40,7 @@ describe('memory file arguments', () => {
   it.each(['../a.md', 'sub/a.md', 'sub\\a.md', '/etc/a.md', 'a.txt', 'MEMORY.md', 'memory.md'])(
     'rejects %s as a file',
     (file) => {
-      expect(() => memoryDeleteArgsSchema.parse({ projectPath: '/repos/dash', file })).toThrow();
+      expect(() => memoryFileArgsSchema.parse({ projectPath: '/repos/dash', file })).toThrow();
       expect(() => memoryUpdateArgsSchema.parse({ ...update, file })).toThrow();
     },
   );
@@ -159,6 +159,24 @@ describe('memory handlers', () => {
     });
     expect(shell.trashItem).toHaveBeenCalledWith(path.join(dir, 'prefer-ci.md'));
     expect(await readProjectMemory(project)).toMatchObject({ entries: [], index: '' });
+  });
+
+  it('indexes and raises a memory by basename only', async () => {
+    const dir = await resolveMemoryDir(project);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'a.md'), '---\nname: A\n---\n');
+    fs.writeFileSync(path.join(dir, 'MEMORY.md'), '- [B](b.md)\n');
+    const args = { projectPath: project, file: 'a.md' };
+
+    expect(await invoke('memory:index', args)).toEqual({ success: true, data: null });
+    expect(await invoke('memory:raise', args)).toEqual({ success: true, data: null });
+    expect(fs.readFileSync(path.join(dir, 'MEMORY.md'), 'utf8')).toBe('- [A](a.md)\n- [B](b.md)\n');
+    for (const channel of ['memory:index', 'memory:raise']) {
+      expect(await invoke(channel, { ...args, file: '../a.md' })).toMatchObject({ success: false });
+      expect(await invoke(channel, { ...args, file: 'MEMORY.md' })).toMatchObject({
+        success: false,
+      });
+    }
   });
 
   it('decides a hook nobody wrote here, not in the caller', async () => {

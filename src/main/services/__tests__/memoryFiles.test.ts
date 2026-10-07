@@ -5,6 +5,7 @@ import {
   loadedIndex,
   memoryFileName,
   parseMemoryFile,
+  raiseIndexLine,
   removeIndexLines,
   serializeMemoryFile,
   setIndexLine,
@@ -374,6 +375,23 @@ describe('index lines', () => {
   it('leaves a line shared with another memory alone', () => {
     const index = '- see [CI](ci.md) and [B](b.md)\n';
     expect(setIndexLine(index, 'ci.md', fields)).toBe(index);
+  });
+
+  it("moves a memory's own line above the other memories', under what heads the index", () => {
+    const index = ['# Memory Index', '', '- [A](a.md) — one', '- [B](b.md)', '- [C](c.md)', ''];
+    expect(raiseIndexLine(index.join('\n'), 'c.md').split('\n')).toEqual([
+      '# Memory Index',
+      '',
+      '- [C](c.md)',
+      '- [A](a.md) — one',
+      '- [B](b.md)',
+      '',
+    ]);
+    // Already on top, not indexed, or sharing its line: nothing to move.
+    expect(raiseIndexLine(index.join('\n'), 'a.md')).toBe(index.join('\n'));
+    expect(raiseIndexLine(index.join('\n'), 'missing.md')).toBe(index.join('\n'));
+    const shared = '- [A](a.md)\n- see [C](c.md) and [B](b.md)\n';
+    expect(raiseIndexLine(shared, 'c.md')).toBe(shared);
   });
 
   it('removes only the lines that point at just that file', () => {

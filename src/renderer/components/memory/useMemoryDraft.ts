@@ -21,9 +21,10 @@ export interface MemoryDraftApi {
   /** The file changed on disk since the draft was opened; nothing was written. */
   stale: boolean;
   saveError: string | null;
-  /** Start a memory of `type` (the list's current type, when it has one). */
-  startNew(type?: KnownMemoryType): void;
-  startEdit(entry: MemoryEntry): void;
+  /** Start a memory of `type` (the list's current type, when it has one), named `name` if given. */
+  startNew(type?: KnownMemoryType, name?: string): void;
+  /** Edit `entry`. `fix` is applied to its fields up front: unsaved, for the user to review. */
+  startEdit(entry: MemoryEntry, fix?: (fields: MemoryDraftFields) => MemoryDraftFields): void;
   change(fields: MemoryDraftFields): void;
   save(): Promise<void>;
   /** Save over the newer file on disk. */
@@ -134,11 +135,13 @@ export function useMemoryDraft({ projectPath, reload, onSaved }: Args): MemoryDr
     saving,
     stale: stale !== null,
     saveError,
-    startNew: (type) => {
-      if (discard()) open(newMemoryDraft(type));
+    startNew: (type, name) => {
+      if (discard()) open(newMemoryDraft(type, name));
     },
-    startEdit: (entry) => {
-      if (discard()) open(editMemoryDraft(entry));
+    startEdit: (entry, fix) => {
+      if (!discard()) return;
+      const edit = editMemoryDraft(entry);
+      open(fix ? { ...edit, fields: fix(edit.fields) } : edit);
     },
     change: (fields) => setDraft((d) => (d ? { ...d, fields } : d)),
     save: () => save(),

@@ -25,6 +25,7 @@ import {
   loadedIndex,
   memoryFileName,
   parseMemoryFile,
+  raiseIndexLine,
   removeIndexLines,
   serializeMemoryFile,
   setIndexLine,
@@ -291,6 +292,33 @@ export async function pruneIndex(projectPath: string): Promise<string[]> {
     return pruned;
   });
   return removed;
+}
+
+/**
+ * Give a memory the MEMORY.md line it lacks, with its description for a hook,
+ * so Claude recalls it. The memory's own file isn't touched. One the index
+ * already links is left as it is. In an index past what Claude loads, a line
+ * added at the end would go unseen as before, so there it goes on top.
+ */
+export async function indexMemory(projectPath: string, file: string): Promise<void> {
+  const dir = await resolveMemoryDir(projectPath);
+  const parsed = parseMemoryFile(await fs.promises.readFile(path.join(dir, file), 'utf8'));
+  const fields = { ...parsed, name: parsed.name || file.replace(/\.md$/, '') };
+  await editIndex(dir, (index) => {
+    if (memoryLinkFiles(index).has(file)) return index;
+    const added = setIndexLine(index, file, fields);
+    return memoryLinkFiles(loadedIndex(added)).has(file) ? added : raiseIndexLine(added, file);
+  });
+}
+
+/**
+ * Move a memory's MEMORY.md line to the top of the list, into the part Claude
+ * loads. The index is no shorter for it: what was last in that part falls
+ * past the cut instead.
+ */
+export async function raiseMemory(projectPath: string, file: string): Promise<void> {
+  const dir = await resolveMemoryDir(projectPath);
+  await editIndex(dir, (index) => raiseIndexLine(index, file));
 }
 
 /**

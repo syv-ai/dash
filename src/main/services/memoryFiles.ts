@@ -5,7 +5,7 @@ import {
   MEMORY_TYPES,
 } from '@shared/types';
 import type { MemoryFields, MemoryType } from '@shared/types';
-import { memoryLinkFiles } from '@shared/memoryLinks';
+import { memoryLinkFiles, memoryLinkTarget } from '@shared/memoryLinks';
 import { stripQuotes } from './skillFrontmatter';
 
 const FRONTMATTER_RE = /^---\s*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
@@ -273,8 +273,7 @@ export function setIndexLine(
   }
   if (memoryLinkFiles(index).has(file)) return index;
   const text = hook ?? fields.description;
-  // A bare link target ends at a space or a parenthesis.
-  const target = /[\s()]/.test(file) ? `<${file}>` : file;
+  const target = memoryLinkTarget(file);
   const gap = index && !index.endsWith('\n') ? '\n' : '';
   return `${index}${gap}- [${indexTitle(fields.name)}](${target})${text ? ` — ${text}` : ''}\n`;
 }
@@ -288,4 +287,18 @@ export function removeIndexLines(index: string, file: string): string {
     .split('\n')
     .filter((line) => !pointsOnlyAt(line, file))
     .join('\n');
+}
+
+/**
+ * `index` with `file`'s own line moved above every other memory's, where the
+ * part Claude loads starts: whatever heads the index stays on top. A line
+ * shared with another memory stays put, like everywhere else.
+ */
+export function raiseIndexLine(index: string, file: string): string {
+  const lines = index.split('\n');
+  const at = lines.findIndex((line) => pointsOnlyAt(line, file));
+  const top = lines.findIndex((line) => memoryLinkFiles(line).size > 0);
+  if (at <= top) return index;
+  lines.splice(top, 0, ...lines.splice(at, 1));
+  return lines.join('\n');
 }

@@ -7,7 +7,9 @@ import { MEMORY_INDEX_FILE, MEMORY_TYPES } from '@shared/types';
 import {
   createMemory,
   deleteMemory,
+  indexMemory,
   pruneIndex,
+  raiseMemory,
   readProjectMemory,
   resolveMemoryDir,
   updateMemory,
@@ -45,7 +47,7 @@ export const memoryUpdateArgsSchema = memoryCreateArgsSchema.extend({
   expectedSizeBytes: z.number(),
 });
 
-export const memoryDeleteArgsSchema = memoryProjectArgsSchema.extend({ file: memoryFileSchema });
+export const memoryFileArgsSchema = memoryProjectArgsSchema.extend({ file: memoryFileSchema });
 
 export function registerMemoryIpc(): void {
   ipcMain.handle('memory:get', async (_event, raw: unknown) => {
@@ -132,9 +134,29 @@ export function registerMemoryIpc(): void {
     }
   });
 
+  ipcMain.handle('memory:index', async (_event, raw: unknown) => {
+    try {
+      const { projectPath, file } = parseArgs('memory:index', memoryFileArgsSchema, raw);
+      await indexMemory(projectPath, file);
+      return { success: true, data: null };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
+  ipcMain.handle('memory:raise', async (_event, raw: unknown) => {
+    try {
+      const { projectPath, file } = parseArgs('memory:raise', memoryFileArgsSchema, raw);
+      await raiseMemory(projectPath, file);
+      return { success: true, data: null };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
   ipcMain.handle('memory:delete', async (_event, raw: unknown) => {
     try {
-      const { projectPath, file } = parseArgs('memory:delete', memoryDeleteArgsSchema, raw);
+      const { projectPath, file } = parseArgs('memory:delete', memoryFileArgsSchema, raw);
       const data = await deleteMemory(projectPath, file, (full) => shell.trashItem(full));
       return { success: true, data };
     } catch (error) {

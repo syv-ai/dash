@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Brain,
   ChevronRight,
@@ -26,16 +26,20 @@ import { useUi } from '../../stores/uiStore';
 import { openInIde } from '../../lib/openInIde';
 import { CascadeConfirm } from '../extensions/CascadeConfirm';
 import { MemoryEditor } from './MemoryEditor';
+import { MemoryIssues } from './MemoryIssues';
 import { MemoryPreview } from './MemoryPreview';
 import { useMemoryDraft } from './useMemoryDraft';
 import { useProjectMemory } from './useProjectMemory';
 import {
+  listMemories,
   memoryCounts,
   memoryDocs,
   memoryNotices,
   memoryReferrers,
   memorySections,
   pickCurrent,
+  repointLink,
+  unlinkLink,
   COLLAPSED_SECTIONS,
   KNOWN_MEMORY_TYPES,
   MEMORY_ISSUE_LABELS,
@@ -127,6 +131,10 @@ function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) 
   // Search filters the list only; the preview changes on click, never on typing.
   const current = pickCurrent(docs, selected);
   const currentEntry = current?.entry;
+  const currentListed = useMemo(
+    () => listMemories(entries).find((m) => m.entry.file === currentEntry?.file),
+    [entries, currentEntry],
+  );
   // A new memory has no row yet; an edit keeps its own row lit.
   const creating = editor.draft?.target === null;
 
@@ -141,7 +149,23 @@ function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) 
   const select = (file: string) => {
     if (editor.discard()) setSelected(file);
   };
-  const startNew = () => editor.startNew(filter === 'all' ? undefined : filter);
+  const startNew = (name?: string) => editor.startNew(filter === 'all' ? undefined : filter, name);
+  // The fixes that leave the memory's own file alone are applied on the spot,
+  // one at a time: a second click lands before the list shows the first.
+  const fixing = useRef(false);
+  const fixIndex = async (fix: 'memoryIndex' | 'memoryRaise', entry: MemoryEntry) => {
+    if (fixing.current) return;
+    fixing.current = true;
+    try {
+      await reportFailure(
+        window.electronAPI[fix]({ projectPath: project.path, file: entry.file }),
+        `Could not update ${MEMORY_INDEX_FILE}`,
+      );
+      await reload();
+    } finally {
+      fixing.current = false;
+    }
+  };
   const confirmDelete = async (entry: MemoryEntry) => {
     setDeleting(null);
     try {
@@ -211,7 +235,7 @@ function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) 
             </IconButton>
           )}
           {memory && (
-            <IconButton onClick={startNew} title="New memory">
+            <IconButton onClick={() => startNew()} title="New memory">
               <Plus size={14} strokeWidth={1.8} />
             </IconButton>
           )}
@@ -272,7 +296,7 @@ function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) 
 
       {/* A missing folder and an empty one (Claude creates it before writing) look the same. */}
       {memory && docs.length === 0 && !editor.draft ? (
-        <EmptyState dir={memory.dir} projectName={project.name} onCreate={startNew} />
+        <EmptyState dir={memory.dir} projectName={project.name} onCreate={() => startNew()} />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="shrink-0 border-b border-border/40 px-5 py-2">
@@ -422,6 +446,36 @@ function MemoryBody({ project, isDark }: { project: Project; isDark: boolean }) 
                         </IconButton>
                       </div>
                     </div>
+                    {currentListed && (
+                      <MemoryIssues
+                        issues={currentListed.issues}
+                        broken={currentListed.broken}
+                        candidates={entries.filter((e) => e.file !== currentListed.entry.file)}
+                        // A fix to the memory's file opens as an unsaved edit, to be read before it is saved.
+                        onRepoint={(link, to) =>
+                          editor.startEdit(currentListed.entry, (f) => ({
+                            ...f,
+                            body: repointLink(f.body, link, to, entries),
+                          }))
+                        }
+                        onUnlink={(link) =>
+                          editor.startEdit(currentListed.entry, (f) => ({
+                            ...f,
+                            body: unlinkLink(f.body, link),
+                          }))
+                        }
+                        onCreate={startNew}
+                        onIndex={() => void fixIndex('memoryIndex', currentListed.entry)}
+                        onRaise={
+                          currentListed.entry.hook !== null
+                            ? () => void fixIndex('memoryRaise', currentListed.entry)
+                            : undefined
+                        }
+                        onRetype={(type) =>
+                          editor.startEdit(currentListed.entry, (f) => ({ ...f, type }))
+                        }
+                      />
+                    )}
                     <div className="min-h-0 flex-1">
                       <MemoryPreview
                         markdown={current.markdown}

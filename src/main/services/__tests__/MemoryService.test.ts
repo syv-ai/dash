@@ -7,7 +7,9 @@ import { claudeProjectDir } from '../../utils/claudePaths';
 import {
   createMemory,
   deleteMemory,
+  indexMemory,
   pruneIndex,
+  raiseMemory,
   readProjectMemory,
   resolveMemoryDir,
   updateMemory,
@@ -581,6 +583,52 @@ describe('writing memories', () => {
     );
     expect(memory.dangling).toEqual(['lost.md']);
     expect(await pruneIndex(repo)).toEqual([]);
+  });
+
+  it('indexes a memory Claude left out without touching its file, and only once', async () => {
+    const dir = await resolveMemoryDir(repo);
+    fs.mkdirSync(dir, { recursive: true });
+    const loose = '---\ndescription: Found by hand\ntype: user\n---\n\nBody.\n';
+    fs.writeFileSync(path.join(dir, 'loose_note.md'), loose);
+    expect((await entryOf('loose_note.md')).inIndex).toBe(false);
+
+    await indexMemory(repo, 'loose_note.md');
+    await indexMemory(repo, 'loose_note.md');
+    expect(fs.readFileSync(path.join(dir, 'MEMORY.md'), 'utf8')).toBe(
+      '- [loose_note](loose_note.md) — Found by hand\n',
+    );
+    expect(fs.readFileSync(path.join(dir, 'loose_note.md'), 'utf8')).toBe(loose);
+    await expect(indexMemory(repo, 'missing.md')).rejects.toThrow(/ENOENT/);
+  });
+
+  it('indexes a memory on top when the end of the index is past what Claude loads', async () => {
+    const dir = await resolveMemoryDir(repo);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'loose.md'), '---\nname: Loose\ntype: user\n---\n');
+    const filler = Array.from({ length: 200 }, (_, i) => `- [N${i}](n${i}.md)`);
+    fs.writeFileSync(path.join(dir, 'MEMORY.md'), ['# Index', ...filler, ''].join('\n'));
+
+    await indexMemory(repo, 'loose.md');
+    expect(await entryOf('loose.md')).toMatchObject({ inIndex: true, pastIndexLimit: false });
+    expect((await readProjectMemory(repo)).index?.split('\n')[1]).toBe('- [Loose](loose.md)');
+  });
+
+  it('raises a memory past the cut into the part of the index Claude loads', async () => {
+    const dir = await resolveMemoryDir(repo);
+    await createMemory(repo, fields);
+    const filler = Array.from({ length: 200 }, (_, i) => `- [N${i}](n${i}.md)`);
+    fs.writeFileSync(
+      path.join(dir, 'MEMORY.md'),
+      ['# Index', ...filler, '- [Prefer CI](prefer-ci.md) — CI over local', ''].join('\n'),
+    );
+    expect((await entryOf('prefer-ci.md')).pastIndexLimit).toBe(true);
+
+    await raiseMemory(repo, 'prefer-ci.md');
+    expect((await entryOf('prefer-ci.md')).pastIndexLimit).toBe(false);
+    expect((await readProjectMemory(repo)).index?.split('\n').slice(0, 2)).toEqual([
+      '# Index',
+      '- [Prefer CI](prefer-ci.md) — CI over local',
+    ]);
   });
 
   it('drops the index line of a memory that is already gone', async () => {

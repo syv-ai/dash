@@ -3,6 +3,9 @@ import { MEMORY_TYPES } from '../../../../shared/types';
 import type { MemoryEntry, ProjectMemory } from '../../../../shared/types';
 import {
   listMemories,
+  brokenLinks,
+  repointLink,
+  unlinkLink,
   memoryCounts,
   memorySections,
   memoryDocs,
@@ -66,10 +69,31 @@ describe('listMemories', () => {
       'linked.md': [],
       'loose.md': ['unindexed'],
       'untyped.md': ['untyped'],
-      'dead-ref.md': ['dead-link'],
+      'dead-ref.md': ['unwritten'],
       'dead-link.md': ['dead-link'],
-      'all.md': ['unindexed', 'untyped', 'dead-link'],
+      'all.md': ['unindexed', 'untyped', 'unwritten'],
     });
+  });
+
+  it('names each link that opens nothing, once, with the memory it likely meant', () => {
+    const entries = [
+      entry({ file: 'user_profile.md', name: 'user-profile' }),
+      entry({ file: 'prefer-ci.md', name: 'Prefer CI over local tests' }),
+      entry({
+        file: 'a.md',
+        body: '[[User Profile]] [[user_profil]] [[prefer-ci]] [x](prefer_ci.md) [[nope]] [[nope]] `[[code]]` [[a]]',
+      }),
+    ];
+    expect(brokenLinks(entries[2]!.body, entries, 'a.md')).toEqual([
+      { kind: 'ref', target: 'User Profile', suggestion: 'user_profile.md' },
+      { kind: 'ref', target: 'user_profil', suggestion: 'user_profile.md' },
+      { kind: 'ref', target: 'nope', suggestion: undefined },
+      { kind: 'file', target: 'prefer_ci.md', suggestion: 'prefer-ci.md' },
+    ]);
+    // Never guessed to have meant the memory it is written in.
+    expect(brokenLinks('[[a.]]', entries, 'a.md')).toEqual([
+      { kind: 'ref', target: 'a.', suggestion: undefined },
+    ]);
   });
 
   it('calls a link dead exactly when the preview cannot open it', () => {
@@ -79,7 +103,7 @@ describe('listMemories', () => {
     ];
     for (const { entry: e, issues } of listMemories(entries)) {
       const missing = rewriteMemoryLinks(e.body, entries).includes('memory-missing');
-      expect(issues.includes('dead-link')).toBe(missing);
+      expect(issues.includes('dead-link') || issues.includes('unwritten')).toBe(missing);
     }
   });
 });
@@ -110,6 +134,14 @@ describe('memorySections', () => {
       ['user', 'me.md'],
       ['project', 'fact.md'],
     ]);
+  });
+
+  it('leaves a memory whose only issue is an unwritten link where it was, flag and all', () => {
+    const later = [entry({ file: 'plan.md', type: 'project', mtimeMs: NOW, body: '[[to-write]]' })];
+    const [section] = memorySections(later, 'all', '', NOW);
+    expect(section).toMatchObject({ id: 'project', entries: [{ issues: ['unwritten'] }] });
+    const dead = [{ ...later[0]!, body: '[x](gone.md)' }];
+    expect(memorySections(dead, 'all', '', NOW).map((s) => s.id)).toEqual(['attention']);
   });
 
   it('shows every memory exactly once under "all", so none can be hidden', () => {
@@ -239,10 +271,16 @@ describe('rewriteMemoryLinks', () => {
     );
   });
 
-  it('rewrites relative links to known .md files and leaves others alone', () => {
-    const md = '[CI](feedback_ci.md) [web](https://x.dev/a.md) [nope](missing.md)';
+  it('rewrites relative links to known .md files and leaves other sites alone', () => {
+    const md = '[CI](feedback_ci.md) [web](https://x.dev/a.md) [index](MEMORY.md)';
     expect(rewriteMemoryLinks(md, entries)).toBe(
-      `[CI](${MEMORY_LINK_PREFIX}feedback_ci.md) [web](https://x.dev/a.md) [nope](missing.md)`,
+      `[CI](${MEMORY_LINK_PREFIX}feedback_ci.md) [web](https://x.dev/a.md) [index](MEMORY.md)`,
+    );
+  });
+
+  it('renders a link to a memory file that is gone as muted text, not a link to follow', () => {
+    expect(rewriteMemoryLinks('see [the <old> one](missing.md).', entries)).toBe(
+      'see <span class="memory-missing">the &lt;old&gt; one</span>.',
     );
   });
 
@@ -440,5 +478,67 @@ describe('memoryReferrers', () => {
       'by-name.md',
       'by-link.md',
     ]);
+  });
+});
+
+describe('fixing a broken link', () => {
+  const entries = [
+    entry({ file: 'prefer-ci.md', name: 'prefer-ci' }),
+    entry({ file: 'odd name (1).md', name: 'has ] bracket' }),
+    entry({ file: 'twin-a.md', name: 'twin' }),
+    entry({ file: 'twin-b.md', name: 'twin' }),
+  ];
+  const ref = { kind: 'ref', target: 'ci' } as const;
+  const link = { kind: 'file', target: 'ci.md' } as const;
+  const body = 'a [[ci]] b [[ ci ]] c [[other]] d [the CI one](ci.md) e [o](./ci.md) `[[ci]]`';
+
+  it('points every use of it at the chosen memory, and nothing else', () => {
+    expect(repointLink(body, ref, entries[0]!, entries)).toBe(
+      'a [[prefer-ci]] b [[prefer-ci]] c [[other]] d [the CI one](ci.md) e [o](./ci.md) `[[ci]]`',
+    );
+    expect(repointLink(body, link, entries[1]!, entries)).toBe(
+      'a [[ci]] b [[ ci ]] c [[other]] d [the CI one](<odd name (1).md>) e [o](<odd name (1).md>) `[[ci]]`',
+    );
+  });
+
+  it('writes a [[name]] the preview resolves to that memory, whatever its name', () => {
+    for (const to of entries) {
+      const fixed = repointLink('[[ci]]', ref, to, entries);
+      expect(rewriteMemoryLinks(fixed, entries)).toContain(
+        `(${MEMORY_LINK_PREFIX}${encodeURIComponent(to.file)})`,
+      );
+    }
+  });
+
+  it('unlinks it down to the text it showed', () => {
+    expect(unlinkLink(body, ref)).toBe(
+      'a ci b ci c [[other]] d [the CI one](ci.md) e [o](./ci.md) `[[ci]]`',
+    );
+    expect(unlinkLink(body, link)).toBe(
+      'a [[ci]] b [[ ci ]] c [[other]] d the CI one e o `[[ci]]`',
+    );
+  });
+
+  it('unlinks every link it calls dead, however its text is written', () => {
+    const odd = 'a [`cfg`](gone.md) b [see [1]](gone.md) c [two\nlines](gone.md) d ](gone.md)';
+    const [dead] = brokenLinks(odd, entries);
+    expect(dead).toMatchObject({ kind: 'file', target: 'gone.md' });
+    const fixed = unlinkLink(odd, dead!);
+    expect(fixed).toBe('a `cfg` b see [1] c two\nlines d ](gone.md)');
+    // What is left was never a link: not flagged, and nothing to follow in the preview.
+    expect(brokenLinks(fixed, entries)).toEqual([]);
+    expect(rewriteMemoryLinks(odd, entries)).not.toContain('[`cfg`](gone.md)');
+  });
+
+  it('leaves nothing broken behind', () => {
+    for (const fixed of [repointLink(body, ref, entries[0]!, entries), unlinkLink(body, ref)]) {
+      expect(brokenLinks(fixed, entries).map((l) => l.target)).toEqual(['other', 'ci.md']);
+    }
+  });
+
+  it('starts the memory a [[name]] was waiting for under that name', () => {
+    const draft = newMemoryDraft('project', 'ci');
+    expect(draft.fields.name).toBe('ci');
+    expect(canSaveDraft(draft)).toBe(true);
   });
 });

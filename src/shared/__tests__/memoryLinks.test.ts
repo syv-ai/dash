@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { mapMemoryLinks, mapMemoryRefs, memoryLinkFiles } from '../memoryLinks';
+import {
+  mapMemoryLinks,
+  mapMemoryRefs,
+  mapWholeMemoryLinks,
+  memoryLinkFiles,
+  memoryLinkTarget,
+} from '../memoryLinks';
 
 describe('memoryLinkFiles', () => {
   it('collects same-folder .md links, with or without ./', () => {
@@ -47,6 +53,33 @@ describe('mapMemoryLinks', () => {
     expect(mapMemoryLinks(md, (file) => `](#${file})`)).toBe(
       'a [x](#x.md) b [y](sub/y.md) c [z](https://z.md)',
     );
+  });
+});
+
+describe('mapWholeMemoryLinks', () => {
+  it('hands over each memory link with its text, and keeps everything else verbatim', () => {
+    const md = 'a [x y](x.md) b [z](<with space.md>) c [w](https://w.md) `[c](c.md)` [[r]]';
+    expect(mapWholeMemoryLinks(md, (file, text) => `{${text}|${file}}`)).toBe(
+      'a {x y|x.md} b {z|with space.md} c [w](https://w.md) `[c](c.md)` [[r]]',
+    );
+  });
+
+  it('finds the text of every link mapMemoryLinks finds, code and brackets in it or not', () => {
+    const md =
+      'a [`cfg` file](x.md) b [see [1]](y.md) c [two\nlines](z.md) d ](loose.md)\n\ne](far.md)';
+    const seen: string[] = [];
+    const out = mapWholeMemoryLinks(md, (file, text) => {
+      seen.push(file);
+      return text;
+    });
+    expect(out).toBe('a `cfg` file b see [1] c two\nlines d ](loose.md)\n\ne](far.md)');
+    expect(seen).toEqual(['x.md', 'y.md', 'z.md']);
+  });
+
+  it('writes a target the link pattern reads back', () => {
+    for (const file of ['a.md', 'with space.md', 'odd (1).md']) {
+      expect([...memoryLinkFiles(`[x](${memoryLinkTarget(file)})`)]).toEqual([file]);
+    }
   });
 });
 
