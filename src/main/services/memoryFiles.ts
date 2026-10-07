@@ -248,8 +248,9 @@ export function indexHook(index: string, file: string): string | null {
 
 /**
  * `index` with `file`'s pointer (the line that makes Claude recall it) in step
- * with a save: appended when the index doesn't link the memory at all, with
- * the description for a hook unless one is given. An existing line takes
+ * with a save: added when the index doesn't link the memory at all, with the
+ * description for a hook unless one is given, at the end or (in an index past
+ * what Claude loads) on top. An existing line takes
  * `hook` when one is given, and its title follows a rename only if it was the
  * old name (`wasName`): Claude titles and hooks the line in its own words,
  * apart from the frontmatter, and those stay as written. A line shared with
@@ -275,7 +276,9 @@ export function setIndexLine(
   const text = hook ?? fields.description;
   const target = memoryLinkTarget(file);
   const gap = index && !index.endsWith('\n') ? '\n' : '';
-  return `${index}${gap}- [${indexTitle(fields.name)}](${target})${text ? ` — ${text}` : ''}\n`;
+  const added = `${index}${gap}- [${indexTitle(fields.name)}](${target})${text ? ` — ${text}` : ''}\n`;
+  // Past what Claude loads, a line at the end would go unseen: there it goes on top.
+  return memoryLinkFiles(loadedIndex(added)).has(file) ? added : raiseIndexLine(added, file);
 }
 
 /**

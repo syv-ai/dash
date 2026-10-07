@@ -613,6 +613,21 @@ describe('writing memories', () => {
     expect((await readProjectMemory(repo)).index?.split('\n')[1]).toBe('- [Loose](loose.md)');
   });
 
+  it('gives a created or saved memory a line Claude loads, like one indexed by hand', async () => {
+    const dir = await resolveMemoryDir(repo);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'orphan.md'), '---\nname: orphan\n---\nOld');
+    const filler = Array.from({ length: 200 }, (_, i) => `- [N${i}](n${i}.md)`);
+    fs.writeFileSync(path.join(dir, 'MEMORY.md'), ['# Index', ...filler, ''].join('\n'));
+
+    await createMemory(repo, fields);
+    expect(await entryOf('prefer-ci.md')).toMatchObject({ inIndex: true, pastIndexLimit: false });
+
+    const edit = { name: 'orphan', description: '', type: 'other', body: 'New' } as const;
+    await updateMemory(repo, 'orphan.md', edit, await entryOf('orphan.md'));
+    expect(await entryOf('orphan.md')).toMatchObject({ inIndex: true, pastIndexLimit: false });
+  });
+
   it('raises a memory past the cut into the part of the index Claude loads', async () => {
     const dir = await resolveMemoryDir(repo);
     await createMemory(repo, fields);

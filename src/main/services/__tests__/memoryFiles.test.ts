@@ -336,6 +336,19 @@ describe('index lines', () => {
     expect(setIndexLine(prose, 'ci.md', fields, { wasName, hook: 'x' })).toBe(prose);
   });
 
+  it('puts a new pointer where Claude loads it: on top once the end is past the cut', () => {
+    const lines = Array.from({ length: 200 }, (_, i) => `- [m${i}](m${i}.md)`);
+    const full = ['# Index', ...lines, ''].join('\n');
+    expect(setIndexLine(full, 'ci.md', fields).split('\n').slice(0, 3)).toEqual([
+      '# Index',
+      '- [CI fast](ci.md) — hook',
+      '- [m0](m0.md)',
+    ]);
+    // With room left, at the end as before.
+    const roomy = ['# Index', ...lines.slice(0, 5), ''].join('\n');
+    expect(setIndexLine(roomy, 'ci.md', fields)).toBe(`${roomy}- [CI fast](ci.md) — hook\n`);
+  });
+
   it('cuts the index where Claude stops loading it: 200 lines or 25KB of whole lines', () => {
     const short = '# Index\n\n- [A](a.md) — one\n';
     expect(loadedIndex(short)).toBe(short);

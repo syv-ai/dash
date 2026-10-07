@@ -297,18 +297,13 @@ export async function pruneIndex(projectPath: string): Promise<string[]> {
 /**
  * Give a memory the MEMORY.md line it lacks, with its description for a hook,
  * so Claude recalls it. The memory's own file isn't touched. One the index
- * already links is left as it is. In an index past what Claude loads, a line
- * added at the end would go unseen as before, so there it goes on top.
+ * already links is left as it is.
  */
 export async function indexMemory(projectPath: string, file: string): Promise<void> {
   const dir = await resolveMemoryDir(projectPath);
   const parsed = parseMemoryFile(await fs.promises.readFile(path.join(dir, file), 'utf8'));
   const fields = { ...parsed, name: parsed.name || file.replace(/\.md$/, '') };
-  await editIndex(dir, (index) => {
-    if (memoryLinkFiles(index).has(file)) return index;
-    const added = setIndexLine(index, file, fields);
-    return memoryLinkFiles(loadedIndex(added)).has(file) ? added : raiseIndexLine(added, file);
-  });
+  await editIndex(dir, (index) => setIndexLine(index, file, fields));
 }
 
 /**
