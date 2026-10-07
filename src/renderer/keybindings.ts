@@ -88,6 +88,15 @@ export const DEFAULT_KEYBINDINGS: KeyBindingMap = {
     alt: false,
     key: 'o',
   },
+  openMemory: {
+    id: 'openMemory',
+    label: 'Claude Memory',
+    category: 'Navigation',
+    mod: true,
+    shift: true,
+    alt: false,
+    key: 'm',
+  },
   closeDiff: {
     id: 'closeDiff',
     label: 'Close Overlay',

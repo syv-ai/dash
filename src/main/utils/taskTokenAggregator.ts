@@ -1,12 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
-import {
-  encodeProjectPath,
-  parseJsonlLine,
-  deduplicateByRequestId,
-  calculateMetrics,
-} from './jsonlParser';
+import { parseJsonlLine, deduplicateByRequestId, calculateMetrics } from './jsonlParser';
+import { claudeProjectDir } from './claudePaths';
 import { computeCostUsd } from './claudePricing';
 import type { ParsedSessionMessage } from '../../shared/sessionTypes';
 
@@ -33,7 +28,7 @@ export async function aggregateTokenStatsForTaskPath(
 
   const allMessages: ParsedSessionMessage[] = [];
   for (const p of new Set(paths)) {
-    const projectDir = path.join(os.homedir(), '.claude', 'projects', encodeProjectPath(p));
+    const projectDir = claudeProjectDir(p);
 
     let entries: string[];
     try {

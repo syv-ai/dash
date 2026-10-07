@@ -56,6 +56,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 
+  // Claude auto-memory
+  memoryGet: (args: { projectPath: string }) => ipcRenderer.invoke('memory:get', args),
+  memoryWatch: (args: { projectPath: string }) => ipcRenderer.invoke('memory:watch', args),
+  memoryUnwatch: () => ipcRenderer.invoke('memory:unwatch'),
+  memoryOpenDir: (args: { projectPath: string }) => ipcRenderer.invoke('memory:openDir', args),
+  memoryCreate: (args: unknown) => ipcRenderer.invoke('memory:create', args),
+  memoryUpdate: (args: unknown) => ipcRenderer.invoke('memory:update', args),
+  memoryDelete: (args: unknown) => ipcRenderer.invoke('memory:delete', args),
+  memoryIndex: (args: unknown) => ipcRenderer.invoke('memory:index', args),
+  memoryRaise: (args: unknown) => ipcRenderer.invoke('memory:raise', args),
+  memoryPrune: (args: { projectPath: string }) => ipcRenderer.invoke('memory:prune', args),
+  onMemoryChanged: (callback: (projectPath: string) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, projectPath: string) =>
+      callback(projectPath);
+    ipcRenderer.on('memory:changed', handler);
+    return () => {
+      ipcRenderer.removeListener('memory:changed', handler);
+    };
+  },
+
   // Worktree
   worktreeCreate: (args: unknown) => ipcRenderer.invoke('worktree:create', args),
   worktreeRemove: (args: unknown) => ipcRenderer.invoke('worktree:remove', args),

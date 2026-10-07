@@ -1116,3 +1116,98 @@ export interface AutoUpdateStatus {
   /** False when the updater isn't wired up: dev builds and Windows. */
   initialized: boolean;
 }
+
+/**
+ * Claude Code auto-memory categories, in display order: standing rules first,
+ * facts that go stale last. `other` catches missing or unknown types.
+ */
+export const MEMORY_TYPES = ['feedback', 'user', 'reference', 'project', 'other'] as const;
+export type MemoryType = (typeof MEMORY_TYPES)[number];
+
+/** The index file Claude keeps beside the memories. */
+export const MEMORY_INDEX_FILE = 'MEMORY.md';
+
+/**
+ * How much of the index Claude Code loads into a session: its first lines, or
+ * its first bytes, whichever runs out first. Nothing past that is seen.
+ */
+export const MEMORY_INDEX_MAX_LINES = 200;
+export const MEMORY_INDEX_MAX_BYTES = 25_000;
+
+/** The part of a memory a person writes: what Dash reads from and saves to its file. */
+export interface MemoryFields {
+  /** Frontmatter `name`. */
+  name: string;
+  description: string;
+  type: MemoryType;
+  /** Markdown without the frontmatter block. */
+  body: string;
+}
+
+/** One `<name>.md` file in a project's auto-memory folder. */
+export interface MemoryEntry extends MemoryFields {
+  /** Basename, e.g. `feedback_testing.md`: the stable id within a folder. */
+  file: string;
+  /** Frontmatter `name`, falling back to the basename without `.md`. */
+  name: string;
+  /** With `sizeBytes`, what a save is checked against so it can't clobber a newer write. */
+  mtimeMs: number;
+  sizeBytes: number;
+  /** Whether MEMORY.md links to this file. */
+  inIndex: boolean;
+  /**
+   * Whether a MEMORY.md line links this memory and no other memory: a line that
+   * can be moved or dropped with it, whatever its shape.
+   */
+  ownLine: boolean;
+  /** Linked, but only past the part of MEMORY.md Claude loads: as good as unindexed. */
+  pastIndexLimit: boolean;
+  /**
+   * The text after the dash on this memory's own MEMORY.md line: what Claude
+   * reads of it in a session that loads the line. Empty when the line has only
+   * a title. Null when there is no hook to read or reword: no line of its own,
+   * or one not in the `- [Title](file) — hook` shape Claude writes.
+   */
+  hook: string | null;
+}
+
+/**
+ * A memory save: the editor's write result, plus (when it was written) the
+ * other memory files whose `[[name]]` links were moved to a new name.
+ */
+export type MemoryUpdateResult =
+  | (Extract<EditorWriteResult, { ok: true }> & { relinked: string[]; warning?: string })
+  | Extract<EditorWriteResult, { ok: false }>;
+
+/**
+ * A created memory: the file it was saved as. `warning` (here and on a save)
+ * says what could not follow the write, e.g. its MEMORY.md line: the memory
+ * itself is saved.
+ */
+export interface MemoryCreateResult {
+  file: string;
+  warning?: string;
+}
+
+/** A deleted memory: its file is gone. `warning` says its MEMORY.md line could not follow. */
+export interface MemoryDeleteResult {
+  warning?: string;
+}
+
+/** A project's auto-memory, as Claude Code stores it. */
+export interface ProjectMemory {
+  /** Absolute memory folder Dash resolved (shown even when it doesn't exist). */
+  dir: string;
+  exists: boolean;
+  /** MEMORY.md contents, or null when absent. */
+  index: string | null;
+  entries: MemoryEntry[];
+  /** Memory files MEMORY.md links to that aren't in the folder. */
+  dangling: string[];
+  /**
+   * What turned auto memory off for sessions in this project (a settings file
+   * or an environment variable), or null while it is on. Off, Claude neither
+   * loads nor writes any of this.
+   */
+  disabledBy: string | null;
+}

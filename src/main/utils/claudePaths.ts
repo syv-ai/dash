@@ -1,0 +1,67 @@
+/**
+ * Claude Code's user-config layout (`CLAUDE_CONFIG_DIR`, else `~/.claude`):
+ * where Claude keeps per-project transcripts and memory (`projects/`) and
+ * background jobs (`jobs/`). Other user-config paths (skills, plugins,
+ * settings) still resolve `~/.claude` themselves until they move here. A
+ * project's own `<repo>/.claude/` folder is a different thing and lives with
+ * its consumers.
+ */
+
+import * as os from 'os';
+import * as path from 'path';
+
+/** Claude Code caps encoded dir names at this length and appends a hash. */
+const MAX_ENCODED_LENGTH = 200;
+
+/** Java's `String.hashCode` — the hash Claude Code uses for the overflow suffix. */
+function javaStringHash(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  return h;
+}
+
+/**
+ * Encode a cwd to the directory name Claude Code uses under `projects/`:
+ * every non-alphanumeric character becomes `-` (so `/`, `\`, `:` and the `.`
+ * of `.claude/worktrees` alike), and names past 200 characters are cut and
+ * suffixed with a base36 hash of the raw path. Mirrors Claude Code 2.1.x
+ * exactly; a mismatch makes transcript and memory lookups silently miss.
+ */
+export function encodeProjectPath(absolutePath: string): string {
+  const encoded = absolutePath.replace(/[^a-zA-Z0-9]/g, '-');
+  if (encoded.length <= MAX_ENCODED_LENGTH) return encoded;
+  const hash = Math.abs(javaStringHash(absolutePath)).toString(36);
+  return `${encoded.slice(0, MAX_ENCODED_LENGTH)}-${hash}`;
+}
+
+/** Claude Code's config root: `CLAUDE_CONFIG_DIR` when set, else `~/.claude`.
+ *  Read per call so a changed env is picked up without a restart. */
+export function claudeConfigDir(): string {
+  return process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
+}
+
+// Names Windows reserves for devices: Claude Code won't use one as a directory.
+const DEVICE_NAME_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+
+/**
+ * The project dir name `CLAUDE_CODE_PROJECT_DIR_NAME` pins for every cwd, or
+ * null when Claude Code would ignore it: without `CLAUDE_CONFIG_DIR` (one name
+ * under `~/.claude` would merge every project), or unless it is 1-64 letters,
+ * digits, hyphens or underscores. Sessions Dash starts inherit its environment,
+ * so its own is the one to read.
+ */
+function pinnedProjectDirName(): string | null {
+  const name = process.env.CLAUDE_CODE_PROJECT_DIR_NAME;
+  if (!name || !process.env.CLAUDE_CONFIG_DIR) return null;
+  return /^[A-Za-z0-9_-]{1,64}$/.test(name) && !DEVICE_NAME_RE.test(name) ? name : null;
+}
+
+/** Where Claude keeps a cwd's transcripts (and, for a repo root, its `memory/`). */
+export function claudeProjectDir(cwd: string): string {
+  return path.join(claudeConfigDir(), 'projects', pinnedProjectDirName() ?? encodeProjectPath(cwd));
+}
+
+/** Claude Code's global state file (workspace trust among it): beside a custom config dir, else in the home directory. */
+export function claudeStateFile(): string {
+  return path.join(process.env.CLAUDE_CONFIG_DIR || os.homedir(), '.claude.json');
+}
