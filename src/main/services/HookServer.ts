@@ -4,11 +4,12 @@ import * as os from 'os';
 import * as path from 'path';
 import { EventEmitter } from 'events';
 import { app, BrowserWindow, Notification } from 'electron';
-import { eq } from 'drizzle-orm';
+import { eq, isNull } from 'drizzle-orm';
 import { activityMonitor } from './ActivityMonitor';
 import { contextUsageService } from './ContextUsageService';
 import { getDb } from '../db/client';
 import { tasks } from '../db/schema';
+import { resolveHookTaskId, type TaskPathRef } from './hookTaskResolver';
 
 /**
  * In-process event bus for hook events that other main-side services may need
@@ -105,6 +106,20 @@ class HookServerImpl {
     }
   }
 
+  /** Live tasks' worktree paths, for resolving which task an event belongs to. */
+  private listTaskPaths(): TaskPathRef[] {
+    try {
+      return getDb()
+        .select({ id: tasks.id, path: tasks.path })
+        .from(tasks)
+        .where(isNull(tasks.archivedAt))
+        .all();
+    } catch (err) {
+      console.warn('[HookServer] Task path lookup failed; trusting ptyId:', err);
+      return [];
+    }
+  }
+
   /** Read and parse a JSON POST body, enforcing a size limit. */
   private readJsonBody(
     req: http.IncomingMessage,
@@ -171,19 +186,38 @@ class HookServerImpl {
           }
 
           const url = new URL(req.url || '', `http://127.0.0.1:${this._port}`);
-          const ptyId = url.searchParams.get('ptyId');
+          const queryId = url.searchParams.get('ptyId');
 
-          if (!ptyId) {
+          if (!queryId) {
             res.writeHead(400);
             res.end('missing ptyId');
             return;
           }
 
-          if (!this._hasPty(ptyId)) {
-            res.writeHead(404);
-            res.end();
-            return;
-          }
+          // The id in the URL is only a hint: Claude Code also loads the
+          // project root's settings.local.json inside worktree sessions, so
+          // the owning task is resolved from the payload's directory once the
+          // body is read (see hookTaskResolver). Handlers read `ptyId` at
+          // call time, after readBody has set it.
+          let ptyId = queryId;
+          const readBody = (callback: (data: Record<string, unknown>) => void): void => {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (data) => {
+              const resolved = resolveHookTaskId(queryId, data, this.listTaskPaths());
+              if (resolved === null) {
+                // Not a task's own session (e.g. a subagent worktree).
+                res.writeHead(200);
+                res.end();
+                return;
+              }
+              if (!this._hasPty(resolved)) {
+                res.writeHead(404);
+                res.end();
+                return;
+              }
+              ptyId = resolved;
+              callback(data);
+            });
+          };
 
           const pathname = url.pathname;
 
@@ -192,7 +226,7 @@ class HookServerImpl {
           // injecting text into Claude's conversation context.
 
           if (pathname === '/hook/stop') {
-            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
+            readBody(() => {
               activityMonitor.setIdle(ptyId);
               this.showDesktopNotification(ptyId);
               res.writeHead(200);
@@ -202,7 +236,7 @@ class HookServerImpl {
           }
 
           if (pathname === '/hook/busy') {
-            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
+            readBody(() => {
               activityMonitor.setBusy(ptyId);
               res.writeHead(200);
               res.end();
@@ -211,7 +245,7 @@ class HookServerImpl {
           }
 
           if (pathname === '/hook/notification') {
-            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
+            readBody((payload) => {
               const notificationType =
                 typeof payload.notification_type === 'string' ? payload.notification_type : '';
               const message = typeof payload.message === 'string' ? payload.message : undefined;
@@ -237,7 +271,7 @@ class HookServerImpl {
 
           // StatusLine data (context usage) — uses type:"command" + curl, not type:"http"
           if (pathname === '/hook/context') {
-            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (data) => {
+            readBody((data) => {
               contextUsageService.updateFromStatusLine(ptyId, data);
               res.writeHead(200);
               res.end();
@@ -246,7 +280,7 @@ class HookServerImpl {
           }
 
           if (pathname === '/hook/tool-start') {
-            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
+            readBody((payload) => {
               const toolName =
                 typeof payload.tool_name === 'string' ? payload.tool_name : 'unknown';
               const toolInput =
@@ -269,7 +303,7 @@ class HookServerImpl {
           }
 
           if (pathname === '/hook/tool-end') {
-            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
+            readBody((payload) => {
               const toolName = typeof payload.tool_name === 'string' ? payload.tool_name : '';
               if (toolName === 'AskUserQuestion') {
                 // User answered — back to busy (Claude will resume working).
@@ -284,7 +318,7 @@ class HookServerImpl {
           }
 
           if (pathname === '/hook/stop-failure') {
-            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
+            readBody((payload) => {
               const errorType =
                 typeof payload.error_type === 'string' ? payload.error_type : 'unknown';
               const message = typeof payload.error === 'string' ? payload.error : undefined;
@@ -303,7 +337,7 @@ class HookServerImpl {
           }
 
           if (pathname === '/hook/compact-start') {
-            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
+            readBody(() => {
               activityMonitor.setCompacting(ptyId, true);
               res.writeHead(200);
               res.end();
@@ -312,7 +346,7 @@ class HookServerImpl {
           }
 
           if (pathname === '/hook/compact-end') {
-            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
+            readBody(() => {
               activityMonitor.setCompacting(ptyId, false);
               res.writeHead(200);
               res.end();
@@ -321,7 +355,7 @@ class HookServerImpl {
           }
 
           if (pathname === '/hook/session-end') {
-            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
+            readBody(() => {
               activityMonitor.setIdle(ptyId);
               res.writeHead(200);
               res.end();
@@ -330,7 +364,7 @@ class HookServerImpl {
           }
 
           if (pathname === '/hook/session-start') {
-            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
+            readBody(() => {
               // Settings only register this hook for the `clear` and `compact`
               // matchers, so reaching here means the session was reset and any
               // prior busy state is stale. Defensive idle.
