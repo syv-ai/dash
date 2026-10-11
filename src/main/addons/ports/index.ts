@@ -271,7 +271,6 @@ export function createPortsAddon(deps: PortsDeps = realDeps): Addon {
           if (configured) probe(task.id, ports);
           return buildDrawer({
             configured,
-            heuristic: !configured && !setup ? heuristicFor(task) : { signals: [], guesses: [] },
             setup,
             setupTaskName:
               setup?.kind === 'started' ? ctx.tasks.get(setup.setupTaskId)?.name : undefined,

@@ -24,7 +24,6 @@ function port(over: Partial<TaskPort>): TaskPort {
 
 const base: DrawerInput = {
   configured: false,
-  heuristic: { signals: [], guesses: [] },
   setup: null,
   ports: [],
   liveness: {},
@@ -46,22 +45,10 @@ describe('ports drawer', () => {
     for (const i of inputs) expect(DrawerSchema.safeParse(buildDrawer(i)).success).toBe(true);
   });
 
-  it('not configured, services detected: names them and offers Start setup', () => {
-    const d = buildDrawer({
-      ...base,
-      heuristic: {
-        signals: ['vite (package.json)'],
-        guesses: [{ label: 'web', envVar: 'WEB_PORT', defaultPort: 5173 }],
-      },
-    });
-    expect(d.title).toBe('Ports');
-    expect(texts(d.blocks)).toContain('Detected: vite (package.json)');
-    expect(texts(d.blocks)).toContain('Likely services: web (WEB_PORT @ 5173)');
-    expect(buttons(d.blocks)).toEqual(['start']);
-  });
-
-  it('not configured, nothing detected: explains and still offers Start setup', () => {
+  it('not configured: one line and Start setup', () => {
     const d = buildDrawer(base);
+    expect(d.title).toBe('Ports');
+    expect(texts(d.blocks)).toHaveLength(1);
     expect(texts(d.blocks)[0]).toMatch(/own ports/);
     expect(buttons(d.blocks)).toEqual(['start']);
   });

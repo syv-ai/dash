@@ -10,7 +10,6 @@ import {
   type IconAction,
   type RowBlock,
 } from '@shared/addon-api';
-import type { HeuristicResult } from './PortsHeuristic';
 import type { Setup } from './setup';
 import type { PortLiveness, TaskPort } from './types';
 
@@ -24,7 +23,6 @@ const SOURCE_LABEL: Record<TaskPort['source'], string> = {
 export interface DrawerInput {
   /** The worktree has `.dash/ports.json`. */
   configured: boolean;
-  heuristic: Pick<HeuristicResult, 'signals' | 'guesses'>;
   setup: Setup | null;
   /** Name of the setup task, when `setup` is `started`. */
   setupTaskName?: string;
@@ -37,7 +35,7 @@ export interface DrawerInput {
 /** The Ports drawer for one task: setup progress, the setup offer, or the ports list. */
 export function buildDrawer(input: DrawerInput): Drawer {
   if (input.setup) return { title: 'Ports', blocks: setupBlocks(input.setup, input.setupTaskName) };
-  if (!input.configured) return { title: 'Ports', blocks: offerBlocks(input.heuristic) };
+  if (!input.configured) return { title: 'Ports', blocks: offerBlocks() };
   return portsDrawer(input);
 }
 
@@ -77,34 +75,11 @@ function setupBlocks(s: Setup, setupTaskName?: string): Block[] {
   }
 }
 
-function offerBlocks(h: DrawerInput['heuristic']): Block[] {
-  const blocks: Block[] = [];
-  if (h.signals.length > 0 || h.guesses.length > 0) {
-    blocks.push(text('This project looks like it runs services on local ports.'));
-    if (h.signals.length > 0) blocks.push(text(`Detected: ${h.signals.join(', ')}`, 'muted'));
-    if (h.guesses.length > 0) {
-      blocks.push(
-        text(
-          `Likely services: ${h.guesses.map((g) => `${g.label} (${g.envVar} @ ${g.defaultPort})`).join(', ')}`,
-          'muted',
-        ),
-      );
-    }
-  } else {
-    blocks.push(
-      text(
-        'Port management gives each task its own ports, so services in different worktrees never collide.',
-      ),
-    );
-  }
-  blocks.push(
-    text(
-      'Setup opens a port-setup task where Claude writes .dash/ports.json for this project.',
-      'muted',
-    ),
-  );
-  blocks.push(button('start', 'Start setup', { primary: true }));
-  return blocks;
+function offerBlocks(): Block[] {
+  return [
+    text('Give each task its own ports.', 'muted'),
+    button('start', 'Start setup', { primary: true }),
+  ];
 }
 
 function portsDrawer(input: DrawerInput): Drawer {
