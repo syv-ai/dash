@@ -26,6 +26,14 @@ export interface PtyApi {
       jobId: string;
     }>
   >;
+  /** After ptyStartDirect failed with UNTRUSTED_WORKSPACE: run Claude Code's
+   *  trust prompt in the pane. `trusted` once accepted; false if it exited. */
+  ptyTrustWorkspace: (args: {
+    id: string;
+    cols: number;
+    rows: number;
+    isDark?: boolean;
+  }) => Promise<IpcResponse<{ trusted: boolean }>>;
   ptyStart: (args: {
     id: string;
     cwd: string;

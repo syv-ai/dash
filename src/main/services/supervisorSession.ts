@@ -63,6 +63,19 @@ export function parseDispatchOutput(output: string): string | null {
   return m ? m[1]! : null;
 }
 
+/**
+ * The folder `claude --bg` refused because the user never accepted Claude
+ * Code's workspace trust prompt for it ("Workspace not trusted. Run `claude`
+ * in <root> once…"), or null. Claude keys trust on this root — the main
+ * checkout, not a task's worktree.
+ */
+export function parseUntrustedRoot(output: string): string | null {
+  const m = output
+    .replace(ANSI_RE, '')
+    .match(/Workspace not trusted\.\s+Run `claude` in (.+?) once\b/);
+  return m ? m[1]!.trim() : null;
+}
+
 /** The CLI prints this when the job could not start; the prompt is then queued
  *  on the job, so the caller must not retry with the same prompt. */
 export function isDispatchFailure(output: string): boolean {

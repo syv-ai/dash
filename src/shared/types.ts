@@ -156,9 +156,17 @@ export interface TokenStatsRollup {
  * - `UNSUPPORTED_CLI`: the Claude Code CLI is missing or older than the floor
  *   Dash requires (`MIN_CLAUDE_VERSION`); the renderer shows the upgrade panel
  *   instead of falling back to a shell.
+ * - `UNTRUSTED_WORKSPACE`: Claude Code refused to start a background session
+ *   because its workspace trust prompt was never accepted for the folder; the
+ *   pane shows that prompt (`ptyTrustWorkspace`) and starts again.
  * - `UNKNOWN`: any other caught error (the default).
  */
-export type IpcErrorCode = 'VALIDATION' | 'NOT_FOUND' | 'UNSUPPORTED_CLI' | 'UNKNOWN';
+export type IpcErrorCode =
+  | 'VALIDATION'
+  | 'NOT_FOUND'
+  | 'UNSUPPORTED_CLI'
+  | 'UNTRUSTED_WORKSPACE'
+  | 'UNKNOWN';
 
 /** Result of the startup `claude --version` probe, as exposed to the renderer. */
 export interface ClaudeCliInfo {

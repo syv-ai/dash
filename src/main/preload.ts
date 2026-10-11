@@ -71,6 +71,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // PTY
   ptyStartDirect: (args: unknown) => ipcRenderer.invoke('pty:startDirect', args),
+  ptyTrustWorkspace: (args: unknown) => ipcRenderer.invoke('pty:trustWorkspace', args),
   ptyStart: (args: unknown) => ipcRenderer.invoke('pty:start', args),
   ptyInput: (args: { id: string; data: string }) => ipcRenderer.send('pty:input', args),
   ptyResize: (args: { id: string; cols: number; rows: number }) =>

@@ -1,10 +1,12 @@
 import { describe, it, expect, afterEach } from 'vitest';
+import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import {
   claudeConfigDir,
   claudeProjectDir,
   claudeStateFile,
+  isWorkspaceTrusted,
   encodeProjectPath,
 } from '../claudePaths';
 
@@ -94,5 +96,37 @@ describe('claudeConfigDir / claudeProjectDir', () => {
     expect(claudeProjectDir('/repo/.claude/worktrees/x')).toBe(
       '/tmp/alt-claude/projects/-repo--claude-worktrees-x',
     );
+  });
+});
+
+describe('isWorkspaceTrusted', () => {
+  const original = process.env.CLAUDE_CONFIG_DIR;
+  afterEach(() => {
+    if (original === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = original;
+  });
+
+  it('reads the trust flag Claude Code records per root', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-trust-'));
+    process.env.CLAUDE_CONFIG_DIR = dir;
+    fs.writeFileSync(
+      path.join(dir, '.claude.json'),
+      JSON.stringify({
+        projects: { '/repo/a': { hasTrustDialogAccepted: true }, '/repo/b': {} },
+      }),
+    );
+    expect(await isWorkspaceTrusted('/repo/a')).toBe(true);
+    expect(await isWorkspaceTrusted('/repo/b')).toBe(false);
+    expect(await isWorkspaceTrusted('/repo/c')).toBe(false);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('is false when the state file is missing or unreadable', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-trust-'));
+    process.env.CLAUDE_CONFIG_DIR = dir;
+    expect(await isWorkspaceTrusted('/repo/a')).toBe(false);
+    fs.writeFileSync(path.join(dir, '.claude.json'), '{not json');
+    expect(await isWorkspaceTrusted('/repo/a')).toBe(false);
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });
