@@ -1,5 +1,4 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
@@ -7,6 +6,7 @@ import { EventEmitter } from 'events';
 import { app, powerMonitor, type WebContents } from 'electron';
 import type { PermissionMode, SupervisorSession, TaskModel } from '@shared/types';
 import { findClaudePath } from './claudeCli';
+import { claudeConfigDir } from '../utils/claudePaths';
 import { isUltracode } from './claudeEnv';
 import { activityMonitor } from './ActivityMonitor';
 import { DatabaseService } from './DatabaseService';
@@ -47,10 +47,9 @@ export class DispatchError extends Error {
   }
 }
 
-/** `~/.claude/jobs` (honouring CLAUDE_CONFIG_DIR): watched as a change trigger only. */
+/** `<claude config dir>/jobs`: watched as a change trigger only. */
 function jobsDir(): string {
-  const configDir = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
-  return path.join(configDir, 'jobs');
+  return path.join(claudeConfigDir(), 'jobs');
 }
 
 /**
