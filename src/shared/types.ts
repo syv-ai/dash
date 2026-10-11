@@ -298,7 +298,7 @@ export interface ActivityInfo {
   error?: ActivityError;
   /** True while Claude Code is compacting context. */
   compacting?: boolean;
-  /** Short reason shown with the `stopped` dot ("Session removed", …). */
+  /** What a `waiting` task waits for, or why a `stopped` one sleeps (not shown: sleeping tasks get no dot). */
   detail?: string;
 }
 

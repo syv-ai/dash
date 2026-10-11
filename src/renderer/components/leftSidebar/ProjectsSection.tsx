@@ -25,6 +25,7 @@ import { formatTokens, formatCost } from '../../utils/format';
 import { TaskCard } from './TaskCard';
 import { ForeignSessionsSection } from './ForeignSessionsSection';
 import { SlidingPill, useSlidingPill } from './useSlidingPill';
+import { getProjectActivity, projectActivityDot } from './projectActivity';
 import { openInIde } from '../../lib/openInIde';
 import { useSettings } from '../../stores/settingsStore';
 import { useRuntime } from '../../stores/runtimeStore';
@@ -252,7 +253,8 @@ export function ProjectsSection({
             const projectTasks = allTasks.filter((t) => !t.archivedAt);
             const archivedTasks = allTasks.filter((t) => t.archivedAt);
             const isArchivedCollapsed = !collapsedArchived.has(project.id);
-            const hasActiveTask = projectTasks.some((t) => !!taskActivity[t.id]?.state);
+            const activity = getProjectActivity(projectTasks, taskActivity);
+            const activityDot = activity && projectActivityDot(activity);
 
             return (
               <div
@@ -324,7 +326,7 @@ export function ProjectsSection({
                       const nameSpan = (
                         <span
                           className={`truncate flex-1 min-w-0 ${
-                            isProjectCollapsed && !hasActiveTask ? 'fade-50' : ''
+                            isProjectCollapsed && !activityDot ? 'fade-50' : ''
                           }`}
                         >
                           {project.name}
@@ -347,9 +349,11 @@ export function ProjectsSection({
                     rest={
                       <>
                         <span className="flex items-center justify-center w-2.5">
-                          {isProjectCollapsed && hasActiveTask && (
-                            <Tooltip content="Active task in this project">
-                              <div className="status-dot-idle w-[6px] h-[6px] rounded-full shrink-0" />
+                          {isProjectCollapsed && activityDot && (
+                            <Tooltip content={activityDot.label}>
+                              <div
+                                className={`${activityDot.className} w-[6px] h-[6px] rounded-full shrink-0`}
+                              />
                             </Tooltip>
                           )}
                         </span>

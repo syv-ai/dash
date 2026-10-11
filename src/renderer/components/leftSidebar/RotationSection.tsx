@@ -154,8 +154,6 @@ export function RotationSection({
                     <div className="status-dot-unseen w-[6px] h-[6px] rounded-full shrink-0 mt-[7px]" />
                   ) : activity === 'idle' ? (
                     <div className="status-dot-idle w-[6px] h-[6px] rounded-full shrink-0 mt-[7px]" />
-                  ) : activity === 'stopped' ? (
-                    <div className="status-dot-stopped w-[6px] h-[6px] rounded-full shrink-0 mt-[7px]" />
                   ) : null}
 
                   <div className="flex flex-col flex-1 min-w-0 leading-tight">
