@@ -424,19 +424,29 @@ export async function startDirectPty(options: {
 
   // Before dispatch, so the session's first turn already reports.
   writeHookSettings(options.cwd, options.id);
+  const hadActivity = activityMonitor.has(options.id);
   activityMonitor.ensure(options.id);
 
-  const jobId = await ensureTaskSession({
-    id: options.id,
-    cwd: options.cwd,
-    name: options.name ?? options.id,
-    permissionMode: options.permissionMode,
-    model: options.model,
-    previousPath: options.previousPath,
-    jobId: options.jobId ?? null,
-    sessionId: options.sessionId ?? null,
-    env,
-  });
+  let jobId: string;
+  try {
+    jobId = await ensureTaskSession({
+      id: options.id,
+      cwd: options.cwd,
+      name: options.name ?? options.id,
+      permissionMode: options.permissionMode,
+      model: options.model,
+      previousPath: options.previousPath,
+      jobId: options.jobId ?? null,
+      sessionId: options.sessionId ?? null,
+      env,
+    });
+  } catch (err) {
+    // No session started: drop the entry made above, or the task shows an
+    // idle dot for a session that does not exist (nothing would correct it —
+    // the supervisor poll only covers tasks with a job).
+    if (!hadActivity) activityMonitor.unregister(options.id);
+    throw err;
+  }
 
   spawnAttach({
     id: options.id,
