@@ -7,6 +7,7 @@ import { app, BrowserWindow, Notification } from 'electron';
 import { eq } from 'drizzle-orm';
 import { activityMonitor } from './ActivityMonitor';
 import { contextUsageService } from './ContextUsageService';
+import { tokenStatsService } from './TokenStatsService';
 import { getDb } from '../db/client';
 import { tasks } from '../db/schema';
 
@@ -195,6 +196,8 @@ class HookServerImpl {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
               activityMonitor.setIdle(ptyId);
               this.showDesktopNotification(ptyId);
+              // A turn just ended, so the transcript has new usage to total.
+              void tokenStatsService.recomputeForTask(ptyId);
               res.writeHead(200);
               res.end();
             });
@@ -323,6 +326,7 @@ class HookServerImpl {
           if (pathname === '/hook/session-end') {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
               activityMonitor.setIdle(ptyId);
+              void tokenStatsService.recomputeForTask(ptyId);
               res.writeHead(200);
               res.end();
             });
