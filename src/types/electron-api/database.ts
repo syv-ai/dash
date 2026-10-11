@@ -20,6 +20,8 @@ export interface DatabaseApi {
     project: Partial<Project> & { name: string; path: string },
   ) => Promise<IpcResponse<Project>>;
   deleteProject: (id: string) => Promise<IpcResponse<void>>;
+  archiveProject: (id: string) => Promise<IpcResponse<void>>;
+  restoreProject: (id: string) => Promise<IpcResponse<void>>;
 
   // Tasks
   getTasks: (projectId: string) => Promise<IpcResponse<Task[]>>;

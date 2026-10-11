@@ -88,6 +88,27 @@ export class DatabaseService {
     db.delete(projects).where(eq(projects.id, id)).run();
   }
 
+  static setProjectArchived(id: string, archived: boolean): void {
+    const db = getDb();
+    const now = new Date().toISOString();
+    db.update(projects)
+      .set({ archivedAt: archived ? now : null, updatedAt: now })
+      .where(eq(projects.id, id))
+      .run();
+  }
+
+  /** True when the task is archived or belongs to an archived project. */
+  static isTaskShelved(task: Task): boolean {
+    if (task.archivedAt) return true;
+    const db = getDb();
+    const row = db
+      .select({ archivedAt: projects.archivedAt })
+      .from(projects)
+      .where(eq(projects.id, task.projectId))
+      .get();
+    return !!row?.archivedAt;
+  }
+
   /**
    * True when the user dismissed the given TUI feature for this project
    * ("Never for this project"). The wizard:requestStart IPC short-circuits on it.
@@ -297,15 +318,23 @@ export class DatabaseService {
       .run();
   }
 
-  /** Every task (archived included) that has a supervisor job recorded. */
-  static getTasksWithSessions(): Task[] {
+  /**
+   * Every task (archived included) that has a supervisor job recorded.
+   * `shelved`: the task is archived or its project is — its session sleeps
+   * and Dash neither tracks nor rewrites hooks for it.
+   */
+  static getTasksWithSessions(): Array<Task & { shelved: boolean }> {
     const db = getDb();
     return db
-      .select()
+      .select({ task: tasks, projectArchivedAt: projects.archivedAt })
       .from(tasks)
+      .leftJoin(projects, eq(tasks.projectId, projects.id))
       .where(isNotNull(tasks.jobId))
       .all()
-      .map((row) => this.mapTask(row));
+      .map((row) => ({
+        ...this.mapTask(row.task),
+        shelved: !!(row.task.archivedAt || row.projectArchivedAt),
+      }));
   }
 
   /** Task whose recorded job id matches, if any. */
@@ -579,6 +608,7 @@ export class DatabaseService {
       gitRemote: row.gitRemote,
       gitBranch: row.gitBranch,
       baseRef: row.baseRef,
+      archivedAt: row.archivedAt ?? null,
       createdAt: row.createdAt ?? '',
       updatedAt: row.updatedAt ?? '',
     };

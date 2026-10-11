@@ -295,6 +295,82 @@ describe('projectsStore delete', () => {
   });
 });
 
+describe('projectsStore project archive', () => {
+  let api: ReturnType<typeof makeElectronApiMock>;
+  beforeEach(() => {
+    api = makeElectronApiMock();
+    installWindow(api);
+  });
+  afterEach(() => resetWindow());
+
+  it('loadProjects keeps archived projects out of the list and drops their tasks', async () => {
+    const useProjects = await freshStore();
+    useProjects.setState({ tasksByProject: { p1: [task('t1', 'p1')], p2: [task('t2', 'p2')] } });
+    api.getProjects.mockResolvedValue({
+      success: true,
+      data: [proj('p1'), proj('p2', { archivedAt: '2026-10-12' })],
+    });
+    await useProjects.getState().loadProjects();
+    const s = useProjects.getState();
+    expect(s.projects.map((p) => p.id)).toEqual(['p1']);
+    expect(s.archivedProjects.map((p) => p.id)).toEqual(['p2']);
+    expect(Object.keys(s.tasksByProject)).toEqual(['p1']);
+  });
+
+  it('archiveProject moves the selection off the archived project', async () => {
+    const useProjects = await freshStore();
+    useProjects.setState({
+      projects: [proj('p1'), proj('p2')],
+      tasksByProject: { p1: [task('t1', 'p1')], p2: [] },
+      activeProjectId: 'p1',
+      activeTaskId: 't1',
+    });
+    api.getProjects.mockResolvedValue({
+      success: true,
+      data: [proj('p1', { archivedAt: '2026-10-12' }), proj('p2')],
+    });
+    await useProjects.getState().archiveProject('p1');
+    expect(api.archiveProject).toHaveBeenCalledWith('p1');
+    const s = useProjects.getState();
+    expect(s.activeProjectId).toBe('p2');
+    expect(s.activeTaskId).toBeNull();
+    expect(s.archivedProjects.map((p) => p.id)).toEqual(['p1']);
+  });
+
+  it('archiveProject leaves state alone and toasts when the IPC fails', async () => {
+    const useProjects = await freshStore();
+    useProjects.setState({ projects: [proj('p1')], activeProjectId: 'p1' });
+    api.archiveProject.mockResolvedValue({ success: false, error: 'nope' });
+    await useProjects.getState().archiveProject('p1');
+    expect(useProjects.getState().activeProjectId).toBe('p1');
+    expect(api.getProjects).not.toHaveBeenCalled();
+  });
+
+  it('restoreProject brings the project back into the list', async () => {
+    const useProjects = await freshStore();
+    useProjects.setState({ projects: [], archivedProjects: [proj('p1', { archivedAt: 'x' })] });
+    api.getProjects.mockResolvedValue({ success: true, data: [proj('p1')] });
+    await useProjects.getState().restoreProject('p1');
+    expect(api.restoreProject).toHaveBeenCalledWith('p1');
+    expect(useProjects.getState().projects.map((p) => p.id)).toEqual(['p1']);
+    expect(useProjects.getState().archivedProjects).toEqual([]);
+  });
+
+  it('deleteProject on an archived project fetches its tasks to clean up worktrees', async () => {
+    const useProjects = await freshStore();
+    api.getTasks.mockResolvedValue({ success: true, data: [task('t1', 'p1')] });
+    await useProjects.getState().deleteProject(proj('p1', { archivedAt: 'x' }), {
+      deleteWorktreeDirs: true,
+      deleteLocalBranches: false,
+      deleteRemoteBranches: false,
+    });
+    expect(api.getTasks).toHaveBeenCalledWith('p1');
+    expect(api.worktreeRemove).toHaveBeenCalledWith(
+      expect.objectContaining({ worktreePath: '/p/p1/t1' }),
+    );
+  });
+});
+
 describe('projectsStore createTask', () => {
   let api: ReturnType<typeof makeElectronApiMock>;
   beforeEach(() => {

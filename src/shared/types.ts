@@ -6,6 +6,8 @@ export interface Project {
   gitRemote: string | null;
   gitBranch: string | null;
   baseRef: string | null;
+  /** Set while archived: out of the project list, its task sessions asleep. */
+  archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

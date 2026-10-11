@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Plus,
   Trash2,
+  Archive,
   ArchiveRestore,
   Settings,
   GitGraph,
@@ -90,6 +91,10 @@ export function ProjectsSection({
   const remoteControlStates = useRuntime((s) => s.remoteControlStates);
   const justCreatedProjectId = useProjects((s) => s.justCreatedProjectId);
   const clearJustCreatedProject = useProjects((s) => s.clearJustCreatedProject);
+  const archivedProjects = useProjects((s) => s.archivedProjects);
+  const archiveProject = useProjects((s) => s.archiveProject);
+  const restoreProject = useProjects((s) => s.restoreProject);
+  const [archivedProjectsOpen, setArchivedProjectsOpen] = useState(false);
   const newRowRef = useRef<HTMLDivElement | null>(null);
   const prByTask = useGit((s) => s.prByTask);
   const detectProjectPrs = useGit((s) => s.detectProjectPrs);
@@ -411,6 +416,14 @@ export function ProjectsSection({
                               />
                               Project settings
                             </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => void archiveProject(project.id)}>
+                              <Archive
+                                size={13}
+                                strokeWidth={1.8}
+                                className="text-muted-foreground"
+                              />
+                              Archive project
+                            </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               onSelect={() => onDeleteProject(project.id)}
@@ -524,6 +537,58 @@ export function ProjectsSection({
             );
           })}
         </div>
+
+        {/* Archived projects drawer */}
+        {archivedProjects.length > 0 && (
+          <div className="mt-2">
+            <button
+              onClick={() => setArchivedProjectsOpen((v) => !v)}
+              className="flex items-center gap-1 w-full pl-2 pr-2 py-[5px] rounded-md text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {archivedProjectsOpen ? (
+                <ChevronDown size={12} strokeWidth={2} />
+              ) : (
+                <ChevronRight size={12} strokeWidth={2} />
+              )}
+              <span>Archived projects ({archivedProjects.length})</span>
+            </button>
+
+            <div
+              className="grid transition-[grid-template-rows] duration-200 ease-in-out"
+              style={{ gridTemplateRows: archivedProjectsOpen ? '1fr' : '0fr' }}
+            >
+              <div className="overflow-hidden">
+                <div className="space-y-px">
+                  {archivedProjects.map((project) => (
+                    <div
+                      key={project.id}
+                      className="group/archived flex items-center gap-2 pl-6 pr-2 py-[6px] rounded-md text-[13px] text-muted-fade-50"
+                    >
+                      <span className="truncate flex-1 min-w-0">{project.name}</span>
+                      <div className="hidden group-hover/archived:flex gap-0.5 shrink-0">
+                        <IconButton
+                          onClick={() => void restoreProject(project.id)}
+                          title="Restore project"
+                          size="sm"
+                        >
+                          <ArchiveRestore size={12} strokeWidth={1.8} />
+                        </IconButton>
+                        <IconButton
+                          onClick={() => onDeleteProject(project.id)}
+                          title="Delete project"
+                          variant="destructive"
+                          size="sm"
+                        >
+                          <Trash2 size={12} strokeWidth={1.8} />
+                        </IconButton>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

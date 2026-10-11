@@ -329,7 +329,7 @@ class SupervisorServiceImpl extends EventEmitter {
     const byId = new Map(rows.filter((r) => r.id).map((r) => [r.id!, r] as const));
     const pollMs = this.focused ? POLL_FOCUSED_MS : POLL_BLURRED_MS;
     for (const task of tasks) {
-      if (task.archivedAt) {
+      if (task.shelved) {
         activityMonitor.unregister(task.id);
         continue;
       }

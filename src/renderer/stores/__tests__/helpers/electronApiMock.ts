@@ -11,6 +11,8 @@ export function makeElectronApiMock(overrides: Record<string, unknown> = {}) {
     getTasks: vi.fn(() => ok([])),
     saveProject: vi.fn(),
     deleteProject: vi.fn(() => ok(undefined)),
+    archiveProject: vi.fn(() => ok(undefined)),
+    restoreProject: vi.fn(() => ok(undefined)),
     showOpenDialog: vi.fn(() => ok([])),
     detectGit: vi.fn(() => ok({ isGitRepo: false, remote: null, branch: null })),
     gitClone: vi.fn(() => ok({ path: '', name: '' })),

@@ -354,5 +354,12 @@ export function runMigrations(): void {
     }
   }
 
+  // Archived projects: set while the project is out of the project list.
+  try {
+    rawDb.exec(`ALTER TABLE projects ADD COLUMN archived_at TEXT`);
+  } catch {
+    /* already exists */
+  }
+
   rawDb.pragma('foreign_keys = ON');
 }

@@ -162,7 +162,7 @@ export function refreshActivePtyHooks(): RefreshResult {
   }
   try {
     for (const task of DatabaseService.getTasksWithSessions()) {
-      if (!task.archivedAt && !targets.has(task.id)) targets.set(task.id, task.path);
+      if (!task.shelved && !targets.has(task.id)) targets.set(task.id, task.path);
     }
   } catch (err) {
     console.error('[refreshActivePtyHooks] task lookup failed:', err);
@@ -776,7 +776,7 @@ export async function killAll(): Promise<void> {
   if (stopSessionsOnQuit) {
     try {
       for (const task of DatabaseService.getTasksWithSessions()) {
-        if (task.jobId && !task.archivedAt) {
+        if (task.jobId && !task.shelved) {
           pending.push(
             supervisorService.stop(task.jobId).then(
               () => DatabaseService.markTaskSessionStopped(task.id),

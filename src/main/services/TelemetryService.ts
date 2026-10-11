@@ -23,6 +23,8 @@ const ALLOWED_EVENTS = new Set([
   // Projects
   'project_added',
   'project_deleted',
+  'project_archived',
+  'project_restored',
 
   // Tasks
   'task_created',

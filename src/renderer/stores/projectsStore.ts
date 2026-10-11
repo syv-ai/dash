@@ -16,7 +16,10 @@ import { useSettings } from './settingsStore';
 import { notifyContextInjected } from './taskToasts';
 
 export interface ProjectsState {
+  /** Projects in the project list. Archived ones live in `archivedProjects`
+   *  only, so everything that walks `projects` skips them. */
   projects: Project[];
+  archivedProjects: Project[];
   tasksByProject: Record<string, Task[]>;
   activeProjectId: string | null;
   activeTaskId: string | null;
@@ -72,6 +75,8 @@ export interface ProjectsActions {
     },
   ) => Promise<void>;
   deleteProject: (project: Project, options: DeleteProjectOptions) => Promise<void>;
+  archiveProject: (id: string) => Promise<void>;
+  restoreProject: (id: string) => Promise<void>;
   createTask: (options: CreateTaskOptions, projectId?: string) => Promise<boolean>;
 }
 
@@ -118,6 +123,7 @@ export type ProjectsStore = ProjectsState & ProjectsActions;
 
 export const useProjects = create<ProjectsStore>((set) => ({
   projects: [],
+  archivedProjects: [],
   tasksByProject: {},
   activeProjectId: initialActive('activeProjectId'),
   activeTaskId: initialActive('activeTaskId'),
@@ -153,11 +159,23 @@ export const useProjects = create<ProjectsStore>((set) => ({
     if (!resp.success || !resp.data) return;
     // On Windows, older projects may have been saved with the full path as the
     // name; derive the folder name so the sidebar shows short names.
-    const projects = resp.data.map((p) => {
+    const all = resp.data.map((p) => {
       const looksLikePath = p.name.includes('\\') || p.name.includes('/');
       return looksLikePath ? { ...p, name: p.name.split(/[\\/]/).pop() || p.name } : p;
     });
-    set({ projects: applyProjectOrder(projects) });
+    const projects = all.filter((p) => !p.archivedAt);
+    const archivedProjects = all
+      .filter((p) => p.archivedAt)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    set((s) => {
+      // Drop the tasks of projects that left the list (archived) so nothing
+      // keeps rendering or polling them.
+      const ids = new Set(projects.map((p) => p.id));
+      const tasksByProject = Object.fromEntries(
+        Object.entries(s.tasksByProject).filter(([id]) => ids.has(id)),
+      );
+      return { projects: applyProjectOrder(projects), archivedProjects, tasksByProject };
+    });
     if (projects.length > 0) {
       const prev = useProjects.getState().activeProjectId;
       if (!prev || !projects.some((p) => p.id === prev)) {
@@ -267,7 +285,13 @@ export const useProjects = create<ProjectsStore>((set) => ({
     await useProjects.getState().loadTasks(taskItem.projectId);
   },
   deleteProject: async (project, options) => {
-    const projectTasks = useProjects.getState().tasksByProject[project.id] ?? [];
+    // An archived project's tasks aren't loaded; fetch them so their
+    // worktrees are cleaned up too.
+    let projectTasks = useProjects.getState().tasksByProject[project.id];
+    if (!projectTasks) {
+      const resp = await window.electronAPI.getTasks(project.id);
+      projectTasks = resp.success && resp.data ? resp.data : [];
+    }
     for (const t of projectTasks) {
       if (t.useWorktree) {
         await window.electronAPI.worktreeRemove({
@@ -295,6 +319,30 @@ export const useProjects = create<ProjectsStore>((set) => ({
       delete next[project.id];
       return { tasksByProject: next };
     });
+    await useProjects.getState().loadProjects();
+  },
+  archiveProject: async (id) => {
+    const projectTasks = useProjects.getState().tasksByProject[id] ?? [];
+    const resp = await window.electronAPI.archiveProject(id);
+    if (!resp.success) {
+      toast.error(resp.error || 'Failed to archive project');
+      return;
+    }
+    for (const t of projectTasks) disposeTaskSessions(t.id);
+    const { activeProjectId, activeTaskId, setActiveProject, setActiveTask } =
+      useProjects.getState();
+    if (activeTaskId && projectTasks.some((t) => t.id === activeTaskId)) setActiveTask(null);
+    await useProjects.getState().loadProjects();
+    if (activeProjectId === id) {
+      setActiveProject(useProjects.getState().projects[0]?.id ?? null);
+    }
+  },
+  restoreProject: async (id) => {
+    const resp = await window.electronAPI.restoreProject(id);
+    if (!resp.success) {
+      toast.error(resp.error || 'Failed to restore project');
+      return;
+    }
     await useProjects.getState().loadProjects();
   },
   createTask: async (options, projectId) => {
