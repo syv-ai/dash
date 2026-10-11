@@ -20,6 +20,7 @@ import { TaskModal } from './components/task/TaskModal';
 import { NewProjectWizard } from './components/newProject/NewProjectWizard';
 import { DeleteTaskModal } from './components/task/DeleteTaskModal';
 import { DeleteProjectModal } from './components/project/DeleteProjectModal';
+import { orderRotationTasks } from './components/leftSidebar/rotationGroups';
 import {
   WorktreeMigrationModal,
   isWorktreeMigrationDismissed,
@@ -482,8 +483,9 @@ export function App() {
       const orderMap = new Map(rotationOrder.map((id, i) => [id, i]));
       tasks.sort((a, b) => (orderMap.get(a.id) ?? Infinity) - (orderMap.get(b.id) ?? Infinity));
     }
-    return tasks;
-  }, [tasksByProject, taskActivity, rotationExclusions, rotationOrder]);
+    // Shown grouped by project, so keep the list in that order too.
+    return orderRotationTasks(tasks, projects);
+  }, [tasksByProject, taskActivity, rotationExclusions, rotationOrder, projects]);
 
   // Load projects on mount
   useEffect(() => {
