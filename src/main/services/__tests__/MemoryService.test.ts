@@ -153,6 +153,7 @@ describe('readProjectMemory', () => {
       dir: await resolveMemoryDir(repo),
       exists: false,
       index: null,
+      indexRows: [],
       entries: [],
       dangling: [],
       disabledBy: null,
@@ -186,6 +187,14 @@ describe('readProjectMemory', () => {
     const memory = await readProjectMemory(worktree);
     expect(memory.exists).toBe(true);
     expect(memory.index).toContain('feedback_ci.md');
+    expect(memory.indexRows).toEqual([
+      {
+        text: '- [CI](feedback_ci.md) — hook',
+        files: ['feedback_ci.md'],
+        pointer: { title: 'CI', hook: 'hook' },
+        loaded: true,
+      },
+    ]);
     const byFile = Object.fromEntries(memory.entries.map((e) => [e.file, e]));
     expect(Object.keys(byFile).sort()).toEqual(['feedback_ci.md', 'orphan.md']);
     expect(byFile['feedback_ci.md']).toMatchObject({

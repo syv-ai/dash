@@ -1194,6 +1194,21 @@ export interface MemoryDeleteResult {
   warning?: string;
 }
 
+/** One line of MEMORY.md, as the index view shows it. */
+export interface MemoryIndexRow {
+  /** The line as written. */
+  text: string;
+  /** The memory files it links: none for a heading, a note or a blank line. */
+  files: string[];
+  /**
+   * Its title and hook, when it links one memory in the `- [Title](file) — hook`
+   * shape Claude writes. Null for any other line.
+   */
+  pointer: { title: string; hook: string } | null;
+  /** Whether it is in the part of MEMORY.md Claude loads into a session. */
+  loaded: boolean;
+}
+
 /** A project's auto-memory, as Claude Code stores it. */
 export interface ProjectMemory {
   /** Absolute memory folder Dash resolved (shown even when it doesn't exist). */
@@ -1201,6 +1216,8 @@ export interface ProjectMemory {
   exists: boolean;
   /** MEMORY.md contents, or null when absent. */
   index: string | null;
+  /** MEMORY.md line by line, in file order; empty when it is absent or empty. */
+  indexRows: MemoryIndexRow[];
   entries: MemoryEntry[];
   /** Memory files MEMORY.md links to that aren't in the folder. */
   dangling: string[];

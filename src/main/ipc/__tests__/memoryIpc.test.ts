@@ -17,6 +17,11 @@ import {
   registerMemoryIpc,
 } from '../memoryIpc';
 import { readProjectMemory, resolveMemoryDir } from '../../services/MemoryService';
+import {
+  draftSaveFields,
+  editMemoryDraft,
+  memoryIndexRows,
+} from '../../../renderer/components/memory/memoryView';
 
 describe('memoryProjectArgsSchema', () => {
   it('accepts an absolute project path', () => {
@@ -190,6 +195,63 @@ describe('memory handlers', () => {
       error: expect.stringContaining('no line of its own'),
     });
     expect(fs.readFileSync(path.join(dir, 'MEMORY.md'), 'utf8')).toBe(before);
+  });
+
+  it("writes a hook edited in the modal onto the memory's MEMORY.md line, and shows it there", async () => {
+    const dir = await resolveMemoryDir(project);
+    const index = path.join(dir, 'MEMORY.md');
+    for (const name of ['Prefer CI', 'Other']) {
+      await invoke('memory:create', {
+        projectPath: project,
+        name,
+        description: 'Run the suites in CI',
+        type: 'feedback',
+        body: 'Use CI.',
+      });
+    }
+    // Claude's own title and hook, under a heading: none of it the description.
+    fs.writeFileSync(
+      index,
+      '# Memory Index\n\n- [CI first](prefer-ci.md) — keep ruff local\n- [Other](other.md) — two\n',
+    );
+    const file = fs.readFileSync(path.join(dir, 'prefer-ci.md'), 'utf8');
+
+    // What the modal does: open the memory as read, reword only the hook, save.
+    const before = await readProjectMemory(project);
+    const draft = editMemoryDraft(before.entries.find((e) => e.file === 'prefer-ci.md')!);
+    expect(draft.fields.hook).toBe('keep ruff local');
+    const edited = { ...draft, fields: { ...draft.fields, hook: 'push the rest' } };
+    expect(
+      await invoke('memory:update', {
+        projectPath: project,
+        file: edited.target!.file,
+        ...draftSaveFields(edited),
+        expectedMtimeMs: edited.target!.mtimeMs,
+        expectedSizeBytes: edited.target!.sizeBytes,
+      }),
+    ).toMatchObject({ success: true, data: { ok: true } });
+
+    // Only that line's hook moved: its title, the heading and the other line are as they were.
+    expect(fs.readFileSync(index, 'utf8')).toBe(
+      '# Memory Index\n\n- [CI first](prefer-ci.md) — push the rest\n- [Other](other.md) — two\n',
+    );
+    // The memory's own text is untouched but for the stamp a save leaves.
+    const stamp = /^ {2}modified: .*$/m;
+    expect(fs.readFileSync(path.join(dir, 'prefer-ci.md'), 'utf8').replace(stamp, '')).toBe(
+      file.replace(stamp, ''),
+    );
+
+    // And the modal reads it back: on the memory, and on its line of the index view.
+    const after = await readProjectMemory(project);
+    expect(after.entries.find((e) => e.file === 'prefer-ci.md')!.hook).toBe('push the rest');
+    expect(
+      memoryIndexRows(after).map((r) => [r.line, r.row.pointer?.hook, r.entries[0]?.file]),
+    ).toEqual([
+      [1, undefined, undefined],
+      [2, undefined, undefined],
+      [3, 'push the rest', 'prefer-ci.md'],
+      [4, 'two', 'other.md'],
+    ]);
   });
 
   it('decides a hook nobody wrote here, not in the caller', async () => {

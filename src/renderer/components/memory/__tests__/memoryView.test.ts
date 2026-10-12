@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { MEMORY_TYPES } from '../../../../shared/types';
-import type { MemoryEntry, ProjectMemory } from '../../../../shared/types';
+import type { MemoryEntry, MemoryIndexRow, ProjectMemory } from '../../../../shared/types';
 import {
   listMemories,
   brokenLinks,
@@ -9,7 +9,8 @@ import {
   fixedDraft,
   memoryCounts,
   memorySections,
-  memoryDocs,
+  memoryIndexRows,
+  memoryLine,
   memoryNotices,
   pickCurrent,
   rewriteMemoryLinks,
@@ -49,7 +50,6 @@ function entry(p: Partial<MemoryEntry> & { file: string }): MemoryEntry {
 
 const sectionsOf = (entries: MemoryEntry[], ...rest: [MemoryFilter, string, number]) =>
   memorySections(listMemories(entries), ...rest);
-const docsOf = (memory: ProjectMemory) => memoryDocs(memory, listMemories(memory.entries));
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = 1000 * DAY;
@@ -212,6 +212,7 @@ describe('memoryNotices', () => {
     dir: '/m',
     exists: true,
     index: '',
+    indexRows: [],
     entries: [entry({ file: 'a.md' })],
     dangling: [],
     disabledBy: null,
@@ -243,46 +244,99 @@ describe('memoryNotices', () => {
   });
 });
 
-describe('memoryDocs / pickCurrent', () => {
-  const memory: ProjectMemory = {
-    dir: '/m',
-    exists: true,
-    dangling: [],
-    disabledBy: null,
-    index: '- [A](a.md)',
-    entries: [
-      entry({ file: 'a.md', type: 'project', mtimeMs: 1, body: 'A' }),
-      entry({ file: 'b.md', type: 'user', mtimeMs: 2 }),
-    ],
-  };
+describe('pickCurrent', () => {
+  const memories = listMemories([
+    entry({ file: 'a.md', type: 'project', mtimeMs: 1 }),
+    entry({ file: 'b.md', type: 'user', mtimeMs: 2 }),
+  ]);
 
-  it('lists memories in "all" order, then the index as an untyped doc', () => {
-    const docs = docsOf(memory);
-    expect(docs.map((d) => d.key)).toEqual(['b.md', 'a.md', 'MEMORY.md']);
-    expect(docs[2]).toEqual({
-      key: 'MEMORY.md',
-      file: 'MEMORY.md',
-      title: 'Index',
-      markdown: '- [A](a.md)',
-    });
-    expect(docs[1]).toMatchObject({ title: 'a', markdown: 'A', type: 'project' });
-  });
-
-  it('keeps the selected doc', () => {
-    expect(pickCurrent(docsOf(memory), 'a.md')?.key).toBe('a.md');
-    expect(pickCurrent(docsOf(memory), 'MEMORY.md')?.key).toBe('MEMORY.md');
+  it('keeps the selected memory', () => {
+    expect(pickCurrent(memories, 'a.md')?.entry.file).toBe('a.md');
   });
 
   it('falls back to the first memory in list order when the selected file was deleted', () => {
-    expect(pickCurrent(docsOf(memory), 'gone.md')?.key).toBe('b.md');
+    expect(pickCurrent(memories, 'gone.md')?.entry.file).toBe('b.md');
+    expect(pickCurrent(memories, null)?.entry.file).toBe('b.md');
   });
 
-  it('falls back to the index when it is all the folder has', () => {
-    expect(pickCurrent(docsOf({ ...memory, entries: [] }), null)?.key).toBe('MEMORY.md');
+  it('returns null without memories: the index is a view of its own, not something to fall back to', () => {
+    expect(pickCurrent([], 'MEMORY.md')).toBeNull();
+  });
+});
+
+describe('memoryIndexRows', () => {
+  const row = (text: string, p: Partial<MemoryIndexRow> = {}): MemoryIndexRow => ({
+    text,
+    files: [],
+    pointer: null,
+    loaded: true,
+    ...p,
+  });
+  const a = entry({ file: 'a.md', hook: 'one' });
+  const b = entry({ file: 'b.md', hook: null });
+  const memory: ProjectMemory = {
+    dir: '/m',
+    exists: true,
+    index: '',
+    dangling: ['gone.md'],
+    disabledBy: null,
+    entries: [b, a],
+    indexRows: [
+      row('# Memory Index'),
+      row(''),
+      row('- [A](a.md) — one', { files: ['a.md'], pointer: { title: 'A', hook: 'one' } }),
+      row('- [Gone](gone.md)', { files: ['gone.md'], pointer: { title: 'Gone', hook: '' } }),
+      row('See [the index](MEMORY.md)', { files: ['MEMORY.md'] }),
+      row('- [B](b.md) and [A](a.md)', { files: ['b.md', 'a.md'], loaded: false }),
+      row('trailing note', { loaded: false }),
+    ],
+  };
+  const rows = memoryIndexRows(memory);
+
+  it('lists every line of the file, in file order, numbered from 1', () => {
+    expect(rows.map((r) => r.line)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(rows.map((r) => r.row)).toEqual(memory.indexRows);
   });
 
-  it('returns null for an empty folder', () => {
-    expect(pickCurrent(docsOf({ ...memory, index: null, entries: [] }), null)).toBeNull();
+  it('gives a line the memories it opens, and names the ones that are gone', () => {
+    expect(rows.map((r) => r.entries.map((e) => e.file))).toEqual([
+      [],
+      [],
+      ['a.md'],
+      [],
+      [],
+      ['b.md', 'a.md'],
+      [],
+    ]);
+    expect(rows.map((r) => r.missing)).toEqual([[], [], [], ['gone.md'], [], [], []]);
+  });
+
+  it('draws the cut once, above the first line Claude does not load', () => {
+    expect(rows.map((r) => r.firstPastCut)).toEqual([
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+    ]);
+    const allLoaded = {
+      ...memory,
+      indexRows: memory.indexRows.map((r) => ({ ...r, loaded: true })),
+    };
+    expect(memoryIndexRows(allLoaded).some((r) => r.firstPastCut)).toBe(false);
+  });
+
+  it('lists nothing for a project without an index', () => {
+    expect(memoryIndexRows({ ...memory, indexRows: [] })).toEqual([]);
+  });
+
+  it("says whose a memory's line is: its own, shared or misshapen, or missing", () => {
+    expect(memoryLine(a)).toBe('own');
+    expect(memoryLine(entry({ file: 'c.md', hook: '' }))).toBe('own');
+    expect(memoryLine(b)).toBe('fixed');
+    expect(memoryLine(entry({ file: 'd.md', hook: null, inIndex: false }))).toBe('missing');
   });
 });
 
@@ -447,18 +501,6 @@ describe('memory drafts', () => {
     expect(draftTypes(editMemoryDraft(entry({ file: 'o.md', type: 'other' })))).toEqual([
       ...MEMORY_TYPES,
     ]);
-  });
-
-  it('keeps a memory as the doc behind its row, and none behind the index', () => {
-    const docs = docsOf({
-      dir: '/m',
-      exists: true,
-      index: '',
-      entries: [saved],
-      dangling: [],
-      disabledBy: null,
-    });
-    expect(docs.map((d) => d.entry)).toEqual([saved, undefined]);
   });
 
   it('starts a new memory as the given type, with the reasoning scaffold where one applies', () => {

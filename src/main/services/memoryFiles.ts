@@ -4,7 +4,7 @@ import {
   MEMORY_INDEX_MAX_LINES,
   MEMORY_TYPES,
 } from '@shared/types';
-import type { MemoryEntry, MemoryFields, MemoryType } from '@shared/types';
+import type { MemoryEntry, MemoryFields, MemoryIndexRow, MemoryType } from '@shared/types';
 import { memoryBaseName, memoryLinkFilesByLine, memoryLinkTarget } from '@shared/memoryLinks';
 import { stripQuotes } from './skillFrontmatter';
 
@@ -253,41 +253,74 @@ function listTop({ lines, links }: IndexLines): number {
   return links.findIndex((on, i) => on.size > 0 && !/^\s*#/.test(lines[i] ?? ''));
 }
 
-/** `file`'s own pointer: where it is and its parts, or null when it has none in that shape. */
-function ownPointer(
-  parsed: IndexLines,
-  file: string,
-): {
+interface Pointer {
   at: number;
   bullet: string;
   title: string;
   target: string;
   dash: string;
   hook: string;
-} | null {
-  const at = ownLineAt(parsed, file);
-  const m = POINTER_RE.exec(parsed.lines[at] ?? '');
+}
+
+/** Line `at` as a pointer: its parts, or null unless it links one memory in that shape. */
+function pointerAt({ lines, links }: IndexLines, at: number): Pointer | null {
+  if (links[at]?.size !== 1) return null;
+  const m = POINTER_RE.exec(lines[at] ?? '');
   if (!m) return null;
   const [, bullet = '', title = '', target = '', dash = ' — ', hook = ''] = m;
   return { at, bullet, title, target, dash, hook };
 }
 
+/** `file`'s own pointer: where it is and its parts, or null when it has none in that shape. */
+function ownPointer(parsed: IndexLines, file: string): Pointer | null {
+  return pointerAt(parsed, ownLineAt(parsed, file));
+}
+
 /** What MEMORY.md says of one memory: the index half of a `MemoryEntry`. */
 export type MemoryIndexLine = Pick<MemoryEntry, 'inIndex' | 'ownLine' | 'pastIndexLimit' | 'hook'>;
 
-/** Read `index` once, to ask what it says of each memory. */
-export function readIndex(index: string): (file: string) => MemoryIndexLine {
+/**
+ * `index` line by line, each with the memories it links and whether Claude
+ * loads it: the index as the modal lists it. The newline that ends the file
+ * starts no line.
+ */
+export function readIndexRows(index: string): MemoryIndexRow[] {
+  if (!index) return [];
   const parsed = indexLines(index);
   const loaded = loadedLineCount(parsed.lines);
-  return (file) => {
-    const first = parsed.links.findIndex((on) => on.has(file));
+  const count = parsed.lines.length - (index.endsWith('\n') ? 1 : 0);
+  return parsed.lines.slice(0, count).map((text, at) => {
+    const pointer = pointerAt(parsed, at);
     return {
-      inIndex: first >= 0,
-      ownLine: ownLineAt(parsed, file) >= 0,
-      pastIndexLimit: first >= loaded,
-      hook: ownPointer(parsed, file)?.hook.trim() ?? null,
+      text,
+      files: [...(parsed.links[at] ?? [])],
+      pointer: pointer && { title: pointer.title, hook: pointer.hook.trim() },
+      loaded: at < loaded,
+    };
+  });
+}
+
+/**
+ * What `rows` (see readIndexRows) say of each memory. Asked of the rows the
+ * modal lists, so a memory and its line in the index can't be read differently.
+ */
+export function indexLineOf(rows: MemoryIndexRow[]): (file: string) => MemoryIndexLine {
+  return (file) => {
+    const first = rows.find((r) => r.files.includes(file));
+    // Its own line: the first that links it and no other memory.
+    const own = rows.find((r) => r.files.length === 1 && r.files[0] === file);
+    return {
+      inIndex: first !== undefined,
+      ownLine: own !== undefined,
+      pastIndexLimit: first !== undefined && !first.loaded,
+      hook: own?.pointer?.hook ?? null,
     };
   };
+}
+
+/** Read `index` once, to ask what it says of each memory. */
+export function readIndex(index: string): (file: string) => MemoryIndexLine {
+  return indexLineOf(readIndexRows(index));
 }
 
 /** The hook on `file`'s own line of `index`, or null when it has no such line in the pointer shape. */

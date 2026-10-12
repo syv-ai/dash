@@ -4,7 +4,13 @@ import {
   MEMORY_INDEX_MAX_LINES,
   MEMORY_TYPES,
 } from '../../../shared/types';
-import type { MemoryEntry, MemoryFields, MemoryType, ProjectMemory } from '../../../shared/types';
+import type {
+  MemoryEntry,
+  MemoryFields,
+  MemoryIndexRow,
+  MemoryType,
+  ProjectMemory,
+} from '../../../shared/types';
 import {
   mapMemoryLinks,
   mapMemoryRefs,
@@ -44,6 +50,12 @@ export const KNOWN_MEMORY_TYPES = MEMORY_TYPES.filter((t): t is KnownMemoryType 
 export type MemoryFilter = 'all' | KnownMemoryType;
 
 /**
+ * What the modal shows: the memories themselves, or the index Claude reads to
+ * find them, MEMORY.md line by line. Two views of one folder, not two filters.
+ */
+export type MemoryPane = 'memories' | 'index';
+
+/**
  * What is off about a memory: Claude won't recall it, it has no type to be filed under, or it
  * points at nothing. `unwritten` is the mild one, a `[[name]]` no memory
  * answers to yet: Claude leaves those on purpose, for a memory worth writing later.
@@ -57,6 +69,9 @@ export const MEMORY_ISSUE_LABELS: Record<MemoryIssue, string> = {
   'dead-link': 'dead link',
   unwritten: 'unwritten link',
 };
+
+/** How much of the index Claude loads, as the modal says it. */
+export const MEMORY_INDEX_LIMIT = `${MEMORY_INDEX_MAX_LINES} lines or ${MEMORY_INDEX_MAX_BYTES / 1000}KB`;
 
 /** A cross-reference that opens nothing. */
 export interface BrokenLink {
@@ -304,7 +319,7 @@ export function memoryNotices(memory: ProjectMemory): MemoryNotice[] {
   const cut = memory.entries.filter((e) => e.pastIndexLimit).length;
   if (cut > 0) {
     notices.push({
-      text: `${MEMORY_INDEX_FILE} is over the ${MEMORY_INDEX_MAX_LINES} lines or ${MEMORY_INDEX_MAX_BYTES / 1000}KB Claude loads into a session: ${cut} ${cut === 1 ? 'memory sits' : 'memories sit'} past the cut and ${cut === 1 ? "isn't" : "aren't"} seen. Shorten the hooks or drop stale lines.`,
+      text: `${MEMORY_INDEX_FILE} is over the ${MEMORY_INDEX_LIMIT} Claude loads into a session: ${cut} ${cut === 1 ? 'memory sits' : 'memories sit'} past the cut and ${cut === 1 ? "isn't" : "aren't"} seen. Shorten the hooks or drop stale lines.`,
     });
   }
   const gone = memory.dangling;
@@ -317,49 +332,46 @@ export function memoryNotices(memory: ProjectMemory): MemoryNotice[] {
   return notices;
 }
 
-/** What the modal previews: a memory, or the MEMORY.md index (untyped). */
-export interface MemoryDoc {
-  key: string;
-  file: string;
-  title: string;
-  markdown: string;
-  type?: MemoryType;
-  description?: string;
-  /** The memory behind this doc. Absent for the index: Dash keeps it in step, it isn't edited here. */
-  entry?: MemoryEntry;
-}
-
 /**
- * The memories and the index as one uniform list, so the modal never branches
- * on "is this the index?". Order is the fallback order: memories as "all"
- * lists them, then the index, which is what an index-only folder shows.
+ * The chosen memory while it exists, else the first as "all" lists them: what
+ * the modal shows of `memories` (see listMemories).
  */
-export function memoryDocs(memory: ProjectMemory, memories: ListedMemory[]): MemoryDoc[] {
-  const docs: MemoryDoc[] = memorySections(memories, 'all', '', 0).flatMap((section) =>
-    section.entries.map(({ entry: e }) => ({
-      key: e.file,
-      file: e.file,
-      title: e.name,
-      markdown: e.body,
-      type: e.type,
-      description: e.description,
-      entry: e,
-    })),
+export function pickCurrent(
+  memories: ListedMemory[],
+  selectedFile: string | null,
+): ListedMemory | null {
+  return (
+    memories.find((m) => m.entry.file === selectedFile) ??
+    memorySections(memories, 'all', '', 0)[0]?.entries[0] ??
+    null
   );
-  if (memory.index != null) {
-    docs.push({
-      key: MEMORY_INDEX_FILE,
-      file: MEMORY_INDEX_FILE,
-      title: 'Index',
-      markdown: memory.index,
-    });
-  }
-  return docs;
 }
 
-/** The chosen doc while it exists, else the first in fallback order. */
-export function pickCurrent(docs: MemoryDoc[], selectedKey: string | null): MemoryDoc | null {
-  return docs.find((d) => d.key === selectedKey) ?? docs[0] ?? null;
+/** One line of MEMORY.md with the memories it stands for. */
+export interface ListedIndexRow {
+  /** Its line number in the file, from 1. */
+  line: number;
+  row: MemoryIndexRow;
+  /** The memories it links that exist: what a click on it opens. */
+  entries: MemoryEntry[];
+  /** The files it links that are gone (see ProjectMemory.dangling). */
+  missing: string[];
+  /** The first line Claude doesn't load: the cut is drawn above it. */
+  firstPastCut: boolean;
+}
+
+/** MEMORY.md as the index view lists it: every line, in file order. */
+export function memoryIndexRows(memory: ProjectMemory): ListedIndexRow[] {
+  const byFile = new Map(memory.entries.map((e) => [e.file, e]));
+  const gone = new Set(memory.dangling);
+  const cut = memory.indexRows.findIndex((r) => !r.loaded);
+  return memory.indexRows.map((row, i) => ({
+    line: i + 1,
+    row,
+    entries: row.files.flatMap((f) => byFile.get(f) ?? []),
+    missing: row.files.filter((f) => gone.has(f)),
+    firstPastCut: i === cut,
+  }));
 }
 
 /** What the editor edits: the memory file's fields, and its MEMORY.md line's hook. */
@@ -372,12 +384,20 @@ export type MemoryDraftFields = MemoryFields & { hook: string };
  */
 export type MemoryDraftLine = 'own' | 'missing' | 'fixed';
 
-/** What the editor's hook field says while empty. */
+/** What the hook is called, wherever it is shown or edited. */
+export const MEMORY_HOOK_LABEL = `Hook in ${MEMORY_INDEX_FILE}`;
+
+/** What stands in for a hook that isn't there to show: in the editor's empty field, on the memory and on its line of the index. */
 export const MEMORY_HOOK_PLACEHOLDERS: Record<MemoryDraftLine, string> = {
   own: 'No hook: Claude sees only the title until it opens the memory',
   missing: 'Same as the description, unless you write one',
   fixed: `Its ${MEMORY_INDEX_FILE} line is shared or in another shape: edit the index by hand`,
 };
+
+/** Which of those `entry`'s line is. */
+export function memoryLine(entry: MemoryEntry): MemoryDraftLine {
+  return entry.hook !== null ? 'own' : entry.inIndex ? 'fixed' : 'missing';
+}
 
 /** An unsaved create or edit. */
 export interface MemoryDraft {
@@ -430,7 +450,7 @@ export function editMemoryDraft(entry: MemoryEntry): MemoryDraft {
   };
   return {
     target: { file: entry.file, mtimeMs: entry.mtimeMs, sizeBytes: entry.sizeBytes },
-    line: entry.hook !== null ? 'own' : entry.inIndex ? 'fixed' : 'missing',
+    line: memoryLine(entry),
     saved: fields,
     fields,
   };
@@ -485,6 +505,11 @@ export function draftHook(draft: MemoryDraft): string | undefined {
   if (draft.line === 'missing') return hook || undefined;
   if (draft.line === 'fixed' || hook === draft.saved.hook) return undefined;
   return hook;
+}
+
+/** What a save sends of `draft`: its fields, with the hook the index line should take. */
+export function draftSaveFields(draft: MemoryDraft): MemoryFields & { hook?: string } {
+  return { ...draft.fields, hook: draftHook(draft) };
 }
 
 export function canSaveDraft(draft: MemoryDraft): boolean {

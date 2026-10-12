@@ -6,6 +6,7 @@ import {
   memoryFileName,
   parseMemoryFile,
   raiseIndexLine,
+  readIndexRows,
   removeIndexLines,
   serializeMemoryFile,
   setIndexLine,
@@ -382,6 +383,62 @@ describe('index lines', () => {
     expect(indexHook(index, 'c.md')).toBeNull();
     expect(indexHook(index, 'd.md')).toBeNull();
     expect(indexHook(index, 'missing.md')).toBeNull();
+  });
+
+  it('lists the index line by line, as the hook and the cut are read everywhere else', () => {
+    const index = [
+      '# Memory Index',
+      '',
+      '- [A](a.md) — one ',
+      '- [B](b.md)',
+      '- see [C](c.md) and [A](a.md)',
+      'Prose about [D](d.md).',
+      '```',
+      '- [E](e.md) — in code',
+      '```',
+      '',
+    ].join('\n');
+    const rows = readIndexRows(index);
+    // The final newline ends the last line; it starts no row of its own.
+    expect(rows.map((r) => r.text)).toEqual(index.split('\n').slice(0, -1));
+    expect(rows.map((r) => r.files)).toEqual([
+      [],
+      [],
+      ['a.md'],
+      ['b.md'],
+      ['c.md', 'a.md'],
+      ['d.md'],
+      [],
+      [],
+      [],
+    ]);
+    expect(rows.map((r) => r.pointer)).toEqual([
+      null,
+      null,
+      { title: 'A', hook: 'one' },
+      { title: 'B', hook: '' },
+      null,
+      null,
+      null,
+      null,
+      null,
+    ]);
+    expect(rows.every((r) => r.loaded)).toBe(true);
+
+    expect(readIndexRows('')).toEqual([]);
+    expect(readIndexRows('no newline')).toEqual([
+      { text: 'no newline', files: [], pointer: null, loaded: true },
+    ]);
+    // The byte limit cuts rows as it cuts the index: 30 lines of 1KB, 25KB loaded.
+    const wide = Array.from({ length: 30 }, (_, i) => `- [w${i}](w${i}.md) — ${'x'.repeat(980)}`);
+    const cut = readIndexRows(wide.join('\n')).findIndex((r) => !r.loaded);
+    expect(cut).toBe(loadedIndex(wide.join('\n')).split('\n').length);
+    expect(cut).toBeGreaterThan(0);
+    expect(cut).toBeLessThan(30);
+    const long = Array.from({ length: 250 }, (_, i) => `- [m${i}](m${i}.md)`).join('\n');
+    expect(readIndexRows(long).map((r) => r.loaded)).toEqual(
+      Array.from({ length: 250 }, (_, i) => i < 200),
+    );
   });
 
   it('links a file name a bare target cannot hold, and finds that line again', () => {

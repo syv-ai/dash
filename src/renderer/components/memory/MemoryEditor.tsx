@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Loader2 } from 'lucide-react';
-import { MEMORY_INDEX_FILE } from '../../../shared/types';
 import type { MemoryEntry } from '../../../shared/types';
 import { Button } from '../ui/Button';
 import { Segmented } from '../ui/Segmented';
@@ -17,6 +16,7 @@ import {
   repointLink,
   retypeDraft,
   unlinkLink,
+  MEMORY_HOOK_LABEL,
   MEMORY_HOOK_PLACEHOLDERS,
   MEMORY_TYPE_HINTS,
   MEMORY_TYPE_LABELS,
@@ -108,7 +108,7 @@ export function MemoryEditor({ draft, api, entries, isDark }: Props) {
             className={fieldClass}
           />
         </Field>
-        <Field label={`Hook in ${MEMORY_INDEX_FILE}`}>
+        <Field label={MEMORY_HOOK_LABEL}>
           <input
             value={fields.hook}
             onChange={(e) => set({ hook: e.target.value })}

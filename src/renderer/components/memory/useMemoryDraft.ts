@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import type { MemoryEntry, MemoryType, ProjectMemory } from '../../../shared/types';
 import {
   canSaveDraft,
-  draftHook,
+  draftSaveFields,
   editMemoryDraft,
   fixedDraft,
   isDraftDirty,
@@ -73,7 +73,7 @@ export function useMemoryDraft({ projectPath, reload, onSaved }: Args): MemoryDr
         let file: string;
         let warning: string | undefined;
         // What the index line should say, not always what the field holds (see draftHook).
-        const fields = { ...draft.fields, hook: draftHook(draft) };
+        const fields = draftSaveFields(draft);
         if (!draft.target) {
           const res = await window.electronAPI.memoryCreate({ projectPath, ...fields });
           if (!res.success || !res.data) {

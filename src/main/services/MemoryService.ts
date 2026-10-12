@@ -28,7 +28,8 @@ import {
 import {
   memoryFileName,
   raiseIndexLine,
-  readIndex,
+  indexLineOf,
+  readIndexRows,
   readMemoryFields,
   type MemoryIndexLine,
   removeIndexLines,
@@ -185,7 +186,15 @@ export async function readProjectMemory(projectPath: string): Promise<ProjectMem
     names = await fs.promises.readdir(dir);
   } catch (err) {
     if (isMissing(err)) {
-      return { dir, exists: false, index: null, entries: [], dangling: [], disabledBy };
+      return {
+        dir,
+        exists: false,
+        index: null,
+        indexRows: [],
+        entries: [],
+        dangling: [],
+        disabledBy,
+      };
     }
     console.error('[MemoryService] cannot read memory folder', dir, err);
     throw err;
@@ -199,7 +208,9 @@ export async function readProjectMemory(projectPath: string): Promise<ProjectMem
           throw err;
         })
     : null;
-  const indexLine = readIndex(index ?? '');
+  // Read once: the rows the modal lists are what each memory's line is read from.
+  const indexRows = readIndexRows(index ?? '');
+  const indexLine = indexLineOf(indexRows);
   const entries = await Promise.all(
     names.filter(isMemoryFileName).map((file) => readEntry(dir, file, indexLine)),
   );
@@ -207,6 +218,7 @@ export async function readProjectMemory(projectPath: string): Promise<ProjectMem
     dir,
     exists: true,
     index,
+    indexRows,
     entries: entries.filter((e): e is MemoryEntry => e !== null),
     dangling: danglingLinks(index ?? '', names),
     disabledBy,
