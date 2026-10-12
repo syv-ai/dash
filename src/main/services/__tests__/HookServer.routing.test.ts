@@ -10,11 +10,10 @@ vi.mock('electron', () => ({
   },
 }));
 
-const ROOT = '/p/music removal';
 const TASKS = [
-  { id: 'root', path: ROOT },
-  { id: 'ball', path: `${ROOT}/.claude/worktrees/ball-kinetics-071` },
-  { id: 'court', path: `${ROOT}/.claude/worktrees/court-segmentation-ed2` },
+  { id: 'root', sessionId: 'sess-root' },
+  { id: 'ball', sessionId: 'sess-ball' },
+  { id: 'court', sessionId: 'sess-court' },
 ];
 
 vi.mock('../../db/client', () => ({
@@ -35,8 +34,8 @@ const post = (endpoint: string, ptyId: string, body: unknown) =>
     body: JSON.stringify(body),
   });
 
-const statusLine = (projectDir: string) => ({
-  workspace: { project_dir: projectDir, current_dir: projectDir },
+const statusLine = (sessionId: string) => ({
+  session_id: sessionId,
   context_window: { context_window_size: 1000, used_percentage: 25 },
   rate_limits: { five_hour: { used_percentage: 6, resets_at: 1 } },
 });
@@ -55,38 +54,43 @@ describe('HookServer task resolution', () => {
     busy.mockClear();
   });
 
-  it("credits a worktree session's status line to its own task, not the root id in the URL", async () => {
-    // Root's settings.local.json leaks into the worktree session: ptyId=root.
-    const res = await post('context', 'root', statusLine(TASKS[1]!.path));
-    expect(res.status).toBe(200);
+  it("handles a worktree session's own copy under its own id", async () => {
+    await post('context', 'ball', statusLine('sess-ball'));
     expect(update).toHaveBeenCalledTimes(1);
     expect(update.mock.calls[0]![0]).toBe('ball');
   });
 
-  it('still credits the root task for a session running in the root', async () => {
-    await post('context', 'root', statusLine(ROOT));
-    expect(update.mock.calls[0]![0]).toBe('root');
-  });
-
-  it('routes other hooks (busy) by cwd too', async () => {
-    await post('busy', 'root', { cwd: TASKS[2]!.path });
-    expect(busy).toHaveBeenCalledWith('court');
-  });
-
-  it('ignores events from a subagent worktree nested under the root task', async () => {
-    const res = await post('context', 'root', statusLine(`${ROOT}/.claude/worktrees/agent-a0`));
+  it('acks but skips the leaked root-settings copy of a worktree session', async () => {
+    const res = await post('context', 'root', statusLine('sess-ball'));
     expect(res.status).toBe(200);
     expect(update).not.toHaveBeenCalled();
   });
 
-  it('falls back to the URL id when the payload has no directory', async () => {
+  it('delivers a worktree event once when both settings files fire', async () => {
+    const body = { session_id: 'sess-court' };
+    await Promise.all([post('busy', 'root', body), post('busy', 'court', body)]);
+    expect(busy).toHaveBeenCalledTimes(1);
+    expect(busy).toHaveBeenCalledWith('court');
+  });
+
+  it('keeps a root session that cd-ed into a worktree on the root task', async () => {
+    await post('busy', 'root', { session_id: 'sess-root', cwd: '/p/.claude/worktrees/ball' });
+    expect(busy).toHaveBeenCalledWith('root');
+  });
+
+  it('still handles events from a non-task worktree session under the URL id', async () => {
+    await post('busy', 'root', { session_id: 'sess-subagent' });
+    expect(busy).toHaveBeenCalledWith('root');
+  });
+
+  it('falls back to the URL id when the payload has no session id', async () => {
     await post('busy', 'court', {});
     expect(busy).toHaveBeenCalledWith('court');
   });
 
   it('404s when the resolved task has no live pty', async () => {
     hookServer.setPtyValidator((id) => id !== 'ball');
-    const res = await post('context', 'root', statusLine(TASKS[1]!.path));
+    const res = await post('context', 'ball', statusLine('sess-ball'));
     expect(res.status).toBe(404);
     expect(update).not.toHaveBeenCalled();
     hookServer.setPtyValidator((id) => TASKS.some((t) => t.id === id));

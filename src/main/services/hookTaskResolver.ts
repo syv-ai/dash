@@ -1,72 +1,43 @@
 /**
- * Which task does a hook event belong to?
+ * Which task does a hook event belong to, and should it be handled?
  *
  * The `?ptyId=` baked into each worktree's settings.local.json is not enough:
  * Claude Code also loads the project root's settings.local.json inside every
- * worktree session under it, so the root task's hooks (and, for the single
- * `statusLine` slot, possibly its status line) fire there with the root
- * task's id. The event's own directory is the reliable signal.
+ * worktree session under it, so a worktree session POSTs each event twice —
+ * once with its own task id and once with the root task's id.
+ *
+ * The payload's `session_id` is the reliable signal: Dash records it per task
+ * at dispatch (`tasks.session_id`) and, unlike `cwd`, it does not change when
+ * the agent `cd`s or enters a nested worktree.
  *
  * Pure (no DB, no electron) so it can be tested directly.
  */
 
-export interface TaskPathRef {
+export interface TaskSessionRef {
   id: string;
-  path: string;
+  sessionId: string | null;
 }
 
-/** Directory a hook payload says it ran in. statusLine payloads carry the
- *  session's stable `workspace.project_dir`; other hooks only carry `cwd`. */
-export function payloadDirectory(payload: Record<string, unknown>): string | null {
-  const ws = payload.workspace;
-  if (ws && typeof ws === 'object') {
-    const w = ws as Record<string, unknown>;
-    if (typeof w.project_dir === 'string' && w.project_dir) return w.project_dir;
-  }
-  return typeof payload.cwd === 'string' && payload.cwd ? payload.cwd : null;
+export interface HookRouting {
+  taskId: string;
+  /** The same event also arrives under the owning task's own id; handling
+   *  this copy as well would double every notification. */
+  duplicate: boolean;
 }
-
-function trimSlash(p: string): string {
-  return p.length > 1 ? p.replace(/[\\/]+$/, '') : p;
-}
-
-/** Marker of Claude Code's own nested worktrees (subagent isolation). */
-const NESTED_WORKTREE = /^[\\/]\.claude[\\/]worktrees[\\/]/;
 
 /**
- * Resolve the owning task id.
- *
- * - Longest task path that is the directory or an ancestor of it wins, so a
- *   session in `<project>/.claude/worktrees/x` is task x, not the project's
- *   root task.
- * - A directory nested under a task but inside a `.claude/worktrees/` folder
- *   that is not itself a task (a subagent's worktree) belongs to no task:
- *   returns null rather than crediting the ancestor.
- * - No directory in the payload, or none that lies under a task: the query
- *   id the settings file carried.
+ * - The payload's session belongs to a task: that task owns the event. Only
+ *   the copy delivered under its own id is handled; copies carrying another
+ *   task's id (a leaked root settings file) are duplicates.
+ * - No session id, or one no task recorded: trust the URL id. Never drop.
  */
-export function resolveHookTaskId(
+export function resolveHookRouting(
   queryId: string,
   payload: Record<string, unknown>,
-  taskPaths: readonly TaskPathRef[],
-): string | null {
-  const dirRaw = payloadDirectory(payload);
-  if (!dirRaw) return queryId;
-  const dir = trimSlash(dirRaw);
-
-  let best: TaskPathRef | null = null;
-  let bestPath = '';
-  for (const t of taskPaths) {
-    const tp = trimSlash(t.path);
-    if (dir !== tp && !dir.startsWith(tp + '/') && !dir.startsWith(tp + '\\')) continue;
-    if (!best || tp.length > bestPath.length) {
-      best = t;
-      bestPath = tp;
-    }
-  }
-  if (!best) return queryId;
-
-  const rest = dir.slice(bestPath.length);
-  if (rest && NESTED_WORKTREE.test(rest)) return null;
-  return best.id;
+  tasks: readonly TaskSessionRef[],
+): HookRouting {
+  const sessionId = typeof payload.session_id === 'string' ? payload.session_id : '';
+  const owner = sessionId ? tasks.find((t) => t.sessionId === sessionId) : undefined;
+  if (!owner) return { taskId: queryId, duplicate: false };
+  return { taskId: owner.id, duplicate: owner.id !== queryId };
 }

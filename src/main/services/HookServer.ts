@@ -9,7 +9,7 @@ import { activityMonitor } from './ActivityMonitor';
 import { contextUsageService } from './ContextUsageService';
 import { getDb } from '../db/client';
 import { tasks } from '../db/schema';
-import { resolveHookTaskId, type TaskPathRef } from './hookTaskResolver';
+import { resolveHookRouting, type TaskSessionRef } from './hookTaskResolver';
 
 /**
  * In-process event bus for hook events that other main-side services may need
@@ -106,16 +106,16 @@ class HookServerImpl {
     }
   }
 
-  /** Live tasks' worktree paths, for resolving which task an event belongs to. */
-  private listTaskPaths(): TaskPathRef[] {
+  /** Live tasks' recorded session ids, for resolving which task an event belongs to. */
+  private listTaskSessions(): TaskSessionRef[] {
     try {
       return getDb()
-        .select({ id: tasks.id, path: tasks.path })
+        .select({ id: tasks.id, sessionId: tasks.sessionId })
         .from(tasks)
         .where(isNull(tasks.archivedAt))
         .all();
     } catch (err) {
-      console.warn('[HookServer] Task path lookup failed; trusting ptyId:', err);
+      console.warn('[HookServer] Task session lookup failed; trusting ptyId:', err);
       return [];
     }
   }
@@ -196,25 +196,29 @@ class HookServerImpl {
 
           // The id in the URL is only a hint: Claude Code also loads the
           // project root's settings.local.json inside worktree sessions, so
-          // the owning task is resolved from the payload's directory once the
+          // the owning task is resolved from the payload's session_id once the
           // body is read (see hookTaskResolver). Handlers read `ptyId` at
           // call time, after readBody has set it.
           let ptyId = queryId;
           const readBody = (callback: (data: Record<string, unknown>) => void): void => {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (data) => {
-              const resolved = resolveHookTaskId(queryId, data, this.listTaskPaths());
-              if (resolved === null) {
-                // Not a task's own session (e.g. a subagent worktree).
+              const { taskId, duplicate } = resolveHookRouting(
+                queryId,
+                data,
+                this.listTaskSessions(),
+              );
+              if (duplicate) {
+                // The owning task's own settings file posts this event too.
                 res.writeHead(200);
                 res.end();
                 return;
               }
-              if (!this._hasPty(resolved)) {
+              if (!this._hasPty(taskId)) {
                 res.writeHead(404);
                 res.end();
                 return;
               }
-              ptyId = resolved;
+              ptyId = taskId;
               callback(data);
             });
           };
