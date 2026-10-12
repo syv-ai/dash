@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getProjects: () => ipcRenderer.invoke('db:getProjects'),
   saveProject: (project: unknown) => ipcRenderer.invoke('db:saveProject', project),
   deleteProject: (id: string) => ipcRenderer.invoke('db:deleteProject', id),
+  archiveProject: (id: string) => ipcRenderer.invoke('db:archiveProject', id),
+  restoreProject: (id: string) => ipcRenderer.invoke('db:restoreProject', id),
 
   // Database - Tasks
   getTasks: (projectId: string) => ipcRenderer.invoke('db:getTasks', projectId),
@@ -89,6 +91,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // PTY
   ptyStartDirect: (args: unknown) => ipcRenderer.invoke('pty:startDirect', args),
+  ptyTrustWorkspace: (args: unknown) => ipcRenderer.invoke('pty:trustWorkspace', args),
   ptyStart: (args: unknown) => ipcRenderer.invoke('pty:start', args),
   ptyInput: (args: { id: string; data: string }) => ipcRenderer.send('pty:input', args),
   ptyResize: (args: { id: string; cols: number; rows: number }) =>

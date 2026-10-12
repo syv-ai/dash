@@ -44,6 +44,9 @@ export interface UiState {
   sidebarAnimating: boolean;
   changesAnimating: boolean;
   shellDrawerAnimating: boolean;
+  // The update the sidebar banner was closed for. Session-only: a ready
+  // update installs on quit, and a newer version brings the banner back.
+  dismissedUpdateVersion: string | null;
 }
 
 export interface UiActions {
@@ -64,6 +67,7 @@ export interface UiActions {
   setSidebarAnimating: (v: boolean) => void;
   setChangesAnimating: (v: boolean) => void;
   setShellDrawerAnimating: (v: boolean) => void;
+  setDismissedUpdateVersion: (v: string | null) => void;
   // Data-mutating UI flows (own their modal state; delegate domain ops to projectsStore)
   finishProjectCreation: (projectId: string) => Promise<void>;
   confirmDeleteProject: (options: DeleteProjectOptions) => Promise<void>;
@@ -90,6 +94,7 @@ const initialState: UiState = {
   sidebarAnimating: false,
   changesAnimating: false,
   shellDrawerAnimating: false,
+  dismissedUpdateVersion: null,
 };
 
 export const useUi = create<UiStore>((set, get) => ({
@@ -114,6 +119,7 @@ export const useUi = create<UiStore>((set, get) => ({
   setSidebarAnimating: (v) => set({ sidebarAnimating: v }),
   setChangesAnimating: (v) => set({ changesAnimating: v }),
   setShellDrawerAnimating: (v) => set({ shellDrawerAnimating: v }),
+  setDismissedUpdateVersion: (v) => set({ dismissedUpdateVersion: v }),
 
   finishProjectCreation: async (projectId) => {
     set({ showAddProjectModal: false });

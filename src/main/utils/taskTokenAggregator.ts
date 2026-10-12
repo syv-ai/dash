@@ -30,9 +30,11 @@ export async function aggregateTokenStatsForTaskPath(
   for (const p of new Set(paths)) {
     const projectDir = claudeProjectDir(p);
 
+    // Recursive: subagent and workflow transcripts are written to
+    // <sessionId>/subagents/**/agent-*.jsonl, not next to the session file.
     let entries: string[];
     try {
-      entries = await fs.promises.readdir(projectDir);
+      entries = await fs.promises.readdir(projectDir, { recursive: true });
     } catch {
       continue;
     }

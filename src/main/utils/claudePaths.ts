@@ -7,6 +7,7 @@
  * its consumers.
  */
 
+import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
@@ -64,4 +65,16 @@ export function claudeProjectDir(cwd: string): string {
 /** Claude Code's global state file (workspace trust among it): beside a custom config dir, else in the home directory. */
 export function claudeStateFile(): string {
   return path.join(process.env.CLAUDE_CONFIG_DIR || os.homedir(), '.claude.json');
+}
+
+/** Whether the user accepted Claude Code's workspace trust prompt for `root`. Read-only. */
+export async function isWorkspaceTrusted(root: string): Promise<boolean> {
+  try {
+    const state: unknown = JSON.parse(await fs.promises.readFile(claudeStateFile(), 'utf8'));
+    const projects = (state as { projects?: Record<string, { hasTrustDialogAccepted?: unknown }> })
+      ?.projects;
+    return projects?.[root]?.hasTrustDialogAccepted === true;
+  } catch {
+    return false;
+  }
 }

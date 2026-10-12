@@ -22,6 +22,9 @@ export const projects = sqliteTable(
     // Deprecated since 0.13: replaced by .dash/config.json setup commands.
     // Column kept so existing DBs don't break; do not read or write.
     worktreeSetupScript: text('worktree_setup_script'),
+    // Set while the project is archived: hidden from the project list, its
+    // task sessions asleep. Restoring clears it.
+    archivedAt: text('archived_at'),
     createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
   },

@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { Download, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Download, RefreshCw, AlertTriangle, X } from 'lucide-react';
 import { useRuntime } from '../../stores/runtimeStore';
+import { useUi } from '../../stores/uiStore';
 import { Button } from '../ui/Button';
+import { IconButton } from '../ui/IconButton';
 import { ProgressBar } from '../ui/ProgressBar';
 
 /**
@@ -11,13 +13,21 @@ import { ProgressBar } from '../ui/ProgressBar';
  * fresh never-dismissing toast on top of the last (#173).
  *
  * Silent unless there is something to say — idle and checking render nothing.
+ * The ready and failed notices can be closed for the rest of the session
+ * (Settings → Updates still offers the restart); a newer version reopens them.
  */
 export function UpdateBanner() {
   const status = useRuntime((s) => s.updateStatus);
   const installUpdate = useRuntime((s) => s.installUpdate);
+  const dismissedVersion = useUi((s) => s.dismissedUpdateVersion);
+  const setDismissedVersion = useUi((s) => s.setDismissedUpdateVersion);
   const [installing, setInstalling] = useState(false);
 
   if (!status || !status.initialized) return null;
+
+  const versionKey = status.availableVersion ?? '';
+  const dismissed = dismissedVersion === versionKey;
+  const onClose = () => setDismissedVersion(versionKey);
 
   // A failed check is not worth a banner — Settings → Updates carries the
   // error. Only a failure that stranded a known update earns the interruption.
@@ -45,10 +55,10 @@ export function UpdateBanner() {
     );
   }
 
-  if (status.state === 'ready') {
+  if (status.state === 'ready' && !dismissed) {
     return (
-      <Shell>
-        <p className="text-[11px] text-fg-fade-90 leading-snug">
+      <Shell onClose={onClose}>
+        <p className="text-[11px] text-fg-fade-90 leading-snug pr-4">
           {status.availableVersion ? `v${status.availableVersion}` : 'An update'} is ready.
         </p>
         <p className="text-[10.5px] text-muted-foreground mt-0.5 leading-snug">
@@ -70,10 +80,10 @@ export function UpdateBanner() {
     );
   }
 
-  if (strandedError) {
+  if (strandedError && !dismissed) {
     return (
-      <Shell>
-        <div className="flex items-start gap-2">
+      <Shell onClose={onClose}>
+        <div className="flex items-start gap-2 pr-4">
           <AlertTriangle
             size={14}
             strokeWidth={1.8}
@@ -99,10 +109,21 @@ export function UpdateBanner() {
   return null;
 }
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({ children, onClose }: { children: React.ReactNode; onClose?: () => void }) {
   return (
     <div className="px-2 pt-2">
-      <div className="rounded-md border border-border/60 bg-[hsl(var(--surface-2))] px-2.5 py-2">
+      <div className="relative rounded-md border border-border/60 bg-[hsl(var(--surface-2))] px-2.5 py-2">
+        {onClose && (
+          <IconButton
+            title="Dismiss"
+            variant="muted"
+            size="sm"
+            onClick={onClose}
+            className="absolute top-1.5 right-1.5"
+          >
+            <X size={12} strokeWidth={1.8} />
+          </IconButton>
+        )}
         {children}
       </div>
     </div>

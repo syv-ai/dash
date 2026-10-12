@@ -11,6 +11,7 @@ function project(p: Partial<Project> = {}): Project {
     gitRemote: 'https://github.com/acme/repo.git',
     gitBranch: 'main',
     baseRef: 'main',
+    archivedAt: null,
     createdAt: '',
     updatedAt: '',
     ...p,

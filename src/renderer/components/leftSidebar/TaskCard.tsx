@@ -102,12 +102,7 @@ export function TaskCard({
             ? isUnseen
               ? { tooltip: 'Done (unseen)', className: 'status-dot-unseen' }
               : { tooltip: 'Idle', className: 'status-dot-idle' }
-            : activityState === 'stopped'
-              ? {
-                  tooltip: activityInfo?.detail ?? 'Sleeping — opening the task resumes it',
-                  className: 'status-dot-stopped',
-                }
-              : null;
+            : null;
 
   return (
     <div
@@ -137,7 +132,7 @@ export function TaskCard({
           <Globe size={10} strokeWidth={2} className="text-primary shrink-0 -ml-0.5" />
         )}
 
-        <span className={`truncate flex-1 min-w-0 ${!isActive && !activityState ? 'fade-50' : ''}`}>
+        <span className={`truncate flex-1 min-w-0 ${!isActive && !statusDot ? 'fade-50' : ''}`}>
           {task.name}
         </span>
 

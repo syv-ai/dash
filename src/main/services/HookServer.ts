@@ -7,6 +7,8 @@ import { app, BrowserWindow, Notification } from 'electron';
 import { eq } from 'drizzle-orm';
 import { activityMonitor } from './ActivityMonitor';
 import { contextUsageService } from './ContextUsageService';
+import { tokenStatsService } from './TokenStatsService';
+import { isSubagentHook } from './hookPayload';
 import { getDb } from '../db/client';
 import { tasks } from '../db/schema';
 
@@ -195,6 +197,8 @@ class HookServerImpl {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
               activityMonitor.setIdle(ptyId);
               this.showDesktopNotification(ptyId);
+              // A turn just ended, so the transcript has new usage to total.
+              void tokenStatsService.recomputeForTask(ptyId);
               res.writeHead(200);
               res.end();
             });
@@ -259,7 +263,7 @@ class HookServerImpl {
                 activityMonitor.setWaitingForPermission(ptyId);
                 const taskName = this.getTaskName(ptyId);
                 this.showDesktopNotification(ptyId, `${taskName} is asking a question`);
-              } else {
+              } else if (!isSubagentHook(payload)) {
                 activityMonitor.setToolStart(ptyId, toolName, toolInput);
               }
               res.writeHead(200);
@@ -274,7 +278,7 @@ class HookServerImpl {
               if (toolName === 'AskUserQuestion') {
                 // User answered — back to busy (Claude will resume working).
                 activityMonitor.setBusy(ptyId);
-              } else {
+              } else if (!isSubagentHook(payload)) {
                 activityMonitor.setToolEnd(ptyId);
               }
               res.writeHead(200);
@@ -303,8 +307,8 @@ class HookServerImpl {
           }
 
           if (pathname === '/hook/compact-start') {
-            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
-              activityMonitor.setCompacting(ptyId, true);
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
+              if (!isSubagentHook(payload)) activityMonitor.setCompacting(ptyId, true);
               res.writeHead(200);
               res.end();
             });
@@ -312,8 +316,8 @@ class HookServerImpl {
           }
 
           if (pathname === '/hook/compact-end') {
-            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
-              activityMonitor.setCompacting(ptyId, false);
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
+              if (!isSubagentHook(payload)) activityMonitor.setCompacting(ptyId, false);
               res.writeHead(200);
               res.end();
             });
@@ -323,6 +327,7 @@ class HookServerImpl {
           if (pathname === '/hook/session-end') {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
               activityMonitor.setIdle(ptyId);
+              void tokenStatsService.recomputeForTask(ptyId);
               res.writeHead(200);
               res.end();
             });

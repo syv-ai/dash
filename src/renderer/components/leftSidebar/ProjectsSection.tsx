@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Plus,
   Trash2,
+  Archive,
   ArchiveRestore,
   Settings,
   GitGraph,
@@ -26,6 +27,7 @@ import { formatTokens, formatCost } from '../../utils/format';
 import { TaskCard } from './TaskCard';
 import { ForeignSessionsSection } from './ForeignSessionsSection';
 import { SlidingPill, useSlidingPill } from './useSlidingPill';
+import { getProjectActivity, projectActivityDot } from './projectActivity';
 import { openInIde } from '../../lib/openInIde';
 import { useSettings } from '../../stores/settingsStore';
 import { useRuntime } from '../../stores/runtimeStore';
@@ -91,6 +93,10 @@ export function ProjectsSection({
   const remoteControlStates = useRuntime((s) => s.remoteControlStates);
   const justCreatedProjectId = useProjects((s) => s.justCreatedProjectId);
   const clearJustCreatedProject = useProjects((s) => s.clearJustCreatedProject);
+  const archivedProjects = useProjects((s) => s.archivedProjects);
+  const archiveProject = useProjects((s) => s.archiveProject);
+  const restoreProject = useProjects((s) => s.restoreProject);
+  const [archivedProjectsOpen, setArchivedProjectsOpen] = useState(false);
   const newRowRef = useRef<HTMLDivElement | null>(null);
   const prByTask = useGit((s) => s.prByTask);
   const detectProjectPrs = useGit((s) => s.detectProjectPrs);
@@ -255,7 +261,8 @@ export function ProjectsSection({
             const projectTasks = allTasks.filter((t) => !t.archivedAt);
             const archivedTasks = allTasks.filter((t) => t.archivedAt);
             const isArchivedCollapsed = !collapsedArchived.has(project.id);
-            const hasActiveTask = projectTasks.some((t) => !!taskActivity[t.id]?.state);
+            const activity = getProjectActivity(projectTasks, taskActivity);
+            const activityDot = activity && projectActivityDot(activity);
 
             return (
               <div
@@ -327,7 +334,7 @@ export function ProjectsSection({
                       const nameSpan = (
                         <span
                           className={`truncate flex-1 min-w-0 ${
-                            isProjectCollapsed && !hasActiveTask ? 'fade-50' : ''
+                            isProjectCollapsed && !activityDot ? 'fade-50' : ''
                           }`}
                         >
                           {project.name}
@@ -350,9 +357,11 @@ export function ProjectsSection({
                     rest={
                       <>
                         <span className="flex items-center justify-center w-2.5">
-                          {isProjectCollapsed && hasActiveTask && (
-                            <Tooltip content="Active task in this project">
-                              <div className="status-dot-idle w-[6px] h-[6px] rounded-full shrink-0" />
+                          {isProjectCollapsed && activityDot && (
+                            <Tooltip content={activityDot.label}>
+                              <div
+                                className={`${activityDot.className} w-[6px] h-[6px] rounded-full shrink-0`}
+                              />
                             </Tooltip>
                           )}
                         </span>
@@ -417,6 +426,14 @@ export function ProjectsSection({
                                 className="text-muted-foreground"
                               />
                               Claude memory
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => void archiveProject(project.id)}>
+                              <Archive
+                                size={13}
+                                strokeWidth={1.8}
+                                className="text-muted-foreground"
+                              />
+                              Archive project
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
@@ -531,6 +548,58 @@ export function ProjectsSection({
             );
           })}
         </div>
+
+        {/* Archived projects drawer */}
+        {archivedProjects.length > 0 && (
+          <div className="mt-2">
+            <button
+              onClick={() => setArchivedProjectsOpen((v) => !v)}
+              className="flex items-center gap-1 w-full pl-2 pr-2 py-[5px] rounded-md text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {archivedProjectsOpen ? (
+                <ChevronDown size={12} strokeWidth={2} />
+              ) : (
+                <ChevronRight size={12} strokeWidth={2} />
+              )}
+              <span>Archived projects ({archivedProjects.length})</span>
+            </button>
+
+            <div
+              className="grid transition-[grid-template-rows] duration-200 ease-in-out"
+              style={{ gridTemplateRows: archivedProjectsOpen ? '1fr' : '0fr' }}
+            >
+              <div className="overflow-hidden">
+                <div className="space-y-px">
+                  {archivedProjects.map((project) => (
+                    <div
+                      key={project.id}
+                      className="group/archived flex items-center gap-2 pl-6 pr-2 py-[6px] rounded-md text-[13px] text-muted-fade-50"
+                    >
+                      <span className="truncate flex-1 min-w-0">{project.name}</span>
+                      <div className="hidden group-hover/archived:flex gap-0.5 shrink-0">
+                        <IconButton
+                          onClick={() => void restoreProject(project.id)}
+                          title="Restore project"
+                          size="sm"
+                        >
+                          <ArchiveRestore size={12} strokeWidth={1.8} />
+                        </IconButton>
+                        <IconButton
+                          onClick={() => onDeleteProject(project.id)}
+                          title="Delete project"
+                          variant="destructive"
+                          size="sm"
+                        >
+                          <Trash2 size={12} strokeWidth={1.8} />
+                        </IconButton>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -8,7 +8,7 @@ import { ProjectsSection } from './ProjectsSection';
 import { useSettings } from '../../stores/settingsStore';
 import { useRuntime } from '../../stores/runtimeStore';
 import { useUi } from '../../stores/uiStore';
-import { getProjectActivity } from './projectActivity';
+import { getProjectActivity, projectActivityDot } from './projectActivity';
 import { UpdateBanner } from './UpdateBanner';
 
 interface LeftSidebarProps {
@@ -137,8 +137,6 @@ export function LeftSidebar({
                         <div className="status-dot-unseen absolute -right-1 top-1/2 mt-[-3px] w-2 h-2 rounded-full" />
                       ) : activity === 'idle' ? (
                         <div className="status-dot-idle absolute -right-1 top-1/2 mt-[-3px] w-2 h-2 rounded-full" />
-                      ) : activity === 'stopped' ? (
-                        <div className="status-dot-stopped absolute -right-1 top-1/2 mt-[-3px] w-2 h-2 rounded-full" />
                       ) : null}
                     </div>
                   );
@@ -163,17 +161,7 @@ export function LeftSidebar({
             {projects.map((project) => {
               const isActive = project.id === activeProjectId;
               const activity = getProjectActivity(tasksByProject[project.id] || [], taskActivity);
-              const activityLabel =
-                activity === 'error'
-                  ? 'Error'
-                  : activity === 'waiting'
-                    ? 'Waiting for user'
-                    : activity === 'busy'
-                      ? 'Claude is working'
-                      : activity === 'stopped'
-                        ? 'Sessions sleeping'
-                        : 'Idle';
-
+              const dot = activity && projectActivityDot(activity);
               return (
                 <div
                   key={project.id}
@@ -215,20 +203,10 @@ export function LeftSidebar({
                       {project.name.charAt(0).toUpperCase() + project.name.charAt(1).toLowerCase()}
                     </button>
                   </Tooltip>
-                  {activity && (
-                    <Tooltip content={activityLabel}>
+                  {dot && (
+                    <Tooltip content={dot.label}>
                       <div
-                        className={`absolute -right-1 top-1/2 mt-[-3px] w-2 h-2 rounded-full ${
-                          activity === 'error'
-                            ? 'status-dot-err'
-                            : activity === 'waiting'
-                              ? 'status-dot-wait'
-                              : activity === 'busy'
-                                ? 'bg-amber-400 status-pulse'
-                                : activity === 'stopped'
-                                  ? 'status-dot-stopped'
-                                  : 'status-dot-idle'
-                        }`}
+                        className={`${dot.className} absolute -right-1 top-1/2 mt-[-3px] w-2 h-2 rounded-full`}
                       />
                     </Tooltip>
                   )}

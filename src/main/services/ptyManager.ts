@@ -10,7 +10,9 @@ import { terminalSnapshotService } from './TerminalSnapshotService';
 import { ensureShellConfig, shellHistoryPath } from './ptyShellConfig';
 import { findClaudePath, findLatestSessionId } from './claudeCli';
 import { buildClaudeEnv } from './claudeEnv';
-import { supervisorService } from './SupervisorService';
+import { supervisorService, DispatchError } from './SupervisorService';
+import { parseUntrustedRoot } from './supervisorSession';
+import { isWorkspaceTrusted } from '../utils/claudePaths';
 import { DatabaseService } from './DatabaseService';
 import { writeHookSettings, setCommitAttributionValue } from './ptyHookSettings';
 import type { PermissionMode, TaskModel } from '@shared/types';
@@ -107,6 +109,24 @@ export function setInitialPrompt(taskId: string, prompt: string): void {
   pendingInitialPrompts.set(taskId, prompt);
 }
 
+/**
+ * `claude --bg` refused the task's folder: Claude Code's workspace trust
+ * prompt was never accepted for `root`. A background session cannot show that
+ * prompt, so the pane runs it via runTrustPrompt() and then starts again.
+ */
+export class UntrustedWorkspaceError extends Error {
+  constructor(
+    message: string,
+    readonly root: string,
+  ) {
+    super(message);
+    this.name = 'UntrustedWorkspaceError';
+  }
+}
+
+/** Trust root per task whose last dispatch was refused as untrusted. */
+const untrustedRoots = new Map<string, string>();
+
 function consumeInitialPrompt(taskId: string): string | undefined {
   const prompt = pendingInitialPrompts.get(taskId);
   if (prompt !== undefined) pendingInitialPrompts.delete(taskId);
@@ -162,7 +182,7 @@ export function refreshActivePtyHooks(): RefreshResult {
   }
   try {
     for (const task of DatabaseService.getTasksWithSessions()) {
-      if (!task.archivedAt && !targets.has(task.id)) targets.set(task.id, task.path);
+      if (!task.shelved && !targets.has(task.id)) targets.set(task.id, task.path);
     }
   } catch (err) {
     console.error('[refreshActivePtyHooks] task lookup failed:', err);
@@ -261,15 +281,28 @@ async function ensureTaskSession(opts: {
     resumeSessionId = findLatestSessionId(opts.cwd, opts.previousPath);
   }
   const prompt = consumeInitialPrompt(opts.id);
-  const { jobId, sessionId } = await supervisorService.dispatch({
-    cwd: opts.cwd,
-    name: opts.name,
-    permissionMode: opts.permissionMode,
-    model: opts.model,
-    prompt,
-    resumeSessionId,
-    env: opts.env,
-  });
+  let dispatched;
+  try {
+    dispatched = await supervisorService.dispatch({
+      cwd: opts.cwd,
+      name: opts.name,
+      permissionMode: opts.permissionMode,
+      model: opts.model,
+      prompt,
+      resumeSessionId,
+      env: opts.env,
+    });
+  } catch (err) {
+    if (!(err instanceof DispatchError)) throw err;
+    const root = parseUntrustedRoot(err.output);
+    if (!root) throw err;
+    // No job was created, so the first prompt is still unsent: keep it for
+    // the dispatch that follows the trust prompt.
+    if (prompt !== undefined) setInitialPrompt(opts.id, prompt);
+    untrustedRoots.set(opts.id, root);
+    throw new UntrustedWorkspaceError(err.message, root);
+  }
+  const { jobId, sessionId } = dispatched;
   DatabaseService.setTaskSession(opts.id, { jobId, sessionId: sessionId ?? resumeSessionId });
   return jobId;
 }
@@ -391,19 +424,29 @@ export async function startDirectPty(options: {
 
   // Before dispatch, so the session's first turn already reports.
   writeHookSettings(options.cwd, options.id);
+  const hadActivity = activityMonitor.has(options.id);
   activityMonitor.ensure(options.id);
 
-  const jobId = await ensureTaskSession({
-    id: options.id,
-    cwd: options.cwd,
-    name: options.name ?? options.id,
-    permissionMode: options.permissionMode,
-    model: options.model,
-    previousPath: options.previousPath,
-    jobId: options.jobId ?? null,
-    sessionId: options.sessionId ?? null,
-    env,
-  });
+  let jobId: string;
+  try {
+    jobId = await ensureTaskSession({
+      id: options.id,
+      cwd: options.cwd,
+      name: options.name ?? options.id,
+      permissionMode: options.permissionMode,
+      model: options.model,
+      previousPath: options.previousPath,
+      jobId: options.jobId ?? null,
+      sessionId: options.sessionId ?? null,
+      env,
+    });
+  } catch (err) {
+    // No session started: drop the entry made above, or the task shows an
+    // idle dot for a session that does not exist (nothing would correct it —
+    // the supervisor poll only covers tasks with a job).
+    if (!hadActivity) activityMonitor.unregister(options.id);
+    throw err;
+  }
 
   spawnAttach({
     id: options.id,
@@ -418,6 +461,82 @@ export async function startDirectPty(options: {
   });
 
   return { reattached: false, isDirectSpawn: true, jobId };
+}
+
+const TRUST_POLL_MS = 500;
+
+/**
+ * Show Claude Code's own workspace trust prompt in the task pane: plain
+ * `claude` in the trust root, at the task's PTY id. Resolves true once the
+ * user accepts (Claude records it in its state file; Dash only reads it) —
+ * the prompt process is then closed without an exit event, so the pane can
+ * start the session in its place — and false when the prompt exits or is
+ * killed first (declined, or the user left the task).
+ */
+export async function runTrustPrompt(options: {
+  id: string;
+  cols: number;
+  rows: number;
+  isDark?: boolean;
+  sender?: WebContents;
+}): Promise<boolean> {
+  const root = untrustedRoots.get(options.id);
+  if (!root) return false;
+  if (await isWorkspaceTrusted(root)) {
+    untrustedRoots.delete(options.id);
+    return true;
+  }
+  const claudePath = await findClaudePath();
+  if (!claudePath) return false;
+  await killPtyInternal(options.id);
+
+  const proc = getPty().spawn(claudePath, [], {
+    name: 'xterm-256color',
+    cols: options.cols,
+    rows: options.rows,
+    cwd: root,
+    env: buildClaudeEnv(options.isDark ?? true, root),
+  });
+  // Agent kind keeps teardown off the task's activity entry; no task id, so
+  // keystrokes here never count as an interrupt.
+  const record: PtyRecord = {
+    proc,
+    cwd: root,
+    isDirectSpawn: false,
+    owner: options.sender ?? null,
+    kind: 'agent',
+    taskId: null,
+    featureId: null,
+    jobId: null,
+    mirror: null,
+  };
+  ptys.set(options.id, record);
+  proc.onData((data: string) => {
+    if (record.owner && !record.owner.isDestroyed()) {
+      record.owner.send(`pty:data:${options.id}`, data);
+    }
+  });
+
+  return new Promise<boolean>((resolve) => {
+    let settled = false;
+    const settle = (trusted: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearInterval(poll);
+      if (ptys.get(options.id) === record) ptys.delete(options.id);
+      if (trusted) {
+        untrustedRoots.delete(options.id);
+        void gracefulKillProc(proc);
+      }
+      resolve(trusted);
+    };
+    const poll = setInterval(() => {
+      void isWorkspaceTrusted(root).then((trusted) => {
+        if (trusted) settle(true);
+      });
+    }, TRUST_POLL_MS);
+    proc.onExit(() => settle(false));
+  });
 }
 
 /**
@@ -776,7 +895,7 @@ export async function killAll(): Promise<void> {
   if (stopSessionsOnQuit) {
     try {
       for (const task of DatabaseService.getTasksWithSessions()) {
-        if (task.jobId && !task.archivedAt) {
+        if (task.jobId && !task.shelved) {
           pending.push(
             supervisorService.stop(task.jobId).then(
               () => DatabaseService.markTaskSessionStopped(task.id),
