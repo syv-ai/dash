@@ -16,6 +16,7 @@ import type { ExtensionsApi } from './electron-api/extensions';
 import type { SessionApi } from './electron-api/session';
 import type { TelemetryApi } from './electron-api/telemetry';
 import type { AutoUpdateApi } from './electron-api/autoUpdate';
+import type { MemoryApi } from './electron-api/memory';
 
 // Re-exported so existing `import type { TokenStatsUpdate } from '.../electron-api'`
 // call sites keep resolving after the split.
@@ -48,7 +49,8 @@ export interface ElectronAPI
     ExtensionsApi,
     SessionApi,
     TelemetryApi,
-    AutoUpdateApi {}
+    AutoUpdateApi,
+    MemoryApi {}
 
 declare global {
   interface Window {

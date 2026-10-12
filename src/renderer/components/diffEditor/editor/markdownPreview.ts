@@ -74,12 +74,15 @@ function previewStyles(isDark: boolean): string {
 /**
  * Render markdown into a complete, self-contained HTML document for the
  * sandboxed preview iframe. The document carries its own stylesheet so it
- * looks right in isolation; any raw HTML in the markdown is contained by the
- * iframe sandbox (no same-origin), so no sanitizer is needed here.
+ * looks right in isolation. Raw HTML in the markdown is not sanitized: it is
+ * contained because every caller's iframe sandbox omits either `allow-scripts`
+ * or `allow-same-origin`, never both (that pair lets the frame script the app).
+ * `extraHead` goes at the end of `<head>`, after the stylesheet, for
+ * caller-specific `<base>`/`<style>` tags; it must not carry scripts.
  */
-export function markdownToDocument(markdown: string, isDark: boolean): string {
+export function markdownToDocument(markdown: string, isDark: boolean, extraHead = ''): string {
   const body = marked.parse(markdown) as string;
   return `<!doctype html><html><head><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<style>${previewStyles(isDark)}</style></head><body>${body}</body></html>`;
+<style>${previewStyles(isDark)}</style>${extraHead}</head><body>${body}</body></html>`;
 }

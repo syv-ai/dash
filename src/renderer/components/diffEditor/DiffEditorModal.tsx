@@ -13,6 +13,9 @@ export interface DiffEditorModalProps {
    *  editor restores the stored view, falling back to the working tree at HEAD/index. */
   initialView?: EditorView;
   activeTaskId: string | null;
+  /** `cwd` is a folder of its own (Claude's memory folder), not the active
+   *  task's worktree: the task's git status and comments don't belong to it. */
+  standalone?: boolean;
   terminalTheme: XtermTheme;
   isDark: boolean;
   onClose: () => void;
