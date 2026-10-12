@@ -1144,7 +1144,7 @@ export const MEMORY_INDEX_FILE = 'MEMORY.md';
 export const MEMORY_INDEX_MAX_LINES = 200;
 export const MEMORY_INDEX_MAX_BYTES = 25_000;
 
-/** The part of a memory a person writes: what Dash reads from and saves to its file. */
+/** What Dash reads from a memory's file. */
 export interface MemoryFields {
   /** Frontmatter `name`. */
   name: string;
@@ -1160,63 +1160,11 @@ export interface MemoryEntry extends MemoryFields {
   file: string;
   /** Frontmatter `name`, falling back to the basename without `.md`. */
   name: string;
-  /** With `sizeBytes`, what a save is checked against so it can't clobber a newer write. */
   mtimeMs: number;
-  sizeBytes: number;
   /** Whether MEMORY.md links to this file. */
   inIndex: boolean;
-  /**
-   * Whether a MEMORY.md line links this memory and no other memory: a line that
-   * can be moved or dropped with it, whatever its shape.
-   */
-  ownLine: boolean;
   /** Linked, but only past the part of MEMORY.md Claude loads: as good as unindexed. */
   pastIndexLimit: boolean;
-  /**
-   * The text after the dash on this memory's own MEMORY.md line: what Claude
-   * reads of it in a session that loads the line. Empty when the line has only
-   * a title. Null when there is no hook to read or reword: no line of its own,
-   * or one not in the `- [Title](file) — hook` shape Claude writes.
-   */
-  hook: string | null;
-}
-
-/**
- * A memory save: the editor's write result, plus (when it was written) the
- * other memory files whose `[[name]]` links were moved to a new name.
- */
-export type MemoryUpdateResult =
-  | (Extract<EditorWriteResult, { ok: true }> & { relinked: string[]; warning?: string })
-  | Extract<EditorWriteResult, { ok: false }>;
-
-/**
- * A created memory: the file it was saved as. `warning` (here and on a save)
- * says what could not follow the write, e.g. its MEMORY.md line: the memory
- * itself is saved.
- */
-export interface MemoryCreateResult {
-  file: string;
-  warning?: string;
-}
-
-/** A deleted memory: its file is gone. `warning` says its MEMORY.md line could not follow. */
-export interface MemoryDeleteResult {
-  warning?: string;
-}
-
-/** One line of MEMORY.md, as the index view shows it. */
-export interface MemoryIndexRow {
-  /** The line as written. */
-  text: string;
-  /** The memory files it links: none for a heading, a note or a blank line. */
-  files: string[];
-  /**
-   * Its title and hook, when it links one memory in the `- [Title](file) — hook`
-   * shape Claude writes. Null for any other line.
-   */
-  pointer: { title: string; hook: string } | null;
-  /** Whether it is in the part of MEMORY.md Claude loads into a session. */
-  loaded: boolean;
 }
 
 /** A project's auto-memory, as Claude Code stores it. */
@@ -1224,10 +1172,8 @@ export interface ProjectMemory {
   /** Absolute memory folder Dash resolved (shown even when it doesn't exist). */
   dir: string;
   exists: boolean;
-  /** MEMORY.md contents, or null when absent. */
-  index: string | null;
-  /** MEMORY.md line by line, in file order; empty when it is absent or empty. */
-  indexRows: MemoryIndexRow[];
+  /** Whether the folder has a MEMORY.md. */
+  hasIndex: boolean;
   entries: MemoryEntry[];
   /** Memory files MEMORY.md links to that aren't in the folder. */
   dangling: string[];

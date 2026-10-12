@@ -6,7 +6,6 @@ import path from 'path';
 import { promisify } from 'util';
 import { parseArgs, errorResponse, ipcError } from './validate';
 import { parseBlameIncremental } from '../services/blameParser';
-import { writeFileIfUnchanged } from '../utils/guardedWrite';
 import type {
   EditorBlameResult,
   EditorCommitListItem,
@@ -141,16 +140,55 @@ function statusFromGitCode(code: string): FileChangeStatus {
   return 'modified';
 }
 
+/** Whether `cwd` is in a git work tree; false for a plain folder (or when git can't say). */
+async function isInsideGitRepo(cwd: string): Promise<boolean> {
+  try {
+    await execFileAsync('git', ['rev-parse', '--is-inside-work-tree'], { cwd, timeout: 15000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const PLAIN_FOLDER_MAX_FILES = 2000;
+
+/**
+ * The files under a folder that is no git repository (Claude's memory folder,
+ * opened from the memory modal), so the tree has something to show there.
+ * Capped: without git there is no ignore list to keep it small.
+ */
+export async function listPlainFolderFiles(cwd: string): Promise<string[]> {
+  const files: string[] = [];
+  const pending = [''];
+  while (pending.length > 0 && files.length < PLAIN_FOLDER_MAX_FILES) {
+    const rel = pending.shift()!;
+    for (const entry of await fs.readdir(path.join(cwd, rel), { withFileTypes: true })) {
+      const child = rel ? `${rel}/${entry.name}` : entry.name;
+      if (entry.isFile()) files.push(child);
+      else if (entry.isDirectory() && entry.name !== '.git' && entry.name !== 'node_modules') {
+        pending.push(child);
+      }
+    }
+  }
+  return files.slice(0, PLAIN_FOLDER_MAX_FILES).sort();
+}
+
 async function listWorkingRepoFiles(cwd: string): Promise<string[]> {
-  const tracked = (
-    await execFileAsync('git', ['ls-files', '-z'], {
+  let listed: { stdout: string };
+  try {
+    listed = await execFileAsync('git', ['ls-files', '-z'], {
       cwd,
       maxBuffer: 50 * 1024 * 1024,
       timeout: 15000,
-    })
-  ).stdout
-    .split('\0')
-    .filter(Boolean);
+    });
+  } catch (err) {
+    const stderr = (err as { stderr?: unknown }).stderr;
+    if (typeof stderr === 'string' && /not a git repository/i.test(stderr)) {
+      return listPlainFolderFiles(cwd);
+    }
+    throw err;
+  }
+  const tracked = listed.stdout.split('\0').filter(Boolean);
   let untracked: string[] = [];
   try {
     untracked = (
@@ -398,7 +436,7 @@ export function registerEditorIpc(): void {
         }
         const relForGit = toGitPath(path.relative(cwdReal, abs));
         const spec = args.ref === 'HEAD' ? `HEAD:${relForGit}` : `:0:${relForGit}`;
-        const originalContent = await gitShow(args.cwd, spec);
+        let originalContent = await gitShow(args.cwd, spec);
 
         let workingContent: string | null = null;
         let mtimeMs = 0;
@@ -423,6 +461,12 @@ export function registerEditorIpc(): void {
         } catch (err: unknown) {
           if ((err as { code?: string }).code !== 'ENOENT') throw err;
           // workingContent stays null — file deleted on disk.
+        }
+
+        // Outside git there is no HEAD to compare with: the file as it is on
+        // disk is the original, so only unsaved edits show as changes.
+        if (originalContent === '' && workingContent && !(await isInsideGitRepo(args.cwd))) {
+          originalContent = workingContent;
         }
 
         return {
@@ -570,11 +614,51 @@ export function registerEditorIpc(): void {
         );
         const abs = resolveInsideCwd(args.cwd, args.filePath);
 
-        const data = await writeFileIfUnchanged(abs, args.content, {
-          mtimeMs: args.expectedMtimeMs,
-          sizeBytes: args.expectedSizeBytes,
-        });
-        return { success: true, data };
+        try {
+          const stat = await fs.stat(abs);
+          if (stat.mtimeMs !== args.expectedMtimeMs || stat.size !== args.expectedSizeBytes) {
+            return {
+              success: true,
+              data: {
+                ok: false,
+                stale: true,
+                currentMtimeMs: stat.mtimeMs,
+                currentSizeBytes: stat.size,
+              },
+            };
+          }
+        } catch (err: unknown) {
+          if ((err as { code?: string }).code !== 'ENOENT') throw err;
+          if (args.expectedMtimeMs !== 0 || args.expectedSizeBytes !== 0) {
+            return {
+              success: true,
+              data: {
+                ok: false,
+                stale: true,
+                currentMtimeMs: 0,
+                currentSizeBytes: 0,
+              },
+            };
+          }
+        }
+
+        const dir = path.dirname(abs);
+        const base = path.basename(abs);
+        const rand = Math.floor(Math.random() * 0xffffffff).toString(16);
+        const tmp = path.join(dir, `.${base}.dash-tmp-${rand}`);
+        await fs.writeFile(tmp, args.content, { encoding: 'utf8', mode: 0o644 });
+        try {
+          await fs.rename(tmp, abs);
+        } catch (err) {
+          await fs.unlink(tmp).catch(() => {});
+          throw err;
+        }
+
+        const stat = await fs.stat(abs);
+        return {
+          success: true,
+          data: { ok: true, mtimeMs: stat.mtimeMs, sizeBytes: stat.size },
+        };
       } catch (err) {
         return errorResponse(err);
       }

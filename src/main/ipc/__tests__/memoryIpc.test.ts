@@ -5,7 +5,7 @@ import * as path from 'path';
 
 vi.mock('electron', () => ({
   ipcMain: { handle: vi.fn() },
-  shell: { openPath: vi.fn(), trashItem: vi.fn() },
+  shell: { openPath: vi.fn() },
   BrowserWindow: { getAllWindows: () => [] },
 }));
 
@@ -15,18 +15,8 @@ vi.mock('../../services/DatabaseService', () => ({
 }));
 
 import { ipcMain, shell } from 'electron';
-import {
-  memoryFileArgsSchema,
-  memoryProjectArgsSchema,
-  memoryUpdateArgsSchema,
-  registerMemoryIpc,
-} from '../memoryIpc';
-import { readProjectMemory, resolveMemoryDir } from '../../services/MemoryService';
-import {
-  draftSaveFields,
-  editMemoryDraft,
-  memoryIndexRows,
-} from '../../../renderer/components/memory/memoryView';
+import { memoryProjectArgsSchema, registerMemoryIpc } from '../memoryIpc';
+import { resolveMemoryDir } from '../../services/MemoryService';
 
 describe('memoryProjectArgsSchema', () => {
   it('accepts an absolute project path', () => {
@@ -37,29 +27,6 @@ describe('memoryProjectArgsSchema', () => {
   });
   it('rejects a missing path', () => {
     expect(() => memoryProjectArgsSchema.parse({})).toThrow();
-  });
-});
-
-describe('memory file arguments', () => {
-  const fields = { projectPath: '/repos/dash', name: 'a', description: '', type: 'user', body: '' };
-  const update = { ...fields, file: 'a.md', expectedMtimeMs: 1, expectedSizeBytes: 1 };
-
-  it('accepts a memory basename', () => {
-    expect(() => memoryUpdateArgsSchema.parse(update)).not.toThrow();
-  });
-  it.each(['../a.md', 'sub/a.md', 'sub\\a.md', '/etc/a.md', 'a.txt', 'MEMORY.md', 'memory.md'])(
-    'rejects %s as a file',
-    (file) => {
-      expect(() => memoryFileArgsSchema.parse({ projectPath: '/repos/dash', file })).toThrow();
-      expect(() => memoryUpdateArgsSchema.parse({ ...update, file })).toThrow();
-    },
-  );
-  it('rejects a blank or multi-line name, a multi-line description and an unknown type', () => {
-    expect(() => memoryUpdateArgsSchema.parse({ ...update, name: '  ' })).toThrow();
-    expect(() => memoryUpdateArgsSchema.parse({ ...update, name: 'a\nmetadata:' })).toThrow();
-    expect(() => memoryUpdateArgsSchema.parse({ ...update, description: 'a\nb' })).toThrow();
-    expect(() => memoryUpdateArgsSchema.parse({ ...update, type: 'bogus' })).toThrow();
-    expect(() => memoryUpdateArgsSchema.parse({ ...update, hook: 'a\n- [x](y.md)' })).toThrow();
   });
 });
 
@@ -83,9 +50,6 @@ describe('memory handlers', () => {
     fs.mkdirSync(project);
     knownProjects.paths = [project];
     vi.mocked(shell.openPath).mockReset().mockResolvedValue('');
-    vi.mocked(shell.trashItem)
-      .mockReset()
-      .mockImplementation((full) => fs.promises.unlink(full));
   });
 
   afterEach(() => {
@@ -126,235 +90,22 @@ describe('memory handlers', () => {
   it("refuses a folder that is not one of Dash's projects, on every channel", async () => {
     const stranger = path.join(tmp, 'stranger');
     fs.mkdirSync(await resolveMemoryDir(stranger), { recursive: true });
-    const fields = { name: 'a', description: '', type: 'user', body: '' };
-    const file = { projectPath: stranger, file: 'a.md' };
-    const calls: [string, unknown][] = [
-      ['memory:get', { projectPath: stranger }],
-      ['memory:watch', { projectPath: stranger }],
-      ['memory:openDir', { projectPath: stranger }],
-      ['memory:create', { projectPath: stranger, ...fields }],
-      ['memory:update', { ...file, ...fields, expectedMtimeMs: 1, expectedSizeBytes: 1 }],
-      ['memory:prune', { projectPath: stranger }],
-      ['memory:index', file],
-      ['memory:raise', file],
-      ['memory:delete', file],
-    ];
-    for (const [channel, raw] of calls) {
-      expect(await invoke(channel, raw), channel).toMatchObject({
+    for (const channel of ['memory:get', 'memory:watch', 'memory:openDir']) {
+      expect(await invoke(channel, { projectPath: stranger }), channel).toMatchObject({
         success: false,
         code: 'VALIDATION',
       });
     }
     expect(shell.openPath).not.toHaveBeenCalled();
-    expect(fs.readdirSync(await resolveMemoryDir(stranger))).toEqual([]);
   });
 
-  it('creates, updates and trashes a memory through the handlers', async () => {
-    const fields = { name: 'Prefer CI', description: 'hook', type: 'feedback', body: 'Use CI.' };
-    expect(await invoke('memory:create', { projectPath: project, ...fields })).toEqual({
-      success: true,
-      data: { file: 'prefer-ci.md' },
-    });
-    const [entry] = (await readProjectMemory(project)).entries;
-
-    expect(
-      await invoke('memory:update', {
-        projectPath: project,
-        file: 'prefer-ci.md',
-        ...fields,
-        body: 'Always.',
-        hook: 'when tests are slow',
-        expectedMtimeMs: entry!.mtimeMs,
-        expectedSizeBytes: entry!.sizeBytes,
-      }),
-    ).toMatchObject({ success: true, data: { ok: true } });
-    expect((await readProjectMemory(project)).entries[0]).toMatchObject({
-      body: '\nAlways.\n',
-      hook: 'when tests are slow',
-    });
-
-    // The same expectation is now out of date: reported, not written.
-    expect(
-      await invoke('memory:update', {
-        projectPath: project,
-        file: 'prefer-ci.md',
-        ...fields,
-        expectedMtimeMs: entry!.mtimeMs,
-        expectedSizeBytes: entry!.sizeBytes,
-      }),
-    ).toMatchObject({ success: true, data: { ok: false, stale: true } });
-
-    const dir = await resolveMemoryDir(project);
-    fs.appendFileSync(path.join(dir, 'MEMORY.md'), '- [Gone](gone.md) — deleted by hand\n');
-    expect(await invoke('memory:prune', { projectPath: project })).toEqual({
-      success: true,
-      data: { removed: ['gone.md'] },
-    });
-    expect(await invoke('memory:delete', { projectPath: project, file: 'prefer-ci.md' })).toEqual({
-      success: true,
-      data: {},
-    });
-    expect(shell.trashItem).toHaveBeenCalledWith(path.join(dir, 'prefer-ci.md'));
-    expect(await readProjectMemory(project)).toMatchObject({ entries: [], index: '' });
-  });
-
-  it('indexes and raises a memory by basename only', async () => {
+  it("reads a project's memory through the handler", async () => {
     const dir = await resolveMemoryDir(project);
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'a.md'), '---\nname: A\n---\n');
-    fs.writeFileSync(path.join(dir, 'MEMORY.md'), '- [B](b.md)\n');
-    const args = { projectPath: project, file: 'a.md' };
-
-    expect(await invoke('memory:index', args)).toEqual({ success: true, data: null });
-    expect(await invoke('memory:raise', args)).toEqual({ success: true, data: null });
-    expect(fs.readFileSync(path.join(dir, 'MEMORY.md'), 'utf8')).toBe('- [A](a.md)\n- [B](b.md)\n');
-    const before = fs.readFileSync(path.join(dir, 'MEMORY.md'), 'utf8');
-    for (const channel of ['memory:index', 'memory:raise']) {
-      for (const file of ['../a.md', 'MEMORY.md', path.join(dir, 'a.md')]) {
-        expect(await invoke(channel, { ...args, file })).toMatchObject({
-          success: false,
-          code: 'VALIDATION',
-        });
-      }
-    }
-    // A failure in the service reaches the caller with its reason.
-    expect(await invoke('memory:index', { ...args, file: 'gone.md' })).toMatchObject({
-      success: false,
-      error: expect.stringContaining('ENOENT'),
-    });
-    expect(await invoke('memory:raise', { ...args, file: 'gone.md' })).toMatchObject({
-      success: false,
-      error: expect.stringContaining('no line of its own'),
-    });
-    expect(fs.readFileSync(path.join(dir, 'MEMORY.md'), 'utf8')).toBe(before);
-  });
-
-  it("writes a hook edited in the modal onto the memory's MEMORY.md line, and shows it there", async () => {
-    const dir = await resolveMemoryDir(project);
-    const index = path.join(dir, 'MEMORY.md');
-    for (const name of ['Prefer CI', 'Other']) {
-      await invoke('memory:create', {
-        projectPath: project,
-        name,
-        description: 'Run the suites in CI',
-        type: 'feedback',
-        body: 'Use CI.',
-      });
-    }
-    // Claude's own title and hook, under a heading: none of it the description.
-    fs.writeFileSync(
-      index,
-      '# Memory Index\n\n- [CI first](prefer-ci.md) — keep ruff local\n- [Other](other.md) — two\n',
-    );
-    const file = fs.readFileSync(path.join(dir, 'prefer-ci.md'), 'utf8');
-
-    // What the modal does: open the memory as read, reword only the hook, save.
-    const before = await readProjectMemory(project);
-    const draft = editMemoryDraft(before.entries.find((e) => e.file === 'prefer-ci.md')!);
-    expect(draft.fields.hook).toBe('keep ruff local');
-    const edited = { ...draft, fields: { ...draft.fields, hook: 'push the rest' } };
-    expect(
-      await invoke('memory:update', {
-        projectPath: project,
-        file: edited.target!.file,
-        ...draftSaveFields(edited),
-        expectedMtimeMs: edited.target!.mtimeMs,
-        expectedSizeBytes: edited.target!.sizeBytes,
-      }),
-    ).toMatchObject({ success: true, data: { ok: true } });
-
-    // Only that line's hook moved: its title, the heading and the other line are as they were.
-    expect(fs.readFileSync(index, 'utf8')).toBe(
-      '# Memory Index\n\n- [CI first](prefer-ci.md) — push the rest\n- [Other](other.md) — two\n',
-    );
-    // The memory's own text is untouched but for the stamp a save leaves.
-    const stamp = /^ {2}modified: .*$/m;
-    expect(fs.readFileSync(path.join(dir, 'prefer-ci.md'), 'utf8').replace(stamp, '')).toBe(
-      file.replace(stamp, ''),
-    );
-
-    // And the modal reads it back: on the memory, and on its line of the index view.
-    const after = await readProjectMemory(project);
-    expect(after.entries.find((e) => e.file === 'prefer-ci.md')!.hook).toBe('push the rest');
-    expect(
-      memoryIndexRows(after).map((r) => [r.line, r.row.pointer?.hook, r.entries[0]?.file]),
-    ).toEqual([
-      [1, undefined, undefined],
-      [2, undefined, undefined],
-      [3, 'push the rest', 'prefer-ci.md'],
-      [4, 'two', 'other.md'],
-    ]);
-  });
-
-  it('decides a hook nobody wrote here, not in the caller', async () => {
-    const fields = { name: 'Prefer CI', description: 'CI over local', type: 'feedback' };
-    await invoke('memory:create', { projectPath: project, ...fields, body: 'Use CI.' });
-    const dir = await resolveMemoryDir(project);
-    const index = path.join(dir, 'MEMORY.md');
-    // A new line takes the description.
-    expect(fs.readFileSync(index, 'utf8')).toBe('- [Prefer CI](prefer-ci.md) — CI over local\n');
-
-    // Claude rewords the line while the memory is open in the editor: a save
-    // that sends no hook leaves it as Claude wrote it.
-    fs.writeFileSync(index, '- [CI first](prefer-ci.md) — when tests are slow\n');
-    const stat = fs.statSync(path.join(dir, 'prefer-ci.md'));
-    expect(
-      await invoke('memory:update', {
-        projectPath: project,
-        file: 'prefer-ci.md',
-        ...fields,
-        body: 'Always.',
-        expectedMtimeMs: stat.mtimeMs,
-        expectedSizeBytes: stat.size,
-      }),
-    ).toMatchObject({ success: true, data: { ok: true } });
-    expect(fs.readFileSync(index, 'utf8')).toBe(
-      '- [CI first](prefer-ci.md) — when tests are slow\n',
-    );
-  });
-
-  it('says the memory is in the trash when its index line could not be dropped', async () => {
-    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-    await invoke('memory:create', {
-      projectPath: project,
-      name: 'Prefer CI',
-      description: '',
-      type: 'feedback',
-      body: 'Use CI.',
-    });
-    const dir = await resolveMemoryDir(project);
-    // An index that can't be read as a file.
-    fs.rmSync(path.join(dir, 'MEMORY.md'));
-    fs.mkdirSync(path.join(dir, 'MEMORY.md'));
-
-    const res = await invoke('memory:delete', { projectPath: project, file: 'prefer-ci.md' });
-    expect(res).toMatchObject({
+    fs.writeFileSync(path.join(dir, 'a.md'), '---\nname: A\n---\nbody');
+    expect(await invoke('memory:get', { projectPath: project })).toMatchObject({
       success: true,
-      data: { warning: expect.stringMatching(/^Moved to the trash, but MEMORY\.md could not/) },
+      data: { dir, exists: true, hasIndex: false, entries: [{ file: 'a.md', name: 'A' }] },
     });
-    expect(fs.existsSync(path.join(dir, 'prefer-ci.md'))).toBe(false);
-    error.mockRestore();
-  });
-
-  it('reports a name that is already taken instead of replacing the memory', async () => {
-    const args = { projectPath: project, name: 'Dup', description: '', type: 'user', body: 'a' };
-    await invoke('memory:create', args);
-    expect(await invoke('memory:create', { ...args, body: 'b' })).toMatchObject({
-      success: false,
-      error: expect.stringContaining('dup.md already exists'),
-    });
-  });
-
-  it('never touches a path outside the memory folder', async () => {
-    const outside = path.join(tmp, 'outside.md');
-    fs.writeFileSync(outside, 'keep');
-    for (const file of ['../outside.md', outside]) {
-      expect(await invoke('memory:delete', { projectPath: project, file })).toMatchObject({
-        success: false,
-        code: 'VALIDATION',
-      });
-    }
-    expect(shell.trashItem).not.toHaveBeenCalled();
-    expect(fs.readFileSync(outside, 'utf8')).toBe('keep');
   });
 });

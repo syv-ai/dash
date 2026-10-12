@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
-import { isWorkspaceTrusted, readClaudeSettings } from '../claudeSettings';
+import { readClaudeSettings } from '../claudeSettings';
 
 let tmp: string;
 let repo: string;
@@ -70,17 +70,6 @@ describe('readClaudeSettings', () => {
     expect(await readClaudeSettings(repo, repo)).toEqual([]);
     expect(warn).toHaveBeenCalledTimes(1);
     warn.mockRestore();
-  });
-});
-
-describe('isWorkspaceTrusted', () => {
-  it('is what the state file records for the repository root, and nothing else', async () => {
-    expect(await isWorkspaceTrusted(repo)).toBe(false);
-    write(path.join(tmp, 'claude', '.claude.json'), {
-      projects: { [repo]: { hasTrustDialogAccepted: true }, [tmp]: {} },
-    });
-    expect(await isWorkspaceTrusted(repo)).toBe(true);
-    expect(await isWorkspaceTrusted(tmp)).toBe(false);
   });
 });
 

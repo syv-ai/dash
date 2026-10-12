@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import type { ProjectMemory } from '../../../shared/types';
 
@@ -6,36 +6,29 @@ import type { ProjectMemory } from '../../../shared/types';
 export function useProjectMemory(projectPath: string): {
   memory: ProjectMemory | null;
   error: string | null;
-  /** Re-read now, without waiting for the watcher; resolves with what was read. */
-  reload: () => Promise<ProjectMemory | null>;
 } {
   const [memory, setMemory] = useState<ProjectMemory | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const loadRef = useRef<() => Promise<ProjectMemory | null>>(() => Promise.resolve(null));
 
   useEffect(() => {
     let cancelled = false;
     let latest = 0;
-    const load = async (): Promise<ProjectMemory | null> => {
+    const load = async (): Promise<void> => {
       const seq = ++latest;
       try {
         const res = await window.electronAPI.memoryGet({ projectPath });
-        if (cancelled) return null;
+        // A read overtaken by a later one isn't shown.
+        if (cancelled || seq !== latest) return;
         if (res.success && res.data) {
-          // A read overtaken by a later one is still returned, but not shown.
-          if (seq === latest) {
-            setMemory(res.data);
-            setError(null);
-          }
-          return res.data;
+          setMemory(res.data);
+          setError(null);
+        } else {
+          setError(res.error ?? 'Could not read memory');
         }
-        setError(res.error ?? 'Could not read memory');
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
       }
-      return null;
     };
-    loadRef.current = load;
     const watch = async () => {
       try {
         const res = await window.electronAPI.memoryWatch({ projectPath });
@@ -57,6 +50,5 @@ export function useProjectMemory(projectPath: string): {
     };
   }, [projectPath]);
 
-  const reload = useCallback(() => loadRef.current(), []);
-  return { memory, error, reload };
+  return { memory, error };
 }

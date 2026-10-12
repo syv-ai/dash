@@ -4,7 +4,6 @@ import {
   mapMemoryRefs,
   mapWholeMemoryLinks,
   memoryLinkFiles,
-  memoryLinkTarget,
 } from '../memoryLinks';
 
 describe('memoryLinkFiles', () => {
@@ -96,14 +95,6 @@ describe('mapWholeMemoryLinks', () => {
     expect(mapMemoryLinks('[outer [in](y.md) more](x.md)', (file) => `](#${file})`)).toBe(
       '[outer [in](#y.md) more](x.md)',
     );
-  });
-});
-
-describe('memoryLinkTarget', () => {
-  it('writes a target the link pattern reads back', () => {
-    for (const file of ['a.md', 'with space.md', 'odd (1).md']) {
-      expect([...memoryLinkFiles(`[x](${memoryLinkTarget(file)})`)]).toEqual([file]);
-    }
   });
 });
 

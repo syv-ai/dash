@@ -1,29 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { MEMORY_TYPES } from '../../../../shared/types';
-import type { MemoryEntry, MemoryIndexRow, ProjectMemory } from '../../../../shared/types';
+import type { MemoryEntry, ProjectMemory } from '../../../../shared/types';
 import {
   listMemories,
   brokenLinks,
-  repointLink,
-  unlinkLink,
-  fixedDraft,
   memoryCounts,
+  memoryIssueTexts,
   memorySections,
-  memoryIndexRows,
-  memoryLine,
   memoryNotices,
   pickCurrent,
   rewriteMemoryLinks,
-  memoryReferrers,
-  newMemoryDraft,
-  editMemoryDraft,
-  isDraftDirty,
-  canSaveDraft,
-  draftHook,
-  draftTypes,
-  redescribeDraft,
-  memoryScaffold,
-  retypeDraft,
   KNOWN_MEMORY_TYPES,
   MEMORY_LINK_PREFIX,
   MEMORY_PREVIEW_SANDBOX,
@@ -39,11 +25,8 @@ function entry(p: Partial<MemoryEntry> & { file: string }): MemoryEntry {
     type: 'other',
     body: '',
     mtimeMs: 0,
-    sizeBytes: 0,
     inIndex: true,
-    ownLine: true,
     pastIndexLimit: false,
-    hook: '',
     ...p,
   };
 }
@@ -82,7 +65,7 @@ describe('listMemories', () => {
     });
   });
 
-  it('names each link that opens nothing, once, with the memory it likely meant', () => {
+  it('names each link that opens nothing, once, and says so in words', () => {
     const entries = [
       entry({ file: 'user_profile.md', name: 'user-profile' }),
       entry({ file: 'prefer-ci.md', name: 'Prefer CI over local tests' }),
@@ -91,15 +74,17 @@ describe('listMemories', () => {
         body: '[[User Profile]] [[user_profil]] [[prefer-ci]] [x](prefer_ci.md) [[nope]] [[nope]] `[[code]]` [[a]]',
       }),
     ];
-    expect(brokenLinks(entries[2]!.body, entries, 'a.md')).toEqual([
-      { kind: 'ref', target: 'User Profile', suggestion: 'user_profile.md' },
-      { kind: 'ref', target: 'user_profil', suggestion: 'user_profile.md' },
-      { kind: 'ref', target: 'nope', suggestion: undefined },
-      { kind: 'file', target: 'prefer_ci.md', suggestion: 'prefer-ci.md' },
+    expect(brokenLinks(entries[2]!.body, entries)).toEqual([
+      { kind: 'ref', target: 'User Profile' },
+      { kind: 'ref', target: 'user_profil' },
+      { kind: 'ref', target: 'nope' },
+      { kind: 'file', target: 'prefer_ci.md' },
     ]);
-    // Never guessed to have meant the memory it is written in.
-    expect(brokenLinks('[[a.]]', entries, 'a.md')).toEqual([
-      { kind: 'ref', target: 'a.', suggestion: undefined },
+    const loose = listMemories([entry({ file: 'a.md', inIndex: false, body: '[x](gone.md)' })]);
+    expect(memoryIssueTexts(loose[0]!)).toEqual([
+      'Not in MEMORY.md, so Claude never recalls it.',
+      "No known type, so it isn't filed with the rest.",
+      "Links to gone.md, which doesn't exist.",
     ]);
   });
 
@@ -125,20 +110,6 @@ describe('listMemories', () => {
     ]);
     for (const m of listed)
       expect([m.entry.file, muted(m.entry)]).toEqual([m.entry.file, m.broken.length]);
-  });
-
-  it('guesses the memory a broken link meant: same but for punctuation, then contained, then one slip', () => {
-    const es = [
-      entry({ file: 'deploy-notes.md' }),
-      entry({ file: 'deploy-notes-old.md' }),
-      entry({ file: 'user_profile.md' }),
-    ];
-    const guess = (body: string, self?: string) => brokenLinks(body, es, self)[0]?.suggestion;
-    expect(guess('[[Deploy Notes]]')).toBe('deploy-notes.md');
-    expect(guess('[[deploy_note]]', 'deploy-notes.md')).toBe('deploy-notes-old.md');
-    expect(guess('[[user_profole]]')).toBe('user_profile.md');
-    expect(guess('[[usr_profile]]')).toBe('user_profile.md');
-    expect(guess('[[profiles-x]]')).toBeUndefined();
   });
 });
 
@@ -211,8 +182,7 @@ describe('memoryNotices', () => {
   const memory: ProjectMemory = {
     dir: '/m',
     exists: true,
-    index: '',
-    indexRows: [],
+    hasIndex: true,
     entries: [entry({ file: 'a.md' })],
     dangling: [],
     disabledBy: null,
@@ -224,23 +194,23 @@ describe('memoryNotices', () => {
 
   it('says what turned auto memory off', () => {
     const [notice] = memoryNotices({ ...memory, disabledBy: 'autoMemoryEnabled in /s.json' });
-    expect(notice!.text).toContain('off for this project (autoMemoryEnabled in /s.json)');
+    expect(notice!).toContain('off for this project (autoMemoryEnabled in /s.json)');
   });
 
   it('counts the memories past the part of the index Claude loads, and flags each', () => {
     const cut = entry({ file: 'b.md', pastIndexLimit: true });
     const [notice] = memoryNotices({ ...memory, entries: [...memory.entries, cut] });
-    expect(notice!.text).toContain('200 lines or 25KB');
-    expect(notice!.text).toContain("1 memory sits past the cut and isn't seen");
+    expect(notice!).toContain('200 lines or 25KB');
+    expect(notice!).toContain("1 memory sits past the cut and isn't seen");
     expect(listMemories([cut])[0]!.issues).toContain('not-loaded');
   });
 
-  it('offers to drop index lines for memories that are gone', () => {
+  it('names the index lines for memories that are gone', () => {
     expect(memoryNotices({ ...memory, dangling: ['old.md'] })).toEqual([
-      { text: 'MEMORY.md points at a memory that no longer exists: old.md.', action: 'prune' },
+      'MEMORY.md points at a memory that no longer exists: old.md.',
     ]);
     const [two] = memoryNotices({ ...memory, dangling: ['a.md', 'b.md'] });
-    expect(two!.text).toContain('2 memories that no longer exist: a.md, b.md');
+    expect(two!).toContain('2 memories that no longer exist: a.md, b.md');
   });
 });
 
@@ -259,84 +229,8 @@ describe('pickCurrent', () => {
     expect(pickCurrent(memories, null)?.entry.file).toBe('b.md');
   });
 
-  it('returns null without memories: the index is a view of its own, not something to fall back to', () => {
+  it('returns null without memories', () => {
     expect(pickCurrent([], 'MEMORY.md')).toBeNull();
-  });
-});
-
-describe('memoryIndexRows', () => {
-  const row = (text: string, p: Partial<MemoryIndexRow> = {}): MemoryIndexRow => ({
-    text,
-    files: [],
-    pointer: null,
-    loaded: true,
-    ...p,
-  });
-  const a = entry({ file: 'a.md', hook: 'one' });
-  const b = entry({ file: 'b.md', hook: null });
-  const memory: ProjectMemory = {
-    dir: '/m',
-    exists: true,
-    index: '',
-    dangling: ['gone.md'],
-    disabledBy: null,
-    entries: [b, a],
-    indexRows: [
-      row('# Memory Index'),
-      row(''),
-      row('- [A](a.md) — one', { files: ['a.md'], pointer: { title: 'A', hook: 'one' } }),
-      row('- [Gone](gone.md)', { files: ['gone.md'], pointer: { title: 'Gone', hook: '' } }),
-      row('See [the index](MEMORY.md)', { files: ['MEMORY.md'] }),
-      row('- [B](b.md) and [A](a.md)', { files: ['b.md', 'a.md'], loaded: false }),
-      row('trailing note', { loaded: false }),
-    ],
-  };
-  const rows = memoryIndexRows(memory);
-
-  it('lists every line of the file, in file order, numbered from 1', () => {
-    expect(rows.map((r) => r.line)).toEqual([1, 2, 3, 4, 5, 6, 7]);
-    expect(rows.map((r) => r.row)).toEqual(memory.indexRows);
-  });
-
-  it('gives a line the memories it opens, and names the ones that are gone', () => {
-    expect(rows.map((r) => r.entries.map((e) => e.file))).toEqual([
-      [],
-      [],
-      ['a.md'],
-      [],
-      [],
-      ['b.md', 'a.md'],
-      [],
-    ]);
-    expect(rows.map((r) => r.missing)).toEqual([[], [], [], ['gone.md'], [], [], []]);
-  });
-
-  it('draws the cut once, above the first line Claude does not load', () => {
-    expect(rows.map((r) => r.firstPastCut)).toEqual([
-      false,
-      false,
-      false,
-      false,
-      false,
-      true,
-      false,
-    ]);
-    const allLoaded = {
-      ...memory,
-      indexRows: memory.indexRows.map((r) => ({ ...r, loaded: true })),
-    };
-    expect(memoryIndexRows(allLoaded).some((r) => r.firstPastCut)).toBe(false);
-  });
-
-  it('lists nothing for a project without an index', () => {
-    expect(memoryIndexRows({ ...memory, indexRows: [] })).toEqual([]);
-  });
-
-  it("says whose a memory's line is: its own, shared or misshapen, or missing", () => {
-    expect(memoryLine(a)).toBe('own');
-    expect(memoryLine(entry({ file: 'c.md', hook: '' }))).toBe('own');
-    expect(memoryLine(b)).toBe('fixed');
-    expect(memoryLine(entry({ file: 'd.md', hook: null, inIndex: false }))).toBe('missing');
   });
 });
 
@@ -394,247 +288,5 @@ describe('indexed ⇔ linked', () => {
     const indexed = memoryLinkFiles(md).has('x.md');
     const linked = rewriteMemoryLinks(md, [entry({ file: 'x.md' })]).includes(MEMORY_LINK_PREFIX);
     expect(linked).toBe(indexed);
-  });
-});
-
-describe('memory drafts', () => {
-  const saved = entry({
-    file: 'ci.md',
-    name: 'prefer-ci',
-    description: 'CI over local',
-    type: 'feedback',
-    body: '\nUse CI.\n',
-    mtimeMs: 7,
-    sizeBytes: 42,
-    hook: 'when tests are slow',
-  });
-
-  it('opens an edit on the memory as shown, guarded by the stat it was read at', () => {
-    const draft = editMemoryDraft(saved);
-    expect(draft.target).toEqual({ file: 'ci.md', mtimeMs: 7, sizeBytes: 42 });
-    expect(draft.fields).toEqual({
-      name: 'prefer-ci',
-      description: 'CI over local',
-      hook: 'when tests are slow',
-      type: 'feedback',
-      body: 'Use CI.',
-    });
-    expect(isDraftDirty(draft)).toBe(false);
-    expect(canSaveDraft(draft)).toBe(false);
-  });
-
-  it('is dirty and saveable once any field differs, and clean again when put back', () => {
-    const draft = editMemoryDraft(saved);
-    const patches = [
-      { name: 'x' },
-      { description: 'x' },
-      { hook: 'x' },
-      { type: 'user' },
-      { body: 'x' },
-    ];
-    for (const patch of patches) {
-      const edited = { ...draft, fields: { ...draft.fields, ...patch } as typeof draft.fields };
-      expect(isDraftDirty(edited)).toBe(true);
-      expect(canSaveDraft(edited)).toBe(true);
-    }
-    expect(isDraftDirty({ ...draft, fields: { ...draft.fields } })).toBe(false);
-  });
-
-  it("sends the hook only when it was edited, so Claude's rewording isn't undone", () => {
-    const draft = editMemoryDraft(saved);
-    expect(draft.line).toBe('own');
-    expect(draftHook(draft)).toBeUndefined();
-    const edit = (hook: string) => ({ ...draft, fields: { ...draft.fields, hook } });
-    expect(draftHook(edit(' when CI is green '))).toBe('when CI is green');
-    // Cleared is a hook too: the line keeps only its title.
-    expect(draftHook(edit(''))).toBe('');
-  });
-
-  it('sends a hook for a memory with no index line only when one is written', () => {
-    // The save defaults the new line to the description; sent from here, that
-    // default would pass for a typed hook and reword a line Claude added since.
-    const orphan = editMemoryDraft({ ...saved, inIndex: false, ownLine: false, hook: null });
-    expect(orphan.line).toBe('missing');
-    expect(draftHook(orphan)).toBeUndefined();
-    expect(draftHook({ ...orphan, fields: { ...orphan.fields, hook: 'mine' } })).toBe('mine');
-
-    const fresh = newMemoryDraft();
-    expect(fresh.line).toBe('missing');
-    const described = { ...fresh, fields: redescribeDraft(fresh, 'What it is') };
-    expect(described.fields.hook).toBe('');
-    expect(draftHook(described)).toBeUndefined();
-    expect(isDraftDirty({ ...fresh, fields: { ...fresh.fields, hook: 'x' } })).toBe(true);
-  });
-
-  it('never rewords a line shared with another memory, or its own in another shape', () => {
-    for (const ownLine of [false, true]) {
-      const fixed = editMemoryDraft({ ...saved, ownLine, hook: null });
-      expect(fixed.line).toBe('fixed');
-      expect(draftHook({ ...fixed, fields: { ...fixed.fields, hook: 'x' } })).toBeUndefined();
-    }
-  });
-
-  it('moves a hook that mirrors the description along with it, and no other', () => {
-    const own = editMemoryDraft(saved);
-    expect(redescribeDraft(own, 'CI first')).toMatchObject({
-      description: 'CI first',
-      hook: 'when tests are slow',
-    });
-    const mirrored = editMemoryDraft({ ...saved, hook: 'CI over local' });
-    const moved = { ...mirrored, fields: redescribeDraft(mirrored, 'CI first') };
-    expect(moved.fields).toMatchObject({ description: 'CI first', hook: 'CI first' });
-    expect(draftHook(moved)).toBe('CI first');
-  });
-
-  it('cannot save a memory without a name', () => {
-    const draft = newMemoryDraft();
-    expect(draft.target).toBeNull();
-    expect(canSaveDraft(draft)).toBe(false);
-    expect(canSaveDraft({ ...draft, fields: { ...draft.fields, body: 'text' } })).toBe(false);
-    expect(canSaveDraft({ ...draft, fields: { ...draft.fields, name: '  ' } })).toBe(false);
-    expect(canSaveDraft({ ...draft, fields: { ...draft.fields, name: 'a' } })).toBe(true);
-  });
-
-  it('offers `other` only to a memory that already has no known type', () => {
-    expect(draftTypes(newMemoryDraft())).toEqual([...KNOWN_MEMORY_TYPES]);
-    expect(draftTypes(editMemoryDraft(saved))).not.toContain('other');
-    expect(draftTypes(editMemoryDraft(entry({ file: 'o.md', type: 'other' })))).toEqual([
-      ...MEMORY_TYPES,
-    ]);
-  });
-
-  it('starts a new memory as the given type, with the reasoning scaffold where one applies', () => {
-    expect(newMemoryDraft().fields.type).toBe('project');
-    const draft = newMemoryDraft('feedback');
-    expect(draft.fields).toMatchObject({ type: 'feedback', body: memoryScaffold('feedback') });
-    expect(draft.fields.body).toContain('**Why:**');
-    expect(draft.fields.body).toContain('**How to apply:**');
-    expect(newMemoryDraft('reference').fields.body).toBe('');
-    // The scaffold alone is nothing to lose.
-    expect(isDraftDirty(draft)).toBe(false);
-  });
-
-  it('moves an untouched scaffold with the type, and never touches written text', () => {
-    const draft = newMemoryDraft('feedback');
-    expect(retypeDraft(draft, 'user')).toMatchObject({ type: 'user', body: '' });
-    const asUser = { ...draft, fields: retypeDraft(draft, 'user') };
-    // Only a type was picked: cancelling loses nothing, so it must not ask.
-    expect(isDraftDirty(asUser)).toBe(false);
-    expect(retypeDraft(asUser, 'project').body).toBe(memoryScaffold('project'));
-    const written = { ...draft, fields: { ...draft.fields, body: 'Use CI.' } };
-    expect(retypeDraft(written, 'user')).toMatchObject({ type: 'user', body: 'Use CI.' });
-    expect(isDraftDirty(written)).toBe(true);
-    // An existing memory's body is its own, even when empty.
-    const existing = editMemoryDraft(entry({ file: 'e.md', type: 'user' }));
-    expect(retypeDraft(existing, 'feedback')).toMatchObject({ type: 'feedback', body: '' });
-  });
-});
-
-describe('memoryReferrers', () => {
-  const target = entry({ file: 'feedback_ci.md', name: 'prefer-ci' });
-  const entries = [
-    target,
-    entry({ file: 'by-name.md', body: 'see [[prefer-ci]]' }),
-    entry({ file: 'by-basename.md', body: 'see [[ feedback_ci ]]' }),
-    entry({ file: 'by-link.md', body: 'see [CI](./feedback_ci.md)' }),
-    entry({ file: 'unrelated.md', body: 'see [[by-name]] and [x](https://x/feedback_ci.md)' }),
-  ];
-
-  it('finds the memories that name or link the target, and not the target itself', () => {
-    const self = { ...target, body: 'I am [[prefer-ci]]' };
-    expect(memoryReferrers([self, ...entries.slice(1)], self).map((e) => e.file)).toEqual([
-      'by-name.md',
-      'by-basename.md',
-      'by-link.md',
-    ]);
-  });
-
-  it('agrees with the preview about what a [[ref]] means', () => {
-    // `[[feedback_ci]]` names another memory outright, so it is not a link to the target.
-    const shadow = entry({ file: 'shadow.md', name: 'feedback_ci' });
-    expect(memoryReferrers([...entries, shadow], target).map((e) => e.file)).toEqual([
-      'by-name.md',
-      'by-link.md',
-    ]);
-  });
-});
-
-describe('fixing a broken link', () => {
-  const entries = [
-    entry({ file: 'prefer-ci.md', name: 'prefer-ci' }),
-    entry({ file: 'odd name (1).md', name: 'has ] bracket' }),
-    entry({ file: 'twin-a.md', name: 'twin' }),
-    entry({ file: 'twin-b.md', name: 'twin' }),
-  ];
-  const ref = { kind: 'ref', target: 'ci' } as const;
-  const link = { kind: 'file', target: 'ci.md' } as const;
-  const body = 'a [[ci]] b [[ ci ]] c [[other]] d [the CI one](ci.md) e [o](./ci.md) `[[ci]]`';
-
-  it('points every use of it at the chosen memory, and nothing else', () => {
-    expect(repointLink(body, ref, entries[0]!, entries)).toBe(
-      'a [[prefer-ci]] b [[prefer-ci]] c [[other]] d [the CI one](ci.md) e [o](./ci.md) `[[ci]]`',
-    );
-    expect(repointLink(body, link, entries[1]!, entries)).toBe(
-      'a [[ci]] b [[ ci ]] c [[other]] d [the CI one](<odd name (1).md>) e [o](<odd name (1).md>) `[[ci]]`',
-    );
-  });
-
-  it('writes a link the preview resolves to that memory, whatever its name', () => {
-    const tricky = [
-      ...entries,
-      // Neither can be carried by a [[name]]: code hides one, the bracket ends the other.
-      entry({ file: 'use-pnpm.md', name: 'Use `pnpm` here' }),
-      entry({ file: 'a]b.md', name: 'x ] y' }),
-    ];
-    for (const to of tricky) {
-      const fixed = repointLink('[[ci]]', ref, to, tricky);
-      expect(rewriteMemoryLinks(fixed, tricky)).toContain(
-        `(${MEMORY_LINK_PREFIX}${encodeURIComponent(to.file)})`,
-      );
-      expect(brokenLinks(fixed, tricky)).toEqual([]);
-    }
-    expect(repointLink('[[ci]]', ref, tricky[4]!, tricky)).toBe('[[use-pnpm]]');
-    expect(repointLink('[[ci]]', ref, tricky[5]!, tricky)).toBe('[ci](a]b.md)');
-  });
-
-  it('opens a fix as an unsaved edit of the memory as it is on disk', () => {
-    const m = listMemories([entry({ file: 'a.md', type: 'user', body: '[x](gone.md)\n' })])[0]!;
-    const draft = fixedDraft(m.entry, (f) => ({ ...f, body: unlinkLink(f.body, m.broken[0]!) }));
-    expect(draft.fields.body).toBe('x');
-    expect(draft.saved.body).toBe('[x](gone.md)');
-    expect(draft.target).toMatchObject({ file: 'a.md' });
-    expect(canSaveDraft(draft)).toBe(true);
-  });
-
-  it('unlinks it down to the text it showed', () => {
-    expect(unlinkLink(body, ref)).toBe(
-      'a ci b ci c [[other]] d [the CI one](ci.md) e [o](./ci.md) `[[ci]]`',
-    );
-    expect(unlinkLink(body, link)).toBe(
-      'a [[ci]] b [[ ci ]] c [[other]] d the CI one e o `[[ci]]`',
-    );
-  });
-
-  it('unlinks every link it calls dead, however its text is written', () => {
-    const odd = 'a [`cfg`](gone.md) b [see [1]](gone.md) c [two\nlines](gone.md) d ](gone.md)';
-    const [dead] = brokenLinks(odd, entries);
-    expect(dead).toMatchObject({ kind: 'file', target: 'gone.md' });
-    const fixed = unlinkLink(odd, dead!);
-    expect(fixed).toBe('a `cfg` b see [1] c two\nlines d ](gone.md)');
-    // What is left was never a link: not flagged, and nothing to follow in the preview.
-    expect(brokenLinks(fixed, entries)).toEqual([]);
-    expect(rewriteMemoryLinks(odd, entries)).not.toContain('[`cfg`](gone.md)');
-  });
-
-  it('leaves the fixed link unflagged and the other broken ones as they were', () => {
-    for (const fixed of [repointLink(body, ref, entries[0]!, entries), unlinkLink(body, ref)]) {
-      expect(brokenLinks(fixed, entries).map((l) => l.target)).toEqual(['other', 'ci.md']);
-    }
-  });
-
-  it('starts the memory a [[name]] was waiting for under that name', () => {
-    const draft = newMemoryDraft('project', 'ci');
-    expect(draft.fields.name).toBe('ci');
-    expect(canSaveDraft(draft)).toBe(true);
   });
 });

@@ -19,11 +19,14 @@ export function DiffEditor({
   initialFilePath,
   initialStaged,
   initialView,
-  activeTaskId,
+  activeTaskId: openTaskId,
+  standalone,
   terminalTheme,
   isDark,
   onClose,
 }: DiffEditorModalProps) {
+  // A standalone folder has no task: comments stay off, and nothing is pruned.
+  const activeTaskId = standalone ? null : openTaskId;
   const gitStatus = useGit((s) => s.gitStatus);
   // View precedence: an explicit caller intent (initialView) wins, so clicking
   // a specific file always shows its working diff and opening a clean tree
@@ -41,7 +44,10 @@ export function DiffEditor({
   const validatedInitialView = useRef(false);
 
   // ── View-dependent git data (changed files, repo tree, commits, base) ──
-  const workingFiles: FileChange[] = useMemo(() => gitStatus?.files ?? [], [gitStatus]);
+  const workingFiles: FileChange[] = useMemo(
+    () => (standalone ? [] : (gitStatus?.files ?? [])),
+    [gitStatus, standalone],
+  );
   const {
     changedFiles,
     changedFilesLoading,

@@ -1,6 +1,7 @@
 /**
- * Which settings files a Claude Code session reads, and whether the user has
- * trusted the workspace they come from. These are Claude Code's rules, copied:
+ * Which settings files a Claude Code session reads, and which of them the
+ * repository supplies (those count only once the workspace is trusted: see
+ * `isWorkspaceTrusted` in claudePaths). These are Claude Code's rules, copied:
  * Dash has no way to ask Claude, so the copy lives here once, and a consumer
  * (memory, today) only interprets the keys it cares about.
  *
@@ -29,7 +30,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { claudeConfigDir, claudeStateFile } from './claudePaths';
+import { claudeConfigDir } from './claudePaths';
 
 const execFileAsync = promisify(execFile);
 
@@ -105,21 +106,4 @@ export async function readClaudeSettings(
     }),
   );
   return read.filter((s) => s !== null);
-}
-
-/**
- * Whether the user accepted Claude Code's workspace trust dialog for
- * `repoRoot`. What a repository-supplied settings file asks for (see
- * `fromRepo`) counts only once this is true.
- */
-export async function isWorkspaceTrusted(repoRoot: string): Promise<boolean> {
-  try {
-    const state: unknown = JSON.parse(await fs.promises.readFile(claudeStateFile(), 'utf8'));
-    const projects = (state as { projects?: Record<string, { hasTrustDialogAccepted?: unknown }> })
-      ?.projects;
-    return projects?.[repoRoot]?.hasTrustDialogAccepted === true;
-  } catch (err) {
-    if (!isMissing(err)) console.warn('[claudeSettings] unreadable Claude state file', err);
-    return false;
-  }
 }

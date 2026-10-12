@@ -1,55 +1,31 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
-import {
-  Brain,
-  ChevronRight,
-  Copy,
-  ExternalLink,
-  FolderOpen,
-  Pencil,
-  Plus,
-  Search,
-  Trash2,
-  X,
-} from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
+import { Brain, ChevronRight, Copy, FolderOpen, List, Pencil, Search, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { MEMORY_INDEX_FILE } from '../../../shared/types';
-import type { IpcResponse, MemoryEntry, MemoryType, Project } from '../../../shared/types';
+import type { IpcResponse, MemoryType, Project } from '../../../shared/types';
 import { formatRelativeTime } from '../../../shared/relativeTime';
-import { Modal, useModalClose, useModalCloseGuard } from '../ui/Modal';
-import { Button } from '../ui/Button';
+import { Modal, useModalClose } from '../ui/Modal';
 import { IconButton } from '../ui/IconButton';
 import { Segmented } from '../ui/Segmented';
 import { Select } from '../ui/Select';
 import { useProjects } from '../../stores/projectsStore';
 import { useUi } from '../../stores/uiStore';
-import { openInIde } from '../../lib/openInIde';
-import { CascadeConfirm } from '../extensions/CascadeConfirm';
-import { MemoryEditor } from './MemoryEditor';
-import { MemoryIndexView } from './MemoryIndexView';
-import { MemoryIssues } from './MemoryIssues';
+import { useGit } from '../../stores/gitStore';
 import { MemoryPreview } from './MemoryPreview';
-import { useMemoryDraft } from './useMemoryDraft';
 import { useProjectMemory } from './useProjectMemory';
 import {
   listMemories,
   memoryCounts,
-  memoryIndexRows,
-  memoryLine,
+  memoryIssueTexts,
   memoryNotices,
-  memoryReferrers,
   memorySections,
   pickCurrent,
-  repointLink,
-  unlinkLink,
   COLLAPSED_SECTIONS,
   KNOWN_MEMORY_TYPES,
-  MEMORY_HOOK_LABEL,
-  MEMORY_HOOK_PLACEHOLDERS,
   MEMORY_ISSUE_LABELS,
   MEMORY_SECTION_LABELS,
   MEMORY_TYPE_LABELS,
   type MemoryFilter,
-  type MemoryPane,
   type MemorySectionId,
 } from './memoryView';
 
@@ -59,19 +35,15 @@ interface Props {
   onClose: () => void;
 }
 
+/**
+ * A project's Claude memories, read-only: the list, what is off about each,
+ * and a preview. Editing opens the file in the diff editor.
+ */
 export function MemoryModal({ project, isDark, onClose }: Props) {
-  // Held here, above the key: the index stays up from one project to the next.
-  const [pane, setPane] = useState<MemoryPane>('memories');
   return (
     <Modal onClose={onClose} size="w-[1040px] max-w-[94vw] h-[86vh] max-h-[760px]">
       {/* Keyed so switching project resets the selection and search. */}
-      <MemoryBody
-        key={project.id}
-        project={project}
-        isDark={isDark}
-        pane={pane}
-        setPane={setPane}
-      />
+      <MemoryBody key={project.id} project={project} isDark={isDark} />
     </Modal>
   );
 }
@@ -97,51 +69,19 @@ async function reportFailure(
   return false;
 }
 
-function deleteMessage(entry: MemoryEntry, referrers: MemoryEntry[]): string {
-  const base = `Delete “${entry.name}”? ${entry.file} is moved to the trash and its line is removed from ${MEMORY_INDEX_FILE}, so Claude stops recalling it.`;
-  if (referrers.length === 0) return base;
-  const names = referrers.map((r) => `“${r.name}”`).join(', ');
-  const plural = referrers.length === 1 ? 'memory still links' : 'memories still link';
-  return `${base} ${referrers.length} other ${plural} to it and will be left pointing at nothing: ${names}.`;
-}
-
-interface BodyProps {
-  project: Project;
-  isDark: boolean;
-  pane: MemoryPane;
-  setPane: (pane: MemoryPane) => void;
-}
-
-function MemoryBody({ project, isDark, pane, setPane }: BodyProps) {
+function MemoryBody({ project, isDark }: Omit<Props, 'onClose'>) {
   const projects = useProjects((s) => s.projects);
   const switchProject = useUi((s) => s.setMemoryProjectId);
   const handleClose = useModalClose();
-  const { memory, error, reload } = useProjectMemory(project.path);
+  const setDiffFile = useGit((s) => s.setDiffFile);
+  const { memory, error } = useProjectMemory(project.path);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState<MemoryEntry | null>(null);
   const [filter, setFilter] = useState<MemoryFilter>('all');
-  // The memory whose line the index is lit on.
-  const [shownInIndex, setShownInIndex] = useState<string | null>(null);
   // Sections the user opened or closed by hand; the rest keep their default.
   const [toggled, setToggled] = useState<Partial<Record<MemorySectionId, boolean>>>({});
   // "Recent" is measured from when the modal opened, so rows don't move while it is up.
   const [openedAt] = useState(() => Date.now());
-  // A memory shown from outside the list (a save, a followed link) brings its type's filter along.
-  const showType = useCallback((type: MemoryType) => {
-    setFilter((f) => (f === 'all' || f === type ? f : type === 'other' ? 'all' : type));
-  }, []);
-  const onSaved = useCallback(
-    (file: string, type: MemoryType) => {
-      setSelected(file);
-      showType(type);
-    },
-    [showType],
-  );
-  const editor = useMemoryDraft({ projectPath: project.path, reload, onSaved });
-  // Esc, the backdrop and the X all ask before dropping unsaved edits.
-  useModalCloseGuard(editor.discard);
-
   const entries = useMemo(() => memory?.entries ?? [], [memory]);
   // Each memory with what is off about it, worked out once per change on disk.
   const listed = useMemo(() => listMemories(entries), [entries]);
@@ -150,99 +90,33 @@ function MemoryBody({ project, isDark, pane, setPane }: BodyProps) {
     [listed, filter, query, openedAt],
   );
   const counts = useMemo(() => memoryCounts(entries, query), [entries, query]);
-  const indexRows = useMemo(() => (memory ? memoryIndexRows(memory) : []), [memory]);
   // Search filters the list only; the preview changes on click, never on typing.
   const current = useMemo(() => pickCurrent(listed, selected), [listed, selected]);
   const currentEntry = current?.entry;
-  // A new memory has no row yet; an edit keeps its own row lit.
-  const creating = editor.draft?.target === null;
 
+  // A link followed in the preview brings its type's filter along.
   const openMemory = useCallback(
     (file: string) => {
       setSelected(file);
-      // Followed from a line of the index, it is read among the memories.
-      setPane('memories');
-      const type = entries.find((e) => e.file === file)?.type;
-      if (type) showType(type);
+      const type: MemoryType | undefined = entries.find((e) => e.file === file)?.type;
+      if (type) setFilter((f) => (f === 'all' || f === type || type === 'other' ? 'all' : type));
     },
-    [entries, showType, setPane],
+    [entries],
   );
-  const select = (file: string) => {
-    if (editor.discard()) setSelected(file);
-  };
-  const startNew = (name?: string) => {
-    editor.startNew(filter === 'all' ? undefined : filter, name);
-    // A draft is written beside the list, not over the index.
-    setPane('memories');
-  };
-  const selectPane = (next: MemoryPane) => {
-    if (next === 'index' && !editor.discard()) return;
-    setShownInIndex(null);
-    setPane(next);
-  };
-  const showInIndex = (file: string) => {
-    setShownInIndex(file);
-    setPane('index');
-  };
-  // The fixes that leave the memory's own file alone are applied on the spot,
-  // one at a time, since a second click can land before the list shows the first.
-  const fixing = useRef(false);
-  const fixIndex = async (fix: 'memoryIndex' | 'memoryRaise', entry: MemoryEntry) => {
-    if (fixing.current) return;
-    fixing.current = true;
-    try {
-      await reportFailure(
-        window.electronAPI[fix]({ projectPath: project.path, file: entry.file }),
-        `Could not update ${MEMORY_INDEX_FILE}`,
-      );
-      await reload();
-    } finally {
-      fixing.current = false;
-    }
-  };
-  const confirmDelete = async (entry: MemoryEntry) => {
-    setDeleting(null);
-    try {
-      const res = await window.electronAPI.memoryDelete({
-        projectPath: project.path,
-        file: entry.file,
-      });
-      if (!res.success) toast.error(res.error || 'Could not delete the memory');
-      // The file is gone; its dangling line shows above the list, with a way to drop it.
-      else if (res.data?.warning) toast.error(res.data.warning);
-      else toast(`Moved ${entry.file} to the trash`, { duration: 1800 });
-    } catch (err) {
-      console.error('Could not delete the memory', err);
-      toast.error('Could not delete the memory');
-    }
-    await reload();
-  };
-  const prune = async () => {
-    try {
-      const res = await window.electronAPI.memoryPrune({ projectPath: project.path });
-      if (!res.success || !res.data) {
-        toast.error(res.error || `Could not tidy ${MEMORY_INDEX_FILE}`);
-        return;
-      }
-      const kept = (memory?.dangling.length ?? 0) - res.data.removed.length;
-      // A line that also links something else isn't dropped for one dead link.
-      if (kept > 0) {
-        toast(`${kept} ${kept === 1 ? 'link shares' : 'links share'} a line with another memory`, {
-          description: `Edit ${MEMORY_INDEX_FILE} by hand to remove ${kept === 1 ? 'it' : 'them'}.`,
-        });
-      }
-    } catch (err) {
-      console.error('Could not tidy the memory index', err);
-      toast.error(`Could not tidy ${MEMORY_INDEX_FILE}`);
-    } finally {
-      await reload();
-    }
+  // Memory files are edited where every other file is: the diff editor, opened
+  // on the memory folder. The watcher brings a save back into the list.
+  const edit = (file: string) => {
+    if (!memory) return;
+    setDiffFile({
+      cwd: memory.dir,
+      filePath: file,
+      staged: false,
+      initialView: { kind: 'working', ref: 'HEAD' },
+      standalone: true,
+    });
   };
   // A missing folder and an empty one (Claude creates it before writing) look the same.
-  const empty = entries.length === 0 && memory?.index == null && !editor.draft;
-  // A folder with an index and no memories has nothing else to show.
-  const onlyIndex = entries.length === 0 && memory?.index != null;
-  const showIndex = !editor.draft && (pane === 'index' || onlyIndex);
+  const empty = entries.length === 0 && !memory?.hasIndex;
   const now = Date.now() / 1000;
   const projectOptions = useMemo(
     () => projects.map((p) => ({ value: p.id, label: p.name })),
@@ -256,55 +130,29 @@ function MemoryBody({ project, isDark, pane, setPane }: BodyProps) {
           <h2 className="text-[14px] font-semibold tracking-tight text-foreground">Memory</h2>
           <Select
             value={project.id}
-            onValueChange={(id) => {
-              if (editor.discard()) switchProject(id);
-            }}
+            onValueChange={switchProject}
             options={projectOptions}
             className="w-auto max-w-[260px] px-2 py-1"
           />
-          {/* The memories, or the index Claude finds them by: a view of its own, not one more type. */}
-          {memory && !empty && (
-            <div className="w-[190px] shrink-0">
-              <Segmented
-                size="sm"
-                value={showIndex ? 'index' : 'memories'}
-                onChange={selectPane}
-                options={[
-                  { value: 'memories', label: 'Memories' },
-                  { value: 'index', label: 'Index' },
-                ]}
-              />
-            </div>
-          )}
         </div>
         <div className="flex items-center gap-1">
-          {memory && (
-            <IconButton onClick={() => startNew()} title="New memory">
-              <Plus size={14} strokeWidth={1.8} />
+          {memory?.hasIndex && (
+            <IconButton onClick={() => edit(MEMORY_INDEX_FILE)} title={`Edit ${MEMORY_INDEX_FILE}`}>
+              <List size={14} strokeWidth={1.8} />
             </IconButton>
           )}
           {memory?.exists && (
-            <>
-              <IconButton
-                onClick={() =>
-                  void reportFailure(openInIde(memory.dir), 'Could not open the memory folder')
-                }
-                title="Open folder in editor"
-              >
-                <ExternalLink size={14} strokeWidth={1.8} />
-              </IconButton>
-              <IconButton
-                onClick={() =>
-                  void reportFailure(
-                    window.electronAPI.memoryOpenDir({ projectPath: project.path }),
-                    'Could not reveal the memory folder',
-                  )
-                }
-                title="Reveal folder"
-              >
-                <FolderOpen size={14} strokeWidth={1.8} />
-              </IconButton>
-            </>
+            <IconButton
+              onClick={() =>
+                void reportFailure(
+                  window.electronAPI.memoryOpenDir({ projectPath: project.path }),
+                  'Could not reveal the memory folder',
+                )
+              }
+              title="Reveal folder"
+            >
+              <FolderOpen size={14} strokeWidth={1.8} />
+            </IconButton>
           )}
           {memory && (
             <IconButton onClick={() => copy(memory.dir)} title="Copy folder path">
@@ -326,263 +174,158 @@ function MemoryBody({ project, isDark, pane, setPane }: BodyProps) {
       {memory &&
         memoryNotices(memory).map((notice) => (
           <div
-            key={notice.text}
-            className="flex shrink-0 items-center justify-between gap-3 border-b border-border/40 bg-surface-2 px-5 py-2 text-[11px] text-muted-foreground"
+            key={notice}
+            className="shrink-0 border-b border-border/40 bg-surface-2 px-5 py-2 text-[11px] text-muted-foreground"
           >
-            <span className="min-w-0">{notice.text}</span>
-            {notice.action === 'prune' && (
-              <Button variant="secondary" size="sm" onClick={() => void prune()}>
-                Remove {memory.dangling.length === 1 ? 'its line' : 'their lines'}
-              </Button>
-            )}
+            {notice}
           </div>
         ))}
 
       {memory && empty ? (
-        <EmptyState dir={memory.dir} projectName={project.name} onCreate={() => startNew()} />
+        <EmptyState dir={memory.dir} projectName={project.name} />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
-          {!showIndex && (
-            <div className="shrink-0 border-b border-border/40 px-5 py-2">
-              <div className="w-[600px] max-w-full">
-                <Segmented
-                  size="sm"
-                  value={filter}
-                  onChange={setFilter}
-                  options={[
-                    { value: 'all', label: 'All', count: counts.all || undefined },
-                    ...KNOWN_MEMORY_TYPES.map((t) => ({
-                      value: t,
-                      label: MEMORY_TYPE_LABELS[t],
-                      count: counts[t] || undefined,
-                    })),
-                  ]}
+          <div className="shrink-0 border-b border-border/40 px-5 py-2">
+            <div className="w-[600px] max-w-full">
+              <Segmented
+                size="sm"
+                value={filter}
+                onChange={setFilter}
+                options={[
+                  { value: 'all', label: 'All', count: counts.all || undefined },
+                  ...KNOWN_MEMORY_TYPES.map((t) => ({
+                    value: t,
+                    label: MEMORY_TYPE_LABELS[t],
+                    count: counts[t] || undefined,
+                  })),
+                ]}
+              />
+            </div>
+          </div>
+          <div className="flex min-h-0 flex-1">
+            <div className="flex w-[300px] shrink-0 flex-col border-r border-border/40">
+              <div className="flex items-center gap-2 border-b border-border/40 px-3 py-2">
+                <Search size={14} strokeWidth={1.8} className="text-muted-foreground" />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search memories"
+                  className="min-w-0 flex-1 bg-transparent text-[12px] text-foreground outline-hidden placeholder:text-muted-foreground"
                 />
               </div>
-            </div>
-          )}
-          {showIndex ? (
-            // Nothing while the folder is being read: the memories' list isn't what was asked for.
-            memory && (
-              <MemoryIndexView
-                rows={memory.index == null ? null : indexRows}
-                shown={shownInIndex}
-                onOpenMemory={(file) => {
-                  // A search left in the list would hide the memory just opened.
-                  setQuery('');
-                  openMemory(file);
-                }}
-                actions={<FileActions dir={memory.dir} file={MEMORY_INDEX_FILE} />}
-              />
-            )
-          ) : (
-            <div className="flex min-h-0 flex-1">
-              <div className="flex w-[300px] shrink-0 flex-col border-r border-border/40">
-                <div className="flex items-center gap-2 border-b border-border/40 px-3 py-2">
-                  <Search size={14} strokeWidth={1.8} className="text-muted-foreground" />
-                  <input
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search memories"
-                    className="min-w-0 flex-1 bg-transparent text-[12px] text-foreground outline-hidden placeholder:text-muted-foreground"
-                  />
-                </div>
-                <div className="min-h-0 flex-1 overflow-y-auto pb-1">
-                  {sections.map((section) => {
-                    const hasCurrent =
-                      !creating && section.entries.some((m) => m.entry.file === currentEntry?.file);
-                    // A search shows every match; otherwise a closed section still opens for the shown memory.
-                    const open =
-                      query.trim() !== '' ||
-                      (toggled[section.id] ?? (!COLLAPSED_SECTIONS.has(section.id) || hasCurrent));
-                    return (
-                      <div key={section.id}>
-                        <button
-                          type="button"
-                          aria-expanded={open}
-                          onClick={() => setToggled((t) => ({ ...t, [section.id]: !open }))}
-                          className="sticky top-0 z-10 flex w-full items-center gap-1 bg-[hsl(var(--surface-1)/0.92)] px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur-md transition-colors hover:text-foreground"
-                        >
-                          <ChevronRight
-                            size={12}
-                            strokeWidth={2}
-                            className={`transition-transform duration-200 ${open ? 'rotate-90' : ''}`}
+              <div className="min-h-0 flex-1 overflow-y-auto pb-1">
+                {sections.map((section) => {
+                  const hasCurrent = section.entries.some(
+                    (m) => m.entry.file === currentEntry?.file,
+                  );
+                  // A search shows every match; otherwise a closed section still opens for the shown memory.
+                  const open =
+                    query.trim() !== '' ||
+                    (toggled[section.id] ?? (!COLLAPSED_SECTIONS.has(section.id) || hasCurrent));
+                  return (
+                    <div key={section.id}>
+                      <button
+                        type="button"
+                        aria-expanded={open}
+                        onClick={() => setToggled((t) => ({ ...t, [section.id]: !open }))}
+                        className="sticky top-0 z-10 flex w-full items-center gap-1 bg-[hsl(var(--surface-1)/0.92)] px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur-md transition-colors hover:text-foreground"
+                      >
+                        <ChevronRight
+                          size={12}
+                          strokeWidth={2}
+                          className={`transition-transform duration-200 ${open ? 'rotate-90' : ''}`}
+                        />
+                        {MEMORY_SECTION_LABELS[section.id]} · {section.entries.length}
+                      </button>
+                      {open &&
+                        section.entries.map(({ entry: e, issues }) => (
+                          <ListRow
+                            key={e.file}
+                            active={currentEntry?.file === e.file}
+                            title={e.name}
+                            subtitle={e.description}
+                            meta={formatRelativeTime(e.mtimeMs / 1000, now)}
+                            flag={[
+                              // Mixed types only sit together under "all".
+                              ...(filter === 'all' &&
+                              section.id === 'attention' &&
+                              e.type !== 'other'
+                                ? [MEMORY_TYPE_LABELS[e.type].toLowerCase()]
+                                : []),
+                              ...issues.map((i) => MEMORY_ISSUE_LABELS[i]),
+                            ].join(' · ')}
+                            onClick={() => setSelected(e.file)}
                           />
-                          {MEMORY_SECTION_LABELS[section.id]} · {section.entries.length}
-                        </button>
-                        {open &&
-                          section.entries.map(({ entry: e, issues }) => (
-                            <ListRow
-                              key={e.file}
-                              active={!creating && currentEntry?.file === e.file}
-                              title={e.name}
-                              subtitle={e.description}
-                              meta={formatRelativeTime(e.mtimeMs / 1000, now)}
-                              flag={[
-                                // Mixed types only sit together under "all".
-                                ...(filter === 'all' &&
-                                section.id === 'attention' &&
-                                e.type !== 'other'
-                                  ? [MEMORY_TYPE_LABELS[e.type].toLowerCase()]
-                                  : []),
-                                ...issues.map((i) => MEMORY_ISSUE_LABELS[i]),
-                              ].join(' · ')}
-                              onClick={() => select(e.file)}
-                            />
-                          ))}
+                        ))}
+                    </div>
+                  );
+                })}
+                {memory && sections.length === 0 && (
+                  <div className="px-3 py-4 text-[12px] text-muted-foreground">
+                    {query.trim()
+                      ? 'No matches'
+                      : filter === 'all'
+                        ? 'No memories yet'
+                        : `No ${MEMORY_TYPE_LABELS[filter].toLowerCase()} memories yet`}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex min-w-0 flex-1 flex-col">
+              {current && currentEntry && memory && (
+                <>
+                  <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border/40 px-5 py-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate text-[13px] font-semibold text-foreground">
+                          {currentEntry.name}
+                        </span>
+                        <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                          {MEMORY_TYPE_LABELS[currentEntry.type]}
+                        </span>
                       </div>
-                    );
-                  })}
-                  {memory && sections.length === 0 && (
-                    <div className="px-3 py-4 text-[12px] text-muted-foreground">
-                      {query.trim()
-                        ? 'No matches'
-                        : filter === 'all'
-                          ? 'No memories yet'
-                          : `No ${MEMORY_TYPE_LABELS[filter].toLowerCase()} memories yet`}
+                      {currentEntry.description && (
+                        <p className="mt-0.5 text-[12px] text-muted-foreground">
+                          {currentEntry.description}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <IconButton onClick={() => edit(currentEntry.file)} title="Edit">
+                        <Pencil size={14} strokeWidth={1.8} />
+                      </IconButton>
+                      <IconButton
+                        onClick={() => copy(`${memory.dir}/${currentEntry.file}`)}
+                        title="Copy path"
+                      >
+                        <Copy size={14} strokeWidth={1.8} />
+                      </IconButton>
+                    </div>
+                  </div>
+                  {current.issues.length > 0 && (
+                    <div className="shrink-0 border-b border-border/40 bg-surface-2 px-5 py-1.5 text-[11px] text-muted-foreground">
+                      {memoryIssueTexts(current).map((text) => (
+                        <div key={text} className="py-0.5">
+                          {text}
+                        </div>
+                      ))}
                     </div>
                   )}
-                </div>
-              </div>
-
-              {editor.draft ? (
-                <MemoryEditor draft={editor.draft} api={editor} entries={entries} isDark={isDark} />
-              ) : (
-                <div className="flex min-w-0 flex-1 flex-col">
-                  {current && currentEntry && memory && (
-                    <>
-                      <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border/40 px-5 py-3">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="truncate text-[13px] font-semibold text-foreground">
-                              {currentEntry.name}
-                            </span>
-                            <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                              {MEMORY_TYPE_LABELS[currentEntry.type]}
-                            </span>
-                          </div>
-                          {currentEntry.description && (
-                            <p className="mt-0.5 text-[12px] text-muted-foreground">
-                              {currentEntry.description}
-                            </p>
-                          )}
-                          <HookLine
-                            entry={currentEntry}
-                            onShow={() => showInIndex(currentEntry.file)}
-                          />
-                        </div>
-                        <div className="flex shrink-0 items-center gap-1">
-                          <IconButton onClick={() => editor.startEdit(currentEntry)} title="Edit">
-                            <Pencil size={14} strokeWidth={1.8} />
-                          </IconButton>
-                          <IconButton
-                            onClick={() => setDeleting(currentEntry)}
-                            title="Delete"
-                            variant="destructive"
-                          >
-                            <Trash2 size={14} strokeWidth={1.8} />
-                          </IconButton>
-                          <FileActions dir={memory.dir} file={currentEntry.file} />
-                        </div>
-                      </div>
-                      <MemoryIssues
-                        broken={current.broken}
-                        candidates={entries.filter((e) => e.file !== currentEntry.file)}
-                        // A fix to the memory's file opens as an unsaved edit, to be read before it is saved.
-                        onRepoint={(link, to) =>
-                          editor.startEdit(currentEntry, (f) => ({
-                            ...f,
-                            body: repointLink(f.body, link, to, entries),
-                          }))
-                        }
-                        onUnlink={(link) =>
-                          editor.startEdit(currentEntry, (f) => ({
-                            ...f,
-                            body: unlinkLink(f.body, link),
-                          }))
-                        }
-                        saved={{
-                          issues: current.issues,
-                          onCreate: startNew,
-                          onIndex: () => void fixIndex('memoryIndex', currentEntry),
-                          onRaise: currentEntry.ownLine
-                            ? () => void fixIndex('memoryRaise', currentEntry)
-                            : null,
-                          onRetype: (type) =>
-                            editor.startEdit(currentEntry, (f) => ({ ...f, type })),
-                        }}
-                      />
-                      <div className="min-h-0 flex-1">
-                        <MemoryPreview
-                          markdown={currentEntry.body}
-                          entries={entries}
-                          isDark={isDark}
-                          onOpenMemory={openMemory}
-                        />
-                      </div>
-                    </>
-                  )}
-                </div>
+                  <div className="min-h-0 flex-1">
+                    <MemoryPreview
+                      markdown={currentEntry.body}
+                      entries={entries}
+                      isDark={isDark}
+                      onOpenMemory={openMemory}
+                    />
+                  </div>
+                </>
               )}
             </div>
-          )}
+          </div>
         </div>
       )}
-
-      {deleting && (
-        <CascadeConfirm
-          message={deleteMessage(deleting, memoryReferrers(entries, deleting))}
-          confirmLabel="Delete"
-          onConfirm={() => void confirmDelete(deleting)}
-          onCancel={() => setDeleting(null)}
-        />
-      )}
-    </div>
-  );
-}
-
-/** Open a file of the memory folder in the editor, or copy its path. */
-function FileActions({ dir, file }: { dir: string; file: string }) {
-  return (
-    <>
-      <IconButton
-        onClick={() =>
-          void reportFailure(
-            window.electronAPI.openInEditor({ cwd: dir, filePath: file }),
-            `Could not open ${file} in your editor`,
-          )
-        }
-        title="Open in editor"
-      >
-        <ExternalLink size={14} strokeWidth={1.8} />
-      </IconButton>
-      <IconButton onClick={() => copy(`${dir}/${file}`)} title="Copy path">
-        <Copy size={14} strokeWidth={1.8} />
-      </IconButton>
-    </>
-  );
-}
-
-/** A memory's line in MEMORY.md, under its description: what Claude reads of it every session. */
-function HookLine({ entry, onShow }: { entry: MemoryEntry; onShow: () => void }) {
-  const line = memoryLine(entry);
-  // Unindexed, it has no line to show: the issues below say so, with the fix.
-  if (line === 'missing') return null;
-  return (
-    <div className="mt-1.5 flex items-baseline gap-2 text-[11px]">
-      <span className="shrink-0 text-[10px] uppercase tracking-[0.08em] text-fg-fade-45">
-        {MEMORY_HOOK_LABEL}
-      </span>
-      <span className={`min-w-0 ${entry.hook ? 'text-foreground' : 'text-muted-foreground'}`}>
-        {entry.hook || MEMORY_HOOK_PLACEHOLDERS[line]}
-      </span>
-      <button
-        type="button"
-        onClick={onShow}
-        className="shrink-0 text-primary transition-colors hover:underline"
-      >
-        Show in index
-      </button>
     </div>
   );
 }
@@ -614,8 +357,7 @@ function ListRow(props: {
   );
 }
 
-function EmptyState(props: { dir: string; projectName: string; onCreate: () => void }) {
-  const { dir, projectName, onCreate } = props;
+function EmptyState({ dir, projectName }: { dir: string; projectName: string }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 px-10 text-center">
       <Brain size={28} strokeWidth={1.5} className="text-muted-foreground" />
@@ -630,9 +372,6 @@ function EmptyState(props: { dir: string; projectName: string; onCreate: () => v
       <p className="max-w-md text-[12px] text-muted-foreground">
         Claude writes memories here as it learns about the project.
       </p>
-      <Button variant="secondary" size="sm" onClick={onCreate}>
-        <Plus size={13} strokeWidth={1.8} /> New memory
-      </Button>
     </div>
   );
 }

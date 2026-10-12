@@ -3,18 +3,7 @@ import * as path from 'path';
 import { ipcMain, shell } from 'electron';
 import { z } from 'zod';
 import { IpcError, parseArgs, errorResponse, ipcError } from './validate';
-import { MEMORY_TYPES } from '@shared/types';
-import { isMemoryFileName } from '@shared/memoryLinks';
-import {
-  createMemory,
-  deleteMemory,
-  indexMemory,
-  pruneIndex,
-  raiseMemory,
-  readProjectMemory,
-  resolveMemoryDir,
-  updateMemory,
-} from '../services/MemoryService';
+import { readProjectMemory, resolveMemoryDir } from '../services/MemoryService';
 import { stopWatchingMemory, watchProjectMemory } from '../services/MemoryWatcher';
 import { DatabaseService } from '../services/DatabaseService';
 
@@ -22,48 +11,13 @@ export const memoryProjectArgsSchema = z.object({
   projectPath: z.string().refine((p) => path.isAbsolute(p), 'must be an absolute path'),
 });
 
-const singleLine = z.string().regex(/^[^\r\n]*$/, 'must be a single line');
-
-const memoryFieldsSchema = z.object({
-  name: singleLine.trim().min(1).max(200),
-  description: singleLine.trim().max(1000),
-  type: z.enum(MEMORY_TYPES),
-  body: z.string().max(1_000_000),
-});
-
-/** A memory's basename: a `.md` file in the memory folder itself, never the index. */
-const memoryFileSchema = z
-  .string()
-  .refine(
-    isMemoryFileName,
-    'must be a memory file name: a .md in the memory folder, not the index',
-  );
-
-export const memoryCreateArgsSchema = memoryProjectArgsSchema.extend({
-  ...memoryFieldsSchema.shape,
-  /** The memory's MEMORY.md line; left out, the line keeps (or defaults) its own. */
-  hook: singleLine.trim().max(1000).optional(),
-});
-
-export const memoryUpdateArgsSchema = memoryCreateArgsSchema.extend({
-  file: memoryFileSchema,
-  expectedMtimeMs: z.number(),
-  expectedSizeBytes: z.number(),
-});
-
-export const memoryFileArgsSchema = memoryProjectArgsSchema.extend({ file: memoryFileSchema });
-
 /**
  * `parseArgs` for the memory channels, which all name a project: the path must
  * be one of Dash's own projects, so the renderer can't point these handlers at
  * the memory of an arbitrary folder.
  */
-function parseProjectArgs<T extends { projectPath: string }>(
-  channel: string,
-  schema: z.ZodType<T>,
-  raw: unknown,
-): T {
-  const args = parseArgs(channel, schema, raw);
+function parseProjectArgs(channel: string, raw: unknown): { projectPath: string } {
+  const args = parseArgs(channel, memoryProjectArgsSchema, raw);
   if (!DatabaseService.getProjects().some((p) => p.path === args.projectPath)) {
     throw new IpcError(
       `Invalid IPC arguments for ${channel}: projectPath is not a Dash project`,
@@ -76,7 +30,7 @@ function parseProjectArgs<T extends { projectPath: string }>(
 export function registerMemoryIpc(): void {
   ipcMain.handle('memory:get', async (_event, raw: unknown) => {
     try {
-      const { projectPath } = parseProjectArgs('memory:get', memoryProjectArgsSchema, raw);
+      const { projectPath } = parseProjectArgs('memory:get', raw);
       return { success: true, data: await readProjectMemory(projectPath) };
     } catch (error) {
       return errorResponse(error);
@@ -85,7 +39,7 @@ export function registerMemoryIpc(): void {
 
   ipcMain.handle('memory:watch', async (_event, raw: unknown) => {
     try {
-      const { projectPath } = parseProjectArgs('memory:watch', memoryProjectArgsSchema, raw);
+      const { projectPath } = parseProjectArgs('memory:watch', raw);
       await watchProjectMemory(projectPath);
       return { success: true, data: null };
     } catch (error) {
@@ -102,84 +56,12 @@ export function registerMemoryIpc(): void {
   // taken from the renderer, so this can only ever open a memory folder.
   ipcMain.handle('memory:openDir', async (_event, raw: unknown) => {
     try {
-      const { projectPath } = parseProjectArgs('memory:openDir', memoryProjectArgsSchema, raw);
+      const { projectPath } = parseProjectArgs('memory:openDir', raw);
       const dir = await resolveMemoryDir(projectPath);
       if (!fs.existsSync(dir)) return ipcError(`No memory folder at ${dir}`, 'NOT_FOUND');
       const failure = await shell.openPath(dir);
       if (failure) return ipcError(failure, 'UNKNOWN');
       return { success: true, data: null };
-    } catch (error) {
-      return errorResponse(error);
-    }
-  });
-
-  // The writes below take a project path and a basename, never a full path:
-  // like openDir, they can only ever touch a memory folder (the default one, or
-  // the `autoMemoryDirectory` Claude's own settings name).
-  ipcMain.handle('memory:create', async (_event, raw: unknown) => {
-    try {
-      const { projectPath, hook, ...fields } = parseProjectArgs(
-        'memory:create',
-        memoryCreateArgsSchema,
-        raw,
-      );
-      return { success: true, data: await createMemory(projectPath, fields, hook) };
-    } catch (error) {
-      return errorResponse(error);
-    }
-  });
-
-  ipcMain.handle('memory:update', async (_event, raw: unknown) => {
-    try {
-      const { projectPath, file, expectedMtimeMs, expectedSizeBytes, hook, ...fields } =
-        parseProjectArgs('memory:update', memoryUpdateArgsSchema, raw);
-      const data = await updateMemory(
-        projectPath,
-        file,
-        fields,
-        { mtimeMs: expectedMtimeMs, sizeBytes: expectedSizeBytes },
-        hook,
-      );
-      return { success: true, data };
-    } catch (error) {
-      return errorResponse(error);
-    }
-  });
-
-  ipcMain.handle('memory:prune', async (_event, raw: unknown) => {
-    try {
-      const { projectPath } = parseProjectArgs('memory:prune', memoryProjectArgsSchema, raw);
-      return { success: true, data: { removed: await pruneIndex(projectPath) } };
-    } catch (error) {
-      return errorResponse(error);
-    }
-  });
-
-  ipcMain.handle('memory:index', async (_event, raw: unknown) => {
-    try {
-      const { projectPath, file } = parseProjectArgs('memory:index', memoryFileArgsSchema, raw);
-      await indexMemory(projectPath, file);
-      return { success: true, data: null };
-    } catch (error) {
-      return errorResponse(error);
-    }
-  });
-
-  ipcMain.handle('memory:raise', async (_event, raw: unknown) => {
-    try {
-      const { projectPath, file } = parseProjectArgs('memory:raise', memoryFileArgsSchema, raw);
-      await raiseMemory(projectPath, file);
-      return { success: true, data: null };
-    } catch (error) {
-      return errorResponse(error);
-    }
-  });
-
-  ipcMain.handle('memory:delete', async (_event, raw: unknown) => {
-    try {
-      const { projectPath, file } = parseProjectArgs('memory:delete', memoryFileArgsSchema, raw);
-      const data = await deleteMemory(projectPath, file, (full) => shell.trashItem(full));
-      return { success: true, data };
     } catch (error) {
       return errorResponse(error);
     }

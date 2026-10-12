@@ -4,12 +4,11 @@ import { MEMORY_INDEX_FILE } from './types';
  * What counts as a markdown link to another memory: `[text](target)` with a
  * target naming a `.md` file in the memory folder itself (`x.md` or `./x.md`).
  * The main process uses it to flag memories MEMORY.md indexes; the modal uses
- * it to make the same links clickable, to call one dead and to repoint or
- * unlink it, so "indexed", "linked" and "dead" can't disagree.
+ * it to make the same links clickable and to call one dead, so "indexed",
+ * "linked" and "dead" can't disagree.
  *
  * Memories also point at each other by name, as `[[name]]`. The preview
- * resolves those, a rename moves them, a delete warns about them and a fix
- * repoints them, all through `mapMemoryRefs`.
+ * resolves those through `mapMemoryRefs`.
  *
  * Neither is looked for in code (a fenced block or an inline span): `[[` there
  * is a shell test or a TOML table, not a memory.
@@ -89,8 +88,8 @@ export function mapMemoryLinks(
 }
 
 /**
- * Rewrite each memory link in `markdown`, text and all: what unlinking one or
- * showing it as dead takes. `replace` gets the file, the link's text and the
+ * Rewrite each memory link in `markdown`, text and all: what showing one as
+ * dead takes. `replace` gets the file, the link's text and the
  * whole `[text](target)` match.
  */
 export function mapWholeMemoryLinks(
@@ -112,11 +111,6 @@ function linkTextStart(markdown: string, close: number): number {
     else if (ch === '[' && depth-- === 0) return i;
   }
   return -1;
-}
-
-/** `file` as a link target: in angle brackets when a bare one would end early. */
-export function memoryLinkTarget(file: string): string {
-  return /[\s()]/.test(file) ? `<${file}>` : file;
 }
 
 /**
@@ -165,8 +159,7 @@ export function memoryBaseName(file: string): string {
 
 /**
  * Which file a `[[ref]]` means among `memories`: the memory with that name,
- * else the one with that basename. The preview follows it, and a rename moves
- * the refs it gives to the renamed memory.
+ * else the one with that basename. The preview follows it.
  */
 export function resolveMemoryRef(
   memories: { file: string; name: string }[],
@@ -181,8 +174,7 @@ export function resolveMemoryRef(
 
 /**
  * Whether `name` is a memory's file: a `.md` in the memory folder itself that
- * a link can name, and never the index in any casing. The list shows exactly
- * the files the writes accept.
+ * a link can name, and never the index in any casing.
  */
 export function isMemoryFileName(name: string): boolean {
   return SAME_FOLDER_MD_RE.exec(name)?.[1] === name && name.toLowerCase() !== INDEX_FILE_LOWER;

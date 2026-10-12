@@ -17,7 +17,6 @@ import { ShellDrawerWrapper } from './components/terminal/ShellDrawerWrapper';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
 import { ExtensionsModal } from './components/extensions/ExtensionsModal';
 import { MemoryModal } from './components/memory/MemoryModal';
-import { closeTopModal } from './components/ui/Modal';
 import { TaskModal } from './components/task/TaskModal';
 import { NewProjectWizard } from './components/newProject/NewProjectWizard';
 import { DeleteTaskModal } from './components/task/DeleteTaskModal';
@@ -813,8 +812,7 @@ export function App() {
       if (keybindings.openMemory && matchesBinding(e, keybindings.openMemory)) {
         e.preventDefault();
         const target = activeProjectId ?? projects[0]?.id;
-        // Closing goes through the modal, which asks before dropping an unsaved draft.
-        if (memoryProjectId) closeTopModal();
+        if (memoryProjectId) setMemoryProjectId(null);
         else if (target) setMemoryProjectId(target);
       }
       if (keybindings.closeDiff && matchesBinding(e, keybindings.closeDiff)) {
@@ -1590,6 +1588,7 @@ export function App() {
             initialStaged={diffFile.staged}
             initialView={diffFile.initialView}
             activeTaskId={activeTaskId}
+            standalone={diffFile.standalone}
             terminalTheme={resolvedTerminalTheme}
             isDark={theme === 'dark'}
             onClose={() => {

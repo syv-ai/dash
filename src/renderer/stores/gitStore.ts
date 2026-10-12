@@ -12,6 +12,8 @@ export interface DiffFileTarget {
   filePath: string;
   staged: boolean;
   initialView?: { kind: 'working'; ref: 'HEAD' | 'index' } | { kind: 'commit'; hash: string };
+  /** `cwd` is not the active task's worktree (see DiffEditorModalProps.standalone). */
+  standalone?: boolean;
 }
 
 type Updater<T> = T | ((prev: T) => T);
