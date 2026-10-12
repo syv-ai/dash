@@ -9,6 +9,11 @@ vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: () => [] },
 }));
 
+const knownProjects = vi.hoisted(() => ({ paths: [] as string[] }));
+vi.mock('../../services/DatabaseService', () => ({
+  DatabaseService: { getProjects: () => knownProjects.paths.map((path) => ({ path })) },
+}));
+
 import { ipcMain, shell } from 'electron';
 import {
   memoryFileArgsSchema,
@@ -76,6 +81,7 @@ describe('memory handlers', () => {
     process.env.CLAUDE_CONFIG_DIR = path.join(tmp, 'claude');
     project = path.join(tmp, 'plain');
     fs.mkdirSync(project);
+    knownProjects.paths = [project];
     vi.mocked(shell.openPath).mockReset().mockResolvedValue('');
     vi.mocked(shell.trashItem)
       .mockReset()
@@ -115,6 +121,32 @@ describe('memory handlers', () => {
   it('rejects a relative path without opening anything', async () => {
     expect(await openDir({ projectPath: 'plain' })).toMatchObject({ success: false });
     expect(shell.openPath).not.toHaveBeenCalled();
+  });
+
+  it("refuses a folder that is not one of Dash's projects, on every channel", async () => {
+    const stranger = path.join(tmp, 'stranger');
+    fs.mkdirSync(await resolveMemoryDir(stranger), { recursive: true });
+    const fields = { name: 'a', description: '', type: 'user', body: '' };
+    const file = { projectPath: stranger, file: 'a.md' };
+    const calls: [string, unknown][] = [
+      ['memory:get', { projectPath: stranger }],
+      ['memory:watch', { projectPath: stranger }],
+      ['memory:openDir', { projectPath: stranger }],
+      ['memory:create', { projectPath: stranger, ...fields }],
+      ['memory:update', { ...file, ...fields, expectedMtimeMs: 1, expectedSizeBytes: 1 }],
+      ['memory:prune', { projectPath: stranger }],
+      ['memory:index', file],
+      ['memory:raise', file],
+      ['memory:delete', file],
+    ];
+    for (const [channel, raw] of calls) {
+      expect(await invoke(channel, raw), channel).toMatchObject({
+        success: false,
+        code: 'VALIDATION',
+      });
+    }
+    expect(shell.openPath).not.toHaveBeenCalled();
+    expect(fs.readdirSync(await resolveMemoryDir(stranger))).toEqual([]);
   });
 
   it('creates, updates and trashes a memory through the handlers', async () => {
