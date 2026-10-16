@@ -2,7 +2,11 @@ import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { loadWorkspaceConfig, writeWorkspaceConfig } from './WorkspaceConfigService';
+import {
+  loadSharedWorkspaceConfig,
+  loadWorkspaceConfig,
+  writeWorkspaceConfig,
+} from './WorkspaceConfigService';
 
 function tmpProject(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'dash-wsc-'));
@@ -50,6 +54,95 @@ describe('loadWorkspaceConfig taskDefaults', () => {
     const cfg = loadWorkspaceConfig(proj);
     expect(cfg?.setup).toEqual(['x']);
     expect(cfg?.taskDefaults?.permissionMode).toBeUndefined();
+  });
+});
+
+function writeDash(proj: string, file: string, content: unknown): void {
+  fs.mkdirSync(path.join(proj, '.dash'), { recursive: true });
+  fs.writeFileSync(path.join(proj, '.dash', file), JSON.stringify(content));
+}
+
+describe('loadWorkspaceConfig taskDefaults.dashAccess', () => {
+  it('parses a boolean dashAccess', () => {
+    const proj = tmpProject();
+    dirs.push(proj);
+    writeDash(proj, 'config.json', { taskDefaults: { dashAccess: true } });
+    expect(loadWorkspaceConfig(proj)?.taskDefaults).toEqual({ dashAccess: true });
+  });
+
+  it('drops a non-boolean dashAccess', () => {
+    const proj = tmpProject();
+    dirs.push(proj);
+    writeDash(proj, 'config.json', { setup: ['x'], taskDefaults: { dashAccess: 'yes' } });
+    expect(loadWorkspaceConfig(proj)?.taskDefaults).toBeUndefined();
+  });
+});
+
+describe('loadWorkspaceConfig config.local.json taskDefaults overlay', () => {
+  it('overlays the shared taskDefaults key by key', () => {
+    const proj = tmpProject();
+    dirs.push(proj);
+    writeDash(proj, 'config.json', { taskDefaults: { dashAccess: true, baseRef: 'main' } });
+    writeDash(proj, 'config.local.json', { taskDefaults: { dashAccess: false } });
+    expect(loadWorkspaceConfig(proj)?.taskDefaults).toEqual({ dashAccess: false, baseRef: 'main' });
+  });
+
+  it('applies every field from the local file, dropping invalid ones', () => {
+    const proj = tmpProject();
+    dirs.push(proj);
+    writeDash(proj, 'config.json', {
+      taskDefaults: { permissionMode: 'acceptEdits', contextPrompt: 'shared' },
+    });
+    writeDash(proj, 'config.local.json', {
+      taskDefaults: {
+        baseRef: 'origin/dev',
+        permissionMode: 'nope',
+        useWorktree: false,
+        contextPrompt: 'mine',
+      },
+    });
+    expect(loadWorkspaceConfig(proj)?.taskDefaults).toEqual({
+      baseRef: 'origin/dev',
+      permissionMode: 'acceptEdits',
+      useWorktree: false,
+      contextPrompt: 'mine',
+    });
+  });
+
+  it('adds taskDefaults when only the local file has them', () => {
+    const proj = tmpProject();
+    dirs.push(proj);
+    writeDash(proj, 'config.json', { setup: ['x'] });
+    writeDash(proj, 'config.local.json', { taskDefaults: { dashAccess: true } });
+    expect(loadWorkspaceConfig(proj)?.taskDefaults).toEqual({ dashAccess: true });
+  });
+});
+
+describe('loadSharedWorkspaceConfig', () => {
+  it('reads config.json and ignores config.local.json', () => {
+    const proj = tmpProject();
+    dirs.push(proj);
+    writeDash(proj, 'config.json', { setup: ['x'], taskDefaults: { dashAccess: true } });
+    writeDash(proj, 'config.local.json', {
+      setup: { after: ['mine'] },
+      taskDefaults: { dashAccess: false, baseRef: 'origin/dev' },
+    });
+    expect(loadSharedWorkspaceConfig(proj)).toEqual({
+      setup: ['x'],
+      taskDefaults: { dashAccess: true },
+    });
+    // The merged read still overlays the local file.
+    expect(loadWorkspaceConfig(proj)).toEqual({
+      setup: ['x', 'mine'],
+      taskDefaults: { dashAccess: false, baseRef: 'origin/dev' },
+    });
+  });
+
+  it('returns null without a config.json, even when a local file exists', () => {
+    const proj = tmpProject();
+    dirs.push(proj);
+    writeDash(proj, 'config.local.json', { taskDefaults: { dashAccess: true } });
+    expect(loadSharedWorkspaceConfig(proj)).toBeNull();
   });
 });
 

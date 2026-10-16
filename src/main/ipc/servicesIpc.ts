@@ -7,7 +7,7 @@ import { DatabaseService } from '../services/DatabaseService';
 import { WorkspacePortsRuntime } from '../services/WorkspacePortsRuntime';
 import { portLivenessService } from '../services/PortLivenessService';
 import { initDrawerTabsService } from './drawerTabsIpc';
-import { startCommandPty, killPty, hasPty } from '../services/ptyManager';
+import { startCommandPty, killPty, hasPty, readPtyText } from '../services/ptyManager';
 import { terminalSnapshotService } from '../services/TerminalSnapshotService';
 import type { TaskPort } from '@shared/types';
 import { stripHostTerminalEnv } from '../services/hostTerminalEnv';
@@ -100,6 +100,7 @@ export function getServiceRunner(): ServiceRunner {
         broadcast('ports:service:focusTab', { taskId, tabId, reset: opts?.reset ?? false }),
       shell: process.env.SHELL || '/bin/sh',
       sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+      ptyText: readPtyText,
     });
   }
   return runner;

@@ -118,6 +118,14 @@ void app.whenReady().then(async () => {
   });
   await hookServer.start();
 
+  // Control API for agents (the dash-mcp shim). Never blocks boot.
+  try {
+    const { startControl } = await import('./control');
+    await startControl();
+  } catch (err) {
+    console.error('[main] Control API failed to start:', err);
+  }
+
   // Register IPC handlers
   const { registerAllIpc } = await import('./ipc');
   registerAllIpc();
@@ -331,6 +339,14 @@ app.on('before-quit', (event) => {
     try {
       const { hookServer } = await import('./services/HookServer');
       hookServer.stop();
+    } catch {
+      // Best effort
+    }
+
+    // Stop the control API (removes its port file)
+    try {
+      const { stopControl } = await import('./control');
+      await stopControl();
     } catch {
       // Best effort
     }

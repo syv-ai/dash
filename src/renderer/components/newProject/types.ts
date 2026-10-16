@@ -8,6 +8,8 @@ export interface ConfigureValues {
   permissionMode: PermissionMode;
   useWorktree: boolean;
   contextPrompt: string;
+  /** Default for the New Task dialog's Dash access switch. */
+  dashAccess: boolean;
   setup: string; // newline-separated; split on save
   teardown: string; // newline-separated; split on save
 }
@@ -38,6 +40,7 @@ export function configToValues(
     permissionMode: td?.permissionMode ?? 'default',
     useWorktree: td?.useWorktree ?? true,
     contextPrompt: td?.contextPrompt ?? '',
+    dashAccess: td?.dashAccess ?? false,
     setup: joinLines(config?.setup),
     teardown: joinLines(config?.teardown),
   };
@@ -52,6 +55,8 @@ export function valuesToConfig(value: ConfigureValues): WorkspaceConfig {
     permissionMode: value.permissionMode,
     useWorktree: value.useWorktree,
     contextPrompt: value.contextPrompt.trim() || undefined,
+    // Off is the built-in default, so only an opt-in is written.
+    dashAccess: value.dashAccess || undefined,
   };
   return {
     setup: setup.length > 0 ? setup : undefined,

@@ -197,6 +197,7 @@ export function App() {
   const syncShellEnv = useSettings((s) => s.syncShellEnv);
   const ultracode = useSettings((s) => s.ultracode);
   const stopSessionsOnQuit = useSettings((s) => s.stopSessionsOnQuit);
+  const orchestratorAccess = useSettings((s) => s.orchestratorAccess);
   const customClaudeEnvVars = useSettings((s) => s.customClaudeEnvVars);
 
   // Sync desktop notification settings to main process
@@ -245,6 +246,10 @@ export function App() {
   useEffect(() => {
     window.electronAPI.setStopSessionsOnQuit?.(stopSessionsOnQuit);
   }, [stopSessionsOnQuit]);
+  // Sync orchestrator access to main (gates the control API's orchestrator caller)
+  useEffect(() => {
+    window.electronAPI.setOrchestratorAccess?.(orchestratorAccess);
+  }, [orchestratorAccess]);
   // Sync Claude Code env vars to main process
   useEffect(() => {
     const vars: Record<string, string> = { ...customClaudeEnvVars };
@@ -438,6 +443,16 @@ export function App() {
     return off;
   }, []);
 
+  // Main changed a project's tasks (created, archived, restored or deleted,
+  // possibly by the control API): reload that project's list so tasks nobody
+  // opened still show up. Archived projects keep no task list, so skip them.
+  useEffect(() => {
+    return window.electronAPI.onTasksChanged(({ projectId }) => {
+      const { projects, loadTasks } = useProjects.getState();
+      if (projects.some((p) => p.id === projectId)) void loadTasks(projectId);
+    });
+  }, []);
+
   // Memoized props for ExtensionsModal. Without these, App.tsx re-renders (terminal
   // activity, git polls, PTY events) hand the modal new array references every time,
   // and the modal's overview useCallback re-fires its refetch effect — flickering
@@ -520,9 +535,11 @@ export function App() {
     }
   }, [activeProjectIdForFetch, activeProjectPathForFetch, activeProjectIsGit]);
 
-  // Focus a specific task when notification is clicked
+  // Focus a task from main (a notification click, or the control API's
+  // tasks.open). Select its project too: the task may live in another one.
   useEffect(() => {
-    return window.electronAPI.onFocusTask((taskId) => {
+    return window.electronAPI.onFocusTask(({ taskId, projectId }) => {
+      if (projectId) setActiveProjectId(projectId);
       setActiveTaskId(taskId);
     });
   }, []);
@@ -1448,6 +1465,15 @@ export function App() {
           onModelChange={(id, model) => {
             if (!taskSettingsTarget || taskSettingsTarget.id !== id) return;
             void persistTaskUpdate(taskSettingsTarget, { model });
+          }}
+          onDashAccessChange={(id, enabled, restart) => {
+            if (taskSettingsTarget?.id !== id) return;
+            void useProjects
+              .getState()
+              .setDashAccess(taskSettingsTarget, enabled, restart)
+              .then((updated) => {
+                if (updated) setTaskSettingsTarget((prev) => (prev?.id === id ? updated : prev));
+              });
           }}
           onScriptsChange={(id, setupScript, teardownScript) => {
             void (async () => {

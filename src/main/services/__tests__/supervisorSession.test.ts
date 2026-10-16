@@ -48,6 +48,50 @@ describe('buildDispatchArgs', () => {
     );
     expect(buildDispatchArgs({ name: 't', model: 'default' })).not.toContain('--model');
   });
+
+  it('puts --mcp-config right after --bg so --name closes the variadic flag', () => {
+    const args = buildDispatchArgs({
+      name: 't',
+      mcpConfigPath: '/u/control/mcp-config/abc.json',
+      permissionMode: 'acceptEdits',
+      model: 'opus',
+      resumeSessionId: 'sess',
+      prompt: 'do the thing',
+    });
+    expect(args.slice(0, 3)).toEqual(['--bg', '--mcp-config', '/u/control/mcp-config/abc.json']);
+    // --mcp-config is variadic: whatever follows its path must be a flag, never
+    // the prompt, or the CLI reads the prompt as a second config file.
+    expect(args[args.indexOf('/u/control/mcp-config/abc.json') + 1]).toBe('--name');
+    expect(args[args.length - 1]).toBe('do the thing');
+  });
+
+  it('merges ultracode and the allow list into one --settings', () => {
+    const args = buildDispatchArgs({
+      name: 't',
+      ultracode: true,
+      mcpConfigPath: '/u/c.json',
+      allowTools: ['mcp__dash__tasks_list', 'mcp__dash__tasks_get'],
+      prompt: 'p',
+    });
+    expect(args.filter((a) => a === '--settings')).toHaveLength(1);
+    expect(JSON.parse(args[args.indexOf('--settings') + 1]!)).toEqual({
+      ultracode: true,
+      permissions: { allow: ['mcp__dash__tasks_list', 'mcp__dash__tasks_get'] },
+    });
+    expect(args[args.length - 1]).toBe('p');
+  });
+
+  it('passes the allow list alone without ultracode, and no --settings with neither', () => {
+    const args = buildDispatchArgs({ name: 't', allowTools: ['mcp__dash__tasks_list'] });
+    expect(JSON.parse(args[args.indexOf('--settings') + 1]!)).toEqual({
+      permissions: { allow: ['mcp__dash__tasks_list'] },
+    });
+    expect(buildDispatchArgs({ name: 't', allowTools: [] })).not.toContain('--settings');
+  });
+
+  it('passes no --mcp-config without a path', () => {
+    expect(buildDispatchArgs({ name: 't', prompt: 'p' })).not.toContain('--mcp-config');
+  });
 });
 
 describe('parseDispatchOutput', () => {

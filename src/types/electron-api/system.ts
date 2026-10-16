@@ -1,4 +1,4 @@
-import type { IpcResponse } from '../../shared/types';
+import type { ControlInfo, IpcResponse } from '../../shared/types';
 
 /** App info, dialogs, external/editor/IDE launch, app-lifecycle events, and
  *  settings mutations — the cross-cutting "shell" surface. */
@@ -28,7 +28,8 @@ export interface SystemApi {
 
   // App lifecycle
   onBeforeQuit: (callback: () => void) => () => void;
-  onFocusTask: (callback: (taskId: string) => void) => () => void;
+  /** `projectId` is absent only from an older sender; then only the task is selected. */
+  onFocusTask: (callback: (target: { taskId: string; projectId?: string }) => void) => () => void;
   onToast: (callback: (data: { message: string; url?: string }) => void) => () => void;
 
   // Settings
@@ -39,5 +40,8 @@ export interface SystemApi {
   setUltracode: (enabled: boolean) => void;
   /** `claude stop` every task session when Dash quits (default: sessions live on). */
   setStopSessionsOnQuit: (enabled: boolean) => void;
+  /** Settings "Let other agents control Dash": gates orchestrator calls to the control API. */
+  setOrchestratorAccess: (enabled: boolean) => void;
+  getControlInfo: () => Promise<IpcResponse<ControlInfo>>;
   getClaudeAttribution: (projectPath?: string) => Promise<IpcResponse<string | null>>;
 }

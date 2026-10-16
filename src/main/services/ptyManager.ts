@@ -8,12 +8,13 @@ import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
 import { TerminalMirror } from './TerminalMirror';
 import { terminalSnapshotService } from './TerminalSnapshotService';
 import { ensureShellConfig, shellHistoryPath } from './ptyShellConfig';
-import { findClaudePath, findLatestSessionId } from './claudeCli';
+import { findClaudePath, findLatestSessionId, requireSupportedClaude } from './claudeCli';
 import { buildClaudeEnv } from './claudeEnv';
 import { supervisorService, DispatchError } from './SupervisorService';
 import { parseUntrustedRoot } from './supervisorSession';
 import { isWorkspaceTrusted } from '../utils/claudePaths';
 import { DatabaseService } from './DatabaseService';
+import { mcpConfigForDispatch } from '../control/mcpConfig';
 import { writeHookSettings, setCommitAttributionValue } from './ptyHookSettings';
 import type { PermissionMode, TaskModel } from '@shared/types';
 
@@ -127,6 +128,12 @@ export class UntrustedWorkspaceError extends Error {
 /** Trust root per task whose last dispatch was refused as untrusted. */
 const untrustedRoots = new Map<string, string>();
 
+/** The trust root the task's last dispatch was refused for, if it still waits
+ *  on Claude Code's trust prompt. */
+export function getUntrustedRoot(taskId: string): string | undefined {
+  return untrustedRoots.get(taskId);
+}
+
 function consumeInitialPrompt(taskId: string): string | undefined {
   const prompt = pendingInitialPrompts.get(taskId);
   if (prompt !== undefined) pendingInitialPrompts.delete(taskId);
@@ -204,6 +211,13 @@ export function hasPty(id: string): boolean {
   return ptys.has(id);
 }
 
+/** The last `lines` lines a shell/service PTY shows, as plain text; null when
+ *  there is no such PTY or it keeps no mirror (agent PTYs). */
+export async function readPtyText(id: string, lines: number): Promise<string | null> {
+  const mirror = ptys.get(id)?.mirror;
+  return mirror ? mirror.toPlainText(lines) : null;
+}
+
 // Lazy-load node-pty to avoid native binding issues at startup
 let ptyModule: typeof import('node-pty') | null = null;
 let ptyLoadError: string | null = null;
@@ -254,6 +268,8 @@ async function ensureTaskSession(opts: {
   previousPath?: string | null;
   jobId: string | null;
   sessionId: string | null;
+  /** From the task row at this call, so a restart after toggling picks it up. */
+  dashAccess: boolean;
   env: Record<string, string>;
 }): Promise<string> {
   let resumeSessionId = opts.sessionId;
@@ -281,6 +297,9 @@ async function ensureTaskSession(opts: {
     resumeSessionId = findLatestSessionId(opts.cwd, opts.previousPath);
   }
   const prompt = consumeInitialPrompt(opts.id);
+  // The one place a task's `--mcp-config` is decided. Only a dispatch reads
+  // it; a reused job keeps the access it was started with.
+  const mcpConfig = mcpConfigForDispatch({ id: opts.id, dashAccess: opts.dashAccess });
   let dispatched;
   try {
     dispatched = await supervisorService.dispatch({
@@ -290,6 +309,8 @@ async function ensureTaskSession(opts: {
       model: opts.model,
       prompt,
       resumeSessionId,
+      mcpConfigPath: mcpConfig?.path,
+      allowTools: mcpConfig?.allowTools,
       env: opts.env,
     });
   } catch (err) {
@@ -303,7 +324,15 @@ async function ensureTaskSession(opts: {
     throw new UntrustedWorkspaceError(err.message, root);
   }
   const { jobId, sessionId } = dispatched;
+  // The supervisor accepted the folder, so it is trusted now (trusted outside
+  // Dash, or after the trust prompt).
+  untrustedRoots.delete(opts.id);
   DatabaseService.setTaskSession(opts.id, { jobId, sessionId: sessionId ?? resumeSessionId });
+  // The first prompt starts a turn, but no hook has spoken yet: without this
+  // the entry reads idle until the first one lands (tasks.wait would return at
+  // once). A lost hook is corrected by the supervisor reconcile and the
+  // safety valve, as for any busy state.
+  if (prompt !== undefined) activityMonitor.setBusy(opts.id);
   return jobId;
 }
 
@@ -380,28 +409,94 @@ function spawnAttach(options: {
 }
 
 /**
- * Open the task's session in a PTY: dispatch it under the supervisor when it
- * has none, then `claude attach`. A second call for the same id (renderer
- * reload) replaces the attach client — the fresh one repaints the screen, so
- * there is no mirror state to hand back.
+ * Theme the last pane start passed. A start with no pane (the control API)
+ * reuses it: Dash's theme is not the OS theme, and the env is frozen into the
+ * job, so guessing wrong would stick for the session's life.
+ */
+let lastIsDark = true;
+
+/**
+ * Make sure the task's session runs under the supervisor, reading everything
+ * from the task row; no PTY. Shared by the pane (startDirectPty) and headless
+ * starts. Throws UntrustedWorkspaceError when the folder needs the trust
+ * prompt, and an UNSUPPORTED_CLI IpcError on a missing or too-old CLI.
+ */
+async function ensureTaskSessionFor(
+  taskId: string,
+  opts: { isDark?: boolean },
+): Promise<{ jobId: string; cwd: string; env: Record<string, string>; claudePath: string }> {
+  // Hard floor: never start a task session on a missing or too-old CLI.
+  await requireSupportedClaude();
+  const task = DatabaseService.getTask(taskId);
+  if (!task) throw new Error(`Task not found: ${taskId}`);
+
+  const claudePath = await findClaudePath();
+  if (!claudePath) {
+    throw new Error('Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code');
+  }
+
+  if (opts.isDark !== undefined) lastIsDark = opts.isDark;
+  const env = buildClaudeEnv(opts.isDark ?? lastIsDark, task.path);
+
+  // Before dispatch, so the session's first turn already reports.
+  writeHookSettings(task.path, taskId);
+  const hadActivity = activityMonitor.has(taskId);
+  activityMonitor.ensure(taskId);
+
+  try {
+    const jobId = await ensureTaskSession({
+      id: taskId,
+      cwd: task.path,
+      name: task.name,
+      permissionMode: task.permissionMode,
+      model: task.model,
+      previousPath: task.previousPath,
+      jobId: task.jobId,
+      sessionId: task.sessionId,
+      dashAccess: task.dashAccess,
+      env,
+    });
+    return { jobId, cwd: task.path, env, claudePath };
+  } catch (err) {
+    // No session started: drop the entry made above, or the task shows an
+    // idle dot for a session that does not exist (nothing would correct it —
+    // the supervisor poll only covers tasks with a job).
+    if (!hadActivity) activityMonitor.unregister(taskId);
+    throw err;
+  }
+}
+
+/**
+ * Start the task's session without attaching to it (the control API, a task
+ * nobody has open). An untrusted folder is not an error here: the result names
+ * the trust root, the first prompt is kept, and opening the task in Dash runs
+ * the trust prompt. `isDark` defaults to the last pane start's.
+ */
+export async function startTaskSession(
+  taskId: string,
+  opts: { isDark?: boolean } = {},
+): Promise<{ jobId: string } | { needsTrust: string }> {
+  try {
+    const { jobId } = await ensureTaskSessionFor(taskId, opts);
+    return { jobId };
+  } catch (err) {
+    if (err instanceof UntrustedWorkspaceError) return { needsTrust: err.root };
+    throw err;
+  }
+}
+
+/**
+ * Open the task's session in a PTY: start it (startTaskSession's work), then
+ * `claude attach`. A second call for the same id (renderer reload) replaces
+ * the attach client — the fresh one repaints the screen, so there is no mirror
+ * state to hand back. An untrusted folder throws UntrustedWorkspaceError, which
+ * the pane answers with the trust prompt.
  */
 export async function startDirectPty(options: {
   id: string;
-  cwd: string;
   cols: number;
   rows: number;
-  permissionMode?: PermissionMode;
-  /** Starting model → `claude --model <alias>` on dispatch. 'default'/undefined omits it. */
-  model?: TaskModel;
   isDark?: boolean;
-  /** Task name → `claude --bg --name`. */
-  name?: string;
-  /** Pre-migration worktree path (Task.previousPath); its transcript dir is
-   *  searched too when picking the session to resume on the first dispatch. */
-  previousPath?: string | null;
-  /** Recorded supervisor job/session (Task.jobId / Task.sessionId). */
-  jobId?: string | null;
-  sessionId?: string | null;
   sender?: WebContents;
 }): Promise<{
   reattached: boolean;
@@ -415,43 +510,14 @@ export async function startDirectPty(options: {
     await killPtyInternal(options.id);
   }
 
-  const claudePath = await findClaudePath();
-  if (!claudePath) {
-    throw new Error('Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code');
-  }
-
-  const env = buildClaudeEnv(options.isDark ?? true, options.cwd);
-
-  // Before dispatch, so the session's first turn already reports.
-  writeHookSettings(options.cwd, options.id);
-  const hadActivity = activityMonitor.has(options.id);
-  activityMonitor.ensure(options.id);
-
-  let jobId: string;
-  try {
-    jobId = await ensureTaskSession({
-      id: options.id,
-      cwd: options.cwd,
-      name: options.name ?? options.id,
-      permissionMode: options.permissionMode,
-      model: options.model,
-      previousPath: options.previousPath,
-      jobId: options.jobId ?? null,
-      sessionId: options.sessionId ?? null,
-      env,
-    });
-  } catch (err) {
-    // No session started: drop the entry made above, or the task shows an
-    // idle dot for a session that does not exist (nothing would correct it —
-    // the supervisor poll only covers tasks with a job).
-    if (!hadActivity) activityMonitor.unregister(options.id);
-    throw err;
-  }
+  const { jobId, cwd, env, claudePath } = await ensureTaskSessionFor(options.id, {
+    isDark: options.isDark,
+  });
 
   spawnAttach({
     id: options.id,
     jobId,
-    cwd: options.cwd,
+    cwd,
     cols: options.cols,
     rows: options.rows,
     env,
@@ -573,7 +639,7 @@ export async function startSessionAttach(options: {
 
 /** Stop the task's session (`claude stop`); the attach client goes with it. */
 export async function stopTaskSession(taskId: string): Promise<void> {
-  await killPtyInternal(taskId);
+  await killPtyInternal(taskId, { notifyOwner: true });
   const task = DatabaseService.getTask(taskId);
   if (!task?.jobId) return;
   await supervisorService.stop(task.jobId);
@@ -602,7 +668,7 @@ export async function removeTaskSession(taskId: string): Promise<void> {
  * renderer's restart path calls this before re-attaching.
  */
 export async function restartTaskSession(taskId: string): Promise<void> {
-  await killPtyInternal(taskId);
+  await killPtyInternal(taskId, { notifyOwner: true });
   const task = DatabaseService.getTask(taskId);
   if (!task?.jobId) return;
   let sessionId = task.sessionId;
@@ -738,15 +804,144 @@ export async function startPty(options: {
   return { reattached: false, isDirectSpawn: false };
 }
 
+/** Delay between typing text into an agent and pressing Enter. */
+const SUBMIT_ENTER_DELAY_MS = 100;
+
+/**
+ * Type `payload` into an agent PTY, then press Enter separately 100 ms later,
+ * so Claude Code's input handler takes the keystroke as its own event instead
+ * of part of the typed text. Resolves after the Enter.
+ */
+function typeAndSubmit(record: PtyRecord, payload: string): Promise<void> {
+  record.proc?.write(payload);
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      try {
+        record.proc?.write('\r');
+      } catch {
+        // The attach client went away; nothing to submit into.
+      }
+      resolve();
+    }, SUBMIT_ENTER_DELAY_MS);
+  });
+}
+
 /**
  * Enable remote control for a PTY by sending `/rc` and watching for the URL.
  */
 export function sendRemoteControl(id: string): void {
   remoteControlService.startWatching(id);
-  // Write command text first, then send Enter separately so Claude Code's
-  // input handler processes the keystroke as a distinct event.
-  writePty(id, '/rc');
-  setTimeout(() => writePty(id, '\r'), 100);
+  const record = ptys.get(id);
+  if (record) void typeAndSubmit(record, '/rc');
+}
+
+/** A fresh attach repaints the screen; it is ready once quiet this long after its first byte. */
+const ATTACH_SETTLE_QUIET_MS = 500;
+/** …or after this long, whatever it printed. */
+const ATTACH_SETTLE_BACKSTOP_MS = 5_000;
+/** How long a hidden attach stays after its submit before it detaches. */
+const HIDDEN_ATTACH_LINGER_MS = 3_000;
+
+/** Attach clients submitToAgent opened because no pane had the task open. */
+const hiddenAttaches = new Map<
+  string,
+  { record: PtyRecord; timer: ReturnType<typeof setTimeout> | null }
+>();
+/** Per task, the last submit: submits run one at a time so two never race to spawn. */
+const submitChains = new Map<string, Promise<void>>();
+
+function waitForAttachSettle(proc: PtyRecord['proc']): Promise<void> {
+  return new Promise((resolve) => {
+    let quiet: ReturnType<typeof setTimeout> | null = null;
+    const done = () => {
+      clearTimeout(backstop);
+      if (quiet) clearTimeout(quiet);
+      dataSub.dispose();
+      exitSub.dispose();
+      resolve();
+    };
+    const backstop = setTimeout(done, ATTACH_SETTLE_BACKSTOP_MS);
+    const dataSub = proc.onData(() => {
+      if (quiet) clearTimeout(quiet);
+      quiet = setTimeout(done, ATTACH_SETTLE_QUIET_MS);
+    });
+    const exitSub = proc.onExit(done);
+  });
+}
+
+/** Bracketed paste, so newlines in `text` don't submit early. Strips any paste
+ *  markers inside the text, which could otherwise end the paste. */
+function bracketedPaste(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  const body = text.replace(/\x1b\[20[01]~/g, '').replace(/\r\n?/g, '\n');
+  return `\x1b[200~${body}\x1b[201~`;
+}
+
+/**
+ * Type `text` into the task's agent and submit it, as a person would in the
+ * pane. With no attach client open (nobody has the task open), a hidden one
+ * is spawned for the submit and detached 3 s later; detaching never touches
+ * the session. A pane that mounts meanwhile replaces the hidden client, and
+ * the timer leaves it alone. Callers decide whether the agent may be typed
+ * into (tasks.send refuses a task waiting for a person).
+ */
+export function submitToAgent(taskId: string, text: string): Promise<void> {
+  const previous = submitChains.get(taskId) ?? Promise.resolve();
+  const next = previous.catch(() => {}).then(() => submitNow(taskId, text));
+  submitChains.set(taskId, next);
+  void next
+    .finally(() => {
+      if (submitChains.get(taskId) === next) submitChains.delete(taskId);
+    })
+    .catch(() => {});
+  return next;
+}
+
+async function submitNow(taskId: string, text: string): Promise<void> {
+  let record = ptys.get(taskId);
+  if (!record) {
+    const { jobId, cwd, env, claudePath } = await ensureTaskSessionFor(taskId, {});
+    // A pane may have attached while the session started.
+    record = ptys.get(taskId);
+    if (!record) {
+      const hidden = spawnAttach({
+        id: taskId,
+        jobId,
+        cwd,
+        cols: 120,
+        rows: 30,
+        env,
+        claudePath,
+        taskId,
+      });
+      hiddenAttaches.set(taskId, { record: hidden, timer: null });
+      await waitForAttachSettle(hidden.proc);
+      record = ptys.get(taskId);
+      if (!record) throw new Error('The session closed before the message could be sent');
+    }
+  }
+  if (!record.jobId) {
+    // The pane shows something other than the session (the trust prompt).
+    throw new Error('The task is not attached to its session; open it in Dash');
+  }
+
+  const hidden = hiddenAttaches.get(taskId);
+  if (hidden?.timer) clearTimeout(hidden.timer);
+  await typeAndSubmit(record, bracketedPaste(text));
+  // The Enter starts (or queues behind) a turn; mark it busy before the first
+  // hook lands so a tasks.wait right after a send does not return at once.
+  activityMonitor.setBusy(taskId);
+
+  if (!hidden) return;
+  if (hidden.record !== ptys.get(taskId)) {
+    hiddenAttaches.delete(taskId); // a pane took over
+    return;
+  }
+  hidden.timer = setTimeout(() => {
+    if (hiddenAttaches.get(taskId) === hidden) hiddenAttaches.delete(taskId);
+    // Only the hidden client: a pane that replaced it in the meantime stays.
+    if (ptys.get(taskId) === hidden.record) void killPtyInternal(taskId);
+  }, HIDDEN_ATTACH_LINGER_MS);
 }
 
 /**
@@ -852,9 +1047,19 @@ function teardownRecord(id: string, record: PtyRecord): void {
   persistAndDisposeMirror(id, record);
 }
 
-function killPtyInternal(id: string): Promise<void> {
+/**
+ * `notifyOwner`: send the owner the exit event the spawn-time handler would
+ * have sent (teardown makes that handler a no-op), so an open agent pane shows
+ * the Detached card instead of freezing. For kills the pane did not ask for
+ * (session stop/restart, e.g. from the control API); the pane's own restart
+ * unsubscribes from exit first, so it sees nothing.
+ */
+function killPtyInternal(id: string, opts: { notifyOwner?: boolean } = {}): Promise<void> {
   const record = ptys.get(id);
   if (!record) return Promise.resolve();
+  if (opts.notifyOwner && record.owner && !record.owner.isDestroyed()) {
+    record.owner.send(`pty:exit:${id}`, { exitCode: 0 });
+  }
   teardownRecord(id, record);
   return gracefulKillProc(record.proc);
 }
@@ -1034,6 +1239,18 @@ export function __testReset(): void {
     record.mirror = null;
   }
   ptys.clear();
+  untrustedRoots.clear();
+  pendingInitialPrompts.clear();
+  for (const hidden of hiddenAttaches.values()) if (hidden.timer) clearTimeout(hidden.timer);
+  hiddenAttaches.clear();
+  submitChains.clear();
+  lastIsDark = true;
+}
+
+/** Swap node-pty for a fake (`require` is not reached by vi.mock). */
+export function __setPtyModuleForTest(mod: unknown): void {
+  ptyModule = mod as typeof import('node-pty') | null;
+  ptyLoadError = null;
 }
 
 export function __registerForTest(

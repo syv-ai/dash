@@ -38,3 +38,17 @@ describe('runMigrations: token re-backfill after the path-encoding fix', () => {
     expect(backfilledAt('empty')).toBe('later');
   });
 });
+
+describe('runMigrations: Dash access and parent task columns', () => {
+  type Col = { name: string; type: string; notnull: number; dflt_value: string | null };
+  const column = (name: string) =>
+    (db.prepare(`PRAGMA table_info(tasks)`).all() as Col[]).find((c) => c.name === name);
+
+  it('adds dash_access (NOT NULL DEFAULT 0) and parent_task_id, idempotently', () => {
+    runMigrations();
+    expect(() => runMigrations()).not.toThrow();
+
+    expect(column('dash_access')).toMatchObject({ type: 'INTEGER', notnull: 1, dflt_value: '0' });
+    expect(column('parent_task_id')).toMatchObject({ type: 'TEXT', notnull: 0 });
+  });
+});

@@ -28,6 +28,7 @@ import {
   Terminal as TerminalIcon,
   GitCommit,
   Shield,
+  Copy,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Tooltip } from '../ui/Tooltip';
@@ -56,6 +57,8 @@ import type {
 } from '../../../shared/types';
 import { UsageBar } from '../ui/UsageBar';
 import { Button } from '../ui/Button';
+import { IconButton } from '../ui/IconButton';
+import { useControlInfo } from '../../hooks/useControlInfo';
 import { ProgressBar } from '../ui/ProgressBar';
 import { updateHeadline, formatCheckedAt } from '../../utils/updateStatus';
 import { formatTokens, formatCost, formatResetTime } from '../../utils/format';
@@ -548,6 +551,66 @@ function ThresholdInputInline({
   );
 }
 
+/** POSIX single-quote a shell word (the launcher path has a space on macOS). */
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+/** Settings → Claude Code → Behavior: the orchestrator switch and, when on, the
+ *  `claude mcp add` command that connects a session outside Dash. Hidden where
+ *  the control API doesn't run (win32). */
+function OrchestratorAccessRow() {
+  const enabled = useSettings((s) => s.orchestratorAccess);
+  const onChange = useSettings((s) => s.setOrchestratorAccess);
+  const info = useControlInfo();
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(t);
+  }, [copied]);
+
+  if (!info?.supported) return null;
+  const command = `claude mcp add dash -- ${shellQuote(info.launcherPath)}`;
+
+  return (
+    <SettingsRow
+      label="Let other agents control Dash"
+      align={enabled ? 'start' : 'center'}
+      description={
+        <>
+          Lets a Claude Code session outside Dash (for example in Holi) create and drive tasks
+          through the dash MCP server.
+          {enabled && (
+            <div className="mt-2 flex items-center gap-1 rounded-md border border-border/60 bg-background pl-2.5 pr-1 py-1">
+              <code className="flex-1 min-w-0 truncate font-mono text-[11px] text-fg-fade-80 select-all">
+                {command}
+              </code>
+              <IconButton
+                title={copied ? 'Copied' : 'Copy command'}
+                size="sm"
+                className={copied ? 'text-[hsl(var(--git-added))]' : ''}
+                onClick={() => {
+                  window.electronAPI.clipboardWriteText(command);
+                  setCopied(true);
+                }}
+              >
+                {copied ? (
+                  <Check size={14} strokeWidth={1.8} />
+                ) : (
+                  <Copy size={14} strokeWidth={1.8} />
+                )}
+              </IconButton>
+            </div>
+          )}
+        </>
+      }
+      control={<Switch enabled={enabled} onToggle={onChange} />}
+    />
+  );
+}
+
 function ClaudeCodeTab({ claudeInfo }: { claudeInfo: ClaudeCliInfo | null }) {
   const effortLevel = useSettings((s) => s.effortLevel);
   const onEffortLevelChange = useSettings((s) => s.setEffortLevel);
@@ -674,6 +737,7 @@ function ClaudeCodeTab({ claudeInfo }: { claudeInfo: ClaudeCliInfo | null }) {
           }
           control={<Switch enabled={stopSessionsOnQuit} onToggle={onStopSessionsOnQuitChange} />}
         />
+        <OrchestratorAccessRow />
       </SettingsCard>
 
       <SettingsCard

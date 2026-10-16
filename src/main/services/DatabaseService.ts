@@ -220,6 +220,8 @@ export class DatabaseService {
           contextPrompt: data.contextPrompt ?? null,
           setupScript: data.setupScript ?? null,
           teardownScript: data.teardownScript ?? null,
+          dashAccess: data.dashAccess ?? false,
+          parentTaskId: data.parentTaskId ?? null,
           sortOrder: sortOrder ?? 0,
           createdAt: now,
           updatedAt: now,
@@ -231,7 +233,8 @@ export class DatabaseService {
         // setTaskScripts) precisely so a partial save like a rename can't
         // clobber them. Adding them here would null them out on every update
         // call that doesn't resend them (e.g. updateTask → rename wipes the
-        // context prompt). Leave them out.
+        // context prompt). Leave them out. Same for `dashAccess` (its setter is
+        // setTaskDashAccess) and `parentTaskId` (fixed at creation).
         .onConflictDoUpdate({
           target: tasks.id,
           set: {
@@ -281,6 +284,28 @@ export class DatabaseService {
       .run();
     const row = db.select().from(tasks).where(eq(tasks.id, id)).get();
     return this.mapTask(row!);
+  }
+
+  /** Turn a task's Dash access (the control API's MCP tools) on or off. Kept
+   *  separate from saveTask so partial saves can't flip it. */
+  static setTaskDashAccess(id: string, enabled: boolean): void {
+    const db = getDb();
+    db.update(tasks)
+      .set({ dashAccess: enabled, updatedAt: new Date().toISOString() })
+      .where(eq(tasks.id, id))
+      .run();
+  }
+
+  /** Non-archived tasks created through the control API by `parentId`. */
+  static getTaskChildren(parentId: string): Task[] {
+    const db = getDb();
+    const rows = db
+      .select()
+      .from(tasks)
+      .where(and(eq(tasks.parentTaskId, parentId), isNull(tasks.archivedAt)))
+      .orderBy(asc(tasks.sortOrder), desc(tasks.createdAt))
+      .all();
+    return rows.map(this.mapTask);
   }
 
   /**
@@ -644,6 +669,8 @@ export class DatabaseService {
       sessionId: row.sessionId ?? null,
       sessionStoppedAt: row.sessionStoppedAt ?? null,
       archivedAt: row.archivedAt,
+      dashAccess: row.dashAccess ?? false,
+      parentTaskId: row.parentTaskId ?? null,
       sortOrder: row.sortOrder,
       totalTokens: row.totalTokens ?? 0,
       totalCostUsd: row.totalCostUsd ?? 0,

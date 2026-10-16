@@ -19,5 +19,7 @@
       "@shared/*": ["./src/shared/*"]
     }
   },
-  "include": ["src/main/**/*", "src/shared/**/*"]
+  "include": ["src/main/**/*", "src/shared/**/*"],
+  "// exclude": "esbuild bundles the scripts (build:mcp); tsconfig.mcp.json type-checks them.",
+  "exclude": ["src/main/scripts/**"]
 }

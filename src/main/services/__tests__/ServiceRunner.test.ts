@@ -40,6 +40,7 @@ let deps: {
   focusTab: ReturnType<typeof vi.fn>;
   shell: string;
   sleep: ReturnType<typeof vi.fn>;
+  ptyText: ReturnType<typeof vi.fn>;
 };
 let runner: ServiceRunner;
 
@@ -63,6 +64,7 @@ beforeEach(() => {
     focusTab: vi.fn(),
     shell: '/bin/zsh',
     sleep: vi.fn(async () => {}),
+    ptyText: vi.fn(async () => 'server log'),
   };
   runner = new ServiceRunner(deps as never);
 });
@@ -273,5 +275,31 @@ describe('status', () => {
     await runner.start('t1', p);
     deps.ptyAlive.mockReturnValue(false);
     expect(runner.status('t1').Web!.ownedTabId).toBe(null);
+  });
+});
+
+describe('findPort / output', () => {
+  it('finds a port by label', () => {
+    const p = port({ label: 'API' });
+    deps.getPorts.mockReturnValue([port({}), p]);
+    expect(runner.findPort('t1', 'API')).toBe(p);
+    expect(runner.findPort('t1', 'nope')).toBeUndefined();
+  });
+
+  it("reads the owned run PTY's text", async () => {
+    const p = port({ runCommand: 'pnpm dev' });
+    deps.getPorts.mockReturnValue([p]);
+    await runner.start('t1', p);
+    expect(await runner.output('t1', 'Web', 40)).toBe('server log');
+    expect(deps.ptyText).toHaveBeenCalledWith('service:t1:web', 40);
+  });
+
+  it('is null when Dash does not own a live run PTY for the service', async () => {
+    expect(await runner.output('t1', 'Web', 40)).toBeNull();
+    const p = port({ runCommand: 'pnpm dev' });
+    await runner.start('t1', p);
+    deps.ptyAlive.mockReturnValue(false);
+    expect(await runner.output('t1', 'Web', 40)).toBeNull();
+    expect(deps.ptyText).not.toHaveBeenCalled();
   });
 });

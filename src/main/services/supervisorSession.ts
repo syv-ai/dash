@@ -28,12 +28,24 @@ export interface DispatchArgsOptions {
   ultracode?: boolean;
   /** Claude session UUID to continue (migrated or re-dispatched task). */
   resumeSessionId?: string | null;
+  /** Per-task `--mcp-config` file (tasks with Dash access). */
+  mcpConfigPath?: string;
+  /** `permissions.allow` rules (the read-only Dash tools), merged into `--settings`. */
+  allowTools?: string[];
   /** Optional first prompt, always the last positional. */
   prompt?: string;
 }
 
 export function buildDispatchArgs(opts: DispatchArgsOptions): string[] {
-  const args: string[] = ['--bg', '--name', opts.name];
+  // Rule: no variadic flag (`--mcp-config`, `--allowedTools`, …) may come
+  // directly before the prompt, or the CLI reads the prompt as one more value
+  // and the job starts with none. `--mcp-config` therefore goes right after
+  // `--bg`, and `--name` closes it.
+  const args: string[] = ['--bg'];
+  if (opts.mcpConfigPath) {
+    args.push('--mcp-config', opts.mcpConfigPath);
+  }
+  args.push('--name', opts.name);
   if (opts.permissionMode === 'acceptEdits') {
     args.push('--permission-mode', 'acceptEdits');
   } else if (opts.permissionMode === 'bypassPermissions') {
@@ -42,8 +54,13 @@ export function buildDispatchArgs(opts: DispatchArgsOptions): string[] {
   if (opts.model && opts.model !== 'default') {
     args.push('--model', opts.model);
   }
-  if (opts.ultracode) {
-    args.push('--settings', JSON.stringify({ ultracode: true }));
+  // One `--settings` (single-valued, so its position is free) carries every
+  // session setting; a second one would replace the first.
+  const settings: { ultracode?: true; permissions?: { allow: string[] } } = {};
+  if (opts.ultracode) settings.ultracode = true;
+  if (opts.allowTools?.length) settings.permissions = { allow: opts.allowTools };
+  if (Object.keys(settings).length > 0) {
+    args.push('--settings', JSON.stringify(settings));
   }
   if (opts.resumeSessionId) {
     args.push('--resume', opts.resumeSessionId);

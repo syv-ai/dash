@@ -361,5 +361,19 @@ export function runMigrations(): void {
     /* already exists */
   }
 
+  // Control API: dash_access opts a task's session into the Dash MCP tools;
+  // parent_task_id records the task that created it through the API (null for
+  // tasks a person created).
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN dash_access INTEGER NOT NULL DEFAULT 0`);
+  } catch {
+    /* already exists */
+  }
+  try {
+    rawDb.exec(`ALTER TABLE tasks ADD COLUMN parent_task_id TEXT`);
+  } catch {
+    /* already exists */
+  }
+
   rawDb.pragma('foreign_keys = ON');
 }

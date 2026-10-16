@@ -1,11 +1,11 @@
 import React from 'react';
 import { AlertTriangle } from 'lucide-react';
-import { Modal } from '../ui/Modal';
-import { Button } from '../ui/Button';
+import { Modal } from './Modal';
+import { Button } from './Button';
 
-/** Confirmation shown before a project-scope change that inheriting task worktrees
- *  would feel. Rendered as a nested modal over the Extensions modal. */
-export function CascadeConfirm({
+/** A warning confirmation with Cancel / confirm buttons, rendered as a nested
+ *  modal over whatever dialog asked (Extensions scope changes, task settings). */
+export function ConfirmModal({
   message,
   confirmLabel,
   onConfirm,

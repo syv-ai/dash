@@ -1,5 +1,6 @@
 import { registerAppIpc } from './appIpc';
 import { registerDbIpc } from './dbIpc';
+import { registerTaskIpc } from './taskIpc';
 import { registerWorktreeIpc } from './worktreeIpc';
 import { registerPtyIpc } from './ptyIpc';
 import { registerGitIpc } from './gitIpc';
@@ -23,6 +24,7 @@ import { registerProjectSourceIpc } from './projectSourceIpc';
 export function registerAllIpc(): void {
   registerAppIpc();
   registerDbIpc();
+  registerTaskIpc();
   registerWorktreeIpc();
   registerPtyIpc();
   registerGitIpc();

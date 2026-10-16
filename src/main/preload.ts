@@ -35,9 +35,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setupScript: string | null;
     teardownScript: string | null;
   }) => ipcRenderer.invoke('db:setTaskScripts', args),
-  deleteTask: (id: string) => ipcRenderer.invoke('db:deleteTask', id),
-  archiveTask: (id: string) => ipcRenderer.invoke('db:archiveTask', id),
-  restoreTask: (id: string) => ipcRenderer.invoke('db:restoreTask', id),
+  // Task lifecycle (TaskService in main)
+  createTask: (input: unknown) => ipcRenderer.invoke('task:create', input),
+  deleteTask: (id: string, options?: unknown) => ipcRenderer.invoke('task:delete', id, options),
+  archiveTask: (id: string) => ipcRenderer.invoke('task:archive', id),
+  restoreTask: (id: string) => ipcRenderer.invoke('task:restore', id),
+  setTaskDashAccess: (input: unknown) => ipcRenderer.invoke('task:setDashAccess', input),
+  onTasksChanged: (callback: (data: { projectId: string }) => void) => {
+    const handler = (_event: unknown, data: { projectId: string }) => callback(data);
+    ipcRenderer.on('tasks:changed', handler);
+    return () => {
+      ipcRenderer.removeListener('tasks:changed', handler);
+    };
+  },
   reorderTasks: (projectId: string, orderedTaskIds: string[]) =>
     ipcRenderer.invoke('db:reorderTasks', { projectId, orderedTaskIds }),
 
@@ -59,11 +69,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // Worktree
-  worktreeCreate: (args: unknown) => ipcRenderer.invoke('worktree:create', args),
   worktreeRemove: (args: unknown) => ipcRenderer.invoke('worktree:remove', args),
-  worktreeClaimReserve: (args: unknown) => ipcRenderer.invoke('worktree:claimReserve', args),
-  worktreeCreateFromExisting: (args: unknown) =>
-    ipcRenderer.invoke('worktree:createFromExisting', args),
   worktreeEnsureReserve: (args: unknown) => ipcRenderer.invoke('worktree:ensureReserve', args),
   worktreeHasReserve: (projectId: string) => ipcRenderer.invoke('worktree:hasReserve', projectId),
   worktreeMigrationPlan: () => ipcRenderer.invoke('worktree:migrationPlan'),
@@ -217,8 +223,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('app:beforeQuit', handler);
     };
   },
-  onFocusTask: (callback: (taskId: string) => void) => {
-    const handler = (_event: unknown, taskId: string) => callback(taskId);
+  onFocusTask: (callback: (target: { taskId: string; projectId?: string }) => void) => {
+    // Main sends `{taskId, projectId}`; a bare task id is still accepted.
+    const handler = (_event: unknown, target: string | { taskId: string; projectId?: string }) =>
+      callback(typeof target === 'string' ? { taskId: target } : target);
     ipcRenderer.on('app:focusTask', handler);
     return () => {
       ipcRenderer.removeListener('app:focusTask', handler);
@@ -243,6 +251,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setUltracode: (enabled: boolean) => ipcRenderer.send('app:setUltracode', enabled),
   setStopSessionsOnQuit: (enabled: boolean) =>
     ipcRenderer.send('app:setStopSessionsOnQuit', enabled),
+  setOrchestratorAccess: (enabled: boolean) =>
+    ipcRenderer.send('app:setOrchestratorAccess', enabled),
+  getControlInfo: () => ipcRenderer.invoke('app:getControlInfo'),
   getClaudeAttribution: (projectPath?: string) =>
     ipcRenderer.invoke('app:getClaudeAttribution', projectPath),
 
@@ -289,8 +300,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   detectClaude: (args?: { refresh?: boolean }) => ipcRenderer.invoke('app:detectClaude', args),
 
   // Workspace config (.dash/config.json)
-  readWorkspaceConfig: (projectPath: string) =>
-    ipcRenderer.invoke('workspaceConfig:read', projectPath),
+  readWorkspaceConfig: (projectPath: string, opts?: { shared?: boolean }) =>
+    ipcRenderer.invoke('workspaceConfig:read', projectPath, opts),
   writeWorkspaceConfig: (args: { projectPath: string; config: unknown }) =>
     ipcRenderer.invoke('workspaceConfig:write', args),
 

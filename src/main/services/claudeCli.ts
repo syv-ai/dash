@@ -4,6 +4,7 @@ import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { claudeProjectDir } from '../utils/claudePaths';
+import { IpcError } from '../ipc/ipcErrors';
 
 const execFileAsync = promisify(execFile);
 
@@ -208,6 +209,19 @@ export function describeUnsupportedClaude(cache: {
   if (versionMeetsMinimum(cache.version)) return null;
   const detected = parseClaudeVersion(cache.version)?.join('.') ?? cache.version ?? 'unknown';
   return `Claude Code ${MIN_CLAUDE_VERSION} or newer is required (found ${detected}). Run: claude update`;
+}
+
+/**
+ * Await the startup `claude --version` probe and throw an `UNSUPPORTED_CLI`
+ * IpcError when the CLI is missing or older than MIN_CLAUDE_VERSION. The hard
+ * floor for starting a task session, whoever asks (pane or control API).
+ */
+export async function requireSupportedClaude(): Promise<void> {
+  // Dynamic import for the same circular-import reason as readCachedVersion.
+  const main = await import('../main');
+  await main.detectClaudeCli();
+  const reason = describeUnsupportedClaude(main.claudeCliCache);
+  if (reason) throw new IpcError(reason, 'UNSUPPORTED_CLI');
 }
 
 function readCachedVersion(): string | null {

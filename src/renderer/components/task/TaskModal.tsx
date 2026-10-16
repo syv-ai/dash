@@ -3,6 +3,7 @@ import { X, GitBranch, Loader2, Upload, FolderGit2, ArrowDown } from 'lucide-rea
 import { SearchableMultiSelect } from '../ui/SearchableMultiSelect';
 import type {
   BranchInfo,
+  CreateTaskOptions,
   GithubIssue,
   AzureDevOpsWorkItem,
   LinkedItem,
@@ -17,33 +18,15 @@ import { ModelPicker, readInitialModel, persistModelChoice } from './ModelPicker
 import { getTaskCreatability } from './taskModalCreatability';
 import { Expandable } from '../ui/Expandable';
 import { Segmented } from '../ui/Segmented';
+import { SwitchField } from '../ui/SwitchField';
+import { useControlInfo } from '../../hooks/useControlInfo';
 import { BranchPrPicker } from './BranchPrPicker';
 import { findBranchHolder, describeBranchHolder } from './branchHolder';
 import { useProjects } from '../../stores/projectsStore';
 
-/**
- * Task creation modes. Each variant carries only the fields that are meaningful
- * for that mode — `baseRef` is a full ref (`origin/main`) for new-branch worktree
- * creation; `branch` is a plain branch name for existing-branch flows. The
- * discriminator stops impossible combinations (e.g. `pushRemote` on a non-worktree
- * task) from reaching the create handler.
- */
-export type CreateTaskOptions = {
-  name: string;
-  permissionMode: PermissionMode;
-  model: TaskModel;
-  linkedItems?: LinkedItem[];
-  contextPrompt?: string;
-  /** Per-task worktree scripts (newline-separated), snapshotted from the project
-   *  default and editable per task. Only meaningful for worktree tasks. */
-  setupScript?: string | null;
-  teardownScript?: string | null;
-} & (
-  | { kind: 'worktree-new-branch'; baseRef: string; pushRemote: boolean }
-  | { kind: 'worktree-existing'; branch: string; updateFromRemote?: boolean }
-  | { kind: 'in-place-checkout'; branch: string; updateFromRemote?: boolean }
-  | { kind: 'in-place-no-git' }
-);
+// Lives in shared/types (main's TaskService takes it too); re-exported so
+// imports don't churn.
+export type { CreateTaskOptions };
 
 /** Project-level prefill for the New Task fields, loaded from .dash/config.json.
  *  Prefill only — sets each field's default value; the user can still change it. */
@@ -52,6 +35,7 @@ export interface TaskModalDefaults {
   permissionMode?: PermissionMode;
   useWorktree?: boolean;
   contextPrompt?: string;
+  dashAccess?: boolean;
 }
 
 interface TaskModalProps {
@@ -186,6 +170,8 @@ function TaskModalBody({
   );
   const [model, setModel] = useState<TaskModel>(() => readInitialModel());
   const [contextPrompt, setContextPrompt] = useState(taskDefaults?.contextPrompt ?? '');
+  const [dashAccess, setDashAccess] = useState(taskDefaults?.dashAccess ?? false);
+  const controlSupported = useControlInfo()?.supported ?? false;
   // Per-task worktree scripts, prefilled from the project default; edit to
   // override for just this worktree.
   const [setupScript, setSetupScript] = useState(defaultScripts?.setup ?? '');
@@ -359,6 +345,8 @@ function TaskModalBody({
       contextPrompt: contextPrompt.trim() || undefined,
       setupScript: scriptsApply ? setupScript : null,
       teardownScript: scriptsApply ? teardownScript : null,
+      // Hidden toggle (win32, or info not loaded yet) → no access, as shown.
+      dashAccess: controlSupported ? dashAccess : false,
     };
 
     // The "Update from remote" choice only applies to a direct checkout of a
@@ -712,6 +700,17 @@ function TaskModalBody({
                 }}
               />
             </div>
+
+            {controlSupported && (
+              <div className="mb-4">
+                <SwitchField
+                  label="Dash access"
+                  hint="Let this task's agent use Dash: its ports and services, and creating tasks of its own."
+                  enabled={dashAccess}
+                  onToggle={setDashAccess}
+                />
+              </div>
+            )}
           </div>
 
           {/* ── Right column: content & details ── */}

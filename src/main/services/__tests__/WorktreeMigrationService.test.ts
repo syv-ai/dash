@@ -121,6 +121,8 @@ function legacySetup(name = 'fix-login-a1b') {
       sessionId: null,
       sessionStoppedAt: null,
       archivedAt: null,
+      dashAccess: false,
+      parentTaskId: null,
       sortOrder: 0,
       totalTokens: 0,
       totalCostUsd: 0,

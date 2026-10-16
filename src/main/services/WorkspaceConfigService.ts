@@ -13,6 +13,8 @@ export interface WorkspaceTaskDefaults {
   permissionMode?: PermissionMode;
   useWorktree?: boolean;
   contextPrompt?: string;
+  /** Default for a new task's Dash access (the control API's MCP tools). */
+  dashAccess?: boolean;
 }
 
 export interface WorkspaceConfig {
@@ -56,6 +58,7 @@ function parseTaskDefaults(value: unknown, source: string): WorkspaceTaskDefault
   }
   if (typeof obj.useWorktree === 'boolean') result.useWorktree = obj.useWorktree;
   if (typeof obj.contextPrompt === 'string') result.contextPrompt = obj.contextPrompt;
+  if (typeof obj.dashAccess === 'boolean') result.dashAccess = obj.dashAccess;
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
@@ -125,6 +128,10 @@ function applyLocalOverlay(
       result[key] = [...(sandwich.before ?? []), ...(base[key] ?? []), ...(sandwich.after ?? [])];
     }
   }
+  // Local taskDefaults win key by key, so a personal override of one default
+  // (e.g. dashAccess) keeps the shared rest.
+  const localDefaults = parseTaskDefaults(overlay.taskDefaults, LOCAL_CONFIG_FILE);
+  if (localDefaults) result.taskDefaults = { ...base.taskDefaults, ...localDefaults };
   return result;
 }
 
@@ -188,11 +195,21 @@ export function buildWorkspaceEnv(args: WorkspaceEnvArgs): Record<string, string
   return env;
 }
 
-export function loadWorkspaceConfig(worktreePath: string): WorkspaceConfig | null {
+/**
+ * Read `.dash/config.json` alone, without the `config.local.json` overlay. For
+ * editors that write config.json back, so a personal override never leaks into
+ * the shared file.
+ */
+export function loadSharedWorkspaceConfig(worktreePath: string): WorkspaceConfig | null {
   const configPath = path.join(worktreePath, DASH_DIR, CONFIG_FILE);
   const parsed = readJson(configPath);
   if (parsed === undefined) return null;
-  const base = parseBaseConfig(parsed, configPath);
+  return parseBaseConfig(parsed, configPath);
+}
+
+/** The effective config: config.json with config.local.json overlaid. */
+export function loadWorkspaceConfig(worktreePath: string): WorkspaceConfig | null {
+  const base = loadSharedWorkspaceConfig(worktreePath);
   if (base === null) return null;
 
   const localPath = path.join(worktreePath, DASH_DIR, LOCAL_CONFIG_FILE);

@@ -27,6 +27,59 @@ The main idea: you open a project, create tasks, and each task gets an isolated 
 - **Customizable keybindings** — Remap any shortcut from Settings.
 - **Dark/light theme**
 
+## Controlling Dash from other agents
+
+Dash ships an MCP server, `dash`, that lets Claude Code sessions create and drive tasks. It runs on macOS and Linux and only answers on 127.0.0.1.
+
+### Agents inside a task
+
+Turn on **Dash access** in the New Task dialog (or later in the task's settings; changing it restarts the session). The task's agent then gets the `dash` tools for its own project: it sees itself and the tasks it created, and can create tasks only in its own project.
+
+The switch's default comes from the project's settings ("Dash access for new tasks"), which is stored as `taskDefaults.dashAccess` in `.dash/config.json`. To set a personal default without changing the shared file, put the same key in `.dash/config.local.json`.
+
+### An orchestrator outside Dash
+
+1. In **Settings → Claude → Behavior**, turn on **Let other agents control Dash**.
+2. Copy the command shown there and run it where your orchestrator runs:
+
+   ```bash
+   claude mcp add dash -- '<path to dash-mcp>'
+   ```
+
+   For Holi, run it in the vault with the vault's `CLAUDE_CONFIG_DIR` set. Keep the default local scope (`--scope local`); `--scope project` would write it to the vault's committed `.mcp.json`, where teammates without Dash get a failing server.
+
+The orchestrator sees every project that isn't archived. Turning the switch off cuts it off on its next call.
+
+### Tools
+
+| Tool              | What it does                                                                       | No prompt in a task |
+| ----------------- | ---------------------------------------------------------------------------------- | ------------------- |
+| `projects_list`   | List projects (orchestrator only)                                                  |                     |
+| `tasks_list`      | List tasks with their state: idle, working, waiting, error, stopped or needs-trust | yes                 |
+| `tasks_get`       | One task: name, branch, worktree path, state and what it waits for                 | yes                 |
+| `tasks_create`    | Create a task (new worktree by default) and start its session with a prompt        |                     |
+| `tasks_wait`      | Wait up to 110 s until a task is idle, waiting, not working, or changes state      | yes                 |
+| `tasks_output`    | The last lines of a task's terminal as plain text                                  | yes                 |
+| `tasks_send`      | Type a message into a task's session and submit it                                 |                     |
+| `tasks_open`      | Bring Dash to the front with the task open                                         |                     |
+| `tasks_archive`   | Archive a task (never the caller's own task)                                       |                     |
+| `tasks_restore`   | Restore an archived task                                                           |                     |
+| `tasks_delete`    | Delete a task, its worktree and optionally its branch (orchestrator only)          |                     |
+| `tasks_restart`   | Restart a task's session in the same conversation (never the caller's own task)    |                     |
+| `services_list`   | A task's services from `.dash/ports.json`, with ports and whether they're up       | yes                 |
+| `services_start`  | Start a service's run command in a Dash terminal tab                               |                     |
+| `services_stop`   | Stop a service                                                                     |                     |
+| `services_output` | The last lines of a service Dash started                                           | yes                 |
+
+Inside a task, the read-only tools (marked above) run without a permission prompt, so a task started by an orchestrator doesn't stall on a lookup. Tools that change something still ask, unless the task runs in `bypassPermissions`.
+
+### Safety rules
+
+- Tasks created through the API never run in `bypassPermissions`, even if the project defaults to it.
+- `tasks_send` refuses a task that is waiting for a person (a permission prompt or a question). Answering those stays with you.
+- Dash never accepts Claude Code's workspace trust prompt for an agent. A task that needs it reports `needs-trust` until you open it in Dash.
+- Anything running as your user on this machine can read the tokens under Dash's data folder, so the API trusts the local user. Leave orchestrator access off when you don't use it.
+
 ## Install
 
 Download the latest build from [Releases](https://github.com/syv-ai/dash/releases/latest). Open the `.dmg` and drag `Dash.app` to `/Applications`.
@@ -169,6 +222,7 @@ All keybindings are customizable in Settings > Keybindings.
 - **Terminal snapshots**: `~/Library/Application Support/Dash/terminal-snapshots/`
 - **Worktrees**: `{project}/.claude/worktrees/{task-slug}-{hash}/` (ignored via `.git/info/exclude`; pre-0.16 tasks at `{project}/../worktrees/` are offered a one-time move at launch)
 - **Hook port**: `~/Library/Application Support/Dash/hook-port` while Dash runs — the per-worktree `.claude/settings.local.json` hooks read the hook server's port from it, so a session that keeps running after Dash quits no-ops instead of erroring
+- **Control API**: `~/Library/Application Support/Dash/control/` — the token secret, the API's port file, the orchestrator token, per-task MCP configs, and the `dash-mcp` launcher
 - **Sessions**: owned by Claude Code under `~/.claude/jobs/` (never read by Dash; `claude agents --json` is the interface)
 
 ## Acknowledgements

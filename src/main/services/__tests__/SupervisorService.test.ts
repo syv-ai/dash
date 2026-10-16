@@ -132,6 +132,18 @@ describe('SupervisorService verbs', () => {
     expect(verbs).toContain('rm a1');
   });
 
+  it('logs prints the raw terminal output of the job', async () => {
+    responses = [{ stdout: '\x1b[2J\x1b[Hhello' }];
+    expect(await supervisorService.logs('a1')).toBe('\x1b[2J\x1b[Hhello');
+    expect(calls[0]!.args).toEqual(['logs', 'a1']);
+  });
+
+  it('logs keeps what was printed when the command times out', async () => {
+    const timeout = Object.assign(new Error('timed out'), { killed: true });
+    responses = [{ error: timeout, stdout: 'partial' }];
+    expect(await supervisorService.logs('a1')).toBe('partial');
+  });
+
   it('remove tolerates an already-removed job', async () => {
     responses = [{ error: new Error('exit 1'), stderr: 'No such job: a1' }, listing([])];
     await expect(supervisorService.remove('a1')).resolves.toBeUndefined();

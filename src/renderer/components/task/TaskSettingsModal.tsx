@@ -4,6 +4,10 @@ import { SettingsModalShell } from '../ui/SettingsModalShell';
 import { PermissionModePicker } from './PermissionModePicker';
 import { ModelPicker } from './ModelPicker';
 import { Expandable } from '../ui/Expandable';
+import { SwitchField } from '../ui/SwitchField';
+import { ConfirmModal } from '../ui/ConfirmModal';
+import { useControlInfo } from '../../hooks/useControlInfo';
+import { useRuntime } from '../../stores/runtimeStore';
 
 interface TaskSettingsModalProps {
   task: Task;
@@ -15,6 +19,9 @@ interface TaskSettingsModalProps {
   onPermissionModeChange: (id: string, mode: PermissionMode) => void;
   onModelChange: (id: string, model: TaskModel) => void;
   onScriptsChange: (id: string, setupScript: string, teardownScript: string) => void;
+  /** `restart` is true when the task has a session to restart (running or a
+   *  parked job): its spawn args are fixed at dispatch, so the change needs a new one. */
+  onDashAccessChange: (id: string, enabled: boolean, restart: boolean) => void;
 }
 
 export function TaskSettingsModal({
@@ -25,10 +32,23 @@ export function TaskSettingsModal({
   onPermissionModeChange,
   onModelChange,
   onScriptsChange,
+  onDashAccessChange,
 }: TaskSettingsModalProps) {
   const [name, setName] = useState(task.name);
   const [setupScript, setSetupScript] = useState(task.setupScript ?? '');
   const [teardownScript, setTeardownScript] = useState(task.teardownScript ?? '');
+  const controlSupported = useControlInfo()?.supported ?? false;
+  // A live session, or a parked job whose spawn args are frozen: either needs a
+  // re-dispatch for a Dash access change. 'stopped' with no job has nothing to restart.
+  const activityState = useRuntime((s) => s.taskActivity[task.id]?.state);
+  const hasSession = (!!activityState && activityState !== 'stopped') || !!task.jobId;
+  // The value waiting on the restart confirmation, if any.
+  const [pendingDashAccess, setPendingDashAccess] = useState<boolean | null>(null);
+
+  function handleDashAccessToggle(enabled: boolean) {
+    if (hasSession) setPendingDashAccess(enabled);
+    else onDashAccessChange(task.id, enabled, false);
+  }
 
   function handleSaveScripts() {
     if (
@@ -75,6 +95,16 @@ export function TaskSettingsModal({
         helperText={hasActiveSession ? 'Applies the next time this session starts' : undefined}
       />
 
+      {controlSupported && (
+        <SwitchField
+          label="Dash access"
+          hint="Let this task's agent use Dash: its ports and services, and creating tasks of its own."
+          helperText={hasSession ? 'Changing it restarts the session' : undefined}
+          enabled={task.dashAccess}
+          onToggle={handleDashAccessToggle}
+        />
+      )}
+
       {task.useWorktree && (
         <Expandable
           label="Worktree scripts"
@@ -111,6 +141,18 @@ export function TaskSettingsModal({
             </div>
           </div>
         </Expandable>
+      )}
+
+      {pendingDashAccess !== null && (
+        <ConfirmModal
+          message="Changing Dash access restarts this task's session."
+          confirmLabel="Restart session"
+          onConfirm={() => {
+            onDashAccessChange(task.id, pendingDashAccess, true);
+            setPendingDashAccess(null);
+          }}
+          onCancel={() => setPendingDashAccess(null)}
+        />
       )}
     </SettingsModalShell>
   );

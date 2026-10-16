@@ -30,6 +30,9 @@ export interface SettingsState {
   /** `claude stop` every task session when Dash quits. Off: sessions keep
    *  running under Claude Code's supervisor and resume on the next attach. */
   stopSessionsOnQuit: boolean;
+  /** Let an orchestrator outside Dash (e.g. a Holi agent) use the control API
+   *  through the dash MCP server. Off by default. */
+  orchestratorAccess: boolean;
   notificationSound: NotificationSound;
   terminalTheme: string;
   terminalFontFamily: string;
@@ -97,6 +100,7 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   entry('syncShellEnv', 'syncShellEnv', boolDefaultFalse()),
   entry('ultracode', 'ultracode', boolDefaultFalse()),
   entry('stopSessionsOnQuit', 'stopSessionsOnQuit', boolDefaultFalse()),
+  entry('orchestratorAccess', 'orchestratorAccess', boolDefaultFalse()),
   entry('notificationSound', 'notificationSound', str('off') as Codec<NotificationSound>),
   entry('terminalTheme', 'terminalTheme', str('default')),
   entry('terminalFontFamily', 'terminalFontFamily', str('system')),

@@ -26,20 +26,8 @@ import { activityMonitor } from '../services/ActivityMonitor';
 import { contextUsageService } from '../services/ContextUsageService';
 import { remoteControlService } from '../services/remoteControlService';
 import { TelemetryService } from '../services/TelemetryService';
-import { describeUnsupportedClaude } from '../services/claudeCli';
-import { IpcError, ipcError } from './ipcErrors';
+import { ipcError } from './ipcErrors';
 import type { PermissionMode } from '@shared/types';
-
-/**
- * Await the startup `claude --version` probe and throw an `UNSUPPORTED_CLI`
- * IpcError when the CLI is missing or older than MIN_CLAUDE_VERSION.
- */
-async function requireSupportedClaude(): Promise<void> {
-  const main = await import('../main');
-  await main.detectClaudeCli();
-  const reason = describeUnsupportedClaude(main.claudeCliCache);
-  if (reason) throw new IpcError(reason, 'UNSUPPORTED_CLI');
-}
 
 export function registerPtyIpc(): void {
   ipcMain.handle(
@@ -68,25 +56,18 @@ export function registerPtyIpc(): void {
           }),
           args,
         );
-        // Hard floor: refuse to start a task session on a missing or too-old
-        // CLI. The renderer normally never gets here (MainContent gates on
-        // detectClaude), so this is the defense in depth that keeps a stale
+        // The agent PTY id is the bare task id; main reads the task's cwd,
+        // name, model, permission mode and recorded supervisor job from the DB
+        // (startTaskSession), so the renderer's cwd/permissionMode are not
+        // used. A missing or too-old CLI is refused there (UNSUPPORTED_CLI):
+        // the renderer normally never gets here (MainContent gates on
+        // detectClaude), so that is the defense in depth that keeps a stale
         // renderer from falling back to a shell in the task pane.
-        await requireSupportedClaude();
-
-        // The agent PTY id is the bare task id — look up its name, model and
-        // recorded supervisor job so a dispatch gets `--name <task>` and
-        // `--model <alias>`, and an existing job is attached rather than
-        // re-dispatched. Read from the DB here rather than threading through
-        // the renderer, since all are stable task settings resolved at spawn.
-        const task = DatabaseService.getTask(args.id);
         const result = await startDirectPty({
-          ...args,
-          name: task?.name,
-          model: task?.model,
-          previousPath: task?.previousPath,
-          jobId: task?.jobId,
-          sessionId: task?.sessionId,
+          id: args.id,
+          cols: args.cols,
+          rows: args.rows,
+          isDark: args.isDark,
           sender: event.sender,
         });
         TelemetryService.capture('terminal_started', { source: 'direct' });

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Globe, Folder, SquareTerminal, PackageOpen } from 'lucide-react';
 import type { ScopeExtensions } from '../../../shared/types';
 import { PluginRow, SkillRow } from './ExtensionCard';
-import { CascadeConfirm } from './CascadeConfirm';
+import { ConfirmModal } from '../ui/ConfirmModal';
 import {
   effectivePlugins,
   effectiveSkills,
@@ -215,7 +215,7 @@ export function ScopeDetail({ scope, ext }: { scope?: ScopeExtensions; ext: Ext 
       )}
 
       {pending && (
-        <CascadeConfirm
+        <ConfirmModal
           message={pending.message}
           confirmLabel={pending.confirmLabel}
           onConfirm={() => {

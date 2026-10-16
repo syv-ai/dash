@@ -10,6 +10,7 @@ vi.mock('../../terminal/SessionRegistry', () => ({
     dispose: vi.fn(),
     disposeByPrefix: vi.fn(),
     restartAllForTask: vi.fn(),
+    restartAgent: vi.fn(() => Promise.resolve()),
   },
 }));
 vi.mock('sonner', () => ({
@@ -255,7 +256,7 @@ describe('projectsStore delete', () => {
   });
   afterEach(() => resetWindow());
 
-  it('deleteTask removes worktree, kills pty, clears active, reloads', async () => {
+  it('deleteTask hands the dialog options to main, then clears UI state and reloads', async () => {
     const useProjects = await freshStore();
     useProjects.setState({
       projects: [proj('p1')],
@@ -263,15 +264,34 @@ describe('projectsStore delete', () => {
     });
     useProjects.getState().setActiveTask('t1');
     api.getTasks.mockResolvedValue({ success: true, data: [] });
-    await useProjects.getState().deleteTask(task('t1', 'p1', { branchCreatedByDash: true }), {
+    const options = {
       deleteWorktreeDir: true,
       deleteLocalBranch: true,
       deleteRemoteBranch: false,
-    });
-    expect(api.worktreeRemove).toHaveBeenCalled();
-    expect(api.deleteTask).toHaveBeenCalledWith('t1');
-    expect(api.ptyKill).toHaveBeenCalledWith('t1');
+    };
+    await useProjects
+      .getState()
+      .deleteTask(task('t1', 'p1', { branchCreatedByDash: true }), options);
+    // Worktree removal and branch gating live in main (TaskService.delete).
+    expect(api.deleteTask).toHaveBeenCalledWith('t1', options);
+    expect(api.worktreeRemove).not.toHaveBeenCalled();
+    expect(api.ptyClearSnapshot).toHaveBeenCalledWith('t1');
     expect(useProjects.getState().activeTaskId).toBeNull();
+    expect(api.getTasks).toHaveBeenCalledWith('p1');
+  });
+
+  it('deleteTask keeps the task selected and toasts when main refuses', async () => {
+    const useProjects = await freshStore();
+    useProjects.getState().setActiveTask('t1');
+    api.deleteTask.mockResolvedValueOnce({ success: false, error: 'busy' });
+    await useProjects.getState().deleteTask(task('t1', 'p1'), {
+      deleteWorktreeDir: true,
+      deleteLocalBranch: false,
+      deleteRemoteBranch: false,
+    });
+    const { toast } = await import('sonner');
+    expect(toast.error).toHaveBeenCalledWith('busy');
+    expect(useProjects.getState().activeTaskId).toBe('t1');
   });
 
   it('deleteProject removes task worktrees, deletes project, clears active, reloads', async () => {
@@ -379,33 +399,67 @@ describe('projectsStore createTask', () => {
   });
   afterEach(() => resetWindow());
 
-  it('worktree-new-branch path: claims reserve, saves task, selects it', async () => {
+  it('creates the task in main with the target project, then selects it', async () => {
     const useProjects = await freshStore();
     useProjects.setState({ projects: [proj('p1')], activeProjectId: 'p1' });
-    api.worktreeClaimReserve.mockResolvedValue({
+    api.createTask.mockResolvedValue({
       success: true,
-      data: { branch: 'feat/x', path: '/w/x' },
+      data: { task: task('t9', 'p1'), session: 'deferred' },
     });
-    api.saveTask.mockResolvedValue({ success: true, data: task('t9', 'p1') });
     api.getTasks.mockResolvedValue({ success: true, data: [task('t9', 'p1')] });
-    const ok = await useProjects.getState().createTask({
+    const options = {
       kind: 'worktree-new-branch',
       name: 'x',
       baseRef: 'main',
       pushRemote: false,
       permissionMode: 'default',
-    } as CreateTaskOptions);
+    } as CreateTaskOptions;
+    const ok = await useProjects.getState().createTask(options);
     expect(ok).toBe(true);
-    expect(api.saveTask).toHaveBeenCalled();
+    expect(api.createTask).toHaveBeenCalledWith({ ...options, projectId: 'p1' });
+    expect(api.createTask).toHaveBeenCalledTimes(1);
+    expect(api.saveTask).not.toHaveBeenCalled();
+    expect(useProjects.getState().tasksByProject.p1!.map((t) => t.id)).toEqual(['t9']);
     expect(useProjects.getState().activeTaskId).toBe('t9');
     expect(useProjects.getState().isCreatingTask).toBe(false);
   });
 
-  it('returns false and toasts when worktree creation fails', async () => {
+  it("passes the dialog's dashAccess choice through to main", async () => {
     const useProjects = await freshStore();
     useProjects.setState({ projects: [proj('p1')], activeProjectId: 'p1' });
-    api.worktreeClaimReserve.mockResolvedValue({ success: false });
-    api.worktreeCreate.mockResolvedValue({ success: false, error: 'nope' });
+    api.createTask.mockResolvedValue({
+      success: true,
+      data: { task: task('t9', 'p1', { dashAccess: true }), session: 'deferred' },
+    });
+    await useProjects.getState().createTask({
+      kind: 'in-place-no-git',
+      name: 'x',
+      permissionMode: 'default',
+      dashAccess: true,
+    } as CreateTaskOptions);
+    expect(api.createTask).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 'p1', dashAccess: true }),
+    );
+  });
+
+  it('targets the given project over the active one', async () => {
+    const useProjects = await freshStore();
+    useProjects.setState({ projects: [proj('p1'), proj('p2')], activeProjectId: 'p1' });
+    api.createTask.mockResolvedValue({
+      success: true,
+      data: { task: task('t9', 'p2'), session: 'deferred' },
+    });
+    await useProjects
+      .getState()
+      .createTask({ kind: 'in-place-no-git', name: 'x' } as CreateTaskOptions, 'p2');
+    expect(api.createTask).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'p2' }));
+    expect(useProjects.getState().activeProjectId).toBe('p2');
+  });
+
+  it('returns false and toasts when main fails to create the task', async () => {
+    const useProjects = await freshStore();
+    useProjects.setState({ projects: [proj('p1')], activeProjectId: 'p1' });
+    api.createTask.mockResolvedValue({ success: false, error: 'nope' });
     const ok = await useProjects.getState().createTask({
       kind: 'worktree-new-branch',
       name: 'x',
@@ -414,6 +468,8 @@ describe('projectsStore createTask', () => {
       permissionMode: 'default',
     } as CreateTaskOptions);
     expect(ok).toBe(false);
+    const { toast } = await import('sonner');
+    expect(toast.error).toHaveBeenCalledWith('nope');
     expect(useProjects.getState().isCreatingTask).toBe(false);
   });
 
@@ -425,5 +481,53 @@ describe('projectsStore createTask', () => {
       permissionMode: 'default',
     } as CreateTaskOptions);
     expect(ok).toBe(false);
+  });
+});
+
+describe('projectsStore setDashAccess', () => {
+  let api: ReturnType<typeof makeElectronApiMock>;
+  beforeEach(() => {
+    api = makeElectronApiMock();
+    installWindow(api);
+  });
+  afterEach(() => resetWindow());
+
+  async function registry() {
+    const { sessionRegistry } = await import('../../terminal/SessionRegistry');
+    return sessionRegistry as unknown as { restartAgent: ReturnType<typeof vi.fn> };
+  }
+
+  it('sets the flag in main, reloads the project and returns the updated task', async () => {
+    const useProjects = await freshStore();
+    const updated = task('t1', 'p1', { dashAccess: true });
+    api.setTaskDashAccess.mockResolvedValue({ success: true, data: updated });
+    api.getTasks.mockResolvedValue({ success: true, data: [updated] });
+    const result = await useProjects.getState().setDashAccess(task('t1', 'p1'), true, false);
+    expect(api.setTaskDashAccess).toHaveBeenCalledWith({ taskId: 't1', enabled: true });
+    expect(result).toEqual(updated);
+    expect(useProjects.getState().tasksByProject.p1).toEqual([updated]);
+  });
+
+  it('restarts the session only when it is running', async () => {
+    const useProjects = await freshStore();
+    const reg = await registry();
+    reg.restartAgent.mockClear();
+    api.setTaskDashAccess.mockResolvedValue({ success: true, data: task('t1', 'p1') });
+    await useProjects.getState().setDashAccess(task('t1', 'p1'), false, false);
+    expect(reg.restartAgent).not.toHaveBeenCalled();
+    await useProjects.getState().setDashAccess(task('t1', 'p1'), true, true);
+    expect(reg.restartAgent).toHaveBeenCalledWith('t1');
+  });
+
+  it('toasts and skips the restart when main refuses', async () => {
+    const useProjects = await freshStore();
+    const reg = await registry();
+    reg.restartAgent.mockClear();
+    api.setTaskDashAccess.mockResolvedValue({ success: false, error: 'nope' });
+    const result = await useProjects.getState().setDashAccess(task('t1', 'p1'), true, true);
+    expect(result).toBeNull();
+    expect(reg.restartAgent).not.toHaveBeenCalled();
+    const { toast } = await import('sonner');
+    expect(toast.error).toHaveBeenCalledWith('nope');
   });
 });

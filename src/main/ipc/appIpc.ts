@@ -418,6 +418,28 @@ export function registerAppIpc(): void {
     })();
   });
 
+  ipcMain.on('app:setOrchestratorAccess', (_event, enabled: boolean) => {
+    const v = parseArgsSafe('app:setOrchestratorAccess', z.boolean(), enabled);
+    if (v === undefined) return;
+    void (async () => {
+      try {
+        const { setOrchestratorAccess } = await import('../control');
+        setOrchestratorAccess(v);
+      } catch (err) {
+        console.error('[app:setOrchestratorAccess] Failed:', err);
+      }
+    })();
+  });
+
+  ipcMain.handle('app:getControlInfo', async () => {
+    try {
+      const { controlInfo } = await import('../control');
+      return { success: true, data: controlInfo() };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
   ipcMain.on('app:setUltracode', (_event, enabled: boolean) => {
     const v = parseArgsSafe('app:setUltracode', z.boolean(), enabled);
     if (v === undefined) return;

@@ -91,12 +91,74 @@ export interface Task {
   /** Set when Dash or the supervisor stopped the session (archive, idle stop). */
   sessionStoppedAt: string | null;
   archivedAt: string | null;
+  /** Whether the task's session gets the Dash MCP tools (control API). */
+  dashAccess: boolean;
+  /** The task that created this one through the control API; null when a
+   *  person created it. Fixed at creation. */
+  parentTaskId: string | null;
   sortOrder: number;
   totalTokens: number;
   totalCostUsd: number;
   tokensBackfilledAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Task creation modes. Each variant carries only the fields that are meaningful
+ * for that mode — `baseRef` is a full ref (`origin/main`) for new-branch worktree
+ * creation; `branch` is a plain branch name for existing-branch flows. The
+ * discriminator stops impossible combinations (e.g. `pushRemote` on a non-worktree
+ * task) from reaching the create handler.
+ */
+export type CreateTaskOptions = {
+  name: string;
+  permissionMode: PermissionMode;
+  model: TaskModel;
+  linkedItems?: LinkedItem[];
+  contextPrompt?: string;
+  /** Per-task worktree scripts (newline-separated), snapshotted from the project
+   *  default and editable per task. Only meaningful for worktree tasks. */
+  setupScript?: string | null;
+  teardownScript?: string | null;
+  /** undefined → project taskDefaults.dashAccess → false. Resolved only in TaskService.create. */
+  dashAccess?: boolean;
+} & (
+  | { kind: 'worktree-new-branch'; baseRef: string; pushRemote: boolean }
+  | { kind: 'worktree-existing'; branch: string; updateFromRemote?: boolean }
+  | { kind: 'in-place-checkout'; branch: string; updateFromRemote?: boolean }
+  | { kind: 'in-place-no-git' }
+);
+
+/** Input to `TaskService.create` (main), shared by the task dialog and the control API. */
+export type CreateTaskInput = CreateTaskOptions & {
+  projectId: string;
+  parentTaskId?: string | null;
+};
+
+/** `task:setDashAccess`: turn a task's Dash access on or off (applies at its next dispatch). */
+export type SetTaskDashAccessInput = { taskId: string; enabled: boolean };
+
+/** What `app:getControlInfo` reports for the Settings orchestrator row. */
+export type ControlInfo = {
+  /** The `dash-mcp` launcher a `claude mcp add` command points at. */
+  launcherPath: string;
+  /** False on win32: the launcher is a shell script, so the control API never starts. */
+  supported: boolean;
+};
+
+/** How `TaskService.create` runs: who asked, and whether it starts the session
+ *  itself (the API) or leaves that to the pane that mounts next (the UI). */
+export type CreateTaskRunOptions = { startSession: boolean; source: 'ui' | 'api' };
+
+export type CreateTaskResult = { task: Task; session: 'deferred' | 'started' | 'needs-trust' };
+
+/** What a task delete removes besides the task row. Branch deletes only apply
+ *  to branches Dash created; a missing flag means "keep". */
+export interface DeleteTaskOptions {
+  deleteWorktreeDir?: boolean;
+  deleteLocalBranch?: boolean;
+  deleteRemoteBranch?: boolean;
 }
 
 /** One legacy-layout task the launch dialog offers to move. */
