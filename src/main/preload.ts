@@ -229,9 +229,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   onFocusTask: (callback: (target: { taskId: string; projectId?: string }) => void) => {
-    // Main sends `{taskId, projectId}`; a bare task id is still accepted.
-    const handler = (_event: unknown, target: string | { taskId: string; projectId?: string }) =>
-      callback(typeof target === 'string' ? { taskId: target } : target);
+    const handler = (_event: unknown, target: { taskId: string; projectId?: string }) =>
+      callback(target);
     ipcRenderer.on('app:focusTask', handler);
     return () => {
       ipcRenderer.removeListener('app:focusTask', handler);

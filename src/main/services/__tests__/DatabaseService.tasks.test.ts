@@ -56,14 +56,4 @@ describe('DatabaseService tasks: Dash access and parent task', () => {
     DatabaseService.setTaskDashAccess(t.id, false);
     expect(DatabaseService.getTask(t.id)?.dashAccess).toBe(false);
   });
-
-  it('getTaskChildren returns non-archived children only', () => {
-    const parent = DatabaseService.saveTask({ ...base, name: 'parent', path: '/repo/p' });
-    const live = DatabaseService.saveTask({ ...base, name: 'live', parentTaskId: parent.id });
-    const gone = DatabaseService.saveTask({ ...base, name: 'gone', parentTaskId: parent.id });
-    DatabaseService.saveTask({ ...base, name: 'other' });
-    DatabaseService.archiveTask(gone.id);
-
-    expect(DatabaseService.getTaskChildren(parent.id).map((t) => t.id)).toEqual([live.id]);
-  });
 });

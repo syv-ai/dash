@@ -59,6 +59,7 @@ import { UsageBar } from '../ui/UsageBar';
 import { Button } from '../ui/Button';
 import { IconButton } from '../ui/IconButton';
 import { useControlInfo } from '../../hooks/useControlInfo';
+import { shellQuote } from '../../../shared/shellQuote';
 import { ProgressBar } from '../ui/ProgressBar';
 import { updateHeadline, formatCheckedAt } from '../../utils/updateStatus';
 import { formatTokens, formatCost, formatResetTime } from '../../utils/format';
@@ -549,11 +550,6 @@ function ThresholdInputInline({
       <span className="text-[11px] text-fg-fade-40">%</span>
     </div>
   );
-}
-
-/** POSIX single-quote a shell word (the launcher path has a space on macOS). */
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
 /** Settings → Claude Code → Behavior: the orchestrator switch and, when on, the

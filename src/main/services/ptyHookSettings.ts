@@ -4,6 +4,7 @@ import { BrowserWindow } from 'electron';
 import { hookServer, getHookPortFilePath } from './HookServer';
 import { RtkService } from './RtkService';
 import { DatabaseService } from './DatabaseService';
+import { writeFileAtomic } from '../utils/atomicWrite';
 import {
   type Hook,
   type HookEntry,
@@ -77,35 +78,6 @@ function buildPreToolUseHooks(
     entries.push({ matcher: 'Bash', hooks: [tagDash({ type: 'command', command: rtkCmd })] });
   }
   return entries;
-}
-
-/**
- * Atomic write: stage to a sibling tmp file then rename over the target.
- * POSIX rename is atomic, so a crash mid-write can never leave a half-
- * written file at `target`. Important here because settings.local.json is
- * rewritten frequently (every PTY spawn, every commit-attribution change)
- * and the corrupt-recovery path on the read side would otherwise have to
- * handle a wider class of partial-write failures than just user edits.
- *
- * On failure (write error mid-data, or rename error after a successful
- * write), unlink the tmp file best-effort before rethrowing so failed
- * writes don't accumulate orphan `*.tmp-<pid>-<ts>` files alongside the
- * user's settings.
- */
-function atomicWriteFileSync(target: string, data: string): void {
-  const tmp = `${target}.tmp-${process.pid}-${Date.now()}`;
-  try {
-    fs.writeFileSync(tmp, data);
-    fs.renameSync(tmp, target);
-  } catch (err) {
-    try {
-      fs.unlinkSync(tmp);
-    } catch {
-      // best-effort: tmp may not exist if writeFileSync failed before
-      // creating the file, or unlink may race with another process.
-    }
-    throw err;
-  }
 }
 
 function broadcastToast(message: string): void {
@@ -356,7 +328,7 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
       merged.enableAllProjectMcpServers = true;
     }
 
-    atomicWriteFileSync(settingsPath, JSON.stringify(merged, null, 2) + '\n');
+    writeFileAtomic(settingsPath, JSON.stringify(merged, null, 2) + '\n');
     writtenSettingsPaths.add(settingsPath);
     return { ok: true };
   } catch (err) {
@@ -403,7 +375,7 @@ export function cleanupHookSettings(): void {
       if (Object.keys(raw).length === 0) {
         fs.unlinkSync(settingsPath);
       } else {
-        atomicWriteFileSync(settingsPath, JSON.stringify(raw, null, 2) + '\n');
+        writeFileAtomic(settingsPath, JSON.stringify(raw, null, 2) + '\n');
       }
     } catch (err) {
       console.error(`[cleanupHookSettings] Failed for ${settingsPath}:`, err);

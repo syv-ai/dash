@@ -235,24 +235,21 @@ describe('projectsStore archive/restore/close/update', () => {
   });
   afterEach(() => resetWindow());
 
-  it('archiveTask calls IPC and reloads the owning project', async () => {
+  // The list reloads on main's `tasks:changed` push, not from the action.
+  it('archiveTask calls IPC and leaves the reload to the push', async () => {
     const useProjects = await freshStore();
     useProjects.setState({ tasksByProject: { p1: [task('t1', 'p1')] } });
-    api.getTasks.mockResolvedValue({
-      success: true,
-      data: [task('t1', 'p1', { archivedAt: '5' })],
-    });
     await useProjects.getState().archiveTask('t1');
     expect(api.archiveTask).toHaveBeenCalledWith('t1');
-    expect(useProjects.getState().tasksByProject.p1![0]!.archivedAt).toBe('5');
+    expect(api.getTasks).not.toHaveBeenCalled();
   });
 
-  it('restoreTask calls IPC and reloads the owning project', async () => {
+  it('restoreTask calls IPC and leaves the reload to the push', async () => {
     const useProjects = await freshStore();
     useProjects.setState({ tasksByProject: { p1: [task('t1', 'p1', { archivedAt: '5' })] } });
-    api.getTasks.mockResolvedValue({ success: true, data: [task('t1', 'p1')] });
     await useProjects.getState().restoreTask('t1');
     expect(api.restoreTask).toHaveBeenCalledWith('t1');
+    expect(api.getTasks).not.toHaveBeenCalled();
   });
 
   it('closeTask stops the supervisor session (not just the pty), clears snapshot, and clears active task if it was active', async () => {
@@ -293,7 +290,7 @@ describe('projectsStore delete', () => {
   });
   afterEach(() => resetWindow());
 
-  it('deleteTask hands the dialog options to main, then clears UI state and reloads', async () => {
+  it('deleteTask hands the dialog options to main, then clears UI state', async () => {
     const useProjects = await freshStore();
     useProjects.setState({
       projects: [proj('p1')],
@@ -314,7 +311,8 @@ describe('projectsStore delete', () => {
     expect(api.worktreeRemove).not.toHaveBeenCalled();
     expect(api.ptyClearSnapshot).toHaveBeenCalledWith('t1');
     expect(useProjects.getState().activeTaskId).toBeNull();
-    expect(api.getTasks).toHaveBeenCalledWith('p1');
+    // The list reloads on main's `tasks:changed` push.
+    expect(api.getTasks).not.toHaveBeenCalled();
   });
 
   it('deleteTask keeps the task selected and toasts when main refuses', async () => {
@@ -534,15 +532,14 @@ describe('projectsStore setDashAccess', () => {
     return sessionRegistry as unknown as { restartAgent: ReturnType<typeof vi.fn> };
   }
 
-  it('sets the flag in main, reloads the project and returns the updated task', async () => {
+  it('sets the flag in main and returns the updated task, leaving the reload to the push', async () => {
     const useProjects = await freshStore();
     const updated = task('t1', 'p1', { dashAccess: true });
     api.setTaskDashAccess.mockResolvedValue({ success: true, data: updated });
-    api.getTasks.mockResolvedValue({ success: true, data: [updated] });
     const result = await useProjects.getState().setDashAccess(task('t1', 'p1'), true, false);
     expect(api.setTaskDashAccess).toHaveBeenCalledWith({ taskId: 't1', enabled: true });
     expect(result).toEqual(updated);
-    expect(useProjects.getState().tasksByProject.p1).toEqual([updated]);
+    expect(api.getTasks).not.toHaveBeenCalled();
   });
 
   it('restarts the session only when it is running', async () => {

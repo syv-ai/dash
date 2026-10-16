@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { shellQuote } from '../../shared/shellQuote';
 import type { PermissionMode } from '../../shared/types';
 
 const DASH_DIR = '.dash';
@@ -140,11 +141,6 @@ export function getResolvedSetupCommands(config: WorkspaceConfig | null): string
   return config.setup.filter((cmd) => cmd.trim().length > 0);
 }
 
-/** POSIX single-quote escape: safe for any path passed through a shell. */
-function singleQuote(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`;
-}
-
 export interface ResolveLifecycleArgs {
   config: WorkspaceConfig | null;
   fallbackScriptPath: string | null;
@@ -156,7 +152,7 @@ function resolveLifecycleCommand(
 ): string | null {
   const filtered = (commands ?? []).filter((c) => c.trim().length > 0);
   if (filtered.length > 0) return filtered.join(' && ');
-  if (fallbackScriptPath) return `bash ${singleQuote(fallbackScriptPath)}`;
+  if (fallbackScriptPath) return `bash ${shellQuote(fallbackScriptPath)}`;
   return null;
 }
 

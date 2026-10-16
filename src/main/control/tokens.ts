@@ -1,6 +1,7 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
+import { writeFileAtomic } from '../utils/atomicWrite';
 import { callerString, type Caller } from './callers';
 import { controlPaths, type ControlPaths } from './paths';
 
@@ -14,17 +15,10 @@ import { controlPaths, type ControlPaths } from './paths';
 let paths: ControlPaths | null = null;
 let secret: Buffer | null = null;
 
-/** Write `content` to `file` with mode 0600 via tmp + rename, so readers never see a partial file. */
+/** Write `content` to `file` (0600, atomic), creating its directory. */
 export function writePrivateFile(file: string, content: string): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-  try {
-    fs.writeFileSync(tmp, content, { mode: 0o600 });
-    fs.renameSync(tmp, file);
-  } catch (err) {
-    fs.rmSync(tmp, { force: true });
-    throw err;
-  }
+  writeFileAtomic(file, content, { mode: 0o600 });
 }
 
 function loadOrCreateSecret(file: string): Buffer {

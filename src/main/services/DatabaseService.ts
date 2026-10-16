@@ -296,18 +296,6 @@ export class DatabaseService {
       .run();
   }
 
-  /** Non-archived tasks created through the control API by `parentId`. */
-  static getTaskChildren(parentId: string): Task[] {
-    const db = getDb();
-    const rows = db
-      .select()
-      .from(tasks)
-      .where(and(eq(tasks.parentTaskId, parentId), isNull(tasks.archivedAt)))
-      .orderBy(asc(tasks.sortOrder), desc(tasks.createdAt))
-      .all();
-    return rows.map(this.mapTask);
-  }
-
   /**
    * Record a worktree move (WorktreeMigrationService). `previousPath` keeps the
    * first pre-move location: a task moved twice still points at the oldest

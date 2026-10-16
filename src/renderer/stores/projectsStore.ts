@@ -69,17 +69,6 @@ export interface ProjectsActions {
   setDashAccess: (taskItem: Task, enabled: boolean, running: boolean) => Promise<Task | null>;
 }
 
-/** Reload tasks for whichever project currently owns `taskId`. */
-async function reloadOwningProject(taskId: string) {
-  const { tasksByProject } = useProjects.getState();
-  for (const [projectId, tasks] of Object.entries(tasksByProject)) {
-    if (tasks.some((t) => t.id === taskId)) {
-      await useProjects.getState().loadTasks(projectId);
-      return;
-    }
-  }
-}
-
 /** Dispose the Claude session + shell sessions for a task. */
 function disposeTaskSessions(taskId: string) {
   void sessionRegistry.dispose(taskId);
@@ -229,13 +218,13 @@ export const useProjects = create<ProjectsStore>((set) => ({
       await useProjects.getState().loadTasks(projectId);
     }
   },
+  // Archive, restore, delete and the Dash-access flag reload the task list
+  // through main's `tasks:changed` push (App.tsx), not here.
   archiveTask: async (id) => {
     await window.electronAPI.archiveTask(id);
-    await reloadOwningProject(id);
   },
   restoreTask: async (id) => {
     await window.electronAPI.restoreTask(id);
-    await reloadOwningProject(id);
   },
   closeTask: async (id) => {
     disposeTaskSessions(id);
@@ -275,7 +264,6 @@ export const useProjects = create<ProjectsStore>((set) => ({
       return;
     }
     forgetDeletedTask(taskItem.id);
-    await useProjects.getState().loadTasks(taskItem.projectId);
   },
   deleteProject: async (project, options) => {
     // An archived project's tasks aren't loaded; fetch them so their
@@ -354,6 +342,9 @@ export const useProjects = create<ProjectsStore>((set) => ({
       const { linkedItems } = options;
       if (linkedItems && linkedItems.length > 0) notifyContextInjected(linkedItems);
 
+      // Reload here as well as on main's `tasks:changed` push: the push's
+      // reload may land after the selection below, and the new task must be
+      // in the list before it is selected.
       await useProjects.getState().loadTasks(targetProjectId);
       useProjects.getState().setActiveProject(targetProjectId);
       useProjects.getState().setActiveTask(resp.data.task.id);
@@ -370,7 +361,6 @@ export const useProjects = create<ProjectsStore>((set) => ({
       toast.error(resp.error || 'Failed to change Dash access');
       return null;
     }
-    await useProjects.getState().loadTasks(taskItem.projectId);
     // Not awaited: the switch shows the new value while the session restarts.
     if (running) {
       void sessionRegistry.restartAgent(taskItem.id).catch((err: unknown) => {

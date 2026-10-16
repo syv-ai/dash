@@ -53,13 +53,3 @@ export function scopeFor(caller: Caller, deps: ScopeLookups): ScopeResult {
     },
   };
 }
-
-export function canSeeTask(caller: Caller, task: Task, deps: ScopeLookups): boolean {
-  const scope = scopeFor(caller, deps);
-  return scope.ok && scope.view.canSeeTask(task);
-}
-
-export function canCreateIn(caller: Caller, projectId: string, deps: ScopeLookups): boolean {
-  const scope = scopeFor(caller, deps);
-  return scope.ok && scope.view.visibleProjectIds.has(projectId);
-}

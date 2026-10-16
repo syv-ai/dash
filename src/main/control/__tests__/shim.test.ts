@@ -9,7 +9,8 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { ToolListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 import { controlPaths } from '../paths';
-import { launcherScript, shQuote, writeLauncher } from '../launcher';
+import { shellQuote } from '../../../shared/shellQuote';
+import { launcherScript, writeLauncher } from '../launcher';
 
 /**
  * Drives the bundled `dash-mcp` shim over stdio, as Claude Code does, against
@@ -290,10 +291,6 @@ describe('dash-mcp shim', () => {
 });
 
 describe('dash-mcp launcher', () => {
-  it('quotes paths for sh', () => {
-    expect(shQuote(`/a b/it's`)).toBe(`'/a b/it'\\''s'`);
-  });
-
   it('copies the shim into userData and writes an executable script that runs the copy', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dash launcher's-"));
     try {
@@ -317,7 +314,7 @@ describe('dash-mcp launcher', () => {
       );
       expect(content.startsWith('#!/bin/sh\n')).toBe(true);
       expect(content).toContain(
-        `DASH_USER_DATA_DIR=${shQuote(dir)} ELECTRON_RUN_AS_NODE=1 exec '/Apps/Dash.app/Electron' ${shQuote(paths.shim)} "$@"`,
+        `DASH_USER_DATA_DIR=${shellQuote(dir)} ELECTRON_RUN_AS_NODE=1 exec '/Apps/Dash.app/Electron' ${shellQuote(paths.shim)} "$@"`,
       );
       expect(fs.readdirSync(path.dirname(file)).sort()).toEqual(['dash-mcp', 'dash-mcp.js']);
     } finally {
@@ -334,7 +331,7 @@ describe('dash-mcp launcher', () => {
       });
       const content = fs.readFileSync(file, 'utf8');
       expect(content).toContain(
-        `ELECTRON_RUN_AS_NODE=1 exec '/home/me/Apps/Dash.AppImage' ${shQuote(controlPaths(dir).shim)} "$@"`,
+        `ELECTRON_RUN_AS_NODE=1 exec '/home/me/Apps/Dash.AppImage' ${shellQuote(controlPaths(dir).shim)} "$@"`,
       );
       expect(content).not.toContain(process.execPath);
     } finally {

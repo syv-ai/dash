@@ -27,7 +27,6 @@ const {
   assertTrustedDownloadUrl,
   assertSafeArchiveMember,
   parseTarVerbose,
-  shellQuoteUnix,
   extractRewrittenCommand,
   verifyChecksum,
   ensureUserBinSymlink,
@@ -148,38 +147,6 @@ describe('assertSafeArchiveMember', () => {
     expect(() => assertSafeArchiveMember(file('..\\..\\etc\\passwd'), dest)).toThrow(
       /escapes|absolute/,
     );
-  });
-});
-
-describe('shellQuoteUnix', () => {
-  it('quotes plain paths', () => {
-    expect(shellQuoteUnix('/usr/local/bin/rtk')).toBe("'/usr/local/bin/rtk'");
-  });
-
-  it('quotes paths containing spaces', () => {
-    expect(shellQuoteUnix('/Application Support/Dash/bin/rtk')).toBe(
-      "'/Application Support/Dash/bin/rtk'",
-    );
-  });
-
-  it('escapes embedded single quotes without leaving an injection hole', () => {
-    // The output must be a single concatenated shell token — decoding it
-    // should yield the exact input back.
-    const input = "/tmp/weird'dir/rtk";
-    const quoted = shellQuoteUnix(input);
-    expect(quoted).toBe("'/tmp/weird'\\''dir/rtk'");
-    // Sanity: the quoted form contains no unescaped bareword that could run.
-    expect(quoted).not.toMatch(/[^\\]\$\(/);
-    expect(quoted).not.toMatch(/[^\\]`/);
-  });
-
-  it('survives $, backtick, and backslash without expansion', () => {
-    const input = '/tmp/$(rm -rf ~)/`whoami`/rtk';
-    const quoted = shellQuoteUnix(input);
-    // With single quotes, none of these metachars get interpreted by sh.
-    expect(quoted.startsWith("'") && quoted.endsWith("'")).toBe(true);
-    expect(quoted).toContain('$(rm -rf ~)');
-    expect(quoted).toContain('`whoami`');
   });
 });
 

@@ -1,6 +1,7 @@
-import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
+import { shellQuote } from '../../shared/shellQuote';
+import { writeFileAtomic } from '../utils/atomicWrite';
 import { controlPaths } from './paths';
 
 /**
@@ -20,11 +21,6 @@ export function defaultShimPath(): string {
     .replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`);
 }
 
-/** Single-quote for sh: `'` → `'\''`. */
-export function shQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
-
 export function launcherScript(opts: {
   userDataDir: string;
   execPath: string;
@@ -33,7 +29,7 @@ export function launcherScript(opts: {
   return [
     '#!/bin/sh',
     '# Written by Dash on launch; points at the current Dash build.',
-    `DASH_USER_DATA_DIR=${shQuote(opts.userDataDir)} ELECTRON_RUN_AS_NODE=1 exec ${shQuote(opts.execPath)} ${shQuote(opts.shimPath)} "$@"`,
+    `DASH_USER_DATA_DIR=${shellQuote(opts.userDataDir)} ELECTRON_RUN_AS_NODE=1 exec ${shellQuote(opts.execPath)} ${shellQuote(opts.shimPath)} "$@"`,
     '',
   ].join('\n');
 }
@@ -54,25 +50,14 @@ export function writeLauncher(
 ): string {
   const paths = controlPaths(userDataDir);
   fs.mkdirSync(paths.dir, { recursive: true });
-  writeAtomic(paths.shim, fs.readFileSync(opts.bundledShimPath ?? defaultShimPath()), 0o644);
+  writeFileAtomic(paths.shim, fs.readFileSync(opts.bundledShimPath ?? defaultShimPath()), {
+    mode: 0o644,
+  });
   const content = launcherScript({
     userDataDir,
     execPath: opts.execPath ?? launcherExecPath(opts.env ?? process.env),
     shimPath: paths.shim,
   });
-  writeAtomic(paths.launcher, content, 0o755);
+  writeFileAtomic(paths.launcher, content, { mode: 0o755 });
   return paths.launcher;
-}
-
-function writeAtomic(file: string, content: string | Buffer, mode: number): void {
-  const tmp = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-  try {
-    fs.writeFileSync(tmp, content, { mode });
-    // The umask may have masked bits off the create mode.
-    fs.chmodSync(tmp, mode);
-    fs.renameSync(tmp, file);
-  } catch (err) {
-    fs.rmSync(tmp, { force: true });
-    throw err;
-  }
 }

@@ -3,6 +3,8 @@
 // testable and shared by both consumers of the result (the PTY env and the
 // on-disk export file), guaranteeing the two stay identical.
 
+import { shellQuote } from '../../shared/shellQuote';
+
 const TEMPLATE_REF_PATTERN = /\$\{([^}]*)\}/g;
 
 /**
@@ -47,11 +49,6 @@ export function composeWorktreeEnv(
     }
   }
   return entries;
-}
-
-/** Single-quote a value for safe `source`-ing in POSIX shells. */
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 /**
