@@ -43,6 +43,12 @@ interface PtyRecord {
    * its whole screen on every attach, so there is nothing to mirror.
    */
   mirror: TerminalMirror | null;
+  /**
+   * Agent PTYs: Dash itself is cycling the session under this client (a
+   * send stops the job and resumes it), so its exit tells the pane to
+   * re-attach rather than show the Detached card.
+   */
+  reattachOnExit?: boolean;
 }
 
 const ptys = new Map<string, PtyRecord>();
@@ -310,8 +316,8 @@ async function ensureTaskSession(opts: {
       if (opts.message === undefined) return opts.jobId;
       const sessionId = row.sessionId ?? opts.sessionId;
       if (!sessionId) throw new Error('The session has no id to resume yet; try again shortly');
-      // The stop inside ends an open pane's attach client, whose exit handler
-      // shows the pane the Detached card; re-attaching waits on this start.
+      // The stop inside ends an open pane's attach client, whose exit asks the
+      // pane to re-attach (sendToTaskSession); re-attaching waits on this start.
       await supervisorService.sendToSession({
         jobId: opts.jobId,
         sessionId,
@@ -451,7 +457,10 @@ function spawnAttach(options: {
     // the client-side registrations go.
     remoteControlService.unregister(options.id);
     if (record.owner && !record.owner.isDestroyed()) {
-      record.owner.send(`pty:exit:${options.id}`, { exitCode, signal });
+      record.owner.send(
+        `pty:exit:${options.id}`,
+        record.reattachOnExit ? { exitCode, signal, reattach: true } : { exitCode, signal },
+      );
     }
     ptys.delete(options.id);
   });
@@ -581,22 +590,51 @@ export async function sendToTaskSession(
   taskId: string,
   message: string,
 ): Promise<{ sent: true } | { needsTrust: string }> {
-  for (let s = sessionStarts.get(taskId); s; s = sessionStarts.get(taskId)) {
-    await s.catch(() => {});
-  }
-  // A send just before this one already started a turn.
-  if (activityMonitor.getAll()[taskId]?.state === 'busy') throw new SessionNotIdleError('busy');
-  const start = startTaskSessionNow(taskId, { message }).finally(() => {
-    if (sessionStarts.get(taskId) === start) sessionStarts.delete(taskId);
-  });
-  sessionStarts.set(taskId, start);
   try {
-    await start;
+    await queueSessionStart(taskId, async () => {
+      // A send just before this one already started a turn.
+      if (activityMonitor.getAll()[taskId]?.state === 'busy') {
+        throw new SessionNotIdleError('busy');
+      }
+      // The stop inside ends an open pane's attach client; its exit tells the
+      // pane to re-attach, which joins this start and so finds the job woken.
+      const pane = ptys.get(taskId);
+      if (pane?.kind === 'agent') pane.reattachOnExit = true;
+      try {
+        return await startTaskSessionNow(taskId, { message });
+      } catch (err) {
+        // Nothing was resumed: a later exit of this client is a real detach.
+        if (pane) pane.reattachOnExit = false;
+        throw err;
+      }
+    });
     return { sent: true };
   } catch (err) {
     if (err instanceof UntrustedWorkspaceError) return { needsTrust: err.root };
     throw err;
   }
+}
+
+/**
+ * Run `work` as the task's session start, after any start in flight (joining
+ * one would skip `work`). It is registered before it runs, so a pane start
+ * made from inside it — the re-attach an exit notification asks for — waits
+ * for it instead of racing it.
+ */
+async function queueSessionStart(
+  taskId: string,
+  work: () => Promise<TaskSessionStart>,
+): Promise<TaskSessionStart> {
+  for (let s = sessionStarts.get(taskId); s; s = sessionStarts.get(taskId)) {
+    await s.catch(() => {});
+  }
+  const start = Promise.resolve()
+    .then(work)
+    .finally(() => {
+      if (sessionStarts.get(taskId) === start) sessionStarts.delete(taskId);
+    });
+  sessionStarts.set(taskId, start);
+  return start;
 }
 
 /**
@@ -781,8 +819,11 @@ export async function removeTaskSession(taskId: string): Promise<void> {
  * next startDirectPty resumes the same session id in a fresh job. The
  * renderer's restart path calls this before re-attaching.
  */
-export async function restartTaskSession(taskId: string): Promise<void> {
-  await killPtyInternal(taskId, { notifyOwner: true });
+export async function restartTaskSession(
+  taskId: string,
+  opts: { reattach?: boolean } = {},
+): Promise<void> {
+  await killPtyInternal(taskId, { notifyOwner: true, reattach: opts.reattach });
   const task = DatabaseService.getTask(taskId);
   if (!task?.jobId) return;
   let sessionId = task.sessionId;
@@ -794,6 +835,26 @@ export async function restartTaskSession(taskId: string): Promise<void> {
   await supervisorService.stop(task.jobId).catch(() => {});
   await supervisorService.remove(task.jobId).catch(() => {});
   DatabaseService.setTaskSession(taskId, { jobId: null, sessionId });
+}
+
+/**
+ * Restart the task's session and start it again as one session start (the
+ * control API's tasks.restart). An open pane is told to re-attach, and its
+ * start waits for this one, so it attaches to the fresh job.
+ */
+export async function restartAndStartTaskSession(
+  taskId: string,
+): Promise<{ jobId: string } | { needsTrust: string }> {
+  try {
+    const { jobId } = await queueSessionStart(taskId, async () => {
+      await restartTaskSession(taskId, { reattach: true });
+      return startTaskSessionNow(taskId, {});
+    });
+    return { jobId };
+  } catch (err) {
+    if (err instanceof UntrustedWorkspaceError) return { needsTrust: err.root };
+    throw err;
+  }
 }
 
 /**
@@ -1057,13 +1118,20 @@ function teardownRecord(id: string, record: PtyRecord): void {
  * have sent (teardown makes that handler a no-op), so an open agent pane shows
  * the Detached card instead of freezing. For kills the pane did not ask for
  * (session stop/restart, e.g. from the control API); the pane's own restart
- * unsubscribes from exit first, so it sees nothing.
+ * unsubscribes from exit first, so it sees nothing. `reattach`: Dash starts
+ * the session again right after, so the pane re-attaches instead.
  */
-function killPtyInternal(id: string, opts: { notifyOwner?: boolean } = {}): Promise<void> {
+function killPtyInternal(
+  id: string,
+  opts: { notifyOwner?: boolean; reattach?: boolean } = {},
+): Promise<void> {
   const record = ptys.get(id);
   if (!record) return Promise.resolve();
   if (opts.notifyOwner && record.owner && !record.owner.isDestroyed()) {
-    record.owner.send(`pty:exit:${id}`, { exitCode: 0 });
+    record.owner.send(
+      `pty:exit:${id}`,
+      opts.reattach ? { exitCode: 0, reattach: true } : { exitCode: 0 },
+    );
   }
   teardownRecord(id, record);
   return gracefulKillProc(record.proc);

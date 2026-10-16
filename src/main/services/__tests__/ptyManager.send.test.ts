@@ -34,7 +34,10 @@ const sessions: Array<[string, unknown]> = [];
 vi.mock('../DatabaseService', () => ({
   DatabaseService: {
     getTask: (id: string) => tasks.get(id),
-    setTaskSession: (id: string, s: unknown) => sessions.push([id, s]),
+    setTaskSession: (id: string, s: Partial<Task>) => {
+      sessions.push([id, s]);
+      Object.assign(tasks.get(id) ?? {}, s);
+    },
     markTaskSessionStopped: () => {},
     getTasksWithSessions: () => [],
   },
@@ -97,6 +100,7 @@ import {
   sendRemoteControl,
   stopTaskSession,
   restartTaskSession,
+  restartAndStartTaskSession,
   hasPty,
   __testReset,
   __setPtyModuleForTest,
@@ -168,15 +172,49 @@ describe('sendToTaskSession', () => {
     expect(ptySpawn).not.toHaveBeenCalled(); // no attach client of its own
   });
 
-  it("leaves an open pane to its client's exit, which shows it Detached", async () => {
+  it("leaves an open pane to its client's exit, which tells the pane to re-attach", async () => {
     const owner = fakeOwner();
     await startDirectPty({ id: 't1', cols: 80, rows: 24, sender: owner as never });
     const pane = procs()[0]!;
     sup.sendToSession.mockImplementationOnce(async () => pane.exit()); // the stop ends it
     await sendToTaskSession('t1', 'go on');
     expect(pane.kill).not.toHaveBeenCalled();
-    expect(owner.send.mock.calls.filter(([c]) => c === 'pty:exit:t1')).toHaveLength(1);
+    expect(owner.send.mock.calls.filter(([c]) => c === 'pty:exit:t1')).toEqual([
+      ['pty:exit:t1', { exitCode: 0, signal: 1, reattach: true }],
+    ]);
     expect(hasPty('t1')).toBe(false);
+  });
+
+  it('a pane re-attaching on the exit waits for the send and attaches to the woken job', async () => {
+    const owner = fakeOwner();
+    await startDirectPty({ id: 't1', cols: 80, rows: 24, sender: owner as never });
+    let resumed!: () => void;
+    let reattach: Promise<unknown> | undefined;
+    sup.sendToSession.mockImplementationOnce(async () => {
+      procs()[0]!.exit(); // the stop ends the client; the pane answers at once
+      reattach = startDirectPty({ id: 't1', cols: 80, rows: 24, sender: owner as never });
+      await new Promise<void>((r) => (resumed = r));
+    });
+    const sent = sendToTaskSession('t1', 'go on');
+    await flush();
+    expect(ptySpawn).toHaveBeenCalledTimes(1); // not attached to the stopped job
+    resumed();
+    await sent;
+    await reattach;
+    expect(ptySpawn).toHaveBeenCalledTimes(2);
+    expect(ptySpawn.mock.calls[1]![1]).toEqual(['attach', 'job-1']);
+  });
+
+  it('a send that fails leaves a later exit of the client a plain detach', async () => {
+    const owner = fakeOwner();
+    activityMonitor.ensure('t1');
+    await startDirectPty({ id: 't1', cols: 80, rows: 24, sender: owner as never });
+    sup.sendToSession.mockRejectedValueOnce(new SessionNotIdleError('waiting'));
+    await expect(sendToTaskSession('t1', 'hi')).rejects.toBeInstanceOf(SessionNotIdleError);
+    procs()[0]!.exit(); // the user's /exit
+    expect(owner.send.mock.calls.filter(([c]) => c === 'pty:exit:t1')).toEqual([
+      ['pty:exit:t1', { exitCode: 0, signal: 1 }],
+    ]);
   });
 
   it('records a session id the task did not have', async () => {
@@ -287,11 +325,38 @@ describe('stopping or restarting the session under an open pane', () => {
     expect(hasPty('t1')).toBe(false);
   });
 
-  it('stopTaskSession tells the pane its attach client is gone', async () => {
+  it('stopTaskSession (archive, sleep) shows the pane Detached, not re-attaching', async () => {
     const owner = fakeOwner();
     await startDirectPty({ id: 't1', cols: 80, rows: 24, sender: owner as never });
     await stopTaskSession('t1');
-    expect(exitSends(owner)).toHaveLength(1);
+    expect(exitSends(owner)).toEqual([['pty:exit:t1', { exitCode: 0 }]]);
+  });
+
+  it('the pane restart path (restartTaskSession) sends a plain exit', async () => {
+    const owner = fakeOwner();
+    await startDirectPty({ id: 't1', cols: 80, rows: 24, sender: owner as never });
+    await restartTaskSession('t1');
+    expect(exitSends(owner)).toEqual([['pty:exit:t1', { exitCode: 0 }]]);
+  });
+
+  it('restartAndStartTaskSession (API restart) re-dispatches and tells the pane to re-attach', async () => {
+    const owner = fakeOwner();
+    await startDirectPty({ id: 't1', cols: 80, rows: 24, sender: owner as never });
+    let stopped!: () => void;
+    sup.stop.mockImplementationOnce(() => new Promise<void>((r) => (stopped = r)));
+    const restarted = restartAndStartTaskSession('t1');
+    await flush();
+    expect(exitSends(owner)).toEqual([['pty:exit:t1', { exitCode: 0, reattach: true }]]);
+    // The pane answers the exit at once; its start waits for the restart's.
+    const reattach = startDirectPty({ id: 't1', cols: 80, rows: 24, sender: owner as never });
+    await flush();
+    expect(ptySpawn).toHaveBeenCalledTimes(1);
+    stopped();
+    expect(await restarted).toEqual({ jobId: 'job-new' });
+    await reattach;
+    expect(sup.stop).toHaveBeenCalledWith('job-1');
+    expect(sup.dispatch).toHaveBeenCalledTimes(1);
+    expect(ptySpawn.mock.calls.at(-1)![1]).toEqual(['attach', 'job-new']);
   });
 
   it('a pane re-attaching over its own client gets no exit', async () => {

@@ -9,7 +9,7 @@ import { focusTaskInWindow } from '../../services/focusTask';
 import {
   getUntrustedRoot,
   recheckWorkspaceTrust,
-  restartTaskSession,
+  restartAndStartTaskSession,
   sendToTaskSession,
   startTaskSession,
 } from '../../services/ptyManager';
@@ -61,7 +61,7 @@ export function taskDeps(): TaskCapabilityDeps {
     archiveTask: (id) => TaskService.archive(id),
     restoreTask: (id) => TaskService.restore(id),
     deleteTask: (id, opts) => TaskService.delete(id, opts),
-    restartSession: restartTaskSession,
+    restartSession: restartAndStartTaskSession,
     startSession: (id) => startTaskSession(id),
     readLogs: (jobId) => supervisorService.logs(jobId),
     openTask: (task) => {

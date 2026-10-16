@@ -75,7 +75,7 @@ beforeEach(() => {
     archiveTask: vi.fn(async () => {}),
     restoreTask: vi.fn(async () => {}),
     deleteTask: vi.fn(async () => {}),
-    restartSession: vi.fn(async () => {}),
+    restartSession: vi.fn(async () => ({ jobId: 'job-1' })),
     startSession: vi.fn(async () => ({ jobId: 'job-1' })),
     readLogs: vi.fn(async () => ''),
     openTask: vi.fn(),
@@ -403,7 +403,6 @@ describe('lifecycle capabilities', () => {
     expect(deps.archiveTask).toHaveBeenCalledWith('child');
     await registry.call(asTask('me'), 'tasks.restart', { taskId: 'child' });
     expect(deps.restartSession).toHaveBeenCalledWith('child');
-    expect(deps.startSession).toHaveBeenCalledWith('child');
   });
 
   it('delete removes the worktree and maps deleteBranch onto both branch flags', async () => {

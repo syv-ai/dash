@@ -9,7 +9,12 @@ import { FilePathLinkProvider } from './FilePathLinkProvider';
 import type { ITheme } from '@xterm/xterm';
 import { darkTheme, lightTheme, resolveTheme } from './terminalThemes';
 import { getTerminalFont } from './terminalFonts';
-import { ptyExitFallback, foreignSessionJobId } from './ptyExitFallback';
+import {
+  ptyExitFallback,
+  foreignSessionJobId,
+  reattachWithin,
+  REATTACH_TIMEOUT_MS,
+} from './ptyExitFallback';
 import { clackBlock, clackExitBlock } from './clackLines';
 import { isPromptOnlySnapshot } from './snapshotFilter';
 import { FitScheduler } from './FitScheduler';
@@ -28,6 +33,10 @@ const MEMORY_LIMIT_BYTES = 600 * 1024 * 1024; // 600MB
 const MEMORY_CHECK_INTERVAL_MS = 5_000;
 // Floor the scrollback never drops below when trimming under pressure.
 const MIN_SCROLLBACK = 10_000;
+
+/** An agent pane whose attach client exited. `reconnecting`: Dash cycled the
+ *  session and the pane is re-attaching on its own (no Re-attach needed). */
+export type DetachedInfo = { exitCode: number; reconnecting?: boolean };
 
 export class TerminalSessionManager {
   readonly id: string;
@@ -48,8 +57,12 @@ export class TerminalSessionManager {
   private isDark = true;
   private _isRestarting = false;
   private onRestartingCallback: (() => void) | null = null;
-  private onDetachedCallback: ((info: { exitCode: number } | null) => void) | null = null;
-  private detachedInfo: { exitCode: number } | null = null;
+  private onDetachedCallback: ((info: DetachedInfo | null) => void) | null = null;
+  private detachedInfo: DetachedInfo | null = null;
+  /** Re-attaching on its own after Dash cycled the session (see reconnect). */
+  private reconnecting = false;
+  /** Whether the last startPty got a session (false: it wrote an error). */
+  private lastStartOk = false;
   private onReadyCallback: (() => void) | null = null;
   private readyFired = false;
   private readyFallbackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -556,7 +569,7 @@ export class TerminalSessionManager {
         // this PTY. The client repaints the whole screen on attach, so there is
         // no snapshot or mirror state to restore — a renderer reload simply
         // attaches again.
-        this.setDetached(null);
+        if (!this.reconnecting) this.setDetached(null);
         const result = await this.startPty();
         if (gen !== this.attachGeneration) return;
         isDirectSpawn = result.isDirectSpawn;
@@ -701,7 +714,7 @@ export class TerminalSessionManager {
    * Agent panes: called with the exit info when the attach client exits and
    * the pane shows the Detached card, and with null when a (re)attach starts.
    */
-  onDetached(cb: ((info: { exitCode: number } | null) => void) | null) {
+  onDetached(cb: ((info: DetachedInfo | null) => void) | null) {
     this.onDetachedCallback = cb;
     if (cb) cb(this.detachedInfo);
   }
@@ -710,9 +723,42 @@ export class TerminalSessionManager {
     return this.detachedInfo !== null;
   }
 
-  private setDetached(info: { exitCode: number } | null) {
+  private setDetached(info: DetachedInfo | null) {
     this.detachedInfo = info;
     this.onDetachedCallback?.(info);
+  }
+
+  /**
+   * Dash stopped and is restarting the session under this pane (tasks.send,
+   * the API's tasks.restart): attach again without a click. Main registers
+   * that start before the client exits, so the attach waits for it and finds
+   * the session live. Shows "Reconnecting…" meanwhile, and the Detached card
+   * if the attach fails or takes longer than REATTACH_TIMEOUT_MS (a late
+   * success still clears it).
+   */
+  private async reconnect(exitCode: number): Promise<void> {
+    const container = this.currentContainer;
+    // A hidden pane attaches when it is shown again.
+    if (!container) return;
+    this.reconnecting = true;
+    this.setDetached({ exitCode, reconnecting: true });
+    const ok = await reattachWithin(async () => {
+      this.dataBuffer = null;
+      await this.attach(container, { autoFocus: false });
+      if (this.lastStartOk && this.detachedInfo && !this.reconnecting) {
+        this.setDetached(null); // succeeded after the card was shown
+      }
+      return this.lastStartOk;
+    }, REATTACH_TIMEOUT_MS);
+    this.reconnecting = false;
+    if (this.disposed) return;
+    if (ok) {
+      this.setDetached(null);
+      return;
+    }
+    // Let the card's Re-attach start a new client.
+    this.ptyStarted = false;
+    this.setDetached({ exitCode });
   }
 
   /** Re-attach after a detach (Detached card → Re-attach). */
@@ -1075,6 +1121,7 @@ export class TerminalSessionManager {
     if (!resp.success && resp.code === 'UNTRUSTED_WORKSPACE') {
       if (await this.promptWorkspaceTrust(cols, rows)) resp = await startDirect();
     }
+    this.lastStartOk = resp.success;
 
     let isDirectSpawn = true;
     if (!resp.success) {
@@ -1204,7 +1251,13 @@ export class TerminalSessionManager {
       // Ensure PTY is cleaned up in main process
       window.electronAPI.ptyKill(this.id);
 
-      const fallback = ptyExitFallback(this.id, this.isTui, this.shellOnly);
+      const fallback = ptyExitFallback(this.id, this.isTui, this.shellOnly, info.reattach);
+      if (fallback.action === 'reattach') {
+        this.ptyStarted = false;
+        this.resetTerminal();
+        void this.reconnect(info.exitCode);
+        return;
+      }
       if (fallback.action === 'detached') {
         // The `claude attach` client exited (Esc out of agent view, Ctrl+Z,
         // or the session process went away); the session itself lives on

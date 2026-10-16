@@ -150,9 +150,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener(`pty:data:${id}`, handler);
     };
   },
-  onPtyExit: (id: string, callback: (info: { exitCode: number; signal?: number }) => void) => {
-    const handler = (_event: unknown, info: { exitCode: number; signal?: number }) =>
-      callback(info);
+  onPtyExit: (
+    id: string,
+    callback: (info: { exitCode: number; signal?: number; reattach?: boolean }) => void,
+  ) => {
+    const handler = (
+      _event: unknown,
+      info: { exitCode: number; signal?: number; reattach?: boolean },
+    ) => callback(info);
     ipcRenderer.on(`pty:exit:${id}`, handler);
     return () => {
       ipcRenderer.removeListener(`pty:exit:${id}`, handler);

@@ -57,9 +57,11 @@ export interface PtyApi {
     opts?: { kinds?: ('agent' | 'shell' | 'tui' | 'service')[]; featureId?: string },
   ) => Promise<IpcResponse<string[]>>;
   onPtyData: (id: string, callback: (data: string) => void) => () => void;
+  /** `reattach`: Dash cycled the task's session (tasks.send, API restart) and
+   *  is starting it again, so an agent pane re-attaches instead of detaching. */
   onPtyExit: (
     id: string,
-    callback: (info: { exitCode: number; signal?: number }) => void,
+    callback: (info: { exitCode: number; signal?: number; reattach?: boolean }) => void,
   ) => () => void;
 
   // Activity monitor

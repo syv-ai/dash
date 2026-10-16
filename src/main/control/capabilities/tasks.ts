@@ -55,7 +55,9 @@ export interface TaskCapabilityDeps {
   archiveTask(id: string): Promise<void>;
   restoreTask(id: string): Promise<void>;
   deleteTask(id: string, opts: DeleteTaskOptions): Promise<void>;
-  restartSession(id: string): Promise<void>;
+  /** Re-dispatch the session and start it again, as one session start
+   *  (ptyManager.restartAndStartTaskSession), so an open pane re-attaches. */
+  restartSession(id: string): Promise<{ jobId: string } | { needsTrust: string }>;
   startSession(id: string): Promise<{ jobId: string } | { needsTrust: string }>;
   /** `claude logs <jobId>`: the raw repaint stream. */
   readLogs(jobId: string): Promise<string>;
@@ -528,7 +530,6 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
       handler: async (_ctx, input) => {
         assertNotArchived(taskOrThrow(input.taskId));
         await deps.restartSession(input.taskId);
-        await deps.startSession(input.taskId);
         return view(taskOrThrow(input.taskId));
       },
     }),
