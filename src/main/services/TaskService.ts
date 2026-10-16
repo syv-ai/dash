@@ -9,7 +9,6 @@ import type {
 import { formatTaskContextPrompt } from '@shared/taskContext';
 import { DatabaseService } from './DatabaseService';
 import { worktreeService } from './WorktreeService';
-import { worktreePoolService } from './WorktreePoolService';
 import { GitService } from './GitService';
 import { GithubService } from './GithubService';
 import { AzureDevOpsService } from './AzureDevOpsService';
@@ -43,7 +42,7 @@ export const UNATTENDED_INSTRUCTION =
 /**
  * Task lifecycle: create, archive, restore, delete. The task dialog (through
  * `task:*` IPC) and the control API both come here, so the side effects
- * (worktree, ports, first prompt, reserve refill, branch comments, telemetry,
+ * (worktree, ports, first prompt, branch comments, telemetry,
  * the `tasks-changed` event) happen the same way whoever asked.
  */
 export class TaskService {
@@ -76,30 +75,14 @@ export class TaskService {
     let worktreeInfo: { branch: string; path: string } | null = null;
     switch (input.kind) {
       case 'worktree-new-branch': {
-        // New branch: try the reserve pool, fall back to direct creation.
-        worktreeInfo = await worktreePoolService
-          .claimReserve(
-            project.id,
-            name,
-            input.baseRef,
-            linkedIssueNumbers,
-            input.pushRemote,
-            setupScript,
-          )
-          .catch((err) => {
-            console.warn('[TaskService] reserve claim failed, creating a worktree:', err);
-            return null;
-          });
-        if (!worktreeInfo) {
-          worktreeInfo = await worktreeService.createWorktree(project.path, name, {
-            baseRef: input.baseRef,
-            projectId: project.id,
-            linkedIssueNumbers,
-            pushRemote: input.pushRemote,
-            setupScript,
-          });
-          TelemetryService.capture('worktree_created');
-        }
+        worktreeInfo = await worktreeService.createWorktree(project.path, name, {
+          baseRef: input.baseRef,
+          projectId: project.id,
+          linkedIssueNumbers,
+          pushRemote: input.pushRemote,
+          setupScript,
+        });
+        TelemetryService.capture('worktree_created');
         break;
       }
       case 'worktree-existing': {
@@ -203,9 +186,6 @@ export class TaskService {
 
     DatabaseService.getOrCreateDefaultConversation(task.id);
 
-    worktreePoolService
-      .ensureReserve(project.id, project.path)
-      .catch((err) => console.warn('[TaskService] reserve refill failed:', err));
     postBranchComments(project.id, project.path, branch, ghIssueNumbers, adoItems);
 
     let session: CreateTaskResult['session'] = 'deferred';

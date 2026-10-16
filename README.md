@@ -9,7 +9,7 @@ The main idea: you open a project, create tasks, and each task gets an isolated 
 ## What it does
 
 - **Project management** — Open any git repo as a project, or clone from a URL. Tasks are nested under projects in the sidebar. Drag-and-drop to reorder projects. Project overview dashboard shows all tasks, activity status, and quick actions.
-- **Git worktrees** — Each task gets its own worktree and branch. A reserve pool pre-creates worktrees so new tasks start instantly (<100ms). Per-project setup scripts run automatically after worktree creation (e.g. `pnpm install`, copying `.env`).
+- **Git worktrees** — Each task gets its own worktree and branch. Per-project setup scripts run automatically after worktree creation (e.g. `pnpm install`, copying `.env`).
 - **Sessions that outlive the window** — Task sessions are owned by Claude Code's supervisor, not by Dash: switching tasks, reloading or quitting Dash only detaches the terminal, and opening the task attaches again with a recap. Sessions idle for about an hour are parked by Claude Code and resume on the next open. Sessions started outside Dash inside a project show up under "Other sessions" and can be attached, stopped, removed or adopted as a task.
 - **Terminal** — Full PTY terminal per task (`claude attach` in fullscreen mode; `←` on an empty prompt opens Claude Code's agent view, Esc leaves it, Ctrl+Z detaches). Shift+Enter sends multiline input. File drag-drop pastes paths. Clickable file paths open in your IDE. 16 terminal themes.
 - **Shell drawer** — Separate shell terminal alongside the task terminal. Configurable position (left, right, or replacing main content).

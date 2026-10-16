@@ -266,16 +266,6 @@ export interface WorktreeInfo {
   createdAt: string;
 }
 
-export interface ReserveWorktree {
-  id: string;
-  path: string;
-  branch: string;
-  projectId: string;
-  projectPath: string;
-  baseRef: string;
-  createdAt: string;
-}
-
 export interface RemoveWorktreeOptions {
   deleteWorktreeDir?: boolean;
   deleteLocalBranch?: boolean;

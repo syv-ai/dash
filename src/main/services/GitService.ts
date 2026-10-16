@@ -276,7 +276,8 @@ export class GitService {
         [
           'branch',
           '-r',
-          '--format=%(refname:short)\t%(objectname:short)\t%(committerdate:relative)',
+          // Full refnames: git shortens origin/HEAD to a bare `origin`.
+          '--format=%(refname)\t%(objectname:short)\t%(committerdate:relative)',
           '--sort=-committerdate',
         ],
         { cwd, timeout: 15000 },
@@ -284,8 +285,9 @@ export class GitService {
 
       const branches: BranchInfo[] = [];
       for (const line of stdout.split('\n').filter(Boolean)) {
-        const [ref, shortHash, ...dateParts] = line.split('\t');
-        if (!ref || ref === 'origin/HEAD') continue;
+        const [refname, shortHash, ...dateParts] = line.split('\t');
+        const ref = refname?.replace(/^refs\/remotes\//, '');
+        if (!ref || ref.endsWith('/HEAD')) continue;
         const name = ref.replace(/^origin\//, '');
         branches.push({
           name,
@@ -907,7 +909,6 @@ export class GitService {
   static async getCommitGraph(cwd: string, limit = 150, skip = 0): Promise<CommitGraphData> {
     const args = [
       'log',
-      '--exclude=refs/heads/_reserve/*',
       '--all',
       '--topo-order',
       `--max-count=${limit}`,
@@ -1016,7 +1017,7 @@ export class GitService {
         }
         return { name: trimmed, type: 'local' as const };
       })
-      .filter((r) => !r.name.includes('_reserve/') && r.name !== 'origin/HEAD');
+      .filter((r) => r.name !== 'origin/HEAD');
   }
 
   private static assignLanes(commits: CommitNode[]): GraphCommit[] {

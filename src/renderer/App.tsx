@@ -583,17 +583,7 @@ export function App() {
     for (const project of projects) {
       void loadTasksForProject(project.id);
     }
-    // Ensure reserve worktree for active project
-    if (activeProjectId) {
-      const project = projects.find((p) => p.id === activeProjectId);
-      if (project) {
-        void window.electronAPI.worktreeEnsureReserve({
-          projectId: activeProjectId,
-          projectPath: project.path,
-        });
-      }
-    }
-  }, [projects, activeProjectId]);
+  }, [projects]);
 
   // One-time offer to move pre-0.16 worktrees (`<parent>/worktrees/`) under
   // each project's `.claude/worktrees/`. Asked once per launch, after every

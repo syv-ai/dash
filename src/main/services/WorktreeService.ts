@@ -561,7 +561,7 @@ export class WorktreeService {
 
   /**
    * Pre-0.16 location, `<parent-of-repo>/worktrees/`. Only the migration
-   * (WorktreeMigrationService) and the orphan-reserve sweep still look here.
+   * (WorktreeMigrationService) and the legacy reserve sweep still look here.
    */
   getLegacyWorktreesDir(projectPath: string): string {
     return path.join(path.dirname(path.resolve(projectPath)), 'worktrees');

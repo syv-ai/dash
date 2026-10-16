@@ -63,12 +63,6 @@ const worktree = vi.hoisted(() => ({
 }));
 vi.mock('../WorktreeService', () => ({ worktreeService: worktree }));
 
-const pool = vi.hoisted(() => ({
-  claimReserve: vi.fn(async (): Promise<{ branch: string; path: string } | null> => null),
-  ensureReserve: vi.fn(async () => {}),
-}));
-vi.mock('../WorktreePoolService', () => ({ worktreePoolService: pool }));
-
 const initialPrompts: Record<string, string> = {};
 const startTaskSession = vi.fn(
   async (_id: string): Promise<{ jobId: string } | { needsTrust: string }> => ({ jobId: 'j1' }),
@@ -163,22 +157,13 @@ beforeEach(() => {
   for (const k of Object.keys(initialPrompts)) delete initialPrompts[k];
   workspaceConfig = null;
   vi.clearAllMocks();
-  pool.claimReserve.mockResolvedValue(null);
   ptysForTask.list = [];
   ptysForTask.killed = [];
   startTaskSession.mockResolvedValue({ jobId: 'j1' });
 });
 
 describe('TaskService.create', () => {
-  it('uses a claimed reserve worktree', async () => {
-    pool.claimReserve.mockResolvedValueOnce({ branch: 'fix-login-r', path: '/wt/reserve' });
-    const { task } = await TaskService.create(newBranchInput(), UI);
-    expect(task.path).toBe('/wt/reserve');
-    expect(task.branch).toBe('fix-login-r');
-    expect(worktree.createWorktree).not.toHaveBeenCalled();
-  });
-
-  it('falls back to creating a worktree when no reserve can be claimed', async () => {
+  it('creates a new-branch worktree', async () => {
     const { task, session } = await TaskService.create(newBranchInput(), UI);
     expect(worktree.createWorktree).toHaveBeenCalledOnce();
     expect(task.path).toBe('/wt/fix-login-new');

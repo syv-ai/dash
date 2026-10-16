@@ -4,7 +4,7 @@ import type {
   WorktreeMigrationResult,
 } from '../../shared/types';
 
-/** Git worktree lifecycle — one worktree per task, plus the pre-warmed reserve pool. */
+/** Git worktree lifecycle — one worktree per task. */
 export interface WorktreeApi {
   worktreeRemove: (args: {
     projectPath: string;
@@ -17,11 +17,6 @@ export interface WorktreeApi {
       teardownScript?: string | null;
     };
   }) => Promise<IpcResponse<void>>;
-  worktreeEnsureReserve: (args: {
-    projectId: string;
-    projectPath: string;
-  }) => Promise<IpcResponse<void>>;
-  worktreeHasReserve: (projectId: string) => Promise<IpcResponse<boolean>>;
   /** Tasks whose worktree still sits at the pre-0.16 `<parent>/worktrees/` location. */
   worktreeMigrationPlan: () => Promise<IpcResponse<WorktreeMigrationProject[]>>;
   /** `git worktree move` every legacy task of one project under `<repo>/.claude/worktrees/`. */

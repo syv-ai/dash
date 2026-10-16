@@ -70,8 +70,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Worktree
   worktreeRemove: (args: unknown) => ipcRenderer.invoke('worktree:remove', args),
-  worktreeEnsureReserve: (args: unknown) => ipcRenderer.invoke('worktree:ensureReserve', args),
-  worktreeHasReserve: (projectId: string) => ipcRenderer.invoke('worktree:hasReserve', projectId),
   worktreeMigrationPlan: () => ipcRenderer.invoke('worktree:migrationPlan'),
   worktreeMigrate: (args: unknown) => ipcRenderer.invoke('worktree:migrate', args),
 

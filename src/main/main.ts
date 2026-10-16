@@ -197,12 +197,12 @@ void app.whenReady().then(async () => {
     });
   }, 60_000);
 
-  // Cleanup orphaned reserve worktrees (background, non-blocking)
+  // Remove the worktree pool's leftovers from before 0.17 (background, non-blocking)
   setTimeout(() => {
     void (async () => {
       try {
-        const { worktreePoolService } = await import('./services/WorktreePoolService');
-        await worktreePoolService.cleanupOrphanedReserves();
+        const { removeLegacyReserves } = await import('./services/legacyReserveCleanup');
+        await removeLegacyReserves(DatabaseService.getProjects().map((p) => p.path));
       } catch {
         // Best effort
       }

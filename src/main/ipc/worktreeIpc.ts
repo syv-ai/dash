@@ -2,7 +2,6 @@ import { ipcMain } from 'electron';
 import { z } from 'zod';
 import { parseArgs, errorResponse } from './validate';
 import { worktreeService } from '../services/WorktreeService';
-import { worktreePoolService } from '../services/WorktreePoolService';
 import { worktreeMigrationService } from '../services/WorktreeMigrationService';
 import { TelemetryService } from '../services/TelemetryService';
 
@@ -55,23 +54,6 @@ export function registerWorktreeIpc(): void {
     },
   );
 
-  ipcMain.handle(
-    'worktree:ensureReserve',
-    async (_event, args: { projectId: string; projectPath: string }) => {
-      try {
-        parseArgs(
-          'worktree:ensureReserve',
-          z.looseObject({ projectId: z.string(), projectPath: z.string() }),
-          args,
-        );
-        await worktreePoolService.ensureReserve(args.projectId, args.projectPath);
-        return { success: true };
-      } catch (error) {
-        return errorResponse(error);
-      }
-    },
-  );
-
   // Pre-0.16 worktrees lived at `<parent>/worktrees/`; the launch dialog offers
   // to move them under `<repo>/.claude/worktrees/`. Plan is read-only.
   ipcMain.handle('worktree:migrationPlan', () => {
@@ -105,13 +87,4 @@ export function registerWorktreeIpc(): void {
       }
     },
   );
-
-  ipcMain.handle('worktree:hasReserve', async (_event, projectId: string) => {
-    try {
-      parseArgs('worktree:hasReserve', z.string(), projectId);
-      return { success: true, data: worktreePoolService.hasReserve(projectId) };
-    } catch (error) {
-      return errorResponse(error);
-    }
-  });
 }

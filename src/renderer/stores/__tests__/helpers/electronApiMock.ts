@@ -25,7 +25,6 @@ export function makeElectronApiMock(overrides: Record<string, unknown> = {}) {
     setTaskDashAccess: vi.fn(),
     onTasksChanged: vi.fn((_cb: (d: { projectId: string }) => void) => () => {}),
     worktreeRemove: vi.fn(() => ok(undefined)),
-    worktreeEnsureReserve: vi.fn(() => ok(undefined)),
     gitCheckoutBranch: vi.fn(() => ok(undefined)),
     gitGetStatus: vi.fn(() => ok(null)),
     gitStageFiles: vi.fn(() => ok(undefined)),
