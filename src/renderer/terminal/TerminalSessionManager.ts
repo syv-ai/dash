@@ -1122,6 +1122,14 @@ export class TerminalSessionManager {
       if (await this.promptWorkspaceTrust(cols, rows)) resp = await startDirect();
     }
     this.lastStartOk = resp.success;
+    if (resp.success) {
+      // The PTY now has the size measured before the await. A fit that ran
+      // while main was still starting it resized nothing (no PTY yet) but
+      // recorded its size, so the next fit would skip the resize and leave
+      // the attach client drawing at a stale width.
+      this.lastPtyCols = cols;
+      this.lastPtyRows = rows;
+    }
 
     let isDirectSpawn = true;
     if (!resp.success) {

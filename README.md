@@ -84,7 +84,7 @@ Dash doesn't carry messages. Your orchestrator talks to a task with Claude Code'
 3. `SendMessage` to the task's `messageAddress`. This works from another config dir too, such as Holi's.
 4. The task answers you with `SendMessage` in the same way.
 
-A task whose `messaging` is `needs-approval` runs in `bypassPermissions`, so a message from a session that does prompt is held until someone clicks Deliver in the task's pane in Dash. When a task's session stops, its old address fails with `ENOENT`. Call `tasks_wake` again for a new one.
+A task whose `messaging` is `needs-approval` runs in `bypassPermissions`, so a message from a session that does prompt is held until someone clicks Deliver in the task's pane in Dash. Its reply is held the same way in your orchestrator's session, which a non-interactive session (`claude -p`) can't approve. The orchestrator also has to still be running when the reply comes: a `claude -p` run that ends its turn and exits leaves the task's reply failing with `ENOENT`. When a task's session stops, its old address fails with `ENOENT`. Call `tasks_wake` again for a new one.
 
 ### Safety rules
 
