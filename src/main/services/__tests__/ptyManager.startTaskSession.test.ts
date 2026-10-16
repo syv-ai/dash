@@ -19,6 +19,7 @@ const sup = vi.hoisted(() => {
     })),
     stop: vi.fn(async () => {}),
     remove: vi.fn(async () => {}),
+    respawn: vi.fn(async (_jobId: string) => {}),
   };
 });
 vi.mock('../SupervisorService', () => ({
@@ -28,6 +29,7 @@ vi.mock('../SupervisorService', () => ({
     dispatch: sup.dispatch,
     stop: sup.stop,
     remove: sup.remove,
+    respawn: sup.respawn,
   },
 }));
 
@@ -150,9 +152,26 @@ describe('startTaskSession', () => {
 
   it('reuses a live job without dispatching', async () => {
     seed({ jobId: 'job-live' });
-    sup.find.mockResolvedValueOnce({ cwd: '/wt/fix-login', sessionId: 'sess-old' });
+    sup.find.mockResolvedValueOnce({ cwd: '/wt/fix-login', sessionId: 'sess-old', pid: 7 });
     expect(await startTaskSession('t1')).toEqual({ jobId: 'job-live' });
     expect(sup.dispatch).not.toHaveBeenCalled();
+    expect(sup.respawn).not.toHaveBeenCalled();
+  });
+
+  it('wakes a stopped job in place (respawn keeps its options), and leaves a running one', async () => {
+    seed({ jobId: 'job-live' });
+    sup.find.mockResolvedValueOnce({
+      cwd: '/wt/fix-login',
+      sessionId: 'sess-old',
+      state: 'stopped',
+    });
+    expect(await startTaskSession('t1')).toEqual({ jobId: 'job-live' });
+    expect(sup.respawn).toHaveBeenCalledWith('job-live');
+    expect(sup.dispatch).not.toHaveBeenCalled();
+    sup.respawn.mockClear();
+    sup.find.mockResolvedValueOnce({ cwd: '/wt/fix-login', pid: 7, state: 'working' });
+    await startTaskSession('t1');
+    expect(sup.respawn).not.toHaveBeenCalled();
   });
 
   it('returns needsTrust for an untrusted folder and keeps the first prompt', async () => {

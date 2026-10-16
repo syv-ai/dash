@@ -24,8 +24,8 @@ export function foreignSessionJobId(id: string): string | null {
  * make `hasPty(tabId)` true again, so ServiceRunner.status would report the
  * dead service as Dash-owned and Stop would kill an innocent shell.
  *
- * `reattach` is main's hint that Dash itself cycled the session (tasks.send
- * resuming it, the API's tasks.restart) and is starting it again: an agent
+ * `reattach` is main's hint that Dash itself cycled the session (the API's
+ * tasks.restart) and is starting it again: an agent
  * pane re-attaches on its own instead of showing the card.
  */
 export function ptyExitFallback(

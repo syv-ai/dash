@@ -3,12 +3,8 @@ import type { ActivityInfo, CreateTaskInput, Task } from '../../../../shared/typ
 import { ControlError, createRegistry, type Registry } from '../../registry';
 import { fakeLookups, makeProject, makeTask } from '../../__tests__/fixtures';
 import { registerProjectCapabilities } from '../projects';
-import {
-  registerTaskCapabilities,
-  RESUME_TOOLS_HINT,
-  toTaskView,
-  type TaskCapabilityDeps,
-} from '../tasks';
+import type { LiveSession } from '../../../services/claudeSessionRegistry';
+import { registerTaskCapabilities, toTaskView, type TaskCapabilityDeps } from '../tasks';
 
 const orch = { kind: 'orchestrator' } as const;
 const asTask = (taskId: string) => ({ kind: 'task', taskId }) as const;
@@ -21,6 +17,8 @@ let projects = [
 let tasks: Task[];
 let activity: Record<string, ActivityInfo>;
 let untrusted: Record<string, string>;
+let sessions: Map<string, LiveSession>;
+let contacts: Record<string, number>;
 let listeners: Array<() => void>;
 /** The fakes, typed loosely so each test can swap an implementation. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -49,6 +47,8 @@ beforeEach(() => {
   ];
   activity = {};
   untrusted = {};
+  sessions = new Map();
+  contacts = {};
   listeners = [];
   deps = {
     getProjects: vi.fn(() => projects),
@@ -56,6 +56,8 @@ beforeEach(() => {
     getTasks: vi.fn((projectId: string) => tasks.filter((t) => t.projectId === projectId)),
     getActivity: vi.fn(() => activity),
     getUntrustedRoot: vi.fn((id: string) => untrusted[id]),
+    getLiveSessions: vi.fn(() => sessions),
+    lastShimContact: vi.fn((id: string) => contacts[id]),
     onActivityChange: vi.fn((l: () => void) => {
       listeners.push(l);
       return () => {
@@ -84,7 +86,6 @@ beforeEach(() => {
     startSession: vi.fn(async () => ({ jobId: 'job-1' })),
     readLogs: vi.fn(async () => ''),
     openTask: vi.fn(),
-    sendToSession: vi.fn(async (): Promise<Record<string, unknown>> => ({ sent: true as const })),
   } as never;
   registry = createRegistry(fakeLookups(projects, tasks));
   registerProjectCapabilities(registry, deps as never);
@@ -105,10 +106,17 @@ async function status(p: Promise<unknown>): Promise<number> {
   }
 }
 
+const live = (socket: string | null = '/tmp/cc-socks/7.sock'): LiveSession => ({
+  pid: 7,
+  sessionId: 'sess-1',
+  messagingSocketPath: socket,
+  status: 'idle',
+});
+
 describe('toTaskView', () => {
   const t = makeTask({ id: 't', projectId: 'p' });
   const view = (info: ActivityInfo | undefined, root?: string) =>
-    toTaskView(t, info ? { t: info } : {}, () => root);
+    toTaskView(t, info ? { t: info } : {}, () => root, new Map());
 
   it.each([
     ['busy', 'working'],
@@ -132,6 +140,29 @@ describe('toTaskView', () => {
 
   it('carries the monitor detail', () => {
     expect(view({ state: 'waiting', detail: 'permission: Bash' }).detail).toBe('permission: Bash');
+  });
+
+  it("gives a live session's socket as its message address, else null", () => {
+    const withJob = makeTask({ id: 't', projectId: 'p', jobId: 'job-t' });
+    const at = (s: Map<string, LiveSession>, task: Task = withJob) =>
+      toTaskView(task, {}, () => undefined, s).messageAddress;
+    expect(at(new Map([['job-t', live()]]))).toBe('uds:/tmp/cc-socks/7.sock');
+    expect(at(new Map([['job-t', live(null)]]))).toBeNull();
+    expect(at(new Map([['job-other', live()]]))).toBeNull();
+    expect(at(new Map([['job-t', live()]]), t)).toBeNull(); // no job
+  });
+
+  it('marks a bypassPermissions task as needing approval for messages', () => {
+    const mode = (permissionMode: Task['permissionMode']) =>
+      toTaskView(
+        makeTask({ id: 't', projectId: 'p', permissionMode }),
+        {},
+        () => undefined,
+        new Map(),
+      ).messaging;
+    expect(mode('bypassPermissions')).toBe('needs-approval');
+    expect(mode('default')).toBe('direct');
+    expect(mode('acceptEdits')).toBe('direct');
   });
 });
 
@@ -217,21 +248,6 @@ describe('tasks.wait', () => {
     await vi.advanceTimersByTimeAsync(5_000);
     await expect(pending).resolves.toMatchObject({ timedOut: true, task: { state: 'working' } });
     expect(listeners).toHaveLength(0);
-  });
-
-  it('after a send, until idle waits through the turn the send started', async () => {
-    activity = { child: { state: 'idle' } };
-    // ptyManager.sendToTaskSession marks the task busy once it delivered.
-    deps.sendToSession.mockImplementation(async () => {
-      activity = { child: { state: 'busy' } };
-      return { sent: true };
-    });
-    await registry.call(orch, 'tasks.send', { taskId: 'child', text: 'go' });
-    const pending = registry.call(orch, 'tasks.wait', { taskId: 'child', until: 'idle' });
-    await vi.waitFor(() => expect(listeners).toHaveLength(1));
-    emitActivity({ child: { state: 'busy', tool: { toolName: 'Bash', label: 'ls' } } });
-    emitActivity({ child: { state: 'idle' } });
-    await expect(pending).resolves.toMatchObject({ timedOut: false, task: { state: 'idle' } });
   });
 
   it('caps the timeout at 110 s', async () => {
@@ -377,15 +393,13 @@ describe('tasks.create branch checks', () => {
 });
 
 describe('archived tasks', () => {
-  it('restart, open and send refuse an archived task', async () => {
-    for (const name of ['tasks.restart', 'tasks.open']) {
+  it('restart, open and wake refuse an archived task', async () => {
+    for (const name of ['tasks.restart', 'tasks.open', 'tasks.wake']) {
       await expect(registry.call(orch, name, { taskId: 'old' })).rejects.toMatchObject({
         status: 409,
         message: 'old is archived; restore it first',
       });
     }
-    expect(await status(registry.call(orch, 'tasks.send', { taskId: 'old', text: 'x' }))).toBe(409);
-    expect(deps.sendToSession).not.toHaveBeenCalled();
     expect(deps.restartSession).not.toHaveBeenCalled();
     expect(deps.startSession).not.toHaveBeenCalled();
     expect(deps.openTask).not.toHaveBeenCalled();
@@ -448,87 +462,8 @@ describe('tasks.output', () => {
   });
 });
 
-describe('tasks.send', () => {
-  it('refuses a task waiting for a person before sending', async () => {
-    activity = { child: { state: 'waiting', detail: 'permission: Bash' } };
-    await expect(
-      registry.call(orch, 'tasks.send', { taskId: 'child', text: 'yes' }),
-    ).rejects.toMatchObject({
-      status: 409,
-      message: 'Child is waiting for a person: permission: Bash',
-    });
-    expect(deps.sendToSession).not.toHaveBeenCalled();
-  });
-
-  it('refuses a working task before sending', async () => {
-    activity = { child: { state: 'busy' } };
-    await expect(
-      registry.call(orch, 'tasks.send', { taskId: 'child', text: 'also this' }),
-    ).rejects.toMatchObject({
-      status: 409,
-      message: 'Child is working; wait until it is idle (tasks_wait) and send again',
-    });
-    expect(deps.sendToSession).not.toHaveBeenCalled();
-  });
-
-  it('refuses when the session turned out busy or waiting at the send', async () => {
-    activity = { child: { state: 'idle' } };
-    deps.sendToSession.mockResolvedValueOnce({ notIdle: 'working' });
-    await expect(
-      registry.call(orch, 'tasks.send', { taskId: 'child', text: 'go' }),
-    ).rejects.toMatchObject({ status: 409, message: expect.stringContaining('is working') });
-    deps.sendToSession.mockResolvedValueOnce({ notIdle: 'waiting' });
-    await expect(
-      registry.call(orch, 'tasks.send', { taskId: 'child', text: 'go' }),
-    ).rejects.toMatchObject({ status: 409, message: 'Child is waiting for a person' });
-  });
-
-  it('sends to an idle task and to a stopped one (the send starts it)', async () => {
-    activity = { child: { state: 'idle' } };
-    expect(await registry.call(orch, 'tasks.send', { taskId: 'child', text: 'go' })).toEqual({});
-    activity = {};
-    expect(await registry.call(orch, 'tasks.send', { taskId: 'child', text: 'more' })).toEqual({});
-    expect(deps.sendToSession.mock.calls).toEqual([
-      ['child', 'go'],
-      ['child', 'more'],
-    ]);
-    expect(deps.startSession).not.toHaveBeenCalled();
-  });
-
-  it('tells a task with Dash access that its dash tools may still be reconnecting', async () => {
-    activity = { me: { state: 'idle' } };
-    await registry.call(orch, 'tasks.send', { taskId: 'me', text: 'go' });
-    expect(deps.sendToSession).toHaveBeenCalledWith('me', `go\n\n${RESUME_TOOLS_HINT}`);
-  });
-
-  it('refuses a task that needs the trust prompt', async () => {
-    untrusted = { child: '/repo' };
-    expect(await status(registry.call(orch, 'tasks.send', { taskId: 'child', text: 'go' }))).toBe(
-      409,
-    );
-    expect(deps.sendToSession).not.toHaveBeenCalled();
-    // Found untrusted by the send's own start.
-    deps.sendToSession.mockImplementation(async () => {
-      untrusted = { sibling: '/repo' };
-      return { needsTrust: '/repo' };
-    });
-    await expect(
-      registry.call(orch, 'tasks.send', { taskId: 'sibling', text: 'go' }),
-    ).rejects.toMatchObject({ status: 409, message: expect.stringContaining('/repo') });
-  });
-
-  it('rechecks trust: a folder trusted outside Dash clears needs-trust and the send goes on', async () => {
-    untrusted = { child: '/repo' };
-    deps.recheckTrust.mockImplementation(async (id: string) => {
-      delete untrusted[id];
-      return true;
-    });
-    await registry.call(orch, 'tasks.send', { taskId: 'child', text: 'go' });
-    expect(deps.recheckTrust).toHaveBeenCalledWith('child');
-    expect(deps.sendToSession).toHaveBeenCalledWith('child', 'go');
-  });
-
-  it('get rechecks a needs-trust task, and only then', async () => {
+describe('tasks.get', () => {
+  it('rechecks a needs-trust task, and only then', async () => {
     await registry.call(orch, 'tasks.get', { taskId: 'child' });
     expect(deps.recheckTrust).not.toHaveBeenCalled();
     untrusted = { child: '/repo' };
@@ -540,12 +475,97 @@ describe('tasks.send', () => {
       state: 'stopped',
     });
   });
+});
 
-  it('refuses text over 32 KB', async () => {
+describe('tasks.wake', () => {
+  const task = (id: string) => tasks.find((t) => t.id === id)!;
+  /** startSession as ptyManager's: records the job; `register` makes it show up in the registry. */
+  const starts = (register: boolean) =>
+    deps.startSession.mockImplementation(async (id: string) => {
+      task(id).jobId = 'job-new';
+      if (register) sessions.set('job-new', live());
+      return { jobId: 'job-new' };
+    });
+
+  it('returns a live session at once, without starting anything', async () => {
+    task('child').jobId = 'job-c';
+    sessions.set('job-c', live());
+    activity = { child: { state: 'busy' } };
+    expect(await registry.call(orch, 'tasks.wake', { taskId: 'child' })).toMatchObject({
+      timedOut: false,
+      task: { id: 'child', state: 'working', messageAddress: 'uds:/tmp/cc-socks/7.sock' },
+    });
+    expect(deps.startSession).not.toHaveBeenCalled();
+  });
+
+  it('starts a stopped session and returns once it is registered', async () => {
+    vi.useFakeTimers();
+    starts(false);
+    const pending = registry.call(orch, 'tasks.wake', { taskId: 'child' });
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(deps.startSession).toHaveBeenCalledWith('child');
+    sessions.set('job-new', live());
+    await vi.advanceTimersByTimeAsync(1_000);
+    await expect(pending).resolves.toMatchObject({
+      timedOut: false,
+      task: { messageAddress: 'uds:/tmp/cc-socks/7.sock' },
+    });
+  });
+
+  it('with Dash access, also waits for its dash shim to connect after the start', async () => {
+    vi.useFakeTimers();
+    starts(true);
+    contacts.me = Date.now(); // the previous session's shim
+    await vi.advanceTimersByTimeAsync(10);
+    let done = false;
+    const pending = registry.call(orch, 'tasks.wake', { taskId: 'me' }).then((r) => {
+      done = true;
+      return r;
+    });
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(done).toBe(false);
+    contacts.me = Date.now();
+    await vi.advanceTimersByTimeAsync(1_000);
+    await expect(pending).resolves.toMatchObject({ timedOut: false });
+  });
+
+  it('times out with timedOut: true and the current view', async () => {
+    vi.useFakeTimers();
+    starts(false);
+    const pending = registry.call(orch, 'tasks.wake', { taskId: 'child', timeoutSec: 5 });
+    await vi.advanceTimersByTimeAsync(5_000);
+    await expect(pending).resolves.toMatchObject({
+      timedOut: true,
+      task: { id: 'child', messageAddress: null },
+    });
+  });
+
+  it('caps the timeout at 110 s', async () => {
     expect(
-      await status(
-        registry.call(orch, 'tasks.send', { taskId: 'child', text: 'x'.repeat(32 * 1024 + 1) }),
-      ),
+      await status(registry.call(orch, 'tasks.wake', { taskId: 'child', timeoutSec: 111 })),
     ).toBe(400);
+  });
+
+  it('refuses a task that needs the trust prompt', async () => {
+    untrusted = { child: '/repo' };
+    expect(await status(registry.call(orch, 'tasks.wake', { taskId: 'child' }))).toBe(409);
+    expect(deps.startSession).not.toHaveBeenCalled();
+    // Found untrusted by the start itself.
+    deps.startSession.mockImplementation(async () => {
+      untrusted = { sibling: '/repo' };
+      return { needsTrust: '/repo' };
+    });
+    await expect(registry.call(orch, 'tasks.wake', { taskId: 'sibling' })).rejects.toMatchObject({
+      status: 409,
+      message: expect.stringContaining('/repo'),
+    });
+  });
+
+  it('a task cannot wake itself, but can wake its child', async () => {
+    expect(await status(registry.call(asTask('me'), 'tasks.wake', { taskId: 'me' }))).toBe(403);
+    starts(true);
+    expect(await registry.call(asTask('me'), 'tasks.wake', { taskId: 'child' })).toMatchObject({
+      timedOut: false,
+    });
   });
 });

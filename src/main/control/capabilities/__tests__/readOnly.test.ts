@@ -20,5 +20,8 @@ describe('read-only capabilities', () => {
       'tasks.output',
       'tasks.wait',
     ]);
+    // tasks.wake starts a session, so an in-task agent is asked first.
+    const names = registry.listFor({ kind: 'orchestrator' }).map((c) => c.name);
+    expect(names).toContain('tasks.wake');
   });
 });

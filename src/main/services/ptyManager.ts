@@ -11,7 +11,7 @@ import { ensureShellConfig, shellHistoryPath } from './ptyShellConfig';
 import { findClaudePath, findLatestSessionId, requireSupportedClaude } from './claudeCli';
 import { buildClaudeEnv } from './claudeEnv';
 import { supervisorService, DispatchError } from './SupervisorService';
-import { parseUntrustedRoot, SessionNotIdleError } from './supervisorSession';
+import { parseUntrustedRoot } from './supervisorSession';
 import { isWorkspaceTrusted } from '../utils/claudePaths';
 import { DatabaseService } from './DatabaseService';
 import { mcpConfigForDispatch } from '../control/mcpConfig';
@@ -43,12 +43,6 @@ interface PtyRecord {
    * its whole screen on every attach, so there is nothing to mirror.
    */
   mirror: TerminalMirror | null;
-  /**
-   * Agent PTYs: Dash itself is cycling the session under this client (a
-   * send stops the job and resumes it), so its exit tells the pane to
-   * re-attach rather than show the Detached card.
-   */
-  reattachOnExit?: boolean;
 }
 
 const ptys = new Map<string, PtyRecord>();
@@ -279,10 +273,9 @@ function samePath(a: string, b: string): boolean {
  * task from before the supervisor — the newest transcript under its current
  * and pre-migration paths, so the conversation carries over.
  *
- * With `message`, the session also gets it as its next user turn: a dispatch
- * submits it as its first prompt (after a stashed initial prompt), and an
- * existing job is woken with it (supervisorService.sendToSession, which stops
- * an idle job first and throws SessionNotIdleError for a busy or waiting one).
+ * `wakeStopped`: a listed job whose process is gone (`claude stop`, reaped)
+ * is woken in place with `claude respawn`, which keeps its dispatch options.
+ * A pane start needs no wake (`claude attach` wakes it).
  */
 async function ensureTaskSession(opts: {
   id: string;
@@ -296,7 +289,7 @@ async function ensureTaskSession(opts: {
   /** From the task row at this call, so a restart after toggling picks it up. */
   dashAccess: boolean;
   env: Record<string, string>;
-  message?: string;
+  wakeStopped?: boolean;
 }): Promise<string> {
   let resumeSessionId = opts.sessionId;
   if (opts.jobId) {
@@ -304,8 +297,6 @@ async function ensureTaskSession(opts: {
     try {
       row = await supervisorService.find(opts.jobId);
     } catch (err) {
-      // A send cannot guess: resuming a job that still runs starts a copy.
-      if (opts.message !== undefined) throw err;
       console.warn(
         `[ptyManager] supervisor listing failed; assuming job ${opts.jobId} is live`,
         err,
@@ -313,23 +304,9 @@ async function ensureTaskSession(opts: {
       return opts.jobId;
     }
     if (row && samePath(row.cwd, opts.cwd)) {
-      if (opts.message === undefined) return opts.jobId;
-      const sessionId = row.sessionId ?? opts.sessionId;
-      if (!sessionId) throw new Error('The session has no id to resume yet; try again shortly');
-      // The stop inside ends an open pane's attach client, whose exit asks the
-      // pane to re-attach (sendToTaskSession); re-attaching waits on this start.
-      await supervisorService.sendToSession({
-        jobId: opts.jobId,
-        sessionId,
-        cwd: opts.cwd,
-        message: opts.message,
-        env: opts.env,
-        row,
-      });
-      if (sessionId !== opts.sessionId) {
-        DatabaseService.setTaskSession(opts.id, { jobId: opts.jobId, sessionId });
+      if (opts.wakeStopped && (row.pid === undefined || row.state === 'stopped')) {
+        await supervisorService.respawn(opts.jobId);
       }
-      activityMonitor.setBusy(opts.id);
       return opts.jobId;
     }
     if (row) {
@@ -343,8 +320,7 @@ async function ensureTaskSession(opts: {
   if (!resumeSessionId) {
     resumeSessionId = findLatestSessionId(opts.cwd, opts.previousPath);
   }
-  const initialPrompt = consumeInitialPrompt(opts.id);
-  const prompt = [initialPrompt, opts.message].filter(Boolean).join('\n\n') || undefined;
+  const prompt = consumeInitialPrompt(opts.id);
   // The one place a task's `--mcp-config` is decided. Only a dispatch reads
   // it; a reused job keeps the access it was started with.
   const mcpConfig = mcpConfigForDispatch({ id: opts.id, dashAccess: opts.dashAccess });
@@ -366,9 +342,8 @@ async function ensureTaskSession(opts: {
     const root = parseUntrustedRoot(err.output);
     if (!root) throw err;
     // No job was created, so the first prompt is still unsent: keep it for
-    // the dispatch that follows the trust prompt. A sent message is not kept
-    // (the send is refused).
-    if (initialPrompt !== undefined) setInitialPrompt(opts.id, initialPrompt);
+    // the dispatch that follows the trust prompt.
+    if (prompt !== undefined) setInitialPrompt(opts.id, prompt);
     untrustedRoots.set(opts.id, root);
     throw new UntrustedWorkspaceError(err.message, root);
   }
@@ -457,10 +432,7 @@ function spawnAttach(options: {
     // the client-side registrations go.
     remoteControlService.unregister(options.id);
     if (record.owner && !record.owner.isDestroyed()) {
-      record.owner.send(
-        `pty:exit:${options.id}`,
-        record.reattachOnExit ? { exitCode, signal, reattach: true } : { exitCode, signal },
-      );
+      record.owner.send(`pty:exit:${options.id}`, { exitCode, signal });
     }
     ptys.delete(options.id);
   });
@@ -500,7 +472,7 @@ const sessionStarts = new Map<string, Promise<TaskSessionStart>>();
  */
 function ensureTaskSessionFor(
   taskId: string,
-  opts: { isDark?: boolean },
+  opts: { isDark?: boolean; wakeStopped?: boolean },
 ): Promise<TaskSessionStart> {
   const inFlight = sessionStarts.get(taskId);
   if (inFlight) return inFlight;
@@ -513,7 +485,7 @@ function ensureTaskSessionFor(
 
 async function startTaskSessionNow(
   taskId: string,
-  opts: { isDark?: boolean; message?: string },
+  opts: { isDark?: boolean; wakeStopped?: boolean },
 ): Promise<TaskSessionStart> {
   // Hard floor: never start a task session on a missing or too-old CLI.
   await requireSupportedClaude();
@@ -545,7 +517,7 @@ async function startTaskSessionNow(
       sessionId: task.sessionId,
       dashAccess: task.dashAccess,
       env,
-      message: opts.message,
+      wakeStopped: opts.wakeStopped,
     });
     return { jobId, cwd: task.path, env, claudePath };
   } catch (err) {
@@ -559,7 +531,7 @@ async function startTaskSessionNow(
 
 /**
  * Start the task's session without attaching to it (the control API, a task
- * nobody has open). An untrusted folder is not an error here: the result names
+ * nobody has open), waking a stopped job. An untrusted folder is not an error here: the result names
  * the trust root, the first prompt is kept, and opening the task in Dash runs
  * the trust prompt. `isDark` defaults to the last pane start's.
  */
@@ -568,47 +540,8 @@ export async function startTaskSession(
   opts: { isDark?: boolean } = {},
 ): Promise<{ jobId: string } | { needsTrust: string }> {
   try {
-    const { jobId } = await ensureTaskSessionFor(taskId, opts);
+    const { jobId } = await ensureTaskSessionFor(taskId, { ...opts, wakeStopped: true });
     return { jobId };
-  } catch (err) {
-    if (err instanceof UntrustedWorkspaceError) return { needsTrust: err.root };
-    throw err;
-  }
-}
-
-/**
- * Give the task's session `message` as its next user turn, through the CLI
- * (ensureTaskSession's `message`): a stopped or missing session is started
- * with it, an idle one is stopped and resumed with it. Runs as the task's
- * session start, after any start in flight (joining one would drop the
- * message), so a pane re-attaching meanwhile waits for it. Throws
- * SessionNotIdleError while the session works or waits for a person; an
- * untrusted folder returns its root and keeps nothing. Callers decide whether
- * the task may be sent to.
- */
-export async function sendToTaskSession(
-  taskId: string,
-  message: string,
-): Promise<{ sent: true } | { needsTrust: string }> {
-  try {
-    await queueSessionStart(taskId, async () => {
-      // A send just before this one already started a turn.
-      if (activityMonitor.getAll()[taskId]?.state === 'busy') {
-        throw new SessionNotIdleError('busy');
-      }
-      // The stop inside ends an open pane's attach client; its exit tells the
-      // pane to re-attach, which joins this start and so finds the job woken.
-      const pane = ptys.get(taskId);
-      if (pane?.kind === 'agent') pane.reattachOnExit = true;
-      try {
-        return await startTaskSessionNow(taskId, { message });
-      } catch (err) {
-        // Nothing was resumed: a later exit of this client is a real detach.
-        if (pane) pane.reattachOnExit = false;
-        throw err;
-      }
-    });
-    return { sent: true };
   } catch (err) {
     if (err instanceof UntrustedWorkspaceError) return { needsTrust: err.root };
     throw err;

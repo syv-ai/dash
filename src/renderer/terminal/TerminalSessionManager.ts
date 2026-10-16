@@ -729,8 +729,8 @@ export class TerminalSessionManager {
   }
 
   /**
-   * Dash stopped and is restarting the session under this pane (tasks.send,
-   * the API's tasks.restart): attach again without a click. Main registers
+   * Dash stopped and is restarting the session under this pane (the API's
+   * tasks.restart): attach again without a click. Main registers
    * that start before the client exits, so the attach waits for it and finds
    * the session live. Shows "Reconnecting…" meanwhile, and the Detached card
    * if the attach fails or takes longer than REATTACH_TIMEOUT_MS (a late

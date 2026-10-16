@@ -15,6 +15,8 @@ export interface ControlServerOptions {
   registry: Registry;
   /** Read per request: the Settings switch can flip while Dash runs. */
   isOrchestratorAllowed: () => boolean;
+  /** A task's dash shim listed or called tools (its MCP connection is up). */
+  onTaskContact?: (taskId: string) => void;
 }
 
 /**
@@ -90,6 +92,9 @@ export class ControlServer {
     }
 
     const pathname = new URL(req.url || '/', `http://127.0.0.1:${this._port}`).pathname;
+    if (caller.kind === 'task' && (pathname === '/v1/capabilities' || pathname === '/v1/call')) {
+      this.opts.onTaskContact?.(caller.taskId);
+    }
 
     if (pathname === '/v1/capabilities') {
       if (req.method !== 'GET') return sendJson(res, 405, { error: 'method not allowed' });

@@ -18,6 +18,7 @@ let userData: string;
 let server: ControlServer;
 let port: number;
 let orchestratorAllowed: boolean;
+let contacts: string[];
 
 beforeEach(async () => {
   userData = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-control-'));
@@ -39,10 +40,12 @@ beforeEach(async () => {
     }),
   );
   orchestratorAllowed = true;
+  contacts = [];
   server = new ControlServer({
     userDataDir: userData,
     registry,
     isOrchestratorAllowed: () => orchestratorAllowed,
+    onTaskContact: (id) => contacts.push(id),
   });
   port = await server.start();
 });
@@ -104,6 +107,16 @@ describe('ControlServer', () => {
 
     const asTaskRes = await call({ name: 'echo', input: { text: 'x' } }, authHeaders(asTask));
     expect(asTaskRes.status).toBe(200);
+  });
+
+  it("notes a task's authenticated list and call, nothing else", async () => {
+    const headers = authHeaders(asTask);
+    await fetch(`http://127.0.0.1:${port}/v1/capabilities`, { headers });
+    await call({ name: 'echo', input: { text: 'x' } }, headers);
+    await call({ name: 'echo', input: { text: 'x' } });
+    await call({ name: 'echo', input: { text: 'x' } }, { ...headers, Authorization: 'Bearer bad' });
+    await fetch(`http://127.0.0.1:${port}/v1/nope`, { headers });
+    expect(contacts).toEqual([taskId, taskId]);
   });
 
   it('lists capabilities', async () => {

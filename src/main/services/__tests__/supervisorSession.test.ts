@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildDispatchArgs,
-  buildResumeArgs,
   parseDispatchOutput,
   isDispatchFailure,
   parseUntrustedRoot,
@@ -99,18 +98,6 @@ describe('buildDispatchArgs', () => {
 
   it('passes no --mcp-config without a path', () => {
     expect(buildDispatchArgs({ name: 't', prompt: 'p' })).not.toContain('--mcp-config');
-  });
-});
-
-describe('buildResumeArgs', () => {
-  it('passes only --bg, --resume and the message after --', () => {
-    expect(buildResumeArgs('sess-1', '- a bullet first')).toEqual([
-      '--bg',
-      '--resume',
-      'sess-1',
-      '--',
-      '- a bullet first',
-    ]);
   });
 });
 

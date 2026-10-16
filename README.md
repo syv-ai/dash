@@ -60,7 +60,7 @@ The orchestrator sees every project that isn't archived. Turning the switch off 
 | `tasks_create`    | Create a task (new worktree by default) and start its session with a prompt        |                     |
 | `tasks_wait`      | Wait up to 110 s until a task is idle, waiting, not working, or changes state      | yes                 |
 | `tasks_output`    | The last lines of a task's terminal as plain text                                  | yes                 |
-| `tasks_send`      | Send an idle or stopped task's session its next message                            |                     |
+| `tasks_wake`      | Make sure a task's session is running, so you can message it (see below)           |                     |
 | `tasks_open`      | Bring Dash to the front with the task open                                         |                     |
 | `tasks_archive`   | Archive a task (never the caller's own task)                                       |                     |
 | `tasks_restore`   | Restore an archived task                                                           |                     |
@@ -71,14 +71,26 @@ The orchestrator sees every project that isn't archived. Turning the switch off 
 | `services_stop`   | Stop a service                                                                     |                     |
 | `services_output` | The last lines of a service Dash started                                           | yes                 |
 
+Every task the tools return has two fields for messaging it: `messageAddress` (`uds:<socket>` while its session runs, otherwise `null`) and `messaging` (`direct`, or `needs-approval` for a task in `bypassPermissions`).
+
 Inside a task, the read-only tools (marked above) run without a permission prompt, so a task started by an orchestrator doesn't stall on a lookup. Tools that change something still ask, unless the task runs in `bypassPermissions`.
+
+### Talking to a task
+
+Dash doesn't carry messages. Your orchestrator talks to a task with Claude Code's own `SendMessage`:
+
+1. `tasks_list` to find the task.
+2. `tasks_wake` to make sure its session is running. If it already is, this returns at once. Otherwise Dash starts it, with no message, and returns once the session is up and, for a task with Dash access, its dash tools have connected.
+3. `SendMessage` to the task's `messageAddress`. This works from another config dir too, such as Holi's.
+4. The task answers you with `SendMessage` in the same way.
+
+A task whose `messaging` is `needs-approval` runs in `bypassPermissions`, so a message from a session that does prompt is held until someone clicks Deliver in the task's pane in Dash. When a task's session stops, its old address fails with `ENOENT`. Call `tasks_wake` again for a new one.
 
 ### Safety rules
 
 - Tasks created through the API never run in `bypassPermissions`, even if the project defaults to it.
-- `tasks_send` refuses a task that is waiting for a person (a permission prompt or a question). Answering those stays with you. It also refuses a working task: wait until it's idle (`tasks_wait`) and send again.
-- `tasks_send` goes through Claude Code's CLI, not the terminal: it stops the idle session and resumes it with the message, keeping its options. If you have the task open, its pane shows Reconnecting… and re-attaches by itself. Text you typed in its prompt and didn't send is lost. Claude Code starts a resumed turn before MCP servers reconnect, so a task with Dash access gets a line telling it the dash tools may briefly look disconnected and how to load them again.
-- A task created through the API gets one line before its first prompt, telling it that it may be running unattended and shouldn't use `AskUserQuestion`.
+- A task created through the API gets one line before its first prompt. It says the task may be running unattended, shouldn't use `AskUserQuestion`, and should answer a message that asks for a reply with `SendMessage`.
+- Dash doesn't set Claude Code to accept messages from other sessions without asking for a task in `bypassPermissions`. That would let any local session feed input to a session that has permission prompts off.
 - Dash never accepts Claude Code's workspace trust prompt for an agent. A task that needs it reports `needs-trust` until you open it in Dash.
 - Anything running as your user on this machine can read the tokens under Dash's data folder, so the API trusts the local user. Leave orchestrator access off when you don't use it.
 

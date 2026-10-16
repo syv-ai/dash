@@ -38,7 +38,7 @@ import { removeTaskMcpConfig } from '../control/mcpConfig';
 
 /** The line an API-created task's first message starts with. */
 export const UNATTENDED_INSTRUCTION =
-  "You were started by an orchestrator and may be running unattended. Don't use AskUserQuestion; state your assumptions and continue.";
+  "You were started by an orchestrator and may be running unattended. Don't use AskUserQuestion; state your assumptions and continue. If a message asks for a reply, answer the sender with SendMessage.";
 
 /**
  * Task lifecycle: create, archive, restore, delete. The task dialog (through

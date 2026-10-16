@@ -6,6 +6,7 @@ import { controlPaths } from './paths';
 import { ControlServer } from './server';
 import { initTokens, setOrchestratorFile } from './tokens';
 import { setReadOnlyCapabilities } from './mcpConfig';
+import { noteTaskContact } from './shimContacts';
 import { registerProjectCapabilities } from './capabilities/projects';
 import { registerTaskCapabilities } from './capabilities/tasks';
 import { registerServiceCapabilities } from './capabilities/services';
@@ -55,6 +56,7 @@ export async function startControl(): Promise<void> {
     userDataDir: app.getPath('userData'),
     registry,
     isOrchestratorAllowed: () => orchestratorAccess,
+    onTaskContact: noteTaskContact,
   });
   await next.start();
   server = next;

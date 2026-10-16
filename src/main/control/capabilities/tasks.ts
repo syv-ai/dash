@@ -9,18 +9,11 @@ import type {
   Task,
 } from '../../../shared/types';
 import type { WorkspaceTaskDefaults } from '../../services/WorkspaceConfigService';
+import type { LiveSession } from '../../services/claudeSessionRegistry';
 import { TerminalMirror } from '../../services/TerminalMirror';
 import { taskModelSchema } from '../../ipc/schemas';
 import { ControlError, defineCapability, type Registry } from '../registry';
 import { defaultBaseRef } from './projects';
-
-/**
- * Appended to a message sent to a task with Dash access. A send resumes the
- * session, and Claude Code starts that turn before MCP servers reconnect,
- * telling the model the dash tools are gone; they are back seconds later.
- */
-export const RESUME_TOOLS_HINT =
-  '(Dash restarted this session to deliver this message, so its dash tools may briefly show as disconnected. They reconnect within seconds: if one is missing, find it with ToolSearch and retry.)';
 
 /** The task state the API reports. */
 export type TaskApiState = 'idle' | 'working' | 'waiting' | 'error' | 'stopped' | 'needs-trust';
@@ -37,6 +30,11 @@ export interface TaskView {
   dashAccess: boolean;
   archived: boolean;
   createdAt: string;
+  /** Where SendMessage reaches the live session (`uds:<socket>`); null when it is not running. */
+  messageAddress: string | null;
+  /** `needs-approval`: the task runs in bypassPermissions, so a message from a
+   *  session that prompts waits for a person to deliver it in Dash. */
+  messaging: 'direct' | 'needs-approval';
 }
 
 /** Everything the task capabilities touch outside `control/`; index.ts wires the real services. */
@@ -47,6 +45,10 @@ export interface TaskCapabilityDeps {
   getTasks(projectId: string): Task[];
   getActivity(): Record<string, ActivityInfo>;
   getUntrustedRoot(taskId: string): string | undefined;
+  /** Claude Code's running sessions by job id (claudeSessionRegistry). */
+  getLiveSessions(): ReadonlyMap<string, LiveSession>;
+  /** Epoch ms the task's dash shim last reached the control server. */
+  lastShimContact(taskId: string): number | undefined;
   /** Subscribe to activity changes; returns the unsubscribe. */
   onActivityChange(listener: () => void): () => void;
   taskDefaults(projectPath: string): WorkspaceTaskDefaults | undefined;
@@ -71,13 +73,6 @@ export interface TaskCapabilityDeps {
   readLogs(jobId: string): Promise<string>;
   /** Show and focus Dash's window on the task. */
   openTask(task: Task): void;
-  /** Give the task's session `text` as its next user turn through the CLI
-   *  (ptyManager.sendToTaskSession), starting a stopped session with it.
-   *  `notIdle` when the session turned out to be working or waiting. */
-  sendToSession(
-    taskId: string,
-    text: string,
-  ): Promise<{ sent: true } | { needsTrust: string } | { notIdle: 'working' | 'waiting' }>;
 }
 
 const STATE_FROM_ACTIVITY: Record<ActivityInfo['state'], TaskApiState> = {
@@ -88,11 +83,12 @@ const STATE_FROM_ACTIVITY: Record<ActivityInfo['state'], TaskApiState> = {
   stopped: 'stopped',
 };
 
-/** The one place the API's task state comes from (tasks.get/list/wait). */
+/** The one place the API's task view comes from (tasks.get/list/wait/wake). */
 export function toTaskView(
   task: Task,
   activity: Record<string, ActivityInfo>,
   getUntrustedRoot: (taskId: string) => string | undefined,
+  sessions: ReadonlyMap<string, LiveSession>,
 ): TaskView {
   const info = activity[task.id];
   const trustRoot = getUntrustedRoot(task.id);
@@ -113,14 +109,21 @@ export function toTaskView(
     dashAccess: task.dashAccess,
     archived: task.archivedAt != null,
     createdAt: task.createdAt,
+    messageAddress: messageAddress(task, sessions),
+    messaging: task.permissionMode === 'bypassPermissions' ? 'needs-approval' : 'direct',
   };
   if (detail) view.detail = detail;
   return view;
 }
 
+function messageAddress(task: Task, sessions: ReadonlyMap<string, LiveSession>): string | null {
+  const socket = task.jobId ? sessions.get(task.jobId)?.messagingSocketPath : null;
+  return socket ? `uds:${socket}` : null;
+}
+
 const taskIdInput = z.object({ taskId: z.string().describe('The task id') });
 
-/** The one refusal for acting on an archived task (send, open, restart, services). */
+/** The one refusal for acting on an archived task (wake, open, restart, services). */
 export function assertNotArchived(task: Task): void {
   if (task.archivedAt) throw new ControlError(409, `${task.name} is archived; restore it first`);
 }
@@ -150,7 +153,10 @@ const branchName = z
 /** Output is replayed into a terminal this size (`claude logs` repaints a full screen). */
 const OUTPUT_COLS = 200;
 const OUTPUT_ROWS = 50;
-const MAX_SEND_BYTES = 32 * 1024;
+/** How often tasks.wake re-reads the session registry while it waits. */
+const WAKE_POLL_MS = 500;
+/** tasks.wait and tasks.wake: under the MCP client's two-minute call timeout. */
+const timeoutSec = z.number().min(0).max(110).default(60);
 
 type WaitUntil = 'idle' | 'waiting' | 'not-working' | 'change';
 
@@ -169,7 +175,7 @@ function matchesUntil(until: WaitUntil, view: TaskView, initial: TaskView): bool
 
 export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilityDeps): void {
   const view = (task: Task): TaskView =>
-    toTaskView(task, deps.getActivity(), deps.getUntrustedRoot);
+    toTaskView(task, deps.getActivity(), deps.getUntrustedRoot, deps.getLiveSessions());
   /** view, after re-reading trust for a task marked untrusted (it may have
    *  been accepted outside Dash since). */
   const freshView = async (task: Task): Promise<TaskView> => {
@@ -209,7 +215,8 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
   registry.register(
     defineCapability({
       name: 'tasks.get',
-      summary: 'Get one task: its name, branch, worktree path, state and what it waits for.',
+      summary:
+        'Get one task: its name, branch, worktree path, state, what it waits for, and its messageAddress (see tasks_wake).',
       input: taskIdInput,
       callers: ['orchestrator', 'task'],
       readOnly: true,
@@ -345,7 +352,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
       input: z.object({
         taskId: z.string(),
         until: z.enum(['idle', 'waiting', 'not-working', 'change']),
-        timeoutSec: z.number().min(0).max(110).default(60),
+        timeoutSec,
       }),
       callers: ['orchestrator', 'task'],
       readOnly: true,
@@ -414,43 +421,37 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
 
   registry.register(
     defineCapability({
-      name: 'tasks.send',
+      name: 'tasks.wake',
       summary:
-        "Send a message to a task's Claude Code session as its next user turn; a stopped session is started with it. Returns once it is delivered and waits for nothing (use tasks_wait). Refused while the task is working (wait until it is idle and send again), waits for a person (a permission prompt or question), needs the trust prompt, or is archived.",
-      input: z.object({
-        taskId: z.string(),
-        text: z
-          .string()
-          .min(1)
-          .refine((s) => Buffer.byteLength(s, 'utf8') <= MAX_SEND_BYTES, 'text is over 32 KB'),
-      }),
+        "Make sure a task's Claude Code session is running so it can take messages: returns at once if it is, otherwise starts it (with no message) and returns once it is up and, with Dash access, its dash tools are connected, for up to timeoutSec (max 110; timedOut: true when the time ran out, call again). Then message the task with your own SendMessage to the task's messageAddress; it answers the same way. A task whose messaging is needs-approval runs with permission prompts off, so your message waits until a person delivers it in Dash. A stopped task's old address fails (ENOENT): wake it again. Refused while the task needs the trust prompt or is archived. A task cannot wake itself.",
+      input: z.object({ taskId: z.string(), timeoutSec }),
       callers: ['orchestrator', 'task'],
       readOnly: false,
       target: { taskId: 'taskId' },
+      allowSelf: false,
       handler: async (_ctx, input) => {
         const task = taskOrThrow(input.taskId);
         assertNotArchived(task);
-        const waiting = (detail?: string) =>
-          new ControlError(
-            409,
-            `${task.name} is waiting for a person${detail ? `: ${detail}` : ''}`,
-          );
-        const working = () =>
-          new ControlError(
-            409,
-            `${task.name} is working; wait until it is idle (tasks_wait) and send again`,
-          );
-        // A needs-trust mark clears here when the folder was trusted outside
-        // Dash; the send then starts the session like any stopped one.
         const current = await freshView(task);
-        if (current.state === 'waiting') throw waiting(current.detail);
-        if (current.state === 'working') throw working();
         if (current.state === 'needs-trust') throw new ControlError(409, current.detail!);
-        const text = task.dashAccess ? `${input.text}\n\n${RESUME_TOOLS_HINT}` : input.text;
-        const result = await deps.sendToSession(task.id, text);
-        if ('notIdle' in result) throw result.notIdle === 'working' ? working() : waiting();
-        if ('needsTrust' in result) throw new ControlError(409, view(task).detail!);
-        return {};
+        // Already running: a start would be a no-op, and its shim connected long ago.
+        if (current.messageAddress) return { task: current, timedOut: false };
+
+        const startedAt = Date.now();
+        const started = await deps.startSession(task.id);
+        if ('needsTrust' in started) throw new ControlError(409, view(task).detail!);
+        const ready = (): boolean => {
+          const session = deps.getLiveSessions().get(started.jobId);
+          if (!session?.messagingSocketPath) return false;
+          // The shim lists tools as soon as Claude Code connects it.
+          return !task.dashAccess || (deps.lastShimContact(task.id) ?? 0) >= startedAt;
+        };
+        const deadline = startedAt + input.timeoutSec * 1000;
+        while (!ready()) {
+          if (Date.now() >= deadline) return { task: view(taskOrThrow(task.id)), timedOut: true };
+          await new Promise((resolve) => setTimeout(resolve, WAKE_POLL_MS));
+        }
+        return { task: view(taskOrThrow(task.id)), timedOut: false };
       },
     }),
   );

@@ -10,15 +10,15 @@ import {
   getUntrustedRoot,
   recheckWorkspaceTrust,
   restartAndStartTaskSession,
-  sendToTaskSession,
   startTaskSession,
 } from '../../services/ptyManager';
-import { SessionNotIdleError } from '../../services/supervisorSession';
+import { readLiveSessions } from '../../services/claudeSessionRegistry';
 import { GitService } from '../../services/GitService';
 import { WorkspacePortsRuntime } from '../../services/WorkspacePortsRuntime';
 import { portLivenessService } from '../../services/PortLivenessService';
 import { getServiceRunner } from '../../ipc/servicesIpc';
 import { ControlError } from '../registry';
+import { lastTaskContact } from '../shimContacts';
 import type { ProjectCapabilityDeps } from './projects';
 import type { ServiceCapabilityDeps } from './services';
 import type { TaskCapabilityDeps } from './tasks';
@@ -48,6 +48,8 @@ export function taskDeps(): TaskCapabilityDeps {
     getTasks: (projectId) => DatabaseService.getTasks(projectId),
     getActivity: () => activityMonitor.getAll(),
     getUntrustedRoot,
+    getLiveSessions: () => readLiveSessions(),
+    lastShimContact: lastTaskContact,
     onActivityChange: (listener) => {
       activityEvents.on('change', listener);
       return () => activityEvents.off('change', listener);
@@ -69,16 +71,6 @@ export function taskDeps(): TaskCapabilityDeps {
       taskEvents.emitChanged(task.projectId);
       if (!focusTaskInWindow({ taskId: task.id, projectId: task.projectId })) {
         throw new ControlError(409, 'Dash has no window open');
-      }
-    },
-    sendToSession: async (taskId, text) => {
-      try {
-        return await sendToTaskSession(taskId, text);
-      } catch (err) {
-        if (err instanceof SessionNotIdleError) {
-          return { notIdle: err.status === 'busy' ? 'working' : 'waiting' };
-        }
-        throw err;
       }
     },
   };
