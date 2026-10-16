@@ -79,7 +79,7 @@ beforeEach(() => {
     startSession: vi.fn(async () => ({ jobId: 'job-1' })),
     readLogs: vi.fn(async () => ''),
     openTask: vi.fn(),
-    submitToAgent: vi.fn(async () => {}),
+    sendToSession: vi.fn(async (): Promise<Record<string, unknown>> => ({ sent: true as const })),
   } as never;
   registry = createRegistry(fakeLookups(projects, tasks));
   registerProjectCapabilities(registry, deps as never);
@@ -216,9 +216,10 @@ describe('tasks.wait', () => {
 
   it('after a send, until idle waits through the turn the send started', async () => {
     activity = { child: { state: 'idle' } };
-    // ptyManager.submitToAgent marks the task busy once it pressed Enter.
-    deps.submitToAgent.mockImplementation(async () => {
+    // ptyManager.sendToTaskSession marks the task busy once it delivered.
+    deps.sendToSession.mockImplementation(async () => {
       activity = { child: { state: 'busy' } };
+      return { sent: true };
     });
     await registry.call(orch, 'tasks.send', { taskId: 'child', text: 'go' });
     const pending = registry.call(orch, 'tasks.wait', { taskId: 'child', until: 'idle' });
@@ -379,6 +380,7 @@ describe('archived tasks', () => {
       });
     }
     expect(await status(registry.call(orch, 'tasks.send', { taskId: 'old', text: 'x' }))).toBe(409);
+    expect(deps.sendToSession).not.toHaveBeenCalled();
     expect(deps.restartSession).not.toHaveBeenCalled();
     expect(deps.startSession).not.toHaveBeenCalled();
     expect(deps.openTask).not.toHaveBeenCalled();
@@ -443,7 +445,7 @@ describe('tasks.output', () => {
 });
 
 describe('tasks.send', () => {
-  it('refuses a task waiting for a person before any write', async () => {
+  it('refuses a task waiting for a person before sending', async () => {
     activity = { child: { state: 'waiting', detail: 'permission: Bash' } };
     await expect(
       registry.call(orch, 'tasks.send', { taskId: 'child', text: 'yes' }),
@@ -451,28 +453,42 @@ describe('tasks.send', () => {
       status: 409,
       message: 'Child is waiting for a person: permission: Bash',
     });
-    expect(deps.submitToAgent).not.toHaveBeenCalled();
-    expect(deps.startSession).not.toHaveBeenCalled();
+    expect(deps.sendToSession).not.toHaveBeenCalled();
   });
 
-  it('submits to a working task (Claude Code queues it)', async () => {
+  it('refuses a working task before sending', async () => {
     activity = { child: { state: 'busy' } };
-    expect(await registry.call(orch, 'tasks.send', { taskId: 'child', text: 'also this' })).toEqual(
-      {},
-    );
-    expect(deps.submitToAgent).toHaveBeenCalledWith('child', 'also this');
+    await expect(
+      registry.call(orch, 'tasks.send', { taskId: 'child', text: 'also this' }),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: 'Child is working; wait until it is idle (tasks_wait) and send again',
+    });
+    expect(deps.sendToSession).not.toHaveBeenCalled();
   });
 
-  it('starts a stopped task first', async () => {
-    deps.startSession.mockImplementation(() => {
-      activity = { child: { state: 'idle' } };
-      return Promise.resolve({ jobId: 'job-1' });
-    });
-    await registry.call(orch, 'tasks.send', { taskId: 'child', text: 'go' });
-    expect(deps.startSession).toHaveBeenCalledWith('child');
-    expect(deps.startSession.mock.invocationCallOrder[0]).toBeLessThan(
-      deps.submitToAgent.mock.invocationCallOrder[0]!,
-    );
+  it('refuses when the session turned out busy or waiting at the send', async () => {
+    activity = { child: { state: 'idle' } };
+    deps.sendToSession.mockResolvedValueOnce({ notIdle: 'working' });
+    await expect(
+      registry.call(orch, 'tasks.send', { taskId: 'child', text: 'go' }),
+    ).rejects.toMatchObject({ status: 409, message: expect.stringContaining('is working') });
+    deps.sendToSession.mockResolvedValueOnce({ notIdle: 'waiting' });
+    await expect(
+      registry.call(orch, 'tasks.send', { taskId: 'child', text: 'go' }),
+    ).rejects.toMatchObject({ status: 409, message: 'Child is waiting for a person' });
+  });
+
+  it('sends to an idle task and to a stopped one (the send starts it)', async () => {
+    activity = { child: { state: 'idle' } };
+    expect(await registry.call(orch, 'tasks.send', { taskId: 'child', text: 'go' })).toEqual({});
+    activity = {};
+    expect(await registry.call(orch, 'tasks.send', { taskId: 'child', text: 'more' })).toEqual({});
+    expect(deps.sendToSession.mock.calls).toEqual([
+      ['child', 'go'],
+      ['child', 'more'],
+    ]);
+    expect(deps.startSession).not.toHaveBeenCalled();
   });
 
   it('refuses a task that needs the trust prompt', async () => {
@@ -480,14 +496,15 @@ describe('tasks.send', () => {
     expect(await status(registry.call(orch, 'tasks.send', { taskId: 'child', text: 'go' }))).toBe(
       409,
     );
-    deps.startSession.mockImplementation(() => {
+    expect(deps.sendToSession).not.toHaveBeenCalled();
+    // Found untrusted by the send's own start.
+    deps.sendToSession.mockImplementation(async () => {
       untrusted = { sibling: '/repo' };
-      return Promise.resolve({ needsTrust: '/repo' });
+      return { needsTrust: '/repo' };
     });
-    expect(await status(registry.call(orch, 'tasks.send', { taskId: 'sibling', text: 'go' }))).toBe(
-      409,
-    );
-    expect(deps.submitToAgent).not.toHaveBeenCalled();
+    await expect(
+      registry.call(orch, 'tasks.send', { taskId: 'sibling', text: 'go' }),
+    ).rejects.toMatchObject({ status: 409, message: expect.stringContaining('/repo') });
   });
 
   it('rechecks trust: a folder trusted outside Dash clears needs-trust and the send goes on', async () => {
@@ -496,14 +513,9 @@ describe('tasks.send', () => {
       delete untrusted[id];
       return true;
     });
-    deps.startSession.mockImplementation(() => {
-      activity = { child: { state: 'idle' } };
-      return Promise.resolve({ jobId: 'job-1' });
-    });
     await registry.call(orch, 'tasks.send', { taskId: 'child', text: 'go' });
     expect(deps.recheckTrust).toHaveBeenCalledWith('child');
-    expect(deps.startSession).toHaveBeenCalledWith('child');
-    expect(deps.submitToAgent).toHaveBeenCalledWith('child', 'go');
+    expect(deps.sendToSession).toHaveBeenCalledWith('child', 'go');
   });
 
   it('get rechecks a needs-trust task, and only then', async () => {

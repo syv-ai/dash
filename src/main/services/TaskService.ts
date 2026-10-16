@@ -36,6 +36,10 @@ import { getTuiHost } from '../tui/hostInstance';
 import { taskEvents } from './taskEvents';
 import { removeTaskMcpConfig } from '../control/mcpConfig';
 
+/** The line an API-created task's first message starts with. */
+export const UNATTENDED_INSTRUCTION =
+  "You were started by an orchestrator and may be running unattended. Don't use AskUserQuestion; state your assumptions and continue.";
+
 /**
  * Task lifecycle: create, archive, restore, delete. The task dialog (through
  * `task:*` IPC) and the control API both come here, so the side effects
@@ -181,7 +185,10 @@ export class TaskService {
     ]
       .filter((part): part is string => !!part)
       .join('\n\n');
-    const firstMessage = [context, input.initialPrompt?.trim()].filter(Boolean).join('\n\n');
+    const prompt = [context, input.initialPrompt?.trim()].filter(Boolean).join('\n\n');
+    // An API-created task may have no person watching it.
+    const firstMessage =
+      prompt && opts.source === 'api' ? `${UNATTENDED_INSTRUCTION}\n\n${prompt}` : prompt;
     if (firstMessage) {
       // Submitted as the first message of the first dispatch, so the agent acts
       // on it instead of only receiving silent SessionStart context.

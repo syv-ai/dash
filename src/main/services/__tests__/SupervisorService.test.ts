@@ -36,6 +36,7 @@ vi.mock('../ActivityMonitor', () => ({
 }));
 
 import { supervisorService, DispatchError } from '../SupervisorService';
+import { SessionNotIdleError } from '../supervisorSession';
 
 const listing = (rows: unknown[]) => ({ stdout: JSON.stringify(rows) });
 
@@ -147,5 +148,61 @@ describe('SupervisorService verbs', () => {
   it('remove tolerates an already-removed job', async () => {
     responses = [{ error: new Error('exit 1'), stderr: 'No such job: a1' }, listing([])];
     await expect(supervisorService.remove('a1')).resolves.toBeUndefined();
+  });
+});
+
+describe('SupervisorService.sendToSession', () => {
+  const base = { jobId: '7ec72810', sessionId: '7ec72810-aaaa', cwd: '/wt', env: { PATH: '/bin' } };
+  const row = (extra: Record<string, unknown>) =>
+    ({ id: '7ec72810', cwd: '/wt', kind: 'background', startedAt: 1, ...extra }) as never;
+  const woke = {
+    stdout: 'note: woke session 7ec72810 with its saved options.\nbackgrounded · 7ec72810 · t\n',
+  };
+  const args = () => calls.map((c) => c.args);
+
+  it('stops an idle running job, then resumes it with only the message', async () => {
+    responses = [{}, woke, listing([])];
+    await supervisorService.sendToSession({
+      ...base,
+      message: '- do this',
+      row: row({ pid: 1, status: 'idle', state: 'done' }),
+    });
+    expect(args().slice(0, 2)).toEqual([
+      ['stop', '7ec72810'],
+      ['--bg', '--resume', '7ec72810-aaaa', '--', '- do this'],
+    ]);
+    expect(calls[1]!.opts.cwd).toBe('/wt');
+    expect(calls[1]!.opts.env).toEqual({ PATH: '/bin' });
+  });
+
+  it('resumes a stopped job without stopping it', async () => {
+    responses = [woke, listing([])];
+    await supervisorService.sendToSession({ ...base, message: 'go', row: row({ state: 'done' }) });
+    expect(args()[0]).toEqual(['--bg', '--resume', '7ec72810-aaaa', '--', 'go']);
+    expect(args().some((a) => a[0] === 'stop')).toBe(false);
+  });
+
+  it('refuses a busy or waiting job and runs nothing', async () => {
+    for (const status of ['busy', 'waiting'] as const) {
+      calls.length = 0;
+      await expect(
+        supervisorService.sendToSession({ ...base, message: 'go', row: row({ pid: 1, status }) }),
+      ).rejects.toEqual(new SessionNotIdleError(status));
+      expect(calls).toHaveLength(0);
+    }
+  });
+
+  it('removes a copy the CLI started and fails the send', async () => {
+    responses = [
+      {
+        stdout:
+          'note: session 7ec72810 is already running in the background, so this started a copy as 73a3165a.\nbackgrounded · 73a3165a\n',
+      },
+    ];
+    await expect(
+      supervisorService.sendToSession({ ...base, message: 'go', row: row({ state: 'stopped' }) }),
+    ).rejects.toBeInstanceOf(DispatchError);
+    expect(args()).toContainEqual(['stop', '73a3165a']);
+    expect(args()).toContainEqual(['rm', '73a3165a']);
   });
 });

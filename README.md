@@ -60,7 +60,7 @@ The orchestrator sees every project that isn't archived. Turning the switch off 
 | `tasks_create`    | Create a task (new worktree by default) and start its session with a prompt        |                     |
 | `tasks_wait`      | Wait up to 110 s until a task is idle, waiting, not working, or changes state      | yes                 |
 | `tasks_output`    | The last lines of a task's terminal as plain text                                  | yes                 |
-| `tasks_send`      | Type a message into a task's session and submit it                                 |                     |
+| `tasks_send`      | Send an idle or stopped task's session its next message                            |                     |
 | `tasks_open`      | Bring Dash to the front with the task open                                         |                     |
 | `tasks_archive`   | Archive a task (never the caller's own task)                                       |                     |
 | `tasks_restore`   | Restore an archived task                                                           |                     |
@@ -76,7 +76,9 @@ Inside a task, the read-only tools (marked above) run without a permission promp
 ### Safety rules
 
 - Tasks created through the API never run in `bypassPermissions`, even if the project defaults to it.
-- `tasks_send` refuses a task that is waiting for a person (a permission prompt or a question). Answering those stays with you.
+- `tasks_send` refuses a task that is waiting for a person (a permission prompt or a question). Answering those stays with you. It also refuses a working task: wait until it's idle (`tasks_wait`) and send again.
+- `tasks_send` goes through Claude Code's CLI, not the terminal: it stops the idle session and resumes it with the message, keeping its options. If you have the task open, its pane shows Detached; click Re-attach. Text you typed in its prompt and didn't send is lost.
+- A task created through the API gets one line before its first prompt, telling it that it may be running unattended and shouldn't use `AskUserQuestion`.
 - Dash never accepts Claude Code's workspace trust prompt for an agent. A task that needs it reports `needs-trust` until you open it in Dash.
 - Anything running as your user on this machine can read the tokens under Dash's data folder, so the API trusts the local user. Leave orchestrator access off when you don't use it.
 

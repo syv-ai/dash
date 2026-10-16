@@ -7,13 +7,13 @@ import { loadWorkspaceConfig } from '../../services/WorkspaceConfigService';
 import { taskEvents } from '../../services/taskEvents';
 import { focusTaskInWindow } from '../../services/focusTask';
 import {
-  DraftPresentError,
   getUntrustedRoot,
   recheckWorkspaceTrust,
   restartTaskSession,
+  sendToTaskSession,
   startTaskSession,
-  submitToAgent,
 } from '../../services/ptyManager';
+import { SessionNotIdleError } from '../../services/supervisorSession';
 import { GitService } from '../../services/GitService';
 import { WorkspacePortsRuntime } from '../../services/WorkspacePortsRuntime';
 import { portLivenessService } from '../../services/PortLivenessService';
@@ -71,12 +71,13 @@ export function taskDeps(): TaskCapabilityDeps {
         throw new ControlError(409, 'Dash has no window open');
       }
     },
-    submitToAgent: async (taskId, text) => {
+    sendToSession: async (taskId, text) => {
       try {
-        await submitToAgent(taskId, text);
+        return await sendToTaskSession(taskId, text);
       } catch (err) {
-        // A person's unsent draft in the composer: theirs to send or clear.
-        if (err instanceof DraftPresentError) throw new ControlError(409, err.message);
+        if (err instanceof SessionNotIdleError) {
+          return { notIdle: err.status === 'busy' ? 'working' : 'waiting' };
+        }
         throw err;
       }
     },

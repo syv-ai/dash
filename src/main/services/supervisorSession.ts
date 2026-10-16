@@ -72,6 +72,30 @@ export function buildDispatchArgs(opts: DispatchArgsOptions): string[] {
   return args;
 }
 
+/**
+ * `claude --bg --resume <session> -- <message>`: wake a stopped background
+ * session and give it `message` as its next user turn. Nothing else may be
+ * passed: with any other flag the CLI starts a copy of the session (it keeps
+ * its own saved options), and resuming one that is still running starts a
+ * copy too, so the caller stops it first. `--` keeps a message starting with
+ * "-" from being read as an option.
+ */
+export function buildResumeArgs(sessionId: string, message: string): string[] {
+  return ['--bg', '--resume', sessionId, '--', message];
+}
+
+/**
+ * The supervisor's job is busy with a turn or waits for a person, so a message
+ * cannot be delivered now (resuming would need a stop, which would cut the
+ * turn or the prompt off).
+ */
+export class SessionNotIdleError extends Error {
+  constructor(readonly status: 'busy' | 'waiting') {
+    super(`The session is ${status === 'busy' ? 'working' : 'waiting for a person'}`);
+    this.name = 'SessionNotIdleError';
+  }
+}
+
 // eslint-disable-next-line no-control-regex
 const ANSI_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]/g;
 

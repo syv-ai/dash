@@ -11,11 +11,10 @@ import { ensureShellConfig, shellHistoryPath } from './ptyShellConfig';
 import { findClaudePath, findLatestSessionId, requireSupportedClaude } from './claudeCli';
 import { buildClaudeEnv } from './claudeEnv';
 import { supervisorService, DispatchError } from './SupervisorService';
-import { parseUntrustedRoot } from './supervisorSession';
+import { parseUntrustedRoot, SessionNotIdleError } from './supervisorSession';
 import { isWorkspaceTrusted } from '../utils/claudePaths';
 import { DatabaseService } from './DatabaseService';
 import { mcpConfigForDispatch } from '../control/mcpConfig';
-import { AttachScreen } from './composerDraft';
 import { writeHookSettings, setCommitAttributionValue } from './ptyHookSettings';
 import type { PermissionMode, TaskModel } from '@shared/types';
 
@@ -44,9 +43,6 @@ interface PtyRecord {
    * its whole screen on every attach, so there is nothing to mirror.
    */
   mirror: TerminalMirror | null;
-  /** Agent attach clients only: their screen, so submitToAgent can see a draft
-   *  in the input box. Never persisted (an attach repaints anyway). */
-  screen: AttachScreen | null;
 }
 
 const ptys = new Map<string, PtyRecord>();
@@ -276,6 +272,11 @@ function samePath(a: string, b: string): boolean {
  * a job existed). A dispatch resumes the task's recorded session, or — for a
  * task from before the supervisor — the newest transcript under its current
  * and pre-migration paths, so the conversation carries over.
+ *
+ * With `message`, the session also gets it as its next user turn: a dispatch
+ * submits it as its first prompt (after a stashed initial prompt), and an
+ * existing job is woken with it (supervisorService.sendToSession, which stops
+ * an idle job first and throws SessionNotIdleError for a busy or waiting one).
  */
 async function ensureTaskSession(opts: {
   id: string;
@@ -289,6 +290,7 @@ async function ensureTaskSession(opts: {
   /** From the task row at this call, so a restart after toggling picks it up. */
   dashAccess: boolean;
   env: Record<string, string>;
+  message?: string;
 }): Promise<string> {
   let resumeSessionId = opts.sessionId;
   if (opts.jobId) {
@@ -296,13 +298,34 @@ async function ensureTaskSession(opts: {
     try {
       row = await supervisorService.find(opts.jobId);
     } catch (err) {
+      // A send cannot guess: resuming a job that still runs starts a copy.
+      if (opts.message !== undefined) throw err;
       console.warn(
         `[ptyManager] supervisor listing failed; assuming job ${opts.jobId} is live`,
         err,
       );
       return opts.jobId;
     }
-    if (row && samePath(row.cwd, opts.cwd)) return opts.jobId;
+    if (row && samePath(row.cwd, opts.cwd)) {
+      if (opts.message === undefined) return opts.jobId;
+      const sessionId = row.sessionId ?? opts.sessionId;
+      if (!sessionId) throw new Error('The session has no id to resume yet; try again shortly');
+      // The stop inside ends an open pane's attach client, whose exit handler
+      // shows the pane the Detached card; re-attaching waits on this start.
+      await supervisorService.sendToSession({
+        jobId: opts.jobId,
+        sessionId,
+        cwd: opts.cwd,
+        message: opts.message,
+        env: opts.env,
+        row,
+      });
+      if (sessionId !== opts.sessionId) {
+        DatabaseService.setTaskSession(opts.id, { jobId: opts.jobId, sessionId });
+      }
+      activityMonitor.setBusy(opts.id);
+      return opts.jobId;
+    }
     if (row) {
       // Job still bound to the old cwd — the supervisor would refuse a resume
       // ("working directory no longer exists") and queue the prompt. Drop it.
@@ -314,7 +337,8 @@ async function ensureTaskSession(opts: {
   if (!resumeSessionId) {
     resumeSessionId = findLatestSessionId(opts.cwd, opts.previousPath);
   }
-  const prompt = consumeInitialPrompt(opts.id);
+  const initialPrompt = consumeInitialPrompt(opts.id);
+  const prompt = [initialPrompt, opts.message].filter(Boolean).join('\n\n') || undefined;
   // The one place a task's `--mcp-config` is decided. Only a dispatch reads
   // it; a reused job keeps the access it was started with.
   const mcpConfig = mcpConfigForDispatch({ id: opts.id, dashAccess: opts.dashAccess });
@@ -336,8 +360,9 @@ async function ensureTaskSession(opts: {
     const root = parseUntrustedRoot(err.output);
     if (!root) throw err;
     // No job was created, so the first prompt is still unsent: keep it for
-    // the dispatch that follows the trust prompt.
-    if (prompt !== undefined) setInitialPrompt(opts.id, prompt);
+    // the dispatch that follows the trust prompt. A sent message is not kept
+    // (the send is refused).
+    if (initialPrompt !== undefined) setInitialPrompt(opts.id, initialPrompt);
     untrustedRoots.set(opts.id, root);
     throw new UntrustedWorkspaceError(err.message, root);
   }
@@ -394,11 +419,10 @@ function spawnAttach(options: {
     featureId: null,
     jobId: options.jobId,
     mirror: null,
-    screen: new AttachScreen(options.cols, options.rows),
   };
-  // A client spawned for this id while the caller awaited the session (a
-  // hidden attach from submitToAgent) is replaced, not orphaned. Its own exit
-  // and linger handlers check identity, so they leave the new one alone.
+  // A client spawned for this id while the caller awaited the session (two
+  // pane starts at once) is replaced, not orphaned. Its own exit handler
+  // checks identity, so it leaves the new one alone.
   const previous = ptys.get(options.id);
   if (previous) {
     teardownRecord(options.id, previous);
@@ -414,7 +438,6 @@ function spawnAttach(options: {
   });
 
   proc.onData((data: string) => {
-    record.screen?.write(data);
     bannerFilter(data);
     if (options.taskId) activityMonitor.noteData(options.taskId);
     remoteControlService.onPtyData(options.id, data);
@@ -430,7 +453,6 @@ function spawnAttach(options: {
     if (record.owner && !record.owner.isDestroyed()) {
       record.owner.send(`pty:exit:${options.id}`, { exitCode, signal });
     }
-    disposeScreen(record);
     ptys.delete(options.id);
   });
 
@@ -482,7 +504,7 @@ function ensureTaskSessionFor(
 
 async function startTaskSessionNow(
   taskId: string,
-  opts: { isDark?: boolean },
+  opts: { isDark?: boolean; message?: string },
 ): Promise<TaskSessionStart> {
   // Hard floor: never start a task session on a missing or too-old CLI.
   await requireSupportedClaude();
@@ -514,6 +536,7 @@ async function startTaskSessionNow(
       sessionId: task.sessionId,
       dashAccess: task.dashAccess,
       env,
+      message: opts.message,
     });
     return { jobId, cwd: task.path, env, claudePath };
   } catch (err) {
@@ -538,6 +561,38 @@ export async function startTaskSession(
   try {
     const { jobId } = await ensureTaskSessionFor(taskId, opts);
     return { jobId };
+  } catch (err) {
+    if (err instanceof UntrustedWorkspaceError) return { needsTrust: err.root };
+    throw err;
+  }
+}
+
+/**
+ * Give the task's session `message` as its next user turn, through the CLI
+ * (ensureTaskSession's `message`): a stopped or missing session is started
+ * with it, an idle one is stopped and resumed with it. Runs as the task's
+ * session start, after any start in flight (joining one would drop the
+ * message), so a pane re-attaching meanwhile waits for it. Throws
+ * SessionNotIdleError while the session works or waits for a person; an
+ * untrusted folder returns its root and keeps nothing. Callers decide whether
+ * the task may be sent to.
+ */
+export async function sendToTaskSession(
+  taskId: string,
+  message: string,
+): Promise<{ sent: true } | { needsTrust: string }> {
+  for (let s = sessionStarts.get(taskId); s; s = sessionStarts.get(taskId)) {
+    await s.catch(() => {});
+  }
+  // A send just before this one already started a turn.
+  if (activityMonitor.getAll()[taskId]?.state === 'busy') throw new SessionNotIdleError('busy');
+  const start = startTaskSessionNow(taskId, { message }).finally(() => {
+    if (sessionStarts.get(taskId) === start) sessionStarts.delete(taskId);
+  });
+  sessionStarts.set(taskId, start);
+  try {
+    await start;
+    return { sent: true };
   } catch (err) {
     if (err instanceof UntrustedWorkspaceError) return { needsTrust: err.root };
     throw err;
@@ -634,7 +689,6 @@ export async function runTrustPrompt(options: {
     featureId: null,
     jobId: null,
     mirror: null,
-    screen: null,
   };
   ptys.set(options.id, record);
   proc.onData((data: string) => {
@@ -836,7 +890,6 @@ export async function startPty(options: {
     featureId: null,
     jobId: null,
     mirror: new TerminalMirror(options.cols, options.rows),
-    screen: null,
   };
 
   ptys.set(options.id, record);
@@ -896,140 +949,6 @@ export function sendRemoteControl(id: string): void {
   if (record) void typeAndSubmit(record, '/rc');
 }
 
-/** A fresh attach repaints the screen; it is ready once quiet this long after its first byte. */
-const ATTACH_SETTLE_QUIET_MS = 500;
-/** …or after this long, whatever it printed. */
-const ATTACH_SETTLE_BACKSTOP_MS = 5_000;
-/** How long a hidden attach stays after its submit before it detaches. */
-const HIDDEN_ATTACH_LINGER_MS = 3_000;
-
-/** Attach clients submitToAgent opened because no pane had the task open. */
-const hiddenAttaches = new Map<
-  string,
-  { record: PtyRecord; timer: ReturnType<typeof setTimeout> | null }
->();
-/** Per task, the last submit: submits run one at a time so two never race to spawn. */
-const submitChains = new Map<string, Promise<void>>();
-
-function waitForAttachSettle(proc: PtyRecord['proc']): Promise<void> {
-  return new Promise((resolve) => {
-    let quiet: ReturnType<typeof setTimeout> | null = null;
-    const done = () => {
-      clearTimeout(backstop);
-      if (quiet) clearTimeout(quiet);
-      dataSub.dispose();
-      exitSub.dispose();
-      resolve();
-    };
-    const backstop = setTimeout(done, ATTACH_SETTLE_BACKSTOP_MS);
-    const dataSub = proc.onData(() => {
-      if (quiet) clearTimeout(quiet);
-      quiet = setTimeout(done, ATTACH_SETTLE_QUIET_MS);
-    });
-    const exitSub = proc.onExit(done);
-  });
-}
-
-/** Bracketed paste, so newlines in `text` don't submit early. Strips any paste
- *  markers inside the text, which could otherwise end the paste. */
-function bracketedPaste(text: string): string {
-  // eslint-disable-next-line no-control-regex
-  const body = text.replace(/\x1b\[20[01]~/g, '').replace(/\r\n?/g, '\n');
-  return `\x1b[200~${body}\x1b[201~`;
-}
-
-/**
- * submitToAgent found text the user typed but has not sent in the session's
- * input box (shared by every attach client). Pasting and pressing Enter would
- * send the draft and the message as one.
- */
-export class DraftPresentError extends Error {
-  constructor(taskName: string) {
-    super(`${taskName} has an unsent draft in its input box; send it or clear it in Dash first`);
-    this.name = 'DraftPresentError';
-  }
-}
-
-/**
- * Type `text` into the task's agent and submit it, as a person would in the
- * pane. With no attach client open (nobody has the task open), a hidden one
- * is spawned for the submit and detached 3 s later; detaching never touches
- * the session. A pane that mounts meanwhile replaces the hidden client, and
- * the timer leaves it alone. Rejects with DraftPresentError, typing nothing,
- * when the input box holds a draft. Callers decide whether the agent may be
- * typed into (tasks.send refuses a task waiting for a person).
- */
-export function submitToAgent(taskId: string, text: string): Promise<void> {
-  const previous = submitChains.get(taskId) ?? Promise.resolve();
-  const next = previous.catch(() => {}).then(() => submitNow(taskId, text));
-  submitChains.set(taskId, next);
-  void next
-    .finally(() => {
-      if (submitChains.get(taskId) === next) submitChains.delete(taskId);
-    })
-    .catch(() => {});
-  return next;
-}
-
-async function submitNow(taskId: string, text: string): Promise<void> {
-  let record = ptys.get(taskId);
-  if (!record) {
-    const { jobId, cwd, env, claudePath } = await ensureTaskSessionFor(taskId, {});
-    // A pane may have attached while the session started.
-    record = ptys.get(taskId);
-    if (!record) {
-      const hidden = spawnAttach({
-        id: taskId,
-        jobId,
-        cwd,
-        cols: 120,
-        rows: 30,
-        env,
-        claudePath,
-        taskId,
-      });
-      hiddenAttaches.set(taskId, { record: hidden, timer: null });
-      await waitForAttachSettle(hidden.proc);
-      record = ptys.get(taskId);
-      if (!record) throw new Error('The session closed before the message could be sent');
-    }
-  }
-  if (!record.jobId) {
-    // The pane shows something other than the session (the trust prompt).
-    throw new Error('The task is not attached to its session; open it in Dash');
-  }
-
-  const hidden = hiddenAttaches.get(taskId);
-  if (hidden?.timer) clearTimeout(hidden.timer);
-  try {
-    if (await record.screen?.hasDraft()) {
-      throw new DraftPresentError(DatabaseService.getTask(taskId)?.name ?? 'The task');
-    }
-    await typeAndSubmit(record, bracketedPaste(text));
-    // The Enter starts (or queues behind) a turn; mark it busy before the first
-    // hook lands so a tasks.wait right after a send does not return at once.
-    activityMonitor.setBusy(taskId);
-  } finally {
-    if (hidden) detachHiddenLater(taskId, hidden);
-  }
-}
-
-/** Detach a hidden attach HIDDEN_ATTACH_LINGER_MS after its submit (or refusal). */
-function detachHiddenLater(
-  taskId: string,
-  hidden: { record: PtyRecord; timer: ReturnType<typeof setTimeout> | null },
-): void {
-  if (hidden.record !== ptys.get(taskId)) {
-    hiddenAttaches.delete(taskId); // a pane took over
-    return;
-  }
-  hidden.timer = setTimeout(() => {
-    if (hiddenAttaches.get(taskId) === hidden) hiddenAttaches.delete(taskId);
-    // Only the hidden client: a pane that replaced it in the meantime stays.
-    if (ptys.get(taskId) === hidden.record) void killPtyInternal(taskId);
-  }, HIDDEN_ATTACH_LINGER_MS);
-}
-
 /**
  * Send data to a PTY.
  */
@@ -1053,7 +972,6 @@ export function resizePty(id: string, cols: number, rows: number): void {
   const record = ptys.get(id);
   if (record) {
     record.mirror?.resize(cols, rows);
-    record.screen?.resize(cols, rows);
     try {
       record.proc.resize(cols, rows);
     } catch {
@@ -1132,12 +1050,6 @@ function teardownRecord(id: string, record: PtyRecord): void {
   // Persist before killing — restart() relies on the snapshot for visual
   // context when it respawns into the same id.
   persistAndDisposeMirror(id, record);
-  disposeScreen(record);
-}
-
-function disposeScreen(record: PtyRecord): void {
-  record.screen?.dispose();
-  record.screen = null;
 }
 
 /**
@@ -1185,7 +1097,6 @@ export async function killAll(): Promise<void> {
   const pending: Promise<void>[] = [];
   for (const [id, record] of ptys) {
     persistAndDisposeMirror(id, record);
-    disposeScreen(record);
     pending.push(gracefulKillProc(record.proc));
   }
   ptys.clear();
@@ -1295,7 +1206,6 @@ export async function startCommandPty(options: {
     featureId: options.featureId,
     jobId: null,
     mirror: new TerminalMirror(options.cols, options.rows),
-    screen: null,
   };
 
   ptys.set(options.id, record);
@@ -1332,14 +1242,10 @@ export function __testReset(): void {
   for (const record of ptys.values()) {
     record.mirror?.dispose();
     record.mirror = null;
-    disposeScreen(record);
   }
   ptys.clear();
   untrustedRoots.clear();
   pendingInitialPrompts.clear();
-  for (const hidden of hiddenAttaches.values()) if (hidden.timer) clearTimeout(hidden.timer);
-  hiddenAttaches.clear();
-  submitChains.clear();
   sessionStarts.clear();
   lastIsDark = true;
 }
@@ -1364,6 +1270,5 @@ export function __registerForTest(
     featureId: rec.featureId,
     jobId: null,
     mirror: null,
-    screen: null,
   });
 }

@@ -135,7 +135,7 @@ vi.mock('../../tui/hostInstance', () => ({
   getTuiHost: () => ({ cancelForTask: async () => {} }),
 }));
 
-import { TaskService } from '../TaskService';
+import { TaskService, UNATTENDED_INSTRUCTION } from '../TaskService';
 import { taskEvents } from '../taskEvents';
 
 const UI = { startSession: false, source: 'ui' } as const;
@@ -300,6 +300,24 @@ describe('TaskService.create', () => {
     expect(git.updateBranchToRemote).not.toHaveBeenCalled();
     expect(git.checkoutBranch).not.toHaveBeenCalled();
     expect(db.tasks).toHaveLength(1);
+  });
+
+  it('starts the first message of an API task with the unattended instruction, and only then', async () => {
+    const API = { startSession: false, source: 'api' } as const;
+    const api = await TaskService.create(
+      newBranchInput({ contextPrompt: 'Use pnpm.', initialPrompt: 'Go.' }),
+      API,
+    );
+    expect(initialPrompts[api.task.id]).toBe(`${UNATTENDED_INSTRUCTION}\n\nUse pnpm.\n\nGo.`);
+    // Context only, as persisted for /clear and /compact.
+    expect(db.contextPrompts[api.task.id]).toBe('Use pnpm.');
+
+    const ui = await TaskService.create(newBranchInput({ initialPrompt: 'Go.' }), UI);
+    expect(initialPrompts[ui.task.id]).toBe('Go.');
+
+    // No first message, nothing to start it with.
+    const bare = await TaskService.create(newBranchInput(), API);
+    expect(initialPrompts[bare.task.id]).toBeUndefined();
   });
 
   it('sets no prompt when there is neither context nor linked items', async () => {

@@ -61,9 +61,13 @@ export interface TaskCapabilityDeps {
   readLogs(jobId: string): Promise<string>;
   /** Show and focus Dash's window on the task. */
   openTask(task: Task): void;
-  /** Paste `text` into the task's agent and submit it (ptyManager.submitToAgent);
-   *  a 409 ControlError while the composer holds a person's draft. */
-  submitToAgent(taskId: string, text: string): Promise<void>;
+  /** Give the task's session `text` as its next user turn through the CLI
+   *  (ptyManager.sendToTaskSession), starting a stopped session with it.
+   *  `notIdle` when the session turned out to be working or waiting. */
+  sendToSession(
+    taskId: string,
+    text: string,
+  ): Promise<{ sent: true } | { needsTrust: string } | { notIdle: 'working' | 'waiting' }>;
 }
 
 const STATE_FROM_ACTIVITY: Record<ActivityInfo['state'], TaskApiState> = {
@@ -402,7 +406,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     defineCapability({
       name: 'tasks.send',
       summary:
-        "Type a message into a task's Claude Code session and submit it (queued if the task is working; a stopped session is started first). Refused while the task waits for a person (a permission prompt or question) or needs the trust prompt.",
+        "Send a message to a task's Claude Code session as its next user turn; a stopped session is started with it. Returns once it is delivered and waits for nothing (use tasks_wait). Refused while the task is working (wait until it is idle and send again), waits for a person (a permission prompt or question), needs the trust prompt, or is archived.",
       input: z.object({
         taskId: z.string(),
         text: z
@@ -416,21 +420,25 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
       handler: async (_ctx, input) => {
         const task = taskOrThrow(input.taskId);
         assertNotArchived(task);
+        const waiting = (detail?: string) =>
+          new ControlError(
+            409,
+            `${task.name} is waiting for a person${detail ? `: ${detail}` : ''}`,
+          );
+        const working = () =>
+          new ControlError(
+            409,
+            `${task.name} is working; wait until it is idle (tasks_wait) and send again`,
+          );
         // A needs-trust mark clears here when the folder was trusted outside
         // Dash; the send then starts the session like any stopped one.
-        let current = await freshView(task);
-        if (current.state === 'waiting') {
-          throw new ControlError(
-            409,
-            `${task.name} is waiting for a person${current.detail ? `: ${current.detail}` : ''}`,
-          );
-        }
-        if (current.state === 'stopped') {
-          await deps.startSession(task.id);
-          current = view(task);
-        }
+        const current = await freshView(task);
+        if (current.state === 'waiting') throw waiting(current.detail);
+        if (current.state === 'working') throw working();
         if (current.state === 'needs-trust') throw new ControlError(409, current.detail!);
-        await deps.submitToAgent(task.id, input.text);
+        const result = await deps.sendToSession(task.id, input.text);
+        if ('notIdle' in result) throw result.notIdle === 'working' ? working() : waiting();
+        if ('needsTrust' in result) throw new ControlError(409, view(task).detail!);
         return {};
       },
     }),

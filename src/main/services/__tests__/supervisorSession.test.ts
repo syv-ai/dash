@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildDispatchArgs,
+  buildResumeArgs,
   parseDispatchOutput,
   isDispatchFailure,
   parseUntrustedRoot,
@@ -101,6 +102,18 @@ describe('buildDispatchArgs', () => {
   });
 });
 
+describe('buildResumeArgs', () => {
+  it('passes only --bg, --resume and the message after --', () => {
+    expect(buildResumeArgs('sess-1', '- a bullet first')).toEqual([
+      '--bg',
+      '--resume',
+      'sess-1',
+      '--',
+      '- a bullet first',
+    ]);
+  });
+});
+
 describe('parseDispatchOutput', () => {
   it('extracts the short job id from the backgrounded line', () => {
     const out =
@@ -112,6 +125,15 @@ describe('parseDispatchOutput', () => {
     expect(parseDispatchOutput('warning: x\n\x1b[2mbackgrounded\x1b[0m · deadbeef · t')).toBe(
       'deadbeef',
     );
+  });
+
+  it('reads the job id of a woken session and of a copy', () => {
+    const woke =
+      'note: woke session 7ec72810 with its saved options (--mcp-config, --name).\nbackgrounded · 7ec72810 · t\n';
+    expect(parseDispatchOutput(woke)).toBe('7ec72810');
+    const copy =
+      'note: session 7ec72810 is already running in the background, so this started a copy as 73a3165a.\nbackgrounded · 73a3165a\n';
+    expect(parseDispatchOutput(copy)).toBe('73a3165a');
   });
 
   it('returns null when the line is missing', () => {

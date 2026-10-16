@@ -13,9 +13,11 @@ import { DatabaseService } from './DatabaseService';
 import {
   activityFromSupervisor,
   buildDispatchArgs,
+  buildResumeArgs,
   isDispatchFailure,
   parseAgentsJson,
   parseDispatchOutput,
+  SessionNotIdleError,
 } from './supervisorSession';
 
 const execFileAsync = promisify(execFile);
@@ -144,6 +146,69 @@ class SupervisorServiceImpl extends EventEmitter {
       );
     }
     return this.resolveSession(jobId, opts.cwd);
+  }
+
+  /**
+   * Give the job `message` as its next user turn: stop it if it runs (only
+   * when idle; SessionNotIdleError while it is busy or waits for a person),
+   * then `claude --bg --resume <session> -- <message>`, which wakes the same
+   * job with its saved dispatch options (MCP config, settings, permission
+   * mode). An attach client ends with the stop. `row` is the job's listing
+   * row when the caller just read it. Throws a DispatchError when the CLI
+   * started a copy instead (the copy is removed).
+   */
+  async sendToSession(opts: {
+    jobId: string;
+    sessionId: string;
+    cwd: string;
+    message: string;
+    env: Record<string, string>;
+    row?: SupervisorSession;
+  }): Promise<void> {
+    const row = opts.row ?? (await this.find(opts.jobId));
+    if (row && row.pid !== undefined && row.state !== 'stopped') {
+      if (row.status === 'busy' || row.status === 'waiting') {
+        throw new SessionNotIdleError(row.status);
+      }
+      await this.run(['stop', opts.jobId], { timeout: LIST_TIMEOUT_MS });
+    }
+    let output: string;
+    try {
+      const { stdout, stderr } = await this.run(buildResumeArgs(opts.sessionId, opts.message), {
+        cwd: opts.cwd,
+        env: opts.env,
+        timeout: DISPATCH_TIMEOUT_MS,
+      });
+      output = `${stdout}\n${stderr}`;
+    } catch (err) {
+      const e = err as { stdout?: unknown; stderr?: unknown; message?: string };
+      output = `${String(e.stdout ?? '')}\n${String(e.stderr ?? '')}`;
+      if (!parseDispatchOutput(output)) {
+        throw new DispatchError(
+          `claude --bg --resume failed: ${output.trim() || e.message || String(err)}`,
+          output,
+        );
+      }
+    } finally {
+      void this.refresh('send');
+    }
+    const jobId = parseDispatchOutput(output);
+    if (!jobId || isDispatchFailure(output)) {
+      throw new DispatchError(
+        `claude --bg --resume did not wake the session: ${output.trim() || '(no output)'}`,
+        output,
+      );
+    }
+    if (jobId !== opts.jobId) {
+      // The session was running again by the time of the resume (a person
+      // opened it): the message went to a copy without the task's options.
+      await this.run(['stop', jobId], { timeout: LIST_TIMEOUT_MS }).catch(() => {});
+      await this.remove(jobId).catch(() => {});
+      throw new DispatchError(
+        'The session started running again before the message was sent; send it again',
+        output,
+      );
+    }
   }
 
   /**
