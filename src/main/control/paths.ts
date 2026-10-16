@@ -20,6 +20,8 @@ export interface ControlPaths {
   mcpConfigDir: string;
   /** The `dash-mcp` launcher script. */
   launcher: string;
+  /** The launcher's copy of the bundled shim, so it outlives the app's own folder. */
+  shim: string;
 }
 
 export function controlPaths(userDataDir: string): ControlPaths {
@@ -31,5 +33,6 @@ export function controlPaths(userDataDir: string): ControlPaths {
     orchestratorToken: path.join(dir, 'orchestrator-token'),
     mcpConfigDir: path.join(dir, 'mcp-config'),
     launcher: path.join(dir, 'dash-mcp'),
+    shim: path.join(dir, 'dash-mcp.js'),
   };
 }

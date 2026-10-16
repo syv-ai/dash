@@ -27,7 +27,10 @@ import {
   startTaskSession,
   stopTaskSession,
   removeTaskSession,
+  listForTask,
+  killPtyAwait,
 } from './ptyManager';
+import { portLivenessService } from './PortLivenessService';
 import { removeShellHistory } from './ptyShellConfig';
 import { getTuiHost } from '../tui/hostInstance';
 import { taskEvents } from './taskEvents';
@@ -47,6 +50,18 @@ export class TaskService {
     const project = DatabaseService.getProjects().find((p) => p.id === input.projectId);
     if (!project) throw new Error(`Project not found: ${input.projectId}`);
     const { name, linkedItems, contextPrompt, setupScript, teardownScript } = input;
+
+    // saveTask enforces one active in-place task per project folder; check it
+    // before the checkout too, or a refused task would still switch the
+    // occupant's branch.
+    if (input.kind === 'in-place-checkout' || input.kind === 'in-place-no-git') {
+      const occupant = DatabaseService.findActiveNonWorktreeTaskAt(project.id, project.path);
+      if (occupant) {
+        throw new Error(
+          `Cannot run "${name}" in ${project.path}: active task "${occupant.name}" already uses this folder. Archive it first.`,
+        );
+      }
+    }
 
     const ghItems =
       linkedItems?.filter((i): i is LinkedGithubIssue => i.provider === 'github') ?? [];
@@ -160,19 +175,23 @@ export class TaskService {
 
     // Combine the context prompt (project default or per-task) with any
     // linked-issue context into one prompt.
-    const prompt = [
+    const context = [
       contextPrompt?.trim(),
       linkedItems && linkedItems.length > 0 ? formatTaskContextPrompt(linkedItems) : '',
     ]
       .filter((part): part is string => !!part)
       .join('\n\n');
-    if (prompt) {
+    const firstMessage = [context, input.initialPrompt?.trim()].filter(Boolean).join('\n\n');
+    if (firstMessage) {
       // Submitted as the first message of the first dispatch, so the agent acts
       // on it instead of only receiving silent SessionStart context.
-      setInitialPrompt(task.id, prompt);
-      // Also persisted so the SessionStart hook re-injects it on /clear and
-      // /compact (which drop it from history).
-      DatabaseService.setTaskContextPrompt(task.id, prompt);
+      setInitialPrompt(task.id, firstMessage);
+    }
+    if (context) {
+      // The context (not the one-shot instruction) is also persisted so the
+      // SessionStart hook re-injects it on /clear and /compact (which drop it
+      // from history).
+      DatabaseService.setTaskContextPrompt(task.id, context);
     }
 
     DatabaseService.getOrCreateDefaultConversation(task.id);
@@ -225,6 +244,15 @@ export class TaskService {
     const task = DatabaseService.getTask(id);
     if (!task) return;
     const project = DatabaseService.getProjects().find((p) => p.id === task.projectId);
+    // Shell and service terminals run in the worktree (and hold its ports);
+    // end them before it goes. The agent PTY goes with the session below.
+    await Promise.all(
+      listForTask(id, { kinds: ['shell', 'service'] }).map((ptyId) =>
+        killPtyAwait(ptyId).catch((err) =>
+          console.warn(`[TaskService] delete: could not kill ${ptyId}:`, err),
+        ),
+      ),
+    );
     if (task.useWorktree && project) {
       try {
         await worktreeService.removeWorktree(project.path, task.path, task.branch, {
@@ -247,9 +275,10 @@ export class TaskService {
       console.warn('[TaskService] delete: session removal failed:', err),
     );
     DatabaseService.deleteTask(id);
-    // Close the ports watcher, drop any never-consumed initial prompt, and
-    // dismiss a lingering ports-setup toast for this task.
+    // Close the ports and liveness watchers, drop any never-consumed initial
+    // prompt, and dismiss a lingering ports-setup toast for this task.
     stopPortsConfigWatch(id);
+    portLivenessService.forgetTask(id);
     discardInitialPrompt(id);
     removeShellHistory(id);
     void getTuiHost().cancelForTask(id);

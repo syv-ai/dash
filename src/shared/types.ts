@@ -116,7 +116,13 @@ export type CreateTaskOptions = {
   permissionMode: PermissionMode;
   model: TaskModel;
   linkedItems?: LinkedItem[];
+  /** Context for the agent: submitted with the first message and persisted, so
+   *  the SessionStart hook re-injects it after /clear and /compact. */
   contextPrompt?: string;
+  /** A one-shot instruction submitted as (the end of) the first message and
+   *  never persisted, so /clear and /compact don't re-run it. The control API's
+   *  `prompt`; the task dialog doesn't use it. */
+  initialPrompt?: string;
   /** Per-task worktree scripts (newline-separated), snapshotted from the project
    *  default and editable per task. Only meaningful for worktree tasks. */
   setupScript?: string | null;

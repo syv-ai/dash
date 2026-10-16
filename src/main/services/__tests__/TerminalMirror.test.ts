@@ -56,4 +56,13 @@ describe('TerminalMirror', () => {
     expect(await m.toPlainText(5)).toBe('abcdefghijklmno\nnext');
     m.dispose();
   });
+
+  it('toPlainText keeps a space that fell on the last column of a wrapped row', async () => {
+    const m = new TerminalMirror(10, 5);
+    // A TUI repaint can leave the space as an erased (empty) cell, which a
+    // right-trim drops: "run thebuild".
+    m.write('run the   build it\x1b[1;10H\x1b[X\x1b[3;1Hnext');
+    expect(await m.toPlainText(5)).toBe('run the   build it\nnext');
+    m.dispose();
+  });
 });

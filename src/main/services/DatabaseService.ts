@@ -152,7 +152,7 @@ export class DatabaseService {
    * and non-worktree tasks must be unique per project path. UI gating in TaskModal
    * is best-effort; this is the load-bearing check.
    */
-  private static findActiveNonWorktreeTaskAt(
+  static findActiveNonWorktreeTaskAt(
     projectId: string,
     path: string,
     excludeId?: string,

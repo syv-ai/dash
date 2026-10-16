@@ -42,6 +42,11 @@ vi.mock('../DatabaseService', () => ({
     restoreTask: (id: string) => {
       db.tasks.find((t) => t.id === id)!.archivedAt = null;
     },
+    findActiveNonWorktreeTaskAt: (projectId: string, path: string) =>
+      db.tasks.find(
+        (t) =>
+          t.projectId === projectId && t.path === path && !t.useWorktree && t.archivedAt == null,
+      ) ?? null,
   },
 }));
 
@@ -70,7 +75,14 @@ const startTaskSession = vi.fn(
 );
 const stopTaskSession = vi.fn(async (_id: string) => {});
 const removeTaskSession = vi.fn(async (_id: string) => {});
+const ptysForTask = vi.hoisted(() => ({ list: [] as string[], killed: [] as string[] }));
 vi.mock('../ptyManager', () => ({
+  // Kind by id shape: `shell:<id>…`, `service:<id>:…`, the bare task id is the agent.
+  listForTask: (_taskId: string, opts?: { kinds?: string[] }) =>
+    ptysForTask.list.filter((id) => opts?.kinds?.some((k) => id.startsWith(`${k}:`))),
+  killPtyAwait: async (id: string) => {
+    ptysForTask.killed.push(id);
+  },
   setInitialPrompt: (taskId: string, prompt: string) => {
     initialPrompts[taskId] = prompt;
   },
@@ -93,12 +105,13 @@ vi.mock('../TelemetryService', () => ({
     capture: (event: string, props?: unknown) => captured.push([event, props]),
   },
 }));
-vi.mock('../GitService', () => ({
-  GitService: {
-    checkoutBranch: vi.fn(async () => {}),
-    updateBranchToRemote: vi.fn(async () => {}),
-  },
+const git = vi.hoisted(() => ({
+  checkoutBranch: vi.fn(async () => {}),
+  updateBranchToRemote: vi.fn(async () => {}),
 }));
+vi.mock('../GitService', () => ({ GitService: git }));
+const liveness = vi.hoisted(() => ({ forgetTask: vi.fn() }));
+vi.mock('../PortLivenessService', () => ({ portLivenessService: liveness }));
 const githubComments: Array<[number, string]> = [];
 vi.mock('../GithubService', () => ({
   GithubService: {
@@ -151,6 +164,8 @@ beforeEach(() => {
   workspaceConfig = null;
   vi.clearAllMocks();
   pool.claimReserve.mockResolvedValue(null);
+  ptysForTask.list = [];
+  ptysForTask.killed = [];
   startTaskSession.mockResolvedValue({ jobId: 'j1' });
 });
 
@@ -242,6 +257,49 @@ describe('TaskService.create', () => {
     expect(db.contextPrompts[task.id]).toBe(prompt);
     // Fire-and-forget branch comment on the linked issue.
     await vi.waitFor(() => expect(githubComments).toEqual([[42, task.branch]]));
+  });
+
+  it('submits a one-shot initialPrompt first but persists only the context', async () => {
+    const { task } = await TaskService.create(
+      newBranchInput({ contextPrompt: 'Use pnpm.', initialPrompt: 'Write the README.' }),
+      UI,
+    );
+    expect(initialPrompts[task.id]).toBe('Use pnpm.\n\nWrite the README.');
+    expect(db.contextPrompts[task.id]).toBe('Use pnpm.');
+    expect(task.contextPrompt).toBe('Use pnpm.');
+
+    const bare = await TaskService.create(newBranchInput({ initialPrompt: 'Go.' }), UI);
+    expect(initialPrompts[bare.task.id]).toBe('Go.');
+    expect(db.contextPrompts[bare.task.id]).toBeUndefined();
+    expect(bare.task.contextPrompt).toBeNull();
+  });
+
+  it('refuses an in-place task in an occupied project folder before any checkout', async () => {
+    db.tasks.push({
+      id: 'busy',
+      projectId: 'p1',
+      name: 'Busy',
+      path: '/repo/app',
+      useWorktree: false,
+      archivedAt: null,
+    } as Task);
+    await expect(
+      TaskService.create(
+        {
+          kind: 'in-place-checkout',
+          projectId: 'p1',
+          name: 'other',
+          branch: 'feat',
+          updateFromRemote: true,
+          permissionMode: 'default',
+          model: 'default',
+        },
+        UI,
+      ),
+    ).rejects.toThrow(/"Busy"/);
+    expect(git.updateBranchToRemote).not.toHaveBeenCalled();
+    expect(git.checkoutBranch).not.toHaveBeenCalled();
+    expect(db.tasks).toHaveLength(1);
   });
 
   it('sets no prompt when there is neither context nor linked items', async () => {
@@ -357,6 +415,18 @@ describe('TaskService.delete', () => {
     expect(removeTaskMcpConfig).toHaveBeenCalledWith('del');
     expect(db.tasks).toEqual([]);
     expect(seen).toEqual(['p1']);
+  });
+
+  it("kills the task's shell and service terminals before removing the worktree", async () => {
+    seedTask();
+    ptysForTask.list = ['del', 'shell:del', 'shell:del:2', 'service:del:web'];
+    worktree.removeWorktree.mockImplementationOnce(async () => {
+      expect(ptysForTask.killed).toEqual(['shell:del', 'shell:del:2', 'service:del:web']);
+    });
+    await TaskService.delete('del', { deleteWorktreeDir: true });
+    expect(worktree.removeWorktree).toHaveBeenCalledOnce();
+    expect(ptysForTask.killed).toEqual(['shell:del', 'shell:del:2', 'service:del:web']);
+    expect(liveness.forgetTask).toHaveBeenCalledWith('del');
   });
 
   it('leaves an in-place task directory alone', async () => {

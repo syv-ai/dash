@@ -1,11 +1,14 @@
 import { z } from 'zod';
-import type { PortLiveness, TaskPort } from '../../../shared/types';
+import type { PortLiveness, Task, TaskPort } from '../../../shared/types';
 import type { OpResult } from '../../services/ServiceRunner';
 import { ControlError, defineCapability, type Registry } from '../registry';
+import { assertNotArchived } from './tasks';
 
 export interface ServiceCapabilityDeps {
+  getTask(id: string): Task | undefined;
   getPorts(taskId: string): TaskPort[];
-  /** Start liveness probes for the ports (liveness exists only for watched tasks). */
+  /** Start, or extend, a lease on liveness probes for the ports (liveness exists
+   *  only for watched tasks); it lapses on its own when nobody lists again. */
   watchLiveness(taskId: string, hostPorts: number[]): void;
   getLiveness(taskId: string): Record<number, PortLiveness>;
   runner: {
@@ -27,6 +30,12 @@ const TASK_ID_FIELD = z
   .describe('The task; an agent inside a task may leave it out for its own');
 
 export function registerServiceCapabilities(registry: Registry, deps: ServiceCapabilityDeps): void {
+  /** start/stop act on the task's worktree, so an archived task is refused. */
+  const activePortOrThrow = (taskId: string, label: string): TaskPort => {
+    const task = deps.getTask(taskId);
+    if (task) assertNotArchived(task);
+    return portOrThrow(taskId, label);
+  };
   const portOrThrow = (taskId: string, label: string): TaskPort => {
     const port = deps.runner.findPort(taskId, label);
     if (!port) {
@@ -82,7 +91,7 @@ export function registerServiceCapabilities(registry: Registry, deps: ServiceCap
       target: { taskId: 'taskId' },
       defaultTargetToSelf: true,
       handler: async (_ctx, input) =>
-        deps.runner.start(input.taskId!, portOrThrow(input.taskId!, input.label)),
+        deps.runner.start(input.taskId!, activePortOrThrow(input.taskId!, input.label)),
     }),
   );
 
@@ -97,7 +106,7 @@ export function registerServiceCapabilities(registry: Registry, deps: ServiceCap
       target: { taskId: 'taskId' },
       defaultTargetToSelf: true,
       handler: async (_ctx, input) =>
-        deps.runner.stop(input.taskId!, portOrThrow(input.taskId!, input.label)),
+        deps.runner.stop(input.taskId!, activePortOrThrow(input.taskId!, input.label)),
     }),
   );
 

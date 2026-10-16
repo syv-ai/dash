@@ -246,6 +246,11 @@ export function App() {
   useEffect(() => {
     window.electronAPI.setStopSessionsOnQuit?.(stopSessionsOnQuit);
   }, [stopSessionsOnQuit]);
+  // Sync the theme to main: a session started with no pane (the control API)
+  // takes its terminal colours from it.
+  useEffect(() => {
+    window.electronAPI.setIsDark?.(theme === 'dark');
+  }, [theme]);
   // Sync orchestrator access to main (gates the control API's orchestrator caller)
   useEffect(() => {
     window.electronAPI.setOrchestratorAccess?.(orchestratorAccess);

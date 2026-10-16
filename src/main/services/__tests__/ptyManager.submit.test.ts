@@ -78,6 +78,7 @@ import {
   stopTaskSession,
   restartTaskSession,
   hasPty,
+  DraftPresentError,
   __testReset,
   __setPtyModuleForTest,
 } from '../ptyManager';
@@ -86,6 +87,10 @@ import { activityMonitor } from '../ActivityMonitor';
 __setPtyModuleForTest({ spawn: ptySpawn });
 
 const PASTE = (s: string) => `\x1b[200~${s}\x1b[201~`;
+
+/** An attach client's repaint: the input box between two rules, holding `draft`. */
+const RULE = '─'.repeat(40);
+const SCREEN = (draft: string) => `${RULE} t1 ─\r\n❯ ${draft}\r\n${RULE}\r\n  ⏵⏵ auto mode on`;
 
 function procs(): FakeProc[] {
   return spawned as FakeProc[];
@@ -232,6 +237,69 @@ describe('submitToAgent', () => {
     await vi.advanceTimersByTimeAsync(100);
     await done;
     expect(activityMonitor.getAll()['t1']?.state).toBe('busy');
+  });
+
+  it('kills a hidden attach that a pane start replaced while both awaited the session', async () => {
+    let listed!: (row: unknown) => void;
+    sup.find.mockImplementationOnce(() => new Promise((resolve) => (listed = resolve)));
+    const done = submitToAgent('t1', 'hi');
+    await flush(); // the submit's session start is waiting on the listing
+    const pane = startDirectPty({ id: 't1', cols: 80, rows: 24 });
+    await flush();
+    listed({ cwd: '/wt/t1', sessionId: 's1' });
+    await flush();
+    await pane;
+    expect(ptySpawn).toHaveBeenCalledTimes(2);
+    const [hidden, paneProc] = procs() as [FakeProc, FakeProc];
+    expect(hidden.kill).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(5_100);
+    await done;
+    // The submit went to the pane; the linger timer kills nothing more.
+    expect(paneProc.write).toHaveBeenCalledWith(PASTE('hi'));
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(hidden.kill).toHaveBeenCalledTimes(1);
+    expect(paneProc.kill).not.toHaveBeenCalled();
+    expect(hasPty('t1')).toBe(true);
+  });
+
+  it('refuses to type over a draft in the open pane', async () => {
+    await startDirectPty({ id: 't1', cols: 80, rows: 24 });
+    const pane = procs()[0]!;
+    pane.emit(SCREEN('half-written thought'));
+    // Asked before the screen parsed the chunk: the check waits for it.
+    const first = expect(submitToAgent('t1', 'hi')).rejects.toBeInstanceOf(DraftPresentError);
+    await flush();
+    await first;
+    await expect(submitToAgent('t1', 'hi')).rejects.toThrow(
+      'T1 has an unsent draft in its input box; send it or clear it in Dash first',
+    );
+    expect(pane.write).not.toHaveBeenCalled();
+  });
+
+  it('types into an empty input box', async () => {
+    await startDirectPty({ id: 't1', cols: 80, rows: 24 });
+    const pane = procs()[0]!;
+    pane.emit(SCREEN(''));
+    const done = submitToAgent('t1', 'hi');
+    await flush();
+    await vi.advanceTimersByTimeAsync(100);
+    await done;
+    expect(pane.write.mock.calls[0]).toEqual([PASTE('hi')]);
+  });
+
+  it('refuses a draft the hidden attach repaints, and still detaches it', async () => {
+    const done = submitToAgent('t1', 'hi');
+    const rejected = expect(done).rejects.toBeInstanceOf(DraftPresentError);
+    await flush();
+    const proc = procs()[0]!;
+    proc.emit(SCREEN('left from earlier'));
+    await vi.advanceTimersByTimeAsync(600);
+    await rejected;
+    expect(proc.write).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(3_100);
+    expect(proc.kill).toHaveBeenCalledWith('SIGTERM');
+    expect(hasPty('t1')).toBe(false);
   });
 
   it('strips paste markers from the text so it cannot end the paste early', async () => {

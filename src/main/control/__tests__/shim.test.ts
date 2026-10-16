@@ -294,28 +294,49 @@ describe('dash-mcp launcher', () => {
     expect(shQuote(`/a b/it's`)).toBe(`'/a b/it'\\''s'`);
   });
 
-  it('writes an executable script that runs the shim under Electron as Node', () => {
+  it('copies the shim into userData and writes an executable script that runs the copy', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dash launcher's-"));
     try {
       const file = writeLauncher(dir, {
+        env: {},
         execPath: '/Apps/Dash.app/Electron',
-        shimPath: '/x/dash-mcp.js',
+        bundledShimPath: shimPath,
       });
-      expect(file).toBe(controlPaths(dir).launcher);
+      const paths = controlPaths(dir);
+      expect(file).toBe(paths.launcher);
       expect(fs.statSync(file).mode & 0o777).toBe(0o755);
+      // The copy survives the app's own folder going away (an AppImage mount).
+      expect(fs.readFileSync(paths.shim, 'utf8')).toBe(fs.readFileSync(shimPath, 'utf8'));
       const content = fs.readFileSync(file, 'utf8');
       expect(content).toBe(
         launcherScript({
           userDataDir: dir,
           execPath: '/Apps/Dash.app/Electron',
-          shimPath: '/x/dash-mcp.js',
+          shimPath: paths.shim,
         }),
       );
       expect(content.startsWith('#!/bin/sh\n')).toBe(true);
       expect(content).toContain(
-        `DASH_USER_DATA_DIR=${shQuote(dir)} ELECTRON_RUN_AS_NODE=1 exec '/Apps/Dash.app/Electron' '/x/dash-mcp.js' "$@"`,
+        `DASH_USER_DATA_DIR=${shQuote(dir)} ELECTRON_RUN_AS_NODE=1 exec '/Apps/Dash.app/Electron' ${shQuote(paths.shim)} "$@"`,
       );
-      expect(fs.readdirSync(path.dirname(file))).toEqual(['dash-mcp']);
+      expect(fs.readdirSync(path.dirname(file)).sort()).toEqual(['dash-mcp', 'dash-mcp.js']);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('execs the AppImage file, not the per-launch mount, when APPIMAGE is set', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-launcher-'));
+    try {
+      const file = writeLauncher(dir, {
+        env: { APPIMAGE: '/home/me/Apps/Dash.AppImage' },
+        bundledShimPath: shimPath,
+      });
+      const content = fs.readFileSync(file, 'utf8');
+      expect(content).toContain(
+        `ELECTRON_RUN_AS_NODE=1 exec '/home/me/Apps/Dash.AppImage' ${shQuote(controlPaths(dir).shim)} "$@"`,
+      );
+      expect(content).not.toContain(process.execPath);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -324,7 +345,7 @@ describe('dash-mcp launcher', () => {
   it('runs: the written launcher starts the shim, which exits on EOF', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dash launcher's-"));
     try {
-      const file = writeLauncher(dir, { shimPath });
+      const file = writeLauncher(dir, { env: {}, bundledShimPath: shimPath });
       const child = spawn(file, [], { stdio: ['ignore', 'pipe', 'pipe'] });
       const code = await new Promise<number | null>((resolve) =>
         child.on('exit', (c) => resolve(c)),

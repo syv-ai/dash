@@ -59,6 +59,9 @@ beforeEach(() => {
     }),
     taskDefaults: vi.fn(() => undefined),
     resolveBaseRef: vi.fn(async () => 'main'),
+    currentBranch: vi.fn(async (): Promise<string | null> => 'live-head'),
+    branchExists: vi.fn(async () => true),
+    recheckTrust: vi.fn(async (id: string) => !untrusted[id]),
     createTask: vi.fn(async (input: CreateTaskInput) => {
       const task = makeTask({
         id: 'new',
@@ -250,13 +253,23 @@ describe('tasks.create', () => {
         pushRemote: false,
         permissionMode: 'default',
         model: 'default',
-        contextPrompt: 'write a README',
+        initialPrompt: 'write a README',
+        contextPrompt: undefined,
         dashAccess: undefined,
         parentTaskId: 'me',
       },
       { startSession: true, source: 'api' },
     );
     expect(result).toMatchObject({ session: 'started', task: { id: 'new', parentTaskId: 'me' } });
+  });
+
+  it("sends the project's context prompt as context and the API prompt as a one-shot", async () => {
+    deps.taskDefaults.mockReturnValue({ contextPrompt: 'Use pnpm.' });
+    await registry.call(orch, 'tasks.create', { projectId: 'pA', name: 'x', prompt: 'go' });
+    expect(deps.createTask.mock.calls[0]![0]).toMatchObject({
+      contextPrompt: 'Use pnpm.',
+      initialPrompt: 'go',
+    });
   });
 
   it('refuses a task caller creating in another project', async () => {
@@ -304,7 +317,9 @@ describe('tasks.create', () => {
     await registry.call(orch, 'tasks.create', { projectId: 'pNoGit', name: 'c' });
     const inputs = deps.createTask.mock.calls.map((c) => c[0]);
     expect(inputs[0]).toMatchObject({ kind: 'worktree-existing', branch: 'feat/x' });
-    expect(inputs[1]).toMatchObject({ kind: 'in-place-checkout', branch: 'main' });
+    // In place with no branch stays on the project's live HEAD.
+    expect(deps.currentBranch).toHaveBeenCalledWith('/repos/pA');
+    expect(inputs[1]).toMatchObject({ kind: 'in-place-checkout', branch: 'live-head' });
     expect(inputs[2]).toMatchObject({ kind: 'in-place-no-git' });
   });
 
@@ -323,6 +338,50 @@ describe('tasks.create', () => {
         registry.call(orch, 'tasks.create', { projectId: 'pNoGit', name: 'a', kind: 'new-branch' }),
       ),
     ).toBe(400);
+  });
+});
+
+describe('tasks.create branch checks', () => {
+  const create = (input: Record<string, unknown>) =>
+    status(registry.call(orch, 'tasks.create', { projectId: 'pA', name: 'x', ...input }));
+
+  it('400s in place on a detached HEAD without a branch', async () => {
+    deps.currentBranch.mockResolvedValue(null);
+    expect(await create({ kind: 'in-place' })).toBe(400);
+    expect(deps.createTask).not.toHaveBeenCalled();
+  });
+
+  it.each(['.', '-f', '--orphan=x', '../x', '/abs', 'a..b', 'HEAD~1', 'a b', 'x.lock'])(
+    'rejects the branch %j in the schema',
+    async (branch) => {
+      expect(await create({ kind: 'in-place', branch })).toBe(400);
+      expect(await create({ kind: 'existing-branch', branch })).toBe(400);
+      expect(deps.branchExists).not.toHaveBeenCalled();
+      expect(deps.createTask).not.toHaveBeenCalled();
+    },
+  );
+
+  it('400s a branch git does not know', async () => {
+    deps.branchExists.mockResolvedValue(false);
+    expect(await create({ kind: 'in-place', branch: 'nope' })).toBe(400);
+    expect(await create({ kind: 'existing-branch', branch: 'nope' })).toBe(400);
+    expect(deps.branchExists).toHaveBeenCalledWith('/repos/pA', 'nope');
+    expect(deps.createTask).not.toHaveBeenCalled();
+  });
+});
+
+describe('archived tasks', () => {
+  it('restart, open and send refuse an archived task', async () => {
+    for (const name of ['tasks.restart', 'tasks.open']) {
+      await expect(registry.call(orch, name, { taskId: 'old' })).rejects.toMatchObject({
+        status: 409,
+        message: 'old is archived; restore it first',
+      });
+    }
+    expect(await status(registry.call(orch, 'tasks.send', { taskId: 'old', text: 'x' }))).toBe(409);
+    expect(deps.restartSession).not.toHaveBeenCalled();
+    expect(deps.startSession).not.toHaveBeenCalled();
+    expect(deps.openTask).not.toHaveBeenCalled();
   });
 });
 
@@ -429,6 +488,35 @@ describe('tasks.send', () => {
       409,
     );
     expect(deps.submitToAgent).not.toHaveBeenCalled();
+  });
+
+  it('rechecks trust: a folder trusted outside Dash clears needs-trust and the send goes on', async () => {
+    untrusted = { child: '/repo' };
+    deps.recheckTrust.mockImplementation(async (id: string) => {
+      delete untrusted[id];
+      return true;
+    });
+    deps.startSession.mockImplementation(() => {
+      activity = { child: { state: 'idle' } };
+      return Promise.resolve({ jobId: 'job-1' });
+    });
+    await registry.call(orch, 'tasks.send', { taskId: 'child', text: 'go' });
+    expect(deps.recheckTrust).toHaveBeenCalledWith('child');
+    expect(deps.startSession).toHaveBeenCalledWith('child');
+    expect(deps.submitToAgent).toHaveBeenCalledWith('child', 'go');
+  });
+
+  it('get rechecks a needs-trust task, and only then', async () => {
+    await registry.call(orch, 'tasks.get', { taskId: 'child' });
+    expect(deps.recheckTrust).not.toHaveBeenCalled();
+    untrusted = { child: '/repo' };
+    deps.recheckTrust.mockImplementation(async (id: string) => {
+      delete untrusted[id];
+      return true;
+    });
+    expect(await registry.call(orch, 'tasks.get', { taskId: 'child' })).toMatchObject({
+      state: 'stopped',
+    });
   });
 
   it('refuses text over 32 KB', async () => {

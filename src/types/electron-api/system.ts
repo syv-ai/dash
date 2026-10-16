@@ -40,6 +40,8 @@ export interface SystemApi {
   setUltracode: (enabled: boolean) => void;
   /** `claude stop` every task session when Dash quits (default: sessions live on). */
   setStopSessionsOnQuit: (enabled: boolean) => void;
+  /** Dash's theme, for sessions started with no pane (the control API). */
+  setIsDark: (isDark: boolean) => void;
   /** Settings "Let other agents control Dash": gates orchestrator calls to the control API. */
   setOrchestratorAccess: (enabled: boolean) => void;
   getControlInfo: () => Promise<IpcResponse<ControlInfo>>;

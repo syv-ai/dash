@@ -32,7 +32,7 @@ export interface DispatchArgsOptions {
   mcpConfigPath?: string;
   /** `permissions.allow` rules (the read-only Dash tools), merged into `--settings`. */
   allowTools?: string[];
-  /** Optional first prompt, always the last positional. */
+  /** Optional first prompt, always the last positional, after `--`. */
   prompt?: string;
 }
 
@@ -40,7 +40,8 @@ export function buildDispatchArgs(opts: DispatchArgsOptions): string[] {
   // Rule: no variadic flag (`--mcp-config`, `--allowedTools`, …) may come
   // directly before the prompt, or the CLI reads the prompt as one more value
   // and the job starts with none. `--mcp-config` therefore goes right after
-  // `--bg`, and `--name` closes it.
+  // `--bg`, and `--name` closes it. The prompt itself follows `--`, so one
+  // starting with "-" (a markdown bullet) is not parsed as an option.
   const args: string[] = ['--bg'];
   if (opts.mcpConfigPath) {
     args.push('--mcp-config', opts.mcpConfigPath);
@@ -66,7 +67,7 @@ export function buildDispatchArgs(opts: DispatchArgsOptions): string[] {
     args.push('--resume', opts.resumeSessionId);
   }
   if (opts.prompt) {
-    args.push(opts.prompt);
+    args.push('--', opts.prompt);
   }
   return args;
 }

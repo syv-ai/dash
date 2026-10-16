@@ -152,6 +152,43 @@ describe('projectsStore loadProjects / loadTasks', () => {
     await useProjects.getState().loadTasks('p1');
     expect(useProjects.getState().tasksByProject.p1!.map((t) => t.id)).toEqual(['t1']);
   });
+
+  it('loadTasks disposes the sessions of a task that disappeared and deselects it', async () => {
+    const useProjects = await freshStore();
+    const { sessionRegistry } = await import('../../terminal/SessionRegistry');
+    useProjects.setState({ tasksByProject: { p1: [task('t1', 'p1'), task('t2', 'p1')] } });
+    useProjects.getState().setActiveTask('t1');
+    // Deleted elsewhere (the control API): main only says the list changed.
+    api.getTasks.mockResolvedValue({ success: true, data: [task('t2', 'p1')] });
+    await useProjects.getState().loadTasks('p1');
+    expect(sessionRegistry.dispose).toHaveBeenCalledWith('t1');
+    expect(sessionRegistry.dispose).toHaveBeenCalledWith('shell:t1');
+    expect(sessionRegistry.disposeByPrefix).toHaveBeenCalledWith('shell:t1:');
+    expect(sessionRegistry.disposeByPrefix).toHaveBeenCalledWith('service:t1:');
+    expect(sessionRegistry.dispose).not.toHaveBeenCalledWith('t2');
+    expect(api.ptyClearSnapshot).toHaveBeenCalledWith('t1');
+    expect(useProjects.getState().activeTaskId).toBeNull();
+  });
+
+  it('loadTasks drops a response a newer load overtook, so a new task is not read as deleted', async () => {
+    const useProjects = await freshStore();
+    const { sessionRegistry } = await import('../../terminal/SessionRegistry');
+    let releaseStale!: () => void;
+    api.getTasks
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseStale = () => resolve({ success: true, data: [] });
+          }),
+      )
+      .mockResolvedValueOnce({ success: true, data: [task('new', 'p1')] });
+    const stale = useProjects.getState().loadTasks('p1');
+    await useProjects.getState().loadTasks('p1');
+    releaseStale();
+    await stale;
+    expect(useProjects.getState().tasksByProject.p1!.map((t) => t.id)).toEqual(['new']);
+    expect(sessionRegistry.dispose).not.toHaveBeenCalledWith('new');
+  });
 });
 
 describe('projectsStore reordering', () => {

@@ -87,6 +87,21 @@ function disposeTaskSessions(taskId: string) {
   void sessionRegistry.disposeByPrefix(`shell:${taskId}:`);
 }
 
+/** Per project, the latest loadTasks call; an older response that lands later is stale. */
+const taskLoadSeq = new Map<string, number>();
+
+/**
+ * UI cleanup for a task main deleted (from the dialog or the control API):
+ * every terminal session, its service tabs (main killed their PTYs), the
+ * snapshot so a new task in the same cwd starts fresh, and the selection.
+ */
+function forgetDeletedTask(taskId: string) {
+  disposeTaskSessions(taskId);
+  void sessionRegistry.disposeByPrefix(`service:${taskId}:`);
+  void window.electronAPI.ptyClearSnapshot(taskId);
+  if (useProjects.getState().activeTaskId === taskId) useProjects.getState().setActiveTask(null);
+}
+
 /** Sort projects by the saved projectOrder, pruning stale ids from storage. */
 function applyProjectOrder(projectList: Project[]): Project[] {
   const store = ls();
@@ -173,9 +188,19 @@ export const useProjects = create<ProjectsStore>((set) => ({
     }
   },
   loadTasks: async (projectId) => {
+    const seq = (taskLoadSeq.get(projectId) ?? 0) + 1;
+    taskLoadSeq.set(projectId, seq);
     const resp = await window.electronAPI.getTasks(projectId);
+    // A stale list would read a task created since as deleted.
+    if (taskLoadSeq.get(projectId) !== seq) return;
     if (resp.success && resp.data) {
+      // The list holds archived tasks too, so a task that left it was deleted.
+      const kept = new Set(resp.data.map((t) => t.id));
+      const removed = (useProjects.getState().tasksByProject[projectId] ?? []).filter(
+        (t) => !kept.has(t.id),
+      );
       set((s) => ({ tasksByProject: { ...s.tasksByProject, [projectId]: resp.data! } }));
+      for (const t of removed) forgetDeletedTask(t.id);
     }
   },
   reorderProjects: (reordered) => {
@@ -249,13 +274,7 @@ export const useProjects = create<ProjectsStore>((set) => ({
       toast.error(resp.error || 'Failed to delete task');
       return;
     }
-    // Clean up all terminal sessions and the snapshot so a new task in the
-    // same cwd starts fresh.
-    disposeTaskSessions(taskItem.id);
-    void window.electronAPI.ptyClearSnapshot(taskItem.id);
-    if (useProjects.getState().activeTaskId === taskItem.id) {
-      useProjects.getState().setActiveTask(null);
-    }
+    forgetDeletedTask(taskItem.id);
     await useProjects.getState().loadTasks(taskItem.projectId);
   },
   deleteProject: async (project, options) => {

@@ -251,6 +251,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setUltracode: (enabled: boolean) => ipcRenderer.send('app:setUltracode', enabled),
   setStopSessionsOnQuit: (enabled: boolean) =>
     ipcRenderer.send('app:setStopSessionsOnQuit', enabled),
+  setIsDark: (isDark: boolean) => ipcRenderer.send('app:setIsDark', isDark),
   setOrchestratorAccess: (enabled: boolean) =>
     ipcRenderer.send('app:setOrchestratorAccess', enabled),
   getControlInfo: () => ipcRenderer.invoke('app:getControlInfo'),

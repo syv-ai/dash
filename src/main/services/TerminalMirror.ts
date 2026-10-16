@@ -62,7 +62,9 @@ export class TerminalMirror {
         for (let i = 0; i < buf.length; i++) {
           const line = buf.getLine(i);
           if (!line) continue;
-          const text = line.translateToString(true);
+          // Trim only at a real line end: a row that wraps into the next one
+          // keeps its trailing cells, or a space on its last column is lost.
+          const text = line.translateToString(!buf.getLine(i + 1)?.isWrapped);
           if (line.isWrapped && lines.length > 0) lines[lines.length - 1] += text;
           // A full-screen TUI leaves empty rows between its output and the input
           // box; keep one so they don't use up the caller's line budget.

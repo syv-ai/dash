@@ -15,6 +15,7 @@ import { parseUntrustedRoot } from './supervisorSession';
 import { isWorkspaceTrusted } from '../utils/claudePaths';
 import { DatabaseService } from './DatabaseService';
 import { mcpConfigForDispatch } from '../control/mcpConfig';
+import { AttachScreen } from './composerDraft';
 import { writeHookSettings, setCommitAttributionValue } from './ptyHookSettings';
 import type { PermissionMode, TaskModel } from '@shared/types';
 
@@ -43,6 +44,9 @@ interface PtyRecord {
    * its whole screen on every attach, so there is nothing to mirror.
    */
   mirror: TerminalMirror | null;
+  /** Agent attach clients only: their screen, so submitToAgent can see a draft
+   *  in the input box. Never persisted (an attach repaints anyway). */
+  screen: AttachScreen | null;
 }
 
 const ptys = new Map<string, PtyRecord>();
@@ -132,6 +136,20 @@ const untrustedRoots = new Map<string, string>();
  *  on Claude Code's trust prompt. */
 export function getUntrustedRoot(taskId: string): string | undefined {
   return untrustedRoots.get(taskId);
+}
+
+/**
+ * Whether the task is clear of the needs-trust mark: true when it has none, or
+ * when its root has been trusted since (`claude` run in the folder outside
+ * Dash), in which case the mark is dropped. False while the root still waits
+ * on the trust prompt.
+ */
+export async function recheckWorkspaceTrust(taskId: string): Promise<boolean> {
+  const root = untrustedRoots.get(taskId);
+  if (!root) return true;
+  if (!(await isWorkspaceTrusted(root))) return false;
+  if (untrustedRoots.get(taskId) === root) untrustedRoots.delete(taskId);
+  return true;
 }
 
 function consumeInitialPrompt(taskId: string): string | undefined {
@@ -376,7 +394,16 @@ function spawnAttach(options: {
     featureId: null,
     jobId: options.jobId,
     mirror: null,
+    screen: new AttachScreen(options.cols, options.rows),
   };
+  // A client spawned for this id while the caller awaited the session (a
+  // hidden attach from submitToAgent) is replaced, not orphaned. Its own exit
+  // and linger handlers check identity, so they leave the new one alone.
+  const previous = ptys.get(options.id);
+  if (previous) {
+    teardownRecord(options.id, previous);
+    void gracefulKillProc(previous.proc);
+  }
   ptys.set(options.id, record);
 
   // Forward output to renderer, replacing the Claude logo with "7" art.
@@ -387,6 +414,7 @@ function spawnAttach(options: {
   });
 
   proc.onData((data: string) => {
+    record.screen?.write(data);
     bannerFilter(data);
     if (options.taskId) activityMonitor.noteData(options.taskId);
     remoteControlService.onPtyData(options.id, data);
@@ -402,6 +430,7 @@ function spawnAttach(options: {
     if (record.owner && !record.owner.isDestroyed()) {
       record.owner.send(`pty:exit:${options.id}`, { exitCode, signal });
     }
+    disposeScreen(record);
     ptys.delete(options.id);
   });
 
@@ -409,11 +438,28 @@ function spawnAttach(options: {
 }
 
 /**
- * Theme the last pane start passed. A start with no pane (the control API)
- * reuses it: Dash's theme is not the OS theme, and the env is frozen into the
- * job, so guessing wrong would stick for the session's life.
+ * Dash's resolved theme, as the renderer reports it at boot and on change (a
+ * pane start's own isDark also lands here). A start with no pane (the control
+ * API) uses it: Dash's theme is not the OS theme, and the env is frozen into
+ * the job, so guessing wrong would stick for the session's life.
  */
 let lastIsDark = true;
+
+export function setAppIsDark(isDark: boolean): void {
+  lastIsDark = isDark;
+}
+
+type TaskSessionStart = {
+  jobId: string;
+  cwd: string;
+  env: Record<string, string>;
+  claudePath: string;
+};
+
+/** Per task, the start in flight: a second caller (a pane and the control API
+ *  at once) awaits it instead of reading the same empty job id and
+ *  dispatching a second job. */
+const sessionStarts = new Map<string, Promise<TaskSessionStart>>();
 
 /**
  * Make sure the task's session runs under the supervisor, reading everything
@@ -421,10 +467,23 @@ let lastIsDark = true;
  * starts. Throws UntrustedWorkspaceError when the folder needs the trust
  * prompt, and an UNSUPPORTED_CLI IpcError on a missing or too-old CLI.
  */
-async function ensureTaskSessionFor(
+function ensureTaskSessionFor(
   taskId: string,
   opts: { isDark?: boolean },
-): Promise<{ jobId: string; cwd: string; env: Record<string, string>; claudePath: string }> {
+): Promise<TaskSessionStart> {
+  const inFlight = sessionStarts.get(taskId);
+  if (inFlight) return inFlight;
+  const start = startTaskSessionNow(taskId, opts).finally(() => {
+    if (sessionStarts.get(taskId) === start) sessionStarts.delete(taskId);
+  });
+  sessionStarts.set(taskId, start);
+  return start;
+}
+
+async function startTaskSessionNow(
+  taskId: string,
+  opts: { isDark?: boolean },
+): Promise<TaskSessionStart> {
   // Hard floor: never start a task session on a missing or too-old CLI.
   await requireSupportedClaude();
   const task = DatabaseService.getTask(taskId);
@@ -575,6 +634,7 @@ export async function runTrustPrompt(options: {
     featureId: null,
     jobId: null,
     mirror: null,
+    screen: null,
   };
   ptys.set(options.id, record);
   proc.onData((data: string) => {
@@ -776,6 +836,7 @@ export async function startPty(options: {
     featureId: null,
     jobId: null,
     mirror: new TerminalMirror(options.cols, options.rows),
+    screen: null,
   };
 
   ptys.set(options.id, record);
@@ -878,12 +939,25 @@ function bracketedPaste(text: string): string {
 }
 
 /**
+ * submitToAgent found text the user typed but has not sent in the session's
+ * input box (shared by every attach client). Pasting and pressing Enter would
+ * send the draft and the message as one.
+ */
+export class DraftPresentError extends Error {
+  constructor(taskName: string) {
+    super(`${taskName} has an unsent draft in its input box; send it or clear it in Dash first`);
+    this.name = 'DraftPresentError';
+  }
+}
+
+/**
  * Type `text` into the task's agent and submit it, as a person would in the
  * pane. With no attach client open (nobody has the task open), a hidden one
  * is spawned for the submit and detached 3 s later; detaching never touches
  * the session. A pane that mounts meanwhile replaces the hidden client, and
- * the timer leaves it alone. Callers decide whether the agent may be typed
- * into (tasks.send refuses a task waiting for a person).
+ * the timer leaves it alone. Rejects with DraftPresentError, typing nothing,
+ * when the input box holds a draft. Callers decide whether the agent may be
+ * typed into (tasks.send refuses a task waiting for a person).
  */
 export function submitToAgent(taskId: string, text: string): Promise<void> {
   const previous = submitChains.get(taskId) ?? Promise.resolve();
@@ -927,12 +1001,24 @@ async function submitNow(taskId: string, text: string): Promise<void> {
 
   const hidden = hiddenAttaches.get(taskId);
   if (hidden?.timer) clearTimeout(hidden.timer);
-  await typeAndSubmit(record, bracketedPaste(text));
-  // The Enter starts (or queues behind) a turn; mark it busy before the first
-  // hook lands so a tasks.wait right after a send does not return at once.
-  activityMonitor.setBusy(taskId);
+  try {
+    if (await record.screen?.hasDraft()) {
+      throw new DraftPresentError(DatabaseService.getTask(taskId)?.name ?? 'The task');
+    }
+    await typeAndSubmit(record, bracketedPaste(text));
+    // The Enter starts (or queues behind) a turn; mark it busy before the first
+    // hook lands so a tasks.wait right after a send does not return at once.
+    activityMonitor.setBusy(taskId);
+  } finally {
+    if (hidden) detachHiddenLater(taskId, hidden);
+  }
+}
 
-  if (!hidden) return;
+/** Detach a hidden attach HIDDEN_ATTACH_LINGER_MS after its submit (or refusal). */
+function detachHiddenLater(
+  taskId: string,
+  hidden: { record: PtyRecord; timer: ReturnType<typeof setTimeout> | null },
+): void {
   if (hidden.record !== ptys.get(taskId)) {
     hiddenAttaches.delete(taskId); // a pane took over
     return;
@@ -967,6 +1053,7 @@ export function resizePty(id: string, cols: number, rows: number): void {
   const record = ptys.get(id);
   if (record) {
     record.mirror?.resize(cols, rows);
+    record.screen?.resize(cols, rows);
     try {
       record.proc.resize(cols, rows);
     } catch {
@@ -1045,6 +1132,12 @@ function teardownRecord(id: string, record: PtyRecord): void {
   // Persist before killing — restart() relies on the snapshot for visual
   // context when it respawns into the same id.
   persistAndDisposeMirror(id, record);
+  disposeScreen(record);
+}
+
+function disposeScreen(record: PtyRecord): void {
+  record.screen?.dispose();
+  record.screen = null;
 }
 
 /**
@@ -1092,6 +1185,7 @@ export async function killAll(): Promise<void> {
   const pending: Promise<void>[] = [];
   for (const [id, record] of ptys) {
     persistAndDisposeMirror(id, record);
+    disposeScreen(record);
     pending.push(gracefulKillProc(record.proc));
   }
   ptys.clear();
@@ -1201,6 +1295,7 @@ export async function startCommandPty(options: {
     featureId: options.featureId,
     jobId: null,
     mirror: new TerminalMirror(options.cols, options.rows),
+    screen: null,
   };
 
   ptys.set(options.id, record);
@@ -1237,6 +1332,7 @@ export function __testReset(): void {
   for (const record of ptys.values()) {
     record.mirror?.dispose();
     record.mirror = null;
+    disposeScreen(record);
   }
   ptys.clear();
   untrustedRoots.clear();
@@ -1244,6 +1340,7 @@ export function __testReset(): void {
   for (const hidden of hiddenAttaches.values()) if (hidden.timer) clearTimeout(hidden.timer);
   hiddenAttaches.clear();
   submitChains.clear();
+  sessionStarts.clear();
   lastIsDark = true;
 }
 
@@ -1267,5 +1364,6 @@ export function __registerForTest(
     featureId: rec.featureId,
     jobId: null,
     mirror: null,
+    screen: null,
   });
 }

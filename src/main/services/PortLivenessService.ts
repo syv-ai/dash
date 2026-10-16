@@ -5,10 +5,16 @@ import type { PortLiveness, PortLivenessUpdate } from '@shared/types';
 const POLL_INTERVAL_MS = 2000;
 const CONNECT_TIMEOUT_MS = 200;
 
+/** Who keeps a task watched: the ports panel, or a control-API lease. */
+type WatchOwner = 'renderer' | 'api';
+
 interface WatchEntry {
   ports: number[];
   states: Map<number, PortLiveness>;
   timer: NodeJS.Timeout;
+  owners: Set<WatchOwner>;
+  /** Ends the API's lease (unwatches as 'api'); refreshed by each leaseTask. */
+  leaseTimer?: NodeJS.Timeout;
 }
 
 /**
@@ -20,6 +26,10 @@ interface WatchEntry {
  * One timer per watched task instead of one global tick so that adding/
  * removing a task doesn't reshuffle every other task's probe phase, and so
  * task removal cleans up cleanly without a sweep.
+ *
+ * A watch has owners, and probing stops only when the last one lets go: the
+ * renderer's unwatch must not cancel a control-API lease, nor the lease's
+ * expiry the renderer's watch.
  */
 class PortLivenessService {
   private watches = new Map<string, WatchEntry>();
@@ -29,7 +39,7 @@ class PortLivenessService {
    * preserves the existing states for ports still present so the dot doesn't
    * flicker through 'unknown' on every config edit.
    */
-  watchTask(taskId: string, ports: number[]): void {
+  watchTask(taskId: string, ports: number[], owner: WatchOwner = 'renderer'): void {
     const previous = this.watches.get(taskId);
     if (previous) clearInterval(previous.timer);
 
@@ -40,6 +50,7 @@ class PortLivenessService {
     }
 
     if (ports.length === 0) {
+      if (previous?.leaseTimer) clearTimeout(previous.leaseTimer);
       this.watches.delete(taskId);
       this.broadcast({ taskId, results: {} });
       return;
@@ -50,17 +61,46 @@ class PortLivenessService {
     };
     const timer = setInterval(probe, POLL_INTERVAL_MS);
     timer.unref?.();
-    this.watches.set(taskId, { ports, states, timer });
+    const owners = new Set(previous?.owners);
+    owners.add(owner);
+    this.watches.set(taskId, { ports, states, timer, owners, leaseTimer: previous?.leaseTimer });
 
     // Kick a first probe immediately so the panel doesn't sit on 'unknown'
     // for two seconds after opening a task.
     probe();
   }
 
-  unwatchTask(taskId: string): void {
+  /**
+   * Watch on behalf of the control API for `ms`: each call restarts the
+   * lease, and when it runs out the API's ownership goes (see unwatchTask).
+   */
+  leaseTask(taskId: string, ports: number[], ms: number): void {
+    this.watchTask(taskId, ports, 'api');
+    const entry = this.watches.get(taskId);
+    if (!entry) return;
+    if (entry.leaseTimer) clearTimeout(entry.leaseTimer);
+    entry.leaseTimer = setTimeout(() => this.unwatchTask(taskId, 'api'), ms);
+    entry.leaseTimer.unref?.();
+  }
+
+  /** Drop `owner`'s hold on the task; probing stops once nobody holds it. */
+  unwatchTask(taskId: string, owner: WatchOwner = 'renderer'): void {
+    const entry = this.watches.get(taskId);
+    if (!entry) return;
+    entry.owners.delete(owner);
+    if (owner === 'api' && entry.leaseTimer) {
+      clearTimeout(entry.leaseTimer);
+      entry.leaseTimer = undefined;
+    }
+    if (entry.owners.size === 0) this.forgetTask(taskId);
+  }
+
+  /** Stop watching the task whoever holds it (task delete). */
+  forgetTask(taskId: string): void {
     const entry = this.watches.get(taskId);
     if (!entry) return;
     clearInterval(entry.timer);
+    if (entry.leaseTimer) clearTimeout(entry.leaseTimer);
     this.watches.delete(taskId);
   }
 
@@ -72,7 +112,10 @@ class PortLivenessService {
 
   /** Clear every watcher (called on app quit). */
   clearAll(): void {
-    for (const entry of this.watches.values()) clearInterval(entry.timer);
+    for (const entry of this.watches.values()) {
+      clearInterval(entry.timer);
+      if (entry.leaseTimer) clearTimeout(entry.leaseTimer);
+    }
     this.watches.clear();
   }
 

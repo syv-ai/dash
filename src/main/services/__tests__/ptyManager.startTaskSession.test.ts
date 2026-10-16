@@ -79,10 +79,23 @@ const mcp = vi.hoisted(() => ({
 }));
 vi.mock('../../control/mcpConfig', () => ({ mcpConfigForDispatch: mcp.forDispatch }));
 
+const trust = vi.hoisted(() => ({ trusted: false }));
+vi.mock('../../utils/claudePaths', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../utils/claudePaths')>()),
+  isWorkspaceTrusted: async () => trust.trusted,
+}));
+
 const ptySpawn = vi.hoisted(() => vi.fn());
 vi.mock('node-pty', () => ({ spawn: ptySpawn }));
 
-import { startTaskSession, getUntrustedRoot, setInitialPrompt, __testReset } from '../ptyManager';
+import {
+  startTaskSession,
+  getUntrustedRoot,
+  setInitialPrompt,
+  recheckWorkspaceTrust,
+  setAppIsDark,
+  __testReset,
+} from '../ptyManager';
 import { activityMonitor } from '../ActivityMonitor';
 
 function seed(over: Partial<Task> = {}): Task {
@@ -109,6 +122,7 @@ beforeEach(() => {
   hookWrites.length = 0;
   envCalls.length = 0;
   supported.reject = null;
+  trust.trusted = false;
   vi.clearAllMocks();
   activityMonitor.unregister('t1');
 });
@@ -226,6 +240,33 @@ describe('startTaskSession', () => {
     ]);
   });
 
+  it("uses the app's theme for a start with no pane; a pane's own isDark wins", async () => {
+    seed();
+    setAppIsDark(false);
+    await startTaskSession('t1');
+    expect(envCalls.at(-1)).toEqual([false, '/wt/fix-login']);
+    await startTaskSession('t1', { isDark: true });
+    expect(envCalls.at(-1)).toEqual([true, '/wt/fix-login']);
+    setAppIsDark(false);
+    await startTaskSession('t1');
+    expect(envCalls.at(-1)).toEqual([false, '/wt/fix-login']);
+  });
+
+  it('runs one dispatch for two concurrent starts and gives both its job', async () => {
+    seed();
+    const [a, b] = await Promise.all([startTaskSession('t1'), startTaskSession('t1')]);
+    expect(sup.dispatch).toHaveBeenCalledTimes(1);
+    expect(a).toEqual({ jobId: 'job-new' });
+    expect(b).toEqual({ jobId: 'job-new' });
+  });
+
+  it('starts again after a concurrent pair settles', async () => {
+    seed();
+    await Promise.all([startTaskSession('t1'), startTaskSession('t1')]);
+    await startTaskSession('t1');
+    expect(sup.dispatch).toHaveBeenCalledTimes(2); // the mock DB keeps jobId null
+  });
+
   it('refuses an unsupported CLI before touching the task', async () => {
     seed();
     supported.reject = new Error('Claude Code too old');
@@ -236,5 +277,35 @@ describe('startTaskSession', () => {
 
   it('throws for an unknown task', async () => {
     await expect(startTaskSession('nope')).rejects.toThrow(/not found/i);
+  });
+});
+
+describe('recheckWorkspaceTrust', () => {
+  async function refuseAsUntrusted(): Promise<void> {
+    seed();
+    sup.dispatch.mockRejectedValueOnce(
+      new sup.DispatchError(
+        'refused',
+        'Workspace not trusted. Run `claude` in /wt/fix-login once to trust it.',
+      ),
+    );
+    await startTaskSession('t1');
+  }
+
+  it('is true for a task never marked untrusted', async () => {
+    expect(await recheckWorkspaceTrust('t1')).toBe(true);
+  });
+
+  it('stays false while the root is still untrusted', async () => {
+    await refuseAsUntrusted();
+    expect(await recheckWorkspaceTrust('t1')).toBe(false);
+    expect(getUntrustedRoot('t1')).toBe('/wt/fix-login');
+  });
+
+  it('clears the mark once the root was trusted outside Dash', async () => {
+    await refuseAsUntrusted();
+    trust.trusted = true;
+    expect(await recheckWorkspaceTrust('t1')).toBe(true);
+    expect(getUntrustedRoot('t1')).toBeUndefined();
   });
 });

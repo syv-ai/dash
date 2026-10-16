@@ -39,7 +39,13 @@ const runner = {
   stop: vi.fn(async () => ({ ok: false, message: 'Nothing listening on :5500' })),
   output: vi.fn(async (): Promise<string | null> => 'ready on :3100'),
 };
+const tasks = [
+  makeTask({ id: 'me', projectId: 'pA', dashAccess: true }),
+  makeTask({ id: 'sibling', projectId: 'pA' }),
+  makeTask({ id: 'old', projectId: 'pA', archivedAt: '2026-01-03T00:00:00.000Z' }),
+];
 let deps: {
+  getTask: ReturnType<typeof vi.fn>;
   getPorts: ReturnType<typeof vi.fn>;
   watchLiveness: ReturnType<typeof vi.fn>;
   getLiveness: ReturnType<typeof vi.fn>;
@@ -51,6 +57,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   liveness = {};
   deps = {
+    getTask: vi.fn((id: string) => tasks.find((t) => t.id === id)),
     getPorts: vi.fn(() => ports),
     watchLiveness: vi.fn(() => {
       liveness = { 3100: 'up', 5500: 'down' };
@@ -59,15 +66,7 @@ beforeEach(() => {
     runner,
     sleep: vi.fn(async () => {}),
   };
-  registry = createRegistry(
-    fakeLookups(
-      [makeProject({ id: 'pA' })],
-      [
-        makeTask({ id: 'me', projectId: 'pA', dashAccess: true }),
-        makeTask({ id: 'sibling', projectId: 'pA' }),
-      ],
-    ),
-  );
+  registry = createRegistry(fakeLookups([makeProject({ id: 'pA' })], tasks));
   registerServiceCapabilities(registry, deps as never);
 });
 
@@ -135,6 +134,16 @@ describe('services.start / stop / output', () => {
       message: 'Nothing listening on :5500',
     });
     expect(runner.stop).toHaveBeenCalledWith('me', ports[1]);
+  });
+
+  it('refuses an archived task', async () => {
+    for (const name of ['services.start', 'services.stop']) {
+      await expect(
+        registry.call(orch, name, { taskId: 'old', label: 'Web' }),
+      ).rejects.toMatchObject({ status: 409, message: 'old is archived; restore it first' });
+    }
+    expect(runner.start).not.toHaveBeenCalled();
+    expect(runner.stop).not.toHaveBeenCalled();
   });
 
   it('404s an unknown label', async () => {

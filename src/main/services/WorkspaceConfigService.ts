@@ -207,15 +207,23 @@ export function loadSharedWorkspaceConfig(worktreePath: string): WorkspaceConfig
   return parseBaseConfig(parsed, configPath);
 }
 
-/** The effective config: config.json with config.local.json overlaid. */
+/**
+ * The effective config: config.json with config.local.json overlaid. A missing
+ * config.json overlays onto an empty config (a personal-only local file still
+ * applies); a broken one gives null. Null too when neither file exists.
+ */
 export function loadWorkspaceConfig(worktreePath: string): WorkspaceConfig | null {
-  const base = loadSharedWorkspaceConfig(worktreePath);
+  const hasShared = fs.existsSync(path.join(worktreePath, DASH_DIR, CONFIG_FILE));
+  const base = hasShared ? loadSharedWorkspaceConfig(worktreePath) : {};
   if (base === null) return null;
+  const noOverlay = hasShared ? base : null;
 
   const localPath = path.join(worktreePath, DASH_DIR, LOCAL_CONFIG_FILE);
   const localParsed = readJson(localPath);
-  if (localParsed === undefined) return base;
-  if (!localParsed || typeof localParsed !== 'object' || Array.isArray(localParsed)) return base;
+  if (localParsed === undefined) return noOverlay;
+  if (!localParsed || typeof localParsed !== 'object' || Array.isArray(localParsed)) {
+    return noOverlay;
+  }
 
   return applyLocalOverlay(base, localParsed as Record<string, unknown>);
 }

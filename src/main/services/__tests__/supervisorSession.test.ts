@@ -41,12 +41,19 @@ describe('buildDispatchArgs', () => {
       'opus',
       '--settings',
       '{"ultracode":true}',
+      '--',
       'do the thing',
     ]);
     expect(buildDispatchArgs({ name: 't', permissionMode: 'bypassPermissions' })).toContain(
       '--dangerously-skip-permissions',
     );
     expect(buildDispatchArgs({ name: 't', model: 'default' })).not.toContain('--model');
+  });
+
+  it('ends the options with -- so a prompt starting with "-" stays the prompt', () => {
+    const args = buildDispatchArgs({ name: 't', resumeSessionId: 's', prompt: '- fix the bug' });
+    expect(args.slice(-2)).toEqual(['--', '- fix the bug']);
+    expect(buildDispatchArgs({ name: 't' })).not.toContain('--');
   });
 
   it('puts --mcp-config right after --bg so --name closes the variadic flag', () => {

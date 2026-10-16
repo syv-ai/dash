@@ -7,11 +7,14 @@ import { loadWorkspaceConfig } from '../../services/WorkspaceConfigService';
 import { taskEvents } from '../../services/taskEvents';
 import { focusTaskInWindow } from '../../services/focusTask';
 import {
+  DraftPresentError,
   getUntrustedRoot,
+  recheckWorkspaceTrust,
   restartTaskSession,
   startTaskSession,
   submitToAgent,
 } from '../../services/ptyManager';
+import { GitService } from '../../services/GitService';
 import { WorkspacePortsRuntime } from '../../services/WorkspacePortsRuntime';
 import { portLivenessService } from '../../services/PortLivenessService';
 import { getServiceRunner } from '../../ipc/servicesIpc';
@@ -51,6 +54,9 @@ export function taskDeps(): TaskCapabilityDeps {
     },
     taskDefaults,
     resolveBaseRef: (projectPath) => worktreeService.resolveBaseRef(projectPath),
+    currentBranch: (projectPath) => GitService.getBranch(projectPath),
+    branchExists: (projectPath, branch) => GitService.branchExists(projectPath, branch),
+    recheckTrust: recheckWorkspaceTrust,
     createTask: (input, opts) => TaskService.create(input, opts),
     archiveTask: (id) => TaskService.archive(id),
     restoreTask: (id) => TaskService.restore(id),
@@ -65,14 +71,27 @@ export function taskDeps(): TaskCapabilityDeps {
         throw new ControlError(409, 'Dash has no window open');
       }
     },
-    submitToAgent,
+    submitToAgent: async (taskId, text) => {
+      try {
+        await submitToAgent(taskId, text);
+      } catch (err) {
+        // A person's unsent draft in the composer: theirs to send or clear.
+        if (err instanceof DraftPresentError) throw new ControlError(409, err.message);
+        throw err;
+      }
+    },
   };
 }
 
+/** How long one services_list keeps the task's ports probed (each call renews it). */
+const LIVENESS_LEASE_MS = 60_000;
+
 export function serviceDeps(): ServiceCapabilityDeps {
   return {
+    getTask: (id) => DatabaseService.getTask(id),
     getPorts: (taskId) => WorkspacePortsRuntime.getPortsForTask(taskId),
-    watchLiveness: (taskId, hostPorts) => portLivenessService.watchTask(taskId, hostPorts),
+    watchLiveness: (taskId, hostPorts) =>
+      portLivenessService.leaseTask(taskId, hostPorts, LIVENESS_LEASE_MS),
     getLiveness: (taskId) => portLivenessService.getStates(taskId),
     // The same runner the drawer uses, so a service started here shows there.
     runner: getServiceRunner(),

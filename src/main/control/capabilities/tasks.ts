@@ -44,6 +44,13 @@ export interface TaskCapabilityDeps {
   taskDefaults(projectPath: string): WorkspaceTaskDefaults | undefined;
   /** Git's default base when nothing names one (the remote's HEAD branch). */
   resolveBaseRef(projectPath: string): Promise<string>;
+  /** The branch checked out in the folder now; null on a detached HEAD. */
+  currentBranch(projectPath: string): Promise<string | null>;
+  /** A valid branch name that exists locally or on origin (GitService.branchExists). */
+  branchExists(projectPath: string, branch: string): Promise<boolean>;
+  /** Re-read Claude Code's trust for the task's folder, clearing a stale
+   *  needs-trust mark; true when the task is not (or no longer) untrusted. */
+  recheckTrust(taskId: string): Promise<boolean>;
   createTask(input: CreateTaskInput, opts: CreateTaskRunOptions): Promise<CreateTaskResult>;
   archiveTask(id: string): Promise<void>;
   restoreTask(id: string): Promise<void>;
@@ -54,7 +61,8 @@ export interface TaskCapabilityDeps {
   readLogs(jobId: string): Promise<string>;
   /** Show and focus Dash's window on the task. */
   openTask(task: Task): void;
-  /** Paste `text` into the task's agent and submit it (ptyManager.submitToAgent). */
+  /** Paste `text` into the task's agent and submit it (ptyManager.submitToAgent);
+   *  a 409 ControlError while the composer holds a person's draft. */
   submitToAgent(taskId: string, text: string): Promise<void>;
 }
 
@@ -98,6 +106,33 @@ export function toTaskView(
 
 const taskIdInput = z.object({ taskId: z.string().describe('The task id') });
 
+/** The one refusal for acting on an archived task (send, open, restart, services). */
+export function assertNotArchived(task: Task): void {
+  if (task.archivedAt) throw new ControlError(409, `${task.name} is archived; restore it first`);
+}
+
+/**
+ * A branch name, never an option, path or revision expression: it reaches
+ * `git checkout` / `git worktree add` in the project folder. Git's own check
+ * (deps.branchExists) runs after; this keeps the obvious cases out of git.
+ */
+const branchName = z
+  .string()
+  .trim()
+  .min(1)
+  .refine(
+    (b) =>
+      !/^[-./]/.test(b) &&
+      !b.endsWith('/') &&
+      !b.endsWith('.') &&
+      !b.endsWith('.lock') &&
+      !b.includes('..') &&
+      !b.includes('@{') &&
+      // eslint-disable-next-line no-control-regex
+      !/[\s~^:?*\\[\]\x00-\x1f\x7f]/.test(b),
+    'not a branch name',
+  );
+
 /** Output is replayed into a terminal this size (`claude logs` repaints a full screen). */
 const OUTPUT_COLS = 200;
 const OUTPUT_ROWS = 50;
@@ -121,6 +156,12 @@ function matchesUntil(until: WaitUntil, view: TaskView, initial: TaskView): bool
 export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilityDeps): void {
   const view = (task: Task): TaskView =>
     toTaskView(task, deps.getActivity(), deps.getUntrustedRoot);
+  /** view, after re-reading trust for a task marked untrusted (it may have
+   *  been accepted outside Dash since). */
+  const freshView = async (task: Task): Promise<TaskView> => {
+    if (deps.getUntrustedRoot(task.id)) await deps.recheckTrust(task.id);
+    return view(task);
+  };
   /** The registry already checked the target exists and is in scope. */
   const taskOrThrow = (id: string): Task => {
     const task = deps.getTask(id);
@@ -159,7 +200,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
       callers: ['orchestrator', 'task'],
       readOnly: true,
       target: { taskId: 'taskId' },
-      handler: async (_ctx, input) => view(taskOrThrow(input.taskId)),
+      handler: async (_ctx, input) => freshView(taskOrThrow(input.taskId)),
     }),
   );
 
@@ -173,18 +214,25 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
           .string()
           .describe('From projects_list; an agent in a task can only use its own project'),
         name: z.string().trim().min(1).max(200),
-        prompt: z.string().optional().describe("The task's first prompt"),
+        prompt: z
+          .string()
+          .optional()
+          .describe(
+            "The task's first message: submitted once, not re-sent after /clear or /compact",
+          ),
         kind: z
           .enum(['new-branch', 'existing-branch', 'in-place'])
           .optional()
           .describe(
-            'new-branch (default): a worktree on a new branch. existing-branch: a worktree on `branch`. in-place: run in the project folder, checking out `branch` (default: the current one).',
+            'new-branch (default): a worktree on a new branch. existing-branch: a worktree on `branch`. in-place: run in the project folder, checking out `branch` (default: the one checked out now).',
           ),
         baseRef: z
           .string()
           .optional()
           .describe("new-branch only: the ref to branch from (default: the project's base ref)"),
-        branch: z.string().optional().describe('existing-branch and in-place: the branch'),
+        branch: branchName
+          .optional()
+          .describe('existing-branch and in-place: the branch (local, or on origin)'),
         pushRemote: z
           .boolean()
           .optional()
@@ -214,8 +262,11 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
             input.permissionMode ??
             (defaults?.permissionMode === 'acceptEdits' ? 'acceptEdits' : 'default'),
           model: input.model ?? 'default',
-          // Like the task dialog, which prefills the project's context prompt.
-          contextPrompt: input.prompt ?? defaults?.contextPrompt,
+          // The prompt is a one-shot instruction; the project's context prompt
+          // (which the task dialog prefills) stays context, re-injected on
+          // /clear and /compact.
+          initialPrompt: input.prompt,
+          contextPrompt: defaults?.contextPrompt,
           dashAccess: input.dashAccess,
           parentTaskId: ctx.caller.kind === 'task' ? ctx.caller.taskId : null,
         } as const;
@@ -242,8 +293,22 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
               pushRemote: input.pushRemote ?? false,
             };
           } else {
-            const branch = input.branch ?? (kind === 'in-place' ? project.gitBranch : null);
-            if (!branch) throw new ControlError(400, `${kind} needs a branch`);
+            let branch = input.branch;
+            if (!branch && kind === 'in-place') {
+              // The live HEAD: project.gitBranch is only what it was when the
+              // project was added, and checking that out would move the folder.
+              branch = (await deps.currentBranch(project.path)) ?? undefined;
+              if (!branch) {
+                throw new ControlError(
+                  400,
+                  `${project.name} is on a detached HEAD; pass the branch to check out`,
+                );
+              }
+            } else if (!branch) {
+              throw new ControlError(400, `${kind} needs a branch`);
+            } else if (!(await deps.branchExists(project.path, branch))) {
+              throw new ControlError(400, `${project.name} has no branch ${branch}`);
+            }
             createInput = {
               ...base,
               kind: kind === 'existing-branch' ? 'worktree-existing' : 'in-place-checkout',
@@ -272,7 +337,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
       readOnly: true,
       target: { taskId: 'taskId' },
       handler: async (_ctx, input) => {
-        const initial = view(taskOrThrow(input.taskId));
+        const initial = await freshView(taskOrThrow(input.taskId));
         if (input.until !== 'change' && matchesUntil(input.until, initial, initial)) {
           return { task: initial, timedOut: false };
         }
@@ -350,10 +415,10 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
       target: { taskId: 'taskId' },
       handler: async (_ctx, input) => {
         const task = taskOrThrow(input.taskId);
-        if (task.archivedAt) {
-          throw new ControlError(409, `${task.name} is archived; restore it first`);
-        }
-        let current = view(task);
+        assertNotArchived(task);
+        // A needs-trust mark clears here when the folder was trusted outside
+        // Dash; the send then starts the session like any stopped one.
+        let current = await freshView(task);
         if (current.state === 'waiting') {
           throw new ControlError(
             409,
@@ -380,7 +445,9 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
       readOnly: false,
       target: { taskId: 'taskId' },
       handler: async (_ctx, input) => {
-        deps.openTask(taskOrThrow(input.taskId));
+        const task = taskOrThrow(input.taskId);
+        assertNotArchived(task);
+        deps.openTask(task);
         return {};
       },
     }),
@@ -451,6 +518,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
       target: { taskId: 'taskId' },
       allowSelf: false,
       handler: async (_ctx, input) => {
+        assertNotArchived(taskOrThrow(input.taskId));
         await deps.restartSession(input.taskId);
         await deps.startSession(input.taskId);
         return view(taskOrThrow(input.taskId));

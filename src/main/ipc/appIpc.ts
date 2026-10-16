@@ -418,6 +418,19 @@ export function registerAppIpc(): void {
     })();
   });
 
+  ipcMain.on('app:setIsDark', (_event, isDark: boolean) => {
+    const v = parseArgsSafe('app:setIsDark', z.boolean(), isDark);
+    if (v === undefined) return;
+    void (async () => {
+      try {
+        const { setAppIsDark } = await import('../services/ptyManager');
+        setAppIsDark(v);
+      } catch (err) {
+        console.error('[app:setIsDark] Failed:', err);
+      }
+    })();
+  });
+
   ipcMain.on('app:setOrchestratorAccess', (_event, enabled: boolean) => {
     const v = parseArgsSafe('app:setOrchestratorAccess', z.boolean(), enabled);
     if (v === undefined) return;

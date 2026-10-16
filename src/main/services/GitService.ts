@@ -787,8 +787,13 @@ export class GitService {
    * and a console.error log for debugging.
    */
   static async checkoutBranch(cwd: string, branch: string): Promise<void> {
+    // `<branch> --` keeps git from reading the name as a pathspec (`.` would
+    // discard unstaged changes); a leading '-' would still parse as an option.
+    if (!branch || branch.startsWith('-')) {
+      throw new Error(`Invalid branch name: '${branch}'`);
+    }
     try {
-      await git(cwd, ['checkout', branch]);
+      await git(cwd, ['checkout', branch, '--']);
     } catch (error: unknown) {
       const stderr = gitStderr(error);
       console.error('[GitService.checkoutBranch] failed', { branch, stderr });
@@ -806,7 +811,7 @@ export class GitService {
           error,
         );
       }
-      if (/pathspec .* did not match/i.test(stderr)) {
+      if (/pathspec .* did not match/i.test(stderr) || /invalid reference/i.test(stderr)) {
         throw wrapGitError(`Branch '${branch}' not found`, error);
       }
       throw error;
@@ -865,6 +870,27 @@ export class GitService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Whether `branch` is a valid branch name that exists locally or on origin
+   * (what checkoutBranch and an existing-branch worktree can use).
+   */
+  static async branchExists(cwd: string, branch: string): Promise<boolean> {
+    try {
+      await git(cwd, ['check-ref-format', '--branch', branch]);
+    } catch {
+      return false;
+    }
+    for (const ref of [`refs/heads/${branch}`, `refs/remotes/origin/${branch}`]) {
+      try {
+        await git(cwd, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
+        return true;
+      } catch {
+        // Not this one.
+      }
+    }
+    return false;
   }
 
   static async remoteBranchExists(cwd: string, branch: string): Promise<boolean> {
