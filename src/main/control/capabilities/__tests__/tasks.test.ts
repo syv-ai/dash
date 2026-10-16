@@ -152,6 +152,17 @@ describe('toTaskView', () => {
     expect(at(new Map([['job-t', live()]]), t)).toBeNull(); // no job
   });
 
+  it('reads a live session the monitor still calls stopped as idle, or working when it is busy', () => {
+    const withJob = makeTask({ id: 't', projectId: 'p', jobId: 'job-t' });
+    const state = (info: ActivityInfo | undefined, s: LiveSession) =>
+      toTaskView(withJob, info ? { t: info } : {}, () => undefined, new Map([['job-t', s]])).state;
+    expect(state({ state: 'stopped' }, live())).toBe('idle');
+    expect(state(undefined, live())).toBe('idle');
+    expect(state({ state: 'stopped' }, { ...live(), status: 'busy' })).toBe('working');
+    expect(state({ state: 'stopped' }, live(null))).toBe('stopped'); // no socket: not reachable
+    expect(state({ state: 'waiting' }, live())).toBe('waiting'); // the monitor wins otherwise
+  });
+
   it('marks a bypassPermissions task as needing approval for messages', () => {
     const mode = (permissionMode: Task['permissionMode']) =>
       toTaskView(

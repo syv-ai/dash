@@ -92,7 +92,13 @@ export function toTaskView(
 ): TaskView {
   const info = activity[task.id];
   const trustRoot = getUntrustedRoot(task.id);
+  const address = messageAddress(task, sessions);
   let state: TaskApiState = info ? STATE_FROM_ACTIVITY[info.state] : 'stopped';
+  // The registry sees a started session before the monitor's next poll does:
+  // a reachable session is never reported stopped.
+  if (state === 'stopped' && address) {
+    state = sessions.get(task.jobId!)?.status === 'busy' ? 'working' : 'idle';
+  }
   let detail = info?.detail ?? (info?.state === 'error' ? info.error?.message : undefined);
   if (trustRoot) {
     state = 'needs-trust';
@@ -109,7 +115,7 @@ export function toTaskView(
     dashAccess: task.dashAccess,
     archived: task.archivedAt != null,
     createdAt: task.createdAt,
-    messageAddress: messageAddress(task, sessions),
+    messageAddress: address,
     messaging: task.permissionMode === 'bypassPermissions' ? 'needs-approval' : 'direct',
   };
   if (detail) view.detail = detail;
