@@ -77,7 +77,7 @@ Inside a task, the read-only tools (marked above) run without a permission promp
 
 - Tasks created through the API never run in `bypassPermissions`, even if the project defaults to it.
 - `tasks_send` refuses a task that is waiting for a person (a permission prompt or a question). Answering those stays with you. It also refuses a working task: wait until it's idle (`tasks_wait`) and send again.
-- `tasks_send` goes through Claude Code's CLI, not the terminal: it stops the idle session and resumes it with the message, keeping its options. If you have the task open, its pane shows Detached; click Re-attach. Text you typed in its prompt and didn't send is lost.
+- `tasks_send` goes through Claude Code's CLI, not the terminal: it stops the idle session and resumes it with the message, keeping its options. If you have the task open, its pane shows Reconnecting… and re-attaches by itself. Text you typed in its prompt and didn't send is lost.
 - A task created through the API gets one line before its first prompt, telling it that it may be running unattended and shouldn't use `AskUserQuestion`.
 - Dash never accepts Claude Code's workspace trust prompt for an agent. A task that needs it reports `needs-trust` until you open it in Dash.
 - Anything running as your user on this machine can read the tokens under Dash's data folder, so the API trusts the local user. Leave orchestrator access off when you don't use it.
