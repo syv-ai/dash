@@ -3,7 +3,12 @@ import type { ActivityInfo, CreateTaskInput, Task } from '../../../../shared/typ
 import { ControlError, createRegistry, type Registry } from '../../registry';
 import { fakeLookups, makeProject, makeTask } from '../../__tests__/fixtures';
 import { registerProjectCapabilities } from '../projects';
-import { registerTaskCapabilities, toTaskView, type TaskCapabilityDeps } from '../tasks';
+import {
+  registerTaskCapabilities,
+  RESUME_TOOLS_HINT,
+  toTaskView,
+  type TaskCapabilityDeps,
+} from '../tasks';
 
 const orch = { kind: 'orchestrator' } as const;
 const asTask = (taskId: string) => ({ kind: 'task', taskId }) as const;
@@ -488,6 +493,12 @@ describe('tasks.send', () => {
       ['child', 'more'],
     ]);
     expect(deps.startSession).not.toHaveBeenCalled();
+  });
+
+  it('tells a task with Dash access that its dash tools may still be reconnecting', async () => {
+    activity = { me: { state: 'idle' } };
+    await registry.call(orch, 'tasks.send', { taskId: 'me', text: 'go' });
+    expect(deps.sendToSession).toHaveBeenCalledWith('me', `go\n\n${RESUME_TOOLS_HINT}`);
   });
 
   it('refuses a task that needs the trust prompt', async () => {

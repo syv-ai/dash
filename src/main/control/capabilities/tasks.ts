@@ -14,6 +14,14 @@ import { taskModelSchema } from '../../ipc/schemas';
 import { ControlError, defineCapability, type Registry } from '../registry';
 import { defaultBaseRef } from './projects';
 
+/**
+ * Appended to a message sent to a task with Dash access. A send resumes the
+ * session, and Claude Code starts that turn before MCP servers reconnect,
+ * telling the model the dash tools are gone; they are back seconds later.
+ */
+export const RESUME_TOOLS_HINT =
+  '(Dash restarted this session to deliver this message, so its dash tools may briefly show as disconnected. They reconnect within seconds: if one is missing, find it with ToolSearch and retry.)';
+
 /** The task state the API reports. */
 export type TaskApiState = 'idle' | 'working' | 'waiting' | 'error' | 'stopped' | 'needs-trust';
 
@@ -438,7 +446,8 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         if (current.state === 'waiting') throw waiting(current.detail);
         if (current.state === 'working') throw working();
         if (current.state === 'needs-trust') throw new ControlError(409, current.detail!);
-        const result = await deps.sendToSession(task.id, input.text);
+        const text = task.dashAccess ? `${input.text}\n\n${RESUME_TOOLS_HINT}` : input.text;
+        const result = await deps.sendToSession(task.id, text);
         if ('notIdle' in result) throw result.notIdle === 'working' ? working() : waiting();
         if ('needsTrust' in result) throw new ControlError(409, view(task).detail!);
         return {};
