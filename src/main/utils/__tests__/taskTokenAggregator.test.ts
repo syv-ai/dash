@@ -3,28 +3,29 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { aggregateTokenStatsForTaskPath } from '../taskTokenAggregator';
-import { encodeProjectPath } from '../jsonlParser';
+import { claudeProjectDir } from '../claudePaths';
 
 let tmpHome: string;
 const ORIGINAL_HOME = process.env.HOME;
+const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
 
 beforeEach(() => {
   tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-tokens-'));
   process.env.HOME = tmpHome;
+  delete process.env.CLAUDE_CONFIG_DIR;
 });
 
 afterEach(() => {
   process.env.HOME = ORIGINAL_HOME;
+  if (ORIGINAL_CONFIG_DIR === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+  else process.env.CLAUDE_CONFIG_DIR = ORIGINAL_CONFIG_DIR;
   fs.rmSync(tmpHome, { recursive: true, force: true });
 });
 
 function writeSession(taskPath: string, sessionId: string, lines: object[]) {
-  const dir = path.join(tmpHome, '.claude', 'projects', encodeProjectPath(taskPath));
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(
-    path.join(dir, `${sessionId}.jsonl`),
-    lines.map((l) => JSON.stringify(l)).join('\n') + '\n',
-  );
+  const file = path.join(claudeProjectDir(taskPath), `${sessionId}.jsonl`);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, lines.map((l) => JSON.stringify(l)).join('\n') + '\n');
 }
 
 function asstLine(opts: {
@@ -72,6 +73,23 @@ describe('aggregateTokenStatsForTaskPath', () => {
     expect(result.totalCostUsd).toBeCloseTo(0.0315, 6);
   });
 
+  it('reads a worktree task from the directory Claude Code writes under CLAUDE_CONFIG_DIR', async () => {
+    const configDir = path.join(tmpHome, 'alt-claude');
+    process.env.CLAUDE_CONFIG_DIR = configDir;
+    // Written by hand, not via claudeProjectDir, so the path is an oracle: the
+    // `.` of `.claude` encodes to `-` just like the `/` before it.
+    const dir = path.join(configDir, 'projects', '-tmp-repo--claude-worktrees-fix-1a2b');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'session-1.jsonl'),
+      JSON.stringify(asstLine({ uuid: 'a', requestId: 'r1', input: 1000, output: 500 })) + '\n',
+    );
+
+    const result = await aggregateTokenStatsForTaskPath('/tmp/repo/.claude/worktrees/fix-1a2b');
+
+    expect(result.totalTokens).toBe(1500);
+  });
+
   it('dedupes by requestId across multiple session files', async () => {
     const taskPath = '/tmp/test-task-b';
     writeSession(taskPath, 'session-1', [
@@ -111,12 +129,33 @@ describe('aggregateTokenStatsForTaskPath', () => {
     expect(result.totalCostUsd).toBeCloseTo(15 + 3, 6);
   });
 
+  it('counts subagent and workflow transcripts nested under a session', async () => {
+    const taskPath = '/tmp/test-task-e';
+    writeSession(taskPath, 'session-1', [
+      asstLine({ uuid: 'a', requestId: 'r1', input: 1000, output: 500 }),
+    ]);
+    writeSession(taskPath, 'session-1/subagents/agent-abc', [
+      asstLine({ uuid: 'b', requestId: 'r2', input: 2000, output: 1000 }),
+    ]);
+    writeSession(taskPath, 'session-1/subagents/workflows/wf_1/agent-def', [
+      asstLine({ uuid: 'c', requestId: 'r3', input: 4000, output: 2000 }),
+    ]);
+    // Workflow journal lines have no uuid/usage and must not affect the total.
+    writeSession(taskPath, 'session-1/subagents/workflows/wf_1/journal', [
+      { type: 'started', key: 'v2:x', agentId: 'def' },
+    ]);
+
+    const result = await aggregateTokenStatsForTaskPath(taskPath);
+
+    expect(result.totalTokens).toBe(10500);
+  });
+
   it('skips non-jsonl files in the project dir', async () => {
     const taskPath = '/tmp/test-task-d';
     writeSession(taskPath, 'session-1', [
       asstLine({ uuid: 'a', requestId: 'r1', input: 1000, output: 500 }),
     ]);
-    const dir = path.join(tmpHome, '.claude', 'projects', encodeProjectPath(taskPath));
+    const dir = claudeProjectDir(taskPath);
     fs.writeFileSync(path.join(dir, 'notes.txt'), 'should be ignored');
 
     const result = await aggregateTokenStatsForTaskPath(taskPath);

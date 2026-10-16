@@ -257,6 +257,13 @@ export function runMigrations(): void {
   } catch {
     /* already exists */
   }
+  // Before 0.16.15 transcript lookups mis-encoded `.claude/worktrees` paths, so
+  // worktree tasks were backfilled with zero tokens. Backfill those once more
+  // (only zeros: transcripts Claude Code has since pruned would erase a real total).
+  if ((rawDb.pragma('user_version', { simple: true }) as number) < 1) {
+    rawDb.exec(`UPDATE tasks SET tokens_backfilled_at = NULL WHERE total_tokens = 0`);
+    rawDb.pragma('user_version = 1');
+  }
 
   // Drawer tabs replace per-task localStorage keys for tab state. id matches
   // the PTY id when the tab owns one (e.g. 'shell:t1' or 'ports-tui:t1').
@@ -345,6 +352,13 @@ export function runMigrations(): void {
     } catch {
       /* already exists */
     }
+  }
+
+  // Archived projects: set while the project is out of the project list.
+  try {
+    rawDb.exec(`ALTER TABLE projects ADD COLUMN archived_at TEXT`);
+  } catch {
+    /* already exists */
   }
 
   rawDb.pragma('foreign_keys = ON');

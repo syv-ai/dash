@@ -3,6 +3,7 @@ import {
   buildDispatchArgs,
   parseDispatchOutput,
   isDispatchFailure,
+  parseUntrustedRoot,
   parseAgentsJson,
   activityFromSupervisor,
   isUnderDir,
@@ -145,5 +146,27 @@ describe('isUnderDir', () => {
     expect(isUnderDir('/repo/.claude/worktrees/t', '/repo/')).toBe(true);
     expect(isUnderDir('/repo-other/x', '/repo')).toBe(false);
     expect(isUnderDir('/re', '/repo')).toBe(false);
+  });
+});
+
+describe('parseUntrustedRoot', () => {
+  it('reads the folder Claude Code wants trusted from the --bg refusal', () => {
+    expect(
+      parseUntrustedRoot(
+        'Workspace not trusted. Run `claude` in /Users/me/repos/dffd once and accept the trust prompt, then retry.\n',
+      ),
+    ).toBe('/Users/me/repos/dffd');
+  });
+
+  it('keeps spaces in the path and ignores colour codes', () => {
+    expect(
+      parseUntrustedRoot(
+        '\x1b[31mWorkspace not trusted. Run `claude` in /Users/me/My Repos/app once and accept\x1b[0m',
+      ),
+    ).toBe('/Users/me/My Repos/app');
+  });
+
+  it('is null for any other failure', () => {
+    expect(parseUntrustedRoot("couldn't start a background session")).toBeNull();
   });
 });

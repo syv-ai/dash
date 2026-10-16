@@ -16,6 +16,8 @@ import {
   setInitialPrompt,
   restartTaskSession,
   stopTaskSession,
+  runTrustPrompt,
+  UntrustedWorkspaceError,
   type PtyKind,
 } from '../services/ptyManager';
 import { DatabaseService } from '../services/DatabaseService';
@@ -25,7 +27,7 @@ import { contextUsageService } from '../services/ContextUsageService';
 import { remoteControlService } from '../services/remoteControlService';
 import { TelemetryService } from '../services/TelemetryService';
 import { describeUnsupportedClaude } from '../services/claudeCli';
-import { IpcError } from './ipcErrors';
+import { IpcError, ipcError } from './ipcErrors';
 import type { PermissionMode } from '@shared/types';
 
 /**
@@ -89,6 +91,33 @@ export function registerPtyIpc(): void {
         });
         TelemetryService.capture('terminal_started', { source: 'direct' });
         return { success: true, data: result };
+      } catch (error) {
+        if (error instanceof UntrustedWorkspaceError) {
+          return ipcError(error.message, 'UNTRUSTED_WORKSPACE');
+        }
+        return errorResponse(error);
+      }
+    },
+  );
+
+  // Show Claude Code's trust prompt in the task pane after a dispatch was
+  // refused as untrusted; resolves once it is accepted or abandoned.
+  ipcMain.handle(
+    'pty:trustWorkspace',
+    async (event, args: { id: string; cols: number; rows: number; isDark?: boolean }) => {
+      try {
+        parseArgs(
+          'pty:trustWorkspace',
+          z.looseObject({
+            id: z.string(),
+            cols: z.number(),
+            rows: z.number(),
+            isDark: z.boolean().optional(),
+          }),
+          args,
+        );
+        const trusted = await runTrustPrompt({ ...args, sender: event.sender });
+        return { success: true, data: { trusted } };
       } catch (error) {
         return errorResponse(error);
       }

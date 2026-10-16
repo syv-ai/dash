@@ -20,6 +20,7 @@ import { TaskModal } from './components/task/TaskModal';
 import { NewProjectWizard } from './components/newProject/NewProjectWizard';
 import { DeleteTaskModal } from './components/task/DeleteTaskModal';
 import { DeleteProjectModal } from './components/project/DeleteProjectModal';
+import { orderRotationTasks } from './components/leftSidebar/rotationGroups';
 import {
   WorktreeMigrationModal,
   isWorktreeMigrationDismissed,
@@ -482,8 +483,9 @@ export function App() {
       const orderMap = new Map(rotationOrder.map((id, i) => [id, i]));
       tasks.sort((a, b) => (orderMap.get(a.id) ?? Infinity) - (orderMap.get(b.id) ?? Infinity));
     }
-    return tasks;
-  }, [tasksByProject, taskActivity, rotationExclusions, rotationOrder]);
+    // Shown grouped by project, so keep the list in that order too.
+    return orderRotationTasks(tasks, projects);
+  }, [tasksByProject, taskActivity, rotationExclusions, rotationOrder, projects]);
 
   // Load projects on mount
   useEffect(() => {
@@ -974,9 +976,23 @@ export function App() {
 
   // ── Handlers ─────────────────────────────────────────────
 
+  // An archived project's tasks aren't in tasksByProject; the delete dialog
+  // still needs them to offer worktree and branch cleanup.
+  const [archivedDeleteTasks, setArchivedDeleteTasks] = useState<Task[]>([]);
+
   function handleDeleteProject(id: string) {
-    const project = projects.find((p) => p.id === id);
-    if (project) setDeleteProjectTarget(project);
+    const { projects: listed, archivedProjects } = useProjects.getState();
+    const project = listed.find((p) => p.id === id);
+    if (project) {
+      setDeleteProjectTarget(project);
+      return;
+    }
+    const archived = archivedProjects.find((p) => p.id === id);
+    if (!archived) return;
+    void window.electronAPI.getTasks(id).then((resp) => {
+      setArchivedDeleteTasks(resp.success && resp.data ? resp.data : []);
+      setDeleteProjectTarget(archived);
+    });
   }
 
   function handleSelectTask(projectId: string, taskId: string) {
@@ -1496,7 +1512,7 @@ export function App() {
       {deleteProjectTarget && (
         <DeleteProjectModal
           project={deleteProjectTarget}
-          tasks={tasksByProject[deleteProjectTarget.id] ?? []}
+          tasks={tasksByProject[deleteProjectTarget.id] ?? archivedDeleteTasks}
           onClose={() => setDeleteProjectTarget(null)}
           onConfirm={handleDeleteProjectConfirm}
         />

@@ -48,6 +48,39 @@ export function registerDbIpc(): void {
     }
   });
 
+  ipcMain.handle('db:archiveProject', async (_event, id: string) => {
+    try {
+      parseArgs('db:archiveProject', z.string(), id);
+      // Every live session in the project sleeps (`claude stop`), as with an
+      // archived task; tasks keep their own archived state, so restoring the
+      // project brings it back as it was.
+      const live = DatabaseService.getTasks(id).filter((t) => t.jobId && !t.archivedAt);
+      await Promise.all(
+        live.map((t) =>
+          stopTaskSession(t.id).catch((err) =>
+            console.warn(`[db:archiveProject] session stop failed for ${t.name}:`, err),
+          ),
+        ),
+      );
+      DatabaseService.setProjectArchived(id, true);
+      TelemetryService.capture('project_archived');
+      return { success: true };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
+  ipcMain.handle('db:restoreProject', (_event, id: string) => {
+    try {
+      parseArgs('db:restoreProject', z.string(), id);
+      DatabaseService.setProjectArchived(id, false);
+      TelemetryService.capture('project_restored');
+      return { success: true };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
   // ── Tasks ────────────────────────────────────────────────
 
   ipcMain.handle('db:getTasks', (_event, projectId: string) => {

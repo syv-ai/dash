@@ -1054,7 +1054,16 @@ export class TerminalSessionManager {
     // A foreign session (started outside Dash) is attached by job id; a task
     // pane is started by task id and main resolves the job.
     const foreignJobId = foreignSessionJobId(this.id);
-    const resp = foreignJobId
+    const startDirect = () =>
+      window.electronAPI.ptyStartDirect({
+        id: this.id,
+        cwd: this.cwd,
+        cols,
+        rows,
+        permissionMode: this.permissionMode,
+        isDark: this.isDark,
+      });
+    let resp = foreignJobId
       ? await window.electronAPI.sessionAttach({
           jobId: foreignJobId,
           cwd: this.cwd,
@@ -1062,14 +1071,10 @@ export class TerminalSessionManager {
           rows,
           isDark: this.isDark,
         })
-      : await window.electronAPI.ptyStartDirect({
-          id: this.id,
-          cwd: this.cwd,
-          cols,
-          rows,
-          permissionMode: this.permissionMode,
-          isDark: this.isDark,
-        });
+      : await startDirect();
+    if (!resp.success && resp.code === 'UNTRUSTED_WORKSPACE') {
+      if (await this.promptWorkspaceTrust(cols, rows)) resp = await startDirect();
+    }
 
     let isDirectSpawn = true;
     if (!resp.success) {
@@ -1110,6 +1115,34 @@ export class TerminalSessionManager {
     this.ptyStarted = true;
 
     return { reattached: false, isDirectSpawn };
+  }
+
+  /**
+   * Claude Code refused the background session because its workspace trust
+   * prompt was never accepted for the folder. Run that prompt in this pane —
+   * live, so the startup buffer is flushed first — and clear the pane once it
+   * is answered, for the session (or the error) that follows.
+   */
+  private async promptWorkspaceTrust(cols: number, rows: number): Promise<boolean> {
+    const buffered = this.dataBuffer;
+    this.dataBuffer = null;
+    for (const chunk of buffered ?? []) this.terminal.write(chunk);
+    this.terminal.write(
+      clackBlock(
+        'info',
+        'Claude Code needs you to trust this folder first.',
+        'Accept its prompt and the task session starts.',
+      ),
+    );
+    const resp = await window.electronAPI.ptyTrustWorkspace({
+      id: this.id,
+      cols,
+      rows,
+      isDark: this.isDark,
+    });
+    this.resetTerminal();
+    if (buffered !== null) this.dataBuffer = [];
+    return resp.success && !!resp.data?.trusted;
   }
 
   private fireReady() {

@@ -112,7 +112,7 @@ void app.whenReady().then(async () => {
   hookServer.setPtyValidator((id) => {
     if (hasPty(id) || activity.has(id)) return true;
     const task = DatabaseService.getTask(id);
-    if (!task?.jobId || task.archivedAt) return false;
+    if (!task?.jobId || DatabaseService.isTaskShelved(task)) return false;
     activity.ensure(id);
     return true;
   });
