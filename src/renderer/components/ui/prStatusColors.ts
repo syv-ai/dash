@@ -31,7 +31,8 @@ export function prStatusText(state: PullRequestState): string {
   }
 }
 
-/** The outline for a PR's combined checks (index.css): a ring, or a looping glow while running. */
+/** The outline for a PR's combined checks (index.css): a ring when failing, a
+ *  looping glow while running, nothing when passing. */
 export function ciOutline(ci: CiState): string {
   switch (ci) {
     case 'failing':
@@ -40,7 +41,7 @@ export function ciOutline(ci: CiState): string {
       return 'pr-ci-running';
     case 'passing':
     default:
-      return 'pr-ci-passing';
+      return '';
   }
 }
 

@@ -112,8 +112,8 @@ function PrList({ prs, taskId }: { prs: PullRequestInfo[]; taskId?: string }) {
 
 /**
  * A task's PR, colour-coded by state (open green, merged purple, closed red)
- * with its checks as the outline: a red or green ring, or a highlight looping
- * around it while they run. Clicking lists every PR from the branch. With no
+ * with its checks as a hairline outline: red when they fail, a highlight looping
+ * around it while they run, none when they pass. Clicking lists every PR from the branch. With no
  * current PR, the branch's newest past one shows muted. The pill variants
  * hide a closed PR; the icon variant always renders. Shared by the task header
  * (md pill), the ProjectView task cards (sm pill) and the sidebar rows (icon).
