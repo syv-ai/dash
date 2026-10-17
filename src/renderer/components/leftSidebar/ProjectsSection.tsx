@@ -454,7 +454,7 @@ export function ProjectsSection({
                           isActive={task.id === activeTaskId}
                           activityInfo={taskActivity[task.id]}
                           ctx={contextUsage[task.id]}
-                          prInfo={prByTask[task.id] ?? null}
+                          prs={prByTask[task.id]}
                           isUnseen={!!unseenTaskIds?.has(task.id)}
                           hasRemoteControl={!!remoteControlStates[task.id]}
                           isDragging={draggingTaskId === task.id}

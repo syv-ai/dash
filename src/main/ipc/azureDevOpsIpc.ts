@@ -120,13 +120,17 @@ export function registerAzureDevOpsIpc(): void {
   });
 
   ipcMain.handle(
-    'ado:get-pr-for-branch',
-    async (_event, args: { branch: string; gitRemote: string; projectId?: string }) => {
+    'ado:get-prs-for-checkout',
+    async (
+      _event,
+      args: { cwd: string; defaultBranch: string; gitRemote: string; projectId?: string },
+    ) => {
       try {
         parseArgs(
-          'ado:get-pr-for-branch',
+          'ado:get-prs-for-checkout',
           z.looseObject({
-            branch: z.string(),
+            cwd: z.string(),
+            defaultBranch: z.string(),
             gitRemote: z.string(),
             projectId: z.string().optional(),
           }),
@@ -137,12 +141,13 @@ export function registerAzureDevOpsIpc(): void {
         const parsed = parseAdoRemote(args.gitRemote);
         if (!parsed?.repository)
           return { success: false, error: 'Could not determine repository from remote' };
-        const pr = await AzureDevOpsService.getPullRequestForBranch(
+        const prs = await AzureDevOpsService.getPullRequestsForCheckout(
           config,
           parsed.repository,
-          args.branch,
+          args.cwd,
+          args.defaultBranch,
         );
-        return { success: true, data: pr };
+        return { success: true, data: prs };
       } catch (err) {
         return errorResponse(err);
       }

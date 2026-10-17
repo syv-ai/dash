@@ -15,10 +15,11 @@ export interface GithubApi {
     issueNumber: number,
     branch: string,
   ) => Promise<IpcResponse<void>>;
-  githubGetPrForBranch: (
+  /** The PRs worth showing for the branch checked out at `cwd`, newest first. */
+  githubGetPrsForCheckout: (
     cwd: string,
-    branch: string,
-  ) => Promise<IpcResponse<PullRequestInfo | null>>;
+    defaultBranch: string,
+  ) => Promise<IpcResponse<PullRequestInfo[]>>;
   githubListPrs: (cwd: string) => Promise<IpcResponse<PullRequest[]>>;
   githubPreparePrBranch: (
     cwd: string,

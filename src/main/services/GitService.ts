@@ -367,6 +367,22 @@ export class GitService {
   }
 
   /**
+   * Whether the checkout at `cwd` has commits on top of `sha` (a PR's last
+   * commit): `sha` is a strict ancestor of HEAD. False when HEAD is `sha`,
+   * behind it, elsewhere, or when `sha` isn't in the local repo.
+   */
+  static async hasMovedPast(cwd: string, sha: string): Promise<boolean> {
+    try {
+      const head = (await git(cwd, ['rev-parse', 'HEAD'])).trim();
+      if (head === sha) return false;
+      await git(cwd, ['merge-base', '--is-ancestor', sha, 'HEAD']);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Get ahead/behind counts relative to upstream.
    */
   static async getAheadBehind(

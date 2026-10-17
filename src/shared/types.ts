@@ -555,12 +555,19 @@ export interface AzureDevOpsConfig {
 
 export type PullRequestState = 'open' | 'merged' | 'closed';
 
+/** A PR's combined checks: any failure fails it, then any still running. */
+export type CiState = 'passing' | 'failing' | 'pending';
+
 export interface PullRequestInfo {
   number: number;
   title: string;
   url: string;
   state: PullRequestState;
   provider: 'github' | 'ado';
+  /** The PR's last commit, to tell whether the branch has moved past it. */
+  headSha?: string;
+  /** Open GitHub PRs only; null when it has no checks. */
+  ci?: CiState | null;
 }
 
 /**

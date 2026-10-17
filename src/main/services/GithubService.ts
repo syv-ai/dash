@@ -2,6 +2,8 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { GithubIssue, PullRequest, PullRequestInfo } from '@shared/types';
 import { mapGithubPrList, buildPrHeadRefspec } from './githubPr';
+import { GitService } from './GitService';
+import { ciFromRollup, relevantPrs } from './prRelevance';
 
 const execFileAsync = promisify(execFile);
 
@@ -47,10 +49,18 @@ export class GithubService {
     return mapIssue(JSON.parse(stdout));
   }
 
-  static async getPullRequestForBranch(
+  /**
+   * The PRs worth showing for the branch checked out at `cwd` (see
+   * relevantPrs), with CI status on open ones. Reads the live branch, so a
+   * session that switched branches gets the new branch's PRs; none on the
+   * default branch or a detached HEAD.
+   */
+  static async getPullRequestsForCheckout(
     cwd: string,
-    branch: string,
-  ): Promise<PullRequestInfo | null> {
+    defaultBranch: string,
+  ): Promise<PullRequestInfo[]> {
+    const branch = await GitService.getBranch(cwd);
+    if (!branch || branch === defaultBranch) return [];
     const { stdout } = await execFileAsync(
       'gh',
       [
@@ -61,30 +71,27 @@ export class GithubService {
         '--state',
         'all',
         '--json',
-        'number,title,url,state',
+        'number,title,url,state,headRefOid,statusCheckRollup',
         '--limit',
-        '5',
+        '10',
       ],
       { cwd, timeout: TIMEOUT_MS, env: process.env as Record<string, string> },
     );
-
-    const prs = JSON.parse(stdout);
-    if (!Array.isArray(prs) || prs.length === 0) return null;
-
-    // Prefer open PR, then merged, then closed
-    const sorted = prs.sort((a: { state: string }, b: { state: string }) => {
-      const order: Record<string, number> = { OPEN: 0, MERGED: 1, CLOSED: 2 };
-      return (order[a.state] ?? 3) - (order[b.state] ?? 3);
+    const raw: unknown = JSON.parse(stdout);
+    if (!Array.isArray(raw)) return [];
+    const prs = raw.map((r: Record<string, unknown>): PullRequestInfo => {
+      const state = r.state === 'MERGED' ? 'merged' : r.state === 'OPEN' ? 'open' : 'closed';
+      return {
+        number: Number(r.number) || 0,
+        title: String(r.title ?? ''),
+        url: String(r.url ?? ''),
+        state,
+        provider: 'github',
+        headSha: typeof r.headRefOid === 'string' ? r.headRefOid : undefined,
+        ci: state === 'open' ? ciFromRollup(r.statusCheckRollup) : null,
+      };
     });
-
-    return {
-      number: sorted[0].number,
-      title: sorted[0].title,
-      url: sorted[0].url,
-      state:
-        sorted[0].state === 'MERGED' ? 'merged' : sorted[0].state === 'OPEN' ? 'open' : 'closed',
-      provider: 'github',
-    };
+    return relevantPrs(prs, (sha) => GitService.hasMovedPast(cwd, sha));
   }
 
   /** Open PRs for the repo at `cwd`, newest first (gh's default order). */

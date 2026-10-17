@@ -264,34 +264,59 @@ describe('gitStore.detectPr', () => {
     resetWindow();
   });
 
-  it('skips and clears prInfo when on the default branch', async () => {
-    api.githubGetPrForBranch = vi.fn();
+  it('skips and clears the PRs when on the default branch', async () => {
+    api.githubGetPrsForCheckout = vi.fn();
     const { useGit } = await freshStores();
     useGit.getState().detectPr(proj('p1', { gitBranch: 'main' }), task('t1', 'p1'), 'main');
-    expect(api.githubGetPrForBranch).not.toHaveBeenCalled();
-    expect(useGit.getState().prInfo).toBeNull();
+    expect(api.githubGetPrsForCheckout).not.toHaveBeenCalled();
+    expect(useGit.getState().prs).toEqual([]);
+    expect(useGit.getState().prByTask.t1).toEqual([]);
   });
 
-  it('fetches a GitHub PR for a non-default branch', async () => {
-    const pr = { number: 7, title: 'PR', url: 'u', state: 'open', provider: 'github' };
-    api.githubGetPrForBranch = vi.fn(() => Promise.resolve({ success: true, data: pr }));
+  it("fetches a GitHub task's PRs from its checkout", async () => {
+    const prs = [
+      { number: 8, title: 'B', url: 'u8', state: 'open', provider: 'github', ci: 'failing' },
+      { number: 7, title: 'A', url: 'u7', state: 'open', provider: 'github', ci: null },
+    ];
+    api.githubGetPrsForCheckout = vi.fn(() => Promise.resolve({ success: true, data: prs }));
     const { useGit } = await freshStores();
     useGit.getState().detectPr(proj('p1', { gitBranch: 'main' }), task('t1', 'p1'), 'feature');
     await vi.runOnlyPendingTimersAsync();
-    expect(api.githubGetPrForBranch).toHaveBeenCalledWith('/wt/t1', 'feature');
-    expect(useGit.getState().prInfo).toEqual(pr);
+    expect(api.githubGetPrsForCheckout).toHaveBeenCalledWith('/wt/t1', 'main');
+    expect(useGit.getState().prs).toEqual(prs);
+    expect(useGit.getState().prByTask.t1).toEqual(prs);
+  });
+
+  it('keeps what it showed when a fetch fails', async () => {
+    const prs = [{ number: 7, title: 'A', url: 'u7', state: 'open', provider: 'github' }];
+    api.githubGetPrsForCheckout = vi
+      .fn()
+      .mockResolvedValueOnce({ success: true, data: prs })
+      .mockResolvedValue({ success: false, error: 'offline' });
+    const { useGit } = await freshStores();
+    useGit.getState().detectPr(proj('p1', { gitBranch: 'main' }), task('t1', 'p1'), 'feature');
+    await vi.runOnlyPendingTimersAsync();
+    await vi.runOnlyPendingTimersAsync();
+    // At least one poll after the first came back failed.
+    expect(vi.mocked(api.githubGetPrsForCheckout).mock.calls.length).toBeGreaterThan(1);
+    expect(useGit.getState().prs).toEqual(prs);
   });
 
   it('uses the ADO endpoint for an Azure DevOps remote', async () => {
     const remote = 'https://dev.azure.com/org/proj/_git/repo';
-    const pr = { number: 9, title: 'ADO', url: 'u', state: 'open', provider: 'ado' };
-    api.adoGetPrForBranch = vi.fn(() => Promise.resolve({ success: true, data: pr }));
+    const prs = [{ number: 9, title: 'ADO', url: 'u', state: 'open', provider: 'ado' }];
+    api.adoGetPrsForCheckout = vi.fn(() => Promise.resolve({ success: true, data: prs }));
     const { useGit } = await freshStores();
     useGit
       .getState()
       .detectPr(proj('p1', { gitBranch: 'main', gitRemote: remote }), task('t1', 'p1'), 'feature');
     await vi.runOnlyPendingTimersAsync();
-    expect(api.adoGetPrForBranch).toHaveBeenCalledWith('feature', remote, 'p1');
-    expect(useGit.getState().prInfo).toEqual(pr);
+    expect(api.adoGetPrsForCheckout).toHaveBeenCalledWith({
+      cwd: '/wt/t1',
+      defaultBranch: 'main',
+      gitRemote: remote,
+      projectId: 'p1',
+    });
+    expect(useGit.getState().prs).toEqual(prs);
   });
 });

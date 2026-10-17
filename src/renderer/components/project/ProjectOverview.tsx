@@ -384,10 +384,10 @@ export function ProjectOverview({
                           );
                         })()}
 
-                      {prByTask[task.id] && (
+                      {(prByTask[task.id]?.length ?? 0) > 0 && (
                         <div className="flex items-start gap-1.5 text-muted-foreground">
                           <span className="shrink-0 text-muted-fade-70 mt-0.5">PR:</span>
-                          <PrBadge prInfo={prByTask[task.id]!} size="sm" />
+                          <PrBadge prs={prByTask[task.id]!} size="sm" />
                         </div>
                       )}
                     </div>

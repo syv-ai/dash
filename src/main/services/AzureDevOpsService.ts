@@ -8,6 +8,8 @@ import type {
 import { normalizeAdoProject } from '@shared/urls';
 import { mapAdoPrList } from './adoPr';
 import { describeAdoFailure } from './adoErrors';
+import { GitService } from './GitService';
+import { relevantPrs } from './prRelevance';
 
 const TIMEOUT_MS = 15_000;
 const API_VERSION = '7.1';
@@ -124,45 +126,49 @@ export class AzureDevOpsService {
     return items[0]!;
   }
 
-  static async getPullRequestForBranch(
+  /**
+   * The PRs worth showing for the branch checked out at `cwd` (see
+   * relevantPrs). Reads the live branch; none on the default branch or a
+   * detached HEAD. No CI status yet.
+   */
+  static async getPullRequestsForCheckout(
     config: AzureDevOpsConfig,
     repositoryName: string,
-    branch: string,
-  ): Promise<PullRequestInfo | null> {
+    cwd: string,
+    defaultBranch: string,
+  ): Promise<PullRequestInfo[]> {
+    const branch = await GitService.getBranch(cwd);
+    if (!branch || branch === defaultBranch) return [];
     const sourceRef = `refs/heads/${branch}`;
     const result = (await this.request(
       config,
-      `${this.proj(config)}/_apis/git/repositories/${encodeURIComponent(repositoryName)}/pullrequests?searchCriteria.sourceRefName=${encodeURIComponent(sourceRef)}&searchCriteria.status=all&$top=5`,
+      `${this.proj(config)}/_apis/git/repositories/${encodeURIComponent(repositoryName)}/pullrequests?searchCriteria.sourceRefName=${encodeURIComponent(sourceRef)}&searchCriteria.status=all&$top=10`,
     )) as {
-      value?: Array<{ pullRequestId: number; title: string; status: string; url?: string }>;
+      value?: Array<{
+        pullRequestId: number;
+        title: string;
+        status: string;
+        lastMergeSourceCommit?: { commitId?: string };
+      }>;
     };
 
-    const prs = result.value;
-    if (!prs || prs.length === 0) return null;
-
-    // Prefer active, then completed (merged), then abandoned (closed)
-    const sorted = prs.sort((a, b) => {
-      const order: Record<string, number> = { active: 0, completed: 1, abandoned: 2 };
-      return (order[a.status] ?? 3) - (order[b.status] ?? 3);
-    });
-
-    const pr = sorted[0]!;
     const baseUrl = config.organizationUrl.replace(/\/+$/, '');
-    const prUrl = `${baseUrl}/${this.proj(config)}/_git/${repositoryName}/pullrequest/${pr.pullRequestId}`;
-
     const stateMap: Record<string, 'open' | 'merged' | 'closed'> = {
       active: 'open',
       completed: 'merged',
       abandoned: 'closed',
     };
-
-    return {
-      number: pr.pullRequestId,
-      title: pr.title,
-      url: prUrl,
-      state: stateMap[pr.status] ?? 'open',
-      provider: 'ado',
-    };
+    const prs = (result.value ?? []).map(
+      (pr): PullRequestInfo => ({
+        number: pr.pullRequestId,
+        title: pr.title,
+        url: `${baseUrl}/${this.proj(config)}/_git/${repositoryName}/pullrequest/${pr.pullRequestId}`,
+        state: stateMap[pr.status] ?? 'open',
+        provider: 'ado',
+        headSha: pr.lastMergeSourceCommit?.commitId,
+      }),
+    );
+    return relevantPrs(prs, (sha) => GitService.hasMovedPast(cwd, sha));
   }
 
   /** Active (open) PRs for `repositoryName`, most-recent first. */

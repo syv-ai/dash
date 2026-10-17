@@ -272,8 +272,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('github:post-branch-comment', { cwd, issueNumber, branch }),
   githubLinkBranch: (cwd: string, issueNumber: number, branch: string) =>
     ipcRenderer.invoke('github:link-branch', { cwd, issueNumber, branch }),
-  githubGetPrForBranch: (cwd: string, branch: string) =>
-    ipcRenderer.invoke('github:get-pr-for-branch', { cwd, branch }),
+  githubGetPrsForCheckout: (cwd: string, defaultBranch: string) =>
+    ipcRenderer.invoke('github:get-prs-for-checkout', { cwd, defaultBranch }),
   githubListPrs: (cwd: string) => ipcRenderer.invoke('github:list-prs', { cwd }),
   githubPreparePrBranch: (cwd: string, prNumber: number, headRefName: string) =>
     ipcRenderer.invoke('github:prepare-pr-branch', { cwd, prNumber, headRefName }),
@@ -292,8 +292,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('ado:get-work-item', { id, projectId }),
   adoPostBranchComment: (workItemId: number, branch: string, projectId?: string) =>
     ipcRenderer.invoke('ado:post-branch-comment', { workItemId, branch, projectId }),
-  adoGetPrForBranch: (branch: string, gitRemote: string, projectId?: string) =>
-    ipcRenderer.invoke('ado:get-pr-for-branch', { branch, gitRemote, projectId }),
+  adoGetPrsForCheckout: (args: {
+    cwd: string;
+    defaultBranch: string;
+    gitRemote: string;
+    projectId?: string;
+  }) => ipcRenderer.invoke('ado:get-prs-for-checkout', args),
   adoListPrs: (gitRemote: string, projectId?: string) =>
     ipcRenderer.invoke('ado:list-prs', { gitRemote, projectId }),
   adoPreparePrBranch: (cwd: string, branch: string) =>

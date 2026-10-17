@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import type { GitStatus, PullRequestInfo, Project, Task } from '../../shared/types';
-import { isAdoRemote } from '../../shared/urls';
-import { prDetectionTargets } from './prDetectionTargets';
+import { fetchPrsFor, prDetectionTargets, prTargetFor } from './prDetectionTargets';
 import { useProjects, selectActiveTask } from './projectsStore';
 
 const GIT_POLL_INTERVAL = 5000;
@@ -24,9 +23,10 @@ export interface GitState {
   gitStatus: GitStatus | null;
   gitLoading: boolean;
   diffFile: DiffFileTarget | null;
-  prInfo: PullRequestInfo | null;
-  /** PR per task for the ProjectView cards, keyed by task id (null = none). */
-  prByTask: Record<string, PullRequestInfo | null>;
+  /** The active task's PRs worth showing, newest first (see relevantPrs). */
+  prs: PullRequestInfo[];
+  /** The same per task, for the sidebar rows and ProjectView cards. */
+  prByTask: Record<string, PullRequestInfo[]>;
   showCommitGraph: boolean;
   /** When set, the commit-graph modal selects + scrolls to this commit on open
    *  (e.g. opened from the diff editor's blame card). Cleared on close. */
@@ -54,7 +54,7 @@ export interface GitActions {
   stopWatch: () => void;
   detectPr: (project: Project | null, task: Task | null, branch: string | null) => void;
   stopPrDetect: () => void;
-  /** Fetch each non-default-branch task's PR in parallel; fill prByTask. */
+  /** Fetch each task's PRs in parallel (main reads its live branch); fill prByTask. */
   detectProjectPrs: (project: Project, tasks: Task[]) => Promise<void>;
 }
 
@@ -68,7 +68,7 @@ export const useGit = create<GitStore>((set, get) => ({
   gitStatus: null,
   gitLoading: false,
   diffFile: null,
-  prInfo: null,
+  prs: [],
   prByTask: {},
   showCommitGraph: false,
   commitGraphFocusHash: null,
@@ -182,39 +182,28 @@ export const useGit = create<GitStore>((set, get) => ({
   detectPr: (project, task, branch) => {
     prTeardown?.();
     prTeardown = null;
-    set({ prInfo: null });
+    set({ prs: [] });
 
     const defaultBranch = project?.baseRef || project?.gitBranch || 'main';
-    if (!branch || !project || branch === defaultBranch) return;
+    if (!branch || !project || branch === defaultBranch) {
+      if (task) set({ prByTask: { ...get().prByTask, [task.id]: [] } });
+      return;
+    }
 
     let cancelled = false;
-    const remote = project.gitRemote;
-    const projectId = project.id;
-    const cwd = task?.path || project.path;
+    const target = prTargetFor(project, task?.path || project.path);
 
-    const fetchPr = async () => {
-      try {
-        let pr: PullRequestInfo | null = null;
-        if (remote && isAdoRemote(remote)) {
-          const resp = await window.electronAPI.adoGetPrForBranch(branch, remote, projectId);
-          if (!cancelled && resp.success) pr = resp.data ?? null;
-        } else {
-          const resp = await window.electronAPI.githubGetPrForBranch(cwd, branch);
-          if (!cancelled && resp.success) pr = resp.data ?? null;
-        }
-        if (!cancelled) {
-          set({
-            prInfo: pr,
-            ...(task ? { prByTask: { ...get().prByTask, [task.id]: pr } } : {}),
-          });
-        }
-      } catch {
-        if (!cancelled) set({ prInfo: null });
-      }
+    const fetchPrs = async () => {
+      const prs = await fetchPrsFor(target);
+      if (cancelled || prs === null) return;
+      set({
+        prs,
+        ...(task ? { prByTask: { ...get().prByTask, [task.id]: prs } } : {}),
+      });
     };
 
-    void fetchPr();
-    const interval = setInterval(() => void fetchPr(), PR_POLL_INTERVAL);
+    void fetchPrs();
+    const interval = setInterval(() => void fetchPrs(), PR_POLL_INTERVAL);
     prTeardown = () => {
       cancelled = true;
       clearInterval(interval);
@@ -229,18 +218,10 @@ export const useGit = create<GitStore>((set, get) => ({
   detectProjectPrs: async (project, tasks) => {
     const targets = prDetectionTargets(project, tasks);
     const results = await Promise.all(
-      targets.map(async (t) => {
-        try {
-          const resp =
-            t.provider === 'ado' && t.remote
-              ? await window.electronAPI.adoGetPrForBranch(t.branch, t.remote, t.projectId)
-              : await window.electronAPI.githubGetPrForBranch(t.cwd, t.branch);
-          return [t.taskId, resp.success ? (resp.data ?? null) : null] as const;
-        } catch {
-          return [t.taskId, null] as const;
-        }
-      }),
+      targets.map(async (t) => [t.taskId, await fetchPrsFor(t)] as const),
     );
-    set({ prByTask: { ...get().prByTask, ...Object.fromEntries(results) } });
+    // A failed fetch (null) keeps what the task showed.
+    const fetched = results.filter((r): r is readonly [string, PullRequestInfo[]] => r[1] !== null);
+    set({ prByTask: { ...get().prByTask, ...Object.fromEntries(fetched) } });
   },
 }));

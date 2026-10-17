@@ -150,7 +150,7 @@ export function MainContent({
 }: MainContentProps) {
   const showTaskTokens = useSettings((s) => s.showTaskTokens);
   const gitStatus = useGit((s) => s.gitStatus);
-  const prInfo = useGit((s) => s.prInfo);
+  const prs = useGit((s) => s.prs);
   const remoteControlStates = useRuntime((s) => s.remoteControlStates);
   const claudeCli = useRuntime((s) => s.claudeCli);
   const remoteControlState = activeTask ? (remoteControlStates[activeTask.id] ?? null) : null;
@@ -253,7 +253,7 @@ export function MainContent({
           </Tooltip>
         )}
 
-        {activeTask && prInfo && <PrBadge prInfo={prInfo} />}
+        {activeTask && <PrBadge prs={prs} />}
 
         {activeTask && modelName && (
           <Tooltip content="Model">

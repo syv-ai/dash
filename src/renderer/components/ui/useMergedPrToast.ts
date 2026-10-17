@@ -36,9 +36,14 @@ export function useMergedPrToast(): void {
       if (state.prByTask === prev.prByTask) return;
       const tasks = Object.values(useProjects.getState().tasksByProject).flat();
       const byId = new Map(tasks.map((t) => [t.id, t]));
+      // The newest relevant PR per task; an empty list (none, or merged and
+      // moved past) reads as no news.
+      const newest = Object.fromEntries(
+        Object.entries(state.prByTask).map(([id, prs]) => [id, prs[0] ?? null]),
+      );
       const { merged, next } = newlyMergedPrs(
         seen,
-        state.prByTask,
+        newest,
         new Set(byId.keys()),
         (id) => !!byId.get(id)?.archivedAt,
       );
@@ -46,7 +51,7 @@ export function useMergedPrToast(): void {
       writeSeen(seen);
       for (const id of merged) {
         const task = byId.get(id);
-        const pr = state.prByTask[id];
+        const pr = newest[id];
         if (!task || !pr) continue;
         toast(`PR #${pr.number} merged`, {
           description: `Archive ${task.name}?`,
