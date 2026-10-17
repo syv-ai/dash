@@ -33,6 +33,7 @@ import { portLivenessService } from './PortLivenessService';
 import { removeShellHistory } from './ptyShellConfig';
 import { getTuiHost } from '../tui/hostInstance';
 import { taskEvents } from './taskEvents';
+import { FolderOccupiedError } from './FolderOccupiedError';
 import { removeTaskMcpConfig } from '../control/mcpConfig';
 
 /** The line an API-created task's first message starts with. */
@@ -60,7 +61,7 @@ export class TaskService {
     if (input.kind === 'in-place-checkout' || input.kind === 'in-place-no-git') {
       const occupant = DatabaseService.findActiveNonWorktreeTaskAt(project.id, project.path);
       if (occupant) {
-        throw new Error(
+        throw new FolderOccupiedError(
           `Cannot run "${name}" in ${project.path}: active task "${occupant.name}" already uses this folder. Archive it first.`,
         );
       }
@@ -276,6 +277,19 @@ export class TaskService {
       console.warn('[TaskService] delete: mcp-config removal failed:', err);
     }
     taskEvents.emitChanged(task.projectId);
+  }
+
+  /**
+   * Delete a project: each task (archived ones too) goes through `delete`,
+   * so its session, terminals, worktree and files go as for a single task;
+   * then the project row.
+   */
+  static async deleteProject(projectId: string, options: DeleteTaskOptions): Promise<void> {
+    for (const task of DatabaseService.getTasks(projectId)) {
+      await TaskService.delete(task.id, options);
+    }
+    DatabaseService.deleteProject(projectId);
+    TelemetryService.capture('project_deleted');
   }
 }
 

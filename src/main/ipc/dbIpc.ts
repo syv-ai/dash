@@ -1,11 +1,12 @@
 import { ipcMain } from 'electron';
 import { z } from 'zod';
 import { parseArgs, errorResponse } from './validate';
-import { projectInputSchema, taskInputSchema } from './schemas';
+import { deleteTaskOptionsSchema, projectInputSchema, taskInputSchema } from './schemas';
 import { DatabaseService } from '../services/DatabaseService';
 import { TelemetryService } from '../services/TelemetryService';
 import { stopTaskSession } from '../services/ptyManager';
-import { removeTaskMcpConfig } from '../control/mcpConfig';
+import { TaskService } from '../services/TaskService';
+import type { DeleteTaskOptions } from '@shared/types';
 
 export function registerDbIpc(): void {
   // ── Projects ─────────────────────────────────────────────
@@ -31,20 +32,11 @@ export function registerDbIpc(): void {
     }
   });
 
-  ipcMain.handle('db:deleteProject', (_event, id: string) => {
+  ipcMain.handle('db:deleteProject', async (_event, id: string, options: DeleteTaskOptions) => {
     try {
       parseArgs('db:deleteProject', z.string(), id);
-      // The task rows go with the project (cascade), not through
-      // TaskService.delete, so their `--mcp-config` files are removed here.
-      for (const task of DatabaseService.getTasks(id)) {
-        try {
-          removeTaskMcpConfig(task.id);
-        } catch (err) {
-          console.warn(`[db:deleteProject] mcp-config removal failed for ${task.id}:`, err);
-        }
-      }
-      DatabaseService.deleteProject(id);
-      TelemetryService.capture('project_deleted');
+      parseArgs('db:deleteProject', deleteTaskOptionsSchema, options);
+      await TaskService.deleteProject(id, options);
       return { success: true };
     } catch (error) {
       return errorResponse(error);

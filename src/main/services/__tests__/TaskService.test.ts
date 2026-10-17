@@ -14,6 +14,10 @@ vi.mock('../DatabaseService', () => ({
   DatabaseService: {
     getProjects: () => db.projects,
     getTask: (id: string) => db.tasks.find((t) => t.id === id),
+    getTasks: (projectId: string) => db.tasks.filter((t) => t.projectId === projectId),
+    deleteProject: (id: string) => {
+      db.projects = db.projects.filter((p) => p.id !== id);
+    },
     saveTask: (data: Partial<Task> & { projectId: string; name: string }) => {
       const t = {
         id: `t${db.tasks.length + 1}`,
@@ -131,6 +135,7 @@ vi.mock('../../tui/hostInstance', () => ({
 
 import { TaskService, UNATTENDED_INSTRUCTION } from '../TaskService';
 import { taskEvents } from '../taskEvents';
+import { FolderOccupiedError } from '../FolderOccupiedError';
 
 const UI = { startSession: false, source: 'ui' } as const;
 
@@ -268,20 +273,20 @@ describe('TaskService.create', () => {
       useWorktree: false,
       archivedAt: null,
     } as Task);
-    await expect(
-      TaskService.create(
-        {
-          kind: 'in-place-checkout',
-          projectId: 'p1',
-          name: 'other',
-          branch: 'feat',
-          updateFromRemote: true,
-          permissionMode: 'default',
-          model: 'default',
-        },
-        UI,
-      ),
-    ).rejects.toThrow(/"Busy"/);
+    const refused = TaskService.create(
+      {
+        kind: 'in-place-checkout',
+        projectId: 'p1',
+        name: 'other',
+        branch: 'feat',
+        updateFromRemote: true,
+        permissionMode: 'default',
+        model: 'default',
+      },
+      UI,
+    );
+    await expect(refused).rejects.toThrow(FolderOccupiedError);
+    await expect(refused).rejects.toThrow(/"Busy"/); // the dialog's toast
     expect(git.updateBranchToRemote).not.toHaveBeenCalled();
     expect(git.checkoutBranch).not.toHaveBeenCalled();
     expect(db.tasks).toHaveLength(1);
@@ -437,6 +442,43 @@ describe('TaskService.delete', () => {
     await TaskService.delete('del', { deleteWorktreeDir: true });
     expect(worktree.removeWorktree).not.toHaveBeenCalled();
     expect(db.tasks).toEqual([]);
+  });
+});
+
+describe('TaskService.deleteProject', () => {
+  it('deletes every task the way TaskService.delete does (archived ones too), then the project', async () => {
+    const seed = (id: string, over: Partial<Task> = {}) =>
+      db.tasks.push({
+        id,
+        projectId: 'p1',
+        name: id,
+        branch: `${id}-b`,
+        path: `/wt/${id}`,
+        useWorktree: true,
+        branchCreatedByDash: true,
+        teardownScript: null,
+        archivedAt: null,
+        jobId: `job-${id}`,
+        sessionId: null,
+        ...over,
+      } as Task);
+    seed('a');
+    seed('b', { archivedAt: 'then' });
+    seed('c', { useWorktree: false, path: '/repo/app' });
+    db.tasks.push({ id: 'elsewhere', projectId: 'p2' } as Task);
+
+    await TaskService.deleteProject('p1', { deleteWorktreeDir: true, deleteLocalBranch: true });
+
+    expect(removeTaskSession.mock.calls.map(([id]) => id)).toEqual(['a', 'b', 'c']);
+    expect(worktree.removeWorktree).toHaveBeenCalledTimes(2);
+    expect(worktree.removeWorktree).toHaveBeenCalledWith('/repo/app', '/wt/a', 'a-b', {
+      deleteWorktreeDir: true,
+      deleteLocalBranch: true,
+      deleteRemoteBranch: false,
+      teardownScript: null,
+    });
+    expect(db.tasks.map((t) => t.id)).toEqual(['elsewhere']);
+    expect(db.projects.map((p) => p.id)).not.toContain('p1');
   });
 });
 

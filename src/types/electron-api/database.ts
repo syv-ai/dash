@@ -23,7 +23,8 @@ export interface DatabaseApi {
   saveProject: (
     project: Partial<Project> & { name: string; path: string },
   ) => Promise<IpcResponse<Project>>;
-  deleteProject: (id: string) => Promise<IpcResponse<void>>;
+  /** Deletes every task as `deleteTask` does (options apply to each), then the project. */
+  deleteProject: (id: string, options: DeleteTaskOptions) => Promise<IpcResponse<void>>;
   archiveProject: (id: string) => Promise<IpcResponse<void>>;
   restoreProject: (id: string) => Promise<IpcResponse<void>>;
 

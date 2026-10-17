@@ -308,7 +308,6 @@ describe('projectsStore delete', () => {
       .deleteTask(task('t1', 'p1', { branchCreatedByDash: true }), options);
     // Worktree removal and branch gating live in main (TaskService.delete).
     expect(api.deleteTask).toHaveBeenCalledWith('t1', options);
-    expect(api.worktreeRemove).not.toHaveBeenCalled();
     expect(api.ptyClearSnapshot).toHaveBeenCalledWith('t1');
     expect(useProjects.getState().activeTaskId).toBeNull();
     // The list reloads on main's `tasks:changed` push.
@@ -329,7 +328,7 @@ describe('projectsStore delete', () => {
     expect(useProjects.getState().activeTaskId).toBe('t1');
   });
 
-  it('deleteProject removes task worktrees, deletes project, clears active, reloads', async () => {
+  it('deleteProject has main delete the tasks and project, then clears active and the panes', async () => {
     const useProjects = await freshStore();
     useProjects.setState({
       projects: [proj('p1')],
@@ -343,8 +342,13 @@ describe('projectsStore delete', () => {
       deleteRemoteBranches: false,
     };
     await useProjects.getState().deleteProject(proj('p1'), opts);
-    expect(api.worktreeRemove).toHaveBeenCalled();
-    expect(api.deleteProject).toHaveBeenCalledWith('p1');
+    // Worktree removal and branch gating live in main (TaskService.deleteProject).
+    expect(api.deleteProject).toHaveBeenCalledWith('p1', {
+      deleteWorktreeDir: true,
+      deleteLocalBranch: true,
+      deleteRemoteBranch: false,
+    });
+    expect(api.ptyClearSnapshot).toHaveBeenCalledWith('t1');
     expect(useProjects.getState().activeProjectId).toBeNull();
     expect(useProjects.getState().tasksByProject.p1).toBeUndefined();
   });
@@ -411,7 +415,7 @@ describe('projectsStore project archive', () => {
     expect(useProjects.getState().archivedProjects).toEqual([]);
   });
 
-  it('deleteProject on an archived project fetches its tasks to clean up worktrees', async () => {
+  it('deleteProject on an archived project fetches its tasks to clean up their panes', async () => {
     const useProjects = await freshStore();
     api.getTasks.mockResolvedValue({ success: true, data: [task('t1', 'p1')] });
     await useProjects.getState().deleteProject(proj('p1', { archivedAt: 'x' }), {
@@ -420,9 +424,21 @@ describe('projectsStore project archive', () => {
       deleteRemoteBranches: false,
     });
     expect(api.getTasks).toHaveBeenCalledWith('p1');
-    expect(api.worktreeRemove).toHaveBeenCalledWith(
-      expect.objectContaining({ worktreePath: '/p/p1/t1' }),
-    );
+    expect(api.ptyClearSnapshot).toHaveBeenCalledWith('t1');
+  });
+
+  it('deleteProject keeps the project and toasts when main refuses', async () => {
+    const useProjects = await freshStore();
+    useProjects.setState({ projects: [proj('p1')], activeProjectId: 'p1' });
+    api.deleteProject.mockResolvedValueOnce({ success: false, error: 'nope' });
+    await useProjects.getState().deleteProject(proj('p1'), {
+      deleteWorktreeDirs: false,
+      deleteLocalBranches: false,
+      deleteRemoteBranches: false,
+    });
+    const { toast } = await import('sonner');
+    expect(toast.error).toHaveBeenCalledWith('nope');
+    expect(useProjects.getState().activeProjectId).toBe('p1');
   });
 });
 

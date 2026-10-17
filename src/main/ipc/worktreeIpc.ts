@@ -1,59 +1,10 @@
 import { ipcMain } from 'electron';
 import { z } from 'zod';
 import { parseArgs, errorResponse } from './validate';
-import { worktreeService } from '../services/WorktreeService';
 import { worktreeMigrationService } from '../services/WorktreeMigrationService';
 import { TelemetryService } from '../services/TelemetryService';
 
 export function registerWorktreeIpc(): void {
-  ipcMain.handle(
-    'worktree:remove',
-    async (
-      _event,
-      args: {
-        projectPath: string;
-        worktreePath: string;
-        branch: string;
-        options?: {
-          deleteWorktreeDir?: boolean;
-          deleteLocalBranch?: boolean;
-          deleteRemoteBranch?: boolean;
-          teardownScript?: string | null;
-        };
-      },
-    ) => {
-      try {
-        parseArgs(
-          'worktree:remove',
-          z.looseObject({
-            projectPath: z.string(),
-            worktreePath: z.string(),
-            branch: z.string(),
-            options: z
-              .looseObject({
-                deleteWorktreeDir: z.boolean().optional(),
-                deleteLocalBranch: z.boolean().optional(),
-                deleteRemoteBranch: z.boolean().optional(),
-                teardownScript: z.string().nullable().optional(),
-              })
-              .optional(),
-          }),
-          args,
-        );
-        await worktreeService.removeWorktree(
-          args.projectPath,
-          args.worktreePath,
-          args.branch,
-          args.options,
-        );
-        TelemetryService.capture('worktree_removed');
-        return { success: true };
-      } catch (error) {
-        return errorResponse(error);
-      }
-    },
-  );
-
   // Pre-0.16 worktrees lived at `<parent>/worktrees/`; the launch dialog offers
   // to move them under `<repo>/.claude/worktrees/`. Plan is read-only.
   ipcMain.handle('worktree:migrationPlan', () => {

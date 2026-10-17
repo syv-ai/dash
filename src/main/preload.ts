@@ -23,7 +23,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Database - Projects
   getProjects: () => ipcRenderer.invoke('db:getProjects'),
   saveProject: (project: unknown) => ipcRenderer.invoke('db:saveProject', project),
-  deleteProject: (id: string) => ipcRenderer.invoke('db:deleteProject', id),
+  deleteProject: (id: string, options: unknown) =>
+    ipcRenderer.invoke('db:deleteProject', id, options),
   archiveProject: (id: string) => ipcRenderer.invoke('db:archiveProject', id),
   restoreProject: (id: string) => ipcRenderer.invoke('db:restoreProject', id),
 
@@ -69,7 +70,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // Worktree
-  worktreeRemove: (args: unknown) => ipcRenderer.invoke('worktree:remove', args),
   worktreeMigrationPlan: () => ipcRenderer.invoke('worktree:migrationPlan'),
   worktreeMigrate: (args: unknown) => ipcRenderer.invoke('worktree:migrate', args),
 

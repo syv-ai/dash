@@ -266,31 +266,24 @@ export const useProjects = create<ProjectsStore>((set) => ({
     forgetDeletedTask(taskItem.id);
   },
   deleteProject: async (project, options) => {
-    // An archived project's tasks aren't loaded; fetch them so their
-    // worktrees are cleaned up too.
+    // Main deletes each task as a single delete would (session, terminals,
+    // worktree); an archived project's tasks aren't loaded here, so fetch
+    // them for the pane cleanup.
     let projectTasks = useProjects.getState().tasksByProject[project.id];
     if (!projectTasks) {
       const resp = await window.electronAPI.getTasks(project.id);
       projectTasks = resp.success && resp.data ? resp.data : [];
     }
-    for (const t of projectTasks) {
-      if (t.useWorktree) {
-        await window.electronAPI.worktreeRemove({
-          projectPath: project.path,
-          worktreePath: t.path,
-          branch: t.branch,
-          options: {
-            deleteWorktreeDir: options.deleteWorktreeDirs,
-            deleteLocalBranch: options.deleteLocalBranches && t.branchCreatedByDash,
-            deleteRemoteBranch: options.deleteRemoteBranches && t.branchCreatedByDash,
-            teardownScript: t.teardownScript,
-          },
-        });
-      }
-      void sessionRegistry.dispose(`shell:${t.id}`);
-      void sessionRegistry.disposeByPrefix(`shell:${t.id}:`);
+    const resp = await window.electronAPI.deleteProject(project.id, {
+      deleteWorktreeDir: options.deleteWorktreeDirs,
+      deleteLocalBranch: options.deleteLocalBranches,
+      deleteRemoteBranch: options.deleteRemoteBranches,
+    });
+    if (!resp.success) {
+      toast.error(resp.error || 'Failed to delete project');
+      return;
     }
-    await window.electronAPI.deleteProject(project.id);
+    for (const t of projectTasks) forgetDeletedTask(t.id);
     if (useProjects.getState().activeProjectId === project.id) {
       useProjects.getState().setActiveProject(null);
       useProjects.getState().setActiveTask(null);

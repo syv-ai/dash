@@ -5,6 +5,7 @@ import { fakeLookups, makeProject, makeTask } from '../../__tests__/fixtures';
 import { registerProjectCapabilities } from '../projects';
 import type { LiveSession } from '../../../services/claudeSessionRegistry';
 import { registerTaskCapabilities, toTaskView, type TaskCapabilityDeps } from '../tasks';
+import { FolderOccupiedError } from '../../../services/FolderOccupiedError';
 
 const orch = { kind: 'orchestrator' } as const;
 const asTask = (taskId: string) => ({ kind: 'task', taskId }) as const;
@@ -371,6 +372,23 @@ describe('tasks.create', () => {
         registry.call(orch, 'tasks.create', { projectId: 'pNoGit', name: 'a', kind: 'new-branch' }),
       ),
     ).toBe(400);
+  });
+});
+
+describe('an occupied in-place folder', () => {
+  const occupied = () =>
+    Promise.reject(new FolderOccupiedError('active task "Busy" already uses this folder'));
+
+  it('refuses tasks.create with 409', async () => {
+    deps.createTask.mockImplementation(occupied);
+    await expect(
+      registry.call(orch, 'tasks.create', { projectId: 'pNoGit', name: 'x' }),
+    ).rejects.toMatchObject({ status: 409, message: expect.stringContaining('"Busy"') });
+  });
+
+  it('refuses tasks.restore with 409', async () => {
+    deps.restoreTask.mockImplementation(occupied);
+    expect(await status(registry.call(orch, 'tasks.restore', { taskId: 'old' }))).toBe(409);
   });
 });
 

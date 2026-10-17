@@ -15,6 +15,7 @@ import type {
   TaskPort,
   PortSource,
 } from '@shared/types';
+import { FolderOccupiedError } from './FolderOccupiedError';
 
 function normalizePermissionMode(value: string | null | undefined): PermissionMode {
   return value === 'acceptEdits' || value === 'bypassPermissions' ? value : 'default';
@@ -183,7 +184,7 @@ export class DatabaseService {
     if (data.useWorktree === false) {
       const conflict = this.findActiveNonWorktreeTaskAt(data.projectId, data.path, id);
       if (conflict) {
-        throw new Error(
+        throw new FolderOccupiedError(
           `Cannot save non-worktree task at "${data.path}": active task "${conflict.name}" already occupies this directory. Archive it first.`,
         );
       }
@@ -469,7 +470,7 @@ export class DatabaseService {
     if (!target.useWorktree) {
       const conflict = this.findActiveNonWorktreeTaskAt(target.projectId, target.path, id);
       if (conflict) {
-        throw new Error(
+        throw new FolderOccupiedError(
           `Cannot restore "${target.name}": active task "${conflict.name}" already occupies "${target.path}". Archive it first.`,
         );
       }

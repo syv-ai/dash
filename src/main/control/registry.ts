@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Caller, CallerKind } from './callers';
 import { scopeFor, type ScopeLookups, type ScopeView } from './scope';
+import { FolderOccupiedError } from '../services/FolderOccupiedError';
 
 /** An error with the HTTP status the control server should answer with. */
 export class ControlError extends Error {
@@ -156,6 +157,7 @@ export function createRegistry(deps: ScopeLookups): Registry {
         return await cap.handler({ caller, scope }, parsed.data);
       } catch (err) {
         if (err instanceof ControlError) throw err;
+        if (err instanceof FolderOccupiedError) throw new ControlError(409, err.message);
         throw new ControlError(500, err instanceof Error ? err.message : String(err));
       }
     },

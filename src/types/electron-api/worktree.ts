@@ -4,19 +4,8 @@ import type {
   WorktreeMigrationResult,
 } from '../../shared/types';
 
-/** Git worktree lifecycle — one worktree per task. */
+/** Moving pre-0.16 worktrees to the current layout (a task's own worktree goes through task IPC). */
 export interface WorktreeApi {
-  worktreeRemove: (args: {
-    projectPath: string;
-    worktreePath: string;
-    branch: string;
-    options?: {
-      deleteWorktreeDir?: boolean;
-      deleteLocalBranch?: boolean;
-      deleteRemoteBranch?: boolean;
-      teardownScript?: string | null;
-    };
-  }) => Promise<IpcResponse<void>>;
   /** Tasks whose worktree still sits at the pre-0.16 `<parent>/worktrees/` location. */
   worktreeMigrationPlan: () => Promise<IpcResponse<WorktreeMigrationProject[]>>;
   /** `git worktree move` every legacy task of one project under `<repo>/.claude/worktrees/`. */
