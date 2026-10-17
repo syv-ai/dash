@@ -45,7 +45,13 @@ vi.mock('../ptyHookSettings', () => ({
   writeHookSettings: () => ({ ok: true }),
   setCommitAttributionValue: () => {},
 }));
-vi.mock('../../control/mcpConfig', () => ({ mcpConfigForDispatch: () => undefined }));
+vi.mock('../../control/mcpConfig', () => ({
+  mcpConfigForDispatch: () => undefined,
+  dashAllowTools: () => undefined,
+}));
+vi.mock('../taskSettings', () => ({
+  writeTaskSettings: (id: string) => `/u/task-settings/${id}.json`,
+}));
 vi.mock('../claudeCli', () => ({
   findClaudePath: async () => '/usr/local/bin/claude',
   findLatestSessionId: () => null,
@@ -53,6 +59,8 @@ vi.mock('../claudeCli', () => ({
 }));
 vi.mock('../claudeEnv', () => ({
   buildClaudeEnv: () => ({ DASH_TEST: '1' }),
+  buildSessionEnv: () => ({}),
+  isUltracode: () => false,
   setClaudeEnvVars: () => {},
   setSyncShellEnv: () => {},
   setUltracode: () => {},

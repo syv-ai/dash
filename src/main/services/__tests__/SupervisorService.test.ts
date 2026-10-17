@@ -27,7 +27,6 @@ vi.mock('child_process', async () => {
 });
 vi.mock('electron', () => ({ app: { on: vi.fn(), removeListener: vi.fn() }, powerMonitor: {} }));
 vi.mock('../claudeCli', () => ({ findClaudePath: async () => '/usr/local/bin/claude' }));
-vi.mock('../claudeEnv', () => ({ isUltracode: () => false }));
 vi.mock('../DatabaseService', () => ({
   DatabaseService: { getTasksWithSessions: () => [], setTaskSession: vi.fn() },
 }));

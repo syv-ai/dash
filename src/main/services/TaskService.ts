@@ -35,6 +35,7 @@ import { getTuiHost } from '../tui/hostInstance';
 import { taskEvents } from './taskEvents';
 import { FolderOccupiedError } from './FolderOccupiedError';
 import { removeTaskMcpConfig } from '../control/mcpConfig';
+import { removeTaskSettings } from './taskSettings';
 
 /** The line an API-created task's first message starts with. */
 export const UNATTENDED_INSTRUCTION =
@@ -271,10 +272,15 @@ export class TaskService {
     removeShellHistory(id);
     void getTuiHost().cancelForTask(id);
     TelemetryService.capture('task_deleted');
-    try {
-      removeTaskMcpConfig(id);
-    } catch (err) {
-      console.warn('[TaskService] delete: mcp-config removal failed:', err);
+    for (const [what, remove] of [
+      ['mcp-config', removeTaskMcpConfig],
+      ['settings file', removeTaskSettings],
+    ] as const) {
+      try {
+        remove(id);
+      } catch (err) {
+        console.warn(`[TaskService] delete: ${what} removal failed:`, err);
+      }
     }
     taskEvents.emitChanged(task.projectId);
   }

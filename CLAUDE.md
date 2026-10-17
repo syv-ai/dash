@@ -35,6 +35,7 @@ Renderer hot-reloads; main process changes require restart. Husky pre-commit run
 
 - **DB**: `~/Library/Application Support/Dash/app.db` (macOS) · `~/.config/Dash/app.db` (Linux)
 - **Snapshots**: `~/Library/Application Support/Dash/terminal-snapshots/` (shell and service tabs only; agent panes repaint on attach)
+- **Task settings**: `~/Library/Application Support/Dash/task-settings/<taskId>.json` (each task's `--settings`: env, ultracode, allow rules; 0600)
 - **Hook port file**: `~/Library/Application Support/Dash/hook-port` while Dash runs
 - **Control API**: `~/Library/Application Support/Dash/control/`: `secret` (HMAC key every caller token derives from), `control-port` (while Dash runs), `orchestrator-token` (only while orchestrator access is on), `mcp-config/<taskId>.json` (per-task `--mcp-config`), `dash-mcp` (launcher rewritten each boot; what `claude mcp add` points at)
 - **Worktrees**: `{projectPath}/.claude/worktrees/{task-slug}-{hash}/` (excluded via `.git/info/exclude`; legacy `{projectPath}/../worktrees/` tasks are migrated by `WorktreeMigrationService`)

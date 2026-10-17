@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildDispatchArgs,
+  buildSessionSettings,
   parseDispatchOutput,
   isDispatchFailure,
   parseUntrustedRoot,
@@ -11,12 +12,34 @@ import {
   SESSION_SLEEPING_DETAIL,
 } from '../supervisorSession';
 
+describe('buildSessionSettings', () => {
+  it('holds ultracode, the allow list and the env in one object', () => {
+    expect(
+      buildSessionSettings({
+        ultracode: true,
+        allowTools: ['mcp__dash__tasks_list', 'mcp__dash__tasks_get'],
+        env: { WEB_PORT: '3001' },
+      }),
+    ).toEqual({
+      ultracode: true,
+      permissions: { allow: ['mcp__dash__tasks_list', 'mcp__dash__tasks_get'] },
+      env: { WEB_PORT: '3001' },
+    });
+  });
+
+  it('leaves out what is empty', () => {
+    expect(buildSessionSettings({ ultracode: false, allowTools: [], env: {} })).toEqual({});
+  });
+});
+
 describe('buildDispatchArgs', () => {
   it('always backgrounds with --name, even on resume', () => {
     expect(buildDispatchArgs({ name: 'my task', resumeSessionId: 'abc-123' })).toEqual([
       '--bg',
       '--name',
       'my task',
+      '--permission-mode',
+      'default',
       '--resume',
       'abc-123',
     ]);
@@ -28,7 +51,7 @@ describe('buildDispatchArgs', () => {
         name: 't',
         permissionMode: 'acceptEdits',
         model: 'opus',
-        ultracode: true,
+        settingsPath: '/u/task-settings/t.json',
         prompt: 'do the thing',
       }),
     ).toEqual([
@@ -40,7 +63,7 @@ describe('buildDispatchArgs', () => {
       '--model',
       'opus',
       '--settings',
-      '{"ultracode":true}',
+      '/u/task-settings/t.json',
       '--',
       'do the thing',
     ]);
@@ -48,6 +71,15 @@ describe('buildDispatchArgs', () => {
       '--dangerously-skip-permissions',
     );
     expect(buildDispatchArgs({ name: 't', model: 'default' })).not.toContain('--model');
+  });
+
+  it("passes Dash's Default explicitly, so the user's own defaultMode (maybe bypass) never applies", () => {
+    for (const permissionMode of ['default', undefined] as const) {
+      const args = buildDispatchArgs({ name: 't', permissionMode });
+      expect(args[args.indexOf('--permission-mode') + 1]).toBe('default');
+    }
+    const bypass = buildDispatchArgs({ name: 't', permissionMode: 'bypassPermissions' });
+    expect(bypass).not.toContain('--permission-mode');
   });
 
   it('ends the options with -- so a prompt starting with "-" stays the prompt', () => {
@@ -72,28 +104,8 @@ describe('buildDispatchArgs', () => {
     expect(args[args.length - 1]).toBe('do the thing');
   });
 
-  it('merges ultracode and the allow list into one --settings', () => {
-    const args = buildDispatchArgs({
-      name: 't',
-      ultracode: true,
-      mcpConfigPath: '/u/c.json',
-      allowTools: ['mcp__dash__tasks_list', 'mcp__dash__tasks_get'],
-      prompt: 'p',
-    });
-    expect(args.filter((a) => a === '--settings')).toHaveLength(1);
-    expect(JSON.parse(args[args.indexOf('--settings') + 1]!)).toEqual({
-      ultracode: true,
-      permissions: { allow: ['mcp__dash__tasks_list', 'mcp__dash__tasks_get'] },
-    });
-    expect(args[args.length - 1]).toBe('p');
-  });
-
-  it('passes the allow list alone without ultracode, and no --settings with neither', () => {
-    const args = buildDispatchArgs({ name: 't', allowTools: ['mcp__dash__tasks_list'] });
-    expect(JSON.parse(args[args.indexOf('--settings') + 1]!)).toEqual({
-      permissions: { allow: ['mcp__dash__tasks_list'] },
-    });
-    expect(buildDispatchArgs({ name: 't', allowTools: [] })).not.toContain('--settings');
+  it('passes no --settings without a settings file', () => {
+    expect(buildDispatchArgs({ name: 't', prompt: 'p' })).not.toContain('--settings');
   });
 
   it('passes no --mcp-config without a path', () => {

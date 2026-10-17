@@ -67,19 +67,31 @@ vi.mock('../claudeEnv', () => ({
     envCalls.push([isDark, cwd]);
     return { DASH_TEST: '1' };
   },
+  buildSessionEnv: (cwd: string) => ({ WEB_PORT: cwd === '/wt/fix-login' ? '3001' : '0' }),
+  isUltracode: () => false,
   setClaudeEnvVars: () => {},
   setSyncShellEnv: () => {},
   setUltracode: () => {},
 }));
 
+/** Writes of the task's `--settings` file, in order with the supervisor calls. */
+const settingsWrites = vi.hoisted(() => [] as Array<[string, unknown]>);
+vi.mock('../taskSettings', () => ({
+  writeTaskSettings: (id: string, settings: unknown) => {
+    settingsWrites.push([id, settings]);
+    return `/u/task-settings/${id}.json`;
+  },
+}));
+
 const mcp = vi.hoisted(() => ({
   forDispatch: vi.fn((task: { id: string; dashAccess: boolean }) =>
-    task.dashAccess
-      ? { path: `/u/control/mcp-config/${task.id}.json`, allowTools: ['mcp__dash__tasks_get'] }
-      : undefined,
+    task.dashAccess ? `/u/control/mcp-config/${task.id}.json` : undefined,
   ),
 }));
-vi.mock('../../control/mcpConfig', () => ({ mcpConfigForDispatch: mcp.forDispatch }));
+vi.mock('../../control/mcpConfig', () => ({
+  mcpConfigForDispatch: mcp.forDispatch,
+  dashAllowTools: (dashAccess: boolean) => (dashAccess ? ['mcp__dash__tasks_get'] : undefined),
+}));
 
 const trust = vi.hoisted(() => ({ trusted: false }));
 vi.mock('../../utils/claudePaths', async (importOriginal) => ({
@@ -123,6 +135,7 @@ beforeEach(() => {
   sessions.length = 0;
   hookWrites.length = 0;
   envCalls.length = 0;
+  settingsWrites.length = 0;
   supported.reject = null;
   trust.trusted = false;
   vi.clearAllMocks();
@@ -233,11 +246,28 @@ describe('startTaskSession', () => {
     tasks.set('t1', { ...tasks.get('t1')!, dashAccess: true, jobId: null });
     await startTaskSession('t1');
     expect(sup.dispatch).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        mcpConfigPath: '/u/control/mcp-config/t1.json',
-        allowTools: ['mcp__dash__tasks_get'],
-      }),
+      expect.objectContaining({ mcpConfigPath: '/u/control/mcp-config/t1.json' }),
     );
+  });
+
+  it("dispatches with the task's settings file: its env, and the allow list with Dash access", async () => {
+    seed({ dashAccess: true });
+    await startTaskSession('t1');
+    expect(settingsWrites).toEqual([
+      ['t1', { permissions: { allow: ['mcp__dash__tasks_get'] }, env: { WEB_PORT: '3001' } }],
+    ]);
+    expect(sup.dispatch.mock.calls[0]![0].settingsPath).toBe('/u/task-settings/t1.json');
+  });
+
+  it('rewrites the settings file before waking a stopped job, which re-reads it', async () => {
+    seed({ jobId: 'job-live' });
+    sup.find.mockResolvedValueOnce({ cwd: '/wt/fix-login', sessionId: 's', state: 'stopped' });
+    sup.respawn.mockImplementationOnce(async () => {
+      expect(settingsWrites).toHaveLength(1);
+    });
+    await startTaskSession('t1');
+    expect(sup.respawn).toHaveBeenCalledWith('job-live');
+    expect(settingsWrites[0]![1]).toEqual({ env: { WEB_PORT: '3001' } });
   });
 
   it('does not touch the mcp-config when reusing a live job', async () => {

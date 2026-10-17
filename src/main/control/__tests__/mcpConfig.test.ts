@@ -71,19 +71,21 @@ describe('mcpConfigForDispatch', () => {
   it('writes and returns the path for a task with Dash access', async () => {
     const { tokens, mcpConfig } = await load();
     tokens.initTokens(userData);
-    const dispatch = mcpConfig.mcpConfigForDispatch({ id: TASK_ID, dashAccess: true });
-    expect(dispatch?.path).toBe(path.join(controlPaths(userData).mcpConfigDir, `${TASK_ID}.json`));
-    expect(fs.existsSync(dispatch!.path)).toBe(true);
+    const file = mcpConfig.mcpConfigForDispatch({ id: TASK_ID, dashAccess: true });
+    expect(file).toBe(path.join(controlPaths(userData).mcpConfigDir, `${TASK_ID}.json`));
+    expect(fs.existsSync(file!)).toBe(true);
   });
 
-  it('allows the read-only tools by their MCP permission names', async () => {
+  it('allows the read-only tools by their MCP permission names, only with access', async () => {
     const { tokens, mcpConfig } = await load();
+    expect(mcpConfig.dashAllowTools(true)).toBeUndefined(); // control API not running
     tokens.initTokens(userData);
     mcpConfig.setReadOnlyCapabilities(['tasks.list', 'services.output']);
-    expect(mcpConfig.mcpConfigForDispatch({ id: TASK_ID, dashAccess: true })?.allowTools).toEqual([
+    expect(mcpConfig.dashAllowTools(true)).toEqual([
       'mcp__dash__tasks_list',
       'mcp__dash__services_output',
     ]);
+    expect(mcpConfig.dashAllowTools(false)).toBeUndefined();
   });
 
   it('returns nothing and removes a stale file for a task without access', async () => {

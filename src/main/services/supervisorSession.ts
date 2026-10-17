@@ -25,15 +25,40 @@ export interface DispatchArgsOptions {
   permissionMode?: PermissionMode;
   /** Model alias (opus|sonnet|haiku|fable). 'default'/undefined → no --model. */
   model?: TaskModel;
-  ultracode?: boolean;
+  /** The task's settings file (buildSessionSettings) → `--settings`. */
+  settingsPath?: string;
   /** Claude session UUID to continue (migrated or re-dispatched task). */
   resumeSessionId?: string | null;
   /** Per-task `--mcp-config` file (tasks with Dash access). */
   mcpConfigPath?: string;
-  /** `permissions.allow` rules (the read-only Dash tools), merged into `--settings`. */
-  allowTools?: string[];
   /** Optional first prompt, always the last positional, after `--`. */
   prompt?: string;
+}
+
+/** What a task's `--settings` file holds. */
+export interface SessionSettings {
+  ultracode?: true;
+  permissions?: { allow: string[] };
+  env?: Record<string, string>;
+}
+
+/**
+ * The task's session settings. They go in a file, not inline: the session
+ * runs in a process the supervisor pre-spawned, so the dispatch's own env
+ * never reaches it; `--settings` → `env` does, and the job re-reads the file
+ * on every respawn. A file also keeps user env values out of `ps`.
+ */
+export function buildSessionSettings(opts: {
+  ultracode?: boolean;
+  /** `permissions.allow` rules (the read-only Dash tools). */
+  allowTools?: string[];
+  env?: Record<string, string>;
+}): SessionSettings {
+  const settings: SessionSettings = {};
+  if (opts.ultracode) settings.ultracode = true;
+  if (opts.allowTools?.length) settings.permissions = { allow: opts.allowTools };
+  if (opts.env && Object.keys(opts.env).length > 0) settings.env = opts.env;
+  return settings;
 }
 
 export function buildDispatchArgs(opts: DispatchArgsOptions): string[] {
@@ -47,21 +72,19 @@ export function buildDispatchArgs(opts: DispatchArgsOptions): string[] {
     args.push('--mcp-config', opts.mcpConfigPath);
   }
   args.push('--name', opts.name);
-  if (opts.permissionMode === 'acceptEdits') {
-    args.push('--permission-mode', 'acceptEdits');
-  } else if (opts.permissionMode === 'bypassPermissions') {
+  // Always explicit: without a flag the user's own `defaultMode` applies,
+  // which can be bypassPermissions behind a task Dash shows as Default.
+  if (opts.permissionMode === 'bypassPermissions') {
     args.push('--dangerously-skip-permissions');
+  } else {
+    args.push('--permission-mode', opts.permissionMode ?? 'default');
   }
   if (opts.model && opts.model !== 'default') {
     args.push('--model', opts.model);
   }
-  // One `--settings` (single-valued, so its position is free) carries every
-  // session setting; a second one would replace the first.
-  const settings: { ultracode?: true; permissions?: { allow: string[] } } = {};
-  if (opts.ultracode) settings.ultracode = true;
-  if (opts.allowTools?.length) settings.permissions = { allow: opts.allowTools };
-  if (Object.keys(settings).length > 0) {
-    args.push('--settings', JSON.stringify(settings));
+  // Single-valued, so its position is free; a second one would replace it.
+  if (opts.settingsPath) {
+    args.push('--settings', opts.settingsPath);
   }
   if (opts.resumeSessionId) {
     args.push('--resume', opts.resumeSessionId);

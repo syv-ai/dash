@@ -7,7 +7,6 @@ import { app, powerMonitor, type WebContents } from 'electron';
 import type { PermissionMode, SupervisorSession, TaskModel } from '@shared/types';
 import { findClaudePath } from './claudeCli';
 import { claudeConfigDir } from '../utils/claudePaths';
-import { isUltracode } from './claudeEnv';
 import { activityMonitor } from './ActivityMonitor';
 import { DatabaseService } from './DatabaseService';
 import {
@@ -36,8 +35,8 @@ export interface DispatchOptions {
   resumeSessionId?: string | null;
   /** Per-task `--mcp-config` file; see buildDispatchArgs for its position. */
   mcpConfigPath?: string;
-  /** Tools the session may call without a prompt; see buildDispatchArgs. */
-  allowTools?: string[];
+  /** The task's settings file (taskSettings.ts) → `--settings`. */
+  settingsPath?: string;
   env: Record<string, string>;
 }
 
@@ -109,10 +108,9 @@ class SupervisorServiceImpl extends EventEmitter {
       name: opts.name,
       permissionMode: opts.permissionMode,
       model: opts.model,
-      ultracode: isUltracode(),
+      settingsPath: opts.settingsPath,
       resumeSessionId: opts.resumeSessionId,
       mcpConfigPath: opts.mcpConfigPath,
-      allowTools: opts.allowTools,
       prompt: opts.prompt,
     });
     let output: string;

@@ -129,6 +129,10 @@ const removeTaskMcpConfig = vi.fn((_id: string) => {});
 vi.mock('../../control/mcpConfig', () => ({
   removeTaskMcpConfig: (id: string) => removeTaskMcpConfig(id),
 }));
+const removeTaskSettings = vi.fn((_id: string) => {});
+vi.mock('../taskSettings', () => ({
+  removeTaskSettings: (id: string) => removeTaskSettings(id),
+}));
 vi.mock('../../tui/hostInstance', () => ({
   getTuiHost: () => ({ cancelForTask: async () => {} }),
 }));
@@ -421,6 +425,7 @@ describe('TaskService.delete', () => {
     );
     expect(removeTaskSession).toHaveBeenCalledWith('del');
     expect(removeTaskMcpConfig).toHaveBeenCalledWith('del');
+    expect(removeTaskSettings).toHaveBeenCalledWith('del');
     expect(db.tasks).toEqual([]);
     expect(seen).toEqual(['p1']);
   });

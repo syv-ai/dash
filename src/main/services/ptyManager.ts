@@ -9,12 +9,13 @@ import { TerminalMirror } from './TerminalMirror';
 import { terminalSnapshotService } from './TerminalSnapshotService';
 import { ensureShellConfig, shellHistoryPath } from './ptyShellConfig';
 import { findClaudePath, findLatestSessionId, requireSupportedClaude } from './claudeCli';
-import { buildClaudeEnv } from './claudeEnv';
+import { buildClaudeEnv, buildSessionEnv, isUltracode } from './claudeEnv';
 import { supervisorService, DispatchError } from './SupervisorService';
-import { parseUntrustedRoot } from './supervisorSession';
+import { buildSessionSettings, parseUntrustedRoot } from './supervisorSession';
 import { isWorkspaceTrusted } from '../utils/claudePaths';
 import { DatabaseService } from './DatabaseService';
-import { mcpConfigForDispatch } from '../control/mcpConfig';
+import { dashAllowTools, mcpConfigForDispatch } from '../control/mcpConfig';
+import { writeTaskSettings } from './taskSettings';
 import { writeHookSettings, setCommitAttributionValue } from './ptyHookSettings';
 import type { PermissionMode, TaskModel } from '@shared/types';
 
@@ -291,6 +292,21 @@ async function ensureTaskSession(opts: {
   env: Record<string, string>;
   wakeStopped?: boolean;
 }): Promise<string> {
+  // Before any respawn or dispatch: the job reads it on each. Without it the
+  // session still runs, just without its env and allow rules.
+  let settingsPath: string | undefined;
+  try {
+    settingsPath = writeTaskSettings(
+      opts.id,
+      buildSessionSettings({
+        ultracode: isUltracode(),
+        allowTools: dashAllowTools(opts.dashAccess),
+        env: buildSessionEnv(opts.cwd),
+      }),
+    );
+  } catch (err) {
+    console.error(`[ptyManager] settings file for task ${opts.id} failed:`, err);
+  }
   let resumeSessionId = opts.sessionId;
   if (opts.jobId) {
     let row;
@@ -323,7 +339,7 @@ async function ensureTaskSession(opts: {
   const prompt = consumeInitialPrompt(opts.id);
   // The one place a task's `--mcp-config` is decided. Only a dispatch reads
   // it; a reused job keeps the access it was started with.
-  const mcpConfig = mcpConfigForDispatch({ id: opts.id, dashAccess: opts.dashAccess });
+  const mcpConfigPath = mcpConfigForDispatch({ id: opts.id, dashAccess: opts.dashAccess });
   let dispatched;
   try {
     dispatched = await supervisorService.dispatch({
@@ -333,8 +349,8 @@ async function ensureTaskSession(opts: {
       model: opts.model,
       prompt,
       resumeSessionId,
-      mcpConfigPath: mcpConfig?.path,
-      allowTools: mcpConfig?.allowTools,
+      mcpConfigPath,
+      settingsPath,
       env: opts.env,
     });
   } catch (err) {

@@ -21,13 +21,6 @@ export function setReadOnlyCapabilities(names: string[]): void {
   readOnlyCapabilities = [...names];
 }
 
-export interface DispatchMcpConfig {
-  /** The `--mcp-config` file. */
-  path: string;
-  /** `permissions.allow` rules for the read-only Dash tools. */
-  allowTools: string[];
-}
-
 function configPath(p: ControlPaths, taskId: string): string {
   return path.join(p.mcpConfigDir, `${taskId}.json`);
 }
@@ -59,24 +52,27 @@ export function removeTaskMcpConfig(taskId: string): void {
 }
 
 /**
- * The `--mcp-config` path and the read-only tools to allow for a dispatch, or
- * undefined for none: written for a task with Dash access while the control
- * API runs; otherwise any stale file from an earlier dispatch is removed. A
- * write failure dispatches without Dash tools rather than failing the
- * session start.
+ * The `--mcp-config` path for a dispatch, or undefined for none: written for
+ * a task with Dash access while the control API runs; otherwise any stale
+ * file from an earlier dispatch is removed. A write failure dispatches
+ * without Dash tools rather than failing the session start.
  */
+/**
+ * The read-only Dash tools a task may call without a prompt (its settings
+ * file's `permissions.allow`); none without access or a running control API.
+ */
+export function dashAllowTools(dashAccess: boolean): string[] | undefined {
+  if (!dashAccess || !initializedPaths()) return undefined;
+  return readOnlyCapabilities.map(mcpPermissionName);
+}
+
 export function mcpConfigForDispatch(task: {
   id: string;
   dashAccess: boolean;
-}): DispatchMcpConfig | undefined {
+}): string | undefined {
   if (!initializedPaths()) return undefined;
   try {
-    if (task.dashAccess) {
-      return {
-        path: writeTaskMcpConfig(task),
-        allowTools: readOnlyCapabilities.map(mcpPermissionName),
-      };
-    }
+    if (task.dashAccess) return writeTaskMcpConfig(task);
     removeTaskMcpConfig(task.id);
   } catch (err) {
     console.error(`[control] mcp-config for task ${task.id} failed; dispatching without it:`, err);
