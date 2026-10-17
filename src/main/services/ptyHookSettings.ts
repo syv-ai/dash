@@ -5,6 +5,7 @@ import { hookServer, getHookPortFilePath } from './HookServer';
 import { RtkService } from './RtkService';
 import { DatabaseService } from './DatabaseService';
 import { writeFileAtomic } from '../utils/atomicWrite';
+import { ownSessionGuard } from './hookSessionGuard';
 import {
   type Hook,
   type HookEntry,
@@ -54,6 +55,14 @@ function getTaskContextPrompt(taskId: string): string | null {
   }
 }
 
+function realPathOr(dir: string): string {
+  try {
+    return fs.realpathSync(dir);
+  } catch {
+    return dir;
+  }
+}
+
 /**
  * Mark a hook as Dash-authored. The brand lets the merge module recognize
  * it on the next rewrite without falling back to URL/command-shape pattern
@@ -71,11 +80,15 @@ function tagDash<T extends CommandHook>(hook: T): T & { __dash: true } {
  */
 function buildPreToolUseHooks(
   dashCmd: (endpoint: DashHookEndpoint, async?: boolean) => Hook,
+  guard: string,
 ): HookEntry[] {
   const entries: HookEntry[] = [{ matcher: '*', hooks: [dashCmd('tool-start', true)] }];
   const rtkCmd = RtkService.isEnabled() ? RtkService.getHookCommand() : null;
   if (rtkCmd) {
-    entries.push({ matcher: 'Bash', hooks: [tagDash({ type: 'command', command: rtkCmd })] });
+    entries.push({
+      matcher: 'Bash',
+      hooks: [tagDash({ type: 'command', command: guard + rtkCmd })],
+    });
   }
   return entries;
 }
@@ -148,7 +161,9 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
   // syntax targets `sh` and is NOT given a win32 branch — unlike the
   // context-injection hook below, whose base64 decode genuinely differs by OS.
   const portFile = getHookPortFilePath().replace(/"/g, '\\"');
-  const hookCommand = (endpoint: DashHookEndpoint): string => {
+  // POSIX like the rest; on Windows the hooks stay unguarded.
+  const guard = process.platform === 'win32' ? '' : ownSessionGuard([cwd, realPathOr(cwd)]);
+  const postCommand = (endpoint: DashHookEndpoint): string => {
     const url = `http://127.0.0.1:$P/hook/${endpoint}?ptyId=${ptyId}`;
     return (
       `P=$(cat "${portFile}" 2>/dev/null) || exit 0; [ -n "$P" ] || exit 0; ` +
@@ -158,7 +173,7 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
 
   const commandHook = (endpoint: DashHookEndpoint, async?: boolean): CommandHook => ({
     type: 'command' as const,
-    command: hookCommand(endpoint),
+    command: guard + postCommand(endpoint),
     ...(async ? { async: true } : {}),
   });
 
@@ -175,7 +190,7 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
       { matcher: 'permission_prompt', hooks: [dashCmd('notification')] },
       { matcher: 'idle_prompt', hooks: [dashCmd('notification')] },
     ],
-    PreToolUse: buildPreToolUseHooks(dashCmd),
+    PreToolUse: buildPreToolUseHooks(dashCmd, guard),
     PostToolUse: [{ matcher: '*', hooks: [dashCmd('tool-end', true)] }],
     PreCompact: [{ matcher: '*', hooks: [dashCmd('compact-start', true)] }],
     // PostCompact (2.1.76) and StopFailure (2.1.78) used to be gated on the
@@ -224,7 +239,7 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
     const decodeCmd =
       process.platform === 'win32'
         ? `powershell.exe -NoProfile -Command "[Console]::Out.Write([System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64}')))"`
-        : `echo '${b64}' | base64 ${process.platform === 'darwin' ? '-D' : '-d'}`;
+        : `${guard}echo '${b64}' | base64 ${process.platform === 'darwin' ? '-D' : '-d'}`;
     const contextHook: CommandHook = { type: 'command', command: decodeCmd };
     for (const entry of sessionStartEntries) {
       // clear and compact already exist — append the context hook alongside
@@ -302,11 +317,13 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
     };
 
     // The statusLine doubles as the context-usage reporter: it POSTs to the
-    // context endpoint and discards output (so the bar stays blank). Same guarded
-    // command shape as the hooks, so it too no-ops outside Dash.
+    // context endpoint and discards output (so the bar stays blank). Same
+    // port-file guard as the hooks, so it too no-ops outside Dash. No session
+    // guard: it is one slot, the root task's wins in a worktree under it, and
+    // HookServer credits the report to the task at the payload's folder.
     merged.statusLine = {
       type: 'command',
-      command: hookCommand('context'),
+      command: postCommand('context'),
     };
 
     const effectiveAttribution =

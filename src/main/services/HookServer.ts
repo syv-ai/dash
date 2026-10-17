@@ -8,7 +8,7 @@ import { eq } from 'drizzle-orm';
 import { activityMonitor } from './ActivityMonitor';
 import { contextUsageService } from './ContextUsageService';
 import { tokenStatsService } from './TokenStatsService';
-import { isSubagentHook } from './hookPayload';
+import { isSubagentHook, statusLineTaskId } from './hookPayload';
 import { getDb } from '../db/client';
 import { tasks } from '../db/schema';
 
@@ -110,6 +110,16 @@ class HookServerImpl {
       return task?.projectId;
     } catch (err) {
       console.warn('[HookServer] DB lookup for task project failed:', err);
+      return undefined;
+    }
+  }
+
+  private getTaskIdAtPath(dir: string): string | undefined {
+    try {
+      const db = getDb();
+      return db.select({ id: tasks.id }).from(tasks).where(eq(tasks.path, dir)).get()?.id;
+    } catch (err) {
+      console.warn('[HookServer] DB lookup for task path failed:', err);
       return undefined;
     }
   }
@@ -260,7 +270,12 @@ class HookServerImpl {
           // StatusLine data (context usage) — uses type:"command" + curl, not type:"http"
           if (pathname === '/hook/context') {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (data) => {
-              contextUsageService.updateFromStatusLine(ptyId, data);
+              // The statusLine is one slot, and the root task's wins inside a
+              // worktree under it: route by the session's own folder.
+              const owner = statusLineTaskId(ptyId, data, (dir) => this.getTaskIdAtPath(dir));
+              if (owner === ptyId || this._hasPty(owner)) {
+                contextUsageService.updateFromStatusLine(owner, data);
+              }
               res.writeHead(200);
               res.end();
             });
