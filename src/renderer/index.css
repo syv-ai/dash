@@ -941,7 +941,7 @@
    fail, a highlight looping around it while they run; passing needs none.
    The mask keeps only the ring (padding box minus content box). */
 .pr-ci-failing {
-  box-shadow: 0 0 0 1px hsl(var(--destructive));
+  box-shadow: 0 0 0 0.5px hsl(var(--destructive));
 }
 @property --pr-ci-angle {
   syntax: '<angle>';
@@ -954,8 +954,8 @@
 .pr-ci-running::before {
   content: '';
   position: absolute;
-  inset: -1px;
-  padding: 1px;
+  inset: -0.5px;
+  padding: 0.5px;
   border-radius: inherit;
   pointer-events: none;
   background: conic-gradient(
@@ -970,7 +970,7 @@
     linear-gradient(hsl(var(--foreground)) 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
-  filter: drop-shadow(0 0 1.5px hsl(var(--git-modified) / 0.7));
+  filter: drop-shadow(0 0 1px hsl(var(--git-modified) / 0.6));
   animation: pr-ci-loop 1.4s linear infinite;
 }
 @keyframes pr-ci-loop {
