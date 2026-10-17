@@ -484,14 +484,17 @@ export function App() {
     [projects, tasksByProject],
   );
 
-  // Rotation: all tasks with activity, minus exclusions
+  // Rotation: all tasks with a live session, minus exclusions. A sleeping
+  // (`stopped`) session has no orb and isn't active, so it stays out.
   const rotationTasks = React.useMemo(() => {
     const tasks: Task[] = [];
     for (const projectTasks of Object.values(tasksByProject)) {
       for (const task of projectTasks) {
+        const activity = taskActivity[task.id];
         if (
           !task.archivedAt &&
-          taskActivity[task.id] !== undefined &&
+          activity !== undefined &&
+          activity.state !== 'stopped' &&
           !rotationExclusions.has(task.id)
         ) {
           tasks.push(task);
