@@ -3,6 +3,7 @@ import { Toaster, toast } from 'sonner';
 import { useSettings } from '../../stores/settingsStore';
 import { useWizardToasts } from '../ports/useWizardToasts';
 import { useReleaseNotesToast } from './useReleaseNotesToast';
+import { useMergedPrToast } from './useMergedPrToast';
 
 export function ToastContainer() {
   // Follow Dash's theme, not the OS one: sonner's own text colours (the
@@ -10,6 +11,7 @@ export function ToastContainer() {
   const theme = useSettings((s) => s.theme);
   useWizardToasts();
   useReleaseNotesToast();
+  useMergedPrToast();
 
   useEffect(() => {
     return window.electronAPI.onToast((data) => {
