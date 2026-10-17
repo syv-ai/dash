@@ -2,7 +2,7 @@ import { GitMerge, GitPullRequest, Wrench } from 'lucide-react';
 import { Tooltip } from './Tooltip';
 import { IconButton } from './IconButton';
 import { Popover, PopoverContent, PopoverTrigger } from './Popover';
-import { ciLabel, ciOutline, prStatusPill, prStatusText } from './prStatusColors';
+import { ciLabel, ciOutline, prStatusText } from './prStatusColors';
 import { fixCi } from '../../utils/fixCi';
 import type { PullRequestInfo } from '../../../shared/types';
 
@@ -20,7 +20,10 @@ interface PrBadgeProps {
   taskId?: string;
 }
 
-const MUTED = 'bg-foreground/5 text-muted-fade-70 hover:bg-foreground/10';
+// No fill: the state colour is carried by the icon (and text) alone; a
+// neutral tint on hover keeps it reading as clickable.
+const HOVER = 'hover:bg-foreground/5';
+const MUTED = 'text-muted-fade-70';
 
 function stateText(pr: PullRequestInfo): string {
   return pr.state === 'open' && pr.ci ? `open, ${ciLabel(pr.ci)}` : pr.state;
@@ -95,7 +98,7 @@ function PrList({ prs, taskId }: { prs: PullRequestInfo[]; taskId?: string }) {
             }`}
           >
             <span
-              className={`inline-flex items-center justify-center rounded-md w-[18px] h-[18px] shrink-0 ${prStatusPill(pr.state)} ${outline(pr)}`}
+              className={`inline-flex items-center justify-center rounded-md w-[18px] h-[18px] shrink-0 ${prStatusText(pr.state)} ${outline(pr)}`}
             >
               <StateIcon pr={pr} size={11} />
             </span>
@@ -111,7 +114,7 @@ function PrList({ prs, taskId }: { prs: PullRequestInfo[]; taskId?: string }) {
 }
 
 /**
- * A task's PR, colour-coded by state (open green, merged purple, closed red)
+ * A task's PR, its icon coloured by state (open green, merged purple, closed red)
  * with its checks as a hairline outline: red when they fail, a highlight looping
  * around it while they run, none when they pass. Clicking lists every PR from the branch. With no
  * current PR, the branch's newest past one shows muted. The pill variants
@@ -123,7 +126,7 @@ export function PrBadge({ prs, allPrs, size = 'md', variant = 'pill', taskId }: 
   const pr = prs[0] ?? list[0];
   if (!pr) return null;
   const isCurrent = prs.length > 0;
-  const colorCls = isCurrent ? prStatusPill(pr.state) : MUTED;
+  const colorCls = `${isCurrent ? prStatusText(pr.state) : MUTED} ${HOVER}`;
   const ciCls = isCurrent ? outline(pr) : '';
   const tooltip =
     (isCurrent ? describe(pr) : `Past PR #${pr.number}: ${pr.title} (${pr.state})`) +
