@@ -8,7 +8,7 @@ import type {
   ScopeExtensions,
   SkillVisibility,
 } from '@shared/types';
-import { enumerateScopes, settingsFilePath } from './extensionScopes';
+import { enumerateScopes, scopeClaudeDir, settingsFilePath } from './extensionScopes';
 import { readSkillOverrides } from './skillOverrides';
 import { PluginsService } from './PluginsService';
 import { listScopeSkillFolders } from './SkillsService';
@@ -73,7 +73,7 @@ export async function getExtensionsOverview(
   const skillsByScopeId: Record<string, OverviewSkill[]> = {};
   const overridesByScopeId: Record<string, Record<string, SkillVisibility>> = {};
   for (const scope of scopes) {
-    const folders = listScopeSkillFolders(scope.path);
+    const folders = listScopeSkillFolders(scopeClaudeDir(scope));
     const overrides = readSkillOverrides(settingsFilePath(scope));
     overridesByScopeId[scope.id] = overrides;
     skillsByScopeId[scope.id] = folders.map((f) => ({

@@ -1,10 +1,10 @@
 /**
  * Claude Code's user-config layout (`CLAUDE_CONFIG_DIR`, else `~/.claude`):
- * where Claude keeps per-project transcripts and memory (`projects/`) and
- * background jobs (`jobs/`). Other user-config paths (skills, plugins,
- * settings) still resolve `~/.claude` themselves until they move here. A
- * project's own `<repo>/.claude/` folder is a different thing and lives with
- * its consumers.
+ * where Claude keeps per-project transcripts and memory (`projects/`),
+ * background jobs (`jobs/`), global skills, plugins and settings. Every
+ * user-config path resolves through `claudeConfigDir()`, never `~/.claude`
+ * directly. A project's own `<repo>/.claude/` folder is a different thing and
+ * lives with its consumers.
  */
 
 import { execFile } from 'child_process';
@@ -43,6 +43,16 @@ export function encodeProjectPath(absolutePath: string): string {
  *  Read per call so a changed env is picked up without a restart. */
 export function claudeConfigDir(): string {
   return process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
+}
+
+/** Global skills: `<config dir>/skills`. */
+export function claudeSkillsDir(): string {
+  return path.join(claudeConfigDir(), 'skills');
+}
+
+/** User settings: `<config dir>/settings.json`. */
+export function claudeUserSettingsFile(): string {
+  return path.join(claudeConfigDir(), 'settings.json');
 }
 
 // Names Windows reserves for devices: Claude Code won't use one as a directory.

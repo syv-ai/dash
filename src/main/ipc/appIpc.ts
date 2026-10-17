@@ -1,6 +1,7 @@
 import { ipcMain, dialog, app, shell, BrowserWindow, Notification, clipboard } from 'electron';
 import { z } from 'zod';
 import { parseArgs, parseArgsSafe, errorResponse, ipcError } from './validate';
+import { claudeUserSettingsFile } from '../utils/claudePaths';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { existsSync, readFileSync } from 'fs';
@@ -345,7 +346,7 @@ export function registerAppIpc(): void {
         }
 
         // Fall back to global settings
-        const globalSettings = join(process.env.HOME || homedir(), '.claude', 'settings.json');
+        const globalSettings = claudeUserSettingsFile();
         if (existsSync(globalSettings)) {
           const parsed = JSON.parse(readFileSync(globalSettings, 'utf-8'));
           if (parsed?.attribution?.commit !== undefined) {

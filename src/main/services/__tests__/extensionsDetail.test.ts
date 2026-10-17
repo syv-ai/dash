@@ -23,7 +23,7 @@ describe('getSkillDetail', () => {
     fs.writeFileSync(path.join(dir, 'SKILL.md'), raw);
     fs.writeFileSync(path.join(dir, 'reference.md'), '# ref');
     fs.writeFileSync(path.join(dir, 'scripts', 'run.sh'), 'echo hi');
-    expect(getSkillDetail(scope, 'deploy')).toEqual({
+    expect(getSkillDetail(path.join(scope, '.claude'), 'deploy')).toEqual({
       name: 'deploy',
       description: 'Ship it.',
       allowedTools: ['Bash'],
@@ -36,7 +36,7 @@ describe('getSkillDetail', () => {
     const dir = path.join(scope, '.claude', 'skills', 'solo');
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'SKILL.md'), '# Solo\n');
-    expect(getSkillDetail(scope, 'solo').files).toEqual([]);
+    expect(getSkillDetail(path.join(scope, '.claude'), 'solo').files).toEqual([]);
   });
   it('returns {} when the SKILL.md is missing', () => {
     expect(getSkillDetail(tmp(), 'ghost')).toEqual({});
@@ -46,7 +46,7 @@ describe('getSkillDetail', () => {
     fs.mkdirSync(path.join(scope, '.claude', 'skills'), { recursive: true });
     // A SKILL.md one level above the skills dir — reachable via `..` without the guard.
     fs.writeFileSync(path.join(scope, '.claude', 'SKILL.md'), '# secret\n');
-    expect(getSkillDetail(scope, '..')).toEqual({});
-    expect(getSkillDetail(scope, '../../../../etc/passwd')).toEqual({});
+    expect(getSkillDetail(path.join(scope, '.claude'), '..')).toEqual({});
+    expect(getSkillDetail(path.join(scope, '.claude'), '../../../../etc/passwd')).toEqual({});
   });
 });

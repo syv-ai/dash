@@ -1047,7 +1047,8 @@ export interface ExtensionScopeRef {
   kind: 'global' | 'project' | 'task';
   /** Display label: 'Global', project name, or task name. */
   name: string;
-  /** Root directory whose `.claude/` this scope owns (home dir for global). */
+  /** Root directory whose `.claude/` this scope owns (home dir for global, whose
+   *  files live in Claude's config dir instead: see `scopeClaudeDir`). */
   path: string;
   /** Owning project id (task scope only). */
   projectId?: string;

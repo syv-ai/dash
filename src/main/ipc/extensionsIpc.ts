@@ -8,7 +8,7 @@ import {
   getSkillDetail,
   getRegistrySkillDetail,
 } from '../services/extensionsDetail';
-import { settingsFilePath } from '../services/extensionScopes';
+import { scopeClaudeDir, settingsFilePath } from '../services/extensionScopes';
 import { setSkillOverride } from '../services/skillOverrides';
 import type {
   ExtensionScopeInput,
@@ -118,7 +118,7 @@ export function registerExtensionsIpc(): void {
   ipcMain.handle('extensions:getSkillDetail', (_event, args: GetSkillDetailArgs) => {
     try {
       parseArgs('extensions:getSkillDetail', getSkillDetailSchema, args);
-      return { success: true, data: getSkillDetail(args.scope.path, args.skillName) };
+      return { success: true, data: getSkillDetail(scopeClaudeDir(args.scope), args.skillName) };
     } catch (error) {
       return fail('GET_SKILL_DETAIL', error);
     }

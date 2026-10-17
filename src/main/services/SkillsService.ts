@@ -10,7 +10,6 @@ import {
 } from 'fs';
 import { createHash } from 'crypto';
 import path from 'path';
-import os from 'os';
 import type {
   RegistrySkill,
   SkillsSearchArgs,
@@ -27,6 +26,7 @@ import type {
 } from '@shared/types';
 import { deriveSkillFolderName } from '@shared/skills';
 import { SkillsCache } from './skillsCache';
+import { claudeSkillsDir } from '../utils/claudePaths';
 import {
   getRegistryEntry,
   setSkillSource,
@@ -342,7 +342,7 @@ export function assertRef(ref: SkillRef): void {
 function resolveSkillsBaseDir(target: SkillInstallTarget): string {
   switch (target.kind) {
     case 'global':
-      return path.join(os.homedir(), '.claude', 'skills');
+      return claudeSkillsDir();
     case 'project':
       return path.join(target.projectPath, '.claude', 'skills');
     case 'task':
@@ -862,10 +862,9 @@ export class SkillsService {
   ): SkillInstallStatus {
     assertSkillName(skillName);
     if (ref) assertRef(ref);
-    const home = os.homedir();
     const probeFailures: ProbeFailure[] = [];
 
-    const globalDir = path.join(home, '.claude', 'skills', skillName);
+    const globalDir = path.join(claudeSkillsDir(), skillName);
     const globalProbe = scopeMatchesRef(globalDir, ref);
     if (globalProbe.error) probeFailures.push({ scope: 'global', code: globalProbe.error });
 
@@ -882,7 +881,7 @@ export class SkillsService {
   }
 
   static async listInstalled(probePaths: string[]): Promise<InstalledSkillsResult> {
-    const home = os.homedir();
+    const globalSkillsDir = claudeSkillsDir();
     const found = new Map<string, InstalledEntry>();
     const probeFailures: ProbeFailure[] = [];
 
@@ -897,7 +896,7 @@ export class SkillsService {
       found.set(skillName, entry);
     }
 
-    const globalProbe = listSkillFolders(path.join(home, '.claude', 'skills'));
+    const globalProbe = listSkillFolders(globalSkillsDir);
     for (const name of globalProbe.names) record(name, 'global');
     if (globalProbe.error) probeFailures.push({ scope: 'global', code: globalProbe.error });
 
@@ -911,7 +910,7 @@ export class SkillsService {
     // skills, manual installs) by content match. Runs before the catalog join so any
     // freshly-written markers are picked up below. The persistent verified-custom
     // sentinel means each truly-custom folder pays the fetch cost at most once.
-    await backfillExternalInstalls(found, home);
+    await backfillExternalInstalls(found, globalSkillsDir);
 
     // Catalog join is keyed by (repo, path) read from each install's marker file.
     // Folders without a marker — user's own custom skills, ambiguous name matches —
@@ -924,7 +923,7 @@ export class SkillsService {
     function lookupCatalog(skillName: string, info: InstalledEntry): RegistrySkill | null {
       const candidates: string[] = [];
       if (info.globalInstalled) {
-        candidates.push(path.join(home, '.claude', 'skills', skillName));
+        candidates.push(path.join(globalSkillsDir, skillName));
       }
       for (const pp of info.installedPaths) {
         candidates.push(path.join(pp, '.claude', 'skills', skillName));
@@ -1005,13 +1004,13 @@ function listSkillFolders(skillsDir: string): { names: string[]; error?: string 
   return { names };
 }
 
-/** Lists skill folders (those with SKILL.md) directly under `<scopePath>/.claude/skills`,
+/** Lists skill folders (those with SKILL.md) directly under `<claudeDir>/skills`,
  *  flagging those that carry the Dash install marker. Used by the Extensions overview to
  *  show standalone skills per scope. Missing dir → []. */
 export function listScopeSkillFolders(
-  scopePath: string,
+  claudeDir: string,
 ): Array<{ name: string; fromRegistry: boolean }> {
-  const base = path.join(scopePath, '.claude', 'skills');
+  const base = path.join(claudeDir, 'skills');
   const { names } = listSkillFolders(base);
   return names.map((name) => ({
     name,
@@ -1032,7 +1031,7 @@ interface InstalledEntry {
 // isn't refetched until the user edits the file.
 async function backfillExternalInstalls(
   found: Map<string, InstalledEntry>,
-  home: string,
+  globalSkillsDir: string,
 ): Promise<void> {
   const candidatesByName = new Map<string, RegistrySkill[]>();
   for (const s of SkillsCache.allSkills()) {
@@ -1050,7 +1049,7 @@ async function backfillExternalInstalls(
   await Promise.all(
     Array.from(found.entries()).map(async ([skillName, info]) => {
       try {
-        await tryBackfillOne(skillName, info, candidatesByName, home);
+        await tryBackfillOne(skillName, info, candidatesByName, globalSkillsDir);
       } catch (err) {
         console.warn('[SkillsService.backfill] skill-level failure', {
           skillName,
@@ -1065,7 +1064,7 @@ async function tryBackfillOne(
   skillName: string,
   info: InstalledEntry,
   candidatesByName: Map<string, RegistrySkill[]>,
-  home: string,
+  globalSkillsDir: string,
 ): Promise<void> {
   const candidates = candidatesByName.get(skillName) ?? [];
   // Ambiguous name (multiple candidates) or no candidate at all → leave as Custom
@@ -1075,7 +1074,7 @@ async function tryBackfillOne(
   const ref = candidates[0]!;
 
   const dirs: string[] = [];
-  if (info.globalInstalled) dirs.push(path.join(home, '.claude', 'skills', skillName));
+  if (info.globalInstalled) dirs.push(path.join(globalSkillsDir, skillName));
   for (const pp of info.installedPaths) {
     dirs.push(path.join(pp, '.claude', 'skills', skillName));
   }
