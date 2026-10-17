@@ -275,8 +275,24 @@ describe('gitStore.detectPr', () => {
 
   it("fetches a GitHub task's PRs from its checkout", async () => {
     const prs = [
-      { number: 8, title: 'B', url: 'u8', state: 'open', provider: 'github', ci: 'failing' },
-      { number: 7, title: 'A', url: 'u7', state: 'open', provider: 'github', ci: null },
+      {
+        number: 8,
+        title: 'B',
+        url: 'u8',
+        state: 'open',
+        provider: 'github',
+        ci: 'failing',
+        current: true,
+      },
+      {
+        number: 7,
+        title: 'A',
+        url: 'u7',
+        state: 'open',
+        provider: 'github',
+        ci: null,
+        current: true,
+      },
     ];
     api.githubGetPrsForCheckout = vi.fn(() => Promise.resolve({ success: true, data: prs }));
     const { useGit } = await freshStores();
@@ -287,8 +303,37 @@ describe('gitStore.detectPr', () => {
     expect(useGit.getState().prByTask.t1).toEqual(prs);
   });
 
+  it("keeps the branch's past PRs apart from the current ones", async () => {
+    const open = {
+      number: 9,
+      title: 'New',
+      url: 'u9',
+      state: 'open',
+      provider: 'github',
+      current: true,
+    };
+    const old = {
+      number: 4,
+      title: 'Old',
+      url: 'u4',
+      state: 'merged',
+      provider: 'github',
+      current: false,
+    };
+    api.githubGetPrsForCheckout = vi.fn(() =>
+      Promise.resolve({ success: true, data: [open, old] }),
+    );
+    const { useGit } = await freshStores();
+    useGit.getState().detectPr(proj('p1', { gitBranch: 'main' }), task('t1', 'p1'), 'feature');
+    await vi.runOnlyPendingTimersAsync();
+    expect(useGit.getState().prByTask.t1).toEqual([open]);
+    expect(useGit.getState().branchPrsByTask.t1).toEqual([open, old]);
+  });
+
   it('keeps what it showed when a fetch fails', async () => {
-    const prs = [{ number: 7, title: 'A', url: 'u7', state: 'open', provider: 'github' }];
+    const prs = [
+      { number: 7, title: 'A', url: 'u7', state: 'open', provider: 'github', current: true },
+    ];
     api.githubGetPrsForCheckout = vi
       .fn()
       .mockResolvedValueOnce({ success: true, data: prs })
@@ -304,7 +349,9 @@ describe('gitStore.detectPr', () => {
 
   it('uses the ADO endpoint for an Azure DevOps remote', async () => {
     const remote = 'https://dev.azure.com/org/proj/_git/repo';
-    const prs = [{ number: 9, title: 'ADO', url: 'u', state: 'open', provider: 'ado' }];
+    const prs = [
+      { number: 9, title: 'ADO', url: 'u', state: 'open', provider: 'ado', current: true },
+    ];
     api.adoGetPrsForCheckout = vi.fn(() => Promise.resolve({ success: true, data: prs }));
     const { useGit } = await freshStores();
     useGit

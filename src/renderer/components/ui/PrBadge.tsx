@@ -2,39 +2,59 @@ import { GitMerge, GitPullRequest, Wrench } from 'lucide-react';
 import { Tooltip } from './Tooltip';
 import { IconButton } from './IconButton';
 import { Popover, PopoverContent, PopoverTrigger } from './Popover';
-import { ciDot, ciLabel, prStatusPill, prStatusText } from './prStatusColors';
+import { ciLabel, ciOutline, prStatusPill, prStatusText } from './prStatusColors';
 import { fixCi } from '../../utils/fixCi';
 import type { PullRequestInfo } from '../../../shared/types';
 
 interface PrBadgeProps {
-  /** The PRs worth showing, newest first (see relevantPrs); nothing renders when empty. */
+  /** The PRs standing for the branch now, newest first (see relevantPrs). */
   prs: PullRequestInfo[];
+  /** Every PR from the branch, newest first, listed when the badge is clicked;
+   *  with no current PR the newest of these shows muted. */
+  allPrs?: PullRequestInfo[];
   size?: 'sm' | 'md';
-  /** `pill` (default) shows "PR #n"; `icon` is just the state icon as a
-   *  compact link button, for dense rows like the sidebar task list. */
+  /** `pill` (default) shows "PR #n"; `icon` is just the state icon, for dense
+   *  rows like the sidebar task list. */
   variant?: 'pill' | 'icon';
   /** The task these PRs belong to; enables "Fix CI" on a PR whose checks fail. */
   taskId?: string;
 }
 
-function describe(pr: PullRequestInfo): string {
-  return `PR #${pr.number}: ${pr.title} (${pr.state}${pr.ci ? `, ${ciLabel(pr.ci)}` : ''})`;
+const MUTED = 'bg-foreground/5 text-muted-fade-70 hover:bg-foreground/10';
+
+function stateText(pr: PullRequestInfo): string {
+  return pr.state === 'open' && pr.ci ? `open, ${ciLabel(pr.ci)}` : pr.state;
 }
 
-function CiDot({ pr, size = 6 }: { pr: PullRequestInfo; size?: number }) {
-  if (!pr.ci) return null;
-  return (
-    <span
-      aria-label={ciLabel(pr.ci)}
-      className={`inline-block rounded-full shrink-0 ${ciDot(pr.ci)}`}
-      style={{ width: size, height: size }}
-    />
-  );
+function describe(pr: PullRequestInfo): string {
+  return `PR #${pr.number}: ${pr.title} (${stateText(pr)})`;
+}
+
+/** The state label's colour: an open PR's checks when it has any, else its state. */
+function stateTextColor(pr: PullRequestInfo): string {
+  if (pr.state !== 'open' || !pr.ci) return prStatusText(pr.state);
+  return pr.ci === 'failing'
+    ? 'text-destructive'
+    : pr.ci === 'pending'
+      ? 'text-[hsl(var(--git-modified))]'
+      : 'text-[hsl(var(--git-added))]';
+}
+
+/** The CI outline for an open PR with checks, else nothing. */
+function outline(pr: PullRequestInfo): string {
+  return pr.state === 'open' && pr.ci ? ciOutline(pr.ci) : '';
+}
+
+function StateIcon({ pr, size }: { pr: PullRequestInfo; size: number }) {
+  const Icon = pr.state === 'merged' ? GitMerge : GitPullRequest;
+  return <Icon size={size} strokeWidth={size < 14 ? 2 : 1.8} />;
 }
 
 /** "Fix CI" for a GitHub PR with failing checks: types a prompt pointing at them into the task. */
 function FixCiButton({ pr, taskId }: { pr: PullRequestInfo; taskId?: string }) {
-  if (!taskId || pr.provider !== 'github' || pr.ci !== 'failing') return null;
+  if (!taskId || pr.provider !== 'github' || pr.state !== 'open' || pr.ci !== 'failing') {
+    return null;
+  }
   return (
     <IconButton
       title={`Fix CI: send PR #${pr.number}'s failed checks to this task`}
@@ -51,111 +71,105 @@ function FixCiButton({ pr, taskId }: { pr: PullRequestInfo; taskId?: string }) {
   );
 }
 
-/** "+N" for a branch with several PRs, opening a list of all of them. */
-function MorePrs({ prs, taskId }: { prs: PullRequestInfo[]; taskId?: string }) {
+/** Every PR from the branch, newest first; each row opens the PR. */
+function PrList({ prs, taskId }: { prs: PullRequestInfo[]; taskId?: string }) {
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          onClick={(e) => e.stopPropagation()}
-          aria-label={`All ${prs.length} PRs on this branch`}
-          className="rounded-full px-1 text-[10px] font-mono text-muted-fade-70 hover:text-foreground transition-colors"
-        >
-          +{prs.length - 1}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        className="p-1 min-w-[220px] max-w-[360px]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {prs.map((pr) => {
-          const Icon = pr.state === 'merged' ? GitMerge : GitPullRequest;
-          return (
-            <div key={pr.number} className="flex items-center gap-1">
-              <a
-                href={pr.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex flex-1 min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-[12px] hover:bg-accent transition-colors"
-              >
-                <Icon
-                  size={14}
-                  strokeWidth={1.8}
-                  className={`shrink-0 ${prStatusText(pr.state)}`}
-                />
-                <span className="font-mono text-muted-fade-70 shrink-0">#{pr.number}</span>
-                <span className="truncate flex-1 min-w-0">{pr.title}</span>
-                <CiDot pr={pr} />
-              </a>
-              <FixCiButton pr={pr} taskId={taskId} />
-            </div>
-          );
-        })}
-      </PopoverContent>
-    </Popover>
+    <PopoverContent
+      align="end"
+      className="p-1 min-w-[260px] max-w-[380px]"
+      onClick={(e) => e.stopPropagation()}
+      // Don't land focus (and its ring) on the first row's Fix CI button.
+      onOpenAutoFocus={(e) => e.preventDefault()}
+    >
+      <div className="px-2 pt-1 pb-1.5 text-[10px] uppercase tracking-wider font-mono text-muted-fade-70">
+        PRs from this branch
+      </div>
+      {prs.map((pr) => (
+        <div key={pr.number} className="flex items-center gap-1">
+          <a
+            href={pr.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`flex flex-1 min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-[12px] hover:bg-accent transition-colors ${
+              pr.current ? '' : 'text-fg-fade-70'
+            }`}
+          >
+            <span
+              className={`inline-flex items-center justify-center rounded-md w-[18px] h-[18px] shrink-0 ${prStatusPill(pr.state)} ${outline(pr)}`}
+            >
+              <StateIcon pr={pr} size={11} />
+            </span>
+            <span className="font-mono text-muted-fade-70 shrink-0">#{pr.number}</span>
+            <span className="truncate flex-1 min-w-0">{pr.title}</span>
+            <span className={`shrink-0 text-[11px] ${stateTextColor(pr)}`}>{stateText(pr)}</span>
+          </a>
+          <FixCiButton pr={pr} taskId={taskId} />
+        </div>
+      ))}
+    </PopoverContent>
   );
 }
 
 /**
- * The newest relevant PR as a link, color-coded by state (standard GitHub
- * colors): open → green, merged → purple, closed → red, with a dot for its
- * checks; "+N" lists the rest. Given a `taskId`, the pills offer "Fix CI" on
- * a PR whose checks fail. The pill variants hide a closed PR; the icon
- * variant always renders. Shared by the task header (md pill), the ProjectView
- * task cards (sm pill) and the sidebar rows (icon).
+ * A task's PR, colour-coded by state (open green, merged purple, closed red)
+ * with its checks as the outline: a red or green ring, or a highlight looping
+ * around it while they run. Clicking lists every PR from the branch. With no
+ * current PR, the branch's newest past one shows muted. The pill variants
+ * hide a closed PR; the icon variant always renders. Shared by the task header
+ * (md pill), the ProjectView task cards (sm pill) and the sidebar rows (icon).
  */
-export function PrBadge({ prs, size = 'md', variant = 'pill', taskId }: PrBadgeProps) {
-  const pr = prs[0];
+export function PrBadge({ prs, allPrs, size = 'md', variant = 'pill', taskId }: PrBadgeProps) {
+  const list = allPrs && allPrs.length > 0 ? allPrs : prs;
+  const pr = prs[0] ?? list[0];
   if (!pr) return null;
-  const colorCls = prStatusPill(pr.state);
-  const Icon = pr.state === 'merged' ? GitMerge : GitPullRequest;
-  const tooltip = prs.length > 1 ? `${describe(pr)}, and ${prs.length - 1} more` : describe(pr);
+  const isCurrent = prs.length > 0;
+  const colorCls = isCurrent ? prStatusPill(pr.state) : MUTED;
+  const ciCls = isCurrent ? outline(pr) : '';
+  const tooltip =
+    (isCurrent ? describe(pr) : `Past PR #${pr.number}: ${pr.title} (${pr.state})`) +
+    (list.length > 1 ? `; click for all ${list.length}` : '');
 
-  // The sidebar icon always shows — a closed PR (red) is still the link the
-  // user wants — while the larger pills keep hiding closed ones.
   if (variant === 'icon') {
     return (
-      <Tooltip content={tooltip}>
-        <a
-          href={pr.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          aria-label={`Open PR #${pr.number}`}
-          className={`relative inline-flex items-center justify-center rounded-md w-[18px] h-[18px] shrink-0 transition-colors ${colorCls}`}
-        >
-          <Icon size={11} strokeWidth={2} />
-          {pr.ci && (
-            <span className="absolute -top-0.5 -right-0.5">
-              <CiDot pr={pr} size={5} />
-            </span>
-          )}
-        </a>
-      </Tooltip>
+      <Popover>
+        <Tooltip content={tooltip}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              onClick={(e) => e.stopPropagation()}
+              aria-label={`PR #${pr.number}`}
+              className={`inline-flex items-center justify-center rounded-md w-[18px] h-[18px] shrink-0 transition-colors ${colorCls} ${ciCls}`}
+            >
+              <StateIcon pr={pr} size={11} />
+            </button>
+          </PopoverTrigger>
+        </Tooltip>
+        <PrList prs={list} taskId={taskId} />
+      </Popover>
     );
   }
 
-  if (pr.state === 'closed') return null;
+  if (isCurrent && pr.state === 'closed') return null;
   const iconSize = size === 'sm' ? 10 : 11;
   const sizeCls = size === 'sm' ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-[3px] text-[11px]';
   return (
     <span className="inline-flex items-center gap-0.5">
-      <Tooltip content={tooltip}>
-        <a
-          href={pr.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className={`inline-flex items-center gap-1 rounded-full font-mono transition-colors ${sizeCls} ${colorCls}`}
-        >
-          <Icon size={iconSize} strokeWidth={2} />
-          PR #{pr.number}
-          <CiDot pr={pr} />
-        </a>
-      </Tooltip>
-      <FixCiButton pr={pr} taskId={taskId} />
-      {prs.length > 1 && <MorePrs prs={prs} taskId={taskId} />}
+      <Popover>
+        <Tooltip content={tooltip}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              onClick={(e) => e.stopPropagation()}
+              className={`inline-flex items-center gap-1 rounded-full font-mono transition-colors ${sizeCls} ${colorCls} ${ciCls}`}
+            >
+              <StateIcon pr={pr} size={iconSize} />
+              PR #{pr.number}
+            </button>
+          </PopoverTrigger>
+        </Tooltip>
+        <PrList prs={list} taskId={taskId} />
+      </Popover>
+      {isCurrent && <FixCiButton pr={pr} taskId={taskId} />}
     </span>
   );
 }

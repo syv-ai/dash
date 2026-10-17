@@ -66,8 +66,8 @@ export class GithubService {
   }
 
   /**
-   * The PRs worth showing for the branch checked out at `cwd` (see
-   * relevantPrs), with CI status on open ones. Reads the live branch, so a
+   * The PRs from the branch checked out at `cwd`, newest first, with the
+   * current ones flagged (see relevantPrs) and CI status on open ones. Reads the live branch, so a
    * session that switched branches gets the new branch's PRs; none on the
    * default branch or a detached HEAD.
    */

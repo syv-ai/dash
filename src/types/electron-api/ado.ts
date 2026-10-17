@@ -23,7 +23,7 @@ export interface AdoApi {
     branch: string,
     projectId?: string,
   ) => Promise<IpcResponse<void>>;
-  /** The PRs worth showing for the branch checked out at `cwd`, newest first. */
+  /** The PRs from the branch checked out at `cwd`, newest first, current ones flagged. */
   adoGetPrsForCheckout: (args: {
     cwd: string;
     defaultBranch: string;

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { GitStatus, PullRequestInfo, Project, Task } from '../../shared/types';
-import { fetchPrsFor, prDetectionTargets, prTargetFor } from './prDetectionTargets';
+import { fetchPrsFor, prDetectionTargets, prTargetFor, type BranchPrs } from './prDetectionTargets';
 import { useProjects, selectActiveTask } from './projectsStore';
 
 const GIT_POLL_INTERVAL = 5000;
@@ -33,10 +33,12 @@ export interface GitState {
   gitStatus: GitStatus | null;
   gitLoading: boolean;
   diffFile: DiffFileTarget | null;
-  /** The active task's PRs worth showing, newest first (see relevantPrs). */
+  /** The PRs standing for the active task's branch now, newest first (see relevantPrs). */
   prs: PullRequestInfo[];
   /** The same per task, for the sidebar rows and ProjectView cards. */
   prByTask: Record<string, PullRequestInfo[]>;
+  /** Per task, every PR from its branch, newest first: the list behind its PR badge. */
+  branchPrsByTask: Record<string, PullRequestInfo[]>;
   /**
    * Each task's checked-out branch as last read (null: detached HEAD). Unlike
    * `task.branch`, the branch Dash created it on, this follows a session that
@@ -86,6 +88,7 @@ export const useGit = create<GitStore>((set, get) => ({
   diffFile: null,
   prs: [],
   prByTask: {},
+  branchPrsByTask: {},
   branchByTask: {},
   showCommitGraph: false,
   commitGraphFocusHash: null,
@@ -212,7 +215,12 @@ export const useGit = create<GitStore>((set, get) => ({
 
     const defaultBranch = project?.baseRef || project?.gitBranch || 'main';
     if (!branch || !project || branch === defaultBranch) {
-      if (task) set({ prByTask: { ...get().prByTask, [task.id]: [] } });
+      if (task) {
+        set({
+          prByTask: { ...get().prByTask, [task.id]: [] },
+          branchPrsByTask: { ...get().branchPrsByTask, [task.id]: [] },
+        });
+      }
       return;
     }
 
@@ -220,11 +228,16 @@ export const useGit = create<GitStore>((set, get) => ({
     const target = prTargetFor(project, task?.path || project.path);
 
     const fetchPrs = async () => {
-      const prs = await fetchPrsFor(target);
-      if (cancelled || prs === null) return;
+      const found = await fetchPrsFor(target);
+      if (cancelled || found === null) return;
       set({
-        prs,
-        ...(task ? { prByTask: { ...get().prByTask, [task.id]: prs } } : {}),
+        prs: found.current,
+        ...(task
+          ? {
+              prByTask: { ...get().prByTask, [task.id]: found.current },
+              branchPrsByTask: { ...get().branchPrsByTask, [task.id]: found.all },
+            }
+          : {}),
       });
     };
 
@@ -248,10 +261,17 @@ export const useGit = create<GitStore>((set, get) => ({
       Promise.all(targets.map(async (t) => [t.taskId, await currentBranch(t.cwd)] as const)),
     ]);
     // A failed fetch (undefined / null) keeps what the task showed.
-    const fetched = results.filter((r): r is readonly [string, PullRequestInfo[]] => r[1] !== null);
+    const fetched = results.filter((r): r is readonly [string, BranchPrs] => r[1] !== null);
     const read = branches.filter((r): r is readonly [string, string | null] => r[1] !== undefined);
     set({
-      prByTask: { ...get().prByTask, ...Object.fromEntries(fetched) },
+      prByTask: {
+        ...get().prByTask,
+        ...Object.fromEntries(fetched.map(([id, f]) => [id, f.current])),
+      },
+      branchPrsByTask: {
+        ...get().branchPrsByTask,
+        ...Object.fromEntries(fetched.map(([id, f]) => [id, f.all])),
+      },
       branchByTask: { ...get().branchByTask, ...Object.fromEntries(read) },
     });
   },

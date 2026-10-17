@@ -602,6 +602,8 @@ export interface PullRequestInfo {
   headSha?: string;
   /** Open PRs only; null when it has no checks. */
   ci?: CiState | null;
+  /** Stands for its branch now (see relevantPrs); the others are its history. */
+  current?: boolean;
 }
 
 /**

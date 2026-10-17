@@ -1,24 +1,25 @@
 import type { CiState, PullRequestInfo } from '@shared/types';
 
 /**
- * The PRs worth showing for a branch, newest first: every open one; with none
- * open, the newest merged or closed PR, but only while the branch has not moved
- * past its last commit. Once a developer keeps working after a merge, the old
- * PR is history and the branch reads as ready for a new one. A PR without a
- * known head commit, or one `movedPast` can't place, is kept rather than
- * guessed away.
+ * Every PR from a branch, newest first, with `current` set on the ones that
+ * stand for it now: every open one; with none open, the newest merged or
+ * closed PR, but only until the branch has a commit past its last one. Once
+ * a developer commits after a merge, the old PR is history (still listed) and
+ * the branch reads as ready for a new one. A PR without a known head commit,
+ * or one `movedPast` can't place, stays current rather than guessed away.
  */
 export async function relevantPrs(
   prs: PullRequestInfo[],
   movedPast: (sha: string) => Promise<boolean>,
 ): Promise<PullRequestInfo[]> {
   const newestFirst = [...prs].sort((a, b) => b.number - a.number);
-  const open = newestFirst.filter((p) => p.state === 'open');
-  if (open.length > 0) return open;
+  const anyOpen = newestFirst.some((p) => p.state === 'open');
   const last = newestFirst[0];
-  if (!last) return [];
-  if (last.headSha && (await movedPast(last.headSha))) return [];
-  return [last];
+  const lastIsCurrent = !anyOpen && !!last && !(last.headSha && (await movedPast(last.headSha)));
+  return newestFirst.map((p) => ({
+    ...p,
+    current: p.state === 'open' || (lastIsCurrent && p === last),
+  }));
 }
 
 /** One entry of `gh pr list --json statusCheckRollup`: a check run or a commit status. */

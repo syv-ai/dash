@@ -937,6 +937,57 @@
     hsl(var(--accent) / 0.5);
 }
 
+/* A PR's checks as the outline of its PrBadge icon/pill: a red or green ring
+   once they finish, and a highlight looping around the outline while they run.
+   The mask keeps only the ring (padding box minus content box). */
+.pr-ci-failing {
+  box-shadow: 0 0 0 1.5px hsl(var(--destructive));
+}
+.pr-ci-passing {
+  box-shadow: 0 0 0 1.5px hsl(var(--git-added));
+}
+@property --pr-ci-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+.pr-ci-running {
+  position: relative;
+}
+.pr-ci-running::before {
+  content: '';
+  position: absolute;
+  inset: -1.5px;
+  padding: 1.5px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: conic-gradient(
+    from var(--pr-ci-angle),
+    hsl(var(--git-modified)) 0deg,
+    hsl(var(--git-modified) / 0.15) 140deg,
+    hsl(var(--git-modified) / 0.15) 260deg,
+    hsl(var(--git-modified)) 360deg
+  );
+  -webkit-mask:
+    linear-gradient(hsl(var(--foreground)) 0 0) content-box,
+    linear-gradient(hsl(var(--foreground)) 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  filter: drop-shadow(0 0 2px hsl(var(--git-modified) / 0.8));
+  animation: pr-ci-loop 1.4s linear infinite;
+}
+@keyframes pr-ci-loop {
+  to {
+    --pr-ci-angle: 360deg;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pr-ci-running::before {
+    animation: none;
+    background: hsl(var(--git-modified));
+  }
+}
+
 /* Status dots with soft colored halos. `status-pulse` (busy) already animates its glow. */
 .status-dot-idle {
   background: hsl(var(--status-idle));

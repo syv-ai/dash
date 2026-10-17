@@ -97,6 +97,7 @@ export function ProjectsSection({
   const [archivedProjectsOpen, setArchivedProjectsOpen] = useState(false);
   const newRowRef = useRef<HTMLDivElement | null>(null);
   const prByTask = useGit((s) => s.prByTask);
+  const branchPrsByTask = useGit((s) => s.branchPrsByTask);
   const detectProjectPrs = useGit((s) => s.detectProjectPrs);
 
   // One-shot: scroll the freshly-created project's row into view, then clear the
@@ -455,6 +456,7 @@ export function ProjectsSection({
                           activityInfo={taskActivity[task.id]}
                           ctx={contextUsage[task.id]}
                           prs={prByTask[task.id]}
+                          allPrs={branchPrsByTask[task.id]}
                           isUnseen={!!unseenTaskIds?.has(task.id)}
                           hasRemoteControl={!!remoteControlStates[task.id]}
                           isDragging={draggingTaskId === task.id}

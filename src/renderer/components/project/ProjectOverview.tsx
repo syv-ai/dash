@@ -120,6 +120,7 @@ export function ProjectOverview({
 }: ProjectOverviewProps) {
   const taskActivity = useRuntime((s) => s.taskActivity);
   const prByTask = useGit((s) => s.prByTask);
+  const branchPrsByTask = useGit((s) => s.branchPrsByTask);
   const branchByTask = useGit((s) => s.branchByTask);
   const detectProjectPrs = useGit((s) => s.detectProjectPrs);
   const projectTokens = useRuntime((s) => s.projectTokenStats[project.id]);
@@ -385,10 +386,15 @@ export function ProjectOverview({
                           );
                         })()}
 
-                      {(prByTask[task.id]?.length ?? 0) > 0 && (
+                      {(branchPrsByTask[task.id]?.length ?? 0) > 0 && (
                         <div className="flex items-start gap-1.5 text-muted-foreground">
                           <span className="shrink-0 text-muted-fade-70 mt-0.5">PR:</span>
-                          <PrBadge prs={prByTask[task.id]!} size="sm" taskId={task.id} />
+                          <PrBadge
+                            prs={prByTask[task.id] ?? []}
+                            allPrs={branchPrsByTask[task.id]}
+                            size="sm"
+                            taskId={task.id}
+                          />
                         </div>
                       )}
                     </div>

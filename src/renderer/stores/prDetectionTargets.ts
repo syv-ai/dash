@@ -34,8 +34,14 @@ export function prDetectionTargets(project: Project, tasks: Task[]): PrDetection
   return tasks.map((t) => prTargetFor(project, t.path || project.path, t.id));
 }
 
-/** The target's PRs worth showing, or null when the lookup failed. */
-export async function fetchPrsFor(t: PrDetectionTarget): Promise<PullRequestInfo[] | null> {
+/** A branch's PRs: the ones standing for it now, and all of them, newest first. */
+export interface BranchPrs {
+  current: PullRequestInfo[];
+  all: PullRequestInfo[];
+}
+
+/** The target's PRs, or null when the lookup failed. */
+export async function fetchPrsFor(t: PrDetectionTarget): Promise<BranchPrs | null> {
   try {
     const resp =
       t.provider === 'ado' && t.remote
@@ -46,7 +52,9 @@ export async function fetchPrsFor(t: PrDetectionTarget): Promise<PullRequestInfo
             projectId: t.projectId,
           })
         : await window.electronAPI.githubGetPrsForCheckout(t.cwd, t.defaultBranch);
-    return resp.success ? (resp.data ?? []) : null;
+    if (!resp.success) return null;
+    const all = resp.data ?? [];
+    return { current: all.filter((p) => p.current), all };
   } catch {
     return null;
   }

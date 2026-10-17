@@ -128,9 +128,9 @@ export class AzureDevOpsService {
   }
 
   /**
-   * The PRs worth showing for the branch checked out at `cwd` (see
-   * relevantPrs). Reads the live branch; none on the default branch or a
-   * detached HEAD. No CI status yet.
+   * The PRs from the branch checked out at `cwd`, newest first, with the
+   * current ones flagged (see relevantPrs) and CI status on open ones. Reads
+   * the live branch; none on the default branch or a detached HEAD.
    */
   static async getPullRequestsForCheckout(
     config: AzureDevOpsConfig,

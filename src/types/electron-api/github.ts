@@ -21,7 +21,7 @@ export interface GithubApi {
     issueNumber: number,
     branch: string,
   ) => Promise<IpcResponse<void>>;
-  /** The PRs worth showing for the branch checked out at `cwd`, newest first. */
+  /** The PRs from the branch checked out at `cwd`, newest first, current ones flagged. */
   githubGetPrsForCheckout: (
     cwd: string,
     defaultBranch: string,

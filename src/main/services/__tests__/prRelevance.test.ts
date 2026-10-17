@@ -18,34 +18,35 @@ const never = async () => false;
 const always = async () => true;
 
 describe('relevantPrs', () => {
-  it('shows every open PR, newest first, and hides older merged ones', async () => {
-    const prs = [pr(3, 'open'), pr(1, 'merged'), pr(7, 'open')];
-    expect((await relevantPrs(prs, always)).map((p) => p.number)).toEqual([7, 3]);
+  const current = (prs: PullRequestInfo[]) => prs.filter((p) => p.current).map((p) => p.number);
+  const all = (prs: PullRequestInfo[]) => prs.map((p) => p.number);
+
+  it('lists every PR on the branch newest first, with every open one current', async () => {
+    const r = await relevantPrs([pr(3, 'open'), pr(1, 'merged'), pr(7, 'open')], always);
+    expect(all(r)).toEqual([7, 3, 1]);
+    expect(current(r)).toEqual([7, 3]);
   });
 
-  it('keeps a merged PR while the branch has not moved past it', async () => {
-    expect(await relevantPrs([pr(4, 'merged', 'abc')], never)).toEqual([pr(4, 'merged', 'abc')]);
+  it('keeps a merged PR current while the branch has not moved past it', async () => {
+    expect(current(await relevantPrs([pr(4, 'merged', 'abc')], never))).toEqual([4]);
   });
 
-  it('drops a merged or closed PR once the branch has new commits on top of it', async () => {
-    expect(await relevantPrs([pr(4, 'merged', 'abc')], always)).toEqual([]);
-    expect(await relevantPrs([pr(5, 'closed', 'def')], always)).toEqual([]);
+  it('keeps a merged or closed PR in the list, not current, once the branch has new commits', async () => {
+    const r = await relevantPrs([pr(4, 'merged', 'abc'), pr(5, 'closed', 'def')], always);
+    expect(all(r)).toEqual([5, 4]);
+    expect(current(r)).toEqual([]);
   });
 
   it('judges only the newest finished PR', async () => {
     const seen: string[] = [];
     const movedPast = async (sha: string) => (seen.push(sha), false);
     const r = await relevantPrs([pr(2, 'merged', 'old'), pr(6, 'closed', 'new')], movedPast);
-    expect(r.map((p) => p.number)).toEqual([6]);
+    expect(current(r)).toEqual([6]);
     expect(seen).toEqual(['new']);
   });
 
-  it('keeps a finished PR whose head commit is unknown', async () => {
-    expect((await relevantPrs([pr(4, 'merged')], always)).map((p) => p.number)).toEqual([4]);
-  });
-
-  it('is empty without PRs', async () => {
-    expect(await relevantPrs([], always)).toEqual([]);
+  it('keeps a finished PR whose head commit is unknown current', async () => {
+    expect(current(await relevantPrs([pr(4, 'merged')], always))).toEqual([4]);
   });
 });
 

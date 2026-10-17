@@ -31,16 +31,16 @@ export function prStatusText(state: PullRequestState): string {
   }
 }
 
-/** The dot for a PR's combined checks. */
-export function ciDot(ci: CiState): string {
+/** The outline for a PR's combined checks (index.css): a ring, or a looping glow while running. */
+export function ciOutline(ci: CiState): string {
   switch (ci) {
     case 'failing':
-      return 'bg-destructive';
+      return 'pr-ci-failing';
     case 'pending':
-      return 'bg-[hsl(var(--git-modified))]';
+      return 'pr-ci-running';
     case 'passing':
     default:
-      return 'bg-[hsl(var(--git-added))]';
+      return 'pr-ci-passing';
   }
 }
 
