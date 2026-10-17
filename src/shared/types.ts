@@ -566,7 +566,7 @@ export interface PullRequestInfo {
   provider: 'github' | 'ado';
   /** The PR's last commit, to tell whether the branch has moved past it. */
   headSha?: string;
-  /** Open GitHub PRs only; null when it has no checks. */
+  /** Open PRs only; null when it has no checks. */
   ci?: CiState | null;
 }
 

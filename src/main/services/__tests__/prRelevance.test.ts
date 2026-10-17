@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { PullRequestInfo } from '@shared/types';
-import { ciFromRollup, relevantPrs } from '../prRelevance';
+import { ciFromAdo, ciFromRollup, relevantPrs } from '../prRelevance';
 
 const pr = (
   number: number,
@@ -77,5 +77,51 @@ describe('ciFromRollup', () => {
       'passing',
     );
     expect(ciFromRollup([ctx('SUCCESS')])).toBe('passing');
+  });
+});
+
+describe('ciFromAdo', () => {
+  const BUILD = '0609b952-1397-4640-95ec-e00a01b2c241';
+  const STATUS = 'cbdc66da-9728-4af8-aada-9a5a32e4a226';
+  const REVIEWERS = 'fa4e907d-c16b-4a4c-9dfa-4906e5d171dd';
+  const policy = (status: string, type = BUILD) => ({
+    status,
+    configuration: { type: { id: type } },
+  });
+  const st = (id: number, state: string, name = 'ci', genre = 'ext') => ({
+    id,
+    state,
+    context: { name, genre },
+  });
+
+  it('is null without build or status checks', () => {
+    expect(ciFromAdo([], [])).toBeNull();
+    expect(ciFromAdo(null, undefined)).toBeNull();
+    expect(ciFromAdo([policy('rejected', REVIEWERS)], [st(1, 'notSet')])).toBeNull();
+  });
+
+  it('fails on a rejected or broken build or status policy, or a failed status', () => {
+    expect(ciFromAdo([policy('approved'), policy('rejected')], [])).toBe('failing');
+    expect(ciFromAdo([policy('broken', STATUS)], [])).toBe('failing');
+    expect(ciFromAdo([policy('running')], [st(1, 'error')])).toBe('failing');
+  });
+
+  it('is pending while a check is queued or running, passing once all succeed', () => {
+    expect(ciFromAdo([policy('queued')], [])).toBe('pending');
+    expect(ciFromAdo([policy('approved')], [st(1, 'pending')])).toBe('pending');
+    expect(ciFromAdo([policy('approved'), policy('notApplicable')], [st(1, 'succeeded')])).toBe(
+      'passing',
+    );
+  });
+
+  it('ignores reviewer and other non-CI policies', () => {
+    expect(ciFromAdo([policy('approved'), policy('rejected', REVIEWERS)], [])).toBe('passing');
+  });
+
+  it('uses the latest status per context', () => {
+    expect(ciFromAdo([], [st(1, 'failed'), st(2, 'succeeded')])).toBe('passing');
+    expect(ciFromAdo([], [st(2, 'succeeded'), st(1, 'failed'), st(3, 'failed', 'lint')])).toBe(
+      'failing',
+    );
   });
 });

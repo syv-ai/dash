@@ -3,13 +3,14 @@ import type {
   AzureDevOpsWorkItem,
   AzureDevOpsWorkItemRef,
   PullRequest,
+  CiState,
   PullRequestInfo,
 } from '@shared/types';
 import { normalizeAdoProject } from '@shared/urls';
 import { mapAdoPrList } from './adoPr';
 import { describeAdoFailure } from './adoErrors';
 import { GitService } from './GitService';
-import { relevantPrs } from './prRelevance';
+import { ciFromAdo, relevantPrs } from './prRelevance';
 
 const TIMEOUT_MS = 15_000;
 const API_VERSION = '7.1';
@@ -34,11 +35,11 @@ export class AzureDevOpsService {
   private static async request(
     config: AzureDevOpsConfig,
     path: string,
-    options?: { method?: string; body?: unknown; contentType?: string },
+    options?: { method?: string; body?: unknown; contentType?: string; apiVersion?: string },
   ): Promise<unknown> {
     const baseUrl = config.organizationUrl.replace(/\/+$/, '');
     const separator = path.includes('?') ? '&' : '?';
-    const url = `${baseUrl}/${path}${separator}api-version=${API_VERSION}`;
+    const url = `${baseUrl}/${path}${separator}api-version=${options?.apiVersion ?? API_VERSION}`;
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -149,6 +150,7 @@ export class AzureDevOpsService {
         title: string;
         status: string;
         lastMergeSourceCommit?: { commitId?: string };
+        repository?: { project?: { id?: string } };
       }>;
     };
 
@@ -158,17 +160,60 @@ export class AzureDevOpsService {
       completed: 'merged',
       abandoned: 'closed',
     };
-    const prs = (result.value ?? []).map(
-      (pr): PullRequestInfo => ({
-        number: pr.pullRequestId,
-        title: pr.title,
-        url: `${baseUrl}/${this.proj(config)}/_git/${repositoryName}/pullrequest/${pr.pullRequestId}`,
-        state: stateMap[pr.status] ?? 'open',
-        provider: 'ado',
-        headSha: pr.lastMergeSourceCommit?.commitId,
+    const prs = await Promise.all(
+      (result.value ?? []).map(async (pr): Promise<PullRequestInfo> => {
+        const state = stateMap[pr.status] ?? 'open';
+        return {
+          number: pr.pullRequestId,
+          title: pr.title,
+          url: `${baseUrl}/${this.proj(config)}/_git/${repositoryName}/pullrequest/${pr.pullRequestId}`,
+          state,
+          provider: 'ado',
+          headSha: pr.lastMergeSourceCommit?.commitId,
+          ci:
+            state === 'open'
+              ? await this.getPullRequestCi(
+                  config,
+                  repositoryName,
+                  pr.pullRequestId,
+                  pr.repository?.project?.id,
+                )
+              : null,
+        };
       }),
     );
     return relevantPrs(prs, (sha) => GitService.hasMovedPast(cwd, sha));
+  }
+
+  /**
+   * A PR's checks (see ciFromAdo) from its policy evaluations, which need the
+   * project's id, and its statuses. Null when neither can be read.
+   */
+  private static async getPullRequestCi(
+    config: AzureDevOpsConfig,
+    repositoryName: string,
+    prId: number,
+    projectId: string | undefined,
+  ): Promise<CiState | null> {
+    const values = (r: PromiseSettledResult<unknown>): unknown =>
+      r.status === 'fulfilled' ? (r.value as { value?: unknown } | null)?.value : null;
+    const [evaluations, statuses] = await Promise.allSettled([
+      projectId
+        ? this.request(
+            config,
+            `${this.proj(config)}/_apis/policy/evaluations?artifactId=${encodeURIComponent(
+              `vstfs:///CodeReview/CodeReviewId/${projectId}/${prId}`,
+            )}`,
+            // Policy evaluations exist only as a preview API.
+            { apiVersion: `${API_VERSION}-preview.1` },
+          )
+        : Promise.resolve(null),
+      this.request(
+        config,
+        `${this.proj(config)}/_apis/git/repositories/${encodeURIComponent(repositoryName)}/pullRequests/${prId}/statuses`,
+      ),
+    ]);
+    return ciFromAdo(values(evaluations), values(statuses));
   }
 
   /** Active (open) PRs for `repositoryName`, most-recent first. */

@@ -51,3 +51,50 @@ export function ciFromRollup(rollup: unknown): CiState | null {
   }
   return running ? 'pending' : 'passing';
 }
+
+// Policy types that are CI: build validation and required external status.
+// Reviewer, comment and work-item policies say nothing about the checks.
+const ADO_CI_POLICY_TYPES = new Set([
+  '0609b952-1397-4640-95ec-e00a01b2c241', // Build
+  'cbdc66da-9728-4af8-aada-9a5a32e4a226', // Status
+]);
+
+interface AdoPolicyEvaluation {
+  status?: string; // queued | running | approved | rejected | notApplicable | broken
+  configuration?: { type?: { id?: string } };
+}
+
+interface AdoPrStatus {
+  id?: number;
+  state?: string; // notSet | pending | succeeded | failed | error | notApplicable
+  context?: { name?: string; genre?: string };
+}
+
+/**
+ * An Azure DevOps PR's checks as one state, from its policy evaluations (build
+ * validation, required statuses) and the statuses posted to it, latest per
+ * context. Same rule as ciFromRollup; null without any CI check.
+ */
+export function ciFromAdo(evaluations: unknown, statuses: unknown): CiState | null {
+  const outcomes: Array<'failing' | 'pending' | 'passing'> = [];
+  for (const e of (Array.isArray(evaluations) ? evaluations : []) as AdoPolicyEvaluation[]) {
+    if (!ADO_CI_POLICY_TYPES.has(e.configuration?.type?.id ?? '')) continue;
+    if (e.status === 'rejected' || e.status === 'broken') outcomes.push('failing');
+    else if (e.status === 'queued' || e.status === 'running') outcomes.push('pending');
+    else if (e.status === 'approved') outcomes.push('passing');
+  }
+  const latest = new Map<string, AdoPrStatus>();
+  for (const s of (Array.isArray(statuses) ? statuses : []) as AdoPrStatus[]) {
+    const key = `${s.context?.genre ?? ''}/${s.context?.name ?? ''}`;
+    const prev = latest.get(key);
+    if (!prev || (s.id ?? 0) > (prev.id ?? 0)) latest.set(key, s);
+  }
+  for (const s of latest.values()) {
+    if (s.state === 'failed' || s.state === 'error') outcomes.push('failing');
+    else if (s.state === 'pending') outcomes.push('pending');
+    else if (s.state === 'succeeded') outcomes.push('passing');
+  }
+  if (outcomes.length === 0) return null;
+  if (outcomes.includes('failing')) return 'failing';
+  return outcomes.includes('pending') ? 'pending' : 'passing';
+}
