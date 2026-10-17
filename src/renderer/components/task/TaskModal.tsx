@@ -11,7 +11,7 @@ import type {
   TaskModel,
 } from '../../../shared/types';
 import { isAdoRemote } from '../../../shared/urls';
-import { slugify } from '../../../shared/slug';
+import { branchSlug } from '../../../shared/slug';
 import { Modal, useModalClose } from '../ui/Modal';
 import { PermissionModePicker, readInitialPermissionMode } from './PermissionModePicker';
 import { ModelPicker, readInitialModel, persistModelChoice } from './ModelPicker';
@@ -546,7 +546,7 @@ function TaskModalBody({
                 </label>
                 {pushRemote && name.trim() && (
                   <p className="ml-[44px] mt-1 text-[11px] text-muted-fade-40 font-mono truncate">
-                    origin/{slugify(name.trim())}
+                    origin/{branchSlug(name.trim())}
                   </p>
                 )}
               </div>

@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { BrowserWindow } from 'electron';
 import type { WorktreeInfo, RemoveWorktreeOptions } from '@shared/types';
-import { slugify } from '@shared/slug';
+import { branchSlug, slugify } from '@shared/slug';
 import { GithubService } from './GithubService';
 import { withExcludeEntry, WORKTREES_EXCLUDE_ENTRY } from './gitExclude';
 import {
@@ -60,9 +60,10 @@ export class WorktreeService {
       setupScript?: string | null;
     },
   ): Promise<WorktreeInfo> {
+    // The branch keeps the name's slashes (`feature/foo-1nfe`); the folder is flat.
     const slug = this.slugify(taskName);
     const hash = this.generateShortHash();
-    const branchName = `${slug}-${hash}`;
+    const branchName = `${branchSlug(taskName)}-${hash}`;
 
     const baseRef = await this.resolveBaseRef(projectPath, options.baseRef);
     const worktreesDir = await this.ensureWorktreesDir(projectPath);
