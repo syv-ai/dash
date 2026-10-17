@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { EditorView } from '../types';
+import { frozenCommit, type EditorView } from '../types';
 
 export type LoadState =
   | { kind: 'loading' }
@@ -71,11 +71,13 @@ export function useFileLoad(
           language: resp.data.language,
           modifiedPresent,
         });
-      } else if (view.kind === 'commit') {
+      } else if (view.kind === 'commit' || view.kind === 'pr') {
+        const frozen = frozenCommit(view)!;
         const resp = await window.electronAPI.editorReadCommit({
           cwd,
           filePath,
-          hash: view.hash,
+          hash: frozen.hash,
+          base: frozen.base,
         });
         if (cancelled) return;
         if (!resp.success || !resp.data) {

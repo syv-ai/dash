@@ -717,6 +717,11 @@ export class TerminalSessionManager {
     if (cb) cb(this.detachedInfo);
   }
 
+  /** Connected to its PTY, so input reaches the process. */
+  get isLive(): boolean {
+    return this.ptyStarted && !this.disposed;
+  }
+
   get isDetached(): boolean {
     return this.detachedInfo !== null;
   }

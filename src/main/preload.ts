@@ -276,6 +276,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('github:get-prs-for-checkout', { cwd, defaultBranch }),
   githubWriteCiReport: (args: { cwd: string; number: number; url: string; headSha?: string }) =>
     ipcRenderer.invoke('github:write-ci-report', args),
+  githubGetPrReview: (args: { cwd: string; number: number }) =>
+    ipcRenderer.invoke('github:get-pr-review', args),
   githubListPrs: (cwd: string) => ipcRenderer.invoke('github:list-prs', { cwd }),
   githubPreparePrBranch: (cwd: string, prNumber: number, headRefName: string) =>
     ipcRenderer.invoke('github:prepare-pr-branch', { cwd, prNumber, headRefName }),
@@ -413,7 +415,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Diff editor
   editorReadWorking: (args: { cwd: string; filePath: string; ref: 'HEAD' | 'index' }) =>
     ipcRenderer.invoke('editor:readWorking', args),
-  editorReadCommit: (args: { cwd: string; filePath: string; hash: string }) =>
+  editorReadCommit: (args: { cwd: string; filePath: string; hash: string; base?: string }) =>
     ipcRenderer.invoke('editor:readCommit', args),
   editorWriteWorking: (args: {
     cwd: string;
@@ -424,7 +426,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }) => ipcRenderer.invoke('editor:writeWorking', args),
   editorListCommits: (args: { cwd: string; limit?: number }) =>
     ipcRenderer.invoke('editor:listCommits', args),
-  editorListFilesInCommit: (args: { cwd: string; hash: string }) =>
+  editorListFilesInCommit: (args: { cwd: string; hash: string; base?: string }) =>
     ipcRenderer.invoke('editor:listFilesInCommit', args),
   editorListRepoFiles: (args: {
     cwd: string;

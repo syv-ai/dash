@@ -19,10 +19,12 @@ export interface EditorApi {
     filePath: string;
     ref: 'HEAD' | 'index';
   }) => Promise<IpcResponse<EditorReadWorkingResult>>;
+  /** A file at `hash` against its parent, or against `base` when given (a PR's merge-base). */
   editorReadCommit: (args: {
     cwd: string;
     filePath: string;
     hash: string;
+    base?: string;
   }) => Promise<IpcResponse<EditorReadCommitResult>>;
   editorWriteWorking: (args: {
     cwd: string;
@@ -38,6 +40,7 @@ export interface EditorApi {
   editorListFilesInCommit: (args: {
     cwd: string;
     hash: string;
+    base?: string;
   }) => Promise<IpcResponse<FileChange[]>>;
   editorListRepoFiles: (args: {
     cwd: string;

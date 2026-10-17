@@ -10,6 +10,9 @@ import { useEditorViewData } from './data/useEditorViewData';
 import { pickFirstChangedFile } from './data/viewData';
 import { readStoredView, writeStoredView } from './data/viewPersistence';
 import { useCommentsStore } from '../../stores/commentsStore';
+import { usePrReviews } from '../../stores/prReviewStore';
+import { toast } from 'sonner';
+import type { PrEntry } from './EditorSidebar';
 import { commentScope, commentCountsByScope } from './comments/commentScope';
 
 /** Composition-root workspace: owns view state, drives the data loaders, and
@@ -66,7 +69,7 @@ export function DiffEditor({
       validatedInitialView.current = true;
       return;
     }
-    if (view.kind === 'commit') {
+    if (view.kind === 'commit' || view.kind === 'pr') {
       if (repoPathsLoading) return; // wait for the tree listing to settle
       validatedInitialView.current = true;
       if (repoPaths.length === 0) changeView({ kind: 'working', ref: 'HEAD' });
@@ -128,7 +131,9 @@ export function DiffEditor({
     if (scope.startsWith('commit:')) {
       setView({ kind: 'commit', hash: scope.slice(7) });
     } else {
-      setView((cur) => (cur.kind === 'commit' ? { kind: 'working', ref: 'HEAD' } : cur));
+      setView((cur) =>
+        cur.kind === 'commit' || cur.kind === 'pr' ? { kind: 'working', ref: 'HEAD' } : cur,
+      );
     }
     setSelectedPath(path);
     setRevealCommentId(commentId);
@@ -140,14 +145,44 @@ export function DiffEditor({
   // "3 comments" when the diff you're looking at has none of them. Already-sent
   // comments don't need attention, so they're excluded from the count.
   const currentScope = commentScope(view);
+  // ── The task's open GitHub PR and its review threads ────
+  const openPr = useGit((s) => {
+    const pr = activeTaskId ? s.prByTask[activeTaskId]?.[0] : undefined;
+    return pr && pr.state === 'open' && pr.provider === 'github' ? pr : null;
+  });
+  const review = usePrReviews((s) => (activeTaskId ? s.byTask[activeTaskId] : undefined));
+  const prReview = openPr && review?.number === openPr.number ? review : null;
+  const openPrView = useCallback(async () => {
+    if (!openPr || !activeTaskId) return;
+    const loaded = await usePrReviews.getState().load(activeTaskId, cwd, openPr.number);
+    if (!loaded) {
+      toast.error(`Could not load PR #${openPr.number}`);
+      return;
+    }
+    setSelectedPath('');
+    setView({ kind: 'pr', number: loaded.number, base: loaded.base, head: loaded.head });
+  }, [openPr, activeTaskId, cwd]);
+  const prEntry: PrEntry | null = openPr
+    ? {
+        number: openPr.number,
+        threads: prReview?.threads.length ?? null,
+        onOpen: () => void openPrView(),
+      }
+    : null;
+
   const commentCounts = useMemo(() => {
     const map = new Map<string, number>();
+    // The PR view badges files with their unresolved threads instead.
+    if (view.kind === 'pr') {
+      for (const t of prReview?.threads ?? []) map.set(t.path, (map.get(t.path) ?? 0) + 1);
+      return map;
+    }
     for (const [path, list] of Object.entries(commentsByFile)) {
       const n = list.filter((c) => c.viewScope === currentScope && !c.sent).length;
       if (n > 0) map.set(path, n);
     }
     return map;
-  }, [commentsByFile, currentScope]);
+  }, [commentsByFile, currentScope, view.kind, prReview]);
 
   // Per-view totals for the commits-drawer badges (all scopes, not just open).
   const commentCountByScope = useMemo(() => commentCountsByScope(commentsByFile), [commentsByFile]);
@@ -181,6 +216,7 @@ export function DiffEditor({
             commentCountByScope={commentCountByScope}
             view={view}
             onSelectView={changeView}
+            pr={prEntry}
           />
         </Panel>
         <PanelResizeHandle className="w-3 bg-transparent hover:bg-transparent transition-colors" />
@@ -199,6 +235,7 @@ export function DiffEditor({
             onSelectBase={selectBase}
             onExitBranchView={exitBranchView}
             defaultBase={defaultBase}
+            onSelectFile={setSelectedPath}
           />
         </Panel>
       </PanelGroup>

@@ -7,6 +7,12 @@ import type { EditorView } from './types';
 import type { LiveComment } from './comments/types';
 import { useCommentsStore } from '../../stores/commentsStore';
 import { useGit } from '../../stores/gitStore';
+import { usePrReviews } from '../../stores/prReviewStore';
+import { buildReviewPrompt } from '../../utils/prReviewNotices';
+import { typeIntoTask } from '../../utils/typeIntoTask';
+import type { PrReviewThread } from '../../../shared/types';
+import { PrThreadOverlay } from './prReview/PrThreadOverlay';
+import { PrReviewMenu, isInlineThread } from './prReview/PrReviewMenu';
 import { useGutterSelection } from './comments/useGutterSelection';
 import { useFileComments } from './comments/useFileComments';
 import { commentScope, scopeLabel } from './comments/commentScope';
@@ -65,6 +71,8 @@ interface EditorPaneProps {
   defaultBase: string | null;
   /** Confirm-before-close (e.g. if the host has unsaved changes elsewhere). */
   guardClose?: () => boolean;
+  /** Open another file (the PR review menu's thread list). */
+  onSelectFile: (path: string) => void;
 }
 
 export function EditorPane({
@@ -81,6 +89,7 @@ export function EditorPane({
   onSelectBase,
   onExitBranchView,
   defaultBase,
+  onSelectFile,
 }: EditorPaneProps) {
   const commentsByFile = useCommentsStore((s) => s.byFile);
   const commentsDisabled = useCommentsStore((s) => s.disabled);
@@ -118,7 +127,10 @@ export function EditorPane({
   // hover-highlight).
   const [hoveredCommentId, setHoveredCommentId] = useState<string | null>(null);
 
-  const isCommitView = view.kind === 'commit';
+  // Commit and PR views show frozen, read-only content.
+  const isCommitView = view.kind === 'commit' || view.kind === 'pr';
+  // A PR view shows the PR's review threads instead of local notes.
+  const isPrView = view.kind === 'pr';
   // Comments anchor to the view's content state: 'live' (working/branch share
   // the working file) vs 'commit:<hash>'. The editor shows only this scope's
   // comments; the menu spans all scopes (grouped by view).
@@ -179,7 +191,7 @@ export function EditorPane({
   const { pendingRange, setPendingRange, dragging } = useGutterSelection(
     modifiedEditor,
     monaco,
-    !commentsDisabled,
+    !commentsDisabled && !isPrView,
   );
   const dirty = !isCommitView && draft !== loadedBuffer;
   const editable =
@@ -384,7 +396,29 @@ export function EditorPane({
     [commentsByFile],
   );
 
-  const showCommentsMenu = !commentsDisabled && hasAnyComments;
+  const showCommentsMenu = !commentsDisabled && hasAnyComments && !isPrView;
+
+  // ── PR review threads (PR view) ─────────────────────────
+  const prNumber = view.kind === 'pr' ? view.number : null;
+  const review = usePrReviews((s) => (activeTaskId ? s.byTask[activeTaskId] : undefined));
+  const prReview = review && review.number === prNumber ? review : null;
+  // Only once the file has loaded, so the zones land on its lines.
+  const inlineThreads = useMemo(
+    () =>
+      prReview && isFileLoaded
+        ? prReview.threads.filter((t) => t.path === filePath && isInlineThread(t))
+        : [],
+    [prReview, filePath, isFileLoaded],
+  );
+  const sendThreads = useCallback(
+    async (threads: PrReviewThread[], close: boolean) => {
+      if (!activeTaskId || !prReview || threads.length === 0) return;
+      if ((await typeIntoTask(activeTaskId, buildReviewPrompt(prReview, threads))) && close) {
+        onClose();
+      }
+    },
+    [activeTaskId, prReview, onClose],
+  );
 
   return (
     <div className="h-full flex flex-col min-w-0 min-h-0">
@@ -474,6 +508,16 @@ export function EditorPane({
                 />
               </div>
             )}
+            {prReview && (
+              <div className="absolute bottom-4 right-4 z-10">
+                <PrReviewMenu
+                  review={prReview}
+                  onSendAll={() => void sendThreads(prReview.threads, true)}
+                  onSend={(t) => void sendThreads([t], false)}
+                  onSelectFile={onSelectFile}
+                />
+              </div>
+            )}
             {state.kind === 'loading' && displayed.kind === 'loaded' && <LoadingPill />}
             {rulerMark &&
               (() => {
@@ -537,6 +581,14 @@ export function EditorPane({
                   </>
                 );
               })()}
+            {isPrView && (
+              <PrThreadOverlay
+                threads={inlineThreads}
+                modifiedEditor={modifiedEditor}
+                area={editorAreaEl}
+                onSend={(t) => void sendThreads([t], false)}
+              />
+            )}
             <CommentOverlay
               liveComments={liveComments}
               shadeById={shadeById}

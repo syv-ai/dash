@@ -4,6 +4,7 @@ import { useSettings } from '../../stores/settingsStore';
 import { useWizardToasts } from '../ports/useWizardToasts';
 import { useReleaseNotesToast } from './useReleaseNotesToast';
 import { useMergedPrToast } from './useMergedPrToast';
+import { useReviewCommentsToast } from './useReviewCommentsToast';
 
 export function ToastContainer() {
   // Follow Dash's theme, not the OS one: sonner's own text colours (the
@@ -12,6 +13,7 @@ export function ToastContainer() {
   useWizardToasts();
   useReleaseNotesToast();
   useMergedPrToast();
+  useReviewCommentsToast();
 
   useEffect(() => {
     return window.electronAPI.onToast((data) => {

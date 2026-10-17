@@ -558,6 +558,40 @@ export type PullRequestState = 'open' | 'merged' | 'closed';
 /** A PR's combined checks: any failure fails it, then any still running. */
 export type CiState = 'passing' | 'failing' | 'pending';
 
+/** One comment in a PR review thread. */
+export interface PrReviewComment {
+  id: string;
+  author: string;
+  body: string;
+  createdAt: string;
+  url: string;
+}
+
+/** An unresolved review thread on a PR, anchored to a file and line. */
+export interface PrReviewThread {
+  id: string;
+  path: string;
+  /** Last line of the commented range in the PR head's file; null once outdated. */
+  line: number | null;
+  /** First line of a multi-line comment, else null. */
+  startLine: number | null;
+  /** RIGHT: the PR's version of the file; LEFT: the base's (a removed line). */
+  side: 'LEFT' | 'RIGHT';
+  /** The lines it was left on have changed since. */
+  isOutdated: boolean;
+  comments: PrReviewComment[];
+}
+
+/** A PR's unresolved review threads, with the commits its diff spans. */
+export interface PrReview {
+  number: number;
+  url: string;
+  /** Merge-base of the PR's base and head: the left side of its diff. */
+  base: string;
+  head: string;
+  threads: PrReviewThread[];
+}
+
 export interface PullRequestInfo {
   number: number;
   title: string;

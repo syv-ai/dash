@@ -9,6 +9,7 @@ import type { EditorView } from '../types';
  *  content where that line means something else, so its comments are scoped to
  *  the commit hash and stay there. */
 export function commentScope(view: EditorView): string {
+  if (view.kind === 'pr') return `pr:${view.number}`;
   return view.kind === 'commit' ? `commit:${view.hash}` : 'live';
 }
 
@@ -20,6 +21,7 @@ export function commitShortHash(scope: string): string | null {
 /** Human label for a scope: 'Working tree' for the shared live diff, or
  *  'Commit <short>' for a frozen commit. */
 export function scopeLabel(scope: string): string {
+  if (scope.startsWith('pr:')) return `PR #${scope.slice(3)}`;
   const short = commitShortHash(scope);
   return short ? `Commit ${short}` : 'Working tree';
 }

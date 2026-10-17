@@ -1,6 +1,14 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
-import { ChevronDown, ChevronRight, Copy, GitCommit, History, ListFilter } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  GitCommit,
+  GitPullRequest,
+  History,
+  ListFilter,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { HoverSwapSlot } from '../ui/HoverSwapSlot';
 import { IconButton } from '../ui/IconButton';
@@ -30,6 +38,15 @@ interface EditorSidebarProps {
   commentCountByScope: Map<string, number>;
   view: EditorView;
   onSelectView: (view: EditorView) => void;
+  /** The task's open GitHub PR, shown as a row that opens the PR view. */
+  pr?: PrEntry | null;
+}
+
+/** The task's open PR in the commits drawer; `threads` is null until its review is fetched. */
+export interface PrEntry {
+  number: number;
+  threads: number | null;
+  onOpen: () => void;
 }
 
 const COMMITS_DRAWER_KEY = 'diffEditor.commitsDrawerSize';
@@ -67,6 +84,7 @@ export function EditorSidebar(props: EditorSidebarProps) {
             commentCountByScope={props.commentCountByScope}
             view={props.view}
             onSelectView={props.onSelectView}
+            pr={props.pr}
           />
         </Panel>
       </PanelGroup>
@@ -681,6 +699,7 @@ interface CommitsDrawerProps {
   commentCountByScope: Map<string, number>;
   view: EditorView;
   onSelectView: (view: EditorView) => void;
+  pr?: PrEntry | null;
 }
 
 function CommitsDrawer({
@@ -689,6 +708,7 @@ function CommitsDrawer({
   commentCountByScope,
   view,
   onSelectView,
+  pr,
 }: CommitsDrawerProps) {
   const workingActive = view.kind === 'working';
   const activeCommitHash = view.kind === 'commit' ? view.hash : null;
@@ -730,6 +750,22 @@ function CommitsDrawer({
             <CommentBadge count={commentCountByScope.get('live')!} />
           )}
         </button>
+        {pr && (
+          <button
+            type="button"
+            data-active={view.kind === 'pr'}
+            onClick={pr.onOpen}
+            className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-[12px] text-left transition-colors ${
+              view.kind === 'pr'
+                ? 'bg-primary/15 text-primary'
+                : 'text-fg-fade-85 hover:bg-[hsl(var(--surface-2)/0.6)]'
+            }`}
+          >
+            <GitPullRequest size={11} strokeWidth={1.8} className="opacity-60 shrink-0" />
+            <span className="truncate flex-1 font-mono text-[11.5px]">PR #{pr.number}</span>
+            {(pr.threads ?? 0) > 0 && <CommentBadge count={pr.threads!} />}
+          </button>
+        )}
         {loading && commits.length === 0 && (
           <div className="px-3 py-2 text-[11px] text-muted-fade-40">Loading…</div>
         )}

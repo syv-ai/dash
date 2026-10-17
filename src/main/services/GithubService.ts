@@ -2,10 +2,11 @@ import { execFile } from 'child_process';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import { promisify } from 'util';
-import type { GithubIssue, PullRequest, PullRequestInfo } from '@shared/types';
+import type { GithubIssue, PrReview, PullRequest, PullRequestInfo } from '@shared/types';
 import { mapGithubPrList, buildPrHeadRefspec } from './githubPr';
 import { GitService } from './GitService';
 import { ciFromRollup, relevantPrs } from './prRelevance';
+import { PR_REVIEW_QUERY, unresolvedThreadsFrom } from './prReview';
 import {
   actionsJobId,
   annotationsFrom,
@@ -176,6 +177,54 @@ export class GithubService {
     const file = path.join(dir, `ci-pr-${pr.number}.md`);
     await fs.writeFile(file, buildCiReport(pr, checks), 'utf-8');
     return { prompt: ciReportPointer(pr.number, file, checks), file };
+  }
+
+  /**
+   * PR `prNumber`'s unresolved review threads, and the merge-base and head
+   * commits its diff spans (what the threads' line numbers refer to). Fetches
+   * the two commits when the checkout at `cwd` lacks them.
+   */
+  static async getPrReview(cwd: string, prNumber: number): Promise<PrReview> {
+    const opts = { cwd, timeout: TIMEOUT_MS, env: process.env as Record<string, string> };
+    const { stdout } = await execFileAsync(
+      'gh',
+      [
+        'api',
+        'graphql',
+        '-F',
+        'owner={owner}',
+        '-F',
+        'name={repo}',
+        '-F',
+        `number=${prNumber}`,
+        '-f',
+        `query=${PR_REVIEW_QUERY}`,
+      ],
+      { ...opts, maxBuffer: 16 * 1024 * 1024 },
+    );
+    const pr = JSON.parse(stdout)?.data?.repository?.pullRequest;
+    if (!pr) throw new Error(`PR #${prNumber} not found`);
+    const head = String(pr.headRefOid ?? '');
+    const baseTip = String(pr.baseRefOid ?? '');
+    const mergeBase = () =>
+      execFileAsync('git', ['merge-base', baseTip, head], { cwd, timeout: TIMEOUT_MS });
+    let base: string;
+    try {
+      base = (await mergeBase()).stdout.trim();
+    } catch {
+      await execFileAsync('git', ['fetch', '--no-tags', 'origin', baseTip, head], {
+        cwd,
+        timeout: 60_000,
+      });
+      base = (await mergeBase()).stdout.trim();
+    }
+    return {
+      number: prNumber,
+      url: String(pr.url ?? ''),
+      base,
+      head,
+      threads: unresolvedThreadsFrom(pr),
+    };
   }
 
   /** Open PRs for the repo at `cwd`, newest first (gh's default order). */

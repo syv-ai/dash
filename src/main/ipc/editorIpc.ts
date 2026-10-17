@@ -447,12 +447,17 @@ export function registerEditorIpc(): void {
     'editor:readCommit',
     async (
       _event,
-      args: { cwd: string; filePath: string; hash: string },
+      args: { cwd: string; filePath: string; hash: string; base?: string },
     ): Promise<IpcResponse<EditorReadCommitResult>> => {
       try {
         parseArgs(
           'editor:readCommit',
-          z.looseObject({ cwd: z.string(), filePath: z.string(), hash: z.string() }),
+          z.looseObject({
+            cwd: z.string(),
+            filePath: z.string(),
+            hash: z.string(),
+            base: z.string().optional(),
+          }),
           args,
         );
         const abs = resolveInsideCwd(args.cwd, args.filePath);
@@ -465,9 +470,10 @@ export function registerEditorIpc(): void {
         }
         const relForGit = toGitPath(path.relative(cwdReal, abs));
 
-        // Try parent for original. If the hash has no parent (root commit),
-        // gitShow falls through to '' — every file is then an addition.
-        const original = await gitShow(args.cwd, `${args.hash}~1:${relForGit}`);
+        // Try `base` (a PR's merge-base) or else the parent for original. If the
+        // hash has no parent (root commit), gitShow falls through to '' — every
+        // file is then an addition.
+        const original = await gitShow(args.cwd, `${args.base ?? `${args.hash}~1`}:${relForGit}`);
         const modified = await gitShow(args.cwd, `${args.hash}:${relForGit}`);
 
         const modifiedBuf = Buffer.from(modified, 'utf8');
@@ -685,21 +691,27 @@ export function registerEditorIpc(): void {
   // ── editor:listFilesInCommit ──────────────────────────────────
   ipcMain.handle(
     'editor:listFilesInCommit',
-    async (_event, args: { cwd: string; hash: string }): Promise<IpcResponse<FileChange[]>> => {
+    async (
+      _event,
+      args: { cwd: string; hash: string; base?: string },
+    ): Promise<IpcResponse<FileChange[]>> => {
       try {
         parseArgs(
           'editor:listFilesInCommit',
-          z.looseObject({ cwd: z.string(), hash: z.string() }),
+          z.looseObject({ cwd: z.string(), hash: z.string(), base: z.string().optional() }),
           args,
         );
-        let base = `${args.hash}~1`;
-        try {
-          await execFileAsync('git', ['rev-parse', '--verify', `${args.hash}~1`], {
-            cwd: args.cwd,
-            timeout: 5000,
-          });
-        } catch {
-          base = EMPTY_TREE;
+        // Against `base` when given (a PR's merge-base), else the parent.
+        let base = args.base ?? `${args.hash}~1`;
+        if (!args.base) {
+          try {
+            await execFileAsync('git', ['rev-parse', '--verify', `${args.hash}~1`], {
+              cwd: args.cwd,
+              timeout: 5000,
+            });
+          } catch {
+            base = EMPTY_TREE;
+          }
         }
 
         const nameStatusOut = (

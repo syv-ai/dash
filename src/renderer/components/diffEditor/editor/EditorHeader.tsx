@@ -6,6 +6,7 @@ import {
   Eye,
   GitCommit,
   GitCompare,
+  GitPullRequest,
   History,
   MessageSquare,
   WrapText,
@@ -83,7 +84,13 @@ export function EditorHeader({
             tooltip: `Commit ${view.hash}`,
             Icon: GitCommit,
           }
-        : null;
+        : view.kind === 'pr'
+          ? {
+              label: `Showing PR #${view.number}`,
+              tooltip: `PR #${view.number}: ${view.base.slice(0, 7)}…${view.head.slice(0, 7)}`,
+              Icon: GitPullRequest,
+            }
+          : null;
   const [pickerOpen, setPickerOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
