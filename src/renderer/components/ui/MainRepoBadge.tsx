@@ -1,3 +1,4 @@
+import { House } from 'lucide-react';
 import { Tooltip } from './Tooltip';
 import { useTaskBranch } from '../../stores/gitStore';
 import type { Task } from '../../../shared/types';
@@ -8,18 +9,19 @@ interface MainRepoBadgeProps {
 }
 
 /**
- * Marks a task that runs in the project's own checkout rather than a worktree.
- * Borderless and deliberately quiet: a translucent tint of the deep-blue
- * badge token carries the meaning, with muted text so it reads as metadata
- * next to the task name rather than competing with it, in every theme.
+ * Marks a task that runs in the project's own checkout rather than a worktree:
+ * a quiet house icon, muted so it reads as metadata beside the task name.
  */
 export function MainRepoBadge({ task }: MainRepoBadgeProps) {
   const branch = useTaskBranch(task);
   const where = branch ? ` on ${branch}` : '';
   return (
     <Tooltip content={`Runs in the project's own checkout${where}, not a worktree`}>
-      <span className="inline-flex items-center rounded-full bg-[hsl(var(--badge-main)/0.3)] text-muted-foreground text-[9px] font-medium leading-none px-1.5 py-[3px] shrink-0 select-none">
-        main
+      <span
+        aria-label="Runs in the project's own checkout"
+        className="inline-flex items-center shrink-0 text-muted-fade-70"
+      >
+        <House size={14} strokeWidth={1.8} />
       </span>
     </Tooltip>
   );

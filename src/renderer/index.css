@@ -937,12 +937,9 @@
     hsl(var(--accent) / 0.5);
 }
 
-/* A PR's checks as a hairline outline on its PrBadge icon/pill: red when they
-   fail, a highlight looping around it while they run; passing needs none.
-   The mask keeps only the ring (padding box minus content box). */
-.pr-ci-failing {
-  box-shadow: 0 0 0 0.5px hsl(var(--destructive));
-}
+/* A PR whose checks are running: a hairline highlight looping around its
+   PrBadge icon/pill. The mask keeps only the ring (padding box minus content
+   box). */
 @property --pr-ci-angle {
   syntax: '<angle>';
   inherits: false;

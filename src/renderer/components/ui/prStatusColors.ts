@@ -31,18 +31,10 @@ export function prStatusText(state: PullRequestState): string {
   }
 }
 
-/** The outline for a PR's combined checks (index.css): a ring when failing, a
- *  looping glow while running, nothing when passing. */
+/** The outline for a PR's combined checks (index.css): a looping glow while
+ *  they run, else nothing (PrBadge marks failures with a warning triangle). */
 export function ciOutline(ci: CiState): string {
-  switch (ci) {
-    case 'failing':
-      return 'pr-ci-failing';
-    case 'pending':
-      return 'pr-ci-running';
-    case 'passing':
-    default:
-      return '';
-  }
+  return ci === 'pending' ? 'pr-ci-running' : '';
 }
 
 export function ciLabel(ci: CiState): string {

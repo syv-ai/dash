@@ -1,4 +1,4 @@
-import { GitMerge, GitPullRequest, Wrench } from 'lucide-react';
+import { GitMerge, GitPullRequest, TriangleAlert, Wrench } from 'lucide-react';
 import { Tooltip } from './Tooltip';
 import { IconButton } from './IconButton';
 import { Popover, PopoverContent, PopoverTrigger } from './Popover';
@@ -43,9 +43,24 @@ function stateTextColor(pr: PullRequestInfo): string {
       : 'text-[hsl(var(--git-added))]';
 }
 
-/** The CI outline for an open PR with checks, else nothing. */
+/** The looping outline while an open PR's checks run, else nothing. */
 function outline(pr: PullRequestInfo): string {
   return pr.state === 'open' && pr.ci ? ciOutline(pr.ci) : '';
+}
+
+const isFailing = (pr: PullRequestInfo) => pr.state === 'open' && pr.ci === 'failing';
+
+/** A small red warning triangle on the corner of a PR icon whose checks fail. */
+function FailingMark({ pr }: { pr: PullRequestInfo }) {
+  if (!isFailing(pr)) return null;
+  return (
+    <TriangleAlert
+      size={9}
+      strokeWidth={2.4}
+      aria-label="checks failing"
+      className="absolute -top-0.5 -right-1 text-destructive fill-[hsl(var(--background))]"
+    />
+  );
 }
 
 function StateIcon({ pr, size }: { pr: PullRequestInfo; size: number }) {
@@ -98,9 +113,10 @@ function PrList({ prs, taskId }: { prs: PullRequestInfo[]; taskId?: string }) {
             }`}
           >
             <span
-              className={`inline-flex items-center justify-center rounded-md w-[18px] h-[18px] shrink-0 ${prStatusText(pr.state)} ${outline(pr)}`}
+              className={`relative inline-flex items-center justify-center rounded-md w-[18px] h-[18px] shrink-0 ${prStatusText(pr.state)} ${outline(pr)}`}
             >
               <StateIcon pr={pr} size={11} />
+              <FailingMark pr={pr} />
             </span>
             <span className="font-mono text-muted-fade-70 shrink-0">#{pr.number}</span>
             <span className="truncate flex-1 min-w-0">{pr.title}</span>
@@ -115,8 +131,8 @@ function PrList({ prs, taskId }: { prs: PullRequestInfo[]; taskId?: string }) {
 
 /**
  * A task's PR, its icon coloured by state (open green, merged purple, closed red)
- * with its checks as a hairline outline: red when they fail, a highlight looping
- * around it while they run, none when they pass. Clicking lists every PR from the branch. With no
+ * with a small red warning triangle when its checks fail and a highlight looping
+ * around it while they run; passing checks add nothing. Clicking lists every PR from the branch. With no
  * current PR, the branch's newest past one shows muted. The pill variants
  * hide a closed PR; the icon variant always renders. Shared by the task header
  * (md pill), the ProjectView task cards (sm pill) and the sidebar rows (icon).
@@ -141,9 +157,10 @@ export function PrBadge({ prs, allPrs, size = 'md', variant = 'pill', taskId }: 
               type="button"
               onClick={(e) => e.stopPropagation()}
               aria-label={`PR #${pr.number}`}
-              className={`inline-flex items-center justify-center rounded-md w-[18px] h-[18px] shrink-0 transition-colors ${colorCls} ${ciCls}`}
+              className={`relative inline-flex items-center justify-center rounded-md w-[18px] h-[18px] shrink-0 transition-colors ${colorCls} ${ciCls}`}
             >
               <StateIcon pr={pr} size={11} />
+              {isCurrent && <FailingMark pr={pr} />}
             </button>
           </PopoverTrigger>
         </Tooltip>
@@ -167,6 +184,14 @@ export function PrBadge({ prs, allPrs, size = 'md', variant = 'pill', taskId }: 
             >
               <StateIcon pr={pr} size={iconSize} />
               PR #{pr.number}
+              {isCurrent && isFailing(pr) && (
+                <TriangleAlert
+                  size={iconSize}
+                  strokeWidth={2}
+                  aria-label="checks failing"
+                  className="text-destructive"
+                />
+              )}
             </button>
           </PopoverTrigger>
         </Tooltip>
