@@ -7,7 +7,8 @@ import { BrowserWindow } from 'electron';
 import type { WorktreeInfo, RemoveWorktreeOptions } from '@shared/types';
 import { branchSlug, slugify } from '@shared/slug';
 import { GithubService } from './GithubService';
-import { withExcludeEntry, WORKTREES_EXCLUDE_ENTRY } from './gitExclude';
+import { GitService } from './GitService';
+import { WORKTREES_EXCLUDE_ENTRY } from './gitExclude';
 import {
   loadWorkspaceConfig,
   resolveSetupCommand,
@@ -596,16 +597,7 @@ export class WorktreeService {
    */
   async ensureWorktreesExcluded(projectPath: string): Promise<void> {
     try {
-      const { stdout } = await execFileAsync('git', ['rev-parse', '--git-common-dir'], {
-        cwd: projectPath,
-      });
-      const gitDir = path.resolve(projectPath, stdout.trim());
-      const infoDir = path.join(gitDir, 'info');
-      fs.mkdirSync(infoDir, { recursive: true });
-      const excludePath = path.join(infoDir, 'exclude');
-      const existing = fs.existsSync(excludePath) ? fs.readFileSync(excludePath, 'utf-8') : '';
-      const next = withExcludeEntry(existing, WORKTREES_EXCLUDE_ENTRY);
-      if (next !== null) fs.writeFileSync(excludePath, next, 'utf-8');
+      await GitService.ensureExcluded(projectPath, WORKTREES_EXCLUDE_ENTRY);
     } catch (err) {
       console.warn(
         `[WorktreeService] Could not update .git/info/exclude for ${projectPath}: ${err instanceof Error ? err.message : String(err)}`,

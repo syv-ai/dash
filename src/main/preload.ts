@@ -274,6 +274,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('github:link-branch', { cwd, issueNumber, branch }),
   githubGetPrsForCheckout: (cwd: string, defaultBranch: string) =>
     ipcRenderer.invoke('github:get-prs-for-checkout', { cwd, defaultBranch }),
+  githubWriteCiReport: (args: { cwd: string; number: number; url: string; headSha?: string }) =>
+    ipcRenderer.invoke('github:write-ci-report', args),
   githubListPrs: (cwd: string) => ipcRenderer.invoke('github:list-prs', { cwd }),
   githubPreparePrBranch: (cwd: string, prNumber: number, headRefName: string) =>
     ipcRenderer.invoke('github:prepare-pr-branch', { cwd, prNumber, headRefName }),

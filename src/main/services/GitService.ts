@@ -1,7 +1,8 @@
 import { execFile, spawn } from 'child_process';
 import { createParser, type ParserEvent } from './preCommitParser';
+import { withExcludeEntry } from './gitExclude';
 import { unlinkSync, promises as fsPromises } from 'fs';
-import { join } from 'path';
+import { isAbsolute, join } from 'path';
 import { promisify } from 'util';
 import type {
   FileChange,
@@ -364,6 +365,21 @@ export class GitService {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Add `entry` to the repository's private `.git/info/exclude` (shared by all
+   * of its worktrees). Idempotent; throws when `cwd` is not in a repository.
+   */
+  static async ensureExcluded(cwd: string, entry: string): Promise<void> {
+    const common = (await git(cwd, ['rev-parse', '--git-common-dir'])).trim();
+    const gitDir = isAbsolute(common) ? common : join(cwd, common);
+    const infoDir = join(gitDir, 'info');
+    await fsPromises.mkdir(infoDir, { recursive: true });
+    const excludePath = join(infoDir, 'exclude');
+    const existing = await fsPromises.readFile(excludePath, 'utf-8').catch(() => '');
+    const next = withExcludeEntry(existing, entry);
+    if (next !== null) await fsPromises.writeFile(excludePath, next, 'utf-8');
   }
 
   /**

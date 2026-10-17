@@ -253,7 +253,7 @@ export function MainContent({
           </Tooltip>
         )}
 
-        {activeTask && <PrBadge prs={prs} />}
+        {activeTask && <PrBadge prs={prs} taskId={activeTask.id} />}
 
         {activeTask && modelName && (
           <Tooltip content="Model">

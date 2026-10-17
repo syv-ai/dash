@@ -55,6 +55,28 @@ export function registerGithubIpc(): void {
     },
   );
 
+  ipcMain.handle(
+    'github:write-ci-report',
+    async (_event, args: { cwd: string; number: number; url: string; headSha?: string }) => {
+      try {
+        parseArgs(
+          'github:write-ci-report',
+          z.looseObject({
+            cwd: z.string(),
+            number: z.number(),
+            url: z.string(),
+            headSha: z.string().optional(),
+          }),
+          args,
+        );
+        const { cwd, ...pr } = args;
+        return { success: true, data: await GithubService.writeCiReport(cwd, pr) };
+      } catch (err) {
+        return errorResponse(err);
+      }
+    },
+  );
+
   ipcMain.handle('github:list-prs', async (_event, args: { cwd: string }) => {
     try {
       parseArgs('github:list-prs', z.looseObject({ cwd: z.string() }), args);

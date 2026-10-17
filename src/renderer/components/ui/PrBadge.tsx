@@ -1,7 +1,9 @@
-import { GitMerge, GitPullRequest } from 'lucide-react';
+import { GitMerge, GitPullRequest, Wrench } from 'lucide-react';
 import { Tooltip } from './Tooltip';
+import { IconButton } from './IconButton';
 import { Popover, PopoverContent, PopoverTrigger } from './Popover';
 import { ciDot, ciLabel, prStatusPill, prStatusText } from './prStatusColors';
+import { fixCi } from '../../utils/fixCi';
 import type { PullRequestInfo } from '../../../shared/types';
 
 interface PrBadgeProps {
@@ -11,6 +13,8 @@ interface PrBadgeProps {
   /** `pill` (default) shows "PR #n"; `icon` is just the state icon as a
    *  compact link button, for dense rows like the sidebar task list. */
   variant?: 'pill' | 'icon';
+  /** The task these PRs belong to; enables "Fix CI" on a PR whose checks fail. */
+  taskId?: string;
 }
 
 function describe(pr: PullRequestInfo): string {
@@ -28,8 +32,27 @@ function CiDot({ pr, size = 6 }: { pr: PullRequestInfo; size?: number }) {
   );
 }
 
+/** "Fix CI" for a GitHub PR with failing checks: types a prompt pointing at them into the task. */
+function FixCiButton({ pr, taskId }: { pr: PullRequestInfo; taskId?: string }) {
+  if (!taskId || pr.provider !== 'github' || pr.ci !== 'failing') return null;
+  return (
+    <IconButton
+      title={`Fix CI: send PR #${pr.number}'s failed checks to this task`}
+      size="sm"
+      variant="destructive"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        void fixCi(taskId, pr);
+      }}
+    >
+      <Wrench size={14} strokeWidth={1.8} />
+    </IconButton>
+  );
+}
+
 /** "+N" for a branch with several PRs, opening a list of all of them. */
-function MorePrs({ prs }: { prs: PullRequestInfo[] }) {
+function MorePrs({ prs, taskId }: { prs: PullRequestInfo[]; taskId?: string }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -49,18 +72,24 @@ function MorePrs({ prs }: { prs: PullRequestInfo[] }) {
         {prs.map((pr) => {
           const Icon = pr.state === 'merged' ? GitMerge : GitPullRequest;
           return (
-            <a
-              key={pr.number}
-              href={pr.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[12px] hover:bg-accent transition-colors"
-            >
-              <Icon size={14} strokeWidth={1.8} className={`shrink-0 ${prStatusText(pr.state)}`} />
-              <span className="font-mono text-muted-fade-70 shrink-0">#{pr.number}</span>
-              <span className="truncate flex-1 min-w-0">{pr.title}</span>
-              <CiDot pr={pr} />
-            </a>
+            <div key={pr.number} className="flex items-center gap-1">
+              <a
+                href={pr.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex flex-1 min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-[12px] hover:bg-accent transition-colors"
+              >
+                <Icon
+                  size={14}
+                  strokeWidth={1.8}
+                  className={`shrink-0 ${prStatusText(pr.state)}`}
+                />
+                <span className="font-mono text-muted-fade-70 shrink-0">#{pr.number}</span>
+                <span className="truncate flex-1 min-w-0">{pr.title}</span>
+                <CiDot pr={pr} />
+              </a>
+              <FixCiButton pr={pr} taskId={taskId} />
+            </div>
           );
         })}
       </PopoverContent>
@@ -71,11 +100,12 @@ function MorePrs({ prs }: { prs: PullRequestInfo[] }) {
 /**
  * The newest relevant PR as a link, color-coded by state (standard GitHub
  * colors): open → green, merged → purple, closed → red, with a dot for its
- * checks; "+N" lists the rest. The pill variants hide a closed PR; the icon
+ * checks; "+N" lists the rest. Given a `taskId`, the pills offer "Fix CI" on
+ * a PR whose checks fail. The pill variants hide a closed PR; the icon
  * variant always renders. Shared by the task header (md pill), the ProjectView
  * task cards (sm pill) and the sidebar rows (icon).
  */
-export function PrBadge({ prs, size = 'md', variant = 'pill' }: PrBadgeProps) {
+export function PrBadge({ prs, size = 'md', variant = 'pill', taskId }: PrBadgeProps) {
   const pr = prs[0];
   if (!pr) return null;
   const colorCls = prStatusPill(pr.state);
@@ -124,7 +154,8 @@ export function PrBadge({ prs, size = 'md', variant = 'pill' }: PrBadgeProps) {
           <CiDot pr={pr} />
         </a>
       </Tooltip>
-      {prs.length > 1 && <MorePrs prs={prs} />}
+      <FixCiButton pr={pr} taskId={taskId} />
+      {prs.length > 1 && <MorePrs prs={prs} taskId={taskId} />}
     </span>
   );
 }

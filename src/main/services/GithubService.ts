@@ -1,13 +1,28 @@
 import { execFile } from 'child_process';
+import { promises as fs } from 'fs';
+import * as path from 'path';
 import { promisify } from 'util';
 import type { GithubIssue, PullRequest, PullRequestInfo } from '@shared/types';
 import { mapGithubPrList, buildPrHeadRefspec } from './githubPr';
 import { GitService } from './GitService';
 import { ciFromRollup, relevantPrs } from './prRelevance';
+import {
+  actionsJobId,
+  annotationsFrom,
+  buildCiReport,
+  ciReportPointer,
+  failedChecksFrom,
+  failedLogExcerpt,
+  failedStepsFrom,
+  type FailedCheck,
+} from './ciReport';
 
 const execFileAsync = promisify(execFile);
 
 const TIMEOUT_MS = 15_000;
+
+/** Where "Fix CI" writes its report, relative to the task's checkout. */
+const CI_REPORT_DIR = '.claude/dash';
 
 export class GithubService {
   static async isAvailable(): Promise<boolean> {
@@ -92,6 +107,75 @@ export class GithubService {
       };
     });
     return relevantPrs(prs, (sha) => GitService.hasMovedPast(cwd, sha));
+  }
+
+  /**
+   * A PR's failed checks, each with what gh can tell about it: for GitHub
+   * Actions jobs the failed steps, annotations and the log up to the failure.
+   * A detail that can't be fetched becomes a notice rather than an error.
+   */
+  static async getFailedChecks(cwd: string, prNumber: number): Promise<FailedCheck[]> {
+    const opts = { cwd, timeout: TIMEOUT_MS, env: process.env as Record<string, string> };
+    const { stdout } = await execFileAsync(
+      'gh',
+      ['pr', 'checks', String(prNumber), '--json', 'name,state,bucket,link,workflow,description'],
+      opts,
+    );
+    const checks = failedChecksFrom(JSON.parse(stdout));
+    return Promise.all(
+      checks.map(async (check): Promise<FailedCheck> => {
+        const jobId = actionsJobId(check.link);
+        if (!jobId) return { ...check, notice: 'Not a GitHub Actions job; see the link.' };
+        const [job, annotations, log] = await Promise.allSettled([
+          execFileAsync('gh', ['api', `repos/{owner}/{repo}/actions/jobs/${jobId}`], opts),
+          execFileAsync(
+            'gh',
+            ['api', `repos/{owner}/{repo}/check-runs/${jobId}/annotations`],
+            opts,
+          ),
+          execFileAsync('gh', ['run', 'view', '--job', jobId, '--log'], {
+            ...opts,
+            maxBuffer: 64 * 1024 * 1024,
+          }),
+        ]);
+        const json = (r: PromiseSettledResult<{ stdout: string }>): unknown => {
+          try {
+            return r.status === 'fulfilled' ? JSON.parse(r.value.stdout) : null;
+          } catch {
+            return null;
+          }
+        };
+        return {
+          ...check,
+          failedSteps: failedStepsFrom(json(job)),
+          annotations: annotationsFrom(json(annotations)),
+          log: log.status === 'fulfilled' ? failedLogExcerpt(log.value.stdout) : undefined,
+          notice:
+            log.status === 'rejected'
+              ? 'The job log could not be fetched (it may have expired); open the link.'
+              : undefined,
+        };
+      }),
+    );
+  }
+
+  /**
+   * Write PR `pr`'s failed checks to a Markdown file in the checkout at `cwd`
+   * (`.claude/dash/`, kept out of git via `.git/info/exclude`) and return the
+   * one-line prompt pointing at it, or null when no check has failed.
+   */
+  static async writeCiReport(
+    cwd: string,
+    pr: { number: number; url: string; headSha?: string },
+  ): Promise<{ prompt: string; file: string } | null> {
+    const checks = await GithubService.getFailedChecks(cwd, pr.number);
+    if (checks.length === 0) return null;
+    const dir = path.join(cwd, CI_REPORT_DIR);
+    await fs.mkdir(dir, { recursive: true });
+    await GitService.ensureExcluded(cwd, `${CI_REPORT_DIR}/`).catch(() => {});
+    const file = path.join(dir, `ci-pr-${pr.number}.md`);
+    await fs.writeFile(file, buildCiReport(pr, checks), 'utf-8');
+    return { prompt: ciReportPointer(pr.number, file, checks), file };
   }
 
   /** Open PRs for the repo at `cwd`, newest first (gh's default order). */
