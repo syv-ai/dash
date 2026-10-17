@@ -5,7 +5,7 @@ import {
   ChevronRight,
   Copy,
   GitCommit,
-  GitPullRequest,
+  GitPullRequestArrow,
   History,
   ListFilter,
 } from 'lucide-react';
@@ -761,7 +761,7 @@ function CommitsDrawer({
                 : 'text-fg-fade-85 hover:bg-[hsl(var(--surface-2)/0.6)]'
             }`}
           >
-            <GitPullRequest size={11} strokeWidth={1.8} className="opacity-60 shrink-0" />
+            <GitPullRequestArrow size={11} strokeWidth={1.8} className="opacity-60 shrink-0" />
             <span className="truncate flex-1 font-mono text-[11.5px]">PR #{pr.number}</span>
             {(pr.threads ?? 0) > 0 && <CommentBadge count={pr.threads!} />}
           </button>

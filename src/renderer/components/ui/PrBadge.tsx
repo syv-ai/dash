@@ -1,4 +1,4 @@
-import { GitMerge, GitPullRequest, GitPullRequestClosed, Wrench } from 'lucide-react';
+import { GitMerge, GitPullRequestArrow, GitPullRequestClosed, Wrench } from 'lucide-react';
 import { Tooltip } from './Tooltip';
 import { IconButton } from './IconButton';
 import { Popover, PopoverContent, PopoverTrigger } from './Popover';
@@ -59,7 +59,7 @@ function StateIcon({ pr, size }: { pr: PullRequestInfo; size: number }) {
       ? GitMerge
       : pr.state === 'closed'
         ? GitPullRequestClosed
-        : GitPullRequest;
+        : GitPullRequestArrow;
   return <Icon size={size} strokeWidth={size < 14 ? 2 : 1.8} />;
 }
 

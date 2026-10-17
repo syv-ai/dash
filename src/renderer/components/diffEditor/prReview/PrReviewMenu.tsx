@@ -1,4 +1,4 @@
-import { GitPullRequest, Send } from 'lucide-react';
+import { GitPullRequestArrow, Send } from 'lucide-react';
 import type { PrReview, PrReviewThread } from '../../../../shared/types';
 import { Button } from '../../ui/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '../../ui/Popover';
@@ -33,7 +33,7 @@ export function PrReviewMenu({ review, onSendAll, onSend, onSelectFile }: Props)
           size="sm"
           className="bg-[hsl(var(--surface-2))] shadow-lg shadow-shade/20"
         >
-          <GitPullRequest size={14} strokeWidth={1.8} />
+          <GitPullRequestArrow size={14} strokeWidth={1.8} />
           {count === 0
             ? 'No unresolved threads'
             : `${count} unresolved ${count === 1 ? 'thread' : 'threads'}`}
