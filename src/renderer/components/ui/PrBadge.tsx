@@ -2,7 +2,7 @@ import { GitMerge, GitPullRequestArrow, GitPullRequestClosed, Wrench } from 'luc
 import { Tooltip } from './Tooltip';
 import { IconButton } from './IconButton';
 import { Popover, PopoverContent, PopoverTrigger } from './Popover';
-import { ciLabel, ciOutline, prStatusText } from './prStatusColors';
+import { ciLabel, ciPulse, prStatusText } from './prStatusColors';
 import { fixCi } from '../../utils/fixCi';
 import type { PullRequestInfo } from '../../../shared/types';
 
@@ -33,9 +33,12 @@ function describe(pr: PullRequestInfo): string {
   return `PR #${pr.number}: ${pr.title} (${stateText(pr)})`;
 }
 
-/** The icon's colour: red for an open PR whose checks fail, else its state's. */
+/** The icon's colour: an open PR's red while its checks fail, amber while they
+ *  run, else its state's. */
 function iconColor(pr: PullRequestInfo): string {
-  return pr.state === 'open' && pr.ci === 'failing' ? 'text-destructive' : prStatusText(pr.state);
+  if (pr.state === 'open' && pr.ci === 'failing') return 'text-destructive';
+  if (pr.state === 'open' && pr.ci === 'pending') return 'text-[hsl(var(--git-modified))]';
+  return prStatusText(pr.state);
 }
 
 /** The state label's colour: an open PR's checks when it has any, else its state. */
@@ -48,19 +51,20 @@ function stateTextColor(pr: PullRequestInfo): string {
       : 'text-[hsl(var(--git-added))]';
 }
 
-/** The looping outline while an open PR's checks run, else nothing. */
-function outline(pr: PullRequestInfo): string {
-  return pr.state === 'open' && pr.ci ? ciOutline(pr.ci) : '';
+/** The pulse while an open PR's checks run, else nothing. */
+function pulse(pr: PullRequestInfo): string {
+  return pr.state === 'open' && pr.ci ? ciPulse(pr.ci) : '';
 }
 
-function StateIcon({ pr, size }: { pr: PullRequestInfo; size: number }) {
+/** The PR's state icon; pulses while its checks run unless `still`. */
+function StateIcon({ pr, size, still }: { pr: PullRequestInfo; size: number; still?: boolean }) {
   const Icon =
     pr.state === 'merged'
       ? GitMerge
       : pr.state === 'closed'
         ? GitPullRequestClosed
         : GitPullRequestArrow;
-  return <Icon size={size} strokeWidth={size < 14 ? 2 : 1.8} />;
+  return <Icon size={size} strokeWidth={size < 14 ? 2 : 1.8} className={still ? '' : pulse(pr)} />;
 }
 
 /** "Fix CI" for a GitHub PR with failing checks: types a prompt pointing at them into the task. */
@@ -108,7 +112,7 @@ function PrList({ prs, taskId }: { prs: PullRequestInfo[]; taskId?: string }) {
             }`}
           >
             <span
-              className={`inline-flex items-center justify-center rounded-md w-[18px] h-[18px] shrink-0 ${iconColor(pr)} ${outline(pr)}`}
+              className={`inline-flex items-center justify-center rounded-md w-[18px] h-[18px] shrink-0 ${iconColor(pr)}`}
             >
               <StateIcon pr={pr} size={11} />
             </span>
@@ -127,7 +131,7 @@ function PrList({ prs, taskId }: { prs: PullRequestInfo[]; taskId?: string }) {
  * A task's PR, its icon coloured by state as on GitHub (open green, merged
  * purple, closed red with the closed-PR icon). An open PR's icon turns red
  * while its checks fail (its open-PR icon keeps it apart from a closed one),
- * with a highlight looping around it while they run. Clicking lists every PR from the branch. With no
+ * and amber, pulsing like the busy session orb, while they run. Clicking lists every PR from the branch. With no
  * current PR, the branch's newest past one shows muted. The pill variants
  * hide a closed PR; the icon variant always renders. Shared by the task header
  * (md pill), the ProjectView task cards (sm pill) and the sidebar rows (icon).
@@ -138,7 +142,6 @@ export function PrBadge({ prs, allPrs, size = 'md', variant = 'pill', taskId }: 
   if (!pr) return null;
   const isCurrent = prs.length > 0;
   const colorCls = `${isCurrent ? iconColor(pr) : MUTED} ${HOVER}`;
-  const ciCls = isCurrent ? outline(pr) : '';
   const tooltip =
     (isCurrent ? describe(pr) : `Past PR #${pr.number}: ${pr.title} (${pr.state})`) +
     (list.length > 1 ? `; click for all ${list.length}` : '');
@@ -152,9 +155,9 @@ export function PrBadge({ prs, allPrs, size = 'md', variant = 'pill', taskId }: 
               type="button"
               onClick={(e) => e.stopPropagation()}
               aria-label={`PR #${pr.number}`}
-              className={`inline-flex items-center justify-center rounded-md w-[18px] h-[18px] shrink-0 transition-colors ${colorCls} ${ciCls}`}
+              className={`inline-flex items-center justify-center rounded-md w-[18px] h-[18px] shrink-0 transition-colors ${colorCls}`}
             >
-              <StateIcon pr={pr} size={11} />
+              <StateIcon pr={pr} size={11} still={!isCurrent} />
             </button>
           </PopoverTrigger>
         </Tooltip>
@@ -174,9 +177,9 @@ export function PrBadge({ prs, allPrs, size = 'md', variant = 'pill', taskId }: 
             <button
               type="button"
               onClick={(e) => e.stopPropagation()}
-              className={`inline-flex items-center gap-1 rounded-full font-mono transition-colors ${sizeCls} ${colorCls} ${ciCls}`}
+              className={`inline-flex items-center gap-1 rounded-full font-mono transition-colors ${sizeCls} ${colorCls}`}
             >
-              <StateIcon pr={pr} size={iconSize} />
+              <StateIcon pr={pr} size={iconSize} still={!isCurrent} />
               PR #{pr.number}
             </button>
           </PopoverTrigger>

@@ -31,9 +31,8 @@ export function prStatusText(state: PullRequestState): string {
   }
 }
 
-/** The outline for a PR's combined checks (index.css): a looping glow while
- *  they run, else nothing (PrBadge turns a failing PR's icon red). */
-export function ciOutline(ci: CiState): string {
+/** The pulse (index.css) for a PR icon while its checks run, else nothing. */
+export function ciPulse(ci: CiState): string {
   return ci === 'pending' ? 'pr-ci-running' : '';
 }
 

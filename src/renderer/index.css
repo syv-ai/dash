@@ -937,48 +937,25 @@
     hsl(var(--accent) / 0.5);
 }
 
-/* A PR whose checks are running: a hairline highlight looping around its
-   PrBadge icon/pill. The mask keeps only the ring (padding box minus content
-   box). */
-@property --pr-ci-angle {
-  syntax: '<angle>';
-  inherits: false;
-  initial-value: 0deg;
-}
+/* A PR whose checks are running: its PrBadge icon pulses like the busy
+   session orb (same rhythm as pulse-glow, without the dot's halo). */
 .pr-ci-running {
-  position: relative;
+  animation: pr-ci-pulse 2s ease-in-out infinite;
 }
-.pr-ci-running::before {
-  content: '';
-  position: absolute;
-  inset: -0.5px;
-  padding: 0.5px;
-  border-radius: inherit;
-  pointer-events: none;
-  background: conic-gradient(
-    from var(--pr-ci-angle),
-    hsl(var(--git-modified)) 0deg,
-    hsl(var(--git-modified) / 0.15) 140deg,
-    hsl(var(--git-modified) / 0.15) 260deg,
-    hsl(var(--git-modified)) 360deg
-  );
-  -webkit-mask:
-    linear-gradient(hsl(var(--foreground)) 0 0) content-box,
-    linear-gradient(hsl(var(--foreground)) 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  filter: drop-shadow(0 0 1px hsl(var(--git-modified) / 0.6));
-  animation: pr-ci-loop 1.4s linear infinite;
-}
-@keyframes pr-ci-loop {
-  to {
-    --pr-ci-angle: 360deg;
+@keyframes pr-ci-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.3;
+    transform: scale(0.85);
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pr-ci-running::before {
+  .pr-ci-running {
     animation: none;
-    background: hsl(var(--git-modified));
   }
 }
 
