@@ -91,6 +91,12 @@ function forgetDeletedTask(taskId: string) {
   if (useProjects.getState().activeTaskId === taskId) useProjects.getState().setActiveTask(null);
 }
 
+/** UI cleanup for a task main archived: its terminal sessions and service tabs. */
+function forgetArchivedTask(taskId: string) {
+  disposeTaskSessions(taskId);
+  void sessionRegistry.disposeByPrefix(`service:${taskId}:`);
+}
+
 /** Sort projects by the saved projectOrder, pruning stale ids from storage. */
 function applyProjectOrder(projectList: Project[]): Project[] {
   const store = ls();
@@ -185,11 +191,15 @@ export const useProjects = create<ProjectsStore>((set) => ({
     if (resp.success && resp.data) {
       // The list holds archived tasks too, so a task that left it was deleted.
       const kept = new Set(resp.data.map((t) => t.id));
-      const removed = (useProjects.getState().tasksByProject[projectId] ?? []).filter(
-        (t) => !kept.has(t.id),
-      );
+      const previous = useProjects.getState().tasksByProject[projectId] ?? [];
+      const removed = previous.filter((t) => !kept.has(t.id));
+      // Main ended a newly archived task's terminals (from the sidebar or the
+      // control API); drop their sessions so a restore starts fresh ones.
+      const wasActive = new Set(previous.filter((t) => !t.archivedAt).map((t) => t.id));
+      const archived = resp.data.filter((t) => t.archivedAt && wasActive.has(t.id));
       set((s) => ({ tasksByProject: { ...s.tasksByProject, [projectId]: resp.data! } }));
       for (const t of removed) forgetDeletedTask(t.id);
+      for (const t of archived) forgetArchivedTask(t.id);
     }
   },
   reorderProjects: (reordered) => {

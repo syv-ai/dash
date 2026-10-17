@@ -170,6 +170,32 @@ describe('projectsStore loadProjects / loadTasks', () => {
     expect(useProjects.getState().activeTaskId).toBeNull();
   });
 
+  it('loadTasks disposes the sessions of a newly archived task, keeping its snapshot', async () => {
+    const useProjects = await freshStore();
+    const { sessionRegistry } = await import('../../terminal/SessionRegistry');
+    useProjects.setState({
+      tasksByProject: {
+        p1: [task('t1', 'p1'), task('t2', 'p1'), task('old', 'p1', { archivedAt: '1' })],
+      },
+    });
+    // Archived elsewhere (the sidebar or the control API): main ended its terminals.
+    api.getTasks.mockResolvedValue({
+      success: true,
+      data: [
+        task('t1', 'p1', { archivedAt: '2' }),
+        task('t2', 'p1'),
+        task('old', 'p1', { archivedAt: '1' }),
+      ],
+    });
+    await useProjects.getState().loadTasks('p1');
+    expect(sessionRegistry.dispose).toHaveBeenCalledWith('t1');
+    expect(sessionRegistry.dispose).toHaveBeenCalledWith('shell:t1');
+    expect(sessionRegistry.disposeByPrefix).toHaveBeenCalledWith('service:t1:');
+    expect(sessionRegistry.dispose).not.toHaveBeenCalledWith('t2');
+    expect(sessionRegistry.dispose).not.toHaveBeenCalledWith('old');
+    expect(api.ptyClearSnapshot).not.toHaveBeenCalledWith('t1');
+  });
+
   it('loadTasks drops a response a newer load overtook, so a new task is not read as deleted', async () => {
     const useProjects = await freshStore();
     const { sessionRegistry } = await import('../../terminal/SessionRegistry');

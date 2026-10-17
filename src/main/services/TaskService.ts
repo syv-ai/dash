@@ -41,6 +41,17 @@ import { removeTaskSettings } from './taskSettings';
 export const UNATTENDED_INSTRUCTION =
   "You were started by an orchestrator and may be running unattended. Don't use AskUserQuestion; state your assumptions and continue. If a message asks for a reply, answer the sender with SendMessage.";
 
+/** End a task's shell and service terminals (not its agent pane). */
+async function killTaskTerminals(taskId: string, why: string): Promise<void> {
+  await Promise.all(
+    listForTask(taskId, { kinds: ['shell', 'service'] }).map((ptyId) =>
+      killPtyAwait(ptyId).catch((err) =>
+        console.warn(`[TaskService] ${why}: could not kill ${ptyId}:`, err),
+      ),
+    ),
+  );
+}
+
 /**
  * Task lifecycle: create, archive, restore, delete. The task dialog (through
  * `task:*` IPC) and the control API both come here, so the side effects
@@ -207,6 +218,9 @@ export class TaskService {
 
   /** Put the task's session to sleep (`claude stop`) and archive the row. */
   static async archive(id: string): Promise<void> {
+    // Shells and services would otherwise keep running (and holding ports)
+    // for a task nobody sees; restoring starts fresh ones.
+    await killTaskTerminals(id, 'archive');
     // Restoring and opening the task attaches, which wakes the session.
     await stopTaskSession(id).catch((err) =>
       console.warn('[TaskService] archive: session stop failed:', err),
@@ -235,13 +249,7 @@ export class TaskService {
     const project = DatabaseService.getProjects().find((p) => p.id === task.projectId);
     // Shell and service terminals run in the worktree (and hold its ports);
     // end them before it goes. The agent PTY goes with the session below.
-    await Promise.all(
-      listForTask(id, { kinds: ['shell', 'service'] }).map((ptyId) =>
-        killPtyAwait(ptyId).catch((err) =>
-          console.warn(`[TaskService] delete: could not kill ${ptyId}:`, err),
-        ),
-      ),
-    );
+    await killTaskTerminals(id, 'delete');
     if (task.useWorktree && project) {
       try {
         await worktreeService.removeWorktree(project.path, task.path, task.branch, {

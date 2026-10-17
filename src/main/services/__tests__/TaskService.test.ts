@@ -504,4 +504,12 @@ describe('TaskService.archive / restore', () => {
     }
     expect(seen).toEqual(['p1', 'p1']);
   });
+
+  it("ends the task's shell and service terminals, but leaves the agent pane to the session stop", async () => {
+    db.tasks.push({ id: 'a', projectId: 'p1', archivedAt: null } as Task);
+    ptysForTask.list = ['a', 'shell:a', 'shell:a:2', 'service:a:web'];
+    await TaskService.archive('a');
+    expect(ptysForTask.killed).toEqual(['shell:a', 'shell:a:2', 'service:a:web']);
+    expect(stopTaskSession).toHaveBeenCalledWith('a');
+  });
 });
