@@ -7,9 +7,13 @@
  * its consumers.
  */
 
+import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 
 /** Claude Code caps encoded dir names at this length and appends a hash. */
 const MAX_ENCODED_LENGTH = 200;
@@ -67,14 +71,35 @@ export function claudeStateFile(): string {
   return path.join(process.env.CLAUDE_CONFIG_DIR || os.homedir(), '.claude.json');
 }
 
-/** Whether the user accepted Claude Code's workspace trust prompt for `root`. Read-only. */
+/** The main checkout of the repo `dir` is a linked worktree of, else null. */
+async function mainRepoRoot(dir: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync(
+      'git',
+      ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+      { cwd: dir, timeout: 5000 },
+    );
+    const common = stdout.trim();
+    return path.basename(common) === '.git' ? path.dirname(common) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether the user accepted Claude Code's workspace trust prompt for `root`.
+ * Read-only. For a linked worktree Claude Code records the acceptance on the
+ * repo's main checkout, which then covers its worktrees; folders above the
+ * repo don't count.
+ */
 export async function isWorkspaceTrusted(root: string): Promise<boolean> {
+  let projects: Record<string, { hasTrustDialogAccepted?: unknown }> | undefined;
   try {
     const state: unknown = JSON.parse(await fs.promises.readFile(claudeStateFile(), 'utf8'));
-    const projects = (state as { projects?: Record<string, { hasTrustDialogAccepted?: unknown }> })
-      ?.projects;
-    return projects?.[root]?.hasTrustDialogAccepted === true;
+    projects = (state as { projects?: typeof projects })?.projects;
   } catch {
     return false;
   }
+  const trusted = (dir: string | null) => !!dir && projects?.[dir]?.hasTrustDialogAccepted === true;
+  return trusted(root) || trusted(await mainRepoRoot(root));
 }

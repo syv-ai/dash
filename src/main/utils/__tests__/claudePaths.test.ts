@@ -1,3 +1,4 @@
+import { execFileSync } from 'child_process';
 import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -118,6 +119,29 @@ describe('isWorkspaceTrusted', () => {
     expect(await isWorkspaceTrusted('/repo/a')).toBe(true);
     expect(await isWorkspaceTrusted('/repo/b')).toBe(false);
     expect(await isWorkspaceTrusted('/repo/c')).toBe(false);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("counts a linked worktree as trusted when its repo is (Claude Code records the repo's root)", async () => {
+    const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dash-trust-')));
+    const repo = path.join(dir, 'repo');
+    const wt = path.join(repo, '.claude', 'worktrees', 'task-1');
+    const git = (...args: string[]) => execFileSync('git', args, { cwd: repo, stdio: 'ignore' });
+    fs.mkdirSync(repo);
+    git('init', '-q', '-b', 'main');
+    git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'a');
+    git('worktree', 'add', '-q', '-b', 'task-1', wt);
+    process.env.CLAUDE_CONFIG_DIR = dir;
+    const trust = (projects: Record<string, unknown>) =>
+      fs.writeFileSync(path.join(dir, '.claude.json'), JSON.stringify({ projects }));
+
+    trust({});
+    expect(await isWorkspaceTrusted(wt)).toBe(false);
+    trust({ [repo]: { hasTrustDialogAccepted: true } });
+    expect(await isWorkspaceTrusted(wt)).toBe(true);
+    // Only the repo itself counts, not any folder above it.
+    trust({ [dir]: { hasTrustDialogAccepted: true } });
+    expect(await isWorkspaceTrusted(wt)).toBe(false);
     fs.rmSync(dir, { recursive: true, force: true });
   });
 

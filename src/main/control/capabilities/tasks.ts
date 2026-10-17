@@ -444,6 +444,8 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         if (current.messageAddress) return { task: current, timedOut: false };
 
         const startedAt = Date.now();
+        // No message: a resume with one starts the turn before its MCP servers
+        // connect, so the task's dash tools read as gone for that turn.
         const started = await deps.startSession(task.id);
         if ('needsTrust' in started) throw new ControlError(409, view(task).detail!);
         const ready = (): boolean => {
