@@ -12,6 +12,9 @@ export interface SystemApi {
   openExternal: (url: string) => Promise<void>;
   clipboardWriteText: (text: string) => void;
   clipboardReadText: () => Promise<string>;
+  clipboardHasImage: () => Promise<boolean>;
+  /** A dropped file's path on disk; '' for one that has none (e.g. dragged text). */
+  getPathForFile: (file: File) => string;
   openInEditor: (args: {
     cwd: string;
     filePath: string;

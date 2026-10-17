@@ -269,9 +269,7 @@ export class TerminalSessionManager {
         (!isMac && e.ctrlKey && e.shiftKey && isKeyV)
       ) {
         e.preventDefault();
-        void window.electronAPI.clipboardReadText().then((text) => {
-          if (text) window.electronAPI.ptyInput({ id: this.id, data: text });
-        });
+        void this.pasteFromClipboard();
         return false;
       }
 
@@ -861,6 +859,27 @@ export class TerminalSessionManager {
 
   writeInput(data: string) {
     window.electronAPI.ptyInput({ id: this.id, data });
+  }
+
+  /**
+   * Cmd+V's paste. Text goes straight to the pty. With only an image on the
+   * clipboard, a Claude pane gets Ctrl+V instead, so Claude Code reads the
+   * image from the clipboard itself. A shell would take Ctrl+V as "insert the
+   * next key literally", so shells get nothing.
+   */
+  private async pasteFromClipboard(): Promise<void> {
+    const api = window.electronAPI;
+    const text = await api.clipboardReadText();
+    if (text) {
+      api.ptyInput({ id: this.id, data: text });
+    } else if (!this.shellOnly && (await api.clipboardHasImage())) {
+      api.ptyInput({ id: this.id, data: '\x16' });
+    }
+  }
+
+  /** Paste as the user would: bracketed when the program asked for it. */
+  paste(text: string) {
+    this.terminal.paste(text);
   }
 
   focus() {

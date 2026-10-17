@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import type { SearchAddon } from '@xterm/addon-search';
 import { Loader2, PlugZap } from 'lucide-react';
 import { sessionRegistry } from '../../terminal/SessionRegistry';
+import { droppedPathsText } from '../../terminal/dropPaths';
 import type { DetachedInfo } from '../../terminal/TerminalSessionManager';
 import type { PermissionMode } from '../../../shared/types';
 import { TerminalSearch } from './TerminalSearch';
@@ -93,14 +94,10 @@ export function TerminalPane({ id, cwd, permissionMode, terminalBg }: TerminalPa
       onDrop={(e) => {
         e.preventDefault();
         setIsDragOver(false);
-        const files = e.dataTransfer.files;
-        if (files.length > 0) {
-          const paths = Array.from(files).map((f) => (f as File & { path: string }).path);
-          const session = sessionRegistry.get(id);
-          if (session) {
-            session.writeInput(paths.join(' '));
-          }
-        }
+        const { electronAPI } = window;
+        const paths = Array.from(e.dataTransfer.files).map((f) => electronAPI.getPathForFile(f));
+        const text = droppedPathsText(paths, electronAPI.getPlatform());
+        if (text) sessionRegistry.get(id)?.paste(text);
       }}
     >
       <div ref={containerRef} className="terminal-container w-full h-full" />

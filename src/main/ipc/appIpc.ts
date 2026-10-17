@@ -211,6 +211,9 @@ export function registerAppIpc(): void {
   ipcMain.handle('app:clipboardReadText', () => {
     return clipboard.readText();
   });
+  ipcMain.handle('app:clipboardHasImage', () => {
+    return clipboard.availableFormats().some((f) => f.startsWith('image/'));
+  });
 
   ipcMain.handle('app:showOpenDialog', async () => {
     try {

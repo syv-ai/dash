@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // App
@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
   clipboardWriteText: (text: string) => ipcRenderer.send('app:clipboardWriteText', text),
   clipboardReadText: () => ipcRenderer.invoke('app:clipboardReadText'),
+  clipboardHasImage: () => ipcRenderer.invoke('app:clipboardHasImage'),
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
   openInEditor: (args: { cwd: string; filePath: string; line?: number; col?: number }) =>
     ipcRenderer.invoke('app:openInEditor', args),
   openInIDE: (args: {
