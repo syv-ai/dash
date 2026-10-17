@@ -207,7 +207,7 @@ export function RotationSection({
                                 <span className="flex items-center gap-1.5">
                                   {anyMainRepo && (
                                     <span className={`flex ${task.useWorktree ? 'invisible' : ''}`}>
-                                      <MainRepoBadge branch={task.branch} />
+                                      <MainRepoBadge task={task} />
                                     </span>
                                   )}
                                   {anyPercent && (

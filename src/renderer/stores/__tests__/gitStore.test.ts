@@ -320,3 +320,45 @@ describe('gitStore.detectPr', () => {
     expect(useGit.getState().prs).toEqual(prs);
   });
 });
+
+describe('gitStore branchByTask (the live branch, not the one recorded at creation)', () => {
+  let api: ReturnType<typeof makeElectronApiMock>;
+  beforeEach(() => {
+    api = makeElectronApiMock();
+    installWindow(api);
+  });
+  afterEach(() => resetWindow());
+
+  it("detectProjectPrs records each task's checked-out branch", async () => {
+    api.gitCurrentBranch = vi.fn((cwd: string) =>
+      Promise.resolve({ success: true, data: cwd === '/wt/t1' ? 'renamed' : null }),
+    ) as unknown as typeof api.gitCurrentBranch;
+    const { useGit } = await freshStores();
+    await useGit.getState().detectProjectPrs(proj('p1'), [task('t1', 'p1'), task('t2', 'p1')]);
+    expect(api.gitCurrentBranch).toHaveBeenCalledWith('/wt/t1');
+    expect(useGit.getState().branchByTask).toEqual({ t1: 'renamed', t2: null });
+  });
+
+  it('keeps the last known branch when a lookup fails', async () => {
+    api.gitCurrentBranch = vi
+      .fn()
+      .mockResolvedValueOnce({ success: true, data: 'renamed' })
+      .mockResolvedValue({ success: false, error: 'gone' });
+    const { useGit } = await freshStores();
+    await useGit.getState().detectProjectPrs(proj('p1'), [task('t1', 'p1')]);
+    await useGit.getState().detectProjectPrs(proj('p1'), [task('t1', 'p1')]);
+    expect(useGit.getState().branchByTask.t1).toBe('renamed');
+  });
+
+  it("refreshGitStatus records the active task's branch from its status", async () => {
+    api.gitGetStatus = vi.fn(() =>
+      Promise.resolve({ success: true, data: status({ branch: 'switched' }) }),
+    );
+    const { useGit, useProjects } = await freshStores();
+    seedActiveTask(useProjects, task('t1', 'p1'));
+    await useGit.getState().refreshGitStatus('/wt/t1');
+    // A status for another checkout says nothing about the active task.
+    await useGit.getState().refreshGitStatus('/elsewhere');
+    expect(useGit.getState().branchByTask).toEqual({ t1: 'switched' });
+  });
+});

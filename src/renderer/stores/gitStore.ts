@@ -19,6 +19,16 @@ const apply = <T>(v: Updater<T>, prev: T): T =>
 
 const activeTask = (): Task | null => selectActiveTask(useProjects.getState());
 
+/** The branch checked out at `cwd` (null: detached), or undefined when it can't be read. */
+async function currentBranch(cwd: string): Promise<string | null | undefined> {
+  try {
+    const resp = await window.electronAPI.gitCurrentBranch(cwd);
+    return resp.success ? (resp.data ?? null) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export interface GitState {
   gitStatus: GitStatus | null;
   gitLoading: boolean;
@@ -27,6 +37,12 @@ export interface GitState {
   prs: PullRequestInfo[];
   /** The same per task, for the sidebar rows and ProjectView cards. */
   prByTask: Record<string, PullRequestInfo[]>;
+  /**
+   * Each task's checked-out branch as last read (null: detached HEAD). Unlike
+   * `task.branch`, the branch Dash created it on, this follows a session that
+   * switched branches. Read it through useTaskBranch.
+   */
+  branchByTask: Record<string, string | null>;
   showCommitGraph: boolean;
   /** When set, the commit-graph modal selects + scrolls to this commit on open
    *  (e.g. opened from the diff editor's blame card). Cleared on close. */
@@ -70,6 +86,7 @@ export const useGit = create<GitStore>((set, get) => ({
   diffFile: null,
   prs: [],
   prByTask: {},
+  branchByTask: {},
   showCommitGraph: false,
   commitGraphFocusHash: null,
 
@@ -82,7 +99,16 @@ export const useGit = create<GitStore>((set, get) => ({
     set({ gitLoading: true });
     try {
       const resp = await window.electronAPI.gitGetStatus(cwd);
-      if (resp.success && resp.data) set({ gitStatus: resp.data });
+      if (resp.success && resp.data) {
+        const t = activeTask();
+        const branch = resp.data.branch || null;
+        set({
+          gitStatus: resp.data,
+          ...(t?.path === cwd && get().branchByTask[t.id] !== branch
+            ? { branchByTask: { ...get().branchByTask, [t.id]: branch } }
+            : {}),
+        });
+      }
     } catch {
       // Ignore — keep the last good status.
     } finally {
@@ -217,11 +243,21 @@ export const useGit = create<GitStore>((set, get) => ({
 
   detectProjectPrs: async (project, tasks) => {
     const targets = prDetectionTargets(project, tasks);
-    const results = await Promise.all(
-      targets.map(async (t) => [t.taskId, await fetchPrsFor(t)] as const),
-    );
-    // A failed fetch (null) keeps what the task showed.
+    const [results, branches] = await Promise.all([
+      Promise.all(targets.map(async (t) => [t.taskId, await fetchPrsFor(t)] as const)),
+      Promise.all(targets.map(async (t) => [t.taskId, await currentBranch(t.cwd)] as const)),
+    ]);
+    // A failed fetch (undefined / null) keeps what the task showed.
     const fetched = results.filter((r): r is readonly [string, PullRequestInfo[]] => r[1] !== null);
-    set({ prByTask: { ...get().prByTask, ...Object.fromEntries(fetched) } });
+    const read = branches.filter((r): r is readonly [string, string | null] => r[1] !== undefined);
+    set({
+      prByTask: { ...get().prByTask, ...Object.fromEntries(fetched) },
+      branchByTask: { ...get().branchByTask, ...Object.fromEntries(read) },
+    });
   },
 }));
+
+/** The branch `task` is on now, falling back to the one it was created on until it is read. */
+export function useTaskBranch(task: Pick<Task, 'id' | 'branch'>): string {
+  return useGit((s) => s.branchByTask[task.id]) ?? task.branch;
+}

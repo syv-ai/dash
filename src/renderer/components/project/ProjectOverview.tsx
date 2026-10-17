@@ -120,6 +120,7 @@ export function ProjectOverview({
 }: ProjectOverviewProps) {
   const taskActivity = useRuntime((s) => s.taskActivity);
   const prByTask = useGit((s) => s.prByTask);
+  const branchByTask = useGit((s) => s.branchByTask);
   const detectProjectPrs = useGit((s) => s.detectProjectPrs);
   const projectTokens = useRuntime((s) => s.projectTokenStats[project.id]);
   const [showArchived, setShowArchived] = useState(false);
@@ -303,17 +304,17 @@ export function ProjectOverview({
                       </span>
                       {!task.useWorktree && (
                         <span className="mt-[3px] shrink-0">
-                          <MainRepoBadge branch={task.branch} />
+                          <MainRepoBadge task={task} />
                         </span>
                       )}
                     </div>
 
                     {/* Details */}
                     <div className="flex flex-col gap-1.5 flex-1 text-[11px] w-full overflow-hidden">
-                      {task.branch && (
+                      {(branchByTask[task.id] ?? task.branch) && (
                         <div className="text-muted-foreground truncate">
                           <span className="text-muted-fade-70">Branch: </span>
-                          {task.branch}
+                          {branchByTask[task.id] ?? task.branch}
                         </div>
                       )}
 

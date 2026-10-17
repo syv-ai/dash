@@ -382,6 +382,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   gitPush: (cwd: string) => ipcRenderer.invoke('git:push', cwd),
   gitRemoteBranchExists: (args: { cwd: string; branch: string }) =>
     ipcRenderer.invoke('git:remoteBranchExists', args),
+  gitCurrentBranch: (cwd: string) => ipcRenderer.invoke('git:currentBranch', cwd),
 
   gitCheckoutBranch: (args: { cwd: string; branch: string }) =>
     ipcRenderer.invoke('git:checkoutBranch', args),

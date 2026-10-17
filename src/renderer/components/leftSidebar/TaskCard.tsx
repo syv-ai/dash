@@ -138,7 +138,7 @@ export function TaskCard({
         </span>
 
         {/* Runs in the project's own checkout, not a worktree */}
-        {!task.useWorktree && <MainRepoBadge branch={task.branch} />}
+        {!task.useWorktree && <MainRepoBadge task={task} />}
 
         {/* PR on this branch — icon-only link to the remote */}
         {prs && <PrBadge prs={prs} variant="icon" />}

@@ -1,8 +1,10 @@
 import { Tooltip } from './Tooltip';
+import { useTaskBranch } from '../../stores/gitStore';
+import type { Task } from '../../../shared/types';
 
 interface MainRepoBadgeProps {
-  /** The branch the task runs on, for the tooltip. */
-  branch?: string;
+  /** The task; its live branch goes in the tooltip. */
+  task: Pick<Task, 'id' | 'branch'>;
 }
 
 /**
@@ -11,7 +13,8 @@ interface MainRepoBadgeProps {
  * badge token carries the meaning, with muted text so it reads as metadata
  * next to the task name rather than competing with it, in every theme.
  */
-export function MainRepoBadge({ branch }: MainRepoBadgeProps) {
+export function MainRepoBadge({ task }: MainRepoBadgeProps) {
+  const branch = useTaskBranch(task);
   const where = branch ? ` on ${branch}` : '';
   return (
     <Tooltip content={`Runs in the project's own checkout${where}, not a worktree`}>
