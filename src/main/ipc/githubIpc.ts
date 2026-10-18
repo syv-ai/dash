@@ -77,19 +77,6 @@ export function registerGithubIpc(): void {
     },
   );
 
-  ipcMain.handle('github:get-pr-review', async (_event, args: { cwd: string; number: number }) => {
-    try {
-      parseArgs(
-        'github:get-pr-review',
-        z.looseObject({ cwd: z.string(), number: z.number() }),
-        args,
-      );
-      return { success: true, data: await GithubService.getPrReview(args.cwd, args.number) };
-    } catch (err) {
-      return errorResponse(err);
-    }
-  });
-
   ipcMain.handle('github:list-prs', async (_event, args: { cwd: string }) => {
     try {
       parseArgs('github:list-prs', z.looseObject({ cwd: z.string() }), args);

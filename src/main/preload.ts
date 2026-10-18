@@ -276,11 +276,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('github:get-prs-for-checkout', { cwd, defaultBranch }),
   githubWriteCiReport: (args: { cwd: string; number: number; url: string; headSha?: string }) =>
     ipcRenderer.invoke('github:write-ci-report', args),
-  githubGetPrReview: (args: { cwd: string; number: number }) =>
-    ipcRenderer.invoke('github:get-pr-review', args),
   githubListPrs: (cwd: string) => ipcRenderer.invoke('github:list-prs', { cwd }),
   githubPreparePrBranch: (cwd: string, prNumber: number, headRefName: string) =>
     ipcRenderer.invoke('github:prepare-pr-branch', { cwd, prNumber, headRefName }),
+
+  // PR review (GitHub or Azure DevOps, picked by main from the project's remote)
+  prReviewList: (args: { projectId: string; cwd: string }) =>
+    ipcRenderer.invoke('prReview:list', args),
+  prReviewLoad: (args: { projectId: string; cwd: string; number: number }) =>
+    ipcRenderer.invoke('prReview:load', args),
 
   // Azure DevOps
   adoCheckConfigured: (projectId?: string) =>

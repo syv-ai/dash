@@ -18,6 +18,12 @@ describe('commentScope', () => {
   it('scopes a commit view to its hash', () => {
     expect(commentScope({ kind: 'commit', hash: 'abc123' })).toBe('commit:abc123');
   });
+
+  it('scopes a PR view to its provider and number', () => {
+    const view = { kind: 'pr', provider: 'ado', number: 7, base: 'b', head: 'h' } as const;
+    expect(commentScope(view)).toBe('pr:ado:7');
+    expect(scopeLabel('pr:github:812')).toBe('PR #812');
+  });
 });
 
 describe('filterCommentsByScope', () => {

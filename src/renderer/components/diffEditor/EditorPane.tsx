@@ -7,8 +7,8 @@ import type { EditorView } from './types';
 import type { LiveComment } from './comments/types';
 import { useCommentsStore } from '../../stores/commentsStore';
 import { useGit } from '../../stores/gitStore';
-import { usePrReviews } from '../../stores/prReviewStore';
-import { buildReviewPrompt } from '../../utils/prReviewNotices';
+import { prKey, usePrReviews } from '../../stores/prReviewStore';
+import { buildReviewPrompt, unresolvedThreads } from '../../utils/prReviewNotices';
 import { typeIntoTask } from '../../utils/typeIntoTask';
 import type { PrReviewThread } from '../../../shared/types';
 import { PrThreadOverlay } from './prReview/PrThreadOverlay';
@@ -69,6 +69,10 @@ interface EditorPaneProps {
   onSelectBase: (base: string) => void;
   onExitBranchView: () => void;
   defaultBase: string | null;
+  /** The project `cwd` belongs to (PR review calls name it). */
+  projectId: string | null;
+  /** Open PR `number`'s view; resolves false when it couldn't be loaded. */
+  onSelectPr: (number: number) => Promise<boolean>;
   /** Confirm-before-close (e.g. if the host has unsaved changes elsewhere). */
   guardClose?: () => boolean;
   /** Open another file (the PR review menu's thread list). */
@@ -89,6 +93,8 @@ export function EditorPane({
   onSelectBase,
   onExitBranchView,
   defaultBase,
+  projectId,
+  onSelectPr,
   onSelectFile,
 }: EditorPaneProps) {
   const commentsByFile = useCommentsStore((s) => s.byFile);
@@ -399,9 +405,9 @@ export function EditorPane({
   const showCommentsMenu = !commentsDisabled && hasAnyComments && !isPrView;
 
   // ── PR review threads (PR view) ─────────────────────────
-  const prNumber = view.kind === 'pr' ? view.number : null;
-  const review = usePrReviews((s) => (activeTaskId ? s.byTask[activeTaskId] : undefined));
-  const prReview = review && review.number === prNumber ? review : null;
+  const prReview = usePrReviews((s) =>
+    view.kind === 'pr' ? (s.byPr[prKey(view.provider, view.number)] ?? null) : null,
+  );
   // Only once the file has loaded, so the zones land on its lines.
   const inlineThreads = useMemo(
     () =>
@@ -439,6 +445,9 @@ export function EditorPane({
         onSelectBase={onSelectBase}
         onExitBranchView={onExitBranchView}
         defaultBase={defaultBase}
+        projectId={projectId}
+        onSelectPr={onSelectPr}
+        prTitle={prReview?.title ?? null}
         commentCount={scopeCommentCount}
         backgroundColor={terminalTheme.background ?? (isDark ? '#0d0d11' : '#faf8f3')}
       />
@@ -512,7 +521,7 @@ export function EditorPane({
               <div className="absolute bottom-4 right-4 z-10">
                 <PrReviewMenu
                   review={prReview}
-                  onSendAll={() => void sendThreads(prReview.threads, true)}
+                  onSendAll={() => void sendThreads(unresolvedThreads(prReview), true)}
                   onSend={(t) => void sendThreads([t], false)}
                   onSelectFile={onSelectFile}
                 />
@@ -584,6 +593,7 @@ export function EditorPane({
             {isPrView && (
               <PrThreadOverlay
                 threads={inlineThreads}
+                provider={view.kind === 'pr' ? view.provider : 'github'}
                 modifiedEditor={modifiedEditor}
                 area={editorAreaEl}
                 onSend={(t) => void sendThreads([t], false)}

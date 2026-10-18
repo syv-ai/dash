@@ -1,17 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
-import type { PrReviewThread } from '../../../../shared/types';
+import type { PrProvider, PrReviewThread } from '../../../../shared/types';
 import { PrThreadCard } from './PrThreadCard';
 
 const PAD_PX = 8;
 // Before a card is measured: close enough that the first paint barely shifts.
 const INITIAL_HEIGHT_PX = 120;
+// A resolved thread starts as a one-line pill.
+const INITIAL_PILL_PX = 28;
 const MIN_CARD_PX = 320;
 const MAX_CARD_PX = 640;
 
 interface Props {
   /** Threads on this file's PR-side lines (`line` set, side RIGHT). */
   threads: PrReviewThread[];
+  provider: PrProvider;
   modifiedEditor: monacoEditor.ICodeEditor | null;
   area: HTMLDivElement | null;
   onSend: (thread: PrReviewThread) => void;
@@ -23,7 +26,7 @@ interface Props {
  * the editor area, moved to the zone's top from Monaco's layout callback (the
  * pattern the local comment bubbles use, minus editing and animation).
  */
-export function PrThreadOverlay({ threads, modifiedEditor, area, onSend }: Props) {
+export function PrThreadOverlay({ threads, provider, modifiedEditor, area, onSend }: Props) {
   const wrappers = useRef(new Map<string, HTMLDivElement>());
   const tops = useRef(new Map<string, number>());
   const zones = useRef(new Map<string, { id: string; zone: monacoEditor.IViewZone }>());
@@ -50,7 +53,9 @@ export function PrThreadOverlay({ threads, modifiedEditor, area, onSend }: Props
       for (const t of threads) {
         const zone: monacoEditor.IViewZone = {
           afterLineNumber: t.line ?? 0,
-          heightInPx: (heights.current.get(t.id) ?? INITIAL_HEIGHT_PX) + PAD_PX * 2,
+          heightInPx:
+            (heights.current.get(t.id) ?? (t.resolved ? INITIAL_PILL_PX : INITIAL_HEIGHT_PX)) +
+            PAD_PX * 2,
           domNode: Object.assign(document.createElement('div'), { style: 'pointer-events:none' }),
           onDomNodeTop: (top) => {
             tops.current.set(t.id, top);
@@ -123,7 +128,7 @@ export function PrThreadOverlay({ threads, modifiedEditor, area, onSend }: Props
           className="absolute pointer-events-auto"
           style={{ top: -9999, left, width }}
         >
-          <PrThreadCard thread={t} onSend={onSend} />
+          <PrThreadCard thread={t} provider={provider} onSend={onSend} />
         </div>
       ))}
     </div>

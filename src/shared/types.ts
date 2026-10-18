@@ -558,7 +558,20 @@ export type PullRequestState = 'open' | 'merged' | 'closed';
 /** A PR's combined checks: any failure fails it, then any still running. */
 export type CiState = 'passing' | 'failing' | 'pending';
 
-/** One comment in a PR review thread. */
+/** Where a PR lives. */
+export type PrProvider = 'github' | 'ado';
+
+/** A review's outcome. GitHub offers comment / approve / request_changes; ADO's
+ *  vote adds approve_with_suggestions / wait_for_author / reject. */
+export type PrVerdict =
+  | 'comment'
+  | 'approve'
+  | 'request_changes'
+  | 'approve_with_suggestions'
+  | 'wait_for_author'
+  | 'reject';
+
+/** One comment in a PR review thread, or a general PR comment. */
 export interface PrReviewComment {
   id: string;
   author: string;
@@ -567,11 +580,12 @@ export interface PrReviewComment {
   url: string;
 }
 
-/** An unresolved review thread on a PR, anchored to a file and line. */
+/** A review thread on a PR, anchored to a file and line. */
 export interface PrReviewThread {
   id: string;
   path: string;
-  /** Last line of the commented range in the PR head's file; null once outdated. */
+  /** Last line of the commented range (in the PR head's file for RIGHT, the base's
+   *  for LEFT); null once outdated, or for a comment on the whole file. */
   line: number | null;
   /** First line of a multi-line comment, else null. */
   startLine: number | null;
@@ -579,17 +593,50 @@ export interface PrReviewThread {
   side: 'LEFT' | 'RIGHT';
   /** The lines it was left on have changed since. */
   isOutdated: boolean;
+  resolved: boolean;
   comments: PrReviewComment[];
 }
 
-/** A PR's unresolved review threads, with the commits its diff spans. */
+/** A PR's review: all its threads and general comments, with the commits its diff spans. */
 export interface PrReview {
+  provider: PrProvider;
   number: number;
+  title: string;
   url: string;
+  /** GitHub refuses approve / request changes on your own PR. */
+  viewerIsAuthor: boolean;
+  /** The verdicts this provider offers, in display order. */
+  verdicts: PrVerdict[];
   /** Merge-base of the PR's base and head: the left side of its diff. */
   base: string;
   head: string;
+  /** File threads, resolved or not. */
   threads: PrReviewThread[];
+  /** General PR comments and review summaries, oldest first. */
+  conversation: PrReviewComment[];
+  /** The provider had more threads than were loaded. */
+  partial?: boolean;
+}
+
+/** What a submit sends: the verdict, its summary, and the task's drafts for the PR. */
+export interface PrSubmission {
+  verdict: PrVerdict;
+  body: string;
+  /** New threads, on the PR's (RIGHT) side. */
+  comments: { draftId: string; path: string; startLine: number; endLine: number; body: string }[];
+  replies: { draftId: string; threadId: string; body: string }[];
+}
+
+/** Why a write to the PR failed. `scope`: the token can't write; `fix` says how to grant it. */
+export type PrWriteError =
+  | { kind: 'scope'; fix: string }
+  | { kind: 'pending-review' }
+  | { kind: 'other'; message: string };
+
+/** The drafts that reached the PR (their rows are deleted), and the error that stopped the rest. */
+export interface SubmitResult {
+  postedDraftIds: string[];
+  error?: PrWriteError;
 }
 
 export interface PullRequestInfo {

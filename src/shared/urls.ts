@@ -129,6 +129,11 @@ export function isAdoRemote(remote: string | null): boolean {
   return parseAdoRemote(remote) !== null;
 }
 
+/** Where a remote's PRs live: ADO for an Azure DevOps remote, else GitHub. */
+export function providerForRemote(remote: string | null): 'github' | 'ado' {
+  return remote && isAdoRemote(remote) ? 'ado' : 'github';
+}
+
 /** Get the display URL for a linked item */
 export function linkedItemUrl(
   item: { provider: 'github' | 'ado'; id: number; url: string },

@@ -1593,6 +1593,7 @@ export function App() {
             initialStaged={diffFile.staged}
             initialView={diffFile.initialView}
             activeTaskId={activeTaskId}
+            projectId={activeTask?.projectId ?? activeProjectId}
             terminalTheme={resolvedTerminalTheme}
             isDark={theme === 'dark'}
             onClose={() => {

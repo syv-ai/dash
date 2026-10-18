@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import type { PrReview, PrReviewThread } from '../../../shared/types';
-import { buildReviewPrompt, newReviewComments, threadLocation } from '../prReviewNotices';
+import {
+  buildReviewPrompt,
+  newReviewComments,
+  threadLocation,
+  unresolvedThreads,
+} from '../prReviewNotices';
 
 const thread = (
   id: string,
@@ -13,6 +18,7 @@ const thread = (
   startLine: null,
   side: 'RIGHT',
   isOutdated: false,
+  resolved: false,
   comments: commentIds.map((c) => ({
     id: c,
     author: 'rev',
@@ -23,11 +29,16 @@ const thread = (
   ...over,
 });
 const review = (number: number, threads: PrReviewThread[]): PrReview => ({
+  provider: 'github',
   number,
+  title: 't',
   url: `https://github.com/o/r/pull/${number}`,
+  viewerIsAuthor: false,
+  verdicts: ['comment'],
   base: 'b',
   head: 'h',
   threads,
+  conversation: [],
 });
 
 describe('newReviewComments', () => {
@@ -58,6 +69,24 @@ describe('newReviewComments', () => {
   it('keeps ids of threads resolved since, so reopening one does not re-announce it', () => {
     const r = newReviewComments({ pr: 4, ids: ['a', 'gone'] }, review(4, [thread('T1', ['a'])]));
     expect(r.next.ids).toEqual(['a', 'gone']);
+  });
+});
+
+describe('unresolvedThreads', () => {
+  it('leaves out resolved threads, so they never reach a prompt or the toast', () => {
+    const open = thread('T1', ['a']);
+    const done = thread('T2', ['b'], { resolved: true });
+    expect(unresolvedThreads(review(4, [open, done]))).toEqual([open]);
+    const seen = newReviewComments(undefined, review(4, [open])).next;
+    expect(
+      newReviewComments(
+        seen,
+        review(4, [
+          open,
+          { ...done, comments: [...done.comments, ...thread('x', ['c']).comments] },
+        ]),
+      ).count,
+    ).toBe(0);
   });
 });
 

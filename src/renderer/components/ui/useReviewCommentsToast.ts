@@ -38,9 +38,10 @@ export function useReviewCommentsToast(): void {
     const seen = readSeen();
     const lastLook: Record<string, number> = {};
 
-    const look = async (taskId: string, cwd: string, prNumber: number) => {
-      const review = await usePrReviews.getState().load(taskId, cwd, prNumber);
-      if (!review) return;
+    const look = async (taskId: string, projectId: string, cwd: string, prNumber: number) => {
+      const loaded = await usePrReviews.getState().load(projectId, cwd, prNumber);
+      if (!loaded.ok) return;
+      const review = loaded.review;
       const { threads, count, next } = newReviewComments(seen[taskId], review);
       seen[taskId] = next;
       writeSeen(seen);
@@ -72,7 +73,7 @@ export function useReviewCommentsToast(): void {
         const cwd = task?.path || project?.path;
         if (!task || task.archivedAt || !cwd) continue;
         lastLook[taskId] = now;
-        void look(taskId, cwd, pr.number);
+        void look(taskId, task.projectId, cwd, pr.number);
       }
     });
   }, []);

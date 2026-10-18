@@ -10,7 +10,8 @@ import { useEditorViewData } from './data/useEditorViewData';
 import { pickFirstChangedFile } from './data/viewData';
 import { readStoredView, writeStoredView } from './data/viewPersistence';
 import { useCommentsStore } from '../../stores/commentsStore';
-import { usePrReviews } from '../../stores/prReviewStore';
+import { prKey, usePrReviews } from '../../stores/prReviewStore';
+import { unresolvedThreads } from '../../utils/prReviewNotices';
 import { toast } from 'sonner';
 import type { PrEntry } from './EditorSidebar';
 import { commentScope, commentCountsByScope } from './comments/commentScope';
@@ -23,6 +24,7 @@ export function DiffEditor({
   initialStaged,
   initialView,
   activeTaskId,
+  projectId,
   terminalTheme,
   isDark,
   onClose,
@@ -150,23 +152,33 @@ export function DiffEditor({
     const pr = activeTaskId ? s.prByTask[activeTaskId]?.[0] : undefined;
     return pr && pr.state === 'open' && pr.provider === 'github' ? pr : null;
   });
-  const review = usePrReviews((s) => (activeTaskId ? s.byTask[activeTaskId] : undefined));
-  const prReview = openPr && review?.number === openPr.number ? review : null;
-  const openPrView = useCallback(async () => {
-    if (!openPr || !activeTaskId) return;
-    const loaded = await usePrReviews.getState().load(activeTaskId, cwd, openPr.number);
-    if (!loaded) {
-      toast.error(`Could not load PR #${openPr.number}`);
-      return;
-    }
-    setSelectedPath('');
-    setView({ kind: 'pr', number: loaded.number, base: loaded.base, head: loaded.head });
-  }, [openPr, activeTaskId, cwd]);
+  // The open view's PR review, or the task's own PR's when that was fetched.
+  const viewReview = usePrReviews((s) =>
+    view.kind === 'pr' ? (s.byPr[prKey(view.provider, view.number)] ?? null) : null,
+  );
+  const ownReview = usePrReviews((s) =>
+    openPr ? (s.byPr[prKey(openPr.provider, openPr.number)] ?? null) : null,
+  );
+  const openPrView = useCallback(
+    async (number: number) => {
+      if (!projectId) return false;
+      const loaded = await usePrReviews.getState().load(projectId, cwd, number);
+      if (!loaded.ok) {
+        toast.error(`Could not load PR #${number}: ${loaded.error}`);
+        return false;
+      }
+      const { provider, base, head } = loaded.review;
+      setSelectedPath('');
+      setView({ kind: 'pr', provider, number, base, head });
+      return true;
+    },
+    [projectId, cwd],
+  );
   const prEntry: PrEntry | null = openPr
     ? {
         number: openPr.number,
-        threads: prReview?.threads.length ?? null,
-        onOpen: () => void openPrView(),
+        threads: ownReview ? unresolvedThreads(ownReview).length : null,
+        onOpen: () => void openPrView(openPr.number),
       }
     : null;
 
@@ -174,7 +186,8 @@ export function DiffEditor({
     const map = new Map<string, number>();
     // The PR view badges files with their unresolved threads instead.
     if (view.kind === 'pr') {
-      for (const t of prReview?.threads ?? []) map.set(t.path, (map.get(t.path) ?? 0) + 1);
+      for (const t of viewReview ? unresolvedThreads(viewReview) : [])
+        map.set(t.path, (map.get(t.path) ?? 0) + 1);
       return map;
     }
     for (const [path, list] of Object.entries(commentsByFile)) {
@@ -182,7 +195,7 @@ export function DiffEditor({
       if (n > 0) map.set(path, n);
     }
     return map;
-  }, [commentsByFile, currentScope, view.kind, prReview]);
+  }, [commentsByFile, currentScope, view.kind, viewReview]);
 
   // Per-view totals for the commits-drawer badges (all scopes, not just open).
   const commentCountByScope = useMemo(() => commentCountsByScope(commentsByFile), [commentsByFile]);
@@ -235,6 +248,8 @@ export function DiffEditor({
             onSelectBase={selectBase}
             onExitBranchView={exitBranchView}
             defaultBase={defaultBase}
+            projectId={projectId}
+            onSelectPr={openPrView}
             onSelectFile={setSelectedPath}
           />
         </Panel>

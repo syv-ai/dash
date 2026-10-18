@@ -1,18 +1,23 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { makeElectronApiMock, installWindow, resetWindow } from './helpers/electronApiMock';
-import type { PrReview } from '../../../shared/types';
+import type { PrProvider, PrReview } from '../../../shared/types';
 
-const review = (n: number): PrReview => ({
+const review = (n: number, provider: PrProvider = 'github'): PrReview => ({
+  provider,
   number: n,
+  title: 't',
   url: 'u',
+  viewerIsAuthor: false,
+  verdicts: ['comment'],
   base: 'b',
   head: 'h',
   threads: [],
+  conversation: [],
 });
 
 async function freshStore() {
   vi.resetModules();
-  return (await import('../prReviewStore')).usePrReviews;
+  return await import('../prReviewStore');
 }
 
 describe('prReviewStore.load', () => {
@@ -23,22 +28,28 @@ describe('prReviewStore.load', () => {
   });
   afterEach(() => resetWindow());
 
-  it("fetches a task's PR review and keeps it per task", async () => {
-    api.githubGetPrReview = vi.fn(() => Promise.resolve({ success: true, data: review(4) }));
-    const store = await freshStore();
-    expect(await store.getState().load('t1', '/wt/t1', 4)).toEqual(review(4));
-    expect(api.githubGetPrReview).toHaveBeenCalledWith({ cwd: '/wt/t1', number: 4 });
-    expect(store.getState().byTask.t1).toEqual(review(4));
+  it('fetches a PR review and keeps it per provider and number', async () => {
+    api.prReviewLoad = vi.fn(() => Promise.resolve({ success: true, data: review(4, 'ado') }));
+    const { usePrReviews, prKey } = await freshStore();
+    expect(await usePrReviews.getState().load('p1', '/wt/t1', 4)).toEqual({
+      ok: true,
+      review: review(4, 'ado'),
+    });
+    expect(api.prReviewLoad).toHaveBeenCalledWith({ projectId: 'p1', cwd: '/wt/t1', number: 4 });
+    expect(usePrReviews.getState().byPr[prKey('ado', 4)]).toEqual(review(4, 'ado'));
   });
 
-  it('keeps what it had when a fetch fails', async () => {
-    api.githubGetPrReview = vi
+  it('keeps what it had when a fetch fails, and says why', async () => {
+    api.prReviewLoad = vi
       .fn()
       .mockResolvedValueOnce({ success: true, data: review(4) })
       .mockResolvedValue({ success: false, error: 'offline' });
-    const store = await freshStore();
-    await store.getState().load('t1', '/wt/t1', 4);
-    expect(await store.getState().load('t1', '/wt/t1', 4)).toBeNull();
-    expect(store.getState().byTask.t1).toEqual(review(4));
+    const { usePrReviews, prKey } = await freshStore();
+    await usePrReviews.getState().load('p1', '/wt/t1', 4);
+    expect(await usePrReviews.getState().load('p1', '/wt/t1', 4)).toEqual({
+      ok: false,
+      error: 'offline',
+    });
+    expect(usePrReviews.getState().byPr[prKey('github', 4)]).toEqual(review(4));
   });
 });

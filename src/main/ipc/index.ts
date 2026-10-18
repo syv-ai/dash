@@ -15,6 +15,7 @@ import { registerExtensionsIpc } from './extensionsIpc';
 import { registerSessionIpc } from './sessionIpc';
 import { registerEditorIpc } from './editorIpc';
 import { registerDiffCommentsIpc } from './diffCommentsIpc';
+import { registerPrReviewIpc } from './prReviewIpc';
 import { registerTokenStatsIpc } from './tokenStatsIpc';
 import { registerPortsIpc } from './portsIpc';
 import { registerDrawerTabsIpc } from './drawerTabsIpc';
@@ -39,6 +40,7 @@ export function registerAllIpc(): void {
   registerSessionIpc();
   registerEditorIpc();
   registerDiffCommentsIpc();
+  registerPrReviewIpc();
   registerTokenStatsIpc();
   registerPortsIpc();
   registerDrawerTabsIpc();
