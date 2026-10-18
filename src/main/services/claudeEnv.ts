@@ -37,6 +37,8 @@ const RESERVED_ENV_KEYS = new Set([
   'COLORTERM',
   'TERM_PROGRAM',
   'COLORFGBG',
+  // Dash's own (see buildClaudeEnv); a user value would split writes from reads.
+  'CLAUDE_CONFIG_DIR',
 ]);
 
 export function setClaudeEnvVars(vars: Record<string, string>): void {
@@ -119,6 +121,10 @@ export function buildClaudeEnv(isDark: boolean, cwd?: string): Record<string, st
     // Format: "fg;bg" where higher values = lighter colors
     COLORFGBG: isDark ? '15;0' : '0;15',
   };
+  // Dash reads Claude Code's state (`claude agents`, the session registry,
+  // trust) from its own CLAUDE_CONFIG_DIR, so every claude it spawns must use
+  // the same one. Only when set: an explicit ~/.claude would move .claude.json.
+  if (process.env.CLAUDE_CONFIG_DIR) env.CLAUDE_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
 
   if (isWin) {
     // Windows requires system env vars for DNS, credential storage, and Node.js.
