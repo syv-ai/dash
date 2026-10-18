@@ -118,6 +118,7 @@
     "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-context-menu": "^2.3.7",
     "@radix-ui/react-popover": "^1.1.17",
+    "@tanstack/react-virtual": "^3.14.21",
     "@types/qrcode": "^1.5.6",
     "@xterm/addon-clipboard": "^0.2.0",
     "@xterm/addon-search": "^0.16.0",

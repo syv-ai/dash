@@ -78,6 +78,30 @@ export interface GitActions {
 
 export type GitStore = GitState & GitActions;
 
+/** Whether two statuses hold the same branch, counts and file changes, in order. */
+export function sameGitStatus(a: GitStatus, b: GitStatus): boolean {
+  if (
+    a.branch !== b.branch ||
+    a.hasUpstream !== b.hasUpstream ||
+    a.ahead !== b.ahead ||
+    a.behind !== b.behind ||
+    a.files.length !== b.files.length
+  ) {
+    return false;
+  }
+  return a.files.every((f, i) => {
+    const g = b.files[i]!;
+    return (
+      f.path === g.path &&
+      f.status === g.status &&
+      f.staged === g.staged &&
+      f.additions === g.additions &&
+      f.deletions === g.deletions &&
+      f.oldPath === g.oldPath
+    );
+  });
+}
+
 // Non-reactive singleton resources (only ever one active task watched / one PR poll).
 let watchTeardown: (() => void) | null = null;
 let prTeardown: (() => void) | null = null;
@@ -99,14 +123,20 @@ export const useGit = create<GitStore>((set, get) => ({
   setCommitGraphFocusHash: (hash) => set({ commitGraphFocusHash: hash }),
 
   refreshGitStatus: async (cwd) => {
-    set({ gitLoading: true });
+    // Only the first load shows "Loading..."; background polls don't toggle it,
+    // which would re-render every subscriber twice per poll.
+    const firstLoad = get().gitStatus === null;
+    if (firstLoad) set({ gitLoading: true });
     try {
       const resp = await window.electronAPI.gitGetStatus(cwd);
       if (resp.success && resp.data) {
         const t = activeTask();
         const branch = resp.data.branch || null;
+        const prev = get().gitStatus;
         set({
-          gitStatus: resp.data,
+          // Keep the old object when nothing changed, so a poll of a big
+          // worktree doesn't re-render every file row.
+          gitStatus: prev && sameGitStatus(prev, resp.data) ? prev : resp.data,
           ...(t?.path === cwd && get().branchByTask[t.id] !== branch
             ? { branchByTask: { ...get().branchByTask, [t.id]: branch } }
             : {}),
@@ -115,7 +145,7 @@ export const useGit = create<GitStore>((set, get) => ({
     } catch {
       // Ignore — keep the last good status.
     } finally {
-      set({ gitLoading: false });
+      if (firstLoad) set({ gitLoading: false });
     }
   },
 

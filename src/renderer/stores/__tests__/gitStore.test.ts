@@ -84,6 +84,44 @@ describe('gitStore.refreshGitStatus', () => {
     expect(useGit.getState().gitLoading).toBe(false);
   });
 
+  it('keeps the same status object when a poll returns an unchanged status', async () => {
+    const file = {
+      path: 'a.ts',
+      status: 'modified' as const,
+      staged: false,
+      additions: 1,
+      deletions: 0,
+    };
+    api.gitGetStatus = vi.fn(() =>
+      Promise.resolve({ success: true, data: status({ files: [{ ...file }] }) }),
+    );
+    const { useGit } = await freshStores();
+
+    await useGit.getState().refreshGitStatus('/wt/t1');
+    const first = useGit.getState().gitStatus;
+    await useGit.getState().refreshGitStatus('/wt/t1');
+    expect(useGit.getState().gitStatus).toBe(first);
+
+    api.gitGetStatus = vi.fn(() =>
+      Promise.resolve({ success: true, data: status({ files: [{ ...file, additions: 2 }] }) }),
+    );
+    await useGit.getState().refreshGitStatus('/wt/t1');
+    expect(useGit.getState().gitStatus).not.toBe(first);
+    expect(useGit.getState().gitStatus?.files[0]?.additions).toBe(2);
+  });
+
+  it('only shows loading for the first status, not for later polls', async () => {
+    api.gitGetStatus = vi.fn(() => Promise.resolve({ success: true, data: status() }));
+    const { useGit } = await freshStores();
+    await useGit.getState().refreshGitStatus('/wt/t1');
+
+    const seen: boolean[] = [];
+    const off = useGit.subscribe((s) => seen.push(s.gitLoading));
+    await useGit.getState().refreshGitStatus('/wt/t1');
+    off();
+    expect(seen).not.toContain(true);
+  });
+
   it('leaves prior status intact and resets loading when the call throws', async () => {
     api.gitGetStatus = vi.fn(() => Promise.reject(new Error('boom')));
     const { useGit } = await freshStores();
