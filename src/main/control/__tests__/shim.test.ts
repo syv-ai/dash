@@ -136,6 +136,7 @@ async function connect(env: Record<string, string> = {}): Promise<Client> {
       ELECTRON_RUN_AS_NODE: '1',
       DASH_USER_DATA_DIR: userData,
       DASH_MCP_POLL_MS: '50',
+      DASH_MCP_WATCH_MS: '50',
       ...env,
     },
     stderr: 'pipe',
@@ -259,6 +260,26 @@ describe('dash-mcp shim', () => {
     await changed;
     const { tools } = await c.listTools();
     expect(tools.map((t) => t.name)).toEqual(['projects_list', 'tasks_create']);
+  });
+
+  it('sends tools/list_changed when Dash comes back with different tools', async () => {
+    let caps = capabilities;
+    fake = await startFakeServer(userData, (req) =>
+      req.url === '/v1/capabilities'
+        ? { status: 200, body: { capabilities: caps } }
+        : defaultReply(req),
+    );
+    const c = await connect();
+    expect((await c.listTools()).tools.map((t) => t.name)).toEqual([
+      'projects_list',
+      'tasks_create',
+    ]);
+    const changed = new Promise<void>((resolve) => {
+      c.setNotificationHandler(ToolListChangedNotificationSchema, () => resolve());
+    });
+    caps = [...capabilities, { ...capabilities[0]!, name: 'review.summary_set' }];
+    await changed;
+    expect((await c.listTools()).tools.map((t) => t.name)).toContain('review_summary_set');
   });
 
   it('answers server/discover with method-not-found and exits on EOF', async () => {

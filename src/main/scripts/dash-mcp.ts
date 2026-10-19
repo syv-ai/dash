@@ -27,6 +27,8 @@ const NOT_RUNNING = 'Dash is not running. Open Dash and try again.';
 const ORCHESTRATOR_OFF = 'orchestrator access is off in Dash settings';
 /** How often to look for Dash while it has no tools to offer. Env override is for tests. */
 const POLL_MS = Number(process.env.DASH_MCP_POLL_MS) || 5000;
+// How often to check Dash's tools against what the client last listed.
+const WATCH_MS = Number(process.env.DASH_MCP_WATCH_MS) || 15_000;
 /** Listing is quick; calls may block (tasks.wait), so they get no timeout. */
 const LIST_TIMEOUT_MS = 5000;
 
@@ -211,10 +213,43 @@ function startPolling(): void {
   pollTimer.unref();
 }
 
+/**
+ * The client caches the tool list, and this process outlives a Dash restart
+ * (it belongs to the session), so a Dash that comes back with new or changed
+ * tools would go unseen. Once the client has a list, check Dash's every
+ * WATCH_MS and tell the client to re-list when it differs.
+ */
+let listedCatalog: string | null = null;
+let watchTimer: NodeJS.Timeout | null = null;
+const catalogOf = (tools: Tool[]) => JSON.stringify(tools);
+
+function startWatching(): void {
+  if (watchTimer) return;
+  watchTimer = setInterval(() => {
+    fetchTools().then(
+      (tools) => {
+        if (listedCatalog === null || catalogOf(tools) === listedCatalog) return;
+        listedCatalog = null; // told once; the client's re-list sets it again
+        server.sendToolListChanged().catch(() => {
+          // Client gone; nothing to tell.
+        });
+      },
+      () => {
+        // Dash is restarting or gone; check again next tick.
+      },
+    );
+  }, WATCH_MS);
+  watchTimer.unref();
+}
+
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   try {
     const tools = await fetchTools();
     if (tools.length === 0) startPolling();
+    else {
+      listedCatalog = catalogOf(tools);
+      startWatching();
+    }
     return { tools };
   } catch {
     toolToCapability = new Map();
