@@ -177,8 +177,8 @@ Verified on 2026-10-19 against a real PR (Akademikernes / aka-ai-platform, PR 72
      - `{N, N}` matches what existing threads carry (common..N).
      - `pullRequestThreadContext` is left out when the path has no change entry (the file isn't in the PR's diff).
   3. **Each reply:** `POST threads/{tid}/comments { content, parentCommentId: 1, commentType: 1 }`. _(docs)_
-  4. **A non-empty summary:** a general thread (no `threadContext`) with `status: 4` (closed). A summary isn't a request to act on, and an `active` thread would hold up repos that require comment resolution. Inline comments stay `active`.
-  5. **The vote:** `PUT reviewers/{me} { vote }`. It adds you as a reviewer if you aren't one. _(docs)_ Values: approve 10, approve_with_suggestions 5, wait_for_author -5, reject -10. `comment` makes no vote call.
+  4. **The vote:** `PUT reviewers/{me} { vote }`. It adds you as a reviewer if you aren't one. _(docs)_ Values: approve 10, approve_with_suggestions 5, wait_for_author -5, reject -10. `comment` makes no vote call. It goes before the summary: a vote is safe to repeat and a summary isn't, so a retry after a failure repeats nothing harmful.
+  5. **A non-empty summary:** a general thread (no `threadContext`) with `status: 4` (closed). A summary isn't a request to act on, and an `active` thread would hold up repos that require comment resolution. Inline comments stay `active`.
   - Each successful post adds its `draftId` to `postedDraftIds`. The first failure stops the run and returns the error with what posted so far, so a retry doesn't duplicate.
 - **Errors:** `request()` sends `X-TFS-FedAuthRedirect: Suppress` (so bad auth is a 401, not a 203 sign-in page) and throws an `AdoRequestError` carrying `status`. A 401 or 403 on a write maps to `{ kind: 'scope', fix: 'Give the PAT "Code (Read & write)" in Azure DevOps → User settings → Personal access tokens' }`.
 
