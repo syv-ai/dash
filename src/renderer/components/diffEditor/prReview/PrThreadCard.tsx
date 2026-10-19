@@ -105,10 +105,12 @@ export function PrThreadCard({
   const [replying, setReplying] = useState(false);
   const drafts = useCommentsStore(
     useShallow((s) =>
+      // By thread, across files: a reply's own path doesn't matter (an agent
+      // may give a slightly different one), only the thread it answers.
       draftScope
-        ? (s.byFile[thread.path] ?? EMPTY).filter(
-            (c) => c.replyTo === thread.id && c.viewScope === draftScope,
-          )
+        ? Object.values(s.byFile)
+            .flat()
+            .filter((c) => c.replyTo === thread.id && c.viewScope === draftScope)
         : EMPTY,
     ),
   );

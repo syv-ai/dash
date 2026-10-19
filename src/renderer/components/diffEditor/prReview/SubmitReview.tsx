@@ -26,7 +26,20 @@ interface Props {
   draftCount: number;
 }
 
-function WriteError({ error, provider }: { error: PrWriteError; provider: PrReview['provider'] }) {
+function WriteError({
+  error,
+  provider,
+  posted,
+}: {
+  error: PrWriteError;
+  provider: PrReview['provider'];
+  /** Drafts that reached the PR before the error; the rest are still drafts. */
+  posted: number;
+}) {
+  const kept =
+    posted > 0
+      ? `${posted} ${posted === 1 ? 'comment was' : 'comments were'} posted; the rest are kept as drafts.`
+      : 'Your drafts are kept.';
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     if (!copied) return;
@@ -36,19 +49,21 @@ function WriteError({ error, provider }: { error: PrWriteError; provider: PrRevi
   if (error.kind === 'pending-review') {
     return (
       <div className="text-[11px] text-destructive">
-        You have a pending review on GitHub; submit or discard it there, then try again. Your drafts
-        are kept.
+        You have a pending review on GitHub; submit or discard it there, then try again. {kept}
       </div>
     );
   }
   if (error.kind === 'other') {
-    return <div className="text-[11px] text-destructive break-words">{error.message}</div>;
+    return (
+      <div className="text-[11px] text-destructive break-words">
+        {error.message} {posted > 0 ? kept : ''}
+      </div>
+    );
   }
   return (
     <div className="flex flex-col gap-1 text-[11px]">
       <span className="text-destructive">
-        {providerName(provider)} refused the write: the token can&apos;t write to this PR. Your
-        drafts are kept.
+        {providerName(provider)} refused the write: the token can&apos;t write to this PR. {kept}
       </span>
       <div className="flex items-center gap-1 rounded-md bg-[hsl(var(--surface-1))] px-2 py-1">
         <span className="flex-1 font-mono text-fg-fade-85 break-words">{error.fix}</span>
@@ -72,7 +87,7 @@ export function SubmitReview({ review, projectId, cwd, taskId, draftCount }: Pro
   const [verdict, setVerdict] = useState<PrVerdict>('comment');
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<PrWriteError | null>(null);
+  const [error, setError] = useState<{ error: PrWriteError; posted: number } | null>(null);
   const offered = review.verdicts.includes(verdict) ? verdict : 'comment';
   const empty = draftCount === 0 && !body.trim() && offered === 'comment';
 
@@ -85,7 +100,7 @@ export function SubmitReview({ review, projectId, cwd, taskId, draftCount }: Pro
       setBody('');
       toast.success('Review submitted');
     } else {
-      setError(r.error);
+      setError({ error: r.error, posted: r.posted ?? 0 });
     }
   }
 
@@ -108,7 +123,7 @@ export function SubmitReview({ review, projectId, cwd, taskId, draftCount }: Pro
         rows={3}
         className="w-full resize-none rounded-md border border-edge/10 bg-[hsl(var(--surface-1))] px-2 py-1.5 text-[12px] leading-relaxed placeholder:text-muted-fade-40 focus:outline-hidden"
       />
-      {error && <WriteError error={error} provider={review.provider} />}
+      {error && <WriteError {...error} provider={review.provider} />}
       <div className="flex items-center justify-end">
         <Button size="sm" disabled={busy || empty} onClick={() => void submit()}>
           {busy && <Loader2 size={14} strokeWidth={1.8} className="animate-spin" />}

@@ -221,7 +221,7 @@ describe('adoProvider', () => {
     expect(review.head).toBe('HEAD11');
   });
 
-  it('posts comments, replies, the summary and the vote, in that order', async () => {
+  it('posts comments, replies, the vote and the summary, in that order', async () => {
     const { deps, calls } = fakeDeps();
     expect(await makeAdoProvider(deps).submit(pctx, 7204, submission)).toEqual({
       postedDraftIds: ['d1', 'd2', 'd3'],
@@ -231,15 +231,16 @@ describe('adoProvider', () => {
       'POST /threads',
       'POST /threads',
       'POST /threads/101/comments',
-      'POST /threads',
       'PUT /reviewers/me-id',
+      'POST /threads',
     ]);
     expect(writes[0]!.body).toMatchObject({
       threadContext: { rightFileEnd: { line: 3, offset: 11 } },
       pullRequestThreadContext: { changeTrackingId: 3 },
     });
     expect(writes[1]!.body).not.toHaveProperty('pullRequestThreadContext');
-    expect(writes[4]!.body).toEqual({ vote: 5 });
+    expect(writes[3]!.body).toEqual({ vote: 5 });
+    expect(writes[4]!.body).toEqual(adoSummaryBody('Looks fine'));
   });
 
   it('stops at the first failure and reports what posted', async () => {

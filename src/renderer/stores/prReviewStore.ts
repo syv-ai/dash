@@ -5,7 +5,8 @@ import type { PrProvider, PrReview, PrVerdict, PrWriteError } from '../../shared
 export const prKey = (provider: PrProvider, number: number): string => `${provider}:${number}`;
 
 export type PrLoadResult = { ok: true; review: PrReview } | { ok: false; error: string };
-export type PrWriteResult = { ok: true } | { ok: false; error: PrWriteError };
+/** `posted`: drafts that reached the PR before the error (ADO posts one at a time). */
+export type PrWriteResult = { ok: true } | { ok: false; error: PrWriteError; posted?: number };
 
 interface PrReviewState {
   /** Per PR (`prKey`), its review as last fetched. */
@@ -93,7 +94,7 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
           return { ok: false, error: ipcError(resp.error ?? 'unknown error') };
         const { postedDraftIds, error } = resp.data;
         if (postedDraftIds.length > 0 || !error) await get().load(projectId, cwd, review.number);
-        return error ? { ok: false, error } : { ok: true };
+        return error ? { ok: false, error, posted: postedDraftIds.length } : { ok: true };
       } catch (err) {
         return { ok: false, error: ipcError(String(err)) };
       }

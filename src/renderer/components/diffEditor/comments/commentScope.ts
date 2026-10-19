@@ -1,4 +1,4 @@
-import { parsePrScope, prScope } from '../../../../shared/prScope';
+import { isPrScope, parsePrScope, prScope } from '../../../../shared/prScope';
 import type { EditorView } from '../types';
 
 /** The content-identity a comment is anchored to.
@@ -53,6 +53,19 @@ export function filterCommentsByScope<T extends { viewScope: string }>(
   const out: Record<string, T[]> = {};
   for (const [path, list] of Object.entries(byFile)) {
     const kept = list.filter((c) => c.viewScope === scope);
+    if (kept.length > 0) out[path] = kept;
+  }
+  return out;
+}
+
+/** Everything but PR review drafts. Those go to the PR on Submit, never to the
+ *  task through the comments menu (which sends, marks sent and clears). */
+export function withoutPrDrafts<T extends { viewScope: string }>(
+  byFile: Record<string, T[]>,
+): Record<string, T[]> {
+  const out: Record<string, T[]> = {};
+  for (const [path, list] of Object.entries(byFile)) {
+    const kept = list.filter((c) => !isPrScope(c.viewScope));
     if (kept.length > 0) out[path] = kept;
   }
   return out;

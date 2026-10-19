@@ -1,8 +1,9 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
 import { useCommentsStore } from '../../../stores/commentsStore';
 import { buildCommentPrompt, type PromptComment } from './commentPrompt';
 import type { LiveComment } from './types';
+import { withoutPrDrafts } from './commentScope';
 
 interface Args {
   activeTaskId: string | null;
@@ -46,8 +47,10 @@ export function useCommentPrompt({
   scope,
   onClose,
 }: Args): CommentPrompt {
-  // All comments across every view — the menu manages and sends across scopes.
-  const byFile = useCommentsStore((s) => s.byFile);
+  // All comments across every view — the menu manages and sends across scopes —
+  // except PR review drafts, which only ever go to the PR.
+  const allByFile = useCommentsStore((s) => s.byFile);
+  const byFile = useMemo(() => withoutPrDrafts(allByFile), [allByFile]);
   const [editTarget, setEditTarget] = useState<{ ids: string[]; text: string } | null>(null);
 
   const build = useCallback(

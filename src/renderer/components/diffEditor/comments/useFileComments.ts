@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
 import { useCommentsStore } from '../../../stores/commentsStore';
 import { isReplyDraft } from '../../../../shared/diffComments';
+import { isPrScope } from '../../../../shared/prScope';
 import {
   commentsDeletedByEdit,
   isFullModelReplace,
@@ -102,6 +103,7 @@ export function useFileComments({
     if (prevIds.length > 0) model.deltaDecorations(prevIds, []);
     const src = storedRef.current;
     if (src.length === 0) {
+      liveCommentsRef.current = [];
       setLiveComments([]);
       return true;
     }
@@ -120,6 +122,7 @@ export function useFileComments({
       );
       return { ...sc, startLine: start, endLine: end, decorationId: ids[0]! };
     });
+    liveCommentsRef.current = hydrated;
     setLiveComments(hydrated);
     return true;
   }, [modifiedEditor, monaco]);
@@ -242,22 +245,59 @@ export function useFileComments({
     setLiveComments(liveCommentsRef.current);
   }, [stored, filePath, scope, modifiedEditor, monaco]);
 
-  // ── Mirror text/sent/author edits from store (not ranges) ──
+  // ── Mirror text/sent/author edits from store ──
+  // Ranges stay with the decorations, which follow typing; the store's copy is
+  // only snapshotted on file switch. A PR view's content is frozen, though, so
+  // there the store's range is the truth: an agent that moves its draft moves
+  // the decoration too.
   useEffect(() => {
     if (hydratedKeyRef.current !== `${filePath}::${scope}::loaded`) return;
+    const model = modifiedEditor?.getModel();
+    const frozen = isPrScope(scope);
     let changed = false;
     const next = liveCommentsRef.current.map((live) => {
       const fresh = stored.find((s) => s.id === live.id);
+      if (!fresh) return live;
+      const moved =
+        frozen && (fresh.startLine !== live.startLine || fresh.endLine !== live.endLine);
       if (
-        !fresh ||
-        (fresh.text === live.text && fresh.sent === live.sent && fresh.author === live.author)
+        !moved &&
+        fresh.text === live.text &&
+        fresh.sent === live.sent &&
+        fresh.author === live.author
       )
         return live;
       changed = true;
-      return { ...live, text: fresh.text, sent: fresh.sent, author: fresh.author };
+      let { decorationId, startLine, endLine } = live;
+      if (moved && model && monaco) {
+        const lineCount = model.getLineCount();
+        startLine = Math.min(Math.max(1, fresh.startLine), lineCount);
+        endLine = Math.min(Math.max(startLine, fresh.endLine), lineCount);
+        decorationId = model.deltaDecorations(
+          [live.decorationId],
+          [
+            {
+              range: new monaco.Range(startLine, 1, endLine, 1),
+              options: { isWholeLine: true, stickiness: 1 },
+            },
+          ],
+        )[0]!;
+      }
+      return {
+        ...live,
+        text: fresh.text,
+        sent: fresh.sent,
+        author: fresh.author,
+        decorationId,
+        startLine,
+        endLine,
+      };
     });
-    if (changed) setLiveComments(next);
-  }, [stored, filePath, scope]);
+    if (changed) {
+      liveCommentsRef.current = next;
+      setLiveComments(next);
+    }
+  }, [stored, filePath, scope, modifiedEditor, monaco]);
 
   // ── Snapshot on unmount / file switch (closure-captured path) ──
   useEffect(() => {

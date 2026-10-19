@@ -16,7 +16,7 @@ import { PrThreadOverlay } from './prReview/PrThreadOverlay';
 import { PrReviewMenu, isInlineThread } from './prReview/PrReviewMenu';
 import { useGutterSelection } from './comments/useGutterSelection';
 import { useFileComments } from './comments/useFileComments';
-import { commentScope, scopeLabel } from './comments/commentScope';
+import { commentScope, scopeLabel, withoutPrDrafts } from './comments/commentScope';
 import { useCommentShades } from './comments/useCommentShades';
 import { useCommentBands } from './comments/useCommentBands';
 import { useCommentDraft } from './comments/useCommentDraft';
@@ -398,10 +398,9 @@ export function EditorPane({
     onClose();
   }
 
-  const hasAnyComments = useMemo(
-    () => Object.values(commentsByFile).some((list) => list.length > 0),
-    [commentsByFile],
-  );
+  // The comments menu sends to the task; PR drafts go to the PR instead.
+  const menuCommentsByFile = useMemo(() => withoutPrDrafts(commentsByFile), [commentsByFile]);
+  const hasAnyComments = Object.keys(menuCommentsByFile).length > 0;
 
   const showCommentsMenu = !commentsDisabled && hasAnyComments && !isPrView;
 
@@ -512,7 +511,7 @@ export function EditorPane({
             {showCommentsMenu && (
               <div className="absolute bottom-4 right-4 z-10">
                 <CommentsMenu
-                  commentsByFile={commentsByFile}
+                  commentsByFile={menuCommentsByFile}
                   currentFilePath={filePath}
                   currentScope={scope}
                   getLiveRangeForCurrent={(commentId) => {

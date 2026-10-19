@@ -336,7 +336,7 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): PrReviewProvider {
 
     /**
      * ADO has no pending review: each comment posts on its own, then the
-     * summary and the vote. The first failure stops the run, and the drafts
+     * replies, the vote and the summary. The first failure stops the run, and the drafts
      * that did post are reported so they aren't posted twice.
      */
     async submit(ctx, number, s) {
@@ -393,16 +393,18 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): PrReviewProvider {
           });
           posted.push(r.draftId);
         }
+        // The vote before the summary: a vote is safe to repeat and a summary
+        // isn't, so whatever a retry repeats after a failure is harmless.
+        const vote = adoVote(s.verdict);
+        if (vote !== null) {
+          const me = await deps.getMyId(ado);
+          await deps.request(ado, `${at}/reviewers/${me}`, { method: 'PUT', body: { vote } });
+        }
         if (s.body.trim()) {
           await deps.request(ado, `${at}/threads`, {
             method: 'POST',
             body: adoSummaryBody(s.body),
           });
-        }
-        const vote = adoVote(s.verdict);
-        if (vote !== null) {
-          const me = await deps.getMyId(ado);
-          await deps.request(ado, `${at}/reviewers/${me}`, { method: 'PUT', body: { vote } });
         }
         return { postedDraftIds: posted };
       } catch (err) {

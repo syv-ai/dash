@@ -5,6 +5,7 @@ import {
   commitShortHash,
   filterCommentsByScope,
   scopeLabel,
+  withoutPrDrafts,
 } from '../commentScope';
 
 describe('commentScope', () => {
@@ -88,5 +89,17 @@ describe('commentCountsByScope', () => {
     expect(counts.get('live')).toBe(2);
     // Every commit-scoped comment was sent → scope drops out of the map.
     expect(counts.get('commit:abc')).toBeUndefined();
+  });
+});
+
+describe('withoutPrDrafts', () => {
+  it('drops PR review drafts, which go to the PR and never to the task', () => {
+    const c = (id: string, viewScope: string) => ({ id, viewScope });
+    expect(
+      withoutPrDrafts({
+        'a.ts': [c('1', 'live'), c('2', 'pr:github:4')],
+        'b.ts': [c('3', 'pr:ado:7')],
+      }),
+    ).toEqual({ 'a.ts': [c('1', 'live')] });
   });
 });

@@ -131,6 +131,7 @@ describe('prReviewStore writes', () => {
     ).toEqual({
       ok: false,
       error: { kind: 'scope', fix: 'gh auth refresh -s repo' },
+      posted: 0,
     });
     expect(api.prReviewLoad).not.toHaveBeenCalled();
   });
