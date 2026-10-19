@@ -54,6 +54,7 @@ interface RawIteration {
 interface RawPr {
   pullRequestId?: number;
   title?: string;
+  description?: string;
   createdBy?: { id?: string } | null;
   reviewers?: { id?: string; vote?: number }[] | null;
 }
@@ -176,6 +177,7 @@ export function adoReviewFrom(
     provider: 'ado',
     number,
     title: pr.title ?? '',
+    body: pr.description ?? '',
     url,
     viewerIsAuthor: !!raw.me && pr.createdBy?.id === raw.me,
     // On the reviewer list and hasn't voted: a vote adds you to the list too,

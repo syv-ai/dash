@@ -95,12 +95,13 @@ describe('githubReviewFrom', () => {
   });
 
   it('describes the PR and offers only "comment" on your own PR', () => {
-    const base = { title: 'Fix it', url: 'https://x/pull/4' };
+    const base = { title: 'Fix it', body: 'Because', url: 'https://x/pull/4' };
     const theirs = githubReviewFrom({ ...base, viewerDidAuthor: false }, at);
     expect(theirs).toMatchObject({
       provider: 'github',
       number: 4,
       title: 'Fix it',
+      body: 'Because',
       url: 'https://x/pull/4',
       base: 'B',
       head: 'H',

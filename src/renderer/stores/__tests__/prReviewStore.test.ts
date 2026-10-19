@@ -6,6 +6,7 @@ const review = (n: number, provider: PrProvider = 'github'): PrReview => ({
   provider,
   number: n,
   title: 't',
+  body: '',
   url: 'u',
   viewerIsAuthor: false,
   viewerIsRequestedReviewer: false,

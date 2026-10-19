@@ -23,6 +23,13 @@ describe('parseStoredView', () => {
     expect(parseStoredView(JSON.stringify(v))).toEqual(v);
   });
 
+  it('round-trips a PR view, and rejects one missing its commits', () => {
+    const v: EditorView = { kind: 'pr', provider: 'ado', number: 7, base: 'B', head: 'H' };
+    expect(parseStoredView(JSON.stringify(v))).toEqual(v);
+    expect(parseStoredView(JSON.stringify({ ...v, head: '' }))).toBeNull();
+    expect(parseStoredView(JSON.stringify({ ...v, provider: 'gitlab' }))).toBeNull();
+  });
+
   it('rejects the unresolved HEAD commit sentinel', () => {
     expect(parseStoredView(JSON.stringify({ kind: 'commit', hash: 'HEAD' }))).toBeNull();
   });

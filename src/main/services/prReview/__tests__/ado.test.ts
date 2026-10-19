@@ -23,7 +23,12 @@ const iterations = {
     { id: 9, sourceRefCommit: { commitId: 'h9' }, commonRefCommit: { commitId: 'b9' } },
   ],
 };
-const pr = { pullRequestId: 7204, title: 'Wire inputs', createdBy: { id: 'author-id' } };
+const pr = {
+  pullRequestId: 7204,
+  title: 'Wire inputs',
+  description: 'Why',
+  createdBy: { id: 'author-id' },
+};
 const filesAtHead = new Set(['src/app/moved.ts', 'src/app/unmoved.ts']);
 
 describe('adoReviewFrom', () => {
@@ -37,6 +42,7 @@ describe('adoReviewFrom', () => {
       provider: 'ado',
       number: 7204,
       title: 'Wire inputs',
+      body: 'Why',
       url: 'https://dev.azure.com/org/Proj/_git/repo/pullrequest/7204',
       viewerIsAuthor: false,
       base: 'BASE11',

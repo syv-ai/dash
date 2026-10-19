@@ -602,6 +602,8 @@ export interface PrReview {
   provider: PrProvider;
   number: number;
   title: string;
+  /** The PR's description, in Markdown. */
+  body: string;
   url: string;
   /** GitHub refuses approve / request changes on your own PR. */
   viewerIsAuthor: boolean;

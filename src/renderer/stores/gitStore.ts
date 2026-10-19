@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { GitStatus, PullRequestInfo, Project, Task } from '../../shared/types';
+import type { GitStatus, PrProvider, PullRequestInfo, Project, Task } from '../../shared/types';
 import { fetchPrsFor, prDetectionTargets, prTargetFor, type BranchPrs } from './prDetectionTargets';
 import { useProjects, selectActiveTask } from './projectsStore';
 
@@ -10,7 +10,10 @@ export interface DiffFileTarget {
   cwd: string;
   filePath: string;
   staged: boolean;
-  initialView?: { kind: 'working'; ref: 'HEAD' | 'index' } | { kind: 'commit'; hash: string };
+  initialView?:
+    | { kind: 'working'; ref: 'HEAD' | 'index' }
+    | { kind: 'commit'; hash: string }
+    | { kind: 'pr'; provider: PrProvider; number: number; base: string; head: string };
 }
 
 type Updater<T> = T | ((prev: T) => T);

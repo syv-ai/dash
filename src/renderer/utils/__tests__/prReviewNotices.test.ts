@@ -32,6 +32,7 @@ const review = (number: number, threads: PrReviewThread[]): PrReview => ({
   provider: 'github',
   number,
   title: 't',
+  body: '',
   url: `https://github.com/o/r/pull/${number}`,
   viewerIsAuthor: false,
   viewerIsRequestedReviewer: false,

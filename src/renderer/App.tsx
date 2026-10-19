@@ -12,6 +12,7 @@ import { openInIde } from './lib/openInIde';
 import { headerModelName } from './lib/modelName';
 import { RightInspector } from './components/rightInspector/RightInspector';
 import { PortsDrawerWrapper } from './components/rightInspector/PortsDrawerWrapper';
+import { readStoredFile, readStoredView } from './components/diffEditor/data/viewPersistence';
 const DiffEditorModal = lazy(() => import('./components/diffEditor/DiffEditorModal'));
 import { ShellDrawerWrapper } from './components/terminal/ShellDrawerWrapper';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
@@ -1354,6 +1355,18 @@ export function App() {
                         onShowCommitGraph={() => setShowCommitGraph(true)}
                         onOpenEditor={() => {
                           if (!activeTask) return;
+                          // A review in progress outranks the working changes:
+                          // reopen the PR view on the file left open.
+                          const stored = readStoredView(activeTask.path);
+                          if (stored?.kind === 'pr') {
+                            setDiffFile({
+                              cwd: activeTask.path,
+                              filePath: readStoredFile(activeTask.path),
+                              staged: false,
+                              initialView: stored,
+                            });
+                            return;
+                          }
                           const files = gitStatus?.files ?? [];
                           if (files.length > 0) {
                             // Prefer the first unstaged file; otherwise first staged.

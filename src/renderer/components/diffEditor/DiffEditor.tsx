@@ -8,9 +8,9 @@ import type { EditorView } from './types';
 import type { DiffEditorModalProps } from './DiffEditorModal';
 import { useEditorViewData } from './data/useEditorViewData';
 import { pickFirstChangedFile } from './data/viewData';
-import { readStoredView, writeStoredView } from './data/viewPersistence';
+import { readStoredView, writeStoredFile, writeStoredView } from './data/viewPersistence';
 import { useCommentsStore } from '../../stores/commentsStore';
-import { prKey, usePrReviews } from '../../stores/prReviewStore';
+import { prKey, reviewKey, usePrReviews } from '../../stores/prReviewStore';
 import { unresolvedThreads } from '../../utils/prReviewNotices';
 import { toast } from 'sonner';
 import type { FileBadges, PrEntry } from './EditorSidebar';
@@ -62,6 +62,9 @@ export function DiffEditor({
   useEffect(() => {
     writeStoredView(cwd, view);
   }, [cwd, view]);
+  useEffect(() => {
+    writeStoredFile(cwd, selectedPath);
+  }, [cwd, selectedPath]);
 
   // Validate the restored initial view exactly once. A commit lists every file
   // in its tree, so an empty repoPaths after load means the sha is gone; a
@@ -182,11 +185,55 @@ export function DiffEditor({
     [view, openPrView],
   );
 
+  // A PR view restored from an earlier session has no review loaded yet: fetch
+  // it (the PR may have moved on since), or fall back to the working tree.
+  useEffect(() => {
+    if (view.kind !== 'pr' || viewReview || !projectId) return;
+    let cancelled = false;
+    void usePrReviews
+      .getState()
+      .load(projectId, cwd, view.number)
+      .then((r) => {
+        if (cancelled) return;
+        if (!r.ok) {
+          toast.error(`Could not load PR #${view.number}: ${r.error}`);
+          changeView({ kind: 'working', ref: 'HEAD' });
+        } else if (r.review.base !== view.base || r.review.head !== view.head) {
+          setView({ ...view, base: r.review.base, head: r.review.head });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, viewReview, projectId, cwd]);
+
+  const ownInReview = usePrReviews((s) =>
+    openPr && activeTaskId
+      ? s.inReview[reviewKey(activeTaskId, openPr.provider, openPr.number)] === true
+      : false,
+  );
+  useEffect(() => {
+    if (!openPr || !activeTaskId) return;
+    void usePrReviews.getState().loadInReview(activeTaskId, openPr.provider, openPr.number);
+  }, [openPr, activeTaskId]);
   const prEntry: PrEntry | null = openPr
     ? {
         number: openPr.number,
+        title: openPr.title,
+        body: ownReview?.body ?? null,
         threads: ownReview ? unresolvedThreads(ownReview).length : null,
+        inReview: ownInReview,
         onOpen: () => void openPrView(openPr.number),
+        onReview: () => {
+          if (activeTaskId) {
+            usePrReviews.getState().setInReview(activeTaskId, openPr.provider, openPr.number, true);
+          }
+          void openPrView(openPr.number);
+        },
+        onPeek: () => {
+          if (!ownReview && projectId)
+            void usePrReviews.getState().load(projectId, cwd, openPr.number);
+        },
       }
     : null;
 

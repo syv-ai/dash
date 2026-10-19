@@ -17,6 +17,7 @@ import { formatRelativeTime } from '@shared/relativeTime';
 import type { CommitSummary, EditorView } from './types';
 import { Popover, PopoverAnchor, PopoverContent } from '../ui/Popover';
 import { Tooltip } from '../ui/Tooltip';
+import { Markdown } from '../ui/Markdown';
 
 interface EditorSidebarProps {
   /** Repo root — needed to lazily list gitignored files under "show all files". */
@@ -50,11 +51,20 @@ export interface FileBadges {
   threads: number;
 }
 
-/** The task's open PR in the commits drawer; `threads` is null until its review is fetched. */
+/** The task's open PR in the commits drawer. `threads` and `body` are null
+ *  until its review is fetched. */
 export interface PrEntry {
   number: number;
+  title: string;
+  body: string | null;
   threads: number | null;
+  /** The task is reviewing it (Review clicked, not yet submitted). */
+  inReview: boolean;
   onOpen: () => void;
+  /** Start reviewing it, and open it. */
+  onReview: () => void;
+  /** The hover card opened: fetch the review if it isn't yet. */
+  onPeek: () => void;
 }
 
 const COMMITS_DRAWER_KEY = 'diffEditor.commitsDrawerSize';
@@ -781,22 +791,7 @@ function CommitsDrawer({
             <CommentBadge count={commentCountByScope.get('live')!} />
           )}
         </button>
-        {pr && (
-          <button
-            type="button"
-            data-active={view.kind === 'pr'}
-            onClick={pr.onOpen}
-            className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-[12px] text-left transition-colors ${
-              view.kind === 'pr'
-                ? 'bg-primary/15 text-primary'
-                : 'text-fg-fade-85 hover:bg-[hsl(var(--surface-2)/0.6)]'
-            }`}
-          >
-            <GitPullRequestArrow size={11} strokeWidth={1.8} className="opacity-60 shrink-0" />
-            <span className="truncate flex-1 font-mono text-[11.5px]">PR #{pr.number}</span>
-            {(pr.threads ?? 0) > 0 && <CommentBadge count={pr.threads!} />}
-          </button>
-        )}
+        {pr && <PrRow pr={pr} active={view.kind === 'pr'} />}
         {loading && commits.length === 0 && (
           <div className="px-3 py-2 text-[11px] text-muted-fade-40">Loading…</div>
         )}
@@ -824,7 +819,9 @@ interface CommitRowProps {
   onSelect: () => void;
 }
 
-function CommitRow({ commit, active, commentCount, onSelect }: CommitRowProps) {
+/** A hover card's open state: opens after a short rest, and stays open while
+ *  the pointer is on the card (`holdOpen` on its mouseenter). */
+function useHoverCard(onOpen?: () => void) {
   const [hovered, setHovered] = useState(false);
   const openTimer = useRef<number | null>(null);
   const closeTimer = useRef<number | null>(null);
@@ -842,7 +839,10 @@ function CommitRow({ commit, active, commentCount, onSelect }: CommitRowProps) {
 
   const scheduleOpen = () => {
     cancelTimers();
-    openTimer.current = window.setTimeout(() => setHovered(true), 220);
+    openTimer.current = window.setTimeout(() => {
+      setHovered(true);
+      onOpen?.();
+    }, 220);
   };
 
   const scheduleClose = () => {
@@ -850,7 +850,19 @@ function CommitRow({ commit, active, commentCount, onSelect }: CommitRowProps) {
     closeTimer.current = window.setTimeout(() => setHovered(false), 80);
   };
 
+  const holdOpen = () => {
+    if (closeTimer.current != null) {
+      window.clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  };
+
   useEffect(() => cancelTimers, []);
+  return { hovered, scheduleOpen, scheduleClose, holdOpen };
+}
+
+function CommitRow({ commit, active, commentCount, onSelect }: CommitRowProps) {
+  const { hovered, scheduleOpen, scheduleClose, holdOpen } = useHoverCard();
 
   return (
     <Popover open={hovered}>
@@ -897,12 +909,7 @@ function CommitRow({ commit, active, commentCount, onSelect }: CommitRowProps) {
         sideOffset={10}
         // Pointer events live so the popover stays open while the cursor is on
         // it; mouseenter/leave on the content cancels the close timer.
-        onMouseEnter={() => {
-          if (closeTimer.current != null) {
-            window.clearTimeout(closeTimer.current);
-            closeTimer.current = null;
-          }
-        }}
+        onMouseEnter={holdOpen}
         onMouseLeave={scheduleClose}
         // Block Radix's auto-focus so the popover doesn't steal focus from the
         // commit list on hover.
@@ -927,6 +934,83 @@ function CommitRow({ commit, active, commentCount, onSelect }: CommitRowProps) {
             {formatRelativeTime(commit.authorDate, Date.now() / 1000)}
           </span>
         </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** The task's PR in the commits drawer: tinted apart from the commits, with
+ *  Review (or "In review") and a hover card holding its description. */
+function PrRow({ pr, active }: { pr: PrEntry; active: boolean }) {
+  const { hovered, scheduleOpen, scheduleClose, holdOpen } = useHoverCard(pr.onPeek);
+  return (
+    <Popover open={hovered}>
+      <PopoverAnchor asChild>
+        <div
+          data-active={active}
+          onMouseEnter={scheduleOpen}
+          onMouseLeave={scheduleClose}
+          className={`my-0.5 flex items-center gap-1 rounded-md border pl-2 pr-1 py-0.5 transition-colors ${
+            active
+              ? 'border-[hsl(var(--git-added)/0.45)] bg-[hsl(var(--git-added)/0.16)]'
+              : 'border-[hsl(var(--git-added)/0.25)] bg-[hsl(var(--git-added)/0.07)] hover:bg-[hsl(var(--git-added)/0.12)]'
+          }`}
+        >
+          <button
+            type="button"
+            onClick={pr.onOpen}
+            onFocus={scheduleOpen}
+            onBlur={scheduleClose}
+            className="flex min-w-0 flex-1 items-center gap-2 py-0.5 text-left text-[12px] text-[hsl(var(--git-added))]"
+          >
+            <GitPullRequestArrow size={11} strokeWidth={1.8} className="shrink-0" />
+            <span className="shrink-0 font-mono text-[11.5px] tabular-nums">#{pr.number}</span>
+            <span className="min-w-0 flex-1 truncate text-[11.5px] text-fg-fade-85">
+              {pr.title}
+            </span>
+            {(pr.threads ?? 0) > 0 && <CommentBadge count={pr.threads!} />}
+          </button>
+          {pr.inReview ? (
+            <button
+              type="button"
+              onClick={pr.onOpen}
+              title="Your review is in progress"
+              className="shrink-0 rounded-full border border-primary/40 px-2 py-0.5 text-[10.5px] font-medium text-primary hover:bg-primary/10 transition-colors"
+            >
+              In review
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={pr.onReview}
+              title="Review: what you write becomes a PR comment, sent on Submit"
+              className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-[10.5px] font-medium text-primary-foreground hover:brightness-110 transition"
+            >
+              Review
+            </button>
+          )}
+        </div>
+      </PopoverAnchor>
+      <PopoverContent
+        side="right"
+        align="start"
+        sideOffset={10}
+        onMouseEnter={holdOpen}
+        onMouseLeave={scheduleClose}
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onCloseAutoFocus={(e) => e.preventDefault()}
+        className="w-[420px] max-h-[440px] overflow-y-auto overflow-x-hidden p-3.5 flex flex-col gap-2.5"
+      >
+        <div className="text-[12.5px] font-medium text-foreground leading-snug wrap-break-word">
+          #{pr.number} {pr.title}
+        </div>
+        {pr.body === null ? (
+          <div className="text-[11.5px] text-muted-fade-60">Loading…</div>
+        ) : pr.body.trim() ? (
+          <Markdown text={pr.body} className="text-[11.5px] leading-relaxed text-fg-fade-85" />
+        ) : (
+          <div className="text-[11.5px] italic text-muted-fade-60">No description.</div>
+        )}
       </PopoverContent>
     </Popover>
   );

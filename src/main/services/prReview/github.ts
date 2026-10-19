@@ -20,6 +20,7 @@ export const PR_REVIEW_QUERY = `query($owner: String!, $name: String!, $number: 
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
       title
+      body
       url
       viewerDidAuthor
       baseRefOid
@@ -98,6 +99,7 @@ export function githubReviewFrom(
     provider: 'github',
     number,
     title: str(p.title),
+    body: str(p.body),
     url: str(p.url),
     viewerIsAuthor,
     viewerIsRequestedReviewer,
