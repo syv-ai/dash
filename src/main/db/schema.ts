@@ -134,6 +134,8 @@ export const diffEditorComments = sqliteTable(
     side: text('side').notNull().default('RIGHT'),
     replyTo: text('reply_to'),
     author: text('author').notNull().default('user'),
+    /** 'note' (local, for the agent) or 'comment' (a PR review draft). */
+    kind: text('kind').notNull().default('note'),
     createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
   },
@@ -210,5 +212,24 @@ export const featureDismissals = sqliteTable(
   },
   (table) => ({
     pk: primaryKey({ columns: [table.projectId, table.featureId] }),
+  }),
+);
+
+// The PRs a task is reviewing (clicked Review, not yet submitted): what's
+// written in their view is a comment rather than a note.
+export const prReviewsInProgress = sqliteTable(
+  'pr_reviews_in_progress',
+  {
+    taskId: text('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull(),
+    number: integer('number').notNull(),
+    startedAt: text('started_at')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.taskId, table.provider, table.number] }),
   }),
 );

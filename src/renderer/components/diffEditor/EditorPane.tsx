@@ -14,9 +14,16 @@ import { typeIntoTask } from '../../utils/typeIntoTask';
 import type { PrReviewThread } from '../../../shared/types';
 import { PrThreadOverlay } from './prReview/PrThreadOverlay';
 import { PrReviewMenu, isInlineThread } from './prReview/PrReviewMenu';
+import { ReviewButton } from './prReview/ReviewButton';
+import { useInReview } from './prReview/useInReview';
 import { useGutterSelection } from './comments/useGutterSelection';
 import { useFileComments } from './comments/useFileComments';
-import { commentScope, scopeLabel, withoutPrDrafts } from './comments/commentScope';
+import {
+  commentScope,
+  filterCommentsByScope,
+  scopeLabel,
+  withoutPrComments,
+} from './comments/commentScope';
 import { useCommentShades } from './comments/useCommentShades';
 import { useCommentBands } from './comments/useCommentBands';
 import { useCommentDraft } from './comments/useCommentDraft';
@@ -136,14 +143,22 @@ export function EditorPane({
 
   // Commit and PR views show frozen, read-only content.
   const isCommitView = view.kind === 'commit' || view.kind === 'pr';
-  // A PR view shows the PR's review threads instead of local notes.
+  // A PR view shows the PR's review threads beside your notes and comments.
   const isPrView = view.kind === 'pr';
   // Comments anchor to the view's content state: 'live' (working/branch share
   // the working file) vs 'commit:<hash>'. The editor shows only this scope's
   // comments; the menu spans all scopes (grouped by view).
   const scope = commentScope(view);
-  // Origin tag on bubbles whenever the open view isn't the plain working tree.
-  const bubbleScopeLabel = view.kind === 'working' ? undefined : scopeLabel(scope);
+  // Origin tag on bubbles whenever the open view isn't the plain working tree
+  // (a PR view tags each one note or comment instead).
+  const bubbleScopeLabel = view.kind === 'working' || isPrView ? undefined : scopeLabel(scope);
+  // Reviewing the PR (Review clicked, not yet submitted): what's written is a
+  // PR comment; otherwise a note.
+  const inReview = useInReview(isPrView && !commentsDisabled ? scope : null);
+  useEffect(() => {
+    if (view.kind !== 'pr' || !activeTaskId) return;
+    void usePrReviews.getState().loadInReview(activeTaskId, view.provider, view.number);
+  }, [view, activeTaskId]);
   // Comment count for the open view — surfaced in the header's "Showing …" pill.
   const scopeCommentCount = useMemo(() => {
     let n = 0;
@@ -254,6 +269,7 @@ export function EditorPane({
     editor,
     monaco,
     scope,
+    newKind: isPrView && inReview ? 'comment' : 'note',
   });
   const liveComments = binding.liveComments;
   const shadeById = useCommentShades(liveComments);
@@ -381,6 +397,15 @@ export function EditorPane({
     return () => cancelAnimationFrame(raf);
   }, [pendingRange, dragging, draftApi.editingId, modifiedEditor, monaco]);
 
+  // The task's comments menu lists notes; PR comments belong to their PR's widget.
+  const menuCommentsByFile = useMemo(() => withoutPrComments(commentsByFile), [commentsByFile]);
+  const hasAnyComments = Object.keys(menuCommentsByFile).length > 0;
+  // The PR widget's bulk sends take this PR's notes and comments.
+  const sendable = useMemo(
+    () => (isPrView ? filterCommentsByScope(commentsByFile, scope) : menuCommentsByFile),
+    [isPrView, commentsByFile, scope, menuCommentsByFile],
+  );
+
   // Prompt assembly + send-to-TUI + edit-and-send modal.
   const promptApi = useCommentPrompt({
     activeTaskId,
@@ -390,17 +415,21 @@ export function EditorPane({
     liveComments,
     language: state.kind === 'loaded' ? state.language : '',
     scope,
+    sendable,
     onClose,
   });
+
+  const getLiveRangeForCurrent = (commentId: string) => {
+    const target = liveComments.find((c) => c.id === commentId);
+    if (!target) return null;
+    const r = modifiedEditor?.getModel()?.getDecorationRange(target.decorationId);
+    return r ? { start: r.startLineNumber, end: r.endLineNumber } : null;
+  };
 
   function handleClose() {
     if (dirty && !window.confirm('Discard unsaved changes?')) return;
     onClose();
   }
-
-  // The comments menu sends to the task; PR drafts go to the PR instead.
-  const menuCommentsByFile = useMemo(() => withoutPrDrafts(commentsByFile), [commentsByFile]);
-  const hasAnyComments = Object.keys(menuCommentsByFile).length > 0;
 
   const showCommentsMenu = !commentsDisabled && hasAnyComments && !isPrView;
 
@@ -514,13 +543,7 @@ export function EditorPane({
                   commentsByFile={menuCommentsByFile}
                   currentFilePath={filePath}
                   currentScope={scope}
-                  getLiveRangeForCurrent={(commentId) => {
-                    const target = liveComments.find((c) => c.id === commentId);
-                    if (!target) return null;
-                    const model = modifiedEditor?.getModel();
-                    const r = model?.getDecorationRange(target.decorationId);
-                    return r ? { start: r.startLineNumber, end: r.endLineNumber } : null;
-                  }}
+                  getLiveRangeForCurrent={getLiveRangeForCurrent}
                   onNavigate={onNavigateToComment}
                   onRemove={(_path, id) => useCommentsStore.getState().remove(id)}
                   onUnsend={(id) => useCommentsStore.getState().markUnsent(id)}
@@ -533,10 +556,26 @@ export function EditorPane({
               </div>
             )}
             {prReview && (
-              <div className="absolute bottom-4 right-4 z-10">
+              <div className="absolute bottom-4 right-4 z-10 flex items-center gap-2">
+                {draftScope && activeTaskId && (
+                  <ReviewButton
+                    inReview={inReview}
+                    asked={prReview.viewerIsRequestedReviewer}
+                    onToggle={() =>
+                      usePrReviews
+                        .getState()
+                        .setInReview(activeTaskId, prReview.provider, prReview.number, !inReview)
+                    }
+                  />
+                )}
                 <PrReviewMenu
                   review={prReview}
                   draftScope={draftScope}
+                  currentFilePath={filePath}
+                  getLiveRangeForCurrent={getLiveRangeForCurrent}
+                  onNavigate={onNavigateToComment}
+                  onSendOne={promptApi.sendOne}
+                  onSendMany={promptApi.sendMany}
                   submitCtx={
                     draftScope && projectId && activeTaskId
                       ? { projectId, cwd, taskId: activeTaskId }
@@ -635,6 +674,12 @@ export function EditorPane({
               onEditComment={draftApi.beginEdit}
               onDeleteComment={binding.remove}
               onReopenComment={(id) => useCommentsStore.getState().markUnsent(id)}
+              onPromoteComment={
+                isPrView && !commentsDisabled
+                  ? (id) => useCommentsStore.getState().setKind(id, 'comment')
+                  : undefined
+              }
+              draftSubmitLabel={isPrView ? (inReview ? 'Add comment' : 'Add note') : undefined}
               pendingRange={dragging ? null : pendingRange}
               pendingText={draftApi.pendingText}
               editingId={draftApi.editingId}

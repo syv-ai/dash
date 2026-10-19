@@ -15,6 +15,7 @@ function c(over: Partial<DiffComment>): DiffComment {
     side: 'RIGHT',
     replyTo: null,
     author: 'user',
+    kind: 'note',
     createdAt: '2026-06-05T00:00:00Z',
     updatedAt: '2026-06-05T00:00:00Z',
     ...over,

@@ -347,6 +347,27 @@ export function runMigrations(): void {
     }
   }
 
+  // A PR view holds both notes (local, for the agent) and comments (review
+  // drafts Submit posts). Every PR-scoped row before this was a draft.
+  try {
+    rawDb.exec(`ALTER TABLE diff_editor_comments ADD COLUMN kind TEXT NOT NULL DEFAULT 'note'`);
+    rawDb.exec(`UPDATE diff_editor_comments SET kind = 'comment' WHERE view_scope LIKE 'pr:%'`);
+  } catch {
+    /* already exists */
+  }
+
+  // The PRs a task is reviewing: what's written in their view becomes a
+  // comment rather than a note, until Submit ends the review.
+  rawDb.exec(`
+    CREATE TABLE IF NOT EXISTS pr_reviews_in_progress (
+      task_id     TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      provider    TEXT NOT NULL,
+      number      INTEGER NOT NULL,
+      started_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (task_id, provider, number)
+    );
+  `);
+
   // Worktrees moved from `<parent>/worktrees/` to `<repo>/.claude/worktrees/`
   // in 0.16. When the launch dialog moves a task, its old path is kept here so
   // the Claude transcripts written under the old cwd (~/.claude/projects/<encoded

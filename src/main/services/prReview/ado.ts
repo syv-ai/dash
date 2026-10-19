@@ -55,6 +55,7 @@ interface RawPr {
   pullRequestId?: number;
   title?: string;
   createdBy?: { id?: string } | null;
+  reviewers?: { id?: string; vote?: number }[] | null;
 }
 
 export interface AdoRepoContext {
@@ -177,6 +178,10 @@ export function adoReviewFrom(
     title: pr.title ?? '',
     url,
     viewerIsAuthor: !!raw.me && pr.createdBy?.id === raw.me,
+    // On the reviewer list and hasn't voted: a vote adds you to the list too,
+    // so being on it alone doesn't mean you were asked.
+    viewerIsRequestedReviewer:
+      !!raw.me && (pr.reviewers ?? []).some((r) => r.id === raw.me && !r.vote),
     verdicts: ADO_VERDICTS,
     base,
     head,

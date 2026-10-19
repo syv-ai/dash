@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import type { PrReview, PrVerdict, PrWriteError } from '../../../../shared/types';
 import { Button } from '../../ui/Button';
 import { IconButton } from '../../ui/IconButton';
-import { Segmented } from '../../ui/Segmented';
+import { Select } from '../../ui/Select';
 import { usePrReviews } from '../../../stores/prReviewStore';
 import { providerName } from './PrThreadCard';
 
@@ -24,6 +24,9 @@ interface Props {
   taskId: string;
   /** The task's drafts (comments and replies) for this PR. */
   draftCount: number;
+  /** The task's notes on this PR: they stay local, and can be cleared before submitting. */
+  noteCount: number;
+  onClearNotes: () => void;
 }
 
 function WriteError({
@@ -83,7 +86,15 @@ function WriteError({
 }
 
 /** The review panel's footer: verdict, summary, and Submit for the task's drafts. */
-export function SubmitReview({ review, projectId, cwd, taskId, draftCount }: Props) {
+export function SubmitReview({
+  review,
+  projectId,
+  cwd,
+  taskId,
+  draftCount,
+  noteCount,
+  onClearNotes,
+}: Props) {
   const [verdict, setVerdict] = useState<PrVerdict>('comment');
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
@@ -105,13 +116,13 @@ export function SubmitReview({ review, projectId, cwd, taskId, draftCount }: Pro
   }
 
   return (
-    <div className="mt-2 flex flex-col gap-2 border-t border-edge/10 px-1.5 pt-2.5">
+    <div className="flex shrink-0 flex-col gap-2 border-t border-foreground/6 bg-foreground/2 px-3 py-2.5">
       {review.verdicts.length > 1 && (
-        <Segmented
-          size="sm"
+        <Select
           value={offered}
-          onChange={setVerdict}
+          onValueChange={setVerdict}
           options={review.verdicts.map((v) => ({ value: v, label: VERDICT_LABELS[v] }))}
+          className="py-1.5"
         />
       )}
       <textarea
@@ -124,7 +135,19 @@ export function SubmitReview({ review, projectId, cwd, taskId, draftCount }: Pro
         className="w-full resize-none rounded-md border border-edge/10 bg-[hsl(var(--surface-1))] px-2 py-1.5 text-[12px] leading-relaxed placeholder:text-muted-fade-40 focus:outline-hidden"
       />
       {error && <WriteError {...error} provider={review.provider} />}
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-end gap-2">
+        {noteCount > 0 && (
+          <span className="min-w-0 flex-1 text-[11px] text-muted-fade-70">
+            {noteCount} {noteCount === 1 ? 'note stays' : 'notes stay'} local ·{' '}
+            <button
+              type="button"
+              onClick={onClearNotes}
+              className="text-fg-fade-80 underline-offset-2 hover:text-destructive hover:underline"
+            >
+              Clear notes
+            </button>
+          </span>
+        )}
         <Button size="sm" disabled={busy || empty} onClick={() => void submit()}>
           {busy && <Loader2 size={14} strokeWidth={1.8} className="animate-spin" />}
           {draftCount > 0

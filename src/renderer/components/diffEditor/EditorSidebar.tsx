@@ -28,9 +28,9 @@ interface EditorSidebarProps {
   filesLoading: boolean;
   selectedPath: string;
   onSelectFile: (path: string) => void;
-  /** Per-file comment counts. Files in this map get a small badge in the
-   *  tree; folders aggregate their descendants' counts for the same badge. */
-  commentCounts: Map<string, number>;
+  /** Per-file badge counts: your notes and comments, and (in a PR view) the
+   *  PR's unresolved threads. */
+  badgeCounts: Map<string, FileBadges>;
 
   commits: CommitSummary[];
   commitsLoading: boolean;
@@ -40,6 +40,14 @@ interface EditorSidebarProps {
   onSelectView: (view: EditorView) => void;
   /** The task's open GitHub PR, shown as a row that opens the PR view. */
   pr?: PrEntry | null;
+}
+
+/** A file's badges in the tree. */
+export interface FileBadges {
+  /** Your notes and comments needing attention (unsent, or PR comments). */
+  comments: number;
+  /** The PR's unresolved threads on the file. */
+  threads: number;
 }
 
 /** The task's open PR in the commits drawer; `threads` is null until its review is fetched. */
@@ -73,7 +81,7 @@ export function EditorSidebar(props: EditorSidebarProps) {
             loading={props.filesLoading}
             selectedPath={props.selectedPath}
             onSelectFile={props.onSelectFile}
-            commentCounts={props.commentCounts}
+            badgeCounts={props.badgeCounts}
           />
         </Panel>
         <PanelResizeHandle className="h-px bg-[hsl(var(--border)/0.5)] hover:bg-[hsl(var(--border))] transition-colors" />
@@ -208,17 +216,20 @@ function buildRepoTree(
  *  0 = no row fills that column, so it isn't drawn. */
 interface TreeColumns {
   comments: boolean;
+  threads: boolean;
   add: number;
   del: number;
   /** The status letter on files and the changed count on folders share it. */
   status: number;
 }
 
-function treeColumns(root: TreeFolder, commentCounts: Map<string, number>): TreeColumns {
-  const cols: TreeColumns = { comments: false, add: 0, del: 0, status: 0 };
+function treeColumns(root: TreeFolder, badgeCounts: Map<string, FileBadges>): TreeColumns {
+  const cols: TreeColumns = { comments: false, threads: false, add: 0, del: 0, status: 0 };
   const walk = (node: TreeFolder) => {
     for (const f of node.files) {
-      if ((commentCounts.get(f.fullPath) ?? 0) > 0) cols.comments = true;
+      const badges = badgeCounts.get(f.fullPath);
+      if (badges?.comments) cols.comments = true;
+      if (badges?.threads) cols.threads = true;
       const c = f.change;
       if (!c) continue;
       cols.status = Math.max(cols.status, 1);
@@ -338,7 +349,7 @@ interface FileTreePanelProps {
   loading: boolean;
   selectedPath: string;
   onSelectFile: (path: string) => void;
-  commentCounts: Map<string, number>;
+  badgeCounts: Map<string, FileBadges>;
 }
 
 function FileTreePanel({
@@ -349,7 +360,7 @@ function FileTreePanel({
   loading,
   selectedPath,
   onSelectFile,
-  commentCounts,
+  badgeCounts,
 }: FileTreePanelProps) {
   const [changedOnly, setChangedOnly] = useState<boolean>(
     () => localStorage.getItem(CHANGED_ONLY_KEY) === 'true',
@@ -400,7 +411,7 @@ function FileTreePanel({
     }
     return { additions, deletions };
   }, [changedFiles]);
-  const cols = useMemo(() => treeColumns(tree, commentCounts), [tree, commentCounts]);
+  const cols = useMemo(() => treeColumns(tree, badgeCounts), [tree, badgeCounts]);
   return (
     <div className="h-full min-h-0 flex flex-col">
       <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-muted-fade-70 font-mono flex items-center justify-between shrink-0">
@@ -450,7 +461,7 @@ function FileTreePanel({
             indent={0}
             selectedPath={selectedPath}
             onSelectFile={onSelectFile}
-            commentCounts={commentCounts}
+            badgeCounts={badgeCounts}
             cols={cols}
           />
         )}
@@ -464,7 +475,7 @@ interface FolderContentsProps {
   indent: number;
   selectedPath: string;
   onSelectFile: (path: string) => void;
-  commentCounts: Map<string, number>;
+  badgeCounts: Map<string, FileBadges>;
   cols: TreeColumns;
 }
 
@@ -473,7 +484,7 @@ function FolderContents({
   indent,
   selectedPath,
   onSelectFile,
-  commentCounts,
+  badgeCounts,
   cols,
 }: FolderContentsProps) {
   const childFolders = Array.from(node.children.values()).sort((a, b) =>
@@ -489,7 +500,7 @@ function FolderContents({
           indent={indent}
           selectedPath={selectedPath}
           onSelectFile={onSelectFile}
-          commentCounts={commentCounts}
+          badgeCounts={badgeCounts}
           cols={cols}
         />
       ))}
@@ -499,7 +510,7 @@ function FolderContents({
           file={file}
           indent={indent}
           selected={file.fullPath === selectedPath}
-          commentCount={commentCounts.get(file.fullPath) ?? 0}
+          badges={badgeCounts.get(file.fullPath)}
           onClick={() => onSelectFile(file.fullPath)}
           cols={cols}
         />
@@ -519,14 +530,14 @@ function FolderEntry({
   indent,
   selectedPath,
   onSelectFile,
-  commentCounts,
+  badgeCounts,
   cols,
 }: {
   folder: TreeFolder;
   indent: number;
   selectedPath: string;
   onSelectFile: (path: string) => void;
-  commentCounts: Map<string, number>;
+  badgeCounts: Map<string, FileBadges>;
   cols: TreeColumns;
 }) {
   // Default-open if the folder has changes OR it contains the file the editor
@@ -591,11 +602,26 @@ function FolderEntry({
           indent={indent + 1}
           selectedPath={selectedPath}
           onSelectFile={onSelectFile}
-          commentCounts={commentCounts}
+          badgeCounts={badgeCounts}
           cols={cols}
         />
       )}
     </>
+  );
+}
+
+/** The PR's unresolved threads on a file: outlined, so it reads apart from yours. */
+function ThreadBadge({ count }: { count: number }) {
+  const label = `${count} unresolved thread${count !== 1 ? 's' : ''}`;
+  return (
+    <Tooltip content={label}>
+      <span
+        aria-label={label}
+        className="shrink-0 inline-flex items-center justify-center min-w-[14px] h-[14px] px-1 rounded-full font-mono text-[9.5px] font-semibold tabular-nums border border-edge/25 text-fg-fade-70"
+      >
+        {count}
+      </span>
+    </Tooltip>
   );
 }
 
@@ -617,14 +643,14 @@ function FileEntry({
   file,
   indent,
   selected,
-  commentCount,
+  badges,
   onClick,
   cols,
 }: {
   file: TreeFile;
   indent: number;
   selected: boolean;
-  commentCount: number;
+  badges: FileBadges | undefined;
   onClick: () => void;
   cols: TreeColumns;
 }) {
@@ -648,9 +674,14 @@ function FileEntry({
       <HoverSwapSlot
         rest={
           <span className="flex items-center gap-1.5 font-mono text-[10.5px] tabular-nums">
+            {cols.threads && (
+              <span className="flex w-[18px] justify-end">
+                {!!badges?.threads && <ThreadBadge count={badges.threads} />}
+              </span>
+            )}
             {cols.comments && (
               <span className="flex w-[18px] justify-end">
-                {commentCount > 0 && <CommentBadge count={commentCount} />}
+                {!!badges?.comments && <CommentBadge count={badges.comments} />}
               </span>
             )}
             {cols.add > 0 && (

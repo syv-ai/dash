@@ -103,8 +103,7 @@ export function reviewDeps(): ReviewCapabilityDeps {
         DatabaseService.getProjects().find((p) => p.id === projectId)?.gitRemote ?? null,
       ),
     getTask: (id) => DatabaseService.getTask(id),
-    listPrDrafts: (taskId, provider, number) =>
-      diffCommentsRepo().listPrDrafts(taskId, provider, number),
+    listByScope: (taskId, scope) => diffCommentsRepo().listByScope(taskId, scope),
     getDraft: (id) => diffCommentsRepo().get(id),
     saveAgentDraft: (draft) => diffCommentsRepo().upsertFromAgent(draft),
     deleteDraft: (id) => diffCommentsRepo().delete(id),

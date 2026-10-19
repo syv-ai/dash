@@ -1,4 +1,5 @@
-import { isPrScope, parsePrScope, prScope } from '../../../../shared/prScope';
+import { parsePrScope, prScope } from '../../../../shared/prScope';
+import type { DiffCommentKind } from '../../../../shared/types';
 import type { EditorView } from '../types';
 
 /** The content-identity a comment is anchored to.
@@ -28,16 +29,20 @@ export function scopeLabel(scope: string): string {
   return short ? `Commit ${short}` : 'Working tree';
 }
 
-/** Total *unsent* comments per scope across all files — feeds the commits-drawer
- *  per-view count badges. Sent comments no longer need attention, so they drop
- *  out of the counters. */
-export function commentCountsByScope<T extends { viewScope: string; sent?: boolean }>(
-  byFile: Record<string, T[]>,
-): Map<string, number> {
+/** A note still to send, or a PR comment still to submit (sending a comment to
+ *  the agent doesn't take it off the PR). */
+export const needsAttention = (c: { sent?: boolean; kind?: DiffCommentKind }): boolean =>
+  !c.sent || c.kind === 'comment';
+
+/** Total notes and comments needing attention per scope across all files —
+ *  feeds the commits-drawer per-view count badges. */
+export function commentCountsByScope<
+  T extends { viewScope: string; sent?: boolean; kind?: DiffCommentKind },
+>(byFile: Record<string, T[]>): Map<string, number> {
   const counts = new Map<string, number>();
   for (const list of Object.values(byFile)) {
     for (const c of list) {
-      if (c.sent) continue;
+      if (!needsAttention(c)) continue;
       counts.set(c.viewScope, (counts.get(c.viewScope) ?? 0) + 1);
     }
   }
@@ -58,14 +63,14 @@ export function filterCommentsByScope<T extends { viewScope: string }>(
   return out;
 }
 
-/** Everything but PR review drafts. Those go to the PR on Submit, never to the
- *  task through the comments menu (which sends, marks sent and clears). */
-export function withoutPrDrafts<T extends { viewScope: string }>(
+/** Notes only: no PR review comments. Those belong to their PR view's
+ *  widget, where they're submitted, not to the task's comments menu. */
+export function withoutPrComments<T extends { kind?: DiffCommentKind }>(
   byFile: Record<string, T[]>,
 ): Record<string, T[]> {
   const out: Record<string, T[]> = {};
   for (const [path, list] of Object.entries(byFile)) {
-    const kept = list.filter((c) => !isPrScope(c.viewScope));
+    const kept = list.filter((c) => c.kind !== 'comment');
     if (kept.length > 0) out[path] = kept;
   }
   return out;

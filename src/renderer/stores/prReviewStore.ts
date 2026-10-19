@@ -4,6 +4,10 @@ import type { PrProvider, PrReview, PrVerdict, PrWriteError } from '../../shared
 /** The store key of a PR's review. */
 export const prKey = (provider: PrProvider, number: number): string => `${provider}:${number}`;
 
+/** The key of a task's review of a PR. */
+export const reviewKey = (taskId: string, provider: PrProvider, number: number): string =>
+  `${taskId}:${prKey(provider, number)}`;
+
 export type PrLoadResult = { ok: true; review: PrReview } | { ok: false; error: string };
 /** `posted`: drafts that reached the PR before the error (ADO posts one at a time). */
 export type PrWriteResult = { ok: true } | { ok: false; error: PrWriteError; posted?: number };
@@ -11,6 +15,12 @@ export type PrWriteResult = { ok: true } | { ok: false; error: PrWriteError; pos
 interface PrReviewState {
   /** Per PR (`prKey`), its review as last fetched. */
   byPr: Record<string, PrReview>;
+  /** Per task and PR (`reviewKey`): whether the task is reviewing it, so what's
+   *  written in its view is a comment, not a note. Absent until loaded. */
+  inReview: Record<string, boolean>;
+  loadInReview: (taskId: string, provider: PrProvider, number: number) => Promise<void>;
+  /** Start (Review) or end a task's review of a PR. */
+  setInReview: (taskId: string, provider: PrProvider, number: number, on: boolean) => void;
   /** Fetch PR `number` of the project, with its commits fetched into `cwd`. On
    *  failure the last fetched review stays. */
   load: (projectId: string, cwd: string, number: number) => Promise<PrLoadResult>;
@@ -23,12 +33,12 @@ interface PrReviewState {
     resolved: boolean,
   ) => Promise<PrWriteResult>;
   /** Submit the task's drafts for the PR with a verdict; refetches the review
-   *  when anything reached the PR. */
+   *  when anything reached the PR, and ends the review when everything did. */
   submit: (
     projectId: string,
     cwd: string,
     taskId: string,
-    review: Pick<PrReview, 'number'>,
+    review: Pick<PrReview, 'provider' | 'number'>,
     verdict: PrVerdict,
     body: string,
   ) => Promise<PrWriteResult>;
@@ -44,8 +54,28 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
     set({ byPr: { ...get().byPr, [key]: { ...review, threads } } });
   };
 
+  const markInReview = (key: string, on: boolean) =>
+    set({ inReview: { ...get().inReview, [key]: on } });
+
   return {
     byPr: {},
+    inReview: {},
+
+    loadInReview: async (taskId, provider, number) => {
+      try {
+        const resp = await window.electronAPI.prReviewInReview({ taskId, provider, number });
+        if (resp.success) markInReview(reviewKey(taskId, provider, number), !!resp.data);
+      } catch {
+        /* stays unknown: writing makes notes */
+      }
+    },
+
+    setInReview: (taskId, provider, number, on) => {
+      markInReview(reviewKey(taskId, provider, number), on);
+      void window.electronAPI
+        .prReviewSetInReview({ taskId, provider, number, on })
+        .catch(() => undefined);
+    },
 
     load: async (projectId, cwd, number) => {
       try {
@@ -93,6 +123,8 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
         if (!resp.success || !resp.data)
           return { ok: false, error: ipcError(resp.error ?? 'unknown error') };
         const { postedDraftIds, error } = resp.data;
+        // Main ends the review once everything got through.
+        if (!error) markInReview(reviewKey(taskId, review.provider, review.number), false);
         if (postedDraftIds.length > 0 || !error) await get().load(projectId, cwd, review.number);
         return error ? { ok: false, error, posted: postedDraftIds.length } : { ok: true };
       } catch (err) {

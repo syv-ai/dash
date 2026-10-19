@@ -1,8 +1,8 @@
 import type { Database, Statement } from 'better-sqlite3';
 import { getRawDb } from '../db/client';
 import { isPrScope, prScope } from '@shared/prScope';
-import { isReplyDraft } from '@shared/diffComments';
-import type { DiffComment, DiffCommentInput, PrProvider } from '@shared/types';
+import { isPrComment, isReplyDraft } from '@shared/diffComments';
+import type { DiffComment, DiffCommentInput, DiffCommentKind, PrProvider } from '@shared/types';
 
 interface DiffCommentRow {
   id: string;
@@ -16,6 +16,7 @@ interface DiffCommentRow {
   side: string;
   reply_to: string | null;
   author: string;
+  kind: string;
   created_at: string;
   updated_at: string;
 }
@@ -33,6 +34,7 @@ function rowToComment(r: DiffCommentRow): DiffComment {
     side: r.side === 'LEFT' ? 'LEFT' : 'RIGHT',
     replyTo: r.reply_to,
     author: r.author === 'agent' ? 'agent' : 'user',
+    kind: r.kind === 'comment' ? 'comment' : 'note',
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -49,8 +51,12 @@ export function computeOrphans(
     .map((r) => r.id);
 }
 
+/** Only a PR scope holds comments; anything else is a note. */
+const kindFor = (viewScope: string, kind: DiffCommentKind | undefined): DiffCommentKind =>
+  kind === 'comment' && isPrScope(viewScope) ? 'comment' : 'note';
+
 const COLS =
-  'id, task_id, file_path, start_line, end_line, text, sent, view_scope, side, reply_to, author, created_at, updated_at';
+  'id, task_id, file_path, start_line, end_line, text, sent, view_scope, side, reply_to, author, kind, created_at, updated_at';
 
 /** A draft an agent writes through the control API. */
 export interface AgentDraft {
@@ -62,10 +68,13 @@ export interface AgentDraft {
   text: string;
   viewScope: string;
   replyTo: string | null;
+  kind: DiffCommentKind;
 }
 
 export interface DiffCommentsRepo {
   listByTask(taskId: string): DiffComment[];
+  /** The task's notes and comments in one view scope. */
+  listByScope(taskId: string, viewScope: string): DiffComment[];
   get(id: string): DiffComment | undefined;
   /** A write from the diff editor. New rows are the user's; an existing row
    *  becomes the user's only when its text changes (range snapshots and the
@@ -75,7 +84,7 @@ export interface DiffCommentsRepo {
   upsertFromAgent(draft: AgentDraft): DiffComment;
   delete(id: string): void;
   deleteByIds(ids: readonly string[]): void;
-  /** The task's drafts for a PR, split into line comments and replies. */
+  /** The task's comments (not notes) for a PR, split into line comments and replies. */
   listPrDrafts(
     taskId: string,
     provider: PrProvider,
@@ -100,7 +109,7 @@ export function createDiffCommentsRepo(db: Database): DiffCommentsRepo {
     upsertFromUser: db.prepare(
       `INSERT INTO diff_editor_comments (${COLS})
         VALUES (@id, @taskId, @filePath, @startLine, @endLine, @text, @sent, @viewScope,
-                @side, @replyTo, 'user', @now, @now)
+                @side, @replyTo, 'user', COALESCE(@kind, 'note'), @now, @now)
         ON CONFLICT(id) DO UPDATE SET
           file_path  = excluded.file_path,
           start_line = excluded.start_line,
@@ -108,6 +117,7 @@ export function createDiffCommentsRepo(db: Database): DiffCommentsRepo {
           text       = excluded.text,
           sent       = excluded.sent,
           view_scope = excluded.view_scope,
+          kind       = COALESCE(@kind, diff_editor_comments.kind),
           author     = CASE WHEN diff_editor_comments.text = excluded.text
                             THEN diff_editor_comments.author ELSE 'user' END,
           updated_at = excluded.updated_at`,
@@ -115,9 +125,10 @@ export function createDiffCommentsRepo(db: Database): DiffCommentsRepo {
     upsertFromAgent: db.prepare(
       `INSERT INTO diff_editor_comments (${COLS})
         VALUES (@id, @taskId, @filePath, @startLine, @endLine, @text, 0, @viewScope,
-                'RIGHT', @replyTo, 'agent', @now, @now)
+                'RIGHT', @replyTo, 'agent', @kind, @now, @now)
         ON CONFLICT(id) DO UPDATE SET
           start_line = excluded.start_line,
+          kind       = excluded.kind,
           end_line   = excluded.end_line,
           text       = excluded.text,
           updated_at = excluded.updated_at`,
@@ -142,6 +153,8 @@ export function createDiffCommentsRepo(db: Database): DiffCommentsRepo {
 
   return {
     listByTask: (taskId) => (s.listByTask!.all(taskId) as DiffCommentRow[]).map(rowToComment),
+    listByScope: (taskId, viewScope) =>
+      (s.listByScope!.all(taskId, viewScope) as DiffCommentRow[]).map(rowToComment),
     get,
     upsertFromUser(input) {
       s.upsertFromUser!.run({
@@ -149,12 +162,18 @@ export function createDiffCommentsRepo(db: Database): DiffCommentsRepo {
         sent: input.sent ? 1 : 0,
         side: input.side ?? 'RIGHT',
         replyTo: input.replyTo ?? null,
+        // Left out, the kind stays as it is.
+        kind: input.kind === undefined ? null : kindFor(input.viewScope, input.kind),
         now: new Date().toISOString(),
       });
       return mustGet(input.id);
     },
     upsertFromAgent(draft) {
-      s.upsertFromAgent!.run({ ...draft, now: new Date().toISOString() });
+      s.upsertFromAgent!.run({
+        ...draft,
+        kind: kindFor(draft.viewScope, draft.kind),
+        now: new Date().toISOString(),
+      });
       return mustGet(draft.id);
     },
     delete: (id) => void s.delete!.run(id),
@@ -165,9 +184,10 @@ export function createDiffCommentsRepo(db: Database): DiffCommentsRepo {
       const rows = (s.listByScope!.all(taskId, prScope(provider, number)) as DiffCommentRow[]).map(
         rowToComment,
       );
+      const drafts = rows.filter(isPrComment);
       return {
-        comments: rows.filter((c) => !isReplyDraft(c)),
-        replies: rows.filter(isReplyDraft),
+        comments: drafts.filter((c) => !isReplyDraft(c)),
+        replies: drafts.filter(isReplyDraft),
       };
     },
     prune(taskId, existingFilePaths) {

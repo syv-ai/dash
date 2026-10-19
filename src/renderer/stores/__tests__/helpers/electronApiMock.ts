@@ -27,6 +27,8 @@ export function makeElectronApiMock(overrides: Record<string, unknown> = {}) {
     onDiffCommentsChanged: vi.fn((_cb: (d: { taskId: string }) => void) => () => {}),
     prReviewSetResolved: vi.fn(() => ok(undefined)),
     prReviewSubmit: vi.fn(() => ok({ postedDraftIds: [] })),
+    prReviewInReview: vi.fn(() => ok(false)),
+    prReviewSetInReview: vi.fn(() => ok(undefined)),
     gitCheckoutBranch: vi.fn(() => ok(undefined)),
     gitGetStatus: vi.fn(() => ok(null)),
     gitStageFiles: vi.fn(() => ok(undefined)),

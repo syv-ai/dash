@@ -14,7 +14,7 @@ const comment = (
   createdAt,
   url: `u/${id}`,
 });
-const at = { number: 4, base: 'B', head: 'H' };
+const at = { number: 4, base: 'B', head: 'H', viewer: 'me' };
 
 describe('githubReviewFrom', () => {
   it('keeps every review thread, resolved or not, with its comments', () => {
@@ -109,6 +109,18 @@ describe('githubReviewFrom', () => {
     });
     expect(theirs.partial).toBeUndefined();
     expect(githubReviewFrom({ ...base, viewerDidAuthor: true }, at).verdicts).toEqual(['comment']);
+  });
+
+  it("says whether you're a requested reviewer, by your login", () => {
+    const pr = {
+      reviewRequests: {
+        nodes: [{ requestedReviewer: { login: 'other' } }, { requestedReviewer: {} }],
+      },
+    };
+    expect(githubReviewFrom(pr, at).viewerIsRequestedReviewer).toBe(false);
+    pr.reviewRequests.nodes.push({ requestedReviewer: { login: 'me' } });
+    expect(githubReviewFrom(pr, at).viewerIsRequestedReviewer).toBe(true);
+    expect(githubReviewFrom(pr, { ...at, viewer: '' }).viewerIsRequestedReviewer).toBe(false);
   });
 
   it('flags a review with more threads than were loaded', () => {

@@ -8,6 +8,7 @@ const review = (n: number, provider: PrProvider = 'github'): PrReview => ({
   title: 't',
   url: 'u',
   viewerIsAuthor: false,
+  viewerIsRequestedReviewer: false,
   verdicts: ['comment'],
   base: 'b',
   head: 'h',
@@ -134,5 +135,24 @@ describe('prReviewStore writes', () => {
       posted: 0,
     });
     expect(api.prReviewLoad).not.toHaveBeenCalled();
+  });
+
+  it('remembers a review per task and PR, and ends it on a submit that all got through', async () => {
+    api.prReviewInReview = vi.fn(() => Promise.resolve({ success: true, data: true }));
+    api.prReviewLoad = vi.fn(() => Promise.resolve({ success: true, data: review(4) }));
+    const { usePrReviews, reviewKey } = await freshStore();
+    const key = reviewKey('t1', 'github', 4);
+    await usePrReviews.getState().loadInReview('t1', 'github', 4);
+    expect(usePrReviews.getState().inReview[key]).toBe(true);
+    usePrReviews.getState().setInReview('t1', 'github', 5, true);
+    expect(api.prReviewSetInReview).toHaveBeenCalledWith({
+      taskId: 't1',
+      provider: 'github',
+      number: 5,
+      on: true,
+    });
+    await usePrReviews.getState().submit('p1', '/wt', 't1', review(4), 'comment', '');
+    expect(usePrReviews.getState().inReview[key]).toBe(false);
+    expect(usePrReviews.getState().inReview[reviewKey('t1', 'github', 5)]).toBe(true);
   });
 });

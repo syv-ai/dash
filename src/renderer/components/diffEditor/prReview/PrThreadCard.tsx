@@ -18,6 +18,7 @@ import { IconButton } from '../../ui/IconButton';
 import { useCommentsStore } from '../../../stores/commentsStore';
 import { threadLocation } from '../../../utils/prReviewNotices';
 import { CommentInputBar } from '../comments/CommentInputBar';
+import { useInReview } from './useInReview';
 
 interface Props {
   thread: PrReviewThread;
@@ -103,6 +104,8 @@ export function PrThreadCard({
 }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [replying, setReplying] = useState(false);
+  // A reply is a PR comment, so it waits for Review.
+  const inReview = useInReview(draftScope);
   const drafts = useCommentsStore(
     useShallow((s) =>
       // By thread, across files: a reply's own path doesn't matter (an agent
@@ -144,6 +147,7 @@ export function PrThreadCard({
       text,
       viewScope: draftScope,
       replyTo: thread.id,
+      kind: 'comment',
     });
     setReplying(false);
   };
@@ -202,7 +206,7 @@ export function PrThreadCard({
             <Check size={14} strokeWidth={1.8} />
           )}
         </IconButton>
-        {draftScope && !replying && (
+        {draftScope && inReview && !replying && (
           <Button variant="secondary" size="sm" onClick={() => setReplying(true)}>
             <Reply size={14} strokeWidth={1.8} />
             Reply

@@ -1,4 +1,5 @@
-import { Bot, Undo2, X } from 'lucide-react';
+import { ArrowUpRight, Bot, Undo2, X } from 'lucide-react';
+import type { DiffCommentKind } from '../../../../shared/types';
 import type { Shade } from './types';
 import { BubbleShell } from './BubbleShell';
 
@@ -35,6 +36,10 @@ interface Props {
    *  it, so the read-only → editable transition reads as a single morph
    *  instead of an unmount + remount pop. */
   isFadingOut: boolean;
+  /** In a PR view: whether it's a local note or a PR review comment. */
+  kindTag?: DiffCommentKind;
+  /** Make this note a PR review comment. */
+  onPromote?(): void;
 }
 
 /** One persisted speech-bubble card. Thin wrapper around BubbleShell that
@@ -55,6 +60,8 @@ export function CommentBubble({
   onDelete,
   onReopen,
   isFadingOut,
+  kindTag,
+  onPromote,
 }: Props) {
   // A sent comment fades back so it reads as "already pushed" without
   // disappearing (it stays editable/removable). A bubble mid-edit takes
@@ -79,6 +86,20 @@ export function CommentBubble({
       >
         <div className="group/bubble">
           <div className="absolute top-[6px] right-[6px] flex items-center gap-[2px] z-10">
+            {onPromote && (
+              <button
+                type="button"
+                aria-label="Promote to comment"
+                title="Promote to a PR comment"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPromote();
+                }}
+                className="flex h-[20px] w-[20px] items-center justify-center rounded-[4px] text-muted-fade-60 opacity-40 hover:opacity-100 hover:text-primary hover:bg-primary/10 transition-opacity"
+              >
+                <ArrowUpRight size={12} strokeWidth={1.8} />
+              </button>
+            )}
             {sent && (
               <button
                 type="button"
@@ -108,6 +129,16 @@ export function CommentBubble({
           </div>
           <div className="flex items-center gap-[6px] mb-[2px]">
             <span className="font-mono text-[10px] text-muted-fade-55 tracking-normal">{meta}</span>
+            {kindTag === 'comment' && (
+              <span className="rounded-[3px] bg-primary/12 px-[5px] py-[1px] text-[9px] font-medium uppercase tracking-[0.04em] text-primary/80">
+                Comment
+              </span>
+            )}
+            {kindTag === 'note' && (
+              <span className="rounded-[3px] bg-foreground/10 px-[5px] py-[1px] text-[9px] font-medium uppercase tracking-[0.04em] text-muted-fade-75">
+                Note
+              </span>
+            )}
             {scopeLabel && (
               <span className="rounded-[3px] bg-primary/12 px-[5px] py-[1px] text-[9px] font-medium text-primary/80">
                 {scopeLabel}

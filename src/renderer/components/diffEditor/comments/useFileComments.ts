@@ -11,6 +11,7 @@ import {
   type RangeReader,
 } from './liveProjection';
 import type { DiffComment, LineRange, LiveComment } from './types';
+import type { DiffCommentKind } from '../../../../shared/types';
 
 // Frozen empty default so `?? EMPTY_STORED` doesn't allocate a fresh array
 // each render (the result feeds effect dep arrays).
@@ -27,6 +28,8 @@ interface Args {
   /** Content-state the current view anchors to ('live' or 'commit:<hash>').
    *  Only comments of this scope are hydrated/shown for the file. */
   scope: string;
+  /** What a new one is: a note, or (reviewing a PR) a PR comment. */
+  newKind: DiffCommentKind;
 }
 
 export interface FileCommentsBinding {
@@ -54,6 +57,7 @@ export function useFileComments({
   editor,
   monaco,
   scope,
+  newKind,
 }: Args): FileCommentsBinding {
   const storeReady = useCommentsStore((s) => s.isReady);
   const allStored = useCommentsStore((s) => s.byFile[filePath]) ?? EMPTY_STORED;
@@ -324,6 +328,7 @@ export function useFileComments({
         endLine: range.end,
         text,
         viewScope: scope,
+        kind: newKind,
       });
       if (!created) return null;
       const ids = model.deltaDecorations(
@@ -340,7 +345,7 @@ export function useFileComments({
       setLiveComments((prev) => [...prev, liveC]);
       return liveC;
     },
-    [filePath, scope, modifiedEditor, monaco],
+    [filePath, scope, newKind, modifiedEditor, monaco],
   );
 
   const updateText = useCallback((id: string, text: string) => {

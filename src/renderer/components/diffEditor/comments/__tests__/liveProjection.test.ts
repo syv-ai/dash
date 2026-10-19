@@ -22,6 +22,7 @@ const live = (id: string, startLine: number, endLine: number): LiveComment => ({
   side: 'RIGHT',
   replyTo: null,
   author: 'user',
+  kind: 'note',
   createdAt: '',
   updatedAt: '',
   decorationId: `dec-${id}`,

@@ -256,7 +256,7 @@ export function CommentsMenu({
   );
 }
 
-interface RowHandlers {
+export interface RowHandlers {
   getLiveRangeForCurrent: (commentId: string) => { start: number; end: number } | null;
   onNavigate: (scope: string, filePath: string, commentId: string) => void;
   onRemove: (filePath: string, commentId: string) => void;
@@ -275,18 +275,29 @@ function StickyHeader({ children }: { children: React.ReactNode }) {
   );
 }
 
-function UnsentSection({
-  view,
-  currentFilePath,
-  onSendScope,
-  getLiveRangeForCurrent,
-  onNavigate,
-  onRemove,
-  onSendOne,
-  onUnsend,
-  closeMenu,
-}: { view: ScopeView; currentFilePath: string; onSendScope: () => void } & RowHandlers) {
-  const [open, setOpen] = useState(true);
+/** A collapsible section of the menu: a sticky header (dot, title, count,
+ *  actions) over its rows. */
+export function MenuSection({
+  title,
+  dotClass,
+  badge,
+  count,
+  actions,
+  defaultOpen = true,
+  children,
+}: {
+  title: string;
+  /** The dot's colour. */
+  dotClass: string;
+  /** A small tag after the title (e.g. 'current'). */
+  badge?: string;
+  /** Trailing count text, e.g. '3 to send'. */
+  count: string;
+  actions?: React.ReactNode;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="border-b border-foreground/5 last:border-b-0">
       <StickyHeader>
@@ -301,52 +312,100 @@ function UnsentSection({
             ) : (
               <ChevronRight size={12} strokeWidth={2} className="text-muted-fade-70 shrink-0" />
             )}
-            <span
-              className={`w-1.5 h-1.5 rounded-full shrink-0 ${view.isCurrent ? 'bg-primary/80' : 'bg-primary/50'}`}
-              aria-hidden
-            />
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotClass}`} aria-hidden />
             <span className="text-[11px] font-semibold tracking-tight text-fg-fade-90 truncate">
-              {view.label}
+              {title}
             </span>
-            {view.isCurrent && (
+            {badge && (
               <span className="shrink-0 text-[9px] uppercase tracking-wider font-medium text-primary/75">
-                current
+                {badge}
               </span>
             )}
-            <span className="text-[10.5px] text-muted-fade-60 tabular-nums shrink-0">
-              {view.count} to send
-            </span>
+            <span className="text-[10.5px] text-muted-fade-60 tabular-nums shrink-0">{count}</span>
           </button>
-          <button
-            type="button"
-            onClick={onSendScope}
-            title={`Send ${view.count} comment${view.count !== 1 ? 's' : ''} in ${view.label}`}
-            className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-medium text-primary hover:bg-primary/12 active:scale-[0.98] transition"
-          >
-            <Send size={10} strokeWidth={2.2} />
-            Send
-          </button>
+          {actions}
         </div>
       </StickyHeader>
-      <SectionBody open={open}>
-        {view.groups.map(([path, list], gi) => (
-          <FileGroup
-            key={path}
-            path={path}
-            scope={view.scope}
-            list={list}
-            isCurrent={path === currentFilePath}
-            marginTop={gi > 0}
-            getLiveRangeForCurrent={view.isCurrent ? getLiveRangeForCurrent : () => null}
-            onNavigate={onNavigate}
-            onRemove={onRemove}
-            onSendOne={onSendOne}
-            onUnsend={onUnsend}
-            closeMenu={closeMenu}
-          />
-        ))}
-      </SectionBody>
+      <SectionBody open={open}>{children}</SectionBody>
     </div>
+  );
+}
+
+/** A section header's small text button (Send, Clear). */
+export function SectionAction({
+  label,
+  title,
+  icon,
+  tone,
+  onClick,
+}: {
+  label: string;
+  title: string;
+  icon: React.ReactNode;
+  tone: 'primary' | 'destructive';
+  onClick: () => void;
+}) {
+  const toneClass =
+    tone === 'primary'
+      ? 'text-primary hover:bg-primary/12'
+      : 'text-muted-fade-65 hover:text-destructive hover:bg-destructive/10';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className={`shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-medium active:scale-[0.98] transition ${toneClass}`}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+function UnsentSection({
+  view,
+  currentFilePath,
+  onSendScope,
+  getLiveRangeForCurrent,
+  onNavigate,
+  onRemove,
+  onSendOne,
+  onUnsend,
+  closeMenu,
+}: { view: ScopeView; currentFilePath: string; onSendScope: () => void } & RowHandlers) {
+  return (
+    <MenuSection
+      title={view.label}
+      dotClass={view.isCurrent ? 'bg-primary/80' : 'bg-primary/50'}
+      badge={view.isCurrent ? 'current' : undefined}
+      count={`${view.count} to send`}
+      actions={
+        <SectionAction
+          label="Send"
+          title={`Send ${view.count} comment${view.count !== 1 ? 's' : ''} in ${view.label}`}
+          icon={<Send size={10} strokeWidth={2.2} />}
+          tone="primary"
+          onClick={onSendScope}
+        />
+      }
+    >
+      {view.groups.map(([path, list], gi) => (
+        <FileGroup
+          key={path}
+          path={path}
+          scope={view.scope}
+          list={list}
+          isCurrent={path === currentFilePath}
+          marginTop={gi > 0}
+          getLiveRangeForCurrent={view.isCurrent ? getLiveRangeForCurrent : () => null}
+          onNavigate={onNavigate}
+          onRemove={onRemove}
+          onSendOne={onSendOne}
+          onUnsend={onUnsend}
+          closeMenu={closeMenu}
+        />
+      ))}
+    </MenuSection>
   );
 }
 
@@ -367,81 +426,60 @@ function SentSection({
   currentFilePath: string;
   onClearSent: (scope?: string) => void;
 } & RowHandlers) {
-  const [open, setOpen] = useState(false);
   return (
-    <div className="border-b border-foreground/5 last:border-b-0">
-      <StickyHeader>
-        <div className="flex items-center gap-2 px-3 py-2 hover:bg-foreground/[0.035] transition-colors">
-          <button
-            type="button"
-            onClick={() => setOpen((o) => !o)}
-            className="flex items-center gap-2 flex-1 min-w-0 text-left"
-          >
-            {open ? (
-              <ChevronDown size={12} strokeWidth={2} className="text-muted-fade-70 shrink-0" />
-            ) : (
-              <ChevronRight size={12} strokeWidth={2} className="text-muted-fade-70 shrink-0" />
-            )}
-            <span
-              className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 shrink-0"
-              aria-hidden
-            />
-            <span className="text-[11px] font-semibold tracking-tight text-muted-fade-85">
-              Sent
+    <MenuSection
+      title="Sent"
+      dotClass="bg-muted-foreground/40"
+      count={String(total)}
+      defaultOpen={false}
+      actions={
+        <SectionAction
+          label="Clear"
+          title={`Clear ${total} sent comment${total !== 1 ? 's' : ''}`}
+          icon={<Trash2 size={10} strokeWidth={2.2} />}
+          tone="destructive"
+          onClick={() => onClearSent()}
+        />
+      }
+    >
+      {views.map((v) => (
+        <div key={v.scope} className="mt-1 first:mt-0">
+          <div className="flex items-center gap-1.5 px-2 pt-1.5 pb-0.5">
+            <span className="text-[9px] uppercase tracking-wider font-medium text-muted-fade-50">
+              {v.label}
             </span>
-            <span className="text-[10.5px] text-muted-fade-60 tabular-nums">{total}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onClearSent()}
-            title={`Clear ${total} sent comment${total !== 1 ? 's' : ''}`}
-            className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-medium text-muted-fade-65 hover:text-destructive hover:bg-destructive/10 active:scale-[0.98] transition"
-          >
-            <Trash2 size={10} strokeWidth={2.2} />
-            Clear
-          </button>
-        </div>
-      </StickyHeader>
-      <SectionBody open={open}>
-        {views.map((v) => (
-          <div key={v.scope} className="mt-1 first:mt-0">
-            <div className="flex items-center gap-1.5 px-2 pt-1.5 pb-0.5">
-              <span className="text-[9px] uppercase tracking-wider font-medium text-muted-fade-50">
-                {v.label}
-              </span>
-              <span className="text-[9px] text-muted-fade-40 tabular-nums">{v.count}</span>
-              {views.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => onClearSent(v.scope)}
-                  title={`Clear ${v.count} sent comment${v.count !== 1 ? 's' : ''} in ${v.label}`}
-                  className="ml-auto shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-medium text-muted-fade-55 hover:text-destructive hover:bg-destructive/10 transition"
-                >
-                  <Trash2 size={9} strokeWidth={2.2} />
-                  Clear
-                </button>
-              )}
-            </div>
-            {v.groups.map(([path, list], gi) => (
-              <FileGroup
-                key={`${v.scope}-${path}`}
-                path={path}
-                scope={v.scope}
-                list={list}
-                isCurrent={v.isCurrent && path === currentFilePath}
-                marginTop={gi > 0}
-                getLiveRangeForCurrent={v.isCurrent ? getLiveRangeForCurrent : () => null}
-                onNavigate={onNavigate}
-                onRemove={onRemove}
-                onSendOne={onSendOne}
-                onUnsend={onUnsend}
-                closeMenu={closeMenu}
-              />
-            ))}
+            <span className="text-[9px] text-muted-fade-40 tabular-nums">{v.count}</span>
+            {views.length > 1 && (
+              <button
+                type="button"
+                onClick={() => onClearSent(v.scope)}
+                title={`Clear ${v.count} sent comment${v.count !== 1 ? 's' : ''} in ${v.label}`}
+                className="ml-auto shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-medium text-muted-fade-55 hover:text-destructive hover:bg-destructive/10 transition"
+              >
+                <Trash2 size={9} strokeWidth={2.2} />
+                Clear
+              </button>
+            )}
           </div>
-        ))}
-      </SectionBody>
-    </div>
+          {v.groups.map(([path, list], gi) => (
+            <FileGroup
+              key={`${v.scope}-${path}`}
+              path={path}
+              scope={v.scope}
+              list={list}
+              isCurrent={v.isCurrent && path === currentFilePath}
+              marginTop={gi > 0}
+              getLiveRangeForCurrent={v.isCurrent ? getLiveRangeForCurrent : () => null}
+              onNavigate={onNavigate}
+              onRemove={onRemove}
+              onSendOne={onSendOne}
+              onUnsend={onUnsend}
+              closeMenu={closeMenu}
+            />
+          ))}
+        </div>
+      ))}
+    </MenuSection>
   );
 }
 
@@ -464,15 +502,20 @@ function SectionBody({ open, children }: { open: boolean; children: React.ReactN
   );
 }
 
-interface FileGroupProps extends RowHandlers {
+export interface FileGroupProps extends RowHandlers {
   path: string;
   scope: string;
   list: DiffComment[];
   isCurrent: boolean;
   marginTop: boolean;
+  /** A tag beside a row's line label (e.g. 'Agent', 'Reply'). */
+  renderTag?: (c: DiffComment) => React.ReactNode;
+  /** Hover actions before the row's send and remove. */
+  renderActions?: (c: DiffComment) => React.ReactNode;
 }
 
-function FileGroup({
+/** One file's rows: line label, text, and hover actions (send or reopen, remove). */
+export function FileGroup({
   path,
   scope,
   list,
@@ -484,12 +527,14 @@ function FileGroup({
   onSendOne,
   onUnsend,
   closeMenu,
+  renderTag,
+  renderActions,
 }: FileGroupProps) {
   const { dir, base } = splitPath(path);
   return (
     <div className={marginTop ? 'mt-2' : ''}>
       <div className="flex items-baseline gap-2 px-2 py-1">
-        <span className="font-mono text-[10.5px] truncate">
+        <span className="min-w-0 font-mono text-[10.5px] break-all">
           {dir && <span className="text-muted-fade-45">{dir}</span>}
           <span className="text-fg-fade-80">{base}</span>
         </span>
@@ -529,10 +574,11 @@ function FileGroup({
                     onNavigate(scope, path, c.id);
                   }}
                   title="Jump to this comment"
-                  className="flex-1 min-w-0 flex flex-col gap-1 px-2.5 py-1.5 pr-14 text-left rounded-md"
+                  className={`flex-1 min-w-0 flex flex-col gap-1 px-2.5 py-1.5 text-left rounded-md ${renderActions ? 'pr-20' : 'pr-14'}`}
                 >
-                  <span className="font-mono text-[10px] tabular-nums text-muted-fade-70 shrink-0">
+                  <span className="flex items-center gap-1.5 font-mono text-[10px] tabular-nums text-muted-fade-70 shrink-0">
                     {lineLabel}
+                    {renderTag?.(c)}
                   </span>
                   <span
                     className={`text-[12.5px] leading-snug whitespace-pre-wrap wrap-break-word ${
@@ -543,6 +589,7 @@ function FileGroup({
                   </span>
                 </button>
                 <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover/item:opacity-100 transition-opacity">
+                  {renderActions?.(c)}
                   {c.sent ? (
                     <ActionButton
                       label="Include in next prompt"
@@ -577,7 +624,8 @@ function FileGroup({
   );
 }
 
-function ActionButton({
+/** A row's hover action. */
+export function ActionButton({
   label,
   onClick,
   tone,

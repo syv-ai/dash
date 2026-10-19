@@ -9,11 +9,8 @@ export interface ReviewCapabilityDeps {
   /** Where the project's PRs live (from its remote). */
   providerFor(projectId: string): PrProvider;
   getTask(id: string): Task | undefined;
-  listPrDrafts(
-    taskId: string,
-    provider: PrProvider,
-    number: number,
-  ): { comments: DiffComment[]; replies: DiffComment[] };
+  /** The task's notes and comments in a PR's view scope. */
+  listByScope(taskId: string, scope: string): DiffComment[];
   getDraft(id: string): DiffComment | undefined;
   saveAgentDraft(draft: AgentDraft): DiffComment;
   deleteDraft(id: string): void;
@@ -32,6 +29,13 @@ const PROVIDER = z
   .describe("Where the PR lives; defaults to the project's remote");
 const BODY = z.string().trim().min(1).max(65_536).describe('The comment, in Markdown');
 const LINE = z.number().int().min(1);
+const KIND = z
+  .enum(['note', 'comment'])
+  .describe(
+    "'comment': a review comment for the PR's author, posted when the person submits the review. " +
+      "'note': for the developer working on the task, something to be aware of; it never reaches the PR. " +
+      'The person can promote a note to a comment.',
+  );
 
 /** What an agent sees of a draft. */
 function view(c: DiffComment) {
@@ -42,15 +46,16 @@ function view(c: DiffComment) {
     endLine: c.endLine,
     side: c.side,
     replyTo: c.replyTo,
+    kind: c.kind,
     body: c.text,
     author: c.author,
   };
 }
 
 /**
- * Draft PR review comments in a task's diff editor, for the person to edit and
- * submit. Nothing here touches the PR itself: submitting, resolving and voting
- * stay with the person, in the UI.
+ * Write notes and draft PR review comments in a task's diff editor, for the
+ * person to edit and submit. Nothing here touches the PR itself: submitting,
+ * resolving and voting stay with the person, in the UI.
  */
 export function registerReviewCapabilities(registry: Registry, deps: ReviewCapabilityDeps): void {
   const scopeFor = (taskId: string, number: number, asked?: PrProvider) => {
@@ -81,16 +86,16 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
     defineCapability({
       name: 'review.drafts_list',
       summary:
-        "List a task's draft review comments on a PR (line comments and thread replies), the user's and the agent's.",
+        "List a task's notes and draft review comments on a PR (on lines, or replies to its threads), the user's and the agent's.",
       input: z.object({ taskId: TASK_ID_FIELD, number: NUMBER, provider: PROVIDER }),
       callers: ['orchestrator', 'task'],
       readOnly: true,
       target: { taskId: 'taskId' },
       defaultTargetToSelf: true,
       handler: async (_ctx, input) => {
-        const { provider } = scopeFor(input.taskId!, input.number, input.provider);
-        const { comments, replies } = deps.listPrDrafts(input.taskId!, provider, input.number);
-        return [...comments, ...replies]
+        const { scope } = scopeFor(input.taskId!, input.number, input.provider);
+        return deps
+          .listByScope(input.taskId!, scope)
           .sort((a, b) => a.filePath.localeCompare(b.filePath) || a.startLine - b.startLine)
           .map(view);
       },
@@ -101,7 +106,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
     defineCapability({
       name: 'review.drafts_create',
       summary:
-        "Draft a review comment on a PR's lines (or a reply to one of its threads) in the task's diff editor. It is not posted: the person reviews, edits and submits it.",
+        "Write a note or draft a review comment on a PR's lines (or a reply to one of its threads) in the task's diff editor. Nothing is posted: the person reviews, edits and submits comments; notes stay local.",
       input: z.object({
         taskId: TASK_ID_FIELD,
         number: NUMBER,
@@ -110,6 +115,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
         startLine: LINE.describe("First line, in the PR's version of the file"),
         endLine: LINE.optional().describe('Last line; defaults to startLine'),
         body: BODY,
+        kind: KIND,
         replyTo: z
           .string()
           .optional()
@@ -133,6 +139,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
           text: input.body,
           viewScope: scope,
           replyTo: input.replyTo ?? null,
+          kind: input.kind,
         });
         deps.changed(taskId);
         return view(draft);
@@ -144,13 +151,14 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
     defineCapability({
       name: 'review.drafts_update',
       summary:
-        "Change a draft review comment the agent wrote: its text or lines. The person's own drafts can't be changed.",
+        "Change a note or draft review comment the agent wrote: its text, lines or kind. The person's own can't be changed.",
       input: z.object({
         taskId: TASK_ID_FIELD,
         id: z.string().describe('From review_drafts_list'),
         body: BODY.optional(),
         startLine: LINE.optional(),
         endLine: LINE.optional(),
+        kind: KIND.optional(),
       }),
       callers: ['orchestrator', 'task'],
       readOnly: false,
@@ -171,6 +179,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
           text: input.body ?? draft.text,
           viewScope: draft.viewScope,
           replyTo: draft.replyTo,
+          kind: input.kind ?? draft.kind,
         });
         deps.changed(taskId);
         return view(saved);
@@ -181,7 +190,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
   registry.register(
     defineCapability({
       name: 'review.drafts_delete',
-      summary: "Delete a draft review comment the agent wrote. The person's own drafts stay.",
+      summary: "Delete a note or draft review comment the agent wrote. The person's own stay.",
       input: z.object({
         taskId: TASK_ID_FIELD,
         id: z.string().describe('From review_drafts_list'),

@@ -16,6 +16,7 @@ const TIMEOUT_MS = 15_000;
 
 /** A PR's review threads, general comments and review summaries, and the commits its diff spans. */
 export const PR_REVIEW_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
+  viewer { login }
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
       title
@@ -32,6 +33,7 @@ export const PR_REVIEW_QUERY = `query($owner: String!, $name: String!, $number: 
       }
       comments(first: 100) { nodes { id author { login } body createdAt url } }
       reviews(first: 100) { nodes { id author { login } body state createdAt url } }
+      reviewRequests(first: 100) { nodes { requestedReviewer { ... on User { login } } } }
     }
   }
 }`;
@@ -74,10 +76,17 @@ const GITHUB_VERDICTS: PrVerdict[] = ['comment', 'approve', 'request_changes'];
 /** The PrReview of PR_REVIEW_QUERY's `pullRequest` node, given the commits its diff spans. */
 export function githubReviewFrom(
   pr: unknown,
-  { number, base, head }: { number: number; base: string; head: string },
+  { number, base, head, viewer }: { number: number; base: string; head: string; viewer: string },
 ): PrReview {
   const p = (pr && typeof pr === 'object' ? pr : {}) as Node;
   const viewerIsAuthor = p.viewerDidAuthor === true;
+  // A request goes away once the person reviews. A team's request isn't
+  // matched: that would take a lookup of the viewer's teams.
+  const viewerIsRequestedReviewer =
+    !!viewer &&
+    nodes(p.reviewRequests).some(
+      (r) => str((r.requestedReviewer as Node | null)?.login) === viewer,
+    );
   // A review's summary belongs in the conversation; one without a body (just
   // inline comments) or still pending says nothing there.
   const summaries = nodes(p.reviews).filter((r) => str(r.body).trim() && r.state !== 'PENDING');
@@ -91,6 +100,7 @@ export function githubReviewFrom(
     title: str(p.title),
     url: str(p.url),
     viewerIsAuthor,
+    viewerIsRequestedReviewer,
     verdicts: viewerIsAuthor ? ['comment'] : GITHUB_VERDICTS,
     base,
     head,
@@ -201,7 +211,8 @@ export function makeGithubProvider(gql: Gql = ghGql): PrReviewProvider {
       const baseTip = str(pr.baseRefOid);
       await ensureCommits(ctx.cwd, [baseTip, head]);
       const base = (await runGit(ctx.cwd, ['merge-base', baseTip, head], TIMEOUT_MS)).trim();
-      return githubReviewFrom(pr, { number, base, head });
+      const viewer = str(pick(data, 'viewer', 'login'));
+      return githubReviewFrom(pr, { number, base, head, viewer });
     },
 
     async setResolved(ctx, _number, threadId, resolved) {

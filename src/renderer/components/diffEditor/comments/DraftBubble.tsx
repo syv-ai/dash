@@ -8,6 +8,7 @@ interface Props {
    *  string for a fresh draft. */
   initialText: string;
   tailLeftPx: number;
+  submitLabel?: string;
   onSubmit(text: string): void;
   onCancel(): void;
 }
@@ -15,13 +16,21 @@ interface Props {
 /** Bubble-chrome wrapper around the existing CommentInputBar. Same shell as
  *  the persisted CommentBubble so creation and reading feel like one
  *  material. Always shade-1 (a draft has no overlap relationship yet). */
-export function DraftBubble({ range, initialText, tailLeftPx, onSubmit, onCancel }: Props) {
+export function DraftBubble({
+  range,
+  initialText,
+  tailLeftPx,
+  submitLabel,
+  onSubmit,
+  onCancel,
+}: Props) {
   return (
     <BubbleShell shade={1} hasTail tailLeftPx={tailLeftPx}>
       <div className="flex flex-col gap-1.5 h-[110px]">
         <CommentInputBar
           lineRange={range}
           initialText={initialText}
+          submitLabel={submitLabel}
           onSubmit={onSubmit}
           onCancel={onCancel}
         />

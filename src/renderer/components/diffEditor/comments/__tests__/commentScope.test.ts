@@ -5,7 +5,7 @@ import {
   commitShortHash,
   filterCommentsByScope,
   scopeLabel,
-  withoutPrDrafts,
+  withoutPrComments,
 } from '../commentScope';
 
 describe('commentScope', () => {
@@ -90,16 +90,30 @@ describe('commentCountsByScope', () => {
     // Every commit-scoped comment was sent → scope drops out of the map.
     expect(counts.get('commit:abc')).toBeUndefined();
   });
+
+  it('keeps counting a PR comment sent to the agent: it still has to be submitted', () => {
+    const counts = commentCountsByScope({
+      'a.ts': [
+        { id: '1', viewScope: 'pr:github:4', sent: true, kind: 'comment' as const },
+        { id: '2', viewScope: 'pr:github:4', sent: true, kind: 'note' as const },
+      ],
+    });
+    expect(counts.get('pr:github:4')).toBe(1);
+  });
 });
 
-describe('withoutPrDrafts', () => {
-  it('drops PR review drafts, which go to the PR and never to the task', () => {
-    const c = (id: string, viewScope: string) => ({ id, viewScope });
+describe('withoutPrComments', () => {
+  it("keeps notes, a PR view's too, and drops PR review comments", () => {
+    const c = (id: string, viewScope: string, kind: 'note' | 'comment' = 'note') => ({
+      id,
+      viewScope,
+      kind,
+    });
     expect(
-      withoutPrDrafts({
-        'a.ts': [c('1', 'live'), c('2', 'pr:github:4')],
-        'b.ts': [c('3', 'pr:ado:7')],
+      withoutPrComments({
+        'a.ts': [c('1', 'live'), c('2', 'pr:github:4', 'comment'), c('3', 'pr:github:4')],
+        'b.ts': [c('4', 'pr:ado:7', 'comment')],
       }),
-    ).toEqual({ 'a.ts': [c('1', 'live')] });
+    ).toEqual({ 'a.ts': [c('1', 'live'), c('3', 'pr:github:4')] });
   });
 });

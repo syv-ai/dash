@@ -29,6 +29,30 @@ A task with Dash access can create, read, update and delete _draft_ comments in 
 | Review panel     | The PR view's corner menu grows into a "Review · n drafts" popover. It holds the Conversation, off-code threads and the Submit footer.                                                                           |
 | Resolved threads | Render as a collapsed one-line pill under their line. Clicking one expands it, with Reactivate.                                                                                                                  |
 
+## Notes and comments (revised 2026-10-19, after the first live try)
+
+Every line comment in a PR view used to be a PR draft, so there was no way left to hand a thought to the agent. Now there are two kinds:
+
+- A **note** is local and for the agent, as comments were before PR review existed. It never reaches the PR.
+- A **comment** is a PR review comment: a draft until Submit posts it.
+
+How the kinds come about:
+
+- A **Review** button sits beside the PR view's corner widget, in every PR view. It stands out when you're a requested reviewer who hasn't reviewed yet (`PrReview.viewerIsRequestedReviewer`: GitHub's `reviewRequests` against `viewer.login`; on ADO, your id in `reviewers[]` with no vote).
+- Until Review is clicked, what you write is a note. After, it's a comment. Notes written before stay notes; a note's **promote** button (on its bubble and in the widget) makes it a comment.
+- Being in review is kept per task and PR in `pr_reviews_in_progress`, so it survives restarts. A submit that all got through ends it (main, in `prReview:submit`), and writing goes back to notes. Clicking "In review" also ends it.
+- Thread replies are comments, so Reply shows only in review.
+- Notes and comments can each be sent to the agent, one or all at once. Sending marks them sent (muted), but a sent comment is still submitted, and "Clear sent" never deletes a comment. "Clear notes" (in the widget's Notes section and the Submit footer) deletes the PR's notes before submitting.
+- The agent writes either kind: `review_drafts_create` takes a required `kind`, and `review_drafts_update` can change it.
+
+Storage: `diff_editor_comments.kind` (`'note' | 'comment'`, default `'note'`; the migration makes existing `pr:*` rows comments). Both kinds keep the scope `pr:<provider>:<n>`; only a PR scope can hold a comment. Submit reads comments only (`listPrDrafts`).
+
+The corner widget is one popover (`PrReviewMenu`, built from `CommentsMenu`'s sections and file rows): your comments and your notes per file (navigate, send, promote, clear), unresolved threads, threads off the code, the conversation, and the Submit footer. The verdict is a `ui/Select` dropdown. Nothing in it scrolls sideways; long text wraps. The task's comments menu outside a PR view lists notes, PR notes included, but no PR comments.
+
+The file tree shows two badges per file in a PR view: your notes and comments (filled), and the PR's unresolved threads (outlined).
+
+Where this section and the rest of the spec disagree, this section wins.
+
 ## Out of scope (v1)
 
 - Starting a thread on a removed (LEFT) line.
@@ -235,12 +259,12 @@ Main gets a small `diffCommentEvents` emitter (modelled on `taskEvents`) that br
 
 ## Agent tools (`src/main/control/capabilities/review.ts`)
 
-| Capability             | readOnly | Input                                                                       | Behaviour                                                                                              |
-| ---------------------- | -------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `review.drafts_list`   | yes      | `{ taskId?, provider?, number }`                                            | The target task's drafts for that PR: `{ id, path, startLine, endLine, side, replyTo, body, author }`. |
-| `review.drafts_create` | no       | `{ taskId?, provider?, number, path, startLine, endLine?, body, replyTo? }` | Inserts an `author: 'agent'` row. Validates `startLine ≤ endLine`.                                     |
-| `review.drafts_update` | no       | `{ taskId?, id, body?, startLine?, endLine? }`                              | 403 unless the row's `author` is `'agent'` and it belongs to the target task.                          |
-| `review.drafts_delete` | no       | `{ taskId?, id }`                                                           | Same rule as update.                                                                                   |
+| Capability             | readOnly | Input                                                                             | Behaviour                                                                                                                |
+| ---------------------- | -------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `review.drafts_list`   | yes      | `{ taskId?, provider?, number }`                                                  | The target task's notes and comments for that PR: `{ id, path, startLine, endLine, side, replyTo, kind, body, author }`. |
+| `review.drafts_create` | no       | `{ taskId?, provider?, number, path, startLine, endLine?, body, kind, replyTo? }` | Inserts an `author: 'agent'` row of that `kind`. Validates `startLine ≤ endLine`.                                        |
+| `review.drafts_update` | no       | `{ taskId?, id, body?, startLine?, endLine?, kind? }`                             | 403 unless the row's `author` is `'agent'` and it belongs to the target task.                                            |
+| `review.drafts_delete` | no       | `{ taskId?, id }`                                                                 | Same rule as update.                                                                                                     |
 
 - All four use `target: { taskId }` and `defaultTargetToSelf: true`, and allow `orchestrator` and `task` callers. Scope stays in `scope.ts` (a task sees itself and its children). Handlers do no scope checks of their own.
 - `provider` defaults from the target task's project remote, which the handler resolves through injected deps (`appDeps.ts` → `reviewDeps()`).

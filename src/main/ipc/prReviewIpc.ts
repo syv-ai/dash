@@ -5,8 +5,9 @@ import { DatabaseService } from '../services/DatabaseService';
 import { ConnectionConfigService } from '../services/ConnectionConfigService';
 import { prContextFor, type PrContextDeps } from '../services/prReview/resolve';
 import { diffCommentsRepo } from '../services/diffCommentsRepo';
+import { prReviewsInProgressRepo } from '../services/prReviewsInProgressRepo';
 import { emitDiffCommentsChanged } from '../services/diffCommentEvents';
-import type { PrVerdict } from '@shared/types';
+import type { PrProvider, PrVerdict } from '@shared/types';
 
 /** The app's lookups for picking a project's PR provider. */
 const appDeps: PrContextDeps = {
@@ -15,6 +16,7 @@ const appDeps: PrContextDeps = {
 };
 
 const where = { projectId: z.string(), cwd: z.string() };
+const reviewOf = { taskId: z.string(), provider: z.enum(['github', 'ado']), number: z.number() };
 const verdict = z.enum([
   'comment',
   'approve',
@@ -79,9 +81,36 @@ export function registerPrReviewIpc(): void {
     },
   );
 
+  ipcMain.handle(
+    'prReview:inReview',
+    (_e, args: { taskId: string; provider: PrProvider; number: number }) => {
+      try {
+        parseArgs('prReview:inReview', z.looseObject(reviewOf), args);
+        const on = prReviewsInProgressRepo().isInReview(args.taskId, args.provider, args.number);
+        return { success: true, data: on };
+      } catch (err) {
+        return errorResponse(err);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'prReview:setInReview',
+    (_e, args: { taskId: string; provider: PrProvider; number: number; on: boolean }) => {
+      try {
+        parseArgs('prReview:setInReview', z.looseObject({ ...reviewOf, on: z.boolean() }), args);
+        prReviewsInProgressRepo().setInReview(args.taskId, args.provider, args.number, args.on);
+        return { success: true };
+      } catch (err) {
+        return errorResponse(err);
+      }
+    },
+  );
+
   /**
    * Submit the task's drafts for the PR with a verdict. Main reads the drafts
-   * itself, and deletes the ones that reached the PR. A write the provider
+   * itself, and deletes the ones that reached the PR; a submit that all got
+   * through ends the review, so what's written next is a note again. A write the provider
    * refused still answers `success`, carrying the error, so the renderer can
    * show its fix.
    */
@@ -132,6 +161,9 @@ export function registerPrReviewIpc(): void {
         if (result.postedDraftIds.length > 0) {
           repo.deleteByIds(result.postedDraftIds);
           emitDiffCommentsChanged(args.taskId);
+        }
+        if (!result.error) {
+          prReviewsInProgressRepo().setInReview(args.taskId, provider, args.number, false);
         }
         return { success: true, data: result };
       } catch (err) {

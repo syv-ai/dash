@@ -37,6 +37,19 @@ export interface PrReviewApi {
     verdict: PrVerdict;
     body: string;
   }) => Promise<IpcResponse<SubmitResult>>;
+  /** Whether the task is reviewing PR `number` (Review clicked, not yet submitted). */
+  prReviewInReview: (args: {
+    taskId: string;
+    provider: PrProvider;
+    number: number;
+  }) => Promise<IpcResponse<boolean>>;
+  /** Start or end the task's review of PR `number`. */
+  prReviewSetInReview: (args: {
+    taskId: string;
+    provider: PrProvider;
+    number: number;
+    on: boolean;
+  }) => Promise<IpcResponse<void>>;
   /** Fires when a task's diff comments change outside the editor (agent drafts, a submit). */
   onDiffCommentsChanged: (cb: (data: { taskId: string }) => void) => () => void;
 }

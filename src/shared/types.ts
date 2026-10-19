@@ -605,6 +605,8 @@ export interface PrReview {
   url: string;
   /** GitHub refuses approve / request changes on your own PR. */
   viewerIsAuthor: boolean;
+  /** You're asked to review it and haven't yet. */
+  viewerIsRequestedReviewer: boolean;
   /** The verdicts this provider offers, in display order. */
   verdicts: PrVerdict[];
   /** Merge-base of the PR's base and head: the left side of its diff. */
@@ -1113,9 +1115,14 @@ export interface DiffComment {
   replyTo: string | null;
   /** Who wrote it. An agent's draft becomes the user's once they edit its text. */
   author: 'user' | 'agent';
+  /** A note is local, for the agent; a comment is a PR review draft that
+   *  Submit posts. Only PR scopes hold comments. */
+  kind: DiffCommentKind;
   createdAt: string;
   updatedAt: string;
 }
+
+export type DiffCommentKind = 'note' | 'comment';
 
 /** Payload for `diffComments:upsert` from the renderer. The handler stamps
  *  createdAt/updatedAt and reflects the row back as a full DiffComment. */
@@ -1130,6 +1137,8 @@ export interface DiffCommentInput {
   viewScope: string;
   side?: 'LEFT' | 'RIGHT';
   replyTo?: string | null;
+  /** Defaults to 'note'. */
+  kind?: DiffCommentKind;
 }
 
 /* ── Unified Extensions model (Skills + Plugins across scopes) ──────────────

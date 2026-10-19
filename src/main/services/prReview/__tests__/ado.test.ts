@@ -49,6 +49,18 @@ describe('adoReviewFrom', () => {
     ).toBe(true);
   });
 
+  it("says whether you're on the reviewer list and haven't voted", () => {
+    const asked = (reviewers: { id: string; vote: number }[]) =>
+      adoReviewFrom(
+        { pr: { ...pr, reviewers }, iterations, threads: [], me: 'me-id', filesAtHead },
+        ctx,
+      ).viewerIsRequestedReviewer;
+    expect(review.viewerIsRequestedReviewer).toBe(false);
+    expect(asked([{ id: 'me-id', vote: 0 }])).toBe(true);
+    expect(asked([{ id: 'me-id', vote: 10 }])).toBe(false);
+    expect(asked([{ id: 'other', vote: 0 }])).toBe(false);
+  });
+
   it('maps file threads, with tracked positions, sides, resolution and outdated files', () => {
     expect(
       review.threads.map((t) => [

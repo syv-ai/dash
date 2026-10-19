@@ -25,6 +25,8 @@ interface Props {
    *  out as the DraftBubble crossfades in beside it. Null when nothing is
    *  being edited. */
   editingId: string | null;
+  /** In a PR view: tag each bubble note or comment, and let a note become a comment. */
+  onPromote?(id: string): void;
 }
 
 function metaLabel(c: LiveComment): string {
@@ -45,6 +47,7 @@ export function BubbleStack({
   onReopen,
   editingId,
   scopeLabel,
+  onPromote,
 }: Props) {
   const stacked = comments.length >= 2;
   return (
@@ -72,6 +75,8 @@ export function BubbleStack({
             onDelete={() => onDelete(c.id)}
             onReopen={() => onReopen(c.id)}
             isFadingOut={c.id === editingId}
+            kindTag={onPromote ? c.kind : undefined}
+            onPromote={onPromote && c.kind === 'note' ? () => onPromote(c.id) : undefined}
           />
         );
       })}

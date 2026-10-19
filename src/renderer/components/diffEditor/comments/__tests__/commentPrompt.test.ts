@@ -52,6 +52,30 @@ describe('buildCommentPrompt', () => {
     expect(out).toBe('Comments:\n\na.ts:2:\n```typescript\nconst a = 1;\n```\nsee code');
   });
 
+  it("labels a PR's note and review comment with the PR", () => {
+    const out = buildCommentPrompt({
+      ids: ['n', 'c'],
+      byFile: {
+        'a.ts': [
+          pc({ id: 'n', startLine: 2, endLine: 2, text: 'watch', viewScope: 'pr:ado:7' }),
+          pc({
+            id: 'c',
+            startLine: 3,
+            endLine: 3,
+            text: 'rename',
+            viewScope: 'pr:ado:7',
+            kind: 'comment',
+          }),
+        ],
+      },
+      currentFilePath: 'b.ts',
+      currentScope: 'pr:ado:7',
+    });
+    expect(out).toBe(
+      'Comments:\n\na.ts:2: (PR #7)\nwatch\n\na.ts:3: (PR #7 review comment)\nrename',
+    );
+  });
+
   it('labels a commit-scoped comment and skips code enrichment when scope differs', () => {
     const out = buildCommentPrompt({
       ids: ['x'],

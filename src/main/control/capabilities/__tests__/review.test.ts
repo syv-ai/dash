@@ -28,6 +28,7 @@ const row = (over: Partial<DiffComment> & { id: string }): DiffComment => ({
   side: 'RIGHT',
   replyTo: null,
   author: 'agent',
+  kind: 'comment',
   createdAt: '',
   updatedAt: '',
   ...over,
@@ -39,12 +40,8 @@ beforeEach(() => {
   const deps: ReviewCapabilityDeps = {
     providerFor: () => 'github',
     getTask: (id) => tasks.find((t) => t.id === id),
-    listPrDrafts: (taskId, provider, number) => {
-      const mine = [...rows.values()].filter(
-        (r) => r.taskId === taskId && r.viewScope === `pr:${provider}:${number}`,
-      );
-      return { comments: mine.filter((r) => !r.replyTo), replies: mine.filter((r) => r.replyTo) };
-    },
+    listByScope: (taskId, scope) =>
+      [...rows.values()].filter((r) => r.taskId === taskId && r.viewScope === scope),
     getDraft: (id) => rows.get(id),
     saveAgentDraft: vi.fn((d: AgentDraft) => {
       const saved = row({ ...d, author: rows.get(d.id)?.author ?? 'agent' });
@@ -76,6 +73,7 @@ describe('review.drafts_create', () => {
       startLine: 4,
       endLine: 6,
       body: 'Null here?',
+      kind: 'comment',
     })) as { id: string };
     expect(rows.get(created.id)).toMatchObject({
       taskId: 'me',
@@ -86,12 +84,23 @@ describe('review.drafts_create', () => {
       viewScope: 'pr:github:12',
       author: 'agent',
       replyTo: null,
+      kind: 'comment',
     });
     expect(changed).toEqual(['me']);
   });
 
+  it('writes a note for the developer, and refuses a write without a kind', async () => {
+    const input = { number: 12, path: 'a.ts', startLine: 1, body: 'watch this' };
+    const note = (await registry.call(asTask('me'), 'review.drafts_create', {
+      ...input,
+      kind: 'note',
+    })) as { id: string; kind: string };
+    expect(rows.get(note.id)!.kind).toBe('note');
+    expect(await status(registry.call(asTask('me'), 'review.drafts_create', input))).toBe(400);
+  });
+
   it('reaches a child task, not a sibling', async () => {
-    const input = { number: 12, path: 'a.ts', startLine: 1, body: 'b' };
+    const input = { number: 12, path: 'a.ts', startLine: 1, body: 'b', kind: 'note' };
     expect(
       await status(
         registry.call(asTask('me'), 'review.drafts_create', { ...input, taskId: 'child' }),
@@ -105,7 +114,7 @@ describe('review.drafts_create', () => {
   });
 
   it('refuses a range that ends before it starts, and the wrong provider', async () => {
-    const input = { number: 12, path: 'a.ts', startLine: 5, body: 'b' };
+    const input = { number: 12, path: 'a.ts', startLine: 5, body: 'b', kind: 'comment' };
     expect(
       await status(registry.call(asTask('me'), 'review.drafts_create', { ...input, endLine: 4 })),
     ).toBe(400);
@@ -126,9 +135,11 @@ describe('review.drafts_update / drafts_delete', () => {
       endLine: 8,
     });
     expect(rows.get('d1')).toMatchObject({ text: 'better', startLine: 3, endLine: 8 });
+    await registry.call(asTask('me'), 'review.drafts_update', { id: 'd1', kind: 'note' });
+    expect(rows.get('d1')).toMatchObject({ text: 'better', kind: 'note' });
     await registry.call(asTask('me'), 'review.drafts_delete', { id: 'd1' });
     expect(rows.has('d1')).toBe(false);
-    expect(changed).toEqual(['me', 'me']);
+    expect(changed).toEqual(['me', 'me', 'me']);
   });
 
   it("leaves the user's drafts alone", async () => {
@@ -155,8 +166,8 @@ describe('review.drafts_update / drafts_delete', () => {
 });
 
 describe('review.drafts_list', () => {
-  it("lists the task's drafts for the PR, the user's and the agent's, by file and line", async () => {
-    rows.set('b', row({ id: 'b', filePath: 'b.ts', author: 'user' }));
+  it("lists the task's notes and comments for the PR, the user's and the agent's, by file and line", async () => {
+    rows.set('b', row({ id: 'b', filePath: 'b.ts', author: 'user', kind: 'note' }));
     rows.set('a2', row({ id: 'a2', filePath: 'a.ts', startLine: 9, replyTo: 'T1' }));
     rows.set('a1', row({ id: 'a1', filePath: 'a.ts', startLine: 2 }));
     rows.set('x', row({ id: 'x', viewScope: 'pr:github:13' }));
@@ -164,6 +175,7 @@ describe('review.drafts_list', () => {
       id: string;
     }[];
     expect(list.map((d) => d.id)).toEqual(['a1', 'a2', 'b']);
-    expect(list[1]).toMatchObject({ replyTo: 'T1', body: 'x', author: 'agent' });
+    expect(list[1]).toMatchObject({ replyTo: 'T1', body: 'x', author: 'agent', kind: 'comment' });
+    expect(list[2]).toMatchObject({ kind: 'note' });
   });
 });
