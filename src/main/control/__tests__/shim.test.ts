@@ -156,6 +156,8 @@ describe('dash-mcp shim', () => {
     fake = await startFakeServer(userData, defaultReply);
     const c = await connect();
     expect(c.getServerCapabilities()?.tools?.listChanged).toBe(true);
+    // How the review tools fit together reaches the session's system prompt.
+    expect(c.getInstructions()).toContain('review_summary_set');
     const { tools } = await c.listTools();
     expect(tools.map((t) => t.name)).toEqual(['projects_list', 'tasks_create']);
     expect(tools[1]?.description).toBe('Create a task');

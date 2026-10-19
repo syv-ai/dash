@@ -180,9 +180,25 @@ async function fetchTools(): Promise<Tool[]> {
   return tools;
 }
 
+/** How the tools fit together, beyond each one's own description. Claude Code
+ *  puts this in the session's system prompt. */
+const INSTRUCTIONS = `PR review (the review_* tools). They write into the PR view of the task's diff editor. Nothing reaches the PR: the person reads everything, picks the verdict and submits. You can't submit, resolve threads or vote, and don't post to the PR any other way (gh, az, scripts) unless the person explicitly asks for that.
+
+Two kinds of draft, chosen with \`kind\`:
+- comment: a review comment for the PR's author, posted when the person submits. Write these when you're reviewing someone's PR.
+- note: for whoever works on this task (the person, or you later), never posted. Use it for things to check, fix or keep in mind that aren't feedback for the author. The person can promote a note to a comment.
+If the person hasn't said which, ask rather than guess.
+
+Where a draft goes:
+- On lines: \`path\` is repo-relative, and the lines are in the PR's version of the file (its head).
+- As a reply to an existing thread: \`replyTo\` is that thread's id.
+- On the whole PR: not a line draft. Use review_summary_set, the review's summary posted with the verdict. There is one per review.
+
+Read review_drafts_list (and review_summary_get) before writing, so you don't repeat what's there. You can update or delete any draft, the person's too, but keep their wording unless they ask you to change it.`;
+
 const server = new Server(
   { name: DASH_MCP_SERVER, version: '1.0.0' },
-  { capabilities: { tools: { listChanged: true } } },
+  { capabilities: { tools: { listChanged: true } }, instructions: INSTRUCTIONS },
 );
 
 /**
