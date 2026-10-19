@@ -333,6 +333,20 @@ export function runMigrations(): void {
     /* already exists */
   }
 
+  // Diff comments double as PR review drafts: which side of the diff, the
+  // remote thread a reply answers, and whether the user or an agent wrote it.
+  for (const column of [
+    `side TEXT NOT NULL DEFAULT 'RIGHT'`,
+    `reply_to TEXT`,
+    `author TEXT NOT NULL DEFAULT 'user'`,
+  ]) {
+    try {
+      rawDb.exec(`ALTER TABLE diff_editor_comments ADD COLUMN ${column}`);
+    } catch {
+      /* already exists */
+    }
+  }
+
   // Worktrees moved from `<parent>/worktrees/` to `<repo>/.claude/worktrees/`
   // in 0.16. When the launch dialog moves a task, its old path is kept here so
   // the Claude transcripts written under the old cwd (~/.claude/projects/<encoded

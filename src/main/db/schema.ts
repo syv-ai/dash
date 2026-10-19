@@ -129,6 +129,11 @@ export const diffEditorComments = sqliteTable(
     /** Diff state the comment is anchored to: 'live' (working/branch views,
      *  which share the working file) or 'commit:<hash>' for a frozen commit. */
     viewScope: text('view_scope').notNull().default('live'),
+    /** PR review drafts: the diff side, the remote thread a reply answers, and
+     *  who wrote it ('user' | 'agent'). */
+    side: text('side').notNull().default('RIGHT'),
+    replyTo: text('reply_to'),
+    author: text('author').notNull().default('user'),
     createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
   },

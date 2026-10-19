@@ -15,6 +15,8 @@ interface Props {
   /** Threads on this file's PR-side lines (`line` set, side RIGHT). */
   threads: PrReviewThread[];
   provider: PrProvider;
+  draftScope: string | null;
+  onSetResolved: (thread: PrReviewThread, resolved: boolean) => void;
   modifiedEditor: monacoEditor.ICodeEditor | null;
   area: HTMLDivElement | null;
   onSend: (thread: PrReviewThread) => void;
@@ -26,7 +28,15 @@ interface Props {
  * the editor area, moved to the zone's top from Monaco's layout callback (the
  * pattern the local comment bubbles use, minus editing and animation).
  */
-export function PrThreadOverlay({ threads, provider, modifiedEditor, area, onSend }: Props) {
+export function PrThreadOverlay({
+  threads,
+  provider,
+  draftScope,
+  onSetResolved,
+  modifiedEditor,
+  area,
+  onSend,
+}: Props) {
   const wrappers = useRef(new Map<string, HTMLDivElement>());
   const tops = useRef(new Map<string, number>());
   const zones = useRef(new Map<string, { id: string; zone: monacoEditor.IViewZone }>());
@@ -128,7 +138,13 @@ export function PrThreadOverlay({ threads, provider, modifiedEditor, area, onSen
           className="absolute pointer-events-auto"
           style={{ top: -9999, left, width }}
         >
-          <PrThreadCard thread={t} provider={provider} onSend={onSend} />
+          <PrThreadCard
+            thread={t}
+            provider={provider}
+            draftScope={draftScope}
+            onSend={onSend}
+            onSetResolved={onSetResolved}
+          />
         </div>
       ))}
     </div>

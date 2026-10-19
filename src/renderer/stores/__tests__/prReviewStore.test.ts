@@ -53,3 +53,85 @@ describe('prReviewStore.load', () => {
     expect(usePrReviews.getState().byPr[prKey('github', 4)]).toEqual(review(4));
   });
 });
+
+describe('prReviewStore writes', () => {
+  let api: ReturnType<typeof makeElectronApiMock>;
+  beforeEach(() => {
+    api = makeElectronApiMock();
+    installWindow(api);
+  });
+  afterEach(() => resetWindow());
+
+  const withThread = (): PrReview => ({
+    ...review(4),
+    threads: [
+      {
+        id: 'T1',
+        path: 'a.ts',
+        line: 3,
+        startLine: null,
+        side: 'RIGHT',
+        isOutdated: false,
+        resolved: false,
+        comments: [],
+      },
+    ],
+  });
+
+  it('resolves a thread at once, and undoes it when the PR refuses', async () => {
+    api.prReviewLoad = vi.fn(() => Promise.resolve({ success: true, data: withThread() }));
+    const { usePrReviews, prKey } = await freshStore();
+    await usePrReviews.getState().load('p1', '/wt', 4);
+    const resolved = () => usePrReviews.getState().byPr[prKey('github', 4)]!.threads[0]!.resolved;
+
+    let answer: (v: unknown) => void = () => {};
+    api.prReviewSetResolved = vi.fn(() => new Promise((r) => (answer = r)));
+    const pending = usePrReviews.getState().setResolved('p1', '/wt', review(4), 'T1', true);
+    expect(resolved()).toBe(true);
+    answer({ success: false, error: 'Resource not accessible' });
+    expect(await pending).toEqual({
+      ok: false,
+      error: { kind: 'other', message: 'Resource not accessible' },
+    });
+    expect(resolved()).toBe(false);
+  });
+
+  it('refetches the review after a submit that posted', async () => {
+    api.prReviewSubmit = vi.fn(() =>
+      Promise.resolve({ success: true, data: { postedDraftIds: ['d1'] } }),
+    );
+    api.prReviewLoad = vi.fn(() => Promise.resolve({ success: true, data: review(4) }));
+    const { usePrReviews } = await freshStore();
+    expect(
+      await usePrReviews.getState().submit('p1', '/wt', 't1', review(4), 'approve', 'LGTM'),
+    ).toEqual({
+      ok: true,
+    });
+    expect(api.prReviewSubmit).toHaveBeenCalledWith({
+      projectId: 'p1',
+      cwd: '/wt',
+      taskId: 't1',
+      number: 4,
+      verdict: 'approve',
+      body: 'LGTM',
+    });
+    expect(api.prReviewLoad).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns the provider's refusal and does not refetch when nothing posted", async () => {
+    api.prReviewSubmit = vi.fn(() =>
+      Promise.resolve({
+        success: true,
+        data: { postedDraftIds: [], error: { kind: 'scope', fix: 'gh auth refresh -s repo' } },
+      }),
+    );
+    const { usePrReviews } = await freshStore();
+    expect(
+      await usePrReviews.getState().submit('p1', '/wt', 't1', review(4), 'comment', 'x'),
+    ).toEqual({
+      ok: false,
+      error: { kind: 'scope', fix: 'gh auth refresh -s repo' },
+    });
+    expect(api.prReviewLoad).not.toHaveBeenCalled();
+  });
+});

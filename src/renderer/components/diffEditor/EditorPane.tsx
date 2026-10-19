@@ -7,6 +7,7 @@ import type { EditorView } from './types';
 import type { LiveComment } from './comments/types';
 import { useCommentsStore } from '../../stores/commentsStore';
 import { useGit } from '../../stores/gitStore';
+import { toast } from 'sonner';
 import { prKey, usePrReviews } from '../../stores/prReviewStore';
 import { buildReviewPrompt, unresolvedThreads } from '../../utils/prReviewNotices';
 import { typeIntoTask } from '../../utils/typeIntoTask';
@@ -197,7 +198,7 @@ export function EditorPane({
   const { pendingRange, setPendingRange, dragging } = useGutterSelection(
     modifiedEditor,
     monaco,
-    !commentsDisabled && !isPrView,
+    !commentsDisabled,
   );
   const dirty = !isCommitView && draft !== loadedBuffer;
   const editable =
@@ -416,6 +417,21 @@ export function EditorPane({
         : [],
     [prReview, filePath, isFileLoaded],
   );
+  const setThreadResolved = useCallback(
+    async (thread: PrReviewThread, resolved: boolean) => {
+      if (!prReview || !projectId) return;
+      const r = await usePrReviews
+        .getState()
+        .setResolved(projectId, cwd, prReview, thread.id, resolved);
+      if (!r.ok) {
+        const why = r.error.kind === 'other' ? r.error.message : 'the PR refused the change';
+        toast.error(`Could not ${resolved ? 'resolve' : 'reactivate'} the thread: ${why}`);
+      }
+    },
+    [prReview, projectId, cwd],
+  );
+  // PR drafts need a task to own them.
+  const draftScope = prReview && !commentsDisabled ? scope : null;
   const sendThreads = useCallback(
     async (threads: PrReviewThread[], close: boolean) => {
       if (!activeTaskId || !prReview || threads.length === 0) return;
@@ -521,6 +537,13 @@ export function EditorPane({
               <div className="absolute bottom-4 right-4 z-10">
                 <PrReviewMenu
                   review={prReview}
+                  draftScope={draftScope}
+                  submitCtx={
+                    draftScope && projectId && activeTaskId
+                      ? { projectId, cwd, taskId: activeTaskId }
+                      : null
+                  }
+                  onSetResolved={(t, r) => void setThreadResolved(t, r)}
                   onSendAll={() => void sendThreads(unresolvedThreads(prReview), true)}
                   onSend={(t) => void sendThreads([t], false)}
                   onSelectFile={onSelectFile}
@@ -594,6 +617,8 @@ export function EditorPane({
               <PrThreadOverlay
                 threads={inlineThreads}
                 provider={view.kind === 'pr' ? view.provider : 'github'}
+                draftScope={draftScope}
+                onSetResolved={(t, r) => void setThreadResolved(t, r)}
                 modifiedEditor={modifiedEditor}
                 area={editorAreaEl}
                 onSend={(t) => void sendThreads([t], false)}

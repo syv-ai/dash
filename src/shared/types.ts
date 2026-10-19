@@ -1104,8 +1104,15 @@ export interface DiffComment {
   text: string;
   sent: boolean;
   /** Diff state the anchor is meaningful against: 'live' (working/branch
-   *  views share the working file) or 'commit:<hash>' for a frozen commit. */
+   *  views share the working file), 'commit:<hash>' for a frozen commit, or
+   *  'pr:<provider>:<n>' for a draft review comment on a PR. */
   viewScope: string;
+  /** Which side of the diff the lines are on; always RIGHT outside PR drafts. */
+  side: 'LEFT' | 'RIGHT';
+  /** A PR draft reply: the remote thread it answers. Null for line comments. */
+  replyTo: string | null;
+  /** Who wrote it. An agent's draft becomes the user's once they edit its text. */
+  author: 'user' | 'agent';
   createdAt: string;
   updatedAt: string;
 }
@@ -1121,6 +1128,8 @@ export interface DiffCommentInput {
   text: string;
   sent: boolean;
   viewScope: string;
+  side?: 'LEFT' | 'RIGHT';
+  replyTo?: string | null;
 }
 
 /* ── Unified Extensions model (Skills + Plugins across scopes) ──────────────

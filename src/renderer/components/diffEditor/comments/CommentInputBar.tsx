@@ -5,11 +5,20 @@ interface Props {
   initialText: string;
   onSubmit: (text: string) => void;
   onCancel: () => void;
+  placeholder?: string;
+  submitLabel?: string;
 }
 
 /** Renders inside the WIP popover. Owns the textarea state and ⌘+Enter
  *  submit shortcut; the popover open/close is controlled by EditorPane. */
-export function CommentInputBar({ lineRange, initialText, onSubmit, onCancel }: Props) {
+export function CommentInputBar({
+  lineRange,
+  initialText,
+  onSubmit,
+  onCancel,
+  placeholder = 'Describe the change…',
+  submitLabel = 'Add',
+}: Props) {
   const [text, setText] = useState(initialText);
   const submit = () => {
     if (text.trim()) onSubmit(text.trim());
@@ -45,7 +54,7 @@ export function CommentInputBar({ lineRange, initialText, onSubmit, onCancel }: 
             onCancel();
           }
         }}
-        placeholder="Describe the change…"
+        placeholder={placeholder}
         className="flex-1 min-h-0 w-full text-[12.5px] leading-relaxed tracking-[-0.005em] bg-transparent px-0 py-0 resize-none placeholder:text-muted-fade-35 focus:outline-hidden"
       />
       <div className="flex items-center gap-2 shrink-0">
@@ -56,7 +65,7 @@ export function CommentInputBar({ lineRange, initialText, onSubmit, onCancel }: 
           <kbd className="px-1.5 py-0.5 rounded-[5px] border border-foreground/10 bg-foreground/4 text-fg-fade-70 ml-1">
             ↵
           </kbd>
-          <span className="ml-1.5">to add</span>
+          <span className="ml-1.5">to {submitLabel.toLowerCase()}</span>
         </span>
         <button
           type="button"
@@ -64,7 +73,7 @@ export function CommentInputBar({ lineRange, initialText, onSubmit, onCancel }: 
           disabled={!text.trim()}
           className="ml-auto flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-md text-[11.5px] font-medium tracking-tight bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition disabled:opacity-30 disabled:cursor-not-allowed disabled:active:scale-100"
         >
-          Add
+          {submitLabel}
         </button>
       </div>
     </>

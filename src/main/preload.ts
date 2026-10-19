@@ -285,6 +285,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('prReview:list', args),
   prReviewLoad: (args: { projectId: string; cwd: string; number: number }) =>
     ipcRenderer.invoke('prReview:load', args),
+  prReviewSetResolved: (args: {
+    projectId: string;
+    cwd: string;
+    number: number;
+    threadId: string;
+    resolved: boolean;
+  }) => ipcRenderer.invoke('prReview:setResolved', args),
+  prReviewSubmit: (args: {
+    projectId: string;
+    cwd: string;
+    taskId: string;
+    number: number;
+    verdict: string;
+    body: string;
+  }) => ipcRenderer.invoke('prReview:submit', args),
+  onDiffCommentsChanged: (callback: (data: { taskId: string }) => void) => {
+    const handler = (_event: unknown, data: { taskId: string }) => callback(data);
+    ipcRenderer.on('diffComments:changed', handler);
+    return () => {
+      ipcRenderer.removeListener('diffComments:changed', handler);
+    };
+  },
 
   // Azure DevOps
   adoCheckConfigured: (projectId?: string) =>

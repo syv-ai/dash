@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
 import { useCommentsStore } from '../../../stores/commentsStore';
+import { isReplyDraft } from '../../../../shared/diffComments';
 import {
   commentsDeletedByEdit,
   isFullModelReplace,
@@ -58,7 +59,11 @@ export function useFileComments({
   // Only comments anchored to the view's current diff state belong here. Memo
   // keeps the reference stable (it feeds effect dep arrays) unless the file's
   // comments or the scope actually change.
-  const stored = useMemo(() => allStored.filter((c) => c.viewScope === scope), [allStored, scope]);
+  // Reply drafts belong to their PR thread's card, not to lines.
+  const stored = useMemo(
+    () => allStored.filter((c) => c.viewScope === scope && !isReplyDraft(c)),
+    [allStored, scope],
+  );
   // Latest stored comments, readable from callbacks (hydrate/re-anchor) without
   // making `stored` an effect/callback dependency.
   const storedRef = useRef<readonly DiffComment[]>(stored);
@@ -207,6 +212,36 @@ export function useFileComments({
     setLiveComments(liveCommentsRef.current.filter((c) => storedIds.has(c.id)));
   }, [stored, filePath, scope, modifiedEditor]);
 
+  // ── Reconcile store additions → add decorations ──
+  // Comments that reach the store from outside this binding (an agent's draft,
+  // a reload after a submit) get their decoration here; the binding's own
+  // addComment records its comment in the ref first, so it isn't added twice.
+  useEffect(() => {
+    if (hydratedKeyRef.current !== `${filePath}::${scope}::loaded`) return;
+    const model = modifiedEditor?.getModel();
+    if (!model || !monaco) return;
+    const liveIds = new Set(liveCommentsRef.current.map((c) => c.id));
+    const added = stored.filter((s) => !liveIds.has(s.id));
+    if (added.length === 0) return;
+    const lineCount = model.getLineCount();
+    const fresh: LiveComment[] = added.map((sc) => {
+      const start = Math.min(Math.max(1, sc.startLine), lineCount);
+      const end = Math.min(Math.max(start, sc.endLine), lineCount);
+      const ids = model.deltaDecorations(
+        [],
+        [
+          {
+            range: new monaco.Range(start, 1, end, 1),
+            options: { isWholeLine: true, stickiness: 1 },
+          },
+        ],
+      );
+      return { ...sc, startLine: start, endLine: end, decorationId: ids[0]! };
+    });
+    liveCommentsRef.current = [...liveCommentsRef.current, ...fresh];
+    setLiveComments(liveCommentsRef.current);
+  }, [stored, filePath, scope, modifiedEditor, monaco]);
+
   // ── Mirror text/sent edits from store (not ranges) ──
   useEffect(() => {
     if (hydratedKeyRef.current !== `${filePath}::${scope}::loaded`) return;
@@ -257,6 +292,7 @@ export function useFileComments({
         ],
       );
       const liveC: LiveComment = { ...created, decorationId: ids[0]! };
+      liveCommentsRef.current = [...liveCommentsRef.current, liveC];
       setLiveComments((prev) => [...prev, liveC]);
       return liveC;
     },

@@ -11,6 +11,9 @@ const cmt = (over: Partial<DiffComment> = {}): DiffComment => ({
   text: over.text ?? 'hello',
   sent: over.sent ?? false,
   viewScope: over.viewScope ?? 'live',
+  side: 'RIGHT',
+  replyTo: null,
+  author: 'user',
   createdAt: over.createdAt ?? '2026-01-01T00:00:00Z',
   updatedAt: over.updatedAt ?? '2026-01-01T00:00:00Z',
 });
@@ -140,6 +143,49 @@ describe('commentsStore', () => {
     expect(useCommentsStore.getState().byFile['a.ts']![0]!.startLine).toBe(10);
     expect(api.diffCommentsUpsert).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'a', startLine: 10, endLine: 12 }),
+    );
+  });
+
+  it("reloads in place when main says the loaded task's comments changed", async () => {
+    let fire: (d: { taskId: string }) => void = () => {};
+    api.onDiffCommentsChanged = vi.fn((cb: (d: { taskId: string }) => void) => {
+      fire = cb;
+      return () => {};
+    });
+    api.diffCommentsList = vi
+      .fn()
+      .mockResolvedValueOnce({ success: true, data: [cmt({ id: 'a' })] })
+      .mockResolvedValue({
+        success: true,
+        data: [cmt({ id: 'a' }), cmt({ id: 'agent', startLine: 9 })],
+      });
+    const useCommentsStore = await freshStore();
+    await useCommentsStore.getState().loadForTask('t1');
+
+    fire({ taskId: 'other' });
+    await Promise.resolve();
+    expect(api.diffCommentsList).toHaveBeenCalledTimes(1);
+
+    fire({ taskId: 't1' });
+    await vi.waitFor(() =>
+      expect(useCommentsStore.getState().byFile['a.ts']!.map((c) => c.id)).toEqual(['a', 'agent']),
+    );
+  });
+
+  it("addComment keeps a reply draft's thread", async () => {
+    const useCommentsStore = await freshStore();
+    await useCommentsStore.getState().loadForTask('t1');
+    const c = useCommentsStore.getState().addComment({
+      filePath: 'a.ts',
+      startLine: 3,
+      endLine: 3,
+      text: 'agreed',
+      viewScope: 'pr:github:4',
+      replyTo: 'T_1',
+    });
+    expect(c).toMatchObject({ replyTo: 'T_1', author: 'user', side: 'RIGHT' });
+    expect(api.diffCommentsUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({ replyTo: 'T_1' }),
     );
   });
 });

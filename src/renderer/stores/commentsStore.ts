@@ -7,6 +7,8 @@ interface AddInput {
   endLine: number;
   text: string;
   viewScope: string;
+  /** A PR draft reply: the remote thread it answers. */
+  replyTo?: string | null;
 }
 export interface RangeSnapshot {
   id: string;
@@ -23,6 +25,9 @@ export interface CommentsState {
 
 export interface CommentsActions {
   loadForTask: (taskId: string | null) => Promise<void>;
+  /** Refetch the loaded task's comments in place (no empty flash), after
+   *  they changed outside the editor. */
+  reload: () => Promise<void>;
   addComment: (input: AddInput) => DiffComment | null;
   updateText: (id: string, text: string) => void;
   remove: (id: string) => void;
@@ -100,6 +105,8 @@ function persist(c: DiffComment, patch: Partial<DiffComment> = {}): void {
     text: c.text,
     sent: c.sent,
     viewScope: c.viewScope,
+    side: c.side,
+    replyTo: c.replyTo,
     ...patch,
   });
 }
@@ -127,6 +134,14 @@ export const useCommentsStore = create<CommentsStore>((set, get) => ({
     set({ byFile: groupByFile(list), isReady: true });
   },
 
+  reload: async () => {
+    const taskId = get().taskId;
+    if (!taskId) return;
+    const resp = await window.electronAPI.diffCommentsList({ taskId });
+    if (get().taskId !== taskId || !resp.success || !resp.data) return;
+    set({ byFile: groupByFile(resp.data) });
+  },
+
   addComment: (input) => {
     const taskId = get().taskId;
     if (!taskId) return null;
@@ -140,6 +155,9 @@ export const useCommentsStore = create<CommentsStore>((set, get) => ({
       text: input.text,
       sent: false,
       viewScope: input.viewScope,
+      side: 'RIGHT',
+      replyTo: input.replyTo ?? null,
+      author: 'user',
       createdAt: now,
       updatedAt: now,
     };
@@ -229,3 +247,11 @@ export const useCommentsStore = create<CommentsStore>((set, get) => ({
     return resp.data;
   },
 }));
+
+// An agent's draft or a submit changes the loaded task's comments behind the
+// editor's back; main says so, and the store refetches them.
+if (typeof window !== 'undefined') {
+  window.electronAPI?.onDiffCommentsChanged?.(({ taskId }) => {
+    if (useCommentsStore.getState().taskId === taskId) void useCommentsStore.getState().reload();
+  });
+}

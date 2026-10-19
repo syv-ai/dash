@@ -5,10 +5,16 @@ import { Button } from '../../ui/Button';
 import { IconButton } from '../../ui/IconButton';
 import { Popover, PopoverContent, PopoverTrigger } from '../../ui/Popover';
 import { threadLocation, unresolvedThreads } from '../../../utils/prReviewNotices';
+import { useCommentsStore } from '../../../stores/commentsStore';
 import { PrThreadCard, providerName } from './PrThreadCard';
+import { SubmitReview } from './SubmitReview';
 
 interface Props {
   review: PrReview;
+  draftScope: string | null;
+  /** Where submits go; null without a task (the panel is then read-only). */
+  submitCtx: { projectId: string; cwd: string; taskId: string } | null;
+  onSetResolved: (thread: PrReviewThread, resolved: boolean) => void;
   onSendAll: () => void;
   onSend: (thread: PrReviewThread) => void;
   onSelectFile: (path: string) => void;
@@ -54,10 +60,25 @@ function ConversationEntry({
  * (outdated, on a removed line, or on the whole file), which the code view
  * can't place.
  */
-export function PrReviewMenu({ review, onSendAll, onSend, onSelectFile }: Props) {
+export function PrReviewMenu({
+  review,
+  draftScope,
+  submitCtx,
+  onSetResolved,
+  onSendAll,
+  onSend,
+  onSelectFile,
+}: Props) {
   const open = unresolvedThreads(review);
   const count = open.length;
   const offCode = review.threads.filter((t) => !isInlineThread(t));
+  const draftCount = useCommentsStore((s) => {
+    if (!draftScope) return 0;
+    let n = 0;
+    for (const list of Object.values(s.byFile))
+      for (const c of list) if (c.viewScope === draftScope) n++;
+    return n;
+  });
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -67,9 +88,11 @@ export function PrReviewMenu({ review, onSendAll, onSend, onSelectFile }: Props)
           className="bg-[hsl(var(--surface-2))] shadow-lg shadow-shade/20"
         >
           <GitPullRequestArrow size={14} strokeWidth={1.8} />
-          {count === 0
-            ? 'No unresolved threads'
-            : `${count} unresolved ${count === 1 ? 'thread' : 'threads'}`}
+          {draftCount > 0
+            ? `Review · ${draftCount} ${draftCount === 1 ? 'draft' : 'drafts'}`
+            : count === 0
+              ? 'No unresolved threads'
+              : `${count} unresolved ${count === 1 ? 'thread' : 'threads'}`}
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[420px] max-h-[70vh] overflow-y-auto p-2">
@@ -119,11 +142,19 @@ export function PrReviewMenu({ review, onSendAll, onSend, onSelectFile }: Props)
             <div className="px-1.5 text-[11px] text-muted-fade-70">Not on the current code</div>
             {offCode.map((t) => (
               <div key={t.id} className="w-full">
-                <PrThreadCard thread={t} provider={review.provider} showLocation onSend={onSend} />
+                <PrThreadCard
+                  thread={t}
+                  provider={review.provider}
+                  draftScope={draftScope}
+                  showLocation
+                  onSend={onSend}
+                  onSetResolved={onSetResolved}
+                />
               </div>
             ))}
           </div>
         )}
+        {submitCtx && <SubmitReview review={review} draftCount={draftCount} {...submitCtx} />}
       </PopoverContent>
     </Popover>
   );
