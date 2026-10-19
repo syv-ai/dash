@@ -19,6 +19,7 @@ import { useCommentsStore } from '../../../stores/commentsStore';
 import { threadLocation } from '../../../utils/prReviewNotices';
 import { CommentInputBar } from '../comments/CommentInputBar';
 import { useInReview } from './useInReview';
+import { Markdown } from '../../ui/Markdown';
 
 interface Props {
   thread: PrReviewThread;
@@ -42,7 +43,7 @@ function Composer(props: {
   onCancel: () => void;
 }) {
   return (
-    <div className="mt-2.5 flex h-[118px] flex-col gap-2 rounded-lg border border-edge/10 bg-[hsl(var(--surface-1))] px-2.5 py-2">
+    <div className="mt-2.5 flex flex-col gap-2 rounded-lg border border-edge/10 bg-[hsl(var(--surface-1))] px-2.5 py-2">
       <CommentInputBar lineRange={null} placeholder="Reply…" submitLabel="Save draft" {...props} />
     </div>
   );
@@ -84,7 +85,7 @@ function ReplyDraft({ draft }: { draft: DiffComment }) {
           <Trash2 size={14} strokeWidth={1.8} />
         </IconButton>
       </div>
-      <div className="whitespace-pre-wrap break-words text-foreground">{draft.text}</div>
+      <Markdown text={draft.text} className="text-foreground" />
     </div>
   );
 }
@@ -174,7 +175,7 @@ export function PrThreadCard({
         {thread.comments.map((c) => (
           <div key={c.id} className="min-w-0">
             <div className="text-[11px] font-medium text-fg-fade-80">@{c.author}</div>
-            <div className="whitespace-pre-wrap break-words text-foreground">{c.body.trim()}</div>
+            <Markdown text={c.body.trim()} className="text-foreground" />
           </div>
         ))}
         {drafts.map((d) => (

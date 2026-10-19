@@ -1,7 +1,8 @@
-import { ArrowUpRight, Bot, Undo2, X } from 'lucide-react';
+import { ArrowUpRight, Bot, Pencil, Undo2, X } from 'lucide-react';
 import type { DiffCommentKind } from '../../../../shared/types';
 import type { Shade } from './types';
 import { BubbleShell } from './BubbleShell';
+import { Markdown } from '../../ui/Markdown';
 
 interface Props {
   shade: Shade;
@@ -86,6 +87,18 @@ export function CommentBubble({
       >
         <div className="group/bubble">
           <div className="absolute top-[6px] right-[6px] flex items-center gap-[2px] z-10">
+            <button
+              type="button"
+              aria-label="Edit comment"
+              title="Edit"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDoubleClick();
+              }}
+              className="flex h-[20px] w-[20px] items-center justify-center rounded-[4px] text-muted-fade-60 opacity-0 group-hover/bubble:opacity-40 hover:opacity-100! hover:text-foreground hover:bg-foreground/10 transition-opacity"
+            >
+              <Pencil size={12} strokeWidth={1.8} />
+            </button>
             {onPromote && (
               <button
                 type="button"
@@ -156,7 +169,7 @@ export function CommentBubble({
               </span>
             )}
           </div>
-          <div className="whitespace-pre-wrap wrap-break-word">{text}</div>
+          <Markdown text={text} />
         </div>
       </BubbleShell>
     </div>

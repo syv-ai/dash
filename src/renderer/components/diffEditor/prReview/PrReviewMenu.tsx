@@ -29,6 +29,7 @@ import {
 } from '../comments/CommentsMenu';
 import { PrThreadCard, providerName } from './PrThreadCard';
 import { SubmitReview } from './SubmitReview';
+import { Markdown } from '../../ui/Markdown';
 
 interface Props {
   review: PrReview;
@@ -97,7 +98,7 @@ function ConversationEntry({
           </IconButton>
         )}
       </div>
-      <div className="whitespace-pre-wrap wrap-break-word text-foreground">{c.body.trim()}</div>
+      <Markdown text={c.body.trim()} className="text-foreground" />
     </div>
   );
 }

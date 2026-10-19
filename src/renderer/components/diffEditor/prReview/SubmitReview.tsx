@@ -132,7 +132,7 @@ export function SubmitReview({
         onKeyDown={(e) => e.stopPropagation()}
         placeholder="Summary (optional)"
         rows={3}
-        className="w-full resize-none rounded-md border border-edge/10 bg-[hsl(var(--surface-1))] px-2 py-1.5 text-[12px] leading-relaxed placeholder:text-muted-fade-40 focus:outline-hidden"
+        className="w-full max-h-[40vh] resize-y rounded-md border border-edge/10 bg-[hsl(var(--surface-1))] px-2 py-1.5 text-[12px] leading-relaxed placeholder:text-muted-fade-40 focus:outline-hidden"
       />
       {error && <WriteError {...error} provider={review.provider} />}
       <div className="flex items-center justify-end gap-2">

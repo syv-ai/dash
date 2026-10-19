@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { GitPullRequestArrow, Loader2, Search, X } from 'lucide-react';
 import type { PullRequest } from '@shared/types';
+import { relevantPrs } from './data/relevantPrs';
 
 interface PrPickerProps {
   projectId: string;
@@ -13,13 +14,27 @@ interface PrPickerProps {
   onExit?: () => void;
 }
 
-/** The project's open PRs (GitHub or Azure DevOps), with a search input. */
+/** The open PRs (GitHub or Azure DevOps) from or into the checkout's branch,
+ *  with "Show all" for the project's others. A search looks through all of them. */
 export function PrPicker({ projectId, cwd, selected, onSelect, onExit }: PrPickerProps) {
   const [prs, setPrs] = useState<PullRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [opening, setOpening] = useState<number | null>(null);
+  const [branch, setBranch] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void window.electronAPI
+      .gitCurrentBranch(cwd)
+      .then((resp) => !cancelled && setBranch(resp.success ? (resp.data ?? null) : null))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [cwd]);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,16 +54,20 @@ export function PrPicker({ projectId, cwd, selected, onSelect, onExit }: PrPicke
     };
   }, [projectId, cwd]);
 
+  // Detached (no branch): nothing to match, so all of them.
+  const relevant = useMemo(() => (branch ? relevantPrs(prs, branch) : prs), [prs, branch]);
+  const hidden = prs.length - relevant.length;
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase().replace(/^#/, '');
-    if (!q) return prs;
+    if (!q) return showAll ? prs : relevant;
     return prs.filter(
       (p) =>
         String(p.number).startsWith(q) ||
         p.title.toLowerCase().includes(q) ||
         p.author.toLowerCase().includes(q),
     );
-  }, [prs, search]);
+  }, [prs, relevant, showAll, search]);
 
   // A number that isn't an open PR (a merged or closed one) can still be opened.
   const typedNumber = /^#?\d+$/.test(search.trim()) ? Number(search.trim().replace('#', '')) : null;
@@ -106,7 +125,11 @@ export function PrPicker({ projectId, cwd, selected, onSelect, onExit }: PrPicke
           </button>
         )}
         {!loading && !error && filtered.length === 0 && !offerTyped && (
-          <div className="px-3 py-2 text-[11px] text-muted-fade-40">No open pull requests</div>
+          <div className="px-3 py-2 text-[11px] text-muted-fade-40">
+            {hidden > 0 && !search.trim()
+              ? `No open pull requests from or into ${branch}`
+              : 'No open pull requests'}
+          </div>
         )}
         {filtered.map((p) => {
           const active = p.number === selected;
@@ -138,6 +161,17 @@ export function PrPicker({ projectId, cwd, selected, onSelect, onExit }: PrPicke
             </button>
           );
         })}
+        {!loading && !error && hidden > 0 && !search.trim() && (
+          <button
+            type="button"
+            onClick={() => setShowAll((v) => !v)}
+            className="w-full px-3 py-1.5 text-left text-[11px] text-muted-fade-70 hover:text-foreground transition-colors"
+          >
+            {showAll
+              ? `Only ${branch}'s pull requests`
+              : `Show all ${prs.length} open pull requests`}
+          </button>
+        )}
       </div>
     </div>
   );

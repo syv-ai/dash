@@ -26,7 +26,7 @@ export function DraftBubble({
 }: Props) {
   return (
     <BubbleShell shade={1} hasTail tailLeftPx={tailLeftPx}>
-      <div className="flex flex-col gap-1.5 h-[110px]">
+      <div className="flex flex-col gap-1.5">
         <CommentInputBar
           lineRange={range}
           initialText={initialText}

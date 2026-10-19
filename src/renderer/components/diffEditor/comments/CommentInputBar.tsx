@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 
 interface Props {
   lineRange: { start: number; end: number } | null;
@@ -20,6 +20,15 @@ export function CommentInputBar({
   submitLabel = 'Add',
 }: Props) {
   const [text, setText] = useState(initialText);
+  // Grows with its text (CSS caps it), so a long comment needn't scroll in a
+  // little box.
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [text]);
   const submit = () => {
     if (text.trim()) onSubmit(text.trim());
   };
@@ -34,6 +43,7 @@ export function CommentInputBar({
         {rangeLabel}
       </div>
       <textarea
+        ref={ref}
         autoFocus
         // Marker the surrounding <Modal>'s window-capture Esc handler
         // looks for — when focus is in here, Esc cancels the draft instead
@@ -55,7 +65,7 @@ export function CommentInputBar({
           }
         }}
         placeholder={placeholder}
-        className="flex-1 min-h-0 w-full text-[12.5px] leading-relaxed tracking-[-0.005em] bg-transparent px-0 py-0 resize-none placeholder:text-muted-fade-35 focus:outline-hidden"
+        className="min-h-[72px] max-h-[60vh] overflow-y-auto w-full text-[12.5px] leading-relaxed tracking-[-0.005em] bg-transparent px-0 py-0 resize-none placeholder:text-muted-fade-35 focus:outline-hidden"
       />
       <div className="flex items-center gap-2 shrink-0">
         <span className="text-[10.5px] text-muted-fade-65 font-mono">

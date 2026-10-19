@@ -419,6 +419,20 @@ export function EditorPane({
     onClose,
   });
 
+  // An edit keeps the kind it has; a new one in a PR view is a note until Review.
+  const editingKind = draftApi.editingId
+    ? liveComments.find((c) => c.id === draftApi.editingId)?.kind
+    : undefined;
+  const draftSubmitLabel = editingKind
+    ? isPrView
+      ? `Save ${editingKind}`
+      : 'Save'
+    : isPrView
+      ? inReview
+        ? 'Add comment'
+        : 'Add note'
+      : undefined;
+
   const getLiveRangeForCurrent = (commentId: string) => {
     const target = liveComments.find((c) => c.id === commentId);
     if (!target) return null;
@@ -679,7 +693,7 @@ export function EditorPane({
                   ? (id) => useCommentsStore.getState().setKind(id, 'comment')
                   : undefined
               }
-              draftSubmitLabel={isPrView ? (inReview ? 'Add comment' : 'Add note') : undefined}
+              draftSubmitLabel={draftSubmitLabel}
               pendingRange={dragging ? null : pendingRange}
               pendingText={draftApi.pendingText}
               editingId={draftApi.editingId}

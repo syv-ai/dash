@@ -249,7 +249,7 @@ export function useFileComments({
     setLiveComments(liveCommentsRef.current);
   }, [stored, filePath, scope, modifiedEditor, monaco]);
 
-  // ── Mirror text/sent/author edits from store ──
+  // ── Mirror text/sent/author/kind edits from store ──
   // Ranges stay with the decorations, which follow typing; the store's copy is
   // only snapshotted on file switch. A PR view's content is frozen, though, so
   // there the store's range is the truth: an agent that moves its draft moves
@@ -268,7 +268,8 @@ export function useFileComments({
         !moved &&
         fresh.text === live.text &&
         fresh.sent === live.sent &&
-        fresh.author === live.author
+        fresh.author === live.author &&
+        fresh.kind === live.kind
       )
         return live;
       changed = true;
@@ -292,6 +293,7 @@ export function useFileComments({
         text: fresh.text,
         sent: fresh.sent,
         author: fresh.author,
+        kind: fresh.kind,
         decorationId,
         startLine,
         endLine,
