@@ -24,6 +24,7 @@ import type { ServiceCapabilityDeps } from './services';
 import type { TaskCapabilityDeps } from './tasks';
 import type { ReviewCapabilityDeps } from './review';
 import { diffCommentsRepo } from '../../services/diffCommentsRepo';
+import { prReviewsInProgressRepo } from '../../services/prReviewsInProgressRepo';
 import { emitDiffCommentsChanged } from '../../services/diffCommentEvents';
 import { providerForRemote } from '@shared/urls';
 
@@ -107,6 +108,10 @@ export function reviewDeps(): ReviewCapabilityDeps {
     getDraft: (id) => diffCommentsRepo().get(id),
     saveAgentDraft: (draft) => diffCommentsRepo().upsertFromAgent(draft),
     deleteDraft: (id) => diffCommentsRepo().delete(id),
+    getSummary: (taskId, provider, number) =>
+      prReviewsInProgressRepo().getSummary(taskId, provider, number),
+    setSummary: (taskId, provider, number, body) =>
+      prReviewsInProgressRepo().setSummary(taskId, provider, number, { body, author: 'agent' }),
     changed: emitDiffCommentsChanged,
   };
 }

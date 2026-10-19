@@ -368,6 +368,20 @@ export function runMigrations(): void {
     );
   `);
 
+  // A task's draft summary for a PR: the review's PR-level comment, which
+  // Submit posts with the verdict. The person or the task's agent writes it.
+  rawDb.exec(`
+    CREATE TABLE IF NOT EXISTS pr_review_summaries (
+      task_id     TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      provider    TEXT NOT NULL,
+      number      INTEGER NOT NULL,
+      body        TEXT NOT NULL,
+      author      TEXT NOT NULL DEFAULT 'user',
+      updated_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (task_id, provider, number)
+    );
+  `);
+
   // Worktrees moved from `<parent>/worktrees/` to `<repo>/.claude/worktrees/`
   // in 0.16. When the launch dialog moves a task, its old path is kept here so
   // the Claude transcripts written under the old cwd (~/.claude/projects/<encoded

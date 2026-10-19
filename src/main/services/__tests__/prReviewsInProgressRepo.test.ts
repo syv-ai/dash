@@ -28,4 +28,16 @@ describe('prReviewsInProgressRepo', () => {
     repo.setInReview('t1', 'github', 4, false);
     expect(repo.isInReview('t1', 'github', 4)).toBe(false);
   });
+
+  it('keeps a draft summary per task and PR, and clears it when emptied', () => {
+    const repo = createPrReviewsInProgressRepo(db);
+    expect(repo.getSummary('t1', 'ado', 7)).toBeNull();
+    repo.setSummary('t1', 'ado', 7, { body: 'Looks good', author: 'agent' });
+    expect(repo.getSummary('t1', 'ado', 7)).toEqual({ body: 'Looks good', author: 'agent' });
+    repo.setSummary('t1', 'ado', 7, { body: 'Mine now', author: 'user' });
+    expect(repo.getSummary('t1', 'ado', 7)).toEqual({ body: 'Mine now', author: 'user' });
+    expect(repo.getSummary('t1', 'ado', 8)).toBeNull();
+    repo.setSummary('t1', 'ado', 7, { body: '  ', author: 'user' });
+    expect(repo.getSummary('t1', 'ado', 7)).toBeNull();
+  });
 });

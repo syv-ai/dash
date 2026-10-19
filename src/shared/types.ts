@@ -620,6 +620,12 @@ export interface PrReview {
   partial?: boolean;
 }
 
+/** A task's draft summary for a PR: the review's PR-level comment. */
+export interface PrReviewSummary {
+  body: string;
+  author: 'user' | 'agent';
+}
+
 /** What a submit sends: the verdict, its summary, and the task's drafts for the PR. */
 export interface PrSubmission {
   verdict: PrVerdict;

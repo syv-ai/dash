@@ -23,7 +23,7 @@ A task with Dash access can create, read, update and delete _draft_ comments in 
 | Submit model     | New comments and replies stay local drafts until Submit. Resolve and reactivate go out immediately.                                                                                                              |
 | Auth             | No new auth flow. A missing write scope fails the submit, keeps the drafts, and shows the exact fix.                                                                                                             |
 | Left side        | New comments only on the right (PR head) side in v1. Existing LEFT threads are shown and can be replied to.                                                                                                      |
-| Agent reach      | The agent lists all drafts but updates or deletes only drafts it wrote. A human edit makes a draft the human's.                                                                                                  |
+| Agent reach      | The agent lists, updates and deletes all of the task's drafts, the person's too (changed 2026-10-19; nothing reaches the PR before Submit). Whoever last rewrites a draft's text owns it.                        |
 | Agent target     | Explicit `{ provider?, number }`. The provider is inferred from the project's remote.                                                                                                                            |
 | PR picker        | The header's "Compare with branch…" becomes "Compare…", with Branches and Pull requests tabs.                                                                                                                    |
 | Review panel     | The PR view's corner menu grows into a "Review · n drafts" popover. It holds the Conversation, off-code threads and the Submit footer.                                                                           |
@@ -50,6 +50,8 @@ Storage: `diff_editor_comments.kind` (`'note' | 'comment'`, default `'note'`; th
 The corner widget is one popover (`PrReviewMenu`, built from `CommentsMenu`'s sections and file rows): your comments and your notes per file (navigate, send, promote, clear), unresolved threads, threads off the code, the conversation, and the Submit footer. The verdict is a `ui/Select` dropdown. Nothing in it scrolls sideways; long text wraps. The task's comments menu outside a PR view lists notes, PR notes included, but no PR comments.
 
 The file tree shows two badges per file in a PR view: your notes and comments (filled), and the PR's unresolved threads (outlined).
+
+The review's summary (the PR-level comment Submit posts with the verdict) is a stored draft too, in `pr_review_summaries` per task and PR, so it survives closing the editor. The person edits it in the Submit footer; the agent drafts it with `review_summary_set` and reads it with `review_summary_get`. A submit that all got through clears it.
 
 Where this section and the rest of the spec disagree, this section wins.
 
@@ -263,7 +265,7 @@ Main gets a small `diffCommentEvents` emitter (modelled on `taskEvents`) that br
 | ---------------------- | -------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `review.drafts_list`   | yes      | `{ taskId?, provider?, number }`                                                  | The target task's notes and comments for that PR: `{ id, path, startLine, endLine, side, replyTo, kind, body, author }`. |
 | `review.drafts_create` | no       | `{ taskId?, provider?, number, path, startLine, endLine?, body, kind, replyTo? }` | Inserts an `author: 'agent'` row of that `kind`. Validates `startLine ≤ endLine`.                                        |
-| `review.drafts_update` | no       | `{ taskId?, id, body?, startLine?, endLine?, kind? }`                             | 403 unless the row's `author` is `'agent'` and it belongs to the target task.                                            |
+| `review.drafts_update` | no       | `{ taskId?, id, body?, startLine?, endLine?, kind? }`                             | 404 unless the row belongs to the target task. Any author (changed 2026-10-19).                                          |
 | `review.drafts_delete` | no       | `{ taskId?, id }`                                                                 | Same rule as update.                                                                                                     |
 
 - All four use `target: { taskId }` and `defaultTargetToSelf: true`, and allow `orchestrator` and `task` callers. Scope stays in `scope.ts` (a task sees itself and its children). Handlers do no scope checks of their own.
@@ -302,7 +304,7 @@ Pure-node vitest, no jsdom.
 - **Drafts:** `diffCommentsIpc` row mapping for the new columns; prune skips `pr:*`.
 - **Capabilities:** `review.test.ts` on fakes, following `services.test.ts`:
   - default-to-self;
-  - updating a user draft gives 403;
+  - updating a user draft works, and makes it the agent's;
   - a child task is reachable and a sibling isn't;
   - `drafts_list` is in `readOnlyNames`.
 - **Renderer:** `commentScope` for `pr:<provider>:<n>`. No stored-view test: PR views aren't restored.
@@ -311,6 +313,6 @@ Pure-node vitest, no jsdom.
 
 1. Open a task in a GitHub repo with an open PR. Choose Compare → Pull requests → the PR. The diff matches GitHub's "Files changed". Resolved threads show as pills, unresolved ones open, and the Conversation lists general comments.
 2. Add a range comment and a reply. Resolve one thread, and check on GitHub that it's resolved at once. Submit with "Request changes". On GitHub: one review, the range comment, the reply in its thread, the verdict. The drafts disappear from Dash.
-3. From the task's agent: `review_drafts_create` on the PR. The bubble appears in the open editor, tagged "agent". `review_drafts_update` on a user draft is refused.
+3. From the task's agent: `review_drafts_create` on the PR. The bubble appears in the open editor, tagged "agent". `review_drafts_update` on a user draft rewrites it.
 4. Revoke the token's `repo` scope (or use a read-only PAT for ADO) and submit. You see the fix text, and the drafts are still there.
 5. Repeat steps 1–3 on an ADO PR, with the vote "Approve with suggestions".

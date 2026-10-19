@@ -304,6 +304,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('prReview:inReview', args),
   prReviewSetInReview: (args: { taskId: string; provider: string; number: number; on: boolean }) =>
     ipcRenderer.invoke('prReview:setInReview', args),
+  prReviewGetSummary: (args: { taskId: string; provider: string; number: number }) =>
+    ipcRenderer.invoke('prReview:getSummary', args),
+  prReviewSetSummary: (args: { taskId: string; provider: string; number: number; body: string }) =>
+    ipcRenderer.invoke('prReview:setSummary', args),
   onDiffCommentsChanged: (callback: (data: { taskId: string }) => void) => {
     const handler = (_event: unknown, data: { taskId: string }) => callback(data);
     ipcRenderer.on('diffComments:changed', handler);

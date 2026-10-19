@@ -16,6 +16,7 @@ const tasks = [
 let registry: Registry;
 let rows: Map<string, DiffComment>;
 let changed: string[];
+let summaries: Map<string, { body: string; author: 'user' | 'agent' }>;
 
 const row = (over: Partial<DiffComment> & { id: string }): DiffComment => ({
   taskId: 'me',
@@ -37,6 +38,7 @@ const row = (over: Partial<DiffComment> & { id: string }): DiffComment => ({
 beforeEach(() => {
   rows = new Map();
   changed = [];
+  summaries = new Map();
   const deps: ReviewCapabilityDeps = {
     providerFor: () => 'github',
     getTask: (id) => tasks.find((t) => t.id === id),
@@ -49,6 +51,13 @@ beforeEach(() => {
       return saved;
     }),
     deleteDraft: (id) => void rows.delete(id),
+    getSummary: (taskId, provider, number) =>
+      summaries.get(`${taskId}:${provider}:${number}`) ?? null,
+    setSummary: (taskId, provider, number, body) => {
+      const key = `${taskId}:${provider}:${number}`;
+      if (body.trim()) summaries.set(key, { body, author: 'agent' });
+      else summaries.delete(key);
+    },
     changed: (taskId) => void changed.push(taskId),
   };
   registry = createRegistry(fakeLookups([makeProject({ id: 'pA' })], tasks));
@@ -142,15 +151,12 @@ describe('review.drafts_update / drafts_delete', () => {
     expect(changed).toEqual(['me', 'me', 'me']);
   });
 
-  it("leaves the user's drafts alone", async () => {
+  it("changes and deletes the user's drafts too", async () => {
     rows.set('u1', row({ id: 'u1', author: 'user' }));
-    expect(
-      await status(registry.call(asTask('me'), 'review.drafts_update', { id: 'u1', body: 'mine' })),
-    ).toBe(403);
-    expect(await status(registry.call(asTask('me'), 'review.drafts_delete', { id: 'u1' }))).toBe(
-      403,
-    );
-    expect(rows.get('u1')!.text).toBe('x');
+    await registry.call(asTask('me'), 'review.drafts_update', { id: 'u1', body: 'reworded' });
+    expect(rows.get('u1')!.text).toBe('reworded');
+    await registry.call(asTask('me'), 'review.drafts_delete', { id: 'u1' });
+    expect(rows.has('u1')).toBe(false);
   });
 
   it("can't see another task's draft, or a non-PR comment", async () => {
@@ -177,5 +183,33 @@ describe('review.drafts_list', () => {
     expect(list.map((d) => d.id)).toEqual(['a1', 'a2', 'b']);
     expect(list[1]).toMatchObject({ replyTo: 'T1', body: 'x', author: 'agent', kind: 'comment' });
     expect(list[2]).toMatchObject({ kind: 'note' });
+  });
+});
+
+describe('review.summary_get / summary_set', () => {
+  it("drafts the review's PR-level summary, replaces it, and clears it", async () => {
+    expect(await registry.call(asTask('me'), 'review.summary_get', { number: 12 })).toBeNull();
+    expect(
+      await registry.call(asTask('me'), 'review.summary_set', { number: 12, body: 'Nice work' }),
+    ).toEqual({ body: 'Nice work', author: 'agent' });
+    expect(await registry.call(asTask('me'), 'review.summary_get', { number: 12 })).toEqual({
+      body: 'Nice work',
+      author: 'agent',
+    });
+    await registry.call(asTask('me'), 'review.summary_set', { number: 12, body: '' });
+    expect(await registry.call(asTask('me'), 'review.summary_get', { number: 12 })).toBeNull();
+    expect(changed).toEqual(['me', 'me']);
+  });
+
+  it("can't reach a sibling's review", async () => {
+    expect(
+      await status(
+        registry.call(asTask('me'), 'review.summary_set', {
+          taskId: 'sibling',
+          number: 12,
+          body: 'x',
+        }),
+      ),
+    ).toBe(404);
   });
 });

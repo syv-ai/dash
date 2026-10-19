@@ -106,6 +106,23 @@ describe('diffCommentsRepo', () => {
     expect(repo.upsertFromUser(input({ startLine: 4 })).kind).toBe('comment');
   });
 
+  it("makes the user's draft the agent's when the agent rewrites it, not when it moves it", () => {
+    repo.upsertFromUser(input());
+    const agentEdit = {
+      id: 'c1',
+      taskId: 't1',
+      filePath: 'src/a.ts',
+      startLine: 3,
+      endLine: 5,
+      text: 'hm',
+      viewScope: 'pr:github:4',
+      replyTo: null,
+      kind: 'note' as const,
+    };
+    expect(repo.upsertFromAgent({ ...agentEdit, startLine: 4 }).author).toBe('user');
+    expect(repo.upsertFromAgent({ ...agentEdit, text: 'better' }).author).toBe('agent');
+  });
+
   it("writes an agent's note or comment", () => {
     const draft = {
       id: 'a1',

@@ -156,3 +156,40 @@ describe('prReviewStore writes', () => {
     expect(usePrReviews.getState().inReview[reviewKey('t1', 'github', 5)]).toBe(true);
   });
 });
+
+describe('prReviewStore summaries', () => {
+  let api: ReturnType<typeof makeElectronApiMock>;
+  beforeEach(() => {
+    vi.useFakeTimers();
+    api = makeElectronApiMock();
+    installWindow(api);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    resetWindow();
+  });
+
+  it("loads the agent's summary, saves the person's edit once they stop typing", async () => {
+    api.prReviewGetSummary = vi.fn(() =>
+      Promise.resolve({ success: true, data: { body: 'From agent', author: 'agent' } }),
+    );
+    const { usePrReviews, reviewKey } = await freshStore();
+    const key = reviewKey('t1', 'ado', 7);
+    await usePrReviews.getState().loadSummary('t1', 'ado', 7);
+    expect(usePrReviews.getState().summaries[key]).toEqual({ body: 'From agent', author: 'agent' });
+    usePrReviews.getState().setSummary('t1', 'ado', 7, 'Mi');
+    usePrReviews.getState().setSummary('t1', 'ado', 7, 'Mine');
+    expect(usePrReviews.getState().summaries[key]).toEqual({ body: 'Mine', author: 'user' });
+    // A refetch mid-typing doesn't undo the edit.
+    await usePrReviews.getState().loadSummary('t1', 'ado', 7);
+    expect(usePrReviews.getState().summaries[key]!.body).toBe('Mine');
+    vi.advanceTimersByTime(500);
+    expect(api.prReviewSetSummary).toHaveBeenCalledTimes(1);
+    expect(api.prReviewSetSummary).toHaveBeenCalledWith({
+      taskId: 't1',
+      provider: 'ado',
+      number: 7,
+      body: 'Mine',
+    });
+  });
+});

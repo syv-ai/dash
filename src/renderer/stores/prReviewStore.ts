@@ -1,5 +1,11 @@
 import { create } from 'zustand';
-import type { PrProvider, PrReview, PrVerdict, PrWriteError } from '../../shared/types';
+import type {
+  PrProvider,
+  PrReview,
+  PrReviewSummary,
+  PrVerdict,
+  PrWriteError,
+} from '../../shared/types';
 
 /** The store key of a PR's review. */
 export const prKey = (provider: PrProvider, number: number): string => `${provider}:${number}`;
@@ -21,6 +27,12 @@ interface PrReviewState {
   loadInReview: (taskId: string, provider: PrProvider, number: number) => Promise<void>;
   /** Start (Review) or end a task's review of a PR. */
   setInReview: (taskId: string, provider: PrProvider, number: number, on: boolean) => void;
+  /** Per task and PR (`reviewKey`): the draft summary, the review's PR-level
+   *  comment. Null when there is none; absent until loaded. */
+  summaries: Record<string, PrReviewSummary | null>;
+  loadSummary: (taskId: string, provider: PrProvider, number: number) => Promise<void>;
+  /** The person's edit: shown at once, saved shortly after they stop typing. */
+  setSummary: (taskId: string, provider: PrProvider, number: number, body: string) => void;
   /** Fetch PR `number` of the project, with its commits fetched into `cwd`. On
    *  failure the last fetched review stays. */
   load: (projectId: string, cwd: string, number: number) => Promise<PrLoadResult>;
@@ -56,10 +68,41 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
 
   const markInReview = (key: string, on: boolean) =>
     set({ inReview: { ...get().inReview, [key]: on } });
+  const putSummary = (key: string, summary: PrReviewSummary | null) =>
+    set({ summaries: { ...get().summaries, [key]: summary } });
+  // Saves waiting for the person to stop typing, per review key.
+  const pendingSaves = new Map<string, ReturnType<typeof setTimeout>>();
 
   return {
     byPr: {},
     inReview: {},
+    summaries: {},
+
+    loadSummary: async (taskId, provider, number) => {
+      const key = reviewKey(taskId, provider, number);
+      try {
+        const resp = await window.electronAPI.prReviewGetSummary({ taskId, provider, number });
+        // An edit still being saved wins over what main had.
+        if (resp.success && !pendingSaves.has(key)) putSummary(key, resp.data ?? null);
+      } catch {
+        /* stays as it was */
+      }
+    },
+
+    setSummary: (taskId, provider, number, body) => {
+      const key = reviewKey(taskId, provider, number);
+      putSummary(key, { body, author: 'user' });
+      clearTimeout(pendingSaves.get(key));
+      pendingSaves.set(
+        key,
+        setTimeout(() => {
+          pendingSaves.delete(key);
+          void window.electronAPI
+            .prReviewSetSummary({ taskId, provider, number, body })
+            .catch(() => undefined);
+        }, 400),
+      );
+    },
 
     loadInReview: async (taskId, provider, number) => {
       try {
@@ -124,7 +167,13 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
           return { ok: false, error: ipcError(resp.error ?? 'unknown error') };
         const { postedDraftIds, error } = resp.data;
         // Main ends the review once everything got through.
-        if (!error) markInReview(reviewKey(taskId, review.provider, review.number), false);
+        if (!error) {
+          const key = reviewKey(taskId, review.provider, review.number);
+          markInReview(key, false);
+          clearTimeout(pendingSaves.get(key));
+          pendingSaves.delete(key);
+          putSummary(key, null);
+        }
         if (postedDraftIds.length > 0 || !error) await get().load(projectId, cwd, review.number);
         return error ? { ok: false, error, posted: postedDraftIds.length } : { ok: true };
       } catch (err) {
@@ -133,3 +182,15 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
     },
   };
 });
+
+// An agent's summary arrives behind the editor's back; main says the task's
+// review drafts changed, and each loaded summary of that task is refetched.
+if (typeof window !== 'undefined') {
+  window.electronAPI?.onDiffCommentsChanged?.(({ taskId }) => {
+    const { summaries, loadSummary } = usePrReviews.getState();
+    for (const key of Object.keys(summaries)) {
+      const [t, provider, number] = key.split(':');
+      if (t === taskId) void loadSummary(t, provider as PrProvider, Number(number));
+    }
+  });
+}

@@ -233,3 +233,24 @@ export const prReviewsInProgress = sqliteTable(
     pk: primaryKey({ columns: [table.taskId, table.provider, table.number] }),
   }),
 );
+
+// A task's draft summary for a PR (the review's PR-level comment), until Submit.
+export const prReviewSummaries = sqliteTable(
+  'pr_review_summaries',
+  {
+    taskId: text('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull(),
+    number: integer('number').notNull(),
+    body: text('body').notNull(),
+    /** 'user' | 'agent': who last wrote it. */
+    author: text('author').notNull().default('user'),
+    updatedAt: text('updated_at')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.taskId, table.provider, table.number] }),
+  }),
+);

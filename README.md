@@ -72,10 +72,12 @@ The orchestrator sees every project that isn't archived. Turning the switch off 
 | `services_output`      | The last lines of a service Dash started                                           | yes                 |
 | `review_drafts_list`   | A task's notes and draft review comments on a PR                                   | yes                 |
 | `review_drafts_create` | Write a note, or draft a review comment on a PR's lines or a reply to a thread     |                     |
-| `review_drafts_update` | Change a note or draft the agent wrote                                             |                     |
-| `review_drafts_delete` | Delete a note or draft the agent wrote                                             |                     |
+| `review_drafts_update` | Change a note or draft, the person's or the agent's                                |                     |
+| `review_drafts_delete` | Delete a note or draft, the person's or the agent's                                |                     |
+| `review_summary_get`   | A task's draft review summary for a PR (its PR-level comment)                      | yes                 |
+| `review_summary_set`   | Draft the review summary, posted with the verdict on Submit                        |                     |
 
-The `review_drafts_*` tools put notes and draft comments into the task's diff editor, on the PR view (Compare → Pull requests). A comment is for the PR's author; a note is for the developer and stays local (the person can promote it). Nothing is posted: the person reads the drafts, edits them and submits the review with a verdict. An agent can change or delete only drafts an agent wrote; once the person edits one, it's theirs.
+The `review_drafts_*` and `review_summary_*` tools put notes and draft comments into the task's diff editor, on the PR view (Compare → Pull requests). A comment is for the PR's author; a note is for the developer and stays local (the person can promote it). Nothing is posted: the person reads the drafts, edits them and submits the review with a verdict. An agent can change or delete any of the task's notes and drafts, the person's too; the person sees every change before submitting.
 
 Every task the tools return has two fields for messaging it: `messageAddress` (`uds:<socket>` while its session runs, otherwise `null`) and `messaging` (`direct`, or `needs-approval` for a task in `bypassPermissions`).
 

@@ -2,6 +2,7 @@ import type {
   IpcResponse,
   PrProvider,
   PrReview,
+  PrReviewSummary,
   PrVerdict,
   PullRequest,
   SubmitResult,
@@ -49,6 +50,19 @@ export interface PrReviewApi {
     provider: PrProvider;
     number: number;
     on: boolean;
+  }) => Promise<IpcResponse<void>>;
+  /** The task's draft summary for PR `number` (its PR-level comment), or null. */
+  prReviewGetSummary: (args: {
+    taskId: string;
+    provider: PrProvider;
+    number: number;
+  }) => Promise<IpcResponse<PrReviewSummary | null>>;
+  /** Save the person's draft summary; an empty one clears it. */
+  prReviewSetSummary: (args: {
+    taskId: string;
+    provider: PrProvider;
+    number: number;
+    body: string;
   }) => Promise<IpcResponse<void>>;
   /** Fires when a task's diff comments change outside the editor (agent drafts, a submit). */
   onDiffCommentsChanged: (cb: (data: { taskId: string }) => void) => () => void;

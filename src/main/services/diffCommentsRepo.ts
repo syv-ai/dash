@@ -80,7 +80,8 @@ export interface DiffCommentsRepo {
    *  becomes the user's only when its text changes (range snapshots and the
    *  sent flag keep an agent's draft the agent's). */
   upsertFromUser(input: DiffCommentInput): DiffComment;
-  /** A draft written or edited by an agent; it stays the agent's. */
+  /** A draft written or edited by an agent. Rewriting the person's text makes
+   *  it the agent's; moving it or changing its kind doesn't. */
   upsertFromAgent(draft: AgentDraft): DiffComment;
   delete(id: string): void;
   deleteByIds(ids: readonly string[]): void;
@@ -129,6 +130,8 @@ export function createDiffCommentsRepo(db: Database): DiffCommentsRepo {
         ON CONFLICT(id) DO UPDATE SET
           start_line = excluded.start_line,
           kind       = excluded.kind,
+          author     = CASE WHEN diff_editor_comments.text = excluded.text
+                            THEN diff_editor_comments.author ELSE 'agent' END,
           end_line   = excluded.end_line,
           text       = excluded.text,
           updated_at = excluded.updated_at`,

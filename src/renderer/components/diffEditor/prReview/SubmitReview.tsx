@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Check, Copy, Loader2 } from 'lucide-react';
+import { Bot, Check, Copy, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { PrReview, PrVerdict, PrWriteError } from '../../../../shared/types';
 import { Button } from '../../ui/Button';
 import { IconButton } from '../../ui/IconButton';
 import { Select } from '../../ui/Select';
-import { usePrReviews } from '../../../stores/prReviewStore';
+import { reviewKey, usePrReviews } from '../../../stores/prReviewStore';
 import { providerName } from './PrThreadCard';
 
 const VERDICT_LABELS: Record<PrVerdict, string> = {
@@ -96,7 +96,15 @@ export function SubmitReview({
   onClearNotes,
 }: Props) {
   const [verdict, setVerdict] = useState<PrVerdict>('comment');
-  const [body, setBody] = useState('');
+  // The summary is a stored draft (the agent may write it), so it lasts until Submit.
+  const key = reviewKey(taskId, review.provider, review.number);
+  const summary = usePrReviews((s) => s.summaries[key]);
+  const body = summary?.body ?? '';
+  const setBody = (text: string) =>
+    usePrReviews.getState().setSummary(taskId, review.provider, review.number, text);
+  useEffect(() => {
+    void usePrReviews.getState().loadSummary(taskId, review.provider, review.number);
+  }, [taskId, review.provider, review.number]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ error: PrWriteError; posted: number } | null>(null);
   const offered = review.verdicts.includes(verdict) ? verdict : 'comment';
@@ -108,7 +116,6 @@ export function SubmitReview({
     const r = await usePrReviews.getState().submit(projectId, cwd, taskId, review, offered, body);
     setBusy(false);
     if (r.ok) {
-      setBody('');
       toast.success('Review submitted');
     } else {
       setError({ error: r.error, posted: r.posted ?? 0 });
@@ -125,12 +132,18 @@ export function SubmitReview({
           className="py-1.5"
         />
       )}
+      {summary?.author === 'agent' && (
+        <span className="inline-flex items-center gap-1 text-[11px] text-muted-fade-70">
+          <Bot size={14} strokeWidth={1.8} />
+          Summary drafted by the agent
+        </span>
+      )}
       <textarea
         data-diff-comment-input="true"
         value={body}
         onChange={(e) => setBody(e.target.value)}
         onKeyDown={(e) => e.stopPropagation()}
-        placeholder="Summary (optional)"
+        placeholder="Summary: a comment on the whole PR (optional)"
         rows={3}
         className="w-full max-h-[40vh] resize-y rounded-md border border-edge/10 bg-[hsl(var(--surface-1))] px-2 py-1.5 text-[12px] leading-relaxed placeholder:text-muted-fade-40 focus:outline-hidden"
       />

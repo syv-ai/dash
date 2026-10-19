@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
-import type { DiffComment, PrProvider, Task } from '../../../shared/types';
+import type { DiffComment, PrProvider, PrReviewSummary, Task } from '../../../shared/types';
 import { prScope } from '../../../shared/prScope';
 import { ControlError, defineCapability, type Registry } from '../registry';
 import type { AgentDraft } from '../../services/diffCommentsRepo';
@@ -14,6 +14,8 @@ export interface ReviewCapabilityDeps {
   getDraft(id: string): DiffComment | undefined;
   saveAgentDraft(draft: AgentDraft): DiffComment;
   deleteDraft(id: string): void;
+  getSummary(taskId: string, provider: PrProvider, number: number): PrReviewSummary | null;
+  setSummary(taskId: string, provider: PrProvider, number: number, body: string): void;
   /** Tell an open diff editor the task's drafts changed. */
   changed(taskId: string): void;
 }
@@ -67,17 +69,12 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
     return { provider, scope: prScope(provider, number) };
   };
 
-  /** The target task's own agent-written draft, or a 403/404 saying why not. */
-  const ownAgentDraftOrThrow = (taskId: string, id: string): DiffComment => {
+  /** The target task's PR note or draft, the person's or an agent's, or a 404.
+   *  Nothing here reaches the PR, so the person still reviews every change. */
+  const draftOrThrow = (taskId: string, id: string): DiffComment => {
     const draft = deps.getDraft(id);
     if (!draft || draft.taskId !== taskId || !draft.viewScope.startsWith('pr:')) {
       throw new ControlError(404, 'draft not found');
-    }
-    if (draft.author !== 'agent') {
-      throw new ControlError(
-        403,
-        "only drafts written by an agent can be changed; this one is the user's",
-      );
     }
     return draft;
   };
@@ -151,7 +148,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
     defineCapability({
       name: 'review.drafts_update',
       summary:
-        "Change a note or draft review comment the agent wrote: its text, lines or kind. The person's own can't be changed.",
+        "Change a note or draft review comment, the person's or the agent's: its text, lines or kind.",
       input: z.object({
         taskId: TASK_ID_FIELD,
         id: z.string().describe('From review_drafts_list'),
@@ -166,7 +163,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
       defaultTargetToSelf: true,
       handler: async (_ctx, input) => {
         const taskId = input.taskId!;
-        const draft = ownAgentDraftOrThrow(taskId, input.id);
+        const draft = draftOrThrow(taskId, input.id);
         const startLine = input.startLine ?? draft.startLine;
         const endLine = input.endLine ?? Math.max(startLine, draft.endLine);
         if (endLine < startLine) throw new ControlError(400, 'endLine is before startLine');
@@ -190,7 +187,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
   registry.register(
     defineCapability({
       name: 'review.drafts_delete',
-      summary: "Delete a note or draft review comment the agent wrote. The person's own stay.",
+      summary: "Delete a note or draft review comment, the person's or the agent's.",
       input: z.object({
         taskId: TASK_ID_FIELD,
         id: z.string().describe('From review_drafts_list'),
@@ -201,10 +198,52 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
       defaultTargetToSelf: true,
       handler: async (_ctx, input) => {
         const taskId = input.taskId!;
-        ownAgentDraftOrThrow(taskId, input.id);
+        draftOrThrow(taskId, input.id);
         deps.deleteDraft(input.id);
         deps.changed(taskId);
         return { ok: true };
+      },
+    }),
+  );
+
+  registry.register(
+    defineCapability({
+      name: 'review.summary_get',
+      summary:
+        "The task's draft summary for a PR: the review's PR-level comment, posted with the verdict on Submit. Null when there is none.",
+      input: z.object({ taskId: TASK_ID_FIELD, number: NUMBER, provider: PROVIDER }),
+      callers: ['orchestrator', 'task'],
+      readOnly: true,
+      target: { taskId: 'taskId' },
+      defaultTargetToSelf: true,
+      handler: async (_ctx, input) => {
+        const { provider } = scopeFor(input.taskId!, input.number, input.provider);
+        return deps.getSummary(input.taskId!, provider, input.number);
+      },
+    }),
+  );
+
+  registry.register(
+    defineCapability({
+      name: 'review.summary_set',
+      summary:
+        "Draft the review's summary: the PR-level comment (not on any line) the person posts with the verdict on Submit. Replaces the current draft, the person's too; an empty body clears it. Nothing is posted.",
+      input: z.object({
+        taskId: TASK_ID_FIELD,
+        number: NUMBER,
+        provider: PROVIDER,
+        body: z.string().max(65_536).describe('The summary, in Markdown; empty clears it'),
+      }),
+      callers: ['orchestrator', 'task'],
+      readOnly: false,
+      target: { taskId: 'taskId' },
+      defaultTargetToSelf: true,
+      handler: async (_ctx, input) => {
+        const taskId = input.taskId!;
+        const { provider } = scopeFor(taskId, input.number, input.provider);
+        deps.setSummary(taskId, provider, input.number, input.body);
+        deps.changed(taskId);
+        return deps.getSummary(taskId, provider, input.number);
       },
     }),
   );

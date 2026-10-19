@@ -107,10 +107,45 @@ export function registerPrReviewIpc(): void {
     },
   );
 
+  ipcMain.handle(
+    'prReview:getSummary',
+    (_e, args: { taskId: string; provider: PrProvider; number: number }) => {
+      try {
+        parseArgs('prReview:getSummary', z.looseObject(reviewOf), args);
+        const summary = prReviewsInProgressRepo().getSummary(
+          args.taskId,
+          args.provider,
+          args.number,
+        );
+        return { success: true, data: summary };
+      } catch (err) {
+        return errorResponse(err);
+      }
+    },
+  );
+
+  /** The person's edit of the draft summary; an empty one clears it. */
+  ipcMain.handle(
+    'prReview:setSummary',
+    (_e, args: { taskId: string; provider: PrProvider; number: number; body: string }) => {
+      try {
+        parseArgs('prReview:setSummary', z.looseObject({ ...reviewOf, body: z.string() }), args);
+        prReviewsInProgressRepo().setSummary(args.taskId, args.provider, args.number, {
+          body: args.body,
+          author: 'user',
+        });
+        return { success: true };
+      } catch (err) {
+        return errorResponse(err);
+      }
+    },
+  );
+
   /**
    * Submit the task's drafts for the PR with a verdict. Main reads the drafts
    * itself, and deletes the ones that reached the PR; a submit that all got
-   * through ends the review, so what's written next is a note again. A write the provider
+   * through ends the review and clears its draft summary, so what's written
+   * next is a note again. A write the provider
    * refused still answers `success`, carrying the error, so the renderer can
    * show its fix.
    */
@@ -163,7 +198,9 @@ export function registerPrReviewIpc(): void {
           emitDiffCommentsChanged(args.taskId);
         }
         if (!result.error) {
-          prReviewsInProgressRepo().setInReview(args.taskId, provider, args.number, false);
+          const reviews = prReviewsInProgressRepo();
+          reviews.setInReview(args.taskId, provider, args.number, false);
+          reviews.setSummary(args.taskId, provider, args.number, { body: '', author: 'user' });
         }
         return { success: true, data: result };
       } catch (err) {
