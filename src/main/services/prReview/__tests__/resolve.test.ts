@@ -41,11 +41,11 @@ describe('prContextFor', () => {
     );
   });
 
-  it('refuses ADO until its adapter exists', () => {
+  it('passes an ADO remote its config and repository', () => {
     const remote = 'git@ssh.dev.azure.com:v3/org/Proj/repo';
-    expect(() => prContextFor('p1', '/wt', deps(remote, ado))).toThrow(
-      'Azure DevOps PRs are not supported yet',
-    );
+    const r = prContextFor('p1', '/wt', deps(remote, ado));
+    expect(r.provider).toBe('ado');
+    expect(r.ctx.ado).toEqual({ ...ado, repository: 'repo' });
   });
 
   it('refuses an unknown project', () => {

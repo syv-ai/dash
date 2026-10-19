@@ -98,6 +98,7 @@ describe('threadLocation', () => {
       'src/a.ts (outdated)',
     );
     expect(threadLocation(thread('T', [], { side: 'LEFT' }))).toBe('src/a.ts:12 (removed line)');
+    expect(threadLocation(thread('T', [], { line: null }))).toBe('src/a.ts (file)');
   });
 });
 

@@ -147,10 +147,10 @@ export function DiffEditor({
   // "3 comments" when the diff you're looking at has none of them. Already-sent
   // comments don't need attention, so they're excluded from the count.
   const currentScope = commentScope(view);
-  // ── The task's open GitHub PR and its review threads ────
+  // ── The task's open PR and its review threads ────
   const openPr = useGit((s) => {
     const pr = activeTaskId ? s.prByTask[activeTaskId]?.[0] : undefined;
-    return pr && pr.state === 'open' && pr.provider === 'github' ? pr : null;
+    return pr && pr.state === 'open' ? pr : null;
   });
   // The open view's PR review, or the task's own PR's when that was fetched.
   const viewReview = usePrReviews((s) =>

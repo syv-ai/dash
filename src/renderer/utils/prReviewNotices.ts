@@ -34,7 +34,7 @@ export function newReviewComments(
 
 /** "path:start-end", with why there is no usable line when there isn't. */
 export function threadLocation(t: PrReviewThread): string {
-  if (t.line === null) return `${t.path} (outdated)`;
+  if (t.line === null) return `${t.path} (${t.isOutdated ? 'outdated' : 'file'})`;
   const lines = t.startLine && t.startLine !== t.line ? `${t.startLine}-${t.line}` : `${t.line}`;
   return `${t.path}:${lines}${t.side === 'LEFT' ? ' (removed line)' : ''}`;
 }

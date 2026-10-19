@@ -1,6 +1,7 @@
 import type { AzureDevOpsConfig, PrProvider, Project } from '@shared/types';
 import { parseAdoRemote, providerForRemote } from '@shared/urls';
 import { githubProvider } from './github';
+import { adoProvider } from './ado';
 import type { PrContext, PrReviewProvider } from './types';
 
 /** Lookups the resolver needs; the IPC layer passes the app's (DatabaseService, ConnectionConfigService). */
@@ -9,7 +10,7 @@ export interface PrContextDeps {
   getAdoConfig(projectId: string): AzureDevOpsConfig | null;
 }
 
-const adapters: Partial<Record<PrProvider, PrReviewProvider>> = { github: githubProvider };
+const adapters: Record<PrProvider, PrReviewProvider> = { github: githubProvider, ado: adoProvider };
 
 /** The provider a project's PRs live on, its adapter, and the context to call it with. */
 export function prContextFor(
@@ -29,7 +30,5 @@ export function prContextFor(
     if (!repository) throw new Error('Could not determine repository from remote');
     ctx.ado = { ...config, repository };
   }
-  const adapter = adapters[provider];
-  if (!adapter) throw new Error('Azure DevOps PRs are not supported yet');
-  return { provider, adapter, ctx };
+  return { provider, adapter: adapters[provider], ctx };
 }

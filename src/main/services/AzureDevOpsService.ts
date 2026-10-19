@@ -15,68 +15,113 @@ import { ciFromAdo, relevantPrs } from './prRelevance';
 const TIMEOUT_MS = 15_000;
 const API_VERSION = '7.1';
 
+/** A failed Azure DevOps call, with the HTTP status when there was a response. */
+export class AdoRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message);
+    this.name = 'AdoRequestError';
+  }
+}
+
+function authHeader(pat: string): string {
+  return 'Basic ' + Buffer.from(':' + pat).toString('base64');
+}
+
+/**
+ * URL-encode the project name for use as a path segment. ADO project names can
+ * contain spaces and other characters that are invalid in a raw URL path; left
+ * unencoded they produce a malformed URL → 404, which the pickers surface as a
+ * misleading "No results found". Repository names are already encoded at their
+ * call sites; this does the same for the project segment. Normalizing first keeps
+ * a config saved in encoded form (`AI%20og%20DT`) from being encoded twice.
+ */
+export function adoProjectSegment(config: AzureDevOpsConfig): string {
+  return encodeURIComponent(normalizeAdoProject(config.project));
+}
+
+/**
+ * One Azure DevOps REST call. A plain function (no `this`), so it can be passed
+ * around as an injectable default. Bad auth answers 401 rather than a sign-in
+ * page (`X-TFS-FedAuthRedirect: Suppress`); failures throw AdoRequestError.
+ */
+export async function adoRequest(
+  config: AzureDevOpsConfig,
+  path: string,
+  options?: { method?: string; body?: unknown; contentType?: string; apiVersion?: string },
+): Promise<unknown> {
+  const baseUrl = config.organizationUrl.replace(/\/+$/, '');
+  const separator = path.includes('?') ? '&' : '?';
+  const url = `${baseUrl}/${path}${separator}api-version=${options?.apiVersion ?? API_VERSION}`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  const context = {
+    organizationUrl: baseUrl,
+    project: normalizeAdoProject(config.project),
+    pat: config.pat,
+  };
+
+  try {
+    let resp: Response;
+    try {
+      resp = await fetch(url, {
+        method: options?.method ?? 'GET',
+        headers: {
+          Authorization: authHeader(config.pat),
+          'Content-Type': options?.contentType ?? 'application/json',
+          'X-TFS-FedAuthRedirect': 'Suppress',
+        },
+        body: options?.body ? JSON.stringify(options.body) : undefined,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      throw new AdoRequestError(describeAdoFailure({ error }, context));
+    }
+
+    // 203 and HTML answers are ADO's sign-in page, not data; resp.ok alone lets them through.
+    const contentType = resp.headers.get('content-type');
+    if (!resp.ok || resp.status === 203 || /text\/html/i.test(contentType ?? '')) {
+      const body = await resp.text().catch(() => '');
+      throw new AdoRequestError(
+        describeAdoFailure({ status: resp.status, body, contentType }, context),
+        resp.status,
+      );
+    }
+
+    return await resp.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export class AzureDevOpsService {
-  private static authHeader(pat: string): string {
-    return 'Basic ' + Buffer.from(':' + pat).toString('base64');
-  }
-
-  /**
-   * URL-encode the project name for use as a path segment. ADO project names can
-   * contain spaces and other characters that are invalid in a raw URL path; left
-   * unencoded they produce a malformed URL → 404, which the pickers surface as a
-   * misleading "No results found". Repository names are already encoded at their
-   * call sites; this does the same for the project segment. Normalizing first keeps
-   * a config saved in encoded form (`AI%20og%20DT`) from being encoded twice.
-   */
   private static proj(config: AzureDevOpsConfig): string {
-    return encodeURIComponent(normalizeAdoProject(config.project));
+    return adoProjectSegment(config);
   }
 
-  private static async request(
+  private static request(
     config: AzureDevOpsConfig,
     path: string,
     options?: { method?: string; body?: unknown; contentType?: string; apiVersion?: string },
   ): Promise<unknown> {
-    const baseUrl = config.organizationUrl.replace(/\/+$/, '');
-    const separator = path.includes('?') ? '&' : '?';
-    const url = `${baseUrl}/${path}${separator}api-version=${options?.apiVersion ?? API_VERSION}`;
+    return adoRequest(config, path, options);
+  }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-    const context = {
-      organizationUrl: baseUrl,
-      project: normalizeAdoProject(config.project),
-      pat: config.pat,
-    };
-
-    try {
-      let resp: Response;
-      try {
-        resp = await fetch(url, {
-          method: options?.method ?? 'GET',
-          headers: {
-            Authorization: this.authHeader(config.pat),
-            'Content-Type': options?.contentType ?? 'application/json',
-          },
-          body: options?.body ? JSON.stringify(options.body) : undefined,
-          signal: controller.signal,
-        });
-      } catch (error) {
-        throw new Error(describeAdoFailure({ error }, context));
-      }
-
-      // 203 and HTML answers are ADO's sign-in page, not data; resp.ok alone lets them through.
-      const contentType = resp.headers.get('content-type');
-      if (!resp.ok || resp.status === 203 || /text\/html/i.test(contentType ?? '')) {
-        const body = await resp.text().catch(() => '');
-        throw new Error(describeAdoFailure({ status: resp.status, body, contentType }, context));
-      }
-
-      return await resp.json();
-    } finally {
-      clearTimeout(timeout);
+  /** The id of the identity the PAT belongs to (what a reviewer vote is cast as). */
+  static async getMyId(config: AzureDevOpsConfig): Promise<string> {
+    // connectionData only answers on the preview version; plain 7.1 is a 400.
+    const data = (await adoRequest(config, '_apis/connectionData', {
+      apiVersion: '7.1-preview',
+    })) as { authenticatedUser?: { id?: unknown } };
+    const id = data.authenticatedUser?.id;
+    if (typeof id !== 'string' || !id || /^0{8}-0{4}-0{4}-0{4}-0{12}$/.test(id)) {
+      throw new AdoRequestError('Azure DevOps did not say who the token belongs to', 401);
     }
+    return id;
   }
 
   /** Resolves when the config works; rejects with a message saying what to fix. */
