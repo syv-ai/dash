@@ -55,14 +55,28 @@ export function ciFromRollup(rollup: unknown): CiState | null {
 
 // Policy types that are CI: build validation and required external status.
 // Reviewer, comment and work-item policies say nothing about the checks.
+const BUILD_POLICY = '0609b952-1397-4640-95ec-e00a01b2c241';
 const ADO_CI_POLICY_TYPES = new Set([
-  '0609b952-1397-4640-95ec-e00a01b2c241', // Build
+  BUILD_POLICY,
   'cbdc66da-9728-4af8-aada-9a5a32e4a226', // Status
 ]);
 
 interface AdoPolicyEvaluation {
   status?: string; // queued | running | approved | rejected | notApplicable | broken
   configuration?: { type?: { id?: string } };
+  /** A build policy's last build; absent until one is queued. */
+  context?: { buildId?: number; isExpired?: boolean } | null;
+}
+
+/**
+ * A build policy is `queued` whenever it waits for a build, which isn't always
+ * one running: its last build may have expired (the target moved on; ADO counts
+ * that as a failed required check until someone re-queues), or none was ever
+ * queued (a manual build). Only a queued build that exists is pending.
+ */
+function queuedBuild(e: AdoPolicyEvaluation): 'failing' | 'pending' | null {
+  if (e.context?.isExpired) return 'failing';
+  return e.context?.buildId ? 'pending' : null;
 }
 
 interface AdoPrStatus {
@@ -81,7 +95,10 @@ export function ciFromAdo(evaluations: unknown, statuses: unknown): CiState | nu
   for (const e of (Array.isArray(evaluations) ? evaluations : []) as AdoPolicyEvaluation[]) {
     if (!ADO_CI_POLICY_TYPES.has(e.configuration?.type?.id ?? '')) continue;
     if (e.status === 'rejected' || e.status === 'broken') outcomes.push('failing');
-    else if (e.status === 'queued' || e.status === 'running') outcomes.push('pending');
+    else if (e.status === 'queued' && e.configuration?.type?.id === BUILD_POLICY) {
+      const outcome = queuedBuild(e);
+      if (outcome) outcomes.push(outcome);
+    } else if (e.status === 'queued' || e.status === 'running') outcomes.push('pending');
     else if (e.status === 'approved') outcomes.push('passing');
   }
   const latest = new Map<string, AdoPrStatus>();

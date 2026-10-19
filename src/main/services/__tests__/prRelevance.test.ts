@@ -107,8 +107,19 @@ describe('ciFromAdo', () => {
     expect(ciFromAdo([policy('running')], [st(1, 'error')])).toBe('failing');
   });
 
+  it("doesn't call a build running when it expired or was never queued", () => {
+    const build = (context: object | null) => ({ ...policy('queued'), context });
+    // Expired: the target moved on; ADO counts it a failed required check.
+    expect(ciFromAdo([build({ buildId: 9, isExpired: true })], [])).toBe('failing');
+    // Never queued: says nothing about the checks.
+    expect(ciFromAdo([build(null), policy('approved')], [])).toBe('passing');
+    expect(ciFromAdo([build(null)], [])).toBeNull();
+  });
+
   it('is pending while a check is queued or running, passing once all succeed', () => {
-    expect(ciFromAdo([policy('queued')], [])).toBe('pending');
+    const build = (context: object | null) => ({ ...policy('queued'), context });
+    expect(ciFromAdo([build({ buildId: 9 })], [])).toBe('pending');
+    expect(ciFromAdo([policy('queued', STATUS)], [])).toBe('pending');
     expect(ciFromAdo([policy('approved')], [st(1, 'pending')])).toBe('pending');
     expect(ciFromAdo([policy('approved'), policy('notApplicable')], [st(1, 'succeeded')])).toBe(
       'passing',
