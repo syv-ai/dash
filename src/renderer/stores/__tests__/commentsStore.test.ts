@@ -188,4 +188,19 @@ describe('commentsStore', () => {
       expect.objectContaining({ replyTo: 'T_1' }),
     );
   });
+
+  it("takes main's answer on who owns a draft after its text is edited", async () => {
+    api.diffCommentsList = vi.fn(() =>
+      Promise.resolve({ success: true, data: [{ ...cmt({ id: 'a' }), author: 'agent' }] }),
+    );
+    api.diffCommentsUpsert = vi.fn((c: unknown) =>
+      Promise.resolve({ success: true, data: { ...(c as DiffComment), author: 'user' } }),
+    );
+    const useCommentsStore = await freshStore();
+    await useCommentsStore.getState().loadForTask('t1');
+    useCommentsStore.getState().updateText('a', 'mine now');
+    await vi.waitFor(() =>
+      expect(useCommentsStore.getState().byFile['a.ts']![0]!.author).toBe('user'),
+    );
+  });
 });

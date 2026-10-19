@@ -52,24 +52,30 @@ The orchestrator sees every project that isn't archived. Turning the switch off 
 
 ### Tools
 
-| Tool              | What it does                                                                       | No prompt in a task |
-| ----------------- | ---------------------------------------------------------------------------------- | ------------------- |
-| `projects_list`   | List projects (orchestrator only)                                                  |                     |
-| `tasks_list`      | List tasks with their state: idle, working, waiting, error, stopped or needs-trust | yes                 |
-| `tasks_get`       | One task: name, branch, worktree path, state and what it waits for                 | yes                 |
-| `tasks_create`    | Create a task (new worktree by default) and start its session with a prompt        |                     |
-| `tasks_wait`      | Wait up to 110 s until a task is idle, waiting, not working, or changes state      | yes                 |
-| `tasks_output`    | The last lines of a task's terminal as plain text                                  | yes                 |
-| `tasks_wake`      | Make sure a task's session is running, so you can message it (see below)           |                     |
-| `tasks_open`      | Bring Dash to the front with the task open                                         |                     |
-| `tasks_archive`   | Archive a task (never the caller's own task)                                       |                     |
-| `tasks_restore`   | Restore an archived task                                                           |                     |
-| `tasks_delete`    | Delete a task, its worktree and optionally its branch (orchestrator only)          |                     |
-| `tasks_restart`   | Restart a task's session in the same conversation (never the caller's own task)    |                     |
-| `services_list`   | A task's services from `.dash/ports.json`, with ports and whether they're up       | yes                 |
-| `services_start`  | Start a service's run command in a Dash terminal tab                               |                     |
-| `services_stop`   | Stop a service                                                                     |                     |
-| `services_output` | The last lines of a service Dash started                                           | yes                 |
+| Tool                   | What it does                                                                       | No prompt in a task |
+| ---------------------- | ---------------------------------------------------------------------------------- | ------------------- |
+| `projects_list`        | List projects (orchestrator only)                                                  |                     |
+| `tasks_list`           | List tasks with their state: idle, working, waiting, error, stopped or needs-trust | yes                 |
+| `tasks_get`            | One task: name, branch, worktree path, state and what it waits for                 | yes                 |
+| `tasks_create`         | Create a task (new worktree by default) and start its session with a prompt        |                     |
+| `tasks_wait`           | Wait up to 110 s until a task is idle, waiting, not working, or changes state      | yes                 |
+| `tasks_output`         | The last lines of a task's terminal as plain text                                  | yes                 |
+| `tasks_wake`           | Make sure a task's session is running, so you can message it (see below)           |                     |
+| `tasks_open`           | Bring Dash to the front with the task open                                         |                     |
+| `tasks_archive`        | Archive a task (never the caller's own task)                                       |                     |
+| `tasks_restore`        | Restore an archived task                                                           |                     |
+| `tasks_delete`         | Delete a task, its worktree and optionally its branch (orchestrator only)          |                     |
+| `tasks_restart`        | Restart a task's session in the same conversation (never the caller's own task)    |                     |
+| `services_list`        | A task's services from `.dash/ports.json`, with ports and whether they're up       | yes                 |
+| `services_start`       | Start a service's run command in a Dash terminal tab                               |                     |
+| `services_stop`        | Stop a service                                                                     |                     |
+| `services_output`      | The last lines of a service Dash started                                           | yes                 |
+| `review_drafts_list`   | A task's draft review comments on a PR                                             | yes                 |
+| `review_drafts_create` | Draft a review comment on a PR's lines, or a reply to one of its threads           |                     |
+| `review_drafts_update` | Change a draft the agent wrote                                                     |                     |
+| `review_drafts_delete` | Delete a draft the agent wrote                                                     |                     |
+
+The `review_drafts_*` tools put draft comments into the task's diff editor, on the PR view (Compare → Pull requests). Nothing is posted: the person reads the drafts, edits them and submits the review with a verdict. An agent can change or delete only drafts an agent wrote; once the person edits one, it's theirs.
 
 Every task the tools return has two fields for messaging it: `messageAddress` (`uds:<socket>` while its session runs, otherwise `null`) and `messaging` (`direct`, or `needs-approval` for a task in `bypassPermissions`).
 

@@ -242,15 +242,19 @@ export function useFileComments({
     setLiveComments(liveCommentsRef.current);
   }, [stored, filePath, scope, modifiedEditor, monaco]);
 
-  // ── Mirror text/sent edits from store (not ranges) ──
+  // ── Mirror text/sent/author edits from store (not ranges) ──
   useEffect(() => {
     if (hydratedKeyRef.current !== `${filePath}::${scope}::loaded`) return;
     let changed = false;
     const next = liveCommentsRef.current.map((live) => {
       const fresh = stored.find((s) => s.id === live.id);
-      if (!fresh || (fresh.text === live.text && fresh.sent === live.sent)) return live;
+      if (
+        !fresh ||
+        (fresh.text === live.text && fresh.sent === live.sent && fresh.author === live.author)
+      )
+        return live;
       changed = true;
-      return { ...live, text: fresh.text, sent: fresh.sent };
+      return { ...live, text: fresh.text, sent: fresh.sent, author: fresh.author };
     });
     if (changed) setLiveComments(next);
   }, [stored, filePath, scope]);

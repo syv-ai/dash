@@ -1,4 +1,4 @@
-import { Undo2, X } from 'lucide-react';
+import { Bot, Undo2, X } from 'lucide-react';
 import type { Shade } from './types';
 import { BubbleShell } from './BubbleShell';
 
@@ -9,6 +9,8 @@ interface Props {
   text: string;
   /** Already pushed to the agent — the card dims to read as "done". */
   sent: boolean;
+  /** Drafted by a task's agent (a PR review draft); the person hasn't edited it yet. */
+  byAgent?: boolean;
   /** Origin tag (e.g. 'Working tree', 'Commit abc1234') shown when the open
    *  view isn't the plain working tree, so it's clear which diff this anchors
    *  to. Undefined → no tag. */
@@ -42,6 +44,7 @@ export function CommentBubble({
   meta,
   text,
   sent,
+  byAgent,
   scopeLabel,
   hasTail,
   isHighlighted,
@@ -108,6 +111,12 @@ export function CommentBubble({
             {scopeLabel && (
               <span className="rounded-[3px] bg-primary/12 px-[5px] py-[1px] text-[9px] font-medium text-primary/80">
                 {scopeLabel}
+              </span>
+            )}
+            {byAgent && (
+              <span className="inline-flex items-center gap-[3px] rounded-[3px] bg-foreground/10 px-[5px] py-[1px] text-[9px] font-medium uppercase tracking-[0.04em] text-muted-fade-75">
+                <Bot size={10} strokeWidth={1.8} />
+                Agent
               </span>
             )}
             {sent && (

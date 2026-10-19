@@ -95,8 +95,8 @@ function findById(byFile: Record<string, DiffComment[]>, id: string): DiffCommen
   }
   return undefined;
 }
-function persist(c: DiffComment, patch: Partial<DiffComment> = {}): void {
-  void window.electronAPI.diffCommentsUpsert({
+function persist(c: DiffComment, patch: Partial<DiffComment> = {}) {
+  return window.electronAPI.diffCommentsUpsert({
     id: c.id,
     taskId: c.taskId,
     filePath: c.filePath,
@@ -162,7 +162,7 @@ export const useCommentsStore = create<CommentsStore>((set, get) => ({
       updatedAt: now,
     };
     set((s) => ({ byFile: upsertInto(s.byFile, comment) }));
-    persist(comment);
+    void persist(comment);
     return comment;
   },
 
@@ -172,7 +172,15 @@ export const useCommentsStore = create<CommentsStore>((set, get) => ({
     if (!existing) return;
     const next: DiffComment = { ...existing, text, updatedAt: new Date().toISOString() };
     set((s) => ({ byFile: upsertInto(s.byFile, next) }));
-    persist(next);
+    // Main decides who owns a draft once its text changes (an agent's draft
+    // becomes the user's); take its answer.
+    void persist(next)?.then((resp) => {
+      const author = resp?.success ? resp.data?.author : undefined;
+      const now = findById(get().byFile, id);
+      if (author && now && now.author !== author) {
+        set((s) => ({ byFile: upsertInto(s.byFile, { ...now, author }) }));
+      }
+    });
   },
 
   remove: (id) => {
@@ -187,7 +195,7 @@ export const useCommentsStore = create<CommentsStore>((set, get) => ({
     set((s) => ({ byFile: mapAll(s.byFile, (c) => (idSet.has(c.id) ? { ...c, sent: true } : c)) }));
     for (const id of ids) {
       const existing = findById(get().byFile, id);
-      if (existing) persist(existing, { sent: true });
+      if (existing) void persist(existing, { sent: true });
     }
   },
 
@@ -195,7 +203,7 @@ export const useCommentsStore = create<CommentsStore>((set, get) => ({
     if (!get().taskId) return;
     set((s) => ({ byFile: mapAll(s.byFile, (c) => (c.id === id ? { ...c, sent: false } : c)) }));
     const existing = findById(get().byFile, id);
-    if (existing) persist(existing, { sent: false });
+    if (existing) void persist(existing, { sent: false });
   },
 
   clearSent: (scope) => {
@@ -226,7 +234,7 @@ export const useCommentsStore = create<CommentsStore>((set, get) => ({
     });
     for (const snap of snapshots) {
       const existing = findById(get().byFile, snap.id);
-      if (existing) persist(existing, { startLine: snap.startLine, endLine: snap.endLine });
+      if (existing) void persist(existing, { startLine: snap.startLine, endLine: snap.endLine });
     }
   },
 

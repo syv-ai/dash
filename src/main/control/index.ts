@@ -10,7 +10,8 @@ import { noteTaskContact } from './shimContacts';
 import { registerProjectCapabilities } from './capabilities/projects';
 import { registerTaskCapabilities } from './capabilities/tasks';
 import { registerServiceCapabilities } from './capabilities/services';
-import { projectDeps, serviceDeps, taskDeps } from './capabilities/appDeps';
+import { registerReviewCapabilities } from './capabilities/review';
+import { projectDeps, reviewDeps, serviceDeps, taskDeps } from './capabilities/appDeps';
 import type { ControlInfo } from '../../shared/types';
 
 /**
@@ -37,6 +38,7 @@ function registerCapabilities(): void {
   registerProjectCapabilities(registry, projectDeps());
   registerTaskCapabilities(registry, taskDeps());
   registerServiceCapabilities(registry, serviceDeps());
+  registerReviewCapabilities(registry, reviewDeps());
   setReadOnlyCapabilities(registry.readOnlyNames());
 }
 

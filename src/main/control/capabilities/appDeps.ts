@@ -22,6 +22,10 @@ import { lastTaskContact } from '../shimContacts';
 import type { ProjectCapabilityDeps } from './projects';
 import type { ServiceCapabilityDeps } from './services';
 import type { TaskCapabilityDeps } from './tasks';
+import type { ReviewCapabilityDeps } from './review';
+import { diffCommentsRepo } from '../../services/diffCommentsRepo';
+import { emitDiffCommentsChanged } from '../../services/diffCommentEvents';
+import { providerForRemote } from '@shared/urls';
 
 /**
  * The capabilities' real dependencies: the app's services. Kept apart from the
@@ -89,5 +93,21 @@ export function serviceDeps(): ServiceCapabilityDeps {
     // The same runner the drawer uses, so a service started here shows there.
     runner: getServiceRunner(),
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  };
+}
+
+export function reviewDeps(): ReviewCapabilityDeps {
+  return {
+    providerFor: (projectId) =>
+      providerForRemote(
+        DatabaseService.getProjects().find((p) => p.id === projectId)?.gitRemote ?? null,
+      ),
+    getTask: (id) => DatabaseService.getTask(id),
+    listPrDrafts: (taskId, provider, number) =>
+      diffCommentsRepo().listPrDrafts(taskId, provider, number),
+    getDraft: (id) => diffCommentsRepo().get(id),
+    saveAgentDraft: (draft) => diffCommentsRepo().upsertFromAgent(draft),
+    deleteDraft: (id) => diffCommentsRepo().delete(id),
+    changed: emitDiffCommentsChanged,
   };
 }

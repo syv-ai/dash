@@ -61,6 +61,7 @@ export function BubbleStack({
             }
             text={c.text}
             sent={c.sent}
+            byAgent={c.author === 'agent'}
             scopeLabel={scopeLabel}
             hasTail={isLast}
             isHighlighted={hoveredId === c.id}
