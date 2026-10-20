@@ -10,7 +10,8 @@ import { useEditorViewData } from './data/useEditorViewData';
 import { pickFirstChangedFile } from './data/viewData';
 import { readStoredView, writeStoredFile, writeStoredView } from './data/viewPersistence';
 import { useCommentsStore } from '../../stores/commentsStore';
-import { prKey, reviewKey, usePrReviews } from '../../stores/prReviewStore';
+import { prKey, usePrReviews } from '../../stores/prReviewStore';
+import { useTaskReview } from './prReview/useTaskReview';
 import { unresolvedThreads } from '../../utils/prReviewNotices';
 import { toast } from 'sonner';
 import type { FileBadges, PrEntry } from './EditorSidebar';
@@ -208,27 +209,17 @@ export function DiffEditor({
     };
   }, [view, viewReview, projectId, cwd]);
 
-  const ownInReview = usePrReviews((s) =>
-    openPr && activeTaskId
-      ? s.inReview[reviewKey(activeTaskId, openPr.provider, openPr.number)] === true
-      : false,
-  );
-  useEffect(() => {
-    if (!openPr || !activeTaskId) return;
-    void usePrReviews.getState().loadInReview(activeTaskId, openPr.provider, openPr.number);
-  }, [openPr, activeTaskId]);
+  const ownTaskReview = useTaskReview(activeTaskId, openPr);
   const prEntry: PrEntry | null = openPr
     ? {
         number: openPr.number,
         title: openPr.title,
         body: ownReview?.body ?? null,
         threads: ownReview ? unresolvedThreads(ownReview).length : null,
-        inReview: ownInReview,
+        inReview: ownTaskReview.inReview,
         onOpen: () => void openPrView(openPr.number),
         onReview: () => {
-          if (activeTaskId) {
-            usePrReviews.getState().setInReview(activeTaskId, openPr.provider, openPr.number, true);
-          }
+          ownTaskReview.setInReview(true);
           void openPrView(openPr.number);
         },
         onPeek: () => {

@@ -34,6 +34,8 @@ import { Markdown } from '../../ui/Markdown';
 interface Props {
   review: PrReview;
   draftScope: string | null;
+  /** The task is reviewing the PR (replies wait for it). */
+  inReview: boolean;
   /** Where submits go; null without a task (the panel is then read-only). */
   submitCtx: { projectId: string; cwd: string; taskId: string } | null;
   currentFilePath: string;
@@ -112,6 +114,7 @@ function ConversationEntry({
 export function PrReviewMenu({
   review,
   draftScope,
+  inReview,
   submitCtx,
   currentFilePath,
   getLiveRangeForCurrent,
@@ -343,6 +346,7 @@ export function PrReviewMenu({
                     thread={t}
                     provider={review.provider}
                     draftScope={draftScope}
+                    inReview={inReview}
                     showLocation
                     onSend={onSend}
                     onSetResolved={onSetResolved}

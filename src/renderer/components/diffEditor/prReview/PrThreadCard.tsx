@@ -18,7 +18,6 @@ import { IconButton } from '../../ui/IconButton';
 import { useCommentsStore } from '../../../stores/commentsStore';
 import { threadLocation } from '../../../utils/prReviewNotices';
 import { CommentInputBar } from '../comments/CommentInputBar';
-import { useInReview } from './useInReview';
 import { Markdown } from '../../ui/Markdown';
 
 interface Props {
@@ -26,6 +25,8 @@ interface Props {
   provider: PrProvider;
   /** The PR's draft scope, or null when there's no task to own drafts. */
   draftScope: string | null;
+  /** The task is reviewing the PR. A reply is a PR comment, so it waits for Review. */
+  inReview: boolean;
   /** Show the file and line above the comments (for threads listed off the code). */
   showLocation?: boolean;
   onSend: (thread: PrReviewThread) => void;
@@ -99,14 +100,13 @@ export function PrThreadCard({
   thread,
   provider,
   draftScope,
+  inReview,
   showLocation,
   onSend,
   onSetResolved,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [replying, setReplying] = useState(false);
-  // A reply is a PR comment, so it waits for Review.
-  const inReview = useInReview(draftScope);
   const drafts = useCommentsStore(
     useShallow((s) =>
       // By thread, across files: a reply's own path doesn't matter (an agent

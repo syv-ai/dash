@@ -24,13 +24,16 @@ interface PrReviewState {
   /** Per task and PR (`reviewKey`): whether the task is reviewing it, so what's
    *  written in its view is a comment, not a note. Absent until loaded. */
   inReview: Record<string, boolean>;
-  loadInReview: (taskId: string, provider: PrProvider, number: number) => Promise<void>;
-  /** Start (Review) or end a task's review of a PR. */
-  setInReview: (taskId: string, provider: PrProvider, number: number, on: boolean) => void;
   /** Per task and PR (`reviewKey`): the draft summary, the review's PR-level
    *  comment. Null when there is none; absent until loaded. */
   summaries: Record<string, PrReviewSummary | null>;
-  loadSummary: (taskId: string, provider: PrProvider, number: number) => Promise<void>;
+  /** Fetch a task's review of a PR: whether it's in review, and its summary.
+   *  Components read it through `useTaskReview`, which calls this. */
+  loadReview: (taskId: string, provider: PrProvider, number: number) => Promise<void>;
+  /** Refetch each loaded summary of the task, after an agent changed it. */
+  refreshSummaries: (taskId: string) => Promise<void>;
+  /** Start (Review) or end a task's review of a PR. */
+  setInReview: (taskId: string, provider: PrProvider, number: number, on: boolean) => void;
   /** The person's edit: shown at once, saved shortly after they stop typing. */
   setSummary: (taskId: string, provider: PrProvider, number: number, body: string) => void;
   /** Fetch PR `number` of the project, with its commits fetched into `cwd`. On
@@ -73,20 +76,43 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
   // Saves waiting for the person to stop typing, per review key.
   const pendingSaves = new Map<string, ReturnType<typeof setTimeout>>();
 
+  const loadInReview = async (taskId: string, provider: PrProvider, number: number) => {
+    try {
+      const resp = await window.electronAPI.prReviewInReview({ taskId, provider, number });
+      if (resp.success) markInReview(reviewKey(taskId, provider, number), !!resp.data);
+    } catch {
+      /* stays unknown: writing makes notes */
+    }
+  };
+  const loadSummary = async (taskId: string, provider: PrProvider, number: number) => {
+    const key = reviewKey(taskId, provider, number);
+    try {
+      const resp = await window.electronAPI.prReviewGetSummary({ taskId, provider, number });
+      // An edit still being saved wins over what main had.
+      if (resp.success && !pendingSaves.has(key)) putSummary(key, resp.data ?? null);
+    } catch {
+      /* stays as it was */
+    }
+  };
+
   return {
     byPr: {},
     inReview: {},
     summaries: {},
 
-    loadSummary: async (taskId, provider, number) => {
-      const key = reviewKey(taskId, provider, number);
-      try {
-        const resp = await window.electronAPI.prReviewGetSummary({ taskId, provider, number });
-        // An edit still being saved wins over what main had.
-        if (resp.success && !pendingSaves.has(key)) putSummary(key, resp.data ?? null);
-      } catch {
-        /* stays as it was */
-      }
+    loadReview: async (taskId, provider, number) => {
+      await Promise.all([
+        loadInReview(taskId, provider, number),
+        loadSummary(taskId, provider, number),
+      ]);
+    },
+
+    refreshSummaries: async (taskId) => {
+      const loads = Object.keys(get().summaries).flatMap((key) => {
+        const [t, provider, number] = key.split(':');
+        return t === taskId ? [loadSummary(t, provider as PrProvider, Number(number))] : [];
+      });
+      await Promise.all(loads);
     },
 
     setSummary: (taskId, provider, number, body) => {
@@ -102,15 +128,6 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
             .catch(() => undefined);
         }, 400),
       );
-    },
-
-    loadInReview: async (taskId, provider, number) => {
-      try {
-        const resp = await window.electronAPI.prReviewInReview({ taskId, provider, number });
-        if (resp.success) markInReview(reviewKey(taskId, provider, number), !!resp.data);
-      } catch {
-        /* stays unknown: writing makes notes */
-      }
     },
 
     setInReview: (taskId, provider, number, on) => {
@@ -187,10 +204,6 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
 // review drafts changed, and each loaded summary of that task is refetched.
 if (typeof window !== 'undefined') {
   window.electronAPI?.onDiffCommentsChanged?.(({ taskId }) => {
-    const { summaries, loadSummary } = usePrReviews.getState();
-    for (const key of Object.keys(summaries)) {
-      const [t, provider, number] = key.split(':');
-      if (t === taskId) void loadSummary(t, provider as PrProvider, Number(number));
-    }
+    void usePrReviews.getState().refreshSummaries(taskId);
   });
 }

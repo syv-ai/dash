@@ -15,7 +15,7 @@ import type { PrReviewThread } from '../../../shared/types';
 import { PrThreadOverlay } from './prReview/PrThreadOverlay';
 import { PrReviewMenu, isInlineThread } from './prReview/PrReviewMenu';
 import { ReviewButton } from './prReview/ReviewButton';
-import { useInReview } from './prReview/useInReview';
+import { useTaskReview } from './prReview/useTaskReview';
 import { useGutterSelection } from './comments/useGutterSelection';
 import { useFileComments } from './comments/useFileComments';
 import {
@@ -154,11 +154,7 @@ export function EditorPane({
   const bubbleScopeLabel = view.kind === 'working' || isPrView ? undefined : scopeLabel(scope);
   // Reviewing the PR (Review clicked, not yet submitted): what's written is a
   // PR comment; otherwise a note.
-  const inReview = useInReview(isPrView && !commentsDisabled ? scope : null);
-  useEffect(() => {
-    if (view.kind !== 'pr' || !activeTaskId) return;
-    void usePrReviews.getState().loadInReview(activeTaskId, view.provider, view.number);
-  }, [view, activeTaskId]);
+  const { inReview, setInReview } = useTaskReview(activeTaskId, view.kind === 'pr' ? view : null);
   // Comment count for the open view — surfaced in the header's "Showing …" pill.
   const scopeCommentCount = useMemo(() => {
     let n = 0;
@@ -575,16 +571,13 @@ export function EditorPane({
                   <ReviewButton
                     inReview={inReview}
                     asked={prReview.viewerIsRequestedReviewer}
-                    onToggle={() =>
-                      usePrReviews
-                        .getState()
-                        .setInReview(activeTaskId, prReview.provider, prReview.number, !inReview)
-                    }
+                    onToggle={() => setInReview(!inReview)}
                   />
                 )}
                 <PrReviewMenu
                   review={prReview}
                   draftScope={draftScope}
+                  inReview={inReview}
                   currentFilePath={filePath}
                   getLiveRangeForCurrent={getLiveRangeForCurrent}
                   onNavigate={onNavigateToComment}
@@ -670,6 +663,7 @@ export function EditorPane({
                 threads={inlineThreads}
                 provider={view.kind === 'pr' ? view.provider : 'github'}
                 draftScope={draftScope}
+                inReview={inReview}
                 onSetResolved={(t, r) => void setThreadResolved(t, r)}
                 modifiedEditor={modifiedEditor}
                 area={editorAreaEl}

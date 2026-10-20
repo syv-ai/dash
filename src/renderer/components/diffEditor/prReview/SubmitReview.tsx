@@ -5,7 +5,8 @@ import type { PrReview, PrVerdict, PrWriteError } from '../../../../shared/types
 import { Button } from '../../ui/Button';
 import { IconButton } from '../../ui/IconButton';
 import { Select } from '../../ui/Select';
-import { reviewKey, usePrReviews } from '../../../stores/prReviewStore';
+import { usePrReviews } from '../../../stores/prReviewStore';
+import { useTaskReview } from './useTaskReview';
 import { providerName } from './PrThreadCard';
 
 const VERDICT_LABELS: Record<PrVerdict, string> = {
@@ -97,14 +98,8 @@ export function SubmitReview({
 }: Props) {
   const [verdict, setVerdict] = useState<PrVerdict>('comment');
   // The summary is a stored draft (the agent may write it), so it lasts until Submit.
-  const key = reviewKey(taskId, review.provider, review.number);
-  const summary = usePrReviews((s) => s.summaries[key]);
+  const { summary, setSummary: setBody } = useTaskReview(taskId, review);
   const body = summary?.body ?? '';
-  const setBody = (text: string) =>
-    usePrReviews.getState().setSummary(taskId, review.provider, review.number, text);
-  useEffect(() => {
-    void usePrReviews.getState().loadSummary(taskId, review.provider, review.number);
-  }, [taskId, review.provider, review.number]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ error: PrWriteError; posted: number } | null>(null);
   const offered = review.verdicts.includes(verdict) ? verdict : 'comment';

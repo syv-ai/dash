@@ -143,7 +143,7 @@ describe('prReviewStore writes', () => {
     api.prReviewLoad = vi.fn(() => Promise.resolve({ success: true, data: review(4) }));
     const { usePrReviews, reviewKey } = await freshStore();
     const key = reviewKey('t1', 'github', 4);
-    await usePrReviews.getState().loadInReview('t1', 'github', 4);
+    await usePrReviews.getState().loadReview('t1', 'github', 4);
     expect(usePrReviews.getState().inReview[key]).toBe(true);
     usePrReviews.getState().setInReview('t1', 'github', 5, true);
     expect(api.prReviewSetInReview).toHaveBeenCalledWith({
@@ -176,13 +176,14 @@ describe('prReviewStore summaries', () => {
     );
     const { usePrReviews, reviewKey } = await freshStore();
     const key = reviewKey('t1', 'ado', 7);
-    await usePrReviews.getState().loadSummary('t1', 'ado', 7);
+    await usePrReviews.getState().loadReview('t1', 'ado', 7);
     expect(usePrReviews.getState().summaries[key]).toEqual({ body: 'From agent', author: 'agent' });
     usePrReviews.getState().setSummary('t1', 'ado', 7, 'Mi');
     usePrReviews.getState().setSummary('t1', 'ado', 7, 'Mine');
     expect(usePrReviews.getState().summaries[key]).toEqual({ body: 'Mine', author: 'user' });
     // A refetch mid-typing doesn't undo the edit.
-    await usePrReviews.getState().loadSummary('t1', 'ado', 7);
+    await usePrReviews.getState().refreshSummaries('t1');
+    expect(api.prReviewGetSummary).toHaveBeenCalledTimes(2);
     expect(usePrReviews.getState().summaries[key]!.body).toBe('Mine');
     vi.advanceTimersByTime(500);
     expect(api.prReviewSetSummary).toHaveBeenCalledTimes(1);
