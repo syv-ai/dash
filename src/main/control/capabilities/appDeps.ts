@@ -18,7 +18,6 @@ import { WorkspacePortsRuntime } from '../../services/WorkspacePortsRuntime';
 import { portLivenessService } from '../../services/PortLivenessService';
 import { getServiceRunner } from '../../ipc/servicesIpc';
 import { ControlError } from '../registry';
-import { lastTaskContact } from '../shimContacts';
 import type { ProjectCapabilityDeps } from './projects';
 import type { ServiceCapabilityDeps } from './services';
 import type { TaskCapabilityDeps } from './tasks';
@@ -52,7 +51,6 @@ export function taskDeps(): TaskCapabilityDeps {
     getActivity: () => activityMonitor.getAll(),
     getUntrustedRoot,
     getLiveSessions: () => readLiveSessions(),
-    lastShimContact: lastTaskContact,
     onActivityChange: (listener) => {
       activityEvents.on('change', listener);
       return () => activityEvents.off('change', listener);

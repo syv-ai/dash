@@ -47,8 +47,6 @@ export interface TaskCapabilityDeps {
   getUntrustedRoot(taskId: string): string | undefined;
   /** Claude Code's running sessions by job id (claudeSessionRegistry). */
   getLiveSessions(): ReadonlyMap<string, LiveSession>;
-  /** Epoch ms the task's dash shim last reached the control server. */
-  lastShimContact(taskId: string): number | undefined;
   /** Subscribe to activity changes; returns the unsubscribe. */
   onActivityChange(listener: () => void): () => void;
   taskDefaults(projectPath: string): WorkspaceTaskDefaults | undefined;
@@ -161,7 +159,7 @@ const OUTPUT_COLS = 200;
 const OUTPUT_ROWS = 50;
 /** How often tasks.wake re-reads the session registry while it waits. */
 const WAKE_POLL_MS = 500;
-/** tasks.wait and tasks.wake: under the MCP client's two-minute call timeout. */
+/** tasks.wait and tasks.wake: under Claude Code's two-minute default Bash timeout. */
 const timeoutSec = z.number().min(0).max(110).default(60);
 
 type WaitUntil = 'idle' | 'waiting' | 'not-working' | 'change';
@@ -270,7 +268,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         dashAccess: z
           .boolean()
           .optional()
-          .describe("Give the new task's agent these Dash tools (default: the project's setting)"),
+          .describe("Let the new task's agent use Dash too (default: the project's setting)"),
       }),
       callers: ['orchestrator', 'task'],
       cli: { args: ['name'], stdin: 'prompt' },
@@ -433,7 +431,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     defineCapability({
       name: 'tasks.wake',
       summary:
-        "Make sure a task's Claude Code session is running so it can take messages: returns at once if it is, otherwise starts it (with no message) and returns once it is up and, with Dash access, its dash tools are connected, for up to timeoutSec (max 110; timedOut: true when the time ran out, call again). Then message the task with your own SendMessage to the task's messageAddress; it answers the same way. A task whose messaging is needs-approval runs with permission prompts off, so your message waits until a person delivers it in Dash. A stopped task's old address fails (ENOENT): wake it again. Refused while the task needs the trust prompt or is archived. A task cannot wake itself.",
+        "Make sure a task's Claude Code session is running so it can take messages: returns at once if it is, otherwise starts it (with no message) and returns once it is up, for up to timeoutSec (max 110; timedOut: true when the time ran out, call again). Then message the task with your own SendMessage to the task's messageAddress; it answers the same way. A task whose messaging is needs-approval runs with permission prompts off, so your message waits until a person delivers it in Dash. A stopped task's old address fails (ENOENT): wake it again. Refused while the task needs the trust prompt or is archived. A task cannot wake itself.",
       input: z.object({ taskId: z.string(), timeoutSec }),
       callers: ['orchestrator', 'task'],
       cli: { args: ['taskId'] },
@@ -445,20 +443,15 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         assertNotArchived(task);
         const current = await freshView(task);
         if (current.state === 'needs-trust') throw new ControlError(409, current.detail!);
-        // Already running: a start would be a no-op, and its shim connected long ago.
+        // Already running: a start would be a no-op.
         if (current.messageAddress) return { task: current, timedOut: false };
 
         const startedAt = Date.now();
-        // No message: a resume with one starts the turn before its MCP servers
-        // connect, so the task's dash tools read as gone for that turn.
+        // No message: the caller's own SendMessage is the task's next turn.
         const started = await deps.startSession(task.id);
         if ('needsTrust' in started) throw new ControlError(409, view(task).detail!);
-        const ready = (): boolean => {
-          const session = deps.getLiveSessions().get(started.jobId);
-          if (!session?.messagingSocketPath) return false;
-          // The shim lists tools as soon as Claude Code connects it.
-          return !task.dashAccess || (deps.lastShimContact(task.id) ?? 0) >= startedAt;
-        };
+        const ready = (): boolean =>
+          !!deps.getLiveSessions().get(started.jobId)?.messagingSocketPath;
         const deadline = startedAt + input.timeoutSec * 1000;
         while (!ready()) {
           if (Date.now() >= deadline) return { task: view(taskOrThrow(task.id)), timedOut: true };

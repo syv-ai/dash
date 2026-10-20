@@ -14,7 +14,7 @@ import { supervisorService, DispatchError } from './SupervisorService';
 import { buildSessionSettings, parseUntrustedRoot } from './supervisorSession';
 import { isWorkspaceTrusted } from '../utils/claudePaths';
 import { DatabaseService } from './DatabaseService';
-import { dashAllowTools, mcpConfigForDispatch } from '../control/mcpConfig';
+import { dashSessionAccess } from '../control/taskAccess';
 import { syncDashSkill } from '../control/dashSkill';
 import { writeTaskSettings } from './taskSettings';
 import { writeHookSettings, setCommitAttributionValue } from './ptyHookSettings';
@@ -294,22 +294,24 @@ async function ensureTaskSession(opts: {
   wakeStopped?: boolean;
 }): Promise<string> {
   // Before any respawn or dispatch: the job reads it on each. Without it the
-  // session still runs, just without its env and allow rules.
+  // session still runs, just without its env, allow rules and dashctl.
   let settingsPath: string | undefined;
+  const dash = dashSessionAccess({ id: opts.id, dashAccess: opts.dashAccess });
   try {
     settingsPath = writeTaskSettings(
       opts.id,
       buildSessionSettings({
         ultracode: isUltracode(),
-        allowTools: dashAllowTools(opts.dashAccess),
-        env: buildSessionEnv(opts.cwd),
+        allowTools: dash?.allow,
+        env: { ...buildSessionEnv(opts.cwd), ...dash?.env },
+        sessionStart: dash?.sessionStart,
       }),
     );
   } catch (err) {
     console.error(`[ptyManager] settings file for task ${opts.id} failed:`, err);
   }
-  // The skill that explains the dash tools, in the checkout while access is on.
-  await syncDashSkill(opts.cwd, opts.dashAccess).catch((err) =>
+  // The skill that explains dashctl, in the checkout while access is on.
+  await syncDashSkill(opts.cwd, opts.dashAccess, dash?.dashctl ?? null).catch((err) =>
     console.warn(`[ptyManager] dash skill for task ${opts.id} failed:`, err),
   );
   let resumeSessionId = opts.sessionId;
@@ -342,9 +344,6 @@ async function ensureTaskSession(opts: {
     resumeSessionId = findLatestSessionId(opts.cwd, opts.previousPath);
   }
   const prompt = consumeInitialPrompt(opts.id);
-  // The one place a task's `--mcp-config` is decided. Only a dispatch reads
-  // it; a reused job keeps the access it was started with.
-  const mcpConfigPath = mcpConfigForDispatch({ id: opts.id, dashAccess: opts.dashAccess });
   let dispatched;
   try {
     dispatched = await supervisorService.dispatch({
@@ -354,7 +353,6 @@ async function ensureTaskSession(opts: {
       model: opts.model,
       prompt,
       resumeSessionId,
-      mcpConfigPath,
       settingsPath,
       env: opts.env,
     });

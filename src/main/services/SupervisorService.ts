@@ -33,8 +33,6 @@ export interface DispatchOptions {
   model?: TaskModel;
   prompt?: string;
   resumeSessionId?: string | null;
-  /** Per-task `--mcp-config` file; see buildDispatchArgs for its position. */
-  mcpConfigPath?: string;
   /** The task's settings file (taskSettings.ts) → `--settings`. */
   settingsPath?: string;
   env: Record<string, string>;
@@ -110,7 +108,6 @@ class SupervisorServiceImpl extends EventEmitter {
       model: opts.model,
       settingsPath: opts.settingsPath,
       resumeSessionId: opts.resumeSessionId,
-      mcpConfigPath: opts.mcpConfigPath,
       prompt: opts.prompt,
     });
     let output: string;

@@ -53,7 +53,7 @@ export function registerTaskIpc(): void {
   });
 
   // Only the flag: the renderer restarts a running session afterwards, and the
-  // next dispatch adds or drops the task's --mcp-config.
+  // session start writes or drops its dashctl access (taskAccess.ts).
   ipcMain.handle('task:setDashAccess', (_event, input: SetTaskDashAccessInput) => {
     try {
       parseArgs(

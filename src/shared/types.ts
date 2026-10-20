@@ -91,7 +91,7 @@ export interface Task {
   /** Set when Dash or the supervisor stopped the session (archive, idle stop). */
   sessionStoppedAt: string | null;
   archivedAt: string | null;
-  /** Whether the task's session gets the Dash MCP tools (control API). */
+  /** Whether the task's session can reach Dash with dashctl (control API). */
   dashAccess: boolean;
   /** The task that created this one through the control API; null when a
    *  person created it. Fixed at creation. */
@@ -142,14 +142,14 @@ export type CreateTaskInput = CreateTaskOptions & {
   parentTaskId?: string | null;
 };
 
-/** `task:setDashAccess`: turn a task's Dash access on or off (applies at its next dispatch). */
+/** `task:setDashAccess`: turn a task's Dash access on or off (applies at its next session start). */
 export type SetTaskDashAccessInput = { taskId: string; enabled: boolean };
 
 /** What `app:getControlInfo` reports for the Settings orchestrator row. */
 export type ControlInfo = {
-  /** The `dash-mcp` launcher a `claude mcp add` command points at. */
-  launcherPath: string;
-  /** False on win32: the launcher is a shell script, so the control API never starts. */
+  /** `dashctl`, the command line other agents reach Dash with. */
+  dashctlPath: string;
+  /** False on win32: dashctl is a shell script, so the control API never starts. */
   supported: boolean;
 };
 

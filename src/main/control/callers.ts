@@ -1,7 +1,7 @@
 /**
  * Who is calling the control API, and the `X-Dash-Caller` header format for
- * it. Pure (no electron, no path aliases): the bundled `dash-mcp` shim
- * imports it too.
+ * it: `dashctl` sends the header, a task's from its `DASH_CALLER`. Pure (no
+ * electron, no path aliases).
  */
 export type Caller = { kind: 'orchestrator' } | { kind: 'task'; taskId: string };
 

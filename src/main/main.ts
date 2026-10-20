@@ -118,7 +118,7 @@ void app.whenReady().then(async () => {
   });
   await hookServer.start();
 
-  // Control API for agents (the dash-mcp shim). Never blocks boot.
+  // Control API for agents (dashctl). Never blocks boot.
   try {
     const { startControl } = await import('./control');
     await startControl();

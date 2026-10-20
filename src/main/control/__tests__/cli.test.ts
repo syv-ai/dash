@@ -13,7 +13,7 @@ import { commandLine, findProject, resolveArgv, resultText, usageText } from '..
 import { ControlServer } from '../server';
 import { initTokens, setOrchestratorFile } from '../tokens';
 import { controlPaths } from '../paths';
-import { dashctlScript } from '../launcher';
+import { dashctlScript } from '../dashctl';
 import { fakeLookups, makeProject, makeTask } from './fixtures';
 
 const projects = [

@@ -19,7 +19,6 @@ let tasks: Task[];
 let activity: Record<string, ActivityInfo>;
 let untrusted: Record<string, string>;
 let sessions: Map<string, LiveSession>;
-let contacts: Record<string, number>;
 let listeners: Array<() => void>;
 /** The fakes, typed loosely so each test can swap an implementation. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -49,7 +48,6 @@ beforeEach(() => {
   activity = {};
   untrusted = {};
   sessions = new Map();
-  contacts = {};
   listeners = [];
   deps = {
     getProjects: vi.fn(() => projects),
@@ -58,7 +56,6 @@ beforeEach(() => {
     getActivity: vi.fn(() => activity),
     getUntrustedRoot: vi.fn((id: string) => untrusted[id]),
     getLiveSessions: vi.fn(() => sessions),
-    lastShimContact: vi.fn((id: string) => contacts[id]),
     onActivityChange: vi.fn((l: () => void) => {
       listeners.push(l);
       return () => {
@@ -539,23 +536,6 @@ describe('tasks.wake', () => {
       timedOut: false,
       task: { messageAddress: 'uds:/tmp/cc-socks/7.sock' },
     });
-  });
-
-  it('with Dash access, also waits for its dash shim to connect after the start', async () => {
-    vi.useFakeTimers();
-    starts(true);
-    contacts.me = Date.now(); // the previous session's shim
-    await vi.advanceTimersByTimeAsync(10);
-    let done = false;
-    const pending = registry.call(orch, 'tasks.wake', { taskId: 'me' }).then((r) => {
-      done = true;
-      return r;
-    });
-    await vi.advanceTimersByTimeAsync(3_000);
-    expect(done).toBe(false);
-    contacts.me = Date.now();
-    await vi.advanceTimersByTimeAsync(1_000);
-    await expect(pending).resolves.toMatchObject({ timedOut: false });
   });
 
   it('times out with timedOut: true and the current view', async () => {

@@ -3,7 +3,7 @@ import { execFileSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { DASH_SKILL, DASH_SKILL_DIR, syncDashSkill } from '../dashSkill';
+import { DASH_SKILL_DIR, dashSkill, syncDashSkill } from '../dashSkill';
 
 let repo: string;
 const skill = () => path.join(repo, DASH_SKILL_DIR, 'SKILL.md');
@@ -18,7 +18,7 @@ afterEach(() => fs.rmSync(repo, { recursive: true, force: true }));
 describe('syncDashSkill', () => {
   it('writes the skill with Dash access on, kept out of git status', async () => {
     await syncDashSkill(repo, true);
-    expect(fs.readFileSync(skill(), 'utf8')).toBe(DASH_SKILL);
+    expect(fs.readFileSync(skill(), 'utf8')).toBe(dashSkill(null));
     expect(git('status', '--porcelain')).toBe('');
     // Again: the exclude line isn't added twice.
     await syncDashSkill(repo, true);
@@ -28,9 +28,9 @@ describe('syncDashSkill', () => {
 
   it('refreshes an older copy Dash wrote, and removes it when access is off', async () => {
     await syncDashSkill(repo, true);
-    fs.writeFileSync(skill(), DASH_SKILL.replace('Reviewing a PR', 'Old'));
+    fs.writeFileSync(skill(), dashSkill(null).replace('Reviewing a PR', 'Old'));
     await syncDashSkill(repo, true);
-    expect(fs.readFileSync(skill(), 'utf8')).toBe(DASH_SKILL);
+    expect(fs.readFileSync(skill(), 'utf8')).toBe(dashSkill(null));
     await syncDashSkill(repo, false);
     expect(fs.existsSync(path.join(repo, DASH_SKILL_DIR))).toBe(false);
   });
@@ -42,6 +42,12 @@ describe('syncDashSkill', () => {
     expect(fs.readFileSync(skill(), 'utf8')).toBe('# ours');
     await syncDashSkill(repo, false);
     expect(fs.readFileSync(skill(), 'utf8')).toBe('# ours');
+  });
+
+  it("names dashctl's own path, for a session whose PATH lacks it", async () => {
+    await syncDashSkill(repo, true, '/data/control/bin/dashctl');
+    expect(fs.readFileSync(skill(), 'utf8')).toContain('it is at `/data/control/bin/dashctl`');
+    expect(dashSkill(null)).not.toContain('it is at');
   });
 
   it('does nothing with access off and no skill', async () => {

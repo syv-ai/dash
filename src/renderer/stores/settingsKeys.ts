@@ -31,7 +31,7 @@ export interface SettingsState {
    *  running under Claude Code's supervisor and resume on the next attach. */
   stopSessionsOnQuit: boolean;
   /** Let an orchestrator outside Dash (e.g. a Holi agent) use the control API
-   *  through the dash MCP server. Off by default. */
+   *  through dashctl. Off by default. */
   orchestratorAccess: boolean;
   notificationSound: NotificationSound;
   terminalTheme: string;

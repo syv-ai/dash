@@ -29,8 +29,6 @@ export interface DispatchArgsOptions {
   settingsPath?: string;
   /** Claude session UUID to continue (migrated or re-dispatched task). */
   resumeSessionId?: string | null;
-  /** Per-task `--mcp-config` file (tasks with Dash access). */
-  mcpConfigPath?: string;
   /** Optional first prompt, always the last positional, after `--`. */
   prompt?: string;
 }
@@ -40,6 +38,7 @@ export interface SessionSettings {
   ultracode?: true;
   permissions?: { allow: string[] };
   env?: Record<string, string>;
+  hooks?: { SessionStart: { matcher: string; hooks: { type: 'command'; command: string }[] }[] };
 }
 
 /**
@@ -50,28 +49,28 @@ export interface SessionSettings {
  */
 export function buildSessionSettings(opts: {
   ultracode?: boolean;
-  /** `permissions.allow` rules (the read-only Dash tools). */
+  /** `permissions.allow` rules (the read-only dashctl commands). */
   allowTools?: string[];
   env?: Record<string, string>;
+  /** Commands for every SessionStart (startup, resume, clear, compact). */
+  sessionStart?: { type: 'command'; command: string }[];
 }): SessionSettings {
   const settings: SessionSettings = {};
   if (opts.ultracode) settings.ultracode = true;
   if (opts.allowTools?.length) settings.permissions = { allow: opts.allowTools };
   if (opts.env && Object.keys(opts.env).length > 0) settings.env = opts.env;
+  if (opts.sessionStart?.length) {
+    settings.hooks = { SessionStart: [{ matcher: '', hooks: opts.sessionStart }] };
+  }
   return settings;
 }
 
 export function buildDispatchArgs(opts: DispatchArgsOptions): string[] {
-  // Rule: no variadic flag (`--mcp-config`, `--allowedTools`, …) may come
-  // directly before the prompt, or the CLI reads the prompt as one more value
-  // and the job starts with none. `--mcp-config` therefore goes right after
-  // `--bg`, and `--name` closes it. The prompt itself follows `--`, so one
-  // starting with "-" (a markdown bullet) is not parsed as an option.
-  const args: string[] = ['--bg'];
-  if (opts.mcpConfigPath) {
-    args.push('--mcp-config', opts.mcpConfigPath);
-  }
-  args.push('--name', opts.name);
+  // Rule: no variadic flag (`--allowedTools`, …) may come directly before the
+  // prompt, or the CLI reads the prompt as one more value and the job starts
+  // with none. The prompt itself follows `--`, so one starting with "-" (a
+  // markdown bullet) is not parsed as an option.
+  const args: string[] = ['--bg', '--name', opts.name];
   // Always explicit: without a flag the user's own `defaultMode` applies,
   // which can be bypassPermissions behind a task Dash shows as Default.
   if (opts.permissionMode === 'bypassPermissions') {

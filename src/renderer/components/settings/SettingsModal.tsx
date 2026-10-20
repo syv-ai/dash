@@ -552,9 +552,9 @@ function ThresholdInputInline({
   );
 }
 
-/** Settings → Claude Code → Behavior: the orchestrator switch and, when on, the
- *  `claude mcp add` command that connects a session outside Dash. Hidden where
- *  the control API doesn't run (win32). */
+/** Settings → Claude Code → Behavior: the orchestrator switch and, when on,
+ *  where `dashctl` is, for a session outside Dash to run. Hidden where the
+ *  control API doesn't run (win32). */
 function OrchestratorAccessRow() {
   const enabled = useSettings((s) => s.orchestratorAccess);
   const onChange = useSettings((s) => s.setOrchestratorAccess);
@@ -568,7 +568,7 @@ function OrchestratorAccessRow() {
   }, [copied]);
 
   if (!info?.supported) return null;
-  const command = `claude mcp add dash -- ${shellQuote(info.launcherPath)}`;
+  const command = shellQuote(info.dashctlPath);
 
   return (
     <SettingsRow
@@ -576,15 +576,16 @@ function OrchestratorAccessRow() {
       align={enabled ? 'start' : 'center'}
       description={
         <>
-          Lets a Claude Code session outside Dash (for example in Holi) create and drive tasks
-          through the dash MCP server.
+          Lets a Claude Code session outside Dash create and drive tasks with{' '}
+          <code className="font-mono text-[11px]">dashctl</code>. Holi&rsquo;s Dash plugin finds it
+          by itself; elsewhere, run it by this path.
           {enabled && (
             <div className="mt-2 flex items-center gap-1 rounded-md border border-border/60 bg-background pl-2.5 pr-1 py-1">
               <code className="flex-1 min-w-0 truncate font-mono text-[11px] text-fg-fade-80 select-all">
                 {command}
               </code>
               <IconButton
-                title={copied ? 'Copied' : 'Copy command'}
+                title={copied ? 'Copied' : 'Copy path'}
                 size="sm"
                 className={copied ? 'text-[hsl(var(--git-added))]' : ''}
                 onClick={() => {

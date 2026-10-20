@@ -410,7 +410,7 @@ export function runMigrations(): void {
     /* already exists */
   }
 
-  // Control API: dash_access opts a task's session into the Dash MCP tools;
+  // Control API: dash_access lets a task's session reach Dash (now via dashctl);
   // parent_task_id records the task that created it through the API (null for
   // tasks a person created).
   try {

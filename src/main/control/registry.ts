@@ -22,11 +22,11 @@ export interface CapabilityContext {
 }
 
 export interface Capability<I extends z.ZodType> {
-  /** 'tasks.create' → MCP tool 'tasks_create' (naming.ts) */
+  /** 'tasks.create' → `dashctl tasks create` (cli.ts) */
   name: string;
-  /** One line; becomes the tool description. */
+  /** What it does; its first sentence is its line in `dashctl`'s usage. */
   summary: string;
-  /** No side effects: an in-task agent may call it without a permission prompt (mcpConfig.ts). */
+  /** No side effects: an in-task agent may call it without a permission prompt (taskAccess.ts). */
   readOnly: boolean;
   input: I;
   callers: CallerKind[];

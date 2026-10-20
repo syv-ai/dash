@@ -83,14 +83,17 @@ vi.mock('../taskSettings', () => ({
   },
 }));
 
-const mcp = vi.hoisted(() => ({
-  forDispatch: vi.fn((task: { id: string; dashAccess: boolean }) =>
-    task.dashAccess ? `/u/control/mcp-config/${task.id}.json` : undefined,
-  ),
-}));
-vi.mock('../../control/mcpConfig', () => ({
-  mcpConfigForDispatch: mcp.forDispatch,
-  dashAllowTools: (dashAccess: boolean) => (dashAccess ? ['mcp__dash__tasks_get'] : undefined),
+const hook = { type: 'command' as const, command: 'export PATH' };
+vi.mock('../../control/taskAccess', () => ({
+  dashSessionAccess: (task: { id: string; dashAccess: boolean }) =>
+    task.dashAccess
+      ? {
+          env: { DASH_CALLER: `task:${task.id}`, DASH_TOKEN: 'tok' },
+          allow: ['Bash(dashctl tasks get:*)'],
+          sessionStart: [hook],
+          dashctl: '/u/control/bin/dashctl',
+        }
+      : null,
 }));
 
 const trust = vi.hoisted(() => ({ trusted: false }));
@@ -236,27 +239,29 @@ describe('startTaskSession', () => {
     expect(activityMonitor.getAll()['t1']?.state).toBe('idle');
   });
 
-  it('passes an mcp-config for a task with Dash access, read from the row at dispatch', async () => {
-    seed({ dashAccess: false });
-    await startTaskSession('t1');
-    expect(sup.dispatch.mock.calls[0]![0].mcpConfigPath).toBeUndefined();
-    expect(mcp.forDispatch).toHaveBeenLastCalledWith({ id: 't1', dashAccess: false });
-
-    // Toggled on in the DB, then restarted (the job is gone): the next dispatch sees it.
-    tasks.set('t1', { ...tasks.get('t1')!, dashAccess: true, jobId: null });
-    await startTaskSession('t1');
-    expect(sup.dispatch).toHaveBeenLastCalledWith(
-      expect.objectContaining({ mcpConfigPath: '/u/control/mcp-config/t1.json' }),
-    );
-  });
-
-  it("dispatches with the task's settings file: its env, and the allow list with Dash access", async () => {
+  it("dispatches with the task's settings file: its env, and dashctl with Dash access", async () => {
     seed({ dashAccess: true });
     await startTaskSession('t1');
     expect(settingsWrites).toEqual([
-      ['t1', { permissions: { allow: ['mcp__dash__tasks_get'] }, env: { WEB_PORT: '3001' } }],
+      [
+        't1',
+        {
+          permissions: { allow: ['Bash(dashctl tasks get:*)'] },
+          env: { WEB_PORT: '3001', DASH_CALLER: 'task:t1', DASH_TOKEN: 'tok' },
+          hooks: { SessionStart: [{ matcher: '', hooks: [hook] }] },
+        },
+      ],
     ]);
     expect(sup.dispatch.mock.calls[0]![0].settingsPath).toBe('/u/task-settings/t1.json');
+  });
+
+  it('reads Dash access from the row at each start, so a restart after a toggle sees it', async () => {
+    seed({ dashAccess: false });
+    await startTaskSession('t1');
+    expect(settingsWrites[0]![1]).toEqual({ env: { WEB_PORT: '3001' } });
+    tasks.set('t1', { ...tasks.get('t1')!, dashAccess: true, jobId: null });
+    await startTaskSession('t1');
+    expect(settingsWrites[1]![1]).toMatchObject({ env: { DASH_CALLER: 'task:t1' } });
   });
 
   it('rewrites the settings file before waking a stopped job, which re-reads it', async () => {
@@ -268,13 +273,6 @@ describe('startTaskSession', () => {
     await startTaskSession('t1');
     expect(sup.respawn).toHaveBeenCalledWith('job-live');
     expect(settingsWrites[0]![1]).toEqual({ env: { WEB_PORT: '3001' } });
-  });
-
-  it('does not touch the mcp-config when reusing a live job', async () => {
-    seed({ jobId: 'job-live', dashAccess: true });
-    sup.find.mockResolvedValueOnce({ cwd: '/wt/fix-login', sessionId: 'sess-old' });
-    await startTaskSession('t1');
-    expect(mcp.forDispatch).not.toHaveBeenCalled();
   });
 
   it('uses the last isDark a pane passed when the caller gives none', async () => {

@@ -77,7 +77,7 @@ export const tasks = sqliteTable(
     sessionId: text('session_id'),
     sessionStoppedAt: text('session_stopped_at'),
     archivedAt: text('archived_at'),
-    // Control API: whether the task's session gets the Dash MCP tools, and the
+    // Control API: whether the task's session can reach Dash with dashctl, and the
     // task that created this one through the API (null if a person did).
     dashAccess: integer('dash_access', { mode: 'boolean' }).notNull().default(false),
     parentTaskId: text('parent_task_id'),

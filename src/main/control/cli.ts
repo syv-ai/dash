@@ -41,6 +41,9 @@ const words = (capability: string) => {
   const [ns, verb] = capability.split('.');
   return [ns!, kebab(verb!)];
 };
+
+/** The command a capability is, after `dashctl`: 'review.drafts_create' → 'review drafts-create'. */
+export const commandName = (capability: string): string => words(capability).join(' ');
 const propsOf = (c: CapabilityListing) => (c.inputSchema as ObjectSchema).properties ?? {};
 const requiredOf = (c: CapabilityListing) =>
   new Set((c.inputSchema as ObjectSchema).required ?? []);
