@@ -7,23 +7,13 @@ import type { EditorView } from './types';
 import type { LiveComment } from './comments/types';
 import { useCommentsStore } from '../../stores/commentsStore';
 import { useGit } from '../../stores/gitStore';
-import { toast } from 'sonner';
-import { prKey, usePrReviews } from '../../stores/prReviewStore';
-import { buildReviewPrompt, unresolvedThreads } from '../../utils/prReviewNotices';
-import { typeIntoTask } from '../../utils/typeIntoTask';
-import type { PrReviewThread } from '../../../shared/types';
 import { PrThreadOverlay } from './prReview/PrThreadOverlay';
-import { PrReviewMenu, isInlineThread } from './prReview/PrReviewMenu';
-import { ReviewButton } from './prReview/ReviewButton';
-import { useTaskReview } from './prReview/useTaskReview';
+import { PrViewCorner } from './prReview/PrViewCorner';
+import { usePrView } from './prReview/usePrView';
+import { draftSubmitLabel as prDraftSubmitLabel } from './prReview/prViewPolicy';
 import { useGutterSelection } from './comments/useGutterSelection';
 import { useFileComments } from './comments/useFileComments';
-import {
-  commentScope,
-  filterCommentsByScope,
-  scopeLabel,
-  withoutPrComments,
-} from './comments/commentScope';
+import { commentScope, scopeLabel, withoutPrComments } from './comments/commentScope';
 import { useCommentShades } from './comments/useCommentShades';
 import { useCommentBands } from './comments/useCommentBands';
 import { useCommentDraft } from './comments/useCommentDraft';
@@ -152,9 +142,6 @@ export function EditorPane({
   // Origin tag on bubbles whenever the open view isn't the plain working tree
   // (a PR view tags each one note or comment instead).
   const bubbleScopeLabel = view.kind === 'working' || isPrView ? undefined : scopeLabel(scope);
-  // Reviewing the PR (Review clicked, not yet submitted): what's written is a
-  // PR comment; otherwise a note.
-  const { inReview, setInReview } = useTaskReview(activeTaskId, view.kind === 'pr' ? view : null);
   // Comment count for the open view — surfaced in the header's "Showing …" pill.
   const scopeCommentCount = useMemo(() => {
     let n = 0;
@@ -259,13 +246,24 @@ export function EditorPane({
   // and snapshot are both scoped via closure inside the hook, which kills
   // the previous file-ref-races (the source of the phantom-comment bug).
   const isFileLoaded = state.kind === 'loaded';
+  // The PR view's review, threads and policy; inert in any other view.
+  const pr = usePrView({
+    view,
+    scope,
+    activeTaskId,
+    projectId,
+    cwd,
+    filePath,
+    isFileLoaded,
+    onClose,
+  });
   const binding = useFileComments({
     filePath,
     isFileLoaded,
     editor,
     monaco,
     scope,
-    newKind: isPrView && inReview ? 'comment' : 'note',
+    newKind: pr.newKind,
   });
   const liveComments = binding.liveComments;
   const shadeById = useCommentShades(liveComments);
@@ -396,11 +394,6 @@ export function EditorPane({
   // The task's comments menu lists notes; PR comments belong to their PR's widget.
   const menuCommentsByFile = useMemo(() => withoutPrComments(commentsByFile), [commentsByFile]);
   const hasAnyComments = Object.keys(menuCommentsByFile).length > 0;
-  // The PR widget's bulk sends take this PR's notes and comments.
-  const sendable = useMemo(
-    () => (isPrView ? filterCommentsByScope(commentsByFile, scope) : menuCommentsByFile),
-    [isPrView, commentsByFile, scope, menuCommentsByFile],
-  );
 
   // Prompt assembly + send-to-TUI + edit-and-send modal.
   const promptApi = useCommentPrompt({
@@ -411,23 +404,14 @@ export function EditorPane({
     liveComments,
     language: state.kind === 'loaded' ? state.language : '',
     scope,
-    sendable,
+    sendable: pr.sendable ?? menuCommentsByFile,
     onClose,
   });
 
-  // An edit keeps the kind it has; a new one in a PR view is a note until Review.
   const editingKind = draftApi.editingId
     ? liveComments.find((c) => c.id === draftApi.editingId)?.kind
     : undefined;
-  const draftSubmitLabel = editingKind
-    ? isPrView
-      ? `Save ${editingKind}`
-      : 'Save'
-    : isPrView
-      ? inReview
-        ? 'Add comment'
-        : 'Add note'
-      : undefined;
+  const draftSubmitLabel = prDraftSubmitLabel(isPrView, pr.inReview, editingKind);
 
   const getLiveRangeForCurrent = (commentId: string) => {
     const target = liveComments.find((c) => c.id === commentId);
@@ -442,43 +426,6 @@ export function EditorPane({
   }
 
   const showCommentsMenu = !commentsDisabled && hasAnyComments && !isPrView;
-
-  // ── PR review threads (PR view) ─────────────────────────
-  const prReview = usePrReviews((s) =>
-    view.kind === 'pr' ? (s.byPr[prKey(view.provider, view.number)] ?? null) : null,
-  );
-  // Only once the file has loaded, so the zones land on its lines.
-  const inlineThreads = useMemo(
-    () =>
-      prReview && isFileLoaded
-        ? prReview.threads.filter((t) => t.path === filePath && isInlineThread(t))
-        : [],
-    [prReview, filePath, isFileLoaded],
-  );
-  const setThreadResolved = useCallback(
-    async (thread: PrReviewThread, resolved: boolean) => {
-      if (!prReview || !projectId) return;
-      const r = await usePrReviews
-        .getState()
-        .setResolved(projectId, cwd, prReview, thread.id, resolved);
-      if (!r.ok) {
-        const why = r.error.kind === 'other' ? r.error.message : 'the PR refused the change';
-        toast.error(`Could not ${resolved ? 'resolve' : 'reactivate'} the thread: ${why}`);
-      }
-    },
-    [prReview, projectId, cwd],
-  );
-  // PR drafts need a task to own them.
-  const draftScope = prReview && !commentsDisabled ? scope : null;
-  const sendThreads = useCallback(
-    async (threads: PrReviewThread[], close: boolean) => {
-      if (!activeTaskId || !prReview || threads.length === 0) return;
-      if ((await typeIntoTask(activeTaskId, buildReviewPrompt(prReview, threads))) && close) {
-        onClose();
-      }
-    },
-    [activeTaskId, prReview, onClose],
-  );
 
   return (
     <div className="h-full flex flex-col min-w-0 min-h-0">
@@ -501,7 +448,7 @@ export function EditorPane({
         defaultBase={defaultBase}
         projectId={projectId}
         onSelectPr={onSelectPr}
-        prTitle={prReview?.title ?? null}
+        prTitle={pr.review?.title ?? null}
         commentCount={scopeCommentCount}
         backgroundColor={terminalTheme.background ?? (isDark ? '#0d0d11' : '#faf8f3')}
       />
@@ -565,36 +512,18 @@ export function EditorPane({
                 />
               </div>
             )}
-            {prReview && (
-              <div className="absolute bottom-4 right-4 z-10 flex items-center gap-2">
-                {draftScope && activeTaskId && (
-                  <ReviewButton
-                    inReview={inReview}
-                    asked={prReview.viewerIsRequestedReviewer}
-                    onToggle={() => setInReview(!inReview)}
-                  />
-                )}
-                <PrReviewMenu
-                  review={prReview}
-                  draftScope={draftScope}
-                  inReview={inReview}
-                  currentFilePath={filePath}
-                  getLiveRangeForCurrent={getLiveRangeForCurrent}
-                  onNavigate={onNavigateToComment}
-                  onSendOne={promptApi.sendOne}
-                  onSendMany={promptApi.sendMany}
-                  submitCtx={
-                    draftScope && projectId && activeTaskId
-                      ? { projectId, cwd, taskId: activeTaskId }
-                      : null
-                  }
-                  onSetResolved={(t, r) => void setThreadResolved(t, r)}
-                  onSendAll={() => void sendThreads(unresolvedThreads(prReview), true)}
-                  onSend={(t) => void sendThreads([t], false)}
-                  onSelectFile={onSelectFile}
-                />
-              </div>
-            )}
+            <PrViewCorner
+              pr={pr}
+              activeTaskId={activeTaskId}
+              projectId={projectId}
+              cwd={cwd}
+              currentFilePath={filePath}
+              getLiveRangeForCurrent={getLiveRangeForCurrent}
+              onNavigate={onNavigateToComment}
+              onSendOne={promptApi.sendOne}
+              onSendMany={promptApi.sendMany}
+              onSelectFile={onSelectFile}
+            />
             {state.kind === 'loading' && displayed.kind === 'loaded' && <LoadingPill />}
             {rulerMark &&
               (() => {
@@ -660,14 +589,14 @@ export function EditorPane({
               })()}
             {isPrView && (
               <PrThreadOverlay
-                threads={inlineThreads}
+                threads={pr.inlineThreads}
                 provider={view.kind === 'pr' ? view.provider : 'github'}
-                draftScope={draftScope}
-                inReview={inReview}
-                onSetResolved={(t, r) => void setThreadResolved(t, r)}
+                draftScope={pr.draftScope}
+                inReview={pr.inReview}
+                onSetResolved={pr.setThreadResolved}
                 modifiedEditor={modifiedEditor}
                 area={editorAreaEl}
-                onSend={(t) => void sendThreads([t], false)}
+                onSend={(t) => pr.sendThreads([t], false)}
               />
             )}
             <CommentOverlay
@@ -683,7 +612,7 @@ export function EditorPane({
               onDeleteComment={binding.remove}
               onReopenComment={(id) => useCommentsStore.getState().markUnsent(id)}
               onPromoteComment={
-                isPrView && !commentsDisabled
+                pr.canPromote
                   ? (id) => useCommentsStore.getState().setKind(id, 'comment')
                   : undefined
               }

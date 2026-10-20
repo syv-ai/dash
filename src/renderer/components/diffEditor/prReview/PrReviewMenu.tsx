@@ -30,6 +30,7 @@ import {
 } from '../comments/CommentList';
 import { PrThreadCard, providerName } from './PrThreadCard';
 import { SubmitReview } from './SubmitReview';
+import { isInlineThread } from './prViewPolicy';
 import { Markdown } from '../../ui/Markdown';
 
 interface Props {
@@ -49,11 +50,6 @@ interface Props {
   onSendAll: () => void;
   onSend: (thread: PrReviewThread) => void;
   onSelectFile: (path: string) => void;
-}
-
-/** True when a thread can be drawn on the PR side of its file. */
-export function isInlineThread(t: PrReviewThread): boolean {
-  return t.line !== null && t.side === 'RIGHT';
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
