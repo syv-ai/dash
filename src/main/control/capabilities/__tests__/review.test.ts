@@ -1,9 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import Database from 'better-sqlite3';
 import type { DiffComment } from '../../../../shared/types';
 import { ControlError, createRegistry, type Registry } from '../../registry';
 import { fakeLookups, makeProject, makeTask } from '../../__tests__/fixtures';
-import { registerReviewCapabilities, type ReviewCapabilityDeps } from '../review';
-import type { AgentDraft } from '../../../services/diffCommentsRepo';
+import { registerReviewCapabilities } from '../review';
+
+let db: Database.Database;
+vi.mock('../../../db/client', () => ({ getRawDb: () => db }));
+
+import { runMigrations } from '../../../db/migrate';
+import { createDiffCommentsRepo, type DiffCommentsRepo } from '../../../services/diffCommentsRepo';
+import { createPrReviewsInProgressRepo } from '../../../services/prReviewsInProgressRepo';
+import { createTaskReviews } from '../../../services/prReview/taskReview';
 
 const asTask = (taskId: string) => ({ kind: 'task', taskId }) as const;
 
@@ -14,9 +22,8 @@ const tasks = [
 ];
 
 let registry: Registry;
-let rows: Map<string, DiffComment>;
+let comments: DiffCommentsRepo;
 let changed: string[];
-let summaries: Map<string, { body: string; author: 'user' | 'agent' }>;
 
 const row = (over: Partial<DiffComment> & { id: string }): DiffComment => ({
   taskId: 'me',
@@ -35,33 +42,49 @@ const row = (over: Partial<DiffComment> & { id: string }): DiffComment => ({
   ...over,
 });
 
+/** A stored draft, written as it is (author and all). */
+function put(c: DiffComment) {
+  db.prepare(
+    `INSERT INTO diff_editor_comments (id, task_id, file_path, start_line, end_line, text, sent,
+       view_scope, side, reply_to, author, kind, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '')`,
+  ).run(
+    c.id,
+    c.taskId,
+    c.filePath,
+    c.startLine,
+    c.endLine,
+    c.text,
+    c.sent ? 1 : 0,
+    c.viewScope,
+    c.side,
+    c.replyTo,
+    c.author,
+    c.kind,
+  );
+}
+
 beforeEach(() => {
-  rows = new Map();
+  db = new Database(':memory:');
+  runMigrations();
+  db.prepare(`INSERT INTO projects (id, name, path) VALUES ('pA', 'p', '/repo')`).run();
+  for (const t of tasks) {
+    db.prepare(
+      `INSERT INTO tasks (id, project_id, name, branch, path) VALUES (?, 'pA', ?, 'b', '/repo')`,
+    ).run(t.id, t.id);
+  }
+  comments = createDiffCommentsRepo(db);
   changed = [];
-  summaries = new Map();
-  const deps: ReviewCapabilityDeps = {
+  registry = createRegistry(fakeLookups([makeProject({ id: 'pA' })], tasks));
+  registerReviewCapabilities(registry, {
     providerFor: () => 'github',
     getTask: (id) => tasks.find((t) => t.id === id),
-    listByScope: (taskId, scope) =>
-      [...rows.values()].filter((r) => r.taskId === taskId && r.viewScope === scope),
-    getDraft: (id) => rows.get(id),
-    saveAgentDraft: vi.fn((d: AgentDraft) => {
-      const saved = row({ ...d, author: rows.get(d.id)?.author ?? 'agent' });
-      rows.set(d.id, saved);
-      return saved;
+    reviews: createTaskReviews({
+      comments,
+      reviews: createPrReviewsInProgressRepo(db),
+      changed: (taskId) => void changed.push(taskId),
     }),
-    deleteDraft: (id) => void rows.delete(id),
-    getSummary: (taskId, provider, number) =>
-      summaries.get(`${taskId}:${provider}:${number}`) ?? null,
-    setSummary: (taskId, provider, number, body) => {
-      const key = `${taskId}:${provider}:${number}`;
-      if (body.trim()) summaries.set(key, { body, author: 'agent' });
-      else summaries.delete(key);
-    },
-    changed: (taskId) => void changed.push(taskId),
-  };
-  registry = createRegistry(fakeLookups([makeProject({ id: 'pA' })], tasks));
-  registerReviewCapabilities(registry, deps);
+  });
 });
 
 async function status(p: Promise<unknown>): Promise<number> {
@@ -84,7 +107,7 @@ describe('review.drafts_create', () => {
       body: 'Null here?',
       kind: 'comment',
     })) as { id: string };
-    expect(rows.get(created.id)).toMatchObject({
+    expect(comments.get(created.id)).toMatchObject({
       taskId: 'me',
       filePath: 'src/a.ts',
       startLine: 4,
@@ -104,7 +127,7 @@ describe('review.drafts_create', () => {
       ...input,
       kind: 'note',
     })) as { id: string; kind: string };
-    expect(rows.get(note.id)!.kind).toBe('note');
+    expect(comments.get(note.id)!.kind).toBe('note');
     expect(await status(registry.call(asTask('me'), 'review.drafts_create', input))).toBe(400);
   });
 
@@ -137,31 +160,31 @@ describe('review.drafts_create', () => {
 
 describe('review.drafts_update / drafts_delete', () => {
   it("changes the agent's own draft", async () => {
-    rows.set('d1', row({ id: 'd1' }));
+    put(row({ id: 'd1' }));
     await registry.call(asTask('me'), 'review.drafts_update', {
       id: 'd1',
       body: 'better',
       endLine: 8,
     });
-    expect(rows.get('d1')).toMatchObject({ text: 'better', startLine: 3, endLine: 8 });
+    expect(comments.get('d1')).toMatchObject({ text: 'better', startLine: 3, endLine: 8 });
     await registry.call(asTask('me'), 'review.drafts_update', { id: 'd1', kind: 'note' });
-    expect(rows.get('d1')).toMatchObject({ text: 'better', kind: 'note' });
+    expect(comments.get('d1')).toMatchObject({ text: 'better', kind: 'note' });
     await registry.call(asTask('me'), 'review.drafts_delete', { id: 'd1' });
-    expect(rows.has('d1')).toBe(false);
+    expect(!!comments.get('d1')).toBe(false);
     expect(changed).toEqual(['me', 'me', 'me']);
   });
 
   it("changes and deletes the user's drafts too", async () => {
-    rows.set('u1', row({ id: 'u1', author: 'user' }));
+    put(row({ id: 'u1', author: 'user' }));
     await registry.call(asTask('me'), 'review.drafts_update', { id: 'u1', body: 'reworded' });
-    expect(rows.get('u1')!.text).toBe('reworded');
+    expect(comments.get('u1')!.text).toBe('reworded');
     await registry.call(asTask('me'), 'review.drafts_delete', { id: 'u1' });
-    expect(rows.has('u1')).toBe(false);
+    expect(!!comments.get('u1')).toBe(false);
   });
 
   it("can't see another task's draft, or a non-PR comment", async () => {
-    rows.set('s1', row({ id: 's1', taskId: 'sibling' }));
-    rows.set('l1', row({ id: 'l1', viewScope: 'live' }));
+    put(row({ id: 's1', taskId: 'sibling' }));
+    put(row({ id: 'l1', viewScope: 'live' }));
     expect(
       await status(registry.call(asTask('me'), 'review.drafts_update', { id: 's1', body: 'x' })),
     ).toBe(404);
@@ -173,10 +196,10 @@ describe('review.drafts_update / drafts_delete', () => {
 
 describe('review.drafts_list', () => {
   it("lists the task's notes and comments for the PR, the user's and the agent's, by file and line", async () => {
-    rows.set('b', row({ id: 'b', filePath: 'b.ts', author: 'user', kind: 'note' }));
-    rows.set('a2', row({ id: 'a2', filePath: 'a.ts', startLine: 9, replyTo: 'T1' }));
-    rows.set('a1', row({ id: 'a1', filePath: 'a.ts', startLine: 2 }));
-    rows.set('x', row({ id: 'x', viewScope: 'pr:github:13' }));
+    put(row({ id: 'b', filePath: 'b.ts', author: 'user', kind: 'note' }));
+    put(row({ id: 'a2', filePath: 'a.ts', startLine: 9, replyTo: 'T1' }));
+    put(row({ id: 'a1', filePath: 'a.ts', startLine: 2 }));
+    put(row({ id: 'x', viewScope: 'pr:github:13' }));
     const list = (await registry.call(asTask('me'), 'review.drafts_list', { number: 12 })) as {
       id: string;
     }[];

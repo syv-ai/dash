@@ -1,23 +1,15 @@
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
-import type { DiffComment, PrProvider, PrReviewSummary, Task } from '../../../shared/types';
+import type { DiffComment, PrProvider, Task } from '../../../shared/types';
 import { prScope } from '../../../shared/prScope';
 import { ControlError, defineCapability, type Registry } from '../registry';
-import type { AgentDraft } from '../../services/diffCommentsRepo';
+import type { PrRef, TaskReviews } from '../../services/prReview/taskReview';
 
 export interface ReviewCapabilityDeps {
   /** Where the project's PRs live (from its remote). */
   providerFor(projectId: string): PrProvider;
   getTask(id: string): Task | undefined;
-  /** The task's notes and comments in a PR's view scope. */
-  listByScope(taskId: string, scope: string): DiffComment[];
-  getDraft(id: string): DiffComment | undefined;
-  saveAgentDraft(draft: AgentDraft): DiffComment;
-  deleteDraft(id: string): void;
-  getSummary(taskId: string, provider: PrProvider, number: number): PrReviewSummary | null;
-  setSummary(taskId: string, provider: PrProvider, number: number, body: string): void;
-  /** Tell an open diff editor the task's drafts changed. */
-  changed(taskId: string): void;
+  reviews: TaskReviews;
 }
 
 const TASK_ID_FIELD = z
@@ -60,22 +52,21 @@ function view(c: DiffComment) {
  * resolving and voting stay with the person, in the UI.
  */
 export function registerReviewCapabilities(registry: Registry, deps: ReviewCapabilityDeps): void {
-  const scopeFor = (taskId: string, number: number, asked?: PrProvider) => {
+  /** The task's project's PR `number`, refusing a provider it isn't on. */
+  const prFor = (taskId: string, number: number, asked?: PrProvider): PrRef => {
     const task = deps.getTask(taskId)!;
     const provider = deps.providerFor(task.projectId);
     if (asked && asked !== provider) {
       throw new ControlError(400, `this project's PRs are on ${provider}`);
     }
-    return { provider, scope: prScope(provider, number) };
+    return { provider, number };
   };
 
   /** The target task's PR note or draft, the person's or an agent's, or a 404.
    *  Nothing here reaches the PR, so the person still reviews every change. */
   const draftOrThrow = (taskId: string, id: string): DiffComment => {
-    const draft = deps.getDraft(id);
-    if (!draft || draft.taskId !== taskId || !draft.viewScope.startsWith('pr:')) {
-      throw new ControlError(404, 'draft not found');
-    }
+    const draft = deps.reviews.draft(taskId, id);
+    if (!draft) throw new ControlError(404, 'draft not found');
     return draft;
   };
 
@@ -90,9 +81,9 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
       target: { taskId: 'taskId' },
       defaultTargetToSelf: true,
       handler: async (_ctx, input) => {
-        const { scope } = scopeFor(input.taskId!, input.number, input.provider);
-        return deps
-          .listByScope(input.taskId!, scope)
+        const pr = prFor(input.taskId!, input.number, input.provider);
+        return deps.reviews
+          .drafts(input.taskId!, pr)
           .sort((a, b) => a.filePath.localeCompare(b.filePath) || a.startLine - b.startLine)
           .map(view);
       },
@@ -124,21 +115,20 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
       defaultTargetToSelf: true,
       handler: async (_ctx, input) => {
         const taskId = input.taskId!;
-        const { scope } = scopeFor(taskId, input.number, input.provider);
+        const { provider, number } = prFor(taskId, input.number, input.provider);
         const endLine = input.endLine ?? input.startLine;
         if (endLine < input.startLine) throw new ControlError(400, 'endLine is before startLine');
-        const draft = deps.saveAgentDraft({
+        const draft = deps.reviews.saveAgentDraft({
           id: randomUUID(),
           taskId,
           filePath: input.path.replace(/^\/+/, ''),
           startLine: input.startLine,
           endLine,
           text: input.body,
-          viewScope: scope,
+          viewScope: prScope(provider, number),
           replyTo: input.replyTo ?? null,
           kind: input.kind,
         });
-        deps.changed(taskId);
         return view(draft);
       },
     }),
@@ -167,7 +157,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
         const startLine = input.startLine ?? draft.startLine;
         const endLine = input.endLine ?? Math.max(startLine, draft.endLine);
         if (endLine < startLine) throw new ControlError(400, 'endLine is before startLine');
-        const saved = deps.saveAgentDraft({
+        const saved = deps.reviews.saveAgentDraft({
           id: draft.id,
           taskId,
           filePath: draft.filePath,
@@ -178,7 +168,6 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
           replyTo: draft.replyTo,
           kind: input.kind ?? draft.kind,
         });
-        deps.changed(taskId);
         return view(saved);
       },
     }),
@@ -199,8 +188,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
       handler: async (_ctx, input) => {
         const taskId = input.taskId!;
         draftOrThrow(taskId, input.id);
-        deps.deleteDraft(input.id);
-        deps.changed(taskId);
+        deps.reviews.deleteAgentDraft(taskId, input.id);
         return { ok: true };
       },
     }),
@@ -217,8 +205,8 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
       target: { taskId: 'taskId' },
       defaultTargetToSelf: true,
       handler: async (_ctx, input) => {
-        const { provider } = scopeFor(input.taskId!, input.number, input.provider);
-        return deps.getSummary(input.taskId!, provider, input.number);
+        const pr = prFor(input.taskId!, input.number, input.provider);
+        return deps.reviews.getSummary(input.taskId!, pr);
       },
     }),
   );
@@ -240,10 +228,9 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
       defaultTargetToSelf: true,
       handler: async (_ctx, input) => {
         const taskId = input.taskId!;
-        const { provider } = scopeFor(taskId, input.number, input.provider);
-        deps.setSummary(taskId, provider, input.number, input.body);
-        deps.changed(taskId);
-        return deps.getSummary(taskId, provider, input.number);
+        const pr = prFor(taskId, input.number, input.provider);
+        deps.reviews.setSummary(taskId, pr, { body: input.body, author: 'agent' });
+        return deps.reviews.getSummary(taskId, pr);
       },
     }),
   );

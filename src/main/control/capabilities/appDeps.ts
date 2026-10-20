@@ -23,10 +23,8 @@ import type { ProjectCapabilityDeps } from './projects';
 import type { ServiceCapabilityDeps } from './services';
 import type { TaskCapabilityDeps } from './tasks';
 import type { ReviewCapabilityDeps } from './review';
-import { diffCommentsRepo } from '../../services/diffCommentsRepo';
-import { prReviewsInProgressRepo } from '../../services/prReviewsInProgressRepo';
-import { emitDiffCommentsChanged } from '../../services/diffCommentEvents';
-import { providerForRemote } from '@shared/urls';
+import { taskReviews } from '../../services/prReview/taskReview';
+import { prProviderFor } from '../../services/prReview/resolve';
 
 /**
  * The capabilities' real dependencies: the app's services. Kept apart from the
@@ -100,18 +98,13 @@ export function serviceDeps(): ServiceCapabilityDeps {
 export function reviewDeps(): ReviewCapabilityDeps {
   return {
     providerFor: (projectId) =>
-      providerForRemote(
-        DatabaseService.getProjects().find((p) => p.id === projectId)?.gitRemote ?? null,
+      prProviderFor(
+        DatabaseService.getProjects().find((p) => p.id === projectId) ?? { gitRemote: null },
       ),
     getTask: (id) => DatabaseService.getTask(id),
-    listByScope: (taskId, scope) => diffCommentsRepo().listByScope(taskId, scope),
-    getDraft: (id) => diffCommentsRepo().get(id),
-    saveAgentDraft: (draft) => diffCommentsRepo().upsertFromAgent(draft),
-    deleteDraft: (id) => diffCommentsRepo().delete(id),
-    getSummary: (taskId, provider, number) =>
-      prReviewsInProgressRepo().getSummary(taskId, provider, number),
-    setSummary: (taskId, provider, number, body) =>
-      prReviewsInProgressRepo().setSummary(taskId, provider, number, { body, author: 'agent' }),
-    changed: emitDiffCommentsChanged,
+    // Read per call, so a database that failed to open fails the call, not the API's start.
+    get reviews() {
+      return taskReviews();
+    },
   };
 }

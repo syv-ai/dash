@@ -4,9 +4,7 @@ import { parseArgs, errorResponse } from './validate';
 import { DatabaseService } from '../services/DatabaseService';
 import { ConnectionConfigService } from '../services/ConnectionConfigService';
 import { prContextFor, type PrContextDeps } from '../services/prReview/resolve';
-import { diffCommentsRepo } from '../services/diffCommentsRepo';
-import { prReviewsInProgressRepo } from '../services/prReviewsInProgressRepo';
-import { emitDiffCommentsChanged } from '../services/diffCommentEvents';
+import { taskReviews } from '../services/prReview/taskReview';
 import type { PrProvider, PrVerdict } from '@shared/types';
 
 /** The app's lookups for picking a project's PR provider. */
@@ -86,8 +84,7 @@ export function registerPrReviewIpc(): void {
     (_e, args: { taskId: string; provider: PrProvider; number: number }) => {
       try {
         parseArgs('prReview:inReview', z.looseObject(reviewOf), args);
-        const on = prReviewsInProgressRepo().isInReview(args.taskId, args.provider, args.number);
-        return { success: true, data: on };
+        return { success: true, data: taskReviews().isInReview(args.taskId, args) };
       } catch (err) {
         return errorResponse(err);
       }
@@ -99,7 +96,7 @@ export function registerPrReviewIpc(): void {
     (_e, args: { taskId: string; provider: PrProvider; number: number; on: boolean }) => {
       try {
         parseArgs('prReview:setInReview', z.looseObject({ ...reviewOf, on: z.boolean() }), args);
-        prReviewsInProgressRepo().setInReview(args.taskId, args.provider, args.number, args.on);
+        taskReviews().setInReview(args.taskId, args, args.on);
         return { success: true };
       } catch (err) {
         return errorResponse(err);
@@ -112,12 +109,7 @@ export function registerPrReviewIpc(): void {
     (_e, args: { taskId: string; provider: PrProvider; number: number }) => {
       try {
         parseArgs('prReview:getSummary', z.looseObject(reviewOf), args);
-        const summary = prReviewsInProgressRepo().getSummary(
-          args.taskId,
-          args.provider,
-          args.number,
-        );
-        return { success: true, data: summary };
+        return { success: true, data: taskReviews().getSummary(args.taskId, args) };
       } catch (err) {
         return errorResponse(err);
       }
@@ -130,10 +122,7 @@ export function registerPrReviewIpc(): void {
     (_e, args: { taskId: string; provider: PrProvider; number: number; body: string }) => {
       try {
         parseArgs('prReview:setSummary', z.looseObject({ ...reviewOf, body: z.string() }), args);
-        prReviewsInProgressRepo().setSummary(args.taskId, args.provider, args.number, {
-          body: args.body,
-          author: 'user',
-        });
+        taskReviews().setSummary(args.taskId, args, { body: args.body, author: 'user' });
         return { success: true };
       } catch (err) {
         return errorResponse(err);
@@ -141,14 +130,9 @@ export function registerPrReviewIpc(): void {
     },
   );
 
-  /**
-   * Submit the task's drafts for the PR with a verdict. Main reads the drafts
-   * itself, and deletes the ones that reached the PR; a submit that all got
-   * through ends the review and clears its draft summary, so what's written
-   * next is a note again. A write the provider
-   * refused still answers `success`, carrying the error, so the renderer can
-   * show its fix.
-   */
+  /** Submit the task's drafts for the PR with a verdict (see `TaskReviews.submit`). A
+   *  write the provider refused still answers `success`, carrying the error, so
+   *  the renderer can show its fix. */
   ipcMain.handle(
     'prReview:submit',
     async (
@@ -175,33 +159,13 @@ export function registerPrReviewIpc(): void {
           args,
         );
         const { provider, adapter, ctx } = prContextFor(args.projectId, args.cwd, appDeps);
-        const repo = diffCommentsRepo();
-        const drafts = repo.listPrDrafts(args.taskId, provider, args.number);
-        const result = await adapter.submit(ctx, args.number, {
-          verdict: args.verdict,
-          body: args.body,
-          comments: drafts.comments.map((c) => ({
-            draftId: c.id,
-            path: c.filePath,
-            startLine: c.startLine,
-            endLine: c.endLine,
-            body: c.text,
-          })),
-          replies: drafts.replies.map((c) => ({
-            draftId: c.id,
-            threadId: c.replyTo!,
-            body: c.text,
-          })),
-        });
-        if (result.postedDraftIds.length > 0) {
-          repo.deleteByIds(result.postedDraftIds);
-          emitDiffCommentsChanged(args.taskId);
-        }
-        if (!result.error) {
-          const reviews = prReviewsInProgressRepo();
-          reviews.setInReview(args.taskId, provider, args.number, false);
-          reviews.setSummary(args.taskId, provider, args.number, { body: '', author: 'user' });
-        }
+        const result = await taskReviews().submit(
+          args.taskId,
+          { provider, number: args.number },
+          { adapter, ctx },
+          args.verdict,
+          args.body,
+        );
         return { success: true, data: result };
       } catch (err) {
         return errorResponse(err);

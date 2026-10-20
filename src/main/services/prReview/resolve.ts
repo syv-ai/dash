@@ -12,6 +12,11 @@ export interface PrContextDeps {
 
 const adapters: Record<PrProvider, PrReviewProvider> = { github: githubProvider, ado: adoProvider };
 
+/** The provider a project's PRs live on, from its remote. The one place that's decided. */
+export function prProviderFor(project: Pick<Project, 'gitRemote'>): PrProvider {
+  return providerForRemote(project.gitRemote ?? null);
+}
+
 /** The provider a project's PRs live on, its adapter, and the context to call it with. */
 export function prContextFor(
   projectId: string,
@@ -21,7 +26,7 @@ export function prContextFor(
   const project = deps.getProject(projectId);
   if (!project) throw new Error('Unknown project');
   const remote = project.gitRemote ?? null;
-  const provider = providerForRemote(remote);
+  const provider = prProviderFor(project);
   const ctx: PrContext = { cwd, projectId, remote };
   if (provider === 'ado') {
     const config = deps.getAdoConfig(projectId);
