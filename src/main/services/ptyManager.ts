@@ -15,6 +15,7 @@ import { buildSessionSettings, parseUntrustedRoot } from './supervisorSession';
 import { isWorkspaceTrusted } from '../utils/claudePaths';
 import { DatabaseService } from './DatabaseService';
 import { dashAllowTools, mcpConfigForDispatch } from '../control/mcpConfig';
+import { syncDashSkill } from '../control/dashSkill';
 import { writeTaskSettings } from './taskSettings';
 import { writeHookSettings, setCommitAttributionValue } from './ptyHookSettings';
 import type { PermissionMode, TaskModel } from '@shared/types';
@@ -307,6 +308,10 @@ async function ensureTaskSession(opts: {
   } catch (err) {
     console.error(`[ptyManager] settings file for task ${opts.id} failed:`, err);
   }
+  // The skill that explains the dash tools, in the checkout while access is on.
+  await syncDashSkill(opts.cwd, opts.dashAccess).catch((err) =>
+    console.warn(`[ptyManager] dash skill for task ${opts.id} failed:`, err),
+  );
   let resumeSessionId = opts.sessionId;
   if (opts.jobId) {
     let row;

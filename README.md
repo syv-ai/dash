@@ -35,6 +35,8 @@ Dash ships an MCP server, `dash`, that lets Claude Code sessions create and driv
 
 Turn on **Dash access** in the New Task dialog (or later in the task's settings; changing it restarts the session). The task's agent then gets the `dash` tools for its own project: it sees itself and the tasks it created, and can create tasks only in its own project.
 
+Each time such a task's session starts, Dash writes a `dash` skill to `.claude/skills/dash/SKILL.md` in the task's checkout. It explains how the tools fit together, above all the PR review workflow (notes vs comments, where a draft goes, the review summary). It is kept out of git through `.git/info/exclude`, not the repo's `.gitignore`, and removed when Dash access is turned off. A `dash` skill the repo already has, without Dash's marker, is left alone.
+
 The switch's default comes from the project's settings ("Dash access for new tasks"), which is stored as `taskDefaults.dashAccess` in `.dash/config.json`. To set a personal default without changing the shared file, put the same key in `.dash/config.local.json`.
 
 ### An orchestrator outside Dash
