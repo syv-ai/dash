@@ -22,6 +22,10 @@ export interface ControlPaths {
   launcher: string;
   /** The launcher's copy of the bundled shim, so it outlives the app's own folder. */
   shim: string;
+  /** A folder holding only `dashctl`, for a PATH (a task's, a Holi vault's). */
+  cliBinDir: string;
+  /** The `dashctl` command line. */
+  dashctl: string;
 }
 
 export function controlPaths(userDataDir: string): ControlPaths {
@@ -34,5 +38,7 @@ export function controlPaths(userDataDir: string): ControlPaths {
     mcpConfigDir: path.join(dir, 'mcp-config'),
     launcher: path.join(dir, 'dash-mcp'),
     shim: path.join(dir, 'dash-mcp.js'),
+    cliBinDir: path.join(dir, 'bin'),
+    dashctl: path.join(dir, 'bin', 'dashctl'),
   };
 }

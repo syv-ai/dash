@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Caller, CallerKind } from './callers';
 import { scopeFor, type ScopeLookups, type ScopeView } from './scope';
 import { FolderOccupiedError } from '../services/FolderOccupiedError';
+import type { Project } from '../../shared/types';
 
 /** An error with the HTTP status the control server should answer with. */
 export class ControlError extends Error {
@@ -35,7 +36,17 @@ export interface Capability<I extends z.ZodType> {
   defaultTargetToSelf?: boolean;
   /** false → a task caller may not target itself (archive/delete/restart). Default true. */
   allowSelf?: boolean;
+  /** How `dashctl` takes it: which inputs are positional, and which reads stdin. */
+  cli?: CliSpec;
   handler(ctx: CapabilityContext, input: z.infer<I>): Promise<unknown>;
+}
+
+/** A capability's command line (cli.ts): every other input is a `--flag`. */
+export interface CliSpec {
+  /** Inputs taken in order as positional arguments. */
+  args?: string[];
+  /** The input read from stdin when it isn't given as a flag (a prompt, a body). */
+  stdin?: string;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -45,6 +56,7 @@ export interface CapabilityListing {
   name: string;
   summary: string;
   inputSchema: unknown;
+  cli?: CliSpec;
 }
 
 /** Identity helper that infers `I` so `target` and `handler` are typed against the schema. */
@@ -58,6 +70,8 @@ export interface Registry {
   call(caller: Caller, name: string, rawInput: unknown): Promise<unknown>;
   /** Names of the capabilities that declare `readOnly`. */
   readOnlyNames(): string[];
+  /** The projects the caller may see. */
+  projectsFor(caller: Caller): Project[];
 }
 
 function scopeOrThrow(caller: Caller, deps: ScopeLookups): ScopeView {
@@ -91,7 +105,13 @@ export function createRegistry(deps: ScopeLookups): Registry {
           name: cap.name,
           summary: cap.summary,
           inputSchema: z.toJSONSchema(cap.input, { io: 'input', unrepresentable: 'any' }),
+          ...(cap.cli ? { cli: cap.cli } : {}),
         }));
+    },
+
+    projectsFor(caller) {
+      const scope = scopeOrThrow(caller, deps);
+      return deps.getProjects().filter((p) => scope.visibleProjectIds.has(p.id));
     },
 
     readOnlyNames() {

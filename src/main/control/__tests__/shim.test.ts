@@ -337,7 +337,10 @@ describe('dash-mcp launcher', () => {
       expect(content).toContain(
         `DASH_USER_DATA_DIR=${shellQuote(dir)} ELECTRON_RUN_AS_NODE=1 exec '/Apps/Dash.app/Electron' ${shellQuote(paths.shim)} "$@"`,
       );
-      expect(fs.readdirSync(path.dirname(file)).sort()).toEqual(['dash-mcp', 'dash-mcp.js']);
+      expect(fs.readdirSync(path.dirname(file)).sort()).toEqual(['bin', 'dash-mcp', 'dash-mcp.js']);
+      // dashctl sits alone in its folder, so that folder can go on a PATH.
+      expect(fs.readdirSync(paths.cliBinDir)).toEqual(['dashctl']);
+      expect(fs.statSync(paths.dashctl).mode & 0o777).toBe(0o755);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
