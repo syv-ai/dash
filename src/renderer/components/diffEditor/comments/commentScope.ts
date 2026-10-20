@@ -71,3 +71,22 @@ export function withoutPrComments<T extends { kind?: DiffCommentKind }>(
   }
   return out;
 }
+
+/** Group comments by file, keeping each file's order: `first`'s file first,
+ *  then by path. */
+export function groupByFile<T extends { filePath: string }>(
+  comments: readonly T[],
+  first?: string,
+): [string, T[]][] {
+  const out = new Map<string, T[]>();
+  for (const c of comments) {
+    const at = out.get(c.filePath);
+    if (at) at.push(c);
+    else out.set(c.filePath, [c]);
+  }
+  return [...out.entries()].sort(([a], [b]) => {
+    if (a === first) return -1;
+    if (b === first) return 1;
+    return a.localeCompare(b);
+  });
+}

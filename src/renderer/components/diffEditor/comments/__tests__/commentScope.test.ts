@@ -4,6 +4,7 @@ import {
   commentScope,
   commitShortHash,
   filterCommentsByScope,
+  groupByFile,
   scopeLabel,
   withoutPrComments,
 } from '../commentScope';
@@ -115,5 +116,21 @@ describe('withoutPrComments', () => {
         'b.ts': [c('4', 'pr:ado:7', 'comment')],
       }),
     ).toEqual({ 'a.ts': [c('1', 'live'), c('3', 'pr:github:4')] });
+  });
+});
+
+describe('groupByFile', () => {
+  const at = (id: string, filePath: string) => ({ id, filePath });
+
+  it("groups by path in order, keeping each file's own order", () => {
+    expect(groupByFile([at('1', 'b.ts'), at('2', 'a.ts'), at('3', 'b.ts')])).toEqual([
+      ['a.ts', [at('2', 'a.ts')]],
+      ['b.ts', [at('1', 'b.ts'), at('3', 'b.ts')]],
+    ]);
+  });
+
+  it('puts the given file first', () => {
+    const groups = groupByFile([at('1', 'a.ts'), at('2', 'c.ts'), at('3', 'b.ts')], 'c.ts');
+    expect(groups.map(([path]) => path)).toEqual(['c.ts', 'a.ts', 'b.ts']);
   });
 });

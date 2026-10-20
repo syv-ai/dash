@@ -22,11 +22,12 @@ import { threadLocation, unresolvedThreads } from '../../../utils/prReviewNotice
 import { useCommentsStore } from '../../../stores/commentsStore';
 import {
   ActionButton,
-  FileGroup,
+  FileGroups,
   MenuSection,
   SectionAction,
+  type RowDecorations,
   type RowHandlers,
-} from '../comments/CommentsMenu';
+} from '../comments/CommentList';
 import { PrThreadCard, providerName } from './PrThreadCard';
 import { SubmitReview } from './SubmitReview';
 import { Markdown } from '../../ui/Markdown';
@@ -56,17 +57,6 @@ export function isInlineThread(t: PrReviewThread): boolean {
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
-
-/** Group a list by file path. */
-function byPath(list: DiffComment[]): [string, DiffComment[]][] {
-  const out = new Map<string, DiffComment[]>();
-  for (const c of list) {
-    const at = out.get(c.filePath);
-    if (at) at.push(c);
-    else out.set(c.filePath, [c]);
-  }
-  return [...out.entries()].sort(([a], [b]) => a.localeCompare(b));
-}
 
 function Tag({ children }: { children: React.ReactNode }) {
   return (
@@ -154,19 +144,15 @@ export function PrReviewMenu({
     onUnsend: (id) => useCommentsStore.getState().markUnsent(id),
     closeMenu: () => setOpen(false),
   };
-  const groups = (list: DiffComment[], extra: Partial<Parameters<typeof FileGroup>[0]>) =>
-    byPath(list).map(([path, rows], gi) => (
-      <FileGroup
-        key={path}
-        path={path}
-        scope={draftScope!}
-        list={rows}
-        isCurrent={path === currentFilePath}
-        marginTop={gi > 0}
-        {...rowHandlers}
-        {...extra}
-      />
-    ));
+  const groups = (list: DiffComment[], decorations: RowDecorations) => (
+    <FileGroups
+      comments={list}
+      scope={draftScope!}
+      currentFilePath={currentFilePath}
+      {...rowHandlers}
+      {...decorations}
+    />
+  );
 
   const label = [
     comments.length > 0 && plural(comments.length, 'comment'),
