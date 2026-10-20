@@ -5,7 +5,8 @@ import type {
   PrVerdict,
   SubmitResult,
 } from '@shared/types';
-import { isPrScope, prScope } from '@shared/prScope';
+import { prScope } from '@shared/prScope';
+import { isPrDraft } from '@shared/diffComments';
 import { diffCommentsRepo, type AgentDraft, type DiffCommentsRepo } from '../diffCommentsRepo';
 import { prReviewsInProgressRepo, type PrReviewsInProgressRepo } from '../prReviewsInProgressRepo';
 import { emitDiffCommentsChanged } from '../diffCommentEvents';
@@ -72,7 +73,7 @@ export function createTaskReviews({ comments, reviews, changed }: TaskReviewDeps
     drafts: (taskId, pr) => comments.listByScope(taskId, prScope(pr.provider, pr.number)),
     draft(taskId, id) {
       const c = comments.get(id);
-      return c && c.taskId === taskId && isPrScope(c.viewScope) ? c : undefined;
+      return c && c.taskId === taskId && isPrDraft(c) ? c : undefined;
     },
     saveAgentDraft(draft) {
       const saved = comments.upsertFromAgent(draft);

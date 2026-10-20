@@ -1,4 +1,5 @@
 import { parsePrScope, prScope } from '../../../../shared/prScope';
+import { isPrComment, needsAttention } from '../../../../shared/diffComments';
 import type { DiffCommentKind } from '../../../../shared/types';
 import type { EditorView } from '../types';
 
@@ -28,11 +29,6 @@ export function scopeLabel(scope: string): string {
   const short = commitShortHash(scope);
   return short ? `Commit ${short}` : 'Working tree';
 }
-
-/** A note still to send, or a PR comment still to submit (sending a comment to
- *  the agent doesn't take it off the PR). */
-export const needsAttention = (c: { sent?: boolean; kind?: DiffCommentKind }): boolean =>
-  !c.sent || c.kind === 'comment';
 
 /** Total notes and comments needing attention per scope across all files —
  *  feeds the commits-drawer per-view count badges. */
@@ -70,7 +66,7 @@ export function withoutPrComments<T extends { kind?: DiffCommentKind }>(
 ): Record<string, T[]> {
   const out: Record<string, T[]> = {};
   for (const [path, list] of Object.entries(byFile)) {
-    const kept = list.filter((c) => c.kind !== 'comment');
+    const kept = list.filter((c) => !isPrComment(c));
     if (kept.length > 0) out[path] = kept;
   }
   return out;

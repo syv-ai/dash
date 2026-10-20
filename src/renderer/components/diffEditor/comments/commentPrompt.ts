@@ -1,4 +1,5 @@
 import { parsePrScope } from '../../../../shared/prScope';
+import { isPrComment } from '../../../../shared/diffComments';
 import type { DiffCommentKind } from '../../../../shared/types';
 
 export interface PromptComment {
@@ -32,7 +33,7 @@ export interface BuildPromptArgs {
  *  PR's, saying whether it's a review comment that goes to the PR. Empty for live. */
 function scopeSuffix(c: Pick<PromptComment, 'viewScope' | 'kind'>): string {
   const pr = parsePrScope(c.viewScope);
-  if (pr) return ` (PR #${pr.number}${c.kind === 'comment' ? ' review comment' : ''})`;
+  if (pr) return ` (PR #${pr.number}${isPrComment(c) ? ' review comment' : ''})`;
   return c.viewScope.startsWith('commit:') ? ` (commit ${c.viewScope.slice(7, 14)})` : '';
 }
 

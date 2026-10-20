@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { DiffComment, DiffCommentKind } from '../../shared/types';
+import { clearedByClearNotes, clearedBySent } from '../../shared/diffComments';
 
 interface AddInput {
   filePath: string;
@@ -229,12 +230,9 @@ export const useCommentsStore = create<CommentsStore>((set, get) => {
       if (existing) void persist(existing, { sent: false });
     },
 
-    clearSent: (scope) =>
-      removeWhere(
-        (c) => c.sent && c.kind !== 'comment' && (scope === undefined || c.viewScope === scope),
-      ),
+    clearSent: (scope) => removeWhere((c) => clearedBySent(c, scope)),
 
-    clearNotes: (scope) => removeWhere((c) => c.kind !== 'comment' && c.viewScope === scope),
+    clearNotes: (scope) => removeWhere((c) => clearedByClearNotes(c, scope)),
 
     setKind: (id, kind) => {
       if (!get().taskId) return;

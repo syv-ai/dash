@@ -1,7 +1,7 @@
 import type { Database, Statement } from 'better-sqlite3';
 import { getRawDb } from '../db/client';
-import { isPrScope, prScope } from '@shared/prScope';
-import { isPrComment, isReplyDraft } from '@shared/diffComments';
+import { prScope } from '@shared/prScope';
+import { isPrunable, isReplyDraft, isSubmittable, kindFor } from '@shared/diffComments';
 import type { DiffComment, DiffCommentInput, DiffCommentKind, PrProvider } from '@shared/types';
 
 interface DiffCommentRow {
@@ -40,20 +40,15 @@ function rowToComment(r: DiffCommentRow): DiffComment {
   };
 }
 
-/** Ids of the rows whose file no longer exists. Pure, so it's testable without
- *  SQLite. PR drafts are kept: a PR's files needn't exist in the task's checkout. */
+/** Ids of the rows `isPrunable` deletes. Pure, so it's testable without SQLite. */
 export function computeOrphans(
   rows: ReadonlyArray<{ id: string; file_path: string; view_scope: string }>,
   existing: ReadonlySet<string>,
 ): string[] {
   return rows
-    .filter((r) => !isPrScope(r.view_scope) && !existing.has(r.file_path))
+    .filter((r) => isPrunable({ viewScope: r.view_scope, filePath: r.file_path }, existing))
     .map((r) => r.id);
 }
-
-/** Only a PR scope holds comments; anything else is a note. */
-const kindFor = (viewScope: string, kind: DiffCommentKind | undefined): DiffCommentKind =>
-  kind === 'comment' && isPrScope(viewScope) ? 'comment' : 'note';
 
 const COLS =
   'id, task_id, file_path, start_line, end_line, text, sent, view_scope, side, reply_to, author, kind, created_at, updated_at';
@@ -187,7 +182,7 @@ export function createDiffCommentsRepo(db: Database): DiffCommentsRepo {
       const rows = (s.listByScope!.all(taskId, prScope(provider, number)) as DiffCommentRow[]).map(
         rowToComment,
       );
-      const drafts = rows.filter(isPrComment);
+      const drafts = rows.filter(isSubmittable);
       return {
         comments: drafts.filter((c) => !isReplyDraft(c)),
         replies: drafts.filter(isReplyDraft),

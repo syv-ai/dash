@@ -14,7 +14,8 @@ import { prKey, reviewKey, usePrReviews } from '../../stores/prReviewStore';
 import { unresolvedThreads } from '../../utils/prReviewNotices';
 import { toast } from 'sonner';
 import type { FileBadges, PrEntry } from './EditorSidebar';
-import { commentScope, commentCountsByScope, needsAttention } from './comments/commentScope';
+import { commentScope, commentCountsByScope } from './comments/commentScope';
+import { needsAttention } from '../../../shared/diffComments';
 import { parsePrScope } from '../../../shared/prScope';
 
 /** Composition-root workspace: owns view state, drives the data loaders, and

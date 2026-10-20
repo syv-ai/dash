@@ -1,5 +1,6 @@
 import type { LiveComment, Shade } from './types';
 import { CommentBubble } from './CommentBubble';
+import { canPromote } from '../../../../shared/diffComments';
 
 interface Props {
   /** Comments anchored at this line. ≥1; >1 means stacked. */
@@ -76,7 +77,7 @@ export function BubbleStack({
             onReopen={() => onReopen(c.id)}
             isFadingOut={c.id === editingId}
             kindTag={onPromote ? c.kind : undefined}
-            onPromote={onPromote && c.kind === 'note' ? () => onPromote(c.id) : undefined}
+            onPromote={onPromote && canPromote(c) ? () => onPromote(c.id) : undefined}
           />
         );
       })}

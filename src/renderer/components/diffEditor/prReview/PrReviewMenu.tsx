@@ -15,7 +15,7 @@ import type {
   PrReviewThread,
 } from '../../../../shared/types';
 import { formatRelativeTime } from '../../../../shared/relativeTime';
-import { isReplyDraft } from '../../../../shared/diffComments';
+import { isPrComment, isReplyDraft } from '../../../../shared/diffComments';
 import { IconButton } from '../../ui/IconButton';
 import { Popover, PopoverArrow, PopoverContent, PopoverTrigger } from '../../ui/Popover';
 import { threadLocation, unresolvedThreads } from '../../../utils/prReviewNotices';
@@ -131,7 +131,7 @@ export function PrReviewMenu({
     if (draftScope) {
       for (const list of Object.values(byFile))
         for (const c of list)
-          if (c.viewScope === draftScope) (c.kind === 'comment' ? comments : notes).push(c);
+          if (c.viewScope === draftScope) (isPrComment(c) ? comments : notes).push(c);
     }
     return { comments, notes };
   }, [byFile, draftScope]);

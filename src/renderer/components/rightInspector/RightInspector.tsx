@@ -5,7 +5,7 @@ import { Tooltip } from '../ui/Tooltip';
 import { UsageStrip } from './UsageStrip';
 import { useGit } from '../../stores/gitStore';
 import { useCommentsStore } from '../../stores/commentsStore';
-import { needsAttention } from '../diffEditor/comments/commentScope';
+import { needsAttention } from '../../../shared/diffComments';
 import type { RateLimits, ContextUsage, Task } from '../../../shared/types';
 
 interface RightInspectorProps {
