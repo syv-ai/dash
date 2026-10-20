@@ -77,3 +77,38 @@ export function writeStoredFile(cwd: string, path: string): void {
     // Best-effort, like the view.
   }
 }
+
+/** Where "Open in editor" lands. */
+export interface EditorOpening {
+  filePath: string;
+  staged: boolean;
+  /** A PR view or the working tree. Absent: the editor restores the repo's
+   *  last view itself. */
+  initialView?: Extract<EditorView, { kind: 'pr' | 'working' }>;
+}
+
+/**
+ * Where "Open in editor" lands, from the stored view and the working changes.
+ * A review in progress outranks the changes: a stored PR view reopens on the
+ * file left open. Otherwise the first unstaged change (else the first staged).
+ * With no changes, still the working tree, not the last commit: the editor is
+ * only editable there, and a save shows up as an unstaged change.
+ */
+export function openingFor(
+  stored: EditorView | null,
+  storedFile: string,
+  files: ReadonlyArray<{ path: string; staged: boolean }>,
+): EditorOpening {
+  if (stored?.kind === 'pr') return { filePath: storedFile, staged: false, initialView: stored };
+  const target = files.find((f) => !f.staged) ?? files[0];
+  if (target) return { filePath: target.path, staged: target.staged };
+  return { filePath: '', staged: false, initialView: { kind: 'working', ref: 'HEAD' } };
+}
+
+/** `openingFor` over the repo's stored view and file. */
+export function editorOpening(
+  cwd: string,
+  files: ReadonlyArray<{ path: string; staged: boolean }>,
+): EditorOpening {
+  return openingFor(readStoredView(cwd), readStoredFile(cwd), files);
+}

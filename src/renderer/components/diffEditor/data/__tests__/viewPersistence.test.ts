@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseStoredView } from '../viewPersistence';
+import { openingFor, parseStoredView } from '../viewPersistence';
 import type { EditorView } from '../../types';
 
 describe('parseStoredView', () => {
@@ -65,5 +65,35 @@ describe('parseStoredView', () => {
     expect(parseStoredView('42')).toBeNull();
     expect(parseStoredView('"working"')).toBeNull();
     expect(parseStoredView('null')).toBeNull();
+  });
+});
+
+describe('openingFor', () => {
+  const pr = { kind: 'pr', provider: 'github', number: 4, base: 'b', head: 'h' } as const;
+  const changes = [
+    { path: 'staged.ts', staged: true },
+    { path: 'unstaged.ts', staged: false },
+  ];
+
+  it('reopens a review in progress on the file left open, over the changes', () => {
+    expect(openingFor(pr, 'src/a.ts', changes)).toEqual({
+      filePath: 'src/a.ts',
+      staged: false,
+      initialView: pr,
+    });
+  });
+
+  it('otherwise opens the first unstaged change, else the first staged, in the restored view', () => {
+    const commit = { kind: 'commit', hash: 'abc' } as const;
+    expect(openingFor(commit, 'x.ts', changes)).toEqual({ filePath: 'unstaged.ts', staged: false });
+    expect(openingFor(null, '', [changes[0]!])).toEqual({ filePath: 'staged.ts', staged: true });
+  });
+
+  it('opens the working tree when nothing changed', () => {
+    expect(openingFor({ kind: 'commit', hash: 'abc' }, 'x.ts', [])).toEqual({
+      filePath: '',
+      staged: false,
+      initialView: { kind: 'working', ref: 'HEAD' },
+    });
   });
 });
