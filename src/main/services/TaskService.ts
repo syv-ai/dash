@@ -34,6 +34,7 @@ import { removeShellHistory } from './ptyShellConfig';
 import { getTuiHost } from '../tui/hostInstance';
 import { taskEvents } from './taskEvents';
 import { FolderOccupiedError } from './FolderOccupiedError';
+import { removeLegacyMcpConfig } from '../control/dashctl';
 import { removeTaskSettings } from './taskSettings';
 
 /** The line an API-created task's first message starts with. */
@@ -279,10 +280,15 @@ export class TaskService {
     removeShellHistory(id);
     void getTuiHost().cancelForTask(id);
     TelemetryService.capture('task_deleted');
-    try {
-      removeTaskSettings(id);
-    } catch (err) {
-      console.warn('[TaskService] delete: settings file removal failed:', err);
+    for (const [what, remove] of [
+      ['settings file', removeTaskSettings],
+      ['legacy mcp-config', removeLegacyMcpConfig],
+    ] as const) {
+      try {
+        remove(id);
+      } catch (err) {
+        console.warn(`[TaskService] delete: ${what} removal failed:`, err);
+      }
     }
     taskEvents.emitChanged(task.projectId);
   }

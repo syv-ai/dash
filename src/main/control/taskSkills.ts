@@ -30,7 +30,7 @@ const FEEDBACK_MARKER = `${OWNED}: rewritten each time the session starts. -->`;
  */
 export function dashSkill(dashctl: string | null): string {
   const fallback = dashctl
-    ? ` If the shell can't find it, it is at \`${dashctl}\` (quote the path).`
+    ? ` If the shell can't find it, run it by its path, in double quotes: \`"${dashctl}"\`.`
     : '';
   return `---
 name: dash
@@ -43,12 +43,20 @@ ${MARKER}
 
 You run inside a Dash task: a Claude Code session in its own checkout (often a git worktree), which the person watches in Dash. \`dashctl\` reaches Dash itself; it is on your \`PATH\`.${fallback} You see your own task and the tasks you created, in this project only.
 
-Run \`dashctl\` bare for every command, and \`dashctl <namespace> <verb> --help\` for one command's flags. Results are JSON; a refusal goes to stderr with a non-zero exit. A command about your own task needs no \`--task-id\`.
+Run \`dashctl help\` for every command, and \`dashctl <namespace> <verb> --help\` for one command's flags. Results are JSON; a refusal goes to stderr with a non-zero exit. A command about your own task needs no \`--task-id\`.
 
 ## Tasks and services
 
-- \`dashctl tasks list\` / \`get\` / \`output\` / \`wait\` read tasks; \`dashctl tasks create <name>\` starts one, with its prompt on stdin (its own worktree by default). Message a task with \`SendMessage\` to its \`messageAddress\`, after \`dashctl tasks wake <task-id>\`.
+- \`dashctl tasks list\` / \`get\` / \`output\` / \`wait\` read tasks; \`dashctl tasks create <name> --project <project>\` starts one (its own worktree by default). Give its prompt as \`--prompt -\` and the text on stdin; without \`--prompt\`, the task starts with no prompt. Message a task with \`SendMessage\` to its \`messageAddress\`, after \`dashctl tasks wake <task-id>\`.
 - \`dashctl services list\` / \`start <label>\` / \`stop <label>\` / \`output <label>\` run the services from \`.dash/ports.json\` in Dash terminal tabs, on the task's own ports.
+
+\`--project\` is your own project, by name or id (\`dashctl tasks get\` gives your task's \`projectId\`); your checkout's path isn't the project's when it is a worktree.
+
+\`\`\`sh
+dashctl tasks create "Fix the flaky test" --project <project> --prompt - <<'EOF'
+The login test fails one run in five on CI. Find out why and fix it.
+EOF
+\`\`\`
 
 ## Reviewing a PR
 

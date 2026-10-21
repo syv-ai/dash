@@ -32,8 +32,8 @@ The main idea: you open a project, create tasks, and each task gets an isolated 
 Dash ships a command line, `dashctl`, that lets Claude Code sessions create and drive tasks. It runs on macOS and Linux and only talks to Dash on 127.0.0.1.
 
 ```bash
-dashctl                                   # every command
-dashctl tasks create "Fix the flaky test" --project dash <<'PROMPT'
+dashctl help                              # every command
+dashctl tasks create "Fix the flaky test" --project dash --prompt - <<'PROMPT'
 The login test fails one run in five on CI. Find out why and fix it.
 PROMPT
 dashctl tasks wait <task-id> --until idle
@@ -41,7 +41,7 @@ dashctl tasks output <task-id> --lines 80
 dashctl review drafts-create --help       # one command's flags
 ```
 
-Dash writes it to `control/bin/dashctl` in its data folder each time it starts. It is a small `sh` + `curl` script that hands its words to Dash, which owns the commands, so an older copy still runs the newest Dash's. `--project` takes a project's name, path or id; a prompt or comment body comes on stdin. Results are JSON on stdout; a usage error exits 2 and a refusal exits 1, both on stderr.
+Dash writes it to `control/bin/dashctl` in its data folder each time it starts. It is a small `sh` + `curl` script that hands its words to Dash, which owns the commands, so an older copy still runs the newest Dash's. `--project` takes a project's name, path (relative to where you run it) or id. A comment body comes on stdin; any input that can come on stdin does when given as `-`, like `--prompt -` above. Results are JSON on stdout; a usage error (bare `dashctl` too) exits 2 and a refusal exits 1, both on stderr.
 
 ### Agents inside a task
 

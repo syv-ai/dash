@@ -111,8 +111,9 @@ export class ControlServer {
       }));
     }
 
-    // `dashctl`: argv (and stdin, once asked for) as a form; the answer is text,
-    // its status telling the script where to print it (cli.ts).
+    // `dashctl`: argv and the caller's cwd (and stdin, once asked for) as a
+    // form; the answer is text, its status telling the script where to print
+    // it (cli.ts).
     if (pathname === '/v1/cli') {
       if (req.method !== 'POST') return sendJson(res, 405, { error: 'method not allowed' });
       const body = await readBody(req, MAX_CLI_BODY_BYTES);
@@ -124,6 +125,7 @@ export class ControlServer {
           caller,
           form.getAll('argv'),
           form.has('stdin') ? form.get('stdin') : null,
+          form.get('cwd') || null,
         );
         return sendText(res, answer.status, answer.text);
       } catch (err) {

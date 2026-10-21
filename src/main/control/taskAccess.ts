@@ -15,7 +15,9 @@ import { initializedPaths, tokenFor } from './tokens';
  *   `CLAUDE_ENV_FILE`, which Claude Code runs before each Bash command. The
  *   settings `env` block can't: its values are literal, so it could only
  *   replace `PATH`.
- * - allow rules for the read-only commands, so reading never prompts.
+ * - allow rules for the read-only commands, so reading never prompts: as
+ *   `dashctl …`, and as `"<its path>" …`, the form the dash skill gives for a
+ *   session whose PATH lacks it.
  */
 
 /** Set by control/index.ts once capabilities register (importing the registry here would cycle). */
@@ -52,7 +54,9 @@ export function dashSessionAccess(task: {
   const exportPath = `export PATH="$PATH":${shellQuote(paths.cliBinDir)}`;
   return {
     env: { DASH_CALLER: callerString(caller), DASH_TOKEN: tokenFor(caller) },
-    allow: readOnlyCapabilities.map((name) => `Bash(dashctl ${commandName(name)}:*)`),
+    allow: ['dashctl', `"${paths.dashctl}"`].flatMap((cmd) =>
+      readOnlyCapabilities.map((name) => `Bash(${cmd} ${commandName(name)}:*)`),
+    ),
     sessionStart: [
       {
         type: 'command',

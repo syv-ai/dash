@@ -14,9 +14,11 @@ import { ControlError, type CapabilityListing, type Registry } from './registry'
  *
  * 'tasks.create' is `dashctl tasks create`, 'review.drafts_create' is
  * `dashctl review drafts-create`. Every input is a flag (`--task-id` or
- * `--taskId`); the capability's `cli.args` are positional too, and its
- * `cli.stdin` input is read from stdin when not given. `--project` takes a
- * project's id, name or path.
+ * `--taskId`); the capability's `cli.args` are positional too. Its `cli.stdin`
+ * input is read from stdin when given as `-`, or when it is required and not
+ * given; an optional one is never read implicitly, so a stdin the agent's
+ * shell happens to hold is never swallowed. `--project` takes a project's id,
+ * name or path (relative to the caller's working directory).
  */
 
 /** What `/v1/cli` answers: the status decides where the script prints it. */
@@ -72,12 +74,12 @@ export function commandLine(c: CapabilityListing): string {
       parts.push(`--${flagFor(prop)} ${placeholder(prop, schema)}`.trimEnd());
     } else optional = true;
   }
-  if (c.cli?.stdin) parts.push(`(${flagFor(c.cli.stdin)} on stdin)`);
+  if (c.cli?.stdin && required.has(c.cli.stdin)) parts.push(`(${flagFor(c.cli.stdin)} on stdin)`);
   if (optional) parts.push('[options]');
   return parts.join(' ');
 }
 
-/** Bare `dashctl`: every command, one line and a sentence each. */
+/** `dashctl help` (and bare `dashctl`): every command, one line and a sentence each. */
 export function usageText(commands: CapabilityListing[]): string {
   const lines = ['usage: dashctl <namespace> <verb> [arguments] [--flag value]', ''];
   for (const c of commands) lines.push(commandLine(c), `    ${firstSentence(c.summary)}`);
@@ -96,7 +98,7 @@ export function helpText(c: CapabilityListing): string {
     const flag = `--${flagFor(prop)} ${placeholder(prop, schema)}`.trimEnd();
     const notes = [
       required.has(prop) ? 'required' : '',
-      c.cli?.stdin === prop ? 'or stdin' : '',
+      c.cli?.stdin === prop ? (required.has(prop) ? 'or stdin' : '- reads stdin') : '',
       prop === 'projectId' ? 'id, name or path' : '',
     ].filter(Boolean);
     const desc = [schema.description, notes.length ? `(${notes.join(', ')})` : '']
@@ -109,15 +111,30 @@ export function helpText(c: CapabilityListing): string {
 
 class UsageError extends Error {}
 
-/** A project by id, name (any case) or path (`~` and relative paths resolved). */
-export function findProject(projects: Project[], ref: string): Project | undefined {
+/**
+ * A project by id, name (any case) or path: `~` is the home folder, and a
+ * relative path is the caller's `cwd` (none from an old script: absolute
+ * paths only). Throws a usage error for a name two projects share.
+ */
+export function findProject(
+  projects: Project[],
+  ref: string,
+  cwd: string | null = null,
+): Project | undefined {
   const byId = projects.find((p) => p.id === ref);
   if (byId) return byId;
   const lower = ref.toLowerCase();
   const byName = projects.filter((p) => p.name.toLowerCase() === lower);
   if (byName.length === 1) return byName[0];
-  const expanded = ref.startsWith('~') ? path.join(os.homedir(), ref.slice(1)) : ref;
-  const resolved = path.resolve(expanded);
+  if (byName.length > 1) {
+    throw new UsageError(
+      `${byName.length} projects are named ${JSON.stringify(ref)}; give its path or id (${byName.map((p) => p.id).join(', ')})`,
+    );
+  }
+  const expanded =
+    ref === '~' || ref.startsWith('~/') ? path.join(os.homedir(), ref.slice(1)) : ref;
+  if (!path.isAbsolute(expanded) && cwd === null) return undefined;
+  const resolved = path.resolve(cwd ?? '/', expanded);
   return projects.find((p) => path.resolve(p.path) === resolved);
 }
 
@@ -138,21 +155,29 @@ function coerce(prop: string, schema: PropSchema, value: string | true): unknown
   return value;
 }
 
+const isHelp = (word: string) => word === '--help' || word === '-h';
+
 type Parsed =
   | { kind: 'usage'; text: string }
   | { kind: 'help'; text: string }
   | { kind: 'stdin' }
   | { kind: 'call'; name: string; input: Record<string, unknown> };
 
-/** Turn argv (and stdin, once sent) into a call, or say why not. Pure. */
+/**
+ * Turn argv (and stdin, once sent) into a call, or say why not. `cwd` is the
+ * caller's working directory, for a relative `--project` path. Pure.
+ */
 export function resolveArgv(
   argv: string[],
   commands: CapabilityListing[],
   stdin: string | null,
   projects: Project[],
+  cwd: string | null = null,
 ): Parsed {
-  if (argv.length === 0 || (argv.length === 1 && ['help', '--help', '-h'].includes(argv[0]!))) {
-    return { kind: 'usage', text: usageText(commands) };
+  // Bare is a usage error (like git); asking for help is an answer.
+  if (argv.length === 0) return { kind: 'usage', text: usageText(commands) };
+  if (argv.length === 1 && (argv[0] === 'help' || isHelp(argv[0]!))) {
+    return { kind: 'help', text: usageText(commands) };
   }
   const [ns, verb, ...rest] = argv;
   const c = commands.find((x) => {
@@ -166,7 +191,6 @@ export function resolveArgv(
     return { kind: 'usage', text: `dashctl: no command ${what}\n\n${known.join('\n')}` };
   }
   try {
-    if (rest.includes('--help') || rest.includes('-h')) return { kind: 'help', text: helpText(c) };
     const props = propsOf(c);
     const byFlag = new Map<string, string>();
     for (const prop of Object.keys(props)) {
@@ -184,6 +208,8 @@ export function resolveArgv(
         break;
       }
       if (word === '--json') continue; // results are always JSON
+      // Only here, not as a flag's value: `--prompt --help` is a prompt.
+      if (isHelp(word)) return { kind: 'help', text: helpText(c) };
       if (!word.startsWith('--')) {
         positional.push(word);
         continue;
@@ -209,19 +235,23 @@ export function resolveArgv(
       if (prop in raw) throw new UsageError(`${flagFor(prop)} given twice`);
       raw[prop] = value;
     });
+    const fromStdin = c.cli?.stdin;
+    const readStdin =
+      fromStdin !== undefined &&
+      (raw[fromStdin] === '-' || (!(fromStdin in raw) && requiredOf(c).has(fromStdin)));
+    if (readStdin) delete raw[fromStdin!];
     for (const [prop, value] of Object.entries(raw)) {
       input[prop] = coerce(prop, props[prop]!, value);
     }
 
-    const fromStdin = c.cli?.stdin;
-    if (fromStdin && !(fromStdin in input)) {
+    if (readStdin) {
       if (stdin === null) return { kind: 'stdin' };
       // A heredoc ends in a newline the writer didn't mean.
       const text = stdin.replace(/\r?\n$/, '');
-      if (text !== '') input[fromStdin] = text;
+      if (text !== '') input[fromStdin!] = text;
     }
     if (typeof input.projectId === 'string') {
-      const project = findProject(projects, input.projectId);
+      const project = findProject(projects, input.projectId, cwd);
       if (!project) {
         throw new UsageError(
           `no project ${JSON.stringify(input.projectId)}; dashctl projects list names them`,
@@ -236,6 +266,8 @@ export function resolveArgv(
     return { kind: 'call', name: c.name, input };
   } catch (err) {
     if (!(err instanceof UsageError)) throw err;
+    // A help flag the parse didn't reach (`--bogus --help`) still asks for help.
+    if (rest.some(isHelp)) return { kind: 'help', text: helpText(c) };
     return {
       kind: 'usage',
       text: `dashctl ${words(c.name).join(' ')}: ${err.message}\nusage: ${commandLine(c)}`,
@@ -265,9 +297,10 @@ export async function runCli(
   caller: Caller,
   argv: string[],
   stdin: string | null,
+  cwd: string | null = null,
 ): Promise<CliAnswer> {
   const commands = registry.listFor(caller);
-  const parsed = resolveArgv(argv, commands, stdin, registry.projectsFor(caller));
+  const parsed = resolveArgv(argv, commands, stdin, registry.projectsFor(caller), cwd);
   switch (parsed.kind) {
     case 'usage':
       return { status: 400, text: parsed.text };

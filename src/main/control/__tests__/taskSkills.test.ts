@@ -68,7 +68,9 @@ describe('syncTaskSkills', () => {
 
   it("names dashctl's own path, for a session whose PATH lacks it", async () => {
     await sync(true, '/data/control/bin/dashctl');
-    expect(fs.readFileSync(skill(), 'utf8')).toContain('it is at `/data/control/bin/dashctl`');
+    expect(fs.readFileSync(skill(), 'utf8')).toContain(
+      'run it by its path, in double quotes: `"/data/control/bin/dashctl"`',
+    );
     expect(dashSkill(null)).not.toContain('it is at');
   });
 });

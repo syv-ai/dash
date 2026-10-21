@@ -3,26 +3,54 @@ import * as path from 'path';
 import { shellQuote } from '../../shared/shellQuote';
 import { writeFileAtomic } from '../utils/atomicWrite';
 import { controlPaths } from './paths';
+import { initializedPaths } from './tokens';
+
+const EMPTY_MCP_CONFIG = '{ "mcpServers": {} }\n';
+const legacyMcpConfigDir = (controlDir: string) => path.join(controlDir, 'mcp-config');
 
 /**
  * Write `<userData>/control/bin/dashctl` (0755, via tmp + rename) and return
- * its path. Run on every boot. Also retires what the MCP door left there: its
- * launcher and the shim's copy go, and each per-task `--mcp-config` becomes an
- * empty one rather than going, since a job the supervisor started with one
- * passes that path again on every respawn.
+ * its path. Run on every boot. Also retires what the MCP door left there: the
+ * shim's copy goes; the launcher, which a `claude mcp add dash` registration
+ * may still run, becomes a stub that says to use dashctl; and each per-task
+ * `--mcp-config` becomes an empty one rather than going, since a job the
+ * supervisor started with one passes that path again on every respawn (it
+ * goes when its task is deleted).
  */
 export function writeDashctl(userDataDir: string): string {
   const paths = controlPaths(userDataDir);
   fs.mkdirSync(paths.cliBinDir, { recursive: true });
   writeFileAtomic(paths.dashctl, dashctlScript(paths.dir), { mode: 0o755 });
-  for (const legacy of ['dash-mcp', 'dash-mcp.js']) {
-    fs.rmSync(path.join(paths.dir, legacy), { force: true });
+  fs.rmSync(path.join(paths.dir, 'dash-mcp.js'), { force: true });
+  const launcher = path.join(paths.dir, 'dash-mcp');
+  if (fs.existsSync(launcher)) {
+    writeFileAtomic(launcher, retiredMcpLauncher(paths.dashctl), { mode: 0o755 });
   }
-  const mcpConfigDir = path.join(paths.dir, 'mcp-config');
+  const mcpConfigDir = legacyMcpConfigDir(paths.dir);
   for (const file of fs.existsSync(mcpConfigDir) ? fs.readdirSync(mcpConfigDir) : []) {
-    writeFileAtomic(path.join(mcpConfigDir, file), '{ "mcpServers": {} }\n', { mode: 0o600 });
+    const config = path.join(mcpConfigDir, file);
+    if (fs.readFileSync(config, 'utf8') === EMPTY_MCP_CONFIG) continue;
+    writeFileAtomic(config, EMPTY_MCP_CONFIG, { mode: 0o600 });
   }
   return paths.dashctl;
+}
+
+/** Remove a deleted task's emptied `--mcp-config`; a no-op when it has none. */
+export function removeLegacyMcpConfig(taskId: string): void {
+  const paths = initializedPaths();
+  if (!paths) return;
+  fs.rmSync(path.join(legacyMcpConfigDir(paths.dir), `${taskId}.json`), { force: true });
+}
+
+/** What the MCP launcher becomes: a server that fails at once, saying why. */
+export function retiredMcpLauncher(dashctl: string): string {
+  return `#!/bin/sh
+# Left by Dash where its MCP server's launcher was, so an old
+# \`claude mcp add dash\` registration says why it stopped working.
+dashctl=${shellQuote(dashctl)}
+echo "Dash's MCP server is gone; use dashctl instead, at $dashctl (and run: claude mcp remove dash)." >&2
+exit 1
+`;
 }
 
 /**
@@ -32,7 +60,7 @@ export function writeDashctl(userDataDir: string): string {
  */
 export function dashctlScript(controlDir: string): string {
   return `#!/bin/sh
-# dashctl: ask the running Dash something. Run it bare for every command.
+# dashctl: ask the running Dash something. \`dashctl help\` lists every command.
 # Written by Dash on launch. It talks to Dash over 127.0.0.1: the port is in
 # control-port; a Dash task's session carries its own token (DASH_CALLER,
 # DASH_TOKEN), and anyone else uses the orchestrator token, which is there
@@ -44,7 +72,12 @@ port=$(tr -d '[:space:]' < "$dir/control-port" 2>/dev/null || true)
 case "$port" in
   '' | *[!0-9]*) echo "dashctl: Dash is not running. Open Dash and try again." >&2; exit 1 ;;
 esac
-if [ -n "\${DASH_CALLER:-}" ] && [ -n "\${DASH_TOKEN:-}" ]; then
+if [ -n "\${DASH_CALLER+set}\${DASH_TOKEN+set}" ]; then
+  # A task's session. Never fall back to the orchestrator's wider token.
+  if [ -z "\${DASH_CALLER:-}" ] || [ -z "\${DASH_TOKEN:-}" ]; then
+    echo "dashctl: DASH_CALLER and DASH_TOKEN go together, and one is empty." >&2
+    exit 1
+  fi
   caller=$DASH_CALLER
   token=$DASH_TOKEN
 else
@@ -57,7 +90,11 @@ else
 fi
 
 out=$(mktemp)
-trap 'rm -f "$out"' EXIT
+headers=$(mktemp)
+trap 'rm -f "$out" "$headers"' EXIT
+# The token reaches curl in a file (mktemp's are 0600), not in its argv, which
+# any process can read.
+printf 'Authorization: Bearer %s\\nX-Dash-Caller: %s\\n' "$token" "$caller" > "$headers"
 
 # Every word rides in the body, so curl does the encoding.
 for a in "$@"; do
@@ -66,9 +103,8 @@ for a in "$@"; do
 done
 
 send() {
-  curl -s -X POST -o "$out" -w '%{http_code}' \\
-    -H "Authorization: Bearer $token" -H "X-Dash-Caller: $caller" \\
-    "http://127.0.0.1:$port/v1/cli" "$@"
+  curl -s -X POST -o "$out" -w '%{http_code}' -H "@$headers" \\
+    --data-urlencode "cwd=$PWD" "http://127.0.0.1:$port/v1/cli" "$@"
 }
 
 if ! code=$(send "$@"); then
@@ -76,8 +112,9 @@ if ! code=$(send "$@"); then
   exit 1
 fi
 if [ "$code" = 428 ]; then
-  # The command reads an input from stdin and it wasn't given as a flag; Dash
-  # ran nothing. Send stdin, once (nothing, from a terminal).
+  # The command reads an input from stdin (it's required and wasn't given, or
+  # was given as -); Dash ran nothing. Send stdin, once (nothing, from a
+  # terminal).
   if [ -t 0 ]; then code=$(send "$@" --data-urlencode "stdin=") || exit 1
   else code=$(send "$@" --data-urlencode "stdin@-") || exit 1
   fi

@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { execFileSync } from 'child_process';
+import { execFileSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { writeDashctl } from '../dashctl';
+import { removeLegacyMcpConfig, writeDashctl } from '../dashctl';
 import { controlPaths } from '../paths';
 import { initTokens, tokenFor, verify } from '../tokens';
 import { dashSessionAccess, setReadOnlyCapabilities } from '../taskAccess';
@@ -29,13 +29,33 @@ describe('writeDashctl', () => {
     fs.mkdirSync(path.join(dir, 'mcp-config'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'dash-mcp'), '#!/bin/sh\n');
     fs.writeFileSync(path.join(dir, 'dash-mcp.js'), '');
-    fs.writeFileSync(path.join(dir, 'mcp-config', 't1.json'), '{"mcpServers":{"dash":{}}}');
+    const config = path.join(dir, 'mcp-config', 't1.json');
+    fs.writeFileSync(config, '{"mcpServers":{"dash":{}}}');
     writeDashctl(userData);
-    expect(fs.existsSync(path.join(dir, 'dash-mcp'))).toBe(false);
     expect(fs.existsSync(path.join(dir, 'dash-mcp.js'))).toBe(false);
-    expect(JSON.parse(fs.readFileSync(path.join(dir, 'mcp-config', 't1.json'), 'utf8'))).toEqual({
-      mcpServers: {},
-    });
+    expect(JSON.parse(fs.readFileSync(config, 'utf8'))).toEqual({ mcpServers: {} });
+    // Emptied once: later boots leave it be.
+    const old = new Date(2020, 0, 1);
+    fs.utimesSync(config, old, old);
+    writeDashctl(userData);
+    expect(fs.statSync(config).mtime).toEqual(old);
+    // Until its task is deleted.
+    initTokens(userData);
+    removeLegacyMcpConfig('t1');
+    expect(fs.existsSync(config)).toBe(false);
+  });
+
+  it('turns the MCP launcher into one that says to use dashctl, and adds none', () => {
+    const paths = controlPaths(userData);
+    const launcher = path.join(paths.dir, 'dash-mcp');
+    writeDashctl(userData);
+    expect(fs.existsSync(launcher)).toBe(false);
+    fs.writeFileSync(launcher, '#!/bin/sh\nexec node dash-mcp.js\n');
+    writeDashctl(userData);
+    const r = spawnSync(launcher, [], { encoding: 'utf8' });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain(`use dashctl instead, at ${paths.dashctl}`);
+    expect(r.stderr).toContain('claude mcp remove dash');
   });
 });
 
@@ -54,11 +74,15 @@ describe('dashSessionAccess', () => {
       DASH_TOKEN: tokenFor({ kind: 'task', taskId: 't1' }),
     });
     expect(verify(access.env.DASH_TOKEN!, { kind: 'task', taskId: 't1' })).toBe(true);
+    const { dashctl } = controlPaths(userData);
+    // By name, and by the quoted path the dash skill gives as a fallback.
     expect(access.allow).toEqual([
       'Bash(dashctl tasks list:*)',
       'Bash(dashctl review drafts-list:*)',
+      `Bash("${dashctl}" tasks list:*)`,
+      `Bash("${dashctl}" review drafts-list:*)`,
     ]);
-    expect(access.dashctl).toBe(controlPaths(userData).dashctl);
+    expect(access.dashctl).toBe(dashctl);
   });
 
   it("puts dashctl's folder on PATH through CLAUDE_ENV_FILE, spaces and all", () => {

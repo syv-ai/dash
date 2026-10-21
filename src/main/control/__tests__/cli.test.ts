@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { spawn, spawnSync } from 'child_process';
+import * as pty from 'node-pty';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -38,15 +39,17 @@ describe('dashctl argv', () => {
   const resolve = (argv: string[], stdin: string | null = null) =>
     resolveArgv(argv, commands, stdin, projects);
 
-  it('prints every command when run bare', () => {
-    const r = resolve([]);
-    expect(r.kind).toBe('usage');
+  it('prints every command on help, and as a usage error when run bare', () => {
+    const r = resolve(['help']);
+    expect(r.kind).toBe('help');
     const text = (r as { text: string }).text;
-    expect(text).toContain(
-      'dashctl tasks create <name> --project <project> (prompt on stdin) [options]',
-    );
+    expect(text).toContain('dashctl tasks create <name> --project <project> [options]');
+    expect(text).toContain('dashctl review drafts-create --number <number>');
+    expect(text).toContain('(body on stdin)');
     expect(text).toContain('dashctl review drafts-update <id> [options]');
     expect(text.split('\n').length).toBe(2 + commands.length * 2 + 2);
+    expect(resolve(['--help'])).toEqual(r);
+    expect(resolve([])).toEqual({ kind: 'usage', text });
   });
 
   it('takes positionals, kebab or camel flags, numbers and booleans', () => {
@@ -77,18 +80,57 @@ describe('dashctl argv', () => {
     expect(resolve(['tasks', 'list', '--project', 'nope'])).toMatchObject({ kind: 'usage' });
   });
 
-  it('asks for stdin once, then reads it without its last newline', () => {
+  it("resolves a relative or ~ path against the caller's cwd, not Dash's", () => {
+    const home = makeProject({ id: 'pH', name: 'h', path: path.join(os.homedir(), 'code/h') });
+    const all = [...projects, home];
+    const list = (ref: string, cwd: string | null) =>
+      resolveArgv(['tasks', 'list', '--project', ref], commands, null, all, cwd);
+    expect(list('.', '/repos/holi')).toMatchObject({ input: { projectId: 'pB' } });
+    expect(list('../dash', '/repos/holi')).toMatchObject({ input: { projectId: 'pA' } });
+    expect(list('holi', '/repos')).toMatchObject({ input: { projectId: 'pB' } });
+    expect(list('~/code/h', '/repos')).toMatchObject({ input: { projectId: 'pH' } });
+    expect(list('~/code/h', null)).toMatchObject({ input: { projectId: 'pH' } });
+    // No cwd (an old script): a relative path matches nothing.
+    expect(list('.', null)).toMatchObject({ kind: 'usage' });
+  });
+
+  it('refuses a name two projects share', () => {
+    const twins = [...projects, makeProject({ id: 'pC', name: 'dash', path: '/other/dash' })];
+    const r = resolveArgv(['tasks', 'list', '--project', 'Dash'], commands, null, twins);
+    expect(r.kind).toBe('usage');
+    expect((r as { text: string }).text).toContain('2 projects are named "Dash"');
+    expect(
+      resolveArgv(['tasks', 'list', '--project', '/other/dash'], commands, null, twins),
+    ).toMatchObject({ input: { projectId: 'pC' } });
+  });
+
+  it('reads an optional stdin input only when given as -', () => {
     const argv = ['tasks', 'create', 'Fix it', '--project', 'holi'];
-    expect(resolve(argv)).toEqual({ kind: 'stdin' });
-    expect(resolve(argv, 'Make the test pass\nplease\n')).toEqual({
+    // Never implicitly: a stdin the agent's shell holds isn't swallowed.
+    expect(resolve(argv)).toEqual({
+      kind: 'call',
+      name: 'tasks.create',
+      input: { name: 'Fix it', projectId: 'pB' },
+    });
+    expect(resolve(argv, 'not mine')).toMatchObject({ input: { name: 'Fix it' } });
+    expect(resolve(argv, 'not mine')).not.toMatchObject({ input: { prompt: expect.anything() } });
+    // `-`: asked for once, then read without its last newline.
+    const dash = [...argv, '--prompt', '-'];
+    expect(resolve(dash)).toEqual({ kind: 'stdin' });
+    expect(resolve(dash, 'Make the test pass\nplease\n')).toEqual({
       kind: 'call',
       name: 'tasks.create',
       input: { name: 'Fix it', projectId: 'pB', prompt: 'Make the test pass\nplease' },
     });
-    // Optional: nothing on stdin creates a task with no prompt.
-    expect(resolve(argv, '')).toMatchObject({ input: { name: 'Fix it', projectId: 'pB' } });
-    // A flag wins, and stdin isn't asked for.
+    expect(resolve([...argv, '--prompt=-'], 'hi\n')).toMatchObject({ input: { prompt: 'hi' } });
     expect(resolve([...argv, '--prompt', 'hi'])).toMatchObject({ input: { prompt: 'hi' } });
+  });
+
+  it('reads a required stdin input when not given as a flag', () => {
+    const argv = ['review', 'summary-set', '--task-id', 't1', '--number', '3'];
+    expect(resolve(argv)).toEqual({ kind: 'stdin' });
+    expect(resolve(argv, 'Looks good\n')).toMatchObject({ input: { body: 'Looks good' } });
+    expect(resolve([...argv, '--body', 'x'])).toMatchObject({ input: { body: 'x' } });
   });
 
   it('says what is wrong, with the command line', () => {
@@ -112,6 +154,17 @@ describe('dashctl argv', () => {
     const text = (r as { text: string }).text;
     expect(text).toContain('--kind note|comment');
     expect(text).toContain('(required, or stdin)');
+    expect((resolve(['tasks', 'create', '-h']) as { text: string }).text).toContain(
+      '(- reads stdin)',
+    );
+    // Even past a flag it doesn't know.
+    expect(resolve(['tasks', 'get', '--bogus', '--help']).kind).toBe('help');
+  });
+
+  it("takes --help as a flag's value", () => {
+    expect(
+      resolve(['tasks', 'create', 'x', '--project', 'holi', '--prompt', '--help']),
+    ).toMatchObject({ kind: 'call', input: { prompt: '--help' } });
   });
 
   it('prints text as is and anything else as compact JSON', () => {
@@ -137,7 +190,21 @@ describe('the dashctl script', () => {
     userData = fs.mkdtempSync(path.join(os.tmpdir(), 'dashctl-'));
     initTokens(userData);
     setOrchestratorFile(true);
-    registry = createRegistry(fakeLookups(projects, [makeTask({ id: 't1', projectId: 'pA' })]));
+    // The project the script runs in, by its real path: that's what sh's $PWD is.
+    const here = makeProject({ id: 'pT', name: 'here', path: fs.realpathSync(userData) });
+    registry = createRegistry(
+      fakeLookups([...projects, here], [makeTask({ id: 't1', projectId: 'pA' })]),
+    );
+    registry.register(
+      defineCapability({
+        name: 'notes.where',
+        summary: 'Say which project.',
+        input: z.object({ projectId: z.string() }),
+        callers: ['orchestrator'],
+        readOnly: true,
+        handler: async (_ctx, input) => input,
+      }),
+    );
     registry.register(
       defineCapability({
         name: 'notes.write',
@@ -177,13 +244,14 @@ describe('the dashctl script', () => {
     fs.rmSync(userData, { recursive: true, force: true });
   });
 
-  const run = (args: string[], input?: string) => {
-    const env = { ...process.env };
-    delete env.DASH_CALLER;
-    delete env.DASH_TOKEN;
+  const run = (args: string[], input?: string, extraEnv: Record<string, string> = {}) => {
+    const env: NodeJS.ProcessEnv = { ...process.env, ...extraEnv };
+    if (!('DASH_CALLER' in extraEnv)) delete env.DASH_CALLER;
+    if (!('DASH_TOKEN' in extraEnv)) delete env.DASH_TOKEN;
+    delete env.PWD; // so sh sets it to the cwd below
     // Async: the server answering it runs in this process.
     return new Promise<{ status: number | null; stdout: string; stderr: string }>((resolve) => {
-      const child = spawn(script, args, { env });
+      const child = spawn(script, args, { env, cwd: userData });
       let stdout = '';
       let stderr = '';
       child.stdout.on('data', (d: Buffer) => (stdout += d));
@@ -208,17 +276,63 @@ describe('the dashctl script', () => {
 
   it.runIf(hasCurl)('exits 2 on usage, 1 on a refusal, both on stderr', async () => {
     const bare = await run([]);
-    expect(bare.status).toBe(2);
+    expect(bare).toMatchObject({ status: 2, stdout: '' });
     expect(bare.stderr).toContain('dashctl notes write <title> (body on stdin) [options]');
     const refused = await run(['notes', 'fail']);
     expect(refused).toMatchObject({ status: 1, stdout: '' });
     expect(refused.stderr).toContain('dashctl notes fail: nope');
   });
 
-  it.runIf(hasCurl)('says when Dash is not running', async () => {
-    await server.stop();
-    const r = await run(['notes', 'fail']);
+  it.runIf(hasCurl)('prints help to stdout, exit 0', async () => {
+    const help = await run(['help']);
+    expect(help).toMatchObject({ status: 0, stderr: '' });
+    expect(help.stdout).toContain('dashctl notes write <title> (body on stdin) [options]');
+  });
+
+  it.runIf(hasCurl)('resolves a relative --project against where it runs', async () => {
+    const r = await run(['notes', 'where', '--project', '.']);
+    expect(r).toMatchObject({ status: 0, stderr: '' });
+    expect(JSON.parse(r.stdout)).toEqual({ projectId: 'pT' });
+  });
+
+  it.runIf(hasCurl)("won't trade a task's empty token for the orchestrator's", async () => {
+    const r = await run(['notes', 'fail'], '', { DASH_CALLER: '', DASH_TOKEN: 'x' });
     expect(r.status).toBe(1);
-    expect(r.stderr).toContain('Dash is not running');
+    expect(r.stderr).toContain('DASH_CALLER and DASH_TOKEN go together');
+    expect(r.stderr).not.toContain('nope');
+  });
+
+  it.runIf(hasCurl)('says when Dash is not running: no port file, or a stale one', async () => {
+    const { port } = controlPaths(userData);
+    const stalePort = fs.readFileSync(port, 'utf8');
+    await server.stop();
+    const missing = await run(['notes', 'fail']);
+    expect(missing.status).toBe(1);
+    expect(missing.stderr).toContain('Dash is not running');
+    // Dash crashed: the file is still there, nothing listens on it.
+    fs.writeFileSync(port, stalePort);
+    const stale = await run(['notes', 'fail']);
+    expect(stale.status).toBe(1);
+    expect(stale.stderr).toContain('Dash is not running');
+  });
+
+  it.runIf(hasCurl)("doesn't wait on a terminal for stdin", async () => {
+    const env: Record<string, string> = {};
+    for (const [k, v] of Object.entries(process.env)) {
+      if (v !== undefined && k !== 'DASH_CALLER' && k !== 'DASH_TOKEN') env[k] = v;
+    }
+    const term = pty.spawn(script, ['notes', 'write', 'a title'], { env, cwd: userData });
+    let output = '';
+    term.onData((d) => (output += d));
+    const exitCode = await new Promise<number>((resolve) => {
+      const timer = setTimeout(() => term.kill(), 5000);
+      term.onExit(({ exitCode: code }) => {
+        clearTimeout(timer);
+        resolve(code);
+      });
+    });
+    // Nothing sent for the body: a usage error, not a hang.
+    expect(exitCode).toBe(2);
+    expect(output).toContain('missing --body');
   });
 });
