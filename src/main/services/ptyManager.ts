@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import { type WebContents } from 'electron';
+import { app, type WebContents } from 'electron';
 import { activityMonitor } from './ActivityMonitor';
 import { hookServer } from './HookServer';
 import { contextUsageService } from './ContextUsageService';
@@ -15,7 +15,7 @@ import { buildSessionSettings, parseUntrustedRoot } from './supervisorSession';
 import { isWorkspaceTrusted } from '../utils/claudePaths';
 import { DatabaseService } from './DatabaseService';
 import { dashSessionAccess } from '../control/taskAccess';
-import { syncDashSkill } from '../control/dashSkill';
+import { syncTaskSkills } from '../control/taskSkills';
 import { writeTaskSettings } from './taskSettings';
 import { writeHookSettings, setCommitAttributionValue } from './ptyHookSettings';
 import type { PermissionMode, TaskModel } from '@shared/types';
@@ -310,10 +310,17 @@ async function ensureTaskSession(opts: {
   } catch (err) {
     console.error(`[ptyManager] settings file for task ${opts.id} failed:`, err);
   }
-  // The skill that explains dashctl, in the checkout while access is on.
-  await syncDashSkill(opts.cwd, opts.dashAccess, dash?.dashctl ?? null).catch((err) =>
-    console.warn(`[ptyManager] dash skill for task ${opts.id} failed:`, err),
-  );
+  // The skills Dash writes into the checkout: dashctl's while access is on,
+  // and how to send the Dash team feedback.
+  await Promise.resolve()
+    .then(() =>
+      syncTaskSkills(opts.cwd, {
+        dashAccess: opts.dashAccess,
+        dashctl: dash?.dashctl ?? null,
+        dashVersion: app.getVersion(),
+      }),
+    )
+    .catch((err) => console.warn(`[ptyManager] skills for task ${opts.id} failed:`, err));
   let resumeSessionId = opts.sessionId;
   if (opts.jobId) {
     let row;

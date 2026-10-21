@@ -49,6 +49,8 @@ Turn on **Dash access** in the New Task dialog (or later in the task's settings;
 
 Dash puts it all in the task's `--settings` file, rewritten at every session start: the task's caller id and token in `env`, a SessionStart hook that appends `dashctl`'s folder to `PATH` (through `CLAUDE_ENV_FILE`), and allow rules for the read-only commands. It also writes a `dash` skill to `.claude/skills/dash/SKILL.md` in the task's checkout. It explains `dashctl`, above all the PR review workflow (notes vs comments, where a draft goes, the review summary), and names `dashctl`'s full path in case a session's `PATH` lacks it. It is kept out of git through `.git/info/exclude`, not the repo's `.gitignore`, and removed when Dash access is turned off. A `dash` skill the repo already has, without Dash's marker, is left alone.
 
+Every task, Dash access or not, also gets a `dash-feedback` skill (`.claude/skills/dash-feedback/`, kept out of git the same way). When the agent misses something in Dash, finds a Dash skill unclear, or its user has something to say about Dash itself, it drafts a GitHub issue on this repository for the user to submit, through the **Agent feedback** issue form, or with `gh` when asked. Nothing from the user's project goes in it: the repository is public.
+
 The switch's default comes from the project's settings ("Dash access for new tasks"), which is stored as `taskDefaults.dashAccess` in `.dash/config.json`. To set a personal default without changing the shared file, put the same key in `.dash/config.local.json`.
 
 ### An orchestrator outside Dash
