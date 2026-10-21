@@ -220,7 +220,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     defineCapability({
       name: 'tasks.get',
       summary:
-        'Get one task: its name, branch, worktree path, state, what it waits for, and its messageAddress (see tasks_wake).',
+        'Get one task: its name, branch, worktree path, state, what it waits for, and its messageAddress (see `dashctl tasks wake`).',
       input: taskIdInput,
       callers: ['orchestrator', 'task'],
       cli: { args: ['taskId'] },
@@ -238,7 +238,9 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
       input: z.object({
         projectId: z
           .string()
-          .describe('From projects_list; an agent in a task can only use its own project'),
+          .describe(
+            'From `dashctl projects list`; an agent in a task can only use its own project',
+          ),
         name: z.string().trim().min(1).max(200),
         prompt: z
           .string()
@@ -250,7 +252,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
           .enum(['new-branch', 'existing-branch', 'in-place'])
           .optional()
           .describe(
-            'new-branch (default): a worktree on a new branch. existing-branch: a worktree on `branch`. in-place: run in the project folder, checking out `branch` (default: the one checked out now).',
+            'new-branch (default): a worktree on a new branch. existing-branch: a worktree on `--branch`. in-place: run in the project folder, checking out `--branch` (default: the one checked out now).',
           ),
         baseRef: z
           .string()
@@ -354,7 +356,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     defineCapability({
       name: 'tasks.wait',
       summary:
-        'Wait until a task is idle, waiting for a person, not working, or changes state, for up to timeoutSec (max 110). Returns the task and timedOut: true when the time ran out; call again to keep waiting.',
+        'Wait until a task is idle, waiting for a person, not working, or changes state, for up to --timeout-sec seconds (max 110). Returns the task and timedOut: true when the time ran out; call again to keep waiting.',
       input: z.object({
         taskId: z.string(),
         until: z.enum(['idle', 'waiting', 'not-working', 'change']),
@@ -403,7 +405,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     defineCapability({
       name: 'tasks.output',
       summary:
-        "Read what a task's Claude Code session shows: the last `lines` lines of its terminal as plain text.",
+        "Read what a task's Claude Code session shows: the last `--lines` lines of its terminal as plain text.",
       input: z.object({
         taskId: z.string(),
         lines: z.number().int().min(1).max(400).default(100),
@@ -431,7 +433,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     defineCapability({
       name: 'tasks.wake',
       summary:
-        "Make sure a task's Claude Code session is running so it can take messages: returns at once if it is, otherwise starts it (with no message) and returns once it is up, for up to timeoutSec (max 110; timedOut: true when the time ran out, call again). Then message the task with your own SendMessage to the task's messageAddress; it answers the same way. A task whose messaging is needs-approval runs with permission prompts off, so your message waits until a person delivers it in Dash. A stopped task's old address fails (ENOENT): wake it again. Refused while the task needs the trust prompt or is archived. A task cannot wake itself.",
+        "Make sure a task's Claude Code session is running so it can take messages: returns at once if it is, otherwise starts it (with no message) and returns once it is up, for up to --timeout-sec seconds (max 110; timedOut: true when the time ran out, call again). Then message the task with your own SendMessage to the task's messageAddress; it answers the same way. A task whose messaging is needs-approval runs with permission prompts off, so your message waits until a person delivers it in Dash. A stopped task's old address fails (ENOENT): wake it again. Refused while the task needs the trust prompt or is archived. A task cannot wake itself.",
       input: z.object({ taskId: z.string(), timeoutSec }),
       callers: ['orchestrator', 'task'],
       cli: { args: ['taskId'] },

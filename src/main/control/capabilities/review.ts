@@ -94,7 +94,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
     defineCapability({
       name: 'review.drafts_create',
       summary:
-        "Write a note or draft a review comment on a PR's lines (or a reply to one of its threads) in the task's diff editor. Nothing is posted: the person reviews, edits and submits comments; notes stay local. For a comment on the whole PR, use review_summary_set instead.",
+        "Write a note or draft a review comment on a PR's lines (or a reply to one of its threads) in the task's diff editor. Nothing is posted: the person reviews, edits and submits comments; notes stay local. For a comment on the whole PR, use `dashctl review summary-set` instead.",
       input: z.object({
         taskId: TASK_ID_FIELD,
         number: NUMBER,
@@ -118,7 +118,8 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
         const taskId = input.taskId!;
         const { provider, number } = prFor(taskId, input.number, input.provider);
         const endLine = input.endLine ?? input.startLine;
-        if (endLine < input.startLine) throw new ControlError(400, 'endLine is before startLine');
+        if (endLine < input.startLine)
+          throw new ControlError(400, '--end-line is before --start-line');
         const draft = deps.reviews.saveAgentDraft({
           id: randomUUID(),
           taskId,
@@ -142,7 +143,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
         "Change a note or draft review comment, the person's or the agent's: its text, lines or kind.",
       input: z.object({
         taskId: TASK_ID_FIELD,
-        id: z.string().describe('From review_drafts_list'),
+        id: z.string().describe('From `dashctl review drafts-list`'),
         body: BODY.optional(),
         startLine: LINE.optional(),
         endLine: LINE.optional(),
@@ -158,7 +159,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
         const draft = draftOrThrow(taskId, input.id);
         const startLine = input.startLine ?? draft.startLine;
         const endLine = input.endLine ?? Math.max(startLine, draft.endLine);
-        if (endLine < startLine) throw new ControlError(400, 'endLine is before startLine');
+        if (endLine < startLine) throw new ControlError(400, '--end-line is before --start-line');
         const saved = deps.reviews.saveAgentDraft({
           id: draft.id,
           taskId,
@@ -181,7 +182,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
       summary: "Delete a note or draft review comment, the person's or the agent's.",
       input: z.object({
         taskId: TASK_ID_FIELD,
-        id: z.string().describe('From review_drafts_list'),
+        id: z.string().describe('From `dashctl review drafts-list`'),
       }),
       callers: ['orchestrator', 'task'],
       cli: { args: ['id'] },

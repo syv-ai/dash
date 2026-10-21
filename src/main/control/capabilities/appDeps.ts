@@ -77,7 +77,7 @@ export function taskDeps(): TaskCapabilityDeps {
   };
 }
 
-/** How long one services_list keeps the task's ports probed (each call renews it). */
+/** How long one `services list` keeps the task's ports probed (each call renews it). */
 const LIVENESS_LEASE_MS = 60_000;
 
 export function serviceDeps(): ServiceCapabilityDeps {

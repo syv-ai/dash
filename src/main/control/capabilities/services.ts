@@ -39,7 +39,10 @@ export function registerServiceCapabilities(registry: Registry, deps: ServiceCap
   const portOrThrow = (taskId: string, label: string): TaskPort => {
     const port = deps.runner.findPort(taskId, label);
     if (!port) {
-      throw new ControlError(404, `no service labelled "${label}"; services_list shows the labels`);
+      throw new ControlError(
+        404,
+        `no service labelled "${label}"; dashctl services list shows the labels`,
+      );
     }
     return port;
   };
@@ -85,7 +88,10 @@ export function registerServiceCapabilities(registry: Registry, deps: ServiceCap
       name: 'services.start',
       summary:
         "Start a task's service with its run command, in a Dash terminal tab. Returns ok, or ok: false with the reason.",
-      input: z.object({ taskId: TASK_ID_FIELD, label: z.string().describe('From services_list') }),
+      input: z.object({
+        taskId: TASK_ID_FIELD,
+        label: z.string().describe('From `dashctl services list`'),
+      }),
       callers: ['orchestrator', 'task'],
       cli: { args: ['label'] },
       readOnly: false,
@@ -101,7 +107,10 @@ export function registerServiceCapabilities(registry: Registry, deps: ServiceCap
       name: 'services.stop',
       summary:
         "Stop a task's service: the one Dash runs, else its stop command, else whatever listens on its port. Returns ok, or ok: false with the reason.",
-      input: z.object({ taskId: TASK_ID_FIELD, label: z.string().describe('From services_list') }),
+      input: z.object({
+        taskId: TASK_ID_FIELD,
+        label: z.string().describe('From `dashctl services list`'),
+      }),
       callers: ['orchestrator', 'task'],
       cli: { args: ['label'] },
       readOnly: false,
@@ -116,10 +125,10 @@ export function registerServiceCapabilities(registry: Registry, deps: ServiceCap
     defineCapability({
       name: 'services.output',
       summary:
-        "Read the last `lines` lines of a service's output as plain text. Only for a service Dash started (services_start); refused otherwise.",
+        "Read the last `--lines` lines of a service's output as plain text. Only for a service Dash started (`dashctl services start`); refused otherwise.",
       input: z.object({
         taskId: TASK_ID_FIELD,
-        label: z.string().describe('From services_list'),
+        label: z.string().describe('From `dashctl services list`'),
         lines: z.number().int().min(1).max(400).default(100),
       }),
       callers: ['orchestrator', 'task'],
