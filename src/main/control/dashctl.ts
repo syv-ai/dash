@@ -1,56 +1,17 @@
 import * as fs from 'fs';
-import * as path from 'path';
 import { shellQuote } from '../../shared/shellQuote';
 import { writeFileAtomic } from '../utils/atomicWrite';
 import { controlPaths } from './paths';
-import { initializedPaths } from './tokens';
-
-const EMPTY_MCP_CONFIG = '{ "mcpServers": {} }\n';
-const legacyMcpConfigDir = (controlDir: string) => path.join(controlDir, 'mcp-config');
 
 /**
  * Write `<userData>/control/bin/dashctl` (0755, via tmp + rename) and return
- * its path. Run on every boot. Also retires what the MCP door left there: the
- * shim's copy goes; the launcher, which a `claude mcp add dash` registration
- * may still run, becomes a stub that says to use dashctl; and each per-task
- * `--mcp-config` becomes an empty one rather than going, since a job the
- * supervisor started with one passes that path again on every respawn (it
- * goes when its task is deleted).
+ * its path. Run on every boot.
  */
 export function writeDashctl(userDataDir: string): string {
   const paths = controlPaths(userDataDir);
   fs.mkdirSync(paths.cliBinDir, { recursive: true });
   writeFileAtomic(paths.dashctl, dashctlScript(paths.dir), { mode: 0o755 });
-  fs.rmSync(path.join(paths.dir, 'dash-mcp.js'), { force: true });
-  const launcher = path.join(paths.dir, 'dash-mcp');
-  if (fs.existsSync(launcher)) {
-    writeFileAtomic(launcher, retiredMcpLauncher(paths.dashctl), { mode: 0o755 });
-  }
-  const mcpConfigDir = legacyMcpConfigDir(paths.dir);
-  for (const file of fs.existsSync(mcpConfigDir) ? fs.readdirSync(mcpConfigDir) : []) {
-    const config = path.join(mcpConfigDir, file);
-    if (fs.readFileSync(config, 'utf8') === EMPTY_MCP_CONFIG) continue;
-    writeFileAtomic(config, EMPTY_MCP_CONFIG, { mode: 0o600 });
-  }
   return paths.dashctl;
-}
-
-/** Remove a deleted task's emptied `--mcp-config`; a no-op when it has none. */
-export function removeLegacyMcpConfig(taskId: string): void {
-  const paths = initializedPaths();
-  if (!paths) return;
-  fs.rmSync(path.join(legacyMcpConfigDir(paths.dir), `${taskId}.json`), { force: true });
-}
-
-/** What the MCP launcher becomes: a server that fails at once, saying why. */
-export function retiredMcpLauncher(dashctl: string): string {
-  return `#!/bin/sh
-# Left by Dash where its MCP server's launcher was, so an old
-# \`claude mcp add dash\` registration says why it stopped working.
-dashctl=${shellQuote(dashctl)}
-echo "Dash's MCP server is gone; use dashctl instead, at $dashctl (and run: claude mcp remove dash)." >&2
-exit 1
-`;
 }
 
 /**
