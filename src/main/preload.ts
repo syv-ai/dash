@@ -236,6 +236,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('app:focusTask', handler);
     };
   },
+  onOrchestratorAccessRequest: (callback: (request: { id: string; open: boolean }) => void) => {
+    const opened = (_event: unknown, r: { id: string }) => callback({ id: r.id, open: true });
+    const ended = (_event: unknown, r: { id: string }) => callback({ id: r.id, open: false });
+    ipcRenderer.on('app:orchestratorAccessRequest', opened);
+    ipcRenderer.on('app:orchestratorAccessRequestEnded', ended);
+    return () => {
+      ipcRenderer.removeListener('app:orchestratorAccessRequest', opened);
+      ipcRenderer.removeListener('app:orchestratorAccessRequestEnded', ended);
+    };
+  },
+  answerOrchestratorAccess: (answer: { id: string; allowed: boolean }) =>
+    ipcRenderer.send('app:orchestratorAccessAnswer', answer),
   onToast: (callback: (data: { message: string; url?: string }) => void) => {
     const handler = (_event: unknown, data: { message: string; url?: string }) => callback(data);
     ipcRenderer.on('app:toast', handler);

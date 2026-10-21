@@ -216,6 +216,7 @@ describe('the dashctl script', () => {
   let server: ControlServer;
   let registry: Registry;
   let script: string;
+  let allowOnAsk: boolean;
   const hasCurl = spawnSync('curl', ['--version']).status === 0;
 
   beforeEach(async () => {
@@ -260,10 +261,16 @@ describe('the dashctl script', () => {
         },
       }),
     );
+    allowOnAsk = false;
     server = new ControlServer({
       userDataDir: userData,
       registry,
       isOrchestratorAllowed: () => true,
+      // Allow writes the token file, as setOrchestratorAccess does.
+      requestOrchestratorAccess: async () => {
+        if (allowOnAsk) setOrchestratorFile(true);
+        return allowOnAsk;
+      },
       version: '9.9.9',
     });
     await server.start();
@@ -330,6 +337,23 @@ describe('the dashctl script', () => {
     const r = await run(['notes', 'where', '--project', '.']);
     expect(r).toMatchObject({ status: 0, stderr: '' });
     expect(JSON.parse(r.stdout)).toEqual({ projectId: 'pT' });
+  });
+
+  it.runIf(hasCurl)('asks in Dash when access is off, and runs once allowed', async () => {
+    setOrchestratorFile(false);
+    allowOnAsk = true;
+    const r = await run(['version']);
+    expect(r).toMatchObject({ status: 0, stdout: '9.9.9\n' });
+    expect(r.stderr).toContain('asking in Dash for access');
+  });
+
+  it.runIf(hasCurl)('says how to turn access on when Dash says no', async () => {
+    setOrchestratorFile(false);
+    const r = await run(['version']);
+    expect(r.status).toBe(1);
+    expect(r.stdout).toBe('');
+    expect(r.stderr).toContain('not allowed. To allow it, turn on "Let other agents control Dash"');
+    expect(r.stderr).not.toContain('No such file');
   });
 
   it.runIf(hasCurl)("won't trade a task's empty token for the orchestrator's", async () => {

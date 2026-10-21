@@ -33,6 +33,12 @@ export interface SystemApi {
   onBeforeQuit: (callback: () => void) => () => void;
   /** `projectId` is absent only from an older sender; then only the task is selected. */
   onFocusTask: (callback: (target: { taskId: string; projectId?: string }) => void) => () => void;
+  /** An agent outside Dash asks to control it (`open`), or the ask timed out (`!open`). */
+  onOrchestratorAccessRequest: (
+    callback: (request: { id: string; open: boolean }) => void,
+  ) => () => void;
+  /** The person's Allow / Deny for an `onOrchestratorAccessRequest`. */
+  answerOrchestratorAccess: (answer: { id: string; allowed: boolean }) => void;
   onToast: (callback: (data: { message: string; url?: string }) => void) => () => void;
 
   // Settings

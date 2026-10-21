@@ -141,7 +141,7 @@ To just rebuild and launch the main process:
 
 ```bash
 pnpm build:main
-npx electron dist/main/main/entry.js --dev
+npx electron . --dev
 ```
 
 ## Build

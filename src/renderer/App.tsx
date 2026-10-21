@@ -30,6 +30,7 @@ import { RemoteControlModal } from './components/RemoteControlModal';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { ProjectSettingsModal } from './components/project/ProjectSettingsModal';
 import { TaskSettingsModal } from './components/task/TaskSettingsModal';
+import { OrchestratorAccessPrompt } from './components/settings/OrchestratorAccessPrompt';
 import { AdoSetupModal } from './components/vcs/ado/AdoSetupModal';
 import { ToastContainer } from './components/ui/Toast';
 import { toast } from 'sonner';
@@ -1430,6 +1431,8 @@ export function App() {
           onClose={() => setAdoSetup(null)}
         />
       )}
+
+      <OrchestratorAccessPrompt />
 
       {taskSettingsTarget && (
         <TaskSettingsModal

@@ -18,6 +18,8 @@ export interface ControlServerOptions {
   registry: Registry;
   /** Read per request: the Settings switch can flip while Dash runs. */
   isOrchestratorAllowed: () => boolean;
+  /** Asks the person in Dash to turn orchestrator access on; true once it is. */
+  requestOrchestratorAccess: () => Promise<boolean>;
   /** Dash's version, for `dashctl version`. */
   version: string;
 }
@@ -88,13 +90,24 @@ export class ControlServer {
       return sendJson(res, 403, { error: 'browser requests are not allowed' });
     }
 
+    const pathname = new URL(req.url || '/', `http://127.0.0.1:${this._port}`).pathname;
+
+    // `dashctl` from outside Dash, finding no orchestrator token: ask the
+    // person in Dash. No token here, by design; it waits for their answer.
+    if (pathname === '/v1/access') {
+      if (req.method !== 'POST') return sendJson(res, 405, { error: 'method not allowed' });
+      const allowed = await this.opts.requestOrchestratorAccess();
+      return allowed
+        ? sendText(res, 200, 'allowed')
+        : sendText(res, 403, `dashctl: ${ORCHESTRATOR_ACCESS_OFF}`);
+    }
+
     const caller = this.authenticate(req);
     if (!caller) return sendJson(res, 401, { error: 'unauthorized' });
     if (caller.kind === 'orchestrator' && !this.opts.isOrchestratorAllowed()) {
       return sendJson(res, 403, { error: ORCHESTRATOR_ACCESS_OFF });
     }
 
-    const pathname = new URL(req.url || '/', `http://127.0.0.1:${this._port}`).pathname;
     if (pathname === '/v1/capabilities') {
       if (req.method !== 'GET') return sendJson(res, 405, { error: 'method not allowed' });
       return this.respond(res, () => ({ capabilities: this.opts.registry.listFor(caller) }));

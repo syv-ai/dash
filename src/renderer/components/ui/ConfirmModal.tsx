@@ -4,15 +4,18 @@ import { Modal } from './Modal';
 import { Button } from './Button';
 
 /** A warning confirmation with Cancel / confirm buttons, rendered as a nested
- *  modal over whatever dialog asked (Extensions scope changes, task settings). */
+ *  modal over whatever dialog asked (Extensions scope changes, task settings),
+ *  or on its own (an agent outside Dash asking for access). */
 export function ConfirmModal({
   message,
   confirmLabel,
+  cancelLabel = 'Cancel',
   onConfirm,
   onCancel,
 }: {
   message: string;
   confirmLabel: string;
+  cancelLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -27,7 +30,7 @@ export function ConfirmModal({
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="secondary" size="sm" onClick={onCancel}>
-            Cancel
+            {cancelLabel}
           </Button>
           <Button variant="primary" size="sm" onClick={onConfirm}>
             {confirmLabel}

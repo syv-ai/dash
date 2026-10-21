@@ -18,6 +18,8 @@ let userData: string;
 let server: ControlServer;
 let port: number;
 let orchestratorAllowed: boolean;
+let accessAsks: number;
+let allowOnAsk: boolean;
 
 beforeEach(async () => {
   userData = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-control-'));
@@ -39,10 +41,17 @@ beforeEach(async () => {
     }),
   );
   orchestratorAllowed = true;
+  accessAsks = 0;
+  allowOnAsk = false;
   server = new ControlServer({
     userDataDir: userData,
     registry,
     isOrchestratorAllowed: () => orchestratorAllowed,
+    requestOrchestratorAccess: async () => {
+      accessAsks++;
+      if (allowOnAsk) orchestratorAllowed = true;
+      return orchestratorAllowed;
+    },
     version: '0.0.0-test',
   });
   port = await server.start();
@@ -154,6 +163,26 @@ describe('ControlServer', () => {
     expect((await call({ name: 'echo', input: { text: 'x' } }, authHeaders(asTask))).status).toBe(
       200,
     );
+  });
+
+  it('asks for orchestrator access without a token, and answers with the outcome', async () => {
+    const access = () => fetch(`http://127.0.0.1:${port}/v1/access`, { method: 'POST' });
+    orchestratorAllowed = false;
+    const denied = await access();
+    expect(denied.status).toBe(403);
+    expect(await denied.text()).toBe('dashctl: orchestrator access is off in Dash settings');
+    allowOnAsk = true;
+    expect((await access()).status).toBe(200);
+    expect(accessAsks).toBe(2);
+    expect((await call({ name: 'echo', input: { text: 'hi' } })).status).toBe(200);
+    // Still only from outside a browser, and only by POST.
+    const fromPage = await fetch(`http://127.0.0.1:${port}/v1/access`, {
+      method: 'POST',
+      headers: { Origin: 'https://evil.example' },
+    });
+    expect(fromPage.status).toBe(403);
+    expect((await fetch(`http://127.0.0.1:${port}/v1/access`)).status).toBe(405);
+    expect(accessAsks).toBe(2);
   });
 
   it('maps registry errors and bad bodies to statuses', async () => {

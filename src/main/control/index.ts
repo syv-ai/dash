@@ -4,6 +4,8 @@ import { createRegistry, type Registry } from './registry';
 import { writeDashctl } from './dashctl';
 import { controlPaths } from './paths';
 import { ControlServer } from './server';
+import { createAccessGate } from './accessGate';
+import { askInWindow } from './accessPrompt';
 import { initTokens, setOrchestratorFile } from './tokens';
 import { setReadOnlyCapabilities } from './taskAccess';
 import { registerProjectCapabilities } from './capabilities/projects';
@@ -29,6 +31,20 @@ let tokensReady = false;
 let capabilitiesRegistered = false;
 // Off until Settings turns it on (Task 12 restores the saved value at boot).
 let orchestratorAccess = false;
+
+/**
+ * `dashctl` from outside Dash with access off: ask the person in Dash. Allow
+ * turns the Settings switch on here at once (the renderer saves it too), so
+ * the token file is there when `dashctl` looks again.
+ */
+const requestOrchestratorAccess = createAccessGate({
+  isAllowed: () => orchestratorAccess,
+  ask: async () => {
+    const allowed = await askInWindow();
+    if (allowed) setOrchestratorAccess(true);
+    return allowed;
+  },
+});
 
 /** Registers every capability. Each capability module adds itself here. */
 function registerCapabilities(): void {
@@ -57,7 +73,9 @@ export async function startControl(): Promise<void> {
     userDataDir: app.getPath('userData'),
     registry,
     isOrchestratorAllowed: () => orchestratorAccess,
-    version: app.getVersion(),
+    requestOrchestratorAccess,
+    // An unpackaged run (`pnpm dev`) says so: it may be answering in place of an installed Dash.
+    version: app.isPackaged ? app.getVersion() : `${app.getVersion()} (dev)`,
   });
   await next.start();
   server = next;

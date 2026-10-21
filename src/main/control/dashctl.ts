@@ -25,11 +25,12 @@ export function dashctlScript(controlDir: string): string {
 # Written by Dash on launch. It talks to Dash over 127.0.0.1: the port is in
 # control-port; a Dash task's session carries its own token (DASH_CALLER,
 # DASH_TOKEN), and anyone else uses the orchestrator token, which is there
-# while "Let other agents control Dash" is on in Dash's settings.
+# while "Let other agents control Dash" is on in Dash's settings (when it is
+# off, Dash asks its user to turn it on).
 set -eu
 dir=\${DASH_CONTROL_DIR:-${shellQuote(controlDir)}}
 
-port=$(tr -d '[:space:]' < "$dir/control-port" 2>/dev/null || true)
+port=$(tr -d '[:space:]' 2>/dev/null < "$dir/control-port" || true)
 case "$port" in
   '' | *[!0-9]*) echo "dashctl: Dash is not running. Open Dash and try again." >&2; exit 1 ;;
 esac
@@ -43,10 +44,18 @@ if [ -n "\${DASH_CALLER+set}\${DASH_TOKEN+set}" ]; then
   token=$DASH_TOKEN
 else
   caller=orchestrator
-  token=$(tr -d '[:space:]' < "$dir/orchestrator-token" 2>/dev/null || true)
+  token=$(tr -d '[:space:]' 2>/dev/null < "$dir/orchestrator-token" || true)
   if [ -z "$token" ]; then
-    echo "dashctl: turn on \\"Let other agents control Dash\\" in Dash's settings." >&2
-    exit 1
+    # Access is off: Dash asks its user (Allow / Deny) and answers once they
+    # do. Allow turns the setting on, which writes the token.
+    echo "dashctl: asking in Dash for access; waiting for an answer there." >&2
+    asked=$(curl -s -X POST -o /dev/null -w '%{http_code}' --max-time 120 \\
+      "http://127.0.0.1:$port/v1/access" || true)
+    [ "$asked" = 200 ] && token=$(tr -d '[:space:]' 2>/dev/null < "$dir/orchestrator-token" || true)
+    if [ -z "$token" ]; then
+      echo "dashctl: not allowed. To allow it, turn on \\"Let other agents control Dash\\" in Dash's settings." >&2
+      exit 1
+    fi
   fi
 fi
 
