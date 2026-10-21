@@ -41,7 +41,7 @@ dashctl tasks output <task-id> --lines 80
 dashctl review drafts-create --help       # one command's flags
 ```
 
-Dash writes it to `control/bin/dashctl` in its data folder each time it starts. It is a small `sh` + `curl` script that hands its words to Dash, which owns the commands, so an older copy still runs the newest Dash's. `--project` takes a project's name, path (relative to where you run it) or id. A comment body comes on stdin; any input that can come on stdin does when given as `-`, like `--prompt -` above. Results are JSON on stdout; a usage error (bare `dashctl` too) exits 2 and a refusal exits 1, both on stderr.
+Dash writes it to `control/bin/dashctl` in its data folder each time it starts. It is a small `sh` + `curl` script that hands its words to Dash, which owns the commands, so an older copy still runs the newest Dash's. `--project` takes a project's name, id or path (relative to where you run it): the project's folder, one inside it, or a git worktree of it. `dashctl version` prints Dash's version. A comment body comes on stdin; any input that can come on stdin does when given as `-`, like `--prompt -` above. Results are JSON on stdout; a usage error (bare `dashctl` too) exits 2 and a refusal exits 1, both on stderr.
 
 ### Agents inside a task
 

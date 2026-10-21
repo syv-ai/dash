@@ -57,6 +57,7 @@ export async function startControl(): Promise<void> {
     userDataDir: app.getPath('userData'),
     registry,
     isOrchestratorAllowed: () => orchestratorAccess,
+    version: app.getVersion(),
   });
   await next.start();
   server = next;

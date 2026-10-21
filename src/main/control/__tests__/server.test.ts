@@ -43,6 +43,7 @@ beforeEach(async () => {
     userDataDir: userData,
     registry,
     isOrchestratorAllowed: () => orchestratorAllowed,
+    version: '0.0.0-test',
   });
   port = await server.start();
 });

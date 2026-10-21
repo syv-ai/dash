@@ -1,3 +1,5 @@
+import { execFileSync } from 'child_process';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import type { Project } from '../../shared/types';
@@ -18,7 +20,8 @@ import { ControlError, type CapabilityListing, type Registry } from './registry'
  * input is read from stdin when given as `-`, or when it is required and not
  * given; an optional one is never read implicitly, so a stdin the agent's
  * shell happens to hold is never swallowed. `--project` takes a project's id,
- * name or path (relative to the caller's working directory).
+ * name or path (relative to the caller's working directory): the project's
+ * folder, one inside it, or a worktree of it. `dashctl version` is Dash's.
  */
 
 /** What `/v1/cli` answers: the status decides where the script prints it. */
@@ -85,7 +88,7 @@ export function usageText(commands: CapabilityListing[]): string {
   for (const c of commands) lines.push(commandLine(c), `    ${firstSentence(c.summary)}`);
   lines.push(
     '',
-    'Run a command with --help for its flags. Results are JSON; a refusal goes to stderr.',
+    "Run a command with --help for its flags, and dashctl version for Dash's. Results are JSON; a refusal goes to stderr.",
   );
   return lines.join('\n');
 }
@@ -111,15 +114,42 @@ export function helpText(c: CapabilityListing): string {
 
 class UsageError extends Error {}
 
+/** `p` with symlinks resolved, when it exists. */
+function real(p: string): string {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    return path.resolve(p);
+  }
+}
+
+/** The main checkout of the git repository `dir` is in (a worktree's too), or null. */
+export function mainCheckout(dir: string): string | null {
+  try {
+    const common = execFileSync('git', ['-C', dir, 'rev-parse', '--git-common-dir'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 2000,
+    }).trim();
+    const abs = path.resolve(dir, common);
+    return path.basename(abs) === '.git' ? path.dirname(abs) : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * A project by id, name (any case) or path: `~` is the home folder, and a
  * relative path is the caller's `cwd` (none from an old script: absolute
- * paths only). Throws a usage error for a name two projects share.
+ * paths only). A path is the project's folder or one inside it (the deepest
+ * project wins), or else a git worktree whose main checkout is the project,
+ * wherever it is. Throws a usage error for a name two projects share.
  */
 export function findProject(
   projects: Project[],
   ref: string,
   cwd: string | null = null,
+  checkoutOf: (dir: string) => string | null = mainCheckout,
 ): Project | undefined {
   const byId = projects.find((p) => p.id === ref);
   if (byId) return byId;
@@ -134,8 +164,16 @@ export function findProject(
   const expanded =
     ref === '~' || ref.startsWith('~/') ? path.join(os.homedir(), ref.slice(1)) : ref;
   if (!path.isAbsolute(expanded) && cwd === null) return undefined;
-  const resolved = path.resolve(cwd ?? '/', expanded);
-  return projects.find((p) => path.resolve(p.path) === resolved);
+  const target = real(path.resolve(cwd ?? '/', expanded));
+  const roots = projects.map((p) => ({ p, root: real(p.path) }));
+  const containing = roots
+    .filter(({ root }) => target === root || target.startsWith(root + path.sep))
+    .sort((a, b) => b.root.length - a.root.length)[0];
+  if (containing) return containing.p;
+  const main = checkoutOf(target);
+  if (main === null) return undefined;
+  const mainRoot = real(main);
+  return roots.find(({ root }) => root === mainRoot)?.p;
 }
 
 function coerce(prop: string, schema: PropSchema, value: string | true): unknown {
@@ -165,7 +203,7 @@ type Parsed =
 
 /**
  * Turn argv (and stdin, once sent) into a call, or say why not. `cwd` is the
- * caller's working directory, for a relative `--project` path. Pure.
+ * caller's working directory, for a relative `--project` path.
  */
 export function resolveArgv(
   argv: string[],
@@ -253,9 +291,10 @@ export function resolveArgv(
     if (typeof input.projectId === 'string') {
       const project = findProject(projects, input.projectId, cwd);
       if (!project) {
-        throw new UsageError(
-          `no project ${JSON.stringify(input.projectId)}; dashctl projects list names them`,
-        );
+        const hint = commands.some((x) => x.name === 'projects.list')
+          ? 'dashctl projects list names them'
+          : "dashctl tasks get gives your task's projectId";
+        throw new UsageError(`no project ${JSON.stringify(input.projectId)}; ${hint}`);
       }
       input.projectId = project.id;
     }
@@ -291,14 +330,26 @@ export function resultText(result: unknown): string {
   return JSON.stringify(result ?? null);
 }
 
+/** One `dashctl` run, as the script sends it. */
+export interface CliRequest {
+  argv: string[];
+  /** Null until the script is asked for it (428). */
+  stdin: string | null;
+  /** The caller's working directory; null from an older script. */
+  cwd?: string | null;
+  /** Dash's version, for `dashctl version`. */
+  version?: string;
+}
+
 /** Answer one `dashctl` run for the caller. */
 export async function runCli(
   registry: Pick<Registry, 'listFor' | 'call' | 'projectsFor'>,
   caller: Caller,
-  argv: string[],
-  stdin: string | null,
-  cwd: string | null = null,
+  { argv, stdin, cwd = null, version = 'unknown' }: CliRequest,
 ): Promise<CliAnswer> {
+  if (argv.length === 1 && (argv[0] === 'version' || argv[0] === '--version')) {
+    return { status: 200, text: version };
+  }
   const commands = registry.listFor(caller);
   const parsed = resolveArgv(argv, commands, stdin, registry.projectsFor(caller), cwd);
   switch (parsed.kind) {

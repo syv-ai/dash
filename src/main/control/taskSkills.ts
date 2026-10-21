@@ -75,7 +75,7 @@ If the person hasn't said which they want, ask rather than guess.
 
 - **On lines**: \`dashctl review drafts-create --number <pr> --path <file> --start-line <n> [--end-line <n>] --kind comment\`, the body on stdin. \`--path\` is repo-relative, and the lines are in the PR's version of the file (its head commit, not the base).
 - **As a reply to an existing thread**: the same command with \`--reply-to\`, the thread's id from the provider.
-- **On the whole PR**: not a line draft. \`dashctl review summary-set --number <pr>\` writes the review's summary from stdin, the PR-level comment posted with the verdict. There is one per review; setting it replaces the current one, and an empty body clears it.
+- **On the whole PR**: not a line draft. \`dashctl review summary-set --number <pr>\` writes the review's summary from stdin, the PR-level comment posted with the verdict. There is one per review; setting it replaces the current one, and \`--body ''\` clears it.
 
 \`\`\`sh
 dashctl review drafts-create --number 12 --path src/auth.ts --start-line 40 --kind comment <<'EOF'

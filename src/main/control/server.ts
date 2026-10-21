@@ -18,6 +18,8 @@ export interface ControlServerOptions {
   registry: Registry;
   /** Read per request: the Settings switch can flip while Dash runs. */
   isOrchestratorAllowed: () => boolean;
+  /** Dash's version, for `dashctl version`. */
+  version: string;
 }
 
 /**
@@ -120,13 +122,12 @@ export class ControlServer {
       if (!body.ok) return sendText(res, body.status, `dashctl: ${body.error}`);
       const form = new URLSearchParams(body.text);
       try {
-        const answer = await runCli(
-          this.opts.registry,
-          caller,
-          form.getAll('argv'),
-          form.has('stdin') ? form.get('stdin') : null,
-          form.get('cwd') || null,
-        );
+        const answer = await runCli(this.opts.registry, caller, {
+          argv: form.getAll('argv'),
+          stdin: form.has('stdin') ? form.get('stdin') : null,
+          cwd: form.get('cwd') || null,
+          version: this.opts.version,
+        });
         return sendText(res, answer.status, answer.text);
       } catch (err) {
         if (err instanceof ControlError)

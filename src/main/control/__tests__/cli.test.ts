@@ -10,7 +10,7 @@ import { registerProjectCapabilities } from '../capabilities/projects';
 import { registerTaskCapabilities } from '../capabilities/tasks';
 import { registerServiceCapabilities } from '../capabilities/services';
 import { registerReviewCapabilities } from '../capabilities/review';
-import { commandLine, findProject, resolveArgv, resultText, usageText } from '../cli';
+import { commandLine, findProject, mainCheckout, resolveArgv, resultText, usageText } from '../cli';
 import { ControlServer } from '../server';
 import { initTokens, setOrchestratorFile } from '../tokens';
 import { controlPaths } from '../paths';
@@ -92,6 +92,41 @@ describe('dashctl argv', () => {
     expect(list('~/code/h', null)).toMatchObject({ input: { projectId: 'pH' } });
     // No cwd (an old script): a relative path matches nothing.
     expect(list('.', null)).toMatchObject({ kind: 'usage' });
+  });
+
+  it('finds a project from a folder inside it, or a worktree of it anywhere', () => {
+    const nested = [...projects, makeProject({ id: 'pN', name: 'web', path: '/repos/dash/web' })];
+    const noGit = () => null;
+    expect(findProject(nested, '/repos/dash/src/main', null, noGit)?.id).toBe('pA');
+    // The deepest project wins.
+    expect(findProject(nested, '/repos/dash/web/app', null, noGit)?.id).toBe('pN');
+    const worktrees = (dir: string) => (dir.startsWith('/trees/') ? '/repos/holi' : null);
+    expect(findProject(nested, '/trees/fix-login', null, worktrees)?.id).toBe('pB');
+    expect(findProject(nested, '/elsewhere', null, worktrees)).toBeUndefined();
+  });
+
+  it("finds a git worktree's main checkout", () => {
+    const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dash-worktree-')));
+    try {
+      const repo = path.join(tmp, 'repo');
+      const git = (...args: string[]) => spawnSync('git', args, { cwd: repo, stdio: 'ignore' });
+      fs.mkdirSync(repo);
+      git('init', '-q');
+      git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'x');
+      git('worktree', 'add', '-q', path.join(tmp, 'tree'));
+      fs.mkdirSync(path.join(repo, 'sub'));
+      expect(mainCheckout(path.join(tmp, 'tree'))).toBe(repo);
+      expect(mainCheckout(path.join(repo, 'sub'))).toBe(repo);
+      expect(mainCheckout(tmp)).toBeNull();
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("points a task, which can't list projects, at its own projectId", () => {
+    const forTask = commands.filter((c) => c.name !== 'projects.list');
+    const r = resolveArgv(['tasks', 'list', '--project', 'nope'], forTask, null, projects);
+    expect((r as { text: string }).text).toContain("dashctl tasks get gives your task's projectId");
   });
 
   it('refuses a name two projects share', () => {
@@ -232,6 +267,7 @@ describe('the dashctl script', () => {
       userDataDir: userData,
       registry,
       isOrchestratorAllowed: () => true,
+      version: '9.9.9',
     });
     await server.start();
     script = path.join(userData, 'dashctl');
@@ -281,6 +317,10 @@ describe('the dashctl script', () => {
     const refused = await run(['notes', 'fail']);
     expect(refused).toMatchObject({ status: 1, stdout: '' });
     expect(refused.stderr).toContain('dashctl notes fail: nope');
+  });
+
+  it.runIf(hasCurl)("prints Dash's version", async () => {
+    expect(await run(['version'])).toMatchObject({ status: 0, stdout: '9.9.9\n', stderr: '' });
   });
 
   it.runIf(hasCurl)('prints help to stdout, exit 0', async () => {

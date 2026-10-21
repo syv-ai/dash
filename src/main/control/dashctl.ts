@@ -90,11 +90,7 @@ else
 fi
 
 out=$(mktemp)
-headers=$(mktemp)
-trap 'rm -f "$out" "$headers"' EXIT
-# The token reaches curl in a file (mktemp's are 0600), not in its argv, which
-# any process can read.
-printf 'Authorization: Bearer %s\\nX-Dash-Caller: %s\\n' "$token" "$caller" > "$headers"
+trap 'rm -f "$out"' EXIT
 
 # Every word rides in the body, so curl does the encoding.
 for a in "$@"; do
@@ -102,9 +98,14 @@ for a in "$@"; do
   set -- "$@" --data-urlencode "argv=$a"
 done
 
+# The token reaches curl on fd 3, from a heredoc: not in its argv, which any
+# process can read, and not in a file a killed run would leave behind.
 send() {
-  curl -s -X POST -o "$out" -w '%{http_code}' -H "@$headers" \\
-    --data-urlencode "cwd=$PWD" "http://127.0.0.1:$port/v1/cli" "$@"
+  curl -s -X POST -o "$out" -w '%{http_code}' -H @/dev/fd/3 \\
+    --data-urlencode "cwd=$PWD" "http://127.0.0.1:$port/v1/cli" "$@" 3<<HEADERS
+Authorization: Bearer $token
+X-Dash-Caller: $caller
+HEADERS
 }
 
 if ! code=$(send "$@"); then
