@@ -11,7 +11,8 @@ export function OrchestratorAccessPrompt() {
 
   useEffect(
     () =>
-      window.electronAPI.onOrchestratorAccessRequest(({ id, open }) =>
+      // `?.`: a renderer hot-reloaded over an older preload has no such bridge yet.
+      window.electronAPI.onOrchestratorAccessRequest?.(({ id, open }) =>
         setRequestId((current) => (open ? id : current === id ? null : current)),
       ),
     [],
