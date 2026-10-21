@@ -333,6 +333,55 @@ export function runMigrations(): void {
     /* already exists */
   }
 
+  // Diff comments double as PR review drafts: which side of the diff, the
+  // remote thread a reply answers, and whether the user or an agent wrote it.
+  for (const column of [
+    `side TEXT NOT NULL DEFAULT 'RIGHT'`,
+    `reply_to TEXT`,
+    `author TEXT NOT NULL DEFAULT 'user'`,
+  ]) {
+    try {
+      rawDb.exec(`ALTER TABLE diff_editor_comments ADD COLUMN ${column}`);
+    } catch {
+      /* already exists */
+    }
+  }
+
+  // A PR view holds both notes (local, for the agent) and comments (review
+  // drafts Submit posts). Every PR-scoped row before this was a draft.
+  try {
+    rawDb.exec(`ALTER TABLE diff_editor_comments ADD COLUMN kind TEXT NOT NULL DEFAULT 'note'`);
+    rawDb.exec(`UPDATE diff_editor_comments SET kind = 'comment' WHERE view_scope LIKE 'pr:%'`);
+  } catch {
+    /* already exists */
+  }
+
+  // The PRs a task is reviewing: what's written in their view becomes a
+  // comment rather than a note, until Submit ends the review.
+  rawDb.exec(`
+    CREATE TABLE IF NOT EXISTS pr_reviews_in_progress (
+      task_id     TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      provider    TEXT NOT NULL,
+      number      INTEGER NOT NULL,
+      started_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (task_id, provider, number)
+    );
+  `);
+
+  // A task's draft summary for a PR: the review's PR-level comment, which
+  // Submit posts with the verdict. The person or the task's agent writes it.
+  rawDb.exec(`
+    CREATE TABLE IF NOT EXISTS pr_review_summaries (
+      task_id     TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      provider    TEXT NOT NULL,
+      number      INTEGER NOT NULL,
+      body        TEXT NOT NULL,
+      author      TEXT NOT NULL DEFAULT 'user',
+      updated_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (task_id, provider, number)
+    );
+  `);
+
   // Worktrees moved from `<parent>/worktrees/` to `<repo>/.claude/worktrees/`
   // in 0.16. When the launch dialog moves a task, its old path is kept here so
   // the Claude transcripts written under the old cwd (~/.claude/projects/<encoded
@@ -361,7 +410,7 @@ export function runMigrations(): void {
     /* already exists */
   }
 
-  // Control API: dash_access opts a task's session into the Dash MCP tools;
+  // Control API: dash_access lets a task's session reach Dash (now via dashctl);
   // parent_task_id records the task that created it through the API (null for
   // tasks a person created).
   try {

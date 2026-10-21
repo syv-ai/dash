@@ -4,6 +4,7 @@ import { fakeLookups } from '../../__tests__/fixtures';
 import { registerProjectCapabilities } from '../projects';
 import { registerTaskCapabilities } from '../tasks';
 import { registerServiceCapabilities } from '../services';
+import { registerReviewCapabilities } from '../review';
 
 describe('read-only capabilities', () => {
   it('are exactly the ones with no side effects', () => {
@@ -11,8 +12,11 @@ describe('read-only capabilities', () => {
     registerProjectCapabilities(registry, {} as never);
     registerTaskCapabilities(registry, {} as never);
     registerServiceCapabilities(registry, {} as never);
+    registerReviewCapabilities(registry, {} as never);
     expect(registry.readOnlyNames().sort()).toEqual([
       'projects.list',
+      'review.drafts_list',
+      'review.summary_get',
       'services.list',
       'services.output',
       'tasks.get',

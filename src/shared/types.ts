@@ -91,7 +91,7 @@ export interface Task {
   /** Set when Dash or the supervisor stopped the session (archive, idle stop). */
   sessionStoppedAt: string | null;
   archivedAt: string | null;
-  /** Whether the task's session gets the Dash MCP tools (control API). */
+  /** Whether the task's session can reach Dash with dashctl (control API). */
   dashAccess: boolean;
   /** The task that created this one through the control API; null when a
    *  person created it. Fixed at creation. */
@@ -142,14 +142,14 @@ export type CreateTaskInput = CreateTaskOptions & {
   parentTaskId?: string | null;
 };
 
-/** `task:setDashAccess`: turn a task's Dash access on or off (applies at its next dispatch). */
+/** `task:setDashAccess`: turn a task's Dash access on or off (applies at its next session start). */
 export type SetTaskDashAccessInput = { taskId: string; enabled: boolean };
 
 /** What `app:getControlInfo` reports for the Settings orchestrator row. */
 export type ControlInfo = {
-  /** The `dash-mcp` launcher a `claude mcp add` command points at. */
-  launcherPath: string;
-  /** False on win32: the launcher is a shell script, so the control API never starts. */
+  /** `dashctl`, the command line other agents reach Dash with. */
+  dashctlPath: string;
+  /** False on win32: dashctl is a shell script, so the control API never starts. */
   supported: boolean;
 };
 
@@ -558,7 +558,20 @@ export type PullRequestState = 'open' | 'merged' | 'closed';
 /** A PR's combined checks: any failure fails it, then any still running. */
 export type CiState = 'passing' | 'failing' | 'pending';
 
-/** One comment in a PR review thread. */
+/** Where a PR lives. */
+export type PrProvider = 'github' | 'ado';
+
+/** A review's outcome. GitHub offers comment / approve / request_changes; ADO's
+ *  vote adds approve_with_suggestions / wait_for_author / reject. */
+export type PrVerdict =
+  | 'comment'
+  | 'approve'
+  | 'request_changes'
+  | 'approve_with_suggestions'
+  | 'wait_for_author'
+  | 'reject';
+
+/** One comment in a PR review thread, or a general PR comment. */
 export interface PrReviewComment {
   id: string;
   author: string;
@@ -567,11 +580,12 @@ export interface PrReviewComment {
   url: string;
 }
 
-/** An unresolved review thread on a PR, anchored to a file and line. */
+/** A review thread on a PR, anchored to a file and line. */
 export interface PrReviewThread {
   id: string;
   path: string;
-  /** Last line of the commented range in the PR head's file; null once outdated. */
+  /** Last line of the commented range (in the PR head's file for RIGHT, the base's
+   *  for LEFT); null once outdated, or for a comment on the whole file. */
   line: number | null;
   /** First line of a multi-line comment, else null. */
   startLine: number | null;
@@ -579,17 +593,60 @@ export interface PrReviewThread {
   side: 'LEFT' | 'RIGHT';
   /** The lines it was left on have changed since. */
   isOutdated: boolean;
+  resolved: boolean;
   comments: PrReviewComment[];
 }
 
-/** A PR's unresolved review threads, with the commits its diff spans. */
+/** A PR's review: all its threads and general comments, with the commits its diff spans. */
 export interface PrReview {
+  provider: PrProvider;
   number: number;
+  title: string;
+  /** The PR's description, in Markdown. */
+  body: string;
   url: string;
+  /** GitHub refuses approve / request changes on your own PR. */
+  viewerIsAuthor: boolean;
+  /** You're asked to review it and haven't yet. */
+  viewerIsRequestedReviewer: boolean;
+  /** The verdicts this provider offers, in display order. */
+  verdicts: PrVerdict[];
   /** Merge-base of the PR's base and head: the left side of its diff. */
   base: string;
   head: string;
+  /** File threads, resolved or not. */
   threads: PrReviewThread[];
+  /** General PR comments and review summaries, oldest first. */
+  conversation: PrReviewComment[];
+  /** The provider had more threads than were loaded. */
+  partial?: boolean;
+}
+
+/** A task's draft summary for a PR: the review's PR-level comment. */
+export interface PrReviewSummary {
+  body: string;
+  author: 'user' | 'agent';
+}
+
+/** What a submit sends: the verdict, its summary, and the task's drafts for the PR. */
+export interface PrSubmission {
+  verdict: PrVerdict;
+  body: string;
+  /** New threads, on the PR's (RIGHT) side. */
+  comments: { draftId: string; path: string; startLine: number; endLine: number; body: string }[];
+  replies: { draftId: string; threadId: string; body: string }[];
+}
+
+/** Why a write to the PR failed. `scope`: the token can't write; `fix` says how to grant it. */
+export type PrWriteError =
+  | { kind: 'scope'; fix: string }
+  | { kind: 'pending-review' }
+  | { kind: 'other'; message: string };
+
+/** The drafts that reached the PR (their rows are deleted), and the error that stopped the rest. */
+export interface SubmitResult {
+  postedDraftIds: string[];
+  error?: PrWriteError;
 }
 
 export interface PullRequestInfo {
@@ -1057,11 +1114,23 @@ export interface DiffComment {
   text: string;
   sent: boolean;
   /** Diff state the anchor is meaningful against: 'live' (working/branch
-   *  views share the working file) or 'commit:<hash>' for a frozen commit. */
+   *  views share the working file), 'commit:<hash>' for a frozen commit, or
+   *  'pr:<provider>:<n>' for a draft review comment on a PR. */
   viewScope: string;
+  /** Which side of the diff the lines are on; always RIGHT outside PR drafts. */
+  side: 'LEFT' | 'RIGHT';
+  /** A PR draft reply: the remote thread it answers. Null for line comments. */
+  replyTo: string | null;
+  /** Who wrote it. An agent's draft becomes the user's once they edit its text. */
+  author: 'user' | 'agent';
+  /** A note is local, for the agent; a comment is a PR review draft that
+   *  Submit posts. Only PR scopes hold comments. */
+  kind: DiffCommentKind;
   createdAt: string;
   updatedAt: string;
 }
+
+export type DiffCommentKind = 'note' | 'comment';
 
 /** Payload for `diffComments:upsert` from the renderer. The handler stamps
  *  createdAt/updatedAt and reflects the row back as a full DiffComment. */
@@ -1074,6 +1143,10 @@ export interface DiffCommentInput {
   text: string;
   sent: boolean;
   viewScope: string;
+  side?: 'LEFT' | 'RIGHT';
+  replyTo?: string | null;
+  /** Defaults to 'note'. */
+  kind?: DiffCommentKind;
 }
 
 /* ── Unified Extensions model (Skills + Plugins across scopes) ──────────────

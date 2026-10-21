@@ -14,7 +14,7 @@ export interface WorkspaceTaskDefaults {
   permissionMode?: PermissionMode;
   useWorktree?: boolean;
   contextPrompt?: string;
-  /** Default for a new task's Dash access (the control API's MCP tools). */
+  /** Default for a new task's Dash access (dashctl, the control API). */
   dashAccess?: boolean;
 }
 

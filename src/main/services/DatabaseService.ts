@@ -287,7 +287,7 @@ export class DatabaseService {
     return this.mapTask(row!);
   }
 
-  /** Turn a task's Dash access (the control API's MCP tools) on or off. Kept
+  /** Turn a task's Dash access (dashctl, the control API) on or off. Kept
    *  separate from saveTask so partial saves can't flip it. */
   static setTaskDashAccess(id: string, enabled: boolean): void {
     const db = getDb();

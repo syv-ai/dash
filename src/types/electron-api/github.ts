@@ -1,10 +1,4 @@
-import type {
-  IpcResponse,
-  GithubIssue,
-  PrReview,
-  PullRequest,
-  PullRequestInfo,
-} from '../../shared/types';
+import type { IpcResponse, GithubIssue, PullRequest, PullRequestInfo } from '../../shared/types';
 
 /** GitHub issue search/linking and PR lookup (via the `gh` CLI). */
 export interface GithubApi {
@@ -36,8 +30,6 @@ export interface GithubApi {
     url: string;
     headSha?: string;
   }) => Promise<IpcResponse<{ prompt: string; file: string } | null>>;
-  /** PR `number`'s unresolved review threads and the commits its diff spans. */
-  githubGetPrReview: (args: { cwd: string; number: number }) => Promise<IpcResponse<PrReview>>;
   githubListPrs: (cwd: string) => Promise<IpcResponse<PullRequest[]>>;
   githubPreparePrBranch: (
     cwd: string,

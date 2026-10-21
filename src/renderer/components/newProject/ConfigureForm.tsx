@@ -78,7 +78,7 @@ export function ConfigureForm({ value, onChange, showName = true }: ConfigureFor
           <div className="mt-3">
             <SwitchField
               label="Dash access for new tasks"
-              hint="New tasks start with their agent able to use Dash: its ports and services, and creating tasks of its own."
+              hint="New tasks start with their agent able to use Dash: its ports and services, creating tasks of its own, and drafting PR review notes and comments. Each such task gets a dash skill in its checkout (.claude/skills/dash, kept out of git) that explains dashctl, the command it uses."
               enabled={value.dashAccess}
               onToggle={(v) => set('dashAccess', v)}
             />

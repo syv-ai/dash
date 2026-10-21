@@ -65,7 +65,7 @@ export interface ProjectsActions {
   restoreProject: (id: string) => Promise<void>;
   createTask: (options: CreateTaskOptions, projectId?: string) => Promise<boolean>;
   /** Turn a task's Dash access on or off. A running session restarts so its
-   *  next dispatch adds or drops the dash MCP server; returns the updated task. */
+   *  settings file gains or drops dashctl; returns the updated task. */
   setDashAccess: (taskItem: Task, enabled: boolean, running: boolean) => Promise<Task | null>;
 }
 

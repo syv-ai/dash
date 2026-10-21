@@ -40,8 +40,8 @@ export function TaskSettingsModal({
   const [setupScript, setSetupScript] = useState(task.setupScript ?? '');
   const [teardownScript, setTeardownScript] = useState(task.teardownScript ?? '');
   const controlSupported = useControlInfo()?.supported ?? false;
-  // A live session, or a parked job whose spawn args are frozen: either needs a
-  // re-dispatch for a Dash access change. 'stopped' with no job has nothing to restart.
+  // A live session, or a parked job: either needs a restart, which rewrites its
+  // settings file, for a Dash access change. 'stopped' with no job has nothing to restart.
   const activityState = useRuntime((s) => s.taskActivity[task.id]?.state);
   const hasSession = (!!activityState && activityState !== 'stopped') || !!task.jobId;
   // The value waiting on the restart confirmation, if any.
@@ -100,7 +100,7 @@ export function TaskSettingsModal({
       {controlSupported && (
         <SwitchField
           label="Dash access"
-          hint="Let this task's agent use Dash: its ports and services, and creating tasks of its own."
+          hint="Let this task's agent use Dash: its ports and services, creating tasks of its own, and drafting PR review notes and comments. Adds a dash skill to the task's checkout (.claude/skills/dash, kept out of git) that explains dashctl, the command it uses."
           helperText={hasSession ? 'Changing it restarts the session' : undefined}
           enabled={task.dashAccess}
           onToggle={handleDashAccessToggle}

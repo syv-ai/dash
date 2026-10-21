@@ -17,6 +17,7 @@ import { formatRelativeTime } from '@shared/relativeTime';
 import type { CommitSummary, EditorView } from './types';
 import { Popover, PopoverAnchor, PopoverContent } from '../ui/Popover';
 import { Tooltip } from '../ui/Tooltip';
+import { Markdown } from '../ui/Markdown';
 
 interface EditorSidebarProps {
   /** Repo root — needed to lazily list gitignored files under "show all files". */
@@ -28,9 +29,9 @@ interface EditorSidebarProps {
   filesLoading: boolean;
   selectedPath: string;
   onSelectFile: (path: string) => void;
-  /** Per-file comment counts. Files in this map get a small badge in the
-   *  tree; folders aggregate their descendants' counts for the same badge. */
-  commentCounts: Map<string, number>;
+  /** Per-file badge counts: your notes and comments, and (in a PR view) the
+   *  PR's unresolved threads. */
+  badgeCounts: Map<string, FileBadges>;
 
   commits: CommitSummary[];
   commitsLoading: boolean;
@@ -42,11 +43,28 @@ interface EditorSidebarProps {
   pr?: PrEntry | null;
 }
 
-/** The task's open PR in the commits drawer; `threads` is null until its review is fetched. */
+/** A file's badges in the tree. */
+export interface FileBadges {
+  /** Your notes and comments needing attention (unsent, or PR comments). */
+  comments: number;
+  /** The PR's unresolved threads on the file. */
+  threads: number;
+}
+
+/** The task's open PR in the commits drawer. `threads` and `body` are null
+ *  until its review is fetched. */
 export interface PrEntry {
   number: number;
+  title: string;
+  body: string | null;
   threads: number | null;
+  /** The task is reviewing it (Review clicked, not yet submitted). */
+  inReview: boolean;
   onOpen: () => void;
+  /** Start reviewing it, and open it. */
+  onReview: () => void;
+  /** The hover card opened: fetch the review if it isn't yet. */
+  onPeek: () => void;
 }
 
 const COMMITS_DRAWER_KEY = 'diffEditor.commitsDrawerSize';
@@ -73,7 +91,7 @@ export function EditorSidebar(props: EditorSidebarProps) {
             loading={props.filesLoading}
             selectedPath={props.selectedPath}
             onSelectFile={props.onSelectFile}
-            commentCounts={props.commentCounts}
+            badgeCounts={props.badgeCounts}
           />
         </Panel>
         <PanelResizeHandle className="h-px bg-[hsl(var(--border)/0.5)] hover:bg-[hsl(var(--border))] transition-colors" />
@@ -208,17 +226,20 @@ function buildRepoTree(
  *  0 = no row fills that column, so it isn't drawn. */
 interface TreeColumns {
   comments: boolean;
+  threads: boolean;
   add: number;
   del: number;
   /** The status letter on files and the changed count on folders share it. */
   status: number;
 }
 
-function treeColumns(root: TreeFolder, commentCounts: Map<string, number>): TreeColumns {
-  const cols: TreeColumns = { comments: false, add: 0, del: 0, status: 0 };
+function treeColumns(root: TreeFolder, badgeCounts: Map<string, FileBadges>): TreeColumns {
+  const cols: TreeColumns = { comments: false, threads: false, add: 0, del: 0, status: 0 };
   const walk = (node: TreeFolder) => {
     for (const f of node.files) {
-      if ((commentCounts.get(f.fullPath) ?? 0) > 0) cols.comments = true;
+      const badges = badgeCounts.get(f.fullPath);
+      if (badges?.comments) cols.comments = true;
+      if (badges?.threads) cols.threads = true;
       const c = f.change;
       if (!c) continue;
       cols.status = Math.max(cols.status, 1);
@@ -338,7 +359,7 @@ interface FileTreePanelProps {
   loading: boolean;
   selectedPath: string;
   onSelectFile: (path: string) => void;
-  commentCounts: Map<string, number>;
+  badgeCounts: Map<string, FileBadges>;
 }
 
 function FileTreePanel({
@@ -349,7 +370,7 @@ function FileTreePanel({
   loading,
   selectedPath,
   onSelectFile,
-  commentCounts,
+  badgeCounts,
 }: FileTreePanelProps) {
   const [changedOnly, setChangedOnly] = useState<boolean>(
     () => localStorage.getItem(CHANGED_ONLY_KEY) === 'true',
@@ -400,7 +421,7 @@ function FileTreePanel({
     }
     return { additions, deletions };
   }, [changedFiles]);
-  const cols = useMemo(() => treeColumns(tree, commentCounts), [tree, commentCounts]);
+  const cols = useMemo(() => treeColumns(tree, badgeCounts), [tree, badgeCounts]);
   return (
     <div className="h-full min-h-0 flex flex-col">
       <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-muted-fade-70 font-mono flex items-center justify-between shrink-0">
@@ -450,7 +471,7 @@ function FileTreePanel({
             indent={0}
             selectedPath={selectedPath}
             onSelectFile={onSelectFile}
-            commentCounts={commentCounts}
+            badgeCounts={badgeCounts}
             cols={cols}
           />
         )}
@@ -464,7 +485,7 @@ interface FolderContentsProps {
   indent: number;
   selectedPath: string;
   onSelectFile: (path: string) => void;
-  commentCounts: Map<string, number>;
+  badgeCounts: Map<string, FileBadges>;
   cols: TreeColumns;
 }
 
@@ -473,7 +494,7 @@ function FolderContents({
   indent,
   selectedPath,
   onSelectFile,
-  commentCounts,
+  badgeCounts,
   cols,
 }: FolderContentsProps) {
   const childFolders = Array.from(node.children.values()).sort((a, b) =>
@@ -489,7 +510,7 @@ function FolderContents({
           indent={indent}
           selectedPath={selectedPath}
           onSelectFile={onSelectFile}
-          commentCounts={commentCounts}
+          badgeCounts={badgeCounts}
           cols={cols}
         />
       ))}
@@ -499,7 +520,7 @@ function FolderContents({
           file={file}
           indent={indent}
           selected={file.fullPath === selectedPath}
-          commentCount={commentCounts.get(file.fullPath) ?? 0}
+          badges={badgeCounts.get(file.fullPath)}
           onClick={() => onSelectFile(file.fullPath)}
           cols={cols}
         />
@@ -519,14 +540,14 @@ function FolderEntry({
   indent,
   selectedPath,
   onSelectFile,
-  commentCounts,
+  badgeCounts,
   cols,
 }: {
   folder: TreeFolder;
   indent: number;
   selectedPath: string;
   onSelectFile: (path: string) => void;
-  commentCounts: Map<string, number>;
+  badgeCounts: Map<string, FileBadges>;
   cols: TreeColumns;
 }) {
   // Default-open if the folder has changes OR it contains the file the editor
@@ -591,11 +612,26 @@ function FolderEntry({
           indent={indent + 1}
           selectedPath={selectedPath}
           onSelectFile={onSelectFile}
-          commentCounts={commentCounts}
+          badgeCounts={badgeCounts}
           cols={cols}
         />
       )}
     </>
+  );
+}
+
+/** The PR's unresolved threads on a file: outlined, so it reads apart from yours. */
+function ThreadBadge({ count }: { count: number }) {
+  const label = `${count} unresolved thread${count !== 1 ? 's' : ''}`;
+  return (
+    <Tooltip content={label}>
+      <span
+        aria-label={label}
+        className="shrink-0 inline-flex items-center justify-center min-w-[14px] h-[14px] px-1 rounded-full font-mono text-[9.5px] font-semibold tabular-nums border border-edge/25 text-fg-fade-70"
+      >
+        {count}
+      </span>
+    </Tooltip>
   );
 }
 
@@ -617,14 +653,14 @@ function FileEntry({
   file,
   indent,
   selected,
-  commentCount,
+  badges,
   onClick,
   cols,
 }: {
   file: TreeFile;
   indent: number;
   selected: boolean;
-  commentCount: number;
+  badges: FileBadges | undefined;
   onClick: () => void;
   cols: TreeColumns;
 }) {
@@ -648,9 +684,14 @@ function FileEntry({
       <HoverSwapSlot
         rest={
           <span className="flex items-center gap-1.5 font-mono text-[10.5px] tabular-nums">
+            {cols.threads && (
+              <span className="flex w-[18px] justify-end">
+                {!!badges?.threads && <ThreadBadge count={badges.threads} />}
+              </span>
+            )}
             {cols.comments && (
               <span className="flex w-[18px] justify-end">
-                {commentCount > 0 && <CommentBadge count={commentCount} />}
+                {!!badges?.comments && <CommentBadge count={badges.comments} />}
               </span>
             )}
             {cols.add > 0 && (
@@ -750,22 +791,7 @@ function CommitsDrawer({
             <CommentBadge count={commentCountByScope.get('live')!} />
           )}
         </button>
-        {pr && (
-          <button
-            type="button"
-            data-active={view.kind === 'pr'}
-            onClick={pr.onOpen}
-            className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-[12px] text-left transition-colors ${
-              view.kind === 'pr'
-                ? 'bg-primary/15 text-primary'
-                : 'text-fg-fade-85 hover:bg-[hsl(var(--surface-2)/0.6)]'
-            }`}
-          >
-            <GitPullRequestArrow size={11} strokeWidth={1.8} className="opacity-60 shrink-0" />
-            <span className="truncate flex-1 font-mono text-[11.5px]">PR #{pr.number}</span>
-            {(pr.threads ?? 0) > 0 && <CommentBadge count={pr.threads!} />}
-          </button>
-        )}
+        {pr && <PrRow pr={pr} active={view.kind === 'pr'} />}
         {loading && commits.length === 0 && (
           <div className="px-3 py-2 text-[11px] text-muted-fade-40">Loading…</div>
         )}
@@ -793,7 +819,9 @@ interface CommitRowProps {
   onSelect: () => void;
 }
 
-function CommitRow({ commit, active, commentCount, onSelect }: CommitRowProps) {
+/** A hover card's open state: opens after a short rest, and stays open while
+ *  the pointer is on the card (`holdOpen` on its mouseenter). */
+function useHoverCard(onOpen?: () => void) {
   const [hovered, setHovered] = useState(false);
   const openTimer = useRef<number | null>(null);
   const closeTimer = useRef<number | null>(null);
@@ -811,7 +839,10 @@ function CommitRow({ commit, active, commentCount, onSelect }: CommitRowProps) {
 
   const scheduleOpen = () => {
     cancelTimers();
-    openTimer.current = window.setTimeout(() => setHovered(true), 220);
+    openTimer.current = window.setTimeout(() => {
+      setHovered(true);
+      onOpen?.();
+    }, 220);
   };
 
   const scheduleClose = () => {
@@ -819,7 +850,19 @@ function CommitRow({ commit, active, commentCount, onSelect }: CommitRowProps) {
     closeTimer.current = window.setTimeout(() => setHovered(false), 80);
   };
 
+  const holdOpen = () => {
+    if (closeTimer.current != null) {
+      window.clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  };
+
   useEffect(() => cancelTimers, []);
+  return { hovered, scheduleOpen, scheduleClose, holdOpen };
+}
+
+function CommitRow({ commit, active, commentCount, onSelect }: CommitRowProps) {
+  const { hovered, scheduleOpen, scheduleClose, holdOpen } = useHoverCard();
 
   return (
     <Popover open={hovered}>
@@ -866,12 +909,7 @@ function CommitRow({ commit, active, commentCount, onSelect }: CommitRowProps) {
         sideOffset={10}
         // Pointer events live so the popover stays open while the cursor is on
         // it; mouseenter/leave on the content cancels the close timer.
-        onMouseEnter={() => {
-          if (closeTimer.current != null) {
-            window.clearTimeout(closeTimer.current);
-            closeTimer.current = null;
-          }
-        }}
+        onMouseEnter={holdOpen}
         onMouseLeave={scheduleClose}
         // Block Radix's auto-focus so the popover doesn't steal focus from the
         // commit list on hover.
@@ -896,6 +934,83 @@ function CommitRow({ commit, active, commentCount, onSelect }: CommitRowProps) {
             {formatRelativeTime(commit.authorDate, Date.now() / 1000)}
           </span>
         </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** The task's PR in the commits drawer: tinted apart from the commits, with
+ *  Review (or "In review") and a hover card holding its description. */
+function PrRow({ pr, active }: { pr: PrEntry; active: boolean }) {
+  const { hovered, scheduleOpen, scheduleClose, holdOpen } = useHoverCard(pr.onPeek);
+  return (
+    <Popover open={hovered}>
+      <PopoverAnchor asChild>
+        <div
+          data-active={active}
+          onMouseEnter={scheduleOpen}
+          onMouseLeave={scheduleClose}
+          className={`my-0.5 flex items-center gap-1 rounded-md border pl-2 pr-1 py-0.5 transition-colors ${
+            active
+              ? 'border-[hsl(var(--git-added)/0.45)] bg-[hsl(var(--git-added)/0.16)]'
+              : 'border-[hsl(var(--git-added)/0.25)] bg-[hsl(var(--git-added)/0.07)] hover:bg-[hsl(var(--git-added)/0.12)]'
+          }`}
+        >
+          <button
+            type="button"
+            onClick={pr.onOpen}
+            onFocus={scheduleOpen}
+            onBlur={scheduleClose}
+            className="flex min-w-0 flex-1 items-center gap-2 py-0.5 text-left text-[12px] text-[hsl(var(--git-added))]"
+          >
+            <GitPullRequestArrow size={11} strokeWidth={1.8} className="shrink-0" />
+            <span className="shrink-0 font-mono text-[11.5px] tabular-nums">#{pr.number}</span>
+            <span className="min-w-0 flex-1 truncate text-[11.5px] text-fg-fade-85">
+              {pr.title}
+            </span>
+            {(pr.threads ?? 0) > 0 && <CommentBadge count={pr.threads!} />}
+          </button>
+          {pr.inReview ? (
+            <button
+              type="button"
+              onClick={pr.onOpen}
+              title="Your review is in progress"
+              className="shrink-0 rounded-full border border-primary/40 px-2 py-0.5 text-[10.5px] font-medium text-primary hover:bg-primary/10 transition-colors"
+            >
+              In review
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={pr.onReview}
+              title="Review: what you write becomes a PR comment, sent on Submit"
+              className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-[10.5px] font-medium text-primary-foreground hover:brightness-110 transition"
+            >
+              Review
+            </button>
+          )}
+        </div>
+      </PopoverAnchor>
+      <PopoverContent
+        side="right"
+        align="start"
+        sideOffset={10}
+        onMouseEnter={holdOpen}
+        onMouseLeave={scheduleClose}
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onCloseAutoFocus={(e) => e.preventDefault()}
+        className="w-[420px] max-h-[440px] overflow-y-auto overflow-x-hidden p-3.5 flex flex-col gap-2.5"
+      >
+        <div className="text-[12.5px] font-medium text-foreground leading-snug wrap-break-word">
+          #{pr.number} {pr.title}
+        </div>
+        {pr.body === null ? (
+          <div className="text-[11.5px] text-muted-fade-60">Loading…</div>
+        ) : pr.body.trim() ? (
+          <Markdown text={pr.body} className="text-[11.5px] leading-relaxed text-fg-fade-85" />
+        ) : (
+          <div className="text-[11.5px] italic text-muted-fade-60">No description.</div>
+        )}
       </PopoverContent>
     </Popover>
   );

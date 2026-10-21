@@ -13,6 +13,8 @@ export interface DiffEditorModalProps {
    *  editor restores the stored view, falling back to the working tree at HEAD/index. */
   initialView?: EditorView;
   activeTaskId: string | null;
+  /** The project `cwd` belongs to; PR review calls name it. */
+  projectId: string | null;
   terminalTheme: XtermTheme;
   isDark: boolean;
   onClose: () => void;

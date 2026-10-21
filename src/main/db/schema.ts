@@ -77,7 +77,7 @@ export const tasks = sqliteTable(
     sessionId: text('session_id'),
     sessionStoppedAt: text('session_stopped_at'),
     archivedAt: text('archived_at'),
-    // Control API: whether the task's session gets the Dash MCP tools, and the
+    // Control API: whether the task's session can reach Dash with dashctl, and the
     // task that created this one through the API (null if a person did).
     dashAccess: integer('dash_access', { mode: 'boolean' }).notNull().default(false),
     parentTaskId: text('parent_task_id'),
@@ -129,6 +129,13 @@ export const diffEditorComments = sqliteTable(
     /** Diff state the comment is anchored to: 'live' (working/branch views,
      *  which share the working file) or 'commit:<hash>' for a frozen commit. */
     viewScope: text('view_scope').notNull().default('live'),
+    /** PR review drafts: the diff side, the remote thread a reply answers, and
+     *  who wrote it ('user' | 'agent'). */
+    side: text('side').notNull().default('RIGHT'),
+    replyTo: text('reply_to'),
+    author: text('author').notNull().default('user'),
+    /** 'note' (local, for the agent) or 'comment' (a PR review draft). */
+    kind: text('kind').notNull().default('note'),
     createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
   },
@@ -205,5 +212,45 @@ export const featureDismissals = sqliteTable(
   },
   (table) => ({
     pk: primaryKey({ columns: [table.projectId, table.featureId] }),
+  }),
+);
+
+// The PRs a task is reviewing (clicked Review, not yet submitted): what's
+// written in their view is a comment rather than a note.
+export const prReviewsInProgress = sqliteTable(
+  'pr_reviews_in_progress',
+  {
+    taskId: text('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull(),
+    number: integer('number').notNull(),
+    startedAt: text('started_at')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.taskId, table.provider, table.number] }),
+  }),
+);
+
+// A task's draft summary for a PR (the review's PR-level comment), until Submit.
+export const prReviewSummaries = sqliteTable(
+  'pr_review_summaries',
+  {
+    taskId: text('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull(),
+    number: integer('number').notNull(),
+    body: text('body').notNull(),
+    /** 'user' | 'agent': who last wrote it. */
+    author: text('author').notNull().default('user'),
+    updatedAt: text('updated_at')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.taskId, table.provider, table.number] }),
   }),
 );

@@ -3,10 +3,13 @@ import * as fs from 'fs';
 import { parseCaller, type Caller } from './callers';
 import { controlPaths, type ControlPaths } from './paths';
 import { ControlError, type Registry } from './registry';
+import { runCli } from './cli';
 import { verify } from './tokens';
 
 /** Maximum JSON body size for a control call (64KB), as for hook payloads. */
 const MAX_BODY_BYTES = 65_536;
+/** A `dashctl` run's form body: a 64KB comment grows when percent-encoded. */
+const MAX_CLI_BODY_BYTES = 262_144;
 
 export const ORCHESTRATOR_ACCESS_OFF = 'orchestrator access is off in Dash settings';
 
@@ -15,13 +18,13 @@ export interface ControlServerOptions {
   registry: Registry;
   /** Read per request: the Settings switch can flip while Dash runs. */
   isOrchestratorAllowed: () => boolean;
-  /** A task's dash shim listed or called tools (its MCP connection is up). */
-  onTaskContact?: (taskId: string) => void;
+  /** Dash's version, for `dashctl version`. */
+  version: string;
 }
 
 /**
- * The control API over HTTP on 127.0.0.1. The `dash-mcp` shim finds it
- * through the `control-port` file, the way hooks find `hook-port`.
+ * The control API over HTTP on 127.0.0.1. `dashctl` finds it through the
+ * `control-port` file, the way hooks find `hook-port`.
  *
  * Trust boundary is the local user; the Host and Origin checks only block
  * browser-based attacks (DNS rebinding, CSRF).
@@ -92,10 +95,6 @@ export class ControlServer {
     }
 
     const pathname = new URL(req.url || '/', `http://127.0.0.1:${this._port}`).pathname;
-    if (caller.kind === 'task' && (pathname === '/v1/capabilities' || pathname === '/v1/call')) {
-      this.opts.onTaskContact?.(caller.taskId);
-    }
-
     if (pathname === '/v1/capabilities') {
       if (req.method !== 'GET') return sendJson(res, 405, { error: 'method not allowed' });
       return this.respond(res, () => ({ capabilities: this.opts.registry.listFor(caller) }));
@@ -112,6 +111,31 @@ export class ControlServer {
       return this.respond(res, async () => ({
         result: await this.opts.registry.call(caller, name, input),
       }));
+    }
+
+    // `dashctl`: argv and the caller's cwd (and stdin, once asked for) as a
+    // form; the answer is text, its status telling the script where to print
+    // it (cli.ts).
+    if (pathname === '/v1/cli') {
+      if (req.method !== 'POST') return sendJson(res, 405, { error: 'method not allowed' });
+      const body = await readBody(req, MAX_CLI_BODY_BYTES);
+      if (!body.ok) return sendText(res, body.status, `dashctl: ${body.error}`);
+      const form = new URLSearchParams(body.text);
+      const cwd = form.get('cwd');
+      if (!cwd) return sendText(res, 400, 'dashctl: no cwd');
+      try {
+        const answer = await runCli(this.opts.registry, caller, {
+          argv: form.getAll('argv'),
+          stdin: form.has('stdin') ? form.get('stdin') : null,
+          cwd,
+          version: this.opts.version,
+        });
+        return sendText(res, answer.status, answer.text);
+      } catch (err) {
+        if (err instanceof ControlError)
+          return sendText(res, err.status, `dashctl: ${err.message}`);
+        throw err;
+      }
     }
 
     sendJson(res, 404, { error: 'not found' });
@@ -168,17 +192,43 @@ function sendJson(res: http.ServerResponse, status: number, body: unknown): void
   res.end(json);
 }
 
+function sendText(res: http.ServerResponse, status: number, text: string): void {
+  res.writeHead(status, {
+    'Content-Type': 'text/plain; charset=utf-8',
+    'Content-Length': Buffer.byteLength(text),
+  });
+  res.end(text);
+}
+
 type BodyResult =
   | { ok: true; data: Record<string, unknown> }
   | { ok: false; status: number; error: string };
 
+type TextResult = { ok: true; text: string } | { ok: false; status: number; error: string };
+
 /** Read a JSON object body, enforcing the size limit. */
-function readJsonBody(req: http.IncomingMessage): Promise<BodyResult> {
+async function readJsonBody(req: http.IncomingMessage): Promise<BodyResult> {
+  const body = await readBody(req, MAX_BODY_BYTES);
+  if (!body.ok) return body;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body.text);
+  } catch {
+    return { ok: false, status: 400, error: 'invalid JSON' };
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return { ok: false, status: 400, error: 'expected a JSON object' };
+  }
+  return { ok: true, data: parsed as Record<string, unknown> };
+}
+
+/** Read a body as UTF-8 text, enforcing `maxBytes`. */
+function readBody(req: http.IncomingMessage, maxBytes: number): Promise<TextResult> {
   return new Promise((resolve) => {
     const chunks: Buffer[] = [];
     let size = 0;
     let settled = false;
-    const finish = (result: BodyResult) => {
+    const finish = (result: TextResult) => {
       if (settled) return;
       settled = true;
       resolve(result);
@@ -186,7 +236,7 @@ function readJsonBody(req: http.IncomingMessage): Promise<BodyResult> {
     req.on('data', (chunk: Buffer) => {
       if (settled) return;
       size += chunk.length;
-      if (size > MAX_BODY_BYTES) {
+      if (size > maxBytes) {
         // Stop buffering but keep draining, so the 413 reaches the client
         // instead of a reset socket.
         finish({ ok: false, status: 413, error: 'payload too large' });
@@ -195,17 +245,6 @@ function readJsonBody(req: http.IncomingMessage): Promise<BodyResult> {
       chunks.push(chunk);
     });
     req.on('error', () => finish({ ok: false, status: 400, error: 'bad request' }));
-    req.on('end', () => {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-      } catch {
-        return finish({ ok: false, status: 400, error: 'invalid JSON' });
-      }
-      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-        return finish({ ok: false, status: 400, error: 'expected a JSON object' });
-      }
-      finish({ ok: true, data: parsed as Record<string, unknown> });
-    });
+    req.on('end', () => finish({ ok: true, text: Buffer.concat(chunks).toString('utf8') }));
   });
 }

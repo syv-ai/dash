@@ -12,6 +12,7 @@ import { openInIde } from './lib/openInIde';
 import { headerModelName } from './lib/modelName';
 import { RightInspector } from './components/rightInspector/RightInspector';
 import { PortsDrawerWrapper } from './components/rightInspector/PortsDrawerWrapper';
+import { editorOpening } from './components/diffEditor/data/viewPersistence';
 const DiffEditorModal = lazy(() => import('./components/diffEditor/DiffEditorModal'));
 import { ShellDrawerWrapper } from './components/terminal/ShellDrawerWrapper';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
@@ -1354,27 +1355,10 @@ export function App() {
                         onShowCommitGraph={() => setShowCommitGraph(true)}
                         onOpenEditor={() => {
                           if (!activeTask) return;
-                          const files = gitStatus?.files ?? [];
-                          if (files.length > 0) {
-                            // Prefer the first unstaged file; otherwise first staged.
-                            const target = files.find((f) => !f.staged) ?? files[0]!;
-                            setDiffFile({
-                              cwd: activeTask.path,
-                              filePath: target.path,
-                              staged: target.staged,
-                            });
-                          } else {
-                            // No working changes — still open the working
-                            // tree, not the last commit: the editor is only
-                            // editable there, and a save shows up in this
-                            // panel as an unstaged change via the git watcher.
-                            setDiffFile({
-                              cwd: activeTask.path,
-                              filePath: '',
-                              staged: false,
-                              initialView: { kind: 'working', ref: 'HEAD' },
-                            });
-                          }
+                          setDiffFile({
+                            cwd: activeTask.path,
+                            ...editorOpening(activeTask.path, gitStatus?.files ?? []),
+                          });
                         }}
                         collapsed={changesPanelCollapsed}
                         onToggleCollapse={toggleChangesPanel}
@@ -1593,6 +1577,7 @@ export function App() {
             initialStaged={diffFile.staged}
             initialView={diffFile.initialView}
             activeTaskId={activeTaskId}
+            projectId={activeTask?.projectId ?? activeProjectId}
             terminalTheme={resolvedTerminalTheme}
             isDark={theme === 'dark'}
             onClose={() => {

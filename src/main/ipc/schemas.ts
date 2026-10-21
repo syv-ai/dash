@@ -127,4 +127,7 @@ export const diffCommentInputSchema = z.object({
   text: z.string(),
   sent: z.boolean(),
   viewScope: z.string(),
+  side: z.enum(['LEFT', 'RIGHT']).optional(),
+  replyTo: z.string().nullable().optional(),
+  kind: z.enum(['note', 'comment']).optional(),
 });

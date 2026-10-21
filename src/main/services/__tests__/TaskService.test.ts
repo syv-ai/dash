@@ -125,10 +125,6 @@ vi.mock('../ConnectionConfigService', () => ({
   ConnectionConfigService: { getAdoConfig: () => null },
 }));
 vi.mock('../ptyShellConfig', () => ({ removeShellHistory: vi.fn() }));
-const removeTaskMcpConfig = vi.fn((_id: string) => {});
-vi.mock('../../control/mcpConfig', () => ({
-  removeTaskMcpConfig: (id: string) => removeTaskMcpConfig(id),
-}));
 const removeTaskSettings = vi.fn((_id: string) => {});
 vi.mock('../taskSettings', () => ({
   removeTaskSettings: (id: string) => removeTaskSettings(id),
@@ -424,7 +420,6 @@ describe('TaskService.delete', () => {
       expect.objectContaining({ deleteLocalBranch: true, deleteRemoteBranch: false }),
     );
     expect(removeTaskSession).toHaveBeenCalledWith('del');
-    expect(removeTaskMcpConfig).toHaveBeenCalledWith('del');
     expect(removeTaskSettings).toHaveBeenCalledWith('del');
     expect(db.tasks).toEqual([]);
     expect(seen).toEqual(['p1']);

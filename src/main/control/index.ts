@@ -1,16 +1,16 @@
 import { app } from 'electron';
 import { DatabaseService } from '../services/DatabaseService';
 import { createRegistry, type Registry } from './registry';
-import { writeLauncher } from './launcher';
+import { writeDashctl } from './dashctl';
 import { controlPaths } from './paths';
 import { ControlServer } from './server';
 import { initTokens, setOrchestratorFile } from './tokens';
-import { setReadOnlyCapabilities } from './mcpConfig';
-import { noteTaskContact } from './shimContacts';
+import { setReadOnlyCapabilities } from './taskAccess';
 import { registerProjectCapabilities } from './capabilities/projects';
 import { registerTaskCapabilities } from './capabilities/tasks';
 import { registerServiceCapabilities } from './capabilities/services';
-import { projectDeps, serviceDeps, taskDeps } from './capabilities/appDeps';
+import { registerReviewCapabilities } from './capabilities/review';
+import { projectDeps, reviewDeps, serviceDeps, taskDeps } from './capabilities/appDeps';
 import type { ControlInfo } from '../../shared/types';
 
 /**
@@ -37,13 +37,14 @@ function registerCapabilities(): void {
   registerProjectCapabilities(registry, projectDeps());
   registerTaskCapabilities(registry, taskDeps());
   registerServiceCapabilities(registry, serviceDeps());
+  registerReviewCapabilities(registry, reviewDeps());
   setReadOnlyCapabilities(registry.readOnlyNames());
 }
 
 export async function startControl(): Promise<void> {
   if (server) return;
   if (process.platform === 'win32') {
-    // The shim launcher is a shell script, like the hook commands; no win32 path.
+    // dashctl is a shell script, like the hook commands; no win32 path.
     console.error('[control] Control API is not available on Windows; not starting');
     return;
   }
@@ -56,15 +57,15 @@ export async function startControl(): Promise<void> {
     userDataDir: app.getPath('userData'),
     registry,
     isOrchestratorAllowed: () => orchestratorAccess,
-    onTaskContact: noteTaskContact,
+    version: app.getVersion(),
   });
   await next.start();
   server = next;
   try {
-    writeLauncher(app.getPath('userData'));
+    writeDashctl(app.getPath('userData'));
   } catch (err) {
-    // Best effort: the API still runs, and last boot's launcher may still point somewhere valid.
-    console.error('[control] Failed to write the dash-mcp launcher:', err);
+    // Best effort: the API still runs, and last boot's dashctl still talks to it.
+    console.error('[control] Failed to write dashctl:', err);
   }
 }
 
@@ -85,10 +86,10 @@ export function setOrchestratorAccess(enabled: boolean): void {
   }
 }
 
-/** For Settings: the launcher a `claude mcp add` command points at, and whether the API runs here. */
+/** For Settings: where dashctl is, and whether the API runs here. */
 export function controlInfo(): ControlInfo {
   return {
-    launcherPath: controlPaths(app.getPath('userData')).launcher,
+    dashctlPath: controlPaths(app.getPath('userData')).dashctl,
     supported: process.platform !== 'win32',
   };
 }

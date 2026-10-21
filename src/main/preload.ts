@@ -276,11 +276,45 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('github:get-prs-for-checkout', { cwd, defaultBranch }),
   githubWriteCiReport: (args: { cwd: string; number: number; url: string; headSha?: string }) =>
     ipcRenderer.invoke('github:write-ci-report', args),
-  githubGetPrReview: (args: { cwd: string; number: number }) =>
-    ipcRenderer.invoke('github:get-pr-review', args),
   githubListPrs: (cwd: string) => ipcRenderer.invoke('github:list-prs', { cwd }),
   githubPreparePrBranch: (cwd: string, prNumber: number, headRefName: string) =>
     ipcRenderer.invoke('github:prepare-pr-branch', { cwd, prNumber, headRefName }),
+
+  // PR review (GitHub or Azure DevOps, picked by main from the project's remote)
+  prReviewList: (args: { projectId: string; cwd: string }) =>
+    ipcRenderer.invoke('prReview:list', args),
+  prReviewLoad: (args: { projectId: string; cwd: string; number: number }) =>
+    ipcRenderer.invoke('prReview:load', args),
+  prReviewSetResolved: (args: {
+    projectId: string;
+    cwd: string;
+    number: number;
+    threadId: string;
+    resolved: boolean;
+  }) => ipcRenderer.invoke('prReview:setResolved', args),
+  prReviewSubmit: (args: {
+    projectId: string;
+    cwd: string;
+    taskId: string;
+    number: number;
+    verdict: string;
+    body: string;
+  }) => ipcRenderer.invoke('prReview:submit', args),
+  prReviewInReview: (args: { taskId: string; provider: string; number: number }) =>
+    ipcRenderer.invoke('prReview:inReview', args),
+  prReviewSetInReview: (args: { taskId: string; provider: string; number: number; on: boolean }) =>
+    ipcRenderer.invoke('prReview:setInReview', args),
+  prReviewGetSummary: (args: { taskId: string; provider: string; number: number }) =>
+    ipcRenderer.invoke('prReview:getSummary', args),
+  prReviewSetSummary: (args: { taskId: string; provider: string; number: number; body: string }) =>
+    ipcRenderer.invoke('prReview:setSummary', args),
+  onDiffCommentsChanged: (callback: (data: { taskId: string }) => void) => {
+    const handler = (_event: unknown, data: { taskId: string }) => callback(data);
+    ipcRenderer.on('diffComments:changed', handler);
+    return () => {
+      ipcRenderer.removeListener('diffComments:changed', handler);
+    };
+  },
 
   // Azure DevOps
   adoCheckConfigured: (projectId?: string) =>

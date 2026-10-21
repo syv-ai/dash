@@ -1,17 +1,16 @@
 {
   "name": "dash",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "description": "Dash — Desktop app for Claude Code with git worktree management",
   "main": "dist/main/main/entry.js",
   "author": "mhenrichsen <mads@syv.ai>, nthomsencph <nicolai@syv.ai>, FabianScott <fabian@syv.ai>",
   "license": "MIT",
   "scripts": {
     "dev": "concurrently -n main,renderer -c blue,green \"pnpm dev:main\" \"pnpm dev:renderer\"",
-    "dev:main": "tsc -p tsconfig.main.json && pnpm build:mcp && electron dist/main/main/entry.js --dev",
+    "dev:main": "tsc -p tsconfig.main.json && electron dist/main/main/entry.js --dev",
     "dev:renderer": "vite",
     "build": "pnpm build:main && pnpm build:renderer",
-    "build:main": "tsc -p tsconfig.main.json && pnpm build:mcp",
-    "build:mcp": "esbuild src/main/scripts/dash-mcp.ts --bundle --platform=node --target=node22 --outfile=dist/main/main/scripts/dash-mcp.js",
+    "build:main": "tsc -p tsconfig.main.json",
     "build:renderer": "vite build",
     "rebuild": "electron-rebuild -f -w node-pty,better-sqlite3",
     "package:mac": "pnpm build && electron-builder --mac",
@@ -19,7 +18,7 @@
     "package:win": "pnpm build && electron-builder --win",
     "test": "ELECTRON_RUN_AS_NODE=1 electron ./node_modules/vitest/vitest.mjs run",
     "test:watch": "ELECTRON_RUN_AS_NODE=1 electron ./node_modules/vitest/vitest.mjs",
-    "type-check": "tsc --noEmit && tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.mcp.json",
+    "type-check": "tsc --noEmit && tsc -p tsconfig.main.json --noEmit",
     "lint": "eslint src",
     "drizzle:generate": "drizzle-kit generate",
     "prepare": "husky",
@@ -36,8 +35,7 @@
     ],
     "asarUnpack": [
       "node_modules/better-sqlite3/**",
-      "node_modules/node-pty/**",
-      "dist/main/main/scripts/**"
+      "node_modules/node-pty/**"
     ],
     "npmRebuild": false,
     "publish": {
@@ -163,7 +161,6 @@
     "concurrently": "^8.2.0",
     "electron": "^42.4.1",
     "electron-builder": "^26.16.1",
-    "esbuild": "0.28.2",
     "eslint": "^9.39.4",
     "eslint-plugin-check-file": "^3.3.1",
     "eslint-plugin-react-hooks": "^7.1.1",

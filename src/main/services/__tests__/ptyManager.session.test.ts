@@ -45,9 +45,8 @@ vi.mock('../ptyHookSettings', () => ({
   writeHookSettings: () => ({ ok: true }),
   setCommitAttributionValue: () => {},
 }));
-vi.mock('../../control/mcpConfig', () => ({
-  mcpConfigForDispatch: () => undefined,
-  dashAllowTools: () => undefined,
+vi.mock('../../control/taskAccess', () => ({
+  dashSessionAccess: () => null,
 }));
 vi.mock('../taskSettings', () => ({
   writeTaskSettings: (id: string) => `/u/task-settings/${id}.json`,

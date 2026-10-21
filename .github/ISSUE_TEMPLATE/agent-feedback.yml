@@ -1,0 +1,33 @@
+name: Agent feedback
+description: Feedback from, or about, the Claude Code agent in a Dash task.
+labels: [agent-feedback]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Usually drafted by the agent with its dash-feedback skill, and reviewed by
+        its user before submitting. Leave out anything from the project the task
+        works on: this repository is public.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options:
+        - Something is missing
+        - Something is broken
+        - A skill or instruction is unclear or wrong
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: feedback
+    attributes:
+      label: What happened, and what would help
+      description: What the agent was doing, where it got stuck, and what would have made it easy.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: The dashctl command, skill or Dash feature involved, if one was. Dash version, and Claude Code version (claude --version).

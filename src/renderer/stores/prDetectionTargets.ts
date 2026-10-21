@@ -1,5 +1,5 @@
 import type { Project, PullRequestInfo, Task } from '../../shared/types';
-import { isAdoRemote } from '../../shared/urls';
+import { providerForRemote } from '../../shared/urls';
 
 /** Where to look up a task's PRs, and through which provider. */
 export interface PrDetectionTarget {
@@ -16,7 +16,7 @@ export function prTargetFor(project: Project, cwd: string, taskId = ''): PrDetec
   const remote = project.gitRemote ?? null;
   return {
     taskId,
-    provider: remote && isAdoRemote(remote) ? 'ado' : 'github',
+    provider: providerForRemote(remote),
     cwd,
     defaultBranch: project.baseRef || project.gitBranch || 'main',
     remote,

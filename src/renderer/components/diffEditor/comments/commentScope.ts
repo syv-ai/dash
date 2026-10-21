@@ -1,3 +1,6 @@
+import { parsePrScope, prScope } from '../../../../shared/prScope';
+import { isPrComment, needsAttention } from '../../../../shared/diffComments';
+import type { DiffCommentKind } from '../../../../shared/types';
 import type { EditorView } from '../types';
 
 /** The content-identity a comment is anchored to.
@@ -9,7 +12,7 @@ import type { EditorView } from '../types';
  *  content where that line means something else, so its comments are scoped to
  *  the commit hash and stay there. */
 export function commentScope(view: EditorView): string {
-  if (view.kind === 'pr') return `pr:${view.number}`;
+  if (view.kind === 'pr') return prScope(view.provider, view.number);
   return view.kind === 'commit' ? `commit:${view.hash}` : 'live';
 }
 
@@ -21,21 +24,21 @@ export function commitShortHash(scope: string): string | null {
 /** Human label for a scope: 'Working tree' for the shared live diff, or
  *  'Commit <short>' for a frozen commit. */
 export function scopeLabel(scope: string): string {
-  if (scope.startsWith('pr:')) return `PR #${scope.slice(3)}`;
+  const pr = parsePrScope(scope);
+  if (pr) return `PR #${pr.number}`;
   const short = commitShortHash(scope);
   return short ? `Commit ${short}` : 'Working tree';
 }
 
-/** Total *unsent* comments per scope across all files — feeds the commits-drawer
- *  per-view count badges. Sent comments no longer need attention, so they drop
- *  out of the counters. */
-export function commentCountsByScope<T extends { viewScope: string; sent?: boolean }>(
-  byFile: Record<string, T[]>,
-): Map<string, number> {
+/** Total notes and comments needing attention per scope across all files —
+ *  feeds the commits-drawer per-view count badges. */
+export function commentCountsByScope<
+  T extends { viewScope: string; sent?: boolean; kind?: DiffCommentKind },
+>(byFile: Record<string, T[]>): Map<string, number> {
   const counts = new Map<string, number>();
   for (const list of Object.values(byFile)) {
     for (const c of list) {
-      if (c.sent) continue;
+      if (!needsAttention(c)) continue;
       counts.set(c.viewScope, (counts.get(c.viewScope) ?? 0) + 1);
     }
   }
@@ -54,4 +57,36 @@ export function filterCommentsByScope<T extends { viewScope: string }>(
     if (kept.length > 0) out[path] = kept;
   }
   return out;
+}
+
+/** Notes only: no PR review comments. Those belong to their PR view's
+ *  widget, where they're submitted, not to the task's comments menu. */
+export function withoutPrComments<T extends { kind?: DiffCommentKind }>(
+  byFile: Record<string, T[]>,
+): Record<string, T[]> {
+  const out: Record<string, T[]> = {};
+  for (const [path, list] of Object.entries(byFile)) {
+    const kept = list.filter((c) => !isPrComment(c));
+    if (kept.length > 0) out[path] = kept;
+  }
+  return out;
+}
+
+/** Group comments by file, keeping each file's order: `first`'s file first,
+ *  then by path. */
+export function groupByFile<T extends { filePath: string }>(
+  comments: readonly T[],
+  first?: string,
+): [string, T[]][] {
+  const out = new Map<string, T[]>();
+  for (const c of comments) {
+    const at = out.get(c.filePath);
+    if (at) at.push(c);
+    else out.set(c.filePath, [c]);
+  }
+  return [...out.entries()].sort(([a], [b]) => {
+    if (a === first) return -1;
+    if (b === first) return 1;
+    return a.localeCompare(b);
+  });
 }

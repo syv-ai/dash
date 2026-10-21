@@ -17,18 +17,24 @@ describe('buildSessionSettings', () => {
     expect(
       buildSessionSettings({
         ultracode: true,
-        allowTools: ['mcp__dash__tasks_list', 'mcp__dash__tasks_get'],
+        allowTools: ['Bash(dashctl tasks list:*)', 'Bash(dashctl tasks get:*)'],
         env: { WEB_PORT: '3001' },
+        sessionStart: [{ type: 'command', command: 'echo hi' }],
       }),
     ).toEqual({
       ultracode: true,
-      permissions: { allow: ['mcp__dash__tasks_list', 'mcp__dash__tasks_get'] },
+      permissions: { allow: ['Bash(dashctl tasks list:*)', 'Bash(dashctl tasks get:*)'] },
       env: { WEB_PORT: '3001' },
+      hooks: {
+        SessionStart: [{ matcher: '', hooks: [{ type: 'command', command: 'echo hi' }] }],
+      },
     });
   });
 
   it('leaves out what is empty', () => {
-    expect(buildSessionSettings({ ultracode: false, allowTools: [], env: {} })).toEqual({});
+    expect(
+      buildSessionSettings({ ultracode: false, allowTools: [], env: {}, sessionStart: [] }),
+    ).toEqual({});
   });
 });
 
@@ -88,32 +94,6 @@ describe('buildDispatchArgs', () => {
     expect(buildDispatchArgs({ name: 't' })).not.toContain('--');
   });
 
-  it('puts --mcp-config right after --bg so --name closes the variadic flag', () => {
-    const args = buildDispatchArgs({
-      name: 't',
-      mcpConfigPath: '/u/control/mcp-config/abc.json',
-      permissionMode: 'acceptEdits',
-      model: 'opus',
-      resumeSessionId: 'sess',
-      prompt: 'do the thing',
-    });
-    expect(args.slice(0, 3)).toEqual(['--bg', '--mcp-config', '/u/control/mcp-config/abc.json']);
-    // --mcp-config is variadic: whatever follows its path must be a flag, never
-    // the prompt, or the CLI reads the prompt as a second config file.
-    expect(args[args.indexOf('/u/control/mcp-config/abc.json') + 1]).toBe('--name');
-    expect(args[args.length - 1]).toBe('do the thing');
-  });
-
-  it('passes no --settings without a settings file', () => {
-    expect(buildDispatchArgs({ name: 't', prompt: 'p' })).not.toContain('--settings');
-  });
-
-  it('passes no --mcp-config without a path', () => {
-    expect(buildDispatchArgs({ name: 't', prompt: 'p' })).not.toContain('--mcp-config');
-  });
-});
-
-describe('parseDispatchOutput', () => {
   it('extracts the short job id from the backgrounded line', () => {
     const out =
       'backgrounded · 5ebbd6cc · my task\n\n  claude attach 5ebbd6cc\n  claude logs 5ebbd6cc\n';

@@ -47,8 +47,6 @@ export interface TaskCapabilityDeps {
   getUntrustedRoot(taskId: string): string | undefined;
   /** Claude Code's running sessions by job id (claudeSessionRegistry). */
   getLiveSessions(): ReadonlyMap<string, LiveSession>;
-  /** Epoch ms the task's dash shim last reached the control server. */
-  lastShimContact(taskId: string): number | undefined;
   /** Subscribe to activity changes; returns the unsubscribe. */
   onActivityChange(listener: () => void): () => void;
   taskDefaults(projectPath: string): WorkspaceTaskDefaults | undefined;
@@ -161,7 +159,7 @@ const OUTPUT_COLS = 200;
 const OUTPUT_ROWS = 50;
 /** How often tasks.wake re-reads the session registry while it waits. */
 const WAKE_POLL_MS = 500;
-/** tasks.wait and tasks.wake: under the MCP client's two-minute call timeout. */
+/** tasks.wait and tasks.wake: under Claude Code's two-minute default Bash timeout. */
 const timeoutSec = z.number().min(0).max(110).default(60);
 
 type WaitUntil = 'idle' | 'waiting' | 'not-working' | 'change';
@@ -222,9 +220,10 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     defineCapability({
       name: 'tasks.get',
       summary:
-        'Get one task: its name, branch, worktree path, state, what it waits for, and its messageAddress (see tasks_wake).',
+        'Get one task: its name, branch, worktree path, state, what it waits for, and its messageAddress (see `dashctl tasks wake`).',
       input: taskIdInput,
       callers: ['orchestrator', 'task'],
+      cli: { args: ['taskId'] },
       readOnly: true,
       target: { taskId: 'taskId' },
       handler: async (_ctx, input) => freshView(taskOrThrow(input.taskId)),
@@ -239,7 +238,9 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
       input: z.object({
         projectId: z
           .string()
-          .describe('From projects_list; an agent in a task can only use its own project'),
+          .describe(
+            'From `dashctl projects list`; an agent in a task can only use its own project',
+          ),
         name: z.string().trim().min(1).max(200),
         prompt: z
           .string()
@@ -251,7 +252,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
           .enum(['new-branch', 'existing-branch', 'in-place'])
           .optional()
           .describe(
-            'new-branch (default): a worktree on a new branch. existing-branch: a worktree on `branch`. in-place: run in the project folder, checking out `branch` (default: the one checked out now).',
+            'new-branch (default): a worktree on a new branch. existing-branch: a worktree on `--branch`. in-place: run in the project folder, checking out `--branch` (default: the one checked out now).',
           ),
         baseRef: z
           .string()
@@ -269,9 +270,10 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         dashAccess: z
           .boolean()
           .optional()
-          .describe("Give the new task's agent these Dash tools (default: the project's setting)"),
+          .describe("Let the new task's agent use Dash too (default: the project's setting)"),
       }),
       callers: ['orchestrator', 'task'],
+      cli: { args: ['name'], stdin: 'prompt' },
       readOnly: false,
       target: { projectId: 'projectId' },
       handler: async (ctx, input) => {
@@ -354,13 +356,14 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     defineCapability({
       name: 'tasks.wait',
       summary:
-        'Wait until a task is idle, waiting for a person, not working, or changes state, for up to timeoutSec (max 110). Returns the task and timedOut: true when the time ran out; call again to keep waiting.',
+        'Wait until a task is idle, waiting for a person, not working, or changes state, for up to --timeout-sec seconds (max 110). Returns the task and timedOut: true when the time ran out; call again to keep waiting.',
       input: z.object({
         taskId: z.string(),
         until: z.enum(['idle', 'waiting', 'not-working', 'change']),
         timeoutSec,
       }),
       callers: ['orchestrator', 'task'],
+      cli: { args: ['taskId'] },
       readOnly: true,
       target: { taskId: 'taskId' },
       handler: async (_ctx, input) => {
@@ -402,12 +405,13 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     defineCapability({
       name: 'tasks.output',
       summary:
-        "Read what a task's Claude Code session shows: the last `lines` lines of its terminal as plain text.",
+        "Read what a task's Claude Code session shows: the last `--lines` lines of its terminal as plain text.",
       input: z.object({
         taskId: z.string(),
         lines: z.number().int().min(1).max(400).default(100),
       }),
       callers: ['orchestrator', 'task'],
+      cli: { args: ['taskId'] },
       readOnly: true,
       target: { taskId: 'taskId' },
       handler: async (_ctx, input) => {
@@ -429,9 +433,10 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     defineCapability({
       name: 'tasks.wake',
       summary:
-        "Make sure a task's Claude Code session is running so it can take messages: returns at once if it is, otherwise starts it (with no message) and returns once it is up and, with Dash access, its dash tools are connected, for up to timeoutSec (max 110; timedOut: true when the time ran out, call again). Then message the task with your own SendMessage to the task's messageAddress; it answers the same way. A task whose messaging is needs-approval runs with permission prompts off, so your message waits until a person delivers it in Dash. A stopped task's old address fails (ENOENT): wake it again. Refused while the task needs the trust prompt or is archived. A task cannot wake itself.",
+        "Make sure a task's Claude Code session is running so it can take messages: returns at once if it is, otherwise starts it (with no message) and returns once it is up, for up to --timeout-sec seconds (max 110; timedOut: true when the time ran out, call again). Then message the task with your own SendMessage to the task's messageAddress; it answers the same way. A task whose messaging is needs-approval runs with permission prompts off, so your message waits until a person delivers it in Dash. A stopped task's old address fails (ENOENT): wake it again. Refused while the task needs the trust prompt or is archived. A task cannot wake itself.",
       input: z.object({ taskId: z.string(), timeoutSec }),
       callers: ['orchestrator', 'task'],
+      cli: { args: ['taskId'] },
       readOnly: false,
       target: { taskId: 'taskId' },
       allowSelf: false,
@@ -440,20 +445,15 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         assertNotArchived(task);
         const current = await freshView(task);
         if (current.state === 'needs-trust') throw new ControlError(409, current.detail!);
-        // Already running: a start would be a no-op, and its shim connected long ago.
+        // Already running: a start would be a no-op.
         if (current.messageAddress) return { task: current, timedOut: false };
 
         const startedAt = Date.now();
-        // No message: a resume with one starts the turn before its MCP servers
-        // connect, so the task's dash tools read as gone for that turn.
+        // No message: the caller's own SendMessage is the task's next turn.
         const started = await deps.startSession(task.id);
         if ('needsTrust' in started) throw new ControlError(409, view(task).detail!);
-        const ready = (): boolean => {
-          const session = deps.getLiveSessions().get(started.jobId);
-          if (!session?.messagingSocketPath) return false;
-          // The shim lists tools as soon as Claude Code connects it.
-          return !task.dashAccess || (deps.lastShimContact(task.id) ?? 0) >= startedAt;
-        };
+        const ready = (): boolean =>
+          !!deps.getLiveSessions().get(started.jobId)?.messagingSocketPath;
         const deadline = startedAt + input.timeoutSec * 1000;
         while (!ready()) {
           if (Date.now() >= deadline) return { task: view(taskOrThrow(task.id)), timedOut: true };
@@ -470,6 +470,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
       summary: "Bring Dash's window to the front with the task open, for a person to look at.",
       input: taskIdInput,
       callers: ['orchestrator', 'task'],
+      cli: { args: ['taskId'] },
       readOnly: false,
       target: { taskId: 'taskId' },
       handler: async (_ctx, input) => {
@@ -488,6 +489,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         'Archive a task: its session is put to sleep and it leaves the active list; the worktree stays. Returns the task. A task cannot archive itself.',
       input: taskIdInput,
       callers: ['orchestrator', 'task'],
+      cli: { args: ['taskId'] },
       readOnly: false,
       target: { taskId: 'taskId' },
       allowSelf: false,
@@ -504,6 +506,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
       summary: 'Restore an archived task to the active list. Returns the task.',
       input: taskIdInput,
       callers: ['orchestrator', 'task'],
+      cli: { args: ['taskId'] },
       readOnly: false,
       target: { taskId: 'taskId' },
       handler: async (_ctx, input) => {
@@ -520,6 +523,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         "Delete a task: its session, its worktree folder and, with deleteBranch, the branch Dash created for it (locally and on the remote). Branches Dash didn't create are kept. Cannot be undone.",
       input: z.object({ taskId: z.string(), deleteBranch: z.boolean().optional() }),
       callers: ['orchestrator'],
+      cli: { args: ['taskId'] },
       readOnly: false,
       target: { taskId: 'taskId' },
       allowSelf: false,
@@ -542,6 +546,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         "Restart a task's Claude Code session (same conversation, fresh process, so it picks up changed settings). Returns the task. A task cannot restart itself.",
       input: taskIdInput,
       callers: ['orchestrator', 'task'],
+      cli: { args: ['taskId'] },
       readOnly: false,
       target: { taskId: 'taskId' },
       allowSelf: false,

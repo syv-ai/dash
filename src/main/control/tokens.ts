@@ -65,7 +65,7 @@ export function verify(token: string, caller: Caller): boolean {
   return crypto.timingSafeEqual(given, expected);
 }
 
-/** Write (enabled) or remove the orchestrator-token file the `claude mcp add` setup reads. */
+/** Write (enabled) or remove the orchestrator-token file dashctl reads outside a task. */
 export function setOrchestratorFile(enabled: boolean): void {
   const { paths: p } = requireInit();
   if (enabled) {

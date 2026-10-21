@@ -1,11 +1,16 @@
+import { parsePrScope } from '../../../../shared/prScope';
+import { isPrComment } from '../../../../shared/diffComments';
+import type { DiffCommentKind } from '../../../../shared/types';
+
 export interface PromptComment {
   id: string;
   filePath: string;
   startLine: number;
   endLine: number;
   text: string;
-  /** Diff state the comment is anchored to ('live' or 'commit:<hash>'). */
+  /** Diff state the comment is anchored to ('live', 'commit:<hash>' or 'pr:<provider>:<n>'). */
   viewScope: string;
+  kind?: DiffCommentKind;
 }
 
 export interface BuildPromptArgs {
@@ -24,9 +29,12 @@ export interface BuildPromptArgs {
 }
 
 /** ` (commit <short>)` suffix for a commit-scoped comment so the agent knows
- *  the line ref is from that commit, not the working tree. Empty for live. */
-function scopeSuffix(viewScope: string): string {
-  return viewScope.startsWith('commit:') ? ` (commit ${viewScope.slice(7, 14)})` : '';
+ *  the line ref is from that commit, not the working tree; ` (PR #n …)` for a
+ *  PR's, saying whether it's a review comment that goes to the PR. Empty for live. */
+function scopeSuffix(c: Pick<PromptComment, 'viewScope' | 'kind'>): string {
+  const pr = parsePrScope(c.viewScope);
+  if (pr) return ` (PR #${pr.number}${isPrComment(c) ? ' review comment' : ''})`;
+  return c.viewScope.startsWith('commit:') ? ` (commit ${c.viewScope.slice(7, 14)})` : '';
 }
 
 /** Pure: turn a set of comment ids into the `path:line:` prompt body. Current
@@ -51,7 +59,7 @@ export function buildCommentPrompt(args: BuildPromptArgs): string | null {
     const isCurrent = path === currentFilePath;
     for (const c of list) {
       const lineRef = c.startLine === c.endLine ? `${c.startLine}` : `${c.startLine}-${c.endLine}`;
-      const header = `${path}:${lineRef}:${scopeSuffix(c.viewScope)}`;
+      const header = `${path}:${lineRef}:${scopeSuffix(c)}`;
       // Only the open view's content lives in the model, so a code excerpt is
       // trustworthy only for current-file comments of the current scope.
       const canEnrich = isCurrent && !!currentFile && c.viewScope === currentScope;

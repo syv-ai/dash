@@ -1,0 +1,215 @@
+{
+  "value": [
+    {
+      "id": 101,
+      "status": "active",
+      "isDeleted": false,
+      "properties": {},
+      "threadContext": {
+        "filePath": "/src/app/moved.ts",
+        "rightFileStart": { "line": 108, "offset": 1 },
+        "rightFileEnd": { "line": 120, "offset": 10 },
+        "leftFileStart": null,
+        "leftFileEnd": null
+      },
+      "pullRequestThreadContext": {
+        "changeTrackingId": 26,
+        "iterationContext": { "firstComparingIteration": 9, "secondComparingIteration": 9 },
+        "trackingCriteria": {
+          "firstComparingIteration": 11,
+          "secondComparingIteration": 11,
+          "origFilePath": "/src/app/moved.ts",
+          "origRightFileStart": { "line": 96, "offset": 1 },
+          "origRightFileEnd": { "line": 108, "offset": 10 }
+        }
+      },
+      "comments": [
+        {
+          "id": 1,
+          "parentCommentId": 0,
+          "content": "This can throw.",
+          "commentType": "text",
+          "publishedDate": "2026-10-10T09:00:00Z",
+          "author": { "displayName": "Ann Reviewer" }
+        },
+        {
+          "id": 2,
+          "parentCommentId": 1,
+          "content": "Fixed in the next push.",
+          "commentType": "text",
+          "publishedDate": "2026-10-10T10:00:00Z",
+          "author": { "displayName": "Bo Author" }
+        },
+        {
+          "id": 3,
+          "parentCommentId": 1,
+          "content": "",
+          "commentType": "text",
+          "isDeleted": true,
+          "publishedDate": "2026-10-10T11:00:00Z",
+          "author": { "displayName": "Bo Author" }
+        }
+      ]
+    },
+    {
+      "id": 102,
+      "status": "fixed",
+      "properties": {},
+      "threadContext": {
+        "filePath": "/src/app/unmoved.ts",
+        "rightFileStart": { "line": 40, "offset": 1 },
+        "rightFileEnd": { "line": 40, "offset": 64 }
+      },
+      "comments": [
+        {
+          "id": 1,
+          "content": "Nit: name.",
+          "commentType": "text",
+          "publishedDate": "2026-10-10T09:05:00Z",
+          "author": { "displayName": "Ann Reviewer" }
+        }
+      ]
+    },
+    {
+      "id": 103,
+      "status": "closed",
+      "properties": {},
+      "threadContext": {
+        "filePath": "/src/app/deleted.ts",
+        "rightFileStart": { "line": 5, "offset": 1 },
+        "rightFileEnd": { "line": 7, "offset": 4 }
+      },
+      "comments": [
+        {
+          "id": 1,
+          "content": "Why keep this file?",
+          "commentType": "text",
+          "publishedDate": "2026-10-10T09:10:00Z",
+          "author": { "displayName": "Ann Reviewer" }
+        }
+      ]
+    },
+    {
+      "id": 104,
+      "status": "active",
+      "properties": {},
+      "threadContext": {
+        "filePath": "/src/app/moved.ts",
+        "leftFileStart": { "line": 12, "offset": 1 },
+        "leftFileEnd": { "line": 12, "offset": 30 }
+      },
+      "comments": [
+        {
+          "id": 1,
+          "content": "Was this removal intended?",
+          "commentType": "text",
+          "publishedDate": "2026-10-10T09:20:00Z",
+          "author": { "displayName": "Ann Reviewer" }
+        }
+      ]
+    },
+    {
+      "id": 105,
+      "status": "fixed",
+      "properties": {},
+      "threadContext": null,
+      "comments": [
+        {
+          "id": 1,
+          "content": "Overall this looks good.",
+          "commentType": "text",
+          "publishedDate": "2026-10-11T08:00:00Z",
+          "author": { "displayName": "Ann Reviewer" }
+        },
+        {
+          "id": 2,
+          "parentCommentId": 1,
+          "content": "Thanks!",
+          "commentType": "text",
+          "publishedDate": "2026-10-11T09:00:00Z",
+          "author": { "displayName": "Bo Author" }
+        }
+      ]
+    },
+    {
+      "id": 106,
+      "status": "active",
+      "properties": {},
+      "threadContext": null,
+      "comments": [
+        {
+          "id": 1,
+          "content": "Can we split this PR?",
+          "commentType": "text",
+          "publishedDate": "2026-10-09T08:00:00Z",
+          "author": { "displayName": "Cy Lead" }
+        }
+      ]
+    },
+    {
+      "id": 201,
+      "status": null,
+      "properties": { "CodeReviewThreadType": { "$type": "System.String", "$value": "RefUpdate" } },
+      "threadContext": null,
+      "comments": [
+        {
+          "id": 1,
+          "content": "The reference refs/heads/feature was updated.",
+          "commentType": "system",
+          "publishedDate": "2026-10-10T08:00:00Z",
+          "author": { "displayName": "Microsoft.VisualStudio.Services.TFS" }
+        }
+      ]
+    },
+    {
+      "id": 202,
+      "status": null,
+      "properties": {
+        "CodeReviewThreadType": { "$type": "System.String", "$value": "VoteUpdate" }
+      },
+      "threadContext": null,
+      "comments": [
+        {
+          "id": 1,
+          "content": "Ann Reviewer voted 10",
+          "commentType": "system",
+          "publishedDate": "2026-10-12T08:00:00Z",
+          "author": { "displayName": "Ann Reviewer" }
+        }
+      ]
+    },
+    {
+      "id": 203,
+      "status": null,
+      "properties": {
+        "CodeReviewThreadType": { "$type": "System.String", "$value": "ReviewersUpdate" }
+      },
+      "threadContext": null,
+      "comments": [
+        {
+          "id": 1,
+          "content": "Bo Author added Ann Reviewer as a reviewer",
+          "commentType": "system",
+          "publishedDate": "2026-10-09T07:00:00Z",
+          "author": { "displayName": "Microsoft.VisualStudio.Services.TFS" }
+        }
+      ]
+    },
+    {
+      "id": 204,
+      "status": "active",
+      "isDeleted": true,
+      "properties": {},
+      "threadContext": null,
+      "comments": [
+        {
+          "id": 1,
+          "content": "deleted thread",
+          "commentType": "text",
+          "author": { "displayName": "Ann Reviewer" }
+        }
+      ]
+    }
+  ],
+  "count": 10
+}

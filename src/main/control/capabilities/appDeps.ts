@@ -18,10 +18,12 @@ import { WorkspacePortsRuntime } from '../../services/WorkspacePortsRuntime';
 import { portLivenessService } from '../../services/PortLivenessService';
 import { getServiceRunner } from '../../ipc/servicesIpc';
 import { ControlError } from '../registry';
-import { lastTaskContact } from '../shimContacts';
 import type { ProjectCapabilityDeps } from './projects';
 import type { ServiceCapabilityDeps } from './services';
 import type { TaskCapabilityDeps } from './tasks';
+import type { ReviewCapabilityDeps } from './review';
+import { taskReviews } from '../../services/prReview/taskReview';
+import { prProviderFor } from '../../services/prReview/resolve';
 
 /**
  * The capabilities' real dependencies: the app's services. Kept apart from the
@@ -49,7 +51,6 @@ export function taskDeps(): TaskCapabilityDeps {
     getActivity: () => activityMonitor.getAll(),
     getUntrustedRoot,
     getLiveSessions: () => readLiveSessions(),
-    lastShimContact: lastTaskContact,
     onActivityChange: (listener) => {
       activityEvents.on('change', listener);
       return () => activityEvents.off('change', listener);
@@ -76,7 +77,7 @@ export function taskDeps(): TaskCapabilityDeps {
   };
 }
 
-/** How long one services_list keeps the task's ports probed (each call renews it). */
+/** How long one `services list` keeps the task's ports probed (each call renews it). */
 const LIVENESS_LEASE_MS = 60_000;
 
 export function serviceDeps(): ServiceCapabilityDeps {
@@ -89,5 +90,19 @@ export function serviceDeps(): ServiceCapabilityDeps {
     // The same runner the drawer uses, so a service started here shows there.
     runner: getServiceRunner(),
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  };
+}
+
+export function reviewDeps(): ReviewCapabilityDeps {
+  return {
+    providerFor: (projectId) =>
+      prProviderFor(
+        DatabaseService.getProjects().find((p) => p.id === projectId) ?? { gitRemote: null },
+      ),
+    getTask: (id) => DatabaseService.getTask(id),
+    // Read per call, so a database that failed to open fails the call, not the API's start.
+    get reviews() {
+      return taskReviews();
+    },
   };
 }
