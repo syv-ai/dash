@@ -140,15 +140,14 @@ export function mainCheckout(dir: string): string | null {
 
 /**
  * A project by id, name (any case) or path: `~` is the home folder, and a
- * relative path is the caller's `cwd` (none from an old script: absolute
- * paths only). A path is the project's folder or one inside it (the deepest
+ * relative path is the caller's `cwd`. A path is the project's folder or one inside it (the deepest
  * project wins), or else a git worktree whose main checkout is the project,
  * wherever it is. Throws a usage error for a name two projects share.
  */
 export function findProject(
   projects: Project[],
   ref: string,
-  cwd: string | null = null,
+  cwd: string,
   checkoutOf: (dir: string) => string | null = mainCheckout,
 ): Project | undefined {
   const byId = projects.find((p) => p.id === ref);
@@ -163,8 +162,7 @@ export function findProject(
   }
   const expanded =
     ref === '~' || ref.startsWith('~/') ? path.join(os.homedir(), ref.slice(1)) : ref;
-  if (!path.isAbsolute(expanded) && cwd === null) return undefined;
-  const target = real(path.resolve(cwd ?? '/', expanded));
+  const target = real(path.resolve(cwd, expanded));
   const roots = projects.map((p) => ({ p, root: real(p.path) }));
   const containing = roots
     .filter(({ root }) => target === root || target.startsWith(root + path.sep))
@@ -210,7 +208,7 @@ export function resolveArgv(
   commands: CapabilityListing[],
   stdin: string | null,
   projects: Project[],
-  cwd: string | null = null,
+  cwd: string,
 ): Parsed {
   // Bare is a usage error (like git); asking for help is an answer.
   if (argv.length === 0) return { kind: 'usage', text: usageText(commands) };
@@ -335,17 +333,17 @@ export interface CliRequest {
   argv: string[];
   /** Null until the script is asked for it (428). */
   stdin: string | null;
-  /** The caller's working directory; null from an older script. */
-  cwd?: string | null;
+  /** The caller's working directory, for a relative `--project` path. */
+  cwd: string;
   /** Dash's version, for `dashctl version`. */
-  version?: string;
+  version: string;
 }
 
 /** Answer one `dashctl` run for the caller. */
 export async function runCli(
   registry: Pick<Registry, 'listFor' | 'call' | 'projectsFor'>,
   caller: Caller,
-  { argv, stdin, cwd = null, version = 'unknown' }: CliRequest,
+  { argv, stdin, cwd, version }: CliRequest,
 ): Promise<CliAnswer> {
   if (argv.length === 1 && (argv[0] === 'version' || argv[0] === '--version')) {
     return { status: 200, text: version };

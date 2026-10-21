@@ -37,7 +37,7 @@ function catalog() {
 describe('dashctl argv', () => {
   const commands = catalog();
   const resolve = (argv: string[], stdin: string | null = null) =>
-    resolveArgv(argv, commands, stdin, projects);
+    resolveArgv(argv, commands, stdin, projects, '/');
 
   it('prints every command on help, and as a usage error when run bare', () => {
     const r = resolve(['help']);
@@ -76,33 +76,30 @@ describe('dashctl argv', () => {
         input: { projectId: 'pA' },
       });
     }
-    expect(findProject(projects, path.join(os.homedir(), 'x'))).toBeUndefined();
+    expect(findProject(projects, path.join(os.homedir(), 'x'), '/')).toBeUndefined();
     expect(resolve(['tasks', 'list', '--project', 'nope'])).toMatchObject({ kind: 'usage' });
   });
 
   it("resolves a relative or ~ path against the caller's cwd, not Dash's", () => {
     const home = makeProject({ id: 'pH', name: 'h', path: path.join(os.homedir(), 'code/h') });
     const all = [...projects, home];
-    const list = (ref: string, cwd: string | null) =>
+    const list = (ref: string, cwd: string) =>
       resolveArgv(['tasks', 'list', '--project', ref], commands, null, all, cwd);
     expect(list('.', '/repos/holi')).toMatchObject({ input: { projectId: 'pB' } });
     expect(list('../dash', '/repos/holi')).toMatchObject({ input: { projectId: 'pA' } });
     expect(list('holi', '/repos')).toMatchObject({ input: { projectId: 'pB' } });
     expect(list('~/code/h', '/repos')).toMatchObject({ input: { projectId: 'pH' } });
-    expect(list('~/code/h', null)).toMatchObject({ input: { projectId: 'pH' } });
-    // No cwd (an old script): a relative path matches nothing.
-    expect(list('.', null)).toMatchObject({ kind: 'usage' });
   });
 
   it('finds a project from a folder inside it, or a worktree of it anywhere', () => {
     const nested = [...projects, makeProject({ id: 'pN', name: 'web', path: '/repos/dash/web' })];
     const noGit = () => null;
-    expect(findProject(nested, '/repos/dash/src/main', null, noGit)?.id).toBe('pA');
+    expect(findProject(nested, '/repos/dash/src/main', '/', noGit)?.id).toBe('pA');
     // The deepest project wins.
-    expect(findProject(nested, '/repos/dash/web/app', null, noGit)?.id).toBe('pN');
+    expect(findProject(nested, '/repos/dash/web/app', '/', noGit)?.id).toBe('pN');
     const worktrees = (dir: string) => (dir.startsWith('/trees/') ? '/repos/holi' : null);
-    expect(findProject(nested, '/trees/fix-login', null, worktrees)?.id).toBe('pB');
-    expect(findProject(nested, '/elsewhere', null, worktrees)).toBeUndefined();
+    expect(findProject(nested, '/trees/fix-login', '/', worktrees)?.id).toBe('pB');
+    expect(findProject(nested, '/elsewhere', '/', worktrees)).toBeUndefined();
   });
 
   it("finds a git worktree's main checkout", () => {
@@ -125,17 +122,17 @@ describe('dashctl argv', () => {
 
   it("points a task, which can't list projects, at its own projectId", () => {
     const forTask = commands.filter((c) => c.name !== 'projects.list');
-    const r = resolveArgv(['tasks', 'list', '--project', 'nope'], forTask, null, projects);
+    const r = resolveArgv(['tasks', 'list', '--project', 'nope'], forTask, null, projects, '/');
     expect((r as { text: string }).text).toContain("dashctl tasks get gives your task's projectId");
   });
 
   it('refuses a name two projects share', () => {
     const twins = [...projects, makeProject({ id: 'pC', name: 'dash', path: '/other/dash' })];
-    const r = resolveArgv(['tasks', 'list', '--project', 'Dash'], commands, null, twins);
+    const r = resolveArgv(['tasks', 'list', '--project', 'Dash'], commands, null, twins, '/');
     expect(r.kind).toBe('usage');
     expect((r as { text: string }).text).toContain('2 projects are named "Dash"');
     expect(
-      resolveArgv(['tasks', 'list', '--project', '/other/dash'], commands, null, twins),
+      resolveArgv(['tasks', 'list', '--project', '/other/dash'], commands, null, twins, '/'),
     ).toMatchObject({ input: { projectId: 'pC' } });
   });
 

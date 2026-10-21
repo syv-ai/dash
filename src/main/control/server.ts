@@ -121,11 +121,13 @@ export class ControlServer {
       const body = await readBody(req, MAX_CLI_BODY_BYTES);
       if (!body.ok) return sendText(res, body.status, `dashctl: ${body.error}`);
       const form = new URLSearchParams(body.text);
+      const cwd = form.get('cwd');
+      if (!cwd) return sendText(res, 400, 'dashctl: no cwd');
       try {
         const answer = await runCli(this.opts.registry, caller, {
           argv: form.getAll('argv'),
           stdin: form.has('stdin') ? form.get('stdin') : null,
-          cwd: form.get('cwd') || null,
+          cwd,
           version: this.opts.version,
         });
         return sendText(res, answer.status, answer.text);
