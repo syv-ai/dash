@@ -12,7 +12,9 @@ import { initializedPaths, tokenFor } from './tokens';
  * - `env`: who the caller is and its token. The token is derived, not stored,
  *   so it stays valid across Dash restarts.
  * - a SessionStart hook that appends dashctl's folder to `PATH` through
- *   `CLAUDE_ENV_FILE`, which Claude Code runs before each Bash command. The
+ *   `CLAUDE_ENV_FILE`, which Claude Code runs before each Bash command. It
+ *   runs again on every resume into the same file, so it adds its line only
+ *   once. The
  *   settings `env` block can't: its values are literal, so it could only
  *   replace `PATH`.
  * - allow rules for the read-only commands, so reading never prompts: as
@@ -60,7 +62,7 @@ export function dashSessionAccess(task: {
     sessionStart: [
       {
         type: 'command',
-        command: `[ -n "$CLAUDE_ENV_FILE" ] && printf '%s\\n' ${shellQuote(exportPath)} >> "$CLAUDE_ENV_FILE"; exit 0`,
+        command: `[ -n "$CLAUDE_ENV_FILE" ] && ! grep -qxF ${shellQuote(exportPath)} "$CLAUDE_ENV_FILE" 2>/dev/null && printf '%s\\n' ${shellQuote(exportPath)} >> "$CLAUDE_ENV_FILE"; exit 0`,
       },
     ],
     dashctl: paths.dashctl,

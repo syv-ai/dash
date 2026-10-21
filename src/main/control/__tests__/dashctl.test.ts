@@ -56,9 +56,13 @@ describe('dashSessionAccess', () => {
     writeDashctl(userData);
     const [hook] = dashSessionAccess({ id: 't1', dashAccess: true })!.sessionStart;
     const envFile = path.join(userData, 'env.sh');
-    execFileSync('sh', ['-c', hook!.command], {
-      env: { ...process.env, CLAUDE_ENV_FILE: envFile },
-    });
+    // A resume runs it again into the same file: one line, not two.
+    for (let i = 0; i < 2; i++) {
+      execFileSync('sh', ['-c', hook!.command], {
+        env: { ...process.env, CLAUDE_ENV_FILE: envFile },
+      });
+    }
+    expect(fs.readFileSync(envFile, 'utf8').trimEnd().split('\n')).toHaveLength(1);
     // What Claude Code does before each Bash command: run the file, then the command.
     const found = execFileSync('sh', ['-c', `. "${envFile}"; command -v dashctl`], {
       encoding: 'utf8',
