@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
 import { useCommentsStore } from '../../../stores/commentsStore';
 import { buildCommentPrompt, type PromptComment } from './commentPrompt';
-import type { LiveComment } from './types';
+import type { DiffComment, LiveComment } from './types';
 
 interface Args {
   activeTaskId: string | null;
@@ -14,6 +14,8 @@ interface Args {
   /** Scope of the open view — used for code enrichment (only current-scope,
    *  current-file comments can be enriched from the live model). */
   scope: string;
+  /** What the menu's bulk sends draw from (the comments it lists). */
+  sendable: Record<string, DiffComment[]>;
   onClose: () => void;
 }
 
@@ -26,6 +28,8 @@ export interface CommentPrompt {
   sendScope: (scope: string) => void;
   /** Send one comment; keeps the modal open (the user is triaging). */
   sendOne: (id: string) => void;
+  /** Send these comments together; keeps the menu open. */
+  sendMany: (ids: ReadonlyArray<string>) => void;
   /** Open the edit-before-send modal prefilled with every unsent comment. */
   openEditAndSend: () => void;
   /** Ship the (possibly edited) text and close. */
@@ -44,9 +48,10 @@ export function useCommentPrompt({
   liveComments,
   language,
   scope,
+  sendable,
   onClose,
 }: Args): CommentPrompt {
-  // All comments across every view — the menu manages and sends across scopes.
+  // Any comment can be sent on its own; the bulk sends take what the menu lists.
   const byFile = useCommentsStore((s) => s.byFile);
   const [editTarget, setEditTarget] = useState<{ ids: string[]; text: string } | null>(null);
 
@@ -62,6 +67,7 @@ export function useCommentPrompt({
           endLine: c.endLine,
           text: c.text,
           viewScope: c.viewScope,
+          kind: c.kind,
         }));
       }
       return buildCommentPrompt({
@@ -92,12 +98,12 @@ export function useCommentPrompt({
   const collectUnsentIds = useCallback(
     (onlyScope?: string): string[] => {
       const ids: string[] = [];
-      for (const list of Object.values(byFile))
+      for (const list of Object.values(sendable))
         for (const c of list)
           if (!c.sent && (onlyScope === undefined || c.viewScope === onlyScope)) ids.push(c.id);
       return ids;
     },
-    [byFile],
+    [sendable],
   );
 
   const writeToTui = useCallback(
@@ -142,6 +148,16 @@ export function useCommentPrompt({
     [activeTaskId, build, writeToTui],
   );
 
+  const sendMany = useCallback(
+    (ids: ReadonlyArray<string>) => {
+      if (!activeTaskId) return;
+      const text = build(ids);
+      if (text === null) return;
+      writeToTui(text, ids);
+    },
+    [activeTaskId, build, writeToTui],
+  );
+
   const openEditAndSend = useCallback(() => {
     if (!activeTaskId) return;
     const ids = collectUnsentIds();
@@ -167,6 +183,7 @@ export function useCommentPrompt({
     sendAllUnsent,
     sendScope,
     sendOne,
+    sendMany,
     openEditAndSend,
     confirmEditAndSend,
     cancelEditAndSend,

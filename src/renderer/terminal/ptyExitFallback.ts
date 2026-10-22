@@ -1,6 +1,7 @@
 export type PtyExitFallback =
   | { action: 'respawn-shell' }
   | { action: 'detached' }
+  | { action: 'reattach' }
   | { action: 'message'; message: string };
 
 /** PTY id prefix of an attach client for a session that belongs to no task. */
@@ -22,11 +23,16 @@ export function foreignSessionJobId(id: string): string | null {
  * (service runs, side-car TUIs) must NOT respawn — a respawned shell would
  * make `hasPty(tabId)` true again, so ServiceRunner.status would report the
  * dead service as Dash-owned and Stop would kill an innocent shell.
+ *
+ * `reattach` is main's hint that Dash itself cycled the session (the API's
+ * tasks.restart) and is starting it again: an agent
+ * pane re-attaches on its own instead of showing the card.
  */
 export function ptyExitFallback(
   tabId: string,
   isTui: boolean,
   shellOnly = tabId.startsWith('shell:'),
+  reattach = false,
 ): PtyExitFallback {
   if (isTui) {
     if (tabId.startsWith('service:') && !tabId.endsWith(':logs')) {
@@ -38,5 +44,31 @@ export function ptyExitFallback(
     return { action: 'message', message: 'Process exited — you can close this tab.' };
   }
   if (shellOnly) return { action: 'respawn-shell' };
-  return { action: 'detached' };
+  return reattach ? { action: 'reattach' } : { action: 'detached' };
+}
+
+/** How long a pane shows "Reconnecting…" before it falls back to Detached. */
+export const REATTACH_TIMEOUT_MS = 30_000;
+
+/**
+ * Run a re-attach attempt, true only when it reports success within
+ * `timeoutMs`. A rejection or a late answer counts as failure.
+ */
+export function reattachWithin(
+  attempt: () => Promise<boolean>,
+  timeoutMs: number,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), timeoutMs);
+    attempt().then(
+      (ok) => {
+        clearTimeout(timer);
+        resolve(ok);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(false);
+      },
+    );
+  });
 }

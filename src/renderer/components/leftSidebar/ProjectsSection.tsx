@@ -99,6 +99,7 @@ export function ProjectsSection({
   const [archivedProjectsOpen, setArchivedProjectsOpen] = useState(false);
   const newRowRef = useRef<HTMLDivElement | null>(null);
   const prByTask = useGit((s) => s.prByTask);
+  const branchPrsByTask = useGit((s) => s.branchPrsByTask);
   const detectProjectPrs = useGit((s) => s.detectProjectPrs);
   const setMemoryProjectId = useUi((s) => s.setMemoryProjectId);
 
@@ -465,7 +466,8 @@ export function ProjectsSection({
                           isActive={task.id === activeTaskId}
                           activityInfo={taskActivity[task.id]}
                           ctx={contextUsage[task.id]}
-                          prInfo={prByTask[task.id] ?? null}
+                          prs={prByTask[task.id]}
+                          allPrs={branchPrsByTask[task.id]}
                           isUnseen={!!unseenTaskIds?.has(task.id)}
                           hasRemoteControl={!!remoteControlStates[task.id]}
                           isDragging={draggingTaskId === task.id}

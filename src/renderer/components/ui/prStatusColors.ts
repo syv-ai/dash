@@ -1,4 +1,4 @@
-import type { PullRequestState } from '../../../shared/types';
+import type { CiState, PullRequestState } from '../../../shared/types';
 
 /**
  * Standard PR status colors (GitHub convention): open → green (git-added),
@@ -29,4 +29,17 @@ export function prStatusText(state: PullRequestState): string {
     default:
       return 'text-[hsl(var(--git-added))]';
   }
+}
+
+/** The pulse (index.css) for a PR icon while its checks run, else nothing. */
+export function ciPulse(ci: CiState): string {
+  return ci === 'pending' ? 'pr-ci-running' : '';
+}
+
+export function ciLabel(ci: CiState): string {
+  return ci === 'failing'
+    ? 'checks failing'
+    : ci === 'pending'
+      ? 'checks running'
+      : 'checks passing';
 }

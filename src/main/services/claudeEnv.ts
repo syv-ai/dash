@@ -18,7 +18,7 @@ let claudeEnvVars: Record<string, string> = {};
 let syncShellEnv = false;
 
 // When true, launch Claude sessions in ultracode (X-High reasoning + multi-agent
-// workflow orchestration) via `--settings '{"ultracode":true}'`. ultracode is
+// workflow orchestration) via the task's settings file (`"ultracode": true`). ultracode is
 // session-only and can't be set through CLAUDE_CODE_EFFORT_LEVEL or --effort, so
 // it's applied per-dispatch rather than through the effort env var.
 let ultracode = false;
@@ -37,6 +37,8 @@ const RESERVED_ENV_KEYS = new Set([
   'COLORTERM',
   'TERM_PROGRAM',
   'COLORFGBG',
+  // Dash's own (see buildClaudeEnv); a user value would split writes from reads.
+  'CLAUDE_CONFIG_DIR',
 ]);
 
 export function setClaudeEnvVars(vars: Record<string, string>): void {
@@ -66,6 +68,26 @@ function prependUnique(dir: string, basePath: string, sep: string): string {
   const parts = basePath.split(sep);
   if (parts.includes(dir)) return basePath;
   return `${dir}${sep}${basePath}`;
+}
+
+/**
+ * The env a task's session itself needs: the user's env vars from settings,
+ * then the task's port vars (FRONTEND_PORT=…) so commands resolve the host
+ * port the ports panel shows; ports after user vars so a project never
+ * clobbers an allocated port. Reserved keys are never overridden. A session
+ * gets this through its settings file (buildSessionSettings), not its
+ * process env.
+ */
+export function buildSessionEnv(cwd?: string): Record<string, string> {
+  const env: Record<string, string> = {};
+  const merge = (vars: Record<string, string>) => {
+    for (const [key, value] of Object.entries(vars)) {
+      if (!RESERVED_ENV_KEYS.has(key)) env[key] = value;
+    }
+  };
+  merge(claudeEnvVars);
+  if (cwd) merge(WorkspacePortsRuntime.getEnvForWorktree(cwd));
+  return env;
 }
 
 /**
@@ -99,6 +121,10 @@ export function buildClaudeEnv(isDark: boolean, cwd?: string): Record<string, st
     // Format: "fg;bg" where higher values = lighter colors
     COLORFGBG: isDark ? '15;0' : '0;15',
   };
+  // Dash reads Claude Code's state (`claude agents`, the session registry,
+  // trust) from its own CLAUDE_CONFIG_DIR, so every claude it spawns must use
+  // the same one. Only when set: an explicit ~/.claude would move .claude.json.
+  if (process.env.CLAUDE_CONFIG_DIR) env.CLAUDE_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
 
   if (isWin) {
     // Windows requires system env vars for DNS, credential storage, and Node.js.
@@ -151,24 +177,7 @@ export function buildClaudeEnv(isDark: boolean, cwd?: string): Record<string, st
     }
   }
 
-  // Merge user-configured environment variables from settings,
-  // preventing overrides of internal keys that would break spawned processes.
-  for (const [key, value] of Object.entries(claudeEnvVars)) {
-    if (!RESERVED_ENV_KEYS.has(key)) {
-      env[key] = value;
-    }
-  }
-
-  // Merge per-task port env vars (FRONTEND_PORT=…, etc) so commands run by
-  // Claude resolve the same host port the user sees in the ports panel.
-  // After user settings so a project never accidentally clobbers an allocated
-  // port. The supervisor freezes these into the job at dispatch, so a port
-  // change after dispatch needs a re-dispatch (ptyManager.restartTaskSession).
-  if (cwd) {
-    for (const [key, value] of Object.entries(WorkspacePortsRuntime.getEnvForWorktree(cwd))) {
-      if (!RESERVED_ENV_KEYS.has(key)) env[key] = value;
-    }
-  }
+  Object.assign(env, buildSessionEnv(cwd));
 
   // Disable Claude Code's built-in viewport scrolling — Dash uses its own terminal viewport
   env.CLAUDE_CODE_NO_FLICKER = '1';

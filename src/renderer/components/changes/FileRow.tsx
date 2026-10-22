@@ -13,6 +13,8 @@ interface FileRowProps {
   onViewDiff: (file: FileChange) => void;
   onDiscard: (file: FileChange) => void;
   onAddToGitignore: (path: string) => void;
+  /** Animate in, out and on layout changes. Off in the virtualized list, where rows are recycled. */
+  animated?: boolean;
 }
 
 const STATUS_LABEL: Record<FileChangeStatus, string> = {
@@ -49,27 +51,26 @@ export function FileRow({
   onViewDiff,
   onDiscard,
   onAddToGitignore,
+  animated = true,
 }: FileRowProps) {
   const canDiscard = !file.staged && file.status !== 'deleted';
   const canIgnore = file.status === 'untracked';
-  return (
-    <motion.div
-      layout
-      {...rowEnterExit}
-      transition={ROW_TRANSITION}
-      style={{ overflow: 'hidden' }}
-      role="button"
-      tabIndex={0}
-      onClick={() => onViewDiff(file)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onViewDiff(file);
-        }
-      }}
-      title="Click to open diff"
-      className="group relative flex items-center gap-2 px-2 py-1 rounded-md text-[12.5px] cursor-pointer hover:bg-[hsl(var(--surface-2)/0.6)] min-h-[24px] transition-colors duration-150"
-    >
+  const rowProps = {
+    role: 'button',
+    tabIndex: 0,
+    onClick: () => onViewDiff(file),
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onViewDiff(file);
+      }
+    },
+    title: 'Click to open diff',
+    className:
+      'group relative flex items-center gap-2 px-2 py-1 rounded-md text-[12.5px] cursor-pointer hover:bg-[hsl(var(--surface-2)/0.6)] min-h-[24px] transition-colors duration-150',
+  };
+  const body = (
+    <>
       <Checkbox checked={file.staged} onChange={() => onToggleStage(file)} />
       {Array.from({ length: indent }, (_, i) => (
         <span key={i} className="w-1 h-full relative inline-block shrink-0">
@@ -135,6 +136,18 @@ export function FileRow({
           )}
         </div>
       )}
+    </>
+  );
+  if (!animated) return <div {...rowProps}>{body}</div>;
+  return (
+    <motion.div
+      layout
+      {...rowEnterExit}
+      transition={ROW_TRANSITION}
+      style={{ overflow: 'hidden' }}
+      {...rowProps}
+    >
+      {body}
     </motion.div>
   );
 }

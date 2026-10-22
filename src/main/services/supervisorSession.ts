@@ -25,31 +25,71 @@ export interface DispatchArgsOptions {
   permissionMode?: PermissionMode;
   /** Model alias (opus|sonnet|haiku|fable). 'default'/undefined → no --model. */
   model?: TaskModel;
-  ultracode?: boolean;
+  /** The task's settings file (buildSessionSettings) → `--settings`. */
+  settingsPath?: string;
   /** Claude session UUID to continue (migrated or re-dispatched task). */
   resumeSessionId?: string | null;
-  /** Optional first prompt, always the last positional. */
+  /** Optional first prompt, always the last positional, after `--`. */
   prompt?: string;
 }
 
+/** What a task's `--settings` file holds. */
+export interface SessionSettings {
+  ultracode?: true;
+  permissions?: { allow: string[] };
+  env?: Record<string, string>;
+  hooks?: { SessionStart: { matcher: string; hooks: { type: 'command'; command: string }[] }[] };
+}
+
+/**
+ * The task's session settings. They go in a file, not inline: the session
+ * runs in a process the supervisor pre-spawned, so the dispatch's own env
+ * never reaches it; `--settings` → `env` does, and the job re-reads the file
+ * on every respawn. A file also keeps user env values out of `ps`.
+ */
+export function buildSessionSettings(opts: {
+  ultracode?: boolean;
+  /** `permissions.allow` rules (the read-only dashctl commands). */
+  allowTools?: string[];
+  env?: Record<string, string>;
+  /** Commands for every SessionStart (startup, resume, clear, compact). */
+  sessionStart?: { type: 'command'; command: string }[];
+}): SessionSettings {
+  const settings: SessionSettings = {};
+  if (opts.ultracode) settings.ultracode = true;
+  if (opts.allowTools?.length) settings.permissions = { allow: opts.allowTools };
+  if (opts.env && Object.keys(opts.env).length > 0) settings.env = opts.env;
+  if (opts.sessionStart?.length) {
+    settings.hooks = { SessionStart: [{ matcher: '', hooks: opts.sessionStart }] };
+  }
+  return settings;
+}
+
 export function buildDispatchArgs(opts: DispatchArgsOptions): string[] {
+  // Rule: no variadic flag (`--allowedTools`, …) may come directly before the
+  // prompt, or the CLI reads the prompt as one more value and the job starts
+  // with none. The prompt itself follows `--`, so one starting with "-" (a
+  // markdown bullet) is not parsed as an option.
   const args: string[] = ['--bg', '--name', opts.name];
-  if (opts.permissionMode === 'acceptEdits') {
-    args.push('--permission-mode', 'acceptEdits');
-  } else if (opts.permissionMode === 'bypassPermissions') {
+  // Always explicit: without a flag the user's own `defaultMode` applies,
+  // which can be bypassPermissions behind a task Dash shows as Default.
+  if (opts.permissionMode === 'bypassPermissions') {
     args.push('--dangerously-skip-permissions');
+  } else {
+    args.push('--permission-mode', opts.permissionMode ?? 'default');
   }
   if (opts.model && opts.model !== 'default') {
     args.push('--model', opts.model);
   }
-  if (opts.ultracode) {
-    args.push('--settings', JSON.stringify({ ultracode: true }));
+  // Single-valued, so its position is free; a second one would replace it.
+  if (opts.settingsPath) {
+    args.push('--settings', opts.settingsPath);
   }
   if (opts.resumeSessionId) {
     args.push('--resume', opts.resumeSessionId);
   }
   if (opts.prompt) {
-    args.push(opts.prompt);
+    args.push('--', opts.prompt);
   }
   return args;
 }

@@ -91,6 +91,17 @@ class SessionRegistryImpl {
     await Promise.all(targets.map((s) => s.restart()));
   }
 
+  /**
+   * Restart a task's agent session so it is dispatched again (fresh
+   * environment and spawn args, same Claude session). A mounted pane restarts
+   * in place; otherwise main stops the job and the next attach dispatches.
+   */
+  async restartAgent(taskId: string): Promise<void> {
+    const session = this.sessions.get(taskId);
+    if (session) await session.restart();
+    else await window.electronAPI.ptyRestartSession(taskId);
+  }
+
   setAllThemes(isDark: boolean): void {
     this._isDark = isDark;
     this.setAllTerminalThemes(this._themeId, isDark);

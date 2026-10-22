@@ -4,6 +4,11 @@ import { SettingsModalShell } from '../ui/SettingsModalShell';
 import { PermissionModePicker } from './PermissionModePicker';
 import { ModelPicker } from './ModelPicker';
 import { Expandable } from '../ui/Expandable';
+import { SwitchField } from '../ui/SwitchField';
+import { ConfirmModal } from '../ui/ConfirmModal';
+import { useControlInfo } from '../../hooks/useControlInfo';
+import { useRuntime } from '../../stores/runtimeStore';
+import { useTaskBranch } from '../../stores/gitStore';
 
 interface TaskSettingsModalProps {
   task: Task;
@@ -15,6 +20,9 @@ interface TaskSettingsModalProps {
   onPermissionModeChange: (id: string, mode: PermissionMode) => void;
   onModelChange: (id: string, model: TaskModel) => void;
   onScriptsChange: (id: string, setupScript: string, teardownScript: string) => void;
+  /** `restart` is true when the task has a session to restart (running or a
+   *  parked job): its spawn args are fixed at dispatch, so the change needs a new one. */
+  onDashAccessChange: (id: string, enabled: boolean, restart: boolean) => void;
 }
 
 export function TaskSettingsModal({
@@ -25,10 +33,24 @@ export function TaskSettingsModal({
   onPermissionModeChange,
   onModelChange,
   onScriptsChange,
+  onDashAccessChange,
 }: TaskSettingsModalProps) {
   const [name, setName] = useState(task.name);
+  const branch = useTaskBranch(task);
   const [setupScript, setSetupScript] = useState(task.setupScript ?? '');
   const [teardownScript, setTeardownScript] = useState(task.teardownScript ?? '');
+  const controlSupported = useControlInfo()?.supported ?? false;
+  // A live session, or a parked job: either needs a restart, which rewrites its
+  // settings file, for a Dash access change. 'stopped' with no job has nothing to restart.
+  const activityState = useRuntime((s) => s.taskActivity[task.id]?.state);
+  const hasSession = (!!activityState && activityState !== 'stopped') || !!task.jobId;
+  // The value waiting on the restart confirmation, if any.
+  const [pendingDashAccess, setPendingDashAccess] = useState<boolean | null>(null);
+
+  function handleDashAccessToggle(enabled: boolean) {
+    if (hasSession) setPendingDashAccess(enabled);
+    else onDashAccessChange(task.id, enabled, false);
+  }
 
   function handleSaveScripts() {
     if (
@@ -60,7 +82,7 @@ export function TaskSettingsModal({
           }}
           className="w-full px-3.5 py-2.5 rounded-lg bg-transparent border border-input/60 text-foreground text-[13px] placeholder:text-muted-fade-30 focus:outline-hidden focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150"
         />
-        <p className="text-[10px] text-muted-fade-50 mt-1.5 font-mono truncate">{task.branch}</p>
+        <p className="text-[10px] text-muted-fade-50 mt-1.5 font-mono truncate">{branch}</p>
       </div>
 
       <PermissionModePicker
@@ -74,6 +96,16 @@ export function TaskSettingsModal({
         onChange={(model) => onModelChange(task.id, model)}
         helperText={hasActiveSession ? 'Applies the next time this session starts' : undefined}
       />
+
+      {controlSupported && (
+        <SwitchField
+          label="Dash access"
+          hint="Let this task's agent use Dash: its ports and services, creating tasks of its own, and drafting PR review notes and comments. Adds a dash skill to the task's checkout (.claude/skills/dash, kept out of git) that explains dashctl, the command it uses."
+          helperText={hasSession ? 'Changing it restarts the session' : undefined}
+          enabled={task.dashAccess}
+          onToggle={handleDashAccessToggle}
+        />
+      )}
 
       {task.useWorktree && (
         <Expandable
@@ -111,6 +143,18 @@ export function TaskSettingsModal({
             </div>
           </div>
         </Expandable>
+      )}
+
+      {pendingDashAccess !== null && (
+        <ConfirmModal
+          message="Changing Dash access restarts this task's session."
+          confirmLabel="Restart session"
+          onConfirm={() => {
+            onDashAccessChange(task.id, pendingDashAccess, true);
+            setPendingDashAccess(null);
+          }}
+          onCancel={() => setPendingDashAccess(null)}
+        />
       )}
     </SettingsModalShell>
   );

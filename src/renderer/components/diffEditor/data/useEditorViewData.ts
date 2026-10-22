@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { EditorView, CommitSummary } from '../types';
+import { frozenCommit, type EditorView, type CommitSummary } from '../types';
 import type { FileChange } from '../../../../shared/types';
 import { useAsyncResource } from './useAsyncResource';
 
@@ -26,17 +26,19 @@ export function useEditorViewData(
   view: EditorView,
   workingFiles: FileChange[],
 ): EditorViewData {
-  const isCommit = view.kind === 'commit';
+  const frozen = frozenCommit(view);
+  const isCommit = frozen !== null;
   const isBranch = view.kind === 'branch';
-  const commitHash = isCommit ? view.hash : '';
+  const commitHash = frozen?.hash ?? '';
+  const commitBase = frozen?.base;
   const branchBase = isBranch ? view.base : '';
 
   const commitFiles = useAsyncResource<FileChange[]>(
     () =>
       window.electronAPI
-        .editorListFilesInCommit({ cwd, hash: commitHash })
+        .editorListFilesInCommit({ cwd, hash: commitHash, base: commitBase })
         .then((r) => (r.success && r.data ? r.data : NO_FILES)),
-    [cwd, commitHash, isCommit],
+    [cwd, commitHash, commitBase, isCommit],
     NO_FILES,
     isCommit,
   );

@@ -67,6 +67,8 @@ export interface GitApi {
   ) => () => void;
   gitPush: (cwd: string) => Promise<IpcResponse<void>>;
   gitRemoteBranchExists: (args: { cwd: string; branch: string }) => Promise<IpcResponse<boolean>>;
+  /** The branch checked out at `cwd`; null on a detached HEAD. */
+  gitCurrentBranch: (cwd: string) => Promise<IpcResponse<string | null>>;
   gitCheckoutBranch: (args: { cwd: string; branch: string }) => Promise<IpcResponse<void>>;
   gitUpdateBranchToRemote: (args: { cwd: string; branch: string }) => Promise<IpcResponse<void>>;
 

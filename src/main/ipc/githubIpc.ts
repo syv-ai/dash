@@ -39,16 +39,38 @@ export function registerGithubIpc(): void {
   });
 
   ipcMain.handle(
-    'github:get-pr-for-branch',
-    async (_event, args: { cwd: string; branch: string }) => {
+    'github:get-prs-for-checkout',
+    async (_event, args: { cwd: string; defaultBranch: string }) => {
       try {
         parseArgs(
-          'github:get-pr-for-branch',
-          z.looseObject({ cwd: z.string(), branch: z.string() }),
+          'github:get-prs-for-checkout',
+          z.looseObject({ cwd: z.string(), defaultBranch: z.string() }),
           args,
         );
-        const pr = await GithubService.getPullRequestForBranch(args.cwd, args.branch);
-        return { success: true, data: pr };
+        const prs = await GithubService.getPullRequestsForCheckout(args.cwd, args.defaultBranch);
+        return { success: true, data: prs };
+      } catch (err) {
+        return errorResponse(err);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'github:write-ci-report',
+    async (_event, args: { cwd: string; number: number; url: string; headSha?: string }) => {
+      try {
+        parseArgs(
+          'github:write-ci-report',
+          z.looseObject({
+            cwd: z.string(),
+            number: z.number(),
+            url: z.string(),
+            headSha: z.string().optional(),
+          }),
+          args,
+        );
+        const { cwd, ...pr } = args;
+        return { success: true, data: await GithubService.writeCiReport(cwd, pr) };
       } catch (err) {
         return errorResponse(err);
       }

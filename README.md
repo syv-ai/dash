@@ -9,7 +9,7 @@ The main idea: you open a project, create tasks, and each task gets an isolated 
 ## What it does
 
 - **Project management** — Open any git repo as a project, or clone from a URL. Tasks are nested under projects in the sidebar. Drag-and-drop to reorder projects. Project overview dashboard shows all tasks, activity status, and quick actions.
-- **Git worktrees** — Each task gets its own worktree and branch. A reserve pool pre-creates worktrees so new tasks start instantly (<100ms). Per-project setup scripts run automatically after worktree creation (e.g. `pnpm install`, copying `.env`).
+- **Git worktrees** — Each task gets its own worktree and branch. Per-project setup scripts run automatically after worktree creation (e.g. `pnpm install`, copying `.env`).
 - **Sessions that outlive the window** — Task sessions are owned by Claude Code's supervisor, not by Dash: switching tasks, reloading or quitting Dash only detaches the terminal, and opening the task attaches again with a recap. Sessions idle for about an hour are parked by Claude Code and resume on the next open. Sessions started outside Dash inside a project show up under "Other sessions" and can be attached, stopped, removed or adopted as a task.
 - **Terminal** — Full PTY terminal per task (`claude attach` in fullscreen mode; `←` on an empty prompt opens Claude Code's agent view, Esc leaves it, Ctrl+Z detaches). Shift+Enter sends multiline input. File drag-drop pastes paths. Clickable file paths open in your IDE. 16 terminal themes.
 - **Shell drawer** — Separate shell terminal alongside the task terminal. Configurable position (left, right, or replacing main content).
@@ -26,6 +26,90 @@ The main idea: you open a project, create tasks, and each task gets an isolated 
 - **Auto-update** — Background update checking with manual download and install.
 - **Customizable keybindings** — Remap any shortcut from Settings.
 - **Dark/light theme**
+
+## Controlling Dash from other agents
+
+Dash ships a command line, `dashctl`, that lets Claude Code sessions create and drive tasks. It runs on macOS and Linux and only talks to Dash on 127.0.0.1.
+
+```bash
+dashctl help                              # every command
+dashctl tasks create "Fix the flaky test" --project dash --prompt - <<'PROMPT'
+The login test fails one run in five on CI. Find out why and fix it.
+PROMPT
+dashctl tasks wait <task-id> --until idle
+dashctl tasks output <task-id> --lines 80
+dashctl review drafts-create --help       # one command's flags
+```
+
+Dash writes it to `control/bin/dashctl` in its data folder each time it starts. It is a small `sh` + `curl` script that hands its words to Dash, which owns the commands, so an older copy still runs the newest Dash's. `--project` takes a project's name, id or path (relative to where you run it): the project's folder, one inside it, or a git worktree of it. `dashctl version` prints Dash's version. A comment body comes on stdin; any input that can come on stdin does when given as `-`, like `--prompt -` above. Results are JSON on stdout; a usage error (bare `dashctl` too) exits 2 and a refusal exits 1, both on stderr.
+
+### Agents inside a task
+
+Turn on **Dash access** in the New Task dialog (or later in the task's settings; changing it restarts the session). The task's agent can then run `dashctl` for its own project: it sees itself and the tasks it created, and can create tasks only in its own project.
+
+Dash puts it all in the task's `--settings` file, rewritten at every session start: the task's caller id and token in `env`, a SessionStart hook that appends `dashctl`'s folder to `PATH` (through `CLAUDE_ENV_FILE`), and allow rules for the read-only commands. It also writes a `dash` skill to `.claude/skills/dash/SKILL.md` in the task's checkout. It explains `dashctl`, above all the PR review workflow (notes vs comments, where a draft goes, the review summary), and names `dashctl`'s full path in case a session's `PATH` lacks it. It is kept out of git through `.git/info/exclude`, not the repo's `.gitignore`, and removed when Dash access is turned off. A `dash` skill the repo already has, without Dash's marker, is left alone.
+
+Every task, Dash access or not, also gets a `dash-feedback` skill (`.claude/skills/dash-feedback/`, kept out of git the same way). When the agent misses something in Dash, finds a Dash skill unclear, or its user has something to say about Dash itself, it drafts a GitHub issue on this repository for the user to submit, through the **Agent feedback** issue form, or with `gh` when asked. Nothing from the user's project goes in it: the repository is public.
+
+The switch's default comes from the project's settings ("Dash access for new tasks"), which is stored as `taskDefaults.dashAccess` in `.dash/config.json`. To set a personal default without changing the shared file, put the same key in `.dash/config.local.json`.
+
+### An orchestrator outside Dash
+
+In **Settings → Claude → Behavior**, turn on **Let other agents control Dash**. That's all: `dashctl` finds Dash's port and the orchestrator token by itself. Settings shows `dashctl`'s path to run it by; in a Holi vault, the Dash plugin (`syv-ai/holi-plugins`, folder `dash`) puts it on the agent's `PATH`.
+
+The orchestrator sees every project that isn't archived. Turning the switch off cuts it off on its next call.
+
+### Commands
+
+| Command                     | What it does                                                                       | No prompt in a task |
+| --------------------------- | ---------------------------------------------------------------------------------- | ------------------- |
+| `projects list`             | List projects (orchestrator only)                                                  |                     |
+| `tasks list`                | List tasks with their state: idle, working, waiting, error, stopped or needs-trust | yes                 |
+| `tasks get <task-id>`       | One task: name, branch, worktree path, state and what it waits for                 | yes                 |
+| `tasks create <name>`       | Create a task (new worktree by default) and start its session with a prompt        |                     |
+| `tasks wait <task-id>`      | Wait up to 110 s until a task is idle, waiting, not working, or changes state      | yes                 |
+| `tasks output <task-id>`    | The last lines of a task's terminal as plain text                                  | yes                 |
+| `tasks wake <task-id>`      | Make sure a task's session is running, so you can message it (see below)           |                     |
+| `tasks open <task-id>`      | Bring Dash to the front with the task open                                         |                     |
+| `tasks archive <task-id>`   | Archive a task (never the caller's own task)                                       |                     |
+| `tasks restore <task-id>`   | Restore an archived task                                                           |                     |
+| `tasks delete <task-id>`    | Delete a task, its worktree and optionally its branch (orchestrator only)          |                     |
+| `tasks restart <task-id>`   | Restart a task's session in the same conversation (never the caller's own task)    |                     |
+| `services list`             | A task's services from `.dash/ports.json`, with ports and whether they're up       | yes                 |
+| `services start <label>`    | Start a service's run command in a Dash terminal tab                               |                     |
+| `services stop <label>`     | Stop a service                                                                     |                     |
+| `services output <label>`   | The last lines of a service Dash started                                           | yes                 |
+| `review drafts-list`        | A task's notes and draft review comments on a PR                                   | yes                 |
+| `review drafts-create`      | Write a note, or draft a review comment on a PR's lines or a reply to a thread     |                     |
+| `review drafts-update <id>` | Change a note or draft, the person's or the agent's                                |                     |
+| `review drafts-delete <id>` | Delete a note or draft, the person's or the agent's                                |                     |
+| `review summary-get`        | A task's draft review summary for a PR (its PR-level comment)                      | yes                 |
+| `review summary-set`        | Draft the review summary, posted with the verdict on Submit                        |                     |
+
+The `review` commands put notes and draft comments into the task's diff editor, on the PR view (Compare → Pull requests). A comment is for the PR's author; a note is for the developer and stays local (the person can promote it). Nothing is posted: the person reads the drafts, edits them and submits the review with a verdict. An agent can change or delete any of the task's notes and drafts, the person's too; the person sees every change before submitting.
+
+Every task the commands return has two fields for messaging it: `messageAddress` (`uds:<socket>` while its session runs, otherwise `null`) and `messaging` (`direct`, or `needs-approval` for a task in `bypassPermissions`).
+
+Inside a task, the read-only commands (marked above) run without a permission prompt, so a task started by an orchestrator doesn't stall on a lookup. Commands that change something still ask, unless the task runs in `bypassPermissions`.
+
+### Talking to a task
+
+Dash doesn't carry messages. Your orchestrator talks to a task with Claude Code's own `SendMessage`:
+
+1. `dashctl tasks list` to find the task.
+2. `dashctl tasks wake <task-id>` to make sure its session is running. If it already is, this returns at once. Otherwise Dash starts it, with no message, and returns once the session is up.
+3. `SendMessage` to the task's `messageAddress`. This works from another config dir too, such as Holi's.
+4. The task answers you with `SendMessage` in the same way.
+
+A task whose `messaging` is `needs-approval` runs in `bypassPermissions`, so a message from a session that does prompt is held until someone clicks Deliver in the task's pane in Dash. Its reply is held the same way in your orchestrator's session, which a non-interactive session (`claude -p`) can't approve. The orchestrator also has to still be running when the reply comes: a `claude -p` run that ends its turn and exits leaves the task's reply failing with `ENOENT`. When a task's session stops, its old address fails with `ENOENT`. Run `dashctl tasks wake` again for a new one.
+
+### Safety rules
+
+- Tasks created through the API never run in `bypassPermissions`, even if the project defaults to it.
+- A task created through the API gets one line before its first prompt. It says the task may be running unattended, shouldn't use `AskUserQuestion`, and should answer a message that asks for a reply with `SendMessage`.
+- Dash doesn't set Claude Code to accept messages from other sessions without asking for a task in `bypassPermissions`. That would let any local session feed input to a session that has permission prompts off.
+- Dash never accepts Claude Code's workspace trust prompt for an agent. A task that needs it reports `needs-trust` until you open it in Dash.
+- Anything running as your user on this machine can read the tokens under Dash's data folder, so the API trusts the local user. Leave orchestrator access off when you don't use it.
 
 ## Install
 
@@ -57,7 +141,7 @@ To just rebuild and launch the main process:
 
 ```bash
 pnpm build:main
-npx electron dist/main/main/entry.js --dev
+npx electron . --dev
 ```
 
 ## Build
@@ -169,6 +253,7 @@ All keybindings are customizable in Settings > Keybindings.
 - **Terminal snapshots**: `~/Library/Application Support/Dash/terminal-snapshots/`
 - **Worktrees**: `{project}/.claude/worktrees/{task-slug}-{hash}/` (ignored via `.git/info/exclude`; pre-0.16 tasks at `{project}/../worktrees/` are offered a one-time move at launch)
 - **Hook port**: `~/Library/Application Support/Dash/hook-port` while Dash runs — the per-worktree `.claude/settings.local.json` hooks read the hook server's port from it, so a session that keeps running after Dash quits no-ops instead of erroring
+- **Control API**: `~/Library/Application Support/Dash/control/` — the token secret, the API's port file, the orchestrator token, and `bin/dashctl`
 - **Sessions**: owned by Claude Code under `~/.claude/jobs/` (never read by Dash; `claude agents --json` is the interface)
 
 ## Acknowledgements

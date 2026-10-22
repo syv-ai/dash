@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import {
   GitBranch,
-  GitPullRequest,
+  GitPullRequestArrow,
   ChevronDown,
   Loader2,
   AlertCircle,
@@ -213,7 +213,7 @@ export function BranchPrPicker({
                 {
                   value: 'pr',
                   label: 'Pull requests',
-                  icon: <GitPullRequest size={12} strokeWidth={1.8} />,
+                  icon: <GitPullRequestArrow size={12} strokeWidth={1.8} />,
                   count: prs?.length,
                 },
               ]}
@@ -297,7 +297,7 @@ export function BranchPrPicker({
                         disabled={preparingId !== null}
                         onSelect={() => void choosePr(pr)}
                       >
-                        <GitPullRequest
+                        <GitPullRequestArrow
                           size={11}
                           className={`${prStatusText(pr.state)} shrink-0`}
                           strokeWidth={1.8}

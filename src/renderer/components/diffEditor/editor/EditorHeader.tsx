@@ -6,6 +6,7 @@ import {
   Eye,
   GitCommit,
   GitCompare,
+  GitPullRequestArrow,
   History,
   MessageSquare,
   WrapText,
@@ -14,7 +15,9 @@ import {
 import type { EditorView } from '../types';
 import { Popover, PopoverAnchor, PopoverContent } from '../../ui/Popover';
 import { Tooltip } from '../../ui/Tooltip';
+import { Segmented } from '../../ui/Segmented';
 import { BranchPicker } from '../BranchPicker';
+import { PrPicker } from '../PrPicker';
 
 interface Props {
   cwd: string;
@@ -36,12 +39,16 @@ interface Props {
   onClose(): void;
   /** Switch into branch view with the given base ref (e.g. "origin/main"). */
   onSelectBase(base: string): void;
-  /** Leave branch view; switch back to working tree. */
+  /** Leave branch or PR view; switch back to working tree. */
   onExitBranchView(): void;
-  /** Resolved repo default; lets the chip enter branch view with one click
-   *  in non-branch view. Null when neither origin/HEAD nor main/master is
-   *  available — clicking the chip then just opens the picker. */
+  /** Resolved repo default (origin/HEAD, else main/master), listed first in the branch picker. */
   defaultBase: string | null;
+  /** The project the checkout belongs to; null hides the Pull requests tab. */
+  projectId: string | null;
+  /** Open PR `number`'s view; resolves false when it couldn't be loaded. */
+  onSelectPr(number: number): Promise<boolean>;
+  /** The open PR's title, once its review has loaded. */
+  prTitle: string | null;
   /** Comments anchored to the open view — shown after the "Showing …" label. */
   commentCount: number;
   backgroundColor: string;
@@ -64,10 +71,14 @@ export function EditorHeader({
   onSelectBase,
   onExitBranchView,
   defaultBase,
+  projectId,
+  onSelectPr,
+  prTitle,
   commentCount,
   backgroundColor,
 }: Props) {
   const isBranch = view.kind === 'branch';
+  const isPr = view.kind === 'pr';
   // "Showing …" pill — only for non-working views (the working tree is the
   // default and needs no callout). Tooltip carries the full ref.
   const viewMeta =
@@ -83,8 +94,15 @@ export function EditorHeader({
             tooltip: `Commit ${view.hash}`,
             Icon: GitCommit,
           }
-        : null;
+        : view.kind === 'pr'
+          ? {
+              label: `Showing PR #${view.number}`,
+              tooltip: `PR #${view.number}: ${view.base.slice(0, 7)}…${view.head.slice(0, 7)}`,
+              Icon: GitPullRequestArrow,
+            }
+          : null;
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [tab, setTab] = useState<'branches' | 'prs'>('branches');
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -99,10 +117,10 @@ export function EditorHeader({
   }
 
   // Close the picker when the host switches view (e.g. user clicks a commit
-  // row), so a stale popover doesn't linger anchored to the chip.
+  // row, or picks a PR), so a stale popover doesn't linger anchored to the chip.
   useEffect(() => {
-    if (!isBranch) setPickerOpen(false);
-  }, [view, isBranch]);
+    setPickerOpen(false);
+  }, [view]);
 
   function handleSelect(ref: string) {
     onSelectBase(ref);
@@ -122,16 +140,9 @@ export function EditorHeader({
     }`;
 
   function handleChipClick() {
-    if (isBranch) {
-      setPickerOpen((v) => !v);
-    } else if (defaultBase) {
-      // Working/commit view → fast path: clicking the chip enters branch
-      // view with the resolved default. The user can re-open the picker
-      // afterwards to change branches.
-      onSelectBase(defaultBase);
-    } else {
-      setPickerOpen((v) => !v);
-    }
+    // Open on the tab of what's showing: a PR view on its PRs, else branches.
+    if (!pickerOpen) setTab(isPr && projectId ? 'prs' : 'branches');
+    setPickerOpen((v) => !v);
   }
 
   return (
@@ -193,31 +204,74 @@ export function EditorHeader({
         <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
           <PopoverAnchor asChild>
             <div className="inline-flex items-center">
-              <Tooltip content={isBranch ? 'Change base branch' : 'Compare with another branch'}>
+              <Tooltip
+                content={
+                  isBranch
+                    ? 'Change base branch'
+                    : isPr
+                      ? 'Change pull request'
+                      : 'Compare with a branch or pull request'
+                }
+              >
                 <button
                   type="button"
                   onClick={handleChipClick}
                   className={`inline-flex items-center gap-1.5 px-2 h-6 rounded-md text-[11px] font-mono transition-colors hover:bg-accent/60 ${
-                    isBranch ? 'text-primary' : 'text-muted-fade-60 hover:text-foreground'
+                    isBranch || isPr ? 'text-primary' : 'text-muted-fade-60 hover:text-foreground'
                   }`}
                 >
-                  <GitCompare size={12} strokeWidth={1.8} className="shrink-0" />
+                  {isPr ? (
+                    <GitPullRequestArrow size={12} strokeWidth={1.8} className="shrink-0" />
+                  ) : (
+                    <GitCompare size={12} strokeWidth={1.8} className="shrink-0" />
+                  )}
                   {isBranch ? (
                     <span className="truncate max-w-[420px]">base: {view.base}</span>
+                  ) : isPr ? (
+                    <span className="truncate max-w-[420px]">
+                      PR #{view.number}
+                      {prTitle ? `: ${prTitle}` : ''}
+                    </span>
                   ) : (
-                    <span className="whitespace-nowrap">Compare with branch…</span>
+                    <span className="whitespace-nowrap">Compare…</span>
                   )}
                 </button>
               </Tooltip>
             </div>
           </PopoverAnchor>
           <PopoverContent side="bottom" align="end" sideOffset={6} className="p-0">
-            <BranchPicker
-              cwd={cwd}
-              selectedRef={isBranch ? view.base : null}
-              onSelect={handleSelect}
-              onExit={isBranch ? handleExit : undefined}
-            />
+            <div className="w-[340px] h-[380px] flex flex-col">
+              {projectId && (
+                <div className="px-2.5 pt-2.5 pb-1">
+                  <Segmented
+                    size="sm"
+                    value={tab}
+                    onChange={setTab}
+                    options={[
+                      { value: 'branches', label: 'Branches' },
+                      { value: 'prs', label: 'Pull requests' },
+                    ]}
+                  />
+                </div>
+              )}
+              {tab === 'prs' && projectId ? (
+                <PrPicker
+                  projectId={projectId}
+                  cwd={cwd}
+                  selected={view.kind === 'pr' ? view.number : null}
+                  onSelect={onSelectPr}
+                  onExit={isPr ? handleExit : undefined}
+                />
+              ) : (
+                <BranchPicker
+                  cwd={cwd}
+                  selectedRef={isBranch ? view.base : null}
+                  onSelect={handleSelect}
+                  onExit={isBranch ? handleExit : undefined}
+                  defaultRef={defaultBase}
+                />
+              )}
+            </div>
           </PopoverContent>
         </Popover>
         <Tooltip content={blameEnabled ? 'Hide git blame' : 'Show git blame'}>

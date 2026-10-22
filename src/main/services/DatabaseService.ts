@@ -15,6 +15,7 @@ import type {
   TaskPort,
   PortSource,
 } from '@shared/types';
+import { FolderOccupiedError } from './FolderOccupiedError';
 
 function normalizePermissionMode(value: string | null | undefined): PermissionMode {
   return value === 'acceptEdits' || value === 'bypassPermissions' ? value : 'default';
@@ -152,7 +153,7 @@ export class DatabaseService {
    * and non-worktree tasks must be unique per project path. UI gating in TaskModal
    * is best-effort; this is the load-bearing check.
    */
-  private static findActiveNonWorktreeTaskAt(
+  static findActiveNonWorktreeTaskAt(
     projectId: string,
     path: string,
     excludeId?: string,
@@ -183,7 +184,7 @@ export class DatabaseService {
     if (data.useWorktree === false) {
       const conflict = this.findActiveNonWorktreeTaskAt(data.projectId, data.path, id);
       if (conflict) {
-        throw new Error(
+        throw new FolderOccupiedError(
           `Cannot save non-worktree task at "${data.path}": active task "${conflict.name}" already occupies this directory. Archive it first.`,
         );
       }
@@ -220,6 +221,8 @@ export class DatabaseService {
           contextPrompt: data.contextPrompt ?? null,
           setupScript: data.setupScript ?? null,
           teardownScript: data.teardownScript ?? null,
+          dashAccess: data.dashAccess ?? false,
+          parentTaskId: data.parentTaskId ?? null,
           sortOrder: sortOrder ?? 0,
           createdAt: now,
           updatedAt: now,
@@ -231,7 +234,8 @@ export class DatabaseService {
         // setTaskScripts) precisely so a partial save like a rename can't
         // clobber them. Adding them here would null them out on every update
         // call that doesn't resend them (e.g. updateTask → rename wipes the
-        // context prompt). Leave them out.
+        // context prompt). Leave them out. Same for `dashAccess` (its setter is
+        // setTaskDashAccess) and `parentTaskId` (fixed at creation).
         .onConflictDoUpdate({
           target: tasks.id,
           set: {
@@ -281,6 +285,16 @@ export class DatabaseService {
       .run();
     const row = db.select().from(tasks).where(eq(tasks.id, id)).get();
     return this.mapTask(row!);
+  }
+
+  /** Turn a task's Dash access (dashctl, the control API) on or off. Kept
+   *  separate from saveTask so partial saves can't flip it. */
+  static setTaskDashAccess(id: string, enabled: boolean): void {
+    const db = getDb();
+    db.update(tasks)
+      .set({ dashAccess: enabled, updatedAt: new Date().toISOString() })
+      .where(eq(tasks.id, id))
+      .run();
   }
 
   /**
@@ -456,7 +470,7 @@ export class DatabaseService {
     if (!target.useWorktree) {
       const conflict = this.findActiveNonWorktreeTaskAt(target.projectId, target.path, id);
       if (conflict) {
-        throw new Error(
+        throw new FolderOccupiedError(
           `Cannot restore "${target.name}": active task "${conflict.name}" already occupies "${target.path}". Archive it first.`,
         );
       }
@@ -644,6 +658,8 @@ export class DatabaseService {
       sessionId: row.sessionId ?? null,
       sessionStoppedAt: row.sessionStoppedAt ?? null,
       archivedAt: row.archivedAt,
+      dashAccess: row.dashAccess ?? false,
+      parentTaskId: row.parentTaskId ?? null,
       sortOrder: row.sortOrder,
       totalTokens: row.totalTokens ?? 0,
       totalCostUsd: row.totalCostUsd ?? 0,

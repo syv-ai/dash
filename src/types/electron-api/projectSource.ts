@@ -5,7 +5,11 @@ import type { WorkspaceConfig } from '../../main/services/WorkspaceConfigService
  *  or writing its `.dash/config.json` workspace config. */
 export interface ProjectSourceApi {
   // Workspace config (.dash/config.json)
-  readWorkspaceConfig: (projectPath: string) => Promise<IpcResponse<WorkspaceConfig | null>>;
+  /** Merged config (config.json + config.local.json); `shared` reads config.json alone. */
+  readWorkspaceConfig: (
+    projectPath: string,
+    opts?: { shared?: boolean },
+  ) => Promise<IpcResponse<WorkspaceConfig | null>>;
   writeWorkspaceConfig: (args: {
     projectPath: string;
     config: WorkspaceConfig;

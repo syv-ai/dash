@@ -8,9 +8,16 @@ import type { EditorView } from './types';
 import type { DiffEditorModalProps } from './DiffEditorModal';
 import { useEditorViewData } from './data/useEditorViewData';
 import { pickFirstChangedFile } from './data/viewData';
-import { readStoredView, writeStoredView } from './data/viewPersistence';
+import { readStoredView, writeStoredFile, writeStoredView } from './data/viewPersistence';
 import { useCommentsStore } from '../../stores/commentsStore';
+import { prKey, usePrReviews } from '../../stores/prReviewStore';
+import { useTaskReview } from './prReview/useTaskReview';
+import { unresolvedThreads } from '../../utils/prReviewNotices';
+import { toast } from 'sonner';
+import type { FileBadges, PrEntry } from './EditorSidebar';
 import { commentScope, commentCountsByScope } from './comments/commentScope';
+import { needsAttention } from '../../../shared/diffComments';
+import { parsePrScope } from '../../../shared/prScope';
 
 /** Composition-root workspace: owns view state, drives the data loaders, and
  *  lays out the sidebar + editor pane. Rendered inside <DiffEditorModal>. */
@@ -21,6 +28,7 @@ export function DiffEditor({
   initialView,
   activeTaskId: openTaskId,
   standalone,
+  projectId,
   terminalTheme,
   isDark,
   onClose,
@@ -62,6 +70,9 @@ export function DiffEditor({
   useEffect(() => {
     writeStoredView(cwd, view);
   }, [cwd, view]);
+  useEffect(() => {
+    writeStoredFile(cwd, selectedPath);
+  }, [cwd, selectedPath]);
 
   // Validate the restored initial view exactly once. A commit lists every file
   // in its tree, so an empty repoPaths after load means the sha is gone; a
@@ -72,7 +83,7 @@ export function DiffEditor({
       validatedInitialView.current = true;
       return;
     }
-    if (view.kind === 'commit') {
+    if (view.kind === 'commit' || view.kind === 'pr') {
       if (repoPathsLoading) return; // wait for the tree listing to settle
       validatedInitialView.current = true;
       if (repoPaths.length === 0) changeView({ kind: 'working', ref: 'HEAD' });
@@ -126,34 +137,121 @@ export function DiffEditor({
   // once hydration completes, then clears it via onClearReveal.
   const [revealCommentId, setRevealCommentId] = useState<string | null>(null);
 
-  // Jump to a comment from the menu: switch to its view (scope) if needed,
-  // select the file, and let EditorPane reveal it once it hydrates. A 'live'
-  // comment stays in the current live view (working OR branch); only a commit
-  // comment forces a view change (and a live comment pulls us off a commit).
-  const navigateToComment = useCallback((scope: string, path: string, commentId: string) => {
-    if (scope.startsWith('commit:')) {
-      setView({ kind: 'commit', hash: scope.slice(7) });
-    } else {
-      setView((cur) => (cur.kind === 'commit' ? { kind: 'working', ref: 'HEAD' } : cur));
-    }
-    setSelectedPath(path);
-    setRevealCommentId(commentId);
-  }, []);
-
   const clearReveal = useCallback(() => setRevealCommentId(null), []);
 
   // File-tree badges reflect only the open view's scope, so a file never shows
   // "3 comments" when the diff you're looking at has none of them. Already-sent
   // comments don't need attention, so they're excluded from the count.
   const currentScope = commentScope(view);
-  const commentCounts = useMemo(() => {
-    const map = new Map<string, number>();
+  // ── The task's open PR and its review threads ────
+  const openPr = useGit((s) => {
+    const pr = activeTaskId ? s.prByTask[activeTaskId]?.[0] : undefined;
+    return pr && pr.state === 'open' ? pr : null;
+  });
+  // The open view's PR review, or the task's own PR's when that was fetched.
+  const viewReview = usePrReviews((s) =>
+    view.kind === 'pr' ? (s.byPr[prKey(view.provider, view.number)] ?? null) : null,
+  );
+  const ownReview = usePrReviews((s) =>
+    openPr ? (s.byPr[prKey(openPr.provider, openPr.number)] ?? null) : null,
+  );
+  const openPrView = useCallback(
+    async (number: number) => {
+      if (!projectId) return false;
+      const loaded = await usePrReviews.getState().load(projectId, cwd, number);
+      if (!loaded.ok) {
+        toast.error(`Could not load PR #${number}: ${loaded.error}`);
+        return false;
+      }
+      const { provider, base, head } = loaded.review;
+      setSelectedPath('');
+      setView({ kind: 'pr', provider, number, base, head });
+      return true;
+    },
+    [projectId, cwd],
+  );
+  // Jump to a comment from the menu: switch to its view (scope) if needed,
+  // select the file, and let EditorPane reveal it once it hydrates. A 'live'
+  // comment stays in the current live view (working OR branch); a commit or PR
+  // comment forces a view change (and a live comment pulls us off either).
+  const navigateToComment = useCallback(
+    async (scope: string, path: string, commentId: string) => {
+      const pr = parsePrScope(scope);
+      if (pr) {
+        const here = view.kind === 'pr' && view.number === pr.number;
+        if (!here && !(await openPrView(pr.number))) return;
+      } else if (scope.startsWith('commit:')) {
+        setView({ kind: 'commit', hash: scope.slice(7) });
+      } else {
+        setView((cur) =>
+          cur.kind === 'commit' || cur.kind === 'pr' ? { kind: 'working', ref: 'HEAD' } : cur,
+        );
+      }
+      setSelectedPath(path);
+      setRevealCommentId(commentId);
+    },
+    [view, openPrView],
+  );
+
+  // A PR view restored from an earlier session has no review loaded yet: fetch
+  // it (the PR may have moved on since), or fall back to the working tree.
+  useEffect(() => {
+    if (view.kind !== 'pr' || viewReview || !projectId) return;
+    let cancelled = false;
+    void usePrReviews
+      .getState()
+      .load(projectId, cwd, view.number)
+      .then((r) => {
+        if (cancelled) return;
+        if (!r.ok) {
+          toast.error(`Could not load PR #${view.number}: ${r.error}`);
+          changeView({ kind: 'working', ref: 'HEAD' });
+        } else if (r.review.base !== view.base || r.review.head !== view.head) {
+          setView({ ...view, base: r.review.base, head: r.review.head });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, viewReview, projectId, cwd]);
+
+  const ownTaskReview = useTaskReview(activeTaskId, openPr);
+  const prEntry: PrEntry | null = openPr
+    ? {
+        number: openPr.number,
+        title: openPr.title,
+        body: ownReview?.body ?? null,
+        threads: ownReview ? unresolvedThreads(ownReview).length : null,
+        inReview: ownTaskReview.inReview,
+        onOpen: () => void openPrView(openPr.number),
+        onReview: () => {
+          ownTaskReview.setInReview(true);
+          void openPrView(openPr.number);
+        },
+        onPeek: () => {
+          if (!ownReview && projectId)
+            void usePrReviews.getState().load(projectId, cwd, openPr.number);
+        },
+      }
+    : null;
+
+  // Your notes and comments, and in a PR view its unresolved threads too.
+  const badgeCounts = useMemo(() => {
+    const map = new Map<string, FileBadges>();
+    const at = (path: string) => {
+      let b = map.get(path);
+      if (!b) map.set(path, (b = { comments: 0, threads: 0 }));
+      return b;
+    };
     for (const [path, list] of Object.entries(commentsByFile)) {
-      const n = list.filter((c) => c.viewScope === currentScope && !c.sent).length;
-      if (n > 0) map.set(path, n);
+      const n = list.filter((c) => c.viewScope === currentScope && needsAttention(c)).length;
+      if (n > 0) at(path).comments = n;
+    }
+    if (view.kind === 'pr' && viewReview) {
+      for (const t of unresolvedThreads(viewReview)) at(t.path).threads++;
     }
     return map;
-  }, [commentsByFile, currentScope]);
+  }, [commentsByFile, currentScope, view.kind, viewReview]);
 
   // Per-view totals for the commits-drawer badges (all scopes, not just open).
   const commentCountByScope = useMemo(() => commentCountsByScope(commentsByFile), [commentsByFile]);
@@ -181,12 +279,13 @@ export function DiffEditor({
             filesLoading={repoPathsLoading || changedFilesLoading}
             selectedPath={selectedPath}
             onSelectFile={setSelectedPath}
-            commentCounts={commentCounts}
+            badgeCounts={badgeCounts}
             commits={commits}
             commitsLoading={commitsLoading}
             commentCountByScope={commentCountByScope}
             view={view}
             onSelectView={changeView}
+            pr={prEntry}
           />
         </Panel>
         <PanelResizeHandle className="w-3 bg-transparent hover:bg-transparent transition-colors" />
@@ -199,12 +298,15 @@ export function DiffEditor({
             terminalTheme={terminalTheme}
             isDark={isDark}
             revealCommentId={revealCommentId}
-            onNavigateToComment={navigateToComment}
+            onNavigateToComment={(scope, path, id) => void navigateToComment(scope, path, id)}
             onClearReveal={clearReveal}
             onClose={onClose}
             onSelectBase={selectBase}
             onExitBranchView={exitBranchView}
             defaultBase={defaultBase}
+            projectId={projectId}
+            onSelectPr={openPrView}
+            onSelectFile={setSelectedPath}
           />
         </Panel>
       </PanelGroup>

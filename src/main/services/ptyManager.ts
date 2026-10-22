@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import { type WebContents } from 'electron';
+import { app, type WebContents } from 'electron';
 import { activityMonitor } from './ActivityMonitor';
 import { hookServer } from './HookServer';
 import { contextUsageService } from './ContextUsageService';
@@ -8,12 +8,15 @@ import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
 import { TerminalMirror } from './TerminalMirror';
 import { terminalSnapshotService } from './TerminalSnapshotService';
 import { ensureShellConfig, shellHistoryPath } from './ptyShellConfig';
-import { findClaudePath, findLatestSessionId } from './claudeCli';
-import { buildClaudeEnv } from './claudeEnv';
+import { findClaudePath, findLatestSessionId, requireSupportedClaude } from './claudeCli';
+import { buildClaudeEnv, buildSessionEnv, isUltracode } from './claudeEnv';
 import { supervisorService, DispatchError } from './SupervisorService';
-import { parseUntrustedRoot } from './supervisorSession';
+import { buildSessionSettings, parseUntrustedRoot } from './supervisorSession';
 import { isWorkspaceTrusted } from '../utils/claudePaths';
 import { DatabaseService } from './DatabaseService';
+import { dashSessionAccess } from '../control/taskAccess';
+import { syncTaskSkills } from '../control/taskSkills';
+import { writeTaskSettings } from './taskSettings';
 import { writeHookSettings, setCommitAttributionValue } from './ptyHookSettings';
 import type { PermissionMode, TaskModel } from '@shared/types';
 
@@ -127,6 +130,26 @@ export class UntrustedWorkspaceError extends Error {
 /** Trust root per task whose last dispatch was refused as untrusted. */
 const untrustedRoots = new Map<string, string>();
 
+/** The trust root the task's last dispatch was refused for, if it still waits
+ *  on Claude Code's trust prompt. */
+export function getUntrustedRoot(taskId: string): string | undefined {
+  return untrustedRoots.get(taskId);
+}
+
+/**
+ * Whether the task is clear of the needs-trust mark: true when it has none, or
+ * when its root has been trusted since (`claude` run in the folder outside
+ * Dash), in which case the mark is dropped. False while the root still waits
+ * on the trust prompt.
+ */
+export async function recheckWorkspaceTrust(taskId: string): Promise<boolean> {
+  const root = untrustedRoots.get(taskId);
+  if (!root) return true;
+  if (!(await isWorkspaceTrusted(root))) return false;
+  if (untrustedRoots.get(taskId) === root) untrustedRoots.delete(taskId);
+  return true;
+}
+
 function consumeInitialPrompt(taskId: string): string | undefined {
   const prompt = pendingInitialPrompts.get(taskId);
   if (prompt !== undefined) pendingInitialPrompts.delete(taskId);
@@ -204,6 +227,13 @@ export function hasPty(id: string): boolean {
   return ptys.has(id);
 }
 
+/** The last `lines` lines a shell/service PTY shows, as plain text; null when
+ *  there is no such PTY or it keeps no mirror (agent PTYs). */
+export async function readPtyText(id: string, lines: number): Promise<string | null> {
+  const mirror = ptys.get(id)?.mirror;
+  return mirror ? mirror.toPlainText(lines) : null;
+}
+
 // Lazy-load node-pty to avoid native binding issues at startup
 let ptyModule: typeof import('node-pty') | null = null;
 let ptyLoadError: string | null = null;
@@ -244,6 +274,10 @@ function samePath(a: string, b: string): boolean {
  * a job existed). A dispatch resumes the task's recorded session, or — for a
  * task from before the supervisor — the newest transcript under its current
  * and pre-migration paths, so the conversation carries over.
+ *
+ * `wakeStopped`: a listed job whose process is gone (`claude stop`, reaped)
+ * is woken in place with `claude respawn`, which keeps its dispatch options.
+ * A pane start needs no wake (`claude attach` wakes it).
  */
 async function ensureTaskSession(opts: {
   id: string;
@@ -254,8 +288,39 @@ async function ensureTaskSession(opts: {
   previousPath?: string | null;
   jobId: string | null;
   sessionId: string | null;
+  /** From the task row at this call, so a restart after toggling picks it up. */
+  dashAccess: boolean;
   env: Record<string, string>;
+  wakeStopped?: boolean;
 }): Promise<string> {
+  // Before any respawn or dispatch: the job reads it on each. Without it the
+  // session still runs, just without its env, allow rules and dashctl.
+  let settingsPath: string | undefined;
+  const dash = dashSessionAccess({ id: opts.id, dashAccess: opts.dashAccess });
+  try {
+    settingsPath = writeTaskSettings(
+      opts.id,
+      buildSessionSettings({
+        ultracode: isUltracode(),
+        allowTools: dash?.allow,
+        env: { ...buildSessionEnv(opts.cwd), ...dash?.env },
+        sessionStart: dash?.sessionStart,
+      }),
+    );
+  } catch (err) {
+    console.error(`[ptyManager] settings file for task ${opts.id} failed:`, err);
+  }
+  // The skills Dash writes into the checkout: dashctl's while access is on,
+  // and how to send the Dash team feedback.
+  await Promise.resolve()
+    .then(() =>
+      syncTaskSkills(opts.cwd, {
+        dashAccess: opts.dashAccess,
+        dashctl: dash?.dashctl ?? null,
+        dashVersion: app.getVersion(),
+      }),
+    )
+    .catch((err) => console.warn(`[ptyManager] skills for task ${opts.id} failed:`, err));
   let resumeSessionId = opts.sessionId;
   if (opts.jobId) {
     let row;
@@ -268,7 +333,12 @@ async function ensureTaskSession(opts: {
       );
       return opts.jobId;
     }
-    if (row && samePath(row.cwd, opts.cwd)) return opts.jobId;
+    if (row && samePath(row.cwd, opts.cwd)) {
+      if (opts.wakeStopped && (row.pid === undefined || row.state === 'stopped')) {
+        await supervisorService.respawn(opts.jobId);
+      }
+      return opts.jobId;
+    }
     if (row) {
       // Job still bound to the old cwd — the supervisor would refuse a resume
       // ("working directory no longer exists") and queue the prompt. Drop it.
@@ -290,6 +360,7 @@ async function ensureTaskSession(opts: {
       model: opts.model,
       prompt,
       resumeSessionId,
+      settingsPath,
       env: opts.env,
     });
   } catch (err) {
@@ -303,7 +374,15 @@ async function ensureTaskSession(opts: {
     throw new UntrustedWorkspaceError(err.message, root);
   }
   const { jobId, sessionId } = dispatched;
+  // The supervisor accepted the folder, so it is trusted now (trusted outside
+  // Dash, or after the trust prompt).
+  untrustedRoots.delete(opts.id);
   DatabaseService.setTaskSession(opts.id, { jobId, sessionId: sessionId ?? resumeSessionId });
+  // The first prompt starts a turn, but no hook has spoken yet: without this
+  // the entry reads idle until the first one lands (tasks.wait would return at
+  // once). A lost hook is corrected by the supervisor reconcile and the
+  // safety valve, as for any busy state.
+  if (prompt !== undefined) activityMonitor.setBusy(opts.id);
   return jobId;
 }
 
@@ -348,6 +427,14 @@ function spawnAttach(options: {
     jobId: options.jobId,
     mirror: null,
   };
+  // A client spawned for this id while the caller awaited the session (two
+  // pane starts at once) is replaced, not orphaned. Its own exit handler
+  // checks identity, so it leaves the new one alone.
+  const previous = ptys.get(options.id);
+  if (previous) {
+    teardownRecord(options.id, previous);
+    void gracefulKillProc(previous.proc);
+  }
   ptys.set(options.id, record);
 
   // Forward output to renderer, replacing the Claude logo with "7" art.
@@ -380,28 +467,147 @@ function spawnAttach(options: {
 }
 
 /**
- * Open the task's session in a PTY: dispatch it under the supervisor when it
- * has none, then `claude attach`. A second call for the same id (renderer
- * reload) replaces the attach client — the fresh one repaints the screen, so
- * there is no mirror state to hand back.
+ * Dash's resolved theme, as the renderer reports it at boot and on change (a
+ * pane start's own isDark also lands here). A start with no pane (the control
+ * API) uses it: Dash's theme is not the OS theme, and the env is frozen into
+ * the job, so guessing wrong would stick for the session's life.
+ */
+let lastIsDark = true;
+
+export function setAppIsDark(isDark: boolean): void {
+  lastIsDark = isDark;
+}
+
+type TaskSessionStart = {
+  jobId: string;
+  cwd: string;
+  env: Record<string, string>;
+  claudePath: string;
+};
+
+/** Per task, the start in flight: a second caller (a pane and the control API
+ *  at once) awaits it instead of reading the same empty job id and
+ *  dispatching a second job. */
+const sessionStarts = new Map<string, Promise<TaskSessionStart>>();
+
+/**
+ * Make sure the task's session runs under the supervisor, reading everything
+ * from the task row; no PTY. Shared by the pane (startDirectPty) and headless
+ * starts. Throws UntrustedWorkspaceError when the folder needs the trust
+ * prompt, and an UNSUPPORTED_CLI IpcError on a missing or too-old CLI.
+ */
+function ensureTaskSessionFor(
+  taskId: string,
+  opts: { isDark?: boolean; wakeStopped?: boolean },
+): Promise<TaskSessionStart> {
+  const inFlight = sessionStarts.get(taskId);
+  if (inFlight) return inFlight;
+  const start = startTaskSessionNow(taskId, opts).finally(() => {
+    if (sessionStarts.get(taskId) === start) sessionStarts.delete(taskId);
+  });
+  sessionStarts.set(taskId, start);
+  return start;
+}
+
+async function startTaskSessionNow(
+  taskId: string,
+  opts: { isDark?: boolean; wakeStopped?: boolean },
+): Promise<TaskSessionStart> {
+  // Hard floor: never start a task session on a missing or too-old CLI.
+  await requireSupportedClaude();
+  const task = DatabaseService.getTask(taskId);
+  if (!task) throw new Error(`Task not found: ${taskId}`);
+
+  const claudePath = await findClaudePath();
+  if (!claudePath) {
+    throw new Error('Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code');
+  }
+
+  if (opts.isDark !== undefined) lastIsDark = opts.isDark;
+  const env = buildClaudeEnv(opts.isDark ?? lastIsDark, task.path);
+
+  // Before dispatch, so the session's first turn already reports.
+  writeHookSettings(task.path, taskId);
+  const hadActivity = activityMonitor.has(taskId);
+  activityMonitor.ensure(taskId);
+
+  try {
+    const jobId = await ensureTaskSession({
+      id: taskId,
+      cwd: task.path,
+      name: task.name,
+      permissionMode: task.permissionMode,
+      model: task.model,
+      previousPath: task.previousPath,
+      jobId: task.jobId,
+      sessionId: task.sessionId,
+      dashAccess: task.dashAccess,
+      env,
+      wakeStopped: opts.wakeStopped,
+    });
+    return { jobId, cwd: task.path, env, claudePath };
+  } catch (err) {
+    // No session started: drop the entry made above, or the task shows an
+    // idle dot for a session that does not exist (nothing would correct it —
+    // the supervisor poll only covers tasks with a job).
+    if (!hadActivity) activityMonitor.unregister(taskId);
+    throw err;
+  }
+}
+
+/**
+ * Start the task's session without attaching to it (the control API, a task
+ * nobody has open), waking a stopped job. An untrusted folder is not an error here: the result names
+ * the trust root, the first prompt is kept, and opening the task in Dash runs
+ * the trust prompt. `isDark` defaults to the last pane start's.
+ */
+export async function startTaskSession(
+  taskId: string,
+  opts: { isDark?: boolean } = {},
+): Promise<{ jobId: string } | { needsTrust: string }> {
+  try {
+    const { jobId } = await ensureTaskSessionFor(taskId, { ...opts, wakeStopped: true });
+    return { jobId };
+  } catch (err) {
+    if (err instanceof UntrustedWorkspaceError) return { needsTrust: err.root };
+    throw err;
+  }
+}
+
+/**
+ * Run `work` as the task's session start, after any start in flight (joining
+ * one would skip `work`). It is registered before it runs, so a pane start
+ * made from inside it — the re-attach an exit notification asks for — waits
+ * for it instead of racing it.
+ */
+async function queueSessionStart(
+  taskId: string,
+  work: () => Promise<TaskSessionStart>,
+): Promise<TaskSessionStart> {
+  for (let s = sessionStarts.get(taskId); s; s = sessionStarts.get(taskId)) {
+    await s.catch(() => {});
+  }
+  const start = Promise.resolve()
+    .then(work)
+    .finally(() => {
+      if (sessionStarts.get(taskId) === start) sessionStarts.delete(taskId);
+    });
+  sessionStarts.set(taskId, start);
+  return start;
+}
+
+/**
+ * Open the task's session in a PTY: start it (startTaskSession's work), then
+ * `claude attach`. A second call for the same id (renderer reload) replaces
+ * the attach client — the fresh one repaints the screen, so there is no mirror
+ * state to hand back. An untrusted folder throws UntrustedWorkspaceError, which
+ * the pane answers with the trust prompt.
  */
 export async function startDirectPty(options: {
   id: string;
-  cwd: string;
   cols: number;
   rows: number;
-  permissionMode?: PermissionMode;
-  /** Starting model → `claude --model <alias>` on dispatch. 'default'/undefined omits it. */
-  model?: TaskModel;
   isDark?: boolean;
-  /** Task name → `claude --bg --name`. */
-  name?: string;
-  /** Pre-migration worktree path (Task.previousPath); its transcript dir is
-   *  searched too when picking the session to resume on the first dispatch. */
-  previousPath?: string | null;
-  /** Recorded supervisor job/session (Task.jobId / Task.sessionId). */
-  jobId?: string | null;
-  sessionId?: string | null;
   sender?: WebContents;
 }): Promise<{
   reattached: boolean;
@@ -415,43 +621,14 @@ export async function startDirectPty(options: {
     await killPtyInternal(options.id);
   }
 
-  const claudePath = await findClaudePath();
-  if (!claudePath) {
-    throw new Error('Claude CLI not found. Install with: npm install -g @anthropic-ai/claude-code');
-  }
-
-  const env = buildClaudeEnv(options.isDark ?? true, options.cwd);
-
-  // Before dispatch, so the session's first turn already reports.
-  writeHookSettings(options.cwd, options.id);
-  const hadActivity = activityMonitor.has(options.id);
-  activityMonitor.ensure(options.id);
-
-  let jobId: string;
-  try {
-    jobId = await ensureTaskSession({
-      id: options.id,
-      cwd: options.cwd,
-      name: options.name ?? options.id,
-      permissionMode: options.permissionMode,
-      model: options.model,
-      previousPath: options.previousPath,
-      jobId: options.jobId ?? null,
-      sessionId: options.sessionId ?? null,
-      env,
-    });
-  } catch (err) {
-    // No session started: drop the entry made above, or the task shows an
-    // idle dot for a session that does not exist (nothing would correct it —
-    // the supervisor poll only covers tasks with a job).
-    if (!hadActivity) activityMonitor.unregister(options.id);
-    throw err;
-  }
+  const { jobId, cwd, env, claudePath } = await ensureTaskSessionFor(options.id, {
+    isDark: options.isDark,
+  });
 
   spawnAttach({
     id: options.id,
     jobId,
-    cwd: options.cwd,
+    cwd,
     cols: options.cols,
     rows: options.rows,
     env,
@@ -573,7 +750,7 @@ export async function startSessionAttach(options: {
 
 /** Stop the task's session (`claude stop`); the attach client goes with it. */
 export async function stopTaskSession(taskId: string): Promise<void> {
-  await killPtyInternal(taskId);
+  await killPtyInternal(taskId, { notifyOwner: true });
   const task = DatabaseService.getTask(taskId);
   if (!task?.jobId) return;
   await supervisorService.stop(task.jobId);
@@ -601,8 +778,11 @@ export async function removeTaskSession(taskId: string): Promise<void> {
  * next startDirectPty resumes the same session id in a fresh job. The
  * renderer's restart path calls this before re-attaching.
  */
-export async function restartTaskSession(taskId: string): Promise<void> {
-  await killPtyInternal(taskId);
+export async function restartTaskSession(
+  taskId: string,
+  opts: { reattach?: boolean } = {},
+): Promise<void> {
+  await killPtyInternal(taskId, { notifyOwner: true, reattach: opts.reattach });
   const task = DatabaseService.getTask(taskId);
   if (!task?.jobId) return;
   let sessionId = task.sessionId;
@@ -614,6 +794,26 @@ export async function restartTaskSession(taskId: string): Promise<void> {
   await supervisorService.stop(task.jobId).catch(() => {});
   await supervisorService.remove(task.jobId).catch(() => {});
   DatabaseService.setTaskSession(taskId, { jobId: null, sessionId });
+}
+
+/**
+ * Restart the task's session and start it again as one session start (the
+ * control API's tasks.restart). An open pane is told to re-attach, and its
+ * start waits for this one, so it attaches to the fresh job.
+ */
+export async function restartAndStartTaskSession(
+  taskId: string,
+): Promise<{ jobId: string } | { needsTrust: string }> {
+  try {
+    const { jobId } = await queueSessionStart(taskId, async () => {
+      await restartTaskSession(taskId, { reattach: true });
+      return startTaskSessionNow(taskId, {});
+    });
+    return { jobId };
+  } catch (err) {
+    if (err instanceof UntrustedWorkspaceError) return { needsTrust: err.root };
+    throw err;
+  }
 }
 
 /**
@@ -738,15 +938,35 @@ export async function startPty(options: {
   return { reattached: false, isDirectSpawn: false };
 }
 
+/** Delay between typing text into an agent and pressing Enter. */
+const SUBMIT_ENTER_DELAY_MS = 100;
+
+/**
+ * Type `payload` into an agent PTY, then press Enter separately 100 ms later,
+ * so Claude Code's input handler takes the keystroke as its own event instead
+ * of part of the typed text. Resolves after the Enter.
+ */
+function typeAndSubmit(record: PtyRecord, payload: string): Promise<void> {
+  record.proc?.write(payload);
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      try {
+        record.proc?.write('\r');
+      } catch {
+        // The attach client went away; nothing to submit into.
+      }
+      resolve();
+    }, SUBMIT_ENTER_DELAY_MS);
+  });
+}
+
 /**
  * Enable remote control for a PTY by sending `/rc` and watching for the URL.
  */
 export function sendRemoteControl(id: string): void {
   remoteControlService.startWatching(id);
-  // Write command text first, then send Enter separately so Claude Code's
-  // input handler processes the keystroke as a distinct event.
-  writePty(id, '/rc');
-  setTimeout(() => writePty(id, '\r'), 100);
+  const record = ptys.get(id);
+  if (record) void typeAndSubmit(record, '/rc');
 }
 
 /**
@@ -852,9 +1072,26 @@ function teardownRecord(id: string, record: PtyRecord): void {
   persistAndDisposeMirror(id, record);
 }
 
-function killPtyInternal(id: string): Promise<void> {
+/**
+ * `notifyOwner`: send the owner the exit event the spawn-time handler would
+ * have sent (teardown makes that handler a no-op), so an open agent pane shows
+ * the Detached card instead of freezing. For kills the pane did not ask for
+ * (session stop/restart, e.g. from the control API); the pane's own restart
+ * unsubscribes from exit first, so it sees nothing. `reattach`: Dash starts
+ * the session again right after, so the pane re-attaches instead.
+ */
+function killPtyInternal(
+  id: string,
+  opts: { notifyOwner?: boolean; reattach?: boolean } = {},
+): Promise<void> {
   const record = ptys.get(id);
   if (!record) return Promise.resolve();
+  if (opts.notifyOwner && record.owner && !record.owner.isDestroyed()) {
+    record.owner.send(
+      `pty:exit:${id}`,
+      opts.reattach ? { exitCode: 0, reattach: true } : { exitCode: 0 },
+    );
+  }
   teardownRecord(id, record);
   return gracefulKillProc(record.proc);
 }
@@ -1034,6 +1271,16 @@ export function __testReset(): void {
     record.mirror = null;
   }
   ptys.clear();
+  untrustedRoots.clear();
+  pendingInitialPrompts.clear();
+  sessionStarts.clear();
+  lastIsDark = true;
+}
+
+/** Swap node-pty for a fake (`require` is not reached by vi.mock). */
+export function __setPtyModuleForTest(mod: unknown): void {
+  ptyModule = mod as typeof import('node-pty') | null;
+  ptyLoadError = null;
 }
 
 export function __registerForTest(

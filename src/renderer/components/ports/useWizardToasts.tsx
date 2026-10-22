@@ -64,7 +64,7 @@ export function useWizardToasts(): void {
       }
 
       // "Cancel setup task" removes the whole port-setup task (worktree + agent).
-      // db:deleteTask → WizardHost.cancelForTask dismisses this toast.
+      // task:delete → WizardHost.cancelForTask dismisses this toast.
       const onCancelTask = () => {
         const { tasksByProject, deleteTask } = useProjects.getState();
         const task = Object.values(tasksByProject)

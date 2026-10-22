@@ -16,9 +16,9 @@ export default tseslint.config(
       ecmaVersion: 2020,
       sourceType: 'module',
       parserOptions: {
-        // This repo has two sibling tsconfigs with non-standard names (renderer + main)
-        // rather than project references, so list both explicitly — projectService would
-        // only discover the root tsconfig.json and miss every src/main file.
+        // This repo has sibling tsconfigs with non-standard names (renderer and main)
+        // rather than project references, so list them explicitly — projectService
+        // would only discover the root tsconfig.json and miss src/main.
         project: ['./tsconfig.json', './tsconfig.main.json'],
         tsconfigRootDir: import.meta.dirname,
       },

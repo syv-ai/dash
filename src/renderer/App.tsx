@@ -12,6 +12,7 @@ import { openInIde } from './lib/openInIde';
 import { headerModelName } from './lib/modelName';
 import { RightInspector } from './components/rightInspector/RightInspector';
 import { PortsDrawerWrapper } from './components/rightInspector/PortsDrawerWrapper';
+import { editorOpening } from './components/diffEditor/data/viewPersistence';
 const DiffEditorModal = lazy(() => import('./components/diffEditor/DiffEditorModal'));
 import { ShellDrawerWrapper } from './components/terminal/ShellDrawerWrapper';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
@@ -30,6 +31,7 @@ import { RemoteControlModal } from './components/RemoteControlModal';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { ProjectSettingsModal } from './components/project/ProjectSettingsModal';
 import { TaskSettingsModal } from './components/task/TaskSettingsModal';
+import { OrchestratorAccessPrompt } from './components/settings/OrchestratorAccessPrompt';
 import { AdoSetupModal } from './components/vcs/ado/AdoSetupModal';
 import { ToastContainer } from './components/ui/Toast';
 import { toast } from 'sonner';
@@ -201,6 +203,7 @@ export function App() {
   const syncShellEnv = useSettings((s) => s.syncShellEnv);
   const ultracode = useSettings((s) => s.ultracode);
   const stopSessionsOnQuit = useSettings((s) => s.stopSessionsOnQuit);
+  const orchestratorAccess = useSettings((s) => s.orchestratorAccess);
   const customClaudeEnvVars = useSettings((s) => s.customClaudeEnvVars);
 
   // Sync desktop notification settings to main process
@@ -249,6 +252,15 @@ export function App() {
   useEffect(() => {
     window.electronAPI.setStopSessionsOnQuit?.(stopSessionsOnQuit);
   }, [stopSessionsOnQuit]);
+  // Sync the theme to main: a session started with no pane (the control API)
+  // takes its terminal colours from it.
+  useEffect(() => {
+    window.electronAPI.setIsDark?.(theme === 'dark');
+  }, [theme]);
+  // Sync orchestrator access to main (gates the control API's orchestrator caller)
+  useEffect(() => {
+    window.electronAPI.setOrchestratorAccess?.(orchestratorAccess);
+  }, [orchestratorAccess]);
   // Sync Claude Code env vars to main process
   useEffect(() => {
     const vars: Record<string, string> = { ...customClaudeEnvVars };
@@ -442,6 +454,16 @@ export function App() {
     return off;
   }, []);
 
+  // Main changed a project's tasks (created, archived, restored or deleted,
+  // possibly by the control API): reload that project's list so tasks nobody
+  // opened still show up. Archived projects keep no task list, so skip them.
+  useEffect(() => {
+    return window.electronAPI.onTasksChanged(({ projectId }) => {
+      const { projects, loadTasks } = useProjects.getState();
+      if (projects.some((p) => p.id === projectId)) void loadTasks(projectId);
+    });
+  }, []);
+
   // Memoized props for ExtensionsModal. Without these, App.tsx re-renders (terminal
   // activity, git polls, PTY events) hand the modal new array references every time,
   // and the modal's overview useCallback re-fires its refetch effect — flickering
@@ -468,14 +490,17 @@ export function App() {
     [projects, tasksByProject],
   );
 
-  // Rotation: all tasks with activity, minus exclusions
+  // Rotation: all tasks with a live session, minus exclusions. A sleeping
+  // (`stopped`) session has no orb and isn't active, so it stays out.
   const rotationTasks = React.useMemo(() => {
     const tasks: Task[] = [];
     for (const projectTasks of Object.values(tasksByProject)) {
       for (const task of projectTasks) {
+        const activity = taskActivity[task.id];
         if (
           !task.archivedAt &&
-          taskActivity[task.id] !== undefined &&
+          activity !== undefined &&
+          activity.state !== 'stopped' &&
           !rotationExclusions.has(task.id)
         ) {
           tasks.push(task);
@@ -524,9 +549,11 @@ export function App() {
     }
   }, [activeProjectIdForFetch, activeProjectPathForFetch, activeProjectIsGit]);
 
-  // Focus a specific task when notification is clicked
+  // Focus a task from main (a notification click, or the control API's
+  // tasks.open). Select its project too: the task may live in another one.
   useEffect(() => {
-    return window.electronAPI.onFocusTask((taskId) => {
+    return window.electronAPI.onFocusTask(({ taskId, projectId }) => {
+      if (projectId) setActiveProjectId(projectId);
       setActiveTaskId(taskId);
     });
   }, []);
@@ -565,17 +592,7 @@ export function App() {
     for (const project of projects) {
       void loadTasksForProject(project.id);
     }
-    // Ensure reserve worktree for active project
-    if (activeProjectId) {
-      const project = projects.find((p) => p.id === activeProjectId);
-      if (project) {
-        void window.electronAPI.worktreeEnsureReserve({
-          projectId: activeProjectId,
-          projectPath: project.path,
-        });
-      }
-    }
-  }, [projects, activeProjectId]);
+  }, [projects]);
 
   // One-time offer to move pre-0.16 worktrees (`<parent>/worktrees/`) under
   // each project's `.claude/worktrees/`. Asked once per launch, after every
@@ -1350,27 +1367,10 @@ export function App() {
                         onShowCommitGraph={() => setShowCommitGraph(true)}
                         onOpenEditor={() => {
                           if (!activeTask) return;
-                          const files = gitStatus?.files ?? [];
-                          if (files.length > 0) {
-                            // Prefer the first unstaged file; otherwise first staged.
-                            const target = files.find((f) => !f.staged) ?? files[0]!;
-                            setDiffFile({
-                              cwd: activeTask.path,
-                              filePath: target.path,
-                              staged: target.staged,
-                            });
-                          } else {
-                            // No working changes — still open the working
-                            // tree, not the last commit: the editor is only
-                            // editable there, and a save shows up in this
-                            // panel as an unstaged change via the git watcher.
-                            setDiffFile({
-                              cwd: activeTask.path,
-                              filePath: '',
-                              staged: false,
-                              initialView: { kind: 'working', ref: 'HEAD' },
-                            });
-                          }
+                          setDiffFile({
+                            cwd: activeTask.path,
+                            ...editorOpening(activeTask.path, gitStatus?.files ?? []),
+                          });
                         }}
                         collapsed={changesPanelCollapsed}
                         onToggleCollapse={toggleChangesPanel}
@@ -1443,6 +1443,8 @@ export function App() {
         />
       )}
 
+      <OrchestratorAccessPrompt />
+
       {taskSettingsTarget && (
         <TaskSettingsModal
           task={taskSettingsTarget}
@@ -1459,6 +1461,15 @@ export function App() {
           onModelChange={(id, model) => {
             if (!taskSettingsTarget || taskSettingsTarget.id !== id) return;
             void persistTaskUpdate(taskSettingsTarget, { model });
+          }}
+          onDashAccessChange={(id, enabled, restart) => {
+            if (taskSettingsTarget?.id !== id) return;
+            void useProjects
+              .getState()
+              .setDashAccess(taskSettingsTarget, enabled, restart)
+              .then((updated) => {
+                if (updated) setTaskSettingsTarget((prev) => (prev?.id === id ? updated : prev));
+              });
           }}
           onScriptsChange={(id, setupScript, teardownScript) => {
             void (async () => {
@@ -1589,6 +1600,7 @@ export function App() {
             initialView={diffFile.initialView}
             activeTaskId={activeTaskId}
             standalone={diffFile.standalone}
+            projectId={activeTask?.projectId ?? activeProjectId}
             terminalTheme={resolvedTerminalTheme}
             isDark={theme === 'dark'}
             onClose={() => {

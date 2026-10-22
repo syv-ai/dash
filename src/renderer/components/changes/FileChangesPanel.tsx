@@ -3,6 +3,7 @@ import { Tooltip } from '../ui/Tooltip';
 import { Popover, PopoverTrigger, PopoverContent, PopoverArrow } from '../ui/Popover';
 import { CircleCheck } from '../ui/CircleCheck';
 import { FileTreeView } from './FileTreeView';
+import { VirtualFileList, VIRTUALIZE_THRESHOLD, type FileSection } from './VirtualFileList';
 import {
   commitRunReducer,
   initialRunningState,
@@ -12,6 +13,7 @@ import {
 import { CommitRunView } from './CommitRunView';
 import { FileDiff, Check, Upload, X } from 'lucide-react';
 import { useGit } from '../../stores/gitStore';
+import type { FileChange } from '../../../shared/types';
 
 interface FileChangesPanelProps {
   cwd: string;
@@ -43,6 +45,7 @@ export function FileChangesPanel({
   const [commitOpen, setCommitOpen] = useState(false);
   const [allowEmpty, setAllowEmpty] = useState(false);
   const commitTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileListRef = useRef<HTMLDivElement | null>(null);
   const [commitRun, setCommitRun] = useState<CommitRunState>({ status: 'idle' });
   const prevStagedRef = useRef<string[]>([]);
   const lastMessageRef = useRef('');
@@ -124,6 +127,39 @@ export function FileChangesPanel({
     commitRun.status === 'failed' ||
     commitRun.status === 'cancelled';
 
+  // The same sections the animated trees below render, for the virtualized list.
+  function fileSections(): FileSection[] {
+    const sections: FileSection[] = [];
+    const common = {
+      onDiscard: (f: FileChange) => void onDiscardFiles([f.path]),
+      onDiscardMany: (paths: string[]) => void onDiscardFiles(paths),
+      onAddToGitignore: (path: string) => void onAddToGitignore(path),
+    };
+    if (stagedFiles.length > 0) {
+      sections.push({
+        id: 'staged',
+        label: `Staged · ${stagedFiles.length}`,
+        files: stagedFiles,
+        onToggleFileStage: (f) => void onUnstageFiles([f.path]),
+        onToggleFolderStage: (paths) => void onUnstageFiles(paths),
+        onViewDiff: (f) => onViewDiff(f.path, true),
+        ...common,
+      });
+    }
+    if (unstagedFiles.length > 0) {
+      sections.push({
+        id: 'unstaged',
+        label: `Unstaged · ${unstagedFiles.length}`,
+        files: unstagedFiles,
+        onToggleFileStage: (f) => void onStageFiles([f.path]),
+        onToggleFolderStage: (paths) => void onStageFiles(paths),
+        onViewDiff: (f) => onViewDiff(f.path, false),
+        ...common,
+      });
+    }
+    return sections;
+  }
+
   async function handleCommit() {
     if (!commitMsg.trim() || stagedFiles.length === 0) return;
     setCommitting(true);
@@ -197,7 +233,7 @@ export function FileChangesPanel({
       ) : (
         <div key="changes" className="flex-1 min-h-0 flex flex-col animate-fade-in">
           {/* File list */}
-          <div className="flex-1 overflow-y-auto scrollbar-gutter-stable">
+          <div ref={fileListRef} className="flex-1 overflow-y-auto scrollbar-gutter-stable">
             {totalChanges === 0 && (
               <div className="flex flex-col items-center justify-center h-full gap-2">
                 <div className="w-8 h-8 rounded-xl bg-foreground/5 flex items-center justify-center">
@@ -222,7 +258,15 @@ export function FileChangesPanel({
               </div>
             )}
 
-            {totalChanges > 0 && (
+            {totalChanges > VIRTUALIZE_THRESHOLD && (
+              <VirtualFileList
+                sections={fileSections()}
+                filesVersion={gitStatus}
+                scrollRef={fileListRef}
+              />
+            )}
+
+            {totalChanges > 0 && totalChanges <= VIRTUALIZE_THRESHOLD && (
               <div className="py-1">
                 {stagedFiles.length > 0 && (
                   <div className="flex flex-col">

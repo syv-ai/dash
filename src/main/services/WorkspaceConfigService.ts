@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { shellQuote } from '../../shared/shellQuote';
 import type { PermissionMode } from '../../shared/types';
 
 const DASH_DIR = '.dash';
@@ -13,6 +14,8 @@ export interface WorkspaceTaskDefaults {
   permissionMode?: PermissionMode;
   useWorktree?: boolean;
   contextPrompt?: string;
+  /** Default for a new task's Dash access (dashctl, the control API). */
+  dashAccess?: boolean;
 }
 
 export interface WorkspaceConfig {
@@ -56,6 +59,7 @@ function parseTaskDefaults(value: unknown, source: string): WorkspaceTaskDefault
   }
   if (typeof obj.useWorktree === 'boolean') result.useWorktree = obj.useWorktree;
   if (typeof obj.contextPrompt === 'string') result.contextPrompt = obj.contextPrompt;
+  if (typeof obj.dashAccess === 'boolean') result.dashAccess = obj.dashAccess;
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
@@ -125,17 +129,16 @@ function applyLocalOverlay(
       result[key] = [...(sandwich.before ?? []), ...(base[key] ?? []), ...(sandwich.after ?? [])];
     }
   }
+  // Local taskDefaults win key by key, so a personal override of one default
+  // (e.g. dashAccess) keeps the shared rest.
+  const localDefaults = parseTaskDefaults(overlay.taskDefaults, LOCAL_CONFIG_FILE);
+  if (localDefaults) result.taskDefaults = { ...base.taskDefaults, ...localDefaults };
   return result;
 }
 
 export function getResolvedSetupCommands(config: WorkspaceConfig | null): string[] {
   if (!config?.setup) return [];
   return config.setup.filter((cmd) => cmd.trim().length > 0);
-}
-
-/** POSIX single-quote escape: safe for any path passed through a shell. */
-function singleQuote(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
 export interface ResolveLifecycleArgs {
@@ -149,7 +152,7 @@ function resolveLifecycleCommand(
 ): string | null {
   const filtered = (commands ?? []).filter((c) => c.trim().length > 0);
   if (filtered.length > 0) return filtered.join(' && ');
-  if (fallbackScriptPath) return `bash ${singleQuote(fallbackScriptPath)}`;
+  if (fallbackScriptPath) return `bash ${shellQuote(fallbackScriptPath)}`;
   return null;
 }
 
@@ -188,17 +191,35 @@ export function buildWorkspaceEnv(args: WorkspaceEnvArgs): Record<string, string
   return env;
 }
 
-export function loadWorkspaceConfig(worktreePath: string): WorkspaceConfig | null {
+/**
+ * Read `.dash/config.json` alone, without the `config.local.json` overlay. For
+ * editors that write config.json back, so a personal override never leaks into
+ * the shared file.
+ */
+export function loadSharedWorkspaceConfig(worktreePath: string): WorkspaceConfig | null {
   const configPath = path.join(worktreePath, DASH_DIR, CONFIG_FILE);
   const parsed = readJson(configPath);
   if (parsed === undefined) return null;
-  const base = parseBaseConfig(parsed, configPath);
+  return parseBaseConfig(parsed, configPath);
+}
+
+/**
+ * The effective config: config.json with config.local.json overlaid. A missing
+ * config.json overlays onto an empty config (a personal-only local file still
+ * applies); a broken one gives null. Null too when neither file exists.
+ */
+export function loadWorkspaceConfig(worktreePath: string): WorkspaceConfig | null {
+  const hasShared = fs.existsSync(path.join(worktreePath, DASH_DIR, CONFIG_FILE));
+  const base = hasShared ? loadSharedWorkspaceConfig(worktreePath) : {};
   if (base === null) return null;
+  const noOverlay = hasShared ? base : null;
 
   const localPath = path.join(worktreePath, DASH_DIR, LOCAL_CONFIG_FILE);
   const localParsed = readJson(localPath);
-  if (localParsed === undefined) return base;
-  if (!localParsed || typeof localParsed !== 'object' || Array.isArray(localParsed)) return base;
+  if (localParsed === undefined) return noOverlay;
+  if (!localParsed || typeof localParsed !== 'object' || Array.isArray(localParsed)) {
+    return noOverlay;
+  }
 
   return applyLocalOverlay(base, localParsed as Record<string, unknown>);
 }

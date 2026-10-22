@@ -16,8 +16,10 @@ interface TaskCardProps {
   isActive: boolean;
   activityInfo?: ActivityInfo;
   ctx?: ContextUsage;
-  /** PR on the task's branch, if one exists on the remote. */
-  prInfo?: PullRequestInfo | null;
+  /** The PRs standing for the task's branch now, newest first. */
+  prs?: PullRequestInfo[];
+  /** Every PR from the branch, newest first (the badge's list). */
+  allPrs?: PullRequestInfo[];
   isUnseen: boolean;
   hasRemoteControl: boolean;
   isDragging: boolean;
@@ -37,7 +39,8 @@ export function TaskCard({
   isActive,
   activityInfo,
   ctx,
-  prInfo,
+  prs,
+  allPrs,
   isUnseen,
   hasRemoteControl,
   isDragging,
@@ -137,10 +140,12 @@ export function TaskCard({
         </span>
 
         {/* Runs in the project's own checkout, not a worktree */}
-        {!task.useWorktree && <MainRepoBadge branch={task.branch} />}
+        {!task.useWorktree && <MainRepoBadge task={task} />}
 
         {/* PR on this branch — icon-only link to the remote */}
-        {prInfo && <PrBadge prInfo={prInfo} variant="icon" />}
+        {(prs || allPrs) && (
+          <PrBadge prs={prs ?? []} allPrs={allPrs} variant="icon" taskId={task.id} />
+        )}
 
         {/* Right slot: context percentage at rest, the action row on hover
             (or while its menu is open), each sliding over the other. The

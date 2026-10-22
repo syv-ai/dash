@@ -2,6 +2,8 @@ import React from 'react';
 import type { PermissionMode } from '../../../shared/types';
 import { PERMISSION_MODE_LABELS, type ConfigureValues } from './types';
 import { Expandable } from '../ui/Expandable';
+import { SwitchField } from '../ui/SwitchField';
+import { useControlInfo } from '../../hooks/useControlInfo';
 
 interface ConfigureFormProps {
   value: ConfigureValues;
@@ -19,6 +21,7 @@ const sectionLabel =
 export function ConfigureForm({ value, onChange, showName = true }: ConfigureFormProps) {
   const set = <K extends keyof ConfigureValues>(key: K, v: ConfigureValues[K]) =>
     onChange({ ...value, [key]: v });
+  const controlSupported = useControlInfo()?.supported ?? false;
 
   return (
     <div className="space-y-5">
@@ -71,6 +74,16 @@ export function ConfigureForm({ value, onChange, showName = true }: ConfigureFor
           />
           Use a git worktree per task
         </label>
+        {controlSupported && (
+          <div className="mt-3">
+            <SwitchField
+              label="Dash access for new tasks"
+              hint="New tasks start with their agent able to use Dash: its ports and services, creating tasks of its own, and drafting PR review notes and comments. Each such task gets a dash skill in its checkout (.claude/skills/dash, kept out of git) that explains dashctl, the command it uses."
+              enabled={value.dashAccess}
+              onToggle={(v) => set('dashAccess', v)}
+            />
+          </div>
+        )}
         <div className="mt-3">
           <Expandable
             label="Default context prompt"

@@ -1,4 +1,4 @@
-import type { IpcResponse } from '../../shared/types';
+import type { ControlInfo, IpcResponse } from '../../shared/types';
 
 /** App info, dialogs, external/editor/IDE launch, app-lifecycle events, and
  *  settings mutations — the cross-cutting "shell" surface. */
@@ -12,6 +12,9 @@ export interface SystemApi {
   openExternal: (url: string) => Promise<void>;
   clipboardWriteText: (text: string) => void;
   clipboardReadText: () => Promise<string>;
+  clipboardHasImage: () => Promise<boolean>;
+  /** A dropped file's path on disk; '' for one that has none (e.g. dragged text). */
+  getPathForFile: (file: File) => string;
   openInEditor: (args: {
     cwd: string;
     filePath: string;
@@ -28,7 +31,14 @@ export interface SystemApi {
 
   // App lifecycle
   onBeforeQuit: (callback: () => void) => () => void;
-  onFocusTask: (callback: (taskId: string) => void) => () => void;
+  /** `projectId` is absent only from an older sender; then only the task is selected. */
+  onFocusTask: (callback: (target: { taskId: string; projectId?: string }) => void) => () => void;
+  /** An agent outside Dash asks to control it (`open`), or the ask timed out (`!open`). */
+  onOrchestratorAccessRequest: (
+    callback: (request: { id: string; open: boolean }) => void,
+  ) => () => void;
+  /** The person's Allow / Deny for an `onOrchestratorAccessRequest`. */
+  answerOrchestratorAccess: (answer: { id: string; allowed: boolean }) => void;
   onToast: (callback: (data: { message: string; url?: string }) => void) => () => void;
 
   // Settings
@@ -39,5 +49,10 @@ export interface SystemApi {
   setUltracode: (enabled: boolean) => void;
   /** `claude stop` every task session when Dash quits (default: sessions live on). */
   setStopSessionsOnQuit: (enabled: boolean) => void;
+  /** Dash's theme, for sessions started with no pane (the control API). */
+  setIsDark: (isDark: boolean) => void;
+  /** Settings "Let other agents control Dash": gates orchestrator calls to the control API. */
+  setOrchestratorAccess: (enabled: boolean) => void;
+  getControlInfo: () => Promise<IpcResponse<ControlInfo>>;
   getClaudeAttribution: (projectPath?: string) => Promise<IpcResponse<string | null>>;
 }

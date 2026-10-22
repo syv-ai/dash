@@ -4,12 +4,10 @@ import { FolderRow } from './FolderRow';
 import { FileRow } from './FileRow';
 import { compressedDisplay, type TreeNode } from './buildTree';
 import { ROW_TRANSITION, rowEnterExit } from './motionConfig';
+import { FOLDER_TRUNCATION_CAP, SMART_COLLAPSE_THRESHOLD } from './flattenTree';
 import type { FileChange } from '../../../shared/types';
 
-const SMART_COLLAPSE_THRESHOLD = 20;
-const FOLDER_TRUNCATION_CAP = 30;
-
-interface Callbacks {
+export interface Callbacks {
   onToggleFileStage: (file: FileChange) => void;
   onToggleFolderStage: (node: TreeNode) => void;
   onViewDiff: (file: FileChange) => void;
@@ -25,6 +23,19 @@ function collectFiles(node: TreeNode): FileChange[] {
     for (const child of n.children.values()) walk(child);
   })(node);
   return out;
+}
+
+/** What a folder row may do with its subtree: discard its unstaged files, or .gitignore it. */
+export function folderActions(terminal: TreeNode) {
+  const subtreeFiles = collectFiles(terminal);
+  const discardable = subtreeFiles.filter((f) => !f.staged && f.status !== 'deleted');
+  const canDiscard = discardable.length > 0;
+  // Only pure-untracked folders can be safely .gitignored — mixing in tracked
+  // content would suddenly ignore those too, which is rarely what the user wants.
+  // (Computed from the files directly: agg.status no longer carries 'untracked'
+  // now that folders only tint for their own rename.)
+  const canIgnore = subtreeFiles.length > 0 && subtreeFiles.every((f) => f.status === 'untracked');
+  return { discardable, canDiscard, canIgnore };
 }
 
 interface TreeNodeProps extends Callbacks {
@@ -56,14 +67,7 @@ function DirNode({ node, indent, ...callbacks }: TreeNodeProps) {
   const { display, terminal } = compressedDisplay(node);
   const initiallyOpen = terminal.agg.count <= SMART_COLLAPSE_THRESHOLD;
   const [open, setOpen] = useState(initiallyOpen);
-  const subtreeFiles = collectFiles(terminal);
-  const discardable = subtreeFiles.filter((f) => !f.staged && f.status !== 'deleted');
-  const canDiscard = discardable.length > 0;
-  // Only pure-untracked folders can be safely .gitignored — mixing in tracked
-  // content would suddenly ignore those too, which is rarely what the user wants.
-  // (Computed from the files directly: agg.status no longer carries 'untracked'
-  // now that folders only tint for their own rename.)
-  const canIgnore = subtreeFiles.length > 0 && subtreeFiles.every((f) => f.status === 'untracked');
+  const { discardable, canDiscard, canIgnore } = folderActions(terminal);
   return (
     <motion.div
       layout

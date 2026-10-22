@@ -1,7 +1,6 @@
 import { create } from 'zustand';
-import type { GitStatus, PullRequestInfo, Project, Task } from '../../shared/types';
-import { isAdoRemote } from '../../shared/urls';
-import { prDetectionTargets } from './prDetectionTargets';
+import type { GitStatus, PrProvider, PullRequestInfo, Project, Task } from '../../shared/types';
+import { fetchPrsFor, prDetectionTargets, prTargetFor, type BranchPrs } from './prDetectionTargets';
 import { useProjects, selectActiveTask } from './projectsStore';
 
 const GIT_POLL_INTERVAL = 5000;
@@ -11,7 +10,10 @@ export interface DiffFileTarget {
   cwd: string;
   filePath: string;
   staged: boolean;
-  initialView?: { kind: 'working'; ref: 'HEAD' | 'index' } | { kind: 'commit'; hash: string };
+  initialView?:
+    | { kind: 'working'; ref: 'HEAD' | 'index' }
+    | { kind: 'commit'; hash: string }
+    | { kind: 'pr'; provider: PrProvider; number: number; base: string; head: string };
   /** `cwd` is not the active task's worktree (see DiffEditorModalProps.standalone). */
   standalone?: boolean;
 }
@@ -22,13 +24,32 @@ const apply = <T>(v: Updater<T>, prev: T): T =>
 
 const activeTask = (): Task | null => selectActiveTask(useProjects.getState());
 
+/** The branch checked out at `cwd` (null: detached), or undefined when it can't be read. */
+async function currentBranch(cwd: string): Promise<string | null | undefined> {
+  try {
+    const resp = await window.electronAPI.gitCurrentBranch(cwd);
+    return resp.success ? (resp.data ?? null) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export interface GitState {
   gitStatus: GitStatus | null;
   gitLoading: boolean;
   diffFile: DiffFileTarget | null;
-  prInfo: PullRequestInfo | null;
-  /** PR per task for the ProjectView cards, keyed by task id (null = none). */
-  prByTask: Record<string, PullRequestInfo | null>;
+  /** The PRs standing for the active task's branch now, newest first (see relevantPrs). */
+  prs: PullRequestInfo[];
+  /** The same per task, for the sidebar rows and ProjectView cards. */
+  prByTask: Record<string, PullRequestInfo[]>;
+  /** Per task, every PR from its branch, newest first: the list behind its PR badge. */
+  branchPrsByTask: Record<string, PullRequestInfo[]>;
+  /**
+   * Each task's checked-out branch as last read (null: detached HEAD). Unlike
+   * `task.branch`, the branch Dash created it on, this follows a session that
+   * switched branches. Read it through useTaskBranch.
+   */
+  branchByTask: Record<string, string | null>;
   showCommitGraph: boolean;
   /** When set, the commit-graph modal selects + scrolls to this commit on open
    *  (e.g. opened from the diff editor's blame card). Cleared on close. */
@@ -56,11 +77,35 @@ export interface GitActions {
   stopWatch: () => void;
   detectPr: (project: Project | null, task: Task | null, branch: string | null) => void;
   stopPrDetect: () => void;
-  /** Fetch each non-default-branch task's PR in parallel; fill prByTask. */
+  /** Fetch each task's PRs in parallel (main reads its live branch); fill prByTask. */
   detectProjectPrs: (project: Project, tasks: Task[]) => Promise<void>;
 }
 
 export type GitStore = GitState & GitActions;
+
+/** Whether two statuses hold the same branch, counts and file changes, in order. */
+export function sameGitStatus(a: GitStatus, b: GitStatus): boolean {
+  if (
+    a.branch !== b.branch ||
+    a.hasUpstream !== b.hasUpstream ||
+    a.ahead !== b.ahead ||
+    a.behind !== b.behind ||
+    a.files.length !== b.files.length
+  ) {
+    return false;
+  }
+  return a.files.every((f, i) => {
+    const g = b.files[i]!;
+    return (
+      f.path === g.path &&
+      f.status === g.status &&
+      f.staged === g.staged &&
+      f.additions === g.additions &&
+      f.deletions === g.deletions &&
+      f.oldPath === g.oldPath
+    );
+  });
+}
 
 // Non-reactive singleton resources (only ever one active task watched / one PR poll).
 let watchTeardown: (() => void) | null = null;
@@ -70,8 +115,10 @@ export const useGit = create<GitStore>((set, get) => ({
   gitStatus: null,
   gitLoading: false,
   diffFile: null,
-  prInfo: null,
+  prs: [],
   prByTask: {},
+  branchPrsByTask: {},
+  branchByTask: {},
   showCommitGraph: false,
   commitGraphFocusHash: null,
 
@@ -81,14 +128,29 @@ export const useGit = create<GitStore>((set, get) => ({
   setCommitGraphFocusHash: (hash) => set({ commitGraphFocusHash: hash }),
 
   refreshGitStatus: async (cwd) => {
-    set({ gitLoading: true });
+    // Only the first load shows "Loading..."; background polls don't toggle it,
+    // which would re-render every subscriber twice per poll.
+    const firstLoad = get().gitStatus === null;
+    if (firstLoad) set({ gitLoading: true });
     try {
       const resp = await window.electronAPI.gitGetStatus(cwd);
-      if (resp.success && resp.data) set({ gitStatus: resp.data });
+      if (resp.success && resp.data) {
+        const t = activeTask();
+        const branch = resp.data.branch || null;
+        const prev = get().gitStatus;
+        set({
+          // Keep the old object when nothing changed, so a poll of a big
+          // worktree doesn't re-render every file row.
+          gitStatus: prev && sameGitStatus(prev, resp.data) ? prev : resp.data,
+          ...(t?.path === cwd && get().branchByTask[t.id] !== branch
+            ? { branchByTask: { ...get().branchByTask, [t.id]: branch } }
+            : {}),
+        });
+      }
     } catch {
       // Ignore — keep the last good status.
     } finally {
-      set({ gitLoading: false });
+      if (firstLoad) set({ gitLoading: false });
     }
   },
 
@@ -184,39 +246,38 @@ export const useGit = create<GitStore>((set, get) => ({
   detectPr: (project, task, branch) => {
     prTeardown?.();
     prTeardown = null;
-    set({ prInfo: null });
+    set({ prs: [] });
 
     const defaultBranch = project?.baseRef || project?.gitBranch || 'main';
-    if (!branch || !project || branch === defaultBranch) return;
+    if (!branch || !project || branch === defaultBranch) {
+      if (task) {
+        set({
+          prByTask: { ...get().prByTask, [task.id]: [] },
+          branchPrsByTask: { ...get().branchPrsByTask, [task.id]: [] },
+        });
+      }
+      return;
+    }
 
     let cancelled = false;
-    const remote = project.gitRemote;
-    const projectId = project.id;
-    const cwd = task?.path || project.path;
+    const target = prTargetFor(project, task?.path || project.path);
 
-    const fetchPr = async () => {
-      try {
-        let pr: PullRequestInfo | null = null;
-        if (remote && isAdoRemote(remote)) {
-          const resp = await window.electronAPI.adoGetPrForBranch(branch, remote, projectId);
-          if (!cancelled && resp.success) pr = resp.data ?? null;
-        } else {
-          const resp = await window.electronAPI.githubGetPrForBranch(cwd, branch);
-          if (!cancelled && resp.success) pr = resp.data ?? null;
-        }
-        if (!cancelled) {
-          set({
-            prInfo: pr,
-            ...(task ? { prByTask: { ...get().prByTask, [task.id]: pr } } : {}),
-          });
-        }
-      } catch {
-        if (!cancelled) set({ prInfo: null });
-      }
+    const fetchPrs = async () => {
+      const found = await fetchPrsFor(target);
+      if (cancelled || found === null) return;
+      set({
+        prs: found.current,
+        ...(task
+          ? {
+              prByTask: { ...get().prByTask, [task.id]: found.current },
+              branchPrsByTask: { ...get().branchPrsByTask, [task.id]: found.all },
+            }
+          : {}),
+      });
     };
 
-    void fetchPr();
-    const interval = setInterval(() => void fetchPr(), PR_POLL_INTERVAL);
+    void fetchPrs();
+    const interval = setInterval(() => void fetchPrs(), PR_POLL_INTERVAL);
     prTeardown = () => {
       cancelled = true;
       clearInterval(interval);
@@ -230,19 +291,28 @@ export const useGit = create<GitStore>((set, get) => ({
 
   detectProjectPrs: async (project, tasks) => {
     const targets = prDetectionTargets(project, tasks);
-    const results = await Promise.all(
-      targets.map(async (t) => {
-        try {
-          const resp =
-            t.provider === 'ado' && t.remote
-              ? await window.electronAPI.adoGetPrForBranch(t.branch, t.remote, t.projectId)
-              : await window.electronAPI.githubGetPrForBranch(t.cwd, t.branch);
-          return [t.taskId, resp.success ? (resp.data ?? null) : null] as const;
-        } catch {
-          return [t.taskId, null] as const;
-        }
-      }),
-    );
-    set({ prByTask: { ...get().prByTask, ...Object.fromEntries(results) } });
+    const [results, branches] = await Promise.all([
+      Promise.all(targets.map(async (t) => [t.taskId, await fetchPrsFor(t)] as const)),
+      Promise.all(targets.map(async (t) => [t.taskId, await currentBranch(t.cwd)] as const)),
+    ]);
+    // A failed fetch (undefined / null) keeps what the task showed.
+    const fetched = results.filter((r): r is readonly [string, BranchPrs] => r[1] !== null);
+    const read = branches.filter((r): r is readonly [string, string | null] => r[1] !== undefined);
+    set({
+      prByTask: {
+        ...get().prByTask,
+        ...Object.fromEntries(fetched.map(([id, f]) => [id, f.current])),
+      },
+      branchPrsByTask: {
+        ...get().branchPrsByTask,
+        ...Object.fromEntries(fetched.map(([id, f]) => [id, f.all])),
+      },
+      branchByTask: { ...get().branchByTask, ...Object.fromEntries(read) },
+    });
   },
 }));
+
+/** The branch `task` is on now, falling back to the one it was created on until it is read. */
+export function useTaskBranch(task: Pick<Task, 'id' | 'branch'>): string {
+  return useGit((s) => s.branchByTask[task.id]) ?? task.branch;
+}

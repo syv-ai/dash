@@ -54,12 +54,57 @@ export const taskInputSchema = z.looseObject({
   setupScript: z.string().nullable().optional(),
   teardownScript: z.string().nullable().optional(),
   archivedAt: z.string().nullable().optional(),
+  dashAccess: z.boolean().optional(),
+  parentTaskId: z.string().nullable().optional(),
   sortOrder: z.number().optional(),
   totalTokens: z.number().optional(),
   totalCostUsd: z.number().optional(),
   tokensBackfilledAt: z.string().nullable().optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
+});
+
+const createTaskCommon = {
+  projectId: z.string(),
+  name: z.string().min(1),
+  permissionMode: permissionModeSchema,
+  model: taskModelSchema,
+  linkedItems: z.array(linkedItemSchema).optional(),
+  contextPrompt: z.string().optional(),
+  setupScript: z.string().nullable().optional(),
+  teardownScript: z.string().nullable().optional(),
+  dashAccess: z.boolean().optional(),
+  parentTaskId: z.string().nullable().optional(),
+};
+
+/** `task:create` — `CreateTaskInput` (one variant per task kind). */
+export const createTaskInputSchema = z.discriminatedUnion('kind', [
+  z.looseObject({
+    ...createTaskCommon,
+    kind: z.literal('worktree-new-branch'),
+    baseRef: z.string(),
+    pushRemote: z.boolean(),
+  }),
+  z.looseObject({
+    ...createTaskCommon,
+    kind: z.literal('worktree-existing'),
+    branch: z.string(),
+    updateFromRemote: z.boolean().optional(),
+  }),
+  z.looseObject({
+    ...createTaskCommon,
+    kind: z.literal('in-place-checkout'),
+    branch: z.string(),
+    updateFromRemote: z.boolean().optional(),
+  }),
+  z.looseObject({ ...createTaskCommon, kind: z.literal('in-place-no-git') }),
+]);
+
+/** `task:delete` options — the delete dialog's three checkboxes. */
+export const deleteTaskOptionsSchema = z.looseObject({
+  deleteWorktreeDir: z.boolean().optional(),
+  deleteLocalBranch: z.boolean().optional(),
+  deleteRemoteBranch: z.boolean().optional(),
 });
 
 /** A repo-relative path stored at a write boundary. Unlike the editor's file
@@ -82,4 +127,7 @@ export const diffCommentInputSchema = z.object({
   text: z.string(),
   sent: z.boolean(),
   viewScope: z.string(),
+  side: z.enum(['LEFT', 'RIGHT']).optional(),
+  replyTo: z.string().nullable().optional(),
+  kind: z.enum(['note', 'comment']).optional(),
 });

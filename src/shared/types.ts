@@ -91,12 +91,80 @@ export interface Task {
   /** Set when Dash or the supervisor stopped the session (archive, idle stop). */
   sessionStoppedAt: string | null;
   archivedAt: string | null;
+  /** Whether the task's session can reach Dash with dashctl (control API). */
+  dashAccess: boolean;
+  /** The task that created this one through the control API; null when a
+   *  person created it. Fixed at creation. */
+  parentTaskId: string | null;
   sortOrder: number;
   totalTokens: number;
   totalCostUsd: number;
   tokensBackfilledAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Task creation modes. Each variant carries only the fields that are meaningful
+ * for that mode — `baseRef` is a full ref (`origin/main`) for new-branch worktree
+ * creation; `branch` is a plain branch name for existing-branch flows. The
+ * discriminator stops impossible combinations (e.g. `pushRemote` on a non-worktree
+ * task) from reaching the create handler.
+ */
+export type CreateTaskOptions = {
+  name: string;
+  permissionMode: PermissionMode;
+  model: TaskModel;
+  linkedItems?: LinkedItem[];
+  /** Context for the agent: submitted with the first message and persisted, so
+   *  the SessionStart hook re-injects it after /clear and /compact. */
+  contextPrompt?: string;
+  /** A one-shot instruction submitted as (the end of) the first message and
+   *  never persisted, so /clear and /compact don't re-run it. The control API's
+   *  `prompt`; the task dialog doesn't use it. */
+  initialPrompt?: string;
+  /** Per-task worktree scripts (newline-separated), snapshotted from the project
+   *  default and editable per task. Only meaningful for worktree tasks. */
+  setupScript?: string | null;
+  teardownScript?: string | null;
+  /** undefined → project taskDefaults.dashAccess → false. Resolved only in TaskService.create. */
+  dashAccess?: boolean;
+} & (
+  | { kind: 'worktree-new-branch'; baseRef: string; pushRemote: boolean }
+  | { kind: 'worktree-existing'; branch: string; updateFromRemote?: boolean }
+  | { kind: 'in-place-checkout'; branch: string; updateFromRemote?: boolean }
+  | { kind: 'in-place-no-git' }
+);
+
+/** Input to `TaskService.create` (main), shared by the task dialog and the control API. */
+export type CreateTaskInput = CreateTaskOptions & {
+  projectId: string;
+  parentTaskId?: string | null;
+};
+
+/** `task:setDashAccess`: turn a task's Dash access on or off (applies at its next session start). */
+export type SetTaskDashAccessInput = { taskId: string; enabled: boolean };
+
+/** What `app:getControlInfo` reports for the Settings orchestrator row. */
+export type ControlInfo = {
+  /** `dashctl`, the command line other agents reach Dash with. */
+  dashctlPath: string;
+  /** False on win32: dashctl is a shell script, so the control API never starts. */
+  supported: boolean;
+};
+
+/** How `TaskService.create` runs: who asked, and whether it starts the session
+ *  itself (the API) or leaves that to the pane that mounts next (the UI). */
+export type CreateTaskRunOptions = { startSession: boolean; source: 'ui' | 'api' };
+
+export type CreateTaskResult = { task: Task; session: 'deferred' | 'started' | 'needs-trust' };
+
+/** What a task delete removes besides the task row. Branch deletes only apply
+ *  to branches Dash created; a missing flag means "keep". */
+export interface DeleteTaskOptions {
+  deleteWorktreeDir?: boolean;
+  deleteLocalBranch?: boolean;
+  deleteRemoteBranch?: boolean;
 }
 
 /** One legacy-layout task the launch dialog offers to move. */
@@ -195,16 +263,6 @@ export interface WorktreeInfo {
   path: string;
   projectId: string;
   status: 'active' | 'error';
-  createdAt: string;
-}
-
-export interface ReserveWorktree {
-  id: string;
-  path: string;
-  branch: string;
-  projectId: string;
-  projectPath: string;
-  baseRef: string;
   createdAt: string;
 }
 
@@ -497,12 +555,112 @@ export interface AzureDevOpsConfig {
 
 export type PullRequestState = 'open' | 'merged' | 'closed';
 
+/** A PR's combined checks: any failure fails it, then any still running. */
+export type CiState = 'passing' | 'failing' | 'pending';
+
+/** Where a PR lives. */
+export type PrProvider = 'github' | 'ado';
+
+/** A review's outcome. GitHub offers comment / approve / request_changes; ADO's
+ *  vote adds approve_with_suggestions / wait_for_author / reject. */
+export type PrVerdict =
+  | 'comment'
+  | 'approve'
+  | 'request_changes'
+  | 'approve_with_suggestions'
+  | 'wait_for_author'
+  | 'reject';
+
+/** One comment in a PR review thread, or a general PR comment. */
+export interface PrReviewComment {
+  id: string;
+  author: string;
+  body: string;
+  createdAt: string;
+  url: string;
+}
+
+/** A review thread on a PR, anchored to a file and line. */
+export interface PrReviewThread {
+  id: string;
+  path: string;
+  /** Last line of the commented range (in the PR head's file for RIGHT, the base's
+   *  for LEFT); null once outdated, or for a comment on the whole file. */
+  line: number | null;
+  /** First line of a multi-line comment, else null. */
+  startLine: number | null;
+  /** RIGHT: the PR's version of the file; LEFT: the base's (a removed line). */
+  side: 'LEFT' | 'RIGHT';
+  /** The lines it was left on have changed since. */
+  isOutdated: boolean;
+  resolved: boolean;
+  comments: PrReviewComment[];
+}
+
+/** A PR's review: all its threads and general comments, with the commits its diff spans. */
+export interface PrReview {
+  provider: PrProvider;
+  number: number;
+  title: string;
+  /** The PR's description, in Markdown. */
+  body: string;
+  url: string;
+  /** GitHub refuses approve / request changes on your own PR. */
+  viewerIsAuthor: boolean;
+  /** You're asked to review it and haven't yet. */
+  viewerIsRequestedReviewer: boolean;
+  /** The verdicts this provider offers, in display order. */
+  verdicts: PrVerdict[];
+  /** Merge-base of the PR's base and head: the left side of its diff. */
+  base: string;
+  head: string;
+  /** File threads, resolved or not. */
+  threads: PrReviewThread[];
+  /** General PR comments and review summaries, oldest first. */
+  conversation: PrReviewComment[];
+  /** The provider had more threads than were loaded. */
+  partial?: boolean;
+}
+
+/** A task's draft summary for a PR: the review's PR-level comment. */
+export interface PrReviewSummary {
+  body: string;
+  author: 'user' | 'agent';
+}
+
+/** What a submit sends: the verdict, its summary, and the task's drafts for the PR. */
+export interface PrSubmission {
+  verdict: PrVerdict;
+  body: string;
+  /** New threads, on the PR's (RIGHT) side. */
+  comments: { draftId: string; path: string; startLine: number; endLine: number; body: string }[];
+  replies: { draftId: string; threadId: string; body: string }[];
+}
+
+/** Why a write to the PR failed. `scope`: the token can't write; `fix` says how to grant it. */
+export type PrWriteError =
+  | { kind: 'scope'; fix: string }
+  | { kind: 'pending-review' }
+  | { kind: 'other'; message: string };
+
+/** The drafts that reached the PR (their rows are deleted), and the error that stopped the rest. */
+export interface SubmitResult {
+  postedDraftIds: string[];
+  error?: PrWriteError;
+}
+
 export interface PullRequestInfo {
   number: number;
   title: string;
   url: string;
   state: PullRequestState;
   provider: 'github' | 'ado';
+  /** The PR's last commit, to tell whether the branch has moved past it. */
+  headSha?: string;
+  /** Open PRs only; null when it has no checks. */
+  ci?: CiState | null;
+  /** Stands for its branch now (see relevantPrs); the others are its history. */
+  current?: boolean;
 }
 
 /**
@@ -956,11 +1114,23 @@ export interface DiffComment {
   text: string;
   sent: boolean;
   /** Diff state the anchor is meaningful against: 'live' (working/branch
-   *  views share the working file) or 'commit:<hash>' for a frozen commit. */
+   *  views share the working file), 'commit:<hash>' for a frozen commit, or
+   *  'pr:<provider>:<n>' for a draft review comment on a PR. */
   viewScope: string;
+  /** Which side of the diff the lines are on; always RIGHT outside PR drafts. */
+  side: 'LEFT' | 'RIGHT';
+  /** A PR draft reply: the remote thread it answers. Null for line comments. */
+  replyTo: string | null;
+  /** Who wrote it. An agent's draft becomes the user's once they edit its text. */
+  author: 'user' | 'agent';
+  /** A note is local, for the agent; a comment is a PR review draft that
+   *  Submit posts. Only PR scopes hold comments. */
+  kind: DiffCommentKind;
   createdAt: string;
   updatedAt: string;
 }
+
+export type DiffCommentKind = 'note' | 'comment';
 
 /** Payload for `diffComments:upsert` from the renderer. The handler stamps
  *  createdAt/updatedAt and reflects the row back as a full DiffComment. */
@@ -973,6 +1143,10 @@ export interface DiffCommentInput {
   text: string;
   sent: boolean;
   viewScope: string;
+  side?: 'LEFT' | 'RIGHT';
+  replyTo?: string | null;
+  /** Defaults to 'note'. */
+  kind?: DiffCommentKind;
 }
 
 /* ── Unified Extensions model (Skills + Plugins across scopes) ──────────────
@@ -989,7 +1163,8 @@ export interface ExtensionScopeRef {
   kind: 'global' | 'project' | 'task';
   /** Display label: 'Global', project name, or task name. */
   name: string;
-  /** Root directory whose `.claude/` this scope owns (home dir for global). */
+  /** Root directory whose `.claude/` this scope owns (home dir for global, whose
+   *  files live in Claude's config dir instead: see `scopeClaudeDir`). */
   path: string;
   /** Owning project id (task scope only). */
   projectId?: string;

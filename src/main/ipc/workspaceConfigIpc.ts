@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import { z } from 'zod';
 import { parseArgs, errorResponse } from './validate';
 import {
+  loadSharedWorkspaceConfig,
   loadWorkspaceConfig,
   writeWorkspaceConfig,
   type WorkspaceConfig,
@@ -13,6 +14,7 @@ const taskDefaultsSchema = z
     permissionMode: z.enum(['default', 'acceptEdits', 'bypassPermissions']).optional(),
     useWorktree: z.boolean().optional(),
     contextPrompt: z.string().optional(),
+    dashAccess: z.boolean().optional(),
   })
   .optional();
 
@@ -24,14 +26,25 @@ const configSchema = z.looseObject({
 });
 
 export function registerWorkspaceConfigIpc(): void {
-  ipcMain.handle('workspaceConfig:read', (_event, projectPath: string) => {
-    try {
-      parseArgs('workspaceConfig:read', z.string(), projectPath);
-      return { success: true, data: loadWorkspaceConfig(projectPath) };
-    } catch (error) {
-      return errorResponse(error);
-    }
-  });
+  // `shared: true` reads config.json without the config.local.json overlay
+  // (for editors that save back to config.json).
+  ipcMain.handle(
+    'workspaceConfig:read',
+    (_event, projectPath: string, opts?: { shared?: boolean }) => {
+      try {
+        parseArgs('workspaceConfig:read', z.string(), projectPath);
+        parseArgs(
+          'workspaceConfig:read',
+          z.object({ shared: z.boolean().optional() }).optional(),
+          opts,
+        );
+        const load = opts?.shared ? loadSharedWorkspaceConfig : loadWorkspaceConfig;
+        return { success: true, data: load(projectPath) };
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+  );
 
   ipcMain.handle(
     'workspaceConfig:write',

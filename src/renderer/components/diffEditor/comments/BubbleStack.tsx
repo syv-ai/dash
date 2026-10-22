@@ -1,5 +1,6 @@
 import type { LiveComment, Shade } from './types';
 import { CommentBubble } from './CommentBubble';
+import { canPromote } from '../../../../shared/diffComments';
 
 interface Props {
   /** Comments anchored at this line. ≥1; >1 means stacked. */
@@ -25,6 +26,8 @@ interface Props {
    *  out as the DraftBubble crossfades in beside it. Null when nothing is
    *  being edited. */
   editingId: string | null;
+  /** In a PR view: tag each bubble note or comment, and let a note become a comment. */
+  onPromote?(id: string): void;
 }
 
 function metaLabel(c: LiveComment): string {
@@ -45,6 +48,7 @@ export function BubbleStack({
   onReopen,
   editingId,
   scopeLabel,
+  onPromote,
 }: Props) {
   const stacked = comments.length >= 2;
   return (
@@ -61,6 +65,7 @@ export function BubbleStack({
             }
             text={c.text}
             sent={c.sent}
+            byAgent={c.author === 'agent'}
             scopeLabel={scopeLabel}
             hasTail={isLast}
             isHighlighted={hoveredId === c.id}
@@ -71,6 +76,8 @@ export function BubbleStack({
             onDelete={() => onDelete(c.id)}
             onReopen={() => onReopen(c.id)}
             isFadingOut={c.id === editingId}
+            kindTag={onPromote ? c.kind : undefined}
+            onPromote={onPromote && canPromote(c) ? () => onPromote(c.id) : undefined}
           />
         );
       })}

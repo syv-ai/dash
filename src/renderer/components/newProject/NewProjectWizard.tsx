@@ -50,8 +50,9 @@ function WizardBody({ onCreated }: { onCreated: (id: string) => void }) {
 
   async function handleResolved(info: Resolved) {
     setResolved(info);
-    // Load any committed config (e.g. cloned repo ships .dash/config.json).
-    const resp = await window.electronAPI.readWorkspaceConfig(info.path);
+    // Load any committed config (e.g. cloned repo ships .dash/config.json). Shared
+    // only, since handleCreate writes it back to config.json.
+    const resp = await window.electronAPI.readWorkspaceConfig(info.path, { shared: true });
     const config = resp.success ? (resp.data ?? null) : null;
     setValues(configToValues(config, { name: info.name, baseRef: 'origin/main' }));
     setStep('configure');

@@ -1,9 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { ArrowDown, ArrowUp, GitBranch, MessageSquareCode, Minus, Plus } from 'lucide-react';
 import { FileChangesPanel } from '../changes/FileChangesPanel';
 import { Tooltip } from '../ui/Tooltip';
 import { UsageStrip } from './UsageStrip';
 import { useGit } from '../../stores/gitStore';
+import { useCommentsStore } from '../../stores/commentsStore';
+import { needsAttention } from '../../../shared/diffComments';
 import type { RateLimits, ContextUsage, Task } from '../../../shared/types';
 
 interface RightInspectorProps {
@@ -30,6 +32,19 @@ export function RightInspector({
   collapsed,
 }: RightInspectorProps) {
   const gitStatus = useGit((s) => s.gitStatus);
+  // The task's notes to send and PR comments to submit, across every view.
+  const taskId = activeTask?.id ?? null;
+  const commentCount = useCommentsStore((s) => {
+    if (!taskId || s.taskId !== taskId) return 0;
+    let n = 0;
+    for (const list of Object.values(s.byFile)) for (const c of list) if (needsAttention(c)) n++;
+    return n;
+  });
+  useEffect(() => {
+    if (taskId && useCommentsStore.getState().taskId !== taskId) {
+      void useCommentsStore.getState().loadForTask(taskId);
+    }
+  }, [taskId]);
   const gitLoading = useGit((s) => s.gitLoading);
   const onStageAll = useGit((s) => s.stageAll);
   const onUnstageAll = useGit((s) => s.unstageAll);
@@ -120,12 +135,23 @@ export function RightInspector({
             </button>
           </Tooltip>
         )}
-        <Tooltip content="Open in editor">
+        <Tooltip
+          content={
+            commentCount > 0
+              ? `Open in editor · ${commentCount} comment${commentCount === 1 ? '' : 's'}`
+              : 'Open in editor'
+          }
+        >
           <button
             onClick={onOpenEditor}
-            className="p-[3px] rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0"
+            className="flex items-center gap-1 p-[3px] rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0"
           >
             <MessageSquareCode size={11} strokeWidth={2} />
+            {commentCount > 0 && (
+              <span className="min-w-[14px] h-[14px] flex items-center justify-center rounded-full bg-primary/15 px-1 text-[9.5px] font-bold text-primary tabular-nums">
+                {commentCount}
+              </span>
+            )}
           </button>
         </Tooltip>
       </div>

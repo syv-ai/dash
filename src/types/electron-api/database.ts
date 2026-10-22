@@ -1,4 +1,8 @@
 import type {
+  CreateTaskInput,
+  CreateTaskResult,
+  DeleteTaskOptions,
+  SetTaskDashAccessInput,
   IpcResponse,
   Project,
   Task,
@@ -19,7 +23,8 @@ export interface DatabaseApi {
   saveProject: (
     project: Partial<Project> & { name: string; path: string },
   ) => Promise<IpcResponse<Project>>;
-  deleteProject: (id: string) => Promise<IpcResponse<void>>;
+  /** Deletes every task as `deleteTask` does (options apply to each), then the project. */
+  deleteProject: (id: string, options: DeleteTaskOptions) => Promise<IpcResponse<void>>;
   archiveProject: (id: string) => Promise<IpcResponse<void>>;
   restoreProject: (id: string) => Promise<IpcResponse<void>>;
 
@@ -28,7 +33,9 @@ export interface DatabaseApi {
   saveTask: (
     task: Partial<Task> & { projectId: string; name: string; branch: string; path: string },
   ) => Promise<IpcResponse<Task>>;
-  deleteTask: (id: string) => Promise<IpcResponse<void>>;
+  /** Create a task through main's TaskService (worktree, row, ports, first prompt). */
+  createTask: (input: CreateTaskInput) => Promise<IpcResponse<CreateTaskResult>>;
+  deleteTask: (id: string, options?: DeleteTaskOptions) => Promise<IpcResponse<void>>;
   setTaskScripts: (args: {
     id: string;
     setupScript: string | null;
@@ -36,7 +43,11 @@ export interface DatabaseApi {
   }) => Promise<IpcResponse<Task>>;
   archiveTask: (id: string) => Promise<IpcResponse<void>>;
   restoreTask: (id: string) => Promise<IpcResponse<void>>;
+  /** Turn a task's Dash access on or off; returns the updated task. Applies at its next dispatch. */
+  setTaskDashAccess: (input: SetTaskDashAccessInput) => Promise<IpcResponse<Task>>;
   reorderTasks: (projectId: string, orderedTaskIds: string[]) => Promise<IpcResponse<void>>;
+  /** A project's tasks changed in main (created, archived, restored, deleted). */
+  onTasksChanged: (callback: (data: { projectId: string }) => void) => () => void;
 
   // Conversations
   getConversations: (taskId: string) => Promise<IpcResponse<Conversation[]>>;

@@ -1,6 +1,8 @@
-import { Undo2, X } from 'lucide-react';
+import { ArrowUpRight, Bot, Pencil, Undo2, X } from 'lucide-react';
+import type { DiffCommentKind } from '../../../../shared/types';
 import type { Shade } from './types';
 import { BubbleShell } from './BubbleShell';
+import { Markdown } from '../../ui/Markdown';
 
 interface Props {
   shade: Shade;
@@ -9,6 +11,8 @@ interface Props {
   text: string;
   /** Already pushed to the agent — the card dims to read as "done". */
   sent: boolean;
+  /** Drafted by a task's agent (a PR review draft); the person hasn't edited it yet. */
+  byAgent?: boolean;
   /** Origin tag (e.g. 'Working tree', 'Commit abc1234') shown when the open
    *  view isn't the plain working tree, so it's clear which diff this anchors
    *  to. Undefined → no tag. */
@@ -33,6 +37,10 @@ interface Props {
    *  it, so the read-only → editable transition reads as a single morph
    *  instead of an unmount + remount pop. */
   isFadingOut: boolean;
+  /** In a PR view: whether it's a local note or a PR review comment. */
+  kindTag?: DiffCommentKind;
+  /** Make this note a PR review comment. */
+  onPromote?(): void;
 }
 
 /** One persisted speech-bubble card. Thin wrapper around BubbleShell that
@@ -42,6 +50,7 @@ export function CommentBubble({
   meta,
   text,
   sent,
+  byAgent,
   scopeLabel,
   hasTail,
   isHighlighted,
@@ -52,6 +61,8 @@ export function CommentBubble({
   onDelete,
   onReopen,
   isFadingOut,
+  kindTag,
+  onPromote,
 }: Props) {
   // A sent comment fades back so it reads as "already pushed" without
   // disappearing (it stays editable/removable). A bubble mid-edit takes
@@ -76,6 +87,32 @@ export function CommentBubble({
       >
         <div className="group/bubble">
           <div className="absolute top-[6px] right-[6px] flex items-center gap-[2px] z-10">
+            <button
+              type="button"
+              aria-label="Edit comment"
+              title="Edit"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDoubleClick();
+              }}
+              className="flex h-[20px] w-[20px] items-center justify-center rounded-[4px] text-muted-fade-60 opacity-0 group-hover/bubble:opacity-40 hover:opacity-100! hover:text-foreground hover:bg-foreground/10 transition-opacity"
+            >
+              <Pencil size={12} strokeWidth={1.8} />
+            </button>
+            {onPromote && (
+              <button
+                type="button"
+                aria-label="Promote to comment"
+                title="Promote to a PR comment"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPromote();
+                }}
+                className="flex h-[20px] w-[20px] items-center justify-center rounded-[4px] text-muted-fade-60 opacity-40 hover:opacity-100 hover:text-primary hover:bg-primary/10 transition-opacity"
+              >
+                <ArrowUpRight size={12} strokeWidth={1.8} />
+              </button>
+            )}
             {sent && (
               <button
                 type="button"
@@ -105,9 +142,25 @@ export function CommentBubble({
           </div>
           <div className="flex items-center gap-[6px] mb-[2px]">
             <span className="font-mono text-[10px] text-muted-fade-55 tracking-normal">{meta}</span>
+            {kindTag === 'comment' && (
+              <span className="rounded-[3px] bg-primary/12 px-[5px] py-[1px] text-[9px] font-medium uppercase tracking-[0.04em] text-primary/80">
+                Comment
+              </span>
+            )}
+            {kindTag === 'note' && (
+              <span className="rounded-[3px] bg-foreground/10 px-[5px] py-[1px] text-[9px] font-medium uppercase tracking-[0.04em] text-muted-fade-75">
+                Note
+              </span>
+            )}
             {scopeLabel && (
               <span className="rounded-[3px] bg-primary/12 px-[5px] py-[1px] text-[9px] font-medium text-primary/80">
                 {scopeLabel}
+              </span>
+            )}
+            {byAgent && (
+              <span className="inline-flex items-center gap-[3px] rounded-[3px] bg-foreground/10 px-[5px] py-[1px] text-[9px] font-medium uppercase tracking-[0.04em] text-muted-fade-75">
+                <Bot size={10} strokeWidth={1.8} />
+                Agent
               </span>
             )}
             {sent && (
@@ -116,7 +169,7 @@ export function CommentBubble({
               </span>
             )}
           </div>
-          <div className="whitespace-pre-wrap wrap-break-word">{text}</div>
+          <Markdown text={text} />
         </div>
       </BubbleShell>
     </div>

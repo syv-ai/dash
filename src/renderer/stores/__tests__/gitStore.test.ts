@@ -84,6 +84,44 @@ describe('gitStore.refreshGitStatus', () => {
     expect(useGit.getState().gitLoading).toBe(false);
   });
 
+  it('keeps the same status object when a poll returns an unchanged status', async () => {
+    const file = {
+      path: 'a.ts',
+      status: 'modified' as const,
+      staged: false,
+      additions: 1,
+      deletions: 0,
+    };
+    api.gitGetStatus = vi.fn(() =>
+      Promise.resolve({ success: true, data: status({ files: [{ ...file }] }) }),
+    );
+    const { useGit } = await freshStores();
+
+    await useGit.getState().refreshGitStatus('/wt/t1');
+    const first = useGit.getState().gitStatus;
+    await useGit.getState().refreshGitStatus('/wt/t1');
+    expect(useGit.getState().gitStatus).toBe(first);
+
+    api.gitGetStatus = vi.fn(() =>
+      Promise.resolve({ success: true, data: status({ files: [{ ...file, additions: 2 }] }) }),
+    );
+    await useGit.getState().refreshGitStatus('/wt/t1');
+    expect(useGit.getState().gitStatus).not.toBe(first);
+    expect(useGit.getState().gitStatus?.files[0]?.additions).toBe(2);
+  });
+
+  it('only shows loading for the first status, not for later polls', async () => {
+    api.gitGetStatus = vi.fn(() => Promise.resolve({ success: true, data: status() }));
+    const { useGit } = await freshStores();
+    await useGit.getState().refreshGitStatus('/wt/t1');
+
+    const seen: boolean[] = [];
+    const off = useGit.subscribe((s) => seen.push(s.gitLoading));
+    await useGit.getState().refreshGitStatus('/wt/t1');
+    off();
+    expect(seen).not.toContain(true);
+  });
+
   it('leaves prior status intact and resets loading when the call throws', async () => {
     api.gitGetStatus = vi.fn(() => Promise.reject(new Error('boom')));
     const { useGit } = await freshStores();
@@ -264,34 +302,148 @@ describe('gitStore.detectPr', () => {
     resetWindow();
   });
 
-  it('skips and clears prInfo when on the default branch', async () => {
-    api.githubGetPrForBranch = vi.fn();
+  it('skips and clears the PRs when on the default branch', async () => {
+    api.githubGetPrsForCheckout = vi.fn();
     const { useGit } = await freshStores();
     useGit.getState().detectPr(proj('p1', { gitBranch: 'main' }), task('t1', 'p1'), 'main');
-    expect(api.githubGetPrForBranch).not.toHaveBeenCalled();
-    expect(useGit.getState().prInfo).toBeNull();
+    expect(api.githubGetPrsForCheckout).not.toHaveBeenCalled();
+    expect(useGit.getState().prs).toEqual([]);
+    expect(useGit.getState().prByTask.t1).toEqual([]);
   });
 
-  it('fetches a GitHub PR for a non-default branch', async () => {
-    const pr = { number: 7, title: 'PR', url: 'u', state: 'open', provider: 'github' };
-    api.githubGetPrForBranch = vi.fn(() => Promise.resolve({ success: true, data: pr }));
+  it("fetches a GitHub task's PRs from its checkout", async () => {
+    const prs = [
+      {
+        number: 8,
+        title: 'B',
+        url: 'u8',
+        state: 'open',
+        provider: 'github',
+        ci: 'failing',
+        current: true,
+      },
+      {
+        number: 7,
+        title: 'A',
+        url: 'u7',
+        state: 'open',
+        provider: 'github',
+        ci: null,
+        current: true,
+      },
+    ];
+    api.githubGetPrsForCheckout = vi.fn(() => Promise.resolve({ success: true, data: prs }));
     const { useGit } = await freshStores();
     useGit.getState().detectPr(proj('p1', { gitBranch: 'main' }), task('t1', 'p1'), 'feature');
     await vi.runOnlyPendingTimersAsync();
-    expect(api.githubGetPrForBranch).toHaveBeenCalledWith('/wt/t1', 'feature');
-    expect(useGit.getState().prInfo).toEqual(pr);
+    expect(api.githubGetPrsForCheckout).toHaveBeenCalledWith('/wt/t1', 'main');
+    expect(useGit.getState().prs).toEqual(prs);
+    expect(useGit.getState().prByTask.t1).toEqual(prs);
+  });
+
+  it("keeps the branch's past PRs apart from the current ones", async () => {
+    const open = {
+      number: 9,
+      title: 'New',
+      url: 'u9',
+      state: 'open',
+      provider: 'github',
+      current: true,
+    };
+    const old = {
+      number: 4,
+      title: 'Old',
+      url: 'u4',
+      state: 'merged',
+      provider: 'github',
+      current: false,
+    };
+    api.githubGetPrsForCheckout = vi.fn(() =>
+      Promise.resolve({ success: true, data: [open, old] }),
+    );
+    const { useGit } = await freshStores();
+    useGit.getState().detectPr(proj('p1', { gitBranch: 'main' }), task('t1', 'p1'), 'feature');
+    await vi.runOnlyPendingTimersAsync();
+    expect(useGit.getState().prByTask.t1).toEqual([open]);
+    expect(useGit.getState().branchPrsByTask.t1).toEqual([open, old]);
+  });
+
+  it('keeps what it showed when a fetch fails', async () => {
+    const prs = [
+      { number: 7, title: 'A', url: 'u7', state: 'open', provider: 'github', current: true },
+    ];
+    api.githubGetPrsForCheckout = vi
+      .fn()
+      .mockResolvedValueOnce({ success: true, data: prs })
+      .mockResolvedValue({ success: false, error: 'offline' });
+    const { useGit } = await freshStores();
+    useGit.getState().detectPr(proj('p1', { gitBranch: 'main' }), task('t1', 'p1'), 'feature');
+    await vi.runOnlyPendingTimersAsync();
+    await vi.runOnlyPendingTimersAsync();
+    // At least one poll after the first came back failed.
+    expect(vi.mocked(api.githubGetPrsForCheckout).mock.calls.length).toBeGreaterThan(1);
+    expect(useGit.getState().prs).toEqual(prs);
   });
 
   it('uses the ADO endpoint for an Azure DevOps remote', async () => {
     const remote = 'https://dev.azure.com/org/proj/_git/repo';
-    const pr = { number: 9, title: 'ADO', url: 'u', state: 'open', provider: 'ado' };
-    api.adoGetPrForBranch = vi.fn(() => Promise.resolve({ success: true, data: pr }));
+    const prs = [
+      { number: 9, title: 'ADO', url: 'u', state: 'open', provider: 'ado', current: true },
+    ];
+    api.adoGetPrsForCheckout = vi.fn(() => Promise.resolve({ success: true, data: prs }));
     const { useGit } = await freshStores();
     useGit
       .getState()
       .detectPr(proj('p1', { gitBranch: 'main', gitRemote: remote }), task('t1', 'p1'), 'feature');
     await vi.runOnlyPendingTimersAsync();
-    expect(api.adoGetPrForBranch).toHaveBeenCalledWith('feature', remote, 'p1');
-    expect(useGit.getState().prInfo).toEqual(pr);
+    expect(api.adoGetPrsForCheckout).toHaveBeenCalledWith({
+      cwd: '/wt/t1',
+      defaultBranch: 'main',
+      gitRemote: remote,
+      projectId: 'p1',
+    });
+    expect(useGit.getState().prs).toEqual(prs);
+  });
+});
+
+describe('gitStore branchByTask (the live branch, not the one recorded at creation)', () => {
+  let api: ReturnType<typeof makeElectronApiMock>;
+  beforeEach(() => {
+    api = makeElectronApiMock();
+    installWindow(api);
+  });
+  afterEach(() => resetWindow());
+
+  it("detectProjectPrs records each task's checked-out branch", async () => {
+    api.gitCurrentBranch = vi.fn((cwd: string) =>
+      Promise.resolve({ success: true, data: cwd === '/wt/t1' ? 'renamed' : null }),
+    ) as unknown as typeof api.gitCurrentBranch;
+    const { useGit } = await freshStores();
+    await useGit.getState().detectProjectPrs(proj('p1'), [task('t1', 'p1'), task('t2', 'p1')]);
+    expect(api.gitCurrentBranch).toHaveBeenCalledWith('/wt/t1');
+    expect(useGit.getState().branchByTask).toEqual({ t1: 'renamed', t2: null });
+  });
+
+  it('keeps the last known branch when a lookup fails', async () => {
+    api.gitCurrentBranch = vi
+      .fn()
+      .mockResolvedValueOnce({ success: true, data: 'renamed' })
+      .mockResolvedValue({ success: false, error: 'gone' });
+    const { useGit } = await freshStores();
+    await useGit.getState().detectProjectPrs(proj('p1'), [task('t1', 'p1')]);
+    await useGit.getState().detectProjectPrs(proj('p1'), [task('t1', 'p1')]);
+    expect(useGit.getState().branchByTask.t1).toBe('renamed');
+  });
+
+  it("refreshGitStatus records the active task's branch from its status", async () => {
+    api.gitGetStatus = vi.fn(() =>
+      Promise.resolve({ success: true, data: status({ branch: 'switched' }) }),
+    );
+    const { useGit, useProjects } = await freshStores();
+    seedActiveTask(useProjects, task('t1', 'p1'));
+    await useGit.getState().refreshGitStatus('/wt/t1');
+    // A status for another checkout says nothing about the active task.
+    await useGit.getState().refreshGitStatus('/elsewhere');
+    expect(useGit.getState().branchByTask).toEqual({ t1: 'switched' });
   });
 });

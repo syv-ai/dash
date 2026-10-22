@@ -1,3 +1,4 @@
+import { EventEmitter } from 'events';
 import type { WebContents } from 'electron';
 import type { ActivityState, ActivityInfo, ToolActivity, ActivityError } from '@shared/types';
 import type { SupervisorActivity } from './supervisorSession';
@@ -73,6 +74,15 @@ function buildToolLabel(toolName: string, toolInput: Record<string, unknown> | u
       return toolName;
   }
 }
+
+/**
+ * Main-side listeners for activity changes (the control API's `tasks.wait`).
+ * `'change'` carries the full `getAll()` map after every state change,
+ * whether or not a renderer is attached.
+ */
+export const activityEvents = new EventEmitter();
+// Every pending tasks.wait holds one listener.
+activityEvents.setMaxListeners(0);
 
 class ActivityMonitorImpl {
   private activities = new Map<string, PtyActivity>();
@@ -336,9 +346,11 @@ class ActivityMonitorImpl {
   }
 
   private emitAll(): void {
+    const all = this.getAll();
     if (this.sender && !this.sender.isDestroyed()) {
-      this.sender.send('pty:activity', this.getAll());
+      this.sender.send('pty:activity', all);
     }
+    activityEvents.emit('change', all);
   }
 }
 

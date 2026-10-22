@@ -15,10 +15,21 @@ export interface GithubApi {
     issueNumber: number,
     branch: string,
   ) => Promise<IpcResponse<void>>;
-  githubGetPrForBranch: (
+  /** The PRs from the branch checked out at `cwd`, newest first, current ones flagged. */
+  githubGetPrsForCheckout: (
     cwd: string,
-    branch: string,
-  ) => Promise<IpcResponse<PullRequestInfo | null>>;
+    defaultBranch: string,
+  ) => Promise<IpcResponse<PullRequestInfo[]>>;
+  /**
+   * "Fix CI": write PR `number`'s failed checks to a Markdown file in the
+   * checkout at `cwd`; the prompt pointing at it, or null when none failed.
+   */
+  githubWriteCiReport: (args: {
+    cwd: string;
+    number: number;
+    url: string;
+    headSha?: string;
+  }) => Promise<IpcResponse<{ prompt: string; file: string } | null>>;
   githubListPrs: (cwd: string) => Promise<IpcResponse<PullRequest[]>>;
   githubPreparePrBranch: (
     cwd: string,

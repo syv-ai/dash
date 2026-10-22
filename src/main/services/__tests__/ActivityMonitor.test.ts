@@ -4,7 +4,7 @@ vi.mock('child_process', () => ({ execFile: vi.fn() }));
 vi.mock('util', () => ({ promisify: () => vi.fn().mockResolvedValue({ stdout: '' }) }));
 vi.mock('electron', () => ({ default: {} }));
 
-import { activityMonitor } from '../ActivityMonitor';
+import { activityMonitor, activityEvents } from '../ActivityMonitor';
 
 const mockSender = {
   send: vi.fn(),
@@ -386,5 +386,22 @@ describe('ActivityMonitor — Escape interrupt (setInterrupted)', () => {
     activityMonitor.setInterrupted('t1');
     activityMonitor.setToolStart('t1', 'Read', { file_path: '/x' });
     expect(activityMonitor.getAll()['t1']!.state).toBe('busy');
+  });
+});
+
+describe('activityEvents', () => {
+  it('emits the full map on every change, also with no renderer attached', () => {
+    (activityMonitor as unknown as { sender: null }).sender = null;
+    const seen: Array<Record<string, { state: string }>> = [];
+    const onChange = (all: Record<string, { state: string }>) => seen.push(all);
+    activityEvents.on('change', onChange);
+    try {
+      activityMonitor.register('t1', 1);
+      activityMonitor.setBusy('t1');
+      activityMonitor.setBusy('t1'); // no change, no event
+      expect(seen.map((all) => all['t1']?.state)).toEqual(['idle', 'busy']);
+    } finally {
+      activityEvents.off('change', onChange);
+    }
   });
 });

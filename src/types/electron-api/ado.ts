@@ -23,11 +23,13 @@ export interface AdoApi {
     branch: string,
     projectId?: string,
   ) => Promise<IpcResponse<void>>;
-  adoGetPrForBranch: (
-    branch: string,
-    gitRemote: string,
-    projectId?: string,
-  ) => Promise<IpcResponse<PullRequestInfo | null>>;
+  /** The PRs from the branch checked out at `cwd`, newest first, current ones flagged. */
+  adoGetPrsForCheckout: (args: {
+    cwd: string;
+    defaultBranch: string;
+    gitRemote: string;
+    projectId?: string;
+  }) => Promise<IpcResponse<PullRequestInfo[]>>;
   adoListPrs: (gitRemote: string, projectId?: string) => Promise<IpcResponse<PullRequest[]>>;
   adoPreparePrBranch: (
     cwd: string,

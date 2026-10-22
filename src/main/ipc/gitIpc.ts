@@ -296,6 +296,15 @@ export function registerGitIpc(): void {
     },
   );
 
+  ipcMain.handle('git:currentBranch', async (_event, cwd: string) => {
+    try {
+      parseArgs('git:currentBranch', z.string(), cwd);
+      return { success: true, data: await GitService.getBranch(cwd) };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
   ipcMain.handle('git:checkoutBranch', async (_event, args: { cwd: string; branch: string }) => {
     try {
       parseArgs('git:checkoutBranch', z.looseObject({ cwd: z.string(), branch: z.string() }), args);

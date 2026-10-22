@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildDispatchArgs,
+  buildSessionSettings,
   parseDispatchOutput,
   isDispatchFailure,
   parseUntrustedRoot,
@@ -11,12 +12,40 @@ import {
   SESSION_SLEEPING_DETAIL,
 } from '../supervisorSession';
 
+describe('buildSessionSettings', () => {
+  it('holds ultracode, the allow list and the env in one object', () => {
+    expect(
+      buildSessionSettings({
+        ultracode: true,
+        allowTools: ['Bash(dashctl tasks list:*)', 'Bash(dashctl tasks get:*)'],
+        env: { WEB_PORT: '3001' },
+        sessionStart: [{ type: 'command', command: 'echo hi' }],
+      }),
+    ).toEqual({
+      ultracode: true,
+      permissions: { allow: ['Bash(dashctl tasks list:*)', 'Bash(dashctl tasks get:*)'] },
+      env: { WEB_PORT: '3001' },
+      hooks: {
+        SessionStart: [{ matcher: '', hooks: [{ type: 'command', command: 'echo hi' }] }],
+      },
+    });
+  });
+
+  it('leaves out what is empty', () => {
+    expect(
+      buildSessionSettings({ ultracode: false, allowTools: [], env: {}, sessionStart: [] }),
+    ).toEqual({});
+  });
+});
+
 describe('buildDispatchArgs', () => {
   it('always backgrounds with --name, even on resume', () => {
     expect(buildDispatchArgs({ name: 'my task', resumeSessionId: 'abc-123' })).toEqual([
       '--bg',
       '--name',
       'my task',
+      '--permission-mode',
+      'default',
       '--resume',
       'abc-123',
     ]);
@@ -28,7 +57,7 @@ describe('buildDispatchArgs', () => {
         name: 't',
         permissionMode: 'acceptEdits',
         model: 'opus',
-        ultracode: true,
+        settingsPath: '/u/task-settings/t.json',
         prompt: 'do the thing',
       }),
     ).toEqual([
@@ -40,7 +69,8 @@ describe('buildDispatchArgs', () => {
       '--model',
       'opus',
       '--settings',
-      '{"ultracode":true}',
+      '/u/task-settings/t.json',
+      '--',
       'do the thing',
     ]);
     expect(buildDispatchArgs({ name: 't', permissionMode: 'bypassPermissions' })).toContain(
@@ -48,9 +78,22 @@ describe('buildDispatchArgs', () => {
     );
     expect(buildDispatchArgs({ name: 't', model: 'default' })).not.toContain('--model');
   });
-});
 
-describe('parseDispatchOutput', () => {
+  it("passes Dash's Default explicitly, so the user's own defaultMode (maybe bypass) never applies", () => {
+    for (const permissionMode of ['default', undefined] as const) {
+      const args = buildDispatchArgs({ name: 't', permissionMode });
+      expect(args[args.indexOf('--permission-mode') + 1]).toBe('default');
+    }
+    const bypass = buildDispatchArgs({ name: 't', permissionMode: 'bypassPermissions' });
+    expect(bypass).not.toContain('--permission-mode');
+  });
+
+  it('ends the options with -- so a prompt starting with "-" stays the prompt', () => {
+    const args = buildDispatchArgs({ name: 't', resumeSessionId: 's', prompt: '- fix the bug' });
+    expect(args.slice(-2)).toEqual(['--', '- fix the bug']);
+    expect(buildDispatchArgs({ name: 't' })).not.toContain('--');
+  });
+
   it('extracts the short job id from the backgrounded line', () => {
     const out =
       'backgrounded · 5ebbd6cc · my task\n\n  claude attach 5ebbd6cc\n  claude logs 5ebbd6cc\n';
@@ -61,6 +104,15 @@ describe('parseDispatchOutput', () => {
     expect(parseDispatchOutput('warning: x\n\x1b[2mbackgrounded\x1b[0m · deadbeef · t')).toBe(
       'deadbeef',
     );
+  });
+
+  it('reads the job id of a woken session and of a copy', () => {
+    const woke =
+      'note: woke session 7ec72810 with its saved options (--mcp-config, --name).\nbackgrounded · 7ec72810 · t\n';
+    expect(parseDispatchOutput(woke)).toBe('7ec72810');
+    const copy =
+      'note: session 7ec72810 is already running in the background, so this started a copy as 73a3165a.\nbackgrounded · 73a3165a\n';
+    expect(parseDispatchOutput(copy)).toBe('73a3165a');
   });
 
   it('returns null when the line is missing', () => {

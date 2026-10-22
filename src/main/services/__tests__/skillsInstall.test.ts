@@ -62,6 +62,16 @@ function skillsParent() {
   return path.join(tmpRoot, '.claude', 'skills');
 }
 
+/** Point Claude's config dir (global skills) at `dir`; returns the undo. */
+function useConfigDir(dir: string): () => void {
+  const original = process.env.CLAUDE_CONFIG_DIR;
+  process.env.CLAUDE_CONFIG_DIR = dir;
+  return () => {
+    if (original === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = original;
+  };
+}
+
 function setRoute(match: (url: string) => boolean, respond: () => FetchStub) {
   routes.unshift({ match, respond });
 }
@@ -698,8 +708,8 @@ describe('checkInstalled — corrupt marker surfaces probe failure', () => {
   });
 
   it('reports marker-corrupt under global scope when the global marker is bad', () => {
-    // Drive the home dir to tmpRoot so we don't touch the real user's filesystem.
-    const homeSpy = vi.spyOn(os, 'homedir').mockReturnValue(tmpRoot);
+    // Point the Claude config dir at tmpRoot so we don't touch the real user's filesystem.
+    const restore = useConfigDir(path.join(tmpRoot, '.claude'));
     try {
       const dir = path.join(tmpRoot, '.claude', 'skills', 'demo');
       mkdirSync(dir, { recursive: true });
@@ -719,7 +729,7 @@ describe('checkInstalled — corrupt marker surfaces probe failure', () => {
       expect(status.global).toBe(false);
       expect(status.probeFailures?.[0]).toEqual({ scope: 'global', code: 'marker-corrupt' });
     } finally {
-      homeSpy.mockRestore();
+      restore();
     }
   });
 });
@@ -767,8 +777,8 @@ describe('listInstalled — corrupt sentinel re-fetches and rewrites', () => {
   it('one slow/failing skill does not blank the entire installed list', async () => {
     // Two distinct catalog entries → two parallel orphans. The first errors mid-fetch;
     // the second must still complete and its row must come back bound.
-    // Drive home to tmpRoot so we don't pick up the developer's real ~/.claude/skills.
-    const homeSpy = vi.spyOn(os, 'homedir').mockReturnValue(tmpRoot);
+    // Point the Claude config dir at tmpRoot so we don't pick up the developer's real skills.
+    const restore = useConfigDir(path.join(tmpRoot, '.claude'));
     try {
       stubCatalog([
         makeRegistrySkill({ name: 'demo', path: 'skills/demo' }),
@@ -790,7 +800,7 @@ describe('listInstalled — corrupt sentinel re-fetches and rewrites', () => {
         () => ({ body: '# other content' }),
       );
 
-      // Pass tmpRoot as a project probe AND lean on the homedir mock for global probe —
+      // Pass tmpRoot as a project probe AND lean on the config dir for the global probe —
       // both rows show up but without the user's real installed skills bleeding in.
       const result = await SkillsService.listInstalled([tmpRoot]);
 
@@ -803,7 +813,7 @@ describe('listInstalled — corrupt sentinel re-fetches and rewrites', () => {
       // Source binding recorded for the one that succeeded.
       expect(getRegistryEntry(otherDir)?.source).toBeDefined();
     } finally {
-      homeSpy.mockRestore();
+      restore();
     }
   });
 });

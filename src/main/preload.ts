@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // App
@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
   clipboardWriteText: (text: string) => ipcRenderer.send('app:clipboardWriteText', text),
   clipboardReadText: () => ipcRenderer.invoke('app:clipboardReadText'),
+  clipboardHasImage: () => ipcRenderer.invoke('app:clipboardHasImage'),
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
   openInEditor: (args: { cwd: string; filePath: string; line?: number; col?: number }) =>
     ipcRenderer.invoke('app:openInEditor', args),
   openInIDE: (args: {
@@ -23,7 +25,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Database - Projects
   getProjects: () => ipcRenderer.invoke('db:getProjects'),
   saveProject: (project: unknown) => ipcRenderer.invoke('db:saveProject', project),
-  deleteProject: (id: string) => ipcRenderer.invoke('db:deleteProject', id),
+  deleteProject: (id: string, options: unknown) =>
+    ipcRenderer.invoke('db:deleteProject', id, options),
   archiveProject: (id: string) => ipcRenderer.invoke('db:archiveProject', id),
   restoreProject: (id: string) => ipcRenderer.invoke('db:restoreProject', id),
 
@@ -35,9 +38,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setupScript: string | null;
     teardownScript: string | null;
   }) => ipcRenderer.invoke('db:setTaskScripts', args),
-  deleteTask: (id: string) => ipcRenderer.invoke('db:deleteTask', id),
-  archiveTask: (id: string) => ipcRenderer.invoke('db:archiveTask', id),
-  restoreTask: (id: string) => ipcRenderer.invoke('db:restoreTask', id),
+  // Task lifecycle (TaskService in main)
+  createTask: (input: unknown) => ipcRenderer.invoke('task:create', input),
+  deleteTask: (id: string, options?: unknown) => ipcRenderer.invoke('task:delete', id, options),
+  archiveTask: (id: string) => ipcRenderer.invoke('task:archive', id),
+  restoreTask: (id: string) => ipcRenderer.invoke('task:restore', id),
+  setTaskDashAccess: (input: unknown) => ipcRenderer.invoke('task:setDashAccess', input),
+  onTasksChanged: (callback: (data: { projectId: string }) => void) => {
+    const handler = (_event: unknown, data: { projectId: string }) => callback(data);
+    ipcRenderer.on('tasks:changed', handler);
+    return () => {
+      ipcRenderer.removeListener('tasks:changed', handler);
+    };
+  },
   reorderTasks: (projectId: string, orderedTaskIds: string[]) =>
     ipcRenderer.invoke('db:reorderTasks', { projectId, orderedTaskIds }),
 
@@ -73,13 +86,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // Worktree
-  worktreeCreate: (args: unknown) => ipcRenderer.invoke('worktree:create', args),
-  worktreeRemove: (args: unknown) => ipcRenderer.invoke('worktree:remove', args),
-  worktreeClaimReserve: (args: unknown) => ipcRenderer.invoke('worktree:claimReserve', args),
-  worktreeCreateFromExisting: (args: unknown) =>
-    ipcRenderer.invoke('worktree:createFromExisting', args),
-  worktreeEnsureReserve: (args: unknown) => ipcRenderer.invoke('worktree:ensureReserve', args),
-  worktreeHasReserve: (projectId: string) => ipcRenderer.invoke('worktree:hasReserve', projectId),
   worktreeMigrationPlan: () => ipcRenderer.invoke('worktree:migrationPlan'),
   worktreeMigrate: (args: unknown) => ipcRenderer.invoke('worktree:migrate', args),
 
@@ -158,9 +164,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener(`pty:data:${id}`, handler);
     };
   },
-  onPtyExit: (id: string, callback: (info: { exitCode: number; signal?: number }) => void) => {
-    const handler = (_event: unknown, info: { exitCode: number; signal?: number }) =>
-      callback(info);
+  onPtyExit: (
+    id: string,
+    callback: (info: { exitCode: number; signal?: number; reattach?: boolean }) => void,
+  ) => {
+    const handler = (
+      _event: unknown,
+      info: { exitCode: number; signal?: number; reattach?: boolean },
+    ) => callback(info);
     ipcRenderer.on(`pty:exit:${id}`, handler);
     return () => {
       ipcRenderer.removeListener(`pty:exit:${id}`, handler);
@@ -231,13 +242,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('app:beforeQuit', handler);
     };
   },
-  onFocusTask: (callback: (taskId: string) => void) => {
-    const handler = (_event: unknown, taskId: string) => callback(taskId);
+  onFocusTask: (callback: (target: { taskId: string; projectId?: string }) => void) => {
+    const handler = (_event: unknown, target: { taskId: string; projectId?: string }) =>
+      callback(target);
     ipcRenderer.on('app:focusTask', handler);
     return () => {
       ipcRenderer.removeListener('app:focusTask', handler);
     };
   },
+  onOrchestratorAccessRequest: (callback: (request: { id: string; open: boolean }) => void) => {
+    const opened = (_event: unknown, r: { id: string }) => callback({ id: r.id, open: true });
+    const ended = (_event: unknown, r: { id: string }) => callback({ id: r.id, open: false });
+    ipcRenderer.on('app:orchestratorAccessRequest', opened);
+    ipcRenderer.on('app:orchestratorAccessRequestEnded', ended);
+    return () => {
+      ipcRenderer.removeListener('app:orchestratorAccessRequest', opened);
+      ipcRenderer.removeListener('app:orchestratorAccessRequestEnded', ended);
+    };
+  },
+  answerOrchestratorAccess: (answer: { id: string; allowed: boolean }) =>
+    ipcRenderer.send('app:orchestratorAccessAnswer', answer),
   onToast: (callback: (data: { message: string; url?: string }) => void) => {
     const handler = (_event: unknown, data: { message: string; url?: string }) => callback(data);
     ipcRenderer.on('app:toast', handler);
@@ -257,6 +281,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setUltracode: (enabled: boolean) => ipcRenderer.send('app:setUltracode', enabled),
   setStopSessionsOnQuit: (enabled: boolean) =>
     ipcRenderer.send('app:setStopSessionsOnQuit', enabled),
+  setIsDark: (isDark: boolean) => ipcRenderer.send('app:setIsDark', isDark),
+  setOrchestratorAccess: (enabled: boolean) =>
+    ipcRenderer.send('app:setOrchestratorAccess', enabled),
+  getControlInfo: () => ipcRenderer.invoke('app:getControlInfo'),
   getClaudeAttribution: (projectPath?: string) =>
     ipcRenderer.invoke('app:getClaudeAttribution', projectPath),
 
@@ -270,11 +298,49 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('github:post-branch-comment', { cwd, issueNumber, branch }),
   githubLinkBranch: (cwd: string, issueNumber: number, branch: string) =>
     ipcRenderer.invoke('github:link-branch', { cwd, issueNumber, branch }),
-  githubGetPrForBranch: (cwd: string, branch: string) =>
-    ipcRenderer.invoke('github:get-pr-for-branch', { cwd, branch }),
+  githubGetPrsForCheckout: (cwd: string, defaultBranch: string) =>
+    ipcRenderer.invoke('github:get-prs-for-checkout', { cwd, defaultBranch }),
+  githubWriteCiReport: (args: { cwd: string; number: number; url: string; headSha?: string }) =>
+    ipcRenderer.invoke('github:write-ci-report', args),
   githubListPrs: (cwd: string) => ipcRenderer.invoke('github:list-prs', { cwd }),
   githubPreparePrBranch: (cwd: string, prNumber: number, headRefName: string) =>
     ipcRenderer.invoke('github:prepare-pr-branch', { cwd, prNumber, headRefName }),
+
+  // PR review (GitHub or Azure DevOps, picked by main from the project's remote)
+  prReviewList: (args: { projectId: string; cwd: string }) =>
+    ipcRenderer.invoke('prReview:list', args),
+  prReviewLoad: (args: { projectId: string; cwd: string; number: number }) =>
+    ipcRenderer.invoke('prReview:load', args),
+  prReviewSetResolved: (args: {
+    projectId: string;
+    cwd: string;
+    number: number;
+    threadId: string;
+    resolved: boolean;
+  }) => ipcRenderer.invoke('prReview:setResolved', args),
+  prReviewSubmit: (args: {
+    projectId: string;
+    cwd: string;
+    taskId: string;
+    number: number;
+    verdict: string;
+    body: string;
+  }) => ipcRenderer.invoke('prReview:submit', args),
+  prReviewInReview: (args: { taskId: string; provider: string; number: number }) =>
+    ipcRenderer.invoke('prReview:inReview', args),
+  prReviewSetInReview: (args: { taskId: string; provider: string; number: number; on: boolean }) =>
+    ipcRenderer.invoke('prReview:setInReview', args),
+  prReviewGetSummary: (args: { taskId: string; provider: string; number: number }) =>
+    ipcRenderer.invoke('prReview:getSummary', args),
+  prReviewSetSummary: (args: { taskId: string; provider: string; number: number; body: string }) =>
+    ipcRenderer.invoke('prReview:setSummary', args),
+  onDiffCommentsChanged: (callback: (data: { taskId: string }) => void) => {
+    const handler = (_event: unknown, data: { taskId: string }) => callback(data);
+    ipcRenderer.on('diffComments:changed', handler);
+    return () => {
+      ipcRenderer.removeListener('diffComments:changed', handler);
+    };
+  },
 
   // Azure DevOps
   adoCheckConfigured: (projectId?: string) =>
@@ -290,8 +356,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('ado:get-work-item', { id, projectId }),
   adoPostBranchComment: (workItemId: number, branch: string, projectId?: string) =>
     ipcRenderer.invoke('ado:post-branch-comment', { workItemId, branch, projectId }),
-  adoGetPrForBranch: (branch: string, gitRemote: string, projectId?: string) =>
-    ipcRenderer.invoke('ado:get-pr-for-branch', { branch, gitRemote, projectId }),
+  adoGetPrsForCheckout: (args: {
+    cwd: string;
+    defaultBranch: string;
+    gitRemote: string;
+    projectId?: string;
+  }) => ipcRenderer.invoke('ado:get-prs-for-checkout', args),
   adoListPrs: (gitRemote: string, projectId?: string) =>
     ipcRenderer.invoke('ado:list-prs', { gitRemote, projectId }),
   adoPreparePrBranch: (cwd: string, branch: string) =>
@@ -303,8 +373,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   detectClaude: (args?: { refresh?: boolean }) => ipcRenderer.invoke('app:detectClaude', args),
 
   // Workspace config (.dash/config.json)
-  readWorkspaceConfig: (projectPath: string) =>
-    ipcRenderer.invoke('workspaceConfig:read', projectPath),
+  readWorkspaceConfig: (projectPath: string, opts?: { shared?: boolean }) =>
+    ipcRenderer.invoke('workspaceConfig:read', projectPath, opts),
   writeWorkspaceConfig: (args: { projectPath: string; config: unknown }) =>
     ipcRenderer.invoke('workspaceConfig:write', args),
 
@@ -374,6 +444,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   gitPush: (cwd: string) => ipcRenderer.invoke('git:push', cwd),
   gitRemoteBranchExists: (args: { cwd: string; branch: string }) =>
     ipcRenderer.invoke('git:remoteBranchExists', args),
+  gitCurrentBranch: (cwd: string) => ipcRenderer.invoke('git:currentBranch', cwd),
 
   gitCheckoutBranch: (args: { cwd: string; branch: string }) =>
     ipcRenderer.invoke('git:checkoutBranch', args),
@@ -404,7 +475,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Diff editor
   editorReadWorking: (args: { cwd: string; filePath: string; ref: 'HEAD' | 'index' }) =>
     ipcRenderer.invoke('editor:readWorking', args),
-  editorReadCommit: (args: { cwd: string; filePath: string; hash: string }) =>
+  editorReadCommit: (args: { cwd: string; filePath: string; hash: string; base?: string }) =>
     ipcRenderer.invoke('editor:readCommit', args),
   editorWriteWorking: (args: {
     cwd: string;
@@ -415,7 +486,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }) => ipcRenderer.invoke('editor:writeWorking', args),
   editorListCommits: (args: { cwd: string; limit?: number }) =>
     ipcRenderer.invoke('editor:listCommits', args),
-  editorListFilesInCommit: (args: { cwd: string; hash: string }) =>
+  editorListFilesInCommit: (args: { cwd: string; hash: string; base?: string }) =>
     ipcRenderer.invoke('editor:listFilesInCommit', args),
   editorListRepoFiles: (args: {
     cwd: string;

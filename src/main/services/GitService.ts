@@ -1,7 +1,8 @@
 import { execFile, spawn } from 'child_process';
 import { createParser, type ParserEvent } from './preCommitParser';
+import { withExcludeEntry } from './gitExclude';
 import { unlinkSync, promises as fsPromises } from 'fs';
-import { join } from 'path';
+import { isAbsolute, join } from 'path';
 import { promisify } from 'util';
 import type {
   FileChange,
@@ -276,7 +277,8 @@ export class GitService {
         [
           'branch',
           '-r',
-          '--format=%(refname:short)\t%(objectname:short)\t%(committerdate:relative)',
+          // Full refnames: git shortens origin/HEAD to a bare `origin`.
+          '--format=%(refname)\t%(objectname:short)\t%(committerdate:relative)',
           '--sort=-committerdate',
         ],
         { cwd, timeout: 15000 },
@@ -284,8 +286,9 @@ export class GitService {
 
       const branches: BranchInfo[] = [];
       for (const line of stdout.split('\n').filter(Boolean)) {
-        const [ref, shortHash, ...dateParts] = line.split('\t');
-        if (!ref || ref === 'origin/HEAD') continue;
+        const [refname, shortHash, ...dateParts] = line.split('\t');
+        const ref = refname?.replace(/^refs\/remotes\//, '');
+        if (!ref || ref.endsWith('/HEAD')) continue;
         const name = ref.replace(/^origin\//, '');
         branches.push({
           name,
@@ -361,6 +364,37 @@ export class GitService {
       return out.trim() || null;
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * Add `entry` to the repository's private `.git/info/exclude` (shared by all
+   * of its worktrees). Idempotent; throws when `cwd` is not in a repository.
+   */
+  static async ensureExcluded(cwd: string, entry: string): Promise<void> {
+    const common = (await git(cwd, ['rev-parse', '--git-common-dir'])).trim();
+    const gitDir = isAbsolute(common) ? common : join(cwd, common);
+    const infoDir = join(gitDir, 'info');
+    await fsPromises.mkdir(infoDir, { recursive: true });
+    const excludePath = join(infoDir, 'exclude');
+    const existing = await fsPromises.readFile(excludePath, 'utf-8').catch(() => '');
+    const next = withExcludeEntry(existing, entry);
+    if (next !== null) await fsPromises.writeFile(excludePath, next, 'utf-8');
+  }
+
+  /**
+   * Whether the checkout at `cwd` has commits on top of `sha` (a PR's last
+   * commit): `sha` is a strict ancestor of HEAD. False when HEAD is `sha`,
+   * behind it, elsewhere, or when `sha` isn't in the local repo.
+   */
+  static async hasMovedPast(cwd: string, sha: string): Promise<boolean> {
+    try {
+      const head = (await git(cwd, ['rev-parse', 'HEAD'])).trim();
+      if (head === sha) return false;
+      await git(cwd, ['merge-base', '--is-ancestor', sha, 'HEAD']);
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -787,8 +821,13 @@ export class GitService {
    * and a console.error log for debugging.
    */
   static async checkoutBranch(cwd: string, branch: string): Promise<void> {
+    // `<branch> --` keeps git from reading the name as a pathspec (`.` would
+    // discard unstaged changes); a leading '-' would still parse as an option.
+    if (!branch || branch.startsWith('-')) {
+      throw new Error(`Invalid branch name: '${branch}'`);
+    }
     try {
-      await git(cwd, ['checkout', branch]);
+      await git(cwd, ['checkout', branch, '--']);
     } catch (error: unknown) {
       const stderr = gitStderr(error);
       console.error('[GitService.checkoutBranch] failed', { branch, stderr });
@@ -806,7 +845,7 @@ export class GitService {
           error,
         );
       }
-      if (/pathspec .* did not match/i.test(stderr)) {
+      if (/pathspec .* did not match/i.test(stderr) || /invalid reference/i.test(stderr)) {
         throw wrapGitError(`Branch '${branch}' not found`, error);
       }
       throw error;
@@ -867,6 +906,27 @@ export class GitService {
     }
   }
 
+  /**
+   * Whether `branch` is a valid branch name that exists locally or on origin
+   * (what checkoutBranch and an existing-branch worktree can use).
+   */
+  static async branchExists(cwd: string, branch: string): Promise<boolean> {
+    try {
+      await git(cwd, ['check-ref-format', '--branch', branch]);
+    } catch {
+      return false;
+    }
+    for (const ref of [`refs/heads/${branch}`, `refs/remotes/origin/${branch}`]) {
+      try {
+        await git(cwd, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
+        return true;
+      } catch {
+        // Not this one.
+      }
+    }
+    return false;
+  }
+
   static async remoteBranchExists(cwd: string, branch: string): Promise<boolean> {
     try {
       const output = await git(cwd, ['ls-remote', '--heads', 'origin', branch]);
@@ -881,7 +941,6 @@ export class GitService {
   static async getCommitGraph(cwd: string, limit = 150, skip = 0): Promise<CommitGraphData> {
     const args = [
       'log',
-      '--exclude=refs/heads/_reserve/*',
       '--all',
       '--topo-order',
       `--max-count=${limit}`,
@@ -990,7 +1049,7 @@ export class GitService {
         }
         return { name: trimmed, type: 'local' as const };
       })
-      .filter((r) => !r.name.includes('_reserve/') && r.name !== 'origin/HEAD');
+      .filter((r) => r.name !== 'origin/HEAD');
   }
 
   private static assignLanes(commits: CommitNode[]): GraphCommit[] {

@@ -1,6 +1,7 @@
 import { ipcMain, dialog, app, shell, BrowserWindow, Notification, clipboard } from 'electron';
 import { z } from 'zod';
 import { parseArgs, parseArgsSafe, errorResponse, ipcError } from './validate';
+import { claudeUserSettingsFile } from '../utils/claudePaths';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { existsSync, readFileSync } from 'fs';
@@ -210,6 +211,9 @@ export function registerAppIpc(): void {
   ipcMain.handle('app:clipboardReadText', () => {
     return clipboard.readText();
   });
+  ipcMain.handle('app:clipboardHasImage', () => {
+    return clipboard.availableFormats().some((f) => f.startsWith('image/'));
+  });
 
   ipcMain.handle('app:showOpenDialog', async () => {
     try {
@@ -345,7 +349,7 @@ export function registerAppIpc(): void {
         }
 
         // Fall back to global settings
-        const globalSettings = join(process.env.HOME || homedir(), '.claude', 'settings.json');
+        const globalSettings = claudeUserSettingsFile();
         if (existsSync(globalSettings)) {
           const parsed = JSON.parse(readFileSync(globalSettings, 'utf-8'));
           if (parsed?.attribution?.commit !== undefined) {
@@ -416,6 +420,41 @@ export function registerAppIpc(): void {
         console.error('[app:setStopSessionsOnQuit] Failed:', err);
       }
     })();
+  });
+
+  ipcMain.on('app:setIsDark', (_event, isDark: boolean) => {
+    const v = parseArgsSafe('app:setIsDark', z.boolean(), isDark);
+    if (v === undefined) return;
+    void (async () => {
+      try {
+        const { setAppIsDark } = await import('../services/ptyManager');
+        setAppIsDark(v);
+      } catch (err) {
+        console.error('[app:setIsDark] Failed:', err);
+      }
+    })();
+  });
+
+  ipcMain.on('app:setOrchestratorAccess', (_event, enabled: boolean) => {
+    const v = parseArgsSafe('app:setOrchestratorAccess', z.boolean(), enabled);
+    if (v === undefined) return;
+    void (async () => {
+      try {
+        const { setOrchestratorAccess } = await import('../control');
+        setOrchestratorAccess(v);
+      } catch (err) {
+        console.error('[app:setOrchestratorAccess] Failed:', err);
+      }
+    })();
+  });
+
+  ipcMain.handle('app:getControlInfo', async () => {
+    try {
+      const { controlInfo } = await import('../control');
+      return { success: true, data: controlInfo() };
+    } catch (error) {
+      return errorResponse(error);
+    }
   });
 
   ipcMain.on('app:setUltracode', (_event, enabled: boolean) => {

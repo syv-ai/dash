@@ -1,16 +1,9 @@
 import { create } from 'zustand';
 import { toast } from 'sonner';
 import { sessionRegistry } from '../terminal/SessionRegistry';
-import type {
-  Project,
-  Task,
-  BranchInfo,
-  LinkedGithubIssue,
-  LinkedAdoWorkItem,
-} from '../../shared/types';
+import type { Project, Task, BranchInfo, DeleteTaskOptions } from '../../shared/types';
 import type { DeleteProjectOptions } from '../components/project/DeleteProjectModal';
 import type { CreateTaskOptions } from '../components/task/TaskModal';
-import { formatTaskContextPrompt } from '../../shared/taskContext';
 import { playPeonSound } from '../sounds';
 import { useSettings } from './settingsStore';
 import { notifyContextInjected } from './taskToasts';
@@ -66,29 +59,14 @@ export interface ProjectsActions {
   restoreTask: (id: string) => Promise<void>;
   closeTask: (id: string) => Promise<void>;
   updateTask: (taskItem: Task, patch: Partial<Task>) => Promise<Task | null>;
-  deleteTask: (
-    taskItem: Task,
-    options?: {
-      deleteWorktreeDir: boolean;
-      deleteLocalBranch: boolean;
-      deleteRemoteBranch: boolean;
-    },
-  ) => Promise<void>;
+  deleteTask: (taskItem: Task, options?: DeleteTaskOptions) => Promise<void>;
   deleteProject: (project: Project, options: DeleteProjectOptions) => Promise<void>;
   archiveProject: (id: string) => Promise<void>;
   restoreProject: (id: string) => Promise<void>;
   createTask: (options: CreateTaskOptions, projectId?: string) => Promise<boolean>;
-}
-
-/** Reload tasks for whichever project currently owns `taskId`. */
-async function reloadOwningProject(taskId: string) {
-  const { tasksByProject } = useProjects.getState();
-  for (const [projectId, tasks] of Object.entries(tasksByProject)) {
-    if (tasks.some((t) => t.id === taskId)) {
-      await useProjects.getState().loadTasks(projectId);
-      return;
-    }
-  }
+  /** Turn a task's Dash access on or off. A running session restarts so its
+   *  settings file gains or drops dashctl; returns the updated task. */
+  setDashAccess: (taskItem: Task, enabled: boolean, running: boolean) => Promise<Task | null>;
 }
 
 /** Dispose the Claude session + shell sessions for a task. */
@@ -96,6 +74,27 @@ function disposeTaskSessions(taskId: string) {
   void sessionRegistry.dispose(taskId);
   void sessionRegistry.dispose(`shell:${taskId}`);
   void sessionRegistry.disposeByPrefix(`shell:${taskId}:`);
+}
+
+/** Per project, the latest loadTasks call; an older response that lands later is stale. */
+const taskLoadSeq = new Map<string, number>();
+
+/**
+ * UI cleanup for a task main deleted (from the dialog or the control API):
+ * every terminal session, its service tabs (main killed their PTYs), the
+ * snapshot so a new task in the same cwd starts fresh, and the selection.
+ */
+function forgetDeletedTask(taskId: string) {
+  disposeTaskSessions(taskId);
+  void sessionRegistry.disposeByPrefix(`service:${taskId}:`);
+  void window.electronAPI.ptyClearSnapshot(taskId);
+  if (useProjects.getState().activeTaskId === taskId) useProjects.getState().setActiveTask(null);
+}
+
+/** UI cleanup for a task main archived: its terminal sessions and service tabs. */
+function forgetArchivedTask(taskId: string) {
+  disposeTaskSessions(taskId);
+  void sessionRegistry.disposeByPrefix(`service:${taskId}:`);
 }
 
 /** Sort projects by the saved projectOrder, pruning stale ids from storage. */
@@ -184,9 +183,23 @@ export const useProjects = create<ProjectsStore>((set) => ({
     }
   },
   loadTasks: async (projectId) => {
+    const seq = (taskLoadSeq.get(projectId) ?? 0) + 1;
+    taskLoadSeq.set(projectId, seq);
     const resp = await window.electronAPI.getTasks(projectId);
+    // A stale list would read a task created since as deleted.
+    if (taskLoadSeq.get(projectId) !== seq) return;
     if (resp.success && resp.data) {
+      // The list holds archived tasks too, so a task that left it was deleted.
+      const kept = new Set(resp.data.map((t) => t.id));
+      const previous = useProjects.getState().tasksByProject[projectId] ?? [];
+      const removed = previous.filter((t) => !kept.has(t.id));
+      // Main ended a newly archived task's terminals (from the sidebar or the
+      // control API); drop their sessions so a restore starts fresh ones.
+      const wasActive = new Set(previous.filter((t) => !t.archivedAt).map((t) => t.id));
+      const archived = resp.data.filter((t) => t.archivedAt && wasActive.has(t.id));
       set((s) => ({ tasksByProject: { ...s.tasksByProject, [projectId]: resp.data! } }));
+      for (const t of removed) forgetDeletedTask(t.id);
+      for (const t of archived) forgetArchivedTask(t.id);
     }
   },
   reorderProjects: (reordered) => {
@@ -215,13 +228,13 @@ export const useProjects = create<ProjectsStore>((set) => ({
       await useProjects.getState().loadTasks(projectId);
     }
   },
+  // Archive, restore, delete and the Dash-access flag reload the task list
+  // through main's `tasks:changed` push (App.tsx), not here.
   archiveTask: async (id) => {
     await window.electronAPI.archiveTask(id);
-    await reloadOwningProject(id);
   },
   restoreTask: async (id) => {
     await window.electronAPI.restoreTask(id);
-    await reloadOwningProject(id);
   },
   closeTask: async (id) => {
     disposeTaskSessions(id);
@@ -253,63 +266,34 @@ export const useProjects = create<ProjectsStore>((set) => ({
     return resp.data;
   },
   deleteTask: async (taskItem, options) => {
-    if (taskItem.useWorktree) {
-      const project = useProjects.getState().projects.find((p) => p.id === taskItem.projectId);
-      if (project) {
-        await window.electronAPI.worktreeRemove({
-          projectPath: project.path,
-          worktreePath: taskItem.path,
-          branch: taskItem.branch,
-          options: {
-            ...(options
-              ? {
-                  deleteWorktreeDir: options.deleteWorktreeDir,
-                  deleteLocalBranch: options.deleteLocalBranch && taskItem.branchCreatedByDash,
-                  deleteRemoteBranch: options.deleteRemoteBranch && taskItem.branchCreatedByDash,
-                }
-              : {}),
-            teardownScript: taskItem.teardownScript,
-          },
-        });
-      }
+    // Main removes the worktree (as the dialog asked; branches only when Dash
+    // created them), the supervisor session and the row.
+    const resp = await window.electronAPI.deleteTask(taskItem.id, options);
+    if (!resp.success) {
+      toast.error(resp.error || 'Failed to delete task');
+      return;
     }
-    // Clean up all terminal sessions, then kill PTY + clear snapshot so a new
-    // task in the same cwd starts fresh.
-    disposeTaskSessions(taskItem.id);
-    void window.electronAPI.ptyKill(taskItem.id);
-    void window.electronAPI.ptyClearSnapshot(taskItem.id);
-    await window.electronAPI.deleteTask(taskItem.id);
-    if (useProjects.getState().activeTaskId === taskItem.id) {
-      useProjects.getState().setActiveTask(null);
-    }
-    await useProjects.getState().loadTasks(taskItem.projectId);
+    forgetDeletedTask(taskItem.id);
   },
   deleteProject: async (project, options) => {
-    // An archived project's tasks aren't loaded; fetch them so their
-    // worktrees are cleaned up too.
+    // Main deletes each task as a single delete would (session, terminals,
+    // worktree); an archived project's tasks aren't loaded here, so fetch
+    // them for the pane cleanup.
     let projectTasks = useProjects.getState().tasksByProject[project.id];
     if (!projectTasks) {
       const resp = await window.electronAPI.getTasks(project.id);
       projectTasks = resp.success && resp.data ? resp.data : [];
     }
-    for (const t of projectTasks) {
-      if (t.useWorktree) {
-        await window.electronAPI.worktreeRemove({
-          projectPath: project.path,
-          worktreePath: t.path,
-          branch: t.branch,
-          options: {
-            deleteWorktreeDir: options.deleteWorktreeDirs,
-            deleteLocalBranch: options.deleteLocalBranches && t.branchCreatedByDash,
-            deleteRemoteBranch: options.deleteRemoteBranches && t.branchCreatedByDash,
-            teardownScript: t.teardownScript,
-          },
-        });
-      }
-      void sessionRegistry.dispose(`shell:${t.id}`);
-      void sessionRegistry.disposeByPrefix(`shell:${t.id}:`);
+    const resp = await window.electronAPI.deleteProject(project.id, {
+      deleteWorktreeDir: options.deleteWorktreeDirs,
+      deleteLocalBranch: options.deleteLocalBranches,
+      deleteRemoteBranch: options.deleteRemoteBranches,
+    });
+    if (!resp.success) {
+      toast.error(resp.error || 'Failed to delete project');
+      return;
     }
-    await window.electronAPI.deleteProject(project.id);
+    for (const t of projectTasks) forgetDeletedTask(t.id);
     if (useProjects.getState().activeProjectId === project.id) {
       useProjects.getState().setActiveProject(null);
       useProjects.getState().setActiveTask(null);
@@ -346,190 +330,47 @@ export const useProjects = create<ProjectsStore>((set) => ({
     await useProjects.getState().loadProjects();
   },
   createTask: async (options, projectId) => {
-    const { name, permissionMode, model, linkedItems, contextPrompt, setupScript, teardownScript } =
-      options;
     const targetProjectId = projectId ?? useProjects.getState().activeProjectId;
-    const targetProject = useProjects.getState().projects.find((p) => p.id === targetProjectId);
-    if (!targetProject) return false;
+    if (!targetProjectId) return false;
 
     set({ isCreatingTask: true });
     try {
-      let worktreeInfo: { branch: string; path: string } | null = null;
-      const ghItems =
-        linkedItems?.filter((i): i is LinkedGithubIssue => i.provider === 'github') ?? [];
-      const adoItems =
-        linkedItems?.filter((i): i is LinkedAdoWorkItem => i.provider === 'ado') ?? [];
-      const ghIssueNumbers = ghItems.map((i) => i.id);
-
-      switch (options.kind) {
-        case 'worktree-new-branch': {
-          // New branch: try reserve pool, fall back to direct creation
-          const claimResp = await window.electronAPI.worktreeClaimReserve({
-            projectId: targetProject.id,
-            taskName: name,
-            baseRef: options.baseRef,
-            linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
-            pushRemote: options.pushRemote,
-            setupScript,
-          });
-          if (claimResp.success && claimResp.data) {
-            worktreeInfo = { branch: claimResp.data.branch, path: claimResp.data.path };
-          } else {
-            const createResp = await window.electronAPI.worktreeCreate({
-              projectPath: targetProject.path,
-              taskName: name,
-              baseRef: options.baseRef,
-              projectId: targetProject.id,
-              linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
-              pushRemote: options.pushRemote,
-              setupScript,
-            });
-            if (createResp.success && createResp.data) {
-              worktreeInfo = { branch: createResp.data.branch, path: createResp.data.path };
-            } else {
-              toast.error(createResp.error || 'Failed to create worktree');
-              return false;
-            }
-          }
-          break;
-        }
-        case 'worktree-existing': {
-          // Fast-forward the local branch to remote first, when requested, so the
-          // worktree is cut from the up-to-date tip. Done before creation so a
-          // diverged branch aborts without leaving a half-built worktree.
-          if (options.updateFromRemote) {
-            const ffResp = await window.electronAPI.gitUpdateBranchToRemote({
-              cwd: targetProject.path,
-              branch: options.branch,
-            });
-            if (!ffResp.success) {
-              toast.error(ffResp.error || 'Failed to update branch from remote');
-              return false;
-            }
-          }
-          const createResp = await window.electronAPI.worktreeCreateFromExisting({
-            projectPath: targetProject.path,
-            taskName: name,
-            branch: options.branch,
-            projectId: targetProject.id,
-            linkedIssueNumbers: ghIssueNumbers.length > 0 ? ghIssueNumbers : undefined,
-            setupScript,
-          });
-          if (createResp.success && createResp.data) {
-            worktreeInfo = { branch: createResp.data.branch, path: createResp.data.path };
-          } else {
-            toast.error(createResp.error || 'Failed to create worktree from existing branch');
-            return false;
-          }
-          break;
-        }
-        case 'in-place-checkout': {
-          // Fast-forward to remote before switching, when requested, so a diverged
-          // branch aborts before we touch the working tree.
-          if (options.updateFromRemote) {
-            const ffResp = await window.electronAPI.gitUpdateBranchToRemote({
-              cwd: targetProject.path,
-              branch: options.branch,
-            });
-            if (!ffResp.success) {
-              toast.error(ffResp.error || 'Failed to update branch from remote');
-              return false;
-            }
-          }
-          const checkoutResp = await window.electronAPI.gitCheckoutBranch({
-            cwd: targetProject.path,
-            branch: options.branch,
-          });
-          if (!checkoutResp.success) {
-            toast.error(checkoutResp.error || 'Failed to checkout branch');
-            return false;
-          }
-          break;
-        }
-        case 'in-place-no-git':
-          break;
-      }
-
-      const useWorktree =
-        options.kind === 'worktree-new-branch' || options.kind === 'worktree-existing';
-      const fallbackBranch =
-        options.kind === 'worktree-existing' || options.kind === 'in-place-checkout'
-          ? options.branch
-          : options.kind === 'worktree-new-branch'
-            ? options.baseRef
-            : 'main';
-      const branch = worktreeInfo?.branch ?? fallbackBranch;
-      const taskPath = worktreeInfo?.path ?? targetProject.path;
-
-      const saveResp = await window.electronAPI.saveTask({
-        projectId: targetProject.id,
-        name,
-        branch,
-        path: taskPath,
-        useWorktree,
-        permissionMode,
-        model,
-        // Only Dash-created branches should be auto-deleted on task removal.
-        branchCreatedByDash: options.kind === 'worktree-new-branch' && !!worktreeInfo,
-        linkedItems: linkedItems ?? null,
-        contextPrompt: contextPrompt ?? null,
-        setupScript: setupScript ?? null,
-        teardownScript: teardownScript ?? null,
-      });
-      if (!saveResp.success || !saveResp.data) {
-        toast.error(saveResp.error || 'Failed to save task');
+      // Main does the work (worktree, row, ports, first prompt, reserve refill,
+      // branch comments); what's left here is UI.
+      const resp = await window.electronAPI.createTask({ ...options, projectId: targetProjectId });
+      if (!resp.success || !resp.data) {
+        toast.error(resp.error || 'Failed to create task');
         return false;
       }
+      const { linkedItems } = options;
+      if (linkedItems && linkedItems.length > 0) notifyContextInjected(linkedItems);
 
-      const taskId = saveResp.data.id;
-      // Combine the user's context prompt (project default or per-task) with any
-      // linked-issue context into one prompt.
-      const hasLinkedItems = !!linkedItems && linkedItems.length > 0;
-      const prompt = [
-        contextPrompt?.trim(),
-        hasLinkedItems ? formatTaskContextPrompt(linkedItems) : '',
-      ]
-        .filter((part): part is string => !!part)
-        .join('\n\n');
-      if (prompt) {
-        // Auto-submit it as the first message so the agent actually acts on the
-        // instruction, instead of only receiving it as silent SessionStart
-        // context (which read as "lost"). Must be stashed before the terminal
-        // mounts below, hence awaited here.
-        await window.electronAPI.ptySetInitialPrompt({ taskId, prompt });
-        // Also persist it so the SessionStart hook re-injects it on /clear and
-        // /compact (which drop it from history) — the auto-submit only covers
-        // the first spawn.
-        await window.electronAPI.ptyWriteTaskContext({ taskId, prompt });
-        if (hasLinkedItems) notifyContextInjected(linkedItems);
-      }
-
-      await window.electronAPI.getOrCreateDefaultConversation(taskId);
-      await useProjects.getState().loadTasks(targetProject.id);
-      useProjects.getState().setActiveProject(targetProject.id);
-      useProjects.getState().setActiveTask(taskId);
+      // Reload here as well as on main's `tasks:changed` push: the push's
+      // reload may land after the selection below, and the new task must be
+      // in the list before it is selected.
+      await useProjects.getState().loadTasks(targetProjectId);
+      useProjects.getState().setActiveProject(targetProjectId);
+      useProjects.getState().setActiveTask(resp.data.task.id);
 
       if (useSettings.getState().notificationSound === 'peon') playPeonSound('what');
-
-      void window.electronAPI.worktreeEnsureReserve({
-        projectId: targetProject.id,
-        projectPath: targetProject.path,
-      });
-      // Fire-and-forget: post branch comment on each linked GitHub issue / ADO item.
-      for (const num of ghIssueNumbers) {
-        window.electronAPI
-          .githubPostBranchComment(targetProject.path, num, branch)
-          .catch(() => toast.error(`Failed to link branch to issue #${num}`));
-      }
-      for (const wi of adoItems) {
-        window.electronAPI
-          .adoPostBranchComment(wi.id, branch, targetProject.id)
-          .catch(() => toast.error(`Failed to link branch to work item #${wi.id}`));
-      }
       return true;
     } finally {
       set({ isCreatingTask: false });
     }
+  },
+  setDashAccess: async (taskItem, enabled, running) => {
+    const resp = await window.electronAPI.setTaskDashAccess({ taskId: taskItem.id, enabled });
+    if (!resp.success || !resp.data) {
+      toast.error(resp.error || 'Failed to change Dash access');
+      return null;
+    }
+    // Not awaited: the switch shows the new value while the session restarts.
+    if (running) {
+      void sessionRegistry.restartAgent(taskItem.id).catch((err: unknown) => {
+        toast.error(`Failed to restart the session: ${String(err)}`);
+      });
+    }
+    return resp.data;
   },
 }));
 

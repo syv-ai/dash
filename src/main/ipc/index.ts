@@ -1,5 +1,6 @@
 import { registerAppIpc } from './appIpc';
 import { registerDbIpc } from './dbIpc';
+import { registerTaskIpc } from './taskIpc';
 import { registerWorktreeIpc } from './worktreeIpc';
 import { registerPtyIpc } from './ptyIpc';
 import { registerGitIpc } from './gitIpc';
@@ -14,6 +15,7 @@ import { registerExtensionsIpc } from './extensionsIpc';
 import { registerSessionIpc } from './sessionIpc';
 import { registerEditorIpc } from './editorIpc';
 import { registerDiffCommentsIpc } from './diffCommentsIpc';
+import { registerPrReviewIpc } from './prReviewIpc';
 import { registerTokenStatsIpc } from './tokenStatsIpc';
 import { registerPortsIpc } from './portsIpc';
 import { registerDrawerTabsIpc } from './drawerTabsIpc';
@@ -24,6 +26,7 @@ import { registerMemoryIpc } from './memoryIpc';
 export function registerAllIpc(): void {
   registerAppIpc();
   registerDbIpc();
+  registerTaskIpc();
   registerWorktreeIpc();
   registerPtyIpc();
   registerGitIpc();
@@ -38,6 +41,7 @@ export function registerAllIpc(): void {
   registerSessionIpc();
   registerEditorIpc();
   registerDiffCommentsIpc();
+  registerPrReviewIpc();
   registerTokenStatsIpc();
   registerPortsIpc();
   registerDrawerTabsIpc();

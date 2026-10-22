@@ -27,7 +27,6 @@ vi.mock('child_process', async () => {
 });
 vi.mock('electron', () => ({ app: { on: vi.fn(), removeListener: vi.fn() }, powerMonitor: {} }));
 vi.mock('../claudeCli', () => ({ findClaudePath: async () => '/usr/local/bin/claude' }));
-vi.mock('../claudeEnv', () => ({ isUltracode: () => false }));
 vi.mock('../DatabaseService', () => ({
   DatabaseService: { getTasksWithSessions: () => [], setTaskSession: vi.fn() },
 }));
@@ -130,6 +129,18 @@ describe('SupervisorService verbs', () => {
     expect(verbs).toContain('stop a1');
     expect(verbs).toContain('respawn a1');
     expect(verbs).toContain('rm a1');
+  });
+
+  it('logs prints the raw terminal output of the job', async () => {
+    responses = [{ stdout: '\x1b[2J\x1b[Hhello' }];
+    expect(await supervisorService.logs('a1')).toBe('\x1b[2J\x1b[Hhello');
+    expect(calls[0]!.args).toEqual(['logs', 'a1']);
+  });
+
+  it('logs keeps what was printed when the command times out', async () => {
+    const timeout = Object.assign(new Error('timed out'), { killed: true });
+    responses = [{ error: timeout, stdout: 'partial' }];
+    expect(await supervisorService.logs('a1')).toBe('partial');
   });
 
   it('remove tolerates an already-removed job', async () => {

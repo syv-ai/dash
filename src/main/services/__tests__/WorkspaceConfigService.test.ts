@@ -103,6 +103,23 @@ describe('loadWorkspaceConfig — config.local.json array overlay', () => {
   });
 });
 
+describe('loadWorkspaceConfig — config.local.json without config.json', () => {
+  it('applies the local overlay onto an empty config', () => {
+    writeJson('.dash/config.local.json', { taskDefaults: { dashAccess: true }, setup: ['x'] });
+    expect(loadWorkspaceConfig(tmpDir)).toMatchObject({
+      taskDefaults: { dashAccess: true },
+      setup: ['x'],
+    });
+  });
+
+  it('still returns null for a malformed config.json', () => {
+    fs.mkdirSync(path.join(tmpDir, '.dash'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, '.dash/config.json'), '{ nope');
+    writeJson('.dash/config.local.json', { taskDefaults: { dashAccess: true } });
+    expect(loadWorkspaceConfig(tmpDir)).toBeNull();
+  });
+});
+
 describe('loadWorkspaceConfig — config.local.json sandwich overlay', () => {
   it('prepends "before" commands to base', () => {
     writeJson('.dash/config.json', { setup: ['pnpm install'] });

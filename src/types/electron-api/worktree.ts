@@ -1,53 +1,11 @@
 import type {
   IpcResponse,
-  WorktreeInfo,
   WorktreeMigrationProject,
   WorktreeMigrationResult,
 } from '../../shared/types';
 
-/** Git worktree lifecycle — one worktree per task, plus the pre-warmed reserve pool. */
+/** Moving pre-0.16 worktrees to the current layout (a task's own worktree goes through task IPC). */
 export interface WorktreeApi {
-  worktreeCreate: (args: {
-    projectPath: string;
-    taskName: string;
-    baseRef?: string;
-    projectId: string;
-    linkedIssueNumbers?: number[];
-    pushRemote?: boolean;
-    setupScript?: string | null;
-  }) => Promise<IpcResponse<WorktreeInfo>>;
-  worktreeRemove: (args: {
-    projectPath: string;
-    worktreePath: string;
-    branch: string;
-    options?: {
-      deleteWorktreeDir?: boolean;
-      deleteLocalBranch?: boolean;
-      deleteRemoteBranch?: boolean;
-      teardownScript?: string | null;
-    };
-  }) => Promise<IpcResponse<void>>;
-  worktreeClaimReserve: (args: {
-    projectId: string;
-    taskName: string;
-    baseRef?: string;
-    linkedIssueNumbers?: number[];
-    pushRemote?: boolean;
-    setupScript?: string | null;
-  }) => Promise<IpcResponse<WorktreeInfo>>;
-  worktreeCreateFromExisting: (args: {
-    projectPath: string;
-    taskName: string;
-    branch: string;
-    projectId: string;
-    linkedIssueNumbers?: number[];
-    setupScript?: string | null;
-  }) => Promise<IpcResponse<WorktreeInfo>>;
-  worktreeEnsureReserve: (args: {
-    projectId: string;
-    projectPath: string;
-  }) => Promise<IpcResponse<void>>;
-  worktreeHasReserve: (projectId: string) => Promise<IpcResponse<boolean>>;
   /** Tasks whose worktree still sits at the pre-0.16 `<parent>/worktrees/` location. */
   worktreeMigrationPlan: () => Promise<IpcResponse<WorktreeMigrationProject[]>>;
   /** `git worktree move` every legacy task of one project under `<repo>/.claude/worktrees/`. */

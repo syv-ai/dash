@@ -11,11 +11,19 @@ interface BranchPickerProps {
   /** When in branch view, leave the comparison (back to working tree). Shown as
    *  a row at the top of the picker. Omitted outside branch view. */
   onExit?: () => void;
+  /** The repo's default base, listed first and tagged. */
+  defaultRef?: string | null;
 }
 
 /** Compact branch list with a search input. Uses the existing
  *  gitListBranches IPC, so it reflects fetched-remote branches. */
-export function BranchPicker({ cwd, selectedRef, onSelect, onExit }: BranchPickerProps) {
+export function BranchPicker({
+  cwd,
+  selectedRef,
+  onSelect,
+  onExit,
+  defaultRef,
+}: BranchPickerProps) {
   const [branches, setBranches] = useState<BranchInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,13 +47,14 @@ export function BranchPicker({ cwd, selectedRef, onSelect, onExit }: BranchPicke
     };
   }, [cwd]);
 
-  const filtered = useMemo(
-    () => branches.filter((b) => b.name.toLowerCase().includes(search.toLowerCase())),
-    [branches, search],
-  );
+  const filtered = useMemo(() => {
+    const hits = branches.filter((b) => b.name.toLowerCase().includes(search.toLowerCase()));
+    const i = defaultRef ? hits.findIndex((b) => b.ref === defaultRef) : -1;
+    return i > 0 ? [hits[i]!, ...hits.slice(0, i), ...hits.slice(i + 1)] : hits;
+  }, [branches, search, defaultRef]);
 
   return (
-    <div className="w-[280px] max-h-[360px] flex flex-col">
+    <div className="flex flex-col min-h-0 flex-1">
       <div className="px-2.5 py-2 border-b border-border/40 flex items-center gap-1.5">
         <Search size={12} strokeWidth={1.8} className="text-muted-fade-60 shrink-0" />
         <input
@@ -88,6 +97,9 @@ export function BranchPicker({ cwd, selectedRef, onSelect, onExit }: BranchPicke
               }`}
             >
               <span className="truncate flex-1">{b.name}</span>
+              {b.ref === defaultRef && (
+                <span className="text-[10px] font-sans text-muted-fade-60">default</span>
+              )}
               <span className="text-[10px] tabular-nums text-muted-fade-50">{b.shortHash}</span>
             </button>
           );

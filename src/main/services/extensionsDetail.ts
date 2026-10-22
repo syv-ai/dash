@@ -1,6 +1,5 @@
 import { readFileSync, readdirSync, statSync } from 'fs';
 import type { Dirent } from 'fs';
-import os from 'os';
 import path from 'path';
 import type {
   ComponentDetail,
@@ -12,6 +11,7 @@ import type {
 import { parseSkillFrontmatter } from './skillFrontmatter';
 import { resolvePluginInstallPath, listPluginComponents } from './pluginComponents';
 import { SkillsService } from './SkillsService';
+import { claudeConfigDir } from '../utils/claudePaths';
 
 /** Resolve `child` under `base`, returning null if it escapes the base (path
  *  traversal via `..`, an absolute segment, or an empty result). The renderer
@@ -55,7 +55,7 @@ const EMPTY_COMPONENTS: PluginComponents = { skills: [], agents: [], commands: [
 let installedPluginsCache: { mtimeMs: number; parsed: unknown } | null = null;
 
 function readInstalledPlugins(): unknown {
-  const file = path.join(os.homedir(), '.claude', 'plugins', 'installed_plugins.json');
+  const file = path.join(claudeConfigDir(), 'plugins', 'installed_plugins.json');
   let mtimeMs: number;
   try {
     mtimeMs = statSync(file).mtimeMs;
@@ -138,9 +138,9 @@ export async function getPluginComponentDetail(
 }
 
 /** Frontmatter + raw contents + bundled files for a standalone skill under a
- *  scope's .claude/skills. */
-export function getSkillDetail(scopePath: string, skillName: string): SkillDetail {
-  const skillDir = resolveWithin(path.join(scopePath, '.claude', 'skills'), skillName);
+ *  scope's Claude dir (`<claudeDir>/skills`). */
+export function getSkillDetail(claudeDir: string, skillName: string): SkillDetail {
+  const skillDir = resolveWithin(path.join(claudeDir, 'skills'), skillName);
   if (skillDir === null) return {};
   let content: string;
   try {

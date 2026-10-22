@@ -937,6 +937,28 @@
     hsl(var(--accent) / 0.5);
 }
 
+/* A PR whose checks are running: its PrBadge icon pulses like the busy
+   session orb (same rhythm as pulse-glow, without the dot's halo). */
+.pr-ci-running {
+  animation: pr-ci-pulse 2s ease-in-out infinite;
+}
+@keyframes pr-ci-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.3;
+    transform: scale(0.85);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pr-ci-running {
+    animation: none;
+  }
+}
+
 /* Status dots with soft colored halos. `status-pulse` (busy) already animates its glow. */
 .status-dot-idle {
   background: hsl(var(--status-idle));

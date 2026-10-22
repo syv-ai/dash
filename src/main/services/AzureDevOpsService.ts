@@ -3,77 +3,125 @@ import type {
   AzureDevOpsWorkItem,
   AzureDevOpsWorkItemRef,
   PullRequest,
+  CiState,
   PullRequestInfo,
 } from '@shared/types';
 import { normalizeAdoProject } from '@shared/urls';
 import { mapAdoPrList } from './adoPr';
 import { describeAdoFailure } from './adoErrors';
+import { GitService } from './GitService';
+import { ciFromAdo, relevantPrs } from './prRelevance';
 
 const TIMEOUT_MS = 15_000;
 const API_VERSION = '7.1';
 
+/** A failed Azure DevOps call, with the HTTP status when there was a response. */
+export class AdoRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message);
+    this.name = 'AdoRequestError';
+  }
+}
+
+function authHeader(pat: string): string {
+  return 'Basic ' + Buffer.from(':' + pat).toString('base64');
+}
+
+/**
+ * URL-encode the project name for use as a path segment. ADO project names can
+ * contain spaces and other characters that are invalid in a raw URL path; left
+ * unencoded they produce a malformed URL → 404, which the pickers surface as a
+ * misleading "No results found". Repository names are already encoded at their
+ * call sites; this does the same for the project segment. Normalizing first keeps
+ * a config saved in encoded form (`AI%20og%20DT`) from being encoded twice.
+ */
+export function adoProjectSegment(config: AzureDevOpsConfig): string {
+  return encodeURIComponent(normalizeAdoProject(config.project));
+}
+
+/**
+ * One Azure DevOps REST call. A plain function (no `this`), so it can be passed
+ * around as an injectable default. Bad auth answers 401 rather than a sign-in
+ * page (`X-TFS-FedAuthRedirect: Suppress`); failures throw AdoRequestError.
+ */
+export async function adoRequest(
+  config: AzureDevOpsConfig,
+  path: string,
+  options?: { method?: string; body?: unknown; contentType?: string; apiVersion?: string },
+): Promise<unknown> {
+  const baseUrl = config.organizationUrl.replace(/\/+$/, '');
+  const separator = path.includes('?') ? '&' : '?';
+  const url = `${baseUrl}/${path}${separator}api-version=${options?.apiVersion ?? API_VERSION}`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  const context = {
+    organizationUrl: baseUrl,
+    project: normalizeAdoProject(config.project),
+    pat: config.pat,
+  };
+
+  try {
+    let resp: Response;
+    try {
+      resp = await fetch(url, {
+        method: options?.method ?? 'GET',
+        headers: {
+          Authorization: authHeader(config.pat),
+          'Content-Type': options?.contentType ?? 'application/json',
+          'X-TFS-FedAuthRedirect': 'Suppress',
+        },
+        body: options?.body ? JSON.stringify(options.body) : undefined,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      throw new AdoRequestError(describeAdoFailure({ error }, context));
+    }
+
+    // 203 and HTML answers are ADO's sign-in page, not data; resp.ok alone lets them through.
+    const contentType = resp.headers.get('content-type');
+    if (!resp.ok || resp.status === 203 || /text\/html/i.test(contentType ?? '')) {
+      const body = await resp.text().catch(() => '');
+      throw new AdoRequestError(
+        describeAdoFailure({ status: resp.status, body, contentType }, context),
+        resp.status,
+      );
+    }
+
+    return await resp.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export class AzureDevOpsService {
-  private static authHeader(pat: string): string {
-    return 'Basic ' + Buffer.from(':' + pat).toString('base64');
-  }
-
-  /**
-   * URL-encode the project name for use as a path segment. ADO project names can
-   * contain spaces and other characters that are invalid in a raw URL path; left
-   * unencoded they produce a malformed URL → 404, which the pickers surface as a
-   * misleading "No results found". Repository names are already encoded at their
-   * call sites; this does the same for the project segment. Normalizing first keeps
-   * a config saved in encoded form (`AI%20og%20DT`) from being encoded twice.
-   */
   private static proj(config: AzureDevOpsConfig): string {
-    return encodeURIComponent(normalizeAdoProject(config.project));
+    return adoProjectSegment(config);
   }
 
-  private static async request(
+  private static request(
     config: AzureDevOpsConfig,
     path: string,
-    options?: { method?: string; body?: unknown; contentType?: string },
+    options?: { method?: string; body?: unknown; contentType?: string; apiVersion?: string },
   ): Promise<unknown> {
-    const baseUrl = config.organizationUrl.replace(/\/+$/, '');
-    const separator = path.includes('?') ? '&' : '?';
-    const url = `${baseUrl}/${path}${separator}api-version=${API_VERSION}`;
+    return adoRequest(config, path, options);
+  }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-    const context = {
-      organizationUrl: baseUrl,
-      project: normalizeAdoProject(config.project),
-      pat: config.pat,
-    };
-
-    try {
-      let resp: Response;
-      try {
-        resp = await fetch(url, {
-          method: options?.method ?? 'GET',
-          headers: {
-            Authorization: this.authHeader(config.pat),
-            'Content-Type': options?.contentType ?? 'application/json',
-          },
-          body: options?.body ? JSON.stringify(options.body) : undefined,
-          signal: controller.signal,
-        });
-      } catch (error) {
-        throw new Error(describeAdoFailure({ error }, context));
-      }
-
-      // 203 and HTML answers are ADO's sign-in page, not data; resp.ok alone lets them through.
-      const contentType = resp.headers.get('content-type');
-      if (!resp.ok || resp.status === 203 || /text\/html/i.test(contentType ?? '')) {
-        const body = await resp.text().catch(() => '');
-        throw new Error(describeAdoFailure({ status: resp.status, body, contentType }, context));
-      }
-
-      return await resp.json();
-    } finally {
-      clearTimeout(timeout);
+  /** The id of the identity the PAT belongs to (what a reviewer vote is cast as). */
+  static async getMyId(config: AzureDevOpsConfig): Promise<string> {
+    // connectionData only answers on the preview version; plain 7.1 is a 400.
+    const data = (await adoRequest(config, '_apis/connectionData', {
+      apiVersion: '7.1-preview',
+    })) as { authenticatedUser?: { id?: unknown } };
+    const id = data.authenticatedUser?.id;
+    if (typeof id !== 'string' || !id || /^0{8}-0{4}-0{4}-0{4}-0{12}$/.test(id)) {
+      throw new AdoRequestError('Azure DevOps did not say who the token belongs to', 401);
     }
+    return id;
   }
 
   /** Resolves when the config works; rejects with a message saying what to fix. */
@@ -124,45 +172,93 @@ export class AzureDevOpsService {
     return items[0]!;
   }
 
-  static async getPullRequestForBranch(
+  /**
+   * The PRs from the branch checked out at `cwd`, newest first, with the
+   * current ones flagged (see relevantPrs) and CI status on open ones. Reads
+   * the live branch; none on the default branch or a detached HEAD.
+   */
+  static async getPullRequestsForCheckout(
     config: AzureDevOpsConfig,
     repositoryName: string,
-    branch: string,
-  ): Promise<PullRequestInfo | null> {
+    cwd: string,
+    defaultBranch: string,
+  ): Promise<PullRequestInfo[]> {
+    const branch = await GitService.getBranch(cwd);
+    if (!branch || branch === defaultBranch) return [];
     const sourceRef = `refs/heads/${branch}`;
     const result = (await this.request(
       config,
-      `${this.proj(config)}/_apis/git/repositories/${encodeURIComponent(repositoryName)}/pullrequests?searchCriteria.sourceRefName=${encodeURIComponent(sourceRef)}&searchCriteria.status=all&$top=5`,
+      `${this.proj(config)}/_apis/git/repositories/${encodeURIComponent(repositoryName)}/pullrequests?searchCriteria.sourceRefName=${encodeURIComponent(sourceRef)}&searchCriteria.status=all&$top=10`,
     )) as {
-      value?: Array<{ pullRequestId: number; title: string; status: string; url?: string }>;
+      value?: Array<{
+        pullRequestId: number;
+        title: string;
+        status: string;
+        lastMergeSourceCommit?: { commitId?: string };
+        repository?: { project?: { id?: string } };
+      }>;
     };
 
-    const prs = result.value;
-    if (!prs || prs.length === 0) return null;
-
-    // Prefer active, then completed (merged), then abandoned (closed)
-    const sorted = prs.sort((a, b) => {
-      const order: Record<string, number> = { active: 0, completed: 1, abandoned: 2 };
-      return (order[a.status] ?? 3) - (order[b.status] ?? 3);
-    });
-
-    const pr = sorted[0]!;
     const baseUrl = config.organizationUrl.replace(/\/+$/, '');
-    const prUrl = `${baseUrl}/${this.proj(config)}/_git/${repositoryName}/pullrequest/${pr.pullRequestId}`;
-
     const stateMap: Record<string, 'open' | 'merged' | 'closed'> = {
       active: 'open',
       completed: 'merged',
       abandoned: 'closed',
     };
+    const prs = await Promise.all(
+      (result.value ?? []).map(async (pr): Promise<PullRequestInfo> => {
+        const state = stateMap[pr.status] ?? 'open';
+        return {
+          number: pr.pullRequestId,
+          title: pr.title,
+          url: `${baseUrl}/${this.proj(config)}/_git/${repositoryName}/pullrequest/${pr.pullRequestId}`,
+          state,
+          provider: 'ado',
+          headSha: pr.lastMergeSourceCommit?.commitId,
+          ci:
+            state === 'open'
+              ? await this.getPullRequestCi(
+                  config,
+                  repositoryName,
+                  pr.pullRequestId,
+                  pr.repository?.project?.id,
+                )
+              : null,
+        };
+      }),
+    );
+    return relevantPrs(prs, (sha) => GitService.hasMovedPast(cwd, sha));
+  }
 
-    return {
-      number: pr.pullRequestId,
-      title: pr.title,
-      url: prUrl,
-      state: stateMap[pr.status] ?? 'open',
-      provider: 'ado',
-    };
+  /**
+   * A PR's checks (see ciFromAdo) from its policy evaluations, which need the
+   * project's id, and its statuses. Null when neither can be read.
+   */
+  private static async getPullRequestCi(
+    config: AzureDevOpsConfig,
+    repositoryName: string,
+    prId: number,
+    projectId: string | undefined,
+  ): Promise<CiState | null> {
+    const values = (r: PromiseSettledResult<unknown>): unknown =>
+      r.status === 'fulfilled' ? (r.value as { value?: unknown } | null)?.value : null;
+    const [evaluations, statuses] = await Promise.allSettled([
+      projectId
+        ? this.request(
+            config,
+            `${this.proj(config)}/_apis/policy/evaluations?artifactId=${encodeURIComponent(
+              `vstfs:///CodeReview/CodeReviewId/${projectId}/${prId}`,
+            )}`,
+            // Policy evaluations exist only as a preview API.
+            { apiVersion: `${API_VERSION}-preview.1` },
+          )
+        : Promise.resolve(null),
+      this.request(
+        config,
+        `${this.proj(config)}/_apis/git/repositories/${encodeURIComponent(repositoryName)}/pullRequests/${prId}/statuses`,
+      ),
+    ]);
+    return ciFromAdo(values(evaluations), values(statuses));
   }
 
   /** Active (open) PRs for `repositoryName`, most-recent first. */

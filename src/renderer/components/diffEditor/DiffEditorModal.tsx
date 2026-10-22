@@ -16,6 +16,8 @@ export interface DiffEditorModalProps {
   /** `cwd` is a folder of its own (Claude's memory folder), not the active
    *  task's worktree: the task's git status and comments don't belong to it. */
   standalone?: boolean;
+  /** The project `cwd` belongs to; PR review calls name it. */
+  projectId: string | null;
   terminalTheme: XtermTheme;
   isDark: boolean;
   onClose: () => void;

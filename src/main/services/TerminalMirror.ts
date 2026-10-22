@@ -47,6 +47,37 @@ export class TerminalMirror {
     return this.addon.serialize();
   }
 
+  /**
+   * The last `lastLines` lines of the buffer (scrollback + screen) as plain
+   * text, after flushing the parse queue: no styling, soft-wrapped rows joined,
+   * trailing blank rows dropped. The one way to read text out of a PTY or a
+   * raw TUI byte stream (`claude logs` is a full-screen repaint with no
+   * newlines, so stripping ANSI from the bytes would not give lines).
+   */
+  toPlainText(lastLines: number): Promise<string> {
+    return new Promise((resolve) => {
+      this.term.write('', () => {
+        const buf = this.term.buffer.active;
+        const lines: string[] = [];
+        for (let i = 0; i < buf.length; i++) {
+          const line = buf.getLine(i);
+          if (!line) continue;
+          // Trim only at a real line end: a row that wraps into the next one
+          // keeps its trailing cells, or a space on its last column is lost.
+          const text = line.translateToString(!buf.getLine(i + 1)?.isWrapped);
+          if (line.isWrapped && lines.length > 0) lines[lines.length - 1] += text;
+          // A full-screen TUI leaves empty rows between its output and the input
+          // box; keep one so they don't use up the caller's line budget.
+          else if (text.trim() === '' && lines.length > 0 && lines[lines.length - 1]!.trim() === '')
+            continue;
+          else lines.push(text);
+        }
+        while (lines.length > 0 && lines[lines.length - 1]!.trim() === '') lines.pop();
+        resolve(lastLines > 0 ? lines.slice(-lastLines).join('\n') : '');
+      });
+    });
+  }
+
   dims(): { cols: number; rows: number } {
     return { cols: this.term.cols, rows: this.term.rows };
   }

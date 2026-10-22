@@ -23,6 +23,7 @@ import { createHash } from 'node:crypto';
 import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import { app } from 'electron';
 import type { WebContents } from 'electron';
+import { shellQuote } from '@shared/shellQuote';
 import type { RtkStatus, RtkSource, RtkDownloadProgress, RtkTestResult } from '@shared/types';
 
 const execFileAsync = promisify(execFile);
@@ -218,7 +219,7 @@ export class RtkService {
     // Claude Code runs the hook via sh -c on Unix. Single-quote-escape the
     // path so spaces and any shell metachars ($, `, ", \) in the userData
     // directory never break or inject into the command.
-    return `${shellQuoteUnix(resolved.path)} hook claude`;
+    return `${shellQuote(resolved.path)} hook claude`;
   }
 
   static async getStatus(): Promise<RtkStatus> {
@@ -861,10 +862,6 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object';
 }
 
-function shellQuoteUnix(s: string): string {
-  return `'${s.replace(/'/g, "'\\''")}'`;
-}
-
 interface ReleasePayload {
   tag_name: string;
   assets: Array<{ name: string; browser_download_url: string }>;
@@ -1034,7 +1031,6 @@ export const __test__ = {
   assertTrustedDownloadUrl,
   assertSafeArchiveMember,
   parseTarVerbose,
-  shellQuoteUnix,
   extractRewrittenCommand,
   verifyChecksum,
   ensureUserBinSymlink,

@@ -1,17 +1,12 @@
 import { ipcMain } from 'electron';
 import { z } from 'zod';
 import { parseArgs, errorResponse } from './validate';
-import { projectInputSchema, taskInputSchema } from './schemas';
+import { deleteTaskOptionsSchema, projectInputSchema, taskInputSchema } from './schemas';
 import { DatabaseService } from '../services/DatabaseService';
 import { TelemetryService } from '../services/TelemetryService';
-import { WorkspacePortsRuntime } from '../services/WorkspacePortsRuntime';
-import {
-  ensureWatching as ensurePortsConfigWatch,
-  stop as stopPortsConfigWatch,
-} from '../services/PortsConfigWatcher';
-import { discardInitialPrompt, stopTaskSession, removeTaskSession } from '../services/ptyManager';
-import { getTuiHost } from '../tui/hostInstance';
-import { removeShellHistory } from '../services/ptyShellConfig';
+import { stopTaskSession } from '../services/ptyManager';
+import { TaskService } from '../services/TaskService';
+import type { DeleteTaskOptions } from '@shared/types';
 
 export function registerDbIpc(): void {
   // ── Projects ─────────────────────────────────────────────
@@ -37,11 +32,11 @@ export function registerDbIpc(): void {
     }
   });
 
-  ipcMain.handle('db:deleteProject', (_event, id: string) => {
+  ipcMain.handle('db:deleteProject', async (_event, id: string, options: DeleteTaskOptions) => {
     try {
       parseArgs('db:deleteProject', z.string(), id);
-      DatabaseService.deleteProject(id);
-      TelemetryService.capture('project_deleted');
+      parseArgs('db:deleteProject', deleteTaskOptionsSchema, options);
+      await TaskService.deleteProject(id, options);
       return { success: true };
     } catch (error) {
       return errorResponse(error);
@@ -96,50 +91,11 @@ export function registerDbIpc(): void {
   ipcMain.handle('db:saveTask', (_event, task) => {
     try {
       parseArgs('db:saveTask', taskInputSchema, task);
-      const isNew = !task.id;
+      // Updates only: a new task goes through task:create (TaskService), which
+      // owns the creation side effects (ports, telemetry, first prompt).
+      if (!task.id) throw new Error('db:saveTask updates an existing task; use task:create');
       const data = DatabaseService.saveTask(task);
-      if (isNew) TelemetryService.capture('task_created');
-      // Allocate per-task ports the first time the row is saved. setupTask
-      // persists to SQLite (the only source of truth for what ports are
-      // taken); the renderer's later agent-PTY spawn reads the env from
-      // there. Skipped for in-place (non-worktree) tasks — they share the
-      // project dir and shouldn't get re-allocated on every save.
-      if (isNew && data.useWorktree) {
-        try {
-          WorkspacePortsRuntime.setupTask({ taskId: data.id, worktreePath: data.path });
-          // Arm the watcher even if .dash/ doesn't exist yet — ensureWatching
-          // keeps the entry and retries the fs.watch on every subsequent
-          // call, so it auto-attaches as soon as the agent creates .dash/.
-          // The watcher lives until db:deleteTask stops it.
-          ensurePortsConfigWatch(data.id, data.path);
-        } catch (err) {
-          console.error('[dbIpc] setupTask ports allocation failed:', err);
-        }
-      }
       return { success: true, data };
-    } catch (error) {
-      return errorResponse(error);
-    }
-  });
-
-  ipcMain.handle('db:deleteTask', async (_event, id: string) => {
-    try {
-      parseArgs('db:deleteTask', z.string(), id);
-      // Forget the task's supervisor session first (transcript kept), while
-      // the row still carries the job id.
-      await removeTaskSession(id).catch((err) =>
-        console.warn('[db:deleteTask] session removal failed:', err),
-      );
-      DatabaseService.deleteTask(id);
-      // The worktree is gone (or about to be) — close the ports watcher,
-      // drop any never-consumed initial prompt, and dismiss a lingering
-      // ports-setup toast for this task.
-      stopPortsConfigWatch(id);
-      discardInitialPrompt(id);
-      removeShellHistory(id);
-      void getTuiHost().cancelForTask(id);
-      TelemetryService.capture('task_deleted');
-      return { success: true };
     } catch (error) {
       return errorResponse(error);
     }
@@ -166,22 +122,6 @@ export function registerDbIpc(): void {
     },
   );
 
-  ipcMain.handle('db:archiveTask', async (_event, id: string) => {
-    try {
-      parseArgs('db:archiveTask', z.string(), id);
-      // An archived task's session sleeps (`claude stop`); restoring and
-      // opening the task attaches, which wakes it.
-      await stopTaskSession(id).catch((err) =>
-        console.warn('[db:archiveTask] session stop failed:', err),
-      );
-      DatabaseService.archiveTask(id);
-      TelemetryService.capture('task_archived');
-      return { success: true };
-    } catch (error) {
-      return errorResponse(error);
-    }
-  });
-
   ipcMain.handle(
     'db:reorderTasks',
     (_event, args: { projectId: string; orderedTaskIds: string[] }) => {
@@ -198,17 +138,6 @@ export function registerDbIpc(): void {
       }
     },
   );
-
-  ipcMain.handle('db:restoreTask', (_event, id: string) => {
-    try {
-      parseArgs('db:restoreTask', z.string(), id);
-      DatabaseService.restoreTask(id);
-      TelemetryService.capture('task_restored');
-      return { success: true };
-    } catch (error) {
-      return errorResponse(error);
-    }
-  });
 
   // ── Conversations ────────────────────────────────────────
 

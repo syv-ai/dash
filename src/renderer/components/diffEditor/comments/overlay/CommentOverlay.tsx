@@ -41,6 +41,11 @@ interface Props {
   scopeLabel?: string;
   /** Bubble width as a fraction of the editor's content width. */
   bubbleWidthFraction?: number;
+  /** In a PR view: each bubble says whether it's a note or a comment, and a
+   *  note offers this to make it a comment. */
+  onPromoteComment?(id: string): void;
+  /** The draft's submit button ('Add note', 'Add comment'). */
+  draftSubmitLabel?: string;
 }
 
 const DEFAULT_BUBBLE_FRACTION = 0.4;
@@ -70,6 +75,8 @@ export function CommentOverlay({
   onCancelDraft,
   scopeLabel,
   bubbleWidthFraction = DEFAULT_BUBBLE_FRACTION,
+  onPromoteComment,
+  draftSubmitLabel,
 }: Props) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
 
@@ -270,6 +277,7 @@ export function CommentOverlay({
                 onReopen={onReopenComment}
                 editingId={editingId}
                 scopeLabel={scopeLabel}
+                onPromote={onPromoteComment}
               />
             </div>
             {editingComment && pendingRange && (
@@ -287,6 +295,7 @@ export function CommentOverlay({
                   range={pendingRange}
                   initialText={pendingText}
                   tailLeftPx={tailLeftPx}
+                  submitLabel={draftSubmitLabel}
                   onSubmit={onSubmitDraft}
                   onCancel={onCancelDraft}
                 />
@@ -333,6 +342,7 @@ export function CommentOverlay({
                   range={pendingRange}
                   initialText={pendingText}
                   tailLeftPx={tailLeftPx}
+                  submitLabel={draftSubmitLabel}
                   onSubmit={onSubmitDraft}
                   onCancel={onCancelDraft}
                 />

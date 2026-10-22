@@ -118,6 +118,14 @@ void app.whenReady().then(async () => {
   });
   await hookServer.start();
 
+  // Control API for agents (dashctl). Never blocks boot.
+  try {
+    const { startControl } = await import('./control');
+    await startControl();
+  } catch (err) {
+    console.error('[main] Control API failed to start:', err);
+  }
+
   // Register IPC handlers
   const { registerAllIpc } = await import('./ipc');
   registerAllIpc();
@@ -189,12 +197,12 @@ void app.whenReady().then(async () => {
     });
   }, 60_000);
 
-  // Cleanup orphaned reserve worktrees (background, non-blocking)
+  // Remove the worktree pool's leftovers from before 0.17 (background, non-blocking)
   setTimeout(() => {
     void (async () => {
       try {
-        const { worktreePoolService } = await import('./services/WorktreePoolService');
-        await worktreePoolService.cleanupOrphanedReserves();
+        const { removeLegacyReserves } = await import('./services/legacyReserveCleanup');
+        await removeLegacyReserves(DatabaseService.getProjects().map((p) => p.path));
       } catch {
         // Best effort
       }
@@ -331,6 +339,14 @@ app.on('before-quit', (event) => {
     try {
       const { hookServer } = await import('./services/HookServer');
       hookServer.stop();
+    } catch {
+      // Best effort
+    }
+
+    // Stop the control API (removes its port file)
+    try {
+      const { stopControl } = await import('./control');
+      await stopControl();
     } catch {
       // Best effort
     }

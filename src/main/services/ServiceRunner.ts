@@ -61,6 +61,8 @@ export interface RunnerDeps {
   focusTab(taskId: string, tabId: string, opts?: { reset?: boolean }): void;
   shell: string;
   sleep(ms: number): Promise<void>;
+  /** Plain text of a PTY's mirror (readPtyText); null when it is gone. */
+  ptyText(id: string, lines: number): Promise<string | null>;
 }
 
 export interface OpResult {
@@ -97,6 +99,22 @@ export class ServiceRunner {
     if (!tabId) return null;
     if (!this.deps.ptyAlive(tabId)) return null;
     return tabId;
+  }
+
+  /** The task's port entry for a service label (the control API names services by label). */
+  findPort(taskId: string, label: string): TaskPort | undefined {
+    return this.deps.getPorts(taskId).find((p) => p.label === label);
+  }
+
+  /**
+   * The last `lines` lines of the service's run tab, as plain text. Null when
+   * Dash doesn't own a live run PTY for it (never started here, or started
+   * outside Dash): there is no output to read.
+   */
+  async output(taskId: string, label: string, lines: number): Promise<string | null> {
+    const tabId = this.ownedTabId(taskId, label);
+    if (!tabId) return null;
+    return this.deps.ptyText(tabId, lines);
   }
 
   status(taskId: string): Record<string, { ownedTabId: string | null }> {

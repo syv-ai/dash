@@ -1,34 +1,61 @@
-import type { Project, Task } from '../../shared/types';
-import { isAdoRemote } from '../../shared/urls';
+import type { Project, PullRequestInfo, Task } from '../../shared/types';
+import { providerForRemote } from '../../shared/urls';
 
-/** A task whose branch may have a PR worth fetching, plus how to fetch it. */
+/** Where to look up a task's PRs, and through which provider. */
 export interface PrDetectionTarget {
   taskId: string;
-  branch: string;
   provider: 'github' | 'ado';
   cwd: string;
+  defaultBranch: string;
   remote: string | null;
   projectId: string;
 }
 
+/** The lookup for a checkout of `project` at `cwd`. */
+export function prTargetFor(project: Project, cwd: string, taskId = ''): PrDetectionTarget {
+  const remote = project.gitRemote ?? null;
+  return {
+    taskId,
+    provider: providerForRemote(remote),
+    cwd,
+    defaultBranch: project.baseRef || project.gitBranch || 'main',
+    remote,
+    projectId: project.id,
+  };
+}
+
 /**
- * Which of a project's tasks should have their PR fetched, and via which
- * provider. Mirrors gitStore.detectPr's gating: a task on the project's default
- * branch (or with no branch) has no PR to show. Pure so it can be unit-tested
- * without touching IPC.
+ * One lookup per task. Main reads each checkout's live branch, so a session
+ * that switched branches is covered and the default branch yields none; the
+ * recorded `task.branch` (fixed at creation) is not consulted. Pure so it can
+ * be unit-tested without touching IPC.
  */
 export function prDetectionTargets(project: Project, tasks: Task[]): PrDetectionTarget[] {
-  const defaultBranch = project.baseRef || project.gitBranch || 'main';
-  const remote = project.gitRemote ?? null;
-  const provider: 'github' | 'ado' = remote && isAdoRemote(remote) ? 'ado' : 'github';
-  return tasks
-    .filter((t) => t.branch && t.branch !== defaultBranch)
-    .map((t) => ({
-      taskId: t.id,
-      branch: t.branch,
-      provider,
-      cwd: t.path || project.path,
-      remote,
-      projectId: project.id,
-    }));
+  return tasks.map((t) => prTargetFor(project, t.path || project.path, t.id));
+}
+
+/** A branch's PRs: the ones standing for it now, and all of them, newest first. */
+export interface BranchPrs {
+  current: PullRequestInfo[];
+  all: PullRequestInfo[];
+}
+
+/** The target's PRs, or null when the lookup failed. */
+export async function fetchPrsFor(t: PrDetectionTarget): Promise<BranchPrs | null> {
+  try {
+    const resp =
+      t.provider === 'ado' && t.remote
+        ? await window.electronAPI.adoGetPrsForCheckout({
+            cwd: t.cwd,
+            defaultBranch: t.defaultBranch,
+            gitRemote: t.remote,
+            projectId: t.projectId,
+          })
+        : await window.electronAPI.githubGetPrsForCheckout(t.cwd, t.defaultBranch);
+    if (!resp.success) return null;
+    const all = resp.data ?? [];
+    return { current: all.filter((p) => p.current), all };
+  } catch {
+    return null;
+  }
 }

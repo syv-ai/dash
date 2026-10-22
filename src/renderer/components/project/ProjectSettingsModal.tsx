@@ -16,10 +16,11 @@ interface ProjectSettingsModalProps {
 export function ProjectSettingsModal({ project, onClose, onRename }: ProjectSettingsModalProps) {
   const [value, setValue] = useState<ConfigureValues | null>(null);
 
-  // Load the committed config once on open.
+  // Load the committed config once on open. Shared only: saving writes config.json,
+  // so config.local.json overrides must not be read in.
   useEffect(() => {
     let cancelled = false;
-    void window.electronAPI.readWorkspaceConfig(project.path).then((resp) => {
+    void window.electronAPI.readWorkspaceConfig(project.path, { shared: true }).then((resp) => {
       if (cancelled) return;
       const config = resp.success ? (resp.data ?? null) : null;
       setValue(

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { slugify } from '../slug';
+import { branchSlug, slugify } from '../slug';
 
 describe('slugify', () => {
   it('lowercases and hyphenates non-alphanumeric runs', () => {
@@ -20,5 +20,22 @@ describe('slugify', () => {
 
   it('returns an empty string when nothing alphanumeric remains', () => {
     expect(slugify('***')).toBe('');
+  });
+});
+
+describe('branchSlug', () => {
+  it('keeps slashes, slugifying each part', () => {
+    expect(branchSlug('feature/Add Thing')).toBe('feature/add-thing');
+    expect(branchSlug('team/fix/Login bug')).toBe('team/fix/login-bug');
+  });
+
+  it('matches slugify for a name without slashes', () => {
+    expect(branchSlug('My Cool Task')).toBe(slugify('My Cool Task'));
+  });
+
+  it('drops empty and symbol-only parts', () => {
+    expect(branchSlug('/feature//foo/')).toBe('feature/foo');
+    expect(branchSlug('feature/***/foo')).toBe('feature/foo');
+    expect(branchSlug('***')).toBe('');
   });
 });

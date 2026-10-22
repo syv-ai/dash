@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { __testReset, startCommandPty, startPty, killPty } from '../ptyManager';
+import { __testReset, startCommandPty, startPty, killPty, readPtyText } from '../ptyManager';
 
 // Real node-pty under Electron's Node ABI (same as production).
 
@@ -72,5 +72,12 @@ describe('PTY mirror', () => {
       sender: fakeSender() as never,
     });
     expect(r2.serializedState ?? '').toContain('EARLY_MARKER');
+  }, 10_000);
+
+  it('readPtyText returns the mirror as plain text, null for an unknown PTY', async () => {
+    await spawnService('service:t1:text', 'printf "\\033[32mgreen\\033[0m\\nplain\\n"; sleep 5');
+    await sleep(500);
+    expect(await readPtyText('service:t1:text', 2)).toBe('green\nplain');
+    expect(await readPtyText('service:t1:none', 2)).toBeNull();
   }, 10_000);
 });

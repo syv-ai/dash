@@ -7,7 +7,6 @@ import { app, powerMonitor, type WebContents } from 'electron';
 import type { PermissionMode, SupervisorSession, TaskModel } from '@shared/types';
 import { findClaudePath } from './claudeCli';
 import { claudeConfigDir } from '../utils/claudePaths';
-import { isUltracode } from './claudeEnv';
 import { activityMonitor } from './ActivityMonitor';
 import { DatabaseService } from './DatabaseService';
 import {
@@ -34,6 +33,8 @@ export interface DispatchOptions {
   model?: TaskModel;
   prompt?: string;
   resumeSessionId?: string | null;
+  /** The task's settings file (taskSettings.ts) → `--settings`. */
+  settingsPath?: string;
   env: Record<string, string>;
 }
 
@@ -105,7 +106,7 @@ class SupervisorServiceImpl extends EventEmitter {
       name: opts.name,
       permissionMode: opts.permissionMode,
       model: opts.model,
-      ultracode: isUltracode(),
+      settingsPath: opts.settingsPath,
       resumeSessionId: opts.resumeSessionId,
       prompt: opts.prompt,
     });
@@ -191,6 +192,22 @@ class SupervisorServiceImpl extends EventEmitter {
       if (!/not found|no such|unknown/i.test(text)) throw err;
     }
     void this.refresh('remove');
+  }
+
+  /**
+   * The job's recent terminal output (`claude logs <jobId>`): a raw TUI repaint
+   * stream, not lines. Replay it into a TerminalMirror to read it as text. A
+   * timed-out read still returns what was printed.
+   */
+  async logs(jobId: string): Promise<string> {
+    try {
+      const { stdout } = await this.run(['logs', jobId], { timeout: LIST_TIMEOUT_MS });
+      return stdout;
+    } catch (err) {
+      const e = err as { killed?: boolean; stdout?: unknown };
+      if (e.killed && e.stdout) return String(e.stdout);
+      throw err;
+    }
   }
 
   /** Find a background session by job id in the full listing. */
