@@ -21,6 +21,8 @@ import { PrPicker } from '../PrPicker';
 
 interface Props {
   cwd: string;
+  /** `cwd` is a task's worktree; otherwise compare and blame have no repository to ask. */
+  git: boolean;
   filePath: string;
   view: EditorView;
   wordWrap: boolean;
@@ -56,6 +58,7 @@ interface Props {
 
 export function EditorHeader({
   cwd,
+  git,
   filePath,
   view,
   wordWrap,
@@ -201,84 +204,88 @@ export function EditorHeader({
             </button>
           </Tooltip>
         )}
-        <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-          <PopoverAnchor asChild>
-            <div className="inline-flex items-center">
-              <Tooltip
-                content={
-                  isBranch
-                    ? 'Change base branch'
-                    : isPr
-                      ? 'Change pull request'
-                      : 'Compare with a branch or pull request'
-                }
-              >
-                <button
-                  type="button"
-                  onClick={handleChipClick}
-                  className={`inline-flex items-center gap-1.5 px-2 h-6 rounded-md text-[11px] font-mono transition-colors hover:bg-accent/60 ${
-                    isBranch || isPr ? 'text-primary' : 'text-muted-fade-60 hover:text-foreground'
-                  }`}
+        {git && (
+          <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+            <PopoverAnchor asChild>
+              <div className="inline-flex items-center">
+                <Tooltip
+                  content={
+                    isBranch
+                      ? 'Change base branch'
+                      : isPr
+                        ? 'Change pull request'
+                        : 'Compare with a branch or pull request'
+                  }
                 >
-                  {isPr ? (
-                    <GitPullRequestArrow size={12} strokeWidth={1.8} className="shrink-0" />
-                  ) : (
-                    <GitCompare size={12} strokeWidth={1.8} className="shrink-0" />
-                  )}
-                  {isBranch ? (
-                    <span className="truncate max-w-[420px]">base: {view.base}</span>
-                  ) : isPr ? (
-                    <span className="truncate max-w-[420px]">
-                      PR #{view.number}
-                      {prTitle ? `: ${prTitle}` : ''}
-                    </span>
-                  ) : (
-                    <span className="whitespace-nowrap">Compare…</span>
-                  )}
-                </button>
-              </Tooltip>
-            </div>
-          </PopoverAnchor>
-          <PopoverContent side="bottom" align="end" sideOffset={6} className="p-0">
-            <div className="w-[340px] h-[380px] flex flex-col">
-              {projectId && (
-                <div className="px-2.5 pt-2.5 pb-1">
-                  <Segmented
-                    size="sm"
-                    value={tab}
-                    onChange={setTab}
-                    options={[
-                      { value: 'branches', label: 'Branches' },
-                      { value: 'prs', label: 'Pull requests' },
-                    ]}
+                  <button
+                    type="button"
+                    onClick={handleChipClick}
+                    className={`inline-flex items-center gap-1.5 px-2 h-6 rounded-md text-[11px] font-mono transition-colors hover:bg-accent/60 ${
+                      isBranch || isPr ? 'text-primary' : 'text-muted-fade-60 hover:text-foreground'
+                    }`}
+                  >
+                    {isPr ? (
+                      <GitPullRequestArrow size={12} strokeWidth={1.8} className="shrink-0" />
+                    ) : (
+                      <GitCompare size={12} strokeWidth={1.8} className="shrink-0" />
+                    )}
+                    {isBranch ? (
+                      <span className="truncate max-w-[420px]">base: {view.base}</span>
+                    ) : isPr ? (
+                      <span className="truncate max-w-[420px]">
+                        PR #{view.number}
+                        {prTitle ? `: ${prTitle}` : ''}
+                      </span>
+                    ) : (
+                      <span className="whitespace-nowrap">Compare…</span>
+                    )}
+                  </button>
+                </Tooltip>
+              </div>
+            </PopoverAnchor>
+            <PopoverContent side="bottom" align="end" sideOffset={6} className="p-0">
+              <div className="w-[340px] h-[380px] flex flex-col">
+                {projectId && (
+                  <div className="px-2.5 pt-2.5 pb-1">
+                    <Segmented
+                      size="sm"
+                      value={tab}
+                      onChange={setTab}
+                      options={[
+                        { value: 'branches', label: 'Branches' },
+                        { value: 'prs', label: 'Pull requests' },
+                      ]}
+                    />
+                  </div>
+                )}
+                {tab === 'prs' && projectId ? (
+                  <PrPicker
+                    projectId={projectId}
+                    cwd={cwd}
+                    selected={view.kind === 'pr' ? view.number : null}
+                    onSelect={onSelectPr}
+                    onExit={isPr ? handleExit : undefined}
                   />
-                </div>
-              )}
-              {tab === 'prs' && projectId ? (
-                <PrPicker
-                  projectId={projectId}
-                  cwd={cwd}
-                  selected={view.kind === 'pr' ? view.number : null}
-                  onSelect={onSelectPr}
-                  onExit={isPr ? handleExit : undefined}
-                />
-              ) : (
-                <BranchPicker
-                  cwd={cwd}
-                  selectedRef={isBranch ? view.base : null}
-                  onSelect={handleSelect}
-                  onExit={isBranch ? handleExit : undefined}
-                  defaultRef={defaultBase}
-                />
-              )}
-            </div>
-          </PopoverContent>
-        </Popover>
-        <Tooltip content={blameEnabled ? 'Hide git blame' : 'Show git blame'}>
-          <button onClick={onToggleBlame} className={iconBtn(blameEnabled)}>
-            <History size={14} strokeWidth={1.8} />
-          </button>
-        </Tooltip>
+                ) : (
+                  <BranchPicker
+                    cwd={cwd}
+                    selectedRef={isBranch ? view.base : null}
+                    onSelect={handleSelect}
+                    onExit={isBranch ? handleExit : undefined}
+                    defaultRef={defaultBase}
+                  />
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
+        )}
+        {git && (
+          <Tooltip content={blameEnabled ? 'Hide git blame' : 'Show git blame'}>
+            <button onClick={onToggleBlame} className={iconBtn(blameEnabled)}>
+              <History size={14} strokeWidth={1.8} />
+            </button>
+          </Tooltip>
+        )}
         <Tooltip content={sideBySide ? 'Show inline diff' : 'Show side by side'}>
           <button onClick={onToggleSideBySide} className={iconBtn(sideBySide)}>
             <Columns2 size={14} strokeWidth={1.8} />

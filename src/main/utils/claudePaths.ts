@@ -81,8 +81,8 @@ export function claudeStateFile(): string {
   return path.join(process.env.CLAUDE_CONFIG_DIR || os.homedir(), '.claude.json');
 }
 
-/** The main checkout of the repo `dir` is a linked worktree of, else null. */
-async function mainRepoRoot(dir: string): Promise<string | null> {
+/** The main checkout of the repo `dir` is in (a linked worktree's too), else null. */
+export async function mainRepoRoot(dir: string): Promise<string | null> {
   try {
     const { stdout } = await execFileAsync(
       'git',

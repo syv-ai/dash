@@ -18,6 +18,8 @@ import type { DiffCommentKind } from '../../../../shared/types';
 const EMPTY_STORED: readonly DiffComment[] = Object.freeze([]);
 
 interface Args {
+  /** False when the open folder isn't the loaded task's: its comments aren't this file's. */
+  enabled: boolean;
   filePath: string;
   /** True once the model's content matches `filePath` (i.e. the file is
    *  loaded). Hydration must wait for this to flip. */
@@ -52,6 +54,7 @@ export interface FileCommentsBinding {
  *  so no new reference is emitted unless a range actually moved). Snapshot
  *  runs on unmount/file-switch via a closure-captured `filePath`. */
 export function useFileComments({
+  enabled,
   filePath,
   isFileLoaded,
   editor,
@@ -60,7 +63,8 @@ export function useFileComments({
   newKind,
 }: Args): FileCommentsBinding {
   const storeReady = useCommentsStore((s) => s.isReady);
-  const allStored = useCommentsStore((s) => s.byFile[filePath]) ?? EMPTY_STORED;
+  const allStored =
+    useCommentsStore((s) => (enabled ? s.byFile[filePath] : undefined)) ?? EMPTY_STORED;
   // Only comments anchored to the view's current diff state belong here. Memo
   // keeps the reference stable (it feeds effect dep arrays) unless the file's
   // comments or the scope actually change.
@@ -323,7 +327,7 @@ export function useFileComments({
   const addComment = useCallback(
     (range: LineRange, text: string): LiveComment | null => {
       const model = modifiedEditor?.getModel();
-      if (!modifiedEditor || !monaco || !model) return null;
+      if (!enabled || !modifiedEditor || !monaco || !model) return null;
       const created = useCommentsStore.getState().addComment({
         filePath,
         startLine: range.start,
@@ -347,7 +351,7 @@ export function useFileComments({
       setLiveComments((prev) => [...prev, liveC]);
       return liveC;
     },
-    [filePath, scope, newKind, modifiedEditor, monaco],
+    [enabled, filePath, scope, newKind, modifiedEditor, monaco],
   );
 
   const updateText = useCallback((id: string, text: string) => {
