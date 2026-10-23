@@ -161,4 +161,29 @@ describe('aggregateTokenStatsForTaskPath', () => {
     const result = await aggregateTokenStatsForTaskPath(taskPath);
     expect(result.totalTokens).toBe(1500);
   });
+
+  it("finds the task's session after its cwd moved to another worktree", async () => {
+    const taskPath = '/tmp/test-task-e';
+    writeSession(taskPath, 'session-old', [
+      asstLine({ uuid: 'a', requestId: 'r1', input: 1000, output: 500 }),
+    ]);
+    // The recorded session continued under a different worktree's project dir.
+    const elsewhere = '/tmp/other-worktree';
+    writeSession(elsewhere, 'session-moved', [
+      asstLine({ uuid: 'b', requestId: 'r2', input: 2000, output: 1000 }),
+    ]);
+    writeSession(elsewhere, 'session-moved/subagents/agent-x', [
+      asstLine({ uuid: 'c', requestId: 'r3', input: 300, output: 200 }),
+    ]);
+    // Another task's session in that dir must not be counted.
+    writeSession(elsewhere, 'session-unrelated', [
+      asstLine({ uuid: 'd', requestId: 'r4', input: 9000, output: 9000 }),
+    ]);
+
+    const without = await aggregateTokenStatsForTaskPath(taskPath);
+    const result = await aggregateTokenStatsForTaskPath(taskPath, 'session-moved');
+
+    expect(without.totalTokens).toBe(1500);
+    expect(result.totalTokens).toBe(1500 + 3000 + 500);
+  });
 });
