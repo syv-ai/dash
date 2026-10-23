@@ -5,6 +5,7 @@ import type { editor as monacoEditor } from 'monaco-editor';
 import type { ITheme as XtermTheme } from '@xterm/xterm';
 import type { EditorView } from './types';
 import type { LiveComment } from './comments/types';
+import type { DiffComment } from '../../../shared/types';
 import { useCommentsStore } from '../../stores/commentsStore';
 import { useGit } from '../../stores/gitStore';
 import { PrThreadOverlay } from './prReview/PrThreadOverlay';
@@ -39,6 +40,7 @@ import '../../monaco-workers';
 const WORDWRAP_KEY = 'diffEditor.wordWrap';
 const BLAME_KEY = 'diffEditor.blame';
 const SIDE_BY_SIDE_KEY = 'diffEditor.sideBySide';
+const NO_COMMENTS: Record<string, DiffComment[]> = {};
 
 /** Which files get a Code | Preview toggle, and how their preview is rendered.
  *  HTML renders as-is; markdown is converted to a styled HTML document. */
@@ -50,6 +52,8 @@ function previewKind(filePath: string): 'html' | 'markdown' | null {
 
 interface EditorPaneProps {
   cwd: string;
+  /** `cwd` is a task's worktree: git (blame) applies. */
+  git: boolean;
   filePath: string;
   view: EditorView;
   activeTaskId: string | null;
@@ -79,6 +83,7 @@ interface EditorPaneProps {
 
 export function EditorPane({
   cwd,
+  git,
   filePath,
   view,
   activeTaskId,
@@ -95,8 +100,12 @@ export function EditorPane({
   onSelectPr,
   onSelectFile,
 }: EditorPaneProps) {
-  const commentsByFile = useCommentsStore((s) => s.byFile);
-  const commentsDisabled = useCommentsStore((s) => s.disabled);
+  // The store holds the active task's comments: they belong here only while
+  // this is that task's folder (activeTaskId is null otherwise).
+  const commentsOn = useCommentsStore((s) => !s.disabled && s.taskId === activeTaskId);
+  const storedByFile = useCommentsStore((s) => s.byFile);
+  const commentsByFile = commentsOn ? storedByFile : NO_COMMENTS;
+  const commentsDisabled = !commentsOn;
   const { state, setState } = useFileLoad(cwd, filePath, view);
   const [draft, setDraft] = useState<string>('');
   const [loadedBuffer, setLoadedBuffer] = useState<string>('');
@@ -258,6 +267,7 @@ export function EditorPane({
     onClose,
   });
   const binding = useFileComments({
+    enabled: commentsOn,
     filePath,
     isFileLoaded,
     editor,
@@ -361,7 +371,7 @@ export function EditorPane({
     view,
     modifiedEditor,
     monaco,
-    enabled: blameEnabled,
+    enabled: git && blameEnabled,
     canBlame: state.kind === 'loaded' && !state.isBinary && !state.isLargeFile,
   });
 
@@ -431,6 +441,7 @@ export function EditorPane({
     <div className="h-full flex flex-col min-w-0 min-h-0">
       <EditorHeader
         cwd={cwd}
+        git={git}
         filePath={filePath}
         view={view}
         wordWrap={wordWrap}

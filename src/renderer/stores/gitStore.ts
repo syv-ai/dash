@@ -14,8 +14,6 @@ export interface DiffFileTarget {
     | { kind: 'working'; ref: 'HEAD' | 'index' }
     | { kind: 'commit'; hash: string }
     | { kind: 'pr'; provider: PrProvider; number: number; base: string; head: string };
-  /** `cwd` is not the active task's worktree (see DiffEditorModalProps.standalone). */
-  standalone?: boolean;
 }
 
 type Updater<T> = T | ((prev: T) => T);

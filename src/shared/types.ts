@@ -1352,10 +1352,4 @@ export interface ProjectMemory {
   entries: MemoryEntry[];
   /** Memory files MEMORY.md links to that aren't in the folder. */
   dangling: string[];
-  /**
-   * What turned auto memory off for sessions in this project (a settings file
-   * or an environment variable), or null while it is on. Off, Claude neither
-   * loads nor writes any of this.
-   */
-  disabledBy: string | null;
 }

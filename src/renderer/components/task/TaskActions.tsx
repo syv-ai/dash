@@ -5,8 +5,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '../ui/Dr
 import { TaskMenuItems } from './TaskMenuItems';
 
 interface TaskActionsProps {
-  /** The task's project, for the menu's "Claude memory" item. */
-  projectId: string;
   /** The task's activity state; the "Put to sleep" (power) button shows only
    *  while there is a live session — not for a task with none, nor for one
    *  already sleeping (`stopped`), where the button would be a no-op. */
@@ -34,7 +32,6 @@ export function hasLiveSession(state: ActivityState | undefined): boolean {
 }
 
 export function TaskActions({
-  projectId,
   activityState,
   onOpenIde,
   onClose,
@@ -67,7 +64,6 @@ export function TaskActions({
             tree to the card's onClick — stop them here. */}
         <DropdownMenuContent align="end" className="min-w-36" onClick={(e) => e.stopPropagation()}>
           <TaskMenuItems
-            projectId={projectId}
             onOpenIde={onOpenIde}
             onSettings={onSettings}
             onArchive={onArchive}

@@ -90,7 +90,7 @@ describe('memory handlers', () => {
   it("refuses a folder that is not one of Dash's projects, on every channel", async () => {
     const stranger = path.join(tmp, 'stranger');
     fs.mkdirSync(await resolveMemoryDir(stranger), { recursive: true });
-    for (const channel of ['memory:get', 'memory:watch', 'memory:openDir']) {
+    for (const channel of ['memory:get', 'memory:openDir']) {
       expect(await invoke(channel, { projectPath: stranger }), channel).toMatchObject({
         success: false,
         code: 'VALIDATION',

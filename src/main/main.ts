@@ -392,14 +392,6 @@ app.on('before-quit', (event) => {
       // Best effort
     }
 
-    // Stop the memory-modal watcher
-    try {
-      const { stopWatchingMemory } = await import('./services/MemoryWatcher');
-      stopWatchingMemory();
-    } catch {
-      // Best effort
-    }
-
     // Flush telemetry
     try {
       const { TelemetryService } = await import('./services/TelemetryService');

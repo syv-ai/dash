@@ -6,6 +6,8 @@ import path from 'path';
 import { promisify } from 'util';
 import { parseArgs, errorResponse, ipcError } from './validate';
 import { parseBlameIncremental } from '../services/blameParser';
+import { DatabaseService } from '../services/DatabaseService';
+import { isProjectMemoryDir } from '../services/MemoryService';
 import type {
   EditorBlameResult,
   EditorCommitListItem,
@@ -140,55 +142,42 @@ function statusFromGitCode(code: string): FileChangeStatus {
   return 'modified';
 }
 
-/** Whether `cwd` is in a git work tree; false for a plain folder (or when git can't say). */
-async function isInsideGitRepo(cwd: string): Promise<boolean> {
-  try {
-    await execFileAsync('git', ['rev-parse', '--is-inside-work-tree'], { cwd, timeout: 15000 });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-const PLAIN_FOLDER_MAX_FILES = 2000;
+// Asked once per folder: the answer only changes when projects come and go.
+const memoryFolderChecks = new Map<string, Promise<boolean>>();
 
 /**
- * The files under a folder that is no git repository (Claude's memory folder,
- * opened from the memory modal), so the tree has something to show there.
- * Capped: without git there is no ignore list to keep it small.
+ * Whether `cwd` is the Claude memory folder of one of Dash's projects (opened
+ * from the memory modal). The editor shows one as plain files, without git,
+ * even when the folder sits inside some other repository.
  */
-export async function listPlainFolderFiles(cwd: string): Promise<string[]> {
-  const files: string[] = [];
-  const pending = [''];
-  while (pending.length > 0 && files.length < PLAIN_FOLDER_MAX_FILES) {
-    const rel = pending.shift()!;
-    for (const entry of await fs.readdir(path.join(cwd, rel), { withFileTypes: true })) {
-      const child = rel ? `${rel}/${entry.name}` : entry.name;
-      if (entry.isFile()) files.push(child);
-      else if (entry.isDirectory() && entry.name !== '.git' && entry.name !== 'node_modules') {
-        pending.push(child);
-      }
-    }
+function isMemoryFolder(cwd: string): Promise<boolean> {
+  let check = memoryFolderChecks.get(cwd);
+  if (!check) {
+    const projectPaths = DatabaseService.getProjects().map((p) => p.path);
+    check = isProjectMemoryDir(cwd, projectPaths);
+    memoryFolderChecks.set(cwd, check);
   }
-  return files.slice(0, PLAIN_FOLDER_MAX_FILES).sort();
+  return check;
 }
 
 async function listWorkingRepoFiles(cwd: string): Promise<string[]> {
-  let listed: { stdout: string };
-  try {
-    listed = await execFileAsync('git', ['ls-files', '-z'], {
+  // A memory folder is flat: its files are the whole listing.
+  if (await isMemoryFolder(cwd)) {
+    const entries = await fs.readdir(cwd, { withFileTypes: true });
+    return entries
+      .filter((e) => e.isFile())
+      .map((e) => e.name)
+      .sort();
+  }
+  const tracked = (
+    await execFileAsync('git', ['ls-files', '-z'], {
       cwd,
       maxBuffer: 50 * 1024 * 1024,
       timeout: 15000,
-    });
-  } catch (err) {
-    const stderr = (err as { stderr?: unknown }).stderr;
-    if (typeof stderr === 'string' && /not a git repository/i.test(stderr)) {
-      return listPlainFolderFiles(cwd);
-    }
-    throw err;
-  }
-  const tracked = listed.stdout.split('\0').filter(Boolean);
+    })
+  ).stdout
+    .split('\0')
+    .filter(Boolean);
   let untracked: string[] = [];
   try {
     untracked = (
@@ -436,7 +425,8 @@ export function registerEditorIpc(): void {
         }
         const relForGit = toGitPath(path.relative(cwdReal, abs));
         const spec = args.ref === 'HEAD' ? `HEAD:${relForGit}` : `:0:${relForGit}`;
-        let originalContent = await gitShow(args.cwd, spec);
+        const memoryFolder = await isMemoryFolder(args.cwd);
+        let originalContent = memoryFolder ? '' : await gitShow(args.cwd, spec);
 
         let workingContent: string | null = null;
         let mtimeMs = 0;
@@ -463,11 +453,9 @@ export function registerEditorIpc(): void {
           // workingContent stays null — file deleted on disk.
         }
 
-        // Outside git there is no HEAD to compare with: the file as it is on
+        // A memory folder has no HEAD to compare with: the file as it is on
         // disk is the original, so only unsaved edits show as changes.
-        if (originalContent === '' && workingContent && !(await isInsideGitRepo(args.cwd))) {
-          originalContent = workingContent;
-        }
+        if (memoryFolder) originalContent = workingContent ?? '';
 
         return {
           success: true,

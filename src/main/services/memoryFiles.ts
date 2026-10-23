@@ -1,6 +1,10 @@
-import { MEMORY_INDEX_MAX_BYTES, MEMORY_INDEX_MAX_LINES, MEMORY_TYPES } from '@shared/types';
+import {
+  MEMORY_INDEX_FILE,
+  MEMORY_INDEX_MAX_BYTES,
+  MEMORY_INDEX_MAX_LINES,
+  MEMORY_TYPES,
+} from '@shared/types';
 import type { MemoryEntry, MemoryFields, MemoryType } from '@shared/types';
-import { memoryBaseName, memoryLinkFilesByLine } from '@shared/memoryLinks';
 import { stripQuotes } from './skillFrontmatter';
 
 const FRONTMATTER_RE = /^---\s*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
@@ -89,7 +93,33 @@ export function parseMemoryFile(content: string): MemoryFields {
 /** A memory file's fields, named as it answers to: its frontmatter name, else its basename. */
 export function readMemoryFields(content: string, file: string): MemoryFields {
   const parsed = parseMemoryFile(content);
-  return { ...parsed, name: parsed.name || memoryBaseName(file) };
+  return { ...parsed, name: parsed.name || file.replace(/\.md$/, '') };
+}
+
+/** Whether `name` is a memory's file: a `.md` in the folder itself, and never the index. */
+export function isMemoryFileName(name: string): boolean {
+  return /^[^/\\:]+\.md$/.test(name) && name.toLowerCase() !== MEMORY_INDEX_FILE.toLowerCase();
+}
+
+// `[text](x.md)` or `[text](./x.md)`; a target with spaces sits in angle brackets.
+const LINK_RE = /\[[^\]\n]*\]\((?:<(?:\.\/)?([^/\\:>\n]+\.md)>|(?:\.\/)?([^/\\:)\s]+\.md))\)/g;
+const FENCE_RE = /^[ \t]*(?:```|~~~)/;
+const INLINE_CODE_RE = /`[^`\n]+`/g;
+
+/**
+ * The memory files each line of `index` links to. A link in code (a fenced
+ * block or an inline span) is a sample, not an index line.
+ */
+export function indexLinkFiles(index: string): string[][] {
+  let fenced = false;
+  return index.split('\n').map((line) => {
+    if (FENCE_RE.test(line)) {
+      fenced = !fenced;
+      return [];
+    }
+    if (fenced) return [];
+    return [...line.replace(INLINE_CODE_RE, '').matchAll(LINK_RE)].map((m) => m[1] ?? m[2] ?? '');
+  });
 }
 
 /** How many of `lines` Claude Code loads: whole lines, up to its line and byte limits. */
@@ -109,14 +139,13 @@ export type MemoryIndexLine = Pick<MemoryEntry, 'inIndex' | 'pastIndexLimit'>;
 
 /**
  * Read `index` once, to ask what it says of each memory: whether a line links
- * it, and whether the first that does is past what Claude loads. Links are
- * found over the whole index, so a line in a code block links nothing.
+ * it, and whether the first that does is past what Claude loads.
  */
 export function readIndex(index: string): (file: string) => MemoryIndexLine {
-  const links = memoryLinkFilesByLine(index);
+  const links = indexLinkFiles(index);
   const loaded = loadedLineCount(index.split('\n'));
   return (file) => {
-    const first = links.findIndex((on) => on.has(file));
+    const first = links.findIndex((on) => on.includes(file));
     return { inIndex: first >= 0, pastIndexLimit: first >= loaded };
   };
 }

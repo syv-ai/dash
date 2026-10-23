@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
-import type { FileChange } from '../../../shared/types';
+import type { DiffComment, FileChange } from '../../../shared/types';
 import { useGit } from '../../stores/gitStore';
+import { useProjects } from '../../stores/projectsStore';
 import { EditorSidebar } from './EditorSidebar';
 import { EditorPane } from './EditorPane';
 import type { EditorView } from './types';
@@ -19,6 +20,8 @@ import { commentScope, commentCountsByScope } from './comments/commentScope';
 import { needsAttention } from '../../../shared/diffComments';
 import { parsePrScope } from '../../../shared/prScope';
 
+const NO_COMMENTS: Record<string, DiffComment[]> = {};
+
 /** Composition-root workspace: owns view state, drives the data loaders, and
  *  lays out the sidebar + editor pane. Rendered inside <DiffEditorModal>. */
 export function DiffEditor({
@@ -27,14 +30,23 @@ export function DiffEditor({
   initialStaged,
   initialView,
   activeTaskId: openTaskId,
-  standalone,
   projectId,
   terminalTheme,
   isDark,
   onClose,
 }: DiffEditorModalProps) {
-  // A standalone folder has no task: comments stay off, and nothing is pruned.
-  const activeTaskId = standalone ? null : openTaskId;
+  // Git belongs to a task's worktree, and the task's comments to the active
+  // task's. Any other folder (Claude's memory, opened from the memory modal)
+  // is plain files: no git, no comments.
+  const worktreeTaskId = useProjects((s) => {
+    for (const tasks of Object.values(s.tasksByProject)) {
+      const task = tasks.find((t) => t.path === cwd);
+      if (task) return task.id;
+    }
+    return null;
+  });
+  const git = worktreeTaskId !== null;
+  const activeTaskId = worktreeTaskId === openTaskId ? openTaskId : null;
   const gitStatus = useGit((s) => s.gitStatus);
   // View precedence: an explicit caller intent (initialView) wins, so clicking
   // a specific file always shows its working diff and opening a clean tree
@@ -53,8 +65,8 @@ export function DiffEditor({
 
   // ── View-dependent git data (changed files, repo tree, commits, base) ──
   const workingFiles: FileChange[] = useMemo(
-    () => (standalone ? [] : (gitStatus?.files ?? [])),
-    [gitStatus, standalone],
+    () => (activeTaskId ? (gitStatus?.files ?? []) : []),
+    [gitStatus, activeTaskId],
   );
   const {
     changedFiles,
@@ -64,7 +76,7 @@ export function DiffEditor({
     commits,
     commitsLoading,
     defaultBase,
-  } = useEditorViewData(cwd, view, workingFiles);
+  } = useEditorViewData(cwd, view, workingFiles, git);
 
   // Persist the active view per-repo so reopening lands back here.
   useEffect(() => {
@@ -125,11 +137,13 @@ export function DiffEditor({
   }
 
   // ── Comments store ──────────────────────────────────────
-  // Task-scoped, persisted to SQLite. Survives modal close/reopen. When
-  // activeTaskId is null the store is `disabled` and all mutators no-op.
-  const commentsByFile = useCommentsStore((s) => s.byFile);
+  // Task-scoped, persisted to SQLite. Survives modal close/reopen. With no
+  // task of its own the editor leaves the store alone (it is the active
+  // task's, counted outside the editor too) and shows none of it.
+  const storedByFile = useCommentsStore((s) => s.byFile);
+  const commentsByFile = activeTaskId ? storedByFile : NO_COMMENTS;
   useEffect(() => {
-    void useCommentsStore.getState().loadForTask(activeTaskId);
+    if (activeTaskId) void useCommentsStore.getState().loadForTask(activeTaskId);
   }, [activeTaskId]);
 
   // Cross-file navigation token from the dropdown: when set, the EditorPane
@@ -274,6 +288,7 @@ export function DiffEditor({
         <Panel defaultSize={22} minSize={14} maxSize={45}>
           <EditorSidebar
             cwd={cwd}
+            git={git}
             allPaths={repoPaths}
             changedFiles={changedFiles}
             filesLoading={repoPathsLoading || changedFilesLoading}
@@ -292,6 +307,7 @@ export function DiffEditor({
         <Panel minSize={40}>
           <EditorPane
             cwd={cwd}
+            git={git}
             filePath={selectedPath}
             view={view}
             activeTaskId={activeTaskId}

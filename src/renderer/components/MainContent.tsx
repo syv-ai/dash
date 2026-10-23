@@ -315,7 +315,6 @@ export function MainContent({
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <TaskMenuItems
-                projectId={activeTask.projectId}
                 onOpenIde={() => onOpenIde?.()}
                 onSettings={() => onTaskSettings?.(activeTask.id)}
                 onArchive={() => onArchiveTask?.(activeTask.id)}

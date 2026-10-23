@@ -826,12 +826,6 @@ export function App() {
         e.preventDefault();
         setShowAddProjectModal(true);
       }
-      if (keybindings.openMemory && matchesBinding(e, keybindings.openMemory)) {
-        e.preventDefault();
-        const target = activeProjectId ?? projects[0]?.id;
-        if (memoryProjectId) setMemoryProjectId(null);
-        else if (target) setMemoryProjectId(target);
-      }
       if (keybindings.closeDiff && matchesBinding(e, keybindings.closeDiff)) {
         if (remoteControlModalPtyId) {
           e.preventDefault();
@@ -910,7 +904,6 @@ export function App() {
     showSettings,
     showTaskModal,
     showAddProjectModal,
-    memoryProjectId,
     keybindings,
     cycleTask,
     cycleRotation,
@@ -1584,11 +1577,7 @@ export function App() {
       )}
 
       {memoryProject && (
-        <MemoryModal
-          project={memoryProject}
-          isDark={theme === 'dark'}
-          onClose={() => setMemoryProjectId(null)}
-        />
+        <MemoryModal project={memoryProject} onClose={() => setMemoryProjectId(null)} />
       )}
 
       {diffFile && (
@@ -1599,7 +1588,6 @@ export function App() {
             initialStaged={diffFile.staged}
             initialView={diffFile.initialView}
             activeTaskId={activeTaskId}
-            standalone={diffFile.standalone}
             projectId={activeTask?.projectId ?? activeProjectId}
             terminalTheme={resolvedTerminalTheme}
             isDark={theme === 'dark'}
@@ -1608,8 +1596,12 @@ export function App() {
               // Refocus the active task's Claude Code TUI so the user can
               // keep typing without an extra click. RAF defers past React's
               // commit so the modal's DOM is gone before xterm grabs focus.
+              // Not while the memory modal is still up: typing would reach
+              // Claude unseen.
               const id = activeTaskId;
-              if (id) requestAnimationFrame(() => sessionRegistry.get(id)?.focus());
+              if (id && !memoryProject) {
+                requestAnimationFrame(() => sessionRegistry.get(id)?.focus());
+              }
             }}
           />
         </Suspense>

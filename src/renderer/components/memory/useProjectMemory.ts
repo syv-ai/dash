@@ -1,9 +1,15 @@
 import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
 import type { ProjectMemory } from '../../../shared/types';
 
-/** Load a project's memory and keep it live while mounted (the modal's lifetime). */
-export function useProjectMemory(projectPath: string): {
+/**
+ * Load a project's memory, and again each time `paused` turns false: the
+ * modal pauses while a memory is open in the editor and reads the result back
+ * once it closes.
+ */
+export function useProjectMemory(
+  projectPath: string,
+  paused: boolean,
+): {
   memory: ProjectMemory | null;
   error: string | null;
 } {
@@ -11,14 +17,12 @@ export function useProjectMemory(projectPath: string): {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (paused) return;
     let cancelled = false;
-    let latest = 0;
-    const load = async (): Promise<void> => {
-      const seq = ++latest;
+    void (async () => {
       try {
         const res = await window.electronAPI.memoryGet({ projectPath });
-        // A read overtaken by a later one isn't shown.
-        if (cancelled || seq !== latest) return;
+        if (cancelled) return;
         if (res.success && res.data) {
           setMemory(res.data);
           setError(null);
@@ -28,27 +32,11 @@ export function useProjectMemory(projectPath: string): {
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
       }
-    };
-    const watch = async () => {
-      try {
-        const res = await window.electronAPI.memoryWatch({ projectPath });
-        if (!res.success) throw new Error(res.error);
-      } catch (err) {
-        console.warn('[memory] live updates unavailable', projectPath, err);
-        if (!cancelled) toast.error('Memory will not update live', { description: String(err) });
-      }
-    };
-    void load();
-    void watch();
-    const off = window.electronAPI.onMemoryChanged((changed) => {
-      if (changed === projectPath) void load();
-    });
+    })();
     return () => {
       cancelled = true;
-      off();
-      void window.electronAPI.memoryUnwatch();
     };
-  }, [projectPath]);
+  }, [projectPath, paused]);
 
   return { memory, error };
 }

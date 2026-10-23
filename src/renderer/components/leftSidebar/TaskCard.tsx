@@ -172,7 +172,6 @@ export function TaskCard({
           >
             <div className="overflow-hidden min-w-0">
               <TaskActions
-                projectId={task.projectId}
                 activityState={activityState}
                 onOpenIde={onOpenIde}
                 onClose={onClose}

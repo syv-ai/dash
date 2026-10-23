@@ -4,7 +4,6 @@ import { ipcMain, shell } from 'electron';
 import { z } from 'zod';
 import { IpcError, parseArgs, errorResponse, ipcError } from './validate';
 import { readProjectMemory, resolveMemoryDir } from '../services/MemoryService';
-import { stopWatchingMemory, watchProjectMemory } from '../services/MemoryWatcher';
 import { DatabaseService } from '../services/DatabaseService';
 
 export const memoryProjectArgsSchema = z.object({
@@ -35,21 +34,6 @@ export function registerMemoryIpc(): void {
     } catch (error) {
       return errorResponse(error);
     }
-  });
-
-  ipcMain.handle('memory:watch', async (_event, raw: unknown) => {
-    try {
-      const { projectPath } = parseProjectArgs('memory:watch', raw);
-      await watchProjectMemory(projectPath);
-      return { success: true, data: null };
-    } catch (error) {
-      return errorResponse(error);
-    }
-  });
-
-  ipcMain.handle('memory:unwatch', () => {
-    stopWatchingMemory();
-    return { success: true, data: null };
   });
 
   // Reveal the folder in the OS file manager. The dir is recomputed here, not

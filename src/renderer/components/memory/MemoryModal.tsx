@@ -1,8 +1,8 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Brain, ChevronRight, Copy, FolderOpen, List, Pencil, Search, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { MEMORY_INDEX_FILE } from '../../../shared/types';
-import type { IpcResponse, MemoryType, Project } from '../../../shared/types';
+import type { IpcResponse, Project } from '../../../shared/types';
 import { formatRelativeTime } from '../../../shared/relativeTime';
 import { Modal, useModalClose } from '../ui/Modal';
 import { IconButton } from '../ui/IconButton';
@@ -11,7 +11,6 @@ import { Select } from '../ui/Select';
 import { useProjects } from '../../stores/projectsStore';
 import { useUi } from '../../stores/uiStore';
 import { useGit } from '../../stores/gitStore';
-import { MemoryPreview } from './MemoryPreview';
 import { useProjectMemory } from './useProjectMemory';
 import {
   listMemories,
@@ -31,19 +30,18 @@ import {
 
 interface Props {
   project: Project;
-  isDark: boolean;
   onClose: () => void;
 }
 
 /**
  * A project's Claude memories, read-only: the list, what is off about each,
- * and a preview. Editing opens the file in the diff editor.
+ * and its text. Editing opens the file in the diff editor.
  */
-export function MemoryModal({ project, isDark, onClose }: Props) {
+export function MemoryModal({ project, onClose }: Props) {
   return (
     <Modal onClose={onClose} size="w-[1040px] max-w-[94vw] h-[86vh] max-h-[760px]">
       {/* Keyed so switching project resets the selection and search. */}
-      <MemoryBody key={project.id} project={project} isDark={isDark} />
+      <MemoryBody key={project.id} project={project} />
     </Modal>
   );
 }
@@ -69,12 +67,14 @@ async function reportFailure(
   return false;
 }
 
-function MemoryBody({ project, isDark }: Omit<Props, 'onClose'>) {
+function MemoryBody({ project }: Omit<Props, 'onClose'>) {
   const projects = useProjects((s) => s.projects);
   const switchProject = useUi((s) => s.setMemoryProjectId);
   const handleClose = useModalClose();
   const setDiffFile = useGit((s) => s.setDiffFile);
-  const { memory, error } = useProjectMemory(project.path);
+  // Read when the modal opens, and again once an edit in the diff editor closes.
+  const editing = useGit((s) => s.diffFile !== null);
+  const { memory, error } = useProjectMemory(project.path, editing);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState<MemoryFilter>('all');
@@ -94,17 +94,8 @@ function MemoryBody({ project, isDark }: Omit<Props, 'onClose'>) {
   const current = useMemo(() => pickCurrent(listed, selected), [listed, selected]);
   const currentEntry = current?.entry;
 
-  // A link followed in the preview brings its type's filter along.
-  const openMemory = useCallback(
-    (file: string) => {
-      setSelected(file);
-      const type: MemoryType | undefined = entries.find((e) => e.file === file)?.type;
-      if (type) setFilter((f) => (f === 'all' || f === type || type === 'other' ? 'all' : type));
-    },
-    [entries],
-  );
   // Memory files are edited where every other file is: the diff editor, opened
-  // on the memory folder. The watcher brings a save back into the list.
+  // on the memory folder.
   const edit = (file: string) => {
     if (!memory) return;
     setDiffFile({
@@ -112,7 +103,6 @@ function MemoryBody({ project, isDark }: Omit<Props, 'onClose'>) {
       filePath: file,
       staged: false,
       initialView: { kind: 'working', ref: 'HEAD' },
-      standalone: true,
     });
   };
   // A missing folder and an empty one (Claude creates it before writing) look the same.
@@ -312,14 +302,9 @@ function MemoryBody({ project, isDark }: Omit<Props, 'onClose'>) {
                       ))}
                     </div>
                   )}
-                  <div className="min-h-0 flex-1">
-                    <MemoryPreview
-                      markdown={currentEntry.body}
-                      entries={entries}
-                      isDark={isDark}
-                      onOpenMemory={openMemory}
-                    />
-                  </div>
+                  <pre className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words px-5 py-4 font-mono text-[12px] leading-relaxed text-foreground">
+                    {currentEntry.body.trim()}
+                  </pre>
                 </>
               )}
             </div>
