@@ -3,6 +3,7 @@ import type {
   CreateTaskResult,
   DeleteTaskOptions,
   SetTaskDashAccessInput,
+  TaskMessageAddresses,
   IpcResponse,
   Project,
   Task,
@@ -45,6 +46,8 @@ export interface DatabaseApi {
   restoreTask: (id: string) => Promise<IpcResponse<void>>;
   /** Turn a task's Dash access on or off; returns the updated task. Applies at its next dispatch. */
   setTaskDashAccess: (input: SetTaskDashAccessInput) => Promise<IpcResponse<Task>>;
+  /** Where SendMessage reaches the task's live session; null when it is not running. */
+  getTaskMessageAddresses: (id: string) => Promise<IpcResponse<TaskMessageAddresses | null>>;
   reorderTasks: (projectId: string, orderedTaskIds: string[]) => Promise<IpcResponse<void>>;
   /** A project's tasks changed in main (created, archived, restored, deleted). */
   onTasksChanged: (callback: (data: { projectId: string }) => void) => () => void;

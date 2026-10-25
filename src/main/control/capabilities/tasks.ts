@@ -9,7 +9,7 @@ import type {
   Task,
 } from '../../../shared/types';
 import type { WorkspaceTaskDefaults } from '../../services/WorkspaceConfigService';
-import type { LiveSession } from '../../services/claudeSessionRegistry';
+import { messageAddress, type LiveSession } from '../../services/claudeSessionRegistry';
 import { TerminalMirror } from '../../services/TerminalMirror';
 import { taskModelSchema } from '../../ipc/schemas';
 import { ControlError, defineCapability, type Registry } from '../registry';
@@ -90,7 +90,7 @@ export function toTaskView(
 ): TaskView {
   const info = activity[task.id];
   const trustRoot = getUntrustedRoot(task.id);
-  const address = messageAddress(task, sessions);
+  const address = messageAddress(task.jobId, sessions);
   let state: TaskApiState = info ? STATE_FROM_ACTIVITY[info.state] : 'stopped';
   // The registry sees a started session before the monitor's next poll does:
   // a reachable session is never reported stopped.
@@ -118,11 +118,6 @@ export function toTaskView(
   };
   if (detail) view.detail = detail;
   return view;
-}
-
-function messageAddress(task: Task, sessions: ReadonlyMap<string, LiveSession>): string | null {
-  const socket = task.jobId ? sessions.get(task.jobId)?.messagingSocketPath : null;
-  return socket ? `uds:${socket}` : null;
 }
 
 const taskIdInput = z.object({ taskId: z.string().describe('The task id') });

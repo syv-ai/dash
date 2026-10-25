@@ -6,15 +6,19 @@
  * behind by sessions that died, so only one whose process is alive counts.
  */
 
+import { createHash } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { claudeConfigDir } from '../utils/claudePaths';
+import type { TaskMessageAddresses } from '@shared/types';
 
 /** A registry file's fields Dash uses. */
 export interface SessionEntry {
   pid: number;
   sessionId: string | null;
   jobId: string | null;
+  /** The display name other sessions see (`--name`, or a later `/rename`). */
+  name: string | null;
   messagingSocketPath: string | null;
   /** Claude Code's own word: `idle`, `busy`, … */
   status: string | null;
@@ -25,6 +29,7 @@ export interface SessionEntry {
 export interface LiveSession {
   pid: number;
   sessionId: string | null;
+  name: string | null;
   messagingSocketPath: string | null;
   status: string | null;
 }
@@ -46,6 +51,7 @@ export function parseSessionEntry(raw: string): SessionEntry | null {
     pid: r.pid,
     sessionId: str(r.sessionId),
     jobId: str(r.jobId),
+    name: str(r.name),
     messagingSocketPath: str(r.messagingSocketPath),
     status: str(r.status),
     updatedAt: typeof r.updatedAt === 'number' ? r.updatedAt : 0,
@@ -92,6 +98,7 @@ export function readLiveSessions(configDir: string = claudeConfigDir()): Map<str
     live.set(jobId, {
       pid: e.pid,
       sessionId: e.sessionId,
+      name: e.name,
       messagingSocketPath:
         e.messagingSocketPath && fs.existsSync(e.messagingSocketPath)
           ? e.messagingSocketPath
@@ -100,4 +107,37 @@ export function readLiveSessions(configDir: string = claudeConfigDir()): Map<str
     });
   }
   return live;
+}
+
+/** Where SendMessage reaches a job's live session (`uds:<socket>`); null when it is not running. */
+export function messageAddress(
+  jobId: string | null | undefined,
+  sessions: ReadonlyMap<string, LiveSession> = readLiveSessions(),
+): string | null {
+  const socket = jobId ? sessions.get(jobId)?.messagingSocketPath : null;
+  return socket ? `uds:${socket}` : null;
+}
+
+/**
+ * The `[ref]` ListAgents prints beside a session's name: the first 6 hex
+ * digits of sha256(`session:<socket>`). Claude Code shows more digits when two
+ * refs collide, but resolves any 6-digit or longer prefix.
+ */
+export function sessionRef(socketPath: string): string {
+  return createHash('sha256').update(`session:${socketPath}`).digest('hex').slice(0, 6);
+}
+
+/** Every form of a job's address; null when its session is not running. */
+export function messageAddresses(
+  jobId: string | null | undefined,
+  sessions: ReadonlyMap<string, LiveSession> = readLiveSessions(),
+): TaskMessageAddresses | null {
+  const session = jobId ? sessions.get(jobId) : undefined;
+  const socket = session?.messagingSocketPath;
+  if (!session || !socket) return null;
+  const ref = sessionRef(socket);
+  return {
+    ref: session.name ? `${session.name} [${ref}]` : `[${ref}]`,
+    uds: `uds:${socket}`,
+  };
 }

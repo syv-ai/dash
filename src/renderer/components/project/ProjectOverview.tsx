@@ -421,6 +421,7 @@ export function ProjectOverview({
                         }`}
                       >
                         <TaskActions
+                          taskId={task.id}
                           activityState={activity?.state}
                           onOpenIde={() => void openInIde(task.path || project.path)}
                           onClose={() => onCloseTask(task.id)}

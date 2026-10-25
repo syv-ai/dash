@@ -145,6 +145,17 @@ export type CreateTaskInput = CreateTaskOptions & {
 /** `task:setDashAccess`: turn a task's Dash access on or off (applies at its next session start). */
 export type SetTaskDashAccessInput = { taskId: string; enabled: boolean };
 
+/**
+ * The ways another Claude Code session's SendMessage can reach a task's live
+ * session. Both die with the session: a restart gets a new socket.
+ */
+export interface TaskMessageAddresses {
+  /** `name [ref]`, the form ListAgents prints; the ref tells same-named sessions apart. */
+  ref: string;
+  /** `uds:<socket>`, what dashctl's `messageAddress` returns. */
+  uds: string;
+}
+
 /** What `app:getControlInfo` reports for the Settings orchestrator row. */
 export type ControlInfo = {
   /** `dashctl`, the command line other agents reach Dash with. */
