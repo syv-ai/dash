@@ -511,9 +511,7 @@ function TaskModalBody({
                         setCreateNewBranch(e.target.checked);
                         // origin/HEAD is only a base, so it can't carry over to a checkout.
                         if (!e.target.checked && selectedBranch?.ref === REMOTE_HEAD_REF) {
-                          setSelectedBranch(
-                            branches.find((b) => b.ref !== REMOTE_HEAD_REF) ?? null,
-                          );
+                          setSelectedBranch(pickableBranches(branches, false)[0] ?? null);
                         }
                       }}
                       className="sr-only peer"
