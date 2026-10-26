@@ -2,7 +2,12 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { parseSessionEntry, readLiveSessions } from '../claudeSessionRegistry';
+import {
+  messageAddresses,
+  parseSessionEntry,
+  readLiveSessions,
+  sessionRef,
+} from '../claudeSessionRegistry';
 
 let dir: string;
 let sessionsDir: string;
@@ -14,6 +19,7 @@ const entry = (extra: Record<string, unknown> = {}) => ({
   cwd: '/wt',
   kind: 'bg',
   jobId: 'job-1',
+  name: 'fix/login',
   messagingSocketPath: sock,
   status: 'idle',
   updatedAt: 1,
@@ -45,6 +51,7 @@ describe('parseSessionEntry', () => {
       pid: process.pid,
       sessionId: 'sess-1',
       jobId: 'job-1',
+      name: 'fix/login',
       messagingSocketPath: sock,
       status: 'idle',
       updatedAt: 1,
@@ -72,6 +79,7 @@ describe('readLiveSessions', () => {
     expect(readLiveSessions(dir).get('job-1')).toEqual({
       pid: process.pid,
       sessionId: 'sess-1',
+      name: 'fix/login',
       messagingSocketPath: sock,
       status: 'idle',
     });
@@ -98,5 +106,29 @@ describe('readLiveSessions', () => {
 
   it('is empty when there is no sessions folder', () => {
     expect(readLiveSessions(path.join(dir, 'nope')).size).toBe(0);
+  });
+});
+
+describe('messageAddresses', () => {
+  // Read off a real ListAgents row (Claude Code 2.1.310): `… [01018e]`.
+  it('derives the ref the way ListAgents prints it', () => {
+    expect(sessionRef('/tmp/cc-socks/10352.sock')).toBe('01018e');
+  });
+
+  it('gives the name [ref] and uds forms of a live session', () => {
+    write(`${process.pid}.json`, entry());
+    expect(messageAddresses('job-1', readLiveSessions(dir))).toEqual({
+      ref: `fix/login [${sessionRef(sock)}]`,
+      uds: `uds:${sock}`,
+    });
+  });
+
+  it('is null for a job with no live session or socket', () => {
+    write(`${process.pid}.json`, entry());
+    const sessions = readLiveSessions(dir);
+    expect(messageAddresses('job-2', sessions)).toBeNull();
+    expect(messageAddresses(null, sessions)).toBeNull();
+    fs.rmSync(sock);
+    expect(messageAddresses('job-1', readLiveSessions(dir))).toBeNull();
   });
 });

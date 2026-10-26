@@ -107,6 +107,7 @@ async function status(p: Promise<unknown>): Promise<number> {
 const live = (socket: string | null = '/tmp/cc-socks/7.sock'): LiveSession => ({
   pid: 7,
   sessionId: 'sess-1',
+  name: 't',
   messagingSocketPath: socket,
   status: 'idle',
 });

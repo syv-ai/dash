@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   archiveTask: (id: string) => ipcRenderer.invoke('task:archive', id),
   restoreTask: (id: string) => ipcRenderer.invoke('task:restore', id),
   setTaskDashAccess: (input: unknown) => ipcRenderer.invoke('task:setDashAccess', input),
+  getTaskMessageAddresses: (id: string) => ipcRenderer.invoke('task:messageAddresses', id),
   onTasksChanged: (callback: (data: { projectId: string }) => void) => {
     const handler = (_event: unknown, data: { projectId: string }) => callback(data);
     ipcRenderer.on('tasks:changed', handler);

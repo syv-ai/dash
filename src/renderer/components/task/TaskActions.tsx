@@ -2,9 +2,10 @@ import { Power, MoreHorizontal } from 'lucide-react';
 import type { ActivityState } from '../../../shared/types';
 import { IconButton } from '../ui/IconButton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '../ui/DropdownMenu';
-import { TaskMenuItems } from './TaskMenuItems';
+import { TaskMenuItems, onTaskMenuCloseAutoFocus } from './TaskMenuItems';
 
 interface TaskActionsProps {
+  taskId: string;
   /** The task's activity state; the "Put to sleep" (power) button shows only
    *  while there is a live session — not for a task with none, nor for one
    *  already sleeping (`stopped`), where the button would be a no-op. */
@@ -32,6 +33,7 @@ export function hasLiveSession(state: ActivityState | undefined): boolean {
 }
 
 export function TaskActions({
+  taskId,
   activityState,
   onOpenIde,
   onClose,
@@ -62,8 +64,14 @@ export function TaskActions({
         </DropdownMenuTrigger>
         {/* Items render in a portal, but React events still bubble through the
             tree to the card's onClick — stop them here. */}
-        <DropdownMenuContent align="end" className="min-w-36" onClick={(e) => e.stopPropagation()}>
+        <DropdownMenuContent
+          align="end"
+          className="min-w-36"
+          onClick={(e) => e.stopPropagation()}
+          onCloseAutoFocus={onTaskMenuCloseAutoFocus}
+        >
           <TaskMenuItems
+            taskId={taskId}
             onOpenIde={onOpenIde}
             onSettings={onSettings}
             onArchive={onArchive}

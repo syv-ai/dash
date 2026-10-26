@@ -28,7 +28,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './ui/DropdownMenu';
-import { TaskMenuItems } from './task/TaskMenuItems';
+import { TaskMenuItems, onTaskMenuCloseAutoFocus } from './task/TaskMenuItems';
 import { TokenBadge } from './ui/TokenBadge';
 import { PrBadge } from './ui/PrBadge';
 
@@ -289,7 +289,11 @@ export function MainContent({
                 <MoreHorizontal size={14} strokeWidth={1.8} />
               </IconButton>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-44">
+            <DropdownMenuContent
+              align="end"
+              className="min-w-44"
+              onCloseAutoFocus={onTaskMenuCloseAutoFocus}
+            >
               <DropdownMenuItem onSelect={() => onEnableRemoteControl?.()}>
                 <Globe
                   size={13}
@@ -315,6 +319,7 @@ export function MainContent({
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <TaskMenuItems
+                taskId={activeTask.id}
                 onOpenIde={() => onOpenIde?.()}
                 onSettings={() => onTaskSettings?.(activeTask.id)}
                 onArchive={() => onArchiveTask?.(activeTask.id)}
