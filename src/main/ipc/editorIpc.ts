@@ -6,6 +6,8 @@ import path from 'path';
 import { promisify } from 'util';
 import { parseArgs, errorResponse, ipcError } from './validate';
 import { parseBlameIncremental } from '../services/blameParser';
+import { DatabaseService } from '../services/DatabaseService';
+import { isProjectMemoryDir } from '../services/MemoryService';
 import type {
   EditorBlameResult,
   EditorCommitListItem,
@@ -140,7 +142,33 @@ function statusFromGitCode(code: string): FileChangeStatus {
   return 'modified';
 }
 
+// Asked once per folder: the answer only changes when projects come and go.
+const memoryFolderChecks = new Map<string, Promise<boolean>>();
+
+/**
+ * Whether `cwd` is the Claude memory folder of one of Dash's projects (opened
+ * from the memory modal). The editor shows one as plain files, without git,
+ * even when the folder sits inside some other repository.
+ */
+function isMemoryFolder(cwd: string): Promise<boolean> {
+  let check = memoryFolderChecks.get(cwd);
+  if (!check) {
+    const projectPaths = DatabaseService.getProjects().map((p) => p.path);
+    check = isProjectMemoryDir(cwd, projectPaths);
+    memoryFolderChecks.set(cwd, check);
+  }
+  return check;
+}
+
 async function listWorkingRepoFiles(cwd: string): Promise<string[]> {
+  // A memory folder is flat: its files are the whole listing.
+  if (await isMemoryFolder(cwd)) {
+    const entries = await fs.readdir(cwd, { withFileTypes: true });
+    return entries
+      .filter((e) => e.isFile())
+      .map((e) => e.name)
+      .sort();
+  }
   const tracked = (
     await execFileAsync('git', ['ls-files', '-z'], {
       cwd,
@@ -397,7 +425,8 @@ export function registerEditorIpc(): void {
         }
         const relForGit = toGitPath(path.relative(cwdReal, abs));
         const spec = args.ref === 'HEAD' ? `HEAD:${relForGit}` : `:0:${relForGit}`;
-        const originalContent = await gitShow(args.cwd, spec);
+        const memoryFolder = await isMemoryFolder(args.cwd);
+        let originalContent = memoryFolder ? '' : await gitShow(args.cwd, spec);
 
         let workingContent: string | null = null;
         let mtimeMs = 0;
@@ -423,6 +452,10 @@ export function registerEditorIpc(): void {
           if ((err as { code?: string }).code !== 'ENOENT') throw err;
           // workingContent stays null — file deleted on disk.
         }
+
+        // A memory folder has no HEAD to compare with: the file as it is on
+        // disk is the original, so only unsaved edits show as changes.
+        if (memoryFolder) originalContent = workingContent ?? '';
 
         return {
           success: true,

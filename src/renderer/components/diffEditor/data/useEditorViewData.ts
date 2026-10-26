@@ -20,11 +20,13 @@ export interface EditorViewData {
 /** Composes the view-dependent git reads (commit files, branch files, repo
  *  paths, commits, default base) behind one hook. Owns no view/selection
  *  state — those stay in the workspace; this just turns (cwd, view,
- *  workingFiles) into the merged data the sidebar + pane consume. */
+ *  workingFiles) into the merged data the sidebar + pane consume. Without
+ *  `git` (a folder that is no task's worktree) only its files are listed. */
 export function useEditorViewData(
   cwd: string,
   view: EditorView,
   workingFiles: FileChange[],
+  git: boolean,
 ): EditorViewData {
   const frozen = frozenCommit(view);
   const isCommit = frozen !== null;
@@ -81,8 +83,9 @@ export function useEditorViewData(
             }))
           : NO_COMMITS,
       ),
-    [cwd],
+    [cwd, git],
     NO_COMMITS,
+    git,
   );
 
   const defaultBase = useAsyncResource<string | null>(
@@ -90,8 +93,9 @@ export function useEditorViewData(
       window.electronAPI
         .editorResolveDefaultBase({ cwd })
         .then((r) => (r.success ? (r.data ?? null) : null)),
-    [cwd],
+    [cwd, git],
     null,
+    git,
   );
 
   const changedFiles = isCommit ? commitFiles.data : isBranch ? branchFiles.data : workingFiles;

@@ -17,6 +17,7 @@ const DiffEditorModal = lazy(() => import('./components/diffEditor/DiffEditorMod
 import { ShellDrawerWrapper } from './components/terminal/ShellDrawerWrapper';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
 import { ExtensionsModal } from './components/extensions/ExtensionsModal';
+import { MemoryModal } from './components/memory/MemoryModal';
 import { TaskModal } from './components/task/TaskModal';
 import { NewProjectWizard } from './components/newProject/NewProjectWizard';
 import { DeleteTaskModal } from './components/task/DeleteTaskModal';
@@ -106,6 +107,9 @@ export function App() {
   const setShowSkillsBrowser = useUi((s) => s.setShowSkillsBrowser);
   const extensionsInitialScopeId = useUi((s) => s.extensionsInitialScopeId);
   const setExtensionsInitialScopeId = useUi((s) => s.setExtensionsInitialScopeId);
+  const memoryProjectId = useUi((s) => s.memoryProjectId);
+  const setMemoryProjectId = useUi((s) => s.setMemoryProjectId);
+  const memoryProject = projects.find((p) => p.id === memoryProjectId) ?? null;
   const settingsInitialTab = useUi((s) => s.settingsInitialTab);
   const setSettingsInitialTab = useUi((s) => s.setSettingsInitialTab);
   const theme = useSettings((s) => s.theme);
@@ -1572,6 +1576,10 @@ export function App() {
         />
       )}
 
+      {memoryProject && (
+        <MemoryModal project={memoryProject} onClose={() => setMemoryProjectId(null)} />
+      )}
+
       {diffFile && (
         <Suspense fallback={null}>
           <DiffEditorModal
@@ -1588,8 +1596,12 @@ export function App() {
               // Refocus the active task's Claude Code TUI so the user can
               // keep typing without an extra click. RAF defers past React's
               // commit so the modal's DOM is gone before xterm grabs focus.
+              // Not while the memory modal is still up: typing would reach
+              // Claude unseen.
               const id = activeTaskId;
-              if (id) requestAnimationFrame(() => sessionRegistry.get(id)?.focus());
+              if (id && !memoryProject) {
+                requestAnimationFrame(() => sessionRegistry.get(id)?.focus());
+              }
             }}
           />
         </Suspense>

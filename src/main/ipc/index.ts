@@ -21,6 +21,7 @@ import { registerPortsIpc } from './portsIpc';
 import { registerDrawerTabsIpc } from './drawerTabsIpc';
 import { registerWorkspaceConfigIpc } from './workspaceConfigIpc';
 import { registerProjectSourceIpc } from './projectSourceIpc';
+import { registerMemoryIpc } from './memoryIpc';
 
 export function registerAllIpc(): void {
   registerAppIpc();
@@ -46,4 +47,5 @@ export function registerAllIpc(): void {
   registerDrawerTabsIpc();
   registerWorkspaceConfigIpc();
   registerProjectSourceIpc();
+  registerMemoryIpc();
 }

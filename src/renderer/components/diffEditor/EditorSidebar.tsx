@@ -22,6 +22,9 @@ import { Markdown } from '../ui/Markdown';
 interface EditorSidebarProps {
   /** Repo root — needed to lazily list gitignored files under "show all files". */
   cwd: string;
+  /** `cwd` is a task's worktree. Otherwise it is plain files: no commits, no
+   *  changes to filter on, no ignored files. */
+  git: boolean;
   /** All file paths in the current view's source (whole repo, sorted). */
   allPaths: string[];
   /** Subset of paths that have a diff for this view, with status + line stats. */
@@ -72,7 +75,23 @@ const CHANGED_ONLY_KEY = 'diffEditor.changedOnly';
 
 export function EditorSidebar(props: EditorSidebarProps) {
   const initialDrawerSize = parseInitial(localStorage.getItem(COMMITS_DRAWER_KEY), 35);
+  const fileTree = (
+    <FileTreePanel
+      cwd={props.cwd}
+      git={props.git}
+      view={props.view}
+      paths={props.allPaths}
+      changedFiles={props.changedFiles}
+      loading={props.filesLoading}
+      selectedPath={props.selectedPath}
+      onSelectFile={props.onSelectFile}
+      badgeCounts={props.badgeCounts}
+    />
+  );
 
+  if (!props.git) {
+    return <div className="h-full min-h-0 flex flex-col overflow-hidden">{fileTree}</div>;
+  }
   return (
     <div className="h-full min-h-0 flex flex-col overflow-hidden">
       <PanelGroup
@@ -82,18 +101,7 @@ export function EditorSidebar(props: EditorSidebarProps) {
           if (sizes[1] != null) localStorage.setItem(COMMITS_DRAWER_KEY, String(sizes[1]));
         }}
       >
-        <Panel minSize={20}>
-          <FileTreePanel
-            cwd={props.cwd}
-            view={props.view}
-            paths={props.allPaths}
-            changedFiles={props.changedFiles}
-            loading={props.filesLoading}
-            selectedPath={props.selectedPath}
-            onSelectFile={props.onSelectFile}
-            badgeCounts={props.badgeCounts}
-          />
-        </Panel>
+        <Panel minSize={20}>{fileTree}</Panel>
         <PanelResizeHandle className="h-px bg-[hsl(var(--border)/0.5)] hover:bg-[hsl(var(--border))] transition-colors" />
         <Panel defaultSize={initialDrawerSize} minSize={10} maxSize={70}>
           <CommitsDrawer
@@ -353,6 +361,7 @@ const FOLDER_TINT: Record<FileChangeStatus, string> = {
 
 interface FileTreePanelProps {
   cwd: string;
+  git: boolean;
   view: EditorView;
   paths: string[];
   changedFiles: FileChange[];
@@ -364,6 +373,7 @@ interface FileTreePanelProps {
 
 function FileTreePanel({
   cwd,
+  git,
   view,
   paths,
   changedFiles,
@@ -372,9 +382,11 @@ function FileTreePanel({
   onSelectFile,
   badgeCounts,
 }: FileTreePanelProps) {
-  const [changedOnly, setChangedOnly] = useState<boolean>(
+  const [changedOnlyPref, setChangedOnly] = useState<boolean>(
     () => localStorage.getItem(CHANGED_ONLY_KEY) === 'true',
   );
+  // Plain files have no changes to filter on, and nothing git ignores.
+  const changedOnly = git && changedOnlyPref;
   const toggleChangedOnly = () =>
     setChangedOnly((v) => {
       const next = !v;
@@ -387,7 +399,7 @@ function FileTreePanel({
   // working-tree concept (a commit's tree can't contain them), so the fetch is
   // gated on the working view; git collapses fully-ignored directories to one
   // entry, which keeps `node_modules/` from flooding the tree.
-  const showIgnored = !changedOnly && view.kind === 'working';
+  const showIgnored = git && !changedOnly && view.kind === 'working';
   const [ignoredPaths, setIgnoredPaths] = useState<string[]>([]);
   useEffect(() => {
     if (!showIgnored) {
@@ -444,20 +456,22 @@ function FileTreePanel({
           )}
         </span>
         <span className="flex items-center gap-0.5">
-          <Tooltip content={changedOnly ? 'Show all files' : 'Show changed files only'}>
-            <button
-              type="button"
-              onClick={toggleChangedOnly}
-              aria-pressed={changedOnly}
-              className={`shrink-0 p-1 -mr-1 rounded transition-colors ${
-                changedOnly
-                  ? 'text-primary'
-                  : 'text-muted-fade-50 hover:text-foreground hover:bg-[hsl(var(--surface-2)/0.6)]'
-              }`}
-            >
-              <ListFilter size={13} strokeWidth={1.8} />
-            </button>
-          </Tooltip>
+          {git && (
+            <Tooltip content={changedOnly ? 'Show all files' : 'Show changed files only'}>
+              <button
+                type="button"
+                onClick={toggleChangedOnly}
+                aria-pressed={changedOnly}
+                className={`shrink-0 p-1 -mr-1 rounded transition-colors ${
+                  changedOnly
+                    ? 'text-primary'
+                    : 'text-muted-fade-50 hover:text-foreground hover:bg-[hsl(var(--surface-2)/0.6)]'
+                }`}
+              >
+                <ListFilter size={13} strokeWidth={1.8} />
+              </button>
+            </Tooltip>
+          )}
         </span>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-gutter-stable scrollbar-thin-hover pb-2 px-1">

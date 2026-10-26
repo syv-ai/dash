@@ -1312,3 +1312,55 @@ export interface AutoUpdateStatus {
   /** False when the updater isn't wired up: dev builds and Windows. */
   initialized: boolean;
 }
+
+/**
+ * Claude Code auto-memory categories, in display order: standing rules first,
+ * facts that go stale last. `other` catches missing or unknown types.
+ */
+export const MEMORY_TYPES = ['feedback', 'user', 'reference', 'project', 'other'] as const;
+export type MemoryType = (typeof MEMORY_TYPES)[number];
+
+/** The index file Claude keeps beside the memories. */
+export const MEMORY_INDEX_FILE = 'MEMORY.md';
+
+/**
+ * How much of the index Claude Code loads into a session: its first lines, or
+ * its first bytes, whichever runs out first. Nothing past that is seen.
+ */
+export const MEMORY_INDEX_MAX_LINES = 200;
+export const MEMORY_INDEX_MAX_BYTES = 25_000;
+
+/** What Dash reads from a memory's file. */
+export interface MemoryFields {
+  /** Frontmatter `name`. */
+  name: string;
+  description: string;
+  type: MemoryType;
+  /** Markdown without the frontmatter block. */
+  body: string;
+}
+
+/** One `<name>.md` file in a project's auto-memory folder. */
+export interface MemoryEntry extends MemoryFields {
+  /** Basename, e.g. `feedback_testing.md`: the stable id within a folder. */
+  file: string;
+  /** Frontmatter `name`, falling back to the basename without `.md`. */
+  name: string;
+  mtimeMs: number;
+  /** Whether MEMORY.md links to this file. */
+  inIndex: boolean;
+  /** Linked, but only past the part of MEMORY.md Claude loads: as good as unindexed. */
+  pastIndexLimit: boolean;
+}
+
+/** A project's auto-memory, as Claude Code stores it. */
+export interface ProjectMemory {
+  /** Absolute memory folder Dash resolved (shown even when it doesn't exist). */
+  dir: string;
+  exists: boolean;
+  /** Whether the folder has a MEMORY.md. */
+  hasIndex: boolean;
+  entries: MemoryEntry[];
+  /** Memory files MEMORY.md links to that aren't in the folder. */
+  dangling: string[];
+}
