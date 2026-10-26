@@ -21,18 +21,7 @@ import { FitScheduler } from './FitScheduler';
 import { MouseModeTracker } from './mouseModeFilter';
 import { macShellKeySequence } from './shellKeys';
 import { TUI_COLS, TUI_ROWS } from '../../shared/tuiProtocol';
-
-// Heap mark above which a terminal trims its own scrollback to relieve pressure.
-// `performance.memory.usedJSHeapSize` is the WHOLE renderer heap (React, Monaco,
-// every terminal), so the mark must clear normal baseline usage (Monaco alone
-// puts a working app at 130–160MB) — otherwise the trim fires constantly. Only
-// genuine pressure should trip it.
-const MEMORY_LIMIT_BYTES = 600 * 1024 * 1024; // 600MB
-// Don't re-check more often than this; the trim is sticky so one pass per window
-// is plenty and it must never run per output chunk (that was the flicker bug).
-const MEMORY_CHECK_INTERVAL_MS = 5_000;
-// Floor the scrollback never drops below when trimming under pressure.
-const MIN_SCROLLBACK = 10_000;
+import type { BudgetedTerminal } from './memoryBudget';
 
 /** An agent pane whose attach client exited. `reconnecting`: Dash cycled the
  *  session and the pane is re-attaching on its own (no Re-attach needed). */
@@ -77,7 +66,9 @@ export class TerminalSessionManager {
   private mouseModes = new MouseModeTracker();
   private lastPtyCols = 0;
   private lastPtyRows = 0;
-  private lastMemoryCheckAt = 0;
+  // When this terminal was last on screen; the memory budget trims the least
+  // recently viewed first.
+  private lastViewedAt = Date.now();
   private savedViewportY: number | null = null;
   // Shell-only sessions use xterm 6's DOM renderer (WebGL paints their
   // transparent background black). The DOM renderer lays each row's glyphs at
@@ -662,6 +653,7 @@ export class TerminalSessionManager {
 
   detach() {
     this.savedViewportY = this.terminal.buffer.active.viewportY;
+    this.lastViewedAt = Date.now();
 
     // Stop timers
     if (this.readyFallbackTimer) {
@@ -1272,7 +1264,6 @@ export class TerminalSessionManager {
       }
 
       this.terminal.write(data);
-      this.checkMemory();
     });
 
     // Listen for PTY exit → detached card (agent panes), shell fallback
@@ -1351,31 +1342,27 @@ export class TerminalSessionManager {
     this.terminal.scrollToLine(line);
   }
 
+  /** Size and recency of this terminal's buffer, for the renderer-wide memory budget. */
+  budgetInfo(): BudgetedTerminal {
+    return {
+      id: this.id,
+      lines: this.terminal.buffer.normal.length,
+      cols: this.terminal.cols,
+      lastViewedAt: this.lastViewedAt,
+      attached: this.currentContainer !== null,
+    };
+  }
+
   /**
-   * Relieve renderer memory pressure by trimming THIS terminal's scrollback when
-   * the heap runs genuinely high. Throttled (never per output chunk) and
-   * non-destructive: lowering the scrollback cap drops the oldest off-screen
-   * lines WITHOUT clearing the visible viewport, so it frees memory with no
-   * repaint, and the reduced cap is sticky so it doesn't re-fire on the next
-   * chunk.
-   *
-   * The previous version called `terminal.clear()` on every chunk once over a
-   * 128MB limit and immediately restored scrollback to 100k — so with a normal
-   * (Monaco-loaded) heap parked above 128MB it wiped + repainted the TUI on
-   * every output chunk, flickering "like crazy" while output streamed (e.g. the
-   * repaints Claude Code emits while scrolling in NO_FLICKER mode).
+   * Cap the buffer at `lines` (scrollback + screen) to free memory. Lowering the
+   * scrollback cap drops the oldest off-screen lines in place, with no clear()
+   * and no viewport repaint (an earlier clear()-based trim made streaming TUIs
+   * flicker). The cap only ever goes down and stays down.
    */
-  private checkMemory() {
-    if (typeof performance === 'undefined' || !('memory' in performance)) return;
-    const now = Date.now();
-    if (now - this.lastMemoryCheckAt < MEMORY_CHECK_INTERVAL_MS) return;
-    this.lastMemoryCheckAt = now;
-    const mem = (performance as unknown as { memory: { usedJSHeapSize: number } }).memory;
-    if (mem.usedJSHeapSize <= MEMORY_LIMIT_BYTES) return;
-    const current = this.terminal.options.scrollback ?? MIN_SCROLLBACK;
-    if (current <= MIN_SCROLLBACK) return; // already at the floor
-    // Halve toward the floor; lowering the cap trims the oldest scrollback lines
-    // in place — no clear(), no viewport repaint.
-    this.terminal.options.scrollback = Math.max(MIN_SCROLLBACK, Math.floor(current / 2));
+  trimScrollback(lines: number) {
+    const scrollback = Math.max(0, lines - this.terminal.rows);
+    if (scrollback < (this.terminal.options.scrollback ?? Infinity)) {
+      this.terminal.options.scrollback = scrollback;
+    }
   }
 }

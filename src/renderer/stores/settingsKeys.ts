@@ -12,6 +12,11 @@ import {
 import type { NotificationSound } from '../sounds';
 import type { UsageThresholds } from '@shared/types';
 import { parseKeybindings, type KeyBindingMap } from '../keybindings';
+import {
+  TERMINAL_MEMORY_LIMITS,
+  DEFAULT_TERMINAL_MEMORY_LIMIT,
+  type TerminalMemoryLimit,
+} from '../terminal/memoryBudget';
 
 /** The slice of settings managed by settingsStore. Grows as fields migrate. */
 export interface SettingsState {
@@ -36,6 +41,9 @@ export interface SettingsState {
   notificationSound: NotificationSound;
   terminalTheme: string;
   terminalFontFamily: string;
+  /** MB all terminal buffers may use together before the least recently
+   *  viewed ones have their oldest scrollback trimmed. */
+  terminalMemoryLimit: TerminalMemoryLimit;
   effortLevel: string;
   shellDrawerPosition: 'main' | 'right';
   customIDE: { path: string; args: string[] };
@@ -104,6 +112,11 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   entry('notificationSound', 'notificationSound', str('off') as Codec<NotificationSound>),
   entry('terminalTheme', 'terminalTheme', str('default')),
   entry('terminalFontFamily', 'terminalFontFamily', str('system')),
+  entry(
+    'terminalMemoryLimit',
+    'terminalMemoryLimit',
+    strEnum(TERMINAL_MEMORY_LIMITS, DEFAULT_TERMINAL_MEMORY_LIMIT),
+  ),
   entry('effortLevel', 'claudeEffortLevel', str('auto')),
   entry('shellDrawerPosition', 'shellDrawerPosition', strEnum(['main', 'right'] as const, 'right')),
   entry(

@@ -46,6 +46,11 @@ import { NOTIFICATION_SOUNDS, SOUND_LABELS, playNotificationSound } from '../../
 import type { NotificationSound } from '../../sounds';
 import { TERMINAL_THEMES, resolveTheme } from '../../terminal/terminalThemes';
 import { TERMINAL_FONTS, resolveTerminalFontValue } from '../../terminal/terminalFonts';
+import {
+  TERMINAL_MEMORY_LIMITS,
+  DEFAULT_TERMINAL_MEMORY_LIMIT,
+  formatMemoryLimit,
+} from '../../terminal/memoryBudget';
 import { Select } from '../ui/Select';
 import { Segmented } from '../ui/Segmented';
 import type {
@@ -843,6 +848,8 @@ export function SettingsModal({
   const onTerminalThemeChange = useSettings((s) => s.setTerminalTheme);
   const terminalFontFamily = useSettings((s) => s.terminalFontFamily);
   const onTerminalFontFamilyChange = useSettings((s) => s.setTerminalFontFamily);
+  const terminalMemoryLimit = useSettings((s) => s.terminalMemoryLimit);
+  const onTerminalMemoryLimitChange = useSettings((s) => s.setTerminalMemoryLimit);
   const preferredIDE = useSettings((s) => s.preferredIDE);
   const onPreferredIDEChange = useSettings((s) => s.setPreferredIDE);
   const customIDE = useSettings((s) => s.customIDE);
@@ -1113,6 +1120,24 @@ export function SettingsModal({
                           { value: 'right', label: 'Right' },
                         ]}
                         onChange={onShellDrawerPositionChange}
+                      />
+                    </SettingsBlock>
+                  </SettingsCard>
+                  <SettingsCard title="Scrollback memory">
+                    <SettingsBlock
+                      label="Memory limit"
+                      description="Total memory all task terminals may use for scrollback. Over the limit, the oldest output of the terminals you looked at least recently is dropped, down to 10,000 lines each. The terminal you're viewing is never trimmed, and Claude's conversation is unaffected."
+                    >
+                      <Select
+                        value={terminalMemoryLimit}
+                        onValueChange={onTerminalMemoryLimitChange}
+                        options={TERMINAL_MEMORY_LIMITS.map((mb) => ({
+                          value: mb,
+                          label:
+                            mb === DEFAULT_TERMINAL_MEMORY_LIMIT
+                              ? `${formatMemoryLimit(mb)} (default)`
+                              : formatMemoryLimit(mb),
+                        }))}
                       />
                     </SettingsBlock>
                   </SettingsCard>

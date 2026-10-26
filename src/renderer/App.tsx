@@ -126,6 +126,7 @@ export function App() {
   const shellDrawerPosition = useSettings((s) => s.shellDrawerPosition);
   const terminalTheme = useSettings((s) => s.terminalTheme);
   const terminalFontFamily = useSettings((s) => s.terminalFontFamily);
+  const terminalMemoryLimit = useSettings((s) => s.terminalMemoryLimit);
   const setPreferredIDE = useSettings((s) => s.setPreferredIDE);
   const availableIDEs = useProjects((s) => s.availableIDEs);
 
@@ -683,6 +684,10 @@ export function App() {
     document.documentElement.style.setProperty('--terminal-font', resolved);
     sessionRegistry.setAllTerminalFonts(resolved);
   }, [terminalFontFamily]);
+
+  useEffect(() => {
+    sessionRegistry.setMemoryBudget(terminalMemoryLimit);
+  }, [terminalMemoryLimit]);
 
   const cycleTask = useCallback(
     (direction: 1 | -1) => {

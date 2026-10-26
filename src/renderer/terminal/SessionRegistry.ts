@@ -1,5 +1,15 @@
 import { TerminalSessionManager } from './TerminalSessionManager';
 import type { PermissionMode } from '../../shared/types';
+import {
+  DEFAULT_TERMINAL_MEMORY_LIMIT,
+  MIN_SCROLLBACK,
+  planScrollbackTrims,
+  type TerminalMemoryLimit,
+} from './memoryBudget';
+
+// How often the memory budget is enforced. A timer, not per output chunk:
+// hidden tasks keep receiving output, and the check is a sum over the sessions.
+const BUDGET_CHECK_INTERVAL_MS = 10_000;
 
 interface AttachOptions {
   id: string;
@@ -15,6 +25,8 @@ class SessionRegistryImpl {
   private sessions = new Map<string, TerminalSessionManager>();
   private _isDark = true;
   private _themeId = 'default';
+  private memoryBudgetBytes = Number(DEFAULT_TERMINAL_MEMORY_LIMIT) * 1024 * 1024;
+  private budgetTimer: ReturnType<typeof setInterval> | null = null;
 
   getOrCreate(opts: Omit<AttachOptions, 'container'>): TerminalSessionManager {
     let session = this.sessions.get(opts.id);
@@ -29,8 +41,22 @@ class SessionRegistryImpl {
         themeId: opts.themeId ?? this._themeId,
       });
       this.sessions.set(opts.id, session);
+      this.budgetTimer ??= setInterval(() => this.enforceMemoryBudget(), BUDGET_CHECK_INTERVAL_MS);
     }
     return session;
+  }
+
+  /** Renderer-wide cap on terminal buffer memory (Settings → Terminal). */
+  setMemoryBudget(limit: TerminalMemoryLimit): void {
+    this.memoryBudgetBytes = Number(limit) * 1024 * 1024;
+    this.enforceMemoryBudget();
+  }
+
+  /** Trim the least recently viewed terminals until all buffers fit the budget. */
+  enforceMemoryBudget(): void {
+    const terminals = [...this.sessions.values()].map((s) => s.budgetInfo());
+    const plan = planScrollbackTrims(terminals, this.memoryBudgetBytes, MIN_SCROLLBACK);
+    for (const [id, lines] of plan) this.sessions.get(id)?.trimScrollback(lines);
   }
 
   attach(opts: AttachOptions): TerminalSessionManager {
