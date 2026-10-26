@@ -4,6 +4,7 @@ import { activityMonitor, activityEvents } from '../../services/ActivityMonitor'
 import { supervisorService } from '../../services/SupervisorService';
 import { worktreeService } from '../../services/WorktreeService';
 import { loadWorkspaceConfig } from '../../services/WorkspaceConfigService';
+import { claudeDefaultPermissionMode } from '../../services/claudeDefaultMode';
 import { taskEvents } from '../../services/taskEvents';
 import { focusTaskInWindow } from '../../services/focusTask';
 import {
@@ -56,6 +57,7 @@ export function taskDeps(): TaskCapabilityDeps {
       return () => activityEvents.off('change', listener);
     },
     taskDefaults,
+    claudeDefaultPermissionMode,
     resolveBaseRef: (projectPath) => worktreeService.resolveBaseRef(projectPath),
     currentBranch: (projectPath) => GitService.getBranch(projectPath),
     branchExists: (projectPath, branch) => GitService.branchExists(projectPath, branch),

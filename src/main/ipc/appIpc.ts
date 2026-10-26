@@ -2,6 +2,7 @@ import { ipcMain, dialog, app, shell, BrowserWindow, Notification, clipboard } f
 import { z } from 'zod';
 import { parseArgs, parseArgsSafe, errorResponse, ipcError } from './validate';
 import { claudeUserSettingsFile } from '../utils/claudePaths';
+import { claudeDefaultPermissionMode } from '../services/claudeDefaultMode';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { existsSync, readFileSync } from 'fs';
@@ -365,6 +366,16 @@ export function registerAppIpc(): void {
       }
     },
   );
+
+  // The defaultMode in Claude Code's settings, as the Dash mode a new task starts in
+  ipcMain.handle('app:getClaudeDefaultPermissionMode', (_event, projectPath?: string) => {
+    try {
+      parseArgs('app:getClaudeDefaultPermissionMode', z.string().optional(), projectPath);
+      return { success: true, data: claudeDefaultPermissionMode(projectPath) ?? null };
+    } catch (err) {
+      return errorResponse(err);
+    }
+  });
 
   ipcMain.on('app:setCommitAttribution', (_event, value: string | undefined) => {
     if (

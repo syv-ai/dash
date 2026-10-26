@@ -1043,9 +1043,20 @@ export function App() {
     let defaults: TaskModalDefaults | null = null;
     let scripts: { setup: string; teardown: string } | null = null;
     if (project) {
-      const resp = await window.electronAPI.readWorkspaceConfig(project.path);
+      const [resp, claudeMode] = await Promise.all([
+        window.electronAPI.readWorkspaceConfig(project.path),
+        window.electronAPI.getClaudeDefaultPermissionMode(project.path),
+      ]);
       const config = resp.success ? resp.data : null;
-      defaults = config?.taskDefaults ?? null;
+      // The project's own default wins; else the defaultMode in Claude Code's
+      // settings, which the explicit mode every task is dispatched with
+      // would otherwise override.
+      defaults = {
+        ...config?.taskDefaults,
+        permissionMode:
+          config?.taskDefaults?.permissionMode ??
+          (claudeMode.success ? (claudeMode.data ?? undefined) : undefined),
+      };
       scripts = {
         setup: (config?.setup ?? []).join('\n'),
         teardown: (config?.teardown ?? []).join('\n'),

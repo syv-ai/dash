@@ -17,6 +17,7 @@ export interface ConfigureValues {
 export const PERMISSION_MODE_LABELS: Record<PermissionMode, string> = {
   default: 'Ask every time (default)',
   acceptEdits: 'Auto-accept edits',
+  auto: 'Auto mode (classifier approves safe actions)',
   bypassPermissions: 'Bypass all permissions',
 };
 
