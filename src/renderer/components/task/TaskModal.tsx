@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { X, GitBranch, Loader2, Upload, FolderGit2, ArrowDown } from 'lucide-react';
 import { SearchableMultiSelect } from '../ui/SearchableMultiSelect';
 import {
-  REMOTE_HEAD_REF,
   type BranchInfo,
   type CreateTaskOptions,
   type GithubIssue,
@@ -217,6 +216,15 @@ function TaskModalBody({
   useEffect(() => {
     if (gitReady && branches.length === 0) void fetchBranches();
   }, [gitReady, projectPath]);
+
+  // origin/HEAD is only a base for a new worktree branch. Whenever the mode,
+  // the fetched list or the defaults leave it selected anywhere else, move on.
+  const pickable = pickableBranches(branches, useWorktree && createNewBranch);
+  useEffect(() => {
+    if (selectedBranch && !pickable.some((b) => b.ref === selectedBranch.ref)) {
+      setSelectedBranch(pickable[0] ?? null);
+    }
+  }, [pickable, selectedBranch]);
 
   // Search callbacks for SearchableMultiSelect
   const searchGithubIssues = useCallback(
@@ -509,10 +517,6 @@ function TaskModalBody({
                         // over as the base branch (and an in-use branch, blocked
                         // for checkout, becomes a valid base to start from).
                         setCreateNewBranch(e.target.checked);
-                        // origin/HEAD is only a base, so it can't carry over to a checkout.
-                        if (!e.target.checked && selectedBranch?.ref === REMOTE_HEAD_REF) {
-                          setSelectedBranch(pickableBranches(branches, false)[0] ?? null);
-                        }
                       }}
                       className="sr-only peer"
                     />
@@ -570,7 +574,7 @@ function TaskModalBody({
                 </label>
 
                 <BranchPrPicker
-                  branches={pickableBranches(branches, createNewBranch)}
+                  branches={pickable}
                   selectedBranch={selectedBranch}
                   branchLoading={branchLoading}
                   branchError={branchError}
