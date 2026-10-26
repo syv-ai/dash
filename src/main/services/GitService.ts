@@ -19,6 +19,7 @@ import type {
   CommitGraphData,
   CommitDetail,
 } from '@shared/types';
+import { REMOTE_HEAD_REF } from '@shared/types';
 
 const execFileAsync = promisify(execFile);
 
@@ -285,20 +286,29 @@ export class GitService {
       );
 
       const branches: BranchInfo[] = [];
+      let remoteHead: BranchInfo | undefined;
       for (const line of stdout.split('\n').filter(Boolean)) {
         const [refname, shortHash, ...dateParts] = line.split('\t');
         const ref = refname?.replace(/^refs\/remotes\//, '');
-        if (!ref || ref.endsWith('/HEAD')) continue;
+        if (!ref) continue;
+        const info = { shortHash: shortHash || '', relativeDate: dateParts.join('\t') || '' };
+        if (ref === REMOTE_HEAD_REF) {
+          // The remote's default branch: a useful base, so keep it, but last
+          // so it never becomes the default selection.
+          remoteHead = { name: REMOTE_HEAD_REF, ref, ...info };
+          continue;
+        }
+        if (ref.endsWith('/HEAD')) continue;
         const name = ref.replace(/^origin\//, '');
         branches.push({
           name,
           ref,
-          shortHash: shortHash || '',
-          relativeDate: dateParts.join('\t') || '',
+          ...info,
           checkedOut: checkedOut.has(name),
           checkedOutPath: checkedOut.get(name),
         });
       }
+      if (remoteHead) branches.push(remoteHead);
 
       // If fetch failed AND there's nothing cached locally, the failure is
       // genuinely actionable (auth, network, never-fetched remote) — surface it.

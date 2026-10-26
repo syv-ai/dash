@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, GitBranch, Loader2, Upload, FolderGit2, ArrowDown } from 'lucide-react';
 import { SearchableMultiSelect } from '../ui/SearchableMultiSelect';
-import type {
-  BranchInfo,
-  CreateTaskOptions,
-  GithubIssue,
-  AzureDevOpsWorkItem,
-  LinkedItem,
-  PermissionMode,
-  TaskModel,
+import {
+  REMOTE_HEAD_REF,
+  type BranchInfo,
+  type CreateTaskOptions,
+  type GithubIssue,
+  type AzureDevOpsWorkItem,
+  type LinkedItem,
+  type PermissionMode,
+  type TaskModel,
 } from '../../../shared/types';
 import { isAdoRemote } from '../../../shared/urls';
 import { branchSlug } from '../../../shared/slug';
@@ -21,6 +22,7 @@ import { Segmented } from '../ui/Segmented';
 import { SwitchField } from '../ui/SwitchField';
 import { useControlInfo } from '../../hooks/useControlInfo';
 import { BranchPrPicker } from './BranchPrPicker';
+import { pickableBranches } from './pickableBranches';
 import { findBranchHolder, describeBranchHolder } from './branchHolder';
 import { useProjects } from '../../stores/projectsStore';
 
@@ -507,6 +509,12 @@ function TaskModalBody({
                         // over as the base branch (and an in-use branch, blocked
                         // for checkout, becomes a valid base to start from).
                         setCreateNewBranch(e.target.checked);
+                        // origin/HEAD is only a base, so it can't carry over to a checkout.
+                        if (!e.target.checked && selectedBranch?.ref === REMOTE_HEAD_REF) {
+                          setSelectedBranch(
+                            branches.find((b) => b.ref !== REMOTE_HEAD_REF) ?? null,
+                          );
+                        }
                       }}
                       className="sr-only peer"
                     />
@@ -564,7 +572,7 @@ function TaskModalBody({
                 </label>
 
                 <BranchPrPicker
-                  branches={branches}
+                  branches={pickableBranches(branches, createNewBranch)}
                   selectedBranch={selectedBranch}
                   branchLoading={branchLoading}
                   branchError={branchError}

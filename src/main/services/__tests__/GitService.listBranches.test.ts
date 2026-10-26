@@ -37,8 +37,9 @@ afterAll(() => {
 });
 
 describe('GitService.fetchAndListBranches', () => {
-  it("does not list origin/HEAD, which git shortens to a bare 'origin'", async () => {
-    const names = (await GitService.fetchAndListBranches(clone)).map((b) => b.name);
-    expect(names).toEqual(['main']);
+  it("lists origin/HEAD (the remote's default) after the real branches, not as a bare 'origin'", async () => {
+    const list = await GitService.fetchAndListBranches(clone);
+    expect(list.map((b) => b.name)).toEqual(['main', 'origin/HEAD']);
+    expect(list.map((b) => b.ref)).toEqual(['origin/main', 'origin/HEAD']);
   });
 });

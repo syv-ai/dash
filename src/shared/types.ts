@@ -408,6 +408,9 @@ export interface SupervisorSession {
 
 // ── Branch Types ─────────────────────────────────────────────
 
+/** The remote's default branch as a base ref. Not a checkout target. */
+export const REMOTE_HEAD_REF = 'origin/HEAD';
+
 export interface BranchInfo {
   name: string; // "main", "develop"
   ref: string; // "origin/main", "origin/develop"
