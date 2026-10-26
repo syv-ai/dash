@@ -12,7 +12,7 @@ import type {
 import type { WorkspaceTaskDefaults } from '../../services/WorkspaceConfigService';
 import { messageAddress, type LiveSession } from '../../services/claudeSessionRegistry';
 import { TerminalMirror } from '../../services/TerminalMirror';
-import { taskModelSchema } from '../../ipc/schemas';
+import { permissionModeSchema, taskModelSchema } from '../../ipc/schemas';
 import { ControlError, defineCapability, type Registry } from '../registry';
 import { defaultBaseRef } from './projects';
 
@@ -271,7 +271,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
           .optional()
           .describe('new-branch only: push the new branch to the remote (default false)'),
         model: taskModelSchema.optional(),
-        permissionMode: z.enum(['default', 'acceptEdits', 'auto']).optional(),
+        permissionMode: permissionModeSchema.exclude(['bypassPermissions']).optional(),
         dashAccess: z
           .boolean()
           .optional()

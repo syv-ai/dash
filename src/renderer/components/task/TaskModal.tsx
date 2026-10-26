@@ -36,6 +36,8 @@ export interface TaskModalDefaults {
   useWorktree?: boolean;
   contextPrompt?: string;
   dashAccess?: boolean;
+  /** The defaultMode in Claude Code's settings, for when Dash has no mode of its own. */
+  claudePermissionMode?: PermissionMode;
 }
 
 interface TaskModalProps {
@@ -166,7 +168,8 @@ function TaskModalBody({
     taskDefaults?.useWorktree ?? (isGitRepo || worktreeForced),
   );
   const [permissionMode, setPermissionMode] = useState<PermissionMode>(
-    () => taskDefaults?.permissionMode ?? readInitialPermissionMode(),
+    () =>
+      taskDefaults?.permissionMode ?? readInitialPermissionMode(taskDefaults?.claudePermissionMode),
   );
   const [model, setModel] = useState<TaskModel>(() => readInitialModel());
   const [contextPrompt, setContextPrompt] = useState(taskDefaults?.contextPrompt ?? '');

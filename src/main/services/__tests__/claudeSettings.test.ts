@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { claudeDefaultPermissionMode } from '../claudeDefaultMode';
+import { claudeDefaultPermissionMode, readClaudeSetting } from '../claudeSettings';
 
 let root: string;
 let configDir: string;
@@ -55,5 +55,23 @@ describe('claudeDefaultPermissionMode', () => {
     expect(claudeDefaultPermissionMode()).toBe('default');
     writeSettings(path.join(project, '.claude', 'settings.json'), 'plan');
     expect(claudeDefaultPermissionMode(project)).toBeUndefined();
+  });
+});
+
+describe('readClaudeSetting', () => {
+  const commit = (s: { attribution?: { commit?: unknown } }) => s.attribution?.commit;
+
+  it('takes the first file that sets it, an empty string included', () => {
+    fs.writeFileSync(
+      path.join(configDir, 'settings.json'),
+      JSON.stringify({ attribution: { commit: 'user' } }),
+    );
+    expect(readClaudeSetting(project, commit)).toBe('user');
+    fs.mkdirSync(path.join(project, '.claude'));
+    fs.writeFileSync(
+      path.join(project, '.claude', 'settings.local.json'),
+      JSON.stringify({ attribution: { commit: '' } }),
+    );
+    expect(readClaudeSetting(project, commit)).toBe('');
   });
 });

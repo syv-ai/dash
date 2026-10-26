@@ -1,11 +1,10 @@
 import { ipcMain, dialog, app, shell, BrowserWindow, Notification, clipboard } from 'electron';
 import { z } from 'zod';
 import { parseArgs, parseArgsSafe, errorResponse, ipcError } from './validate';
-import { claudeUserSettingsFile } from '../utils/claudePaths';
-import { claudeDefaultPermissionMode } from '../services/claudeDefaultMode';
+import { claudeDefaultPermissionMode, readClaudeSetting } from '../services/claudeSettings';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync } from 'fs';
 import { homedir } from 'os';
 import { join, resolve } from 'path';
 import type { ClaudeCliInfo } from '@shared/types';
@@ -338,28 +337,9 @@ export function registerAppIpc(): void {
     (_event, projectPath?: string): { success: boolean; data?: string | null; error?: string } => {
       try {
         parseArgs('app:getClaudeAttribution', z.string().optional(), projectPath);
-        // Check project-level settings first (higher precedence)
-        if (projectPath) {
-          const repoSettings = join(projectPath, '.claude', 'settings.json');
-          if (existsSync(repoSettings)) {
-            const parsed = JSON.parse(readFileSync(repoSettings, 'utf-8'));
-            if (parsed?.attribution?.commit !== undefined) {
-              return { success: true, data: parsed.attribution.commit };
-            }
-          }
-        }
-
-        // Fall back to global settings
-        const globalSettings = claudeUserSettingsFile();
-        if (existsSync(globalSettings)) {
-          const parsed = JSON.parse(readFileSync(globalSettings, 'utf-8'));
-          if (parsed?.attribution?.commit !== undefined) {
-            return { success: true, data: parsed.attribution.commit };
-          }
-        }
-
-        // No custom attribution configured — Claude uses its built-in default
-        return { success: true, data: null };
+        const commit = readClaudeSetting(projectPath, (s) => s.attribution?.commit);
+        // null: no custom attribution, so Claude uses its built-in default
+        return { success: true, data: typeof commit === 'string' ? commit : null };
       } catch (err) {
         console.error('[app:getClaudeAttribution] Failed to read settings:', err);
         return errorResponse(err);

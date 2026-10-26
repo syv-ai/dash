@@ -4,7 +4,7 @@ import { activityMonitor, activityEvents } from '../../services/ActivityMonitor'
 import { supervisorService } from '../../services/SupervisorService';
 import { worktreeService } from '../../services/WorktreeService';
 import { loadWorkspaceConfig } from '../../services/WorkspaceConfigService';
-import { claudeDefaultPermissionMode } from '../../services/claudeDefaultMode';
+import { claudeDefaultPermissionMode } from '../../services/claudeSettings';
 import { taskEvents } from '../../services/taskEvents';
 import { focusTaskInWindow } from '../../services/focusTask';
 import {

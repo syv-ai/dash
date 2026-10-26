@@ -1048,14 +1048,9 @@ export function App() {
         window.electronAPI.getClaudeDefaultPermissionMode(project.path),
       ]);
       const config = resp.success ? resp.data : null;
-      // The project's own default wins; else the defaultMode in Claude Code's
-      // settings, which the explicit mode every task is dispatched with
-      // would otherwise override.
       defaults = {
         ...config?.taskDefaults,
-        permissionMode:
-          config?.taskDefaults?.permissionMode ??
-          (claudeMode.success ? (claudeMode.data ?? undefined) : undefined),
+        claudePermissionMode: claudeMode.success ? (claudeMode.data ?? undefined) : undefined,
       };
       scripts = {
         setup: (config?.setup ?? []).join('\n'),
