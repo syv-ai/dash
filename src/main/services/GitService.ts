@@ -212,6 +212,16 @@ export class GitService {
     }
   }
 
+  /** The ref origin/HEAD points to, e.g. "origin/main"; null when unset. */
+  private static async getRemoteHeadTarget(cwd: string): Promise<string | null> {
+    try {
+      const out = await git(cwd, ['symbolic-ref', '-q', 'refs/remotes/origin/HEAD']);
+      return out.trim().replace(/^refs\/remotes\//, '') || null;
+    } catch {
+      return null;
+    }
+  }
+
   static async fetchAndListBranches(cwd: string): Promise<BranchInfo[]> {
     const checkedOut = await this.getCheckedOutBranches(cwd);
     // Check if origin remote exists
@@ -272,6 +282,19 @@ export class GitService {
         console.warn(`[GitService] fetch failed for ${cwd}: ${fetchError.message}`);
       }
 
+      // Only `git clone` creates origin/HEAD; for other repos (or after the remote
+      // renamed its default branch) point it at the remote's default. Best-effort.
+      if (!fetchError) {
+        try {
+          await execFileAsync('git', ['remote', 'set-head', 'origin', '--auto'], {
+            cwd,
+            timeout: 10000,
+          });
+        } catch {
+          // Offline or no default branch advertised: origin/HEAD just won't be listed.
+        }
+      }
+
       // List remote branches sorted by committerdate descending
       const { stdout } = await execFileAsync(
         'git',
@@ -293,8 +316,7 @@ export class GitService {
         if (!ref) continue;
         const info = { shortHash: shortHash || '', relativeDate: dateParts.join('\t') || '' };
         if (ref === REMOTE_HEAD_REF) {
-          // The remote's default branch: a useful base, so keep it, but last
-          // so it never becomes the default selection.
+          // The remote's default branch: a useful base, so keep it and place it below.
           remoteHead = { name: REMOTE_HEAD_REF, ref, ...info };
           continue;
         }
@@ -308,7 +330,13 @@ export class GitService {
           checkedOutPath: checkedOut.get(name),
         });
       }
-      if (remoteHead) branches.push(remoteHead);
+      if (remoteHead) {
+        // Sit just above the branch it points to, so it reads as that branch's
+        // always-current, never-occupied twin.
+        const target = await this.getRemoteHeadTarget(cwd);
+        const at = branches.findIndex((b) => b.ref === target);
+        branches.splice(at === -1 ? 0 : at, 0, remoteHead);
+      }
 
       // If fetch failed AND there's nothing cached locally, the failure is
       // genuinely actionable (auth, network, never-fetched remote) — surface it.
