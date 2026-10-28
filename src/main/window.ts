@@ -91,7 +91,6 @@ function watchForBlankWindow(win: BrowserWindow): void {
     if (details.reason !== 'clean-exit' && !win.isDestroyed()) win.webContents.reload();
   });
 
-  win.on('close', () => console.log('[window] close requested'));
   win.on('closed', () => {
     powerMonitor.removeListener('resume', onResume);
     powerMonitor.removeListener('unlock-screen', onUnlock);
