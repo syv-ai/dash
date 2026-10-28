@@ -268,6 +268,7 @@ app.on('second-instance', () => {
 });
 
 app.on('window-all-closed', () => {
+  console.log('[main] all windows closed');
   if (process.platform !== 'darwin') {
     app.quit();
   }
@@ -306,6 +307,9 @@ let quitCleanupComplete = false;
 app.on('before-quit', (event) => {
   // Second pass (after cleanup re-issues app.quit()): let the quit proceed.
   if (quitCleanupComplete) return;
+  // The stack shows whether Dash asked to quit or Electron did on its own
+  // (e.g. the window manager closed the window).
+  console.log('[main] quitting', new Error().stack?.split('\n').slice(1, 6).join('\n'));
   // Hold the quit so the attach clients and shells can exit gracefully (and,
   // with stopSessionsOnQuit, the supervisor gets its `claude stop` calls).
   event.preventDefault();
