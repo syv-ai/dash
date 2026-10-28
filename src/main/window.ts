@@ -1,4 +1,4 @@
-import { BrowserWindow, Menu, shell } from 'electron';
+import { app, BrowserWindow, Menu, powerMonitor, shell } from 'electron';
 import * as path from 'path';
 import { getTuiHost } from './tui/hostInstance';
 
@@ -40,6 +40,8 @@ export function createWindow(): BrowserWindow {
     void getTuiHost().handleRendererReload();
   });
 
+  watchForBlankWindow(mainWindow);
+
   // Open external links in default browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url).catch(() => {});
@@ -58,4 +60,40 @@ export function createWindow(): BrowserWindow {
   }
 
   return mainWindow;
+}
+
+/**
+ * After a suspend (Linux, notably amdgpu) the GPU context can come back lost
+ * and the window stays white until something forces a new frame. Repaint on
+ * wake and when the GPU process restarts; reload if the renderer itself died.
+ */
+function watchForBlankWindow(win: BrowserWindow): void {
+  const repaint = (why: string) => {
+    if (win.isDestroyed()) return;
+    console.log(`[window] repainting after ${why}`);
+    win.webContents.invalidate();
+  };
+  // Give the GPU process a moment to come back before asking for a frame.
+  const onResume = () => setTimeout(() => repaint('resume'), 1000);
+  const onUnlock = () => repaint('unlock-screen');
+  const onChildGone = (_e: Electron.Event, details: Electron.Details) => {
+    if (details.type !== 'GPU') return;
+    console.error(`[window] GPU process gone (${details.reason}, exit ${details.exitCode})`);
+    setTimeout(() => repaint('GPU process restart'), 1000);
+  };
+
+  powerMonitor.on('resume', onResume);
+  powerMonitor.on('unlock-screen', onUnlock);
+  app.on('child-process-gone', onChildGone);
+
+  win.webContents.on('render-process-gone', (_e, details) => {
+    console.error(`[window] renderer gone (${details.reason}, exit ${details.exitCode})`);
+    if (details.reason !== 'clean-exit' && !win.isDestroyed()) win.webContents.reload();
+  });
+
+  win.on('closed', () => {
+    powerMonitor.removeListener('resume', onResume);
+    powerMonitor.removeListener('unlock-screen', onUnlock);
+    app.removeListener('child-process-gone', onChildGone);
+  });
 }
