@@ -63,19 +63,37 @@ export function createWindow(): BrowserWindow {
 }
 
 /**
- * After a suspend (Linux, notably amdgpu) the GPU context can come back lost
- * and the window stays white until something forces a new frame. Repaint on
- * wake and when the GPU process restarts; reload if the renderer itself died.
+ * After a suspend (Linux Wayland, seen on amdgpu) the window can come back
+ * white while every process is alive: a new frame alone does not fix it, so
+ * unmap and remap the window to get it a fresh surface. Done on wake, again on
+ * the first focus after it (the lock screen may have been up at wake), and
+ * when the GPU process restarts; reload if the renderer itself died.
  */
 function watchForBlankWindow(win: BrowserWindow): void {
   const repaint = (why: string) => {
     if (win.isDestroyed()) return;
-    console.log(`[window] repainting after ${why}`);
+    console.log(`[window] remapping after ${why}`);
+    // show() would also restore a minimized window; a new frame is all it gets.
+    if (win.isVisible() && !win.isMinimized()) {
+      const maximized = win.isMaximized();
+      win.hide();
+      win.show();
+      if (maximized) win.maximize();
+    }
     win.webContents.invalidate();
   };
+  let repaintOnFocus = false;
   // Give the GPU process a moment to come back before asking for a frame.
-  const onResume = () => setTimeout(() => repaint('resume'), 1000);
+  const onResume = () => {
+    repaintOnFocus = true;
+    setTimeout(() => repaint('resume'), 1000);
+  };
   const onUnlock = () => repaint('unlock-screen');
+  win.on('focus', () => {
+    if (!repaintOnFocus) return;
+    repaintOnFocus = false;
+    repaint('first focus after resume');
+  });
   const onChildGone = (_e: Electron.Event, details: Electron.Details) => {
     if (details.type !== 'GPU') return;
     console.error(`[window] GPU process gone (${details.reason}, exit ${details.exitCode})`);
