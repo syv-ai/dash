@@ -1043,15 +1043,9 @@ export function App() {
     let defaults: TaskModalDefaults | null = null;
     let scripts: { setup: string; teardown: string } | null = null;
     if (project) {
-      const [resp, claudeMode] = await Promise.all([
-        window.electronAPI.readWorkspaceConfig(project.path),
-        window.electronAPI.getClaudeDefaultPermissionMode(project.path),
-      ]);
+      const resp = await window.electronAPI.readWorkspaceConfig(project.path);
       const config = resp.success ? resp.data : null;
-      defaults = {
-        ...config?.taskDefaults,
-        claudePermissionMode: claudeMode.success ? (claudeMode.data ?? undefined) : undefined,
-      };
+      defaults = config?.taskDefaults ?? null;
       scripts = {
         setup: (config?.setup ?? []).join('\n'),
         teardown: (config?.teardown ?? []).join('\n'),

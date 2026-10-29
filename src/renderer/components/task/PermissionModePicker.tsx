@@ -55,12 +55,11 @@ export function PermissionModePicker({
   );
 }
 
-/** The last mode picked in Dash; else `claudeMode` (Claude Code's defaultMode),
- *  which Dash otherwise overrides with the explicit mode every task gets. */
-export function readInitialPermissionMode(claudeMode?: PermissionMode): PermissionMode {
+/** The last mode picked in Dash, else auto. */
+export function readInitialPermissionMode(): PermissionMode {
   const stored = localStorage.getItem('permissionMode');
   if (isPermissionMode(stored)) return stored;
   // One-time migration from the old yoloMode boolean.
   if (localStorage.getItem('yoloMode') === 'true') return 'bypassPermissions';
-  return claudeMode ?? 'default';
+  return 'auto';
 }

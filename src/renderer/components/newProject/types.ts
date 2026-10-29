@@ -38,7 +38,7 @@ export function configToValues(
   return {
     name: fallbacks.name,
     baseRef: td?.baseRef ?? fallbacks.baseRef,
-    permissionMode: td?.permissionMode ?? 'default',
+    permissionMode: td?.permissionMode ?? 'auto',
     useWorktree: td?.useWorktree ?? true,
     contextPrompt: td?.contextPrompt ?? '',
     dashAccess: td?.dashAccess ?? false,

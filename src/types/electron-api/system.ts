@@ -1,4 +1,4 @@
-import type { ControlInfo, IpcResponse, PermissionMode } from '../../shared/types';
+import type { ControlInfo, IpcResponse } from '../../shared/types';
 
 /** App info, dialogs, external/editor/IDE launch, app-lifecycle events, and
  *  settings mutations — the cross-cutting "shell" surface. */
@@ -55,8 +55,4 @@ export interface SystemApi {
   setOrchestratorAccess: (enabled: boolean) => void;
   getControlInfo: () => Promise<IpcResponse<ControlInfo>>;
   getClaudeAttribution: (projectPath?: string) => Promise<IpcResponse<string | null>>;
-  /** Claude Code's `permissions.defaultMode` as a Dash mode; null when unset or unmatched. */
-  getClaudeDefaultPermissionMode: (
-    projectPath?: string,
-  ) => Promise<IpcResponse<PermissionMode | null>>;
 }

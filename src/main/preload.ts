@@ -278,8 +278,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getControlInfo: () => ipcRenderer.invoke('app:getControlInfo'),
   getClaudeAttribution: (projectPath?: string) =>
     ipcRenderer.invoke('app:getClaudeAttribution', projectPath),
-  getClaudeDefaultPermissionMode: (projectPath?: string) =>
-    ipcRenderer.invoke('app:getClaudeDefaultPermissionMode', projectPath),
 
   // GitHub
   githubCheckAvailable: () => ipcRenderer.invoke('github:check-available'),

@@ -51,8 +51,6 @@ export interface TaskCapabilityDeps {
   /** Subscribe to activity changes; returns the unsubscribe. */
   onActivityChange(listener: () => void): () => void;
   taskDefaults(projectPath: string): WorkspaceTaskDefaults | undefined;
-  /** The defaultMode in Claude Code's settings, as a Dash mode. */
-  claudeDefaultPermissionMode(projectPath: string): PermissionMode | undefined;
   /** Git's default base when nothing names one (the remote's HEAD branch). */
   resolveBaseRef(projectPath: string): Promise<string>;
   /** The branch checked out in the folder now; null on a detached HEAD. */
@@ -123,11 +121,11 @@ export function toTaskView(
   return view;
 }
 
-/** A task an agent starts: any mode but bypassPermissions. */
+/** A task an agent starts: any mode but bypassPermissions, auto by default. */
 function withoutBypass(
   mode: PermissionMode | undefined,
 ): Exclude<PermissionMode, 'bypassPermissions'> {
-  return !mode || mode === 'bypassPermissions' ? 'default' : mode;
+  return !mode || mode === 'bypassPermissions' ? 'auto' : mode;
 }
 
 const taskIdInput = z.object({ taskId: z.string().describe('The task id') });
@@ -290,14 +288,9 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         const base = {
           projectId: project.id,
           name: input.name,
-          // Else the project's default, else Claude Code's defaultMode — but
-          // never bypassPermissions (one agent must not start another with
-          // every permission prompt off).
-          permissionMode: withoutBypass(
-            input.permissionMode ??
-              defaults?.permissionMode ??
-              deps.claudeDefaultPermissionMode(project.path),
-          ),
+          // Else the project's default — but never bypassPermissions (one agent
+          // must not start another with every permission prompt off).
+          permissionMode: withoutBypass(input.permissionMode ?? defaults?.permissionMode),
           model: input.model ?? 'default',
           // The prompt is a one-shot instruction; the project's context prompt
           // (which the task dialog prefills) stays context, re-injected on

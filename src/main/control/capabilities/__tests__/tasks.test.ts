@@ -63,7 +63,6 @@ beforeEach(() => {
       };
     }),
     taskDefaults: vi.fn(() => undefined),
-    claudeDefaultPermissionMode: vi.fn(() => undefined),
     resolveBaseRef: vi.fn(async () => 'main'),
     currentBranch: vi.fn(async (): Promise<string | null> => 'live-head'),
     branchExists: vi.fn(async () => true),
@@ -284,7 +283,7 @@ describe('tasks.create', () => {
         kind: 'worktree-new-branch',
         baseRef: 'origin/main',
         pushRemote: false,
-        permissionMode: 'default',
+        permissionMode: 'auto',
         model: 'default',
         initialPrompt: 'write a README',
         contextPrompt: undefined,
@@ -328,31 +327,13 @@ describe('tasks.create', () => {
   it('never inherits a bypassPermissions project default', async () => {
     deps.taskDefaults.mockReturnValue({ permissionMode: 'bypassPermissions' });
     await registry.call(orch, 'tasks.create', { projectId: 'pA', name: 'x' });
-    expect(deps.createTask.mock.calls[0]![0]).toMatchObject({ permissionMode: 'default' });
-  });
-
-  it('starts a task in auto mode when asked', async () => {
-    await registry.call(orch, 'tasks.create', {
-      projectId: 'pA',
-      name: 'x',
-      permissionMode: 'auto',
-    });
     expect(deps.createTask.mock.calls[0]![0]).toMatchObject({ permissionMode: 'auto' });
   });
 
-  it("inherits the project's auto default", async () => {
-    deps.taskDefaults.mockReturnValue({ permissionMode: 'auto' });
+  it("inherits the project's default mode", async () => {
+    deps.taskDefaults.mockReturnValue({ permissionMode: 'acceptEdits' });
     await registry.call(orch, 'tasks.create', { projectId: 'pA', name: 'x' });
-    expect(deps.createTask.mock.calls[0]![0]).toMatchObject({ permissionMode: 'auto' });
-  });
-
-  it("falls back to Claude Code's defaultMode, never its bypassPermissions", async () => {
-    deps.claudeDefaultPermissionMode.mockReturnValueOnce('auto');
-    await registry.call(orch, 'tasks.create', { projectId: 'pA', name: 'x' });
-    deps.claudeDefaultPermissionMode.mockReturnValueOnce('bypassPermissions');
-    await registry.call(orch, 'tasks.create', { projectId: 'pA', name: 'y' });
-    expect(deps.claudeDefaultPermissionMode).toHaveBeenCalledWith('/repos/pA');
-    expect(deps.createTask.mock.calls.map((c) => c[0].permissionMode)).toEqual(['auto', 'default']);
+    expect(deps.createTask.mock.calls[0]![0]).toMatchObject({ permissionMode: 'acceptEdits' });
   });
 
   it('orchestrator-created tasks have no parent', async () => {
