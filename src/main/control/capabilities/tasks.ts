@@ -5,13 +5,14 @@ import type {
   CreateTaskResult,
   CreateTaskRunOptions,
   DeleteTaskOptions,
+  PermissionMode,
   Project,
   Task,
 } from '../../../shared/types';
 import type { WorkspaceTaskDefaults } from '../../services/WorkspaceConfigService';
 import { messageAddress, type LiveSession } from '../../services/claudeSessionRegistry';
 import { TerminalMirror } from '../../services/TerminalMirror';
-import { taskModelSchema } from '../../ipc/schemas';
+import { permissionModeSchema, taskModelSchema } from '../../ipc/schemas';
 import { ControlError, defineCapability, type Registry } from '../registry';
 import { defaultBaseRef } from './projects';
 
@@ -118,6 +119,13 @@ export function toTaskView(
   };
   if (detail) view.detail = detail;
   return view;
+}
+
+/** A task an agent starts: any mode but bypassPermissions, auto by default. */
+function withoutBypass(
+  mode: PermissionMode | undefined,
+): Exclude<PermissionMode, 'bypassPermissions'> {
+  return !mode || mode === 'bypassPermissions' ? 'auto' : mode;
 }
 
 const taskIdInput = z.object({ taskId: z.string().describe('The task id') });
@@ -261,7 +269,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
           .optional()
           .describe('new-branch only: push the new branch to the remote (default false)'),
         model: taskModelSchema.optional(),
-        permissionMode: z.enum(['default', 'acceptEdits']).optional(),
+        permissionMode: permissionModeSchema.exclude(['bypassPermissions']).optional(),
         dashAccess: z
           .boolean()
           .optional()
@@ -280,11 +288,9 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         const base = {
           projectId: project.id,
           name: input.name,
-          // Never the project's bypassPermissions default (one agent must not
-          // start another with every permission prompt off).
-          permissionMode:
-            input.permissionMode ??
-            (defaults?.permissionMode === 'acceptEdits' ? 'acceptEdits' : 'default'),
+          // Else the project's default — but never bypassPermissions (one agent
+          // must not start another with every permission prompt off).
+          permissionMode: withoutBypass(input.permissionMode ?? defaults?.permissionMode),
           model: input.model ?? 'default',
           // The prompt is a one-shot instruction; the project's context prompt
           // (which the task dialog prefills) stays context, re-injected on

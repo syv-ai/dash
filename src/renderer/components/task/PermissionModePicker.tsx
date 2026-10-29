@@ -1,23 +1,26 @@
 import React from 'react';
-import { Shield, Zap, Flame } from 'lucide-react';
-import type { PermissionMode } from '../../../shared/types';
+import { Shield, FilePen, Zap, Flame } from 'lucide-react';
+import { isPermissionMode, type PermissionMode } from '../../../shared/types';
 import { Select, type SelectOption } from '../ui/Select';
 
 const OPTIONS: SelectOption<PermissionMode>[] = [
   { value: 'default', label: 'Default' },
-  { value: 'acceptEdits', label: 'Auto' },
+  { value: 'acceptEdits', label: 'Accept edits' },
+  { value: 'auto', label: 'Auto' },
   { value: 'bypassPermissions', label: 'Yolo' },
 ];
 
 const DESCRIPTIONS: Record<PermissionMode, string> = {
   default: 'Prompts for every tool use',
   acceptEdits: 'Auto-accepts edits, prompts for shell',
+  auto: 'A classifier approves safe actions, prompts for risky ones',
   bypassPermissions: 'Skips all permission prompts',
 };
 
 function ModeIcon({ mode }: { mode: PermissionMode }) {
   const props = { size: 13, strokeWidth: 1.8, className: 'text-muted-fade-60' };
-  if (mode === 'acceptEdits') return <Zap {...props} />;
+  if (mode === 'acceptEdits') return <FilePen {...props} />;
+  if (mode === 'auto') return <Zap {...props} />;
   if (mode === 'bypassPermissions') return <Flame {...props} />;
   return <Shield {...props} />;
 }
@@ -52,12 +55,11 @@ export function PermissionModePicker({
   );
 }
 
+/** The last mode picked in Dash, else auto. */
 export function readInitialPermissionMode(): PermissionMode {
   const stored = localStorage.getItem('permissionMode');
-  if (stored === 'default' || stored === 'acceptEdits' || stored === 'bypassPermissions') {
-    return stored;
-  }
+  if (isPermissionMode(stored)) return stored;
   // One-time migration from the old yoloMode boolean.
   if (localStorage.getItem('yoloMode') === 'true') return 'bypassPermissions';
-  return 'default';
+  return 'auto';
 }

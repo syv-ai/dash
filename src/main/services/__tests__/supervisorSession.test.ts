@@ -84,6 +84,8 @@ describe('buildDispatchArgs', () => {
       const args = buildDispatchArgs({ name: 't', permissionMode });
       expect(args[args.indexOf('--permission-mode') + 1]).toBe('default');
     }
+    const auto = buildDispatchArgs({ name: 't', permissionMode: 'auto' });
+    expect(auto[auto.indexOf('--permission-mode') + 1]).toBe('auto');
     const bypass = buildDispatchArgs({ name: 't', permissionMode: 'bypassPermissions' });
     expect(bypass).not.toContain('--permission-mode');
   });

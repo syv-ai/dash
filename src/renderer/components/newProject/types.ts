@@ -17,6 +17,7 @@ export interface ConfigureValues {
 export const PERMISSION_MODE_LABELS: Record<PermissionMode, string> = {
   default: 'Ask every time (default)',
   acceptEdits: 'Auto-accept edits',
+  auto: 'Auto mode (classifier approves safe actions)',
   bypassPermissions: 'Bypass all permissions',
 };
 
@@ -37,7 +38,7 @@ export function configToValues(
   return {
     name: fallbacks.name,
     baseRef: td?.baseRef ?? fallbacks.baseRef,
-    permissionMode: td?.permissionMode ?? 'default',
+    permissionMode: td?.permissionMode ?? 'auto',
     useWorktree: td?.useWorktree ?? true,
     contextPrompt: td?.contextPrompt ?? '',
     dashAccess: td?.dashAccess ?? false,

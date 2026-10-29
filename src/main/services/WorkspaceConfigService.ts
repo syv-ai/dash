@@ -1,13 +1,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { shellQuote } from '../../shared/shellQuote';
-import type { PermissionMode } from '../../shared/types';
+import { isPermissionMode, type PermissionMode } from '../../shared/types';
 
 const DASH_DIR = '.dash';
 const CONFIG_FILE = 'config.json';
 const LOCAL_CONFIG_FILE = 'config.local.json';
-
-const PERMISSION_MODES: readonly PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions'];
 
 export interface WorkspaceTaskDefaults {
   baseRef?: string;
@@ -54,9 +52,7 @@ function parseTaskDefaults(value: unknown, source: string): WorkspaceTaskDefault
   const obj = value as Record<string, unknown>;
   const result: WorkspaceTaskDefaults = {};
   if (typeof obj.baseRef === 'string' && obj.baseRef.trim()) result.baseRef = obj.baseRef.trim();
-  if (PERMISSION_MODES.includes(obj.permissionMode as PermissionMode)) {
-    result.permissionMode = obj.permissionMode as PermissionMode;
-  }
+  if (isPermissionMode(obj.permissionMode)) result.permissionMode = obj.permissionMode;
   if (typeof obj.useWorktree === 'boolean') result.useWorktree = obj.useWorktree;
   if (typeof obj.contextPrompt === 'string') result.contextPrompt = obj.contextPrompt;
   if (typeof obj.dashAccess === 'boolean') result.dashAccess = obj.dashAccess;

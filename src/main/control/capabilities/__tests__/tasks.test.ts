@@ -283,7 +283,7 @@ describe('tasks.create', () => {
         kind: 'worktree-new-branch',
         baseRef: 'origin/main',
         pushRemote: false,
-        permissionMode: 'default',
+        permissionMode: 'auto',
         model: 'default',
         initialPrompt: 'write a README',
         contextPrompt: undefined,
@@ -327,7 +327,13 @@ describe('tasks.create', () => {
   it('never inherits a bypassPermissions project default', async () => {
     deps.taskDefaults.mockReturnValue({ permissionMode: 'bypassPermissions' });
     await registry.call(orch, 'tasks.create', { projectId: 'pA', name: 'x' });
-    expect(deps.createTask.mock.calls[0]![0]).toMatchObject({ permissionMode: 'default' });
+    expect(deps.createTask.mock.calls[0]![0]).toMatchObject({ permissionMode: 'auto' });
+  });
+
+  it("inherits the project's default mode", async () => {
+    deps.taskDefaults.mockReturnValue({ permissionMode: 'acceptEdits' });
+    await registry.call(orch, 'tasks.create', { projectId: 'pA', name: 'x' });
+    expect(deps.createTask.mock.calls[0]![0]).toMatchObject({ permissionMode: 'acceptEdits' });
   });
 
   it('orchestrator-created tasks have no parent', async () => {
