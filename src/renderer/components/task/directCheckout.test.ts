@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isDirectCheckout } from './branchUpstreamBadges';
+import { isDirectCheckout } from './directCheckout';
 
 describe('isDirectCheckout', () => {
   it('new branch in a worktree is cut from origin/<name>, so local state is not used', () => {

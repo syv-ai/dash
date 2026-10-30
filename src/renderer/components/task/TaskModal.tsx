@@ -17,7 +17,7 @@ import { PermissionModePicker, readInitialPermissionMode } from './PermissionMod
 import { ModelPicker, readInitialModel, persistModelChoice } from './ModelPicker';
 import { getTaskCreatability } from './taskModalCreatability';
 import { Expandable } from '../ui/Expandable';
-import { isDirectCheckout } from './branchUpstreamBadges';
+import { isDirectCheckout } from './directCheckout';
 import { Segmented } from '../ui/Segmented';
 import { SwitchField } from '../ui/SwitchField';
 import { useControlInfo } from '../../hooks/useControlInfo';
@@ -274,11 +274,11 @@ function TaskModalBody({
     hasSelectedBranch: !!selectedBranch,
   });
 
+  const directCheckout = isDirectCheckout({ createNewBranch, useWorktree });
   // A worktree can't be created on a branch that's already checked out (primary
   // repo or another worktree) — git refuses it. Block that selection up front
   // and steer toward "Create new branch". In-place checkout is exempt: switching
   // the primary repo to its own current branch is legal.
-  const directCheckout = isDirectCheckout({ createNewBranch, useWorktree });
   const branchInUse = useWorktree && !createNewBranch && !!selectedBranch?.checkedOut;
   // Name the holder: the project's own checkout, a (possibly archived) task,
   // or a foreign worktree. `tasksByProject` includes archived tasks.
@@ -647,11 +647,11 @@ function TaskModalBody({
                         </div>
                       );
                     }
-                    if (behind > 0) {
+                    if (!directCheckout) {
                       // New-branch case: the branch is cut from the freshly-fetched
-                      // remote ref (origin/<name>), so it already has the latest
-                      // commits. The "behind" count reflects only the *local* branch
-                      // lagging, which isn't used, so the picker hides its badges too.
+                      // remote ref (origin/<name>), so the local branch's ahead/behind
+                      // state isn't used. The picker hides its badges to match.
+                      if (!selectedBranch.upstream) return null;
                       return (
                         <p className="mt-1.5 text-[11px] text-muted-fade-50">
                           New branch will be based on the latest{' '}
