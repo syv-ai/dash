@@ -279,6 +279,7 @@ function TaskModalBody({
   // repo or another worktree) — git refuses it. Block that selection up front
   // and steer toward "Create new branch". In-place checkout is exempt: switching
   // the primary repo to its own current branch is legal.
+  const directCheckout = isDirectCheckout({ createNewBranch, useWorktree });
   const branchInUse = useWorktree && !createNewBranch && !!selectedBranch?.checkedOut;
   // Name the holder: the project's own checkout, a (possibly archived) task,
   // or a foreign worktree. `tasksByProject` includes archived tasks.
@@ -336,7 +337,6 @@ function TaskModalBody({
     // The "Update from remote" choice only applies to a direct checkout of a
     // branch that's behind its upstream — mirror the banner's visibility.
     const behind = selectedBranch?.upstream?.behind ?? 0;
-    const directCheckout = isDirectCheckout({ createNewBranch, useWorktree });
     const wantRemote = updateFromRemote && behind > 0 && directCheckout;
 
     let options: CreateTaskOptions;
@@ -561,7 +561,7 @@ function TaskModalBody({
                   }}
                   showPrs={showGithub || showAdo}
                   markInUse={!createNewBranch}
-                  showUpstream={isDirectCheckout({ createNewBranch, useWorktree })}
+                  showUpstream={directCheckout}
                   prProvider={showAdo ? 'ado' : 'github'}
                   projectPath={projectPath}
                   projectId={projectId}
@@ -595,7 +595,6 @@ function TaskModalBody({
                   (() => {
                     const behind = selectedBranch.upstream?.behind ?? 0;
                     const ahead = selectedBranch.upstream?.ahead ?? 0;
-                    const directCheckout = isDirectCheckout({ createNewBranch, useWorktree });
 
                     if (behind > 0 && directCheckout) {
                       return (
