@@ -30,6 +30,9 @@ interface BranchPrPickerProps {
    *  when the selection will be checked out directly — branching off one is
    *  fine, so the caller passes false in new-branch mode to avoid noise. */
   markInUse: boolean;
+  /** Show the ahead/behind badges. Hidden when the task is cut from the fetched
+   *  remote ref, since the local branch's state isn't used then. */
+  showUpstream: boolean;
   prProvider: 'github' | 'ado';
   projectPath: string;
   projectId?: string;
@@ -55,6 +58,7 @@ export function BranchPrPicker({
   onRetry,
   showPrs,
   markInUse,
+  showUpstream,
   prProvider,
   projectPath,
   projectId,
@@ -243,13 +247,13 @@ export function BranchPrPicker({
                         in use
                       </span>
                     )}
-                    {b.upstream && b.upstream.ahead > 0 && (
+                    {showUpstream && b.upstream && b.upstream.ahead > 0 && (
                       <span className="flex items-center gap-0.5 text-[10px] text-emerald-500 font-mono shrink-0">
                         <ArrowUp size={9} strokeWidth={2.5} />
                         {b.upstream.ahead}
                       </span>
                     )}
-                    {b.upstream && b.upstream.behind > 0 && (
+                    {showUpstream && b.upstream && b.upstream.behind > 0 && (
                       <span className="flex items-center gap-0.5 text-[10px] text-amber-500 font-mono shrink-0">
                         <ArrowDown size={9} strokeWidth={2.5} />
                         {b.upstream.behind}
