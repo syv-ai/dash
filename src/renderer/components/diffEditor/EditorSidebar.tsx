@@ -8,6 +8,8 @@ import {
   GitPullRequestArrow,
   History,
   ListFilter,
+  Search,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { HoverSwapSlot } from '../ui/HoverSwapSlot';
@@ -18,6 +20,7 @@ import type { CommitSummary, EditorView } from './types';
 import { Popover, PopoverAnchor, PopoverContent } from '../ui/Popover';
 import { Tooltip } from '../ui/Tooltip';
 import { Markdown } from '../ui/Markdown';
+import { searchFiles, type FileHit } from '../../lib/fileSearch';
 
 interface EditorSidebarProps {
   /** Repo root — needed to lazily list gitignored files under "show all files". */
@@ -434,6 +437,47 @@ function FileTreePanel({
     return { additions, deletions };
   }, [changedFiles]);
   const cols = useMemo(() => treeColumns(tree, badgeCounts), [tree, badgeCounts]);
+
+  // Search covers what the tree shows. Ignored directories are collapsed to a
+  // single `dir/` entry, which is matched as-is, never searched inside.
+  const [query, setQuery] = useState('');
+  const [activeIdx, setActiveIdx] = useState(0);
+  const searchable = useMemo(() => {
+    const all = changedOnly ? [] : [...paths, ...ignoredPaths];
+    for (const f of changedFiles) all.push(f.path);
+    return Array.from(new Set(all));
+  }, [changedOnly, paths, ignoredPaths, changedFiles]);
+  const hits = useMemo(() => searchFiles(searchable, query), [searchable, query]);
+  const searching = query.trim() !== '';
+  const clampedIdx = Math.min(activeIdx, Math.max(hits.length - 1, 0));
+  const activeRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [clampedIdx, hits]);
+  const updateQuery = (value: string) => {
+    setQuery(value);
+    setActiveIdx(0);
+  };
+  // Scoped to the input: nothing here listens on window, so Monaco and the
+  // commits drawer keep their keys.
+  const onSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (hits.length === 0) return;
+      e.preventDefault();
+      const step = e.key === 'ArrowDown' ? 1 : -1;
+      setActiveIdx((clampedIdx + step + hits.length) % hits.length);
+    } else if (e.key === 'Enter') {
+      const hit = hits[clampedIdx];
+      if (!hit) return;
+      e.preventDefault();
+      onSelectFile(hit.path);
+    } else if (e.key === 'Escape' && query) {
+      // Clear first; a second Esc (empty box) is left to whoever owns it.
+      e.preventDefault();
+      e.stopPropagation();
+      updateQuery('');
+    }
+  };
   return (
     <div className="h-full min-h-0 flex flex-col">
       <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-muted-fade-70 font-mono flex items-center justify-between shrink-0">
@@ -474,8 +518,47 @@ function FileTreePanel({
           )}
         </span>
       </div>
+      <div className="px-2 pb-1.5 shrink-0">
+        <div className="flex items-center gap-1.5 rounded border border-edge/30 bg-[hsl(var(--surface-2)/0.4)] px-2 focus-within:border-primary/50">
+          <Search size={14} strokeWidth={1.8} className="shrink-0 text-muted-fade-50" />
+          <input
+            value={query}
+            onChange={(e) => updateQuery(e.target.value)}
+            onKeyDown={onSearchKeyDown}
+            placeholder="Search files"
+            aria-label="Search files"
+            spellCheck={false}
+            className="min-w-0 flex-1 bg-transparent py-1 text-[12px] text-foreground placeholder:text-muted-fade-40 outline-none"
+          />
+          {query && (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={() => updateQuery('')}
+              className="shrink-0 text-muted-fade-50 hover:text-foreground"
+            >
+              <X size={14} strokeWidth={1.8} />
+            </button>
+          )}
+        </div>
+      </div>
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-gutter-stable scrollbar-thin-hover pb-2 px-1">
-        {loading && paths.length === 0 ? (
+        {searching ? (
+          hits.length === 0 ? (
+            <div className="px-3 py-2 text-[11px] text-muted-fade-40">No files match</div>
+          ) : (
+            hits.map((hit, i) => (
+              <SearchResultRow
+                key={hit.path}
+                hit={hit}
+                active={i === clampedIdx}
+                selected={hit.path === selectedPath}
+                buttonRef={i === clampedIdx ? activeRef : undefined}
+                onClick={() => onSelectFile(hit.path)}
+              />
+            ))
+          )
+        ) : loading && paths.length === 0 ? (
           <div className="px-3 py-2 text-[11px] text-muted-fade-40">Loading…</div>
         ) : changedOnly && tree.changedCount === 0 ? (
           <div className="px-3 py-2 text-[11px] text-muted-fade-40">No changed files</div>
@@ -491,6 +574,53 @@ function FileTreePanel({
         )}
       </div>
     </div>
+  );
+}
+
+function SearchResultRow({
+  hit,
+  active,
+  selected,
+  buttonRef,
+  onClick,
+}: {
+  hit: FileHit;
+  active: boolean;
+  selected: boolean;
+  buttonRef?: React.Ref<HTMLButtonElement>;
+  onClick: () => void;
+}) {
+  const slash = hit.path.lastIndexOf('/') + 1;
+  const matched = new Set(hit.indices);
+  const chars = (from: number, to: number) =>
+    Array.from({ length: to - from }, (_, k) => {
+      const i = from + k;
+      return matched.has(i) ? (
+        <span key={i} className="text-primary font-medium">
+          {hit.path[i]}
+        </span>
+      ) : (
+        hit.path[i]
+      );
+    });
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      // Keep focus in the search box so arrow keys keep working after a click.
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onClick}
+      className={`w-full flex items-baseline gap-2 rounded px-2 py-1 text-left text-[12px] ${
+        active ? 'bg-[hsl(var(--surface-2)/0.8)]' : 'hover:bg-[hsl(var(--surface-2)/0.5)]'
+      } ${selected ? 'text-primary' : 'text-foreground'}`}
+    >
+      <span className="shrink-0 truncate">{chars(slash, hit.path.length)}</span>
+      {slash > 0 && (
+        <span className="min-w-0 truncate text-[11px] text-muted-fade-50">
+          {chars(0, slash - 1)}
+        </span>
+      )}
+    </button>
   );
 }
 
