@@ -3,6 +3,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
+import type { WebglAddon } from '@xterm/addon-webgl';
 import { Utf8Base64 } from './Utf8Base64';
 import type { PermissionMode, TerminalSnapshot } from '../../shared/types';
 import { FilePathLinkProvider } from './FilePathLinkProvider';
@@ -18,6 +19,7 @@ import {
 import { clackBlock, clackExitBlock } from './clackLines';
 import { isPromptOnlySnapshot } from './snapshotFilter';
 import { FitScheduler } from './FitScheduler';
+import { recordContextLoss } from './webglContextLoss';
 import { MouseModeTracker } from './mouseModeFilter';
 import { macShellKeySequence } from './shellKeys';
 import { TUI_COLS, TUI_ROWS } from '../../shared/tuiProtocol';
@@ -79,6 +81,15 @@ export class TerminalSessionManager {
   private lastPtyRows = 0;
   private lastMemoryCheckAt = 0;
   private savedViewportY: number | null = null;
+  // Only an attached terminal holds a WebGL context: attach() loads the addon
+  // and detach() releases it. Chromium caps active contexts per renderer
+  // (~16) and force-loses the oldest past that, so keeping one per viewed
+  // session made losses rotate through the terminals (#206).
+  private webgl: WebglAddon | null = null;
+  // Recent context-loss times; repeated losses move this terminal to the DOM
+  // renderer for good (`gpuFallback`) so a loss can never loop.
+  private contextLosses: number[] = [];
+  private gpuFallback = false;
   // Shell-only sessions use xterm 6's DOM renderer (WebGL paints their
   // transparent background black). The DOM renderer lays each row's glyphs at
   // the font's real advance, which runs slightly wider than xterm's reported
@@ -363,19 +374,46 @@ export class TerminalSessionManager {
     const isLinux = navigator.userAgent.includes('Linux');
     if (isLinux) return; // built-in DOM renderer
 
+    if (this.webgl || this.gpuFallback) return;
     try {
       const { WebglAddon } = await import('@xterm/addon-webgl');
+      // Detached, disposed, or another load won while the import resolved.
+      if (this.disposed || !this.currentContainer || this.webgl || this.gpuFallback) return;
       const webgl = new WebglAddon();
-      webgl.onContextLoss(() => {
-        webgl.dispose();
-        void this.loadGpuAddon();
-      });
+      webgl.onContextLoss(() => this.onGpuContextLoss(webgl));
       this.terminal.loadAddon(webgl);
+      this.webgl = webgl;
     } catch (err) {
       // A GPU-renderer failure drops to xterm's DOM renderer; log it so that
       // regression is visible, not mysterious.
       console.warn('[terminal] WebGL renderer failed, using DOM renderer:', err);
     }
+  }
+
+  /** Drop the WebGL addon; xterm swaps in its DOM renderer and repaints. */
+  private releaseGpuAddon() {
+    const webgl = this.webgl;
+    if (!webgl) return;
+    this.webgl = null;
+    try {
+      webgl.dispose();
+    } catch (err) {
+      console.warn('[terminal] WebGL addon dispose failed:', err);
+    }
+  }
+
+  private onGpuContextLoss(webgl: WebglAddon) {
+    if (webgl !== this.webgl) return; // already released
+    this.releaseGpuAddon();
+    const { losses, fallback } = recordContextLoss(this.contextLosses, Date.now());
+    this.contextLosses = losses;
+    if (fallback) {
+      this.gpuFallback = true;
+      console.warn('[terminal] WebGL context lost repeatedly, staying on DOM renderer');
+      return;
+    }
+    // A detached terminal reloads on its next attach().
+    if (this.currentContainer) void this.loadGpuAddon();
   }
 
   async attach(container: HTMLElement, opts?: { autoFocus?: boolean }) {
@@ -412,6 +450,11 @@ export class TerminalSessionManager {
       if (xtermEl && xtermEl.parentElement !== container) {
         container.appendChild(xtermEl);
       }
+      // detach() released the WebGL addon; load it again now that the element
+      // is back in the DOM. Swapping renderers repaints every row, and the
+      // fit below re-reads the cell size.
+      await this.loadGpuAddon();
+      if (gen !== this.attachGeneration) return;
     }
 
     // Resize observer
@@ -684,6 +727,8 @@ export class TerminalSessionManager {
     }
 
     this.currentContainer = null;
+    // Free the WebGL context; attach() loads a new one (see `webgl`).
+    this.releaseGpuAddon();
     // Terminal element stays in DOM but container will be unmounted by React
   }
 
