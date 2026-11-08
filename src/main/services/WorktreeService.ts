@@ -15,6 +15,7 @@ import {
   resolveTeardownCommand,
   buildWorkspaceEnv,
 } from './WorkspaceConfigService';
+import { recordSetupFailure, runSetupCommand, forgetSetupRun } from './setupRuns';
 
 const execFileAsync = promisify(execFile);
 const execAsync = promisify(exec);
@@ -125,6 +126,7 @@ export class WorktreeService {
     if (normalizedWorktree === normalizedProject) {
       throw new Error('Cannot remove project directory as worktree');
     }
+    forgetSetupRun(worktreePath);
 
     if (deleteWorktreeDir) {
       // Verify this is actually a worktree
@@ -370,61 +372,50 @@ export class WorktreeService {
   }
 
   /**
-   * Resolve and run workspace setup in the new worktree directory.
+   * Resolve and run workspace setup in the worktree directory.
    *
    * Sources, in priority order:
-   *   1. `.dash/config.json` setup commands (joined with ` && `)
-   *   2. `bash <projectPath>/.dash/setup.sh` if the script exists
+   *   1. A per-task override (even an empty one: "no setup for this worktree")
+   *   2. `.dash/config.json` setup commands (joined with ` && `)
+   *   3. `bash <projectPath>/.dash/setup.sh` if the script exists
    *
-   * Async, non-blocking — sends a toast on failure.
+   * Non-blocking: the run's state and output stream to the renderer through
+   * `setupRuns`. Returns false when there is no setup to run.
    */
   runSetupScriptAsync(
     worktreePath: string,
     branchName: string,
     projectPath: string,
     setupOverride?: string | null,
-  ): void {
-    void (async () => {
-      try {
-        const config = loadWorkspaceConfig(worktreePath);
-        // A per-task override (even an empty one) supersedes the project config:
-        // empty means "this worktree intentionally has no setup".
-        const overrideCommand = scriptStringToCommand(setupOverride);
-        let command: string | null;
-        if (setupOverride !== undefined && setupOverride !== null) {
-          command = overrideCommand;
-        } else {
-          const fallbackPath = path.join(projectPath, '.dash', 'setup.sh');
-          const fallbackScriptPath = fs.existsSync(fallbackPath) ? fallbackPath : null;
-          command = resolveSetupCommand({ config, fallbackScriptPath });
-        }
-        if (!command) return;
-
-        const env = buildWorkspaceEnv({ worktreePath, projectPath, branch: branchName });
-        const cwd = config?.cwd ? path.join(worktreePath, config.cwd) : worktreePath;
-
-        await execAsync(command, {
-          cwd,
-          timeout: SETUP_SCRIPT_TIMEOUT_MS,
-          env: { ...process.env, ...env },
-        });
-      } catch (error: unknown) {
-        const killed =
-          error && typeof error === 'object' && 'killed' in error
-            ? (error as { killed: unknown }).killed === true
-            : false;
-        const stderr =
-          error && typeof error === 'object' && 'stderr' in error
-            ? String((error as { stderr: unknown }).stderr).trim()
-            : '';
-        const msg = killed
-          ? `timed out after ${SETUP_SCRIPT_TIMEOUT_MS / 60_000} min (scripts must not stay in the foreground)`
-          : stderr || (error instanceof Error ? error.message : String(error));
-        broadcast('app:toast', {
-          message: `Workspace setup failed: ${msg.slice(0, 200)}`,
-        });
+  ): boolean {
+    let command: string | null;
+    let cwd: string;
+    let env: Record<string, string>;
+    try {
+      const config = loadWorkspaceConfig(worktreePath);
+      if (setupOverride !== undefined && setupOverride !== null) {
+        command = scriptStringToCommand(setupOverride);
+      } else {
+        const fallbackPath = path.join(projectPath, '.dash', 'setup.sh');
+        const fallbackScriptPath = fs.existsSync(fallbackPath) ? fallbackPath : null;
+        command = resolveSetupCommand({ config, fallbackScriptPath });
       }
-    })();
+      env = buildWorkspaceEnv({ worktreePath, projectPath, branch: branchName });
+      cwd = config?.cwd ? path.join(worktreePath, config.cwd) : worktreePath;
+    } catch (error: unknown) {
+      recordSetupFailure(worktreePath, error instanceof Error ? error.message : String(error));
+      return true;
+    }
+    if (!command) return false;
+
+    void runSetupCommand({
+      worktreePath,
+      command,
+      cwd,
+      env: { ...process.env, ...env },
+      timeoutMs: SETUP_SCRIPT_TIMEOUT_MS,
+    });
+    return true;
   }
 
   /**

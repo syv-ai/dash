@@ -3,6 +3,9 @@ import { z } from 'zod';
 import { parseArgs, errorResponse } from './validate';
 import { worktreeMigrationService } from '../services/WorktreeMigrationService';
 import { TelemetryService } from '../services/TelemetryService';
+import { DatabaseService } from '../services/DatabaseService';
+import { worktreeService } from '../services/WorktreeService';
+import { getSetupLog, isSetupRunning, listSetupRuns } from '../services/setupRuns';
 
 export function registerWorktreeIpc(): void {
   // Pre-0.16 worktrees lived at `<parent>/worktrees/`; the launch dialog offers
@@ -38,4 +41,39 @@ export function registerWorktreeIpc(): void {
       }
     },
   );
+
+  // Setup script runs: state and output live in main (setupRuns); the
+  // renderer reads them here and follows `worktree:setupChanged`/`setupOutput`.
+  ipcMain.handle('worktree:setupList', () => ({ success: true, data: listSetupRuns() }));
+
+  ipcMain.handle('worktree:setupLog', (_event, worktreePath: string) => {
+    try {
+      parseArgs('worktree:setupLog', z.string(), worktreePath);
+      return { success: true, data: getSetupLog(worktreePath) };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
+  ipcMain.handle('worktree:setupRerun', (_event, taskId: string) => {
+    try {
+      parseArgs('worktree:setupRerun', z.string(), taskId);
+      const task = DatabaseService.getTask(taskId);
+      if (!task) throw new Error('Task not found');
+      if (!task.useWorktree) throw new Error('Setup only runs in a task worktree');
+      const project = DatabaseService.getProjects().find((p) => p.id === task.projectId);
+      if (!project) throw new Error('Project not found');
+      if (isSetupRunning(task.path)) throw new Error('Setup is already running for this task');
+      const started = worktreeService.runSetupScriptAsync(
+        task.path,
+        task.branch,
+        project.path,
+        task.setupScript,
+      );
+      if (!started) throw new Error('No setup script is configured for this task');
+      return { success: true };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
 }

@@ -82,6 +82,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Worktree
   worktreeMigrationPlan: () => ipcRenderer.invoke('worktree:migrationPlan'),
   worktreeMigrate: (args: unknown) => ipcRenderer.invoke('worktree:migrate', args),
+  worktreeSetupList: () => ipcRenderer.invoke('worktree:setupList'),
+  worktreeSetupLog: (worktreePath: string) => ipcRenderer.invoke('worktree:setupLog', worktreePath),
+  worktreeSetupRerun: (taskId: string) => ipcRenderer.invoke('worktree:setupRerun', taskId),
+  onWorktreeSetupChanged: (callback: (run: unknown) => void) => {
+    const handler = (_event: unknown, run: unknown) => callback(run);
+    ipcRenderer.on('worktree:setupChanged', handler);
+    return () => {
+      ipcRenderer.removeListener('worktree:setupChanged', handler);
+    };
+  },
+  onWorktreeSetupOutput: (callback: (data: { worktreePath: string; chunk: string }) => void) => {
+    const handler = (_event: unknown, data: { worktreePath: string; chunk: string }) =>
+      callback(data);
+    ipcRenderer.on('worktree:setupOutput', handler);
+    return () => {
+      ipcRenderer.removeListener('worktree:setupOutput', handler);
+    };
+  },
 
   // PTY
   ptyStartDirect: (args: unknown) => ipcRenderer.invoke('pty:startDirect', args),
