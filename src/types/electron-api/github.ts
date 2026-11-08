@@ -10,11 +10,6 @@ export interface GithubApi {
     issueNumber: number,
     branch: string,
   ) => Promise<IpcResponse<void>>;
-  githubLinkBranch: (
-    cwd: string,
-    issueNumber: number,
-    branch: string,
-  ) => Promise<IpcResponse<void>>;
   /** The PRs from the branch checked out at `cwd`, newest first, current ones flagged. */
   githubGetPrsForCheckout: (
     cwd: string,
