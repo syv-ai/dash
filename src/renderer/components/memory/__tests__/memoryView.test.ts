@@ -194,6 +194,20 @@ describe('memorySendTarget', () => {
       'reason',
     );
   });
+
+  it('sends to the task the modal was opened from first, even with another active', () => {
+    expect(memorySendTarget('Dash', [task('a'), task('b')], 'b', task('a'))).toEqual({
+      taskId: 'a',
+      taskName: 'Task a',
+    });
+  });
+
+  it('falls back to the active task when the task it was opened from is archived', () => {
+    expect(memorySendTarget('Dash', [task('b')], 'b', task('a', { archivedAt: 'x' }))).toEqual({
+      taskId: 'b',
+      taskName: 'Task b',
+    });
+  });
 });
 
 describe('memoryMention', () => {

@@ -23,6 +23,7 @@ import { useDragReorder } from '../../hooks/useDragReorder';
 import { IconButton } from '../ui/IconButton';
 import { HoverSwapSlot } from '../ui/HoverSwapSlot';
 import { Tooltip } from '../ui/Tooltip';
+import { CountBadge } from '../ui/CountBadge';
 import { formatTokens, formatCost } from '../../utils/format';
 import { TaskCard } from './TaskCard';
 import { ForeignSessionsSection } from './ForeignSessionsSection';
@@ -614,7 +615,7 @@ export function ProjectsSection({
 }
 
 /**
- * A dot after the project name while Claude has written memories since the
+ * A count after the project name while Claude has written memories since the
  * project's memory was last opened. Clicking it opens the memory, which clears it.
  */
 function NewMemoryDot({ count, onOpen }: { count: number; onOpen: () => void }) {
@@ -628,9 +629,9 @@ function NewMemoryDot({ count, onOpen }: { count: number; onOpen: () => void }) 
           e.stopPropagation();
           onOpen();
         }}
-        className="ml-1.5 flex h-4 w-3 shrink-0 items-center justify-center"
+        className="ml-1.5 flex shrink-0 items-center"
       >
-        <span className="h-[6px] w-[6px] rounded-full bg-primary" />
+        <CountBadge count={count} />
       </button>
     </Tooltip>
   );

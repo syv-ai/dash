@@ -95,12 +95,22 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
   useEffect(() => {
     if (!editing) void markMemorySeen(project.id, project.path);
   }, [markMemorySeen, project.id, project.path, editing]);
-  const projectTasks = useProjects((s) => s.tasksByProject[project.id]);
+  const tasksByProject = useProjects((s) => s.tasksByProject);
   const activeTaskId = useProjects((s) => s.activeTaskId);
-  const sendTarget = useMemo(
-    () => memorySendTarget(project.name, projectTasks ?? [], activeTaskId),
-    [project.name, projectTasks, activeTaskId],
-  );
+  const originTaskId = useUi((s) => s.memoryTaskId);
+  const sendTarget = useMemo(() => {
+    const originTask = originTaskId
+      ? (Object.values(tasksByProject)
+          .flat()
+          .find((t) => t.id === originTaskId) ?? null)
+      : null;
+    return memorySendTarget(
+      project.name,
+      tasksByProject[project.id] ?? [],
+      activeTaskId,
+      originTask,
+    );
+  }, [project.name, project.id, tasksByProject, activeTaskId, originTaskId]);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState<MemoryFilter>('all');

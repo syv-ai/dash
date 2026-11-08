@@ -193,16 +193,20 @@ export function newMemoriesLabel(count: number): string {
 export type MemorySendTarget = { taskId: string; taskName: string } | { reason: string };
 
 /**
- * The task a memory is sent to: the active task, when it is one of the shown
- * project's open tasks. The modal opens over the active task, so that is the
- * task it was opened from; a task of another project would be handed a memory
- * that isn't its own.
+ * The task a memory is sent to: the task whose menu opened the modal, while it
+ * is open (not archived); else the active task, when it is one of the shown
+ * project's open tasks, since a task of another project would be handed a
+ * memory that isn't its own; else none, and why.
  */
 export function memorySendTarget(
   projectName: string,
   projectTasks: Task[],
   activeTaskId: string | null,
+  originTask: Task | null = null,
 ): MemorySendTarget {
+  if (originTask && !originTask.archivedAt) {
+    return { taskId: originTask.id, taskName: originTask.name };
+  }
   const task = projectTasks.find((t) => t.id === activeTaskId && !t.archivedAt);
   if (task) return { taskId: task.id, taskName: task.name };
   return { reason: `Open a task in ${projectName} to send this memory to it` };
