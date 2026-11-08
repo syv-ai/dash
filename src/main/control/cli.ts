@@ -296,6 +296,12 @@ export function resultText(result: unknown): string {
   return JSON.stringify(result ?? null);
 }
 
+/** The running Dash: its version, and false for `packaged` in a dev run. */
+export interface BuildInfo {
+  version: string;
+  packaged: boolean;
+}
+
 /** One `dashctl` run, as the script sends it. */
 export interface CliRequest {
   argv: string[];
@@ -303,10 +309,8 @@ export interface CliRequest {
   stdin: string | null;
   /** The caller's working directory, for a relative `--project` or `cli.paths` path. */
   cwd: string;
-  /** Dash's version, for `dashctl version`. */
-  version: string;
-  /** Whether this is a packaged build, not a dev run, for `dashctl version`. */
-  packaged: boolean;
+  /** What `dashctl version` prints. */
+  build: BuildInfo;
   /** Where a stream command's lines go; absent when the script can't print a stream as it comes. */
   stream?: StreamSink;
 }
@@ -315,10 +319,10 @@ export interface CliRequest {
 export async function runCli(
   registry: Pick<Registry, 'listFor' | 'call' | 'projectsFor'>,
   caller: Caller,
-  { argv, stdin, cwd, version, packaged, stream }: CliRequest,
+  { argv, stdin, cwd, build, stream }: CliRequest,
 ): Promise<CliAnswer> {
   if (argv.length === 1 && (argv[0] === 'version' || argv[0] === '--version')) {
-    return { status: 200, text: JSON.stringify({ version, packaged }) };
+    return { status: 200, text: JSON.stringify(build) };
   }
   const commands = registry.listFor(caller);
   const parsed = resolveArgv(argv, commands, stdin, registry.projectsFor(caller), cwd);

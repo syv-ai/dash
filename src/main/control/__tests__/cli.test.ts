@@ -272,8 +272,7 @@ describe('the dashctl script', () => {
         if (allowOnAsk) setOrchestratorFile(true);
         return allowOnAsk;
       },
-      version: '9.9.9',
-      packaged: true,
+      build: { version: '9.9.9', packaged: true },
     });
     await server.start();
     script = path.join(userData, 'dashctl');
