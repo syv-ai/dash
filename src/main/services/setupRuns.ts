@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'child_process';
-import { BrowserWindow } from 'electron';
+import { broadcast } from '../utils/broadcast';
 import { appendCapped, setupFailureMessage, type SetupLog, type SetupRun } from '@shared/setupRuns';
 
 /** Output is pushed to the renderer at most this often per run. */
@@ -23,17 +23,6 @@ interface Entry {
 /** The latest setup run per worktree path, with its output. In memory only:
  *  a restart forgets them. */
 const runs = new Map<string, Entry>();
-
-function broadcast(channel: string, payload: unknown): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (win.isDestroyed()) continue;
-    try {
-      win.webContents.send(channel, payload);
-    } catch (err) {
-      console.warn('[setupRuns] broadcast failed', err);
-    }
-  }
-}
 
 function flushOutput(entry: Entry): void {
   if (entry.flushTimer) clearTimeout(entry.flushTimer);

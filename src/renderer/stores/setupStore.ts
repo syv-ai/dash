@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { toast } from 'sonner';
 import type { SetupRun } from '../../shared/setupRuns';
 import type { Task } from '../../shared/types';
-import { useProjects } from './projectsStore';
+import { useProjects, selectTaskByPath } from './projectsStore';
 
 export interface SetupState {
   /** Latest setup run per worktree path (a task's `path`), since launch. A
@@ -30,12 +30,10 @@ export type SetupStore = SetupState & SetupActions;
 /** Never resets (clearing a request doesn't), so every request is new. */
 let requestSeq = 0;
 
+/** The live (not archived) task whose worktree is at `worktreePath`. */
 function taskAt(worktreePath: string): Task | null {
-  for (const list of Object.values(useProjects.getState().tasksByProject)) {
-    const task = list.find((t) => t.path === worktreePath && !t.archivedAt);
-    if (task) return task;
-  }
-  return null;
+  const task = selectTaskByPath(useProjects.getState(), worktreePath);
+  return task && !task.archivedAt ? task : null;
 }
 
 export const useSetup = create<SetupStore>((set, get) => ({

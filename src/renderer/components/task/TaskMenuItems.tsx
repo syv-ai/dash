@@ -3,7 +3,7 @@ import { DropdownMenuItem, DropdownMenuSeparator } from '../ui/DropdownMenu';
 import { IdeIcon } from '../ui/IdeIcon';
 import { usePreferredIde } from '../../hooks/usePreferredIde';
 import { copyTaskMessageAddress } from '../../utils/copyMessageAddress';
-import { useProjects } from '../../stores/projectsStore';
+import { useProjects, selectTaskById } from '../../stores/projectsStore';
 import { sessionRegistry } from '../../terminal/SessionRegistry';
 import { useSetup } from '../../stores/setupStore';
 
@@ -45,13 +45,7 @@ export function TaskMenuItems({
   onDelete,
 }: TaskMenuHandlers) {
   const { ideId, openLabel } = usePreferredIde();
-  const task = useProjects((s) => {
-    for (const list of Object.values(s.tasksByProject)) {
-      const t = list.find((x) => x.id === taskId);
-      if (t) return t;
-    }
-    return null;
-  });
+  const task = useProjects((s) => selectTaskById(s, taskId));
   const setupRun = useSetup((s) => (task ? s.runs[task.path] : undefined));
   const showSetup = useSetup((s) => s.showSetup);
   const rerunSetup = useSetup((s) => s.rerun);

@@ -85,28 +85,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   worktreeSetupList: () => ipcRenderer.invoke('worktree:setupList'),
   worktreeSetupLog: (worktreePath: string) => ipcRenderer.invoke('worktree:setupLog', worktreePath),
   worktreeSetupRerun: (taskId: string) => ipcRenderer.invoke('worktree:setupRerun', taskId),
-  onWorktreeSetupChanged: (callback: (run: unknown) => void) => {
-    const handler = (_event: unknown, run: unknown) => callback(run);
-    ipcRenderer.on('worktree:setupChanged', handler);
-    return () => {
-      ipcRenderer.removeListener('worktree:setupChanged', handler);
-    };
-  },
-  onWorktreeSetupForgotten: (callback: (data: { worktreePath: string }) => void) => {
-    const handler = (_event: unknown, data: { worktreePath: string }) => callback(data);
-    ipcRenderer.on('worktree:setupForgotten', handler);
-    return () => {
-      ipcRenderer.removeListener('worktree:setupForgotten', handler);
-    };
-  },
-  onWorktreeSetupOutput: (callback: (data: { worktreePath: string; chunk: string }) => void) => {
-    const handler = (_event: unknown, data: { worktreePath: string; chunk: string }) =>
-      callback(data);
-    ipcRenderer.on('worktree:setupOutput', handler);
-    return () => {
-      ipcRenderer.removeListener('worktree:setupOutput', handler);
-    };
-  },
+  onWorktreeSetupChanged: listen<unknown>('worktree:setupChanged'),
+  onWorktreeSetupForgotten: listen<{ worktreePath: string }>('worktree:setupForgotten'),
+  onWorktreeSetupOutput: listen<{ worktreePath: string; chunk: string }>('worktree:setupOutput'),
 
   // PTY
   ptyStartDirect: (args: unknown) => ipcRenderer.invoke('pty:startDirect', args),
