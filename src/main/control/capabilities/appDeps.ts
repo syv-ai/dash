@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import { DatabaseService } from '../../services/DatabaseService';
 import { TaskService } from '../../services/TaskService';
 import { activityMonitor, activityEvents } from '../../services/ActivityMonitor';
@@ -15,6 +17,8 @@ import {
   startTaskSession,
 } from '../../services/ptyManager';
 import { readLiveSessions } from '../../services/claudeSessionRegistry';
+import { dropTaskInbox, getTaskInbox, postToInbox } from '../../services/taskInbox';
+import { claudeProjectDir } from '../../utils/claudePaths';
 import { GitService } from '../../services/GitService';
 import { WorkspacePortsRuntime } from '../../services/WorkspacePortsRuntime';
 import { portLivenessService } from '../../services/PortLivenessService';
@@ -74,6 +78,10 @@ export function taskDeps(): TaskCapabilityDeps {
       activityEvents.on('change', listener);
       return () => activityEvents.off('change', listener);
     },
+    onTasksChange: (listener) => {
+      taskEvents.on('tasks-changed', listener);
+      return () => taskEvents.off('tasks-changed', listener);
+    },
     taskDefaults,
     resolveBaseRef: (projectPath) => worktreeService.resolveBaseRef(projectPath),
     currentBranch: (projectPath) => GitService.getBranch(projectPath),
@@ -108,6 +116,20 @@ export function taskDeps(): TaskCapabilityDeps {
       return linkedAdoWorkItem(await AzureDevOpsService.getWorkItem(config, id));
     },
     linkItems: async (taskId, items) => TaskService.linkItems(taskId, items),
+    getInbox: getTaskInbox,
+    dropInbox: dropTaskInbox,
+    postToInbox: (inbox, text) => postToInbox(inbox, text),
+    transcriptPathFor: (task) => {
+      const live = task.jobId ? readLiveSessions().get(task.jobId)?.sessionId : null;
+      const sessionId = live ?? task.sessionId;
+      if (!sessionId) return null;
+      // A session resumed after a worktree move keeps writing under its old folder.
+      const files = [task.path, task.previousPath]
+        .filter((dir): dir is string => !!dir)
+        .map((dir) => path.join(claudeProjectDir(dir), `${sessionId}.jsonl`));
+      return files.find((f) => fs.existsSync(f)) ?? files[0]!;
+    },
+    readTranscript: (file) => fs.promises.readFile(file, 'utf8').catch(() => null),
   };
 }
 

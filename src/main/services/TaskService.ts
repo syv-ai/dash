@@ -37,10 +37,11 @@ import { getTuiHost } from '../tui/hostInstance';
 import { taskEvents } from './taskEvents';
 import { FolderOccupiedError } from './FolderOccupiedError';
 import { removeTaskSettings } from './taskSettings';
+import { forgetTask as forgetTaskInbox } from './taskInbox';
 
 /** The line an API-created task's first message starts with. */
 export const UNATTENDED_INSTRUCTION =
-  "You were started by an orchestrator and may be running unattended. Don't use AskUserQuestion; state your assumptions and continue. If a message asks for a reply, answer the sender with SendMessage.";
+  "You were started by an orchestrator and may be running unattended. Don't use AskUserQuestion; state your assumptions and continue. Messages may reach you from an orchestrator through Dash, headed [Message from … via Dash …]: your last message of the turn one starts is read as your reply, so answer there; no need to SendMessage.";
 
 /** End a task's shell and service terminals (not its agent pane). */
 async function killTaskTerminals(taskId: string, why: string): Promise<void> {
@@ -304,6 +305,7 @@ export class TaskService {
     // prompt, and dismiss a lingering ports-setup toast for this task.
     stopPortsConfigWatch(id);
     portLivenessService.forgetTask(id);
+    forgetTaskInbox(id);
     discardInitialPrompt(id);
     removeShellHistory(id);
     void getTuiHost().cancelForTask(id);

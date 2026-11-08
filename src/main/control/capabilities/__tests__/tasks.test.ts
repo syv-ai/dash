@@ -20,6 +20,7 @@ let activity: Record<string, ActivityInfo>;
 let untrusted: Record<string, string>;
 let sessions: Map<string, LiveSession>;
 let listeners: Array<() => void>;
+let taskListeners: Array<() => void>;
 /** The fakes, typed loosely so each test can swap an implementation. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let deps: Record<keyof TaskCapabilityDeps, Mock<(...args: any[]) => any>>;
@@ -53,6 +54,7 @@ beforeEach(() => {
   untrusted = {};
   sessions = new Map();
   listeners = [];
+  taskListeners = [];
   deps = {
     getProjects: vi.fn(() => projects),
     getTask: vi.fn((id: string) => tasks.find((t) => t.id === id)),
@@ -64,6 +66,12 @@ beforeEach(() => {
       listeners.push(l);
       return () => {
         listeners = listeners.filter((x) => x !== l);
+      };
+    }),
+    onTasksChange: vi.fn((l: () => void) => {
+      taskListeners.push(l);
+      return () => {
+        taskListeners = taskListeners.filter((x) => x !== l);
       };
     }),
     taskDefaults: vi.fn(() => undefined),
@@ -679,5 +687,127 @@ describe('linking issues and work items', () => {
       409,
     );
     expect(deps.linkItems).not.toHaveBeenCalled();
+  });
+});
+
+describe('tasks.watch', () => {
+  const task = (id: string) => tasks.find((t) => t.id === id)!;
+  const emitTasks = () => {
+    for (const l of [...taskListeners]) l();
+  };
+  /** A stream that collects its lines, and the controller that ends it. */
+  function watch(caller: Parameters<Registry['call']>[0], input: Record<string, unknown> = {}) {
+    const lines: Array<Record<string, unknown>> = [];
+    const ac = new AbortController();
+    const done = registry.call(caller, 'tasks.watch', input, {
+      emit: (line) => lines.push(line as Record<string, unknown>),
+      signal: ac.signal,
+    });
+    return { lines, ac, done };
+  }
+  const ids = (lines: Array<Record<string, unknown>>) =>
+    lines.map((l) => (l.task as { id?: string } | undefined)?.id ?? `${l.event}:${l.taskId}`);
+
+  it("starts with every watched task's view: the caller's scope, archived ones left out", async () => {
+    const all = watch(orch);
+    expect(ids(all.lines)).toEqual(['me', 'child', 'sibling', 'other']);
+    expect(all.lines[0]).toEqual({
+      event: 'task',
+      task: toTaskView(task('me'), activity, () => undefined, sessions),
+    });
+    const mine = watch(asTask('me'));
+    expect(ids(mine.lines)).toEqual(['me', 'child']);
+    const projectB = watch(orch, { projectId: 'pB' });
+    expect(ids(projectB.lines)).toEqual(['other']);
+    for (const w of [all, mine, projectB]) w.ac.abort();
+    await Promise.all([all.done, mine.done, projectB.done]);
+  });
+
+  it('emits a task again only when its view changes', async () => {
+    const w = watch(orch, { taskId: 'child' });
+    expect(w.lines).toHaveLength(1);
+    emitActivity({});
+    emitActivity({ sibling: { state: 'busy' } });
+    expect(w.lines).toHaveLength(1);
+    emitActivity({ child: { state: 'busy' } });
+    emitActivity({ child: { state: 'busy' } });
+    expect(w.lines).toHaveLength(2);
+    expect(w.lines[1]).toMatchObject({ event: 'task', task: { id: 'child', state: 'working' } });
+    w.ac.abort();
+    await w.done;
+  });
+
+  it('picks up new tasks, and says when one is archived or deleted', async () => {
+    const w = watch(orch, { projectId: 'pA' });
+    w.lines.length = 0;
+    tasks.push(makeTask({ id: 'fresh', projectId: 'pA' }));
+    emitTasks();
+    task('sibling').archivedAt = '2026-02-01T00:00:00.000Z';
+    tasks.splice(tasks.indexOf(task('child')), 1);
+    emitTasks();
+    expect(ids(w.lines)).toEqual(['fresh', 'removed:child', 'removed:sibling']);
+    // A restored task is watched again.
+    task('sibling').archivedAt = null;
+    emitTasks();
+    expect(ids(w.lines).at(-1)).toBe('sibling');
+    w.ac.abort();
+    await w.done;
+  });
+
+  it("re-reads views on a timer, for a session's message address", async () => {
+    vi.useFakeTimers();
+    const w = watch(orch, { taskId: 'child' });
+    task('child').jobId = 'job-c';
+    sessions.set('job-c', live());
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(w.lines.at(-1)).toMatchObject({
+      task: { id: 'child', messageAddress: 'uds:/tmp/cc-socks/7.sock' },
+    });
+    w.ac.abort();
+    await w.done;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('ends after the removed line when watching one task', async () => {
+    const w = watch(orch, { taskId: 'child' });
+    task('child').archivedAt = '2026-02-01T00:00:00.000Z';
+    emitTasks();
+    await expect(w.done).resolves.toBeUndefined();
+    expect(ids(w.lines)).toEqual(['child', 'removed:child']);
+    expect(listeners).toHaveLength(0);
+    expect(taskListeners).toHaveLength(0);
+  });
+
+  it('unsubscribes when the stream is aborted', async () => {
+    vi.useFakeTimers();
+    const w = watch(orch);
+    expect(listeners).toHaveLength(2); // the views and the reply lines
+    expect(taskListeners).toHaveLength(1);
+    w.ac.abort();
+    await expect(w.done).resolves.toBeUndefined();
+    expect(listeners).toHaveLength(0);
+    expect(taskListeners).toHaveLength(0);
+    expect(vi.getTimerCount()).toBe(0);
+    emitActivity({ child: { state: 'busy' } });
+    expect(ids(w.lines)).toEqual(['me', 'child', 'sibling', 'other']);
+  });
+
+  it('refuses before streaming: out of scope, archived, both targets, no stream', async () => {
+    const refused = async (
+      caller: Parameters<Registry['call']>[0],
+      input: Record<string, unknown>,
+    ) => {
+      const w = watch(caller, input);
+      const code = await status(w.done);
+      expect(w.lines).toEqual([]);
+      return code;
+    };
+    expect(await refused(asTask('me'), { taskId: 'sibling' })).toBe(404);
+    expect(await refused(orch, { taskId: 'hidden' })).toBe(404);
+    expect(await refused(orch, { projectId: 'pArch' })).toBe(404);
+    expect(await refused(orch, { taskId: 'old' })).toBe(409);
+    expect(await refused(orch, { taskId: 'child', projectId: 'pA' })).toBe(400);
+    expect(await status(registry.call(orch, 'tasks.watch', {}))).toBe(406);
+    expect(listeners).toHaveLength(0);
   });
 });

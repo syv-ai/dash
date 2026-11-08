@@ -1,6 +1,6 @@
 import type { Project } from '../../shared/types';
 import type { Caller } from './callers';
-import { ControlError, type CapabilityListing, type Registry } from './registry';
+import { ControlError, type CapabilityListing, type Registry, type StreamSink } from './registry';
 import { mainCheckout, projectAtPath, resolveFrom } from './projectPaths';
 
 /*
@@ -304,13 +304,15 @@ export interface CliRequest {
   cwd: string;
   /** Dash's version, for `dashctl version`. */
   version: string;
+  /** Where a stream command's lines go; absent when the script can't print a stream as it comes. */
+  stream?: StreamSink;
 }
 
 /** Answer one `dashctl` run for the caller. */
 export async function runCli(
   registry: Pick<Registry, 'listFor' | 'call' | 'projectsFor'>,
   caller: Caller,
-  { argv, stdin, cwd, version }: CliRequest,
+  { argv, stdin, cwd, version, stream }: CliRequest,
 ): Promise<CliAnswer> {
   if (argv.length === 1 && (argv[0] === 'version' || argv[0] === '--version')) {
     return { status: 200, text: version };
@@ -326,10 +328,18 @@ export async function runCli(
       return { status: 428, text: '' };
   }
   const label = `dashctl ${words(parsed.name).join(' ')}`;
+  if (!stream && commands.find((c) => c.name === parsed.name)?.stream) {
+    // A dashctl copied from an older Dash buffers the answer, and a stream never ends.
+    return {
+      status: 422,
+      text: `${label}: this dashctl is too old to print a stream; use the one Dash writes on launch (its path is in Dash's settings)`,
+    };
+  }
   try {
+    // A stream's lines went out as they came; what is returned then is not sent.
     return {
       status: 200,
-      text: resultText(await registry.call(caller, parsed.name, parsed.input)),
+      text: resultText(await registry.call(caller, parsed.name, parsed.input, stream)),
     };
   } catch (err) {
     if (err instanceof ControlError) return { status: 422, text: `${label}: ${err.message}` };

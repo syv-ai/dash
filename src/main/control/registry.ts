@@ -21,6 +21,17 @@ export interface CapabilityContext {
   scope: ScopeView;
 }
 
+/**
+ * A `stream` capability's way out: each `emit` is one JSON line, sent at once.
+ * The response starts at the first line, so a handler can still refuse with a
+ * status (throw a ControlError) before it emits anything.
+ */
+export interface StreamSink {
+  emit(line: unknown): void;
+  /** Fires when the client goes away or Dash stops: end the stream and unsubscribe. */
+  signal: AbortSignal;
+}
+
 export interface Capability<I extends z.ZodType> {
   /** 'tasks.create' → `dashctl tasks create` (cli.ts) */
   name: string;
@@ -30,15 +41,28 @@ export interface Capability<I extends z.ZodType> {
   readOnly: boolean;
   input: I;
   callers: CallerKind[];
-  /** Which input field names a task or project; the registry checks scope on it before the handler. */
-  target?: { taskId: keyof z.infer<I> } | { projectId: keyof z.infer<I> };
+  /**
+   * Which input field names a task or project; the registry checks scope on it
+   * before the handler. With both, the task is optional: absent, the project
+   * is checked when given (and an untargeted call filters through ctx.scope).
+   */
+  target?:
+    | { taskId: keyof z.infer<I> }
+    | { projectId: keyof z.infer<I> }
+    | { taskId: keyof z.infer<I>; projectId: keyof z.infer<I> };
   /** Task callers only: fill a missing target taskId with the caller's own id. */
   defaultTargetToSelf?: boolean;
   /** false → a task caller may not target itself (archive/delete/restart). Default true. */
   allowSelf?: boolean;
   /** How `dashctl` takes it: which inputs are positional, and which reads stdin. */
   cli?: CliSpec;
-  handler(ctx: CapabilityContext, input: z.infer<I>): Promise<unknown>;
+  /**
+   * Answers with JSON lines through the handler's `stream` (application/x-ndjson,
+   * one line per emit) until its promise settles, instead of with its result.
+   */
+  stream?: boolean;
+  /** `stream` is only given to a `stream` capability. */
+  handler(ctx: CapabilityContext, input: z.infer<I>, stream: StreamSink): Promise<unknown>;
 }
 
 /** A capability's command line (cli.ts): every other input is a `--flag`. */
@@ -59,6 +83,7 @@ export interface CapabilityListing {
   summary: string;
   inputSchema: unknown;
   cli?: CliSpec;
+  stream?: true;
 }
 
 /** Identity helper that infers `I` so `target` and `handler` are typed against the schema. */
@@ -69,12 +94,21 @@ export function defineCapability<I extends z.ZodType>(cap: Capability<I>): Capab
 export interface Registry {
   register(cap: AnyCapability): void;
   listFor(caller: Caller): CapabilityListing[];
-  call(caller: Caller, name: string, rawInput: unknown): Promise<unknown>;
+  /** `stream` is required by a `stream` capability, and ignored by the others. */
+  call(caller: Caller, name: string, rawInput: unknown, stream?: StreamSink): Promise<unknown>;
   /** Names of the capabilities that declare `readOnly`. */
   readOnlyNames(): string[];
   /** The projects the caller may see. */
   projectsFor(caller: Caller): Project[];
 }
+
+/** What a capability that doesn't stream is handed (and never uses). */
+const NO_STREAM: StreamSink = {
+  emit() {
+    throw new Error('not a stream capability');
+  },
+  signal: new AbortController().signal,
+};
 
 function scopeOrThrow(caller: Caller, deps: ScopeLookups): ScopeView {
   const scope = scopeFor(caller, deps);
@@ -108,6 +142,7 @@ export function createRegistry(deps: ScopeLookups): Registry {
           summary: cap.summary,
           inputSchema: z.toJSONSchema(cap.input, { io: 'input', unrepresentable: 'any' }),
           ...(cap.cli ? { cli: cap.cli } : {}),
+          ...(cap.stream ? { stream: true as const } : {}),
         }));
     },
 
@@ -124,9 +159,10 @@ export function createRegistry(deps: ScopeLookups): Registry {
      * Checks, in order: the caller's scope exists (a task without Dash access
      * is refused outright), the capability exists and allows this caller kind,
      * the input parses, the target exists and is in scope (404 either way, so
-     * existence doesn't leak), `allowSelf`, then the handler.
+     * existence doesn't leak), `allowSelf`, that a `stream` capability has a
+     * stream to answer on, then the handler.
      */
-    async call(caller, name, rawInput) {
+    async call(caller, name, rawInput, stream) {
       const scope = scopeOrThrow(caller, deps);
 
       const cap = caps.get(name);
@@ -156,7 +192,7 @@ export function createRegistry(deps: ScopeLookups): Registry {
       }
       const input = parsed.data as Record<string, unknown>;
 
-      if (taskField) {
+      if (taskField && (input[taskField] != null || !projectField)) {
         const taskId = input[taskField];
         if (typeof taskId !== 'string' || !taskId) {
           throw new ControlError(400, `${taskField} is required`);
@@ -175,8 +211,12 @@ export function createRegistry(deps: ScopeLookups): Registry {
         }
       }
 
+      if (cap.stream && !stream) {
+        throw new ControlError(406, `${name} answers with a stream, which this client cannot take`);
+      }
+
       try {
-        return await cap.handler({ caller, scope }, parsed.data);
+        return await cap.handler({ caller, scope }, parsed.data, stream ?? NO_STREAM);
       } catch (err) {
         if (err instanceof ControlError) throw err;
         if (err instanceof FolderOccupiedError) throw new ControlError(409, err.message);

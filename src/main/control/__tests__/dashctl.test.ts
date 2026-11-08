@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { execFileSync } from 'child_process';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { execFile, execFileSync, spawn } from 'child_process';
+import { z } from 'zod';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -7,6 +8,9 @@ import { writeDashctl } from '../dashctl';
 import { controlPaths } from '../paths';
 import { initTokens, tokenFor, verify } from '../tokens';
 import { dashSessionAccess, setReadOnlyCapabilities } from '../taskAccess';
+import { ControlServer } from '../server';
+import { ControlError, createRegistry, defineCapability, type StreamSink } from '../registry';
+import { fakeLookups, makeProject, makeTask } from './fixtures';
 
 let userData: string;
 
@@ -73,5 +77,124 @@ describe('dashSessionAccess', () => {
     expect(() =>
       execFileSync('sh', ['-c', hook!.command], { env: { PATH: '/usr/bin:/bin' } }),
     ).not.toThrow();
+  });
+});
+
+describe('the dashctl script, against a running Dash', () => {
+  const taskId = 't1';
+  let server: ControlServer;
+  let feed: StreamSink | null;
+  let endFeed: () => void;
+
+  beforeEach(async () => {
+    initTokens(userData);
+    const registry = createRegistry(
+      fakeLookups(
+        [makeProject({ id: 'pA' })],
+        [makeTask({ id: taskId, projectId: 'pA', dashAccess: true })],
+      ),
+    );
+    registry.register(
+      defineCapability({
+        name: 'feed.say',
+        summary: 'Say it back',
+        input: z.object({ text: z.string(), fail: z.boolean().optional() }),
+        callers: ['task'],
+        readOnly: true,
+        cli: { args: ['text'], stdin: 'text' },
+        handler: async (_ctx, input) => {
+          if (input.fail) throw new ControlError(409, 'not today');
+          return { text: input.text };
+        },
+      }),
+    );
+    registry.register(
+      defineCapability({
+        name: 'feed.follow',
+        summary: 'Stream lines until ended',
+        input: z.object({}),
+        callers: ['task'],
+        readOnly: true,
+        stream: true,
+        handler: async (_ctx, _input, stream) => {
+          feed = stream;
+          stream.emit({ n: 0 });
+          await new Promise<void>((resolve) => (endFeed = resolve));
+        },
+      }),
+    );
+    feed = null;
+    server = new ControlServer({
+      userDataDir: userData,
+      registry,
+      isOrchestratorAllowed: () => false,
+      requestOrchestratorAccess: async () => false,
+      version: '0.0.0-test',
+    });
+    await server.start();
+    writeDashctl(userData);
+  });
+  afterEach(() => server.stop());
+
+  const env = () => ({
+    PATH: process.env.PATH ?? '/usr/bin:/bin',
+    DASH_CONTROL_DIR: controlPaths(userData).dir,
+    DASH_CALLER: `task:${taskId}`,
+    DASH_TOKEN: tokenFor({ kind: 'task', taskId }),
+  });
+  const run = (...argv: string[]) =>
+    new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
+      execFile(controlPaths(userData).dashctl, argv, { env: env() }, (err, stdout, stderr) =>
+        resolve({ code: err ? Number(err.code) : 0, stdout, stderr }),
+      );
+    });
+
+  it('prints an answer to stdout, usage to stderr (exit 2) and a refusal to stderr (exit 1)', async () => {
+    expect(await run('feed', 'say', 'hi')).toEqual({ code: 0, stdout: 'hi\n', stderr: '' });
+    expect(await run('feed', 'say', 'hi', '--bogus')).toMatchObject({
+      code: 2,
+      stdout: '',
+      stderr: expect.stringMatching(/^dashctl feed say: unknown flag --bogus/),
+    });
+    expect(await run('feed', 'say', 'hi', '--fail')).toEqual({
+      code: 1,
+      stdout: '',
+      stderr: 'dashctl feed say: not today\n',
+    });
+  });
+
+  it('sends stdin when Dash asks for it', async () => {
+    const child = spawn(controlPaths(userData).dashctl, ['feed', 'say'], { env: env() });
+    let stdout = '';
+    child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
+    child.stdin.end('from stdin\n');
+    expect(await new Promise((resolve) => child.on('exit', resolve))).toBe(0);
+    expect(stdout).toBe('from stdin\n');
+  });
+
+  it("ends Dash's stream when the script is killed", async () => {
+    const child = spawn(controlPaths(userData).dashctl, ['feed', 'follow'], { env: env() });
+    let stdout = '';
+    child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
+    await vi.waitFor(() => expect(stdout).toBe('{"n":0}\n'));
+    let aborted = false;
+    feed!.signal.addEventListener('abort', () => (aborted = true));
+    const exited = new Promise((resolve) => child.on('exit', resolve));
+    child.kill('SIGTERM');
+    expect(await exited).toBe(143);
+    await vi.waitFor(() => expect(aborted).toBe(true));
+  });
+
+  it('prints a stream line by line as it comes, and exits 0 when it ends', async () => {
+    const child = spawn(controlPaths(userData).dashctl, ['feed', 'follow'], { env: env() });
+    let stdout = '';
+    child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
+    const exited = new Promise<number | null>((resolve) => child.on('exit', resolve));
+    await vi.waitFor(() => expect(stdout).toBe('{"n":0}\n'));
+    feed!.emit({ n: 1 });
+    await vi.waitFor(() => expect(stdout).toBe('{"n":0}\n{"n":1}\n'));
+    endFeed();
+    expect(await exited).toBe(0);
+    expect(stdout).toBe('{"n":0}\n{"n":1}\n');
   });
 });

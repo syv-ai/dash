@@ -9,6 +9,8 @@ import { activityMonitor } from './ActivityMonitor';
 import { contextUsageService } from './ContextUsageService';
 import { tokenStatsService } from './TokenStatsService';
 import { isSubagentHook, statusLineTaskId } from './hookPayload';
+import { setTaskInbox } from './taskInbox';
+import { claudeConfigDir } from '../utils/claudePaths';
 import { getDb } from '../db/client';
 import { tasks } from '../db/schema';
 
@@ -20,6 +22,29 @@ import { tasks } from '../db/schema';
  *  - 'permission-prompt'  { ptyId }  — Notification(permission_prompt) fired
  */
 export const hookEvents = new EventEmitter();
+
+/**
+ * The session's inbox from a hook's `X-Dash-Messaging-*` headers
+ * (ptyHookSettings INBOX_HEADER_ARGS), with the transcript the payload names;
+ * null when the session sent none. The token is never logged.
+ */
+export function inboxFromHeaders(
+  headers: http.IncomingHttpHeaders,
+  payload: Record<string, unknown>,
+): { socket: string; token: string; transcriptPath: string | null } | null {
+  const one = (v: string | string[] | undefined) => (typeof v === 'string' ? v.trim() : '');
+  const socket = one(headers['x-dash-messaging-socket']);
+  const token = one(headers['x-dash-messaging-token']);
+  if (!socket || !token || !path.isAbsolute(socket)) return null;
+  // Only a transcript under Claude Code's own projects folder is read back later.
+  const projects = path.join(claudeConfigDir(), 'projects') + path.sep;
+  const t = payload.transcript_path;
+  const transcriptPath =
+    typeof t === 'string' && t.endsWith('.jsonl') && path.resolve(t).startsWith(projects)
+      ? path.resolve(t)
+      : null;
+  return { socket, token, transcriptPath };
+}
 
 /** Maximum JSON body size for hook payloads (64KB). */
 const MAX_HOOK_BODY_BYTES = 65_536;
@@ -234,7 +259,9 @@ class HookServerImpl {
           }
 
           if (pathname === '/hook/busy') {
-            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
+              const inbox = inboxFromHeaders(req.headers, payload);
+              if (inbox) setTaskInbox(ptyId, inbox);
               activityMonitor.setBusy(ptyId);
               res.writeHead(200);
               res.end();
@@ -361,6 +388,18 @@ class HookServerImpl {
             this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, () => {
               activityMonitor.setIdle(ptyId);
               void tokenStatsService.recomputeForTask(ptyId);
+              res.writeHead(200);
+              res.end();
+            });
+            return;
+          }
+
+          // SessionStart, every source: only reports the session's inbox
+          // (taskInbox.ts); activity is left alone.
+          if (pathname === '/hook/inbox') {
+            this.readJsonBody(req, res, MAX_HOOK_BODY_BYTES, (payload) => {
+              const inbox = inboxFromHeaders(req.headers, payload);
+              if (inbox) setTaskInbox(ptyId, inbox);
               res.writeHead(200);
               res.end();
             });
