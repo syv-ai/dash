@@ -19,11 +19,21 @@ export function recordContextLoss(
 }
 
 /**
- * Most terminals that keep a WebGL context. Chromium allows about 16 active
- * contexts per renderer and force-loses the oldest past that; 8 stays well
- * under it while covering the handful of tasks people switch between.
+ * How many terminals may keep a WebGL context (the "Terminals kept ready"
+ * setting). Chromium allows about 16 active contexts per renderer and
+ * force-loses the oldest past that, so the range tops out at 14, leaving room
+ * for the main pane plus the session attach modal. 8 covers the handful of
+ * tasks people switch between.
  */
-export const WEBGL_MAX_HELD = 8;
+export const WEBGL_HELD_MIN = 2;
+export const WEBGL_HELD_MAX = 14;
+export const WEBGL_HELD_DEFAULT = 8;
+
+/** Rounds and clamps a held-terminal limit into WEBGL_HELD_MIN..MAX. */
+export function clampHeldLimit(n: number): number {
+  if (!Number.isFinite(n)) return WEBGL_HELD_DEFAULT;
+  return Math.min(WEBGL_HELD_MAX, Math.max(WEBGL_HELD_MIN, Math.round(n)));
+}
 
 /** What the pool needs to know about a terminal. */
 export interface PoolMember {
@@ -53,7 +63,13 @@ export function pickEvictions<T extends PoolMember>(order: readonly T[], cap: nu
 export class WebglPool {
   private order: PoolMember[] = [];
 
-  constructor(private readonly cap = WEBGL_MAX_HELD) {}
+  constructor(private cap = WEBGL_HELD_DEFAULT) {}
+
+  /** Change the limit; lowering it releases the extra off-screen holders now. */
+  setCap(cap: number): void {
+    this.cap = cap;
+    this.enforce();
+  }
 
   /** Make `member` the most recently attached. */
   touch(member: PoolMember): void {
@@ -84,11 +100,16 @@ export interface LosableContext {
 
 const sharedPool = new WebglPool();
 
+/** Apply the "Terminals kept ready" setting to every terminal. */
+export function setWebglHeldLimit(n: number): void {
+  sharedPool.setCap(clampHeldLimit(n));
+}
+
 /**
  * Owns a terminal's WebGL addon. attach() makes the terminal the most recent
  * in the shared pool and loads the addon if it has none; the pool then
  * releases the least recently attached detached terminal past
- * WEBGL_MAX_HELD (#206: one context per viewed session made Chromium's cap
+ * the held limit (#206: one context per viewed session made Chromium's cap
  * force-lose contexts in a loop). Detach keeps the addon so switching back is
  * instant. A loss while detached waits for the next attach(), and repeated
  * losses leave the terminal on xterm's DOM renderer for good.

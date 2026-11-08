@@ -35,3 +35,29 @@ describe('settingsStore generated actions', () => {
     expect(useSettings.getState().preferredIDE).toBe('auto');
   });
 });
+
+describe('webglHeldLimit setting', () => {
+  it('defaults to 8', async () => {
+    const { defaultSettings } = await import('../settingsKeys');
+    expect(defaultSettings().webglHeldLimit).toBe(8);
+  });
+
+  it('clamps the setter to 2..14', () => {
+    const s = useSettings.getState();
+    s.setWebglHeldLimit(1);
+    expect(useSettings.getState().webglHeldLimit).toBe(2);
+    s.setWebglHeldLimit(20);
+    expect(useSettings.getState().webglHeldLimit).toBe(14);
+    s.setWebglHeldLimit(5);
+    expect(useSettings.getState().webglHeldLimit).toBe(5);
+  });
+
+  it('clamps a stored value and falls back on garbage', async () => {
+    const { SETTINGS_REGISTRY } = await import('../settingsKeys');
+    const e = SETTINGS_REGISTRY.find((r) => r.field === 'webglHeldLimit');
+    expect(e?.codec.decode('40')).toBe(14);
+    expect(e?.codec.decode('0')).toBe(2);
+    expect(e?.codec.decode('abc')).toBe(8);
+    expect(e?.codec.decode(null)).toBe(8);
+  });
+});

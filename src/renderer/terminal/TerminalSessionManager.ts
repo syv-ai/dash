@@ -705,8 +705,8 @@ export class TerminalSessionManager {
     }
 
     this.currentContainer = null;
-    // Keeps the WebGL addon; the shared pool frees it once WEBGL_MAX_HELD
-    // more recent terminals hold one.
+    // Keeps the WebGL addon; the shared pool frees it once more recent
+    // terminals than the "Terminals kept ready" setting hold one.
     this.gpu?.detach();
     // Terminal element stays in DOM but container will be unmounted by React
   }

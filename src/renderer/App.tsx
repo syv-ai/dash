@@ -44,6 +44,7 @@ import { matchesBinding } from './keybindings';
 import { sessionRegistry } from './terminal/SessionRegistry';
 import { resolveTheme } from './terminal/terminalThemes';
 import { resolveTerminalFontValue } from './terminal/terminalFonts';
+import { setWebglHeldLimit } from './terminal/WebglLifecycle';
 import { useSettings } from './stores/settingsStore';
 import { useUi } from './stores/uiStore';
 import { useGit } from './stores/gitStore';
@@ -126,6 +127,7 @@ export function App() {
   const shellDrawerPosition = useSettings((s) => s.shellDrawerPosition);
   const terminalTheme = useSettings((s) => s.terminalTheme);
   const terminalFontFamily = useSettings((s) => s.terminalFontFamily);
+  const webglHeldLimit = useSettings((s) => s.webglHeldLimit);
   const setPreferredIDE = useSettings((s) => s.setPreferredIDE);
   const availableIDEs = useProjects((s) => s.availableIDEs);
 
@@ -691,6 +693,11 @@ export function App() {
     document.documentElement.style.setProperty('--terminal-font', resolved);
     sessionRegistry.setAllTerminalFonts(resolved);
   }, [terminalFontFamily]);
+
+  // Lowering the limit releases the least recent off-screen terminals at once.
+  useEffect(() => {
+    setWebglHeldLimit(webglHeldLimit);
+  }, [webglHeldLimit]);
 
   const cycleTask = useCallback(
     (direction: 1 | -1) => {

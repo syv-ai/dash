@@ -46,6 +46,8 @@ import { NOTIFICATION_SOUNDS, SOUND_LABELS, playNotificationSound } from '../../
 import type { NotificationSound } from '../../sounds';
 import { TERMINAL_THEMES, resolveTheme } from '../../terminal/terminalThemes';
 import { TERMINAL_FONTS, resolveTerminalFontValue } from '../../terminal/terminalFonts';
+import { WEBGL_HELD_MAX, WEBGL_HELD_MIN } from '../../terminal/WebglLifecycle';
+import { Slider } from '../ui/Slider';
 import { Select } from '../ui/Select';
 import { Segmented } from '../ui/Segmented';
 import type {
@@ -843,6 +845,8 @@ export function SettingsModal({
   const onTerminalThemeChange = useSettings((s) => s.setTerminalTheme);
   const terminalFontFamily = useSettings((s) => s.terminalFontFamily);
   const onTerminalFontFamilyChange = useSettings((s) => s.setTerminalFontFamily);
+  const webglHeldLimit = useSettings((s) => s.webglHeldLimit);
+  const onWebglHeldLimitChange = useSettings((s) => s.setWebglHeldLimit);
   const preferredIDE = useSettings((s) => s.preferredIDE);
   const onPreferredIDEChange = useSettings((s) => s.setPreferredIDE);
   const customIDE = useSettings((s) => s.customIDE);
@@ -1546,6 +1550,23 @@ export function SettingsModal({
                           </span>
                         )}
                       />
+                    </SettingsBlock>
+                  </SettingsCard>
+
+                  <SettingsCard title="Terminals kept ready">
+                    <SettingsBlock description="How many recent Claude terminals stay ready to show instantly. Lower uses less graphics memory; switching back to an older task may flicker for a moment while it redraws. Higher keeps switching smooth across more tasks.">
+                      <div className="flex items-center gap-3">
+                        <Slider
+                          value={webglHeldLimit}
+                          onValueChange={onWebglHeldLimitChange}
+                          min={WEBGL_HELD_MIN}
+                          max={WEBGL_HELD_MAX}
+                          aria-label="Terminals kept ready"
+                        />
+                        <span className="w-5 text-right text-[12.5px] tabular-nums text-foreground">
+                          {webglHeldLimit}
+                        </span>
+                      </div>
                     </SettingsBlock>
                   </SettingsCard>
                 </SettingsPane>

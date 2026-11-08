@@ -3,14 +3,16 @@ import { persist } from 'zustand/middleware';
 import { type SettingsState, defaultSettings, SETTINGS_REGISTRY } from './settingsKeys';
 import { fanOutStorage, createMemoryStorage, type StorageLike } from './fanOutStorage';
 import { runSettingsMigrations } from './settingsMigrations';
+import { clampHeldLimit } from '../terminal/WebglLifecycle';
 
 /** One plain value-setter per settings field: setTheme(v), setShowTaskTokens(v), … */
 type ValueSetters = {
   [K in keyof SettingsState as `set${Capitalize<string & K>}`]: (value: SettingsState[K]) => void;
 };
 
-/** Fields whose setter also accepts a functional updater (defined explicitly below). */
+/** Fields whose setter is defined explicitly below: functional updaters, clamping. */
 interface UpdaterActions {
+  setWebglHeldLimit: (value: number) => void;
   setPreferredIDE: (value: string | ((prev: string) => string)) => void;
   setRotationExclusions: (value: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
   setUnseenTaskIds: (value: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
@@ -34,8 +36,8 @@ export const useSettings = create<SettingsStore>()(
   persist(
     (set) => {
       // Value-setters are generated from the registry so a new setting gets its
-      // `set<Field>` action for free; the three updater-capable actions below
-      // override their generated value-only versions.
+      // `set<Field>` action for free; the explicit actions below override
+      // their generated value-only versions.
       const valueSetters = Object.fromEntries(
         SETTINGS_REGISTRY.map((e) => [
           `set${e.field[0]!.toUpperCase()}${e.field.slice(1)}`,
@@ -46,6 +48,7 @@ export const useSettings = create<SettingsStore>()(
       return {
         ...defaultSettings(),
         ...valueSetters,
+        setWebglHeldLimit: (value) => set({ webglHeldLimit: clampHeldLimit(value) }),
         setPreferredIDE: (value) =>
           set((s) => ({
             preferredIDE: typeof value === 'function' ? value(s.preferredIDE) : value,

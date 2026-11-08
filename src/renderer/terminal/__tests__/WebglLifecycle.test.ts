@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
+  clampHeldLimit,
   pickEvictions,
   recordContextLoss,
   WebglLifecycle,
@@ -80,7 +81,7 @@ function setup(cap = 8) {
     };
     return { gpu, addons, order, loseContext, last };
   };
-  return { make, tick: (ms: number) => (t += ms) };
+  return { make, pool, tick: (ms: number) => (t += ms) };
 }
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
@@ -141,6 +142,31 @@ describe('WebglLifecycle', () => {
     expect(b.order).toEqual(['dispose', 'loseContext']);
     expect(a.gpu.loaded).toBe(true);
     expect(c.gpu.loaded).toBe(true);
+  });
+
+  it('lowering the cap releases the least recent off-screen holders at once', async () => {
+    const { make, pool } = setup(4);
+    const [a, b, c, d] = [make(), make(), make(), make()];
+    for (const t of [a, b, c, d]) {
+      await t.gpu.attach();
+      t.gpu.detach();
+    }
+    await a.gpu.attach(); // on screen, and now the most recent
+    pool.setCap(1);
+    expect(a.gpu.loaded).toBe(true);
+    expect([b, c, d].map((t) => t.gpu.loaded)).toEqual([false, false, false]);
+    expect(b.order).toEqual(['dispose', 'loseContext']);
+  });
+
+  it('a cap below the on-screen count releases nothing on screen', async () => {
+    const { make, pool } = setup(4);
+    const a = make();
+    const b = make();
+    await a.gpu.attach();
+    await b.gpu.attach();
+    pool.setCap(1);
+    expect(a.gpu.loaded).toBe(true);
+    expect(b.gpu.loaded).toBe(true);
   });
 
   it('never releases an attached terminal', async () => {
@@ -231,5 +257,14 @@ describe('WebglLifecycle', () => {
     gpu.detach();
     await gpu.attach();
     expect(addons).toHaveLength(3);
+  });
+});
+
+describe('clampHeldLimit', () => {
+  it('clamps to 2..14 and rounds', () => {
+    expect(clampHeldLimit(0)).toBe(2);
+    expect(clampHeldLimit(99)).toBe(14);
+    expect(clampHeldLimit(7.6)).toBe(8);
+    expect(clampHeldLimit(Number.NaN)).toBe(8);
   });
 });

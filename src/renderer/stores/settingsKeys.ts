@@ -8,7 +8,9 @@ import {
   json,
   stringSet,
   strOrUndefined,
+  clampedInt,
 } from './settingsCodecs';
+import { clampHeldLimit, WEBGL_HELD_DEFAULT } from '../terminal/WebglLifecycle';
 import type { NotificationSound } from '../sounds';
 import type { UsageThresholds } from '@shared/types';
 import { parseKeybindings, type KeyBindingMap } from '../keybindings';
@@ -36,6 +38,9 @@ export interface SettingsState {
   notificationSound: NotificationSound;
   terminalTheme: string;
   terminalFontFamily: string;
+  /** "Terminals kept ready": how many recent terminals keep their WebGL
+   *  renderer (see WebglLifecycle). Clamped to WEBGL_HELD_MIN..MAX. */
+  webglHeldLimit: number;
   effortLevel: string;
   shellDrawerPosition: 'main' | 'right';
   customIDE: { path: string; args: string[] };
@@ -104,6 +109,7 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   entry('notificationSound', 'notificationSound', str('off') as Codec<NotificationSound>),
   entry('terminalTheme', 'terminalTheme', str('default')),
   entry('terminalFontFamily', 'terminalFontFamily', str('system')),
+  entry('webglHeldLimit', 'webglHeldLimit', clampedInt(WEBGL_HELD_DEFAULT, clampHeldLimit)),
   entry('effortLevel', 'claudeEffortLevel', str('auto')),
   entry('shellDrawerPosition', 'shellDrawerPosition', strEnum(['main', 'right'] as const, 'right')),
   entry(
