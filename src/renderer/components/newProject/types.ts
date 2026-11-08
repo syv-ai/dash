@@ -53,7 +53,9 @@ export function valuesToConfig(value: ConfigureValues): WorkspaceConfig {
   const teardown = lines(value.teardown);
   const taskDefaults = {
     baseRef: value.baseRef.trim() || undefined,
-    permissionMode: value.permissionMode,
+    // Auto is the built-in default, so saving a config with no mode doesn't
+    // write one into the committed file.
+    permissionMode: value.permissionMode === 'auto' ? undefined : value.permissionMode,
     useWorktree: value.useWorktree,
     contextPrompt: value.contextPrompt.trim() || undefined,
     // Off is the built-in default, so only an opt-in is written.

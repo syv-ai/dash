@@ -95,7 +95,7 @@ The `review` commands put notes and draft comments into the task's diff editor, 
 
 Every task the commands return has two fields for messaging it with Claude Code's `SendMessage`: `messageAddress` (`uds:<socket>` while its session runs, otherwise `null`) and `messaging` (`direct`, or `needs-approval` for a task in `bypassPermissions`).
 
-Inside a task, the read-only commands (marked above) run without a permission prompt, so a task started by an orchestrator doesn't stall on a lookup. Commands that change something still ask, unless the task runs in `bypassPermissions`.
+Inside a task, the read-only commands (marked above) run without a permission prompt, so a task started by an orchestrator doesn't stall on a lookup. Commands that change something ask in the default and accept-edits modes; in auto mode (the default) Claude Code's classifier can approve them on its own, and in `bypassPermissions` nothing asks.
 
 ### Talking to a task
 
@@ -113,7 +113,7 @@ Claude Code's own `SendMessage` to a task's `messageAddress` still works too. A 
 
 ### Safety rules
 
-- Tasks created through the API never run in `bypassPermissions`, even if the project defaults to it.
+- Tasks created through the API never run in `bypassPermissions`: a project that defaults to it gives them auto mode instead.
 - A task created through the API gets one line before its first prompt. It says the task may be running unattended, shouldn't use `AskUserQuestion`, and that the reply to a message from an orchestrator through Dash is its last message of that turn.
 - Dash doesn't set Claude Code to accept messages from other sessions without asking for a task in `bypassPermissions`. That would let any local session feed input to a session that has permission prompts off. `dashctl tasks message` is delivered with the task's own inbox token instead, which only Dash holds (in memory), so only a caller Dash lets in (the orchestrator token, or a task with Dash access acting on a task it created) gets a message to a task that way. Claude Code still tells the task the message came from another session, so it can't approve anything on the person's behalf.
 - Dash never accepts Claude Code's workspace trust prompt for an agent. A task that needs it reports `needs-trust` until you open it in Dash.
