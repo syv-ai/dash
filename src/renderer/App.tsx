@@ -15,6 +15,7 @@ import { PortsDrawerWrapper } from './components/rightInspector/PortsDrawerWrapp
 import { editorOpening } from './components/diffEditor/data/viewPersistence';
 const DiffEditorModal = lazy(() => import('./components/diffEditor/DiffEditorModal'));
 import { ShellDrawerWrapper } from './components/terminal/ShellDrawerWrapper';
+import { SetupLogModal } from './components/task/SetupLogModal';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
 import { ExtensionsModal } from './components/extensions/ExtensionsModal';
 import { MemoryModal } from './components/memory/MemoryModal';
@@ -1529,6 +1530,8 @@ export function App() {
           onConfirm={handleDeleteProjectConfirm}
         />
       )}
+
+      <SetupLogModal />
 
       {remoteControlModalPtyId && (
         <RemoteControlModal

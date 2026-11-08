@@ -1,10 +1,11 @@
-import { Settings, Archive, Trash2, AtSign } from 'lucide-react';
+import { Settings, Archive, Trash2, AtSign, ScrollText, RotateCw } from 'lucide-react';
 import { DropdownMenuItem, DropdownMenuSeparator } from '../ui/DropdownMenu';
 import { IdeIcon } from '../ui/IdeIcon';
 import { usePreferredIde } from '../../hooks/usePreferredIde';
 import { copyTaskMessageAddress } from '../../utils/copyMessageAddress';
 import { useProjects } from '../../stores/projectsStore';
 import { sessionRegistry } from '../../terminal/SessionRegistry';
+import { useSetup } from '../../stores/setupStore';
 
 let focusTerminalOnClose = false;
 
@@ -44,6 +45,16 @@ export function TaskMenuItems({
   onDelete,
 }: TaskMenuHandlers) {
   const { ideId, openLabel } = usePreferredIde();
+  const task = useProjects((s) => {
+    for (const list of Object.values(s.tasksByProject)) {
+      const t = list.find((x) => x.id === taskId);
+      if (t) return t;
+    }
+    return null;
+  });
+  const setupRun = useSetup((s) => (task ? s.runs[task.path] : undefined));
+  const openSetupLog = useSetup((s) => s.openLog);
+  const rerunSetup = useSetup((s) => s.rerun);
   return (
     <>
       <DropdownMenuItem onSelect={onOpenIde}>
@@ -56,6 +67,21 @@ export function TaskMenuItems({
         <Settings size={13} strokeWidth={1.8} className="text-muted-foreground" />
         Task settings
       </DropdownMenuItem>
+      {task?.useWorktree && setupRun && (
+        <DropdownMenuItem onSelect={() => void openSetupLog(task.path)}>
+          <ScrollText size={13} strokeWidth={1.8} className="text-muted-foreground" />
+          Setup output
+        </DropdownMenuItem>
+      )}
+      {task?.useWorktree && (
+        <DropdownMenuItem
+          disabled={setupRun?.status === 'running'}
+          onSelect={() => void rerunSetup(task)}
+        >
+          <RotateCw size={13} strokeWidth={1.8} className="text-muted-foreground" />
+          {setupRun ? 'Run setup again' : 'Run setup'}
+        </DropdownMenuItem>
+      )}
       <DropdownMenuItem
         onSelect={() => {
           focusTerminalOnClose = true;
