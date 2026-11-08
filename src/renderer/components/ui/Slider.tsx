@@ -7,6 +7,7 @@ import * as SliderPrimitive from '@radix-ui/react-slider';
 export function Slider({
   value,
   onValueChange,
+  onValueCommit,
   min,
   max,
   step = 1,
@@ -16,6 +17,9 @@ export function Slider({
 }: {
   value: number;
   onValueChange: (value: number) => void;
+  /** Fires once when the user lets go (pointer up or key press), unlike
+   *  onValueChange, which fires on every step of a drag. */
+  onValueCommit?: (value: number) => void;
   min: number;
   max: number;
   step?: number;
@@ -28,6 +32,9 @@ export function Slider({
       value={[value]}
       onValueChange={([v]) => {
         if (v !== undefined) onValueChange(v);
+      }}
+      onValueCommit={([v]) => {
+        if (v !== undefined) onValueCommit?.(v);
       }}
       min={min}
       max={max}
