@@ -1,4 +1,4 @@
-import { BrowserWindow } from 'electron';
+import { broadcast } from '../utils/broadcast';
 import { DatabaseService } from './DatabaseService';
 import { newMemoryCount, resolveMemoryDir } from './MemoryService';
 import { setMemoryChangeNotifier, startMemoryWatches, watchedMemoryDir } from './MemoryWatcher';
@@ -9,9 +9,7 @@ import { setMemoryChangeNotifier, startMemoryWatches, watchedMemoryDir } from '.
  */
 
 function broadcastNewCount(projectId: string, count: number): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.webContents.send('memory:newCount', { projectId, count });
-  }
+  broadcast('memory:newCount', { projectId, count });
 }
 
 /** At startup: watch every project's memory, and push its count to the renderer on each change. */

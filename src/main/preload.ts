@@ -80,16 +80,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   memoryOpenDir: (args: { projectPath: string }) => ipcRenderer.invoke('memory:openDir', args),
   memoryNewCounts: () => ipcRenderer.invoke('memory:newCounts'),
   memoryMarkSeen: (args: { projectId: string }) => ipcRenderer.invoke('memory:markSeen', args),
-  onMemoryNewCount: (callback: (data: { projectId: string; count: number }) => void) => {
-    const handler = (
-      _event: Electron.IpcRendererEvent,
-      data: { projectId: string; count: number },
-    ) => callback(data);
-    ipcRenderer.on('memory:newCount', handler);
-    return () => {
-      ipcRenderer.removeListener('memory:newCount', handler);
-    };
-  },
+  onMemoryNewCount: listen<{ projectId: string; count: number }>('memory:newCount'),
 
   // Worktree
   worktreeMigrationPlan: () => ipcRenderer.invoke('worktree:migrationPlan'),

@@ -18,7 +18,7 @@ import { Modal, useModalClose } from '../ui/Modal';
 import { IconButton } from '../ui/IconButton';
 import { Segmented } from '../ui/Segmented';
 import { Select } from '../ui/Select';
-import { useProjects } from '../../stores/projectsStore';
+import { useProjects, selectTaskById } from '../../stores/projectsStore';
 import { useUi } from '../../stores/uiStore';
 import { useGit } from '../../stores/gitStore';
 import { useRuntime } from '../../stores/runtimeStore';
@@ -100,9 +100,7 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
   const originTaskId = useUi((s) => s.memoryTaskId);
   const sendTarget = useMemo(() => {
     const originTask = originTaskId
-      ? (Object.values(tasksByProject)
-          .flat()
-          .find((t) => t.id === originTaskId) ?? null)
+      ? (selectTaskById({ tasksByProject }, originTaskId) ?? null)
       : null;
     return memorySendTarget(project, tasksByProject[project.id] ?? [], activeTaskId, originTask);
   }, [project, tasksByProject, activeTaskId, originTaskId]);
