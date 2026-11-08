@@ -4,7 +4,7 @@ import {
   MEMORY_INDEX_MAX_LINES,
   MEMORY_TYPES,
 } from '../../../shared/types';
-import type { MemoryEntry, MemoryType, ProjectMemory } from '../../../shared/types';
+import type { MemoryEntry, MemoryType, ProjectMemory, Task } from '../../../shared/types';
 
 export const MEMORY_TYPE_LABELS: Record<MemoryType, string> = {
   user: 'User',
@@ -187,4 +187,28 @@ export function pickCurrent(
 /** The project row badge's tooltip. */
 export function newMemoriesLabel(count: number): string {
   return `${count} new ${count === 1 ? 'memory' : 'memories'}`;
+}
+
+/** Where "Send to task" types a memory's path: a task, or why there is none. */
+export type MemorySendTarget = { taskId: string; taskName: string } | { reason: string };
+
+/**
+ * The task a memory is sent to: the active task, when it is one of the shown
+ * project's open tasks. The modal opens over the active task, so that is the
+ * task it was opened from; a task of another project would be handed a memory
+ * that isn't its own.
+ */
+export function memorySendTarget(
+  projectName: string,
+  projectTasks: Task[],
+  activeTaskId: string | null,
+): MemorySendTarget {
+  const task = projectTasks.find((t) => t.id === activeTaskId && !t.archivedAt);
+  if (task) return { taskId: task.id, taskName: task.name };
+  return { reason: `Open a task in ${projectName} to send this memory to it` };
+}
+
+/** What "Send to task" types into the prompt: an @-mention of the file, unsent, ready for more. */
+export function memoryMention(path: string): string {
+  return `@${path} `;
 }

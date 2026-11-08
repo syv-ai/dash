@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { MEMORY_TYPES } from '../../../../shared/types';
-import type { MemoryEntry, ProjectMemory } from '../../../../shared/types';
+import type { MemoryEntry, ProjectMemory, Task } from '../../../../shared/types';
 import {
   listMemories,
   memoryCounts,
   memoryIssueTexts,
+  memoryMention,
+  memorySendTarget,
   newMemoriesLabel,
   memorySections,
   memoryNotices,
@@ -167,5 +169,37 @@ describe('newMemoriesLabel', () => {
   it('says how many, in the singular for one', () => {
     expect(newMemoriesLabel(1)).toBe('1 new memory');
     expect(newMemoriesLabel(3)).toBe('3 new memories');
+  });
+});
+
+describe('memorySendTarget', () => {
+  const task = (id: string, over: Partial<Task> = {}): Task =>
+    ({ id, name: `Task ${id}`, projectId: 'p', archivedAt: null, ...over }) as Task;
+
+  it("sends to the active task when it is one of the project's", () => {
+    expect(memorySendTarget('Dash', [task('a'), task('b')], 'b')).toEqual({
+      taskId: 'b',
+      taskName: 'Task b',
+    });
+  });
+
+  it("says why when the active task is another project's, or there is none", () => {
+    const reason = { reason: 'Open a task in Dash to send this memory to it' };
+    expect(memorySendTarget('Dash', [task('a')], 'elsewhere')).toEqual(reason);
+    expect(memorySendTarget('Dash', [task('a')], null)).toEqual(reason);
+  });
+
+  it('never sends to an archived task', () => {
+    expect(memorySendTarget('Dash', [task('a', { archivedAt: 'x' })], 'a')).toHaveProperty(
+      'reason',
+    );
+  });
+});
+
+describe('memoryMention', () => {
+  it('@-mentions the path and leaves a space to keep typing', () => {
+    expect(memoryMention('/h/.claude/projects/x/memory/a.md')).toBe(
+      '@/h/.claude/projects/x/memory/a.md ',
+    );
   });
 });

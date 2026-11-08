@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Brain, ChevronRight, Copy, FolderOpen, List, Pencil, Search, X } from 'lucide-react';
+import {
+  AtSign,
+  Brain,
+  ChevronRight,
+  Copy,
+  FolderOpen,
+  List,
+  Pencil,
+  Search,
+  X,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { MEMORY_INDEX_FILE } from '../../../shared/types';
 import type { IpcResponse, Project } from '../../../shared/types';
@@ -12,13 +22,16 @@ import { useProjects } from '../../stores/projectsStore';
 import { useUi } from '../../stores/uiStore';
 import { useGit } from '../../stores/gitStore';
 import { useRuntime } from '../../stores/runtimeStore';
+import { typeIntoTask } from '../../utils/typeIntoTask';
 import { useProjectMemory } from './useProjectMemory';
 import {
   listMemories,
   memoryCounts,
   memoryIssueTexts,
+  memoryMention,
   memoryNotices,
   memorySections,
+  memorySendTarget,
   pickCurrent,
   COLLAPSED_SECTIONS,
   KNOWN_MEMORY_TYPES,
@@ -81,6 +94,12 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
   useEffect(() => {
     void markMemorySeen(project.id, project.path);
   }, [markMemorySeen, project.id, project.path]);
+  const projectTasks = useProjects((s) => s.tasksByProject[project.id]);
+  const activeTaskId = useProjects((s) => s.activeTaskId);
+  const sendTarget = useMemo(
+    () => memorySendTarget(project.name, projectTasks ?? [], activeTaskId),
+    [project.name, projectTasks, activeTaskId],
+  );
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState<MemoryFilter>('all');
@@ -110,6 +129,13 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
       staged: false,
       initialView: { kind: 'working', ref: 'HEAD' },
     });
+  };
+  // Type an @-mention of the memory into the task's prompt, unsent, so the
+  // user can finish the sentence there.
+  const sendToTask = (file: string) => {
+    if (!memory || !('taskId' in sendTarget)) return;
+    handleClose();
+    void typeIntoTask(sendTarget.taskId, memoryMention(`${memory.dir}/${file}`));
   };
   // A missing folder and an empty one (Claude creates it before writing) look the same.
   const empty = entries.length === 0 && !memory?.hasIndex;
@@ -288,6 +314,17 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
                       )}
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
+                      <IconButton
+                        onClick={() => sendToTask(currentEntry.file)}
+                        disabled={!('taskId' in sendTarget)}
+                        title={
+                          'taskId' in sendTarget
+                            ? `Mention in ${sendTarget.taskName}'s prompt`
+                            : sendTarget.reason
+                        }
+                      >
+                        <AtSign size={14} strokeWidth={1.8} />
+                      </IconButton>
                       <IconButton onClick={() => edit(currentEntry.file)} title="Edit">
                         <Pencil size={14} strokeWidth={1.8} />
                       </IconButton>
