@@ -150,12 +150,24 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
         kind: KIND.optional(),
       }),
       callers: ['orchestrator', 'task'],
-      cli: { args: ['id'] },
+      cli: { args: ['id'], stdin: 'body' },
       readOnly: false,
       target: { taskId: 'taskId' },
       defaultTargetToSelf: true,
       handler: async (_ctx, input) => {
         const taskId = input.taskId!;
+        // A body piped without `--body -` isn't read: say so rather than exit 0.
+        if (
+          input.body === undefined &&
+          input.startLine === undefined &&
+          input.endLine === undefined &&
+          input.kind === undefined
+        ) {
+          throw new ControlError(
+            400,
+            'nothing to change: give --body - with the body on stdin, --start-line, --end-line or --kind',
+          );
+        }
         const draft = draftOrThrow(taskId, input.id);
         const startLine = input.startLine ?? draft.startLine;
         const endLine = input.endLine ?? Math.max(startLine, draft.endLine);

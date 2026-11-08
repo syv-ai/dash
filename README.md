@@ -86,7 +86,7 @@ The orchestrator sees every project that isn't archived. Turning the switch off 
 | `services output <label>`   | The last lines of a service Dash started                                           | yes                 |
 | `review drafts-list`        | A task's notes and draft review comments on a PR                                   | yes                 |
 | `review drafts-create`      | Write a note, or draft a review comment on a PR's lines or a reply to a thread     |                     |
-| `review drafts-update <id>` | Change a note or draft, the person's or the agent's                                |                     |
+| `review drafts-update <id>` | Change a note or draft, the person's or the agent's (`--body -` reads stdin)       |                     |
 | `review drafts-delete <id>` | Delete a note or draft, the person's or the agent's                                |                     |
 | `review summary-get`        | A task's draft review summary for a PR (its PR-level comment)                      | yes                 |
 | `review summary-set`        | Draft the review summary, posted with the verdict on Submit                        |                     |

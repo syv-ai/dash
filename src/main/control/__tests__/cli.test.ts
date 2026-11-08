@@ -159,6 +159,22 @@ describe('dashctl argv', () => {
     expect(resolve([...argv, '--prompt', 'hi'])).toMatchObject({ input: { prompt: 'hi' } });
   });
 
+  it('reads drafts-update --body - from stdin, not as the string -', () => {
+    const argv = ['review', 'drafts-update', 'd1', '--task-id', 't1', '--body', '-'];
+    expect(resolve(argv)).toEqual({ kind: 'stdin' });
+    expect(resolve(argv, 'New text\n\nsecond line\n')).toEqual({
+      kind: 'call',
+      name: 'review.drafts_update',
+      input: { id: 'd1', taskId: 't1', body: 'New text\n\nsecond line' },
+    });
+    // Optional, so a piped body without --body - isn't read (the handler refuses an empty update).
+    expect(resolve(argv.slice(0, -2), 'New text')).toEqual({
+      kind: 'call',
+      name: 'review.drafts_update',
+      input: { id: 'd1', taskId: 't1' },
+    });
+  });
+
   it('reads a required stdin input when not given as a flag', () => {
     const argv = ['review', 'summary-set', '--task-id', 't1', '--number', '3'];
     expect(resolve(argv)).toEqual({ kind: 'stdin' });
