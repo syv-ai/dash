@@ -1,4 +1,5 @@
-import { ipcMain, BrowserWindow } from 'electron';
+import { ipcMain } from 'electron';
+import { broadcast } from '../utils/broadcast';
 import { execFile, spawn } from 'child_process';
 import { z } from 'zod';
 import { parseArgs } from './validate';
@@ -11,12 +12,6 @@ import { startCommandPty, killPty, hasPty, readPtyText } from '../services/ptyMa
 import { terminalSnapshotService } from '../services/TerminalSnapshotService';
 import type { TaskPort } from '@shared/types';
 import { stripHostTerminalEnv } from '../services/hostTerminalEnv';
-
-function broadcast(channel: string, payload: unknown): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.webContents.send(channel, payload);
-  }
-}
 
 /** Short-lived command via the user's login shell; never rejects. */
 function execViaShell(command: string, cwd: string): Promise<{ code: number; stderrTail: string }> {

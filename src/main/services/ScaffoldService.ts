@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import { join } from 'path';
-import { BrowserWindow } from 'electron';
+import { broadcast } from '../utils/broadcast';
 import type { IPty } from 'node-pty';
 import type { DetectStrategy } from './cloneMethods';
 
@@ -24,12 +24,6 @@ interface ScaffoldSession {
 }
 
 const sessions = new Map<string, ScaffoldSession>();
-
-function broadcast(channel: string, payload: unknown): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.webContents.send(channel, payload);
-  }
-}
 
 function listDir(dir: string): string[] {
   try {

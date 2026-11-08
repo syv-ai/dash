@@ -1,4 +1,4 @@
-import { BrowserWindow } from 'electron';
+import { broadcast } from '../utils/broadcast';
 
 /**
  * "The project list changed" in main (a project the control API added), for
@@ -7,12 +7,5 @@ import { BrowserWindow } from 'electron';
  * themselves.
  */
 export function broadcastProjectsChanged(): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (win.isDestroyed()) continue;
-    try {
-      win.webContents.send('projects:changed');
-    } catch (err) {
-      console.warn('[projectEvents] broadcast failed', err);
-    }
-  }
+  broadcast('projects:changed');
 }

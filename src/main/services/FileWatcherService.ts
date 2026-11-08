@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { BrowserWindow } from 'electron';
+import { broadcast } from '../utils/broadcast';
 import * as fs from 'fs';
 
 const DEBOUNCE_MS = 500;
@@ -79,9 +79,5 @@ export function stopAll(): void {
  * Notify all renderer windows that files changed for a given watcher ID.
  */
 function notifyRenderers(id: string): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      win.webContents.send('git:fileChanged', id);
-    }
-  }
+  broadcast('git:fileChanged', id);
 }

@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { EventEmitter } from 'events';
-import { BrowserWindow } from 'electron';
+import { broadcast } from '../utils/broadcast';
 import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
 
 /**
@@ -125,11 +125,7 @@ function closeEntry(entry: WatcherEntry): void {
 function notifyConfigChanged(taskId: string, errors: string[]): void {
   // The renderer panel refreshes either way — setupTask re-applied the DB
   // rows (or cleared them on an invalid config), and the panel reads from DB.
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      win.webContents.send('ports:configChanged', { taskId });
-    }
-  }
+  broadcast('ports:configChanged', { taskId });
   // In-process: a valid config advances the setup wizard; an invalid one keeps
   // it waiting and shows the errors, so a corrected rewrite re-advances it.
   if (errors.length > 0) {

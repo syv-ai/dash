@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { BrowserWindow } from 'electron';
+import { broadcast } from '../utils/broadcast';
 import { hookServer, getHookPortFilePath } from './HookServer';
 import { RtkService } from './RtkService';
 import { DatabaseService } from './DatabaseService';
@@ -108,11 +108,7 @@ function buildPreToolUseHooks(
 }
 
 function broadcastToast(message: string): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      win.webContents.send('app:toast', { message });
-    }
-  }
+  broadcast('app:toast', { message });
 }
 
 export type HookWriteResult = { ok: true } | { ok: false; settingsPath: string; error: string };
