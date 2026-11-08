@@ -108,12 +108,13 @@ function danglingLinks(index: string, names: string[]): string[] {
 }
 
 /**
- * How many memories in `dir` were written or changed after `seenAt`. A missing
- * folder has none; an unreadable one is logged and counts none, since this
- * only feeds a badge.
+ * How many memories in `dir` were written or changed after the last look,
+ * `seenAt()`. It is asked once the folder has been read, so a look taken while
+ * the count runs isn't overwritten by a count from before it. A missing folder
+ * has none; an unreadable one is logged and counts none, since this only feeds
+ * a badge.
  */
-export async function newMemoryCount(dir: string, seenAt: number | null): Promise<number> {
-  if (seenAt === null) return 0;
+export async function newMemoryCount(dir: string, seenAt: () => number | null): Promise<number> {
   let names: string[];
   try {
     names = await fs.promises.readdir(dir);
@@ -132,6 +133,6 @@ export async function newMemoryCount(dir: string, seenAt: number | null): Promis
   );
   return countNewMemories(
     files.filter((f) => f !== null),
-    seenAt,
+    seenAt(),
   );
 }

@@ -208,7 +208,11 @@ export function memorySendTarget(
   return { reason: `Open a task in ${projectName} to send this memory to it` };
 }
 
-/** What "Send to task" types into the prompt: an @-mention of the file, unsent, ready for more. */
+/**
+ * What "Send to task" types into the prompt: an @-mention of the file, unsent,
+ * ready for more. A path with whitespace goes in quotes (`@"…"`), the form
+ * Claude Code reads a spaced path from.
+ */
 export function memoryMention(path: string): string {
-  return `@${path} `;
+  return /\s/.test(path) ? `@"${path}" ` : `@${path} `;
 }

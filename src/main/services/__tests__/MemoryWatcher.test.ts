@@ -23,19 +23,22 @@ async function waitFor(check: () => boolean, ms = 15_000): Promise<void> {
 }
 
 /**
- * Write `file` until the watcher reports a change. A watch just started can
- * miss the first write (macOS starts its FSEvents stream asynchronously), and
+ * Repeat `act` until the watcher reports a change. A watch just started can
+ * miss the first event (macOS starts its FSEvents stream asynchronously), and
  * under a loaded test run that window grows.
  */
-async function writeUntilSeen(file: string, ms = 15_000): Promise<void> {
+async function untilSeen(act: () => void, ms = 15_000): Promise<void> {
   const start = Date.now();
   while (seen.length === 0) {
     if (Date.now() - start > ms) throw new Error('timed out');
-    fs.writeFileSync(file, String(Date.now()));
-    // Longer than the watcher's debounce, which each write would otherwise restart.
+    act();
+    // Longer than the watcher's debounce, which each repeat would otherwise restart.
     await new Promise((r) => setTimeout(r, 1000));
   }
 }
+
+const writeUntilSeen = (file: string) =>
+  untilSeen(() => fs.writeFileSync(file, String(Date.now())));
 
 const quiet = () => new Promise((r) => setTimeout(r, 600));
 
@@ -77,9 +80,15 @@ describe('MemoryWatcher', { timeout: 20_000 }, () => {
   it('picks up a memory folder created after the watch started', async () => {
     const a = await project('a');
     await syncMemoryWatches([a]);
-    await quiet(); // let the ancestor's watch start
-    fs.mkdirSync(a.dir, { recursive: true });
-    await waitFor(() => seen.length > 0);
+    // Create the folder until the ancestor's watch (on the config dir: nothing
+    // below it exists yet) sees it appear. Each try starts over from the config
+    // dir, the one folder that watch can see change.
+    const projectsDir = path.join(tmp, 'claude', 'projects');
+    await untilSeen(() => {
+      fs.rmSync(projectsDir, { recursive: true, force: true });
+      fs.mkdirSync(a.dir, { recursive: true });
+    });
+    await quiet();
     seen.length = 0;
     await writeUntilSeen(path.join(a.dir, 'late.md'));
     expect(seen[0]).toBe('a');
@@ -128,14 +137,14 @@ describe('MemoryWatcher', { timeout: 20_000 }, () => {
 describe('newMemoryCount', () => {
   it('counts the memories changed since the last look, and none for a missing folder', async () => {
     const a = await project('a');
-    expect(await newMemoryCount(a.dir, 0)).toBe(0);
+    expect(await newMemoryCount(a.dir, () => 0)).toBe(0);
     fs.mkdirSync(a.dir, { recursive: true });
     fs.writeFileSync(path.join(a.dir, 'old.md'), 'x');
     fs.writeFileSync(path.join(a.dir, 'new.md'), 'x');
     fs.writeFileSync(path.join(a.dir, 'MEMORY.md'), 'x');
     const t = Date.now() / 1000;
     fs.utimesSync(path.join(a.dir, 'old.md'), t - 100, t - 100);
-    expect(await newMemoryCount(a.dir, Date.now() - 50_000)).toBe(1);
-    expect(await newMemoryCount(a.dir, null)).toBe(0);
+    expect(await newMemoryCount(a.dir, () => Date.now() - 50_000)).toBe(1);
+    expect(await newMemoryCount(a.dir, () => null)).toBe(0);
   });
 });

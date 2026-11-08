@@ -17,7 +17,7 @@ function broadcastNewCount(projectId: string, count: number): void {
 /** At startup: watch every project's memory, and push its count to the renderer on each change. */
 export function startMemoryBadges(): Promise<void> {
   setMemoryChangeNotifier((projectId, memoryDir) => {
-    void newMemoryCount(memoryDir, DatabaseService.getMemorySeenAt(projectId)).then((count) =>
+    void newMemoryCount(memoryDir, () => DatabaseService.getMemorySeenAt(projectId)).then((count) =>
       broadcastNewCount(projectId, count),
     );
   });
@@ -35,13 +35,21 @@ export async function newMemoryCounts(): Promise<Record<string, number>> {
   const counts = await Promise.all(
     projects.map(async (p) => {
       const dir = watchedMemoryDir(p.id) ?? (await resolveMemoryDir(p.path));
-      return [p.id, await newMemoryCount(dir, DatabaseService.getMemorySeenAt(p.id))] as const;
+      return [
+        p.id,
+        await newMemoryCount(dir, () => DatabaseService.getMemorySeenAt(p.id)),
+      ] as const;
     }),
   );
   return Object.fromEntries(counts);
 }
 
-/** The project's memory was just looked at: nothing in it is new any more. */
+/**
+ * The project's memory was just looked at: nothing in it is new any more. The
+ * 0 is broadcast too, after any count main sent before the look, so a count
+ * already on its way can't bring the badge back.
+ */
 export function markMemorySeen(projectId: string): void {
   DatabaseService.setMemorySeenAt(projectId, Date.now());
+  broadcastNewCount(projectId, 0);
 }

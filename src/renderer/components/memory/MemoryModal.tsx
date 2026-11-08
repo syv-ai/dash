@@ -89,11 +89,12 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
   // Read when the modal opens, and again once an edit in the diff editor closes.
   const editing = useGit((s) => s.diffFile !== null);
   const { memory, error } = useProjectMemory(project.path, editing);
-  // Opening the project's memory clears its "new memories" badge.
+  // Opening the project's memory clears its "new memories" badge; so does
+  // closing an edit, whose save would otherwise count as a new memory.
   const markMemorySeen = useRuntime((s) => s.markMemorySeen);
   useEffect(() => {
-    void markMemorySeen(project.id, project.path);
-  }, [markMemorySeen, project.id, project.path]);
+    if (!editing) void markMemorySeen(project.id, project.path);
+  }, [markMemorySeen, project.id, project.path, editing]);
   const projectTasks = useProjects((s) => s.tasksByProject[project.id]);
   const activeTaskId = useProjects((s) => s.activeTaskId);
   const sendTarget = useMemo(

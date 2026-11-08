@@ -202,4 +202,10 @@ describe('memoryMention', () => {
       '@/h/.claude/projects/x/memory/a.md ',
     );
   });
+
+  it('quotes a path with a space in it', () => {
+    expect(memoryMention('/Users/Jo Doe/.claude/projects/x/memory/a b.md')).toBe(
+      '@"/Users/Jo Doe/.claude/projects/x/memory/a b.md" ',
+    );
+  });
 });

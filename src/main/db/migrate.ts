@@ -422,8 +422,10 @@ export function runMigrations(): void {
         .get() as { c: number }
     ).c > 0;
   if (!hasMemorySeenCol) {
-    rawDb.exec(`ALTER TABLE projects ADD COLUMN memory_seen_at INTEGER`);
-    rawDb.prepare(`UPDATE projects SET memory_seen_at = ?`).run(Date.now());
+    rawDb.transaction(() => {
+      rawDb.exec(`ALTER TABLE projects ADD COLUMN memory_seen_at INTEGER`);
+      rawDb.prepare(`UPDATE projects SET memory_seen_at = ?`).run(Date.now());
+    })();
   }
 
   // Control API: dash_access lets a task's session reach Dash (now via dashctl);
