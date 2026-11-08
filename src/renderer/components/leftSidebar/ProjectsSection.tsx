@@ -352,7 +352,7 @@ export function ProjectsSection({
                       )} across ${stats.taskCount} task${stats.taskCount === 1 ? '' : 's'}`;
                       return <Tooltip content={tip}>{nameSpan}</Tooltip>;
                     })()}
-                    <NewMemoryDot
+                    <NewMemoryCount
                       count={newMemoryCounts[project.id] ?? 0}
                       onOpen={() => setMemoryProjectId(project.id)}
                     />
@@ -618,7 +618,7 @@ export function ProjectsSection({
  * A count after the project name while Claude has written memories since the
  * project's memory was last opened. Clicking it opens the memory, which clears it.
  */
-function NewMemoryDot({ count, onOpen }: { count: number; onOpen: () => void }) {
+function NewMemoryCount({ count, onOpen }: { count: number; onOpen: () => void }) {
   if (count <= 0) return null;
   return (
     <Tooltip content={newMemoriesLabel(count)} delay={300}>

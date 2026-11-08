@@ -175,9 +175,10 @@ describe('newMemoriesLabel', () => {
 describe('memorySendTarget', () => {
   const task = (id: string, over: Partial<Task> = {}): Task =>
     ({ id, name: `Task ${id}`, projectId: 'p', archivedAt: null, ...over }) as Task;
+  const dash = { id: 'p', name: 'Dash' };
 
   it("sends to the active task when it is one of the project's", () => {
-    expect(memorySendTarget('Dash', [task('a'), task('b')], 'b')).toEqual({
+    expect(memorySendTarget(dash, [task('a'), task('b')], 'b')).toEqual({
       taskId: 'b',
       taskName: 'Task b',
     });
@@ -185,25 +186,34 @@ describe('memorySendTarget', () => {
 
   it("says why when the active task is another project's, or there is none", () => {
     const reason = { reason: 'Open a task in Dash to send this memory to it' };
-    expect(memorySendTarget('Dash', [task('a')], 'elsewhere')).toEqual(reason);
-    expect(memorySendTarget('Dash', [task('a')], null)).toEqual(reason);
+    expect(memorySendTarget(dash, [task('a')], 'elsewhere')).toEqual(reason);
+    expect(memorySendTarget(dash, [task('a')], null)).toEqual(reason);
   });
 
   it('never sends to an archived task', () => {
-    expect(memorySendTarget('Dash', [task('a', { archivedAt: 'x' })], 'a')).toHaveProperty(
-      'reason',
-    );
+    expect(memorySendTarget(dash, [task('a', { archivedAt: 'x' })], 'a')).toHaveProperty('reason');
   });
 
   it('sends to the task the modal was opened from first, even with another active', () => {
-    expect(memorySendTarget('Dash', [task('a'), task('b')], 'b', task('a'))).toEqual({
+    expect(memorySendTarget(dash, [task('a'), task('b')], 'b', task('a'))).toEqual({
       taskId: 'a',
       taskName: 'Task a',
     });
   });
 
+  it("skips the task it was opened from once the modal shows another project's memory", () => {
+    const other = task('a', { projectId: 'other' });
+    expect(memorySendTarget(dash, [task('b')], 'b', other)).toEqual({
+      taskId: 'b',
+      taskName: 'Task b',
+    });
+    expect(memorySendTarget(dash, [task('b')], null, other)).toEqual({
+      reason: 'Open a task in Dash to send this memory to it',
+    });
+  });
+
   it('falls back to the active task when the task it was opened from is archived', () => {
-    expect(memorySendTarget('Dash', [task('b')], 'b', task('a', { archivedAt: 'x' }))).toEqual({
+    expect(memorySendTarget(dash, [task('b')], 'b', task('a', { archivedAt: 'x' }))).toEqual({
       taskId: 'b',
       taskName: 'Task b',
     });

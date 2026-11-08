@@ -104,13 +104,8 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
           .flat()
           .find((t) => t.id === originTaskId) ?? null)
       : null;
-    return memorySendTarget(
-      project.name,
-      tasksByProject[project.id] ?? [],
-      activeTaskId,
-      originTask,
-    );
-  }, [project.name, project.id, tasksByProject, activeTaskId, originTaskId]);
+    return memorySendTarget(project, tasksByProject[project.id] ?? [], activeTaskId, originTask);
+  }, [project, tasksByProject, activeTaskId, originTaskId]);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState<MemoryFilter>('all');
