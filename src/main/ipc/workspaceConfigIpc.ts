@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import { z } from 'zod';
 import { parseArgs, errorResponse } from './validate';
+import { permissionModeSchema } from './schemas';
 import {
   loadSharedWorkspaceConfig,
   loadWorkspaceConfig,
@@ -11,7 +12,7 @@ import {
 const taskDefaultsSchema = z
   .object({
     baseRef: z.string().optional(),
-    permissionMode: z.enum(['default', 'acceptEdits', 'bypassPermissions']).optional(),
+    permissionMode: permissionModeSchema.optional(),
     useWorktree: z.boolean().optional(),
     contextPrompt: z.string().optional(),
     dashAccess: z.boolean().optional(),

@@ -48,7 +48,7 @@ export const tasks = sqliteTable(
     // Deprecated since 0.10: replaced by permission_mode. Kept so existing DBs
     // don't break; do not read or write. New rows leave this at default (false).
     autoApprove: integer('auto_approve', { mode: 'boolean' }).default(false),
-    // 'default' | 'acceptEdits' | 'bypassPermissions' — see PermissionMode in shared/types
+    // 'default' | 'acceptEdits' | 'auto' | 'bypassPermissions' — see PermissionMode in shared/types
     permissionMode: text('permission_mode').notNull().default('default'),
     // 'default' | 'opus' | 'sonnet' | 'haiku' | 'fable' — see TaskModel in shared/types.
     // 'default' → no `--model` flag (respect the user's Claude Code config).

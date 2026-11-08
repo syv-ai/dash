@@ -15,10 +15,11 @@ import type {
   TaskPort,
   PortSource,
 } from '@shared/types';
+import { isPermissionMode } from '@shared/types';
 import { FolderOccupiedError } from './FolderOccupiedError';
 
 function normalizePermissionMode(value: string | null | undefined): PermissionMode {
-  return value === 'acceptEdits' || value === 'bypassPermissions' ? value : 'default';
+  return isPermissionMode(value) ? value : 'default';
 }
 
 const TASK_MODELS: readonly TaskModel[] = ['default', 'opus', 'sonnet', 'haiku', 'fable'];
