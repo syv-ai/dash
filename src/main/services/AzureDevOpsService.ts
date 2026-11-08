@@ -284,8 +284,13 @@ export class AzureDevOpsService {
     config: AzureDevOpsConfig,
     workItemId: number,
     branch: string,
+    /** Dash made the branch for the task; false for an existing branch. */
+    created = true,
   ): Promise<void> {
-    const comment = `A task branch has been created for this work item:\n\n<code>${branch}</code>`;
+    const intro = created
+      ? 'A task branch has been created for this work item:'
+      : 'A task is working on this work item on an existing branch:';
+    const comment = `${intro}\n\n<code>${branch}</code>`;
 
     await this.request(config, `${this.proj(config)}/_apis/wit/workitems/${workItemId}`, {
       method: 'PATCH',

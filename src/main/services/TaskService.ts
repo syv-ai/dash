@@ -196,7 +196,7 @@ export class TaskService {
 
     DatabaseService.getOrCreateDefaultConversation(task.id);
 
-    postBranchComments(project.id, project.path, branch, ghIssueNumbers, adoItems);
+    postBranchComments(project.id, project.path, task, ghIssueNumbers, adoItems);
 
     let session: CreateTaskResult['session'] = 'deferred';
     try {
@@ -239,7 +239,7 @@ export class TaskService {
       // No GitHub branch link here: createLinkedBranch creates the branch on
       // the remote (a push behind the task's back), and fails for a branch
       // that is already there. The comment names the branch instead.
-      postBranchComments(project.id, project.path, task.branch, ghIssueNumbers, adoItems);
+      postBranchComments(project.id, project.path, task, ghIssueNumbers, adoItems);
     }
     taskEvents.emitChanged(task.projectId);
     return DatabaseService.getTask(id) ?? task;
@@ -343,16 +343,20 @@ function resolveDashAccess(explicit: boolean | undefined, projectPath: string): 
   }
 }
 
-/** Fire-and-forget: comment the task's branch on each linked GitHub issue / ADO item. */
+/**
+ * Fire-and-forget: comment the task's branch on each linked GitHub issue / ADO
+ * item, worded by whether Dash created the branch or the task reuses one.
+ */
 function postBranchComments(
   projectId: string,
   projectPath: string,
-  branch: string,
+  task: Pick<Task, 'branch' | 'branchCreatedByDash'>,
   ghIssueNumbers: number[],
   adoItems: LinkedAdoWorkItem[],
 ): void {
+  const { branch, branchCreatedByDash: created } = task;
   for (const num of ghIssueNumbers) {
-    GithubService.postBranchComment(projectPath, num, branch).catch((err) =>
+    GithubService.postBranchComment(projectPath, num, branch, created).catch((err) =>
       console.warn(`[TaskService] failed to link branch to issue #${num}:`, err),
     );
   }
@@ -360,7 +364,7 @@ function postBranchComments(
   const config = ConnectionConfigService.getAdoConfig(projectId);
   if (!config) return;
   for (const wi of adoItems) {
-    AzureDevOpsService.postBranchComment(config, wi.id, branch).catch((err) =>
+    AzureDevOpsService.postBranchComment(config, wi.id, branch, created).catch((err) =>
       console.warn(`[TaskService] failed to link branch to work item #${wi.id}:`, err),
     );
   }
