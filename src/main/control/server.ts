@@ -25,6 +25,8 @@ export interface ControlServerOptions {
   requestOrchestratorAccess: () => Promise<boolean>;
   /** Dash's version, for `dashctl version`. */
   version: string;
+  /** Whether this is a packaged build, not a dev run, for `dashctl version`. */
+  packaged: boolean;
 }
 
 /**
@@ -151,6 +153,7 @@ export class ControlServer {
           stdin: form.has('stdin') ? form.get('stdin') : null,
           cwd,
           version: this.opts.version,
+          packaged: this.opts.packaged,
           stream,
         });
         if (stream?.started) return stream.end(answer.status === 200 ? undefined : answer.text);

@@ -19,7 +19,8 @@ import { mainCheckout, projectAtPath, resolveFrom } from './projectPaths';
  * shell happens to hold is never swallowed. `--project` takes a project's id,
  * name or path (relative to the caller's working directory): the project's
  * folder, one inside it, or a worktree of it. A `cli.paths` input is a path
- * relative to the caller's working directory too. `dashctl version` is Dash's.
+ * relative to the caller's working directory too. `dashctl version` is Dash's
+ * version and whether it is a packaged build (false for `pnpm dev`).
  */
 
 /** What `/v1/cli` answers: the status decides where the script prints it. */
@@ -304,6 +305,8 @@ export interface CliRequest {
   cwd: string;
   /** Dash's version, for `dashctl version`. */
   version: string;
+  /** Whether this is a packaged build, not a dev run, for `dashctl version`. */
+  packaged: boolean;
   /** Where a stream command's lines go; absent when the script can't print a stream as it comes. */
   stream?: StreamSink;
 }
@@ -312,10 +315,10 @@ export interface CliRequest {
 export async function runCli(
   registry: Pick<Registry, 'listFor' | 'call' | 'projectsFor'>,
   caller: Caller,
-  { argv, stdin, cwd, version, stream }: CliRequest,
+  { argv, stdin, cwd, version, packaged, stream }: CliRequest,
 ): Promise<CliAnswer> {
   if (argv.length === 1 && (argv[0] === 'version' || argv[0] === '--version')) {
-    return { status: 200, text: version };
+    return { status: 200, text: JSON.stringify({ version, packaged }) };
   }
   const commands = registry.listFor(caller);
   const parsed = resolveArgv(argv, commands, stdin, registry.projectsFor(caller), cwd);

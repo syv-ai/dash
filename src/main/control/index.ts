@@ -77,6 +77,7 @@ export async function startControl(): Promise<void> {
     requestOrchestratorAccess,
     // An unpackaged run (`pnpm dev`) says so: it may be answering in place of an installed Dash.
     version: app.isPackaged ? app.getVersion() : `${app.getVersion()} (dev)`,
+    packaged: app.isPackaged,
   });
   await next.start();
   server = next;

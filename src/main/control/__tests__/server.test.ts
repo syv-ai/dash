@@ -75,6 +75,7 @@ beforeEach(async () => {
       return orchestratorAllowed;
     },
     version: '0.0.0-test',
+    packaged: true,
   });
   port = await server.start();
 });
