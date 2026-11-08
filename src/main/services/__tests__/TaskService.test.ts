@@ -249,6 +249,29 @@ describe('TaskService.create', () => {
     await vi.waitFor(() => expect(githubComments).toEqual([[42, task.branch]]));
   });
 
+  it('comments an existing branch on a linked issue instead of linking it (#222)', async () => {
+    const { task } = await TaskService.create(
+      {
+        kind: 'worktree-existing',
+        projectId: 'p1',
+        name: 'review',
+        branch: 'feature/x',
+        permissionMode: 'default',
+        model: 'default',
+        linkedItems: [{ provider: 'github', id: 7, title: 'Bug', url: 'https://x/7', labels: [] }],
+      } as CreateTaskInput,
+      UI,
+    );
+    // No issue numbers reach the worktree: linking there would push the branch.
+    expect(worktree.createWorktreeFromExistingBranch).toHaveBeenCalledWith(
+      '/repo/app',
+      'review',
+      'feature/x',
+      { projectId: 'p1', setupScript: undefined },
+    );
+    await vi.waitFor(() => expect(githubComments).toEqual([[7, task.branch]]));
+  });
+
   it('submits a one-shot initialPrompt first but persists only the context', async () => {
     const { task } = await TaskService.create(
       newBranchInput({ contextPrompt: 'Use pnpm.', initialPrompt: 'Write the README.' }),

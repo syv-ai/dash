@@ -446,7 +446,7 @@ export class WorktreeService {
     projectPath: string,
     taskName: string,
     branch: string,
-    options: { projectId: string; linkedIssueNumbers?: number[]; setupScript?: string | null },
+    options: { projectId: string; setupScript?: string | null },
   ): Promise<WorktreeInfo> {
     // eslint-disable-next-line no-control-regex
     const hasControlChars = /[\x00-\x1f\x7f]/.test(branch);
@@ -530,11 +530,9 @@ export class WorktreeService {
       throw error;
     }
 
-    // For existing branches, only link issues — do not push, since the branch
-    // already exists and the user manages its remote state.
-    if (options.linkedIssueNumbers && options.linkedIssueNumbers.length > 0) {
-      void this.linkIssuesAsync(worktreePath, branch, options.linkedIssueNumbers);
-    }
+    // No GitHub branch link for an existing branch: createLinkedBranch creates
+    // the branch on the remote (a push nobody asked for), and fails for one
+    // already there. TaskService comments the branch on linked issues instead.
 
     this.runSetupScriptAsync(worktreePath, branch, projectPath, options.setupScript);
 

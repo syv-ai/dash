@@ -92,7 +92,7 @@ export interface TaskCapabilityDeps {
   getGithubIssue(projectPath: string, issueNumber: number): Promise<LinkedGithubIssue>;
   /** Null when the project has no Azure DevOps connection. */
   getAdoWorkItem(projectId: string, id: number): Promise<LinkedAdoWorkItem | null>;
-  /** TaskService.linkItems: store, add to the context, link the branch. */
+  /** TaskService.linkItems: store, add to the context, comment the branch. */
   linkItems(taskId: string, items: LinkedItem[]): Promise<Task>;
   /** The inbox a session in the task's folder reported on that socket (taskInbox.ts); undefined when none did. */
   getInbox(taskId: string, socket: string): TaskInbox | undefined;
@@ -337,7 +337,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     defineCapability({
       name: 'tasks.create',
       summary:
-        "Create a Dash task (by default a new git worktree on a new branch) and start its Claude Code session with the prompt. A linked issue or work item goes into the task's context, and its branch is linked on it, as in Dash's New Task dialog. Returns the task and session: 'started', or 'needs-trust' when a person must accept Claude Code's trust prompt for the folder in Dash first. bypassPermissions is not allowed.",
+        "Create a Dash task (by default a new git worktree on a new branch) and start its Claude Code session with the prompt. A linked issue or work item goes into the task's context and gets a comment naming the task's branch, as in Dash's New Task dialog; a new branch pushed with pushRemote is also linked on the GitHub issue. Returns the task and session: 'started', or 'needs-trust' when a person must accept Claude Code's trust prompt for the folder in Dash first. bypassPermissions is not allowed.",
       input: z.object({
         projectId: z
           .string()
@@ -460,7 +460,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     defineCapability({
       name: 'tasks.link',
       summary:
-        "Link a GitHub issue or Azure DevOps work item to a task, as Dash's New Task dialog does: its content joins the task's context (re-injected on /clear and /compact, a running session's too: Dash rewrites its hook settings, which Claude Code picks up as they change; nothing is sent to the session now), and the item gets a comment naming the task's branch. Unlike the dialog, the branch isn't linked on GitHub, since that would push it. An item already linked is left as it is. Returns the task.",
+        "Link a GitHub issue or Azure DevOps work item to a task, as Dash's New Task dialog does: its content joins the task's context (re-injected on /clear and /compact, a running session's too: Dash rewrites its hook settings, which Claude Code picks up as they change; nothing is sent to the session now), and the item gets a comment naming the task's branch. The branch isn't linked on the GitHub issue, since that would push it. An item already linked is left as it is. Returns the task.",
       input: z.object({ taskId: z.string().describe('The task id'), ...linkInputs }),
       callers: ['orchestrator', 'task'],
       cli: { args: ['taskId'] },

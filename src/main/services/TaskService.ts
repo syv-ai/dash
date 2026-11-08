@@ -111,7 +111,7 @@ export class TaskService {
           project.path,
           name,
           input.branch,
-          { projectId: project.id, linkedIssueNumbers, setupScript },
+          { projectId: project.id, setupScript },
         );
         TelemetryService.capture('worktree_created_existing_branch');
         break;
@@ -217,8 +217,8 @@ export class TaskService {
    * Link issues / work items to an existing task, as the task dialog does at
    * creation: stored (an item already linked is skipped), their content added
    * to the persisted context (re-injected on /clear and /compact, never sent
-   * into the running session), and the task's branch linked and commented on
-   * each new item (the branch is commented, not linked: see below).
+   * into the running session), and the task's branch commented on each new
+   * item (commented, not linked: see below).
    */
   static linkItems(id: string, items: LinkedItem[]): Task {
     const task = DatabaseService.getTask(id);
@@ -343,7 +343,7 @@ function resolveDashAccess(explicit: boolean | undefined, projectPath: string): 
   }
 }
 
-/** Fire-and-forget: link the new branch on each linked GitHub issue / ADO item. */
+/** Fire-and-forget: comment the task's branch on each linked GitHub issue / ADO item. */
 function postBranchComments(
   projectId: string,
   projectPath: string,
