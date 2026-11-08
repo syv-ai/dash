@@ -5,9 +5,13 @@ import type {
   CreateTaskResult,
   CreateTaskRunOptions,
   DeleteTaskOptions,
+  LinkedAdoWorkItem,
+  LinkedGithubIssue,
+  LinkedItem,
   Project,
   Task,
 } from '../../../shared/types';
+import { githubSlug } from '../../../shared/urls';
 import type { WorkspaceTaskDefaults } from '../../services/WorkspaceConfigService';
 import { messageAddress, type LiveSession } from '../../services/claudeSessionRegistry';
 import { TerminalMirror } from '../../services/TerminalMirror';
@@ -71,6 +75,12 @@ export interface TaskCapabilityDeps {
   readLogs(jobId: string): Promise<string>;
   /** Show and focus Dash's window on the task. */
   openTask(task: Task): void;
+  /** `gh issue view` in the project folder; throws with gh's reason. */
+  getGithubIssue(projectPath: string, issueNumber: number): Promise<LinkedGithubIssue>;
+  /** Null when the project has no Azure DevOps connection. */
+  getAdoWorkItem(projectId: string, id: number): Promise<LinkedAdoWorkItem | null>;
+  /** TaskService.linkItems: store, add to the context, link the branch. */
+  linkItems(taskId: string, items: LinkedItem[]): Promise<Task>;
 }
 
 const STATE_FROM_ACTIVITY: Record<ActivityInfo['state'], TaskApiState> = {
@@ -149,6 +159,41 @@ const branchName = z
     'not a branch name',
   );
 
+/** `--issue` and `--work-item`, on tasks.create and tasks.link. */
+const linkInputs = {
+  issue: z
+    .union([z.string(), z.number()])
+    .optional()
+    .describe("A GitHub issue of the project's repository to link: its number, #number or URL"),
+  workItem: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'An Azure DevOps work item id to link (the project needs an Azure DevOps connection)',
+    ),
+};
+
+/** `123`, `#123` or the issue's github.com URL, which must be the project's repository. */
+export function issueNumber(ref: string | number, project: Project): number {
+  const s = String(ref).trim();
+  const plain = s.match(/^#?([1-9]\d*)$/);
+  if (plain) return Number(plain[1]);
+  const url = s.match(
+    /^https?:\/\/(?:www\.)?github\.com\/([^/\s]+\/[^/\s]+)\/issues\/([1-9]\d*)\/?(?:[?#]\S*)?$/i,
+  );
+  if (!url) throw new ControlError(400, `${s} is not an issue number or GitHub issue URL`);
+  const repo = githubSlug(project.gitRemote);
+  if (!repo) throw new ControlError(400, `${project.name} has no GitHub remote`);
+  if (repo.toLowerCase() !== url[1]!.toLowerCase()) {
+    throw new ControlError(400, `${url[1]} is not ${project.name}'s repository (${repo})`);
+  }
+  return Number(url[2]);
+}
+
+const reasonOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
 /** Output is replayed into a terminal this size (`claude logs` repaints a full screen). */
 const OUTPUT_COLS = 200;
 const OUTPUT_ROWS = 50;
@@ -186,6 +231,32 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     const task = deps.getTask(id);
     if (!task) throw new ControlError(404, 'task not found');
     return task;
+  };
+  /** Fetch what `--issue` / `--work-item` name, as the task dialog stores them. */
+  const fetchLinkedItems = async (
+    project: Project,
+    input: { issue?: string | number; workItem?: number },
+  ): Promise<LinkedItem[]> => {
+    const items: LinkedItem[] = [];
+    if (input.issue !== undefined) {
+      const n = issueNumber(input.issue, project);
+      try {
+        items.push(await deps.getGithubIssue(project.path, n));
+      } catch (err) {
+        throw new ControlError(404, `issue #${n}: ${reasonOf(err)}`);
+      }
+    }
+    if (input.workItem !== undefined) {
+      let wi: LinkedAdoWorkItem | null;
+      try {
+        wi = await deps.getAdoWorkItem(project.id, input.workItem);
+      } catch (err) {
+        throw new ControlError(404, `work item ${input.workItem}: ${reasonOf(err)}`);
+      }
+      if (!wi) throw new ControlError(400, `${project.name} has no Azure DevOps connection`);
+      items.push(wi);
+    }
+    return items;
   };
 
   registry.register(
@@ -229,7 +300,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     defineCapability({
       name: 'tasks.create',
       summary:
-        "Create a Dash task (by default a new git worktree on a new branch) and start its Claude Code session with the prompt. Returns the task and session: 'started', or 'needs-trust' when a person must accept Claude Code's trust prompt for the folder in Dash first. bypassPermissions is not allowed.",
+        "Create a Dash task (by default a new git worktree on a new branch) and start its Claude Code session with the prompt. A linked issue or work item goes into the task's context, and its branch is linked on it, as in Dash's New Task dialog. Returns the task and session: 'started', or 'needs-trust' when a person must accept Claude Code's trust prompt for the folder in Dash first. bypassPermissions is not allowed.",
       input: z.object({
         projectId: z
           .string()
@@ -266,6 +337,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
           .boolean()
           .optional()
           .describe("Let the new task's agent use Dash too (default: the project's setting)"),
+        ...linkInputs,
       }),
       callers: ['orchestrator', 'task'],
       cli: { args: ['name'], stdin: 'prompt' },
@@ -341,8 +413,34 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
           }
         }
 
+        const linkedItems = await fetchLinkedItems(project, input);
+        if (linkedItems.length > 0) createInput = { ...createInput, linkedItems };
         const result = await deps.createTask(createInput, { startSession: true, source: 'api' });
         return { task: view(result.task), session: result.session };
+      },
+    }),
+  );
+
+  registry.register(
+    defineCapability({
+      name: 'tasks.link',
+      summary:
+        "Link a GitHub issue or Azure DevOps work item to a task, as Dash's New Task dialog does: its content joins the task's context (re-injected on /clear and /compact; nothing is sent to the running session) and the task's branch is linked on it. An item already linked is left as it is. Returns the task.",
+      input: z.object({ taskId: z.string().describe('The task id'), ...linkInputs }),
+      callers: ['orchestrator', 'task'],
+      cli: { args: ['taskId'] },
+      readOnly: false,
+      target: { taskId: 'taskId' },
+      handler: async (_ctx, input) => {
+        const task = taskOrThrow(input.taskId);
+        assertNotArchived(task);
+        if (input.issue === undefined && input.workItem === undefined) {
+          throw new ControlError(400, 'pass --issue or --work-item');
+        }
+        const project = deps.getProjects().find((p) => p.id === task.projectId);
+        if (!project) throw new ControlError(404, 'project not found');
+        const items = await fetchLinkedItems(project, input);
+        return view(await deps.linkItems(task.id, items));
       },
     }),
   );

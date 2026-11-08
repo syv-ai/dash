@@ -25,7 +25,7 @@ export function registerDbIpc(): void {
       parseArgs('db:saveProject', projectInputSchema, project);
       const isNew = !project.id;
       const data = DatabaseService.saveProject(project);
-      if (isNew) TelemetryService.capture('project_added');
+      if (isNew) TelemetryService.capture('project_added', { source: 'ui' });
       return { success: true, data };
     } catch (error) {
       return errorResponse(error);

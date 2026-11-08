@@ -270,6 +270,15 @@ export class DatabaseService {
       .run();
   }
 
+  /** Replace a task's linked issues / work items (`tasks link`). */
+  static setTaskLinkedItems(id: string, items: LinkedItem[]): void {
+    const db = getDb();
+    db.update(tasks)
+      .set({ linkedItems: JSON.stringify(items), updatedAt: new Date().toISOString() })
+      .where(eq(tasks.id, id))
+      .run();
+  }
+
   /** Update a task's per-task worktree scripts (Task Settings edit). Null clears
    *  the override. Kept separate from saveTask so partial saves (rename, etc.)
    *  can't clobber these. */

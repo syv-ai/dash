@@ -32,7 +32,11 @@ function emitActivity(next: Record<string, ActivityInfo>): void {
 
 beforeEach(() => {
   projects = [
-    makeProject({ id: 'pA', baseRef: 'origin/main' }),
+    makeProject({
+      id: 'pA',
+      baseRef: 'origin/main',
+      gitRemote: 'git@github.com:acme/app.git',
+    }),
     makeProject({ id: 'pB' }),
     makeProject({ id: 'pNoGit', isGitRepo: false }),
     makeProject({ id: 'pArch', archivedAt: '2026-01-02T00:00:00.000Z' }),
@@ -84,6 +88,21 @@ beforeEach(() => {
     startSession: vi.fn(async () => ({ jobId: 'job-1' })),
     readLogs: vi.fn(async () => ''),
     openTask: vi.fn(),
+    getGithubIssue: vi.fn(async (_path: string, n: number) => ({
+      provider: 'github' as const,
+      id: n,
+      title: `Issue ${n}`,
+      url: `https://github.com/acme/app/issues/${n}`,
+    })),
+    getAdoWorkItem: vi.fn(async (_projectId: string, id: number) => ({
+      provider: 'ado' as const,
+      id,
+      title: `Item ${id}`,
+      url: `https://dev.azure.com/acme/app/_workitems/edit/${id}`,
+      type: 'Bug',
+      state: 'New',
+    })),
+    linkItems: vi.fn(async (taskId: string) => tasks.find((t) => t.id === taskId)!),
   } as never;
   registry = createRegistry(fakeLookups(projects, tasks));
   registerProjectCapabilities(registry, deps as never);
@@ -577,5 +596,88 @@ describe('tasks.wake', () => {
     expect(await registry.call(asTask('me'), 'tasks.wake', { taskId: 'child' })).toMatchObject({
       timedOut: false,
     });
+  });
+});
+
+describe('linking issues and work items', () => {
+  it('tasks.create passes the fetched issue and work item through as linkedItems', async () => {
+    await registry.call(orch, 'tasks.create', {
+      projectId: 'pA',
+      name: 'x',
+      issue: '#12',
+      workItem: 7,
+    });
+    expect(deps.getGithubIssue).toHaveBeenCalledWith('/repos/pA', 12);
+    expect(deps.getAdoWorkItem).toHaveBeenCalledWith('pA', 7);
+    expect(deps.createTask.mock.calls[0]![0].linkedItems).toEqual([
+      expect.objectContaining({ provider: 'github', id: 12 }),
+      expect.objectContaining({ provider: 'ado', id: 7 }),
+    ]);
+  });
+
+  it('tasks.create without links passes no linkedItems', async () => {
+    await registry.call(orch, 'tasks.create', { projectId: 'pA', name: 'x' });
+    expect(deps.createTask.mock.calls[0]![0].linkedItems).toBeUndefined();
+  });
+
+  it.each([
+    ['123', 123],
+    ['#123', 123],
+    [123, 123],
+    ['https://github.com/acme/app/issues/123', 123],
+    ['https://github.com/Acme/App/issues/123/', 123],
+    ['https://github.com/acme/app/issues/123#issuecomment-1', 123],
+  ])('reads the issue %s as #%s', async (issue, n) => {
+    await registry.call(orch, 'tasks.link', { taskId: 'sibling', issue });
+    expect(deps.getGithubIssue).toHaveBeenCalledWith('/repos/pA', n);
+  });
+
+  it("400s an issue URL of another repository, or that isn't an issue", async () => {
+    for (const issue of [
+      'https://github.com/other/app/issues/1',
+      'https://github.com/acme/app/pull/1',
+      'abc',
+      '0',
+    ]) {
+      expect(await status(registry.call(orch, 'tasks.link', { taskId: 'sibling', issue }))).toBe(
+        400,
+      );
+    }
+    expect(deps.getGithubIssue).not.toHaveBeenCalled();
+    expect(deps.linkItems).not.toHaveBeenCalled();
+  });
+
+  it('404s an issue gh cannot find, with its reason', async () => {
+    deps.getGithubIssue.mockRejectedValue(new Error('Could not resolve to an issue'));
+    await expect(
+      registry.call(orch, 'tasks.create', { projectId: 'pA', name: 'x', issue: '9' }),
+    ).rejects.toMatchObject({ status: 404, message: 'issue #9: Could not resolve to an issue' });
+    expect(deps.createTask).not.toHaveBeenCalled();
+  });
+
+  it('400s a work item on a project with no Azure DevOps connection', async () => {
+    deps.getAdoWorkItem.mockResolvedValue(null);
+    await expect(
+      registry.call(orch, 'tasks.link', { taskId: 'sibling', workItem: 3 }),
+    ).rejects.toMatchObject({ status: 400, message: 'pA has no Azure DevOps connection' });
+  });
+
+  it('tasks.link hands the fetched items to linkItems and returns the task', async () => {
+    const result = await registry.call(asTask('me'), 'tasks.link', {
+      taskId: 'child',
+      issue: '5',
+    });
+    expect(deps.linkItems).toHaveBeenCalledWith('child', [
+      expect.objectContaining({ provider: 'github', id: 5 }),
+    ]);
+    expect(result).toMatchObject({ id: 'child' });
+  });
+
+  it('tasks.link needs an issue or work item, and refuses an archived task', async () => {
+    expect(await status(registry.call(orch, 'tasks.link', { taskId: 'sibling' }))).toBe(400);
+    expect(await status(registry.call(orch, 'tasks.link', { taskId: 'old', issue: '1' }))).toBe(
+      409,
+    );
+    expect(deps.linkItems).not.toHaveBeenCalled();
   });
 });

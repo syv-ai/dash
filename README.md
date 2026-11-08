@@ -64,9 +64,11 @@ The orchestrator sees every project that isn't archived. Turning the switch off 
 | Command                     | What it does                                                                       | No prompt in a task |
 | --------------------------- | ---------------------------------------------------------------------------------- | ------------------- |
 | `projects list`             | List projects (orchestrator only)                                                  |                     |
+| `projects add <path>`       | Open a folder already on this machine as a project (orchestrator only)             |                     |
 | `tasks list`                | List tasks with their state: idle, working, waiting, error, stopped or needs-trust | yes                 |
 | `tasks get <task-id>`       | One task: name, branch, worktree path, state and what it waits for                 | yes                 |
 | `tasks create <name>`       | Create a task (new worktree by default) and start its session with a prompt        |                     |
+| `tasks link <task-id>`      | Link a GitHub issue or ADO work item to a task (also `tasks create --issue`)       |                     |
 | `tasks wait <task-id>`      | Wait up to 110 s until a task is idle, waiting, not working, or changes state      | yes                 |
 | `tasks output <task-id>`    | The last lines of a task's terminal as plain text                                  | yes                 |
 | `tasks wake <task-id>`      | Make sure a task's session is running, so you can message it (see below)           |                     |

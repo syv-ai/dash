@@ -5,8 +5,10 @@ import type {
   DeleteTaskOptions,
   LinkedAdoWorkItem,
   LinkedGithubIssue,
+  LinkedItem,
+  Task,
 } from '@shared/types';
-import { formatTaskContextPrompt } from '@shared/taskContext';
+import { buildTaskContext, relinkTaskContext } from '@shared/taskContext';
 import { DatabaseService } from './DatabaseService';
 import { worktreeService } from './WorktreeService';
 import { GitService } from './GitService';
@@ -174,12 +176,7 @@ export class TaskService {
 
     // Combine the context prompt (project default or per-task) with any
     // linked-issue context into one prompt.
-    const context = [
-      contextPrompt?.trim(),
-      linkedItems && linkedItems.length > 0 ? formatTaskContextPrompt(linkedItems) : '',
-    ]
-      .filter((part): part is string => !!part)
-      .join('\n\n');
+    const context = buildTaskContext(contextPrompt, linkedItems);
     const prompt = [context, input.initialPrompt?.trim()].filter(Boolean).join('\n\n');
     // An API-created task may have no person watching it.
     const firstMessage =
@@ -213,6 +210,38 @@ export class TaskService {
       taskEvents.emitChanged(project.id);
     }
     return { task: DatabaseService.getTask(task.id) ?? task, session };
+  }
+
+  /**
+   * Link issues / work items to an existing task, as the task dialog does at
+   * creation: stored (an item already linked is skipped), their content added
+   * to the persisted context (re-injected on /clear and /compact, never sent
+   * into the running session), and the task's branch linked and commented on
+   * each new item (the branch is commented, not linked: see below).
+   */
+  static linkItems(id: string, items: LinkedItem[]): Task {
+    const task = DatabaseService.getTask(id);
+    if (!task) throw new Error(`Task not found: ${id}`);
+    const before = task.linkedItems ?? [];
+    const added = items.filter(
+      (i) => !before.some((b) => b.provider === i.provider && b.id === i.id),
+    );
+    if (added.length === 0) return task;
+    const after = [...before, ...added];
+    DatabaseService.setTaskLinkedItems(id, after);
+    DatabaseService.setTaskContextPrompt(id, relinkTaskContext(task.contextPrompt, before, after));
+
+    const project = DatabaseService.getProjects().find((p) => p.id === task.projectId);
+    if (project) {
+      const ghIssueNumbers = added.filter((i) => i.provider === 'github').map((i) => i.id);
+      const adoItems = added.filter((i): i is LinkedAdoWorkItem => i.provider === 'ado');
+      // No GitHub branch link here: createLinkedBranch creates the branch on
+      // the remote (a push behind the task's back), and fails for a branch
+      // that is already there. The comment names the branch instead.
+      postBranchComments(project.id, project.path, task.branch, ghIssueNumbers, adoItems);
+    }
+    taskEvents.emitChanged(task.projectId);
+    return DatabaseService.getTask(id) ?? task;
   }
 
   /** Put the task's session to sleep (`claude stop`) and archive the row. */

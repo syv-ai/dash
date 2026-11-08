@@ -464,6 +464,14 @@ export function App() {
     });
   }, []);
 
+  // Main changed the project list (the control API added a project): reload
+  // it. The active project stays as it is.
+  useEffect(() => {
+    return window.electronAPI.onProjectsChanged(() => {
+      void useProjects.getState().loadProjects();
+    });
+  }, []);
+
   // Memoized props for ExtensionsModal. Without these, App.tsx re-renders (terminal
   // activity, git polls, PTY events) hand the modal new array references every time,
   // and the modal's overview useCallback re-fires its refetch effect — flickering

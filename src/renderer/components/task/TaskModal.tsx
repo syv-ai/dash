@@ -12,6 +12,7 @@ import type {
 } from '../../../shared/types';
 import { isAdoRemote } from '../../../shared/urls';
 import { branchSlug } from '../../../shared/slug';
+import { linkedAdoWorkItem, linkedGithubIssue } from '../../../shared/taskContext';
 import { Modal, useModalClose } from '../ui/Modal';
 import { PermissionModePicker, readInitialPermissionMode } from './PermissionModePicker';
 import { ModelPicker, readInitialModel, persistModelChoice } from './ModelPicker';
@@ -312,26 +313,8 @@ function TaskModalBody({
     if (!name.trim() || isCreating) return;
 
     // Build unified linkedItems from both providers
-    const ghItems: LinkedItem[] = selectedIssues.map((issue) => ({
-      provider: 'github' as const,
-      id: issue.number,
-      title: issue.title,
-      url: issue.url,
-      labels: issue.labels.length > 0 ? issue.labels : undefined,
-      body: issue.body || undefined,
-    }));
-    const adoItems: LinkedItem[] = selectedWorkItems.map((wi) => ({
-      provider: 'ado' as const,
-      id: wi.id,
-      title: wi.title,
-      url: wi.url,
-      type: wi.type,
-      state: wi.state,
-      tags: wi.tags,
-      description: wi.description,
-      acceptanceCriteria: wi.acceptanceCriteria,
-      parents: wi.parents,
-    }));
+    const ghItems: LinkedItem[] = selectedIssues.map(linkedGithubIssue);
+    const adoItems: LinkedItem[] = selectedWorkItems.map(linkedAdoWorkItem);
     const allLinkedItems: LinkedItem[] = [...ghItems, ...adoItems];
     const linkedItems = allLinkedItems.length > 0 ? allLinkedItems : undefined;
 

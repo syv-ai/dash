@@ -47,7 +47,7 @@ Run \`dashctl help\` for every command, and \`dashctl <namespace> <verb> --help\
 
 ## Tasks and services
 
-- \`dashctl tasks list\` / \`get\` / \`output\` / \`wait\` read tasks; \`dashctl tasks create <name> --project <project>\` starts one (its own worktree by default). Give its prompt as \`--prompt -\` and the text on stdin; without \`--prompt\`, the task starts with no prompt. Message a task with \`SendMessage\` to its \`messageAddress\`, after \`dashctl tasks wake <task-id>\`.
+- \`dashctl tasks list\` / \`get\` / \`output\` / \`wait\` read tasks; \`dashctl tasks create <name> --project <project>\` starts one (its own worktree by default). Give its prompt as \`--prompt -\` and the text on stdin; without \`--prompt\`, the task starts with no prompt. \`--issue <number|url>\` or \`--work-item <id>\` links a GitHub issue or Azure DevOps work item and puts it in the task's context; \`dashctl tasks link <task-id>\` does it for an existing task. Message a task with \`SendMessage\` to its \`messageAddress\`, after \`dashctl tasks wake <task-id>\`.
 - \`dashctl services list\` / \`start <label>\` / \`stop <label>\` / \`output <label>\` run the services from \`.dash/ports.json\` in Dash terminal tabs, on the task's own ports.
 
 \`--project\` is your own project, by name or id (\`dashctl tasks get\` gives your task's \`projectId\`); your checkout's path isn't the project's when it is a worktree.

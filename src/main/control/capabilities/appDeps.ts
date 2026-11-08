@@ -5,6 +5,8 @@ import { supervisorService } from '../../services/SupervisorService';
 import { worktreeService } from '../../services/WorktreeService';
 import { loadWorkspaceConfig } from '../../services/WorkspaceConfigService';
 import { taskEvents } from '../../services/taskEvents';
+import { broadcastProjectsChanged } from '../../services/projectEvents';
+import { TelemetryService } from '../../services/TelemetryService';
 import { focusTaskInWindow } from '../../services/focusTask';
 import {
   getUntrustedRoot,
@@ -18,12 +20,17 @@ import { WorkspacePortsRuntime } from '../../services/WorkspacePortsRuntime';
 import { portLivenessService } from '../../services/PortLivenessService';
 import { getServiceRunner } from '../../ipc/servicesIpc';
 import { ControlError } from '../registry';
+import { mainCheckout } from '../projectPaths';
 import type { ProjectCapabilityDeps } from './projects';
 import type { ServiceCapabilityDeps } from './services';
 import type { TaskCapabilityDeps } from './tasks';
 import type { ReviewCapabilityDeps } from './review';
 import { taskReviews } from '../../services/prReview/taskReview';
 import { prProviderFor } from '../../services/prReview/resolve';
+import { GithubService } from '../../services/GithubService';
+import { AzureDevOpsService } from '../../services/AzureDevOpsService';
+import { ConnectionConfigService } from '../../services/ConnectionConfigService';
+import { linkedAdoWorkItem, linkedGithubIssue } from '../../../shared/taskContext';
 
 /**
  * The capabilities' real dependencies: the app's services. Kept apart from the
@@ -40,7 +47,19 @@ function taskDefaults(projectPath: string) {
 }
 
 export function projectDeps(): ProjectCapabilityDeps {
-  return { getProjects: () => DatabaseService.getProjects(), taskDefaults };
+  return {
+    getProjects: () => DatabaseService.getProjects(),
+    taskDefaults,
+    detectGit: (folderPath) => GitService.detectRepo(folderPath),
+    mainCheckout,
+    addProject: (input) => {
+      // As db:saveProject saves a new one; the renderer reloads on the broadcast.
+      const project = DatabaseService.saveProject(input);
+      TelemetryService.capture('project_added', { source: 'api' });
+      broadcastProjectsChanged();
+      return project;
+    },
+  };
 }
 
 export function taskDeps(): TaskCapabilityDeps {
@@ -74,6 +93,21 @@ export function taskDeps(): TaskCapabilityDeps {
         throw new ControlError(409, 'Dash has no window open');
       }
     },
+    getGithubIssue: async (projectPath, issueNumber) => {
+      try {
+        return linkedGithubIssue(await GithubService.getIssue(projectPath, issueNumber));
+      } catch (err) {
+        // gh's own reason, not execFile's "Command failed: gh …".
+        const stderr = (err as { stderr?: unknown }).stderr;
+        throw new Error(typeof stderr === 'string' && stderr.trim() ? stderr.trim() : String(err));
+      }
+    },
+    getAdoWorkItem: async (projectId, id) => {
+      const config = ConnectionConfigService.getAdoConfig(projectId);
+      if (!config) return null;
+      return linkedAdoWorkItem(await AzureDevOpsService.getWorkItem(config, id));
+    },
+    linkItems: async (taskId, items) => TaskService.linkItems(taskId, items),
   };
 }
 

@@ -52,6 +52,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('tasks:changed', handler);
     };
   },
+  onProjectsChanged: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on('projects:changed', handler);
+    return () => {
+      ipcRenderer.removeListener('projects:changed', handler);
+    };
+  },
   reorderTasks: (projectId: string, orderedTaskIds: string[]) =>
     ipcRenderer.invoke('db:reorderTasks', { projectId, orderedTaskIds }),
 

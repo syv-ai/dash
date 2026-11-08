@@ -1,10 +1,7 @@
-import { execFileSync } from 'child_process';
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
 import type { Project } from '../../shared/types';
 import type { Caller } from './callers';
 import { ControlError, type CapabilityListing, type Registry } from './registry';
+import { mainCheckout, projectAtPath, resolveFrom } from './projectPaths';
 
 /*
  * `dashctl`, the control API's command line. The `dashctl` script only carries
@@ -21,7 +18,8 @@ import { ControlError, type CapabilityListing, type Registry } from './registry'
  * given; an optional one is never read implicitly, so a stdin the agent's
  * shell happens to hold is never swallowed. `--project` takes a project's id,
  * name or path (relative to the caller's working directory): the project's
- * folder, one inside it, or a worktree of it. `dashctl version` is Dash's.
+ * folder, one inside it, or a worktree of it. A `cli.paths` input is a path
+ * relative to the caller's working directory too. `dashctl version` is Dash's.
  */
 
 /** What `/v1/cli` answers: the status decides where the script prints it. */
@@ -114,30 +112,6 @@ export function helpText(c: CapabilityListing): string {
 
 class UsageError extends Error {}
 
-/** `p` with symlinks resolved, when it exists. */
-function real(p: string): string {
-  try {
-    return fs.realpathSync(p);
-  } catch {
-    return path.resolve(p);
-  }
-}
-
-/** The main checkout of the git repository `dir` is in (a worktree's too), or null. */
-export function mainCheckout(dir: string): string | null {
-  try {
-    const common = execFileSync('git', ['-C', dir, 'rev-parse', '--git-common-dir'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-      timeout: 2000,
-    }).trim();
-    const abs = path.resolve(dir, common);
-    return path.basename(abs) === '.git' ? path.dirname(abs) : null;
-  } catch {
-    return null;
-  }
-}
-
 /**
  * A project by id, name (any case) or path: `~` is the home folder, and a
  * relative path is the caller's `cwd`. A path is the project's folder or one inside it (the deepest
@@ -160,18 +134,7 @@ export function findProject(
       `${byName.length} projects are named ${JSON.stringify(ref)}; give its path or id (${byName.map((p) => p.id).join(', ')})`,
     );
   }
-  const expanded =
-    ref === '~' || ref.startsWith('~/') ? path.join(os.homedir(), ref.slice(1)) : ref;
-  const target = real(path.resolve(cwd, expanded));
-  const roots = projects.map((p) => ({ p, root: real(p.path) }));
-  const containing = roots
-    .filter(({ root }) => target === root || target.startsWith(root + path.sep))
-    .sort((a, b) => b.root.length - a.root.length)[0];
-  if (containing) return containing.p;
-  const main = checkoutOf(target);
-  if (main === null) return undefined;
-  const mainRoot = real(main);
-  return roots.find(({ root }) => root === mainRoot)?.p;
+  return projectAtPath(projects, resolveFrom(cwd, ref), checkoutOf);
 }
 
 function coerce(prop: string, schema: PropSchema, value: string | true): unknown {
@@ -201,7 +164,7 @@ type Parsed =
 
 /**
  * Turn argv (and stdin, once sent) into a call, or say why not. `cwd` is the
- * caller's working directory, for a relative `--project` path.
+ * caller's working directory, for a relative `--project` or `cli.paths` path.
  */
 export function resolveArgv(
   argv: string[],
@@ -286,6 +249,10 @@ export function resolveArgv(
       const text = stdin.replace(/\r?\n$/, '');
       if (text !== '') input[fromStdin!] = text;
     }
+    for (const prop of c.cli?.paths ?? []) {
+      const value = input[prop];
+      if (typeof value === 'string' && value !== '') input[prop] = resolveFrom(cwd, value);
+    }
     if (typeof input.projectId === 'string') {
       const project = findProject(projects, input.projectId, cwd);
       if (!project) {
@@ -333,7 +300,7 @@ export interface CliRequest {
   argv: string[];
   /** Null until the script is asked for it (428). */
   stdin: string | null;
-  /** The caller's working directory, for a relative `--project` path. */
+  /** The caller's working directory, for a relative `--project` or `cli.paths` path. */
   cwd: string;
   /** Dash's version, for `dashctl version`. */
   version: string;

@@ -47,6 +47,8 @@ export interface CliSpec {
   args?: string[];
   /** The input read from stdin when it isn't given as a flag (a prompt, a body). */
   stdin?: string;
+  /** Inputs that are paths: made absolute against the caller's working directory (and `~`). */
+  paths?: string[];
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
