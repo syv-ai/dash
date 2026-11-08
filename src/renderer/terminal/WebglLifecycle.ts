@@ -18,6 +18,59 @@ export function recordContextLoss(
   return { losses: recent, fallback: recent.length >= WEBGL_MAX_LOSSES };
 }
 
+/**
+ * Most terminals that keep a WebGL context. Chromium allows about 16 active
+ * contexts per renderer and force-loses the oldest past that; 8 stays well
+ * under it while covering the handful of tasks people switch between.
+ */
+export const WEBGL_MAX_HELD = 8;
+
+/** What the pool needs to know about a terminal. */
+export interface PoolMember {
+  readonly loaded: boolean;
+  readonly isAttached: boolean;
+  release(): void;
+}
+
+/**
+ * Which members to release so at most `cap` hold a context. `order` runs
+ * least to most recently attached; attached members are never picked.
+ */
+export function pickEvictions<T extends PoolMember>(order: readonly T[], cap: number): T[] {
+  let excess = order.filter((m) => m.loaded).length - cap;
+  const out: T[] = [];
+  for (const m of order) {
+    if (excess <= 0) break;
+    if (m.loaded && !m.isAttached) {
+      out.push(m);
+      excess--;
+    }
+  }
+  return out;
+}
+
+/** Recency list shared by every terminal's WebglLifecycle. */
+export class WebglPool {
+  private order: PoolMember[] = [];
+
+  constructor(private readonly cap = WEBGL_MAX_HELD) {}
+
+  /** Make `member` the most recently attached. */
+  touch(member: PoolMember): void {
+    this.remove(member);
+    this.order.push(member);
+  }
+
+  remove(member: PoolMember): void {
+    this.order = this.order.filter((m) => m !== member);
+  }
+
+  /** Release the least recently attached holders past the cap. */
+  enforce(): void {
+    for (const m of pickEvictions(this.order, this.cap)) m.release();
+  }
+}
+
 /** The parts of xterm's WebglAddon the lifecycle uses. */
 export interface WebglAddonLike {
   dispose(): void;
@@ -29,19 +82,24 @@ export interface LosableContext {
   getExtension(name: 'WEBGL_lose_context'): { loseContext(): void } | null;
 }
 
+const sharedPool = new WebglPool();
+
 /**
- * Owns a terminal's WebGL addon so that only an attached terminal holds a
- * context. Chromium caps active contexts per renderer (~16) and force-loses
- * the oldest past that, so keeping one per viewed session made losses rotate
- * through the terminals (#206). attach() loads the addon, detach() releases
- * it, a loss while detached waits for the next attach(), and repeated losses
- * leave the terminal on xterm's DOM renderer for good.
+ * Owns a terminal's WebGL addon. attach() makes the terminal the most recent
+ * in the shared pool and loads the addon if it has none; the pool then
+ * releases the least recently attached detached terminal past
+ * WEBGL_MAX_HELD (#206: one context per viewed session made Chromium's cap
+ * force-lose contexts in a loop). Detach keeps the addon so switching back is
+ * instant. A loss while detached waits for the next attach(), and repeated
+ * losses leave the terminal on xterm's DOM renderer for good.
  */
-export class WebglLifecycle<A extends WebglAddonLike = WebglAddonLike> {
+export class WebglLifecycle<A extends WebglAddonLike = WebglAddonLike> implements PoolMember {
   private addon: A | null = null;
   private attached = false;
+  private disposed = false;
   private losses: number[] = [];
   private fallback = false;
+  private readonly pool: WebglPool;
 
   constructor(
     private readonly deps: {
@@ -52,11 +110,19 @@ export class WebglLifecycle<A extends WebglAddonLike = WebglAddonLike> {
       /** The addon's live WebGL context, read just before it is disposed. */
       findContext: () => LosableContext | null;
       now?: () => number;
+      /** Defaults to the pool shared by every terminal. */
+      pool?: WebglPool;
     },
-  ) {}
+  ) {
+    this.pool = deps.pool ?? sharedPool;
+  }
 
   get loaded(): boolean {
     return this.addon !== null;
+  }
+
+  get isAttached(): boolean {
+    return this.attached;
   }
 
   get fellBack(): boolean {
@@ -64,12 +130,24 @@ export class WebglLifecycle<A extends WebglAddonLike = WebglAddonLike> {
   }
 
   async attach(): Promise<void> {
+    if (this.disposed) return;
     this.attached = true;
+    this.pool.touch(this);
+    // Also run here (not only on load): holders that were all attached at
+    // once can leave the pool over the cap after they detach.
+    this.pool.enforce();
     await this.load();
   }
 
+  /** Keeps the addon; the pool releases it once enough others are attached. */
   detach(): void {
     this.attached = false;
+  }
+
+  dispose(): void {
+    this.disposed = true;
+    this.attached = false;
+    this.pool.remove(this);
     this.release();
   }
 
@@ -77,12 +155,13 @@ export class WebglLifecycle<A extends WebglAddonLike = WebglAddonLike> {
     if (this.addon || this.fallback) return;
     try {
       const addon = await this.deps.create();
-      // Detached, or another load won while the import resolved.
+      // Detached, disposed, or another load won while the import resolved.
       // Not installed yet, so nothing to free: drop it.
       if (!this.attached || this.addon || this.fallback) return;
       addon.onContextLoss(() => this.onContextLoss(addon));
       this.deps.install(addon);
       this.addon = addon;
+      this.pool.enforce();
     } catch (err) {
       // A GPU-renderer failure drops to xterm's DOM renderer; log it so that
       // regression is visible, not mysterious.
@@ -91,7 +170,7 @@ export class WebglLifecycle<A extends WebglAddonLike = WebglAddonLike> {
   }
 
   /** Drop the addon; xterm swaps in its DOM renderer and repaints. */
-  private release(): void {
+  release(): void {
     const addon = this.addon;
     if (!addon) return;
     this.addon = null;
@@ -122,6 +201,7 @@ export class WebglLifecycle<A extends WebglAddonLike = WebglAddonLike> {
       console.warn('[terminal] WebGL context lost repeatedly, staying on DOM renderer');
       return;
     }
+    // A detached terminal reloads on its next attach().
     if (this.attached) void this.load();
   }
 }

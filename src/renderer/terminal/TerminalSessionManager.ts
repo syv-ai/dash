@@ -81,8 +81,9 @@ export class TerminalSessionManager {
   private lastPtyRows = 0;
   private lastMemoryCheckAt = 0;
   private savedViewportY: number | null = null;
-  // WebGL renderer, held only while attached (see WebglLifecycle). Null for
-  // terminals that always use xterm's DOM renderer (see createGpu).
+  // WebGL renderer, kept on the most recently attached terminals (see
+  // WebglLifecycle). Null for terminals that always use xterm's DOM renderer
+  // (see createGpu).
   private readonly gpu: WebglLifecycle<WebglAddon> | null;
   // Shell-only sessions use xterm 6's DOM renderer (WebGL paints their
   // transparent background black). The DOM renderer lays each row's glyphs at
@@ -427,9 +428,9 @@ export class TerminalSessionManager {
       if (xtermEl && xtermEl.parentElement !== container) {
         container.appendChild(xtermEl);
       }
-      // detach() released the WebGL addon; load it again now that the element
-      // is back in the DOM. Swapping renderers repaints every row, and the
-      // fit below re-reads the cell size.
+      // Mark this terminal most recent, and reload the WebGL addon if the pool
+      // released it or it was lost while detached. Swapping renderers
+      // repaints every row, and the fit below re-reads the cell size.
       await this.gpu?.attach();
       if (gen !== this.attachGeneration) return;
     }
@@ -704,7 +705,8 @@ export class TerminalSessionManager {
     }
 
     this.currentContainer = null;
-    // Free the WebGL context; attach() loads a new one.
+    // Keeps the WebGL addon; the shared pool frees it once WEBGL_MAX_HELD
+    // more recent terminals hold one.
     this.gpu?.detach();
     // Terminal element stays in DOM but container will be unmounted by React
   }
@@ -723,7 +725,7 @@ export class TerminalSessionManager {
     if (this.unsubExit) this.unsubExit();
 
     window.electronAPI.ptyKill(this.id);
-    this.gpu?.detach(); // frees the WebGL context now, not at GC
+    this.gpu?.dispose(); // frees the WebGL context now, not at GC
     this.terminal.dispose();
   }
 
