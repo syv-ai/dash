@@ -15,7 +15,7 @@ import {
   resolveTeardownCommand,
   buildWorkspaceEnv,
 } from './WorkspaceConfigService';
-import { recordSetupFailure, runSetupCommand, forgetSetupRun } from './setupRuns';
+import { recordSetupFailure, runSetupCommand } from './setupRuns';
 
 const execFileAsync = promisify(execFile);
 const execAsync = promisify(exec);
@@ -126,7 +126,6 @@ export class WorktreeService {
     if (normalizedWorktree === normalizedProject) {
       throw new Error('Cannot remove project directory as worktree');
     }
-    forgetSetupRun(worktreePath);
 
     if (deleteWorktreeDir) {
       // Verify this is actually a worktree

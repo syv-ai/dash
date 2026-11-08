@@ -7,6 +7,7 @@ import { followSetupLog } from '../../stores/setupLogFeed';
 import { useSettings } from '../../stores/settingsStore';
 import { resolveTheme } from '../../terminal/terminalThemes';
 import { resolveTerminalFontValue } from '../../terminal/terminalFonts';
+import { TERMINAL_BASE_OPTIONS, glassTheme } from '../../terminal/terminalOptions';
 import { Button } from '../ui/Button';
 
 /** Lines kept on screen; main caps the log at ~1 MB anyway. */
@@ -25,11 +26,8 @@ export function SetupLogPane({ taskId, worktreePath }: { taskId: string; worktre
   const isDark = useSettings((s) => s.theme === 'dark');
   const terminalTheme = useSettings((s) => s.terminalTheme);
   const fontFamily = resolveTerminalFontValue(useSettings((s) => s.terminalFontFamily));
-  const themeOf = (id: string, dark: boolean) => ({
-    ...resolveTheme(id, dark),
-    // Same glass as the drawer's shell tabs.
-    background: 'rgba(0,0,0,0)',
-  });
+  // Same glass as the drawer's shell tabs.
+  const themeOf = (id: string, dark: boolean) => glassTheme(resolveTheme(id, dark));
   const run = useSetup((s) => s.runs[worktreePath]);
   const rerun = useSetup((s) => s.rerun);
 
@@ -42,9 +40,8 @@ export function SetupLogPane({ taskId, worktreePath }: { taskId: string; worktre
       // Pipe output ends lines with a bare \n.
       convertEol: true,
       scrollback: SCROLLBACK,
-      fontSize: 13,
+      ...TERMINAL_BASE_OPTIONS,
       fontFamily,
-      lineHeight: 1.2,
       allowTransparency: true,
       theme: themeOf(terminalTheme, isDark),
     });
