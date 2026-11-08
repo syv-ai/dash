@@ -145,7 +145,7 @@ pnpm dev
 
 This starts Vite on port 3000 and launches Electron pointing at it. Renderer changes hot-reload; main process changes need a restart (`pnpm dev:main` or just kill and re-run `pnpm dev`).
 
-A dev run keeps its data in `~/Library/Application Support/Dash-dev/`, apart from an installed Dash's, so the two can run side by side and outside `dashctl` calls keep going to the installed app. A fresh dev run starts with an empty database: to work with real data, quit the dev run and copy `app.db` over from `Dash/`. For an extra isolated instance (a second checkout, say), set `DASH_USER_DATA_DIR` to its own folder, and `DASH_DEV_URL` to that checkout's Vite server on another port.
+A dev run keeps its data in `~/Library/Application Support/Dash-dev/`, apart from an installed Dash's, so the two can run side by side and outside `dashctl` calls keep going to the installed app. A fresh dev run starts with an empty database: to work with real data, quit the dev run and copy the installed app's database over. The database runs in WAL mode, so copy it with `sqlite3 ~/Library/Application\ Support/Dash/app.db ".backup '$HOME/Library/Application Support/Dash-dev/app.db'"`, or quit Dash too and copy `app.db` with its `app.db-wal` and `app.db-shm` files. For an extra isolated instance (a second checkout, say), set `DASH_USER_DATA_DIR` to its own folder, and `DASH_DEV_URL` to that checkout's Vite server on another port.
 
 To just rebuild and launch the main process:
 
