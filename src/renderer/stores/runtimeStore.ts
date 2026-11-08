@@ -47,7 +47,7 @@ export interface RuntimeActions {
   refreshTokenRollups: () => Promise<void>;
   refreshNewMemoryCounts: () => Promise<void>;
   /** The project's memory modal opened: clear its badge, here and in the DB. */
-  markMemorySeen: (projectId: string, projectPath: string) => Promise<void>;
+  markMemorySeen: (projectId: string) => Promise<void>;
   /** Re-read the CLI probe; `refresh` re-runs `claude --version` in main. */
   refreshClaudeCli: (opts?: { refresh?: boolean }) => Promise<void>;
   /** Ask main for a fresh supervisor listing. */
@@ -150,9 +150,9 @@ export const useRuntime = create<RuntimeStore>((set, get) => ({
     if (resp.success && resp.data) set({ newMemoryCounts: resp.data });
   },
 
-  markMemorySeen: async (projectId, projectPath) => {
+  markMemorySeen: async (projectId) => {
     set((s) => ({ newMemoryCounts: { ...s.newMemoryCounts, [projectId]: 0 } }));
-    const resp = await window.electronAPI.memoryMarkSeen({ projectPath });
+    const resp = await window.electronAPI.memoryMarkSeen({ projectId });
     if (!resp.success) console.warn('[memoryMarkSeen] failed:', resp.error);
   },
 

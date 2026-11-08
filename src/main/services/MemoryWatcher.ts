@@ -26,6 +26,9 @@ export interface WatchedProject {
 const watches = new Map<string, Watch>();
 // Syncs run one after another, so two can't both add the same project.
 let syncing: Promise<void> = Promise.resolve();
+// Nothing is watched before startMemoryWatches (at app start), so a project
+// saved earlier, or in a test, doesn't open watches.
+let started = false;
 
 let notify: (projectId: string, memoryDir: string) => void = () => {};
 
@@ -139,13 +142,20 @@ async function sync(projects: WatchedProject[]): Promise<void> {
   }
 }
 
+/** Start watching: from now on, syncs take effect. Called once at app start. */
+export function startMemoryWatches(projects: WatchedProject[]): Promise<void> {
+  started = true;
+  return syncMemoryWatches(projects);
+}
+
 /**
  * Watch the memory folder of each of `projects` (one `fs.watch` apiece, on
  * the folder or, until it exists, its nearest existing ancestor), and stop
- * watching projects no longer listed. Call at startup and whenever a project
- * is added, moved or removed.
+ * watching projects no longer listed. DatabaseService calls it on every
+ * project save and delete. A no-op before startMemoryWatches.
  */
 export function syncMemoryWatches(projects: WatchedProject[]): Promise<void> {
+  if (!started) return syncing;
   syncing = syncing
     .then(() => sync(projects))
     .catch((err) => console.error('[MemoryWatcher] sync failed', err));
@@ -154,6 +164,7 @@ export function syncMemoryWatches(projects: WatchedProject[]): Promise<void> {
 
 /** Close every watch. Idempotent; called at quit. */
 export function stopAllMemoryWatches(): void {
+  started = false;
   for (const entry of watches.values()) close(entry);
   watches.clear();
 }

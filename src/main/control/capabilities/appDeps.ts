@@ -8,7 +8,6 @@ import { worktreeService } from '../../services/WorktreeService';
 import { loadWorkspaceConfig } from '../../services/WorkspaceConfigService';
 import { taskEvents } from '../../services/taskEvents';
 import { broadcastProjectsChanged } from '../../services/projectEvents';
-import { syncProjectMemoryWatches } from '../../services/memoryBadge';
 import { TelemetryService } from '../../services/TelemetryService';
 import { focusTaskInWindow } from '../../services/focusTask';
 import {
@@ -63,7 +62,6 @@ export function projectDeps(): ProjectCapabilityDeps {
       const project = DatabaseService.saveProject(input);
       TelemetryService.capture('project_added', { source: 'api' });
       broadcastProjectsChanged();
-      void syncProjectMemoryWatches();
       return project;
     },
   };

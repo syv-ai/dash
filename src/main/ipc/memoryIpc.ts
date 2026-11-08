@@ -48,9 +48,8 @@ export function registerMemoryIpc(): void {
   // The memory modal opened on this project: its memories are no longer new.
   ipcMain.handle('memory:markSeen', (_event, raw: unknown) => {
     try {
-      const { projectPath } = parseProjectArgs('memory:markSeen', raw);
-      const project = DatabaseService.getProjects().find((p) => p.path === projectPath);
-      if (project) markMemorySeen(project.id);
+      const { projectId } = parseArgs('memory:markSeen', z.object({ projectId: z.string() }), raw);
+      if (DatabaseService.getProjects().some((p) => p.id === projectId)) markMemorySeen(projectId);
       return { success: true, data: null };
     } catch (error) {
       return errorResponse(error);

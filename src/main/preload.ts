@@ -79,7 +79,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   memoryGet: (args: { projectPath: string }) => ipcRenderer.invoke('memory:get', args),
   memoryOpenDir: (args: { projectPath: string }) => ipcRenderer.invoke('memory:openDir', args),
   memoryNewCounts: () => ipcRenderer.invoke('memory:newCounts'),
-  memoryMarkSeen: (args: { projectPath: string }) => ipcRenderer.invoke('memory:markSeen', args),
+  memoryMarkSeen: (args: { projectId: string }) => ipcRenderer.invoke('memory:markSeen', args),
   onMemoryNewCount: (callback: (data: { projectId: string; count: number }) => void) => {
     const handler = (
       _event: Electron.IpcRendererEvent,

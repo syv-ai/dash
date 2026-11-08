@@ -17,6 +17,7 @@ import type {
 } from '@shared/types';
 import { isPermissionMode } from '@shared/types';
 import { FolderOccupiedError } from './FolderOccupiedError';
+import { syncMemoryWatches } from './MemoryWatcher';
 
 function normalizePermissionMode(value: string | null | undefined): PermissionMode {
   return isPermissionMode(value) ? value : 'default';
@@ -84,12 +85,15 @@ export class DatabaseService {
       .run();
 
     const rows = db.select().from(projects).where(eq(projects.id, id)).all();
+    // Every way a project is added or moved comes through here: keep its memory watched.
+    void syncMemoryWatches(this.getProjects());
     return this.mapProject(rows[0]!);
   }
 
   static deleteProject(id: string): void {
     const db = getDb();
     db.delete(projects).where(eq(projects.id, id)).run();
+    void syncMemoryWatches(this.getProjects());
   }
 
   static setProjectArchived(id: string, archived: boolean): void {

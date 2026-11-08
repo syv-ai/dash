@@ -4,6 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import {
   setMemoryChangeNotifier,
+  startMemoryWatches,
   stopAllMemoryWatches,
   syncMemoryWatches,
   watchedMemoryDir,
@@ -71,7 +72,7 @@ describe('MemoryWatcher', { timeout: 20_000 }, () => {
     const b = await project('b');
     fs.mkdirSync(a.dir, { recursive: true });
     fs.mkdirSync(b.dir, { recursive: true });
-    await syncMemoryWatches([a, b]);
+    await startMemoryWatches([a, b]);
     await writeUntilSeen(path.join(b.dir, 'x.md'));
     await quiet();
     expect(seen).toEqual(['b']);
@@ -79,7 +80,7 @@ describe('MemoryWatcher', { timeout: 20_000 }, () => {
 
   it('picks up a memory folder created after the watch started', async () => {
     const a = await project('a');
-    await syncMemoryWatches([a]);
+    await startMemoryWatches([a]);
     // Create the folder until the ancestor's watch (on the config dir: nothing
     // below it exists yet) sees it appear. Each try starts over from the config
     // dir, the one folder that watch can see change.
@@ -97,7 +98,7 @@ describe('MemoryWatcher', { timeout: 20_000 }, () => {
   it('keeps notifying after the memory folder is deleted and recreated', async () => {
     const a = await project('a');
     fs.mkdirSync(a.dir, { recursive: true });
-    await syncMemoryWatches([a]);
+    await startMemoryWatches([a]);
     await writeUntilSeen(path.join(a.dir, 'before.md'));
     await quiet();
     seen.length = 0;
@@ -113,7 +114,7 @@ describe('MemoryWatcher', { timeout: 20_000 }, () => {
     const a = await project('a');
     const transcripts = path.dirname(a.dir);
     fs.mkdirSync(transcripts, { recursive: true });
-    await syncMemoryWatches([a]);
+    await startMemoryWatches([a]);
     fs.writeFileSync(path.join(transcripts, 'session.jsonl'), '{}\n');
     fs.appendFileSync(path.join(transcripts, 'session.jsonl'), '{}\n');
     await quiet();
@@ -124,13 +125,18 @@ describe('MemoryWatcher', { timeout: 20_000 }, () => {
     const a = await project('a');
     const b = await project('b');
     fs.mkdirSync(a.dir, { recursive: true });
-    await syncMemoryWatches([a, b]);
+    await startMemoryWatches([a, b]);
     await syncMemoryWatches([b]);
     expect(watchedMemoryDir('a')).toBeUndefined();
     expect(watchedMemoryDir('b')).toBe(b.dir);
     fs.writeFileSync(path.join(a.dir, 'gone.md'), 'x');
     await quiet();
     expect(seen).toEqual([]);
+  });
+  it('watches nothing until started, so a project saved early opens no watch', async () => {
+    const a = await project('a');
+    await syncMemoryWatches([a]);
+    expect(watchedMemoryDir('a')).toBeUndefined();
   });
 });
 

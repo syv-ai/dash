@@ -449,8 +449,8 @@ describe('runtimeStore new-memory badges', () => {
   it('markMemorySeen clears the badge and records the look in main', async () => {
     const { useRuntime } = await freshStores();
     useRuntime.setState({ newMemoryCounts: { p1: 4, p2: 1 } });
-    await useRuntime.getState().markMemorySeen('p1', '/p/p1');
+    await useRuntime.getState().markMemorySeen('p1');
     expect(useRuntime.getState().newMemoryCounts).toEqual({ p1: 0, p2: 1 });
-    expect(api.memoryMarkSeen).toHaveBeenCalledWith({ projectPath: '/p/p1' });
+    expect(api.memoryMarkSeen).toHaveBeenCalledWith({ projectId: 'p1' });
   });
 });

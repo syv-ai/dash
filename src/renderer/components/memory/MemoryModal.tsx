@@ -93,8 +93,8 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
   // closing an edit, whose save would otherwise count as a new memory.
   const markMemorySeen = useRuntime((s) => s.markMemorySeen);
   useEffect(() => {
-    if (!editing) void markMemorySeen(project.id, project.path);
-  }, [markMemorySeen, project.id, project.path, editing]);
+    if (!editing) void markMemorySeen(project.id);
+  }, [markMemorySeen, project.id, editing]);
   const tasksByProject = useProjects((s) => s.tasksByProject);
   const activeTaskId = useProjects((s) => s.activeTaskId);
   const originTaskId = useUi((s) => s.memoryTaskId);

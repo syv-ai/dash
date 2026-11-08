@@ -1,7 +1,7 @@
 import { BrowserWindow } from 'electron';
 import { DatabaseService } from './DatabaseService';
 import { newMemoryCount, resolveMemoryDir } from './MemoryService';
-import { setMemoryChangeNotifier, syncMemoryWatches, watchedMemoryDir } from './MemoryWatcher';
+import { setMemoryChangeNotifier, startMemoryWatches, watchedMemoryDir } from './MemoryWatcher';
 
 /**
  * The project row's "N new memories" badge: memories written since the
@@ -21,12 +21,7 @@ export function startMemoryBadges(): Promise<void> {
       broadcastNewCount(projectId, count),
     );
   });
-  return syncProjectMemoryWatches();
-}
-
-/** Watch the memory of every project in the DB, and only those. After a project is added or removed. */
-export function syncProjectMemoryWatches(): Promise<void> {
-  return syncMemoryWatches(DatabaseService.getProjects());
+  return startMemoryWatches(DatabaseService.getProjects());
 }
 
 /** Every project's new-memory count, by project id. */

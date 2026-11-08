@@ -6,7 +6,6 @@ import { DatabaseService } from '../services/DatabaseService';
 import { TelemetryService } from '../services/TelemetryService';
 import { stopTaskSession } from '../services/ptyManager';
 import { TaskService } from '../services/TaskService';
-import { syncProjectMemoryWatches } from '../services/memoryBadge';
 import type { DeleteTaskOptions } from '@shared/types';
 
 export function registerDbIpc(): void {
@@ -27,7 +26,6 @@ export function registerDbIpc(): void {
       const isNew = !project.id;
       const data = DatabaseService.saveProject(project);
       if (isNew) TelemetryService.capture('project_added', { source: 'ui' });
-      void syncProjectMemoryWatches();
       return { success: true, data };
     } catch (error) {
       return errorResponse(error);
@@ -39,7 +37,6 @@ export function registerDbIpc(): void {
       parseArgs('db:deleteProject', z.string(), id);
       parseArgs('db:deleteProject', deleteTaskOptionsSchema, options);
       await TaskService.deleteProject(id, options);
-      void syncProjectMemoryWatches();
       return { success: true };
     } catch (error) {
       return errorResponse(error);
