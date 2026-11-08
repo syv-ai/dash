@@ -8,9 +8,8 @@ import {
   json,
   stringSet,
   strOrUndefined,
-  clampedInt,
 } from './settingsCodecs';
-import { clampHeldLimit, WEBGL_HELD_DEFAULT } from '../terminal/WebglLifecycle';
+import { clampHeldLimit } from '../terminal/WebglLifecycle';
 import type { NotificationSound } from '../sounds';
 import type { UsageThresholds } from '@shared/types';
 import { parseKeybindings, type KeyBindingMap } from '../keybindings';
@@ -109,7 +108,12 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   entry('notificationSound', 'notificationSound', str('off') as Codec<NotificationSound>),
   entry('terminalTheme', 'terminalTheme', str('default')),
   entry('terminalFontFamily', 'terminalFontFamily', str('system')),
-  entry('webglHeldLimit', 'webglHeldLimit', clampedInt(WEBGL_HELD_DEFAULT, clampHeldLimit)),
+  // parseFloat gives NaN for absent, empty or garbage values; clampHeldLimit
+  // maps NaN to the default.
+  entry('webglHeldLimit', 'webglHeldLimit', {
+    decode: (raw) => clampHeldLimit(parseFloat(raw ?? '')),
+    encode: (v) => String(v),
+  }),
   entry('effortLevel', 'claudeEffortLevel', str('auto')),
   entry('shellDrawerPosition', 'shellDrawerPosition', strEnum(['main', 'right'] as const, 'right')),
   entry(

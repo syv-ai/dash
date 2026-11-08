@@ -50,17 +50,6 @@ export function nullableInt(fallback: number): Codec<number | null> {
   };
 }
 
-/** Integer clamped by `clamp`; absent or non-numeric values decode to `def`. */
-export function clampedInt(def: number, clamp: (n: number) => number): Codec<number> {
-  return {
-    decode: (raw) => {
-      const n = raw === null ? NaN : Number(raw);
-      return Number.isFinite(n) ? clamp(n) : def;
-    },
-    encode: (v) => String(v),
-  };
-}
-
 /** string | undefined, where an absent key decodes to undefined (the "default").
  *  Empty string and other values are preserved verbatim. */
 export function strOrUndefined(): Codec<string | undefined> {
