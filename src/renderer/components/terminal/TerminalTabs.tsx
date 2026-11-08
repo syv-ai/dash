@@ -130,6 +130,16 @@ export function TerminalTabs({
   const [setupSelected, setSetupSelected] = useState(false);
   const setupActive = setupSelected && !!setupRun;
 
+  // Main switched the active PTY tab (a new TUI, a focused service, the user
+  // picking one): that tab takes over from Setup. The first id after mount
+  // isn't a switch, so a Setup request that mounted this drawer stands.
+  const prevActiveTabIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = prevActiveTabIdRef.current;
+    prevActiveTabIdRef.current = activeTabId;
+    if (prev !== null && activeTabId !== prev) setSetupSelected(false);
+  }, [activeTabId]);
+
   // Toast, task row, header or menu asked for this worktree's Setup tab.
   useEffect(() => {
     if (!setupTabRequest || setupTabRequest.worktreePath !== cwd) return;
@@ -508,7 +518,7 @@ export function TerminalTabs({
           <Terminal size={12} strokeWidth={1.8} />
           <span className="text-[11px] font-semibold uppercase tracking-[0.08em]">{label}</span>
           {setupRun?.status === 'running' && (
-            <Loader2 size={11} strokeWidth={2} className="animate-spin" />
+            <Loader2 size={11} strokeWidth={1.8} className="animate-spin" />
           )}
           {hasUnseenTui ? (
             <span className="w-1.5 h-1.5 rounded-full bg-destructive shadow-[0_0_6px_hsl(var(--destructive)/0.6)] status-pulse" />
@@ -581,7 +591,7 @@ export function TerminalTabs({
             >
               <span className="text-[11px] font-medium">Setup</span>
               {setupRun.status === 'running' && (
-                <Loader2 size={10} strokeWidth={2} className="animate-spin" />
+                <Loader2 size={10} strokeWidth={1.8} className="animate-spin" />
               )}
               {setupRun.status === 'failed' && (
                 <span className="w-1.5 h-1.5 rounded-full bg-destructive" />

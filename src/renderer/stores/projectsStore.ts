@@ -44,6 +44,9 @@ export interface ProjectsActions {
   setTasksForProject: (projectId: string, tasks: Task[]) => void;
   setActiveProject: (id: string | null) => void;
   setActiveTask: (id: string | null) => void;
+  /** A person picked this task: select it and its project, and bring it back
+   *  into the rotation if it was excluded. */
+  selectTask: (projectId: string, taskId: string) => void;
   setJustCreatedProject: (id: string | null) => void;
   clearJustCreatedProject: () => void;
   setGhAvailable: (v: boolean) => void;
@@ -120,7 +123,7 @@ function applyProjectOrder(projectList: Project[]): Project[] {
 
 export type ProjectsStore = ProjectsState & ProjectsActions;
 
-export const useProjects = create<ProjectsStore>((set) => ({
+export const useProjects = create<ProjectsStore>((set, get) => ({
   projects: [],
   archivedProjects: [],
   tasksByProject: {},
@@ -143,6 +146,16 @@ export const useProjects = create<ProjectsStore>((set) => ({
   setActiveTask: (id) => {
     persistKey('activeTaskId', id);
     set({ activeTaskId: id });
+  },
+  selectTask: (projectId, taskId) => {
+    get().setActiveProject(projectId);
+    get().setActiveTask(taskId);
+    useSettings.getState().setRotationExclusions((prev) => {
+      if (!prev.has(taskId)) return prev;
+      const next = new Set(prev);
+      next.delete(taskId);
+      return next;
+    });
   },
   setJustCreatedProject: (id) => set({ justCreatedProjectId: id }),
   clearJustCreatedProject: () => set({ justCreatedProjectId: null }),

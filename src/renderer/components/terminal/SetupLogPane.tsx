@@ -4,9 +4,9 @@ import { FitAddon } from '@xterm/addon-fit';
 import { RotateCw } from 'lucide-react';
 import { useSetup } from '../../stores/setupStore';
 import { followSetupLog } from '../../stores/setupLogFeed';
-import { sessionRegistry } from '../../terminal/SessionRegistry';
+import { useSettings } from '../../stores/settingsStore';
 import { resolveTheme } from '../../terminal/terminalThemes';
-import { getTerminalFont } from '../../terminal/terminalFonts';
+import { resolveTerminalFontValue } from '../../terminal/terminalFonts';
 import { Button } from '../ui/Button';
 
 /** Lines kept on screen; main caps the log at ~1 MB anyway. */
@@ -19,13 +19,23 @@ const SCROLLBACK = 20_000;
  */
 export function SetupLogPane({ taskId, worktreePath }: { taskId: string; worktreePath: string }) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const termRef = useRef<{ term: Terminal; refit: () => void } | null>(null);
+  // The same settings App feeds the session registry, so the log follows
+  // theme and font changes like the other terminals.
+  const isDark = useSettings((s) => s.theme === 'dark');
+  const terminalTheme = useSettings((s) => s.terminalTheme);
+  const fontFamily = resolveTerminalFontValue(useSettings((s) => s.terminalFontFamily));
+  const themeOf = (id: string, dark: boolean) => ({
+    ...resolveTheme(id, dark),
+    // Same glass as the drawer's shell tabs.
+    background: 'rgba(0,0,0,0)',
+  });
   const run = useSetup((s) => s.runs[worktreePath]);
   const rerun = useSetup((s) => s.rerun);
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const { themeId, isDark } = sessionRegistry.currentTheme;
     const term = new Terminal({
       disableStdin: true,
       cursorBlink: false,
@@ -33,11 +43,10 @@ export function SetupLogPane({ taskId, worktreePath }: { taskId: string; worktre
       convertEol: true,
       scrollback: SCROLLBACK,
       fontSize: 13,
-      fontFamily: getTerminalFont(),
+      fontFamily,
       lineHeight: 1.2,
-      // Same glass as the drawer's shell tabs.
       allowTransparency: true,
-      theme: { ...resolveTheme(themeId, isDark), background: 'rgba(0,0,0,0)' },
+      theme: themeOf(terminalTheme, isDark),
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
@@ -53,6 +62,7 @@ export function SetupLogPane({ taskId, worktreePath }: { taskId: string; worktre
     const ro = new ResizeObserver(refit);
     ro.observe(host);
     refit();
+    termRef.current = { term, refit };
 
     const hideCursor = '\x1b[?25l';
     const off = followSetupLog(worktreePath, {
@@ -65,11 +75,27 @@ export function SetupLogPane({ taskId, worktreePath }: { taskId: string; worktre
       append: (chunk) => term.write(chunk),
     });
     return () => {
+      termRef.current = null;
       off();
       ro.disconnect();
       term.dispose();
     };
+    // Theme and font are applied live below, not by recreating the terminal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [worktreePath]);
+
+  useEffect(() => {
+    const t = termRef.current;
+    if (!t) return;
+    t.term.options.theme = themeOf(terminalTheme, isDark);
+  }, [terminalTheme, isDark]);
+
+  useEffect(() => {
+    const t = termRef.current;
+    if (!t) return;
+    t.term.options.fontFamily = fontFamily;
+    t.refit();
+  }, [fontFamily]);
 
   const running = run?.status === 'running';
   const status = running
@@ -94,7 +120,7 @@ export function SetupLogPane({ taskId, worktreePath }: { taskId: string; worktre
           disabled={running}
           onClick={() => void rerun({ id: taskId, path: worktreePath })}
         >
-          <RotateCw size={12} strokeWidth={2} />
+          <RotateCw size={12} strokeWidth={1.8} />
           Run setup again
         </Button>
       </div>

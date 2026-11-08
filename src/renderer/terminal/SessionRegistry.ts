@@ -102,11 +102,6 @@ class SessionRegistryImpl {
     else await window.electronAPI.ptyRestartSession(taskId);
   }
 
-  /** The theme every session uses now (for xterm views outside the registry). */
-  get currentTheme(): { themeId: string; isDark: boolean } {
-    return { themeId: this._themeId, isDark: this._isDark };
-  }
-
   setAllThemes(isDark: boolean): void {
     this._isDark = isDark;
     this.setAllTerminalThemes(this._themeId, isDark);

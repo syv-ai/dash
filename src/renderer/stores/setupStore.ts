@@ -41,11 +41,9 @@ export const useSetup = create<SetupStore>((set, get) => ({
 
   showSetup: (worktreePath) => {
     const task = taskAt(worktreePath);
-    if (task) {
-      const projects = useProjects.getState();
-      if (projects.activeProjectId !== task.projectId) projects.setActiveProject(task.projectId);
-      if (projects.activeTaskId !== task.id) projects.setActiveTask(task.id);
-    }
+    // No live task owns it: no drawer would ever take the request.
+    if (!task) return;
+    useProjects.getState().selectTask(task.projectId, task.id);
     set((s) => ({ setupTabRequest: { worktreePath, seq: (s.setupTabRequest?.seq ?? 0) + 1 } }));
   },
 

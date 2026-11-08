@@ -13,6 +13,7 @@ vi.mock('sonner', () => ({
 import { toast } from 'sonner';
 import { useSetup } from '../setupStore';
 import { useProjects } from '../projectsStore';
+import { useSettings } from '../settingsStore';
 
 const run = (worktreePath: string, over: Partial<SetupRun> = {}): SetupRun => ({
   worktreePath,
@@ -95,6 +96,18 @@ describe('setupStore', () => {
     expect(useSetup.getState().setupTabRequest!.seq).toBe(first.seq + 1);
     useSetup.getState().clearSetupTabRequest();
     expect(useSetup.getState().setupTabRequest).toBeNull();
+  });
+
+  it('showSetup brings an excluded task back into the rotation, like any selection', () => {
+    useSettings.getState().setRotationExclusions(new Set(['t2', 'other']));
+    useSetup.getState().showSetup('/wt/two');
+    expect([...useSettings.getState().rotationExclusions]).toEqual(['other']);
+  });
+
+  it('showSetup ignores a path no live task owns', () => {
+    useSetup.getState().showSetup('/wt/gone');
+    expect(useSetup.getState().setupTabRequest).toBeNull();
+    expect(useProjects.getState().activeTaskId).toBe('t1');
   });
 
   it('drops a forgotten run and its pending tab request', () => {

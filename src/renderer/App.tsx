@@ -942,11 +942,13 @@ export function App() {
 
   // A Setup tab request needs the drawer mounted: with the drawer in the
   // inspector, a collapsed inspector unmounts it, so open the inspector.
+  // Once per request: a later collapse must not reopen it.
   const setupTabRequest = useSetup((s) => s.setupTabRequest);
+  const handledSetupSeqRef = useRef(0);
   useEffect(() => {
-    if (setupTabRequest && shellDrawerPosition === 'right' && changesPanelCollapsed) {
-      toggleChangesPanel();
-    }
+    if (!setupTabRequest || handledSetupSeqRef.current === setupTabRequest.seq) return;
+    handledSetupSeqRef.current = setupTabRequest.seq;
+    if (shellDrawerPosition === 'right' && changesPanelCollapsed) toggleChangesPanel();
   }, [setupTabRequest, shellDrawerPosition, changesPanelCollapsed, toggleChangesPanel]);
 
   const toggleShellDrawer = useCallback(() => {
@@ -1035,14 +1037,7 @@ export function App() {
   }
 
   function handleSelectTask(projectId: string, taskId: string) {
-    setActiveProjectId(projectId);
-    setActiveTaskId(taskId);
-    setRotationExclusions((prev) => {
-      if (!prev.has(taskId)) return prev;
-      const next = new Set(prev);
-      next.delete(taskId);
-      return next;
-    });
+    useProjects.getState().selectTask(projectId, taskId);
   }
 
   // Loaded before the modal mounts so its fields render with the project's
