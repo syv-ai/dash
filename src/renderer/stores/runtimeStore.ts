@@ -26,6 +26,8 @@ export interface RuntimeState {
   taskActivity: Record<string, ActivityInfo>;
   remoteControlStates: Record<string, RemoteControlState>;
   projectTokenStats: Record<string, TokenStatsRollup>;
+  /** Memories written since each project's memory modal was last opened, by project id. */
+  newMemoryCounts: Record<string, number>;
   globalTokenStats: TokenStatsRollup;
   rtkStatus: RtkStatus | null;
   rtkDownloadProgress: RtkDownloadProgress | null;
@@ -43,6 +45,9 @@ export interface RuntimeState {
 
 export interface RuntimeActions {
   refreshTokenRollups: () => Promise<void>;
+  refreshNewMemoryCounts: () => Promise<void>;
+  /** The project's memory modal opened: clear its badge, here and in the DB. */
+  markMemorySeen: (projectId: string, projectPath: string) => Promise<void>;
   /** Re-read the CLI probe; `refresh` re-runs `claude --version` in main. */
   refreshClaudeCli: (opts?: { refresh?: boolean }) => Promise<void>;
   /** Ask main for a fresh supervisor listing. */
@@ -67,6 +72,7 @@ export const useRuntime = create<RuntimeStore>((set, get) => ({
   taskActivity: {},
   remoteControlStates: {},
   projectTokenStats: {},
+  newMemoryCounts: {},
   globalTokenStats: { totalTokens: 0, totalCostUsd: 0, taskCount: 0 },
   rtkStatus: null,
   rtkDownloadProgress: null,
@@ -137,6 +143,17 @@ export const useRuntime = create<RuntimeStore>((set, get) => ({
       }),
     );
     set({ projectTokenStats: Object.fromEntries(entries) });
+  },
+
+  refreshNewMemoryCounts: async () => {
+    const resp = await window.electronAPI.memoryNewCounts();
+    if (resp.success && resp.data) set({ newMemoryCounts: resp.data });
+  },
+
+  markMemorySeen: async (projectId, projectPath) => {
+    set((s) => ({ newMemoryCounts: { ...s.newMemoryCounts, [projectId]: 0 } }));
+    const resp = await window.electronAPI.memoryMarkSeen({ projectPath });
+    if (!resp.success) console.warn('[memoryMarkSeen] failed:', resp.error);
   },
 
   enableRtk: async (enabled) => {
@@ -281,6 +298,17 @@ export const useRuntime = create<RuntimeStore>((set, get) => ({
         void get().refreshTokenRollups();
       });
       cleanups.push(unsub);
+    }
+
+    // ── New-memory badges (main watches every project's memory folder) ─
+    {
+      const unsub = window.electronAPI.onMemoryNewCount(({ projectId, count }) =>
+        set((s) => ({ newMemoryCounts: { ...s.newMemoryCounts, [projectId]: count } })),
+      );
+      cleanups.push(unsub);
+      void get()
+        .refreshNewMemoryCounts()
+        .catch((err) => console.warn('[memoryNewCounts] failed:', err));
     }
 
     // ── RTK status + download progress ─────────────────────

@@ -78,6 +78,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Claude auto-memory
   memoryGet: (args: { projectPath: string }) => ipcRenderer.invoke('memory:get', args),
   memoryOpenDir: (args: { projectPath: string }) => ipcRenderer.invoke('memory:openDir', args),
+  memoryNewCounts: () => ipcRenderer.invoke('memory:newCounts'),
+  memoryMarkSeen: (args: { projectPath: string }) => ipcRenderer.invoke('memory:markSeen', args),
+  onMemoryNewCount: (callback: (data: { projectId: string; count: number }) => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      data: { projectId: string; count: number },
+    ) => callback(data);
+    ipcRenderer.on('memory:newCount', handler);
+    return () => {
+      ipcRenderer.removeListener('memory:newCount', handler);
+    };
+  },
 
   // Worktree
   worktreeMigrationPlan: () => ipcRenderer.invoke('worktree:migrationPlan'),

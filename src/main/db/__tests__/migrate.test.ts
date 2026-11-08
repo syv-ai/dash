@@ -68,3 +68,26 @@ describe('runMigrations: PR review draft columns on diff comments', () => {
     expect(column('author')).toMatchObject({ type: 'TEXT', notnull: 1, dflt_value: "'user'" });
   });
 });
+
+describe('runMigrations: memory_seen_at on projects', () => {
+  const seenAt = (id: string) =>
+    (
+      db.prepare(`SELECT memory_seen_at AS t FROM projects WHERE id = ?`).get(id) as {
+        t: number | null;
+      }
+    ).t;
+
+  it('adds the column, marks existing projects seen now, and leaves it alone on later runs', () => {
+    runMigrations();
+    db.exec(`ALTER TABLE projects DROP COLUMN memory_seen_at`); // as a DB from before the badge
+    db.prepare(`INSERT INTO projects (id, name, path) VALUES ('p1', 'p', '/repo')`).run();
+
+    const before = Date.now();
+    runMigrations();
+    expect(seenAt('p1')).toBeGreaterThanOrEqual(before);
+
+    db.prepare(`UPDATE projects SET memory_seen_at = 5 WHERE id = 'p1'`).run();
+    expect(() => runMigrations()).not.toThrow();
+    expect(seenAt('p1')).toBe(5);
+  });
+});

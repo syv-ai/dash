@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Brain, ChevronRight, Copy, FolderOpen, List, Pencil, Search, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { MEMORY_INDEX_FILE } from '../../../shared/types';
@@ -11,6 +11,7 @@ import { Select } from '../ui/Select';
 import { useProjects } from '../../stores/projectsStore';
 import { useUi } from '../../stores/uiStore';
 import { useGit } from '../../stores/gitStore';
+import { useRuntime } from '../../stores/runtimeStore';
 import { useProjectMemory } from './useProjectMemory';
 import {
   listMemories,
@@ -75,6 +76,11 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
   // Read when the modal opens, and again once an edit in the diff editor closes.
   const editing = useGit((s) => s.diffFile !== null);
   const { memory, error } = useProjectMemory(project.path, editing);
+  // Opening the project's memory clears its "new memories" badge.
+  const markMemorySeen = useRuntime((s) => s.markMemorySeen);
+  useEffect(() => {
+    void markMemorySeen(project.id, project.path);
+  }, [markMemorySeen, project.id, project.path]);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState<MemoryFilter>('all');

@@ -60,6 +60,9 @@ export function makeElectronApiMock(overrides: Record<string, unknown> = {}) {
     getProjectTokenStats: vi.fn((_id: string) =>
       ok({ totalTokens: 0, totalCostUsd: 0, taskCount: 0 }),
     ),
+    memoryNewCounts: vi.fn(() => ok({})),
+    memoryMarkSeen: vi.fn(() => ok(null)),
+    onMemoryNewCount: vi.fn((_cb: (d: { projectId: string; count: number }) => void) => () => {}),
     rtkGetStatus: vi.fn(() => ok({ installed: false, downloadable: false })),
     detectClaude: vi.fn(() =>
       ok({

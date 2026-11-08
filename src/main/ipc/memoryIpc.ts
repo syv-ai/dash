@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { IpcError, parseArgs, errorResponse, ipcError } from './validate';
 import { readProjectMemory, resolveMemoryDir } from '../services/MemoryService';
 import { DatabaseService } from '../services/DatabaseService';
+import { markMemorySeen, newMemoryCounts } from '../services/memoryBadge';
 
 export const memoryProjectArgsSchema = z.object({
   projectPath: z.string().refine((p) => path.isAbsolute(p), 'must be an absolute path'),
@@ -31,6 +32,26 @@ export function registerMemoryIpc(): void {
     try {
       const { projectPath } = parseProjectArgs('memory:get', raw);
       return { success: true, data: await readProjectMemory(projectPath) };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
+  ipcMain.handle('memory:newCounts', async () => {
+    try {
+      return { success: true, data: await newMemoryCounts() };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
+  // The memory modal opened on this project: its memories are no longer new.
+  ipcMain.handle('memory:markSeen', (_event, raw: unknown) => {
+    try {
+      const { projectPath } = parseProjectArgs('memory:markSeen', raw);
+      const project = DatabaseService.getProjects().find((p) => p.path === projectPath);
+      if (project) markMemorySeen(project.id);
+      return { success: true, data: null };
     } catch (error) {
       return errorResponse(error);
     }

@@ -410,6 +410,22 @@ export function runMigrations(): void {
     /* already exists */
   }
 
+  // Memory badge: when the project's Claude memory was last seen (epoch ms).
+  // Existing projects start as seen now, so a project's older memories don't
+  // all show up as new on the first launch.
+  const hasMemorySeenCol =
+    (
+      rawDb
+        .prepare(
+          `SELECT COUNT(*) AS c FROM pragma_table_info('projects') WHERE name = 'memory_seen_at'`,
+        )
+        .get() as { c: number }
+    ).c > 0;
+  if (!hasMemorySeenCol) {
+    rawDb.exec(`ALTER TABLE projects ADD COLUMN memory_seen_at INTEGER`);
+    rawDb.prepare(`UPDATE projects SET memory_seen_at = ?`).run(Date.now());
+  }
+
   // Control API: dash_access lets a task's session reach Dash (now via dashctl);
   // parent_task_id records the task that created it through the API (null for
   // tasks a person created).

@@ -130,6 +130,10 @@ void app.whenReady().then(async () => {
   const { registerAllIpc } = await import('./ipc');
   registerAllIpc();
 
+  // Watch every project's Claude memory for the project rows' "new memories" badge.
+  const { startMemoryBadges } = await import('./services/memoryBadge');
+  void startMemoryBadges();
+
   // Create main window
   const { createWindow } = await import('./window');
   mainWindow = createWindow();
@@ -397,6 +401,14 @@ app.on('before-quit', (event) => {
     try {
       const { stopAll: stopPortsConfigWatchers } = await import('./services/PortsConfigWatcher');
       stopPortsConfigWatchers();
+    } catch {
+      // Best effort
+    }
+
+    // Stop the memory-badge watchers
+    try {
+      const { stopAllMemoryWatches } = await import('./services/MemoryWatcher');
+      stopAllMemoryWatches();
     } catch {
       // Best effort
     }

@@ -5,6 +5,7 @@ import {
   listMemories,
   memoryCounts,
   memoryIssueTexts,
+  newMemoriesLabel,
   memorySections,
   memoryNotices,
   pickCurrent,
@@ -159,5 +160,12 @@ describe('pickCurrent', () => {
 
   it('returns null without memories', () => {
     expect(pickCurrent([], 'MEMORY.md')).toBeNull();
+  });
+});
+
+describe('newMemoriesLabel', () => {
+  it('says how many, in the singular for one', () => {
+    expect(newMemoriesLabel(1)).toBe('1 new memory');
+    expect(newMemoriesLabel(3)).toBe('3 new memories');
   });
 });

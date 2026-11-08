@@ -25,6 +25,10 @@ export const projects = sqliteTable(
     // Set while the project is archived: hidden from the project list, its
     // task sessions asleep. Restoring clears it.
     archivedAt: text('archived_at'),
+    // When the project's Claude memory was last looked at (epoch ms): memories
+    // written after it count as new on the project row. Opening the memory
+    // modal moves it to now.
+    memorySeenAt: integer('memory_seen_at'),
     createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
   },

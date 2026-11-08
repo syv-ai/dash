@@ -183,3 +183,8 @@ export function pickCurrent(
     null
   );
 }
+
+/** The project row badge's tooltip. */
+export function newMemoriesLabel(count: number): string {
+  return `${count} new ${count === 1 ? 'memory' : 'memories'}`;
+}
