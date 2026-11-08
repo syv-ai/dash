@@ -315,6 +315,15 @@ app.on('before-quit', (event) => {
   const forceExit = setTimeout(() => app.exit(0), 8000);
 
   void (async () => {
+    // Setup scripts run detached in their own process group, so they would
+    // outlive Dash. First, before anything that could hang into forceExit.
+    try {
+      const { killAllSetupRuns } = await import('./services/setupRuns');
+      killAllSetupRuns();
+    } catch {
+      // Best effort
+    }
+
     // Terminal persistence happens main-side: killAll() below serializes every
     // PTY's TerminalMirror to the snapshot files before killing — the renderer
     // is no longer involved (no app:beforeQuit round-trip needed).
@@ -347,14 +356,6 @@ app.on('before-quit', (event) => {
     try {
       const { stopControl } = await import('./control');
       await stopControl();
-    } catch {
-      // Best effort
-    }
-
-    // Setup scripts run detached in their own process group; end them.
-    try {
-      const { killAllSetupRuns } = await import('./services/setupRuns');
-      killAllSetupRuns();
     } catch {
       // Best effort
     }

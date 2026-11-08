@@ -16,6 +16,8 @@ interface Entry {
   child: ChildProcess | null;
   /** Forgotten (task archived or deleted, app quitting): the run ends silently. */
   dead: boolean;
+  /** Pending SIGKILL after a SIGTERM; settled runs fire it early and clear it. */
+  forceTimer: NodeJS.Timeout | null;
 }
 
 /** The latest setup run per worktree path, with its output. In memory only:
@@ -88,13 +90,34 @@ function killTree(child: ChildProcess, signal: 'SIGTERM' | 'SIGKILL'): void {
   }
 }
 
-/** SIGTERM the tree, then SIGKILL it if it hasn't exited after the grace. */
-function stop(child: ChildProcess): void {
+/**
+ * SIGTERM the tree, then SIGKILL the group after `graceMs` (at once for 0).
+ * The SIGKILL doesn't wait on the leader's `exit`: a grandchild holding the
+ * pipes outlives it, and that grandchild is what has to go. When the run
+ * settles first, `settleStop` sends the SIGKILL early and clears the timer.
+ */
+function stop(entry: Entry, child: ChildProcess, graceMs: number): void {
   killTree(child, 'SIGTERM');
   if (process.platform === 'win32') return; // taskkill /F already forced it.
-  const force = setTimeout(() => killTree(child, 'SIGKILL'), KILL_GRACE_MS);
-  force.unref();
-  child.once('exit', () => clearTimeout(force));
+  if (graceMs === 0) {
+    if (entry.forceTimer) clearTimeout(entry.forceTimer);
+    entry.forceTimer = null;
+    killTree(child, 'SIGKILL');
+    return;
+  }
+  if (entry.forceTimer) return;
+  entry.forceTimer = setTimeout(() => {
+    entry.forceTimer = null;
+    killTree(child, 'SIGKILL');
+  }, graceMs);
+}
+
+/** The run ended after a stop: kill what is left of its group now. */
+function settleStop(entry: Entry, child: ChildProcess): void {
+  if (!entry.forceTimer) return;
+  clearTimeout(entry.forceTimer);
+  entry.forceTimer = null;
+  killTree(child, 'SIGKILL');
 }
 
 export function isSetupRunning(worktreePath: string): boolean {
@@ -110,6 +133,7 @@ function begin(worktreePath: string): Entry {
     flushTimer: null,
     child: null,
     dead: false,
+    forceTimer: null,
   };
   runs.set(worktreePath, entry);
   broadcast('worktree:setupChanged', entry.run);
@@ -147,6 +171,7 @@ export function runSetupCommand(args: {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
+      settleStop(entry, child);
       finish(entry, error);
       resolve(entry.run);
     };
@@ -167,7 +192,7 @@ export function runSetupCommand(args: {
       timedOut = true;
       child.stdout?.destroy();
       child.stderr?.destroy();
-      stop(child);
+      stop(entry, child, KILL_GRACE_MS);
     }, args.timeoutMs);
 
     child.stdout?.setEncoding('utf8');
@@ -200,12 +225,12 @@ export function getSetupLog(worktreePath: string): SetupLog | null {
   return entry.log;
 }
 
-function kill(entry: Entry): void {
+function kill(entry: Entry, graceMs: number): void {
   entry.dead = true;
   if (entry.flushTimer) clearTimeout(entry.flushTimer);
   entry.flushTimer = null;
   entry.pending = '';
-  if (entry.child) stop(entry.child);
+  if (entry.child) stop(entry, entry.child, graceMs);
 }
 
 /** Drop a worktree's run (task archived or deleted): kill it if it is still
@@ -213,13 +238,14 @@ function kill(entry: Entry): void {
 export function forgetSetupRun(worktreePath: string): void {
   const entry = runs.get(worktreePath);
   if (!entry) return;
-  kill(entry);
+  kill(entry, KILL_GRACE_MS);
   runs.delete(worktreePath);
   broadcast('worktree:setupForgotten', { worktreePath });
 }
 
-/** App quit: the runs are detached, so they would outlive Dash otherwise. */
+/** App quit: the runs are detached, so they would outlive Dash otherwise.
+ *  SIGKILL straight away; there is no time left for a grace period. */
 export function killAllSetupRuns(): void {
-  for (const entry of runs.values()) kill(entry);
+  for (const entry of runs.values()) kill(entry, 0);
   runs.clear();
 }

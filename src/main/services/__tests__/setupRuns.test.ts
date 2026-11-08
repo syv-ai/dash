@@ -115,6 +115,20 @@ describe('setupRuns', () => {
     expect(Date.now() - started).toBeLessThan(6000);
   }, 10_000);
 
+  it('on timeout, kills a TERM-ignoring grandchild the exited leader left holding the pipes', async () => {
+    const touched = marker('orphan');
+    const run = await runSetupCommand({
+      ...base,
+      timeoutMs: 200,
+      worktreePath: '/wt/orphan',
+      command: `(trap '' TERM; sleep 1; touch ${touched}) &`,
+    });
+    expect(run.status).toBe('failed');
+    expect(run.error).toMatch(/^timed out/);
+    await new Promise((r) => setTimeout(r, 1300));
+    expect(fs.existsSync(touched)).toBe(false);
+  });
+
   it('forgetting a running run kills it quietly and tells the renderer', async () => {
     const touched = marker('forgot');
     const p = runSetupCommand({
