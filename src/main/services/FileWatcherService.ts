@@ -1,6 +1,6 @@
 import * as path from 'path';
 import { broadcast } from '../utils/broadcast';
-import * as fs from 'fs';
+import { watchDir } from '../utils/watchDir';
 
 const DEBOUNCE_MS = 500;
 
@@ -8,8 +8,7 @@ const DEBOUNCE_MS = 500;
 const GIT_WATCH_FILES = ['index', 'HEAD', 'MERGE_HEAD', 'REBASE_HEAD', 'CHERRY_PICK_HEAD'];
 
 interface WatcherEntry {
-  watcher: fs.FSWatcher;
-  debounceTimer: ReturnType<typeof setTimeout> | null;
+  close: () => void;
   cwd: string;
 }
 
@@ -28,22 +27,14 @@ export function startWatching(id: string, cwd: string): void {
   // Git updates files atomically (write tmp → rename), which breaks per-file watchers
   // on macOS since the watcher follows the old inode. Watching the directory works on
   // both platforms and automatically picks up files created later (e.g. MERGE_HEAD).
-  const watcher = fs.watch(gitDir, (_eventType, filename) => {
-    if (!filename || !GIT_WATCH_FILES.includes(filename)) return;
-
-    if (entry.debounceTimer) {
-      clearTimeout(entry.debounceTimer);
-    }
-    entry.debounceTimer = setTimeout(() => {
-      notifyRenderers(id);
-      entry.debounceTimer = null;
-    }, DEBOUNCE_MS);
+  // The .git dir may vanish later (e.g. repo deleted); watchDir swallows that error.
+  const close = watchDir(gitDir, {
+    filter: (filename) => GIT_WATCH_FILES.includes(filename),
+    debounceMs: DEBOUNCE_MS,
+    onChange: () => notifyRenderers(id),
   });
 
-  watcher.on('error', () => {}); // .git dir may vanish (e.g. repo deleted)
-
-  const entry: WatcherEntry = { watcher, debounceTimer: null, cwd };
-  entries.set(id, entry);
+  entries.set(id, { close, cwd });
 }
 
 /**
@@ -52,17 +43,7 @@ export function startWatching(id: string, cwd: string): void {
 export function stopWatching(id: string): void {
   const entry = entries.get(id);
   if (!entry) return;
-
-  if (entry.debounceTimer) {
-    clearTimeout(entry.debounceTimer);
-  }
-
-  try {
-    entry.watcher.close();
-  } catch {
-    // Already closed
-  }
-
+  entry.close();
   entries.delete(id);
 }
 
