@@ -90,6 +90,24 @@ describe('projectsStore state + selectors', () => {
     expect(store.selectActiveProjectTasks(s).map((t) => t.id)).toEqual(['t1']); // non-archived for active project
   });
 
+  it('selectTaskById / selectTaskByPath search every project and return the stored task', async () => {
+    const useProjects = await freshStore();
+    const archived = task('t2', 'p1', { archivedAt: '123' });
+    const other = task('t3', 'p2', { path: '/elsewhere/t3' });
+    useProjects.setState({
+      tasksByProject: { p1: [task('t1', 'p1'), archived], p2: [other] },
+    });
+    const s = useProjects.getState();
+    // Same object by reference, so a hook can select it without useShallow.
+    expect(store.selectTaskById(s, 't3')).toBe(other);
+    expect(store.selectTaskById(s, 't2')).toBe(archived); // archived included
+    expect(store.selectTaskById(s, 'nope')).toBeUndefined();
+    expect(store.selectTaskByPath(s, '/elsewhere/t3')).toBe(other);
+    expect(store.selectTaskByPath(s, '/nowhere')).toBeUndefined();
+    // Works on a bare { tasksByProject } too (a component's own snapshot).
+    expect(store.selectTaskById({ tasksByProject: s.tasksByProject }, 't1')?.id).toBe('t1');
+  });
+
   // App subscribes via useProjects(useShallow(selectActiveProjectTasks)). The raw selector
   // filters → a fresh array every call (a !== b), which alone would loop useSyncExternalStore;
   // useShallow only rescues it because successive outputs are SHALLOW-equal. If a future change

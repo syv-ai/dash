@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { toast } from 'sonner';
-import { useProjects } from '../../stores/projectsStore';
+import { selectTaskById, useProjects } from '../../stores/projectsStore';
 import { WizardScreen, type Send } from './PortsWizardToasts';
 
 /**
@@ -66,10 +66,9 @@ export function useWizardToasts(): void {
       // "Cancel setup task" removes the whole port-setup task (worktree + agent).
       // task:delete → WizardHost.cancelForTask dismisses this toast.
       const onCancelTask = () => {
-        const { tasksByProject, deleteTask } = useProjects.getState();
-        const task = Object.values(tasksByProject)
-          .flat()
-          .find((t) => t.id === taskId);
+        const state = useProjects.getState();
+        const { deleteTask } = state;
+        const task = selectTaskById(state, taskId);
         if (task) {
           void deleteTask(task, {
             deleteWorktreeDir: true,

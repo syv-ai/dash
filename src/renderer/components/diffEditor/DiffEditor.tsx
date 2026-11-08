@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import type { DiffComment, FileChange } from '../../../shared/types';
 import { useGit } from '../../stores/gitStore';
-import { useProjects } from '../../stores/projectsStore';
+import { selectTaskByPath, useProjects } from '../../stores/projectsStore';
 import { EditorSidebar } from './EditorSidebar';
 import { EditorPane } from './EditorPane';
 import type { EditorView } from './types';
@@ -38,13 +38,7 @@ export function DiffEditor({
   // Git belongs to a task's worktree, and the task's comments to the active
   // task's. Any other folder (Claude's memory, opened from the memory modal)
   // is plain files: no git, no comments.
-  const worktreeTaskId = useProjects((s) => {
-    for (const tasks of Object.values(s.tasksByProject)) {
-      const task = tasks.find((t) => t.path === cwd);
-      if (task) return task.id;
-    }
-    return null;
-  });
+  const worktreeTaskId = useProjects((s) => selectTaskByPath(s, cwd)?.id ?? null);
   const git = worktreeTaskId !== null;
   const activeTaskId = worktreeTaskId === openTaskId ? openTaskId : null;
   const gitStatus = useGit((s) => s.gitStatus);

@@ -54,6 +54,7 @@ import {
   useProjects,
   selectActiveProject,
   selectActiveTask,
+  selectTaskById,
   selectActiveProjectTasks,
 } from './stores/projectsStore';
 
@@ -589,9 +590,8 @@ export function App() {
   useEffect(() => {
     if (!activeTaskId || projects.length === 0) return;
     if (Object.keys(tasksByProject).length < projects.length) return;
-    for (const tasks of Object.values(tasksByProject)) {
-      if (tasks.some((t) => t.id === activeTaskId && !t.archivedAt)) return;
-    }
+    const current = selectTaskById({ tasksByProject }, activeTaskId);
+    if (current && !current.archivedAt) return;
     setActiveTaskId(null);
   }, [tasksByProject, activeTaskId, projects.length]);
 
@@ -1072,24 +1072,13 @@ export function App() {
   }
 
   function handleDeleteTask(id: string) {
-    // Find task across all projects
-    for (const tasks of Object.values(tasksByProject)) {
-      const found = tasks.find((t) => t.id === id);
-      if (found) {
-        setDeleteTaskTarget(found);
-        return;
-      }
-    }
+    const found = selectTaskById({ tasksByProject }, id);
+    if (found) setDeleteTaskTarget(found);
   }
 
   function handleTaskSettings(id: string) {
-    for (const tasks of Object.values(tasksByProject)) {
-      const found = tasks.find((t) => t.id === id);
-      if (found) {
-        setTaskSettingsTarget(found);
-        return;
-      }
-    }
+    const found = selectTaskById({ tasksByProject }, id);
+    if (found) setTaskSettingsTarget(found);
   }
 
   async function persistTaskUpdate(task: Task, patch: Partial<Task>): Promise<Task | null> {
