@@ -92,6 +92,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('worktree:setupChanged', handler);
     };
   },
+  onWorktreeSetupForgotten: (callback: (data: { worktreePath: string }) => void) => {
+    const handler = (_event: unknown, data: { worktreePath: string }) => callback(data);
+    ipcRenderer.on('worktree:setupForgotten', handler);
+    return () => {
+      ipcRenderer.removeListener('worktree:setupForgotten', handler);
+    };
+  },
   onWorktreeSetupOutput: (callback: (data: { worktreePath: string; chunk: string }) => void) => {
     const handler = (_event: unknown, data: { worktreePath: string; chunk: string }) =>
       callback(data);

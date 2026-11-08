@@ -21,7 +21,15 @@ import {
   recordSetupFailure,
   runSetupCommand,
   forgetSetupRun,
+  killAllSetupRuns,
 } from '../setupRuns';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+
+/** A file the command touches if it survives long enough to reach it. */
+const marker = (name: string) =>
+  path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'dash-setup-')), name);
 
 const base = { cwd: process.cwd(), env: process.env, timeoutMs: 10_000 };
 
@@ -90,5 +98,51 @@ describe('setupRuns', () => {
     });
     forgetSetupRun('/wt/config');
     expect(getSetupLog('/wt/config')).toBeNull();
+  });
+
+  it('settles a timed-out run whose command ignores SIGTERM and holds the pipes', async () => {
+    const started = Date.now();
+    const run = await runSetupCommand({
+      ...base,
+      timeoutMs: 200,
+      worktreePath: '/wt/stubborn',
+      // The shell and a backgrounded child both ignore TERM; the child keeps
+      // stdout open, so only SIGKILL + cutting the pipes ends the run.
+      command: "trap '' TERM; (trap '' TERM; sleep 30) & sleep 30",
+    });
+    expect(run.status).toBe('failed');
+    expect(run.error).toMatch(/^timed out/);
+    expect(Date.now() - started).toBeLessThan(6000);
+  }, 10_000);
+
+  it('forgetting a running run kills it quietly and tells the renderer', async () => {
+    const touched = marker('forgot');
+    const p = runSetupCommand({
+      ...base,
+      worktreePath: '/wt/forget',
+      command: `sleep 1; touch ${touched}`,
+    });
+    sent.length = 0;
+    forgetSetupRun('/wt/forget');
+    const run = await p;
+    expect(run.status).toBe('failed');
+    expect(sent.map((s) => s.channel)).toEqual(['worktree:setupForgotten']);
+    expect(listSetupRuns().some((r) => r.worktreePath === '/wt/forget')).toBe(false);
+    await new Promise((r) => setTimeout(r, 1300));
+    expect(fs.existsSync(touched)).toBe(false);
+  });
+
+  it('killAllSetupRuns ends every run, children included', async () => {
+    const touched = marker('quit');
+    const p = runSetupCommand({
+      ...base,
+      worktreePath: '/wt/quit',
+      command: `(sleep 1; touch ${touched}) & wait`,
+    });
+    killAllSetupRuns();
+    await p;
+    expect(listSetupRuns()).toEqual([]);
+    await new Promise((r) => setTimeout(r, 1300));
+    expect(fs.existsSync(touched)).toBe(false);
   });
 });

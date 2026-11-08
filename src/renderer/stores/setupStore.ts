@@ -73,6 +73,13 @@ export const useSetup = create<SetupStore>((set, get) => ({
         });
       }
     });
+    const offForgotten = window.electronAPI.onWorktreeSetupForgotten(({ worktreePath }) => {
+      set((s) => {
+        const runs = { ...s.runs };
+        delete runs[worktreePath];
+        return s.viewPath === worktreePath ? { runs, viewPath: null, viewLog: null } : { runs };
+      });
+    });
     const offOutput = window.electronAPI.onWorktreeSetupOutput(({ worktreePath, chunk }) => {
       const { viewPath, viewLog } = get();
       if (viewPath !== worktreePath || !viewLog) return;
@@ -87,6 +94,7 @@ export const useSetup = create<SetupStore>((set, get) => ({
     });
     return () => {
       offChanged();
+      offForgotten();
       offOutput();
     };
   },

@@ -1,15 +1,21 @@
-import { spawn } from 'child_process';
+import { spawn, type ChildProcess } from 'child_process';
 import { BrowserWindow } from 'electron';
 import { appendCapped, setupFailureMessage, type SetupLog, type SetupRun } from '@shared/setupRuns';
 
 /** Output is pushed to the renderer at most this often per run. */
 const OUTPUT_FLUSH_MS = 100;
+/** After SIGTERM, how long a run gets before SIGKILL. */
+const KILL_GRACE_MS = 2000;
 
 interface Entry {
   run: SetupRun;
   log: SetupLog;
   pending: string;
   flushTimer: NodeJS.Timeout | null;
+  /** The running command; null once it has ended. */
+  child: ChildProcess | null;
+  /** Forgotten (task archived or deleted, app quitting): the run ends silently. */
+  dead: boolean;
 }
 
 /** The latest setup run per worktree path, with its output. In memory only:
@@ -30,7 +36,10 @@ function broadcast(channel: string, payload: unknown): void {
 function flushOutput(entry: Entry): void {
   if (entry.flushTimer) clearTimeout(entry.flushTimer);
   entry.flushTimer = null;
-  if (!entry.pending) return;
+  if (!entry.pending || entry.dead) {
+    entry.pending = '';
+    return;
+  }
   broadcast('worktree:setupOutput', {
     worktreePath: entry.run.worktreePath,
     chunk: entry.pending,
@@ -40,11 +49,13 @@ function flushOutput(entry: Entry): void {
 
 function append(entry: Entry, chunk: string): void {
   entry.log = appendCapped(entry.log, chunk);
+  if (entry.dead) return;
   entry.pending += chunk;
   if (!entry.flushTimer) entry.flushTimer = setTimeout(() => flushOutput(entry), OUTPUT_FLUSH_MS);
 }
 
 function finish(entry: Entry, error: string | null): void {
+  entry.child = null;
   flushOutput(entry);
   entry.run = {
     ...entry.run,
@@ -52,7 +63,38 @@ function finish(entry: Entry, error: string | null): void {
     endedAt: Date.now(),
     error,
   };
-  broadcast('worktree:setupChanged', entry.run);
+  if (!entry.dead) broadcast('worktree:setupChanged', entry.run);
+}
+
+/**
+ * Kill a run's whole process tree: its process group on macOS/Linux (the
+ * command runs detached in its own group), `taskkill /T` on Windows, where
+ * killing the child would only end cmd.exe.
+ */
+function killTree(child: ChildProcess, signal: 'SIGTERM' | 'SIGKILL'): void {
+  const pid = child.pid;
+  if (!pid) return;
+  try {
+    if (process.platform === 'win32') {
+      spawn('taskkill', ['/T', '/F', '/PID', String(pid)], { stdio: 'ignore' }).on(
+        'error',
+        () => {},
+      );
+    } else {
+      process.kill(-pid, signal);
+    }
+  } catch {
+    // Already gone.
+  }
+}
+
+/** SIGTERM the tree, then SIGKILL it if it hasn't exited after the grace. */
+function stop(child: ChildProcess): void {
+  killTree(child, 'SIGTERM');
+  if (process.platform === 'win32') return; // taskkill /F already forced it.
+  const force = setTimeout(() => killTree(child, 'SIGKILL'), KILL_GRACE_MS);
+  force.unref();
+  child.once('exit', () => clearTimeout(force));
 }
 
 export function isSetupRunning(worktreePath: string): boolean {
@@ -66,6 +108,8 @@ function begin(worktreePath: string): Entry {
     log: { text: '', trimmed: false },
     pending: '',
     flushTimer: null,
+    child: null,
+    dead: false,
   };
   runs.set(worktreePath, entry);
   broadcast('worktree:setupChanged', entry.run);
@@ -82,8 +126,10 @@ export function recordSetupFailure(worktreePath: string, error: string): void {
 
 /**
  * Run a setup command through the shell, streaming stdout and stderr into the
- * run's log. Resolves when the run ends; never rejects. The command runs in
- * its own process group so the timeout kills what it started, not just `sh`.
+ * run's log. Resolves when the run ends; never rejects. On timeout the tree
+ * is killed and the pipes are closed, and the run settles on whichever of
+ * `exit`/`close` comes first, so a child that keeps a pipe open can't leave
+ * it "running".
  */
 export function runSetupCommand(args: {
   worktreePath: string;
@@ -96,30 +142,32 @@ export function runSetupCommand(args: {
   return new Promise((resolve) => {
     let timedOut = false;
     let settled = false;
+    let timer: NodeJS.Timeout | null = null;
     const done = (error: string | null) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       finish(entry, error);
       resolve(entry.run);
     };
+    const ended = (code: number | null) => {
+      if (code === 0 && !timedOut) return done(null);
+      done(setupFailureMessage({ log: entry.log.text, code, timedOut, timeoutMs: args.timeoutMs }));
+    };
 
-    const usesGroup = process.platform !== 'win32';
     const child = spawn(args.command, {
       cwd: args.cwd,
       env: args.env,
       shell: true,
-      detached: usesGroup,
+      detached: process.platform !== 'win32',
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    const timer = setTimeout(() => {
+    entry.child = child;
+    timer = setTimeout(() => {
       timedOut = true;
-      try {
-        if (usesGroup && child.pid) process.kill(-child.pid, 'SIGTERM');
-        else child.kill('SIGTERM');
-      } catch {
-        child.kill('SIGTERM');
-      }
+      child.stdout?.destroy();
+      child.stderr?.destroy();
+      stop(child);
     }, args.timeoutMs);
 
     child.stdout?.setEncoding('utf8');
@@ -130,16 +178,11 @@ export function runSetupCommand(args: {
       append(entry, `${err.message}\n`);
       done(err.message.slice(0, 200));
     });
-    child.on('close', (code) => {
-      if (code === 0 && !timedOut) return done(null);
-      done(
-        setupFailureMessage({
-          log: entry.log.text,
-          code,
-          timedOut,
-          timeoutMs: args.timeoutMs,
-        }),
-      );
+    // `close` normally (all output read); `exit` only once the pipes were cut
+    // on timeout, since a backgrounded grandchild may hold them open forever.
+    child.on('close', (code) => ended(code));
+    child.on('exit', (code) => {
+      if (timedOut) ended(code);
     });
   });
 }
@@ -157,9 +200,26 @@ export function getSetupLog(worktreePath: string): SetupLog | null {
   return entry.log;
 }
 
-/** Drop a removed worktree's run and output. */
+function kill(entry: Entry): void {
+  entry.dead = true;
+  if (entry.flushTimer) clearTimeout(entry.flushTimer);
+  entry.flushTimer = null;
+  entry.pending = '';
+  if (entry.child) stop(entry.child);
+}
+
+/** Drop a worktree's run (task archived or deleted): kill it if it is still
+ *  going, quietly, and tell the renderer to forget it. */
 export function forgetSetupRun(worktreePath: string): void {
   const entry = runs.get(worktreePath);
-  if (entry?.flushTimer) clearTimeout(entry.flushTimer);
+  if (!entry) return;
+  kill(entry);
   runs.delete(worktreePath);
+  broadcast('worktree:setupForgotten', { worktreePath });
+}
+
+/** App quit: the runs are detached, so they would outlive Dash otherwise. */
+export function killAllSetupRuns(): void {
+  for (const entry of runs.values()) kill(entry);
+  runs.clear();
 }

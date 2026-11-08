@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import { ipcMain } from 'electron';
 import { z } from 'zod';
 import { parseArgs, errorResponse } from './validate';
@@ -63,6 +64,9 @@ export function registerWorktreeIpc(): void {
       if (!task.useWorktree) throw new Error('Setup only runs in a task worktree');
       const project = DatabaseService.getProjects().find((p) => p.id === task.projectId);
       if (!project) throw new Error('Project not found');
+      if (!fs.existsSync(task.path)) {
+        throw new Error(`The task's worktree folder is gone: ${task.path}`);
+      }
       if (isSetupRunning(task.path)) throw new Error('Setup is already running for this task');
       const started = worktreeService.runSetupScriptAsync(
         task.path,

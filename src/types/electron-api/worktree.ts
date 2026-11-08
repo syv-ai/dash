@@ -25,6 +25,8 @@ export interface WorktreeApi {
   worktreeSetupRerun: (taskId: string) => Promise<IpcResponse<void>>;
   /** A run started or ended. */
   onWorktreeSetupChanged: (callback: (run: SetupRun) => void) => () => void;
+  /** A run was dropped (its task was archived or deleted). */
+  onWorktreeSetupForgotten: (callback: (data: { worktreePath: string }) => void) => () => void;
   /** New output from a running setup (batched). */
   onWorktreeSetupOutput: (
     callback: (data: { worktreePath: string; chunk: string }) => void,

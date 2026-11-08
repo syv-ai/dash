@@ -5,6 +5,7 @@ import { useSetup } from '../../stores/setupStore';
 import { useProjects } from '../../stores/projectsStore';
 import { Modal, useModalClose } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { IconButton } from '../ui/IconButton';
 
 /** The worktree setup output for `useSetup().viewPath`, live while it runs. */
 export function SetupLogModal() {
@@ -62,16 +63,13 @@ function SetupLogBody({ worktreePath }: { worktreePath: string }) {
               disabled={running}
               onClick={() => void rerun(task)}
             >
-              <RotateCw size={12} strokeWidth={1.8} />
+              <RotateCw size={12} strokeWidth={2} />
               Run setup again
             </Button>
           )}
-          <button
-            onClick={close}
-            className="p-1.5 rounded-lg hover:bg-accent text-fg-fade-50 hover:text-foreground transition-all duration-150"
-          >
+          <IconButton title="Close" onClick={close}>
             <X size={14} strokeWidth={2} />
-          </button>
+          </IconButton>
         </div>
       </div>
       <div
@@ -105,7 +103,7 @@ function RunStatus({ status, error }: { status?: string; error: string | null })
   if (status === 'running') {
     return (
       <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground shrink-0">
-        <Loader2 size={12} strokeWidth={1.8} className="animate-spin" />
+        <Loader2 size={12} strokeWidth={2} className="animate-spin" />
         Running
       </span>
     );
@@ -116,7 +114,7 @@ function RunStatus({ status, error }: { status?: string; error: string | null })
         className="inline-flex items-center gap-1 text-[11px] text-destructive min-w-0"
         title={error ?? undefined}
       >
-        <CircleAlert size={12} strokeWidth={1.8} className="shrink-0" />
+        <CircleAlert size={12} strokeWidth={2} className="shrink-0" />
         <span className="truncate">Failed</span>
       </span>
     );
@@ -124,7 +122,7 @@ function RunStatus({ status, error }: { status?: string; error: string | null })
   if (status === 'succeeded') {
     return (
       <span className="inline-flex items-center gap-1 text-[11px] text-[hsl(var(--git-added))] shrink-0">
-        <CircleCheck size={12} strokeWidth={1.8} />
+        <CircleCheck size={12} strokeWidth={2} />
         Done
       </span>
     );

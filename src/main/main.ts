@@ -351,6 +351,14 @@ app.on('before-quit', (event) => {
       // Best effort
     }
 
+    // Setup scripts run detached in their own process group; end them.
+    try {
+      const { killAllSetupRuns } = await import('./services/setupRuns');
+      killAllSetupRuns();
+    } catch {
+      // Best effort
+    }
+
     // Stop the supervisor reconcile loop before the PTYs go.
     try {
       const { supervisorService } = await import('./services/SupervisorService');

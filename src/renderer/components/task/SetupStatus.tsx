@@ -37,9 +37,9 @@ export function SetupStatus({
         className={`inline-flex items-center gap-1 shrink-0 text-[11px] transition-colors ${tone} ${shape}`}
       >
         {running ? (
-          <Loader2 size={11} strokeWidth={1.8} className="animate-spin" />
+          <Loader2 size={11} strokeWidth={2} className="animate-spin" />
         ) : (
-          <CircleAlert size={11} strokeWidth={1.8} />
+          <CircleAlert size={11} strokeWidth={2} />
         )}
         {running ? 'Setting up…' : 'Setup failed'}
       </button>

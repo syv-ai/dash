@@ -24,6 +24,7 @@ const run = (worktreePath: string, over: Partial<SetupRun> = {}): SetupRun => ({
 describe('setupStore', () => {
   let onChanged: (r: SetupRun) => void;
   let onOutput: (d: { worktreePath: string; chunk: string }) => void;
+  let onForgotten: (d: { worktreePath: string }) => void;
   let api: ReturnType<typeof makeElectronApiMock>;
   let cleanup: () => void;
 
@@ -32,6 +33,10 @@ describe('setupStore', () => {
     api = makeElectronApiMock({
       onWorktreeSetupChanged: vi.fn((cb: typeof onChanged) => {
         onChanged = cb;
+        return () => {};
+      }),
+      onWorktreeSetupForgotten: vi.fn((cb: typeof onForgotten) => {
+        onForgotten = cb;
         return () => {};
       }),
       onWorktreeSetupOutput: vi.fn((cb: typeof onOutput) => {
@@ -103,6 +108,14 @@ describe('setupStore', () => {
     api.worktreeSetupRerun.mockResolvedValueOnce({ success: false, error: 'already running' });
     await useSetup.getState().rerun({ id: 't1', path: '/wt/e' });
     expect(toast.error).toHaveBeenCalledWith('already running');
+    expect(useSetup.getState().viewPath).toBeNull();
+  });
+
+  it('drops a forgotten run and closes its view', async () => {
+    onChanged(run('/wt/f'));
+    await useSetup.getState().openLog('/wt/f');
+    onForgotten({ worktreePath: '/wt/f' });
+    expect(useSetup.getState().runs['/wt/f']).toBeUndefined();
     expect(useSetup.getState().viewPath).toBeNull();
   });
 });

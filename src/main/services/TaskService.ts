@@ -35,6 +35,7 @@ import { portLivenessService } from './PortLivenessService';
 import { removeShellHistory } from './ptyShellConfig';
 import { getTuiHost } from '../tui/hostInstance';
 import { taskEvents } from './taskEvents';
+import { forgetSetupRun } from './setupRuns';
 import { FolderOccupiedError } from './FolderOccupiedError';
 import { removeTaskSettings } from './taskSettings';
 import { forgetTask as forgetTaskInbox } from './taskInbox';
@@ -250,6 +251,9 @@ export class TaskService {
     // Shells and services would otherwise keep running (and holding ports)
     // for a task nobody sees; restoring starts fresh ones.
     await killTaskTerminals(id, 'archive');
+    // Same for a setup script still running in the worktree.
+    const archived = DatabaseService.getTask(id);
+    if (archived?.useWorktree) forgetSetupRun(archived.path);
     // Restoring and opening the task attaches, which wakes the session.
     await stopTaskSession(id).catch((err) =>
       console.warn('[TaskService] archive: session stop failed:', err),

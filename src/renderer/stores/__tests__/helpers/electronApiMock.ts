@@ -98,6 +98,7 @@ export function makeElectronApiMock(overrides: Record<string, unknown> = {}) {
     worktreeSetupLog: vi.fn((_path: string) => ok(null)),
     worktreeSetupRerun: vi.fn((_taskId: string) => ok(undefined)),
     onWorktreeSetupChanged: vi.fn((_cb: (run: unknown) => void) => () => {}),
+    onWorktreeSetupForgotten: vi.fn((_cb: (d: { worktreePath: string }) => void) => () => {}),
     onWorktreeSetupOutput: vi.fn(
       (_cb: (d: { worktreePath: string; chunk: string }) => void) => () => {},
     ),
