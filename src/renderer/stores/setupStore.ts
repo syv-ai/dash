@@ -27,6 +27,9 @@ export interface SetupActions {
 
 export type SetupStore = SetupState & SetupActions;
 
+/** Never resets (clearing a request doesn't), so every request is new. */
+let requestSeq = 0;
+
 function taskAt(worktreePath: string): Task | null {
   for (const list of Object.values(useProjects.getState().tasksByProject)) {
     const task = list.find((t) => t.path === worktreePath && !t.archivedAt);
@@ -44,7 +47,7 @@ export const useSetup = create<SetupStore>((set, get) => ({
     // No live task owns it: no drawer would ever take the request.
     if (!task) return;
     useProjects.getState().selectTask(task.projectId, task.id);
-    set((s) => ({ setupTabRequest: { worktreePath, seq: (s.setupTabRequest?.seq ?? 0) + 1 } }));
+    set({ setupTabRequest: { worktreePath, seq: ++requestSeq } });
   },
 
   clearSetupTabRequest: () => set({ setupTabRequest: null }),

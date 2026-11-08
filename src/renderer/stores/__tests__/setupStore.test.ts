@@ -98,6 +98,14 @@ describe('setupStore', () => {
     expect(useSetup.getState().setupTabRequest).toBeNull();
   });
 
+  it('a request after a cleared one still gets a higher seq', () => {
+    useSetup.getState().showSetup('/wt/one');
+    const first = useSetup.getState().setupTabRequest!.seq;
+    useSetup.getState().clearSetupTabRequest();
+    useSetup.getState().showSetup('/wt/one');
+    expect(useSetup.getState().setupTabRequest!.seq).toBeGreaterThan(first);
+  });
+
   it('showSetup brings an excluded task back into the rotation, like any selection', () => {
     useSettings.getState().setRotationExclusions(new Set(['t2', 'other']));
     useSetup.getState().showSetup('/wt/two');
