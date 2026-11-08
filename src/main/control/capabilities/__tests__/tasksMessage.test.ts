@@ -3,7 +3,14 @@ import type { ActivityInfo, Task } from '../../../../shared/types';
 import { ControlError, createRegistry, type Registry } from '../../registry';
 import { fakeLookups, makeProject, makeTask } from '../../__tests__/fixtures';
 import type { LiveSession } from '../../../services/claudeSessionRegistry';
-import { InboxWriteError, resetTaskInboxes, type TaskInbox } from '../../../services/taskInbox';
+import {
+  InboxWriteError,
+  dropTaskInbox,
+  getTaskInbox,
+  resetTaskInboxes,
+  setTaskInbox,
+  type TaskInbox,
+} from '../../../services/taskInbox';
 import { createReplyReader, registerTaskCapabilities, type TaskCapabilityDeps } from '../tasks';
 
 const orch = { kind: 'orchestrator' } as const;
@@ -15,7 +22,6 @@ let tasks: Task[];
 let activity: Record<string, ActivityInfo>;
 let untrusted: Record<string, string>;
 let sessions: Map<string, LiveSession>;
-let inboxes: Map<string, TaskInbox>;
 let transcripts: Record<string, string>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let deps: Record<keyof TaskCapabilityDeps, Mock<(...args: any[]) => any>>;
@@ -34,7 +40,7 @@ const task = (id: string) => tasks.find((t) => t.id === id)!;
 function running(state: ActivityInfo['state'] = 'idle'): void {
   task('child').jobId = 'job-c';
   sessions.set('job-c', live());
-  inboxes.set('child', inbox());
+  setTaskInbox('child', inbox());
   activity = { child: { state } };
 }
 
@@ -48,7 +54,6 @@ beforeEach(() => {
   activity = {};
   untrusted = {};
   sessions = new Map();
-  inboxes = new Map();
   transcripts = {};
   resetTaskInboxes();
   deps = {
@@ -62,8 +67,8 @@ beforeEach(() => {
     onTasksChange: vi.fn(() => () => {}),
     recheckTrust: vi.fn(async (id: string) => !untrusted[id]),
     startSession: vi.fn(async () => ({ jobId: 'job-1' })),
-    getInbox: vi.fn((id: string) => inboxes.get(id)),
-    dropInbox: vi.fn((id: string) => inboxes.delete(id)),
+    getInbox: vi.fn(getTaskInbox),
+    dropInbox: vi.fn(dropTaskInbox),
     postToInbox: vi.fn(async () => {}),
     transcriptPathFor: vi.fn(() => null),
     readTranscript: vi.fn(async (file: string) => transcripts[file] ?? null),
@@ -143,7 +148,7 @@ describe('tasks.message', () => {
   it('refuses a running session with no inbox known, naming the fix', async () => {
     vi.useFakeTimers();
     running();
-    inboxes.clear();
+    dropTaskInbox('child');
     const pending = send();
     const settled = expect(pending).rejects.toMatchObject({
       status: 409,
@@ -155,14 +160,20 @@ describe('tasks.message', () => {
     expect(deps.postToInbox).not.toHaveBeenCalled();
   });
 
-  it("drops an inbox whose socket is not the live session's", async () => {
+  it("sends to the live session's inbox, never another session's in the worktree", async () => {
     vi.useFakeTimers();
     running();
-    inboxes.set('child', inbox('/tmp/cc-socks/old.sock'));
+    dropTaskInbox('child');
+    // A `claude -p` the agent ran in its worktree reported last: not used.
+    setTaskInbox('child', inbox('/tmp/cc-socks/other.sock'));
     const settled = expect(send()).rejects.toMatchObject({ status: 409 });
     await vi.advanceTimersByTimeAsync(5_000);
     await settled;
-    expect(inboxes.has('child')).toBe(false);
+    // The task's own session, then another `claude -p`: the live one is used.
+    setTaskInbox('child', inbox());
+    setTaskInbox('child', inbox('/tmp/cc-socks/third.sock'));
+    await send();
+    expect(deps.postToInbox.mock.calls.at(-1)![0]).toMatchObject({ socket: SOCK });
   });
 
   it('starts a stopped session, waits for its inbox, then sends', async () => {
@@ -177,7 +188,7 @@ describe('tasks.message', () => {
     sessions.set('job-new', live());
     await vi.advanceTimersByTimeAsync(1_000);
     expect(deps.postToInbox).not.toHaveBeenCalled();
-    inboxes.set('child', inbox());
+    setTaskInbox('child', inbox());
     await vi.advanceTimersByTimeAsync(1_000);
     await expect(pending).resolves.toMatchObject({ queued: false });
     expect(deps.postToInbox).toHaveBeenCalledTimes(1);
@@ -208,7 +219,7 @@ describe('tasks.message', () => {
       status: 502,
       message: expect.stringContaining('nothing was sent'),
     });
-    expect(inboxes.has('child')).toBe(false);
+    expect(getTaskInbox('child', SOCK)).toBeUndefined();
     running();
     deps.postToInbox.mockRejectedValueOnce(
       new InboxWriteError("the session's inbox did not answer in time", 'unknown'),
@@ -263,7 +274,7 @@ describe('tasks.reply', () => {
 
   it('falls back to the session transcript Dash locates when no hook named one', async () => {
     running();
-    inboxes.set('child', { ...inbox(), transcriptPath: null });
+    setTaskInbox('child', { ...inbox(), transcriptPath: null });
     const { messageId } = await send();
     deps.transcriptPathFor.mockReturnValue('/elsewhere.jsonl');
     transcripts['/elsewhere.jsonl'] = [peerLine(messageId), answerLine('42')].join('\n');
@@ -338,5 +349,61 @@ describe('tasks.watch reply lines', () => {
     ac.abort();
     await done;
     expect(listeners).toHaveLength(0);
+  });
+
+  /** A watch of the child task, its activity listeners driven by the test. */
+  function watchChild() {
+    const listeners: Array<() => void> = [];
+    deps.onActivityChange.mockImplementation((l: () => void) => {
+      listeners.push(l);
+      return () => listeners.splice(listeners.indexOf(l), 1);
+    });
+    const lines: Array<Record<string, unknown>> = [];
+    const ac = new AbortController();
+    const done = registry.call(
+      orch,
+      'tasks.watch',
+      { taskId: 'child' },
+      { emit: (l) => lines.push(l as Record<string, unknown>), signal: ac.signal },
+    );
+    const replies = () => lines.filter((l) => l.event === 'reply');
+    const fire = () => {
+      for (const l of [...listeners]) l();
+    };
+    return { replies, fire, ac, done };
+  }
+
+  it('emits one reply for a burst of activity events', async () => {
+    running('busy');
+    const w = watchChild();
+    const sent = await send();
+    transcripts[TRANSCRIPT] = [peerLine(sent.messageId), answerLine('42')].join('\n');
+    activity = { child: { state: 'idle' } };
+    w.fire();
+    w.fire();
+    w.fire();
+    await vi.waitFor(() => expect(w.replies()).toHaveLength(1));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(w.replies()).toHaveLength(1);
+    w.ac.abort();
+    await w.done;
+  });
+
+  it("finds a reply on the poll when the transcript lands after the task's last event", async () => {
+    vi.useFakeTimers();
+    running('busy');
+    const w = watchChild();
+    const sent = await send();
+    activity = { child: { state: 'idle' } };
+    w.fire(); // idle, but the answer isn't written yet
+    await vi.advanceTimersByTimeAsync(0);
+    expect(w.replies()).toEqual([]);
+    transcripts[TRANSCRIPT] = [peerLine(sent.messageId), answerLine('42')].join('\n');
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(w.replies()).toEqual([
+      { event: 'reply', taskId: 'child', messageId: sent.messageId, queued: true, text: '42' },
+    ]);
+    w.ac.abort();
+    await w.done;
   });
 });

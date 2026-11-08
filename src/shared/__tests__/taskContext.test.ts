@@ -22,4 +22,11 @@ describe('relinkTaskContext', () => {
       `Be brief.\n\n${formatTaskContextPrompt([issue(3)])}`,
     );
   });
+
+  it('adds only the new items when the stored context no longer ends with the old block', () => {
+    const stored = `${buildTaskContext('Use pnpm.', [issue(1)])}\n\nAlso: keep it small.`;
+    const next = relinkTaskContext(stored, [issue(1)], [issue(1), issue(2)]);
+    expect(next).toBe(`${stored}\n\n${formatTaskContextPrompt([issue(2)])}`);
+    expect(next.split('Issue 1').length - 1).toBe(1);
+  });
 });

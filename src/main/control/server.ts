@@ -5,18 +5,21 @@ import { controlPaths, type ControlPaths } from './paths';
 import { ControlError, type Registry, type StreamSink } from './registry';
 import { runCli } from './cli';
 import { verify } from './tokens';
+import { ORCHESTRATOR_ACCESS_OFF } from './scope';
 
 /** Maximum JSON body size for a control call (64KB), as for hook payloads. */
 const MAX_BODY_BYTES = 65_536;
 /** A `dashctl` run's form body: a 64KB comment grows when percent-encoded. */
 const MAX_CLI_BODY_BYTES = 262_144;
 
-export const ORCHESTRATOR_ACCESS_OFF = 'orchestrator access is off in Dash settings';
-
 export interface ControlServerOptions {
   userDataDir: string;
   registry: Registry;
-  /** Read per request: the Settings switch can flip while Dash runs. */
+  /**
+   * Read per request: the Settings switch can flip while Dash runs. The
+   * registry's scope checks it too (and again during a stream); this one
+   * answers before anything else is read.
+   */
   isOrchestratorAllowed: () => boolean;
   /** Asks the person in Dash to turn orchestrator access on; true once it is. */
   requestOrchestratorAccess: () => Promise<boolean>;

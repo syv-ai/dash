@@ -14,7 +14,7 @@ vi.mock('../HookServer', () => ({
 vi.mock('../RtkService', () => ({ RtkService: { isEnabled: () => false } }));
 vi.mock('../DatabaseService', () => ({ DatabaseService: { getTask: () => undefined } }));
 
-import { writeHookSettings, INBOX_HEADER_ARGS } from '../ptyHookSettings';
+import { writeHookSettings, INBOX_HEADERS_HEREDOC } from '../ptyHookSettings';
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-hooks-'));
 afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -35,7 +35,7 @@ describe('the inbox hooks', () => {
     expect(hooks.SessionStart!.map((e) => e.matcher)).toEqual(['clear', 'compact', '']);
     const [inbox] = hooks.SessionStart![2]!.hooks;
     expect(inbox!.command).toContain('/hook/inbox?ptyId=task-1');
-    expect(inbox!.command).toContain(INBOX_HEADER_ARGS);
+    expect(inbox!.command).toContain(INBOX_HEADERS_HEREDOC);
     expect(inbox!.async).toBe(true);
     // The clear/compact entries post to session-start, which sets idle; no inbox there.
     expect(hooks.SessionStart![0]!.hooks[0]!.command).not.toContain('X-Dash-Messaging');
@@ -44,9 +44,11 @@ describe('the inbox hooks', () => {
   it('UserPromptSubmit sends the inbox headers with the busy report', () => {
     const [busy] = hooks.UserPromptSubmit![0]!.hooks;
     expect(busy!.command).toContain('/hook/busy?ptyId=task-1');
-    expect(busy!.command).toContain(
-      `-H "X-Dash-Messaging-Socket: $CLAUDE_CODE_MESSAGING_SOCKET" -H "X-Dash-Messaging-Token: $CLAUDE_CODE_MESSAGING_TOKEN"`,
-    );
+    // The headers come on fd 3 from a heredoc: never in curl's argv.
+    const [curlLine] = busy!.command.split(' 3<<');
+    expect(curlLine).toContain('-H @/dev/fd/3');
+    expect(curlLine).not.toContain('CLAUDE_CODE_MESSAGING');
+    expect(busy!.command).toContain(INBOX_HEADERS_HEREDOC);
   });
 
   it('writes only hook events Claude Code knows, and no new hook fields', () => {
@@ -73,12 +75,58 @@ describe('the inbox hooks', () => {
     }
   });
 
-  it('runs under sh with both variables unset, sending empty headers', async () => {
-    const { execFileSync } = await import('child_process');
-    const line = `printf '%s\\n'${INBOX_HEADER_ARGS.replace(/ -H /g, ' ')}`;
-    const out = execFileSync('sh', ['-c', line], {
-      env: { PATH: process.env.PATH, CLAUDE_CODE_MESSAGING_SOCKET: '/tmp/a b.sock' },
-    }).toString();
-    expect(out).toBe('X-Dash-Messaging-Socket: /tmp/a b.sock\nX-Dash-Messaging-Token: \n');
+  /** Run a hook's command under sh against a local server; what it got and printed. */
+  async function run(command: string, env: Record<string, string>) {
+    const http = await import('http');
+    const { execFile } = await import('child_process');
+    const got: Array<{ url: string; headers: Record<string, unknown>; body: string }> = [];
+    const server = http.createServer((req, res) => {
+      let body = '';
+      req.on('data', (c) => (body += c));
+      req.on('end', () => {
+        got.push({ url: req.url!, headers: req.headers, body });
+        res.end('ok');
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const portFile = path.join(dir, 'port');
+    fs.writeFileSync(portFile, String((server.address() as { port: number }).port));
+    const cmd = command.replace('/tmp/dash-hook-port', portFile);
+    try {
+      const out = await new Promise<string>((resolve, reject) => {
+        const child = execFile(
+          'sh',
+          ['-c', cmd],
+          { env: { PATH: process.env.PATH, CLAUDE_PROJECT_DIR: dir, ...env } },
+          (err, stdout) => (err ? reject(err) : resolve(stdout)),
+        );
+        child.stdin!.end('{"transcript_path":"/x.jsonl"}');
+      });
+      return { got, out };
+    } finally {
+      server.close();
+    }
+  }
+
+  it('sends both headers under sh, printing nothing (SessionStart stdout is context)', async () => {
+    const { command } = hooks.SessionStart![2]!.hooks[0]!;
+    const { got, out } = await run(command, {
+      CLAUDE_CODE_MESSAGING_SOCKET: '/tmp/a b.sock',
+      CLAUDE_CODE_MESSAGING_TOKEN: 'tok',
+    });
+    expect(out).toBe('');
+    expect(got).toHaveLength(1);
+    expect(got[0]!.url).toBe('/hook/inbox?ptyId=task-1');
+    expect(got[0]!.body).toBe('{"transcript_path":"/x.jsonl"}');
+    expect(got[0]!.headers['x-dash-messaging-socket']).toBe('/tmp/a b.sock');
+    expect(got[0]!.headers['x-dash-messaging-token']).toBe('tok');
+  });
+
+  it('still posts, with no inbox headers worth keeping, when both variables are unset', async () => {
+    const { command } = hooks.UserPromptSubmit![0]!.hooks[0]!;
+    const { got, out } = await run(command, {});
+    expect(out).toBe('');
+    expect(got).toHaveLength(1);
+    expect(got[0]!.headers['x-dash-messaging-token'] ?? '').toBe('');
   });
 });

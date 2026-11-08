@@ -24,6 +24,12 @@ export function writeDashctl(userDataDir: string): string {
  * from before streams buffers every answer; it sends no `Accept:
  * application/x-ndjson`, so Dash refuses it a stream command (cli.ts) instead
  * of leaving it waiting, and runs every other command as before.
+ *
+ * Exit status: 0 for a whole answer, or a stream Dash ended cleanly; 1 for a
+ * refusal, no Dash, an answer cut off, or a stream that ended on an
+ * `{"error":…}` line or because Dash stopped; 2 for usage; 128 + the signal
+ * when killed (a background watch being stopped is not a failure, but this
+ * says it was stopped).
  */
 export function dashctlScript(controlDir: string): string {
   return `#!/bin/sh
@@ -69,7 +75,7 @@ work=$(mktemp -d)
 out=$work/out
 trap 'rm -rf "$work"' EXIT
 # Killed (a background run being stopped): take curl and the reader along, so
-# Dash sees the stream's client go.
+# Dash sees the stream's client go, and exit 128 + the signal (129, 130, 143).
 pids=
 trap '[ -z "$pids" ] || kill $pids 2>/dev/null; exit 129' HUP
 trap '[ -z "$pids" ] || kill $pids 2>/dev/null; exit 130' INT
@@ -98,10 +104,11 @@ Accept: application/x-ndjson, text/plain
 HEADERS
 }
 
-# Read an answer, headers first. 200: the answer, to stdout; a stream
-# (application/x-ndjson), line by line as it comes, until it ends. 400: usage,
-# to stderr, exit 2. 428: exit 3, to send stdin. Anything else is a refusal,
-# to stderr, exit 1. No answer at all: Dash isn't there.
+# Read an answer, headers first. 200: a stream (application/x-ndjson) is
+# printed line by line as it comes, until it ends (6; 1 if its last line is an
+# {"error":…} line); any other answer is kept for ask() to print once curl got
+# all of it (4). 400: usage, to stderr, 2. 428: 3, to send stdin. Anything
+# else is a refusal, to stderr, 1. No answer at all: 5.
 answer() {
   code=
   stream=
@@ -114,8 +121,16 @@ answer() {
     esac
   done
   case "$code" in
-    '') echo "dashctl: Dash is not running. Open Dash and try again." >&2; return 1 ;;
-    200) if [ -n "$stream" ]; then cat; else cat > "$out"; cat "$out"; echo; fi ;;
+    '') return 5 ;;
+    200)
+      if [ -z "$stream" ]; then cat > "$out"; return 4; fi
+      last=
+      while IFS= read -r line; do
+        printf '%s\\n' "$line"
+        last=$line
+      done
+      case "$last" in '{"error":'*) return 1 ;; esac
+      return 6 ;;
     428) return 3 ;;
     400) cat > "$out"; cat "$out" >&2; echo >&2; return 2 ;;
     *) cat > "$out"; cat "$out" >&2; echo >&2; return 1 ;;
@@ -124,6 +139,8 @@ answer() {
 
 # curl and the reader run in the background, joined by a fifo, and the script
 # waits for them: a signal ends a wait at once (not a foreground command).
+# Then curl's own status says whether the answer was whole: one cut off (Dash
+# stopped, or the connection broke) exits 1, even after a stream's lines.
 ask() {
   rm -f "$work/answer"
   mkfifo "$work/answer"
@@ -133,8 +150,20 @@ ask() {
   pids="$curl_pid $!"
   status=0
   wait $! || status=$?
-  wait "$curl_pid" || true
+  curl_status=0
+  wait "$curl_pid" || curl_status=$?
   pids=
+  case "$status" in
+    5) echo "dashctl: Dash is not running. Open Dash and try again." >&2; return 1 ;;
+    4)
+      if [ "$curl_status" = 0 ]; then cat "$out"; echo; return 0; fi
+      echo "dashctl: the answer was cut off: Dash stopped. Nothing it printed is shown." >&2
+      return 1 ;;
+    6)
+      [ "$curl_status" = 0 ] && return 0
+      echo "dashctl: the stream ended: Dash stopped" >&2
+      return 1 ;;
+  esac
   return "$status"
 }
 

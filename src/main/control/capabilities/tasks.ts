@@ -93,9 +93,10 @@ export interface TaskCapabilityDeps {
   getAdoWorkItem(projectId: string, id: number): Promise<LinkedAdoWorkItem | null>;
   /** TaskService.linkItems: store, add to the context, link the branch. */
   linkItems(taskId: string, items: LinkedItem[]): Promise<Task>;
-  /** The task session's inbox as its hooks reported it (taskInbox.ts); undefined when none is known. */
-  getInbox(taskId: string): TaskInbox | undefined;
-  dropInbox(taskId: string): void;
+  /** The inbox a session in the task's folder reported on that socket (taskInbox.ts); undefined when none did. */
+  getInbox(taskId: string, socket: string): TaskInbox | undefined;
+  /** Drop the inbox on that socket. */
+  dropInbox(taskId: string, socket: string): void;
   /** Write one message into an inbox, once (taskInbox.postToInbox). */
   postToInbox(inbox: TaskInbox, text: string): Promise<void>;
   /** Where the task's current session writes its transcript, when no hook named it; null if unknown. */
@@ -453,7 +454,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     defineCapability({
       name: 'tasks.link',
       summary:
-        "Link a GitHub issue or Azure DevOps work item to a task, as Dash's New Task dialog does: its content joins the task's context (re-injected on /clear and /compact; nothing is sent to the running session) and the task's branch is linked on it. An item already linked is left as it is. Returns the task.",
+        "Link a GitHub issue or Azure DevOps work item to a task, as Dash's New Task dialog does: its content joins the task's context (re-injected on /clear and /compact, a running session's too: Dash rewrites its hook settings, which Claude Code picks up as they change; nothing is sent to the session now), and the item gets a comment naming the task's branch. Unlike the dialog, the branch isn't linked on GitHub, since that would push it. An item already linked is left as it is. Returns the task.",
       input: z.object({ taskId: z.string().describe('The task id'), ...linkInputs }),
       callers: ['orchestrator', 'task'],
       cli: { args: ['taskId'] },
@@ -526,7 +527,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     defineCapability({
       name: 'tasks.watch',
       summary:
-        'Watch tasks until stopped, printing a JSON line per change; meant to run in the background. Without a task id it watches every task you can see (or one project\'s with --project), and picks up new ones. First a {"event":"task","task":…} line per task with its current view (as tasks get gives it), then another whenever a task\'s view changes (state, detail, messageAddress, …), and {"event":"removed","taskId":…} when a task is archived or deleted. A task you messaged with `tasks message` since the watch started gives {"event":"reply","taskId":…,"messageId":…,"queued":…,"text":…} once it has answered (as `tasks reply` gives it). Watching one task, the stream ends after its removed line; otherwise it runs until killed or Dash quits.',
+        'Watch tasks until stopped, printing a JSON line per change; meant to run in the background. Without a task id it watches every task you can see (or one project\'s with --project), and picks up new ones. First a {"event":"task","task":…} line per task with its current view (as tasks get gives it), then another whenever a task\'s view changes (state, detail, messageAddress, …), and {"event":"removed","taskId":…} when a task is archived or deleted. A task you messaged with `tasks message` since the watch started gives {"event":"reply","taskId":…,"messageId":…,"queued":…,"text":…} once it has answered (as `tasks reply` gives it). Watching one task, the stream ends after its removed line; otherwise it runs until killed or Dash quits. It ends with an {"error":…} line once your access to Dash is turned off.',
       input: z.object({
         taskId: z.string().optional().describe('Watch only this task'),
         projectId: z.string().optional().describe("Only this project's tasks"),
@@ -541,35 +542,53 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         if (taskId && projectId)
           throw new ControlError(400, 'give a task id or --project, not both');
         if (taskId) assertNotArchived(taskOrThrow(taskId));
-        const watched = (task: Task | undefined): task is Task =>
-          !!task && task.archivedAt == null && ctx.scope.canSeeTask(task);
+        // The caller's scope now, not at the call's start: a watch outlives
+        // the moment it was allowed, and ends once its access is gone.
         const read = (): Map<string, TaskView> => {
+          const scope = ctx.rescope();
           const found = taskId
             ? [deps.getTask(taskId)]
-            : (projectId ? [projectId] : [...ctx.scope.visibleProjectIds]).flatMap((id) =>
+            : (projectId ? [projectId] : [...scope.visibleProjectIds]).flatMap((id) =>
                 deps.getTasks(id),
               );
-          return new Map(found.filter(watched).map((t) => [t.id, view(t)]));
+          return new Map(
+            found
+              .filter((t): t is Task => !!t && t.archivedAt == null && scope.canSeeTask(t))
+              .map((t) => [t.id, view(t)]),
+          );
         };
-        // A `reply` line when a messaged task stops working; only replies to
-        // messages sent after the watch started (this watch's own record).
+        // A `reply` line when a messaged task has stopped working; only replies
+        // to messages sent after the watch started (this watch's own record).
         const reported = new Set(
           [...read().keys()].flatMap((id) => taskMessages(id).map((m) => m.messageId)),
         );
         const replySource: TaskWatchSource = (watch) => {
-          const check = () => {
-            for (const [id, task] of read()) {
-              if (!watch.isWatched(id) || task.state === 'working' || task.state === 'waiting')
-                continue;
-              void replies.pendingReplies(id, reported).then(
+          // One read per task at a time (else a burst of checks reads the same
+          // reply twice before either marks it reported); a check arriving
+          // meanwhile runs once more after it.
+          const running = new Set<string>();
+          const again = new Set<string>();
+          const run = (id: string) => {
+            if (running.has(id)) return void again.add(id);
+            running.add(id);
+            void replies
+              .pendingReplies(id, reported)
+              .then(
                 (found) => {
                   for (const r of found) watch.emit({ event: 'reply', taskId: id, ...r });
                 },
                 (err) => console.warn('[tasks.watch] reading a reply failed:', err),
-              );
+              )
+              .finally(() => {
+                running.delete(id);
+                if (again.delete(id) && !watch.ended()) run(id);
+              });
+          };
+          return (watched) => {
+            for (const [id, task] of watched) {
+              if (task.state !== 'working' && task.state !== 'waiting') run(id);
             }
           };
-          return deps.onActivityChange(check);
         };
         await watchTasks(
           {
@@ -652,16 +671,12 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     }),
   );
 
-  /** The inbox of the task's running session; a stale one (its socket is not
-   *  the live session's) is dropped. */
+  /** The inbox of the task's running session: the one reported on its live
+   *  socket (another Claude Code session in the worktree reports its own). */
   const liveInbox = (taskId: string): TaskInbox | undefined => {
-    const inbox = deps.getInbox(taskId);
-    if (!inbox) return undefined;
     const jobId = deps.getTask(taskId)?.jobId;
     const socket = jobId ? deps.getLiveSessions().get(jobId)?.messagingSocketPath : null;
-    if (socket && inbox.socket === socket) return inbox;
-    if (socket) deps.dropInbox(taskId);
-    return undefined;
+    return socket ? deps.getInbox(taskId, socket) : undefined;
   };
   const waitForInbox = async (taskId: string, deadline: number): Promise<TaskInbox | undefined> => {
     for (;;) {
@@ -738,7 +753,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         try {
           await deps.postToInbox(inbox, text);
         } catch (err) {
-          deps.dropInbox(task.id);
+          deps.dropInbox(task.id, inbox.socket);
           const reason = reasonOf(err);
           if (err instanceof InboxWriteError && err.delivered === 'no') {
             throw new ControlError(502, `${reason}; nothing was sent`);

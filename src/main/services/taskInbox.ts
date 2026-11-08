@@ -29,18 +29,37 @@ export interface TaskInbox {
   transcriptPath: string | null;
 }
 
-const inboxes = new Map<string, TaskInbox>();
+/**
+ * Every inbox reported for a task, by socket. A hook post only proves it came
+ * from a Claude Code session in the task's folder, not from the task's own
+ * session (the agent may run `claude -p` there), so a report is a candidate:
+ * the one in use is the one whose socket is the task's live session's
+ * (claudeSessionRegistry), looked up when a message goes out. The newest few
+ * are kept; the real session reports again on every prompt.
+ */
+const inboxes = new Map<string, Map<string, TaskInbox>>();
+const CANDIDATES_PER_TASK = 16;
 
 export function setTaskInbox(taskId: string, inbox: TaskInbox): void {
-  inboxes.set(taskId, inbox);
+  const candidates = inboxes.get(taskId) ?? new Map<string, TaskInbox>();
+  candidates.delete(inbox.socket); // re-inserted as the newest
+  candidates.set(inbox.socket, inbox);
+  for (const socket of candidates.keys()) {
+    if (candidates.size <= CANDIDATES_PER_TASK) break;
+    candidates.delete(socket);
+  }
+  inboxes.set(taskId, candidates);
 }
 
-export function getTaskInbox(taskId: string): TaskInbox | undefined {
-  return inboxes.get(taskId);
+/** The inbox reported for the task's session on `socket` (its live session's). */
+export function getTaskInbox(taskId: string, socket: string): TaskInbox | undefined {
+  return inboxes.get(taskId)?.get(socket);
 }
 
-export function dropTaskInbox(taskId: string): void {
-  inboxes.delete(taskId);
+/** Drop the inbox on `socket`, or, with none given, every inbox of the task. */
+export function dropTaskInbox(taskId: string, socket?: string): void {
+  if (socket === undefined) inboxes.delete(taskId);
+  else inboxes.get(taskId)?.delete(socket);
 }
 
 /** Claude Code closes a connection that sends no complete line in 30 s; a

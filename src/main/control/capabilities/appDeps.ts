@@ -17,6 +17,7 @@ import {
   startTaskSession,
 } from '../../services/ptyManager';
 import { readLiveSessions } from '../../services/claudeSessionRegistry';
+import { writeHookSettings } from '../../services/ptyHookSettings';
 import { dropTaskInbox, getTaskInbox, postToInbox } from '../../services/taskInbox';
 import { claudeProjectDir } from '../../utils/claudePaths';
 import { GitService } from '../../services/GitService';
@@ -115,7 +116,15 @@ export function taskDeps(): TaskCapabilityDeps {
       if (!config) return null;
       return linkedAdoWorkItem(await AzureDevOpsService.getWorkItem(config, id));
     },
-    linkItems: async (taskId, items) => TaskService.linkItems(taskId, items),
+    linkItems: async (taskId, items) => {
+      const task = TaskService.linkItems(taskId, items);
+      // The context is baked into the SessionStart hooks of the settings file
+      // a session start writes; rewrite it now, so the running session's next
+      // /clear or /compact re-injects it (Claude Code's file watcher picks up
+      // hook edits).
+      writeHookSettings(task.path, task.id);
+      return task;
+    },
     getInbox: getTaskInbox,
     dropInbox: dropTaskInbox,
     postToInbox: (inbox, text) => postToInbox(inbox, text),

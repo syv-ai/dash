@@ -43,7 +43,7 @@ describe('HookServer inbox reports', () => {
     const res = await post('inbox', inboxHeaders, { transcript_path: transcript });
     expect(res.status).toBe(200);
     expect(await res.text()).toBe('');
-    expect(getTaskInbox('t1')).toEqual({
+    expect(getTaskInbox('t1', '/tmp/cc-socks/9.sock')).toEqual({
       socket: '/tmp/cc-socks/9.sock',
       token: 'secret',
       transcriptPath: transcript,
@@ -54,13 +54,13 @@ describe('HookServer inbox reports', () => {
 
   it('UserPromptSubmit (/hook/busy) stores it too', async () => {
     await post('busy', inboxHeaders);
-    expect(getTaskInbox('t1')?.socket).toBe('/tmp/cc-socks/9.sock');
+    expect(getTaskInbox('t1', '/tmp/cc-socks/9.sock')?.token).toBe('secret');
   });
 
   it('ignores empty headers (variables unset) and a transcript outside Claude Code projects', async () => {
     await post('inbox', { 'X-Dash-Messaging-Socket': '', 'X-Dash-Messaging-Token': '' });
-    expect(getTaskInbox('t1')).toBeUndefined();
+    expect(getTaskInbox('t1', '')).toBeUndefined();
     await post('inbox', inboxHeaders, { transcript_path: '/etc/passwd.jsonl' });
-    expect(getTaskInbox('t1')?.transcriptPath).toBeNull();
+    expect(getTaskInbox('t1', '/tmp/cc-socks/9.sock')?.transcriptPath).toBeNull();
   });
 });

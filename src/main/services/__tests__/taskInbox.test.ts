@@ -7,6 +7,7 @@ import {
   InboxWriteError,
   findTaskMessage,
   forgetTask,
+  dropTaskInbox,
   getTaskInbox,
   postToInbox,
   recordTaskMessage,
@@ -82,9 +83,15 @@ describe('postToInbox', () => {
 });
 
 describe('inbox and message store', () => {
-  it('keeps an inbox per task and forgets it with the task', () => {
+  it('keeps every inbox reported for a task by socket, and forgets them with the task', () => {
     setTaskInbox('t', { socket: '/s', token: 'k', transcriptPath: null });
-    expect(getTaskInbox('t')?.socket).toBe('/s');
+    // Another session in the worktree (a `claude -p`) doesn't replace it.
+    setTaskInbox('t', { socket: '/other', token: 'o', transcriptPath: null });
+    expect(getTaskInbox('t', '/s')?.token).toBe('k');
+    expect(getTaskInbox('t', '/other')?.token).toBe('o');
+    dropTaskInbox('t', '/other');
+    expect(getTaskInbox('t', '/other')).toBeUndefined();
+    expect(getTaskInbox('t', '/s')).toBeDefined();
     recordTaskMessage('t', {
       messageId: 'm_1',
       sentAt: 1,
@@ -93,8 +100,20 @@ describe('inbox and message store', () => {
       transcriptPath: null,
     });
     forgetTask('t');
-    expect(getTaskInbox('t')).toBeUndefined();
+    expect(getTaskInbox('t', '/s')).toBeUndefined();
     expect(findTaskMessage('t', 'm_1')).toBeUndefined();
+  });
+
+  it('keeps the newest 16 inboxes per task, a re-report counting as new', () => {
+    const report = (socket: string) =>
+      setTaskInbox('t', { socket, token: socket, transcriptPath: null });
+    report('/live');
+    for (let i = 0; i < 15; i++) report(`/p${i}`);
+    report('/live');
+    report('/p15');
+    expect(getTaskInbox('t', '/live')).toBeDefined();
+    expect(getTaskInbox('t', '/p0')).toBeUndefined();
+    expect(getTaskInbox('t', '/p15')).toBeDefined();
   });
 
   it('keeps the last 20 messages per task', () => {

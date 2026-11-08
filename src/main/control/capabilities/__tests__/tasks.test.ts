@@ -6,6 +6,7 @@ import { registerProjectCapabilities } from '../projects';
 import type { LiveSession } from '../../../services/claudeSessionRegistry';
 import { registerTaskCapabilities, toTaskView, type TaskCapabilityDeps } from '../tasks';
 import { FolderOccupiedError } from '../../../services/FolderOccupiedError';
+import { DASH_ACCESS_OFF, ORCHESTRATOR_ACCESS_OFF } from '../../scope';
 
 const orch = { kind: 'orchestrator' } as const;
 const asTask = (taskId: string) => ({ kind: 'task', taskId }) as const;
@@ -781,7 +782,7 @@ describe('tasks.watch', () => {
   it('unsubscribes when the stream is aborted', async () => {
     vi.useFakeTimers();
     const w = watch(orch);
-    expect(listeners).toHaveLength(2); // the views and the reply lines
+    expect(listeners).toHaveLength(1);
     expect(taskListeners).toHaveLength(1);
     w.ac.abort();
     await expect(w.done).resolves.toBeUndefined();
@@ -790,6 +791,40 @@ describe('tasks.watch', () => {
     expect(vi.getTimerCount()).toBe(0);
     emitActivity({ child: { state: 'busy' } });
     expect(ids(w.lines)).toEqual(['me', 'child', 'sibling', 'other']);
+  });
+
+  it("ends with an error once the caller's access is gone", async () => {
+    // A task caller: its Dash access turned off, or the task itself removed.
+    const mine = watch(asTask('me'));
+    task('me').dashAccess = false;
+    emitTasks();
+    await expect(mine.done).rejects.toMatchObject({ status: 403, message: DASH_ACCESS_OFF });
+    task('me').dashAccess = true;
+    const gone = watch(asTask('me'));
+    tasks.splice(tasks.indexOf(task('me')), 1);
+    emitActivity({});
+    await expect(gone.done).rejects.toMatchObject({ status: 403 });
+    expect(listeners).toHaveLength(0);
+    expect(taskListeners).toHaveLength(0);
+  });
+
+  it('ends with an error once orchestrator access is turned off, on the next poll', async () => {
+    vi.useFakeTimers();
+    let allowed = true;
+    registry = createRegistry({
+      ...fakeLookups(projects, tasks),
+      isOrchestratorAllowed: () => allowed,
+    });
+    registerTaskCapabilities(registry, deps as never);
+    const w = watch(orch);
+    allowed = false;
+    const settled = expect(w.done).rejects.toMatchObject({
+      status: 403,
+      message: ORCHESTRATOR_ACCESS_OFF,
+    });
+    await vi.advanceTimersByTimeAsync(2_000);
+    await settled;
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('refuses before streaming: out of scope, archived, both targets, no stream', async () => {

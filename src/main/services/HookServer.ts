@@ -25,7 +25,7 @@ export const hookEvents = new EventEmitter();
 
 /**
  * The session's inbox from a hook's `X-Dash-Messaging-*` headers
- * (ptyHookSettings INBOX_HEADER_ARGS), with the transcript the payload names;
+ * (ptyHookSettings INBOX_HEADERS_HEREDOC), with the transcript the payload names;
  * null when the session sent none. The token is never logged.
  */
 export function inboxFromHeaders(

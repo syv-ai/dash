@@ -8,16 +8,22 @@ export type TaskWatchEvent =
 
 /**
  * Something else a watch reports about its tasks, beside their views (e.g. a
- * task's reply to a message): given the watch, it emits its own lines for the
- * tasks being watched, and returns its unsubscribe.
+ * task's reply to a message): given the watch, it returns its check, which the
+ * watch runs after each of its own (every change and every poll) with the
+ * views of the tasks watched now. It emits its own lines, async if it likes:
+ * `emit` drops them once the watch has ended.
  */
 export type TaskWatchSource = (watch: {
-  isWatched(taskId: string): boolean;
   emit(line: { event: string } & Record<string, unknown>): void;
-}) => () => void;
+  ended(): boolean;
+}) => (watched: ReadonlyMap<string, TaskView>) => void;
 
 export interface TaskWatchOptions {
-  /** The tasks watched now, by id (in scope, not archived). Read again on every change. */
+  /**
+   * The tasks watched now, by id (in scope, not archived). Read again on every
+   * change; a throw ends the watch with that error (e.g. the caller's access
+   * was turned off).
+   */
   read(): Map<string, TaskView>;
   /** Watching one task: the stream ends once it is removed. */
   single: boolean;
@@ -38,6 +44,7 @@ export function watchTasks(opts: TaskWatchOptions, stream: StreamSink): Promise<
     /** The last view sent, serialized, by task id. */
     const sent = new Map<string, string>();
     const unsubscribes: Array<() => void> = [];
+    let sourceChecks: Array<(watched: ReadonlyMap<string, TaskView>) => void> = [];
     let done = false;
 
     const finish = (err?: unknown) => {
@@ -67,6 +74,8 @@ export function watchTasks(opts: TaskWatchOptions, stream: StreamSink): Promise<
           stream.emit({ event: 'removed', taskId: id } satisfies TaskWatchEvent);
           if (opts.single) finish();
         }
+        if (done) return;
+        for (const sourceCheck of sourceChecks) sourceCheck(now);
       } catch (err) {
         // Not into the emitter that called us (ActivityMonitor, taskEvents).
         finish(err);
@@ -77,15 +86,15 @@ export function watchTasks(opts: TaskWatchOptions, stream: StreamSink): Promise<
     const timer = setInterval(check, opts.pollMs);
     if (stream.signal.aborted) return finish();
     stream.signal.addEventListener('abort', onAbort);
-    check();
-    if (done) return;
-    for (const subscribe of opts.subscriptions) unsubscribes.push(subscribe(check));
     const watch = {
-      isWatched: (taskId: string) => sent.has(taskId),
       emit: (line: { event: string } & Record<string, unknown>) => {
         if (!done) stream.emit(line);
       },
+      ended: () => done,
     };
-    for (const source of opts.sources ?? []) unsubscribes.push(source(watch));
+    sourceChecks = (opts.sources ?? []).map((source) => source(watch));
+    check();
+    if (done) return;
+    for (const subscribe of opts.subscriptions) unsubscribes.push(subscribe(check));
   });
 }

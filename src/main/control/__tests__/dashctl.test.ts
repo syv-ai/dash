@@ -84,7 +84,7 @@ describe('the dashctl script, against a running Dash', () => {
   const taskId = 't1';
   let server: ControlServer;
   let feed: StreamSink | null;
-  let endFeed: () => void;
+  let endFeed: (err?: Error) => void;
 
   beforeEach(async () => {
     initTokens(userData);
@@ -119,7 +119,9 @@ describe('the dashctl script, against a running Dash', () => {
         handler: async (_ctx, _input, stream) => {
           feed = stream;
           stream.emit({ n: 0 });
-          await new Promise<void>((resolve) => (endFeed = resolve));
+          await new Promise<void>(
+            (resolve, reject) => (endFeed = (err) => (err ? reject(err) : resolve())),
+          );
         },
       }),
     );
@@ -196,5 +198,73 @@ describe('the dashctl script, against a running Dash', () => {
     endFeed();
     expect(await exited).toBe(0);
     expect(stdout).toBe('{"n":0}\n{"n":1}\n');
+  });
+
+  /** Start `feed follow`, wait for its first line; its output and exit as they come. */
+  async function follow() {
+    const child = spawn(controlPaths(userData).dashctl, ['feed', 'follow'], { env: env() });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
+    child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
+    const exited = new Promise<number | null>((resolve) => child.on('exit', resolve));
+    await vi.waitFor(() => expect(stdout).toBe('{"n":0}\n'));
+    return { exited, out: () => ({ stdout, stderr }) };
+  }
+
+  it('exits 1 when a stream ends on an error line', async () => {
+    const f = await follow();
+    endFeed(new ControlError(403, 'access was turned off'));
+    expect(await f.exited).toBe(1);
+    expect(f.out().stdout).toBe(
+      '{"n":0}\n{"error":"dashctl feed follow: access was turned off"}\n',
+    );
+  });
+
+  it('exits 1, saying so, when Dash stops mid-stream', async () => {
+    const f = await follow();
+    await server.stop();
+    expect(await f.exited).toBe(1);
+    expect(f.out()).toEqual({
+      stdout: '{"n":0}\n',
+      stderr: 'dashctl: the stream ended: Dash stopped\n',
+    });
+  });
+});
+
+describe('the dashctl script, against an answer cut off', () => {
+  it('exits 1 and prints none of it', async () => {
+    const net = await import('net');
+    const server = net.createServer((socket) => {
+      socket.once('data', () => {
+        socket.write(
+          'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 100\r\n\r\npartial',
+        );
+        setTimeout(() => socket.destroy(), 50);
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const paths = controlPaths(userData);
+    writeDashctl(userData);
+    fs.writeFileSync(paths.port, String((server.address() as { port: number }).port));
+    const res = await new Promise<{ code: number; stdout: string; stderr: string }>((resolve) =>
+      execFile(
+        paths.dashctl,
+        ['tasks', 'list'],
+        {
+          env: {
+            PATH: process.env.PATH ?? '/usr/bin:/bin',
+            DASH_CONTROL_DIR: paths.dir,
+            DASH_CALLER: 'task:t1',
+            DASH_TOKEN: 'x',
+          },
+        },
+        (err, stdout, stderr) => resolve({ code: err ? Number(err.code) : 0, stdout, stderr }),
+      ),
+    );
+    server.close();
+    expect(res.code).toBe(1);
+    expect(res.stdout).toBe('');
+    expect(res.stderr).toMatch(/^dashctl: the answer was cut off/);
   });
 });

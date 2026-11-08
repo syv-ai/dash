@@ -24,6 +24,7 @@ import type { ControlInfo } from '../../shared/types';
 export const registry: Registry = createRegistry({
   getProjects: () => DatabaseService.getProjects(),
   getTask: (id) => DatabaseService.getTask(id),
+  isOrchestratorAllowed: () => orchestratorAccess,
 });
 
 let server: ControlServer | null = null;

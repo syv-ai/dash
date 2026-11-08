@@ -116,14 +116,21 @@ export function buildTaskContext(
 /**
  * A task's persisted context after its linked items change from `before` to
  * `after`: the block `before` produced is replaced by the one `after` does.
+ * A context that no longer ends with that block (edited since, or written by
+ * an older Dash) keeps it as it is and gets a block of the added items only,
+ * so no item is listed twice.
  */
 export function relinkTaskContext(
   stored: string | null,
   before: LinkedItem[],
   after: LinkedItem[],
 ): string {
+  const own = stored ?? '';
   const oldBlock = before.length > 0 ? formatTaskContextPrompt(before) : null;
-  let own = stored ?? '';
-  if (oldBlock && own.endsWith(oldBlock)) own = own.slice(0, -oldBlock.length);
-  return buildTaskContext(own, after);
+  if (!oldBlock) return buildTaskContext(own, after);
+  if (own.endsWith(oldBlock)) return buildTaskContext(own.slice(0, -oldBlock.length), after);
+  const added = after.filter(
+    (a) => !before.some((b) => b.provider === a.provider && b.id === a.id),
+  );
+  return buildTaskContext(own, added);
 }

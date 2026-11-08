@@ -18,7 +18,14 @@ export class ControlError extends Error {
 
 export interface CapabilityContext {
   caller: Caller;
+  /** The caller's scope when the call started. */
   scope: ScopeView;
+  /**
+   * The caller's scope now, for a handler that outlives the moment it was
+   * called (a stream): throws a 403 ControlError once the caller's access is
+   * gone (the Settings switch, the task's Dash access, the task itself).
+   */
+  rescope(): ScopeView;
 }
 
 /**
@@ -216,7 +223,8 @@ export function createRegistry(deps: ScopeLookups): Registry {
       }
 
       try {
-        return await cap.handler({ caller, scope }, parsed.data, stream ?? NO_STREAM);
+        const rescope = () => scopeOrThrow(caller, deps);
+        return await cap.handler({ caller, scope, rescope }, parsed.data, stream ?? NO_STREAM);
       } catch (err) {
         if (err instanceof ControlError) throw err;
         if (err instanceof FolderOccupiedError) throw new ControlError(409, err.message);
