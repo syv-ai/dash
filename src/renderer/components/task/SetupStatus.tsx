@@ -15,7 +15,7 @@ export function SetupStatus({
   variant: 'pill' | 'inline';
 }) {
   const run = useSetup((s) => s.runs[worktreePath]);
-  const openLog = useSetup((s) => s.openLog);
+  const showSetup = useSetup((s) => s.showSetup);
   if (!run || run.status === 'succeeded') return null;
 
   const running = run.status === 'running';
@@ -26,13 +26,13 @@ export function SetupStatus({
       : 'hover:text-foreground';
   return (
     <Tooltip
-      content={running ? 'Setup script running: view output' : (run.error ?? 'Setup failed')}
+      content={running ? 'Setup script running: show output' : (run.error ?? 'Setup failed')}
     >
       <button
         type="button"
         onClick={(e) => {
           e.stopPropagation();
-          void openLog(worktreePath);
+          showSetup(worktreePath);
         }}
         className={`inline-flex items-center gap-1 shrink-0 text-[11px] transition-colors ${tone} ${shape}`}
       >

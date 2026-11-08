@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { makeElectronApiMock, installWindow, resetWindow } from './helpers/electronApiMock';
 import type { SetupRun } from '../../../shared/setupRuns';
+import type { Task } from '../../../shared/types';
 
 vi.mock('../../terminal/SessionRegistry', () => ({
   sessionRegistry: { dispose: vi.fn(), disposeByPrefix: vi.fn(), restartAllForTask: vi.fn() },
@@ -11,6 +12,7 @@ vi.mock('sonner', () => ({
 
 import { toast } from 'sonner';
 import { useSetup } from '../setupStore';
+import { useProjects } from '../projectsStore';
 
 const run = (worktreePath: string, over: Partial<SetupRun> = {}): SetupRun => ({
   worktreePath,
@@ -21,9 +23,11 @@ const run = (worktreePath: string, over: Partial<SetupRun> = {}): SetupRun => ({
   ...over,
 });
 
+const task = (id: string, projectId: string, path: string): Task =>
+  ({ id, projectId, name: `task ${id}`, path, useWorktree: true, archivedAt: null }) as Task;
+
 describe('setupStore', () => {
   let onChanged: (r: SetupRun) => void;
-  let onOutput: (d: { worktreePath: string; chunk: string }) => void;
   let onForgotten: (d: { worktreePath: string }) => void;
   let api: ReturnType<typeof makeElectronApiMock>;
   let cleanup: () => void;
@@ -39,21 +43,18 @@ describe('setupStore', () => {
         onForgotten = cb;
         return () => {};
       }),
-      onWorktreeSetupOutput: vi.fn((cb: typeof onOutput) => {
-        onOutput = cb;
-        return () => {};
-      }),
     });
     api.worktreeSetupList.mockResolvedValue({
       success: true,
       data: [run('/wt/a', { status: 'succeeded', endedAt: 2 })],
     });
-    api.worktreeSetupLog.mockResolvedValue({
-      success: true,
-      data: { text: 'so far\n', trimmed: false },
-    });
     installWindow(api);
-    useSetup.setState({ runs: {}, viewPath: null, viewLog: null });
+    useProjects.setState({
+      activeProjectId: 'p1',
+      activeTaskId: 't1',
+      tasksByProject: { p1: [task('t1', 'p1', '/wt/one')], p2: [task('t2', 'p2', '/wt/two')] },
+    });
+    useSetup.setState({ runs: {}, setupTabRequest: null });
     cleanup = useSetup.getState().init();
   });
 
@@ -68,54 +69,51 @@ describe('setupStore', () => {
     expect(useSetup.getState().runs['/wt/a']?.status).toBe('succeeded');
   });
 
-  it('tracks a run from running to failed and toasts once with a view action', () => {
-    onChanged(run('/wt/b'));
-    expect(useSetup.getState().runs['/wt/b']?.status).toBe('running');
-    onChanged(run('/wt/b', { status: 'failed', error: 'boom', endedAt: 2 }));
-    expect(useSetup.getState().runs['/wt/b']?.status).toBe('failed');
+  it('tracks a run to failed and toasts once, with an action that shows the Setup tab', () => {
+    onChanged(run('/wt/two'));
+    expect(useSetup.getState().runs['/wt/two']?.status).toBe('running');
+    onChanged(run('/wt/two', { status: 'failed', error: 'boom', endedAt: 2 }));
+    expect(useSetup.getState().runs['/wt/two']?.status).toBe('failed');
     expect(toast.error).toHaveBeenCalledTimes(1);
-    const opts = vi.mocked(toast.error).mock.calls[0]![1] as {
-      description: string;
-      action: { label: string; onClick: () => void };
-    };
+    const [title, opts] = vi.mocked(toast.error).mock.calls[0]! as [
+      string,
+      { description: string; action: { label: string; onClick: () => void } },
+    ];
+    expect(title).toBe('Setup failed for task t2');
     expect(opts.description).toBe('boom');
     expect(opts.action.label).toBe('View output');
     opts.action.onClick();
-    expect(useSetup.getState().viewPath).toBe('/wt/b');
+    expect(useSetup.getState().setupTabRequest?.worktreePath).toBe('/wt/two');
   });
 
-  it('appends output only for the open view', async () => {
-    onOutput({ worktreePath: '/wt/c', chunk: 'ignored' });
-    await useSetup.getState().openLog('/wt/c');
-    expect(useSetup.getState().viewLog?.text).toBe('so far\n');
-    onOutput({ worktreePath: '/wt/c', chunk: 'more\n' });
-    onOutput({ worktreePath: '/wt/other', chunk: 'nope' });
-    expect(useSetup.getState().viewLog?.text).toBe('so far\nmore\n');
+  it('showSetup selects the owning task, across projects, and makes a new request each time', () => {
+    useSetup.getState().showSetup('/wt/two');
+    expect(useProjects.getState().activeProjectId).toBe('p2');
+    expect(useProjects.getState().activeTaskId).toBe('t2');
+    const first = useSetup.getState().setupTabRequest!;
+    useSetup.getState().showSetup('/wt/two');
+    expect(useSetup.getState().setupTabRequest!.seq).toBe(first.seq + 1);
+    useSetup.getState().clearSetupTabRequest();
+    expect(useSetup.getState().setupTabRequest).toBeNull();
   });
 
-  it('clears the open log when a new run starts', async () => {
-    await useSetup.getState().openLog('/wt/d');
-    onChanged(run('/wt/d', { startedAt: 5 }));
-    expect(useSetup.getState().viewLog).toEqual({ text: '', trimmed: false });
+  it('drops a forgotten run and its pending tab request', () => {
+    onChanged(run('/wt/one'));
+    useSetup.getState().showSetup('/wt/one');
+    onForgotten({ worktreePath: '/wt/one' });
+    expect(useSetup.getState().runs['/wt/one']).toBeUndefined();
+    expect(useSetup.getState().setupTabRequest).toBeNull();
   });
 
-  it('rerun opens the output, or toasts when main refuses', async () => {
-    await useSetup.getState().rerun({ id: 't1', path: '/wt/e' });
+  it('rerun shows the Setup tab, or toasts when main refuses', async () => {
+    await useSetup.getState().rerun({ id: 't1', path: '/wt/one' });
     expect(api.worktreeSetupRerun).toHaveBeenCalledWith('t1');
-    expect(useSetup.getState().viewPath).toBe('/wt/e');
+    expect(useSetup.getState().setupTabRequest?.worktreePath).toBe('/wt/one');
 
-    useSetup.getState().closeLog();
+    useSetup.getState().clearSetupTabRequest();
     api.worktreeSetupRerun.mockResolvedValueOnce({ success: false, error: 'already running' });
-    await useSetup.getState().rerun({ id: 't1', path: '/wt/e' });
+    await useSetup.getState().rerun({ id: 't1', path: '/wt/one' });
     expect(toast.error).toHaveBeenCalledWith('already running');
-    expect(useSetup.getState().viewPath).toBeNull();
-  });
-
-  it('drops a forgotten run and closes its view', async () => {
-    onChanged(run('/wt/f'));
-    await useSetup.getState().openLog('/wt/f');
-    onForgotten({ worktreePath: '/wt/f' });
-    expect(useSetup.getState().runs['/wt/f']).toBeUndefined();
-    expect(useSetup.getState().viewPath).toBeNull();
+    expect(useSetup.getState().setupTabRequest).toBeNull();
   });
 });

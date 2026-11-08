@@ -15,7 +15,7 @@ import { PortsDrawerWrapper } from './components/rightInspector/PortsDrawerWrapp
 import { editorOpening } from './components/diffEditor/data/viewPersistence';
 const DiffEditorModal = lazy(() => import('./components/diffEditor/DiffEditorModal'));
 import { ShellDrawerWrapper } from './components/terminal/ShellDrawerWrapper';
-import { SetupLogModal } from './components/task/SetupLogModal';
+import { useSetup } from './stores/setupStore';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
 import { ExtensionsModal } from './components/extensions/ExtensionsModal';
 import { MemoryModal } from './components/memory/MemoryModal';
@@ -940,6 +940,15 @@ export function App() {
     }
   }, [changesPanelCollapsed]);
 
+  // A Setup tab request needs the drawer mounted: with the drawer in the
+  // inspector, a collapsed inspector unmounts it, so open the inspector.
+  const setupTabRequest = useSetup((s) => s.setupTabRequest);
+  useEffect(() => {
+    if (setupTabRequest && shellDrawerPosition === 'right' && changesPanelCollapsed) {
+      toggleChangesPanel();
+    }
+  }, [setupTabRequest, shellDrawerPosition, changesPanelCollapsed, toggleChangesPanel]);
+
   const toggleShellDrawer = useCallback(() => {
     const panel = shellDrawerPanelRef.current;
     if (!panel) return;
@@ -1530,8 +1539,6 @@ export function App() {
           onConfirm={handleDeleteProjectConfirm}
         />
       )}
-
-      <SetupLogModal />
 
       {remoteControlModalPtyId && (
         <RemoteControlModal

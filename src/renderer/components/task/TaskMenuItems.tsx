@@ -53,7 +53,7 @@ export function TaskMenuItems({
     return null;
   });
   const setupRun = useSetup((s) => (task ? s.runs[task.path] : undefined));
-  const openSetupLog = useSetup((s) => s.openLog);
+  const showSetup = useSetup((s) => s.showSetup);
   const rerunSetup = useSetup((s) => s.rerun);
   return (
     <>
@@ -68,7 +68,7 @@ export function TaskMenuItems({
         Task settings
       </DropdownMenuItem>
       {task?.useWorktree && setupRun && (
-        <DropdownMenuItem onSelect={() => void openSetupLog(task.path)}>
+        <DropdownMenuItem onSelect={() => showSetup(task.path)}>
           <ScrollText size={13} strokeWidth={1.8} className="text-muted-foreground" />
           Setup output
         </DropdownMenuItem>

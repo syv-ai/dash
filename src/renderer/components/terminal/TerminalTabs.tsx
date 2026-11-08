@@ -1,5 +1,14 @@
 import React, { useRef, useEffect, useLayoutEffect, useState } from 'react';
-import { Terminal, ChevronDown, ChevronUp, ChevronsRight, X, Plus, Check } from 'lucide-react';
+import {
+  Terminal,
+  ChevronDown,
+  ChevronUp,
+  ChevronsRight,
+  X,
+  Plus,
+  Check,
+  Loader2,
+} from 'lucide-react';
 import { sessionRegistry } from '../../terminal/SessionRegistry';
 import { Tooltip } from '../ui/Tooltip';
 import {
@@ -16,6 +25,8 @@ import { selectTaskById, useProjects } from '../../stores/projectsStore';
 import { WIZARDS } from '../../../shared/wizards';
 import { type TuiFeatureId } from '../../../shared/tuiProtocol';
 import type { Tab } from '../../../shared/drawerTabs';
+import { useSetup } from '../../stores/setupStore';
+import { SetupLogPane } from './SetupLogPane';
 
 /** Minimum drawer height (px) for a side-car TUI's CTA start screen. */
 const MIN_TUI_DRAWER_PX = 300;
@@ -111,6 +122,22 @@ export function TerminalTabs({
   const [trackWidth, setTrackWidth] = useState(0);
   const [, setWidthsVersion] = useState(0);
 
+  // The Setup tab: not a drawer_tabs row and no PTY. It exists while this
+  // worktree has a setup run this session, and when selected it takes the
+  // terminal area's place (the active PTY tab detaches until it's left).
+  const setupRun = useSetup((s) => s.runs[cwd]);
+  const setupTabRequest = useSetup((s) => s.setupTabRequest);
+  const [setupSelected, setSetupSelected] = useState(false);
+  const setupActive = setupSelected && !!setupRun;
+
+  // Toast, task row, header or menu asked for this worktree's Setup tab.
+  useEffect(() => {
+    if (!setupTabRequest || setupTabRequest.worktreePath !== cwd) return;
+    useSetup.getState().clearSetupTabRequest();
+    setSetupSelected(true);
+    onExpand();
+  }, [setupTabRequest, cwd, onExpand]);
+
   // Subscribe to main's drawer-tabs feed. On first mount of a task that has no
   // rows yet, seed the default shell tab so we don't render an empty header.
   useEffect(() => {
@@ -197,7 +224,7 @@ export function TerminalTabs({
   // panel to hug its pinned canvas. The canvas is fixed-width, so its px is
   // stable once rendered — measure after a couple of frames. Reset to false
   // on unmount (task switch) so the panel restores for the next task.
-  const activeKind = tabs.find((t) => t.id === activeTabId)?.kind;
+  const activeKind = setupActive ? undefined : tabs.find((t) => t.id === activeTabId)?.kind;
   useEffect(() => {
     if (activeKind !== 'tui') {
       onTuiActiveChange?.(false);
@@ -229,7 +256,7 @@ export function TerminalTabs({
   // Attach the active tab's session to the container.
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || !activeTabId) return;
+    if (!container || !activeTabId || setupActive) return;
 
     while (container.firstChild) {
       container.removeChild(container.firstChild);
@@ -254,12 +281,13 @@ export function TerminalTabs({
     return () => {
       void sessionRegistry.detach(activeTabId);
     };
-  }, [activeTabId, cwd, tabs]);
+  }, [activeTabId, cwd, tabs, setupActive]);
 
   // Logs button with a Dash-owned tab: main asks us to surface that tab.
   useEffect(() => {
     const off = window.electronAPI.onPortsServiceFocusTab(({ taskId: tid, tabId, reset }) => {
       if (tid !== taskId) return;
+      setSetupSelected(false);
       onExpand();
       // reset: main respawned this service's PTY under the same id. The cached
       // session is still bound to the dead process — re-link it (without
@@ -306,6 +334,7 @@ export function TerminalTabs({
   async function handleAddTab() {
     const id = `shell:${taskId}:t${Date.now()}`;
     pendingFocusRef.current = id;
+    setSetupSelected(false);
     await window.electronAPI.drawerTabsAdd(taskId, {
       kind: 'shell',
       label: nextShellLabel(tabs.map((t) => t.label)),
@@ -348,6 +377,7 @@ export function TerminalTabs({
   }
 
   function handleSelectTab(tabId: string) {
+    setSetupSelected(false);
     void window.electronAPI.drawerTabsSetActive(taskId, tabId);
   }
 
@@ -388,7 +418,7 @@ export function TerminalTabs({
     // replaces the busy orb for this kind — a side-car is always "running",
     // so the orb carried no signal.
     const isHotTui = tab.kind === 'tui' && !seenTuiIds.has(tab.id);
-    const isActive = tab.id === activeTabId;
+    const isActive = tab.id === activeTabId && !setupActive;
     // No underline. The active (focused) tab — shell or service alike — wears
     // the port-terminal periwinkle wash as a full-height fill. Inactive tabs
     // keep a per-kind look so a service tab still reads differently from a
@@ -477,6 +507,9 @@ export function TerminalTabs({
         >
           <Terminal size={12} strokeWidth={1.8} />
           <span className="text-[11px] font-semibold uppercase tracking-[0.08em]">{label}</span>
+          {setupRun?.status === 'running' && (
+            <Loader2 size={11} strokeWidth={2} className="animate-spin" />
+          )}
           {hasUnseenTui ? (
             <span className="w-1.5 h-1.5 rounded-full bg-destructive shadow-[0_0_6px_hsl(var(--destructive)/0.6)] status-pulse" />
           ) : (
@@ -537,6 +570,24 @@ export function TerminalTabs({
           </div>
           {/* TUI tabs (e.g. ports setup) sit right-aligned and tinted so they read
               as Dash speaking, not another terminal. */}
+          {setupRun && (
+            <div
+              className={`relative flex items-center justify-center gap-1 px-2.5 h-full cursor-pointer transition-colors shrink-0 select-none ${
+                setupActive
+                  ? 'bg-[hsl(var(--terminal-service)/0.16)] text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              onClick={() => setSetupSelected(true)}
+            >
+              <span className="text-[11px] font-medium">Setup</span>
+              {setupRun.status === 'running' && (
+                <Loader2 size={10} strokeWidth={2} className="animate-spin" />
+              )}
+              {setupRun.status === 'failed' && (
+                <span className="w-1.5 h-1.5 rounded-full bg-destructive" />
+              )}
+            </div>
+          )}
           {tabs.filter((t) => t.kind === 'tui').map(renderTab)}
           <DropdownMenu
             onOpenChange={(open) => {
@@ -588,8 +639,19 @@ export function TerminalTabs({
         className={`terminal-container terminal-drawer flex-1 min-h-0 ${
           activeTabIsTui ? 'tui-canvas-host' : ''
         } ${collapsed ? '' : 'px-2 pb-1.5'}`}
-        style={collapsed ? { height: 0, overflow: 'hidden' } : undefined}
+        style={
+          setupActive
+            ? { display: 'none' }
+            : collapsed
+              ? { height: 0, overflow: 'hidden' }
+              : undefined
+        }
       />
+      {setupActive && !collapsed && (
+        <div className="flex-1 min-h-0 px-2 pb-1.5">
+          <SetupLogPane taskId={taskId} worktreePath={cwd} />
+        </div>
+      )}
     </div>
   );
 }
