@@ -167,6 +167,16 @@ describe('dashctl argv', () => {
       name: 'review.drafts_update',
       input: { id: 'd1', taskId: 't1', body: 'New text\n\nsecond line' },
     });
+    // With --kind, the body is read too.
+    expect(resolve([...argv, '--kind', 'note'], 'Reworded\n')).toMatchObject({
+      input: { id: 'd1', body: 'Reworded', kind: 'note' },
+    });
+    // Empty or blank stdin (a terminal sends none) is a usage error, never a body silently dropped.
+    for (const empty of ['', '\n', '  \n\t']) {
+      const r = resolve([...argv, '--kind', 'note'], empty);
+      expect(r.kind).toBe('usage');
+      expect((r as { text: string }).text).toContain('--body -: stdin was empty');
+    }
     // Optional, so a piped body without --body - isn't read (the handler refuses an empty update).
     expect(resolve(argv.slice(0, -2), 'New text')).toEqual({
       kind: 'call',

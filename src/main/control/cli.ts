@@ -14,8 +14,8 @@ import { mainCheckout, projectAtPath, resolveFrom } from './projectPaths';
  * 'tasks.create' is `dashctl tasks create`, 'review.drafts_create' is
  * `dashctl review drafts-create`. Every input is a flag (`--task-id` or
  * `--taskId`); the capability's `cli.args` are positional too. Its `cli.stdin`
- * input is read from stdin when given as `-`, or when it is required and not
- * given; an optional one is never read implicitly, so a stdin the agent's
+ * input is read from stdin when given as `-` (empty stdin is then a usage
+ * error), or when it is required and not given; an optional one is never read implicitly, so a stdin the agent's
  * shell happens to hold is never swallowed. `--project` takes a project's id,
  * name or path (relative to the caller's working directory): the project's
  * folder, one inside it, or a worktree of it. A `cli.paths` input is a path
@@ -235,9 +235,10 @@ export function resolveArgv(
       raw[prop] = value;
     });
     const fromStdin = c.cli?.stdin;
+    const askedForStdin = fromStdin !== undefined && raw[fromStdin] === '-';
     const readStdin =
-      fromStdin !== undefined &&
-      (raw[fromStdin] === '-' || (!(fromStdin in raw) && requiredOf(c).has(fromStdin)));
+      askedForStdin ||
+      (fromStdin !== undefined && !(fromStdin in raw) && requiredOf(c).has(fromStdin));
     if (readStdin) delete raw[fromStdin!];
     for (const [prop, value] of Object.entries(raw)) {
       input[prop] = coerce(prop, props[prop]!, value);
@@ -247,6 +248,10 @@ export function resolveArgv(
       if (stdin === null) return { kind: 'stdin' };
       // A heredoc ends in a newline the writer didn't mean.
       const text = stdin.replace(/\r?\n$/, '');
+      // Asked for by name, an empty read is a mistake (a terminal sends nothing), not "leave it out".
+      if (askedForStdin && text.trim() === '') {
+        throw new UsageError(`--${flagFor(fromStdin!)} -: stdin was empty`);
+      }
       if (text !== '') input[fromStdin!] = text;
     }
     for (const prop of c.cli?.paths ?? []) {
