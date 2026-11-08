@@ -188,7 +188,8 @@ export class TelemetryService {
 
     const config: TelemetryConfig = {
       instanceId: crypto.randomUUID(),
-      enabled: true,
+      // A dev run (its own Dash-dev folder) sends nothing unless turned on.
+      enabled: app.isPackaged,
       lastActiveDate: null,
     };
     this.writeConfig(config);
