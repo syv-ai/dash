@@ -1,16 +1,14 @@
 import { app } from 'electron';
 import * as path from 'path';
+import { userDataDir } from './userDataDir';
 
 // 1. Set app name BEFORE any app.getPath() calls
 app.setName('Dash');
 
-// Dev/testing escape hatch: point userData (DB, snapshots, hook-port file and
-// the single-instance lock) at another directory so a second Dash — e.g. a
-// checkout under development — can run beside the installed one without
-// sharing its database.
-if (process.env.DASH_USER_DATA_DIR) {
-  app.setPath('userData', path.resolve(process.env.DASH_USER_DATA_DIR));
-}
+// Also before anything reads userData: a dev run gets its own folder, and
+// DASH_USER_DATA_DIR another one (userDataDir.ts).
+const dataDir = userDataDir(process.env, app.isPackaged, app.getPath('appData'));
+if (dataDir) app.setPath('userData', dataDir);
 
 // 2. Install path aliases for main process
 // @shared/* → dist/main/shared/*

@@ -131,7 +131,7 @@ describe('the dashctl script, against a running Dash', () => {
       registry,
       isOrchestratorAllowed: () => false,
       requestOrchestratorAccess: async () => false,
-      version: '0.0.0-test',
+      build: { version: '0.0.0-test', packaged: true },
     });
     await server.start();
     writeDashctl(userData);

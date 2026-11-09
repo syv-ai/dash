@@ -298,7 +298,7 @@ describe('the dashctl script', () => {
         if (allowOnAsk) setOrchestratorFile(true);
         return allowOnAsk;
       },
-      version: '9.9.9',
+      build: { version: '9.9.9', packaged: true },
     });
     await server.start();
     script = path.join(userData, 'dashctl');
@@ -351,7 +351,11 @@ describe('the dashctl script', () => {
   });
 
   it.runIf(hasCurl)("prints Dash's version", async () => {
-    expect(await run(['version'])).toMatchObject({ status: 0, stdout: '9.9.9\n', stderr: '' });
+    expect(await run(['version'])).toMatchObject({
+      status: 0,
+      stdout: '{"version":"9.9.9","packaged":true}\n',
+      stderr: '',
+    });
   });
 
   it.runIf(hasCurl)('prints help to stdout, exit 0', async () => {
@@ -370,7 +374,7 @@ describe('the dashctl script', () => {
     setOrchestratorFile(false);
     allowOnAsk = true;
     const r = await run(['version']);
-    expect(r).toMatchObject({ status: 0, stdout: '9.9.9\n' });
+    expect(r).toMatchObject({ status: 0, stdout: '{"version":"9.9.9","packaged":true}\n' });
     expect(r.stderr).toContain('asking in Dash for access');
   });
 

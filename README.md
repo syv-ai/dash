@@ -41,7 +41,7 @@ dashctl tasks output <task-id> --lines 80
 dashctl review drafts-create --help       # one command's flags
 ```
 
-Dash writes it to `control/bin/dashctl` in its data folder each time it starts. It is a small `sh` + `curl` script that hands its words to Dash, which owns the commands, so an older copy still runs the newest Dash's (all but `tasks watch`, which streams: an older copy gets a refusal). `--project` takes a project's name, id or path (relative to where you run it): the project's folder, one inside it, or a git worktree of it. `dashctl version` prints Dash's version. A comment body comes on stdin; any input that can come on stdin does when given as `-`, like `--prompt -` above. Results are JSON on stdout (`tasks watch`: one JSON line per change, as it happens); a usage error (bare `dashctl` too) exits 2 and a refusal exits 1, both on stderr. An answer cut off exits 1; so does a stream that ends on an `{"error":…}` line or because Dash quit. A stopped `tasks watch` exits 128 + the signal (143 for SIGTERM).
+Dash writes it to `control/bin/dashctl` in its data folder each time it starts. It is a small `sh` + `curl` script that hands its words to Dash, which owns the commands, so an older copy still runs the newest Dash's (all but `tasks watch`, which streams: an older copy gets a refusal). `--project` takes a project's name, id or path (relative to where you run it): the project's folder, one inside it, or a git worktree of it. `dashctl version` prints Dash's version and whether it is a packaged build, as `{"version":"0.22.0","packaged":true}` (`false` for a dev run). A comment body comes on stdin; any input that can come on stdin does when given as `-`, like `--prompt -` above. Results are JSON on stdout (`tasks watch`: one JSON line per change, as it happens); a usage error (bare `dashctl` too) exits 2 and a refusal exits 1, both on stderr. An answer cut off exits 1; so does a stream that ends on an `{"error":…}` line or because Dash quit. A stopped `tasks watch` exits 128 + the signal (143 for SIGTERM).
 
 ### Agents inside a task
 
@@ -144,6 +144,8 @@ pnpm dev
 ```
 
 This starts Vite on port 3000 and launches Electron pointing at it. Renderer changes hot-reload; main process changes need a restart (`pnpm dev:main` or just kill and re-run `pnpm dev`).
+
+A dev run keeps its data in `~/Library/Application Support/Dash-dev/`, apart from an installed Dash's, so the two can run side by side and outside `dashctl` calls keep going to the installed app. A fresh dev run starts with an empty database: to work with real data, quit the dev run and copy the installed app's database over. The database runs in WAL mode, so copy it with `sqlite3 ~/Library/Application\ Support/Dash/app.db ".backup '$HOME/Library/Application Support/Dash-dev/app.db'"`, or quit Dash too and copy `app.db` with its `app.db-wal` and `app.db-shm` files. For an extra isolated instance (a second checkout, say), set `DASH_USER_DATA_DIR` to its own folder, and `DASH_DEV_URL` to that checkout's Vite server on another port.
 
 To just rebuild and launch the main process:
 
@@ -257,6 +259,7 @@ All keybindings are customizable in Settings > Keybindings.
 
 ## Data storage
 
+- **Data folder**: `~/Library/Application Support/Dash/` (macOS); a dev run uses `Dash-dev/` instead, and `DASH_USER_DATA_DIR` overrides both
 - **Database**: `~/Library/Application Support/Dash/app.db` (macOS)
 - **Terminal snapshots**: `~/Library/Application Support/Dash/terminal-snapshots/`
 - **Worktrees**: `{project}/.claude/worktrees/{task-slug}-{hash}/` (ignored via `.git/info/exclude`; pre-0.16 tasks at `{project}/../worktrees/` are offered a one-time move at launch)

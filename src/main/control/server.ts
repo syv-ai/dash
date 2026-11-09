@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import { parseCaller, type Caller } from './callers';
 import { controlPaths, type ControlPaths } from './paths';
 import { ControlError, type Registry, type StreamSink } from './registry';
-import { runCli } from './cli';
+import { runCli, type BuildInfo } from './cli';
 import { verify } from './tokens';
 import { ORCHESTRATOR_ACCESS_OFF } from './scope';
 
@@ -23,8 +23,8 @@ export interface ControlServerOptions {
   isOrchestratorAllowed: () => boolean;
   /** Asks the person in Dash to turn orchestrator access on; true once it is. */
   requestOrchestratorAccess: () => Promise<boolean>;
-  /** Dash's version, for `dashctl version`. */
-  version: string;
+  /** What `dashctl version` prints. */
+  build: BuildInfo;
 }
 
 /**
@@ -150,7 +150,7 @@ export class ControlServer {
           argv: form.getAll('argv'),
           stdin: form.has('stdin') ? form.get('stdin') : null,
           cwd,
-          version: this.opts.version,
+          build: this.opts.build,
           stream,
         });
         if (stream?.started) return stream.end(answer.status === 200 ? undefined : answer.text);
