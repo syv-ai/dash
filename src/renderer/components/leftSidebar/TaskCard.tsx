@@ -6,6 +6,7 @@ import { Tooltip } from '../ui/Tooltip';
 import { UsageBarInline } from '../ui/UsageBar';
 import { MainRepoBadge } from '../ui/MainRepoBadge';
 import { PrBadge } from '../ui/PrBadge';
+import { SetupStatus } from '../task/SetupStatus';
 import type { DragHandlers } from '../../hooks/useDragReorder';
 import { useSettings } from '../../stores/settingsStore';
 
@@ -138,6 +139,8 @@ export function TaskCard({
         <span className={`truncate flex-1 min-w-0 ${!isActive && !statusDot ? 'fade-50' : ''}`}>
           {task.name}
         </span>
+
+        {task.useWorktree && <SetupStatus worktreePath={task.path} variant="inline" />}
 
         {/* Runs in the project's own checkout, not a worktree */}
         {!task.useWorktree && <MainRepoBadge task={task} />}

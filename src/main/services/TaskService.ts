@@ -35,6 +35,7 @@ import { portLivenessService } from './PortLivenessService';
 import { removeShellHistory } from './ptyShellConfig';
 import { getTuiHost } from '../tui/hostInstance';
 import { taskEvents } from './taskEvents';
+import { forgetSetupRun } from './setupRuns';
 import { FolderOccupiedError } from './FolderOccupiedError';
 import { removeTaskSettings } from './taskSettings';
 import { forgetTask as forgetTaskInbox } from './taskInbox';
@@ -43,8 +44,12 @@ import { forgetTask as forgetTaskInbox } from './taskInbox';
 export const UNATTENDED_INSTRUCTION =
   "You were started by an orchestrator and may be running unattended. Don't use AskUserQuestion; state your assumptions and continue. Messages may reach you from an orchestrator through Dash, headed [Message from … via Dash …]: your last message of the turn one starts is read as your reply, so answer there; no need to SendMessage.";
 
-/** End a task's shell and service terminals (not its agent pane). */
+/** End a task's shell and service terminals and its setup run (not its agent pane). */
 async function killTaskTerminals(taskId: string, why: string): Promise<void> {
+  // A setup script still running in the worktree goes too (quietly: the
+  // renderer drops its Setup tab).
+  const task = DatabaseService.getTask(taskId);
+  if (task?.useWorktree) forgetSetupRun(task.path);
   await Promise.all(
     listForTask(taskId, { kinds: ['shell', 'service'] }).map((ptyId) =>
       killPtyAwait(ptyId).catch((err) =>

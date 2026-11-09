@@ -10,6 +10,7 @@ import { FilePathLinkProvider } from './FilePathLinkProvider';
 import type { ITheme } from '@xterm/xterm';
 import { darkTheme, lightTheme, resolveTheme } from './terminalThemes';
 import { getTerminalFont } from './terminalFonts';
+import { TERMINAL_BASE_OPTIONS, glassTheme } from './terminalOptions';
 import {
   ptyExitFallback,
   foreignSessionJobId,
@@ -142,9 +143,8 @@ export class TerminalSessionManager {
     this.terminal = new Terminal({
       scrollback: 100_000,
       // Side-car TUIs render at the same size as a regular terminal.
-      fontSize: 13,
+      ...TERMINAL_BASE_OPTIONS,
       fontFamily: getTerminalFont(),
-      lineHeight: 1.2,
       allowProposedApi: true,
       // Shell-only sessions sit on the floating right-pane glass — render
       // with alpha so the frosted background shows through xterm's canvas.
@@ -1031,8 +1031,7 @@ export class TerminalSessionManager {
    * the Terminal constructor.
    */
   private effectiveTheme(theme: ITheme): ITheme {
-    if (!this.shellOnly) return theme;
-    return { ...theme, background: 'rgba(0,0,0,0)' };
+    return this.shellOnly ? glassTheme(theme) : theme;
   }
 
   setTerminalTheme(themeId: string, isDark: boolean) {

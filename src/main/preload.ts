@@ -82,6 +82,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Worktree
   worktreeMigrationPlan: () => ipcRenderer.invoke('worktree:migrationPlan'),
   worktreeMigrate: (args: unknown) => ipcRenderer.invoke('worktree:migrate', args),
+  worktreeSetupList: () => ipcRenderer.invoke('worktree:setupList'),
+  worktreeSetupLog: (worktreePath: string) => ipcRenderer.invoke('worktree:setupLog', worktreePath),
+  worktreeSetupRerun: (taskId: string) => ipcRenderer.invoke('worktree:setupRerun', taskId),
+  onWorktreeSetupChanged: listen<unknown>('worktree:setupChanged'),
+  onWorktreeSetupForgotten: listen<{ worktreePath: string }>('worktree:setupForgotten'),
+  onWorktreeSetupOutput: listen<{ worktreePath: string; chunk: string }>('worktree:setupOutput'),
 
   // PTY
   ptyStartDirect: (args: unknown) => ipcRenderer.invoke('pty:startDirect', args),

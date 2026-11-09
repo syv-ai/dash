@@ -15,6 +15,7 @@ import { PortsDrawerWrapper } from './components/rightInspector/PortsDrawerWrapp
 import { editorOpening } from './components/diffEditor/data/viewPersistence';
 const DiffEditorModal = lazy(() => import('./components/diffEditor/DiffEditorModal'));
 import { ShellDrawerWrapper } from './components/terminal/ShellDrawerWrapper';
+import { useSetup } from './stores/setupStore';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
 import { ExtensionsModal } from './components/extensions/ExtensionsModal';
 import { MemoryModal } from './components/memory/MemoryModal';
@@ -946,6 +947,17 @@ export function App() {
     }
   }, [changesPanelCollapsed]);
 
+  // A Setup tab request needs the drawer mounted: with the drawer in the
+  // inspector, a collapsed inspector unmounts it, so open the inspector.
+  // Once per request: a later collapse must not reopen it.
+  const setupTabRequest = useSetup((s) => s.setupTabRequest);
+  const handledSetupSeqRef = useRef(0);
+  useEffect(() => {
+    if (!setupTabRequest || handledSetupSeqRef.current === setupTabRequest.seq) return;
+    handledSetupSeqRef.current = setupTabRequest.seq;
+    if (shellDrawerPosition === 'right' && changesPanelCollapsed) toggleChangesPanel();
+  }, [setupTabRequest, shellDrawerPosition, changesPanelCollapsed, toggleChangesPanel]);
+
   const toggleShellDrawer = useCallback(() => {
     const panel = shellDrawerPanelRef.current;
     if (!panel) return;
@@ -1032,14 +1044,7 @@ export function App() {
   }
 
   function handleSelectTask(projectId: string, taskId: string) {
-    setActiveProjectId(projectId);
-    setActiveTaskId(taskId);
-    setRotationExclusions((prev) => {
-      if (!prev.has(taskId)) return prev;
-      const next = new Set(prev);
-      next.delete(taskId);
-      return next;
-    });
+    useProjects.getState().selectTask(projectId, taskId);
   }
 
   // Loaded before the modal mounts so its fields render with the project's
