@@ -3,6 +3,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
+import type { WebglAddon } from '@xterm/addon-webgl';
 import { Utf8Base64 } from './Utf8Base64';
 import type { PermissionMode, TerminalSnapshot } from '../../shared/types';
 import { FilePathLinkProvider } from './FilePathLinkProvider';
@@ -18,6 +19,7 @@ import {
 import { clackBlock, clackExitBlock } from './clackLines';
 import { isPromptOnlySnapshot } from './snapshotFilter';
 import { FitScheduler } from './FitScheduler';
+import { WebglLifecycle, type LosableContext } from './WebglLifecycle';
 import { MouseModeTracker } from './mouseModeFilter';
 import { macShellKeySequence } from './shellKeys';
 import { TUI_COLS, TUI_ROWS } from '../../shared/tuiProtocol';
@@ -79,6 +81,10 @@ export class TerminalSessionManager {
   private lastPtyRows = 0;
   private lastMemoryCheckAt = 0;
   private savedViewportY: number | null = null;
+  // WebGL renderer, kept on the most recently attached terminals (see
+  // WebglLifecycle). Null for terminals that always use xterm's DOM renderer
+  // (see createGpu).
+  private readonly gpu: WebglLifecycle<WebglAddon> | null;
   // Shell-only sessions use xterm 6's DOM renderer (WebGL paints their
   // transparent background black). The DOM renderer lays each row's glyphs at
   // the font's real advance, which runs slightly wider than xterm's reported
@@ -131,6 +137,7 @@ export class TerminalSessionManager {
     this.isTui = opts.isTui ?? false;
     this.pinnedTui = this.isTui && opts.id.startsWith('tui:');
     this.themeId = opts.themeId ?? 'default';
+    this.gpu = this.createGpu();
 
     this.terminal = new Terminal({
       scrollback: 100_000,
@@ -347,13 +354,13 @@ export class TerminalSessionManager {
     this.mouseModes.clear();
   }
 
-  private async loadGpuAddon() {
+  private createGpu(): WebglLifecycle<WebglAddon> | null {
     // Shell-only sessions render transparent (allowTransparency: true, theme
     // background rgba(0,0,0,0)) so the floating right-pane glass shows through.
     // xterm 6's WebGL renderer paints a transparent background as solid black,
     // so use the built-in DOM renderer for these — it composites alpha
     // correctly. (Opaque main terminals keep WebGL for output performance.)
-    if (this.shellOnly) return; // built-in DOM renderer — alpha-correct
+    if (this.shellOnly) return null; // built-in DOM renderer — alpha-correct
 
     // xterm 6 removed the canvas renderer; the choices are WebGL or xterm's
     // built-in DOM renderer. On Linux, WebGL has had compositing bugs that
@@ -361,21 +368,30 @@ export class TerminalSessionManager {
     // DOM renderer there. NOTE: the DOM renderer historically clips the last
     // glyph of full rows — re-verify on Linux under the current Chromium.
     const isLinux = navigator.userAgent.includes('Linux');
-    if (isLinux) return; // built-in DOM renderer
+    if (isLinux) return null; // built-in DOM renderer
 
-    try {
-      const { WebglAddon } = await import('@xterm/addon-webgl');
-      const webgl = new WebglAddon();
-      webgl.onContextLoss(() => {
-        webgl.dispose();
-        void this.loadGpuAddon();
-      });
-      this.terminal.loadAddon(webgl);
-    } catch (err) {
-      // A GPU-renderer failure drops to xterm's DOM renderer; log it so that
-      // regression is visible, not mysterious.
-      console.warn('[terminal] WebGL renderer failed, using DOM renderer:', err);
+    return new WebglLifecycle({
+      create: async () => {
+        const { WebglAddon } = await import('@xterm/addon-webgl');
+        return new WebglAddon();
+      },
+      install: (addon) => this.terminal.loadAddon(addon),
+      findContext: () => this.webglContext(),
+    });
+  }
+
+  /**
+   * The WebGL addon's context. Its canvas sits in `.xterm-screen` beside the
+   * link layer, whose canvas already has a 2d context, so getContext('webgl2')
+   * returns null there and the existing context on the renderer's canvas.
+   */
+  private webglContext(): LosableContext | null {
+    const canvases = this.terminal.element?.querySelectorAll('.xterm-screen canvas') ?? [];
+    for (const canvas of canvases) {
+      const gl = (canvas as HTMLCanvasElement).getContext('webgl2');
+      if (gl) return gl;
     }
+    return null;
   }
 
   async attach(container: HTMLElement, opts?: { autoFocus?: boolean }) {
@@ -403,7 +419,7 @@ export class TerminalSessionManager {
         this.terminal.element.style.paddingRight = '24px';
       }
       // Load GPU addon after terminal is in DOM
-      await this.loadGpuAddon();
+      await this.gpu?.attach();
       // After yielding, check if a newer attach() has started (React remount)
       if (gen !== this.attachGeneration) return;
     } else {
@@ -412,6 +428,11 @@ export class TerminalSessionManager {
       if (xtermEl && xtermEl.parentElement !== container) {
         container.appendChild(xtermEl);
       }
+      // Mark this terminal most recent, and reload the WebGL addon if the pool
+      // released it or it was lost while detached. Swapping renderers
+      // repaints every row, and the fit below re-reads the cell size.
+      await this.gpu?.attach();
+      if (gen !== this.attachGeneration) return;
     }
 
     // Resize observer
@@ -684,6 +705,9 @@ export class TerminalSessionManager {
     }
 
     this.currentContainer = null;
+    // Keeps the WebGL addon; the shared pool frees it once more recent
+    // terminals than the "Terminals kept ready" setting hold one.
+    this.gpu?.detach();
     // Terminal element stays in DOM but container will be unmounted by React
   }
 
@@ -701,6 +725,7 @@ export class TerminalSessionManager {
     if (this.unsubExit) this.unsubExit();
 
     window.electronAPI.ptyKill(this.id);
+    this.gpu?.dispose(); // frees the WebGL context now, not at GC
     this.terminal.dispose();
   }
 
