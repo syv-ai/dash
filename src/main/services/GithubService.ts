@@ -247,8 +247,17 @@ export class GithubService {
     }
   }
 
-  static async postBranchComment(cwd: string, issueNumber: number, branch: string): Promise<void> {
-    const body = `A task branch has been created for this issue:\n\n\`\`\`\n${branch}\n\`\`\``;
+  /** `created`: Dash made the branch for the task; false for an existing branch. */
+  static async postBranchComment(
+    cwd: string,
+    issueNumber: number,
+    branch: string,
+    created = true,
+  ): Promise<void> {
+    const intro = created
+      ? 'A task branch has been created for this issue:'
+      : 'A task is working on this issue on an existing branch:';
+    const body = `${intro}\n\n\`\`\`\n${branch}\n\`\`\``;
     await execFileAsync('gh', ['issue', 'comment', String(issueNumber), '--body', body], {
       cwd,
       timeout: TIMEOUT_MS,
