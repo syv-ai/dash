@@ -3,7 +3,7 @@ import { promisify } from 'util';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
-import { BrowserWindow } from 'electron';
+import { broadcast } from '../utils/broadcast';
 import type { WorktreeInfo, RemoveWorktreeOptions } from '@shared/types';
 import { branchSlug, slugify } from '@shared/slug';
 import { GithubService } from './GithubService';
@@ -286,14 +286,10 @@ export class WorktreeService {
     for (const num of issueNumbers) {
       try {
         const issueUrl = await GithubService.linkBranch(cwd, num, branch);
-        for (const win of BrowserWindow.getAllWindows()) {
-          if (!win.isDestroyed()) {
-            win.webContents.send('app:toast', {
-              message: `Issue #${num} linked to branch '${branch}'`,
-              url: issueUrl,
-            });
-          }
-        }
+        broadcast('app:toast', {
+          message: `Issue #${num} linked to branch '${branch}'`,
+          url: issueUrl,
+        });
       } catch {
         // Best effort — gh may not be available
       }
@@ -367,13 +363,9 @@ export class WorktreeService {
           ? String((error as { stderr: unknown }).stderr).trim()
           : '';
       const msg = stderr || (error instanceof Error ? error.message : String(error));
-      for (const win of BrowserWindow.getAllWindows()) {
-        if (!win.isDestroyed()) {
-          win.webContents.send('app:toast', {
-            message: `Workspace teardown failed: ${msg.slice(0, 200)}`,
-          });
-        }
-      }
+      broadcast('app:toast', {
+        message: `Workspace teardown failed: ${msg.slice(0, 200)}`,
+      });
     }
   }
 
@@ -428,13 +420,9 @@ export class WorktreeService {
         const msg = killed
           ? `timed out after ${SETUP_SCRIPT_TIMEOUT_MS / 60_000} min (scripts must not stay in the foreground)`
           : stderr || (error instanceof Error ? error.message : String(error));
-        for (const win of BrowserWindow.getAllWindows()) {
-          if (!win.isDestroyed()) {
-            win.webContents.send('app:toast', {
-              message: `Workspace setup failed: ${msg.slice(0, 200)}`,
-            });
-          }
-        }
+        broadcast('app:toast', {
+          message: `Workspace setup failed: ${msg.slice(0, 200)}`,
+        });
       }
     })();
   }

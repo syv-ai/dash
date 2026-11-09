@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
 } from '../ui/DropdownMenu';
 import { nextShellLabel } from '../../utils/shellTabLabel';
-import { useProjects } from '../../stores/projectsStore';
+import { selectTaskById, useProjects } from '../../stores/projectsStore';
 import { WIZARDS } from '../../../shared/wizards';
 import { type TuiFeatureId } from '../../../shared/tuiProtocol';
 import type { Tab } from '../../../shared/drawerTabs';
@@ -315,10 +315,9 @@ export function TerminalTabs({
   }
 
   async function handleLaunchWizard(featureId: TuiFeatureId) {
-    const { projects, tasksByProject } = useProjects.getState();
-    const task = Object.values(tasksByProject)
-      .flat()
-      .find((t) => t.id === taskId);
+    const state = useProjects.getState();
+    const { projects } = state;
+    const task = selectTaskById(state, taskId);
     const project = task && projects.find((p) => p.id === task.projectId);
     if (!task || !project) return;
     // force: the user explicitly picked the wizard, so re-run it even when it's

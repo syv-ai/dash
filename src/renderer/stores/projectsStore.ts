@@ -378,14 +378,29 @@ export const useProjects = create<ProjectsStore>((set) => ({
 export const selectActiveProject = (s: ProjectsState): Project | null =>
   s.projects.find((p) => p.id === s.activeProjectId) ?? null;
 
-export const selectActiveTask = (s: ProjectsState): Task | null => {
-  if (!s.activeTaskId) return null;
+type TaskLookupState = Pick<ProjectsState, 'tasksByProject'>;
+
+function findTask(s: TaskLookupState, match: (t: Task) => boolean): Task | undefined {
   for (const tasks of Object.values(s.tasksByProject)) {
-    const found = tasks.find((t) => t.id === s.activeTaskId);
+    const found = tasks.find(match);
     if (found) return found;
   }
-  return null;
-};
+  return undefined;
+}
+
+/**
+ * The task with this id, in any project (archived included). Returns the
+ * stored object itself, so it's safe as a hook selector without useShallow.
+ */
+export const selectTaskById = (s: TaskLookupState, id: string): Task | undefined =>
+  findTask(s, (t) => t.id === id);
+
+/** The task whose worktree is at `path`, in any project (archived included). */
+export const selectTaskByPath = (s: TaskLookupState, path: string): Task | undefined =>
+  findTask(s, (t) => t.path === path);
+
+export const selectActiveTask = (s: ProjectsState): Task | null =>
+  s.activeTaskId ? (selectTaskById(s, s.activeTaskId) ?? null) : null;
 
 export const selectActiveProjectTasks = (s: ProjectsState): Task[] =>
   s.activeProjectId ? (s.tasksByProject[s.activeProjectId] ?? []).filter((t) => !t.archivedAt) : [];

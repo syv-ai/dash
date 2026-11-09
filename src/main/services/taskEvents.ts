@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { BrowserWindow } from 'electron';
+import { broadcast } from '../utils/broadcast';
 
 export interface TasksChangedEvent {
   projectId: string;
@@ -16,14 +16,7 @@ class TaskEvents extends EventEmitter {
   emitChanged(projectId: string): void {
     const event: TasksChangedEvent = { projectId };
     this.emit('tasks-changed', event);
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (win.isDestroyed()) continue;
-      try {
-        win.webContents.send('tasks:changed', event);
-      } catch (err) {
-        console.warn('[taskEvents] broadcast failed', err);
-      }
-    }
+    broadcast('tasks:changed', event);
   }
 }
 

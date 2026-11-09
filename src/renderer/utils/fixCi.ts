@@ -1,5 +1,5 @@
 import { toast } from 'sonner';
-import { useProjects } from '../stores/projectsStore';
+import { selectTaskById, useProjects } from '../stores/projectsStore';
 import { typeIntoTask } from './typeIntoTask';
 import type { PullRequestInfo } from '../../shared/types';
 
@@ -9,10 +9,9 @@ import type { PullRequestInfo } from '../../shared/types';
  * file into its session, left as a draft for the user to send.
  */
 export async function fixCi(taskId: string, pr: PullRequestInfo): Promise<void> {
-  const { tasksByProject, projects } = useProjects.getState();
-  const task = Object.values(tasksByProject)
-    .flat()
-    .find((t) => t.id === taskId);
+  const state = useProjects.getState();
+  const { projects } = state;
+  const task = selectTaskById(state, taskId);
   const cwd = task?.path || projects.find((p) => p.id === task?.projectId)?.path;
   if (!task || !cwd) return;
 

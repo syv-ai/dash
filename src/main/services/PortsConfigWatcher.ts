@@ -1,7 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { EventEmitter } from 'events';
-import { BrowserWindow } from 'electron';
+import { broadcast } from '../utils/broadcast';
+import { watchDir } from '../utils/watchDir';
 import { WorkspacePortsRuntime } from './WorkspacePortsRuntime';
 
 /**
@@ -23,9 +24,8 @@ interface WatcherEntry {
   // null when ensureWatching ran before .dash/ existed; every subsequent
   // ensureWatching call retries the arm, so the watcher comes online as soon
   // as the directory appears.
-  watcher: fs.FSWatcher | null;
+  close: (() => void) | null;
   worktreePath: string;
-  debounceTimer: ReturnType<typeof setTimeout> | null;
 }
 
 const entries = new Map<string, WatcherEntry>();
@@ -52,10 +52,10 @@ const entries = new Map<string, WatcherEntry>();
 export function ensureWatching(taskId: string, worktreePath: string): void {
   let entry = entries.get(taskId);
   if (!entry) {
-    entry = { watcher: null, worktreePath, debounceTimer: null };
+    entry = { close: null, worktreePath };
     entries.set(taskId, entry);
   }
-  if (!entry.watcher) armWatcher(entry, taskId);
+  if (!entry.close) armWatcher(entry, taskId);
 }
 
 function armWatcher(entry: WatcherEntry, taskId: string): void {
@@ -63,37 +63,27 @@ function armWatcher(entry: WatcherEntry, taskId: string): void {
   // Deferred until .dash/ exists — ensureWatching retries the arm on its next call.
   if (!fs.existsSync(dashDir)) return;
 
-  let watcher: fs.FSWatcher;
   try {
-    watcher = fs.watch(dashDir, (eventType, filename) => {
-      if (filename === PORTS_FILE) {
-        const e = entries.get(taskId);
-        if (!e) return;
-        if (e.debounceTimer) clearTimeout(e.debounceTimer);
-        e.debounceTimer = setTimeout(() => {
-          e.debounceTimer = null;
-          const errors: string[] = [];
-          try {
-            WorkspacePortsRuntime.setupTask({ taskId, worktreePath: entry.worktreePath }, errors);
-          } catch (err) {
-            console.error('[PortsConfigWatcher] setupTask failed', taskId, err);
-            errors.push(err instanceof Error ? err.message : String(err));
-          }
-          notifyConfigChanged(taskId, errors);
-        }, DEBOUNCE_MS);
-        return;
-      }
+    // .dash dir may vanish if the user deletes the worktree out from under us;
+    // watchDir suppresses the unhandled-error logs in that case.
+    entry.close = watchDir(dashDir, {
+      filter: (filename) => filename === PORTS_FILE,
+      debounceMs: DEBOUNCE_MS,
+      onChange: () => {
+        if (!entries.has(taskId)) return;
+        const errors: string[] = [];
+        try {
+          WorkspacePortsRuntime.setupTask({ taskId, worktreePath: entry.worktreePath }, errors);
+        } catch (err) {
+          console.error('[PortsConfigWatcher] setupTask failed', taskId, err);
+          errors.push(err instanceof Error ? err.message : String(err));
+        }
+        notifyConfigChanged(taskId, errors);
+      },
     });
   } catch (err) {
     console.error('[PortsConfigWatcher] fs.watch failed', taskId, err);
-    return;
   }
-
-  // .dash dir may vanish if the user deletes the worktree out from under us;
-  // suppress unhandled-error logs in that case.
-  watcher.on('error', () => {});
-
-  entry.watcher = watcher;
 }
 
 /** Close the watcher and drop the entry. For task deletion. Idempotent. */
@@ -112,24 +102,13 @@ export function stopAll(): void {
 }
 
 function closeEntry(entry: WatcherEntry): void {
-  if (entry.debounceTimer) clearTimeout(entry.debounceTimer);
-  if (entry.watcher) {
-    try {
-      entry.watcher.close();
-    } catch {
-      // Already closed.
-    }
-  }
+  entry.close?.();
 }
 
 function notifyConfigChanged(taskId: string, errors: string[]): void {
   // The renderer panel refreshes either way — setupTask re-applied the DB
   // rows (or cleared them on an invalid config), and the panel reads from DB.
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      win.webContents.send('ports:configChanged', { taskId });
-    }
-  }
+  broadcast('ports:configChanged', { taskId });
   // In-process: a valid config advances the setup wizard; an invalid one keeps
   // it waiting and shows the errors, so a corrected rewrite re-advances it.
   if (errors.length > 0) {
