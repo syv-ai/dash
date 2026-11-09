@@ -78,6 +78,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Claude auto-memory
   memoryGet: (args: { projectPath: string }) => ipcRenderer.invoke('memory:get', args),
   memoryOpenDir: (args: { projectPath: string }) => ipcRenderer.invoke('memory:openDir', args),
+  memoryNewCounts: () => ipcRenderer.invoke('memory:newCounts'),
+  memoryMarkSeen: (args: { projectId: string }) => ipcRenderer.invoke('memory:markSeen', args),
+  onMemoryNewCount: listen<{ projectId: string; count: number }>('memory:newCount'),
 
   // Worktree
   worktreeMigrationPlan: () => ipcRenderer.invoke('worktree:migrationPlan'),

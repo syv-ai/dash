@@ -23,11 +23,13 @@ import { useDragReorder } from '../../hooks/useDragReorder';
 import { IconButton } from '../ui/IconButton';
 import { HoverSwapSlot } from '../ui/HoverSwapSlot';
 import { Tooltip } from '../ui/Tooltip';
+import { CountBadge } from '../ui/CountBadge';
 import { formatTokens, formatCost } from '../../utils/format';
 import { TaskCard } from './TaskCard';
 import { ForeignSessionsSection } from './ForeignSessionsSection';
 import { SlidingPill, useSlidingPill } from './useSlidingPill';
 import { getProjectActivity, projectActivityDot } from './projectActivity';
+import { newMemoriesLabel } from '../memory/memoryView';
 import { openInIde } from '../../lib/openInIde';
 import { useSettings } from '../../stores/settingsStore';
 import { useRuntime } from '../../stores/runtimeStore';
@@ -90,6 +92,7 @@ export function ProjectsSection({
   const showProjectTokens = useSettings((s) => s.showProjectTokens);
   const projectTokenStats = useRuntime((s) => s.projectTokenStats);
   const taskActivity = useRuntime((s) => s.taskActivity);
+  const newMemoryCounts = useRuntime((s) => s.newMemoryCounts);
   const remoteControlStates = useRuntime((s) => s.remoteControlStates);
   const justCreatedProjectId = useProjects((s) => s.justCreatedProjectId);
   const clearJustCreatedProject = useProjects((s) => s.clearJustCreatedProject);
@@ -349,6 +352,10 @@ export function ProjectsSection({
                       )} across ${stats.taskCount} task${stats.taskCount === 1 ? '' : 's'}`;
                       return <Tooltip content={tip}>{nameSpan}</Tooltip>;
                     })()}
+                    <NewMemoryCount
+                      count={newMemoryCounts[project.id] ?? 0}
+                      onOpen={() => setMemoryProjectId(project.id)}
+                    />
                   </div>
 
                   {/* Orb and task count at rest; on hover (or while its menu is
@@ -604,5 +611,28 @@ export function ProjectsSection({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * A count after the project name while Claude has written memories since the
+ * project's memory was last opened. Clicking it opens the memory, which clears it.
+ */
+function NewMemoryCount({ count, onOpen }: { count: number; onOpen: () => void }) {
+  if (count <= 0) return null;
+  return (
+    <Tooltip content={newMemoriesLabel(count)} delay={300}>
+      <button
+        type="button"
+        aria-label={newMemoriesLabel(count)}
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpen();
+        }}
+        className="ml-1.5 flex shrink-0 items-center"
+      >
+        <CountBadge count={count} />
+      </button>
+    </Tooltip>
   );
 }

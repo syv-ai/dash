@@ -17,6 +17,7 @@ import type {
 } from '@shared/types';
 import { isPermissionMode } from '@shared/types';
 import { FolderOccupiedError } from './FolderOccupiedError';
+import { syncMemoryWatches } from './MemoryWatcher';
 
 function normalizePermissionMode(value: string | null | undefined): PermissionMode {
   return isPermissionMode(value) ? value : 'default';
@@ -64,6 +65,8 @@ export class DatabaseService {
         gitRemote: data.gitRemote ?? null,
         gitBranch: data.gitBranch ?? null,
         baseRef: data.baseRef ?? null,
+        // A new project's existing memories aren't news.
+        memorySeenAt: Date.now(),
         createdAt: now,
         updatedAt: now,
       })
@@ -82,12 +85,15 @@ export class DatabaseService {
       .run();
 
     const rows = db.select().from(projects).where(eq(projects.id, id)).all();
+    // Every way a project is added or moved comes through here: keep its memory watched.
+    void syncMemoryWatches(this.getProjects());
     return this.mapProject(rows[0]!);
   }
 
   static deleteProject(id: string): void {
     const db = getDb();
     db.delete(projects).where(eq(projects.id, id)).run();
+    void syncMemoryWatches(this.getProjects());
   }
 
   static setProjectArchived(id: string, archived: boolean): void {
@@ -97,6 +103,22 @@ export class DatabaseService {
       .set({ archivedAt: archived ? now : null, updatedAt: now })
       .where(eq(projects.id, id))
       .run();
+  }
+
+  /** When the project's memory was last seen (epoch ms); null for an unknown project. */
+  static getMemorySeenAt(id: string): number | null {
+    const db = getDb();
+    const row = db
+      .select({ at: projects.memorySeenAt })
+      .from(projects)
+      .where(eq(projects.id, id))
+      .get();
+    return row?.at ?? null;
+  }
+
+  static setMemorySeenAt(id: string, at: number): void {
+    const db = getDb();
+    db.update(projects).set({ memorySeenAt: at }).where(eq(projects.id, id)).run();
   }
 
   /** True when the task is archived or belongs to an archived project. */

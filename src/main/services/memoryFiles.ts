@@ -149,3 +149,16 @@ export function readIndex(index: string): (file: string) => MemoryIndexLine {
     return { inIndex: first >= 0, pastIndexLimit: first >= loaded };
   };
 }
+
+/**
+ * How many memories were written or changed after `seenAt` (epoch ms), given
+ * the memory folder's files: the count on the project row's badge. MEMORY.md
+ * and other non-memory files don't count.
+ */
+export function countNewMemories(
+  files: { name: string; mtimeMs: number }[],
+  seenAt: number | null,
+): number {
+  if (seenAt === null) return 0;
+  return files.filter((f) => isMemoryFileName(f.name) && f.mtimeMs > seenAt).length;
+}

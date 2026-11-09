@@ -1,9 +1,10 @@
-import { Settings, Archive, Trash2, AtSign, ScrollText, RotateCw } from 'lucide-react';
+import { Settings, Archive, Trash2, AtSign, Brain, ScrollText, RotateCw } from 'lucide-react';
 import { DropdownMenuItem, DropdownMenuSeparator } from '../ui/DropdownMenu';
 import { IdeIcon } from '../ui/IdeIcon';
 import { usePreferredIde } from '../../hooks/usePreferredIde';
 import { copyTaskMessageAddress } from '../../utils/copyMessageAddress';
 import { useProjects, selectTaskById } from '../../stores/projectsStore';
+import { useUi } from '../../stores/uiStore';
 import { sessionRegistry } from '../../terminal/SessionRegistry';
 import { useSetup } from '../../stores/setupStore';
 
@@ -49,6 +50,7 @@ export function TaskMenuItems({
   const setupRun = useSetup((s) => (task ? s.runs[task.path] : undefined));
   const showSetup = useSetup((s) => s.showSetup);
   const rerunSetup = useSetup((s) => s.rerun);
+  const openTaskMemory = useUi((s) => s.openTaskMemory);
   return (
     <>
       <DropdownMenuItem onSelect={onOpenIde}>
@@ -85,6 +87,12 @@ export function TaskMenuItems({
         <AtSign size={13} strokeWidth={1.8} className="text-muted-foreground" />
         Copy message address
       </DropdownMenuItem>
+      {task && (
+        <DropdownMenuItem onSelect={() => openTaskMemory(task.projectId, taskId)}>
+          <Brain size={13} strokeWidth={1.8} className="text-muted-foreground" />
+          Memories
+        </DropdownMenuItem>
+      )}
       <DropdownMenuItem onSelect={onArchive}>
         <Archive size={13} strokeWidth={1.8} className="text-muted-foreground" />
         Archive

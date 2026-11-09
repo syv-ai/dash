@@ -4,7 +4,7 @@ import {
   MEMORY_INDEX_MAX_LINES,
   MEMORY_TYPES,
 } from '../../../shared/types';
-import type { MemoryEntry, MemoryType, ProjectMemory } from '../../../shared/types';
+import type { MemoryEntry, MemoryType, ProjectMemory, Task } from '../../../shared/types';
 
 export const MEMORY_TYPE_LABELS: Record<MemoryType, string> = {
   user: 'User',
@@ -182,4 +182,41 @@ export function pickCurrent(
     memorySections(memories, 'all', '', 0)[0]?.entries[0] ??
     null
   );
+}
+
+/** The project row badge's tooltip. */
+export function newMemoriesLabel(count: number): string {
+  return `${count} new ${count === 1 ? 'memory' : 'memories'}`;
+}
+
+/** Where "Send to task" types a memory's path: a task, or why there is none. */
+export type MemorySendTarget = { taskId: string; taskName: string } | { reason: string };
+
+/**
+ * The task a memory is sent to: the task whose menu opened the modal; else the
+ * active task. Either only when it is an open task of the shown project: a
+ * task of another project (the modal switched project) would be handed a
+ * memory that isn't its own. Else none, and why.
+ */
+export function memorySendTarget(
+  project: { id: string; name: string },
+  projectTasks: Task[],
+  activeTaskId: string | null,
+  originTask: Task | null = null,
+): MemorySendTarget {
+  if (originTask && originTask.projectId === project.id && !originTask.archivedAt) {
+    return { taskId: originTask.id, taskName: originTask.name };
+  }
+  const task = projectTasks.find((t) => t.id === activeTaskId && !t.archivedAt);
+  if (task) return { taskId: task.id, taskName: task.name };
+  return { reason: `Open a task in ${project.name} to send this memory to it` };
+}
+
+/**
+ * What "Send to task" types into the prompt: an @-mention of the file, unsent,
+ * ready for more. A path with whitespace goes in quotes (`@"…"`), the form
+ * Claude Code reads a spaced path from.
+ */
+export function memoryMention(path: string): string {
+  return /\s/.test(path) ? `@"${path}" ` : `@${path} `;
 }
