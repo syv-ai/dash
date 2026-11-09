@@ -86,7 +86,7 @@ EOF
 ### Working with what's there
 
 - Read \`dashctl review drafts-list --number <pr>\` and \`summary-get\` before writing, so you don't repeat what exists.
-- You can change (\`drafts-update <id>\`, including its \`--kind\`) or delete (\`drafts-delete <id>\`) any draft, the person's too. Keep the person's wording unless they ask you to change it.
+- You can change (\`drafts-update <id>\`: \`--body -\` with the new body on stdin, \`--start-line\`, \`--end-line\` or \`--kind\`) or delete (\`drafts-delete <id>\`) any draft, the person's too. Keep the person's wording unless they ask you to change it.
 - Write in Markdown; it is rendered in the editor.
 `;
 }
