@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 import {
   ChevronDown,
@@ -461,6 +461,16 @@ function FileTreePanel({
   // Until the file list arrives, hits are only the changed files: show no partial list.
   const listLoading = loading && paths.length === 0;
   const searching = query.trim() !== '';
+  // The tree stays mounted (just hidden) while searching, so each folder's
+  // open state survives. Its scroll offset does not survive `display:none`
+  // reliably, so it is tracked while the tree is visible and put back when the
+  // search ends.
+  const treeScrollRef = useRef<HTMLDivElement>(null);
+  const savedTreeScroll = useRef(0);
+  useLayoutEffect(() => {
+    if (!searching && treeScrollRef.current)
+      treeScrollRef.current.scrollTop = savedTreeScroll.current;
+  }, [searching]);
   const statusReady = searching && !listLoading;
   const hasHits = statusReady && hits.length > 0;
   // Esc with text in the box clears it. The Command root carries data-owns-escape
@@ -607,24 +617,33 @@ function FileTreePanel({
           )}
         </Command>
       </div>
-      {!searching && (
-        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-gutter-stable scrollbar-thin-hover pb-2 px-1">
-          {listLoading ? (
-            <div className="px-3 py-2 text-[11px] text-muted-fade-40">Loading…</div>
-          ) : changedOnly && tree.changedCount === 0 ? (
-            <div className="px-3 py-2 text-[11px] text-muted-fade-40">No changed files</div>
-          ) : (
-            <FolderContents
-              node={tree}
-              indent={0}
-              selectedPath={selectedPath}
-              onSelectFile={onSelectFile}
-              badgeCounts={badgeCounts}
-              cols={cols}
-            />
-          )}
-        </div>
-      )}
+      {/* Hidden, not unmounted, while searching: display:none also removes it
+          from keyboard focus and screen readers. */}
+      <div
+        ref={treeScrollRef}
+        onScroll={(e) => {
+          // A hidden element has no height; ignore anything reported then.
+          if (e.currentTarget.clientHeight > 0) savedTreeScroll.current = e.currentTarget.scrollTop;
+        }}
+        className={`flex-1 min-h-0 overflow-y-auto scrollbar-gutter-stable scrollbar-thin-hover pb-2 px-1 ${
+          searching ? 'hidden' : ''
+        }`}
+      >
+        {listLoading ? (
+          <div className="px-3 py-2 text-[11px] text-muted-fade-40">Loading…</div>
+        ) : changedOnly && tree.changedCount === 0 ? (
+          <div className="px-3 py-2 text-[11px] text-muted-fade-40">No changed files</div>
+        ) : (
+          <FolderContents
+            node={tree}
+            indent={0}
+            selectedPath={selectedPath}
+            onSelectFile={onSelectFile}
+            badgeCounts={badgeCounts}
+            cols={cols}
+          />
+        )}
+      </div>
     </div>
   );
 }
