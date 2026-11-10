@@ -458,8 +458,10 @@ function FileTreePanel({
   const treePaths = useMemo(() => treeFilePaths(tree), [tree]);
   const result = useMemo(() => searchFiles(treePaths, query), [treePaths, query]);
   const hits = result.hits;
+  // Until the file list arrives, hits are only the changed files: show no partial list.
+  const listLoading = loading && paths.length === 0;
   const searching = query.trim() !== '';
-  const hasHits = searching && hits.length > 0;
+  const hasHits = searching && !listLoading && hits.length > 0;
   // Esc with text in the box clears it. The Command root carries data-owns-escape
   // only while there is a query, so Modal's window-level Esc handler skips it;
   // with an empty box the marker is absent and Esc reaches the modal as usual.
@@ -554,10 +556,14 @@ function FileTreePanel({
               // Keep focus in the search box so keys keep working after a click on a result.
               onMouseDown={(e) => e.preventDefault()}
             >
-              <CommandEmpty className="px-3 py-2 text-[11px] text-muted-fade-40">
-                No files match
-              </CommandEmpty>
-              {hits.map((hit) => (
+              {listLoading ? (
+                <div className="px-3 py-2 text-[11px] text-muted-fade-40">Loading…</div>
+              ) : (
+                <CommandEmpty className="px-3 py-2 text-[11px] text-muted-fade-40">
+                  No files match
+                </CommandEmpty>
+              )}
+              {(listLoading ? [] : hits).map((hit) => (
                 <CommandItem
                   key={hit.path}
                   value={hit.path}
@@ -581,7 +587,7 @@ function FileTreePanel({
       </div>
       {!searching && (
         <div className="flex-1 min-h-0 overflow-y-auto scrollbar-gutter-stable scrollbar-thin-hover pb-2 px-1">
-          {loading && paths.length === 0 ? (
+          {listLoading ? (
             <div className="px-3 py-2 text-[11px] text-muted-fade-40">Loading…</div>
           ) : changedOnly && tree.changedCount === 0 ? (
             <div className="px-3 py-2 text-[11px] text-muted-fade-40">No changed files</div>
