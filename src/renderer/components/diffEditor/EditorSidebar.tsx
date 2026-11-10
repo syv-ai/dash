@@ -525,7 +525,12 @@ function FileTreePanel({
           label="Search files"
           onKeyDown={onSearchKeyDown}
           data-owns-escape={query ? '' : undefined}
-          className="rounded-none outline-hidden"
+          // Keep focus in the search box so keys keep working after a click in
+          // the box area, and no focus ring or Esc gap appears on the root.
+          onMouseDown={(e) => {
+            if (!(e.target instanceof HTMLInputElement)) e.preventDefault();
+          }}
+          className="rounded-none"
         >
           <div className="relative px-1 shrink-0">
             <CommandInput
@@ -536,9 +541,13 @@ function FileTreePanel({
               className="pr-6"
             />
             {query && (
+              // A pointer shortcut for Esc. It never takes focus: focused, it
+              // would sit inside cmdk's root, where Enter opens a result
+              // instead of clearing.
               <button
                 type="button"
                 aria-label="Clear search"
+                tabIndex={-1}
                 onClick={() => setQuery('')}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-fade-50 hover:text-foreground"
               >
@@ -559,11 +568,7 @@ function FileTreePanel({
             {statusReady ? (hasHits ? describeHitCount(result) : 'No files match') : ''}
           </div>
           {searching && (
-            <CommandList
-              className="flex-1 max-h-none min-h-0 px-1 py-1 scrollbar-gutter-stable scrollbar-thin-hover"
-              // Keep focus in the search box so keys keep working after a click on a result.
-              onMouseDown={(e) => e.preventDefault()}
-            >
+            <CommandList className="flex-1 max-h-none min-h-0 px-1 py-1 scrollbar-gutter-stable scrollbar-thin-hover">
               {listLoading ? (
                 <div className="px-3 py-2 text-[11px] text-muted-fade-40">Loading…</div>
               ) : (
