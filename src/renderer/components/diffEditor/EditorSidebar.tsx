@@ -538,6 +538,13 @@ function FileTreePanel({
               onValueChange={setQuery}
               placeholder="Search files"
               spellCheck={false}
+              // cmdk's root turns Home/End into "first/last result" and prevents
+              // the default, so they would never move the caret. Stopping the
+              // event here keeps it from reaching that handler (Esc and the
+              // arrows still do), and the browser moves the caret as usual.
+              onKeyDown={(e) => {
+                if (e.key === 'Home' || e.key === 'End') e.stopPropagation();
+              }}
               className="pr-6"
             />
             {query && (
