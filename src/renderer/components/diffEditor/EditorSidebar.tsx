@@ -469,6 +469,8 @@ function FileTreePanel({
   // Scoped to the box: nothing here listens on window, so Monaco and the
   // commits drawer keep their keys.
   const onSearchKeyDown = (e: React.KeyboardEvent) => {
+    // IME: Esc cancels the composition, not the query.
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     if (e.key === 'Escape' && query) {
       e.preventDefault();
       e.stopPropagation();
