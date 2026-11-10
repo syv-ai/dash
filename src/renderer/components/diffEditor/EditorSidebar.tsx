@@ -561,6 +561,7 @@ function FileTreePanel({
                 <CommandItem
                   key={hit.path}
                   value={hit.path}
+                  title={hit.path}
                   onSelect={() => onSelectFile(hit.path)}
                   aria-current={hit.path === selectedPath ? 'true' : undefined}
                   // The open file gets the tree's background but its name keeps the
