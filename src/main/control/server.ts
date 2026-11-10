@@ -2,26 +2,29 @@ import * as http from 'http';
 import * as fs from 'fs';
 import { parseCaller, type Caller } from './callers';
 import { controlPaths, type ControlPaths } from './paths';
-import { ControlError, type Registry } from './registry';
-import { runCli } from './cli';
+import { ControlError, type Registry, type StreamSink } from './registry';
+import { runCli, type BuildInfo } from './cli';
 import { verify } from './tokens';
+import { ORCHESTRATOR_ACCESS_OFF } from './scope';
 
 /** Maximum JSON body size for a control call (64KB), as for hook payloads. */
 const MAX_BODY_BYTES = 65_536;
 /** A `dashctl` run's form body: a 64KB comment grows when percent-encoded. */
 const MAX_CLI_BODY_BYTES = 262_144;
 
-export const ORCHESTRATOR_ACCESS_OFF = 'orchestrator access is off in Dash settings';
-
 export interface ControlServerOptions {
   userDataDir: string;
   registry: Registry;
-  /** Read per request: the Settings switch can flip while Dash runs. */
+  /**
+   * Read per request: the Settings switch can flip while Dash runs. The
+   * registry's scope checks it too (and again during a stream); this one
+   * answers before anything else is read.
+   */
   isOrchestratorAllowed: () => boolean;
   /** Asks the person in Dash to turn orchestrator access on; true once it is. */
   requestOrchestratorAccess: () => Promise<boolean>;
-  /** Dash's version, for `dashctl version`. */
-  version: string;
+  /** What `dashctl version` prints. */
+  build: BuildInfo;
 }
 
 /**
@@ -121,14 +124,19 @@ export class ControlServer {
       if (typeof name !== 'string' || !name) {
         return sendJson(res, 400, { error: 'expected {name, input}' });
       }
-      return this.respond(res, async () => ({
-        result: await this.opts.registry.call(caller, name, input),
-      }));
+      const stream = new NdjsonStream(res);
+      return this.respond(
+        res,
+        async () => ({ result: await this.opts.registry.call(caller, name, input, stream) }),
+        stream,
+      );
     }
 
     // `dashctl`: argv and the caller's cwd (and stdin, once asked for) as a
     // form; the answer is text, its status telling the script where to print
-    // it (cli.ts).
+    // it (cli.ts). A script that can print a stream says so in its Accept
+    // header; an older one is refused a stream command rather than left
+    // buffering one that never ends.
     if (pathname === '/v1/cli') {
       if (req.method !== 'POST') return sendJson(res, 405, { error: 'method not allowed' });
       const body = await readBody(req, MAX_CLI_BODY_BYTES);
@@ -136,17 +144,21 @@ export class ControlServer {
       const form = new URLSearchParams(body.text);
       const cwd = form.get('cwd');
       if (!cwd) return sendText(res, 400, 'dashctl: no cwd');
+      const stream = acceptsNdjson(req) ? new NdjsonStream(res) : undefined;
       try {
         const answer = await runCli(this.opts.registry, caller, {
           argv: form.getAll('argv'),
           stdin: form.has('stdin') ? form.get('stdin') : null,
           cwd,
-          version: this.opts.version,
+          build: this.opts.build,
+          stream,
         });
+        if (stream?.started) return stream.end(answer.status === 200 ? undefined : answer.text);
         return sendText(res, answer.status, answer.text);
       } catch (err) {
-        if (err instanceof ControlError)
-          return sendText(res, err.status, `dashctl: ${err.message}`);
+        const message = `dashctl: ${err instanceof Error ? err.message : String(err)}`;
+        if (stream?.started) return stream.end(message);
+        if (err instanceof ControlError) return sendText(res, err.status, message);
         throw err;
       }
     }
@@ -163,10 +175,17 @@ export class ControlServer {
     return verify(auth.slice('Bearer '.length).trim(), caller) ? caller : null;
   }
 
-  private async respond(res: http.ServerResponse, fn: () => unknown): Promise<void> {
+  private async respond(
+    res: http.ServerResponse,
+    fn: () => unknown,
+    stream?: NdjsonStream,
+  ): Promise<void> {
     try {
-      sendJson(res, 200, (await fn()) ?? null);
+      const result = await fn();
+      if (stream?.started) return stream.end();
+      sendJson(res, 200, result ?? null);
     } catch (err) {
+      if (stream?.started) return stream.end(err instanceof Error ? err.message : String(err));
       if (err instanceof ControlError) {
         sendJson(res, err.status, {
           error: err.message,
@@ -194,6 +213,45 @@ export class ControlServer {
       // Best effort — a stale file is overwritten on the next start.
     }
   }
+}
+
+/**
+ * What a `stream` capability answers on: 200 application/x-ndjson, chunked, a
+ * line written as soon as it is emitted. Nothing is sent before the first
+ * line, so a refusal until then keeps its status. Its signal fires when the
+ * connection closes: the client went away, or stop() closed every connection.
+ */
+class NdjsonStream implements StreamSink {
+  private readonly controller = new AbortController();
+  readonly signal = this.controller.signal;
+  started = false;
+
+  constructor(private readonly res: http.ServerResponse) {
+    res.on('close', () => this.controller.abort());
+  }
+
+  emit(line: unknown): void {
+    if (this.signal.aborted || this.res.writableEnded) return;
+    if (!this.started) {
+      this.started = true;
+      this.res.writeHead(200, {
+        'Content-Type': 'application/x-ndjson; charset=utf-8',
+        'Cache-Control': 'no-cache',
+      });
+    }
+    this.res.write(`${JSON.stringify(line ?? null)}\n`);
+  }
+
+  /** Ends a started stream; an error after the first line is its last line. */
+  end(error?: string): void {
+    if (error !== undefined) this.emit({ error });
+    if (!this.res.writableEnded) this.res.end();
+  }
+}
+
+/** The client can read application/x-ndjson as it comes (today's dashctl). */
+function acceptsNdjson(req: http.IncomingMessage): boolean {
+  return (req.headers.accept ?? '').includes('application/x-ndjson');
 }
 
 function sendJson(res: http.ServerResponse, status: number, body: unknown): void {

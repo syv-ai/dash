@@ -1,7 +1,7 @@
 import { execFile, spawn } from 'child_process';
 import { createParser, type ParserEvent } from './preCommitParser';
 import { withExcludeEntry } from './gitExclude';
-import { unlinkSync, promises as fsPromises } from 'fs';
+import { existsSync, unlinkSync, promises as fsPromises } from 'fs';
 import { isAbsolute, join } from 'path';
 import { promisify } from 'util';
 import type {
@@ -21,6 +21,12 @@ import type {
 } from '@shared/types';
 
 const execFileAsync = promisify(execFile);
+
+export interface GitDetection {
+  isGitRepo: boolean;
+  remote: string | null;
+  branch: string | null;
+}
 
 const MAX_DIFF_SIZE = 1024 * 1024; // 1MB max diff output
 const NULL_DEVICE = process.platform === 'win32' ? 'NUL' : '/dev/null';
@@ -353,6 +359,21 @@ export class GitService {
     const { hasUpstream, ahead, behind } = await this.getAheadBehind(cwd);
     const files = await this.getFileChanges(cwd);
     return { branch, hasUpstream, ahead, behind, files };
+  }
+
+  /**
+   * A folder's git, as the New Project wizard and `dashctl projects add` see it:
+   * a repository when it holds `.git`, with its `origin` URL and current branch.
+   */
+  static async detectRepo(folderPath: string): Promise<GitDetection> {
+    if (!existsSync(join(folderPath, '.git'))) {
+      return { isGitRepo: false, remote: null, branch: null };
+    }
+    const remote = await git(folderPath, ['remote', 'get-url', 'origin']).then(
+      (out) => out.trim() || null,
+      () => null,
+    );
+    return { isGitRepo: true, remote, branch: await this.getBranch(folderPath) };
   }
 
   /**

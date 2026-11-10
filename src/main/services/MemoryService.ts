@@ -3,6 +3,7 @@ import * as path from 'path';
 import { MEMORY_INDEX_FILE, type MemoryEntry, type ProjectMemory } from '@shared/types';
 import { claudeConfigDir, claudeProjectDir, mainRepoRoot } from '../utils/claudePaths';
 import {
+  countNewMemories,
   indexLinkFiles,
   isMemoryFileName,
   readIndex,
@@ -103,5 +104,35 @@ function danglingLinks(index: string, names: string[]): string[] {
   const present = new Set(names);
   return [...new Set(indexLinkFiles(index).flat())].filter(
     (f) => f !== MEMORY_INDEX_FILE && !present.has(f),
+  );
+}
+
+/**
+ * How many memories in `dir` were written or changed after the last look,
+ * `seenAt()`. It is asked once the folder has been read, so a look taken while
+ * the count runs isn't overwritten by a count from before it. A missing folder
+ * has none; an unreadable one is logged and counts none, since this only feeds
+ * a badge.
+ */
+export async function newMemoryCount(dir: string, seenAt: () => number | null): Promise<number> {
+  let names: string[];
+  try {
+    names = await fs.promises.readdir(dir);
+  } catch (err) {
+    if (!isMissing(err)) console.warn('[MemoryService] cannot count new memories', dir, err);
+    return 0;
+  }
+  const files = await Promise.all(
+    names.filter(isMemoryFileName).map(async (name) => {
+      try {
+        return { name, mtimeMs: (await fs.promises.stat(path.join(dir, name))).mtimeMs };
+      } catch {
+        return null; // deleted between readdir and stat
+      }
+    }),
+  );
+  return countNewMemories(
+    files.filter((f) => f !== null),
+    seenAt(),
   );
 }

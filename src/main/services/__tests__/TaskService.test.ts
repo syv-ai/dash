@@ -110,11 +110,11 @@ const git = vi.hoisted(() => ({
 vi.mock('../GitService', () => ({ GitService: git }));
 const liveness = vi.hoisted(() => ({ forgetTask: vi.fn() }));
 vi.mock('../PortLivenessService', () => ({ portLivenessService: liveness }));
-const githubComments: Array<[number, string]> = [];
+const githubComments: Array<[number, string, boolean]> = [];
 vi.mock('../GithubService', () => ({
   GithubService: {
-    postBranchComment: async (_cwd: string, num: number, branch: string) => {
-      githubComments.push([num, branch]);
+    postBranchComment: async (_cwd: string, num: number, branch: string, created: boolean) => {
+      githubComments.push([num, branch, created]);
     },
   },
 }));
@@ -246,7 +246,30 @@ describe('TaskService.create', () => {
     expect(prompt).toContain('#42');
     expect(db.contextPrompts[task.id]).toBe(prompt);
     // Fire-and-forget branch comment on the linked issue.
-    await vi.waitFor(() => expect(githubComments).toEqual([[42, task.branch]]));
+    await vi.waitFor(() => expect(githubComments).toEqual([[42, task.branch, true]]));
+  });
+
+  it('comments an existing branch on a linked issue, worded as existing, instead of linking it (#222)', async () => {
+    const { task } = await TaskService.create(
+      {
+        kind: 'worktree-existing',
+        projectId: 'p1',
+        name: 'review',
+        branch: 'feature/x',
+        permissionMode: 'default',
+        model: 'default',
+        linkedItems: [{ provider: 'github', id: 7, title: 'Bug', url: 'https://x/7', labels: [] }],
+      } as CreateTaskInput,
+      UI,
+    );
+    // No issue numbers reach the worktree: linking there would push the branch.
+    expect(worktree.createWorktreeFromExistingBranch).toHaveBeenCalledWith(
+      '/repo/app',
+      'review',
+      'feature/x',
+      { projectId: 'p1', setupScript: undefined },
+    );
+    await vi.waitFor(() => expect(githubComments).toEqual([[7, task.branch, false]]));
   });
 
   it('submits a one-shot initialPrompt first but persists only the context', async () => {

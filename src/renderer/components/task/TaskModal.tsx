@@ -12,11 +12,13 @@ import type {
 } from '../../../shared/types';
 import { isAdoRemote } from '../../../shared/urls';
 import { branchSlug } from '../../../shared/slug';
+import { linkedAdoWorkItem, linkedGithubIssue } from '../../../shared/taskContext';
 import { Modal, useModalClose } from '../ui/Modal';
 import { PermissionModePicker, readInitialPermissionMode } from './PermissionModePicker';
 import { ModelPicker, readInitialModel, persistModelChoice } from './ModelPicker';
 import { getTaskCreatability } from './taskModalCreatability';
 import { Expandable } from '../ui/Expandable';
+import { isDirectCheckout } from './directCheckout';
 import { Segmented } from '../ui/Segmented';
 import { SwitchField } from '../ui/SwitchField';
 import { useControlInfo } from '../../hooks/useControlInfo';
@@ -273,6 +275,7 @@ function TaskModalBody({
     hasSelectedBranch: !!selectedBranch,
   });
 
+  const directCheckout = isDirectCheckout({ createNewBranch, useWorktree });
   // A worktree can't be created on a branch that's already checked out (primary
   // repo or another worktree) — git refuses it. Block that selection up front
   // and steer toward "Create new branch". In-place checkout is exempt: switching
@@ -312,26 +315,8 @@ function TaskModalBody({
     if (!name.trim() || isCreating) return;
 
     // Build unified linkedItems from both providers
-    const ghItems: LinkedItem[] = selectedIssues.map((issue) => ({
-      provider: 'github' as const,
-      id: issue.number,
-      title: issue.title,
-      url: issue.url,
-      labels: issue.labels.length > 0 ? issue.labels : undefined,
-      body: issue.body || undefined,
-    }));
-    const adoItems: LinkedItem[] = selectedWorkItems.map((wi) => ({
-      provider: 'ado' as const,
-      id: wi.id,
-      title: wi.title,
-      url: wi.url,
-      type: wi.type,
-      state: wi.state,
-      tags: wi.tags,
-      description: wi.description,
-      acceptanceCriteria: wi.acceptanceCriteria,
-      parents: wi.parents,
-    }));
+    const ghItems: LinkedItem[] = selectedIssues.map(linkedGithubIssue);
+    const adoItems: LinkedItem[] = selectedWorkItems.map(linkedAdoWorkItem);
     const allLinkedItems: LinkedItem[] = [...ghItems, ...adoItems];
     const linkedItems = allLinkedItems.length > 0 ? allLinkedItems : undefined;
 
@@ -352,8 +337,7 @@ function TaskModalBody({
     // The "Update from remote" choice only applies to a direct checkout of a
     // branch that's behind its upstream — mirror the banner's visibility.
     const behind = selectedBranch?.upstream?.behind ?? 0;
-    const isDirectCheckout = !createNewBranch || !useWorktree;
-    const wantRemote = updateFromRemote && behind > 0 && isDirectCheckout;
+    const wantRemote = updateFromRemote && behind > 0 && directCheckout;
 
     let options: CreateTaskOptions;
     if (repoHasNoCommits) {
@@ -577,6 +561,7 @@ function TaskModalBody({
                   }}
                   showPrs={showGithub || showAdo}
                   markInUse={!createNewBranch}
+                  showUpstream={directCheckout}
                   prProvider={showAdo ? 'ado' : 'github'}
                   projectPath={projectPath}
                   projectId={projectId}
@@ -610,9 +595,8 @@ function TaskModalBody({
                   (() => {
                     const behind = selectedBranch.upstream?.behind ?? 0;
                     const ahead = selectedBranch.upstream?.ahead ?? 0;
-                    const isDirectCheckout = !createNewBranch || !useWorktree;
 
-                    if (behind > 0 && isDirectCheckout) {
+                    if (behind > 0 && directCheckout) {
                       return (
                         <div className="mt-2 px-3 py-2.5 rounded-lg bg-amber-500/10 text-[11px]">
                           <div className="flex items-start gap-2">
@@ -646,20 +630,16 @@ function TaskModalBody({
                         </div>
                       );
                     }
-                    if (behind > 0) {
+                    if (!directCheckout) {
                       // New-branch case: the branch is cut from the freshly-fetched
-                      // remote ref (origin/<name>), so it already has the latest
-                      // commits. The "behind" count reflects only the *local* branch
-                      // lagging, which isn't used — say so instead of implying the
-                      // new task starts from a stale base.
+                      // remote ref (origin/<name>), so the local branch's ahead/behind
+                      // state isn't used. The picker hides its badges to match.
+                      if (!selectedBranch.upstream) return null;
                       return (
                         <p className="mt-1.5 text-[11px] text-muted-fade-50">
                           New branch will be based on the latest{' '}
                           <span className="text-fg-fade-70 font-medium">
                             origin/{selectedBranch.name}
-                          </span>{' '}
-                          <span className="text-muted-fade-40">
-                            (local {selectedBranch.name} is {behind} behind — not used)
                           </span>
                         </p>
                       );

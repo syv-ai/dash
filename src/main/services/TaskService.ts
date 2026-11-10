@@ -5,8 +5,10 @@ import type {
   DeleteTaskOptions,
   LinkedAdoWorkItem,
   LinkedGithubIssue,
+  LinkedItem,
+  Task,
 } from '@shared/types';
-import { formatTaskContextPrompt } from '@shared/taskContext';
+import { buildTaskContext, relinkTaskContext } from '@shared/taskContext';
 import { DatabaseService } from './DatabaseService';
 import { worktreeService } from './WorktreeService';
 import { GitService } from './GitService';
@@ -33,15 +35,21 @@ import { portLivenessService } from './PortLivenessService';
 import { removeShellHistory } from './ptyShellConfig';
 import { getTuiHost } from '../tui/hostInstance';
 import { taskEvents } from './taskEvents';
+import { forgetSetupRun } from './setupRuns';
 import { FolderOccupiedError } from './FolderOccupiedError';
 import { removeTaskSettings } from './taskSettings';
+import { forgetTask as forgetTaskInbox } from './taskInbox';
 
 /** The line an API-created task's first message starts with. */
 export const UNATTENDED_INSTRUCTION =
-  "You were started by an orchestrator and may be running unattended. Don't use AskUserQuestion; state your assumptions and continue. If a message asks for a reply, answer the sender with SendMessage.";
+  "You were started by an orchestrator and may be running unattended. Don't use AskUserQuestion; state your assumptions and continue. Messages may reach you from an orchestrator through Dash, headed [Message from … via Dash …]: your last message of the turn one starts is read as your reply, so answer there; no need to SendMessage.";
 
-/** End a task's shell and service terminals (not its agent pane). */
+/** End a task's shell and service terminals and its setup run (not its agent pane). */
 async function killTaskTerminals(taskId: string, why: string): Promise<void> {
+  // A setup script still running in the worktree goes too (quietly: the
+  // renderer drops its Setup tab).
+  const task = DatabaseService.getTask(taskId);
+  if (task?.useWorktree) forgetSetupRun(task.path);
   await Promise.all(
     listForTask(taskId, { kinds: ['shell', 'service'] }).map((ptyId) =>
       killPtyAwait(ptyId).catch((err) =>
@@ -108,7 +116,7 @@ export class TaskService {
           project.path,
           name,
           input.branch,
-          { projectId: project.id, linkedIssueNumbers, setupScript },
+          { projectId: project.id, setupScript },
         );
         TelemetryService.capture('worktree_created_existing_branch');
         break;
@@ -174,12 +182,7 @@ export class TaskService {
 
     // Combine the context prompt (project default or per-task) with any
     // linked-issue context into one prompt.
-    const context = [
-      contextPrompt?.trim(),
-      linkedItems && linkedItems.length > 0 ? formatTaskContextPrompt(linkedItems) : '',
-    ]
-      .filter((part): part is string => !!part)
-      .join('\n\n');
+    const context = buildTaskContext(contextPrompt, linkedItems);
     const prompt = [context, input.initialPrompt?.trim()].filter(Boolean).join('\n\n');
     // An API-created task may have no person watching it.
     const firstMessage =
@@ -198,7 +201,7 @@ export class TaskService {
 
     DatabaseService.getOrCreateDefaultConversation(task.id);
 
-    postBranchComments(project.id, project.path, branch, ghIssueNumbers, adoItems);
+    postBranchComments(project.id, project.path, task, ghIssueNumbers, adoItems);
 
     let session: CreateTaskResult['session'] = 'deferred';
     try {
@@ -213,6 +216,38 @@ export class TaskService {
       taskEvents.emitChanged(project.id);
     }
     return { task: DatabaseService.getTask(task.id) ?? task, session };
+  }
+
+  /**
+   * Link issues / work items to an existing task, as the task dialog does at
+   * creation: stored (an item already linked is skipped), their content added
+   * to the persisted context (re-injected on /clear and /compact, never sent
+   * into the running session), and the task's branch commented on each new
+   * item (commented, not linked: see below).
+   */
+  static linkItems(id: string, items: LinkedItem[]): Task {
+    const task = DatabaseService.getTask(id);
+    if (!task) throw new Error(`Task not found: ${id}`);
+    const before = task.linkedItems ?? [];
+    const added = items.filter(
+      (i) => !before.some((b) => b.provider === i.provider && b.id === i.id),
+    );
+    if (added.length === 0) return task;
+    const after = [...before, ...added];
+    DatabaseService.setTaskLinkedItems(id, after);
+    DatabaseService.setTaskContextPrompt(id, relinkTaskContext(task.contextPrompt, before, after));
+
+    const project = DatabaseService.getProjects().find((p) => p.id === task.projectId);
+    if (project) {
+      const ghIssueNumbers = added.filter((i) => i.provider === 'github').map((i) => i.id);
+      const adoItems = added.filter((i): i is LinkedAdoWorkItem => i.provider === 'ado');
+      // No GitHub branch link here: createLinkedBranch creates the branch on
+      // the remote (a push behind the task's back), and fails for a branch
+      // that is already there. The comment names the branch instead.
+      postBranchComments(project.id, project.path, task, ghIssueNumbers, adoItems);
+    }
+    taskEvents.emitChanged(task.projectId);
+    return DatabaseService.getTask(id) ?? task;
   }
 
   /** Put the task's session to sleep (`claude stop`) and archive the row. */
@@ -275,6 +310,7 @@ export class TaskService {
     // prompt, and dismiss a lingering ports-setup toast for this task.
     stopPortsConfigWatch(id);
     portLivenessService.forgetTask(id);
+    forgetTaskInbox(id);
     discardInitialPrompt(id);
     removeShellHistory(id);
     void getTuiHost().cancelForTask(id);
@@ -312,16 +348,20 @@ function resolveDashAccess(explicit: boolean | undefined, projectPath: string): 
   }
 }
 
-/** Fire-and-forget: link the new branch on each linked GitHub issue / ADO item. */
+/**
+ * Fire-and-forget: comment the task's branch on each linked GitHub issue / ADO
+ * item, worded by whether Dash created the branch or the task reuses one.
+ */
 function postBranchComments(
   projectId: string,
   projectPath: string,
-  branch: string,
+  task: Pick<Task, 'branch' | 'branchCreatedByDash'>,
   ghIssueNumbers: number[],
   adoItems: LinkedAdoWorkItem[],
 ): void {
+  const { branch, branchCreatedByDash: created } = task;
   for (const num of ghIssueNumbers) {
-    GithubService.postBranchComment(projectPath, num, branch).catch((err) =>
+    GithubService.postBranchComment(projectPath, num, branch, created).catch((err) =>
       console.warn(`[TaskService] failed to link branch to issue #${num}:`, err),
     );
   }
@@ -329,7 +369,7 @@ function postBranchComments(
   const config = ConnectionConfigService.getAdoConfig(projectId);
   if (!config) return;
   for (const wi of adoItems) {
-    AzureDevOpsService.postBranchComment(config, wi.id, branch).catch((err) =>
+    AzureDevOpsService.postBranchComment(config, wi.id, branch, created).catch((err) =>
       console.warn(`[TaskService] failed to link branch to work item #${wi.id}:`, err),
     );
   }

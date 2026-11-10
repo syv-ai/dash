@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { toast } from 'sonner';
 import { useGit } from '../../stores/gitStore';
-import { useProjects } from '../../stores/projectsStore';
+import { selectTaskById, useProjects } from '../../stores/projectsStore';
 import { usePrReviews } from '../../stores/prReviewStore';
 import { buildReviewPrompt, newReviewComments, type SeenReview } from '../../utils/prReviewNotices';
 import { typeIntoTask } from '../../utils/typeIntoTask';
@@ -45,9 +45,7 @@ export function useReviewCommentsToast(): void {
       const { threads, count, next } = newReviewComments(seen[taskId], review);
       seen[taskId] = next;
       writeSeen(seen);
-      const task = Object.values(useProjects.getState().tasksByProject)
-        .flat()
-        .find((t) => t.id === taskId);
+      const task = selectTaskById(useProjects.getState(), taskId);
       if (count === 0 || !task || task.archivedAt) return;
       toast(`${count} new review ${count === 1 ? 'comment' : 'comments'} on PR #${prNumber}`, {
         description: task.name,
@@ -62,13 +60,13 @@ export function useReviewCommentsToast(): void {
 
     return useGit.subscribe((state, prev) => {
       if (state.prByTask === prev.prByTask) return;
-      const tasks = Object.values(useProjects.getState().tasksByProject).flat();
+      const projectsState = useProjects.getState();
       const now = Date.now();
       for (const [taskId, prs] of Object.entries(state.prByTask)) {
         const pr = prs[0];
         if (!pr || pr.state !== 'open' || pr.provider !== 'github') continue;
         if (now - (lastLook[taskId] ?? 0) < MIN_INTERVAL_MS) continue;
-        const task = tasks.find((t) => t.id === taskId);
+        const task = selectTaskById(projectsState, taskId);
         const project = useProjects.getState().projects.find((p) => p.id === task?.projectId);
         const cwd = task?.path || project?.path;
         if (!task || task.archivedAt || !cwd) continue;

@@ -1,5 +1,5 @@
 import * as net from 'net';
-import { BrowserWindow } from 'electron';
+import { broadcast } from '../utils/broadcast';
 import type { PortLiveness, PortLivenessUpdate } from '@shared/types';
 
 const POLL_INTERVAL_MS = 2000;
@@ -144,9 +144,7 @@ class PortLivenessService {
   }
 
   private broadcast(update: PortLivenessUpdate): void {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) win.webContents.send('ports:liveness', update);
-    }
+    broadcast('ports:liveness', update);
   }
 }
 

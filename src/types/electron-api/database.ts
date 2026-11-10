@@ -51,6 +51,8 @@ export interface DatabaseApi {
   reorderTasks: (projectId: string, orderedTaskIds: string[]) => Promise<IpcResponse<void>>;
   /** A project's tasks changed in main (created, archived, restored, deleted). */
   onTasksChanged: (callback: (data: { projectId: string }) => void) => () => void;
+  /** Main changed the project list (the control API added a project). */
+  onProjectsChanged: (callback: () => void) => () => void;
 
   // Conversations
   getConversations: (taskId: string) => Promise<IpcResponse<Conversation[]>>;

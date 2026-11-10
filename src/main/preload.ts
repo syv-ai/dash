@@ -1,5 +1,19 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
+/**
+ * A main→renderer event subscription: `listen<T>(channel)(callback)` calls
+ * `callback(payload)` on each event and returns the unsubscribe.
+ */
+function listen<T = void>(channel: string) {
+  return (callback: (data: T) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: T) => callback(data);
+    ipcRenderer.on(channel, handler);
+    return () => {
+      ipcRenderer.removeListener(channel, handler);
+    };
+  };
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
   // App
   getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
@@ -45,13 +59,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   restoreTask: (id: string) => ipcRenderer.invoke('task:restore', id),
   setTaskDashAccess: (input: unknown) => ipcRenderer.invoke('task:setDashAccess', input),
   getTaskMessageAddresses: (id: string) => ipcRenderer.invoke('task:messageAddresses', id),
-  onTasksChanged: (callback: (data: { projectId: string }) => void) => {
-    const handler = (_event: unknown, data: { projectId: string }) => callback(data);
-    ipcRenderer.on('tasks:changed', handler);
-    return () => {
-      ipcRenderer.removeListener('tasks:changed', handler);
-    };
-  },
+  onTasksChanged: listen<{ projectId: string }>('tasks:changed'),
+  onProjectsChanged: listen('projects:changed'),
   reorderTasks: (projectId: string, orderedTaskIds: string[]) =>
     ipcRenderer.invoke('db:reorderTasks', { projectId, orderedTaskIds }),
 
@@ -64,21 +73,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getProjectTokenStats: (projectId: string) =>
     ipcRenderer.invoke('tokenStats:getProject', projectId),
   getGlobalTokenStats: () => ipcRenderer.invoke('tokenStats:getGlobal'),
-  onTokenStatsUpdated: (callback: (data: unknown) => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
-    ipcRenderer.on('tokenStats:updated', handler);
-    return () => {
-      ipcRenderer.removeListener('tokenStats:updated', handler);
-    };
-  },
+  onTokenStatsUpdated: listen<unknown>('tokenStats:updated'),
 
   // Claude auto-memory
   memoryGet: (args: { projectPath: string }) => ipcRenderer.invoke('memory:get', args),
   memoryOpenDir: (args: { projectPath: string }) => ipcRenderer.invoke('memory:openDir', args),
+  memoryNewCounts: () => ipcRenderer.invoke('memory:newCounts'),
+  memoryMarkSeen: (args: { projectId: string }) => ipcRenderer.invoke('memory:markSeen', args),
+  onMemoryNewCount: listen<{ projectId: string; count: number }>('memory:newCount'),
 
   // Worktree
   worktreeMigrationPlan: () => ipcRenderer.invoke('worktree:migrationPlan'),
   worktreeMigrate: (args: unknown) => ipcRenderer.invoke('worktree:migrate', args),
+  worktreeSetupList: () => ipcRenderer.invoke('worktree:setupList'),
+  worktreeSetupLog: (worktreePath: string) => ipcRenderer.invoke('worktree:setupLog', worktreePath),
+  worktreeSetupRerun: (taskId: string) => ipcRenderer.invoke('worktree:setupRerun', taskId),
+  onWorktreeSetupChanged: listen<unknown>('worktree:setupChanged'),
+  onWorktreeSetupForgotten: listen<{ worktreePath: string }>('worktree:setupForgotten'),
+  onWorktreeSetupOutput: listen<{ worktreePath: string; chunk: string }>('worktree:setupOutput'),
 
   // PTY
   ptyStartDirect: (args: unknown) => ipcRenderer.invoke('pty:startDirect', args),
@@ -107,11 +119,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   drawerTabsBulkUpsert: (entries: unknown) => ipcRenderer.invoke('drawerTabs:bulkUpsert', entries),
   drawerTabsSubscribe: (taskId: string) => ipcRenderer.invoke('drawerTabs:subscribe', taskId),
   drawerTabsUnsubscribe: (taskId: string) => ipcRenderer.invoke('drawerTabs:unsubscribe', taskId),
-  onDrawerTabsChanged: (cb: (taskId: string) => void) => {
-    const handler = (_event: unknown, taskId: string) => cb(taskId);
-    ipcRenderer.on('drawerTabs:changed', handler);
-    return () => ipcRenderer.removeListener('drawerTabs:changed', handler);
-  },
+  onDrawerTabsChanged: listen<string>('drawerTabs:changed'),
 
   // Ports TUI lifecycle
   ptyStartCommand: (opts: unknown) => ipcRenderer.invoke('pty:startCommand', opts),
@@ -120,98 +128,37 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('wizard:active', q),
   wizardCompleted: (q: { featureId: string; cwd: string }) =>
     ipcRenderer.invoke('wizard:completed', q),
-  onPortsRestartTask: (cb: (taskId: string) => void) => {
-    const handler = (_event: unknown, taskId: string) => cb(taskId);
-    ipcRenderer.on('ports:restart-task', handler);
-    return () => ipcRenderer.removeListener('ports:restart-task', handler);
-  },
-  onPortsTuiMigrated: (
-    cb: (info: { fromTaskId: string; toTaskId: string; projectId: string }) => void,
-  ) => {
-    const handler = (
-      _event: unknown,
-      info: { fromTaskId: string; toTaskId: string; projectId: string },
-    ) => cb(info);
-    ipcRenderer.on('ports:tui:migrated', handler);
-    return () => ipcRenderer.removeListener('ports:tui:migrated', handler);
-  },
+  onPortsRestartTask: listen<string>('ports:restart-task'),
+  onPortsTuiMigrated: listen<{ fromTaskId: string; toTaskId: string; projectId: string }>(
+    'ports:tui:migrated',
+  ),
   wizardMessage: (p: { featureId: string; taskId: string; msg: unknown }) =>
     ipcRenderer.send('wizard:message', p),
-  onWizardShow: (cb: (data: { featureId: string; taskId: string; msg: unknown }) => void) => {
-    const handler = (_event: unknown, data: { featureId: string; taskId: string; msg: unknown }) =>
-      cb(data);
-    ipcRenderer.on('wizard:show', handler);
-    return () => ipcRenderer.removeListener('wizard:show', handler);
-  },
-  onWizardDismiss: (cb: (data: { featureId: string; taskId: string }) => void) => {
-    const handler = (_event: unknown, data: { featureId: string; taskId: string }) => cb(data);
-    ipcRenderer.on('wizard:dismiss', handler);
-    return () => ipcRenderer.removeListener('wizard:dismiss', handler);
-  },
-  onPtyData: (id: string, callback: (data: string) => void) => {
-    const handler = (_event: unknown, data: string) => callback(data);
-    ipcRenderer.on(`pty:data:${id}`, handler);
-    return () => {
-      ipcRenderer.removeListener(`pty:data:${id}`, handler);
-    };
-  },
+  onWizardShow: listen<{ featureId: string; taskId: string; msg: unknown }>('wizard:show'),
+  onWizardDismiss: listen<{ featureId: string; taskId: string }>('wizard:dismiss'),
+  onPtyData: (id: string, callback: (data: string) => void) =>
+    listen<string>(`pty:data:${id}`)(callback),
   onPtyExit: (
     id: string,
     callback: (info: { exitCode: number; signal?: number; reattach?: boolean }) => void,
-  ) => {
-    const handler = (
-      _event: unknown,
-      info: { exitCode: number; signal?: number; reattach?: boolean },
-    ) => callback(info);
-    ipcRenderer.on(`pty:exit:${id}`, handler);
-    return () => {
-      ipcRenderer.removeListener(`pty:exit:${id}`, handler);
-    };
-  },
+  ) =>
+    listen<{ exitCode: number; signal?: number; reattach?: boolean }>(`pty:exit:${id}`)(callback),
 
   // Activity monitor
   ptyGetAllActivity: () => ipcRenderer.invoke('pty:activity:getAll'),
-  onPtyActivity: (
-    callback: (data: Record<string, import('@shared/types').ActivityInfo>) => void,
-  ) => {
-    const handler = (_event: unknown, data: Record<string, import('@shared/types').ActivityInfo>) =>
-      callback(data);
-    ipcRenderer.on('pty:activity', handler);
-    return () => {
-      ipcRenderer.removeListener('pty:activity', handler);
-    };
-  },
+  onPtyActivity: listen<Record<string, import('@shared/types').ActivityInfo>>('pty:activity'),
 
   // Remote control
   ptyRemoteControlEnable: (ptyId: string) => ipcRenderer.invoke('pty:remoteControl:enable', ptyId),
   ptyRemoteControlGetAllStates: () => ipcRenderer.invoke('pty:remoteControl:getAllStates'),
-  onRemoteControlStateChanged: (
-    callback: (data: { ptyId: string; state: { url: string; active: boolean } | null }) => void,
-  ) => {
-    const handler = (
-      _event: unknown,
-      data: { ptyId: string; state: { url: string; active: boolean } | null },
-    ) => callback(data);
-    ipcRenderer.on('rc:stateChanged', handler);
-    return () => {
-      ipcRenderer.removeListener('rc:stateChanged', handler);
-    };
-  },
+  onRemoteControlStateChanged: listen<{
+    ptyId: string;
+    state: { url: string; active: boolean } | null;
+  }>('rc:stateChanged'),
 
   // Status line data (context + cost + rate limits)
   ptyGetAllStatusLine: () => ipcRenderer.invoke('pty:statusLine:getAll'),
-  onPtyStatusLine: (
-    callback: (data: Record<string, import('@shared/types').StatusLineData>) => void,
-  ) => {
-    const handler = (
-      _event: unknown,
-      data: Record<string, import('@shared/types').StatusLineData>,
-    ) => callback(data);
-    ipcRenderer.on('pty:statusLine', handler);
-    return () => {
-      ipcRenderer.removeListener('pty:statusLine', handler);
-    };
-  },
+  onPtyStatusLine: listen<Record<string, import('@shared/types').StatusLineData>>('pty:statusLine'),
 
   // Snapshots
   ptyGetSnapshot: (id: string) => ipcRenderer.invoke('pty:snapshot:get', id),
@@ -226,21 +173,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('pty:setInitialPrompt', args),
 
   // App lifecycle
-  onBeforeQuit: (callback: () => void) => {
-    const handler = () => callback();
-    ipcRenderer.on('app:beforeQuit', handler);
-    return () => {
-      ipcRenderer.removeListener('app:beforeQuit', handler);
-    };
-  },
-  onFocusTask: (callback: (target: { taskId: string; projectId?: string }) => void) => {
-    const handler = (_event: unknown, target: { taskId: string; projectId?: string }) =>
-      callback(target);
-    ipcRenderer.on('app:focusTask', handler);
-    return () => {
-      ipcRenderer.removeListener('app:focusTask', handler);
-    };
-  },
+  onBeforeQuit: listen('app:beforeQuit'),
+  onFocusTask: listen<{ taskId: string; projectId?: string }>('app:focusTask'),
   onOrchestratorAccessRequest: (callback: (request: { id: string; open: boolean }) => void) => {
     const opened = (_event: unknown, r: { id: string }) => callback({ id: r.id, open: true });
     const ended = (_event: unknown, r: { id: string }) => callback({ id: r.id, open: false });
@@ -253,13 +187,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   answerOrchestratorAccess: (answer: { id: string; allowed: boolean }) =>
     ipcRenderer.send('app:orchestratorAccessAnswer', answer),
-  onToast: (callback: (data: { message: string; url?: string }) => void) => {
-    const handler = (_event: unknown, data: { message: string; url?: string }) => callback(data);
-    ipcRenderer.on('app:toast', handler);
-    return () => {
-      ipcRenderer.removeListener('app:toast', handler);
-    };
-  },
+  onToast: listen<{ message: string; url?: string }>('app:toast'),
 
   // Settings
   setDesktopNotification: (opts: { enabled: boolean }) =>
@@ -287,8 +215,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('github:get-issue', { cwd, number }),
   githubPostBranchComment: (cwd: string, issueNumber: number, branch: string) =>
     ipcRenderer.invoke('github:post-branch-comment', { cwd, issueNumber, branch }),
-  githubLinkBranch: (cwd: string, issueNumber: number, branch: string) =>
-    ipcRenderer.invoke('github:link-branch', { cwd, issueNumber, branch }),
   githubGetPrsForCheckout: (cwd: string, defaultBranch: string) =>
     ipcRenderer.invoke('github:get-prs-for-checkout', { cwd, defaultBranch }),
   githubWriteCiReport: (args: { cwd: string; number: number; url: string; headSha?: string }) =>
@@ -325,13 +251,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('prReview:getSummary', args),
   prReviewSetSummary: (args: { taskId: string; provider: string; number: number; body: string }) =>
     ipcRenderer.invoke('prReview:setSummary', args),
-  onDiffCommentsChanged: (callback: (data: { taskId: string }) => void) => {
-    const handler = (_event: unknown, data: { taskId: string }) => callback(data);
-    ipcRenderer.on('diffComments:changed', handler);
-    return () => {
-      ipcRenderer.removeListener('diffComments:changed', handler);
-    };
-  },
+  onDiffCommentsChanged: listen<{ taskId: string }>('diffComments:changed'),
 
   // Azure DevOps
   adoCheckConfigured: (projectId?: string) =>
@@ -388,21 +308,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   scaffoldResize: (args: { sessionId: string; cols: number; rows: number }) =>
     ipcRenderer.send('scaffold:resize', args),
   scaffoldKill: (args: { sessionId: string }) => ipcRenderer.send('scaffold:kill', args),
-  onScaffoldData: (callback: (p: { sessionId: string; data: string }) => void) => {
-    const handler = (_e: unknown, p: { sessionId: string; data: string }) => callback(p);
-    ipcRenderer.on('scaffold:data', handler);
-    return () => ipcRenderer.removeListener('scaffold:data', handler);
-  },
-  onScaffoldExit: (
-    callback: (p: { sessionId: string; exitCode: number; resultPath: string | null }) => void,
-  ) => {
-    const handler = (
-      _e: unknown,
-      p: { sessionId: string; exitCode: number; resultPath: string | null },
-    ) => callback(p);
-    ipcRenderer.on('scaffold:exit', handler);
-    return () => ipcRenderer.removeListener('scaffold:exit', handler);
-  },
+  onScaffoldData: listen<{ sessionId: string; data: string }>('scaffold:data'),
+  onScaffoldExit: listen<{ sessionId: string; exitCode: number; resultPath: string | null }>(
+    'scaffold:exit',
+  ),
 
   // Git operations
   gitClone: (args: { url: string }) => ipcRenderer.invoke('git:clone', args),
@@ -426,12 +335,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   gitCommitStart: (args: { cwd: string; message: string; allowEmpty?: boolean }) =>
     ipcRenderer.invoke('git:commitStart', args),
   gitCommitCancel: (requestId: string) => ipcRenderer.invoke('git:commitCancel', { requestId }),
-  onCommitEvent: (cb: (msg: { requestId: string; event: unknown }) => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, msg: { requestId: string; event: unknown }) =>
-      cb(msg);
-    ipcRenderer.on('git:commitEvent', listener);
-    return () => ipcRenderer.removeListener('git:commitEvent', listener);
-  },
+  onCommitEvent: listen<{ requestId: string; event: unknown }>('git:commitEvent'),
   gitPush: (cwd: string) => ipcRenderer.invoke('git:push', cwd),
   gitRemoteBranchExists: (args: { cwd: string; branch: string }) =>
     ipcRenderer.invoke('git:remoteBranchExists', args),
@@ -455,13 +359,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // File watcher
   gitWatch: (args: { id: string; cwd: string }) => ipcRenderer.invoke('git:watch', args),
   gitUnwatch: (id: string) => ipcRenderer.invoke('git:unwatch', id),
-  onGitFileChanged: (callback: (id: string) => void) => {
-    const handler = (_event: unknown, id: string) => callback(id);
-    ipcRenderer.on('git:fileChanged', handler);
-    return () => {
-      ipcRenderer.removeListener('git:fileChanged', handler);
-    };
-  },
+  onGitFileChanged: listen<string>('git:fileChanged'),
 
   // Diff editor
   editorReadWorking: (args: { cwd: string; filePath: string; ref: 'HEAD' | 'index' }) =>
@@ -507,16 +405,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   rtkSetEnabled: (enabled: boolean) => ipcRenderer.invoke('rtk:setEnabled', enabled),
   rtkDownload: () => ipcRenderer.invoke('rtk:download'),
   rtkTest: () => ipcRenderer.invoke('rtk:test'),
-  onRtkDownloadProgress: (
-    callback: (progress: import('@shared/types').RtkDownloadProgress) => void,
-  ) => {
-    const handler = (_event: unknown, progress: import('@shared/types').RtkDownloadProgress) =>
-      callback(progress);
-    ipcRenderer.on('rtk:downloadProgress', handler);
-    return () => {
-      ipcRenderer.removeListener('rtk:downloadProgress', handler);
-    };
-  },
+  onRtkDownloadProgress:
+    listen<import('@shared/types').RtkDownloadProgress>('rtk:downloadProgress'),
 
   // Skills
   skillsRefresh: (args?: { force?: boolean }) => ipcRenderer.invoke('skills:refresh', args),
@@ -575,13 +465,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Sessions under Claude Code's supervisor
   sessionList: (args?: { refresh?: boolean }) => ipcRenderer.invoke('session:list', args),
-  onSessionList: (callback: (rows: unknown) => void) => {
-    const handler = (_event: unknown, rows: unknown) => callback(rows);
-    ipcRenderer.on('session:list', handler);
-    return () => {
-      ipcRenderer.removeListener('session:list', handler);
-    };
-  },
+  onSessionList: listen<unknown>('session:list'),
   sessionAttach: (args: unknown) => ipcRenderer.invoke('session:attach', args),
   sessionStop: (jobId: string) => ipcRenderer.invoke('session:stop', jobId),
   sessionRemove: (jobId: string) => ipcRenderer.invoke('session:remove', jobId),
@@ -601,14 +485,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   autoUpdateGetEnabled: () => ipcRenderer.invoke('autoUpdate:getEnabled'),
   autoUpdateSetEnabled: (enabled: boolean) => ipcRenderer.invoke('autoUpdate:setEnabled', enabled),
   autoUpdateGetStatus: () => ipcRenderer.invoke('autoUpdate:getStatus'),
-  onAutoUpdateStatus: (callback: (status: import('@shared/types').AutoUpdateStatus) => void) => {
-    const handler = (_event: unknown, status: import('@shared/types').AutoUpdateStatus) =>
-      callback(status);
-    ipcRenderer.on('autoUpdate:status', handler);
-    return () => {
-      ipcRenderer.removeListener('autoUpdate:status', handler);
-    };
-  },
+  onAutoUpdateStatus: listen<import('@shared/types').AutoUpdateStatus>('autoUpdate:status'),
 
   // Workspace ports
   portsList: (taskId: string) => ipcRenderer.invoke('ports:list', taskId),
@@ -629,32 +506,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   portsServiceStatus: (taskId: string) => ipcRenderer.invoke('ports:service:status', taskId),
   portsServiceReleaseTab: (taskId: string, tabId: string) =>
     ipcRenderer.invoke('ports:service:releaseTab', taskId, tabId),
-  onPortsServiceChanged: (cb: (data: { taskId: string }) => void) => {
-    const handler = (_event: unknown, data: { taskId: string }) => cb(data);
-    ipcRenderer.on('ports:service:changed', handler);
-    return () => ipcRenderer.removeListener('ports:service:changed', handler);
-  },
-  onPortsServiceFocusTab: (
-    cb: (data: { taskId: string; tabId: string; reset: boolean }) => void,
-  ) => {
-    const handler = (_event: unknown, data: { taskId: string; tabId: string; reset: boolean }) =>
-      cb(data);
-    ipcRenderer.on('ports:service:focusTab', handler);
-    return () => ipcRenderer.removeListener('ports:service:focusTab', handler);
-  },
-  onPortsConfigChanged: (callback: (data: { taskId: string }) => void) => {
-    const handler = (_event: unknown, data: { taskId: string }) => callback(data);
-    ipcRenderer.on('ports:configChanged', handler);
-    return () => {
-      ipcRenderer.removeListener('ports:configChanged', handler);
-    };
-  },
-  onPortsLiveness: (callback: (update: import('@shared/types').PortLivenessUpdate) => void) => {
-    const handler = (_event: unknown, update: import('@shared/types').PortLivenessUpdate) =>
-      callback(update);
-    ipcRenderer.on('ports:liveness', handler);
-    return () => {
-      ipcRenderer.removeListener('ports:liveness', handler);
-    };
-  },
+  onPortsServiceChanged: listen<{ taskId: string }>('ports:service:changed'),
+  onPortsServiceFocusTab: listen<{ taskId: string; tabId: string; reset: boolean }>(
+    'ports:service:focusTab',
+  ),
+  onPortsConfigChanged: listen<{ taskId: string }>('ports:configChanged'),
+  onPortsLiveness: listen<import('@shared/types').PortLivenessUpdate>('ports:liveness'),
 });

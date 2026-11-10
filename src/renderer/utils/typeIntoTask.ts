@@ -1,5 +1,5 @@
 import { toast } from 'sonner';
-import { useProjects } from '../stores/projectsStore';
+import { selectTaskById, useProjects } from '../stores/projectsStore';
 import { sessionRegistry } from '../terminal/SessionRegistry';
 
 const SESSION_WAIT_MS = 15_000;
@@ -31,9 +31,7 @@ async function waitForSession(taskId: string) {
  * an error toast) when the session can't be reached.
  */
 export async function typeIntoTask(taskId: string, text: string): Promise<boolean> {
-  const task = Object.values(useProjects.getState().tasksByProject)
-    .flat()
-    .find((t) => t.id === taskId);
+  const task = selectTaskById(useProjects.getState(), taskId);
   useProjects.getState().setActiveTask(taskId);
   const session = await waitForSession(taskId);
   if (!session) {

@@ -10,6 +10,11 @@ interface IconButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElem
   variant?: 'default' | 'destructive' | 'muted';
   size?: IconButtonSize;
   className?: string;
+  /**
+   * Greyed out and inert, its tooltip still shown (a disabled `<button>` gets
+   * no mouse events, so its tooltip couldn't say why it is off).
+   */
+  disabled?: boolean;
   children: React.ReactNode;
 }
 
@@ -32,7 +37,16 @@ const sizeStyles = {
  * the child, and a component that swallowed them would render a dead button.
  */
 export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
-  { onClick, title, variant = 'default', size = 'md', className = '', children, ...rest },
+  {
+    onClick,
+    title,
+    variant = 'default',
+    size = 'md',
+    className = '',
+    disabled = false,
+    children,
+    ...rest
+  },
   ref,
 ) {
   return (
@@ -40,8 +54,11 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(f
       <button
         ref={ref}
         type="button"
-        onClick={onClick}
-        className={`rounded-md transition-colors duration-150 ${sizeStyles[size]} ${variantStyles[variant]} ${className}`}
+        onClick={disabled ? undefined : onClick}
+        aria-disabled={disabled || undefined}
+        className={`rounded-md transition-colors duration-150 ${sizeStyles[size]} ${
+          disabled ? 'cursor-default text-fg-fade-40' : variantStyles[variant]
+        } ${className}`}
         {...rest}
       >
         {children}

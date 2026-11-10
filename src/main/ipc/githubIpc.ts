@@ -127,21 +127,4 @@ export function registerGithubIpc(): void {
       }
     },
   );
-
-  ipcMain.handle(
-    'github:link-branch',
-    async (_event, args: { cwd: string; issueNumber: number; branch: string }) => {
-      try {
-        parseArgs(
-          'github:link-branch',
-          z.looseObject({ cwd: z.string(), issueNumber: z.number(), branch: z.string() }),
-          args,
-        );
-        await GithubService.linkBranch(args.cwd, args.issueNumber, args.branch);
-        return { success: true };
-      } catch (err) {
-        return errorResponse(err);
-      }
-    },
-  );
 }

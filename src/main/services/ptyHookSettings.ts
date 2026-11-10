@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { BrowserWindow } from 'electron';
+import { broadcast } from '../utils/broadcast';
 import { hookServer, getHookPortFilePath } from './HookServer';
 import { RtkService } from './RtkService';
 import { DatabaseService } from './DatabaseService';
@@ -27,6 +27,20 @@ import {
 
 /** Tracks all settings.local.json paths Dash has written hooks to, for cleanup on exit. */
 const writtenSettingsPaths = new Set<string>();
+
+/**
+ * The session's inbox socket and token as headers (HookServer.inboxFromHeaders),
+ * for curl to read on fd 3 (`-H @/dev/fd/3`) from this heredoc, as dashctl
+ * sends its token: not in curl's argv, which any process can read with `ps`.
+ * The delimiter is unquoted so `sh` expands the variables; an unset one sends
+ * an empty header, which HookServer ignores. The command goes on after it on
+ * a new line.
+ */
+export const INBOX_HEADERS_HEREDOC =
+  ' 3<<DASH_INBOX\n' +
+  'X-Dash-Messaging-Socket: $CLAUDE_CODE_MESSAGING_SOCKET\n' +
+  'X-Dash-Messaging-Token: $CLAUDE_CODE_MESSAGING_TOKEN\n' +
+  'DASH_INBOX\n';
 
 const DASH_DEFAULT_ATTRIBUTION =
   '\n\nCo-Authored-By: Claude <noreply@anthropic.com> via Dash <dash@syv.ai>';
@@ -94,11 +108,7 @@ function buildPreToolUseHooks(
 }
 
 function broadcastToast(message: string): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      win.webContents.send('app:toast', { message });
-    }
-  }
+  broadcast('app:toast', { message });
 }
 
 export type HookWriteResult = { ok: true } | { ok: false; settingsPath: string; error: string };
@@ -163,29 +173,39 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
   const portFile = getHookPortFilePath().replace(/"/g, '\\"');
   // POSIX like the rest; on Windows the hooks stay unguarded.
   const guard = process.platform === 'win32' ? '' : ownSessionGuard([cwd, realPathOr(cwd)]);
-  const postCommand = (endpoint: DashHookEndpoint): string => {
+  const postCommand = (endpoint: DashHookEndpoint, inbox = false): string => {
     const url = `http://127.0.0.1:$P/hook/${endpoint}?ptyId=${ptyId}`;
     return (
       `P=$(cat "${portFile}" 2>/dev/null) || exit 0; [ -n "$P" ] || exit 0; ` +
-      `curl -s --max-time 2 -X POST -H 'Content-Type: application/json' -d @- "${url}" >/dev/null 2>&1; exit 0`
+      `curl -s --max-time 2 -X POST -H 'Content-Type: application/json'${inbox ? ' -H @/dev/fd/3' : ''} -d @- "${url}" >/dev/null 2>&1` +
+      (inbox ? INBOX_HEADERS_HEREDOC : '; ') +
+      'exit 0'
     );
   };
 
-  const commandHook = (endpoint: DashHookEndpoint, async?: boolean): CommandHook => ({
+  const commandHook = (
+    endpoint: DashHookEndpoint,
+    async?: boolean,
+    inbox?: boolean,
+  ): CommandHook => ({
     type: 'command' as const,
-    command: guard + postCommand(endpoint),
+    command: guard + postCommand(endpoint, inbox),
     ...(async ? { async: true } : {}),
   });
 
   const dashCmd = (endpoint: DashHookEndpoint, async?: boolean) =>
     tagDash(commandHook(endpoint, async));
+  /** A hook that also reports the session's inbox (taskInbox.ts). Claude Code
+   *  exports both variables to hooks before SessionStart. */
+  const inboxCmd = (endpoint: DashHookEndpoint, async?: boolean) =>
+    tagDash(commandHook(endpoint, async, true));
 
   // Typed against DashHookEvent so a typo'd event key (e.g. 'PreToolUze')
   // fails the build, matching the drift-prevention DashHookEndpoint gives
   // us for endpoints.
   const dashEntries: Partial<Record<DashHookEvent, HookEntry[]>> = {
     Stop: [{ matcher: '', hooks: [dashCmd('stop')] }],
-    UserPromptSubmit: [{ matcher: '', hooks: [dashCmd('busy')] }],
+    UserPromptSubmit: [{ matcher: '', hooks: [inboxCmd('busy')] }],
     Notification: [
       { matcher: 'permission_prompt', hooks: [dashCmd('notification')] },
       { matcher: 'idle_prompt', hooks: [dashCmd('notification')] },
@@ -211,6 +231,9 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
   // wired to /hook/agent-startup for the ports onboarding TUI's auto-detect
   // path; we dropped that — see PortsSetupWizard (the agent self-starts via the
   // inlined initial prompt instead).
+  //
+  // The no-matcher entry fires for every source (startup and resume too) and
+  // only reports the session's inbox to /hook/inbox, which leaves activity alone.
   const sessionStartEntries: HookEntry[] = [
     { matcher: 'clear', hooks: [dashCmd('session-start', true)] },
     { matcher: 'compact', hooks: [dashCmd('session-start', true)] },
@@ -248,7 +271,10 @@ export function writeHookSettings(cwd: string, ptyId: string): HookWriteResult {
     }
   }
 
-  dashEntries.SessionStart = sessionStartEntries;
+  dashEntries.SessionStart = [
+    ...sessionStartEntries,
+    { matcher: '', hooks: [inboxCmd('inbox', true)] },
+  ];
 
   try {
     // Only ever create `.claude/` inside an existing working directory. A

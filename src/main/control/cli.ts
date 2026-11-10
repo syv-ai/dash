@@ -1,10 +1,7 @@
-import { execFileSync } from 'child_process';
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
 import type { Project } from '../../shared/types';
 import type { Caller } from './callers';
-import { ControlError, type CapabilityListing, type Registry } from './registry';
+import { ControlError, type CapabilityListing, type Registry, type StreamSink } from './registry';
+import { mainCheckout, projectAtPath, resolveFrom } from './projectPaths';
 
 /*
  * `dashctl`, the control API's command line. The `dashctl` script only carries
@@ -17,11 +14,13 @@ import { ControlError, type CapabilityListing, type Registry } from './registry'
  * 'tasks.create' is `dashctl tasks create`, 'review.drafts_create' is
  * `dashctl review drafts-create`. Every input is a flag (`--task-id` or
  * `--taskId`); the capability's `cli.args` are positional too. Its `cli.stdin`
- * input is read from stdin when given as `-`, or when it is required and not
- * given; an optional one is never read implicitly, so a stdin the agent's
+ * input is read from stdin when given as `-` (empty stdin is then a usage
+ * error), or when it is required and not given; an optional one is never read implicitly, so a stdin the agent's
  * shell happens to hold is never swallowed. `--project` takes a project's id,
  * name or path (relative to the caller's working directory): the project's
- * folder, one inside it, or a worktree of it. `dashctl version` is Dash's.
+ * folder, one inside it, or a worktree of it. A `cli.paths` input is a path
+ * relative to the caller's working directory too. `dashctl version` is Dash's
+ * version and whether it is a packaged build (false for `pnpm dev`).
  */
 
 /** What `/v1/cli` answers: the status decides where the script prints it. */
@@ -114,30 +113,6 @@ export function helpText(c: CapabilityListing): string {
 
 class UsageError extends Error {}
 
-/** `p` with symlinks resolved, when it exists. */
-function real(p: string): string {
-  try {
-    return fs.realpathSync(p);
-  } catch {
-    return path.resolve(p);
-  }
-}
-
-/** The main checkout of the git repository `dir` is in (a worktree's too), or null. */
-export function mainCheckout(dir: string): string | null {
-  try {
-    const common = execFileSync('git', ['-C', dir, 'rev-parse', '--git-common-dir'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-      timeout: 2000,
-    }).trim();
-    const abs = path.resolve(dir, common);
-    return path.basename(abs) === '.git' ? path.dirname(abs) : null;
-  } catch {
-    return null;
-  }
-}
-
 /**
  * A project by id, name (any case) or path: `~` is the home folder, and a
  * relative path is the caller's `cwd`. A path is the project's folder or one inside it (the deepest
@@ -160,18 +135,7 @@ export function findProject(
       `${byName.length} projects are named ${JSON.stringify(ref)}; give its path or id (${byName.map((p) => p.id).join(', ')})`,
     );
   }
-  const expanded =
-    ref === '~' || ref.startsWith('~/') ? path.join(os.homedir(), ref.slice(1)) : ref;
-  const target = real(path.resolve(cwd, expanded));
-  const roots = projects.map((p) => ({ p, root: real(p.path) }));
-  const containing = roots
-    .filter(({ root }) => target === root || target.startsWith(root + path.sep))
-    .sort((a, b) => b.root.length - a.root.length)[0];
-  if (containing) return containing.p;
-  const main = checkoutOf(target);
-  if (main === null) return undefined;
-  const mainRoot = real(main);
-  return roots.find(({ root }) => root === mainRoot)?.p;
+  return projectAtPath(projects, resolveFrom(cwd, ref), checkoutOf);
 }
 
 function coerce(prop: string, schema: PropSchema, value: string | true): unknown {
@@ -201,7 +165,7 @@ type Parsed =
 
 /**
  * Turn argv (and stdin, once sent) into a call, or say why not. `cwd` is the
- * caller's working directory, for a relative `--project` path.
+ * caller's working directory, for a relative `--project` or `cli.paths` path.
  */
 export function resolveArgv(
   argv: string[],
@@ -272,9 +236,10 @@ export function resolveArgv(
       raw[prop] = value;
     });
     const fromStdin = c.cli?.stdin;
+    const askedForStdin = fromStdin !== undefined && raw[fromStdin] === '-';
     const readStdin =
-      fromStdin !== undefined &&
-      (raw[fromStdin] === '-' || (!(fromStdin in raw) && requiredOf(c).has(fromStdin)));
+      askedForStdin ||
+      (fromStdin !== undefined && !(fromStdin in raw) && requiredOf(c).has(fromStdin));
     if (readStdin) delete raw[fromStdin!];
     for (const [prop, value] of Object.entries(raw)) {
       input[prop] = coerce(prop, props[prop]!, value);
@@ -284,7 +249,15 @@ export function resolveArgv(
       if (stdin === null) return { kind: 'stdin' };
       // A heredoc ends in a newline the writer didn't mean.
       const text = stdin.replace(/\r?\n$/, '');
+      // Asked for by name, an empty read is a mistake (a terminal sends nothing), not "leave it out".
+      if (askedForStdin && text.trim() === '') {
+        throw new UsageError(`--${flagFor(fromStdin!)} -: stdin was empty`);
+      }
       if (text !== '') input[fromStdin!] = text;
+    }
+    for (const prop of c.cli?.paths ?? []) {
+      const value = input[prop];
+      if (typeof value === 'string' && value !== '') input[prop] = resolveFrom(cwd, value);
     }
     if (typeof input.projectId === 'string') {
       const project = findProject(projects, input.projectId, cwd);
@@ -328,25 +301,33 @@ export function resultText(result: unknown): string {
   return JSON.stringify(result ?? null);
 }
 
+/** The running Dash: its version, and false for `packaged` in a dev run. */
+export interface BuildInfo {
+  version: string;
+  packaged: boolean;
+}
+
 /** One `dashctl` run, as the script sends it. */
 export interface CliRequest {
   argv: string[];
   /** Null until the script is asked for it (428). */
   stdin: string | null;
-  /** The caller's working directory, for a relative `--project` path. */
+  /** The caller's working directory, for a relative `--project` or `cli.paths` path. */
   cwd: string;
-  /** Dash's version, for `dashctl version`. */
-  version: string;
+  /** What `dashctl version` prints. */
+  build: BuildInfo;
+  /** Where a stream command's lines go; absent when the script can't print a stream as it comes. */
+  stream?: StreamSink;
 }
 
 /** Answer one `dashctl` run for the caller. */
 export async function runCli(
   registry: Pick<Registry, 'listFor' | 'call' | 'projectsFor'>,
   caller: Caller,
-  { argv, stdin, cwd, version }: CliRequest,
+  { argv, stdin, cwd, build, stream }: CliRequest,
 ): Promise<CliAnswer> {
   if (argv.length === 1 && (argv[0] === 'version' || argv[0] === '--version')) {
-    return { status: 200, text: version };
+    return { status: 200, text: JSON.stringify(build) };
   }
   const commands = registry.listFor(caller);
   const parsed = resolveArgv(argv, commands, stdin, registry.projectsFor(caller), cwd);
@@ -359,10 +340,18 @@ export async function runCli(
       return { status: 428, text: '' };
   }
   const label = `dashctl ${words(parsed.name).join(' ')}`;
+  if (!stream && commands.find((c) => c.name === parsed.name)?.stream) {
+    // A dashctl copied from an older Dash buffers the answer, and a stream never ends.
+    return {
+      status: 422,
+      text: `${label}: this dashctl is too old to print a stream; use the one Dash writes on launch (its path is in Dash's settings)`,
+    };
+  }
   try {
+    // A stream's lines went out as they came; what is returned then is not sent.
     return {
       status: 200,
-      text: resultText(await registry.call(caller, parsed.name, parsed.input)),
+      text: resultText(await registry.call(caller, parsed.name, parsed.input, stream)),
     };
   } catch (err) {
     if (err instanceof ControlError) return { status: 422, text: `${label}: ${err.message}` };

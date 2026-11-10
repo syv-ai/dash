@@ -65,6 +65,7 @@ export const DASH_HOOK_ENDPOINTS = [
   'busy',
   'session-start',
   'session-end',
+  'inbox',
   'agent-startup',
   'notification',
   'context',

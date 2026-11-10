@@ -17,6 +17,7 @@ export interface ConfigureValues {
 export const PERMISSION_MODE_LABELS: Record<PermissionMode, string> = {
   default: 'Ask every time (default)',
   acceptEdits: 'Auto-accept edits',
+  auto: 'Auto mode (classifier approves safe actions)',
   bypassPermissions: 'Bypass all permissions',
 };
 
@@ -37,7 +38,7 @@ export function configToValues(
   return {
     name: fallbacks.name,
     baseRef: td?.baseRef ?? fallbacks.baseRef,
-    permissionMode: td?.permissionMode ?? 'default',
+    permissionMode: td?.permissionMode ?? 'auto',
     useWorktree: td?.useWorktree ?? true,
     contextPrompt: td?.contextPrompt ?? '',
     dashAccess: td?.dashAccess ?? false,
@@ -52,7 +53,9 @@ export function valuesToConfig(value: ConfigureValues): WorkspaceConfig {
   const teardown = lines(value.teardown);
   const taskDefaults = {
     baseRef: value.baseRef.trim() || undefined,
-    permissionMode: value.permissionMode,
+    // Auto is the built-in default, so saving a config with no mode doesn't
+    // write one into the committed file.
+    permissionMode: value.permissionMode === 'auto' ? undefined : value.permissionMode,
     useWorktree: value.useWorktree,
     contextPrompt: value.contextPrompt.trim() || undefined,
     // Off is the built-in default, so only an opt-in is written.

@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import { z } from 'zod';
 import type {
   ActivityInfo,
@@ -5,15 +6,29 @@ import type {
   CreateTaskResult,
   CreateTaskRunOptions,
   DeleteTaskOptions,
+  LinkedAdoWorkItem,
+  LinkedGithubIssue,
+  LinkedItem,
+  PermissionMode,
   Project,
   Task,
 } from '../../../shared/types';
+import { githubSlug } from '../../../shared/urls';
 import type { WorkspaceTaskDefaults } from '../../services/WorkspaceConfigService';
 import { messageAddress, type LiveSession } from '../../services/claudeSessionRegistry';
 import { TerminalMirror } from '../../services/TerminalMirror';
-import { taskModelSchema } from '../../ipc/schemas';
+import { permissionModeSchema, taskModelSchema } from '../../ipc/schemas';
 import { ControlError, defineCapability, type Registry } from '../registry';
 import { defaultBaseRef } from './projects';
+import {
+  InboxWriteError,
+  findTaskMessage,
+  recordTaskMessage,
+  taskMessages,
+  type TaskInbox,
+} from '../../services/taskInbox';
+import { messageHeader, replyAfterMessage } from '../../services/transcriptReply';
+import { watchTasks, type TaskWatchSource } from './taskWatch';
 
 /** The task state the API reports. */
 export type TaskApiState = 'idle' | 'working' | 'waiting' | 'error' | 'stopped' | 'needs-trust';
@@ -49,6 +64,8 @@ export interface TaskCapabilityDeps {
   getLiveSessions(): ReadonlyMap<string, LiveSession>;
   /** Subscribe to activity changes; returns the unsubscribe. */
   onActivityChange(listener: () => void): () => void;
+  /** Subscribe to task list changes (created, archived, restored, deleted); returns the unsubscribe. */
+  onTasksChange(listener: () => void): () => void;
   taskDefaults(projectPath: string): WorkspaceTaskDefaults | undefined;
   /** Git's default base when nothing names one (the remote's HEAD branch). */
   resolveBaseRef(projectPath: string): Promise<string>;
@@ -71,6 +88,22 @@ export interface TaskCapabilityDeps {
   readLogs(jobId: string): Promise<string>;
   /** Show and focus Dash's window on the task. */
   openTask(task: Task): void;
+  /** `gh issue view` in the project folder; throws with gh's reason. */
+  getGithubIssue(projectPath: string, issueNumber: number): Promise<LinkedGithubIssue>;
+  /** Null when the project has no Azure DevOps connection. */
+  getAdoWorkItem(projectId: string, id: number): Promise<LinkedAdoWorkItem | null>;
+  /** TaskService.linkItems: store, add to the context, comment the branch. */
+  linkItems(taskId: string, items: LinkedItem[]): Promise<Task>;
+  /** The inbox a session in the task's folder reported on that socket (taskInbox.ts); undefined when none did. */
+  getInbox(taskId: string, socket: string): TaskInbox | undefined;
+  /** Drop the inbox on that socket. */
+  dropInbox(taskId: string, socket: string): void;
+  /** Write one message into an inbox, once (taskInbox.postToInbox). */
+  postToInbox(inbox: TaskInbox, text: string): Promise<void>;
+  /** Where the task's current session writes its transcript, when no hook named it; null if unknown. */
+  transcriptPathFor(task: Task): string | null;
+  /** A transcript's text; null when it can't be read. */
+  readTranscript(path: string): Promise<string | null>;
 }
 
 const STATE_FROM_ACTIVITY: Record<ActivityInfo['state'], TaskApiState> = {
@@ -120,6 +153,13 @@ export function toTaskView(
   return view;
 }
 
+/** A task an agent starts: any mode but bypassPermissions, auto by default. */
+function withoutBypass(
+  mode: PermissionMode | undefined,
+): Exclude<PermissionMode, 'bypassPermissions'> {
+  return !mode || mode === 'bypassPermissions' ? 'auto' : mode;
+}
+
 const taskIdInput = z.object({ taskId: z.string().describe('The task id') });
 
 /** The one refusal for acting on an archived task (wake, open, restart, services). */
@@ -149,11 +189,53 @@ const branchName = z
     'not a branch name',
   );
 
+/** `--issue` and `--work-item`, on tasks.create and tasks.link. */
+const linkInputs = {
+  issue: z
+    .union([z.string(), z.number()])
+    .optional()
+    .describe("A GitHub issue of the project's repository to link: its number, #number or URL"),
+  workItem: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'An Azure DevOps work item id to link (the project needs an Azure DevOps connection)',
+    ),
+};
+
+/** `123`, `#123` or the issue's github.com URL, which must be the project's repository. */
+export function issueNumber(ref: string | number, project: Project): number {
+  const s = String(ref).trim();
+  const plain = s.match(/^#?([1-9]\d*)$/);
+  if (plain) return Number(plain[1]);
+  const url = s.match(
+    /^https?:\/\/(?:www\.)?github\.com\/([^/\s]+\/[^/\s]+)\/issues\/([1-9]\d*)\/?(?:[?#]\S*)?$/i,
+  );
+  if (!url) throw new ControlError(400, `${s} is not an issue number or GitHub issue URL`);
+  const repo = githubSlug(project.gitRemote);
+  if (!repo) throw new ControlError(400, `${project.name} has no GitHub remote`);
+  if (repo.toLowerCase() !== url[1]!.toLowerCase()) {
+    throw new ControlError(400, `${url[1]} is not ${project.name}'s repository (${repo})`);
+  }
+  return Number(url[2]);
+}
+
+const reasonOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
 /** Output is replayed into a terminal this size (`claude logs` repaints a full screen). */
 const OUTPUT_COLS = 200;
 const OUTPUT_ROWS = 50;
 /** How often tasks.wake re-reads the session registry while it waits. */
 const WAKE_POLL_MS = 500;
+/** tasks.message: how long a stopped session gets to start and report its inbox. */
+const MESSAGE_START_MS = 30_000;
+/** tasks.message: how long a running session with no inbox known gets to report one. */
+const INBOX_GRACE_MS = 3_000;
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+/** How often tasks.watch re-reads its views anyway (a session's message address fires no event). */
+const WATCH_POLL_MS = 2_000;
 /** tasks.wait and tasks.wake: under Claude Code's two-minute default Bash timeout. */
 const timeoutSec = z.number().min(0).max(110).default(60);
 
@@ -186,6 +268,32 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     const task = deps.getTask(id);
     if (!task) throw new ControlError(404, 'task not found');
     return task;
+  };
+  /** Fetch what `--issue` / `--work-item` name, as the task dialog stores them. */
+  const fetchLinkedItems = async (
+    project: Project,
+    input: { issue?: string | number; workItem?: number },
+  ): Promise<LinkedItem[]> => {
+    const items: LinkedItem[] = [];
+    if (input.issue !== undefined) {
+      const n = issueNumber(input.issue, project);
+      try {
+        items.push(await deps.getGithubIssue(project.path, n));
+      } catch (err) {
+        throw new ControlError(404, `issue #${n}: ${reasonOf(err)}`);
+      }
+    }
+    if (input.workItem !== undefined) {
+      let wi: LinkedAdoWorkItem | null;
+      try {
+        wi = await deps.getAdoWorkItem(project.id, input.workItem);
+      } catch (err) {
+        throw new ControlError(404, `work item ${input.workItem}: ${reasonOf(err)}`);
+      }
+      if (!wi) throw new ControlError(400, `${project.name} has no Azure DevOps connection`);
+      items.push(wi);
+    }
+    return items;
   };
 
   registry.register(
@@ -229,7 +337,7 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     defineCapability({
       name: 'tasks.create',
       summary:
-        "Create a Dash task (by default a new git worktree on a new branch) and start its Claude Code session with the prompt. Returns the task and session: 'started', or 'needs-trust' when a person must accept Claude Code's trust prompt for the folder in Dash first. bypassPermissions is not allowed.",
+        "Create a Dash task (by default a new git worktree on a new branch) and start its Claude Code session with the prompt. A linked issue or work item goes into the task's context and gets a comment naming the task's branch, as in Dash's New Task dialog; a new branch pushed with pushRemote is also linked on the GitHub issue. Returns the task and session: 'started', or 'needs-trust' when a person must accept Claude Code's trust prompt for the folder in Dash first. bypassPermissions is not allowed.",
       input: z.object({
         projectId: z
           .string()
@@ -261,11 +369,12 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
           .optional()
           .describe('new-branch only: push the new branch to the remote (default false)'),
         model: taskModelSchema.optional(),
-        permissionMode: z.enum(['default', 'acceptEdits']).optional(),
+        permissionMode: permissionModeSchema.exclude(['bypassPermissions']).optional(),
         dashAccess: z
           .boolean()
           .optional()
           .describe("Let the new task's agent use Dash too (default: the project's setting)"),
+        ...linkInputs,
       }),
       callers: ['orchestrator', 'task'],
       cli: { args: ['name'], stdin: 'prompt' },
@@ -280,11 +389,9 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         const base = {
           projectId: project.id,
           name: input.name,
-          // Never the project's bypassPermissions default (one agent must not
-          // start another with every permission prompt off).
-          permissionMode:
-            input.permissionMode ??
-            (defaults?.permissionMode === 'acceptEdits' ? 'acceptEdits' : 'default'),
+          // Else the project's default — but never bypassPermissions (one agent
+          // must not start another with every permission prompt off).
+          permissionMode: withoutBypass(input.permissionMode ?? defaults?.permissionMode),
           model: input.model ?? 'default',
           // The prompt is a one-shot instruction; the project's context prompt
           // (which the task dialog prefills) stays context, re-injected on
@@ -341,8 +448,34 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
           }
         }
 
+        const linkedItems = await fetchLinkedItems(project, input);
+        if (linkedItems.length > 0) createInput = { ...createInput, linkedItems };
         const result = await deps.createTask(createInput, { startSession: true, source: 'api' });
         return { task: view(result.task), session: result.session };
+      },
+    }),
+  );
+
+  registry.register(
+    defineCapability({
+      name: 'tasks.link',
+      summary:
+        "Link a GitHub issue or Azure DevOps work item to a task, as Dash's New Task dialog does: its content joins the task's context (re-injected on /clear and /compact, a running session's too: Dash rewrites its hook settings, which Claude Code picks up as they change; nothing is sent to the session now), and the item gets a comment naming the task's branch. The branch isn't linked on the GitHub issue, since that would push it. An item already linked is left as it is. Returns the task.",
+      input: z.object({ taskId: z.string().describe('The task id'), ...linkInputs }),
+      callers: ['orchestrator', 'task'],
+      cli: { args: ['taskId'] },
+      readOnly: false,
+      target: { taskId: 'taskId' },
+      handler: async (_ctx, input) => {
+        const task = taskOrThrow(input.taskId);
+        assertNotArchived(task);
+        if (input.issue === undefined && input.workItem === undefined) {
+          throw new ControlError(400, 'pass --issue or --work-item');
+        }
+        const project = deps.getProjects().find((p) => p.id === task.projectId);
+        if (!project) throw new ControlError(404, 'project not found');
+        const items = await fetchLinkedItems(project, input);
+        return view(await deps.linkItems(task.id, items));
       },
     }),
   );
@@ -398,6 +531,87 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
 
   registry.register(
     defineCapability({
+      name: 'tasks.watch',
+      summary:
+        'Watch tasks until stopped, printing a JSON line per change; meant to run in the background. Without a task id it watches every task you can see (or one project\'s with --project), and picks up new ones. First a {"event":"task","task":…} line per task with its current view (as tasks get gives it), then another whenever a task\'s view changes (state, detail, messageAddress, …), and {"event":"removed","taskId":…} when a task is archived or deleted. A task you messaged with `tasks message` since the watch started gives {"event":"reply","taskId":…,"messageId":…,"queued":…,"text":…} once it has answered (as `tasks reply` gives it). Watching one task, the stream ends after its removed line; otherwise it runs until killed or Dash quits. It ends with an {"error":…} line once your access to Dash is turned off.',
+      input: z.object({
+        taskId: z.string().optional().describe('Watch only this task'),
+        projectId: z.string().optional().describe("Only this project's tasks"),
+      }),
+      callers: ['orchestrator', 'task'],
+      cli: { args: ['taskId'] },
+      readOnly: true,
+      stream: true,
+      target: { taskId: 'taskId', projectId: 'projectId' },
+      handler: async (ctx, input, stream) => {
+        const { taskId, projectId } = input;
+        if (taskId && projectId)
+          throw new ControlError(400, 'give a task id or --project, not both');
+        if (taskId) assertNotArchived(taskOrThrow(taskId));
+        // The caller's scope now, not at the call's start: a watch outlives
+        // the moment it was allowed, and ends once its access is gone.
+        const read = (): Map<string, TaskView> => {
+          const scope = ctx.rescope();
+          const found = taskId
+            ? [deps.getTask(taskId)]
+            : (projectId ? [projectId] : [...scope.visibleProjectIds]).flatMap((id) =>
+                deps.getTasks(id),
+              );
+          return new Map(
+            found
+              .filter((t): t is Task => !!t && t.archivedAt == null && scope.canSeeTask(t))
+              .map((t) => [t.id, view(t)]),
+          );
+        };
+        // A `reply` line when a messaged task has stopped working; only replies
+        // to messages sent after the watch started (this watch's own record).
+        const reported = new Set(
+          [...read().keys()].flatMap((id) => taskMessages(id).map((m) => m.messageId)),
+        );
+        const replySource: TaskWatchSource = (watch) => {
+          // One read per task at a time (else a burst of checks reads the same
+          // reply twice before either marks it reported); a check arriving
+          // meanwhile runs once more after it.
+          const running = new Set<string>();
+          const again = new Set<string>();
+          const run = (id: string) => {
+            if (running.has(id)) return void again.add(id);
+            running.add(id);
+            void replies
+              .pendingReplies(id, reported)
+              .then(
+                (found) => {
+                  for (const r of found) watch.emit({ event: 'reply', taskId: id, ...r });
+                },
+                (err) => console.warn('[tasks.watch] reading a reply failed:', err),
+              )
+              .finally(() => {
+                running.delete(id);
+                if (again.delete(id) && !watch.ended()) run(id);
+              });
+          };
+          return (watched) => {
+            for (const [id, task] of watched) {
+              if (task.state !== 'working' && task.state !== 'waiting') run(id);
+            }
+          };
+        };
+        await watchTasks(
+          {
+            read,
+            single: !!taskId,
+            subscriptions: [deps.onActivityChange, deps.onTasksChange],
+            pollMs: WATCH_POLL_MS,
+            sources: [replySource],
+          },
+          stream,
+        );
+      },
+    }),
+  );
+
+  registry.register(
+    defineCapability({
       name: 'tasks.output',
       summary:
         "Read what a task's Claude Code session shows: the last `--lines` lines of its terminal as plain text.",
@@ -424,11 +638,24 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
     }),
   );
 
+  /** Start the task's session and wait until it is in Claude Code's registry
+   *  with a socket; false when `deadline` passed first. */
+  const startAndWait = async (task: Task, deadline: number): Promise<boolean> => {
+    const started = await deps.startSession(task.id);
+    if ('needsTrust' in started) throw new ControlError(409, view(task).detail!);
+    const ready = (): boolean => !!deps.getLiveSessions().get(started.jobId)?.messagingSocketPath;
+    while (!ready()) {
+      if (Date.now() >= deadline) return false;
+      await sleep(WAKE_POLL_MS);
+    }
+    return true;
+  };
+
   registry.register(
     defineCapability({
       name: 'tasks.wake',
       summary:
-        "Make sure a task's Claude Code session is running so it can take messages: returns at once if it is, otherwise starts it (with no message) and returns once it is up, for up to --timeout-sec seconds (max 110; timedOut: true when the time ran out, call again). Then message the task with your own SendMessage to the task's messageAddress; it answers the same way. A task whose messaging is needs-approval runs with permission prompts off, so your message waits until a person delivers it in Dash. A stopped task's old address fails (ENOENT): wake it again. Refused while the task needs the trust prompt or is archived. A task cannot wake itself.",
+        "Make sure a task's Claude Code session is running: returns at once if it is, otherwise starts it (with no message) and returns once it is up, for up to --timeout-sec seconds (max 110; timedOut: true when the time ran out, call again). To message a task, use `dashctl tasks message`, which wakes it itself. Your own SendMessage to the task's messageAddress also works, but a task whose messaging is needs-approval (bypassPermissions) holds it until a person delivers it in Dash, and a stopped task's old address fails (ENOENT). Refused while the task needs the trust prompt or is archived. A task cannot wake itself.",
       input: z.object({ taskId: z.string(), timeoutSec }),
       callers: ['orchestrator', 'task'],
       cli: { args: ['taskId'] },
@@ -443,18 +670,143 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
         // Already running: a start would be a no-op.
         if (current.messageAddress) return { task: current, timedOut: false };
 
-        const startedAt = Date.now();
-        // No message: the caller's own SendMessage is the task's next turn.
-        const started = await deps.startSession(task.id);
-        if ('needsTrust' in started) throw new ControlError(409, view(task).detail!);
-        const ready = (): boolean =>
-          !!deps.getLiveSessions().get(started.jobId)?.messagingSocketPath;
-        const deadline = startedAt + input.timeoutSec * 1000;
-        while (!ready()) {
-          if (Date.now() >= deadline) return { task: view(taskOrThrow(task.id)), timedOut: true };
-          await new Promise((resolve) => setTimeout(resolve, WAKE_POLL_MS));
+        // No message: the caller's own message is the task's next turn.
+        const up = await startAndWait(task, Date.now() + input.timeoutSec * 1000);
+        return { task: view(taskOrThrow(task.id)), timedOut: !up };
+      },
+    }),
+  );
+
+  /** The inbox of the task's running session: the one reported on its live
+   *  socket (another Claude Code session in the worktree reports its own). */
+  const liveInbox = (taskId: string): TaskInbox | undefined => {
+    const jobId = deps.getTask(taskId)?.jobId;
+    const socket = jobId ? deps.getLiveSessions().get(jobId)?.messagingSocketPath : null;
+    return socket ? deps.getInbox(taskId, socket) : undefined;
+  };
+  const waitForInbox = async (taskId: string, deadline: number): Promise<TaskInbox | undefined> => {
+    for (;;) {
+      const inbox = liveInbox(taskId);
+      if (inbox || Date.now() >= deadline) return inbox;
+      await sleep(WAKE_POLL_MS);
+    }
+  };
+
+  registry.register(
+    defineCapability({
+      name: 'tasks.message',
+      summary:
+        "Send a task's Claude Code session a message (the body on stdin), as its next turn: it works for tasks in bypassPermissions too, with no Deliver click in Dash. A stopped session is started first. Returns messageId, queued and the task. Read the answer with `dashctl tasks reply <task-id> --message-id <id>` (or `dashctl tasks watch`): the task's last message of the turn the message starts is its reply. queued: true means the task was working, so its running turn reads the message after the tool call in flight and the reply may be mixed with that turn's work. Never send a message again after an error that says it may have been delivered: a message sent twice is a turn taken twice. A session whose Claude Code setting crossSessionInbound is hold or refuse sets the message aside or drops it without a word. Refused while the task needs the trust prompt or is archived. A task cannot message itself.",
+      input: z.object({
+        taskId: z.string(),
+        text: z.string().trim().min(1).max(200_000).describe('The message body'),
+        from: z
+          .string()
+          .trim()
+          .min(1)
+          .max(100)
+          // eslint-disable-next-line no-control-regex
+          .refine((f) => !/[\x00-\x1f\x7f\]]/.test(f), 'one line, without ]')
+          .optional()
+          .describe('Who the task is told the message is from (default: an orchestrator)'),
+        noReply: z.boolean().optional().describe('Tell the task no reply is needed'),
+      }),
+      callers: ['orchestrator', 'task'],
+      cli: { args: ['taskId'], stdin: 'text' },
+      readOnly: false,
+      target: { taskId: 'taskId' },
+      allowSelf: false,
+      handler: async (ctx, input) => {
+        const task = taskOrThrow(input.taskId);
+        assertNotArchived(task);
+        const current = await freshView(task);
+        if (current.state === 'needs-trust') throw new ControlError(409, current.detail!);
+
+        let inbox: TaskInbox | undefined;
+        if (!current.messageAddress) {
+          const deadline = Date.now() + MESSAGE_START_MS;
+          if (!(await startAndWait(task, deadline))) {
+            throw new ControlError(
+              504,
+              `${task.name}'s session did not start within ${MESSAGE_START_MS / 1000} s; nothing was sent, try again`,
+            );
+          }
+          inbox = await waitForInbox(task.id, deadline);
+          if (!inbox) {
+            throw new ControlError(
+              504,
+              `${task.name}'s session started but reported no inbox within ${MESSAGE_START_MS / 1000} s; nothing was sent, try again`,
+            );
+          }
+        } else {
+          // A session started a moment ago may not have reported it yet.
+          inbox = await waitForInbox(task.id, Date.now() + INBOX_GRACE_MS);
+          if (!inbox) {
+            throw new ControlError(
+              409,
+              `no inbox known yet for ${task.name}: run \`dashctl tasks restart ${task.id}\` (same conversation) and try again`,
+            );
+          }
         }
-        return { task: view(taskOrThrow(task.id)), timedOut: false };
+
+        const queued = view(taskOrThrow(task.id)).state === 'working';
+        const messageId = `m_${randomBytes(4).toString('hex')}`;
+        const sender = ctx.caller.kind === 'task' ? deps.getTask(ctx.caller.taskId) : undefined;
+        const from =
+          input.from ?? (sender ? `task "${sender.name}" (${sender.id})` : 'an orchestrator');
+        const noReply = input.noReply === true;
+        const text = `${messageHeader({ from, messageId, noReply })}\n\n${input.text}`;
+        try {
+          await deps.postToInbox(inbox, text);
+        } catch (err) {
+          deps.dropInbox(task.id, inbox.socket);
+          const reason = reasonOf(err);
+          if (err instanceof InboxWriteError && err.delivered === 'no') {
+            throw new ControlError(502, `${reason}; nothing was sent`);
+          }
+          throw new ControlError(
+            502,
+            `${reason}. It may have been delivered: don't send it again, check \`dashctl tasks output ${task.id}\``,
+          );
+        }
+        recordTaskMessage(task.id, {
+          messageId,
+          sentAt: Date.now(),
+          queued,
+          noReply,
+          transcriptPath: inbox.transcriptPath,
+        });
+        return { messageId, queued, task: view(taskOrThrow(task.id)) };
+      },
+    }),
+  );
+
+  const replies = createReplyReader(deps);
+
+  registry.register(
+    defineCapability({
+      name: 'tasks.reply',
+      summary:
+        "Read a task's reply to a message sent with `dashctl tasks message`: its last message of the turn the message started. status is done once the task has stopped working and has answered, else pending (text is what it has written so far, or null). Message ids are kept in memory until Dash restarts.",
+      input: z.object({
+        taskId: z.string(),
+        messageId: z.string().describe('From `dashctl tasks message`'),
+      }),
+      callers: ['orchestrator', 'task'],
+      cli: { args: ['taskId'] },
+      readOnly: true,
+      target: { taskId: 'taskId' },
+      handler: async (_ctx, input) => {
+        const task = taskOrThrow(input.taskId);
+        const record = findTaskMessage(task.id, input.messageId);
+        if (!record) {
+          throw new ControlError(
+            404,
+            `no message ${input.messageId} to ${task.name}: message ids are kept in memory until Dash restarts`,
+          );
+        }
+        const reply = await replies.replyTo(task, record);
+        return { messageId: record.messageId, queued: record.queued, ...reply };
       },
     }),
   );
@@ -552,4 +904,66 @@ export function registerTaskCapabilities(registry: Registry, deps: TaskCapabilit
       },
     }),
   );
+}
+
+/** What tasks.reply and the watch's reply lines read the transcript with. */
+type ReplyDeps = Pick<
+  TaskCapabilityDeps,
+  | 'getTask'
+  | 'getActivity'
+  | 'getUntrustedRoot'
+  | 'getLiveSessions'
+  | 'transcriptPathFor'
+  | 'readTranscript'
+>;
+
+export interface MessageReply {
+  status: 'pending' | 'done';
+  text: string | null;
+}
+
+/**
+ * Replies to messages sent with tasks.message, read from the task's
+ * transcript. `pendingReplies` is for a watch: call it when a task stops
+ * working, with that watch's own set of message ids already reported; it
+ * returns each reply that is done and not in the set (messages sent with
+ * noReply are left out), and adds it to the set.
+ */
+export function createReplyReader(deps: ReplyDeps) {
+  const replyTo = async (
+    task: Task,
+    record: { messageId: string; transcriptPath: string | null },
+  ): Promise<MessageReply> => {
+    const file = record.transcriptPath ?? deps.transcriptPathFor(task);
+    const jsonl = file ? await deps.readTranscript(file) : null;
+    const { text } = jsonl ? replyAfterMessage(jsonl, record.messageId) : { text: null };
+    const state = toTaskView(
+      task,
+      deps.getActivity(),
+      deps.getUntrustedRoot,
+      deps.getLiveSessions(),
+    ).state;
+    // Waiting for a person is a turn not finished yet.
+    const done = text !== null && state !== 'working' && state !== 'waiting';
+    return { status: done ? 'done' : 'pending', text };
+  };
+
+  const pendingReplies = async (
+    taskId: string,
+    reported: Set<string>,
+  ): Promise<Array<{ messageId: string; queued: boolean; text: string }>> => {
+    const task = deps.getTask(taskId);
+    if (!task) return [];
+    const out: Array<{ messageId: string; queued: boolean; text: string }> = [];
+    for (const record of taskMessages(taskId)) {
+      if (record.noReply || reported.has(record.messageId)) continue;
+      const reply = await replyTo(task, record);
+      if (reply.status !== 'done') continue;
+      reported.add(record.messageId);
+      out.push({ messageId: record.messageId, queued: record.queued, text: reply.text! });
+    }
+    return out;
+  };
+
+  return { replyTo, pendingReplies };
 }

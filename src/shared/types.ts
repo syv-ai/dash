@@ -40,11 +40,17 @@ export type LinkedItem = LinkedGithubIssue | LinkedAdoWorkItem;
 
 /**
  * Permission strategy passed to Claude CLI when a task PTY is spawned.
- * - `default`: prompt for every tool use (no flag)
+ * - `default`: prompt for every tool use (--permission-mode default)
  * - `acceptEdits`: auto-accept file edits, still prompt for shell (--permission-mode acceptEdits)
+ * - `auto`: Claude Code's auto mode, a classifier approves safe actions (--permission-mode auto)
  * - `bypassPermissions`: skip all permission prompts (--dangerously-skip-permissions)
  */
-export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions';
+export const PERMISSION_MODES = ['default', 'acceptEdits', 'auto', 'bypassPermissions'] as const;
+export type PermissionMode = (typeof PERMISSION_MODES)[number];
+
+export function isPermissionMode(value: unknown): value is PermissionMode {
+  return PERMISSION_MODES.includes(value as PermissionMode);
+}
 
 /**
  * Which Claude model a task's `claude` session starts with. 'default' omits the

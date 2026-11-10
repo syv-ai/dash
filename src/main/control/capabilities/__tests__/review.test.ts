@@ -182,6 +182,14 @@ describe('review.drafts_update / drafts_delete', () => {
     expect(!!comments.get('u1')).toBe(false);
   });
 
+  it('refuses an update that changes nothing, such as a body piped without --body -', async () => {
+    put(row({ id: 'd1' }));
+    expect(await status(registry.call(asTask('me'), 'review.drafts_update', { id: 'd1' }))).toBe(
+      400,
+    );
+    expect(changed).toEqual([]);
+  });
+
   it("can't see another task's draft, or a non-PR comment", async () => {
     put(row({ id: 's1', taskId: 'sibling' }));
     put(row({ id: 'l1', viewScope: 'live' }));

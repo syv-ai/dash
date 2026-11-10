@@ -6,6 +6,7 @@ import { registerProjectCapabilities } from '../projects';
 import type { LiveSession } from '../../../services/claudeSessionRegistry';
 import { registerTaskCapabilities, toTaskView, type TaskCapabilityDeps } from '../tasks';
 import { FolderOccupiedError } from '../../../services/FolderOccupiedError';
+import { DASH_ACCESS_OFF, ORCHESTRATOR_ACCESS_OFF } from '../../scope';
 
 const orch = { kind: 'orchestrator' } as const;
 const asTask = (taskId: string) => ({ kind: 'task', taskId }) as const;
@@ -20,6 +21,7 @@ let activity: Record<string, ActivityInfo>;
 let untrusted: Record<string, string>;
 let sessions: Map<string, LiveSession>;
 let listeners: Array<() => void>;
+let taskListeners: Array<() => void>;
 /** The fakes, typed loosely so each test can swap an implementation. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let deps: Record<keyof TaskCapabilityDeps, Mock<(...args: any[]) => any>>;
@@ -32,7 +34,11 @@ function emitActivity(next: Record<string, ActivityInfo>): void {
 
 beforeEach(() => {
   projects = [
-    makeProject({ id: 'pA', baseRef: 'origin/main' }),
+    makeProject({
+      id: 'pA',
+      baseRef: 'origin/main',
+      gitRemote: 'git@github.com:acme/app.git',
+    }),
     makeProject({ id: 'pB' }),
     makeProject({ id: 'pNoGit', isGitRepo: false }),
     makeProject({ id: 'pArch', archivedAt: '2026-01-02T00:00:00.000Z' }),
@@ -49,6 +55,7 @@ beforeEach(() => {
   untrusted = {};
   sessions = new Map();
   listeners = [];
+  taskListeners = [];
   deps = {
     getProjects: vi.fn(() => projects),
     getTask: vi.fn((id: string) => tasks.find((t) => t.id === id)),
@@ -60,6 +67,12 @@ beforeEach(() => {
       listeners.push(l);
       return () => {
         listeners = listeners.filter((x) => x !== l);
+      };
+    }),
+    onTasksChange: vi.fn((l: () => void) => {
+      taskListeners.push(l);
+      return () => {
+        taskListeners = taskListeners.filter((x) => x !== l);
       };
     }),
     taskDefaults: vi.fn(() => undefined),
@@ -84,6 +97,21 @@ beforeEach(() => {
     startSession: vi.fn(async () => ({ jobId: 'job-1' })),
     readLogs: vi.fn(async () => ''),
     openTask: vi.fn(),
+    getGithubIssue: vi.fn(async (_path: string, n: number) => ({
+      provider: 'github' as const,
+      id: n,
+      title: `Issue ${n}`,
+      url: `https://github.com/acme/app/issues/${n}`,
+    })),
+    getAdoWorkItem: vi.fn(async (_projectId: string, id: number) => ({
+      provider: 'ado' as const,
+      id,
+      title: `Item ${id}`,
+      url: `https://dev.azure.com/acme/app/_workitems/edit/${id}`,
+      type: 'Bug',
+      state: 'New',
+    })),
+    linkItems: vi.fn(async (taskId: string) => tasks.find((t) => t.id === taskId)!),
   } as never;
   registry = createRegistry(fakeLookups(projects, tasks));
   registerProjectCapabilities(registry, deps as never);
@@ -283,7 +311,7 @@ describe('tasks.create', () => {
         kind: 'worktree-new-branch',
         baseRef: 'origin/main',
         pushRemote: false,
-        permissionMode: 'default',
+        permissionMode: 'auto',
         model: 'default',
         initialPrompt: 'write a README',
         contextPrompt: undefined,
@@ -327,7 +355,13 @@ describe('tasks.create', () => {
   it('never inherits a bypassPermissions project default', async () => {
     deps.taskDefaults.mockReturnValue({ permissionMode: 'bypassPermissions' });
     await registry.call(orch, 'tasks.create', { projectId: 'pA', name: 'x' });
-    expect(deps.createTask.mock.calls[0]![0]).toMatchObject({ permissionMode: 'default' });
+    expect(deps.createTask.mock.calls[0]![0]).toMatchObject({ permissionMode: 'auto' });
+  });
+
+  it("inherits the project's default mode", async () => {
+    deps.taskDefaults.mockReturnValue({ permissionMode: 'acceptEdits' });
+    await registry.call(orch, 'tasks.create', { projectId: 'pA', name: 'x' });
+    expect(deps.createTask.mock.calls[0]![0]).toMatchObject({ permissionMode: 'acceptEdits' });
   });
 
   it('orchestrator-created tasks have no parent', async () => {
@@ -577,5 +611,244 @@ describe('tasks.wake', () => {
     expect(await registry.call(asTask('me'), 'tasks.wake', { taskId: 'child' })).toMatchObject({
       timedOut: false,
     });
+  });
+});
+
+describe('linking issues and work items', () => {
+  it('tasks.create passes the fetched issue and work item through as linkedItems', async () => {
+    await registry.call(orch, 'tasks.create', {
+      projectId: 'pA',
+      name: 'x',
+      issue: '#12',
+      workItem: 7,
+    });
+    expect(deps.getGithubIssue).toHaveBeenCalledWith('/repos/pA', 12);
+    expect(deps.getAdoWorkItem).toHaveBeenCalledWith('pA', 7);
+    expect(deps.createTask.mock.calls[0]![0].linkedItems).toEqual([
+      expect.objectContaining({ provider: 'github', id: 12 }),
+      expect.objectContaining({ provider: 'ado', id: 7 }),
+    ]);
+  });
+
+  it('tasks.create without links passes no linkedItems', async () => {
+    await registry.call(orch, 'tasks.create', { projectId: 'pA', name: 'x' });
+    expect(deps.createTask.mock.calls[0]![0].linkedItems).toBeUndefined();
+  });
+
+  it.each([
+    ['123', 123],
+    ['#123', 123],
+    [123, 123],
+    ['https://github.com/acme/app/issues/123', 123],
+    ['https://github.com/Acme/App/issues/123/', 123],
+    ['https://github.com/acme/app/issues/123#issuecomment-1', 123],
+  ])('reads the issue %s as #%s', async (issue, n) => {
+    await registry.call(orch, 'tasks.link', { taskId: 'sibling', issue });
+    expect(deps.getGithubIssue).toHaveBeenCalledWith('/repos/pA', n);
+  });
+
+  it("400s an issue URL of another repository, or that isn't an issue", async () => {
+    for (const issue of [
+      'https://github.com/other/app/issues/1',
+      'https://github.com/acme/app/pull/1',
+      'abc',
+      '0',
+    ]) {
+      expect(await status(registry.call(orch, 'tasks.link', { taskId: 'sibling', issue }))).toBe(
+        400,
+      );
+    }
+    expect(deps.getGithubIssue).not.toHaveBeenCalled();
+    expect(deps.linkItems).not.toHaveBeenCalled();
+  });
+
+  it('404s an issue gh cannot find, with its reason', async () => {
+    deps.getGithubIssue.mockRejectedValue(new Error('Could not resolve to an issue'));
+    await expect(
+      registry.call(orch, 'tasks.create', { projectId: 'pA', name: 'x', issue: '9' }),
+    ).rejects.toMatchObject({ status: 404, message: 'issue #9: Could not resolve to an issue' });
+    expect(deps.createTask).not.toHaveBeenCalled();
+  });
+
+  it('400s a work item on a project with no Azure DevOps connection', async () => {
+    deps.getAdoWorkItem.mockResolvedValue(null);
+    await expect(
+      registry.call(orch, 'tasks.link', { taskId: 'sibling', workItem: 3 }),
+    ).rejects.toMatchObject({ status: 400, message: 'pA has no Azure DevOps connection' });
+  });
+
+  it('tasks.link hands the fetched items to linkItems and returns the task', async () => {
+    const result = await registry.call(asTask('me'), 'tasks.link', {
+      taskId: 'child',
+      issue: '5',
+    });
+    expect(deps.linkItems).toHaveBeenCalledWith('child', [
+      expect.objectContaining({ provider: 'github', id: 5 }),
+    ]);
+    expect(result).toMatchObject({ id: 'child' });
+  });
+
+  it('tasks.link needs an issue or work item, and refuses an archived task', async () => {
+    expect(await status(registry.call(orch, 'tasks.link', { taskId: 'sibling' }))).toBe(400);
+    expect(await status(registry.call(orch, 'tasks.link', { taskId: 'old', issue: '1' }))).toBe(
+      409,
+    );
+    expect(deps.linkItems).not.toHaveBeenCalled();
+  });
+});
+
+describe('tasks.watch', () => {
+  const task = (id: string) => tasks.find((t) => t.id === id)!;
+  const emitTasks = () => {
+    for (const l of [...taskListeners]) l();
+  };
+  /** A stream that collects its lines, and the controller that ends it. */
+  function watch(caller: Parameters<Registry['call']>[0], input: Record<string, unknown> = {}) {
+    const lines: Array<Record<string, unknown>> = [];
+    const ac = new AbortController();
+    const done = registry.call(caller, 'tasks.watch', input, {
+      emit: (line) => lines.push(line as Record<string, unknown>),
+      signal: ac.signal,
+    });
+    return { lines, ac, done };
+  }
+  const ids = (lines: Array<Record<string, unknown>>) =>
+    lines.map((l) => (l.task as { id?: string } | undefined)?.id ?? `${l.event}:${l.taskId}`);
+
+  it("starts with every watched task's view: the caller's scope, archived ones left out", async () => {
+    const all = watch(orch);
+    expect(ids(all.lines)).toEqual(['me', 'child', 'sibling', 'other']);
+    expect(all.lines[0]).toEqual({
+      event: 'task',
+      task: toTaskView(task('me'), activity, () => undefined, sessions),
+    });
+    const mine = watch(asTask('me'));
+    expect(ids(mine.lines)).toEqual(['me', 'child']);
+    const projectB = watch(orch, { projectId: 'pB' });
+    expect(ids(projectB.lines)).toEqual(['other']);
+    for (const w of [all, mine, projectB]) w.ac.abort();
+    await Promise.all([all.done, mine.done, projectB.done]);
+  });
+
+  it('emits a task again only when its view changes', async () => {
+    const w = watch(orch, { taskId: 'child' });
+    expect(w.lines).toHaveLength(1);
+    emitActivity({});
+    emitActivity({ sibling: { state: 'busy' } });
+    expect(w.lines).toHaveLength(1);
+    emitActivity({ child: { state: 'busy' } });
+    emitActivity({ child: { state: 'busy' } });
+    expect(w.lines).toHaveLength(2);
+    expect(w.lines[1]).toMatchObject({ event: 'task', task: { id: 'child', state: 'working' } });
+    w.ac.abort();
+    await w.done;
+  });
+
+  it('picks up new tasks, and says when one is archived or deleted', async () => {
+    const w = watch(orch, { projectId: 'pA' });
+    w.lines.length = 0;
+    tasks.push(makeTask({ id: 'fresh', projectId: 'pA' }));
+    emitTasks();
+    task('sibling').archivedAt = '2026-02-01T00:00:00.000Z';
+    tasks.splice(tasks.indexOf(task('child')), 1);
+    emitTasks();
+    expect(ids(w.lines)).toEqual(['fresh', 'removed:child', 'removed:sibling']);
+    // A restored task is watched again.
+    task('sibling').archivedAt = null;
+    emitTasks();
+    expect(ids(w.lines).at(-1)).toBe('sibling');
+    w.ac.abort();
+    await w.done;
+  });
+
+  it("re-reads views on a timer, for a session's message address", async () => {
+    vi.useFakeTimers();
+    const w = watch(orch, { taskId: 'child' });
+    task('child').jobId = 'job-c';
+    sessions.set('job-c', live());
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(w.lines.at(-1)).toMatchObject({
+      task: { id: 'child', messageAddress: 'uds:/tmp/cc-socks/7.sock' },
+    });
+    w.ac.abort();
+    await w.done;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('ends after the removed line when watching one task', async () => {
+    const w = watch(orch, { taskId: 'child' });
+    task('child').archivedAt = '2026-02-01T00:00:00.000Z';
+    emitTasks();
+    await expect(w.done).resolves.toBeUndefined();
+    expect(ids(w.lines)).toEqual(['child', 'removed:child']);
+    expect(listeners).toHaveLength(0);
+    expect(taskListeners).toHaveLength(0);
+  });
+
+  it('unsubscribes when the stream is aborted', async () => {
+    vi.useFakeTimers();
+    const w = watch(orch);
+    expect(listeners).toHaveLength(1);
+    expect(taskListeners).toHaveLength(1);
+    w.ac.abort();
+    await expect(w.done).resolves.toBeUndefined();
+    expect(listeners).toHaveLength(0);
+    expect(taskListeners).toHaveLength(0);
+    expect(vi.getTimerCount()).toBe(0);
+    emitActivity({ child: { state: 'busy' } });
+    expect(ids(w.lines)).toEqual(['me', 'child', 'sibling', 'other']);
+  });
+
+  it("ends with an error once the caller's access is gone", async () => {
+    // A task caller: its Dash access turned off, or the task itself removed.
+    const mine = watch(asTask('me'));
+    task('me').dashAccess = false;
+    emitTasks();
+    await expect(mine.done).rejects.toMatchObject({ status: 403, message: DASH_ACCESS_OFF });
+    task('me').dashAccess = true;
+    const gone = watch(asTask('me'));
+    tasks.splice(tasks.indexOf(task('me')), 1);
+    emitActivity({});
+    await expect(gone.done).rejects.toMatchObject({ status: 403 });
+    expect(listeners).toHaveLength(0);
+    expect(taskListeners).toHaveLength(0);
+  });
+
+  it('ends with an error once orchestrator access is turned off, on the next poll', async () => {
+    vi.useFakeTimers();
+    let allowed = true;
+    registry = createRegistry({
+      ...fakeLookups(projects, tasks),
+      isOrchestratorAllowed: () => allowed,
+    });
+    registerTaskCapabilities(registry, deps as never);
+    const w = watch(orch);
+    allowed = false;
+    const settled = expect(w.done).rejects.toMatchObject({
+      status: 403,
+      message: ORCHESTRATOR_ACCESS_OFF,
+    });
+    await vi.advanceTimersByTimeAsync(2_000);
+    await settled;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('refuses before streaming: out of scope, archived, both targets, no stream', async () => {
+    const refused = async (
+      caller: Parameters<Registry['call']>[0],
+      input: Record<string, unknown>,
+    ) => {
+      const w = watch(caller, input);
+      const code = await status(w.done);
+      expect(w.lines).toEqual([]);
+      return code;
+    };
+    expect(await refused(asTask('me'), { taskId: 'sibling' })).toBe(404);
+    expect(await refused(orch, { taskId: 'hidden' })).toBe(404);
+    expect(await refused(orch, { projectId: 'pArch' })).toBe(404);
+    expect(await refused(orch, { taskId: 'old' })).toBe(409);
+    expect(await refused(orch, { taskId: 'child', projectId: 'pA' })).toBe(400);
+    expect(await status(registry.call(orch, 'tasks.watch', {}))).toBe(406);
+    expect(listeners).toHaveLength(0);
   });
 });

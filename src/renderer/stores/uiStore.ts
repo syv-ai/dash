@@ -38,6 +38,9 @@ export interface UiState {
   extensionsInitialScopeId: string | null;
   // Project whose Claude memory the memory modal shows; null → closed.
   memoryProjectId: string | null;
+  // The task whose "…" menu opened the memory modal (where "Send to task"
+  // goes first); null when it was opened from a project.
+  memoryTaskId: string | null;
   settingsInitialTab: string | undefined;
   remoteControlModalPtyId: string | null;
   // Panel-animation flags (driven by App's panel toggle handlers)
@@ -61,7 +64,10 @@ export interface UiActions {
   setShowSettings: (v: Updater<boolean>) => void;
   setShowSkillsBrowser: (v: boolean) => void;
   setExtensionsInitialScopeId: (v: string | null) => void;
+  /** Show a project's memory (null closes the modal). Switching project keeps the task it was opened from. */
   setMemoryProjectId: (v: string | null) => void;
+  /** Open the memory modal from a task's menu, on that task's project. */
+  openTaskMemory: (projectId: string, taskId: string) => void;
   setSettingsInitialTab: (v: string | undefined) => void;
   setRemoteControlModalPtyId: (v: string | null) => void;
   setSidebarAnimating: (v: boolean) => void;
@@ -89,6 +95,7 @@ const initialState: UiState = {
   showSkillsBrowser: false,
   extensionsInitialScopeId: null,
   memoryProjectId: null,
+  memoryTaskId: null,
   settingsInitialTab: undefined,
   remoteControlModalPtyId: null,
   sidebarAnimating: false,
@@ -113,7 +120,13 @@ export const useUi = create<UiStore>((set, get) => ({
   setShowSettings: (v) => set((s) => ({ showSettings: apply(v, s.showSettings) })),
   setShowSkillsBrowser: (v) => set({ showSkillsBrowser: v }),
   setExtensionsInitialScopeId: (v) => set({ extensionsInitialScopeId: v }),
-  setMemoryProjectId: (v) => set({ memoryProjectId: v }),
+  setMemoryProjectId: (v) =>
+    set((s) => ({
+      memoryProjectId: v,
+      // Opening from a project, or closing, drops the task it was opened from.
+      memoryTaskId: v !== null && s.memoryProjectId !== null ? s.memoryTaskId : null,
+    })),
+  openTaskMemory: (projectId, taskId) => set({ memoryProjectId: projectId, memoryTaskId: taskId }),
   setSettingsInitialTab: (v) => set({ settingsInitialTab: v }),
   setRemoteControlModalPtyId: (v) => set({ remoteControlModalPtyId: v }),
   setSidebarAnimating: (v) => set({ sidebarAnimating: v }),

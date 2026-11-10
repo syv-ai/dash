@@ -31,6 +31,7 @@ import {
 import { TaskMenuItems, onTaskMenuCloseAutoFocus } from './task/TaskMenuItems';
 import { TokenBadge } from './ui/TokenBadge';
 import { PrBadge } from './ui/PrBadge';
+import { SetupStatus } from './task/SetupStatus';
 
 /**
  * Colored, linkable badges for the GitHub issues / ADO work items attached to a
@@ -230,6 +231,7 @@ export function MainContent({
 
       {/* Right cluster: controls + right-inspector toggle */}
       <div className="inline-flex items-center gap-1.5 shrink-0 titlebar-no-drag">
+        {activeTask?.useWorktree && <SetupStatus worktreePath={activeTask.path} variant="pill" />}
         {activeTask && showTaskTokens && (
           <TokenBadge totalTokens={activeTask.totalTokens} totalCostUsd={activeTask.totalCostUsd} />
         )}

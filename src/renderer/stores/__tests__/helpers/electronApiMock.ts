@@ -24,6 +24,7 @@ export function makeElectronApiMock(overrides: Record<string, unknown> = {}) {
     createTask: vi.fn(),
     setTaskDashAccess: vi.fn(),
     onTasksChanged: vi.fn((_cb: (d: { projectId: string }) => void) => () => {}),
+    onProjectsChanged: vi.fn((_cb: () => void) => () => {}),
     onDiffCommentsChanged: vi.fn((_cb: (d: { taskId: string }) => void) => () => {}),
     prReviewSetResolved: vi.fn(() => ok(undefined)),
     prReviewSubmit: vi.fn(() => ok({ postedDraftIds: [] })),
@@ -59,6 +60,9 @@ export function makeElectronApiMock(overrides: Record<string, unknown> = {}) {
     getProjectTokenStats: vi.fn((_id: string) =>
       ok({ totalTokens: 0, totalCostUsd: 0, taskCount: 0 }),
     ),
+    memoryNewCounts: vi.fn(() => ok({})),
+    memoryMarkSeen: vi.fn(() => ok(null)),
+    onMemoryNewCount: vi.fn((_cb: (d: { projectId: string; count: number }) => void) => () => {}),
     rtkGetStatus: vi.fn(() => ok({ installed: false, downloadable: false })),
     detectClaude: vi.fn(() =>
       ok({
@@ -93,6 +97,14 @@ export function makeElectronApiMock(overrides: Record<string, unknown> = {}) {
     diffCommentsUpsert: vi.fn((c: unknown) => ok(c)),
     diffCommentsDelete: vi.fn(() => ok(undefined)),
     diffCommentsPruneForTask: vi.fn(() => ok({ deleted: 0 })),
+    worktreeSetupList: vi.fn(() => ok([])),
+    worktreeSetupLog: vi.fn((_path: string) => ok(null)),
+    worktreeSetupRerun: vi.fn((_taskId: string) => ok(undefined)),
+    onWorktreeSetupChanged: vi.fn((_cb: (run: unknown) => void) => () => {}),
+    onWorktreeSetupForgotten: vi.fn((_cb: (d: { worktreePath: string }) => void) => () => {}),
+    onWorktreeSetupOutput: vi.fn(
+      (_cb: (d: { worktreePath: string; chunk: string }) => void) => () => {},
+    ),
     ...overrides,
   };
 }

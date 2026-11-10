@@ -1,4 +1,5 @@
-import { BrowserWindow, WebContents } from 'electron';
+import type { WebContents } from 'electron';
+import { broadcast } from '../utils/broadcast';
 import { DatabaseService } from './DatabaseService';
 import { aggregateTokenStatsForTaskPath } from '../utils/taskTokenAggregator';
 import type { TokenStatsRollup } from '../../shared/types';
@@ -65,14 +66,7 @@ class TokenStatsServiceImpl {
         console.warn('[TokenStatsService] sender.send failed, falling back', err);
       }
     }
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (win.isDestroyed()) continue;
-      try {
-        win.webContents.send('tokenStats:updated', update);
-      } catch (err) {
-        console.warn('[TokenStatsService] broadcast failed', err);
-      }
-    }
+    broadcast('tokenStats:updated', update);
   }
 }
 

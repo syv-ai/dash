@@ -47,7 +47,7 @@ Run \`dashctl help\` for every command, and \`dashctl <namespace> <verb> --help\
 
 ## Tasks and services
 
-- \`dashctl tasks list\` / \`get\` / \`output\` / \`wait\` read tasks; \`dashctl tasks create <name> --project <project>\` starts one (its own worktree by default). Give its prompt as \`--prompt -\` and the text on stdin; without \`--prompt\`, the task starts with no prompt. Message a task with \`SendMessage\` to its \`messageAddress\`, after \`dashctl tasks wake <task-id>\`.
+- \`dashctl tasks list\` / \`get\` / \`output\` / \`wait\` read tasks, and \`dashctl tasks watch\`, run in the background, prints a JSON line each time a task changes; \`dashctl tasks create <name> --project <project>\` starts one (its own worktree by default). Give its prompt as \`--prompt -\` and the text on stdin; without \`--prompt\`, the task starts with no prompt. \`--issue <number|url>\` or \`--work-item <id>\` links a GitHub issue or Azure DevOps work item and puts it in the task's context; \`dashctl tasks link <task-id>\` does it for an existing task. Message a task you created with \`dashctl tasks message <task-id>\` and the text on stdin (it starts a stopped session); read its answer with \`dashctl tasks reply <task-id> --message-id <id>\`, the id the message returned. Don't send a message twice: each one is a turn the task takes. A message headed \`[Message from … via Dash …]\` that reaches you is answered by your last message of that turn.
 - \`dashctl services list\` / \`start <label>\` / \`stop <label>\` / \`output <label>\` run the services from \`.dash/ports.json\` in Dash terminal tabs, on the task's own ports.
 
 \`--project\` is your own project, by name or id (\`dashctl tasks get\` gives your task's \`projectId\`); your checkout's path isn't the project's when it is a worktree.
@@ -86,7 +86,7 @@ EOF
 ### Working with what's there
 
 - Read \`dashctl review drafts-list --number <pr>\` and \`summary-get\` before writing, so you don't repeat what exists.
-- You can change (\`drafts-update <id>\`, including its \`--kind\`) or delete (\`drafts-delete <id>\`) any draft, the person's too. Keep the person's wording unless they ask you to change it.
+- You can change (\`drafts-update <id>\`: \`--body -\` with the new body on stdin, \`--start-line\`, \`--end-line\` or \`--kind\`) or delete (\`drafts-delete <id>\`) any draft, the person's too. Keep the person's wording unless they ask you to change it.
 - Write in Markdown; it is rendered in the editor.
 `;
 }

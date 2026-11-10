@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { MEMORY_TYPES } from '../../../../shared/types';
-import type { MemoryEntry, ProjectMemory } from '../../../../shared/types';
+import type { MemoryEntry, ProjectMemory, Task } from '../../../../shared/types';
 import {
   listMemories,
   memoryCounts,
   memoryIssueTexts,
+  memoryMention,
+  memorySendTarget,
+  newMemoriesLabel,
   memorySections,
   memoryNotices,
   pickCurrent,
@@ -159,5 +162,74 @@ describe('pickCurrent', () => {
 
   it('returns null without memories', () => {
     expect(pickCurrent([], 'MEMORY.md')).toBeNull();
+  });
+});
+
+describe('newMemoriesLabel', () => {
+  it('says how many, in the singular for one', () => {
+    expect(newMemoriesLabel(1)).toBe('1 new memory');
+    expect(newMemoriesLabel(3)).toBe('3 new memories');
+  });
+});
+
+describe('memorySendTarget', () => {
+  const task = (id: string, over: Partial<Task> = {}): Task =>
+    ({ id, name: `Task ${id}`, projectId: 'p', archivedAt: null, ...over }) as Task;
+  const dash = { id: 'p', name: 'Dash' };
+
+  it("sends to the active task when it is one of the project's", () => {
+    expect(memorySendTarget(dash, [task('a'), task('b')], 'b')).toEqual({
+      taskId: 'b',
+      taskName: 'Task b',
+    });
+  });
+
+  it("says why when the active task is another project's, or there is none", () => {
+    const reason = { reason: 'Open a task in Dash to send this memory to it' };
+    expect(memorySendTarget(dash, [task('a')], 'elsewhere')).toEqual(reason);
+    expect(memorySendTarget(dash, [task('a')], null)).toEqual(reason);
+  });
+
+  it('never sends to an archived task', () => {
+    expect(memorySendTarget(dash, [task('a', { archivedAt: 'x' })], 'a')).toHaveProperty('reason');
+  });
+
+  it('sends to the task the modal was opened from first, even with another active', () => {
+    expect(memorySendTarget(dash, [task('a'), task('b')], 'b', task('a'))).toEqual({
+      taskId: 'a',
+      taskName: 'Task a',
+    });
+  });
+
+  it("skips the task it was opened from once the modal shows another project's memory", () => {
+    const other = task('a', { projectId: 'other' });
+    expect(memorySendTarget(dash, [task('b')], 'b', other)).toEqual({
+      taskId: 'b',
+      taskName: 'Task b',
+    });
+    expect(memorySendTarget(dash, [task('b')], null, other)).toEqual({
+      reason: 'Open a task in Dash to send this memory to it',
+    });
+  });
+
+  it('falls back to the active task when the task it was opened from is archived', () => {
+    expect(memorySendTarget(dash, [task('b')], 'b', task('a', { archivedAt: 'x' }))).toEqual({
+      taskId: 'b',
+      taskName: 'Task b',
+    });
+  });
+});
+
+describe('memoryMention', () => {
+  it('@-mentions the path and leaves a space to keep typing', () => {
+    expect(memoryMention('/h/.claude/projects/x/memory/a.md')).toBe(
+      '@/h/.claude/projects/x/memory/a.md ',
+    );
+  });
+
+  it('quotes a path with a space in it', () => {
+    expect(memoryMention('/Users/Jo Doe/.claude/projects/x/memory/a b.md')).toBe(
+      '@"/Users/Jo Doe/.claude/projects/x/memory/a b.md" ',
+    );
   });
 });

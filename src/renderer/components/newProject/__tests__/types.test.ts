@@ -16,3 +16,13 @@ describe('configure form dashAccess', () => {
     expect(valuesToConfig(off).taskDefaults).not.toHaveProperty('dashAccess', false);
   });
 });
+
+describe('configure form permissionMode', () => {
+  it('reads auto when unset, and writes a mode only when it is not auto', () => {
+    const unset = configToValues(null, fallbacks);
+    expect(unset.permissionMode).toBe('auto');
+    expect(valuesToConfig(unset).taskDefaults?.permissionMode).toBeUndefined();
+    const edits = { ...unset, permissionMode: 'acceptEdits' as const };
+    expect(valuesToConfig(edits).taskDefaults?.permissionMode).toBe('acceptEdits');
+  });
+});

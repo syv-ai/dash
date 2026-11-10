@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseMemoryFile, readIndex, toMemoryType } from '../memoryFiles';
+import { countNewMemories, parseMemoryFile, readIndex, toMemoryType } from '../memoryFiles';
 
 describe('parseMemoryFile', () => {
   it('reads the current shape (type under metadata:)', () => {
@@ -109,5 +109,27 @@ describe('readIndex', () => {
     );
     expect(of('x.md').inIndex).toBe(false);
     expect(of('a.md').inIndex).toBe(true);
+  });
+});
+
+describe('countNewMemories', () => {
+  const files = [
+    { name: 'old.md', mtimeMs: 100 },
+    { name: 'edited.md', mtimeMs: 250 },
+    { name: 'written.md', mtimeMs: 300 },
+    { name: 'MEMORY.md', mtimeMs: 300 },
+    { name: 'notes.txt', mtimeMs: 300 },
+  ];
+
+  it('counts the memories written or changed after the last look, not the index', () => {
+    expect(countNewMemories(files, 200)).toBe(2);
+  });
+
+  it('counts a memory written at the moment of the last look as seen', () => {
+    expect(countNewMemories(files, 300)).toBe(0);
+  });
+
+  it('counts nothing when the project was never seen', () => {
+    expect(countNewMemories(files, null)).toBe(0);
   });
 });

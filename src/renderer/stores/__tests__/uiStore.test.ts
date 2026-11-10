@@ -198,3 +198,26 @@ describe('uiStore delete confirmations', () => {
     expect(useUi.getState().deleteTaskTarget).toBeNull();
   });
 });
+
+describe('uiStore memory modal origin', () => {
+  beforeEach(() => installWindow(makeElectronApiMock()));
+  afterEach(() => resetWindow());
+
+  it('keeps the task it was opened from across a project switch, and drops it on close', async () => {
+    const { useUi } = await freshStores();
+    useUi.getState().openTaskMemory('p1', 't1');
+    expect(useUi.getState()).toMatchObject({ memoryProjectId: 'p1', memoryTaskId: 't1' });
+    useUi.getState().setMemoryProjectId('p2');
+    expect(useUi.getState()).toMatchObject({ memoryProjectId: 'p2', memoryTaskId: 't1' });
+    useUi.getState().setMemoryProjectId(null);
+    expect(useUi.getState()).toMatchObject({ memoryProjectId: null, memoryTaskId: null });
+  });
+
+  it('has no task when opened from a project', async () => {
+    const { useUi } = await freshStores();
+    useUi.getState().openTaskMemory('p1', 't1');
+    useUi.getState().setMemoryProjectId(null);
+    useUi.getState().setMemoryProjectId('p1');
+    expect(useUi.getState().memoryTaskId).toBeNull();
+  });
+});

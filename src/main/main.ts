@@ -130,6 +130,10 @@ void app.whenReady().then(async () => {
   const { registerAllIpc } = await import('./ipc');
   registerAllIpc();
 
+  // Watch every project's Claude memory for the project rows' "new memories" badge.
+  const { startMemoryBadges } = await import('./services/memoryBadge');
+  void startMemoryBadges();
+
   // Create main window
   const { createWindow } = await import('./window');
   mainWindow = createWindow();
@@ -315,6 +319,15 @@ app.on('before-quit', (event) => {
   const forceExit = setTimeout(() => app.exit(0), 8000);
 
   void (async () => {
+    // Setup scripts run detached in their own process group, so they would
+    // outlive Dash. First, before anything that could hang into forceExit.
+    try {
+      const { killAllSetupRuns } = await import('./services/setupRuns');
+      killAllSetupRuns();
+    } catch {
+      // Best effort
+    }
+
     // Terminal persistence happens main-side: killAll() below serializes every
     // PTY's TerminalMirror to the snapshot files before killing — the renderer
     // is no longer involved (no app:beforeQuit round-trip needed).
@@ -388,6 +401,14 @@ app.on('before-quit', (event) => {
     try {
       const { stopAll: stopPortsConfigWatchers } = await import('./services/PortsConfigWatcher');
       stopPortsConfigWatchers();
+    } catch {
+      // Best effort
+    }
+
+    // Stop the memory-badge watchers
+    try {
+      const { stopAllMemoryWatches } = await import('./services/MemoryWatcher');
+      stopAllMemoryWatches();
     } catch {
       // Best effort
     }

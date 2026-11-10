@@ -25,6 +25,10 @@ export const projects = sqliteTable(
     // Set while the project is archived: hidden from the project list, its
     // task sessions asleep. Restoring clears it.
     archivedAt: text('archived_at'),
+    // When the project's Claude memory was last looked at (epoch ms): memories
+    // written after it count as new on the project row. Opening the memory
+    // modal moves it to now.
+    memorySeenAt: integer('memory_seen_at'),
     createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
   },
@@ -48,7 +52,7 @@ export const tasks = sqliteTable(
     // Deprecated since 0.10: replaced by permission_mode. Kept so existing DBs
     // don't break; do not read or write. New rows leave this at default (false).
     autoApprove: integer('auto_approve', { mode: 'boolean' }).default(false),
-    // 'default' | 'acceptEdits' | 'bypassPermissions' — see PermissionMode in shared/types
+    // 'default' | 'acceptEdits' | 'auto' | 'bypassPermissions' — see PermissionMode in shared/types
     permissionMode: text('permission_mode').notNull().default('default'),
     // 'default' | 'opus' | 'sonnet' | 'haiku' | 'fable' — see TaskModel in shared/types.
     // 'default' → no `--model` flag (respect the user's Claude Code config).

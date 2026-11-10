@@ -1,10 +1,12 @@
-import { Settings, Archive, Trash2, AtSign } from 'lucide-react';
+import { Settings, Archive, Trash2, AtSign, Brain, ScrollText, RotateCw } from 'lucide-react';
 import { DropdownMenuItem, DropdownMenuSeparator } from '../ui/DropdownMenu';
 import { IdeIcon } from '../ui/IdeIcon';
 import { usePreferredIde } from '../../hooks/usePreferredIde';
 import { copyTaskMessageAddress } from '../../utils/copyMessageAddress';
-import { useProjects } from '../../stores/projectsStore';
+import { useProjects, selectTaskById } from '../../stores/projectsStore';
+import { useUi } from '../../stores/uiStore';
 import { sessionRegistry } from '../../terminal/SessionRegistry';
+import { useSetup } from '../../stores/setupStore';
 
 let focusTerminalOnClose = false;
 
@@ -44,6 +46,11 @@ export function TaskMenuItems({
   onDelete,
 }: TaskMenuHandlers) {
   const { ideId, openLabel } = usePreferredIde();
+  const task = useProjects((s) => selectTaskById(s, taskId));
+  const setupRun = useSetup((s) => (task ? s.runs[task.path] : undefined));
+  const showSetup = useSetup((s) => s.showSetup);
+  const rerunSetup = useSetup((s) => s.rerun);
+  const openTaskMemory = useUi((s) => s.openTaskMemory);
   return (
     <>
       <DropdownMenuItem onSelect={onOpenIde}>
@@ -56,6 +63,21 @@ export function TaskMenuItems({
         <Settings size={13} strokeWidth={1.8} className="text-muted-foreground" />
         Task settings
       </DropdownMenuItem>
+      {task?.useWorktree && setupRun && (
+        <DropdownMenuItem onSelect={() => showSetup(task.path)}>
+          <ScrollText size={13} strokeWidth={1.8} className="text-muted-foreground" />
+          Setup output
+        </DropdownMenuItem>
+      )}
+      {task?.useWorktree && (
+        <DropdownMenuItem
+          disabled={setupRun?.status === 'running'}
+          onSelect={() => void rerunSetup(task)}
+        >
+          <RotateCw size={13} strokeWidth={1.8} className="text-muted-foreground" />
+          {setupRun ? 'Run setup again' : 'Run setup'}
+        </DropdownMenuItem>
+      )}
       <DropdownMenuItem
         onSelect={() => {
           focusTerminalOnClose = true;
@@ -65,6 +87,12 @@ export function TaskMenuItems({
         <AtSign size={13} strokeWidth={1.8} className="text-muted-foreground" />
         Copy message address
       </DropdownMenuItem>
+      {task && (
+        <DropdownMenuItem onSelect={() => openTaskMemory(task.projectId, taskId)}>
+          <Brain size={13} strokeWidth={1.8} className="text-muted-foreground" />
+          Memories
+        </DropdownMenuItem>
+      )}
       <DropdownMenuItem onSelect={onArchive}>
         <Archive size={13} strokeWidth={1.8} className="text-muted-foreground" />
         Archive

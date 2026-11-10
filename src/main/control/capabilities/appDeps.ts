@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import { DatabaseService } from '../../services/DatabaseService';
 import { TaskService } from '../../services/TaskService';
 import { activityMonitor, activityEvents } from '../../services/ActivityMonitor';
@@ -5,6 +7,8 @@ import { supervisorService } from '../../services/SupervisorService';
 import { worktreeService } from '../../services/WorktreeService';
 import { loadWorkspaceConfig } from '../../services/WorkspaceConfigService';
 import { taskEvents } from '../../services/taskEvents';
+import { broadcastProjectsChanged } from '../../services/projectEvents';
+import { TelemetryService } from '../../services/TelemetryService';
 import { focusTaskInWindow } from '../../services/focusTask';
 import {
   getUntrustedRoot,
@@ -13,17 +17,25 @@ import {
   startTaskSession,
 } from '../../services/ptyManager';
 import { readLiveSessions } from '../../services/claudeSessionRegistry';
+import { writeHookSettings } from '../../services/ptyHookSettings';
+import { dropTaskInbox, getTaskInbox, postToInbox } from '../../services/taskInbox';
+import { claudeProjectDir } from '../../utils/claudePaths';
 import { GitService } from '../../services/GitService';
 import { WorkspacePortsRuntime } from '../../services/WorkspacePortsRuntime';
 import { portLivenessService } from '../../services/PortLivenessService';
 import { getServiceRunner } from '../../ipc/servicesIpc';
 import { ControlError } from '../registry';
+import { mainCheckout } from '../projectPaths';
 import type { ProjectCapabilityDeps } from './projects';
 import type { ServiceCapabilityDeps } from './services';
 import type { TaskCapabilityDeps } from './tasks';
 import type { ReviewCapabilityDeps } from './review';
 import { taskReviews } from '../../services/prReview/taskReview';
 import { prProviderFor } from '../../services/prReview/resolve';
+import { GithubService } from '../../services/GithubService';
+import { AzureDevOpsService } from '../../services/AzureDevOpsService';
+import { ConnectionConfigService } from '../../services/ConnectionConfigService';
+import { linkedAdoWorkItem, linkedGithubIssue } from '../../../shared/taskContext';
 
 /**
  * The capabilities' real dependencies: the app's services. Kept apart from the
@@ -40,7 +52,19 @@ function taskDefaults(projectPath: string) {
 }
 
 export function projectDeps(): ProjectCapabilityDeps {
-  return { getProjects: () => DatabaseService.getProjects(), taskDefaults };
+  return {
+    getProjects: () => DatabaseService.getProjects(),
+    taskDefaults,
+    detectGit: (folderPath) => GitService.detectRepo(folderPath),
+    mainCheckout,
+    addProject: (input) => {
+      // As db:saveProject saves a new one; the renderer reloads on the broadcast.
+      const project = DatabaseService.saveProject(input);
+      TelemetryService.capture('project_added', { source: 'api' });
+      broadcastProjectsChanged();
+      return project;
+    },
+  };
 }
 
 export function taskDeps(): TaskCapabilityDeps {
@@ -54,6 +78,10 @@ export function taskDeps(): TaskCapabilityDeps {
     onActivityChange: (listener) => {
       activityEvents.on('change', listener);
       return () => activityEvents.off('change', listener);
+    },
+    onTasksChange: (listener) => {
+      taskEvents.on('tasks-changed', listener);
+      return () => taskEvents.off('tasks-changed', listener);
     },
     taskDefaults,
     resolveBaseRef: (projectPath) => worktreeService.resolveBaseRef(projectPath),
@@ -74,6 +102,43 @@ export function taskDeps(): TaskCapabilityDeps {
         throw new ControlError(409, 'Dash has no window open');
       }
     },
+    getGithubIssue: async (projectPath, issueNumber) => {
+      try {
+        return linkedGithubIssue(await GithubService.getIssue(projectPath, issueNumber));
+      } catch (err) {
+        // gh's own reason, not execFile's "Command failed: gh …".
+        const stderr = (err as { stderr?: unknown }).stderr;
+        throw new Error(typeof stderr === 'string' && stderr.trim() ? stderr.trim() : String(err));
+      }
+    },
+    getAdoWorkItem: async (projectId, id) => {
+      const config = ConnectionConfigService.getAdoConfig(projectId);
+      if (!config) return null;
+      return linkedAdoWorkItem(await AzureDevOpsService.getWorkItem(config, id));
+    },
+    linkItems: async (taskId, items) => {
+      const task = TaskService.linkItems(taskId, items);
+      // The context is baked into the SessionStart hooks of the settings file
+      // a session start writes; rewrite it now, so the running session's next
+      // /clear or /compact re-injects it (Claude Code's file watcher picks up
+      // hook edits).
+      writeHookSettings(task.path, task.id);
+      return task;
+    },
+    getInbox: getTaskInbox,
+    dropInbox: dropTaskInbox,
+    postToInbox: (inbox, text) => postToInbox(inbox, text),
+    transcriptPathFor: (task) => {
+      const live = task.jobId ? readLiveSessions().get(task.jobId)?.sessionId : null;
+      const sessionId = live ?? task.sessionId;
+      if (!sessionId) return null;
+      // A session resumed after a worktree move keeps writing under its old folder.
+      const files = [task.path, task.previousPath]
+        .filter((dir): dir is string => !!dir)
+        .map((dir) => path.join(claudeProjectDir(dir), `${sessionId}.jsonl`));
+      return files.find((f) => fs.existsSync(f)) ?? files[0]!;
+    },
+    readTranscript: (file) => fs.promises.readFile(file, 'utf8').catch(() => null),
   };
 }
 

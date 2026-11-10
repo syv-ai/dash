@@ -2,6 +2,7 @@ import { ipcMain, dialog, app, shell, BrowserWindow, Notification, clipboard } f
 import { z } from 'zod';
 import { parseArgs, parseArgsSafe, errorResponse, ipcError } from './validate';
 import { claudeUserSettingsFile } from '../utils/claudePaths';
+import { GitService } from '../services/GitService';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { existsSync, readFileSync } from 'fs';
@@ -256,33 +257,7 @@ export function registerAppIpc(): void {
   ipcMain.handle('app:detectGit', async (_event, folderPath: string) => {
     try {
       parseArgs('app:detectGit', z.string(), folderPath);
-      const gitDir = join(folderPath, '.git');
-      if (!existsSync(gitDir)) {
-        return { success: true, data: { isGitRepo: false, remote: null, branch: null } };
-      }
-
-      let remote: string | null = null;
-      let branch: string | null = null;
-
-      try {
-        const { stdout } = await execFileAsync('git', ['remote', 'get-url', 'origin'], {
-          cwd: folderPath,
-        });
-        remote = stdout.trim() || null;
-      } catch {
-        // No remote
-      }
-
-      try {
-        const { stdout } = await execFileAsync('git', ['branch', '--show-current'], {
-          cwd: folderPath,
-        });
-        branch = stdout.trim() || null;
-      } catch {
-        // No branch
-      }
-
-      return { success: true, data: { isGitRepo: true, remote, branch } };
+      return { success: true, data: await GitService.detectRepo(folderPath) };
     } catch (error) {
       return errorResponse(error);
     }

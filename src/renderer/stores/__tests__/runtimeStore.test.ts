@@ -422,3 +422,35 @@ describe('runtimeStore.init — auto-update', () => {
     expect(toast.error).toHaveBeenCalledWith('not ready');
   });
 });
+
+describe('runtimeStore new-memory badges', () => {
+  let api: ReturnType<typeof makeElectronApiMock>;
+  beforeEach(() => {
+    api = makeElectronApiMock();
+    installWindow(api);
+  });
+  afterEach(() => resetWindow());
+
+  it('loads the counts on init and takes each pushed count', async () => {
+    let push: (d: { projectId: string; count: number }) => void = () => {};
+    api.memoryNewCounts.mockResolvedValue({ success: true, data: { p1: 2, p2: 0 } });
+    api.onMemoryNewCount.mockImplementation((cb) => {
+      push = cb;
+      return () => {};
+    });
+    const { useRuntime } = await freshStores();
+    const cleanup = useRuntime.getState().init();
+    await vi.waitFor(() => expect(useRuntime.getState().newMemoryCounts).toEqual({ p1: 2, p2: 0 }));
+    push({ projectId: 'p2', count: 1 });
+    expect(useRuntime.getState().newMemoryCounts).toEqual({ p1: 2, p2: 1 });
+    cleanup();
+  });
+
+  it('markMemorySeen clears the badge and records the look in main', async () => {
+    const { useRuntime } = await freshStores();
+    useRuntime.setState({ newMemoryCounts: { p1: 4, p2: 1 } });
+    await useRuntime.getState().markMemorySeen('p1');
+    expect(useRuntime.getState().newMemoryCounts).toEqual({ p1: 0, p2: 1 });
+    expect(api.memoryMarkSeen).toHaveBeenCalledWith({ projectId: 'p1' });
+  });
+});

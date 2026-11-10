@@ -1,4 +1,4 @@
-import { BrowserWindow } from 'electron';
+import { broadcast } from '../utils/broadcast';
 
 /**
  * "A task's diff comments changed outside the diff editor" (an agent drafted
@@ -7,12 +7,5 @@ import { BrowserWindow } from 'electron';
  * already holds them.
  */
 export function emitDiffCommentsChanged(taskId: string): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (win.isDestroyed()) continue;
-    try {
-      win.webContents.send('diffComments:changed', { taskId });
-    } catch (err) {
-      console.warn('[diffCommentEvents] broadcast failed', err);
-    }
-  }
+  broadcast('diffComments:changed', { taskId });
 }

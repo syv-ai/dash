@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PERMISSION_MODES } from '@shared/types';
 
 /**
  * Reusable zod schemas for domain objects crossing the IPC boundary.
@@ -10,7 +11,7 @@ import { z } from 'zod';
  * handler module; this file holds only the heavily-reused domain types.
  */
 
-export const permissionModeSchema = z.enum(['default', 'acceptEdits', 'bypassPermissions']);
+export const permissionModeSchema = z.enum(PERMISSION_MODES);
 
 export const taskModelSchema = z.enum(['default', 'opus', 'sonnet', 'haiku', 'fable']);
 

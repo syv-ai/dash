@@ -10,7 +10,8 @@ import { registerProjectCapabilities } from '../capabilities/projects';
 import { registerTaskCapabilities } from '../capabilities/tasks';
 import { registerServiceCapabilities } from '../capabilities/services';
 import { registerReviewCapabilities } from '../capabilities/review';
-import { commandLine, findProject, mainCheckout, resolveArgv, resultText, usageText } from '../cli';
+import { commandLine, findProject, resolveArgv, resultText, usageText } from '../cli';
+import { mainCheckout } from '../projectPaths';
 import { ControlServer } from '../server';
 import { initTokens, setOrchestratorFile } from '../tokens';
 import { controlPaths } from '../paths';
@@ -158,6 +159,32 @@ describe('dashctl argv', () => {
     expect(resolve([...argv, '--prompt', 'hi'])).toMatchObject({ input: { prompt: 'hi' } });
   });
 
+  it('reads drafts-update --body - from stdin, not as the string -', () => {
+    const argv = ['review', 'drafts-update', 'd1', '--task-id', 't1', '--body', '-'];
+    expect(resolve(argv)).toEqual({ kind: 'stdin' });
+    expect(resolve(argv, 'New text\n\nsecond line\n')).toEqual({
+      kind: 'call',
+      name: 'review.drafts_update',
+      input: { id: 'd1', taskId: 't1', body: 'New text\n\nsecond line' },
+    });
+    // With --kind, the body is read too.
+    expect(resolve([...argv, '--kind', 'note'], 'Reworded\n')).toMatchObject({
+      input: { id: 'd1', body: 'Reworded', kind: 'note' },
+    });
+    // Empty or blank stdin (a terminal sends none) is a usage error, never a body silently dropped.
+    for (const empty of ['', '\n', '  \n\t']) {
+      const r = resolve([...argv, '--kind', 'note'], empty);
+      expect(r.kind).toBe('usage');
+      expect((r as { text: string }).text).toContain('--body -: stdin was empty');
+    }
+    // Optional, so a piped body without --body - isn't read (the handler refuses an empty update).
+    expect(resolve(argv.slice(0, -2), 'New text')).toEqual({
+      kind: 'call',
+      name: 'review.drafts_update',
+      input: { id: 'd1', taskId: 't1' },
+    });
+  });
+
   it('reads a required stdin input when not given as a flag', () => {
     const argv = ['review', 'summary-set', '--task-id', 't1', '--number', '3'];
     expect(resolve(argv)).toEqual({ kind: 'stdin' });
@@ -271,7 +298,7 @@ describe('the dashctl script', () => {
         if (allowOnAsk) setOrchestratorFile(true);
         return allowOnAsk;
       },
-      version: '9.9.9',
+      build: { version: '9.9.9', packaged: true },
     });
     await server.start();
     script = path.join(userData, 'dashctl');
@@ -324,7 +351,11 @@ describe('the dashctl script', () => {
   });
 
   it.runIf(hasCurl)("prints Dash's version", async () => {
-    expect(await run(['version'])).toMatchObject({ status: 0, stdout: '9.9.9\n', stderr: '' });
+    expect(await run(['version'])).toMatchObject({
+      status: 0,
+      stdout: '{"version":"9.9.9","packaged":true}\n',
+      stderr: '',
+    });
   });
 
   it.runIf(hasCurl)('prints help to stdout, exit 0', async () => {
@@ -343,7 +374,7 @@ describe('the dashctl script', () => {
     setOrchestratorFile(false);
     allowOnAsk = true;
     const r = await run(['version']);
-    expect(r).toMatchObject({ status: 0, stdout: '9.9.9\n' });
+    expect(r).toMatchObject({ status: 0, stdout: '{"version":"9.9.9","packaged":true}\n' });
     expect(r.stderr).toContain('asking in Dash for access');
   });
 

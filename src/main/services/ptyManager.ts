@@ -18,6 +18,7 @@ import { dashSessionAccess } from '../control/taskAccess';
 import { syncTaskSkills } from '../control/taskSkills';
 import { writeTaskSettings } from './taskSettings';
 import { writeHookSettings, setCommitAttributionValue } from './ptyHookSettings';
+import { dropTaskInbox } from './taskInbox';
 import type { PermissionMode, TaskModel } from '@shared/types';
 
 // Launch configuration setters live in claudeEnv (shared with the supervisor
@@ -750,6 +751,7 @@ export async function startSessionAttach(options: {
 
 /** Stop the task's session (`claude stop`); the attach client goes with it. */
 export async function stopTaskSession(taskId: string): Promise<void> {
+  dropTaskInbox(taskId);
   await killPtyInternal(taskId, { notifyOwner: true });
   const task = DatabaseService.getTask(taskId);
   if (!task?.jobId) return;
@@ -763,6 +765,7 @@ export async function stopTaskSession(taskId: string): Promise<void> {
  * task starts a fresh job that resumes the recorded session id.
  */
 export async function removeTaskSession(taskId: string): Promise<void> {
+  dropTaskInbox(taskId);
   await killPtyInternal(taskId);
   const task = DatabaseService.getTask(taskId);
   activityMonitor.unregister(taskId);
@@ -782,6 +785,8 @@ export async function restartTaskSession(
   taskId: string,
   opts: { reattach?: boolean } = {},
 ): Promise<void> {
+  // The next session reports its own inbox at SessionStart.
+  dropTaskInbox(taskId);
   await killPtyInternal(taskId, { notifyOwner: true, reattach: opts.reattach });
   const task = DatabaseService.getTask(taskId);
   if (!task?.jobId) return;

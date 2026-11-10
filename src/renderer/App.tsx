@@ -15,6 +15,7 @@ import { PortsDrawerWrapper } from './components/rightInspector/PortsDrawerWrapp
 import { editorOpening } from './components/diffEditor/data/viewPersistence';
 const DiffEditorModal = lazy(() => import('./components/diffEditor/DiffEditorModal'));
 import { ShellDrawerWrapper } from './components/terminal/ShellDrawerWrapper';
+import { useSetup } from './stores/setupStore';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
 import { ExtensionsModal } from './components/extensions/ExtensionsModal';
 import { MemoryModal } from './components/memory/MemoryModal';
@@ -44,6 +45,7 @@ import { matchesBinding } from './keybindings';
 import { sessionRegistry } from './terminal/SessionRegistry';
 import { resolveTheme } from './terminal/terminalThemes';
 import { resolveTerminalFontValue } from './terminal/terminalFonts';
+import { setWebglHeldLimit } from './terminal/WebglLifecycle';
 import { useSettings } from './stores/settingsStore';
 import { useUi } from './stores/uiStore';
 import { useGit } from './stores/gitStore';
@@ -54,6 +56,7 @@ import {
   useProjects,
   selectActiveProject,
   selectActiveTask,
+  selectTaskById,
   selectActiveProjectTasks,
 } from './stores/projectsStore';
 
@@ -126,6 +129,7 @@ export function App() {
   const shellDrawerPosition = useSettings((s) => s.shellDrawerPosition);
   const terminalTheme = useSettings((s) => s.terminalTheme);
   const terminalFontFamily = useSettings((s) => s.terminalFontFamily);
+  const webglHeldLimit = useSettings((s) => s.webglHeldLimit);
   const setPreferredIDE = useSettings((s) => s.setPreferredIDE);
   const availableIDEs = useProjects((s) => s.availableIDEs);
 
@@ -464,6 +468,14 @@ export function App() {
     });
   }, []);
 
+  // Main changed the project list (the control API added a project): reload
+  // it. The active project stays as it is.
+  useEffect(() => {
+    return window.electronAPI.onProjectsChanged(() => {
+      void useProjects.getState().loadProjects();
+    });
+  }, []);
+
   // Memoized props for ExtensionsModal. Without these, App.tsx re-renders (terminal
   // activity, git polls, PTY events) hand the modal new array references every time,
   // and the modal's overview useCallback re-fires its refetch effect — flickering
@@ -581,9 +593,8 @@ export function App() {
   useEffect(() => {
     if (!activeTaskId || projects.length === 0) return;
     if (Object.keys(tasksByProject).length < projects.length) return;
-    for (const tasks of Object.values(tasksByProject)) {
-      if (tasks.some((t) => t.id === activeTaskId && !t.archivedAt)) return;
-    }
+    const current = selectTaskById({ tasksByProject }, activeTaskId);
+    if (current && !current.archivedAt) return;
     setActiveTaskId(null);
   }, [tasksByProject, activeTaskId, projects.length]);
 
@@ -683,6 +694,11 @@ export function App() {
     document.documentElement.style.setProperty('--terminal-font', resolved);
     sessionRegistry.setAllTerminalFonts(resolved);
   }, [terminalFontFamily]);
+
+  // Lowering the limit releases the least recent off-screen terminals at once.
+  useEffect(() => {
+    setWebglHeldLimit(webglHeldLimit);
+  }, [webglHeldLimit]);
 
   const cycleTask = useCallback(
     (direction: 1 | -1) => {
@@ -931,6 +947,17 @@ export function App() {
     }
   }, [changesPanelCollapsed]);
 
+  // A Setup tab request needs the drawer mounted: with the drawer in the
+  // inspector, a collapsed inspector unmounts it, so open the inspector.
+  // Once per request: a later collapse must not reopen it.
+  const setupTabRequest = useSetup((s) => s.setupTabRequest);
+  const handledSetupSeqRef = useRef(0);
+  useEffect(() => {
+    if (!setupTabRequest || handledSetupSeqRef.current === setupTabRequest.seq) return;
+    handledSetupSeqRef.current = setupTabRequest.seq;
+    if (shellDrawerPosition === 'right' && changesPanelCollapsed) toggleChangesPanel();
+  }, [setupTabRequest, shellDrawerPosition, changesPanelCollapsed, toggleChangesPanel]);
+
   const toggleShellDrawer = useCallback(() => {
     const panel = shellDrawerPanelRef.current;
     if (!panel) return;
@@ -1017,14 +1044,7 @@ export function App() {
   }
 
   function handleSelectTask(projectId: string, taskId: string) {
-    setActiveProjectId(projectId);
-    setActiveTaskId(taskId);
-    setRotationExclusions((prev) => {
-      if (!prev.has(taskId)) return prev;
-      const next = new Set(prev);
-      next.delete(taskId);
-      return next;
-    });
+    useProjects.getState().selectTask(projectId, taskId);
   }
 
   // Loaded before the modal mounts so its fields render with the project's
@@ -1064,24 +1084,13 @@ export function App() {
   }
 
   function handleDeleteTask(id: string) {
-    // Find task across all projects
-    for (const tasks of Object.values(tasksByProject)) {
-      const found = tasks.find((t) => t.id === id);
-      if (found) {
-        setDeleteTaskTarget(found);
-        return;
-      }
-    }
+    const found = selectTaskById({ tasksByProject }, id);
+    if (found) setDeleteTaskTarget(found);
   }
 
   function handleTaskSettings(id: string) {
-    for (const tasks of Object.values(tasksByProject)) {
-      const found = tasks.find((t) => t.id === id);
-      if (found) {
-        setTaskSettingsTarget(found);
-        return;
-      }
-    }
+    const found = selectTaskById({ tasksByProject }, id);
+    if (found) setTaskSettingsTarget(found);
   }
 
   async function persistTaskUpdate(task: Task, patch: Partial<Task>): Promise<Task | null> {
