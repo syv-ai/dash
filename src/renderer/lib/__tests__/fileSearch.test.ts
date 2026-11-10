@@ -64,6 +64,24 @@ describe('searchFiles', () => {
     expect(rankedFirst([scattered, run], 'abc')).toBe(run);
   });
 
+  // The first letters that fit are not always the best ones: a path is judged
+  // by its best of a few tried alignments (leftmost start plus word-boundary
+  // starts), and that alignment is what gets highlighted.
+  it('ranks a path by its best word-start alignment, not only the first one that fits', () => {
+    // The first fit scatters across 'xsxtxoxrxe'; the clean run is 'store'.
+    const clean = 'src/xsxtxoxrxe_store.ts';
+    const rival = 'src/mystore.ts';
+    expect(rankedFirst([clean, rival], 'store')).toBe(clean);
+    expect(rankedFirst([rival, clean], 'store')).toBe(clean);
+  });
+
+  it('highlights the best tried alignment, not the first letters that fit', () => {
+    const path = 'src/abc_bar.ts';
+    const [hit] = searchFiles([path], 'bar').hits;
+    const at = path.indexOf('bar');
+    expect(hit?.indices).toEqual([at, at + 1, at + 2]);
+  });
+
   it('returns indices into the path for highlighting', () => {
     const [hit] = searchFiles(['a/bcd.ts'], 'bd').hits;
     expect(hit?.indices).toEqual([2, 4]);

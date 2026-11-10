@@ -23,14 +23,14 @@ function isBoundary(path: string, i: number): boolean {
   return prev === prev.toLowerCase() && cur !== cur.toLowerCase();
 }
 
-/** Greedy left-to-right subsequence match of `query` against `path` starting at
- *  `from`. Returns the matched indices, or null. */
-function match(path: string, query: string, from: number): number[] | null {
-  const lower = path.toLowerCase();
-  const indices: number[] = [];
-  let pos = from;
-  for (const ch of query) {
-    const at = lower.indexOf(ch, pos);
+/** Greedy left-to-right subsequence match of the query against `lower` (the
+ *  path, lowercased), the first letter taken at `start`. Returns the matched
+ *  indices, or null. */
+function match(lower: string, query: string, start: number): number[] | null {
+  const indices: number[] = [start];
+  let pos = start + 1;
+  for (let k = 1; k < query.length; k++) {
+    const at = lower.indexOf(query.charAt(k), pos);
     if (at === -1) return null;
     indices.push(at);
     pos = at + 1;
@@ -59,6 +59,37 @@ function score(path: string, indices: number[], nameStart: number): number {
   return s;
 }
 
+/** Few starts keep a long path cheap. */
+const MAX_STARTS = 8;
+
+/** The best-scoring of a few greedy alignments of `q` with its first letter at
+ *  or after `from`, or null when it doesn't fit. It is not a search for the
+ *  best alignment overall. Starts tried: the leftmost occurrence of the first
+ *  letter, then later occurrences on a word boundary, at most MAX_STARTS in
+ *  all. A later start can't fit where the leftmost one failed, so that failure
+ *  ends the search. */
+function bestAlignment(
+  path: string,
+  lower: string,
+  q: string,
+  from: number,
+  nameStart: number,
+): { indices: number[]; score: number } | null {
+  const ch = q.charAt(0);
+  let start = lower.indexOf(ch, from);
+  let best: { indices: number[]; score: number } | null = null;
+  for (let tried = 0; start !== -1 && tried < MAX_STARTS; ) {
+    const indices = match(lower, q, start);
+    if (!indices) break;
+    const s = score(path, indices, nameStart);
+    if (!best || s > best.score) best = { indices, score: s };
+    tried++;
+    do start = lower.indexOf(ch, start + 1);
+    while (start !== -1 && !isBoundary(path, start));
+  }
+  return best;
+}
+
 /** Fuzzy-find files by path: the query must be a subsequence of the path.
  *  Prefers matches inside the file name, at word starts, and in runs. */
 export function searchFiles(
@@ -71,13 +102,16 @@ export function searchFiles(
   const hits: FileHit[] = [];
   for (const path of paths) {
     const nameStart = path.lastIndexOf('/') + 1;
+    const lower = path.toLowerCase();
     // Try the file name first so `edsb` binds to EditorSidebar, not to letters
-    // scattered through the directories.
-    const indices = match(path, q, nameStart) ?? match(path, q, 0);
-    if (!indices) continue;
-    hits.push({ path, indices, score: score(path, indices, nameStart) });
+    // scattered through the directories; only if it doesn't fit there, use the
+    // whole path. The leftmost match is a start too, so if it fails none can fit.
+    const best =
+      bestAlignment(path, lower, q, nameStart, nameStart) ??
+      bestAlignment(path, lower, q, 0, nameStart);
+    if (best) hits.push({ path, indices: best.indices, score: best.score });
   }
-  hits.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
+  hits.sort((a, b) => b.score - a.score || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   return { hits: hits.slice(0, limit), total: hits.length };
 }
 
