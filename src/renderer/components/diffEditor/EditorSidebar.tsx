@@ -461,7 +461,8 @@ function FileTreePanel({
   // Until the file list arrives, hits are only the changed files: show no partial list.
   const listLoading = loading && paths.length === 0;
   const searching = query.trim() !== '';
-  const hasHits = searching && !listLoading && hits.length > 0;
+  const statusReady = searching && !listLoading;
+  const hasHits = statusReady && hits.length > 0;
   // Esc with text in the box clears it. The Command root carries data-owns-escape
   // only while there is a query, so Modal's window-level Esc handler skips it;
   // with an empty box the marker is absent and Esc reaches the modal as usual.
@@ -545,11 +546,18 @@ function FileTreePanel({
               </button>
             )}
           </div>
-          {hasHits && (
-            <div className="px-3 pb-1 text-[10px] text-muted-fade-50 tabular-nums shrink-0">
-              {describeHitCount(result)}
-            </div>
-          )}
+          {/* One region that is always mounted, so screen readers register it
+              before its text changes. Sighted users get the count line here and
+              the visible "No files match" below, so that copy stays hidden. */}
+          <div
+            aria-live="polite"
+            aria-atomic="true"
+            className={
+              hasHits ? 'px-3 pb-1 text-[10px] text-muted-fade-50 tabular-nums shrink-0' : 'sr-only'
+            }
+          >
+            {statusReady ? (hasHits ? describeHitCount(result) : 'No files match') : ''}
+          </div>
           {searching && (
             <CommandList
               className="flex-1 max-h-none min-h-0 px-1 py-1 scrollbar-gutter-stable scrollbar-thin-hover"
