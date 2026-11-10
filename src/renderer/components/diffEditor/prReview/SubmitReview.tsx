@@ -134,7 +134,7 @@ export function SubmitReview({
         </span>
       )}
       <textarea
-        data-diff-comment-input="true"
+        data-owns-escape=""
         value={body}
         onChange={(e) => setBody(e.target.value)}
         onKeyDown={(e) => e.stopPropagation()}

@@ -48,7 +48,7 @@ export function CommentInputBar({
         // Marker the surrounding <Modal>'s window-capture Esc handler
         // looks for — when focus is in here, Esc cancels the draft instead
         // of closing the modal.
-        data-diff-comment-input="true"
+        data-owns-escape=""
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {

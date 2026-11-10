@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 import {
   ChevronDown,
@@ -8,7 +8,6 @@ import {
   GitPullRequestArrow,
   History,
   ListFilter,
-  Search,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -20,6 +19,7 @@ import type { CommitSummary, EditorView } from './types';
 import { Popover, PopoverAnchor, PopoverContent } from '../ui/Popover';
 import { Tooltip } from '../ui/Tooltip';
 import { Markdown } from '../ui/Markdown';
+import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from '../ui/Command';
 import { searchFiles, type FileHit } from '../../lib/fileSearch';
 
 interface EditorSidebarProps {
@@ -73,6 +73,8 @@ export interface PrEntry {
   onPeek: () => void;
 }
 
+// Background of the open file's row, in the tree and in the search results.
+const OPEN_ROW_BG = 'bg-primary/15';
 const COMMITS_DRAWER_KEY = 'diffEditor.commitsDrawerSize';
 const CHANGED_ONLY_KEY = 'diffEditor.changedOnly';
 
@@ -230,6 +232,17 @@ function buildRepoTree(
   }
   aggregate(root);
   return root;
+}
+
+/** Every file path in the tree, as the tree shows it. */
+function treeFilePaths(root: TreeFolder): string[] {
+  const out: string[] = [];
+  const walk = (node: TreeFolder) => {
+    for (const f of node.files) out.push(f.fullPath);
+    for (const child of node.children.values()) walk(child);
+  };
+  walk(root);
+  return out;
 }
 
 /** Widths (in `ch` of the tree's monospace font) of the trailing stat columns,
@@ -438,44 +451,23 @@ function FileTreePanel({
   }, [changedFiles]);
   const cols = useMemo(() => treeColumns(tree, badgeCounts), [tree, badgeCounts]);
 
-  // Search covers what the tree shows. Ignored directories are collapsed to a
-  // single `dir/` entry, which is matched as-is, never searched inside.
+  // Search reads its files off the tree, so it can't drift from what the tree
+  // shows. A fully ignored directory is a single entry there (`node_modules`,
+  // slash stripped), so it matches by name and is never searched inside.
   const [query, setQuery] = useState('');
-  const [activeIdx, setActiveIdx] = useState(0);
-  const searchable = useMemo(() => {
-    const all = changedOnly ? [] : [...paths, ...ignoredPaths];
-    for (const f of changedFiles) all.push(f.path);
-    return Array.from(new Set(all));
-  }, [changedOnly, paths, ignoredPaths, changedFiles]);
-  const hits = useMemo(() => searchFiles(searchable, query), [searchable, query]);
+  const treePaths = useMemo(() => treeFilePaths(tree), [tree]);
+  const hits = useMemo(() => searchFiles(treePaths, query), [treePaths, query]);
   const searching = query.trim() !== '';
-  const clampedIdx = Math.min(activeIdx, Math.max(hits.length - 1, 0));
-  const activeRef = useRef<HTMLButtonElement | null>(null);
-  useEffect(() => {
-    activeRef.current?.scrollIntoView({ block: 'nearest' });
-  }, [clampedIdx, hits]);
-  const updateQuery = (value: string) => {
-    setQuery(value);
-    setActiveIdx(0);
-  };
-  // Scoped to the input: nothing here listens on window, so Monaco and the
+  // Esc with text in the box clears it. The Command root carries data-owns-escape
+  // only while there is a query, so Modal's window-level Esc handler skips it;
+  // with an empty box the marker is absent and Esc reaches the modal as usual.
+  // Scoped to the box: nothing here listens on window, so Monaco and the
   // commits drawer keep their keys.
-  const onSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      if (hits.length === 0) return;
-      e.preventDefault();
-      const step = e.key === 'ArrowDown' ? 1 : -1;
-      setActiveIdx((clampedIdx + step + hits.length) % hits.length);
-    } else if (e.key === 'Enter') {
-      const hit = hits[clampedIdx];
-      if (!hit) return;
-      e.preventDefault();
-      onSelectFile(hit.path);
-    } else if (e.key === 'Escape' && query) {
-      // Clear first; a second Esc (empty box) is left to whoever owns it.
+  const onSearchKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape' && query) {
       e.preventDefault();
       e.stopPropagation();
-      updateQuery('');
+      setQuery('');
     }
   };
   return (
@@ -518,78 +510,91 @@ function FileTreePanel({
           )}
         </span>
       </div>
-      <div className="px-2 pb-1.5 shrink-0">
-        <div className="flex items-center gap-1.5 rounded border border-edge/30 bg-[hsl(var(--surface-2)/0.4)] px-2 focus-within:border-primary/50">
-          <Search size={14} strokeWidth={1.8} className="shrink-0 text-muted-fade-50" />
-          <input
-            value={query}
-            onChange={(e) => updateQuery(e.target.value)}
-            onKeyDown={onSearchKeyDown}
-            placeholder="Search files"
-            aria-label="Search files"
-            spellCheck={false}
-            className="min-w-0 flex-1 bg-transparent py-1 text-[12px] text-foreground placeholder:text-muted-fade-40 outline-none"
-          />
-          {query && (
-            <button
-              type="button"
-              aria-label="Clear search"
-              onClick={() => updateQuery('')}
-              className="shrink-0 text-muted-fade-50 hover:text-foreground"
+      {/* cmdk handles Up/Down/Home/End/Enter on its root, so the root holds only
+          the box and its results: the tree stays outside, where those keys keep
+          scrolling and activating rows. The wrapper sizes it (Command is h-full):
+          content height over the tree, the whole panel while searching. */}
+      <div className={searching ? 'flex-1 min-h-0 flex flex-col' : 'shrink-0'}>
+        <Command
+          shouldFilter={false}
+          label="Search files"
+          onKeyDown={onSearchKeyDown}
+          data-owns-escape={query ? '' : undefined}
+          className="rounded-none outline-hidden"
+        >
+          <div className="relative px-1 shrink-0">
+            <CommandInput
+              value={query}
+              onValueChange={setQuery}
+              placeholder="Search files"
+              spellCheck={false}
+              className="pr-6"
+            />
+            {query && (
+              <button
+                type="button"
+                aria-label="Clear search"
+                onClick={() => setQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-fade-50 hover:text-foreground"
+              >
+                <X size={14} strokeWidth={1.8} />
+              </button>
+            )}
+          </div>
+          {searching && (
+            <CommandList
+              className="flex-1 max-h-none min-h-0 px-1 py-1 scrollbar-gutter-stable scrollbar-thin-hover"
+              // Keep focus in the search box so keys keep working after a click on a result.
+              onMouseDown={(e) => e.preventDefault()}
             >
-              <X size={14} strokeWidth={1.8} />
-            </button>
+              <CommandEmpty className="px-3 py-2 text-[11px] text-muted-fade-40">
+                No files match
+              </CommandEmpty>
+              {hits.map((hit) => (
+                <CommandItem
+                  key={hit.path}
+                  value={hit.path}
+                  onSelect={() => onSelectFile(hit.path)}
+                  aria-current={hit.path === selectedPath ? 'true' : undefined}
+                  // The open file gets the tree's background but its name keeps the
+                  // normal colour: matched letters are primary and must stay visible.
+                  className={`gap-2 px-2 text-[12px] ${
+                    hit.path === selectedPath
+                      ? `${OPEN_ROW_BG} data-[selected=true]:bg-primary/25`
+                      : ''
+                  }`}
+                >
+                  <HitLabel hit={hit} />
+                </CommandItem>
+              ))}
+            </CommandList>
+          )}
+        </Command>
+      </div>
+      {!searching && (
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-gutter-stable scrollbar-thin-hover pb-2 px-1">
+          {loading && paths.length === 0 ? (
+            <div className="px-3 py-2 text-[11px] text-muted-fade-40">Loading…</div>
+          ) : changedOnly && tree.changedCount === 0 ? (
+            <div className="px-3 py-2 text-[11px] text-muted-fade-40">No changed files</div>
+          ) : (
+            <FolderContents
+              node={tree}
+              indent={0}
+              selectedPath={selectedPath}
+              onSelectFile={onSelectFile}
+              badgeCounts={badgeCounts}
+              cols={cols}
+            />
           )}
         </div>
-      </div>
-      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-gutter-stable scrollbar-thin-hover pb-2 px-1">
-        {searching ? (
-          hits.length === 0 ? (
-            <div className="px-3 py-2 text-[11px] text-muted-fade-40">No files match</div>
-          ) : (
-            hits.map((hit, i) => (
-              <SearchResultRow
-                key={hit.path}
-                hit={hit}
-                active={i === clampedIdx}
-                selected={hit.path === selectedPath}
-                buttonRef={i === clampedIdx ? activeRef : undefined}
-                onClick={() => onSelectFile(hit.path)}
-              />
-            ))
-          )
-        ) : loading && paths.length === 0 ? (
-          <div className="px-3 py-2 text-[11px] text-muted-fade-40">Loading…</div>
-        ) : changedOnly && tree.changedCount === 0 ? (
-          <div className="px-3 py-2 text-[11px] text-muted-fade-40">No changed files</div>
-        ) : (
-          <FolderContents
-            node={tree}
-            indent={0}
-            selectedPath={selectedPath}
-            onSelectFile={onSelectFile}
-            badgeCounts={badgeCounts}
-            cols={cols}
-          />
-        )}
-      </div>
+      )}
     </div>
   );
 }
 
-function SearchResultRow({
-  hit,
-  active,
-  selected,
-  buttonRef,
-  onClick,
-}: {
-  hit: FileHit;
-  active: boolean;
-  selected: boolean;
-  buttonRef?: React.Ref<HTMLButtonElement>;
-  onClick: () => void;
-}) {
+/** A search hit: file name with the matched letters lit, the folder dimmed. */
+function HitLabel({ hit }: { hit: FileHit }) {
   const slash = hit.path.lastIndexOf('/') + 1;
   const matched = new Set(hit.indices);
   const chars = (from: number, to: number) =>
@@ -603,24 +608,18 @@ function SearchResultRow({
         hit.path[i]
       );
     });
+  // Both parts may shrink, and the folder first, so a long name still truncates.
   return (
-    <button
-      ref={buttonRef}
-      type="button"
-      // Keep focus in the search box so arrow keys keep working after a click.
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onClick}
-      className={`w-full flex items-baseline gap-2 rounded px-2 py-1 text-left text-[12px] ${
-        active ? 'bg-[hsl(var(--surface-2)/0.8)]' : 'hover:bg-[hsl(var(--surface-2)/0.5)]'
-      } ${selected ? 'text-primary' : 'text-foreground'}`}
-    >
-      <span className="shrink-0 truncate">{chars(slash, hit.path.length)}</span>
+    <>
+      <span className="min-w-0 truncate font-mono text-[11.5px]">
+        {chars(slash, hit.path.length)}
+      </span>
       {slash > 0 && (
-        <span className="min-w-0 truncate text-[11px] text-muted-fade-50">
+        <span className="min-w-0 shrink-[3] truncate text-[11px] text-muted-fade-50">
           {chars(0, slash - 1)}
         </span>
       )}
-    </button>
+    </>
   );
 }
 
@@ -815,7 +814,7 @@ function FileEntry({
       onActivate={onClick}
       title={file.fullPath}
       style={{ paddingLeft: 4 + indent * INDENT_STEP, paddingRight: 8 }}
-      className={selected ? 'bg-primary/15' : 'hover:bg-[hsl(var(--surface-2)/0.6)]'}
+      className={selected ? OPEN_ROW_BG : 'hover:bg-[hsl(var(--surface-2)/0.6)]'}
     >
       {/* Empty icon slot keeps file names aligned with folder names at the
           same indent (the chevron column for folders). */}
