@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 import {
   ChevronDown,
@@ -308,16 +308,19 @@ function TreeRow({
   className,
   style,
   title,
+  rowRef,
   children,
 }: {
   onActivate: () => void;
   className: string;
   style: React.CSSProperties;
   title?: string;
+  rowRef?: React.Ref<HTMLDivElement>;
   children: React.ReactNode;
 }) {
   return (
     <div
+      ref={rowRef}
       role="button"
       tabIndex={0}
       title={title}
@@ -471,6 +474,17 @@ function FileTreePanel({
     if (!searching && treeScrollRef.current)
       treeScrollRef.current.scrollTop = savedTreeScroll.current;
   }, [searching]);
+  // A file picked from the results, to be shown in the tree once it is visible
+  // again. Only a pick sets it: other selection changes never open folders.
+  // Cleared by the file's row after it scrolls into view, or here when the
+  // file is not in the tree (e.g. "changed only" flipped during the search).
+  const [revealPath, setRevealPath] = useState<string | null>(null);
+  const clearReveal = useCallback((path: string) => {
+    setRevealPath((cur) => (cur === path ? null : cur));
+  }, []);
+  useEffect(() => {
+    if (!searching && revealPath !== null && !treePaths.includes(revealPath)) setRevealPath(null);
+  }, [searching, revealPath, treePaths]);
   const statusReady = searching && !listLoading;
   const hasHits = statusReady && hits.length > 0;
   // Esc with text in the box clears it. The Command root carries data-owns-escape
@@ -600,7 +614,10 @@ function FileTreePanel({
                   key={hit.path}
                   value={hit.path}
                   title={hit.path}
-                  onSelect={() => onSelectFile(hit.path)}
+                  onSelect={() => {
+                    setRevealPath(hit.path);
+                    onSelectFile(hit.path);
+                  }}
                   aria-current={hit.path === selectedPath ? 'true' : undefined}
                   // The open file gets the tree's background but its name keeps the
                   // normal colour: matched letters are primary and must stay visible.
@@ -641,6 +658,10 @@ function FileTreePanel({
             onSelectFile={onSelectFile}
             badgeCounts={badgeCounts}
             cols={cols}
+            // Withheld while hidden: scrolling a display:none row does nothing,
+            // so the request waits for the tree to show again.
+            revealPath={searching ? null : revealPath}
+            onRevealed={clearReveal}
           />
         )}
       </div>
@@ -685,6 +706,8 @@ interface FolderContentsProps {
   onSelectFile: (path: string) => void;
   badgeCounts: Map<string, FileBadges>;
   cols: TreeColumns;
+  revealPath: string | null;
+  onRevealed: (path: string) => void;
 }
 
 function FolderContents({
@@ -694,6 +717,8 @@ function FolderContents({
   onSelectFile,
   badgeCounts,
   cols,
+  revealPath,
+  onRevealed,
 }: FolderContentsProps) {
   const childFolders = Array.from(node.children.values()).sort((a, b) =>
     a.name.localeCompare(b.name),
@@ -710,6 +735,8 @@ function FolderContents({
           onSelectFile={onSelectFile}
           badgeCounts={badgeCounts}
           cols={cols}
+          revealPath={revealPath}
+          onRevealed={onRevealed}
         />
       ))}
       {childFiles.map((file) => (
@@ -721,6 +748,8 @@ function FolderContents({
           badges={badgeCounts.get(file.fullPath)}
           onClick={() => onSelectFile(file.fullPath)}
           cols={cols}
+          reveal={file.fullPath === revealPath}
+          onRevealed={onRevealed}
         />
       ))}
     </>
@@ -740,6 +769,8 @@ function FolderEntry({
   onSelectFile,
   badgeCounts,
   cols,
+  revealPath,
+  onRevealed,
 }: {
   folder: TreeFolder;
   indent: number;
@@ -747,6 +778,8 @@ function FolderEntry({
   onSelectFile: (path: string) => void;
   badgeCounts: Map<string, FileBadges>;
   cols: TreeColumns;
+  revealPath: string | null;
+  onRevealed: (path: string) => void;
 }) {
   // Default-open if the folder has changes OR it contains the file the editor
   // opened to — so that file is never hidden in a collapsed folder. The user's
@@ -765,6 +798,14 @@ function FolderEntry({
       setOpen(true);
     }
   }, [folder.changedCount]);
+  // Open on the way to a file picked from the search. A pick sets selectedPath
+  // first, so folders that mount after the pick already open via the lazy init
+  // above. This effect is for folders that were mounted and closed when the pick
+  // happened (collapsed by the user, or never opened). The file's row, not the
+  // panel, does the scrolling: the row exists only once every ancestor is open.
+  useEffect(() => {
+    if (revealPath !== null && revealPath.startsWith(`${folder.fullPath}/`)) setOpen(true);
+  }, [revealPath, folder.fullPath]);
   const tint = folder.dominantStatus ? FOLDER_TINT[folder.dominantStatus] : 'text-fg-fade-90';
   return (
     <>
@@ -812,6 +853,8 @@ function FolderEntry({
           onSelectFile={onSelectFile}
           badgeCounts={badgeCounts}
           cols={cols}
+          revealPath={revealPath}
+          onRevealed={onRevealed}
         />
       )}
     </>
@@ -854,6 +897,8 @@ function FileEntry({
   badges,
   onClick,
   cols,
+  reveal,
+  onRevealed,
 }: {
   file: TreeFile;
   indent: number;
@@ -861,11 +906,23 @@ function FileEntry({
   badges: FileBadges | undefined;
   onClick: () => void;
   cols: TreeColumns;
+  reveal: boolean;
+  onRevealed: (path: string) => void;
 }) {
+  // Passive effects run after the parent's layout effect, so the saved scroll
+  // offset is already restored when this brings the row into view. Repeating
+  // under StrictMode is harmless (same scroll, same clear).
+  const rowRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!reveal) return;
+    rowRef.current?.scrollIntoView({ block: 'nearest' });
+    onRevealed(file.fullPath);
+  }, [reveal, file.fullPath, onRevealed]);
   const change = file.change;
   const tint = selected ? 'text-primary' : change ? STATUS_TEXT[change.status] : 'text-fg-fade-80';
   return (
     <TreeRow
+      rowRef={rowRef}
       onActivate={onClick}
       title={file.fullPath}
       style={{ paddingLeft: 4 + indent * INDENT_STEP, paddingRight: 8 }}
