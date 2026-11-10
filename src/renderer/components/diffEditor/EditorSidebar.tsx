@@ -20,7 +20,7 @@ import { Popover, PopoverAnchor, PopoverContent } from '../ui/Popover';
 import { Tooltip } from '../ui/Tooltip';
 import { Markdown } from '../ui/Markdown';
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from '../ui/Command';
-import { searchFiles, type FileHit } from '../../lib/fileSearch';
+import { searchFiles, describeHitCount, type FileHit } from '../../lib/fileSearch';
 
 interface EditorSidebarProps {
   /** Repo root — needed to lazily list gitignored files under "show all files". */
@@ -456,8 +456,10 @@ function FileTreePanel({
   // slash stripped), so it matches by name and is never searched inside.
   const [query, setQuery] = useState('');
   const treePaths = useMemo(() => treeFilePaths(tree), [tree]);
-  const hits = useMemo(() => searchFiles(treePaths, query), [treePaths, query]);
+  const result = useMemo(() => searchFiles(treePaths, query), [treePaths, query]);
+  const hits = result.hits;
   const searching = query.trim() !== '';
+  const hasHits = searching && hits.length > 0;
   // Esc with text in the box clears it. The Command root carries data-owns-escape
   // only while there is a query, so Modal's window-level Esc handler skips it;
   // with an empty box the marker is absent and Esc reaches the modal as usual.
@@ -541,6 +543,11 @@ function FileTreePanel({
               </button>
             )}
           </div>
+          {hasHits && (
+            <div className="px-3 pb-1 text-[10px] text-muted-fade-50 tabular-nums shrink-0">
+              {describeHitCount(result)}
+            </div>
+          )}
           {searching && (
             <CommandList
               className="flex-1 max-h-none min-h-0 px-1 py-1 scrollbar-gutter-stable scrollbar-thin-hover"

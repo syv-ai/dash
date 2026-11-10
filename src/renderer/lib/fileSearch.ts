@@ -5,7 +5,14 @@ export interface FileHit {
   score: number;
 }
 
-const DEFAULT_LIMIT = 200;
+export interface FileSearchResult {
+  /** The best `limit` matches, best first. */
+  hits: FileHit[];
+  /** How many paths matched in all, `hits` included. */
+  total: number;
+}
+
+export const DEFAULT_LIMIT = 200;
 
 function isBoundary(path: string, i: number): boolean {
   if (i === 0) return true;
@@ -54,9 +61,13 @@ function score(path: string, indices: number[], nameStart: number): number {
 
 /** Fuzzy-find files by path: the query must be a subsequence of the path.
  *  Prefers matches inside the file name, at word starts, and in runs. */
-export function searchFiles(paths: string[], query: string, limit = DEFAULT_LIMIT): FileHit[] {
+export function searchFiles(
+  paths: string[],
+  query: string,
+  limit = DEFAULT_LIMIT,
+): FileSearchResult {
   const q = query.trim().toLowerCase().replace(/\s+/g, '');
-  if (!q) return [];
+  if (!q) return { hits: [], total: 0 };
   const hits: FileHit[] = [];
   for (const path of paths) {
     const nameStart = path.lastIndexOf('/') + 1;
@@ -67,5 +78,12 @@ export function searchFiles(paths: string[], query: string, limit = DEFAULT_LIMI
     hits.push({ path, indices, score: score(path, indices, nameStart) });
   }
   hits.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
-  return hits.slice(0, limit);
+  return { hits: hits.slice(0, limit), total: hits.length };
+}
+
+/** The count line under the search box: every match, and how many are listed
+ *  when the cap cut the list short. */
+export function describeHitCount({ hits, total }: FileSearchResult): string {
+  const files = total === 1 ? '1 file' : `${total} files`;
+  return hits.length < total ? `${hits.length} of ${files}` : files;
 }

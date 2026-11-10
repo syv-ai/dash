@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { searchFiles } from '../fileSearch';
+import { searchFiles, describeHitCount } from '../fileSearch';
 
 const paths = [
   'src/renderer/components/diffEditor/EditorSidebar.tsx',
@@ -11,13 +11,13 @@ const paths = [
 
 describe('searchFiles', () => {
   it('matches a subsequence of the file name', () => {
-    const hits = searchFiles(paths, 'edsb');
+    const { hits } = searchFiles(paths, 'edsb');
     expect(hits[0]?.path).toBe('src/renderer/components/diffEditor/EditorSidebar.tsx');
   });
 
   it('is case-insensitive', () => {
-    expect(searchFiles(paths, 'README').map((h) => h.path)).toContain('README.md');
-    expect(searchFiles(paths, 'readme').map((h) => h.path)).toContain('README.md');
+    expect(searchFiles(paths, 'README').hits.map((h) => h.path)).toContain('README.md');
+    expect(searchFiles(paths, 'readme').hits.map((h) => h.path)).toContain('README.md');
   });
 
   // The ranking tests below pit the path a rule should favour against a rival
@@ -25,7 +25,7 @@ describe('searchFiles', () => {
   // the order. They assert order only, so the weights can be re-tuned without
   // touching them.
   const rankedFirst = (candidates: string[], query: string) =>
-    searchFiles(candidates, query)[0]?.path;
+    searchFiles(candidates, query).hits[0]?.path;
 
   it('ranks a file-name match above a shorter directory-only match', () => {
     // The winner's match starts mid-word, so only being inside the name helps it.
@@ -65,35 +65,37 @@ describe('searchFiles', () => {
   });
 
   it('returns indices into the path for highlighting', () => {
-    const [hit] = searchFiles(['a/bcd.ts'], 'bd');
+    const [hit] = searchFiles(['a/bcd.ts'], 'bd').hits;
     expect(hit?.indices).toEqual([2, 4]);
   });
 
   it('returns nothing when the query is not a subsequence', () => {
-    expect(searchFiles(paths, 'zzz')).toEqual([]);
+    expect(searchFiles(paths, 'zzz')).toEqual({ hits: [], total: 0 });
   });
 
   it('returns nothing for a blank query', () => {
-    expect(searchFiles(paths, '  ')).toEqual([]);
+    expect(searchFiles(paths, '  ')).toEqual({ hits: [], total: 0 });
   });
 
-  it('caps the number of results', () => {
+  it('caps the listed results but counts every match', () => {
     const many = Array.from({ length: 500 }, (_, i) => `f/file${i}.ts`);
-    expect(searchFiles(many, 'file', 50)).toHaveLength(50);
+    const result = searchFiles(many, 'file', 50);
+    expect(result.hits).toHaveLength(50);
+    expect(result.total).toBe(500);
   });
 
   it('lists equally good matches in path order, whatever the input order', () => {
     // Same shape, so the scores are identical and only the tie-break orders them.
-    const order = (input: string[]) => searchFiles(input, 'x').map((h) => h.path);
+    const order = (input: string[]) => searchFiles(input, 'x').hits.map((h) => h.path);
     expect(order(['a/x2.ts', 'a/x1.ts'])).toEqual(['a/x1.ts', 'a/x2.ts']);
     expect(order(['a/x1.ts', 'a/x2.ts'])).toEqual(['a/x1.ts', 'a/x2.ts']);
   });
 
   it('ignores spaces in the query', () => {
     const spaced = searchFiles(paths, 'ed sb');
-    expect(spaced.length).toBeGreaterThan(0);
-    expect(spaced).toEqual(searchFiles(paths, 'edsb'));
-    expect(searchFiles(paths, '   ')).toEqual([]);
+    expect(spaced.hits.length).toBeGreaterThan(0);
+    expect(spaced.hits).toEqual(searchFiles(paths, 'edsb').hits);
+    expect(searchFiles(paths, '   ').hits).toEqual([]);
   });
 
   it('ranks a tighter match above a looser one over the same letters', () => {
@@ -103,5 +105,25 @@ describe('searchFiles', () => {
     const loose = 'a-b-x.ts';
     expect(rankedFirst([loose, tight], 'ax')).toBe(tight);
     expect(rankedFirst([tight, loose], 'ax')).toBe(tight);
+  });
+});
+
+describe('describeHitCount', () => {
+  const files = (n: number) => Array.from({ length: n }, (_, i) => `f/file${i}.ts`);
+
+  it('uses the singular for one file', () => {
+    expect(describeHitCount(searchFiles(files(1), 'file', 10))).toBe('1 file');
+  });
+
+  it('counts several files', () => {
+    expect(describeHitCount(searchFiles(files(146), 'file', 200))).toBe('146 files');
+  });
+
+  it('gives the exact count when the matches just fill the cap', () => {
+    expect(describeHitCount(searchFiles(files(10), 'file', 10))).toBe('10 files');
+  });
+
+  it('says how many are listed when the cap cuts the list short', () => {
+    expect(describeHitCount(searchFiles(files(500), 'file', 200))).toBe('200 of 500 files');
   });
 });
