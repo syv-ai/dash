@@ -53,6 +53,9 @@ function score(path: string, indices: number[], nameStart: number): number {
     if (k > 0 && i === (indices[k - 1] ?? -2) + 1) s += 5;
   }
   if (inName && first === nameStart) s += 20;
+  // The whole query as one unbroken run that starts a word (`Store` in
+  // `uiStore.ts`) beats a scattered match, even one that starts at the file name.
+  if (last - first === indices.length - 1 && isBoundary(path, first)) s += 20;
   // Prefer short paths and tight matches.
   s -= (last - first) * 0.5;
   s -= path.length * 0.05;

@@ -64,6 +64,23 @@ describe('searchFiles', () => {
     expect(rankedFirst([scattered, run], 'abc')).toBe(run);
   });
 
+  // A whole word typed out beats letters picked from several words, even when
+  // the scattered match starts right at the file name.
+  it('ranks a clean word-start run above a scattered match from the name start', () => {
+    const scattered = 'stores/settingsStore.ts';
+    for (const clean of ['uiStore.ts', 'gitStore.ts']) {
+      expect(rankedFirst([scattered, clean], 'store')).toBe(clean);
+      expect(rankedFirst([clean, scattered], 'store')).toBe(clean);
+    }
+  });
+
+  it('ranks a clean run after an underscore above a scattered match from the name start', () => {
+    const run = 'src/abc_bar.ts';
+    const scattered = 'src/bxar.ts';
+    expect(rankedFirst([run, scattered], 'bar')).toBe(run);
+    expect(rankedFirst([scattered, run], 'bar')).toBe(run);
+  });
+
   // The first letters that fit are not always the best ones: a path is judged
   // by its best of a few tried alignments (leftmost start plus word-boundary
   // starts), and that alignment is what gets highlighted.
