@@ -62,6 +62,20 @@ function score(path: string, indices: number[], nameStart: number): number {
   return s;
 }
 
+/** Lowercases `s` without ever changing its length: a character whose
+ *  lowercase is longer (`İ` becomes two units) stays as it is, so indices into
+ *  the result are indices into `s`. */
+export function lowerKeepingLength(s: string): string {
+  const fast = s.toLowerCase();
+  if (fast.length === s.length) return fast;
+  let out = '';
+  for (const c of s) {
+    const l = c.toLowerCase();
+    out += l.length === c.length ? l : c;
+  }
+  return out;
+}
+
 /** Few starts keep a long path cheap. */
 const MAX_STARTS = 8;
 
@@ -100,12 +114,12 @@ export function searchFiles(
   query: string,
   limit = DEFAULT_LIMIT,
 ): FileSearchResult {
-  const q = query.trim().toLowerCase().replace(/\s+/g, '');
+  const q = lowerKeepingLength(query.trim().replace(/\s+/g, ''));
   if (!q) return { hits: [], total: 0 };
   const hits: FileHit[] = [];
   for (const path of paths) {
     const nameStart = path.lastIndexOf('/') + 1;
-    const lower = path.toLowerCase();
+    const lower = lowerKeepingLength(path);
     // Try the file name first so `edsb` binds to EditorSidebar, not to letters
     // scattered through the directories; only if it doesn't fit there, use the
     // whole path. The leftmost match is a start too, so if it fails none can fit.

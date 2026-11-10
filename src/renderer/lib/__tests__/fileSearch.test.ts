@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { searchFiles, describeHitCount } from '../fileSearch';
+import { searchFiles, describeHitCount, lowerKeepingLength } from '../fileSearch';
 
 const paths = [
   'src/renderer/components/diffEditor/EditorSidebar.tsx',
@@ -18,6 +18,28 @@ describe('searchFiles', () => {
   it('is case-insensitive', () => {
     expect(searchFiles(paths, 'README').hits.map((h) => h.path)).toContain('README.md');
     expect(searchFiles(paths, 'readme').hits.map((h) => h.path)).toContain('README.md');
+  });
+
+  it('highlights the right letters after a character that grows when lowercased', () => {
+    const path = 'docs/İstanbul/notes.md';
+    const hit = searchFiles([path], 'notes').hits[0];
+    expect(hit?.indices.map((i) => path.slice(i, i + 1).toLowerCase()).join('')).toBe('notes');
+  });
+
+  it('finds a query that contains a character that grows when lowercased', () => {
+    const path = 'docs/İstanbul/notes.md';
+    const hit = searchFiles([path], 'İstanbul').hits[0];
+    expect(hit?.path).toBe(path);
+    expect(hit?.indices.map((i) => path.slice(i, i + 1).toLowerCase())).toEqual(
+      [...'İstanbul'].map((c) => c.toLowerCase()),
+    );
+  });
+
+  it('lowercases without changing the length', () => {
+    for (const s of ['docs/İstanbul/notes.md', 'ÀÉ𐐀x', 'Straße']) {
+      expect(lowerKeepingLength(s)).toHaveLength(s.length);
+    }
+    expect(lowerKeepingLength('ABC')).toBe('abc');
   });
 
   // The ranking tests below pit the path a rule should favour against a rival
