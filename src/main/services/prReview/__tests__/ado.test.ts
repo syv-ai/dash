@@ -197,7 +197,8 @@ function fakeDeps(failOnCall?: number) {
           ? { changeEntries: [{ changeTrackingId: 3, item: { path: '/src/a.ts' } }], nextSkip: 1 }
           : { changeEntries: [] };
       }
-      if (path.includes('/threads?')) return threadsFixture;
+      if (path.includes('/threads?') || (path.endsWith('/threads') && !options?.method))
+        return threadsFixture;
       if (/pullRequests\/\d+$/.test(path)) return pr;
       return {};
     },
@@ -285,5 +286,15 @@ describe('adoProvider', () => {
       { path: `${base}/threads/101`, method: 'PATCH', body: { status: 'fixed' } },
       { path: `${base}/threads/101`, method: 'PATCH', body: { status: 'active' } },
     ]);
+  });
+
+  it("finds a person's thread by its id or a comment's, not a system or deleted one", async () => {
+    const ado = makeAdoProvider(fakeDeps().deps);
+    expect(await ado.replyThread(pctx, 7204, '101')).toBe('101');
+    // The PR view's own comment id, "<thread>:<comment>", names its thread.
+    expect(await ado.replyThread(pctx, 7204, '101:2')).toBe('101');
+    for (const ref of ['201', '204', '999']) {
+      expect(await ado.replyThread(pctx, 7204, ref)).toBeNull();
+    }
   });
 });

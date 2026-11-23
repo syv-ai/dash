@@ -21,5 +21,8 @@ export interface PrReviewProvider {
   /** The PR's review, with its base and head present in the checkout. */
   load(ctx: PrContext, number: number): Promise<PrReview>;
   setResolved(ctx: PrContext, number: number, threadId: string, resolved: boolean): Promise<void>;
+  /** The id of the PR's thread that `ref` names (the thread's own id, or on GitHub
+   *  one of its comments' node or REST ids), as a reply is posted to; null if none. */
+  replyThread(ctx: PrContext, number: number, ref: string): Promise<string | null>;
   submit(ctx: PrContext, number: number, submission: PrSubmission): Promise<SubmitResult>;
 }

@@ -24,6 +24,8 @@ const tasks = [
 let registry: Registry;
 let comments: DiffCommentsRepo;
 let changed: string[];
+/** The PR's thread, by the id of the thread itself or of one of its comments. */
+const threadOf: Record<string, string> = { PRRT_1: 'PRRT_1', '4504285548': 'PRRT_1' };
 
 const row = (over: Partial<DiffComment> & { id: string }): DiffComment => ({
   taskId: 'me',
@@ -79,6 +81,10 @@ beforeEach(() => {
   registerReviewCapabilities(registry, {
     providerFor: () => 'github',
     getTask: (id) => tasks.find((t) => t.id === id),
+    replyThread: async (_task, _number, ref) => {
+      if (ref === 'offline') throw new Error('gh: could not connect');
+      return threadOf[ref] ?? null;
+    },
     reviews: createTaskReviews({
       comments,
       reviews: createPrReviewsInProgressRepo(db),
@@ -156,9 +162,43 @@ describe('review.drafts_create', () => {
       ),
     ).toBe(400);
   });
+
+  it("stores a reply to the PR's thread, named by its id or one of its comments'", async () => {
+    const input = { number: 12, path: 'a.ts', startLine: 1, body: 'agreed', kind: 'comment' };
+    for (const replyTo of ['PRRT_1', '4504285548']) {
+      const created = (await registry.call(asTask('me'), 'review.drafts_create', {
+        ...input,
+        replyTo,
+      })) as { id: string };
+      expect(comments.get(created.id)!.replyTo).toBe('PRRT_1');
+    }
+  });
+
+  it("refuses a reply to a thread the PR doesn't have, or can't be checked", async () => {
+    const input = { number: 12, path: 'a.ts', startLine: 1, body: 'agreed', kind: 'comment' };
+    expect(
+      await status(registry.call(asTask('me'), 'review.drafts_create', { ...input, replyTo: '9' })),
+    ).toBe(400);
+    expect(
+      await status(
+        registry.call(asTask('me'), 'review.drafts_create', { ...input, replyTo: 'offline' }),
+      ),
+    ).toBe(502);
+    expect(changed).toEqual([]);
+  });
 });
 
 describe('review.drafts_update / drafts_delete', () => {
+  it('moves the whole range when only its start moves', async () => {
+    put(row({ id: 'd1', startLine: 100, endLine: 110 }));
+    await registry.call(asTask('me'), 'review.drafts_update', { id: 'd1', startLine: 10 });
+    expect(comments.get('d1')).toMatchObject({ startLine: 10, endLine: 20 });
+    await registry.call(asTask('me'), 'review.drafts_update', { id: 'd1', startLine: 200 });
+    expect(comments.get('d1')).toMatchObject({ startLine: 200, endLine: 210 });
+    await registry.call(asTask('me'), 'review.drafts_update', { id: 'd1', endLine: 205 });
+    expect(comments.get('d1')).toMatchObject({ startLine: 200, endLine: 205 });
+  });
+
   it("changes the agent's own draft", async () => {
     put(row({ id: 'd1' }));
     await registry.call(asTask('me'), 'review.drafts_update', {

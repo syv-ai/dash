@@ -162,6 +162,37 @@ const EVENTS: Partial<Record<PrVerdict, string>> = {
   request_changes: 'REQUEST_CHANGES',
 };
 
+/** A page of a PR's review threads, with their comments' ids (a reply names the first). */
+const THREAD_IDS_QUERY = `query($owner: String!, $name: String!, $number: Int!, $after: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      reviewThreads(first: 100, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        nodes { id comments(first: 50) { nodes { id databaseId } } }
+      }
+    }
+  }
+}`;
+
+/** Whether `ref` is the thread's id, or one of its comments' node or REST ids. */
+const threadMatches = (t: Node, ref: string) =>
+  t.id === ref ||
+  nodes(t.comments).some(
+    (c) => c.id === ref || (typeof c.databaseId === 'number' && String(c.databaseId) === ref),
+  );
+
+/** Runs one step of a submit, naming the draft it was posting (its text, which the
+ *  person recognises) when it fails. */
+async function posting(what: string, body: string, step: () => Promise<unknown>): Promise<void> {
+  try {
+    await step();
+  } catch (err) {
+    const text = body.replace(/\s+/g, ' ').trim();
+    const quote = text.length > 40 ? `${text.slice(0, 40)}…` : text;
+    throw new Error(`${what} ("${quote}"): ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 const PR_ID_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) { id reviews(states: PENDING, first: 1) { nodes { id } } }
@@ -221,6 +252,21 @@ export function makeGithubProvider(gql: Gql = ghGql): PrReviewProvider {
       await gql(ctx.cwd, resolveMutation(resolved), { id: threadId });
     },
 
+    async replyThread(ctx, number, ref) {
+      // Page through: a PR can have more threads than one page holds.
+      for (let after = ''; ; ) {
+        const vars = { ...repoVars(number), ...(after ? { after } : {}) };
+        const data = await gql(ctx.cwd, THREAD_IDS_QUERY, vars);
+        const pr = pick(data, 'repository', 'pullRequest') as Node | undefined;
+        if (!pr) throw new Error(`PR #${number} not found`);
+        const thread = nodes(pr.reviewThreads).find((t) => threadMatches(t, ref));
+        if (thread) return str(thread.id);
+        const page = pick(pr, 'reviewThreads', 'pageInfo') as Node | undefined;
+        after = page?.hasNextPage === true ? str(page.endCursor) : '';
+        if (!after) return null;
+      }
+    },
+
     /**
      * All or nothing: the comments and replies go into one pending review that
      * is submitted with the verdict, and deleted again if any step fails.
@@ -251,20 +297,25 @@ export function makeGithubProvider(gql: Gql = ghGql): PrReviewProvider {
         const added = await gql(ctx.cwd, ADD_REVIEW, { pr: str(pr.id) });
         reviewId = str(pick(added, 'addPullRequestReview', 'pullRequestReview', 'id'));
         if (!reviewId) throw new Error('GitHub did not return the new review');
+        const review = reviewId;
         for (const c of s.comments) {
           const range = c.startLine < c.endLine;
-          await gql(ctx.cwd, addThread(range), {
-            review: reviewId,
-            path: c.path,
-            line: c.endLine,
-            body: c.body,
-            ...(range ? { startLine: c.startLine } : {}),
-          });
+          await posting(`comment on ${c.path}:${c.startLine}`, c.body, () =>
+            gql(ctx.cwd, addThread(range), {
+              review,
+              path: c.path,
+              line: c.endLine,
+              body: c.body,
+              ...(range ? { startLine: c.startLine } : {}),
+            }),
+          );
         }
         for (const r of s.replies) {
-          await gql(ctx.cwd, ADD_REPLY, { review: reviewId, thread: r.threadId, body: r.body });
+          await posting(`reply to thread ${r.threadId}`, r.body, () =>
+            gql(ctx.cwd, ADD_REPLY, { review, thread: r.threadId, body: r.body }),
+          );
         }
-        await gql(ctx.cwd, SUBMIT_REVIEW, { review: reviewId, event, body: s.body });
+        await gql(ctx.cwd, SUBMIT_REVIEW, { review, event, body: s.body });
         return {
           postedDraftIds: [...s.comments.map((c) => c.draftId), ...s.replies.map((r) => r.draftId)],
         };

@@ -213,14 +213,23 @@ describe('githubProvider.submit', () => {
     expect(calls[5]!.vars).toEqual({ review: 'R_1', event: 'REQUEST_CHANGES', body: 'Two things' });
   });
 
-  it('deletes the pending review and posts nothing when a step fails', async () => {
+  it('deletes the pending review and posts nothing when a step fails, naming the draft', async () => {
     const { gql, ops } = fakeGql({ failOn: 'addPullRequestReviewThreadReply' });
     const result = await makeGithubProvider(gql).submit(ctx, 4, submission);
     expect(result).toEqual({
       postedDraftIds: [],
-      error: { kind: 'other', message: 'GraphQL: something broke' },
+      error: { kind: 'other', message: 'reply to thread T_9 ("agreed"): GraphQL: something broke' },
     });
     expect(ops().at(-1)).toBe('deletePullRequestReview');
+  });
+
+  it('names the line a failed comment was on', async () => {
+    const { gql } = fakeGql({ failOn: 'addPullRequestReviewThread' });
+    const result = await makeGithubProvider(gql).submit(ctx, 4, submission);
+    expect(result.error).toEqual({
+      kind: 'other',
+      message: 'comment on src/a.ts:3 ("one line"): GraphQL: something broke',
+    });
   });
 
   it('refuses to write when the viewer already has a pending review on GitHub', async () => {
@@ -258,6 +267,54 @@ describe('githubProvider.setResolved', () => {
     await gh.setResolved(ctx, 4, 'T_1', false);
     expect(ops()).toEqual(['resolveReviewThread', 'unresolveReviewThread']);
     expect(calls[0]!.vars).toEqual({ id: 'T_1' });
+  });
+});
+
+describe('githubProvider.replyThread', () => {
+  const threads: Gql = async () => ({
+    repository: {
+      pullRequest: {
+        reviewThreads: {
+          nodes: [
+            { id: 'PRRT_1', comments: { nodes: [{ id: 'PRRC_1', databaseId: 4504285548 }] } },
+            { id: 'PRRT_2', comments: { nodes: [{ id: 'PRRC_2', databaseId: 4504285549 }] } },
+          ],
+        },
+      },
+    },
+  });
+
+  it("finds the thread by its id, or a comment's node or REST id", async () => {
+    const gh = makeGithubProvider(threads);
+    for (const ref of ['PRRT_2', 'PRRC_2', '4504285549']) {
+      expect(await gh.replyThread(ctx, 4, ref)).toBe('PRRT_2');
+    }
+  });
+
+  it("is null for an id the PR's threads don't have", async () => {
+    expect(await makeGithubProvider(threads).replyThread(ctx, 4, '123')).toBeNull();
+  });
+
+  it('pages through a PR with more threads than one page holds', async () => {
+    const afters: unknown[] = [];
+    const paged: Gql = async (_cwd, _query, vars) => {
+      afters.push(vars.after);
+      const second = vars.after === 'C1';
+      return {
+        repository: {
+          pullRequest: {
+            reviewThreads: {
+              pageInfo: { hasNextPage: !second, endCursor: second ? null : 'C1' },
+              nodes: [{ id: second ? 'PRRT_101' : 'PRRT_1', comments: { nodes: [] } }],
+            },
+          },
+        },
+      };
+    };
+    const gh = makeGithubProvider(paged);
+    expect(await gh.replyThread(ctx, 4, 'PRRT_101')).toBe('PRRT_101');
+    expect(afters).toEqual([undefined, 'C1']);
+    expect(await gh.replyThread(ctx, 4, 'PRRT_999')).toBeNull();
   });
 });
 

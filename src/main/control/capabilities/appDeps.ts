@@ -31,7 +31,8 @@ import type { ServiceCapabilityDeps } from './services';
 import type { TaskCapabilityDeps } from './tasks';
 import type { ReviewCapabilityDeps } from './review';
 import { taskReviews } from '../../services/prReview/taskReview';
-import { prProviderFor } from '../../services/prReview/resolve';
+import { prContextFor, prProviderFor } from '../../services/prReview/resolve';
+import { appPrContextDeps } from '../../services/prReview/appContext';
 import { GithubService } from '../../services/GithubService';
 import { AzureDevOpsService } from '../../services/AzureDevOpsService';
 import { ConnectionConfigService } from '../../services/ConnectionConfigService';
@@ -161,10 +162,12 @@ export function serviceDeps(): ServiceCapabilityDeps {
 export function reviewDeps(): ReviewCapabilityDeps {
   return {
     providerFor: (projectId) =>
-      prProviderFor(
-        DatabaseService.getProjects().find((p) => p.id === projectId) ?? { gitRemote: null },
-      ),
+      prProviderFor(appPrContextDeps.getProject(projectId) ?? { gitRemote: null }),
     getTask: (id) => DatabaseService.getTask(id),
+    replyThread: async (task, number, ref) => {
+      const { adapter, ctx } = prContextFor(task.projectId, task.path, appPrContextDeps);
+      return adapter.replyThread(ctx, number, ref);
+    },
     // Read per call, so a database that failed to open fails the call, not the API's start.
     get reviews() {
       return taskReviews();

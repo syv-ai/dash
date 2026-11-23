@@ -9,6 +9,8 @@ export interface ReviewCapabilityDeps {
   /** Where the project's PRs live (from its remote). */
   providerFor(projectId: string): PrProvider;
   getTask(id: string): Task | undefined;
+  /** The id of PR `number`'s thread that `ref` names, as the provider posts replies to; null if none. */
+  replyThread(task: Task, number: number, ref: string): Promise<string | null>;
   reviews: TaskReviews;
 }
 
@@ -70,6 +72,24 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
     return draft;
   };
 
+  /** The PR thread `ref` names, checked now: an unknown one would fail the whole review at Submit. */
+  const replyThreadOrThrow = async (taskId: string, number: number, ref: string) => {
+    let thread: string | null;
+    try {
+      thread = await deps.replyThread(deps.getTask(taskId)!, number, ref);
+    } catch (err) {
+      const why = err instanceof Error ? err.message : String(err);
+      throw new ControlError(502, `could not check --reply-to against PR #${number}: ${why}`);
+    }
+    if (!thread) {
+      throw new ControlError(
+        400,
+        `PR #${number} has no thread ${JSON.stringify(ref)}: --reply-to takes the id of a thread or of one of its comments`,
+      );
+    }
+    return thread;
+  };
+
   registry.register(
     defineCapability({
       name: 'review.drafts_list',
@@ -107,7 +127,9 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
         replyTo: z
           .string()
           .optional()
-          .describe("Reply to this thread (the provider's thread id) instead of starting one"),
+          .describe(
+            "Reply to this thread instead of starting one: the thread's id, or the id of one of its comments (on GitHub, its node id or REST id)",
+          ),
       }),
       callers: ['orchestrator', 'task'],
       cli: { stdin: 'body' },
@@ -120,6 +142,10 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
         const endLine = input.endLine ?? input.startLine;
         if (endLine < input.startLine)
           throw new ControlError(400, '--end-line is before --start-line');
+        const replyTo =
+          input.replyTo === undefined
+            ? null
+            : await replyThreadOrThrow(taskId, number, input.replyTo);
         const draft = deps.reviews.saveAgentDraft({
           id: randomUUID(),
           taskId,
@@ -128,7 +154,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
           endLine,
           text: input.body,
           viewScope: prScope(provider, number),
-          replyTo: input.replyTo ?? null,
+          replyTo,
           kind: input.kind,
         });
         return view(draft);
@@ -145,7 +171,9 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
         taskId: TASK_ID_FIELD,
         id: z.string().describe('From `dashctl review drafts-list`'),
         body: BODY.optional(),
-        startLine: LINE.optional(),
+        startLine: LINE.optional().describe(
+          'New first line; without endLine the range moves with it, keeping its length',
+        ),
         endLine: LINE.optional(),
         kind: KIND.optional(),
       }),
@@ -167,7 +195,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
         }
         const draft = draftOrThrow(taskId, input.id);
         const startLine = input.startLine ?? draft.startLine;
-        const endLine = input.endLine ?? Math.max(startLine, draft.endLine);
+        const endLine = input.endLine ?? startLine + (draft.endLine - draft.startLine);
         if (endLine < startLine) throw new ControlError(400, '--end-line is before --start-line');
         const saved = deps.reviews.saveAgentDraft({
           id: draft.id,

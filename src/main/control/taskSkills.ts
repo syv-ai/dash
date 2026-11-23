@@ -74,7 +74,7 @@ If the person hasn't said which they want, ask rather than guess.
 ### Where a draft goes
 
 - **On lines**: \`dashctl review drafts-create --number <pr> --path <file> --start-line <n> [--end-line <n>] --kind comment\`, the body on stdin. \`--path\` is repo-relative, and the lines are in the PR's version of the file (its head commit, not the base).
-- **As a reply to an existing thread**: the same command with \`--reply-to\`, the thread's id from the provider.
+- **As a reply to an existing thread**: the same command with \`--reply-to\`: the thread's id, or the id of one of its comments (on GitHub a comment's REST id works too). Dash checks it against the PR's threads.
 - **On the whole PR**: not a line draft. \`dashctl review summary-set --number <pr>\` writes the review's summary from stdin, the PR-level comment posted with the verdict. There is one per review; setting it replaces the current one, and \`--body ''\` clears it.
 
 \`\`\`sh
@@ -83,10 +83,12 @@ This can be null when the session expired; guard it before reading \`user.id\`.
 EOF
 \`\`\`
 
+The person sees your drafts in the diff editor's view of that PR, whatever branch the task has checked out: there's no need to check the PR's branch out. When the PR isn't the task's own, tell the person its number; they open it from **Pull requests** in the diff editor (search, or type the number).
+
 ### Working with what's there
 
 - Read \`dashctl review drafts-list --number <pr>\` and \`summary-get\` before writing, so you don't repeat what exists.
-- You can change (\`drafts-update <id>\`: \`--body -\` with the new body on stdin, \`--start-line\`, \`--end-line\` or \`--kind\`) or delete (\`drafts-delete <id>\`) any draft, the person's too. Keep the person's wording unless they ask you to change it.
+- You can change (\`drafts-update <id>\`: \`--body -\` with the new body on stdin, \`--start-line\` (alone, it moves the whole range), \`--end-line\` or \`--kind\`) or delete (\`drafts-delete <id>\`) any draft, the person's too. Keep the person's wording unless they ask you to change it.
 - Write in Markdown; it is rendered in the editor.
 `;
 }
