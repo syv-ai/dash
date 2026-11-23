@@ -26,6 +26,10 @@ let comments: DiffCommentsRepo;
 let changed: string[];
 /** The PR's thread, by the id of the thread itself or of one of its comments. */
 const threadOf: Record<string, string> = { PRRT_1: 'PRRT_1', '4504285548': 'PRRT_1' };
+/** Each PR's head now; PR 99's can't be read. */
+const OLD = 'a'.repeat(40);
+const heads: Record<number, string> = { 12: 'c'.repeat(40), 13: 'd'.repeat(40) };
+let opened: unknown[];
 
 const row = (over: Partial<DiffComment> & { id: string }): DiffComment => ({
   taskId: 'me',
@@ -37,10 +41,11 @@ const row = (over: Partial<DiffComment> & { id: string }): DiffComment => ({
   viewScope: 'pr:github:12',
   side: 'RIGHT',
   replyTo: null,
+  commit: null,
   author: 'agent',
   kind: 'comment',
   createdAt: '',
-  updatedAt: '',
+  updatedAt: 'v1',
   ...over,
 });
 
@@ -48,8 +53,8 @@ const row = (over: Partial<DiffComment> & { id: string }): DiffComment => ({
 function put(c: DiffComment) {
   db.prepare(
     `INSERT INTO diff_editor_comments (id, task_id, file_path, start_line, end_line, text, sent,
-       view_scope, side, reply_to, author, kind, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '')`,
+       view_scope, side, reply_to, commit_sha, author, kind, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?)`,
   ).run(
     c.id,
     c.taskId,
@@ -61,8 +66,10 @@ function put(c: DiffComment) {
     c.viewScope,
     c.side,
     c.replyTo,
+    c.commit,
     c.author,
     c.kind,
+    c.updatedAt,
   );
 }
 
@@ -77,10 +84,16 @@ beforeEach(() => {
   }
   comments = createDiffCommentsRepo(db);
   changed = [];
+  opened = [];
   registry = createRegistry(fakeLookups([makeProject({ id: 'pA' })], tasks));
   registerReviewCapabilities(registry, {
     providerFor: () => 'github',
     getTask: (id) => tasks.find((t) => t.id === id),
+    prHead: async (_task, number) => {
+      if (!heads[number]) throw new Error('gh: could not connect');
+      return heads[number]!;
+    },
+    openPr: (task, pr) => void opened.push({ taskId: task.id, ...pr }),
     replyThread: async (_task, _number, ref) => {
       if (ref === 'offline') throw new Error('gh: could not connect');
       return threadOf[ref] ?? null;
@@ -122,6 +135,7 @@ describe('review.drafts_create', () => {
       viewScope: 'pr:github:12',
       author: 'agent',
       replyTo: null,
+      commit: heads[12],
       kind: 'comment',
     });
     expect(changed).toEqual(['me']);
@@ -209,7 +223,7 @@ describe('review.drafts_update / drafts_delete', () => {
     expect(comments.get('d1')).toMatchObject({ text: 'better', startLine: 3, endLine: 8 });
     await registry.call(asTask('me'), 'review.drafts_update', { id: 'd1', kind: 'note' });
     expect(comments.get('d1')).toMatchObject({ text: 'better', kind: 'note' });
-    await registry.call(asTask('me'), 'review.drafts_delete', { id: 'd1' });
+    await registry.call(asTask('me'), 'review.drafts_delete', { ids: ['d1'] });
     expect(!!comments.get('d1')).toBe(false);
     expect(changed).toEqual(['me', 'me', 'me']);
   });
@@ -218,7 +232,7 @@ describe('review.drafts_update / drafts_delete', () => {
     put(row({ id: 'u1', author: 'user' }));
     await registry.call(asTask('me'), 'review.drafts_update', { id: 'u1', body: 'reworded' });
     expect(comments.get('u1')!.text).toBe('reworded');
-    await registry.call(asTask('me'), 'review.drafts_delete', { id: 'u1' });
+    await registry.call(asTask('me'), 'review.drafts_delete', { ids: ['u1'] });
     expect(!!comments.get('u1')).toBe(false);
   });
 
@@ -236,7 +250,7 @@ describe('review.drafts_update / drafts_delete', () => {
     expect(
       await status(registry.call(asTask('me'), 'review.drafts_update', { id: 's1', body: 'x' })),
     ).toBe(404);
-    expect(await status(registry.call(asTask('me'), 'review.drafts_delete', { id: 'l1' }))).toBe(
+    expect(await status(registry.call(asTask('me'), 'review.drafts_delete', { ids: ['l1'] }))).toBe(
       404,
     );
   });
@@ -262,8 +276,8 @@ describe('review.summary_get / summary_set', () => {
     expect(await registry.call(asTask('me'), 'review.summary_get', { number: 12 })).toBeNull();
     expect(
       await registry.call(asTask('me'), 'review.summary_set', { number: 12, body: 'Nice work' }),
-    ).toEqual({ body: 'Nice work', author: 'agent' });
-    expect(await registry.call(asTask('me'), 'review.summary_get', { number: 12 })).toEqual({
+    ).toMatchObject({ body: 'Nice work', author: 'agent' });
+    expect(await registry.call(asTask('me'), 'review.summary_get', { number: 12 })).toMatchObject({
       body: 'Nice work',
       author: 'agent',
     });
@@ -282,5 +296,190 @@ describe('review.summary_get / summary_set', () => {
         }),
       ),
     ).toBe(404);
+  });
+});
+
+type View = { id: string; number: number; status?: string; commit?: string | null };
+const call = (name: string, input: Record<string, unknown>) =>
+  registry.call(asTask('me'), name, input);
+
+describe('PR heads (#233)', () => {
+  const line = { number: 12, path: 'a.ts', startLine: 1, body: 'b', kind: 'comment' };
+
+  it("records the PR's head on a line draft, or the commit given, and none on a reply", async () => {
+    const head = (await call('review.drafts_create', line)) as View;
+    expect(head).toMatchObject({ commit: heads[12], status: 'current' });
+    const given = (await call('review.drafts_create', { ...line, commit: OLD })) as View;
+    expect(given).toMatchObject({ commit: OLD, status: 'moved' });
+    const reply = (await call('review.drafts_create', { ...line, replyTo: 'PRRT_1' })) as View;
+    expect(comments.get(reply.id)!.commit).toBeNull();
+    expect(reply).not.toHaveProperty('status');
+  });
+
+  it("refuses a line draft when the PR's head can't be read, and a reply on a commit", async () => {
+    expect(await status(call('review.drafts_create', { ...line, number: 99 }))).toBe(502);
+    expect(
+      await status(call('review.drafts_create', { ...line, replyTo: 'PRRT_1', commit: OLD })),
+    ).toBe(400);
+    expect(changed).toEqual([]);
+  });
+
+  it('says which drafts were written on the head now, an older one, or not known', async () => {
+    put(row({ id: 'cur', commit: heads[12]! }));
+    put(row({ id: 'old', commit: OLD, startLine: 5 }));
+    put(row({ id: 'unk', startLine: 7 }));
+    put(row({ id: 'gone', commit: OLD, viewScope: 'pr:github:99' }));
+    const list = (await call('review.drafts_list', {})) as View[];
+    expect(list.map((d) => [d.id, d.number, d.status])).toEqual([
+      ['cur', 12, 'current'],
+      ['old', 12, 'moved'],
+      ['unk', 12, 'unknown'],
+      ['gone', 99, 'unknown'],
+    ]);
+    expect(await call('review.drafts_get', { id: 'old' })).toMatchObject({ status: 'moved' });
+  });
+});
+
+describe('drafts_list filters and drafts_get (#238)', () => {
+  it('lists every PR when no number is given, narrowed by kind, author and path', async () => {
+    put(row({ id: 'n', kind: 'note', author: 'user' }));
+    put(row({ id: 'c', filePath: 'b.ts' }));
+    put(row({ id: 'p13', viewScope: 'pr:github:13' }));
+    put(row({ id: 'live', viewScope: 'live' }));
+    const ids = async (input: Record<string, unknown>) =>
+      ((await call('review.drafts_list', input)) as View[]).map((d) => d.id);
+    expect(await ids({})).toEqual(['c', 'n', 'p13']);
+    expect(await ids({ kind: 'note' })).toEqual(['n']);
+    expect(await ids({ author: 'agent' })).toEqual(['c', 'p13']);
+    expect(await ids({ number: 12, path: '/b.ts' })).toEqual(['c']);
+  });
+
+  it('gets one draft, or a 404', async () => {
+    put(row({ id: 'd1' }));
+    expect(await call('review.drafts_get', { id: 'd1' })).toMatchObject({ id: 'd1', number: 12 });
+    expect(await status(call('review.drafts_get', { id: 'nope' }))).toBe(404);
+  });
+});
+
+describe('drafts_update moves (#235)', () => {
+  it('moves a draft to another file and PR, keeping its id, text and author, on the head now', async () => {
+    put(row({ id: 'd1', author: 'user', text: 'their words', commit: OLD }));
+    const moved = (await call('review.drafts_update', {
+      id: 'd1',
+      number: 13,
+      path: 'src/b.ts',
+      startLine: 20,
+    })) as View;
+    expect(moved).toMatchObject({ id: 'd1', number: 13, status: 'current' });
+    expect(comments.get('d1')).toMatchObject({
+      filePath: 'src/b.ts',
+      viewScope: 'pr:github:13',
+      startLine: 20,
+      endLine: 20,
+      text: 'their words',
+      author: 'user',
+      commit: heads[13],
+    });
+  });
+
+  it("keeps the anchor when only the text changes, or its own PR's number is given back", async () => {
+    put(row({ id: 'd1', commit: OLD }));
+    await call('review.drafts_update', { id: 'd1', body: 'reworded', number: 12 });
+    expect(comments.get('d1')!.commit).toBe(OLD);
+  });
+
+  it("can't move a reply, which belongs to its thread", async () => {
+    put(row({ id: 'r1', replyTo: 'PRRT_1' }));
+    expect(await status(call('review.drafts_update', { id: 'r1', number: 13 }))).toBe(400);
+    expect(await status(call('review.drafts_update', { id: 'r1', path: 'other.ts' }))).toBe(400);
+  });
+});
+
+describe('versions (#234)', () => {
+  it('returns updatedAt, and refuses an update or delete of a draft changed since', async () => {
+    put(row({ id: 'd1', updatedAt: 'v2' }));
+    expect(await call('review.drafts_get', { id: 'd1' })).toMatchObject({ updatedAt: 'v2' });
+    expect(
+      await status(call('review.drafts_update', { id: 'd1', body: 'x', ifUnchangedSince: 'v1' })),
+    ).toBe(409);
+    expect(
+      await status(call('review.drafts_delete', { ids: ['d1'], ifUnchangedSince: 'v1' })),
+    ).toBe(409);
+    expect(comments.get('d1')!.text).toBe('x');
+    const updated = (await call('review.drafts_update', {
+      id: 'd1',
+      body: 'mine',
+      ifUnchangedSince: 'v2',
+    })) as { updatedAt: string };
+    expect(updated.updatedAt).not.toBe('v2');
+    expect(changed).toEqual(['me']);
+  });
+
+  it('refuses a summary write when the summary changed since', async () => {
+    await call('review.summary_set', { number: 12, body: 'first', ifUnchangedSince: '' });
+    const { updatedAt } = (await call('review.summary_get', { number: 12 })) as {
+      updatedAt: string;
+    };
+    expect(
+      await status(call('review.summary_set', { number: 12, body: 'x', ifUnchangedSince: '' })),
+    ).toBe(409);
+    await call('review.summary_set', { number: 12, body: 'second', ifUnchangedSince: updatedAt });
+    expect(
+      await status(
+        call('review.summary_set', { number: 12, body: 'x', ifUnchangedSince: updatedAt }),
+      ),
+    ).toBe(409);
+    expect(await call('review.summary_get', { number: 12 })).toMatchObject({ body: 'second' });
+  });
+});
+
+describe('drafts_delete (#238)', () => {
+  beforeEach(() => {
+    put(row({ id: 'a', author: 'user', kind: 'note' }));
+    put(row({ id: 'b' }));
+    put(row({ id: 'c', viewScope: 'pr:github:13' }));
+  });
+  const left = () => ['a', 'b', 'c'].filter((id) => comments.get(id) !== undefined).sort();
+
+  it('deletes several drafts at once, telling the editor once', async () => {
+    expect(await call('review.drafts_delete', { ids: ['a', 'c'] })).toEqual({
+      deleted: ['a', 'c'],
+    });
+    expect(left()).toEqual(['b']);
+    expect(changed).toEqual(['me']);
+  });
+
+  it("deletes nothing when one id isn't the task's, or isn't on the --number given", async () => {
+    expect(await status(call('review.drafts_delete', { ids: ['a', 'nope'] }))).toBe(404);
+    expect(await status(call('review.drafts_delete', { ids: ['a', 'c'], number: 12 }))).toBe(400);
+    expect(left()).toEqual(['a', 'b', 'c']);
+  });
+
+  it("clears a PR's drafts with --all, narrowed by kind and author", async () => {
+    expect(await call('review.drafts_delete', { all: true, number: 12, author: 'agent' })).toEqual({
+      deleted: ['b'],
+    });
+    await call('review.drafts_delete', { all: true, number: 12 });
+    expect(left()).toEqual(['c']);
+  });
+
+  it('refuses a call that names no drafts, or mixes ids and --all', async () => {
+    for (const input of [
+      {},
+      { all: true },
+      { ids: ['a'], all: true, number: 12 },
+      { ids: ['a'], kind: 'note' },
+      { ids: ['a', 'b'], ifUnchangedSince: 'v1' },
+    ]) {
+      expect(await status(call('review.drafts_delete', input))).toBe(400);
+    }
+    expect(left()).toEqual(['a', 'b', 'c']);
+  });
+});
+
+describe('review.open (#239)', () => {
+  it("opens the task's diff editor on the PR", async () => {
+    await call('review.open', { number: 13 });
+    expect(opened).toEqual([{ taskId: 'me', provider: 'github', number: 13 }]);
   });
 });

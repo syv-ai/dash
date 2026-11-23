@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import type { DiffComment, DiffCommentKind } from '../../shared/types';
+import { toast } from 'sonner';
+import type { DiffComment, DiffCommentInput, DiffCommentKind } from '../../shared/types';
 import { clearedByClearNotes, clearedBySent } from '../../shared/diffComments';
 
 interface AddInput {
@@ -12,6 +13,8 @@ interface AddInput {
   replyTo?: string | null;
   /** Defaults to 'note'; a 'comment' is a PR review draft. */
   kind?: DiffCommentKind;
+  /** A PR line draft: the PR head its lines are in. */
+  commit?: string | null;
 }
 export interface RangeSnapshot {
   id: string;
@@ -32,7 +35,12 @@ export interface CommentsActions {
    *  they changed outside the editor. */
   reload: () => Promise<void>;
   addComment: (input: AddInput) => DiffComment | null;
-  updateText: (id: string, text: string) => void;
+  /** Save new text. `from` is the draft as the person started editing it: if
+   *  the agent changed or deleted it meanwhile, nothing is overwritten and the
+   *  person chooses (a toast: use mine, or keep theirs). */
+  updateText: (id: string, text: string, from?: DiffComment) => void;
+  /** Anchor a PR line draft to the PR's head (it was written on an older one). */
+  setCommit: (id: string, commit: string) => void;
   remove: (id: string) => void;
   markSent: (ids: ReadonlyArray<string>) => void;
   markUnsent: (id: string) => void;
@@ -103,28 +111,66 @@ function findById(byFile: Record<string, DiffComment[]>, id: string): DiffCommen
   }
   return undefined;
 }
-function persist(c: DiffComment, patch: Partial<DiffComment> = {}) {
-  return window.electronAPI.diffCommentsUpsert({
-    id: c.id,
-    taskId: c.taskId,
-    filePath: c.filePath,
-    startLine: c.startLine,
-    endLine: c.endLine,
-    text: c.text,
-    sent: c.sent,
-    viewScope: c.viewScope,
-    side: c.side,
-    replyTo: c.replyTo,
-    kind: c.kind,
-    ...patch,
-  });
-}
 
 /** Task-scoped comments store. Optimistic-applies mutations to local state,
  *  fires the IPC for persistence in the background, and ignores IPC errors
  *  (best-effort persistence; local state is the UI source of truth). Matches
  *  the app's other Zustand stores — driveable under node via getState(). */
 export const useCommentsStore = create<CommentsStore>((set, get) => {
+  /** Write a comment, then take main's word on what it decides: its version
+   *  (updatedAt), and who owns it (an agent's draft becomes the user's once
+   *  they change its text). */
+  const persist = async (
+    c: DiffComment,
+    patch: Partial<DiffCommentInput> = {},
+  ): Promise<Awaited<ReturnType<typeof window.electronAPI.diffCommentsUpsert>> | undefined> => {
+    const resp = await window.electronAPI.diffCommentsUpsert({
+      id: c.id,
+      taskId: c.taskId,
+      filePath: c.filePath,
+      startLine: c.startLine,
+      endLine: c.endLine,
+      text: c.text,
+      sent: c.sent,
+      viewScope: c.viewScope,
+      side: c.side,
+      replyTo: c.replyTo,
+      kind: c.kind,
+      commit: c.commit,
+      ...patch,
+    });
+    const saved = resp?.success ? resp.data : undefined;
+    const now = saved && findById(get().byFile, saved.id);
+    if (saved && now && (now.updatedAt !== saved.updatedAt || now.author !== saved.author)) {
+      set((st) => ({
+        byFile: upsertInto(st.byFile, { ...now, updatedAt: saved.updatedAt, author: saved.author }),
+      }));
+    }
+    return resp;
+  };
+
+  /** The agent changed or deleted a draft the person was editing: show it as
+   *  it is now, and let them put their text back. */
+  const onConflict = (mine: DiffComment, current: DiffComment | undefined) => {
+    void get().reload();
+    const what = current ? 'changed' : 'deleted';
+    toast(`The agent ${what} this draft while you were editing it.`, {
+      description: mine.text.length > 80 ? `${mine.text.slice(0, 80)}…` : mine.text,
+      duration: Infinity,
+      action: {
+        label: current ? 'Use mine' : 'Restore mine',
+        onClick: () => {
+          if (current) get().updateText(mine.id, mine.text);
+          else {
+            set((st) => ({ byFile: upsertInto(st.byFile, mine) }));
+            void persist(mine);
+          }
+        },
+      },
+      cancel: { label: current ? 'Keep theirs' : 'Discard', onClick: () => {} },
+    });
+  };
+
   const removeWhere = (pred: (c: DiffComment) => boolean) => {
     if (!get().taskId) return;
     const ids: string[] = [];
@@ -178,6 +224,7 @@ export const useCommentsStore = create<CommentsStore>((set, get) => {
         viewScope: input.viewScope,
         side: 'RIGHT',
         replyTo: input.replyTo ?? null,
+        commit: input.commit ?? null,
         author: 'user',
         kind: input.kind ?? 'note',
         createdAt: now,
@@ -188,21 +235,31 @@ export const useCommentsStore = create<CommentsStore>((set, get) => {
       return comment;
     },
 
-    updateText: (id, text) => {
+    updateText: (id, text, from) => {
       if (!get().taskId) return;
       const existing = findById(get().byFile, id);
-      if (!existing) return;
-      const next: DiffComment = { ...existing, text, updatedAt: new Date().toISOString() };
+      if (!existing) {
+        // Deleted while the person edited it (the reload got here first).
+        if (from) onConflict({ ...from, text }, undefined);
+        return;
+      }
+      const next: DiffComment = { ...existing, text };
       set((s) => ({ byFile: upsertInto(s.byFile, next) }));
-      // Main decides who owns a draft once its text changes (an agent's draft
-      // becomes the user's); take its answer.
-      void persist(next)?.then((resp) => {
-        const author = resp?.success ? resp.data?.author : undefined;
-        const now = findById(get().byFile, id);
-        if (author && now && now.author !== author) {
-          set((s) => ({ byFile: upsertInto(s.byFile, { ...now, author }) }));
+      const since = from ? { ifUnchangedSince: from.updatedAt } : {};
+      void persist(next, since).then((resp) => {
+        if (resp && !resp.success && resp.code === 'CONFLICT') {
+          onConflict(next, (resp.data as DiffComment | null | undefined) ?? undefined);
         }
       });
+    },
+
+    setCommit: (id, commit) => {
+      if (!get().taskId) return;
+      const existing = findById(get().byFile, id);
+      if (!existing || existing.commit === commit) return;
+      const next: DiffComment = { ...existing, commit };
+      set((s) => ({ byFile: upsertInto(s.byFile, next) }));
+      void persist(next);
     },
 
     remove: (id) => {

@@ -13,6 +13,7 @@ const cmt = (over: Partial<DiffComment> = {}): DiffComment => ({
   viewScope: over.viewScope ?? 'live',
   side: 'RIGHT',
   replyTo: null,
+  commit: null,
   author: 'user',
   kind: over.kind ?? 'note',
   createdAt: over.createdAt ?? '2026-01-01T00:00:00Z',
@@ -258,5 +259,52 @@ describe('commentsStore', () => {
     await vi.waitFor(() =>
       expect(useCommentsStore.getState().byFile['a.ts']![0]!.author).toBe('user'),
     );
+  });
+
+  it("takes main's version of a write, so the next edit builds on it", async () => {
+    api.diffCommentsList = vi.fn(() =>
+      Promise.resolve({ success: true, data: [cmt({ id: 'a' })] }),
+    );
+    api.diffCommentsUpsert = vi.fn((c: unknown) =>
+      Promise.resolve({ success: true, data: { ...(c as DiffComment), updatedAt: 'v-main' } }),
+    );
+    const useCommentsStore = await freshStore();
+    await useCommentsStore.getState().loadForTask('t1');
+    useCommentsStore.getState().markSent(['a']);
+    await vi.waitFor(() =>
+      expect(useCommentsStore.getState().byFile['a.ts']![0]!.updatedAt).toBe('v-main'),
+    );
+  });
+
+  it("saves an edit only if the agent hasn't changed the draft since it began", async () => {
+    const theirs = cmt({ id: 'a', text: 'theirs', updatedAt: 'v2' });
+    api.diffCommentsList = vi
+      .fn()
+      .mockResolvedValueOnce({ success: true, data: [cmt({ id: 'a' })] })
+      .mockResolvedValue({ success: true, data: [theirs] });
+    api.diffCommentsUpsert = vi.fn(() =>
+      Promise.resolve({ success: false, code: 'CONFLICT', error: 'changed', data: theirs }),
+    );
+    const useCommentsStore = await freshStore();
+    await useCommentsStore.getState().loadForTask('t1');
+    const from = useCommentsStore.getState().byFile['a.ts']![0]!;
+    useCommentsStore.getState().updateText('a', 'mine', from);
+    expect(api.diffCommentsUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({ text: 'mine', ifUnchangedSince: from.updatedAt }),
+    );
+    // Refused: the store shows the agent's version again.
+    await vi.waitFor(() =>
+      expect(useCommentsStore.getState().byFile['a.ts']![0]!.text).toBe('theirs'),
+    );
+  });
+
+  it("doesn't drop an edit of a draft the agent deleted meanwhile", async () => {
+    api.diffCommentsList = vi.fn(() => Promise.resolve({ success: true, data: [] }));
+    const useCommentsStore = await freshStore();
+    await useCommentsStore.getState().loadForTask('t1');
+    useCommentsStore.getState().updateText('a', 'mine', cmt({ id: 'a' }));
+    // Nothing is written behind the person's back; they choose (restore or discard).
+    expect(api.diffCommentsUpsert).not.toHaveBeenCalled();
+    expect(api.diffCommentsList).toHaveBeenCalledTimes(2);
   });
 });

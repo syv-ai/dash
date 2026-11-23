@@ -14,6 +14,7 @@ function c(over: Partial<DiffComment>): DiffComment {
     viewScope: 'live',
     side: 'RIGHT',
     replyTo: null,
+    commit: null,
     author: 'user',
     kind: 'note',
     createdAt: '2026-06-05T00:00:00Z',

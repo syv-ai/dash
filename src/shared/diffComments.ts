@@ -53,3 +53,22 @@ export const isPrunable = (
   c: Scoped & { filePath: string },
   existingFilePaths: ReadonlySet<string>,
 ): boolean => !isPrScope(c.viewScope) && !existingFilePaths.has(c.filePath);
+
+/**
+ * Where a PR line draft stands against the PR's head now: written on that
+ * head ('current'), on an older one, so its lines may sit on other code now
+ * ('moved'), or not known ('unknown': written before Dash recorded it, or the
+ * head couldn't be read). Replies sit on their thread, not on lines.
+ */
+export type AnchorStatus = 'current' | 'moved' | 'unknown';
+
+export const anchorStatus = (
+  c: Pick<DiffComment, 'commit'>,
+  head: string | null | undefined,
+): AnchorStatus => (!c.commit || !head ? 'unknown' : c.commit === head ? 'current' : 'moved');
+
+/** A line draft written on an older head of its PR: Submit holds it back. */
+export const isMoved = (
+  c: Pick<DiffComment, 'commit' | 'replyTo'>,
+  head: string | null | undefined,
+): boolean => !isReplyDraft(c) && anchorStatus(c, head) === 'moved';

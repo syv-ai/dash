@@ -67,7 +67,7 @@ describe('dashctl argv', () => {
     });
     expect(resolve(['review', 'drafts-delete', 'd1', '--task-id', 't1'])).toMatchObject({
       name: 'review.drafts_delete',
-      input: { id: 'd1', taskId: 't1' },
+      input: { ids: ['d1'], taskId: 't1' },
     });
   });
 
@@ -183,6 +183,26 @@ describe('dashctl argv', () => {
       name: 'review.drafts_update',
       input: { id: 'd1', taskId: 't1' },
     });
+  });
+
+  it('takes several values for an array: trailing positionals, or its flag again', () => {
+    expect(resolve(['review', 'drafts-delete', 'd1', 'd2', 'd3'])).toEqual({
+      kind: 'call',
+      name: 'review.drafts_delete',
+      input: { ids: ['d1', 'd2', 'd3'] },
+    });
+    expect(resolve(['review', 'drafts-delete', '--ids', 'd1', '--ids', 'd2'])).toMatchObject({
+      input: { ids: ['d1', 'd2'] },
+    });
+    expect(resolve(['review', 'drafts-delete', '--all', '--number', '4'])).toMatchObject({
+      input: { all: true, number: 4 },
+    });
+    // A flag that isn't an array still can't be given twice.
+    const r = resolve(['review', 'drafts-delete', 'd1', '--number', '4', '--number', '5']);
+    expect((r as { text: string }).text).toContain('--number given twice');
+    expect(commandLine(commands.find((c) => c.name === 'review.drafts_delete')!)).toBe(
+      'dashctl review drafts-delete [ids]... [options]',
+    );
   });
 
   it('reads a required stdin input when not given as a flag', () => {

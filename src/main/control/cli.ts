@@ -34,6 +34,8 @@ interface PropSchema {
   type?: string;
   enum?: unknown[];
   description?: string;
+  /** An array's items. */
+  items?: PropSchema;
 }
 interface ObjectSchema {
   properties?: Record<string, PropSchema>;
@@ -59,7 +61,7 @@ const flagFor = (prop: string) => (prop === 'projectId' ? 'project' : kebab(prop
 function placeholder(prop: string, schema: PropSchema): string {
   if (schema.enum) return schema.enum.join('|');
   if (schema.type === 'boolean') return '';
-  return `<${flagFor(prop)}>`;
+  return schema.type === 'array' ? `<${flagFor(prop)}>...` : `<${flagFor(prop)}>`;
 }
 
 /** One command's line: positionals, required flags, then `[options]`. */
@@ -68,7 +70,10 @@ export function commandLine(c: CapabilityListing): string {
   const required = requiredOf(c);
   const args = c.cli?.args ?? [];
   const parts = ['dashctl', ...words(c.name)];
-  for (const a of args) parts.push(required.has(a) ? `<${flagFor(a)}>` : `[${flagFor(a)}]`);
+  for (const a of args) {
+    const many = propsOf(c)[a]?.type === 'array' ? '...' : '';
+    parts.push(required.has(a) ? `<${flagFor(a)}>${many}` : `[${flagFor(a)}]${many}`);
+  }
   let optional = false;
   for (const [prop, schema] of Object.entries(props)) {
     if (args.includes(prop)) continue;
@@ -138,7 +143,12 @@ export function findProject(
   return projectAtPath(projects, resolveFrom(cwd, ref), checkoutOf);
 }
 
-function coerce(prop: string, schema: PropSchema, value: string | true): unknown {
+function coerce(prop: string, schema: PropSchema, value: string | true | string[]): unknown {
+  if (schema.type === 'array') {
+    const values = Array.isArray(value) ? value : [value];
+    return values.map((v) => coerce(prop, schema.items ?? {}, v));
+  }
+  if (Array.isArray(value)) throw new UsageError(`--${flagFor(prop)} given twice`);
   if (schema.type === 'boolean') {
     if (value === true || value === 'true') return true;
     if (value === 'false') return false;
@@ -199,7 +209,18 @@ export function resolveArgv(
       byFlag.set(kebab(prop), prop);
     }
     const input: Record<string, unknown> = {};
-    const raw: Record<string, string | true> = {};
+    const raw: Record<string, string | true | string[]> = {};
+    /** A flag's value; an array's flag may be given again, adding one each time. */
+    const put = (prop: string, value: string | true) => {
+      const prev = raw[prop];
+      if (prev !== undefined && props[prop]!.type !== 'array') {
+        throw new UsageError(`--${flagFor(prop)} given twice`);
+      }
+      raw[prop] =
+        prev === undefined
+          ? value
+          : [...(Array.isArray(prev) ? prev : [String(prev)]), String(value)];
+    };
     const positional: string[] = [];
     for (let i = 0; i < rest.length; i++) {
       const word = rest[i]!;
@@ -218,22 +239,25 @@ export function resolveArgv(
       const flag = word.slice(2, eq < 0 ? undefined : eq);
       const prop = byFlag.get(flag);
       if (!prop) throw new UsageError(`unknown flag --${flag}`);
-      if (prop in raw) throw new UsageError(`--${flagFor(prop)} given twice`);
-      if (eq >= 0) raw[prop] = word.slice(eq + 1);
+      if (eq >= 0) put(prop, word.slice(eq + 1));
       else if (props[prop]!.type === 'boolean') {
         const next = rest[i + 1];
-        raw[prop] = next === 'true' || next === 'false' ? (i++, next) : true;
-      } else if (i + 1 < rest.length) raw[prop] = rest[++i]!;
+        put(prop, next === 'true' || next === 'false' ? (i++, next) : true);
+      } else if (i + 1 < rest.length) put(prop, rest[++i]!);
       else throw new UsageError(`--${flagFor(prop)} needs a value`);
     }
     const args = c.cli?.args ?? [];
-    if (positional.length > args.length) {
+    // An array as the last positional takes every word left.
+    const variadic = props[args.at(-1) ?? '']?.type === 'array';
+    if (positional.length > args.length && !variadic) {
       throw new UsageError(`unexpected argument ${JSON.stringify(positional[args.length])}`);
     }
-    positional.forEach((value, i) => {
-      const prop = args[i]!;
+    args.forEach((prop, i) => {
+      const values =
+        variadic && i === args.length - 1 ? positional.slice(i) : positional.slice(i, i + 1);
+      if (values.length === 0) return;
       if (prop in raw) throw new UsageError(`${flagFor(prop)} given twice`);
-      raw[prop] = value;
+      raw[prop] = props[prop]!.type === 'array' ? values : values[0]!;
     });
     const fromStdin = c.cli?.stdin;
     const askedForStdin = fromStdin !== undefined && raw[fromStdin] === '-';

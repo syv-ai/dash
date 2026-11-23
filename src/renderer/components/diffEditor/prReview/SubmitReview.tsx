@@ -110,7 +110,12 @@ export function SubmitReview({
     setError(null);
     const r = await usePrReviews.getState().submit(projectId, cwd, taskId, review, offered, body);
     setBusy(false);
-    if (r.ok) {
+    if (r.ok && r.heldBack) {
+      const n = r.heldBack;
+      toast.warning(
+        `Review submitted. ${n} ${n === 1 ? 'comment was' : 'comments were'} kept as drafts: written on an older version of the PR, ${n === 1 ? 'its lines' : 'their lines'} may be other code now. Check ${n === 1 ? 'it' : 'them'} (marked "PR moved"), then submit again.`,
+      );
+    } else if (r.ok) {
       toast.success('Review submitted');
     } else {
       setError({ error: r.error, posted: r.posted ?? 0 });

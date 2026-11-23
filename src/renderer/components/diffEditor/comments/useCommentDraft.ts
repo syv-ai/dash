@@ -1,13 +1,13 @@
 import { useCallback, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
-import type { LineRange, LiveComment } from './types';
+import type { DiffComment, LineRange, LiveComment } from './types';
 
 interface Args {
   modifiedEditor: monacoEditor.ICodeEditor | null;
   setPendingRange: (r: LineRange | null) => void;
   binding: {
     addComment: (range: LineRange, text: string) => LiveComment | null;
-    updateText: (id: string, text: string) => void;
+    updateText: (id: string, text: string, from?: DiffComment) => void;
   };
 }
 
@@ -23,29 +23,35 @@ export interface CommentDraft {
   beginEdit: (comment: LiveComment) => void;
 }
 
+/** The comment as stored, without the editor's decoration. */
+const storedOf = ({ decorationId: _decorationId, ...stored }: LiveComment): DiffComment => stored;
+
 /** Owns the in-progress comment (fresh-create vs edit) state. Does NOT own
  *  pendingRange — that lives in useGutterSelection — but drives it so the
  *  draft popover opens/closes in sync. */
 export function useCommentDraft({ modifiedEditor, setPendingRange, binding }: Args): CommentDraft {
   const [pendingText, setPendingText] = useState('');
-  const [editingId, setEditingId] = useState<string | null>(null);
+  // The comment as it was when editing began, so a save can tell whether the
+  // agent changed it meanwhile.
+  const [editing, setEditing] = useState<DiffComment | null>(null);
+  const editingId = editing?.id ?? null;
 
   const submit = useCallback(
     (text: string, pendingRange: LineRange | null) => {
-      if (editingId) {
-        binding.updateText(editingId, text);
+      if (editing) {
+        binding.updateText(editing.id, text, editing);
       } else if (pendingRange) {
         binding.addComment(pendingRange, text);
       }
-      setEditingId(null);
+      setEditing(null);
       setPendingText('');
       setPendingRange(null);
     },
-    [editingId, binding, setPendingRange],
+    [editing, binding, setPendingRange],
   );
 
   const cancel = useCallback(() => {
-    setEditingId(null);
+    setEditing(null);
     setPendingText('');
     setPendingRange(null);
   }, [setPendingRange]);
@@ -55,7 +61,7 @@ export function useCommentDraft({ modifiedEditor, setPendingRange, binding }: Ar
       const model = modifiedEditor?.getModel();
       const range = model?.getDecorationRange(comment.decorationId);
       if (!range) return;
-      setEditingId(comment.id);
+      setEditing(storedOf(comment));
       setPendingText(comment.text);
       setPendingRange({ start: range.startLineNumber, end: range.endLineNumber });
     },

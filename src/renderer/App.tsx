@@ -49,6 +49,7 @@ import { setWebglHeldLimit } from './terminal/WebglLifecycle';
 import { useSettings } from './stores/settingsStore';
 import { useUi } from './stores/uiStore';
 import { useGit } from './stores/gitStore';
+import { usePrReviews } from './stores/prReviewStore';
 import { useRuntime } from './stores/runtimeStore';
 import { useAppBootstrap } from './hooks/useAppBootstrap';
 import { useShallow } from 'zustand/react/shallow';
@@ -569,6 +570,32 @@ export function App() {
       setActiveTaskId(taskId);
     });
   }, []);
+
+  // Open a task's diff editor on a PR (the control API's review.open). The
+  // review loads first, so the view starts on the PR's real base and head.
+  useEffect(() => {
+    const openPr = async (taskId: string, projectId: string, number: number) => {
+      setActiveProjectId(projectId);
+      setActiveTaskId(taskId);
+      const task = selectTaskById(useProjects.getState(), taskId);
+      if (!task) return;
+      const loaded = await usePrReviews.getState().load(projectId, task.path, number);
+      if (!loaded.ok) {
+        toast.error(`Could not load PR #${number}: ${loaded.error}`);
+        return;
+      }
+      const { provider, base, head } = loaded.review;
+      setDiffFile({
+        cwd: task.path,
+        filePath: '',
+        staged: false,
+        initialView: { kind: 'pr', provider, number, base, head },
+      });
+    };
+    return window.electronAPI.onOpenPr(
+      ({ taskId, projectId, number }) => void openPr(taskId, projectId, number),
+    );
+  }, [setDiffFile, setActiveProjectId, setActiveTaskId]);
 
   // Task name lookup (used for threshold alerts and settings)
   const taskNames = useMemo(() => {

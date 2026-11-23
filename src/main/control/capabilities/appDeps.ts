@@ -9,7 +9,7 @@ import { loadWorkspaceConfig } from '../../services/WorkspaceConfigService';
 import { taskEvents } from '../../services/taskEvents';
 import { broadcastProjectsChanged } from '../../services/projectEvents';
 import { TelemetryService } from '../../services/TelemetryService';
-import { focusTaskInWindow } from '../../services/focusTask';
+import { focusTaskInWindow, openPrInWindow } from '../../services/focusTask';
 import {
   getUntrustedRoot,
   recheckWorkspaceTrust,
@@ -164,9 +164,18 @@ export function reviewDeps(): ReviewCapabilityDeps {
     providerFor: (projectId) =>
       prProviderFor(appPrContextDeps.getProject(projectId) ?? { gitRemote: null }),
     getTask: (id) => DatabaseService.getTask(id),
+    prHead: async (task, number) => {
+      const { adapter, ctx } = prContextFor(task.projectId, task.path, appPrContextDeps);
+      return adapter.head(ctx, number);
+    },
     replyThread: async (task, number, ref) => {
       const { adapter, ctx } = prContextFor(task.projectId, task.path, appPrContextDeps);
       return adapter.replyThread(ctx, number, ref);
+    },
+    openPr: (task, pr) => {
+      if (!openPrInWindow({ taskId: task.id, projectId: task.projectId, ...pr })) {
+        throw new ControlError(409, 'Dash has no window open');
+      }
     },
     // Read per call, so a database that failed to open fails the call, not the API's start.
     get reviews() {

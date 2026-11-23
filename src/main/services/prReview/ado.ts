@@ -341,6 +341,13 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): PrReviewProvider {
       });
     },
 
+    async head(ctx, number) {
+      const at = `${prPath(ctx, number)}/iterations`;
+      const { head } = latestIteration(await deps.request(adoOf(ctx), at));
+      if (!head) throw new Error(`PR #${number} has no head commit`);
+      return head;
+    },
+
     async replyThread(ctx, number, ref) {
       // A comment's id is numbered within its thread, so only the PR view's
       // "<thread>:<comment>" form of it (see adoReviewFrom) names a thread.

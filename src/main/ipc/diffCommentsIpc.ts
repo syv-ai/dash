@@ -2,7 +2,7 @@ import { ipcMain } from 'electron';
 import { z } from 'zod';
 import { parseArgs, errorResponse } from './validate';
 import { diffCommentInputSchema } from './schemas';
-import { diffCommentsRepo } from '../services/diffCommentsRepo';
+import { DraftConflictError, diffCommentsRepo } from '../services/diffCommentsRepo';
 import type { DiffComment, DiffCommentInput, IpcResponse } from '@shared/types';
 
 export function registerDiffCommentsIpc(): void {
@@ -23,6 +23,11 @@ export function registerDiffCommentsIpc(): void {
       parseArgs('diffComments:upsert', diffCommentInputSchema, c);
       return { success: true, data: diffCommentsRepo().upsertFromUser(c) };
     } catch (err) {
+      // The agent changed or deleted it since the person started editing: say
+      // so, with the row as it is now, rather than overwrite it.
+      if (err instanceof DraftConflictError) {
+        return { success: false, error: err.message, code: 'CONFLICT', data: err.current };
+      }
       return errorResponse(err);
     }
   });

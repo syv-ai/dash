@@ -192,6 +192,8 @@ describe('prReviewStore summaries', () => {
       provider: 'ado',
       number: 7,
       body: 'Mine',
+      // Built on what was loaded, which had no version: the save is refused if the agent wrote since.
+      ifUnchangedSince: '',
     });
   });
 });

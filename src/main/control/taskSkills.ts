@@ -83,12 +83,18 @@ This can be null when the session expired; guard it before reading \`user.id\`.
 EOF
 \`\`\`
 
-The person sees your drafts in the diff editor's view of that PR, whatever branch the task has checked out: there's no need to check the PR's branch out. When the PR isn't the task's own, tell the person its number; they open it from **Pull requests** in the diff editor (search, or type the number).
+The person sees your drafts in the diff editor's view of that PR, whatever branch the task has checked out: there's no need to check the PR's branch out. When the PR isn't the task's own, \`dashctl review open --number <pr>\` brings it up for the person; they can also open it from **Pull requests** in the diff editor (search, or type the number).
+
+### When the PR moves
+
+A line draft records the PR's head commit it was written on (\`commit\`; give \`--commit <sha>\` if you read the code at another one). \`drafts-list\` gives each line draft a \`status\`: \`current\`, or \`moved\` once the author has pushed since, so its lines may be other code now. Submit holds moved drafts back. Re-check a moved draft against the PR as it is now and place it again (\`drafts-update <id> --start-line <n>\` and the like anchors it to the head now), or delete it.
 
 ### Working with what's there
 
-- Read \`dashctl review drafts-list --number <pr>\` and \`summary-get\` before writing, so you don't repeat what exists.
-- You can change (\`drafts-update <id>\`: \`--body -\` with the new body on stdin, \`--start-line\` (alone, it moves the whole range), \`--end-line\` or \`--kind\`) or delete (\`drafts-delete <id>\`) any draft, the person's too. Keep the person's wording unless they ask you to change it.
+- Read \`dashctl review drafts-list --number <pr>\` and \`summary-get\` before writing, so you don't repeat what exists. Without \`--number\` it lists every PR the task has drafts on; \`--kind\`, \`--author\` and \`--path\` narrow it, and \`drafts-get <id>\` reads one.
+- You can change any draft, the person's too, with \`drafts-update <id>\`: \`--body -\` with the new body on stdin, \`--kind\`, \`--start-line\` (alone, it moves the whole range), \`--end-line\`, or \`--path\` and \`--number\` to move it to another file or PR (it keeps its id and author; a reply can't move). Keep the person's wording unless they ask you to change it.
+- Delete with \`drafts-delete <id>...\` (several at once), or \`drafts-delete --all --number <pr>\` for a PR's drafts, narrowed by \`--kind\` or \`--author\`. \`--number\` with ids refuses any draft not on that PR.
+- The person may be editing the same drafts. Each has an \`updatedAt\`: pass the one you read as \`--if-unchanged-since\` to \`drafts-update\`, \`drafts-delete\` (one id) or \`summary-set\`, and a 409 tells you it changed since; read it again before deciding.
 - Write in Markdown; it is rendered in the editor.
 `;
 }

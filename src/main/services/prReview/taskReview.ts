@@ -6,7 +6,7 @@ import type {
   SubmitResult,
 } from '@shared/types';
 import { prScope } from '@shared/prScope';
-import { isPrDraft } from '@shared/diffComments';
+import { isMoved, isPrDraft } from '@shared/diffComments';
 import { diffCommentsRepo, type AgentDraft, type DiffCommentsRepo } from '../diffCommentsRepo';
 import { prReviewsInProgressRepo, type PrReviewsInProgressRepo } from '../prReviewsInProgressRepo';
 import { emitDiffCommentsChanged } from '../diffCommentEvents';
@@ -20,7 +20,7 @@ export interface PrRef {
 
 /** Where a submit goes: the PR's adapter and the context to call it with. */
 export interface SubmitTarget {
-  adapter: Pick<PrReviewProvider, 'submit'>;
+  adapter: Pick<PrReviewProvider, 'submit' | 'head'>;
   ctx: PrContext;
 }
 
@@ -34,21 +34,26 @@ export interface SubmitTarget {
 export interface TaskReviews {
   /** The task's notes and comments on the PR. */
   drafts(taskId: string, pr: PrRef): DiffComment[];
+  /** The task's notes and comments on every PR. */
+  allDrafts(taskId: string): DiffComment[];
   /** One of the task's notes or comments on any PR, or undefined. */
   draft(taskId: string, id: string): DiffComment | undefined;
   saveAgentDraft(draft: AgentDraft): DiffComment;
-  deleteAgentDraft(taskId: string, id: string): void;
+  deleteAgentDrafts(taskId: string, ids: readonly string[]): void;
   isInReview(taskId: string, pr: PrRef): boolean;
   /** Start (Review) or end the task's review of the PR. */
   setInReview(taskId: string, pr: PrRef, on: boolean): void;
   getSummary(taskId: string, pr: PrRef): PrReviewSummary | null;
-  /** Replace the draft summary; an empty body clears it. */
-  setSummary(taskId: string, pr: PrRef, summary: PrReviewSummary): void;
+  /** Replace the draft summary; an empty body clears it. With `ifUnchangedSince`,
+   *  only if it's still that version (see PrReviewsInProgressRepo.setSummary). */
+  setSummary(taskId: string, pr: PrRef, summary: PrReviewSummary, ifUnchangedSince?: string): void;
   /**
    * Post the task's comments on the PR (not its notes) with a verdict and
-   * summary. Drafts that reached the PR are deleted. A submit with no error
-   * ends the review and clears the summary, so what's written next is a note
-   * again. A write the provider refused comes back as the result's error.
+   * summary. Drafts that reached the PR are deleted. A line comment written on
+   * an older head of the PR is held back, not posted on code it wasn't about.
+   * A submit with no error ends the review and clears the summary, so what's
+   * written next is a note again; one that held drafts back keeps the review
+   * going, for them. A write the provider refused comes back as the result's error.
    */
   submit(
     taskId: string,
@@ -67,10 +72,15 @@ export interface TaskReviewDeps {
 }
 
 export function createTaskReviews({ comments, reviews, changed }: TaskReviewDeps): TaskReviews {
-  const setSummary = (taskId: string, pr: PrRef, summary: PrReviewSummary) =>
-    reviews.setSummary(taskId, pr.provider, pr.number, summary);
+  const setSummary = (
+    taskId: string,
+    pr: PrRef,
+    summary: PrReviewSummary,
+    ifUnchangedSince?: string,
+  ) => reviews.setSummary(taskId, pr.provider, pr.number, summary, ifUnchangedSince);
   return {
     drafts: (taskId, pr) => comments.listByScope(taskId, prScope(pr.provider, pr.number)),
+    allDrafts: (taskId) => comments.listByTask(taskId).filter(isPrDraft),
     draft(taskId, id) {
       const c = comments.get(id);
       return c && c.taskId === taskId && isPrDraft(c) ? c : undefined;
@@ -80,29 +90,34 @@ export function createTaskReviews({ comments, reviews, changed }: TaskReviewDeps
       changed(draft.taskId);
       return saved;
     },
-    deleteAgentDraft(taskId, id) {
-      comments.delete(id);
+    deleteAgentDrafts(taskId, ids) {
+      if (ids.length === 0) return;
+      comments.deleteByIds(ids);
       changed(taskId);
     },
     isInReview: (taskId, pr) => reviews.isInReview(taskId, pr.provider, pr.number),
     setInReview: (taskId, pr, on) => reviews.setInReview(taskId, pr.provider, pr.number, on),
     getSummary: (taskId, pr) => reviews.getSummary(taskId, pr.provider, pr.number),
-    setSummary(taskId, pr, summary) {
-      setSummary(taskId, pr, summary);
+    setSummary(taskId, pr, summary, ifUnchangedSince) {
+      setSummary(taskId, pr, summary, ifUnchangedSince);
       if (summary.author === 'agent') changed(taskId);
     },
     async submit(taskId, pr, { adapter, ctx }, verdict, body) {
       const drafts = comments.listPrDrafts(taskId, pr.provider, pr.number);
+      const head = drafts.comments.some((c) => c.commit) ? await adapter.head(ctx, pr.number) : '';
+      const heldBack = drafts.comments.filter((c) => isMoved(c, head));
       const result = await adapter.submit(ctx, pr.number, {
         verdict,
         body,
-        comments: drafts.comments.map((c) => ({
-          draftId: c.id,
-          path: c.filePath,
-          startLine: c.startLine,
-          endLine: c.endLine,
-          body: c.text,
-        })),
+        comments: drafts.comments
+          .filter((c) => !isMoved(c, head))
+          .map((c) => ({
+            draftId: c.id,
+            path: c.filePath,
+            startLine: c.startLine,
+            endLine: c.endLine,
+            body: c.text,
+          })),
         replies: drafts.replies.map((c) => ({
           draftId: c.id,
           threadId: c.replyTo!,
@@ -114,10 +129,12 @@ export function createTaskReviews({ comments, reviews, changed }: TaskReviewDeps
         changed(taskId);
       }
       if (!result.error) {
-        reviews.setInReview(taskId, pr.provider, pr.number, false);
+        if (heldBack.length === 0) reviews.setInReview(taskId, pr.provider, pr.number, false);
         setSummary(taskId, pr, { body: '', author: 'user' });
       }
-      return result;
+      return heldBack.length > 0
+        ? { ...result, heldBackDraftIds: heldBack.map((c) => c.id) }
+        : result;
     },
   };
 }
