@@ -162,6 +162,15 @@ export interface TaskMessageAddresses {
   uds: string;
 }
 
+/** A task's `dashctl tasks notify` that no watch of its sender took: Dash holds it
+ *  for the sender's next watch and shows it to the person. */
+export interface HeldTaskNotice {
+  taskId: string;
+  projectId: string;
+  taskName: string;
+  text: string;
+}
+
 /** What `app:getControlInfo` reports for the Settings orchestrator row. */
 export type ControlInfo = {
   /** `dashctl`, the command line other agents reach Dash with. */

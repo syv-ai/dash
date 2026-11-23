@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import type { HeldTaskNotice } from '../shared/types';
 
 /**
  * A main→renderer event subscription: `listen<T>(channel)(callback)` calls
@@ -60,6 +61,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setTaskDashAccess: (input: unknown) => ipcRenderer.invoke('task:setDashAccess', input),
   getTaskMessageAddresses: (id: string) => ipcRenderer.invoke('task:messageAddresses', id),
   onTasksChanged: listen<{ projectId: string }>('tasks:changed'),
+  onTaskNoticeHeld: listen<HeldTaskNotice>('tasks:noticeHeld'),
   onProjectsChanged: listen('projects:changed'),
   reorderTasks: (projectId: string, orderedTaskIds: string[]) =>
     ipcRenderer.invoke('db:reorderTasks', { projectId, orderedTaskIds }),

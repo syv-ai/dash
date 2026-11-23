@@ -75,6 +75,7 @@ The orchestrator sees every project that isn't archived. Turning the switch off 
 | `tasks wake <task-id>`      | Make sure a task's session is running                                              |                     |
 | `tasks message <task-id>`   | Send a task's session a message (body on stdin), starting it if stopped            |                     |
 | `tasks reply <task-id>`     | A task's reply to a message, from its transcript (`--message-id`)                  | yes                 |
+| `tasks notify`              | From a task: reach the sender of a message later (`--to <message-id>`, stdin)      |                     |
 | `tasks open <task-id>`      | Bring Dash to the front with the task open                                         |                     |
 | `tasks archive <task-id>`   | Archive a task (never the caller's own task)                                       |                     |
 | `tasks restore <task-id>`   | Restore an archived task                                                           |                     |
@@ -106,6 +107,8 @@ An orchestrator on any harness (Claude Code, Codex, Pi, a script) talks to a tas
 3. `dashctl tasks reply <task-id> --message-id <id>` reads the answer: the task's last message of the turn the message started. `status` is `pending` until the task stops working, then `done`.
 
 To follow tasks without polling, keep `dashctl tasks watch` running in the background (Claude Code's `run_in_background` or Monitor): it prints each task's view, then a `{"event":"task",…}` line whenever one changes and `{"event":"removed",…}` when one is archived or deleted. A task messaged since the watch started also gives a `{"event":"reply","messageId":…,"text":…}` line once it has answered, so you don't need `tasks reply`. Give a task id to watch just that task; it then ends once the task is removed. A watch also ends, on an `{"error":…}` line, once the caller's access is turned off.
+
+A task with Dash access can also reach you after that turn (a review came in, a build failed) with `dashctl tasks notify --to <message-id>`. Your watch prints it as `{"event":"notice","taskId":…,"inReplyTo":…,"text":…}`, where `inReplyTo` is the `messageId` your `tasks message` returned. A watch gets notices only from tasks it sees. Dash knows every outside orchestrator as the same sender, so each of their watches gets the notice, and `inReplyTo` tells yours apart. When no watch of yours sees the task, Dash holds the notice for your next watch that does, and shows the person a notification in Dash. A task without Dash access can only answer within the turn a message starts.
 
 An idle task starts a turn with the message. A working one reads it after the tool call in flight; the result then says `queued: true`, and the reply may be mixed with the turn's other work. Never send a message again after an error that says it may have been delivered: a message sent twice is a turn taken twice. Message ids live in Dash's memory, so `tasks reply` can't find one after Dash restarts. A task whose session started before this version of Dash has no inbox known: `dashctl tasks restart <task-id>` (same conversation) fixes it.
 

@@ -37,6 +37,8 @@ import { GithubService } from '../../services/GithubService';
 import { AzureDevOpsService } from '../../services/AzureDevOpsService';
 import { ConnectionConfigService } from '../../services/ConnectionConfigService';
 import { linkedAdoWorkItem, linkedGithubIssue } from '../../../shared/taskContext';
+import { broadcast } from '../../utils/broadcast';
+import type { HeldTaskNotice } from '../../../shared/types';
 
 /**
  * The capabilities' real dependencies: the app's services. Kept apart from the
@@ -140,6 +142,13 @@ export function taskDeps(): TaskCapabilityDeps {
       return files.find((f) => fs.existsSync(f)) ?? files[0]!;
     },
     readTranscript: (file) => fs.promises.readFile(file, 'utf8').catch(() => null),
+    showHeldNotice: (task, notice) =>
+      broadcast('tasks:noticeHeld', {
+        taskId: task.id,
+        projectId: task.projectId,
+        taskName: task.name,
+        text: notice.text,
+      } satisfies HeldTaskNotice),
   };
 }
 
