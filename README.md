@@ -133,8 +133,7 @@ Download the latest build from [Releases](https://github.com/syv-ai/dash/release
 ## Development setup
 
 ```bash
-pnpm install
-pnpm run rebuild  # rebuild native modules for Electron
+pnpm install  # also rebuilds the native modules for Electron
 ```
 
 ## Development

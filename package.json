@@ -1,6 +1,6 @@
 {
   "name": "dash",
-  "version": "0.23.2",
+  "version": "0.23.3",
   "description": "Dash — Desktop app for Claude Code with git worktree management",
   "main": "dist/main/main/entry.js",
   "author": "mhenrichsen <mads@syv.ai>, nthomsencph <nicolai@syv.ai>, FabianScott <fabian@syv.ai>",
@@ -22,7 +22,7 @@
     "lint": "eslint src",
     "drizzle:generate": "drizzle-kit generate",
     "prepare": "husky",
-    "postinstall": "node scripts/sign-dev-electron.mjs"
+    "postinstall": "node scripts/sign-dev-electron.mjs && pnpm run rebuild"
   },
   "build": {
     "appId": "com.syv.dash",

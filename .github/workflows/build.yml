@@ -57,8 +57,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Rebuild native modules for Electron
-        run: pnpm exec electron-rebuild -f -w node-pty,better-sqlite3
 
       - name: Build
         run: pnpm build
@@ -141,8 +139,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Rebuild native modules for Electron
-        run: pnpm exec electron-rebuild -f -w node-pty,better-sqlite3
 
       - name: Build
         run: pnpm build
@@ -180,8 +176,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Rebuild native modules for Electron
-        run: pnpm exec electron-rebuild -f -w node-pty,better-sqlite3
 
       - name: Build
         run: pnpm build
