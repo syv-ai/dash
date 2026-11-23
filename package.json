@@ -1,6 +1,6 @@
 {
   "name": "dash",
-  "version": "0.23.1",
+  "version": "0.23.2",
   "description": "Dash — Desktop app for Claude Code with git worktree management",
   "main": "dist/main/main/entry.js",
   "author": "mhenrichsen <mads@syv.ai>, nthomsencph <nicolai@syv.ai>, FabianScott <fabian@syv.ai>",
@@ -103,14 +103,6 @@
       "installerSidebar": "build/win/installerSidebar.bmp",
       "uninstallerSidebar": "build/win/installerSidebar.bmp"
     }
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "better-sqlite3",
-      "electron",
-      "esbuild",
-      "node-pty"
-    ]
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

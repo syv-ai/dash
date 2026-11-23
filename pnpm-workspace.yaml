@@ -1,0 +1,15 @@
+shamefullyHoist: true
+
+# Packages whose install scripts may run (native modules and Electron's binary).
+# pnpm 10 reads onlyBuiltDependencies; pnpm 11+ reads allowBuilds.
+onlyBuiltDependencies:
+  - better-sqlite3
+  - electron
+  - esbuild
+  - node-pty
+allowBuilds:
+  better-sqlite3: true
+  electron: true
+  electron-winstaller: false
+  esbuild: true
+  node-pty: true

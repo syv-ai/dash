@@ -134,7 +134,7 @@ Download the latest build from [Releases](https://github.com/syv-ai/dash/release
 
 ```bash
 pnpm install
-npx electron-rebuild -f -w node-pty,better-sqlite3  # rebuild native modules for Electron
+pnpm run rebuild  # rebuild native modules for Electron
 ```
 
 ## Development
@@ -252,7 +252,7 @@ All keybindings are customizable in Settings > Keybindings.
 | -------- | ------------------------------------- |
 | Shell    | Electron 30, electron-updater         |
 | UI       | React 18, TypeScript, Tailwind CSS 3  |
-| Build    | Vite 5, pnpm                          |
+| Build    | Vite 8, pnpm                          |
 | Terminal | xterm.js + node-pty                   |
 | Database | SQLite (better-sqlite3) + Drizzle ORM |
 | Package  | electron-builder                      |
