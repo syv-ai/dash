@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { GitPullRequestArrow } from 'lucide-react';
 import { prScope } from '../../../shared/prScope';
-import type { PrRef, Task } from '../../../shared/types';
+import type { PrRef, Task, TaskReviewTarget } from '../../../shared/types';
 import { useCommentsStore } from '../../stores/commentsStore';
 import { usePrReviews } from '../../stores/prReviewStore';
 import { EmptyState } from '../ui/EmptyState';
@@ -17,10 +17,10 @@ import { YourReview } from './YourReview';
 
 interface ReviewViewProps {
   task: Task;
-  /** The task's review target; undefined while it loads. */
-  target: PrRef | null | undefined;
-  /** "Stop reviewing" applies: the target was picked for the task (not its own PR). */
-  canStop: boolean;
+  /** The task's review target and why; undefined while it loads. */
+  target: TaskReviewTarget | null | undefined;
+  /** Review PR `number` instead (Switch PR…); resolves false when it couldn't be loaded. */
+  onSwitchPr: (number: number) => Promise<boolean>;
   /** The file showing in the focused editor group. */
   activePath: string | null;
   /** Open a file of the PR in the PR view, expanding the sidebar. */
@@ -45,12 +45,12 @@ export function ReviewView({ target, ...rest }: ReviewViewProps) {
 function Outline({
   task,
   target,
-  canStop,
+  onSwitchPr,
   activePath,
   onOpenFile,
   onOpenOverview,
   onNavigate,
-}: Omit<ReviewViewProps, 'target'> & { target: PrRef }) {
+}: Omit<ReviewViewProps, 'target'> & { target: TaskReviewTarget }) {
   const { review, marks, error, loading, refresh } = useReviewData({
     taskId: task.id,
     projectId: task.projectId,
@@ -86,11 +86,15 @@ function Outline({
     <div className="scrollbar-gutter-stable scrollbar-thin-hover flex h-full min-h-0 flex-col overflow-y-auto pb-2">
       <ReviewHeader
         review={review}
+        source={target.source}
+        projectId={task.projectId}
+        cwd={task.path}
         loading={loading}
         error={error}
         onRefresh={refresh}
         onOpenOverview={() => onOpenOverview(target)}
-        onStop={canStop ? () => usePrReviews.getState().setTarget(task.id, null) : undefined}
+        onSwitch={onSwitchPr}
+        onStop={() => usePrReviews.getState().setTarget(task.id, null)}
       />
       <ReviewProgress rows={rows} activePath={activePath} onOpenFile={onOpenFile} />
       <ReviewFiles

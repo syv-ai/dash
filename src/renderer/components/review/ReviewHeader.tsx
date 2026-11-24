@@ -6,12 +6,13 @@ import {
   ListChecks,
   MoreHorizontal,
   RefreshCw,
+  Repeat,
   Users,
   X,
   type LucideIcon,
 } from 'lucide-react';
-import type { ReactNode } from 'react';
-import type { PrReview } from '../../../shared/types';
+import { useRef, useState, type ReactNode } from 'react';
+import type { PrReview, TaskReviewTarget } from '../../../shared/types';
 import { cn } from '../../lib/cn';
 import {
   DropdownMenu,
@@ -23,6 +24,7 @@ import { IconButton } from '../ui/IconButton';
 import { TextLink } from '../ui/TextLink';
 import { checksSummary } from './outline';
 import { distanceLine, providerName, REVIEWER_LABELS, STATE_LABELS } from './labels';
+import { SwitchPr } from './SwitchPr';
 
 /** One fact about the PR: an icon naming what it is, then the value, which
  *  wraps rather than truncates (the list column can be narrow). */
@@ -46,29 +48,45 @@ function Fact({
 }
 
 /**
- * The Review view's head: the PR's title (it opens the PR overview tab), its
- * branches, how far it is from its base, its state, reviewers and checks;
- * Refresh, and a menu with "Open on <forge>" and "Stop reviewing". A refresh
- * that failed says why under the title, until the next one lands.
+ * The Review view's head: the PR's title (it opens the PR overview tab), why
+ * it is shown, its branches, how far it is from its base, its state, reviewers
+ * and checks; Refresh, and a menu with "Open on <forge>", "Switch PR…" and,
+ * for a picked PR, "Stop reviewing". A refresh that failed says why under the
+ * title, until the next one lands.
  */
 export function ReviewHeader({
   review,
+  source,
+  projectId,
+  cwd,
   loading,
   error,
   onRefresh,
   onOpenOverview,
+  onSwitch,
   onStop,
 }: {
   review: PrReview;
+  /** Why the task reviews this PR (D3). */
+  source: TaskReviewTarget['source'];
+  /** Where Switch PR… lists the PRs from. */
+  projectId: string;
+  cwd: string;
   loading: boolean;
   /** Why the last refresh failed; null after a good one. */
   error: string | null;
   onRefresh: () => void;
   onOpenOverview: () => void;
-  /** Stop reviewing the PR picked for the task; absent when it is the task's own. */
-  onStop?: () => void;
+  /** Review PR `number` instead; resolves false when it couldn't be loaded. */
+  onSwitch: (number: number) => Promise<boolean>;
+  /** Stop reviewing the picked PR (back to the branch's own, or none). */
+  onStop: () => void;
 }) {
   const checks = checksSummary(review.checks);
+  const [switching, setSwitching] = useState(false);
+  // Switch PR… from the menu: the menu's close must not hand focus back to
+  // its trigger, which would close the picker as it opens.
+  const switchFromMenu = useRef(false);
 
   return (
     <section className="grid gap-2 px-2.5 pt-2 pb-1">
@@ -87,12 +105,24 @@ export function ReviewHeader({
               <MoreHorizontal size={14} strokeWidth={1.8} />
             </IconButton>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+          <DropdownMenuContent
+            align="end"
+            onCloseAutoFocus={(e) => {
+              if (!switchFromMenu.current) return;
+              switchFromMenu.current = false;
+              e.preventDefault();
+              setSwitching(true);
+            }}
+          >
             <DropdownMenuItem onSelect={() => void window.electronAPI.openExternal(review.url)}>
               <ExternalLink size={14} strokeWidth={1.8} />
               Open on {providerName(review.provider)}
             </DropdownMenuItem>
-            {onStop && (
+            <DropdownMenuItem onSelect={() => (switchFromMenu.current = true)}>
+              <Repeat size={14} strokeWidth={1.8} />
+              Switch PR…
+            </DropdownMenuItem>
+            {source === 'stored' && (
               <DropdownMenuItem onSelect={onStop}>
                 <X size={14} strokeWidth={1.8} />
                 Stop reviewing
@@ -101,6 +131,27 @@ export function ReviewHeader({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+      <SwitchPr
+        open={switching}
+        onOpenChange={setSwitching}
+        projectId={projectId}
+        cwd={cwd}
+        selected={review.number}
+        onSwitch={onSwitch}
+      >
+        <p className="type-caption">
+          {source === 'own' ? (
+            "This branch's pull request"
+          ) : (
+            <>
+              Picked for review ·{' '}
+              <TextLink quiet title="Review another PR" onClick={() => setSwitching(true)}>
+                Switch PR…
+              </TextLink>
+            </>
+          )}
+        </p>
+      </SwitchPr>
       {error && (
         <p className="type-caption wrap-break-word" role="status">
           Could not refresh: {error}

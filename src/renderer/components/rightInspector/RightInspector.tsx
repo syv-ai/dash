@@ -538,8 +538,7 @@ export function RightInspector({
     <ReviewView
       task={task}
       target={reviewTarget}
-      // Stopping a review of the own PR would leave it the target still.
-      canStop={reviewTarget?.source === 'stored'}
+      onSwitchPr={ws.reviewPr}
       activePath={activePath(ws.layout)}
       onOpenFile={(path) => openFile(path, { preview: true })}
       onOpenOverview={(target) => openFile(prTab(target.provider, target.number))}
