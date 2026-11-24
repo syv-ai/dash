@@ -4,7 +4,6 @@ import {
   ChevronDown,
   ChevronUp,
   ChevronsRight,
-  X,
   Plus,
   Check,
   Loader2,
@@ -12,6 +11,7 @@ import {
 import { sessionRegistry } from '../../terminal/SessionRegistry';
 import { Tooltip } from '../ui/Tooltip';
 import { IconButton } from '../ui/IconButton';
+import { PillTab } from '../ui/PillTab';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -427,69 +427,37 @@ export function TerminalTabs({
 
   function renderTab(tab: Tab) {
     // TUI tabs are Dash speaking: a primary tint, plus an inline red dot
-    // beside the label until first activated. The dot also replaces the busy
-    // orb for this kind — a side-car is always "running", so the orb carried
-    // no signal.
+    // beside the label until first activated. A service tab keeps the
+    // port-terminal wash, so it reads apart from a plain shell.
     const isHotTui = tab.kind === 'tui' && !seenTuiIds.has(tab.id);
     const isActive = tab.id === activeTabId && !setupActive;
-    // Pill tabs, the Segmented look: the active one on the select tint. A
-    // service tab keeps the port-terminal periwinkle wash, stronger when
-    // active, so it reads apart from a plain shell; wizard TUIs keep theirs.
-    const colors =
-      tab.kind === 'tui'
-        ? isActive
-          ? 'bg-primary/20 text-ink'
-          : 'bg-primary/10 text-ink-2 hover:bg-primary/15 hover:text-ink'
-        : tab.kind === 'service'
-          ? isActive
-            ? 'bg-terminal-service/25 text-ink'
-            : 'bg-terminal-service/10 text-ink-2 hover:bg-terminal-service/15 hover:text-ink'
-          : isActive
-            ? 'bg-select text-ink'
-            : 'text-ink-2 hover:bg-hover hover:text-ink';
     const closeable = tabs.length > 1;
     const showDot = isHotTui || (tab.kind !== 'tui' && livePtyIds.has(tab.id));
-    // Hot wizard = red; live shell/service = green.
+    // Hot wizard = red; live shell/service = green. A running service is a
+    // steady state (solid); shells and hot wizards pulse.
     const dotColor = isHotTui ? 'bg-state-fail' : 'bg-state-done';
     return (
-      <div
+      <PillTab
         key={tab.id}
         data-tab-id={tab.id}
-        className={`group/tab relative flex items-center justify-center min-w-11 px-2.5 h-6 rounded-md cursor-pointer transition-colors duration-150 shrink-0 select-none drawer-tab-in ${colors}`}
-        onClick={() => handleSelectTab(tab.id)}
-      >
-        {/* The label and its activity dot are centered content together — the
-            dot is on equal footing with the text, not tucked into the gutter.
-            Only the transient close button floats absolutely in the right
-            gutter so it never shifts the centered content off-center. */}
-        <span className="flex items-center gap-1">
-          <span className="text-sm font-medium">{tab.label}</span>
-          {showDot && (
-            // A running service is a steady state — solid green, not a pulsing
-            // attention-grab. Shells keep the pulse. On hover the close button
-            // takes over, so hide the dot with `invisible` (keeps its layout
-            // slot — no recenter jitter — and beats the pulse opacity animation,
-            // which a plain opacity utility would lose to).
+        className="drawer-tab-in"
+        tone={tab.kind === 'tui' ? 'primary' : tab.kind === 'service' ? 'service' : 'plain'}
+        active={isActive}
+        onSelect={() => handleSelectTab(tab.id)}
+        onClose={closeable ? () => handleCloseTab(tab.id) : undefined}
+        closeLabel={`Close terminal ${tab.label}`}
+        indicator={
+          showDot && (
             <span
-              className={`w-1.5 h-1.5 rounded-full ${dotColor} ${
+              className={`size-1.5 rounded-full ${dotColor} ${
                 tab.kind === 'service' ? '' : 'status-pulse'
-              } ${closeable ? 'group-hover/tab:invisible' : ''}`}
+              }`}
             />
-          )}
-        </span>
-        {closeable && (
-          <button
-            className="absolute right-1 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-sm hidden group-hover/tab:flex items-center justify-center text-ink-3 hover:text-ink hover:bg-hover transition-colors"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleCloseTab(tab.id);
-            }}
-            aria-label={`Close terminal ${tab.label}`}
-          >
-            <X size={10} strokeWidth={2} />
-          </button>
-        )}
-      </div>
+          )
+        }
+      >
+        {tab.label}
+      </PillTab>
     );
   }
 
@@ -583,20 +551,21 @@ export function TerminalTabs({
           {/* TUI tabs (e.g. ports setup) sit right-aligned and tinted so they read
               as Dash speaking, not another terminal. */}
           {setupRun && (
-            <div
-              className={`relative flex items-center justify-center gap-1 px-2.5 h-6 rounded-md cursor-pointer transition-colors duration-150 shrink-0 select-none ${
-                setupActive ? 'bg-select text-ink' : 'text-ink-2 hover:bg-hover hover:text-ink'
-              }`}
-              onClick={() => setSetupSelected(true)}
+            <PillTab
+              active={setupActive}
+              onSelect={() => setSetupSelected(true)}
+              indicator={
+                setupRun.status === 'running' ? (
+                  <Loader2 size={10} strokeWidth={1.8} className="animate-spin" />
+                ) : (
+                  setupRun.status === 'failed' && (
+                    <span className="size-1.5 rounded-full bg-state-fail" />
+                  )
+                )
+              }
             >
-              <span className="text-sm font-medium">Setup</span>
-              {setupRun.status === 'running' && (
-                <Loader2 size={10} strokeWidth={1.8} className="animate-spin" />
-              )}
-              {setupRun.status === 'failed' && (
-                <span className="w-1.5 h-1.5 rounded-full bg-state-fail" />
-              )}
-            </div>
+              Setup
+            </PillTab>
           )}
           {tabs.filter((t) => t.kind === 'tui').map(renderTab)}
           <DropdownMenu

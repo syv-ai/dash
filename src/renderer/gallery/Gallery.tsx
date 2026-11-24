@@ -60,6 +60,7 @@ import { Slider } from '../components/ui/Slider';
 import { StatusDot, type AgentState } from '../components/ui/StatusDot';
 import { Switch } from '../components/ui/Switch';
 import { SwitchField } from '../components/ui/SwitchField';
+import { PillTab } from '../components/ui/PillTab';
 import { Textarea } from '../components/ui/Textarea';
 import { Toaster } from '../components/ui/Toast';
 import { TokenBadge } from '../components/ui/TokenBadge';
@@ -137,6 +138,7 @@ export function Gallery() {
           <Badges />
           <Meters />
           <Rows />
+          <PillTabs />
           <Menus pinned={pinned} />
         </div>
 
@@ -384,6 +386,45 @@ function Rows() {
           </Button>
         }
       />
+    </Section>
+  );
+}
+
+function PillTabs() {
+  const [tabs, setTabs] = React.useState(['App.tsx', 'index.css', 'README.md']);
+  const [active, setActive] = React.useState('App.tsx');
+  return (
+    <Section title="PillTab">
+      <Line>
+        {tabs.map((t) => (
+          <PillTab
+            key={t}
+            active={t === active}
+            onSelect={() => setActive(t)}
+            onClose={() => setTabs((all) => all.filter((x) => x !== t))}
+            closeLabel={`Close ${t}`}
+            indicator={
+              <span className={`size-1.5 rounded-full ${t === 'index.css' ? 'bg-ink-2' : ''}`} />
+            }
+          >
+            {t}
+          </PillTab>
+        ))}
+      </Line>
+      <Line>
+        <PillTab active muted onSelect={() => {}}>
+          unfocused group
+        </PillTab>
+        <PillTab tone="service" active onSelect={() => {}}>
+          dev
+        </PillTab>
+        <PillTab tone="service" onSelect={() => {}}>
+          api
+        </PillTab>
+        <PillTab tone="primary" onSelect={() => {}}>
+          Ports setup
+        </PillTab>
+      </Line>
     </Section>
   );
 }
