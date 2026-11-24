@@ -33,9 +33,13 @@
     "files": [
       "dist/**/*"
     ],
+    "afterPack": "scripts/afterPack.cjs",
     "asarUnpack": [
       "node_modules/better-sqlite3/**",
-      "node_modules/node-pty/**"
+      "node_modules/node-pty/**",
+      "node_modules/pyright/**",
+      "node_modules/typescript7/**",
+      "node_modules/@typescript/typescript-*/**"
     ],
     "npmRebuild": false,
     "publish": {
@@ -126,10 +130,15 @@
     "motion": "^12.40.0",
     "node-pty": "^1.2.0-beta.13",
     "posthog-node": "^5.28.2",
+    "pyright": "^1.1.414",
     "qrcode": "^1.5.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "sonner": "^2.0.7",
+    "typescript7": "npm:typescript@^7.0.2",
+    "vscode-jsonrpc": "^10.0.1",
+    "vscode-languageserver-protocol": "^3.18.6",
+    "vscode-uri": "^3.2.0",
     "zod": "^4.4.3",
     "zustand": "^5.0.14"
   },
