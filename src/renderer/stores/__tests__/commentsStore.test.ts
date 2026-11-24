@@ -185,8 +185,11 @@ describe('commentsStore', () => {
     expect(useCommentsStore.getState().byFile['a.ts']!.every((c) => c.kind === 'comment')).toBe(
       true,
     );
-    expect(api.diffCommentsUpsert).toHaveBeenLastCalledWith(
-      expect.objectContaining({ id: note.id, kind: 'comment' }),
+    // Queued behind the note's own first write, so it builds on that version.
+    await vi.waitFor(() =>
+      expect(api.diffCommentsUpsert).toHaveBeenLastCalledWith(
+        expect.objectContaining({ id: note.id, kind: 'comment' }),
+      ),
     );
   });
 
@@ -293,6 +296,42 @@ describe('commentsStore', () => {
       expect.objectContaining({ text: 'mine', ifUnchangedSince: from.updatedAt }),
     );
     // Refused: the store shows the agent's version again.
+    await vi.waitFor(() =>
+      expect(useCommentsStore.getState().byFile['a.ts']![0]!.text).toBe('theirs'),
+    );
+  });
+
+  it("doesn't save a range snapshot that didn't move, and guards one that did", async () => {
+    api.diffCommentsList = vi.fn(() =>
+      Promise.resolve({ success: true, data: [cmt({ id: 'a', startLine: 1, endLine: 2 })] }),
+    );
+    const useCommentsStore = await freshStore();
+    await useCommentsStore.getState().loadForTask('t1');
+    useCommentsStore.getState().snapshotRanges('a.ts', [{ id: 'a', startLine: 1, endLine: 2 }]);
+    expect(api.diffCommentsUpsert).not.toHaveBeenCalled();
+    useCommentsStore.getState().snapshotRanges('a.ts', [{ id: 'a', startLine: 3, endLine: 4 }]);
+    await vi.waitFor(() =>
+      expect(api.diffCommentsUpsert).toHaveBeenCalledWith(
+        expect.objectContaining({ startLine: 3, ifUnchangedSince: '2026-01-01T00:00:00Z' }),
+      ),
+    );
+  });
+
+  it('builds a change on the row as it is, and drops it if the agent changed the row first', async () => {
+    const theirs = cmt({ id: 'a', text: 'theirs', updatedAt: 'v2' });
+    api.diffCommentsList = vi
+      .fn()
+      .mockResolvedValueOnce({ success: true, data: [cmt({ id: 'a', viewScope: 'pr:github:4' })] })
+      .mockResolvedValue({ success: true, data: [theirs] });
+    api.diffCommentsUpsert = vi.fn(() =>
+      Promise.resolve({ success: false, code: 'CONFLICT', error: 'changed', data: theirs }),
+    );
+    const useCommentsStore = await freshStore();
+    await useCommentsStore.getState().loadForTask('t1');
+    useCommentsStore.getState().setKind('a', 'comment');
+    expect(api.diffCommentsUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'comment', ifUnchangedSince: '2026-01-01T00:00:00Z' }),
+    );
     await vi.waitFor(() =>
       expect(useCommentsStore.getState().byFile['a.ts']![0]!.text).toBe('theirs'),
     );

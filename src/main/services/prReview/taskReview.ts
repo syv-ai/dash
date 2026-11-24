@@ -104,20 +104,39 @@ export function createTaskReviews({ comments, reviews, changed }: TaskReviewDeps
     },
     async submit(taskId, pr, { adapter, ctx }, verdict, body) {
       const drafts = comments.listPrDrafts(taskId, pr.provider, pr.number);
-      const head = drafts.comments.some((c) => c.commit) ? await adapter.head(ctx, pr.number) : '';
+      let head = '';
+      if (drafts.comments.some((c) => c.commit)) {
+        try {
+          head = await adapter.head(ctx, pr.number);
+        } catch (err) {
+          const why = err instanceof Error ? err.message : String(err);
+          const message = `Couldn't check whether the PR changed since the comments were written, so nothing was posted: ${why}`;
+          return { postedDraftIds: [], error: { kind: 'other', message } };
+        }
+      }
       const heldBack = drafts.comments.filter((c) => isMoved(c, head));
+      const toPost = drafts.comments.filter((c) => !isMoved(c, head));
+      const heldBackDraftIds = heldBack.map((c) => c.id);
+      // Everything held back and nothing else to say: there's no review to post.
+      if (
+        heldBack.length > 0 &&
+        toPost.length === 0 &&
+        drafts.replies.length === 0 &&
+        !body.trim() &&
+        verdict === 'comment'
+      ) {
+        return { postedDraftIds: [], heldBackDraftIds };
+      }
       const result = await adapter.submit(ctx, pr.number, {
         verdict,
         body,
-        comments: drafts.comments
-          .filter((c) => !isMoved(c, head))
-          .map((c) => ({
-            draftId: c.id,
-            path: c.filePath,
-            startLine: c.startLine,
-            endLine: c.endLine,
-            body: c.text,
-          })),
+        comments: toPost.map((c) => ({
+          draftId: c.id,
+          path: c.filePath,
+          startLine: c.startLine,
+          endLine: c.endLine,
+          body: c.text,
+        })),
         replies: drafts.replies.map((c) => ({
           draftId: c.id,
           threadId: c.replyTo!,
@@ -132,9 +151,7 @@ export function createTaskReviews({ comments, reviews, changed }: TaskReviewDeps
         if (heldBack.length === 0) reviews.setInReview(taskId, pr.provider, pr.number, false);
         setSummary(taskId, pr, { body: '', author: 'user' });
       }
-      return heldBack.length > 0
-        ? { ...result, heldBackDraftIds: heldBack.map((c) => c.id) }
-        : result;
+      return heldBack.length > 0 ? { ...result, heldBackDraftIds } : result;
     },
   };
 }

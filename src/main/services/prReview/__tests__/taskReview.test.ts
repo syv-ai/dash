@@ -146,6 +146,29 @@ describe('TaskReviews.submit and a PR that moved', () => {
     expect(reviews.getSummary('t1', pr)).toBeNull();
   });
 
+  it("posts nothing when every comment is held back and there's nothing else to say", async () => {
+    comments.deleteByIds(['r1']);
+    comments.upsertFromUser(draft({ id: 'c1', commit: 'H1' }));
+    const { t, submit } = target(all, undefined, 'H2');
+    expect(await reviews.submit('t1', pr, t, 'comment', ' ')).toEqual({
+      postedDraftIds: [],
+      heldBackDraftIds: ['c1'],
+    });
+    expect(submit).not.toHaveBeenCalled();
+    expect(reviews.isInReview('t1', pr)).toBe(true);
+  });
+
+  it("posts nothing, and says why, when the PR's head can't be read", async () => {
+    comments.upsertFromUser(draft({ id: 'c1', commit: 'H1' }));
+    const { t, submit, head } = target(all);
+    head.mockRejectedValueOnce(new Error('offline'));
+    const result = await reviews.submit('t1', pr, t, 'comment', '');
+    expect(result.postedDraftIds).toEqual([]);
+    expect(result.error).toMatchObject({ kind: 'other' });
+    expect((result.error as { message: string }).message).toContain('offline');
+    expect(submit).not.toHaveBeenCalled();
+  });
+
   it("posts drafts that don't know their head, without asking for it", async () => {
     const { t, head } = target(all);
     expect((await reviews.submit('t1', pr, t, 'comment', '')).heldBackDraftIds).toBeUndefined();

@@ -17,9 +17,10 @@ export const reviewKey = (taskId: string, provider: PrProvider, number: number):
 
 export type PrLoadResult = { ok: true; review: PrReview } | { ok: false; error: string };
 /** `posted`: drafts that reached the PR before the error (ADO posts one at a time). */
-/** `heldBack`: line comments a submit kept as drafts, written on an older head of the PR. */
+/** `heldBack`: line comments a submit kept as drafts, written on an older head of the
+ *  PR; `posted`: the drafts that reached it. */
 export type PrWriteResult =
-  | { ok: true; heldBack?: number }
+  | { ok: true; heldBack?: number; posted?: number }
   | { ok: false; error: PrWriteError; posted?: number };
 
 interface PrReviewState {
@@ -84,6 +85,66 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
    *  builds on: a save from it doesn't overwrite what the agent wrote since. */
   const summaryBase = new Map<string, string>();
 
+  /**
+   * Save the person's summary, built on version `since` (null: regardless). If
+   * the agent rewrote it since, nothing is overwritten: one toast per review
+   * (typing on updates it) lets the person keep theirs or use their own.
+   */
+  const saveSummary = async (
+    taskId: string,
+    provider: PrProvider,
+    number: number,
+    body: string,
+    since: string | null,
+  ) => {
+    const key = reviewKey(taskId, provider, number);
+    const cancelPending = () => {
+      clearTimeout(pendingSaves.get(key));
+      pendingSaves.delete(key);
+    };
+    try {
+      const resp = await window.electronAPI.prReviewSetSummary({
+        taskId,
+        provider,
+        number,
+        body,
+        ...(since === null ? {} : { ifUnchangedSince: since }),
+      });
+      if (resp.success) {
+        summaryBase.set(key, resp.data?.updatedAt ?? '');
+        return;
+      }
+      if (resp.code !== 'CONFLICT') return;
+      const theirs = (resp.data as PrReviewSummary | null | undefined) ?? null;
+      const said = theirs?.body ?? '';
+      toast('The agent rewrote the review summary while you were writing it.', {
+        id: `summary-conflict-${key}`,
+        description: said
+          ? `Theirs: ${said.length > 80 ? `${said.slice(0, 80)}…` : said}`
+          : 'They cleared it.',
+        duration: Infinity,
+        action: {
+          label: 'Use mine',
+          onClick: () => {
+            cancelPending();
+            const mine = get().summaries[key]?.body ?? body;
+            void saveSummary(taskId, provider, number, mine, null);
+          },
+        },
+        cancel: {
+          label: 'Keep theirs',
+          onClick: () => {
+            cancelPending();
+            putSummary(key, theirs);
+            summaryBase.set(key, theirs?.updatedAt ?? '');
+          },
+        },
+      });
+    } catch {
+      /* stays as typed; the next edit saves again */
+    }
+  };
+
   const loadInReview = async (taskId: string, provider: PrProvider, number: number) => {
     try {
       const resp = await window.electronAPI.prReviewInReview({ taskId, provider, number });
@@ -134,38 +195,9 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
         key,
         setTimeout(() => {
           pendingSaves.delete(key);
-          void window.electronAPI
-            .prReviewSetSummary({
-              taskId,
-              provider,
-              number,
-              body,
-              ifUnchangedSince: summaryBase.get(key),
-            })
-            .then((resp) => {
-              if (resp.success) summaryBase.set(key, resp.data?.updatedAt ?? '');
-              else if (resp.code === 'CONFLICT') {
-                const theirs = (resp.data as PrReviewSummary | null | undefined) ?? null;
-                toast('The agent rewrote the review summary while you were typing.', {
-                  duration: Infinity,
-                  action: {
-                    label: 'Use mine',
-                    onClick: () => {
-                      summaryBase.delete(key);
-                      get().setSummary(taskId, provider, number, body);
-                    },
-                  },
-                  cancel: {
-                    label: 'Keep theirs',
-                    onClick: () => {
-                      putSummary(key, theirs);
-                      summaryBase.set(key, theirs?.updatedAt ?? '');
-                    },
-                  },
-                });
-              }
-            })
-            .catch(() => undefined);
+          // Before the stored summary has loaded, build on "none": one the agent
+          // already wrote isn't overwritten unseen.
+          void saveSummary(taskId, provider, number, body, summaryBase.get(key) ?? '');
         }, 400),
       );
     },
@@ -236,7 +268,7 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
         if (postedDraftIds.length > 0 || !error) await get().load(projectId, cwd, review.number);
         if (error) return { ok: false, error, posted: postedDraftIds.length };
         return heldBackDraftIds.length > 0
-          ? { ok: true, heldBack: heldBackDraftIds.length }
+          ? { ok: true, heldBack: heldBackDraftIds.length, posted: postedDraftIds.length }
           : { ok: true };
       } catch (err) {
         return { ok: false, error: ipcError(String(err)) };

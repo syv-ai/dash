@@ -316,8 +316,12 @@ describe('PR heads (#233)', () => {
     expect(reply).not.toHaveProperty('status');
   });
 
-  it("refuses a line draft when the PR's head can't be read, and a reply on a commit", async () => {
-    expect(await status(call('review.drafts_create', { ...line, number: 99 }))).toBe(502);
+  it("still drafts when the PR's head can't be read, not knowing its anchor", async () => {
+    const d = (await call('review.drafts_create', { ...line, number: 99 })) as View;
+    expect(d).toMatchObject({ commit: null, status: 'unknown' });
+  });
+
+  it('refuses a reply on a commit', async () => {
     expect(
       await status(call('review.drafts_create', { ...line, replyTo: 'PRRT_1', commit: OLD })),
     ).toBe(400);
@@ -386,6 +390,20 @@ describe('drafts_update moves (#235)', () => {
     put(row({ id: 'd1', commit: OLD }));
     await call('review.drafts_update', { id: 'd1', body: 'reworded', number: 12 });
     expect(comments.get('d1')!.commit).toBe(OLD);
+  });
+
+  it('refuses a move when the person edits the draft while its head is looked up', async () => {
+    put(row({ id: 'd1', text: 'theirs' }));
+    heads[14] = 'e'.repeat(40);
+    const slow = registry.call(asTask('me'), 'review.drafts_update', { id: 'd1', number: 14 });
+    // The person's save lands while the agent's update awaits the head.
+    comments.upsertFromUser({ ...comments.get('d1')!, text: 'the person edited this' });
+    expect(await status(slow)).toBe(409);
+    expect(comments.get('d1')).toMatchObject({
+      text: 'the person edited this',
+      viewScope: 'pr:github:12',
+    });
+    delete heads[14];
   });
 
   it("can't move a reply, which belongs to its thread", async () => {

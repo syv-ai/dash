@@ -121,8 +121,10 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
     }
   };
 
-  const headOf = (taskId: string, number: number) =>
-    fromProvider(`read PR #${number}'s head commit`, () => deps.prHead(taskOf(taskId), number));
+  /** PR `number`'s head now, to anchor a line draft to; null when it can't be
+   *  read (the draft is still written, its status 'unknown'). */
+  const headOrNull = (taskId: string, number: number) =>
+    deps.prHead(taskOf(taskId), number).catch(() => null);
 
   /** Each PR's head now, for the drafts' statuses; a head that can't be read is left out. */
   const headsFor = async (taskId: string, drafts: DiffComment[]) => {
@@ -174,10 +176,12 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
       defaultTargetToSelf: true,
       handler: async (_ctx, input) => {
         const taskId = input.taskId!;
+        // Refuses a provider the project isn't on, with a number or without.
+        const pr = prFor(taskId, input.number ?? 0, input.provider);
         const drafts = (
           input.number === undefined
             ? deps.reviews.allDrafts(taskId)
-            : deps.reviews.drafts(taskId, prFor(taskId, input.number, input.provider))
+            : deps.reviews.drafts(taskId, pr)
         ).filter(
           (c) =>
             (!input.kind || c.kind === input.kind) &&
@@ -259,7 +263,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
             ? null
             : await replyThreadOrThrow(taskId, number, input.replyTo);
         // A line draft records the head its lines are in; Submit checks it.
-        const head = replyTo ? null : await headOf(taskId, number);
+        const head = replyTo || input.commit ? null : await headOrNull(taskId, number);
         const draft = deps.reviews.saveAgentDraft({
           id: randomUUID(),
           taskId,
@@ -272,7 +276,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
           commit: replyTo ? null : (input.commit ?? head),
           kind: input.kind,
         });
-        return view(draft, head);
+        return view(draft, head ?? (await headsFor(taskId, [draft]))(draft));
       },
     }),
   );
@@ -345,7 +349,16 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
           (number !== from.number ||
             filePath !== draft.filePath ||
             [input.startLine, input.endLine, input.commit].some((v) => v !== undefined));
-        const head = moved ? await headOf(taskId, number) : undefined;
+        const head = moved ? await headOrNull(taskId, number) : undefined;
+        // The head lookup awaited: the person may have edited the draft meanwhile,
+        // and this write is built on the version read before it.
+        if (draftOrThrow(taskId, input.id).updatedAt !== draft.updatedAt) {
+          throw new ControlError(
+            409,
+            `draft ${draft.id} changed while it was being updated; read it again with drafts-get`,
+            view(draftOrThrow(taskId, input.id)),
+          );
+        }
         const saved = deps.reviews.saveAgentDraft({
           id: draft.id,
           taskId,
@@ -355,7 +368,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
           text: input.body ?? draft.text,
           viewScope: prScope(pr.provider, number),
           replyTo: draft.replyTo,
-          commit: moved ? (input.commit ?? head!) : draft.commit,
+          commit: moved ? (input.commit ?? head ?? null) : draft.commit,
           kind: input.kind ?? draft.kind,
         });
         return view(saved, head ?? (await headsFor(taskId, [saved]))(saved));
@@ -392,7 +405,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
       defaultTargetToSelf: true,
       handler: async (_ctx, input) => {
         const taskId = input.taskId!;
-        const ids = input.ids ?? [];
+        const ids = [...new Set(input.ids ?? [])];
         if (input.all === true) {
           if (ids.length > 0) throw new ControlError(400, 'give draft ids or --all, not both');
           if (input.number === undefined) throw new ControlError(400, '--all needs --number');
@@ -418,7 +431,7 @@ export function registerReviewCapabilities(registry: Registry, deps: ReviewCapab
                   (!input.kind || c.kind === input.kind) &&
                   (!input.author || c.author === input.author),
               )
-          : [...new Set(ids)].map((id) => draftOrThrow(taskId, id));
+          : ids.map((id) => draftOrThrow(taskId, id));
         for (const c of targets) {
           if (pr && c.viewScope !== prScope(pr.provider, pr.number)) {
             throw new ControlError(

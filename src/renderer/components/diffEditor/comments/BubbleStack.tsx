@@ -1,6 +1,6 @@
 import type { LiveComment, Shade } from './types';
 import { CommentBubble } from './CommentBubble';
-import { canPromote, isMoved } from '../../../../shared/diffComments';
+import { canPromote, isMoved, isPrComment } from '../../../../shared/diffComments';
 
 interface Props {
   /** Comments anchored at this line. ≥1; >1 means stacked. */
@@ -84,7 +84,8 @@ export function BubbleStack({
             isFadingOut={c.id === editingId}
             kindTag={onPromote ? c.kind : undefined}
             onPromote={onPromote && canPromote(c) ? () => onPromote(c.id) : undefined}
-            movedFrom={isMoved(c, prHead) ? c.commit : null}
+            // Only comments are submitted, so only they are held back.
+            movedFrom={isPrComment(c) && isMoved(c, prHead) ? c.commit : null}
             onAnchor={onAnchor ? () => onAnchor(c.id) : undefined}
           />
         );

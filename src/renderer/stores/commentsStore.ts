@@ -117,58 +117,104 @@ function findById(byFile: Record<string, DiffComment[]>, id: string): DiffCommen
  *  (best-effort persistence; local state is the UI source of truth). Matches
  *  the app's other Zustand stores — driveable under node via getState(). */
 export const useCommentsStore = create<CommentsStore>((set, get) => {
+  /**
+   * How a write is checked against the row in main:
+   * - `{ since }`: an edit of the text, from the version editing began at;
+   * - 'current': a change made in the editor (kind, sent, range, commit), built
+   *   from the row as the store holds it when the write runs, and checked
+   *   against that version;
+   * - 'none': a new row, or the person putting their own text back.
+   * A refused write means the agent got there first.
+   */
+  type Guard = { since: string } | 'current' | 'none';
+  type UpsertResponse = Awaited<ReturnType<typeof window.electronAPI.diffCommentsUpsert>>;
+  // One row's writes go one after another, so each builds on the version the
+  // one before it got back.
+  const queues = new Map<string, Promise<unknown>>();
+
   /** Write a comment, then take main's word on what it decides: its version
    *  (updatedAt), and who owns it (an agent's draft becomes the user's once
    *  they change its text). */
-  const persist = async (
+  const persist = (
     c: DiffComment,
     patch: Partial<DiffCommentInput> = {},
-  ): Promise<Awaited<ReturnType<typeof window.electronAPI.diffCommentsUpsert>> | undefined> => {
-    const resp = await window.electronAPI.diffCommentsUpsert({
-      id: c.id,
-      taskId: c.taskId,
-      filePath: c.filePath,
-      startLine: c.startLine,
-      endLine: c.endLine,
-      text: c.text,
-      sent: c.sent,
-      viewScope: c.viewScope,
-      side: c.side,
-      replyTo: c.replyTo,
-      kind: c.kind,
-      commit: c.commit,
-      ...patch,
+    guard: Guard = 'current',
+  ): Promise<UpsertResponse | undefined> => {
+    const write = async (): Promise<UpsertResponse | undefined> => {
+      const base = guard === 'current' ? findById(get().byFile, c.id) : c;
+      // Gone from the store (deleted, or reloaded away): nothing left to change.
+      if (!base) return undefined;
+      const since =
+        guard === 'none' ? undefined : guard === 'current' ? base.updatedAt : guard.since;
+      const resp = await window.electronAPI.diffCommentsUpsert({
+        id: base.id,
+        taskId: base.taskId,
+        filePath: base.filePath,
+        startLine: base.startLine,
+        endLine: base.endLine,
+        text: base.text,
+        sent: base.sent,
+        viewScope: base.viewScope,
+        side: base.side,
+        replyTo: base.replyTo,
+        kind: base.kind,
+        commit: base.commit,
+        ...patch,
+        ...(since === undefined ? {} : { ifUnchangedSince: since }),
+      });
+      const saved = resp?.success ? resp.data : undefined;
+      const now = saved && findById(get().byFile, saved.id);
+      if (saved && now && (now.updatedAt !== saved.updatedAt || now.author !== saved.author)) {
+        set((st) => ({
+          byFile: upsertInto(st.byFile, {
+            ...now,
+            updatedAt: saved.updatedAt,
+            author: saved.author,
+          }),
+        }));
+      }
+      if (guard === 'current' && resp && !resp.success && resp.code === 'CONFLICT') {
+        await get().reload();
+        toast.info("The agent changed this draft first, so your change wasn't applied.");
+      }
+      return resp;
+    };
+    // With nothing in flight for the row, write now; otherwise after the last one.
+    const prev = queues.get(c.id);
+    const queued = prev ? prev.then(write, write) : write();
+    queues.set(c.id, queued);
+    void queued.finally(() => {
+      if (queues.get(c.id) === queued) queues.delete(c.id);
     });
-    const saved = resp?.success ? resp.data : undefined;
-    const now = saved && findById(get().byFile, saved.id);
-    if (saved && now && (now.updatedAt !== saved.updatedAt || now.author !== saved.author)) {
-      set((st) => ({
-        byFile: upsertInto(st.byFile, { ...now, updatedAt: saved.updatedAt, author: saved.author }),
-      }));
-    }
-    return resp;
+    return queued;
   };
 
   /** The agent changed or deleted a draft the person was editing: show it as
    *  it is now, and let them put their text back. */
-  const onConflict = (mine: DiffComment, current: DiffComment | undefined) => {
-    void get().reload();
-    const what = current ? 'changed' : 'deleted';
-    toast(`The agent ${what} this draft while you were editing it.`, {
-      description: mine.text.length > 80 ? `${mine.text.slice(0, 80)}…` : mine.text,
-      duration: Infinity,
-      action: {
-        label: current ? 'Use mine' : 'Restore mine',
-        onClick: () => {
-          if (current) get().updateText(mine.id, mine.text);
-          else {
-            set((st) => ({ byFile: upsertInto(st.byFile, mine) }));
-            void persist(mine);
-          }
+  const onConflict = async (mine: DiffComment, current: DiffComment | undefined) => {
+    await get().reload();
+    toast(
+      current
+        ? 'The agent changed this draft while you were editing it.'
+        : 'This draft was deleted while you were editing it (by the agent, or posted by a submit).',
+      {
+        id: `draft-conflict-${mine.id}`,
+        description: mine.text.length > 80 ? `${mine.text.slice(0, 80)}…` : mine.text,
+        duration: Infinity,
+        action: {
+          label: current ? 'Use mine' : 'Restore mine',
+          onClick: () => {
+            if (current) {
+              get().updateText(mine.id, mine.text);
+            } else {
+              set((st) => ({ byFile: upsertInto(st.byFile, mine) }));
+              void persist(mine, {}, 'none');
+            }
+          },
         },
+        cancel: { label: current ? 'Keep theirs' : 'Discard', onClick: () => {} },
       },
-      cancel: { label: current ? 'Keep theirs' : 'Discard', onClick: () => {} },
-    });
+    );
   };
 
   const removeWhere = (pred: (c: DiffComment) => boolean) => {
@@ -231,7 +277,7 @@ export const useCommentsStore = create<CommentsStore>((set, get) => {
         updatedAt: now,
       };
       set((s) => ({ byFile: upsertInto(s.byFile, comment) }));
-      void persist(comment);
+      void persist(comment, {}, 'none');
       return comment;
     },
 
@@ -240,15 +286,18 @@ export const useCommentsStore = create<CommentsStore>((set, get) => {
       const existing = findById(get().byFile, id);
       if (!existing) {
         // Deleted while the person edited it (the reload got here first).
-        if (from) onConflict({ ...from, text }, undefined);
+        if (from) void onConflict({ ...from, text }, undefined);
         return;
       }
       const next: DiffComment = { ...existing, text };
       set((s) => ({ byFile: upsertInto(s.byFile, next) }));
-      const since = from ? { ifUnchangedSince: from.updatedAt } : {};
-      void persist(next, since).then((resp) => {
+      if (!from) {
+        void persist(existing, { text });
+        return;
+      }
+      void persist(next, {}, { since: from.updatedAt }).then((resp) => {
         if (resp && !resp.success && resp.code === 'CONFLICT') {
-          onConflict(next, (resp.data as DiffComment | null | undefined) ?? undefined);
+          void onConflict(next, (resp.data as DiffComment | null | undefined) ?? undefined);
         }
       });
     },
@@ -259,7 +308,7 @@ export const useCommentsStore = create<CommentsStore>((set, get) => {
       if (!existing || existing.commit === commit) return;
       const next: DiffComment = { ...existing, commit };
       set((s) => ({ byFile: upsertInto(s.byFile, next) }));
-      void persist(next);
+      void persist(next, { commit });
     },
 
     remove: (id) => {
@@ -297,11 +346,18 @@ export const useCommentsStore = create<CommentsStore>((set, get) => {
       if (!existing || existing.kind === kind) return;
       const next: DiffComment = { ...existing, kind };
       set((s) => ({ byFile: upsertInto(s.byFile, next) }));
-      void persist(next);
+      void persist(next, { kind });
     },
 
-    snapshotRanges: (filePath, snapshots) => {
-      if (!get().taskId || snapshots.length === 0) return;
+    snapshotRanges: (filePath, all) => {
+      if (!get().taskId) return;
+      // Only ranges that moved: an unchanged write would still be a new version,
+      // and tell an agent the person changed a draft they only looked at.
+      const snapshots = all.filter((snap) => {
+        const c = findById(get().byFile, snap.id);
+        return c && (c.startLine !== snap.startLine || c.endLine !== snap.endLine);
+      });
+      if (snapshots.length === 0) return;
       const patches = new Map(snapshots.map((s) => [s.id, s]));
       set((s) => {
         const list = s.byFile[filePath];
