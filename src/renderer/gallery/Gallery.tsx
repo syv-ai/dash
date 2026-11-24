@@ -52,6 +52,7 @@ import { ListRow } from '../components/ui/ListRow';
 import { MainRepoBadge } from '../components/ui/MainRepoBadge';
 import { Meter, usageTone } from '../components/ui/Meter';
 import { ProgressRing } from '../components/ui/ProgressRing';
+import { ScrollRail, type RailTick } from '../components/ui/ScrollRail';
 import { usageColor } from '../lib/usageColor';
 import { PanelHeader } from '../components/ui/PanelHeader';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/Popover';
@@ -141,6 +142,7 @@ export function Gallery() {
           <Badges />
           <Meters />
           <Rings />
+          <Rails />
           <Rows />
           <PillTabs />
           <Menus pinned={pinned} />
@@ -353,6 +355,34 @@ function Meters() {
       <Meter label="Session context" value={62} />
       <Meter value={35} role="progressbar" aria-label="Downloading" />
       <Meter value={70} tone="work" size="sm" aria-label="Context" />
+    </Section>
+  );
+}
+
+const RAIL_TICKS: [RailTick, number, string][] = [
+  ['faint', 0.15, 'L12 · @ana: Resolved thread'],
+  ['strong', 0.4, 'L48 · @ana: Unresolved thread'],
+  ['hollow', 0.62, 'L80 · Note to agent: Check the guard'],
+  ['solid', 0.85, 'L110 · Comment: Rename this'],
+];
+
+function Rails() {
+  return (
+    <Section title="ScrollRail">
+      <div className="relative h-40 rounded-md bg-ground">
+        <ScrollRail
+          aria-label="Review marks"
+          height={160}
+          right={8}
+          marks={RAIL_TICKS.map(([tick, at, label]) => ({
+            key: label,
+            tick,
+            at,
+            label,
+            onSelect: () => toast(label),
+          }))}
+        />
+      </div>
     </Section>
   );
 }

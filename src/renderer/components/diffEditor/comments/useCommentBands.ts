@@ -8,22 +8,19 @@ interface Args {
   monaco: typeof import('monaco-editor') | null;
   liveComments: LiveComment[];
   shadeById: ReadonlyMap<string, Shade>;
-  isDark: boolean;
   disabled: boolean;
   hoveredCommentId: string | null;
 }
 
 /** Owns the per-row shade-band decoration collection for the open file. Each
  *  row gets one of three classNames depending on which comments claim it;
- *  coalesced runs of same-signature rows become single decoration ranges. The
- *  minimap + overview ruler get the band marker in a single representative
- *  colour (Monaco's canvas can't read CSS vars). */
+ *  coalesced runs of same-signature rows become single decoration ranges.
+ *  Where comments sit in the whole file is the review rail's (`ReviewRail`). */
 export function useCommentBands({
   modifiedEditor,
   monaco,
   liveComments,
   shadeById,
-  isDark,
   disabled,
   hoveredCommentId,
 }: Args): void {
@@ -40,7 +37,6 @@ export function useCommentBands({
       commentDecorations.current.clear();
       return;
     }
-    const commentMarker = isDark ? '#b8c5e0' : '#3b5078';
     // liveComments already carry live ranges (useFileComments re-projects on
     // edits) and shadeById is the shared single shade assignment.
     if (liveComments.length === 0) {
@@ -70,13 +66,6 @@ export function useCommentBands({
           isWholeLine: true,
           className: cls,
           lineNumberClassName: `monaco-comment-ln-shade-${r.signature}`,
-          // Gutter (not Inline) so the marker is a crisp tick in the minimap's
-          // dedicated lane rather than a faint line tint that's easy to miss.
-          minimap: { color: commentMarker, position: monaco.editor.MinimapPosition.Gutter },
-          overviewRuler: {
-            color: commentMarker,
-            position: monaco.editor.OverviewRulerLane.Right,
-          },
         },
       };
     });
@@ -92,5 +81,5 @@ export function useCommentBands({
       });
     }
     commentDecorations.current.set(decos);
-  }, [liveComments, shadeById, isDark, disabled, modifiedEditor, monaco, hoveredCommentId]);
+  }, [liveComments, shadeById, disabled, modifiedEditor, monaco, hoveredCommentId]);
 }

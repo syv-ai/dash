@@ -17,7 +17,6 @@ import type { DiffComment } from '../../../shared/types';
 import { useCommentsStore } from '../../stores/commentsStore';
 import { useGit } from '../../stores/gitStore';
 import { PrThreadOverlay } from './prReview/PrThreadOverlay';
-import { useThreadMinimapMarks } from './prReview/useThreadMinimapMarks';
 import type { AttachReviewNav } from './prReview/useReviewNavigation';
 import type { GroupIndex } from './tabs/editorLayout';
 import { trayNotes } from '../review/outline';
@@ -42,6 +41,7 @@ import { useEditorSave } from './editor/useEditorSave';
 import { useMonacoEditor } from './editor/useMonacoEditor';
 import { EditorHeader } from './editor/EditorHeader';
 import { EditorViewport } from './editor/EditorViewport';
+import { ReviewRail } from './editor/ReviewRail';
 import { EditorContextMenu } from './editor/EditorContextMenu';
 import { HtmlPreview } from './editor/HtmlPreview';
 import { markdownToDocument } from './editor/markdownPreview';
@@ -375,7 +375,6 @@ export function EditorPane({
     monaco,
     liveComments,
     shadeById,
-    isDark,
     disabled: commentsDisabled,
     hoveredCommentId,
   });
@@ -433,8 +432,7 @@ export function EditorPane({
     scope,
   });
 
-  // The PR view's threads in the minimap, and next/previous thread or draft.
-  useThreadMinimapMarks({ modifiedEditor, monaco, threads: pr.inlineThreads, isDark });
+  // The PR view's next/previous thread or draft.
   useEffect(() => {
     if (!onAttachReviewNav || !modifiedEditor || !monaco) return;
     return onAttachReviewNav(group, modifiedEditor, monaco);
@@ -583,6 +581,12 @@ export function EditorPane({
                 replyPoster={pr.replyPoster}
               />
             )}
+            <ReviewRail
+              modifiedEditor={modifiedEditor}
+              monaco={monaco}
+              threads={pr.inlineThreads}
+              comments={liveComments}
+            />
             <CommentOverlay
               liveComments={liveComments}
               shadeById={shadeById}

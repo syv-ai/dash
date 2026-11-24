@@ -72,16 +72,6 @@ export function EditorViewport({
       compactMode: !sideBySide,
       renderGutterMenu: false,
       contextmenu: false,
-      // The minimap shows only while scrolling: a file that fits shows no
-      // rail at all.
-      minimap: {
-        enabled: true,
-        autohide: 'scroll',
-        renderCharacters: false,
-        maxColumn: 60,
-        showSlider: 'mouseover',
-        size: 'fit',
-      },
       fontSize: 12,
       lineNumbers: 'on',
       // Nothing draws in the glyph margin (blame and comments live elsewhere).
@@ -93,7 +83,8 @@ export function EditorViewport({
       scrollBeyondLastLine: false,
       wordWrap: wordWrap ? 'on' : 'off',
       // No overview rails beside the code (the diff's strip read as a grey
-      // slab); the minimap, shown while scrolling, carries the diff's marks.
+      // slab). The diff editor forces its sub-editors' minimap off; threads,
+      // comments and notes show on the review rail (`ReviewRail`, D80).
       renderOverviewRuler: false,
       overviewRulerBorder: false,
       overviewRulerLanes: 0,

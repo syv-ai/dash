@@ -1091,14 +1091,6 @@
   border-color: hsl(var(--line)) !important;
   box-shadow: 0 22px 48px -18px color-mix(in srgb, hsl(var(--shade)) 65%, transparent) !important;
 }
-/* Breathing room between the code area and the minimap on the right.
- * Monaco renders the minimap as an absolutely-positioned sibling of the
- * scrollable view; shifting it right and clipping the canvas keeps the
- * visual width unchanged while the column reads as detached from the code. */
-.monaco-diff-editor .minimap {
-  margin-left: 8px;
-}
-
 /* Monaco diff editor: kill the tint on the right-side overview ruler / diff-
  * decoration strip / scrollbar shadow so the editor blends edge-to-edge with
  * whatever background the theme sets. Monaco sets some of these via inline
