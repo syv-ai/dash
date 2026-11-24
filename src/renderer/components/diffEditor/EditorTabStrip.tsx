@@ -1,16 +1,18 @@
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react';
-import { Columns2, Pin, X } from 'lucide-react';
+import { Pin, X } from 'lucide-react';
 import { FolderTab } from '../ui/FolderTab';
 import { cn } from '../../lib/cn';
-import { IconButton } from '../ui/IconButton';
 import {
   ContextMenu,
   ContextMenuContent,
-  ContextMenuItem,
+  ContextMenuItems,
   ContextMenuTrigger,
 } from '../ui/ContextMenu';
+import { useSettings } from '../../stores/settingsStore';
+import { formatBinding } from '../../keybindings';
 import { dirtyVersion, isDirty, subscribeDirty, workingUri } from './models';
 import { absolutePath } from './editor/fileRef';
+import { tabsInScope } from './tabs/editorLayout';
 
 interface Props {
   cwd: string;
@@ -21,13 +23,12 @@ interface Props {
   /** The group "open" and the keyboard act on. */
   focused: boolean;
   onSelect(path: string): void;
-  onClose(path: string): void;
+  /** Close these tabs (one, or a "Close others/to the right/all"). */
+  onClose(paths: string[]): void;
   /** Keep the preview tab open (double-click, or "Keep open"). */
   onPin(path: string): void;
   /** Before the tabs (the file tree's toggle). */
   leading?: ReactNode;
-  /** Open the active file in the other group (absent: nothing to split). */
-  onSplit?: () => void;
   /** Shown before the actions (the language-server status). */
   trailing?: ReactNode;
 }
@@ -38,7 +39,7 @@ function basename(path: string): string {
 
 /** A group's open files as folder tabs over its sheet (the active one opens
  *  into it), with a dirty dot on unsaved ones and the preview tab in italics;
- *  the split action at its end. The strip overlaps the sheet by 1px so the
+ *  right-click for keep/close commands. The strip overlaps the sheet by 1px so the
  *  active tab covers the sheet's top edge where they join. */
 export function EditorTabStrip({
   cwd,
@@ -50,10 +51,10 @@ export function EditorTabStrip({
   onClose,
   onPin,
   leading,
-  onSplit,
   trailing,
 }: Props) {
   useSyncExternalStore(subscribeDirty, dirtyVersion);
+  const closeBinding = useSettings((s) => s.keybindings.closeEditorTab);
   const trackRef = useRef<HTMLDivElement>(null);
 
   // Keep the active tab in sight in a strip that scrolls.
@@ -91,7 +92,7 @@ export function EditorTabStrip({
                   muted={!focused}
                   onSelect={() => onSelect(path)}
                   onDoubleClick={() => onPin(path)}
-                  onClose={() => onClose(path)}
+                  onClose={() => onClose([path])}
                   closeLabel={`Close ${path}`}
                   indicator={
                     <span
@@ -104,25 +105,43 @@ export function EditorTabStrip({
                 </FolderTab>
               </ContextMenuTrigger>
               <ContextMenuContent>
-                <ContextMenuItem disabled={!isPreview} onSelect={() => onPin(path)}>
-                  <Pin size={14} strokeWidth={1.8} />
-                  Keep open
-                </ContextMenuItem>
-                <ContextMenuItem onSelect={() => onClose(path)}>
-                  <X size={14} strokeWidth={1.8} />
-                  Close
-                </ContextMenuItem>
+                <ContextMenuItems
+                  items={[
+                    {
+                      label: 'Keep open',
+                      icon: Pin,
+                      disabled: !isPreview,
+                      onSelect: () => onPin(path),
+                    },
+                    'separator',
+                    {
+                      label: 'Close',
+                      icon: X,
+                      shortcut: closeBinding ? formatBinding(closeBinding) : undefined,
+                      onSelect: () => onClose([path]),
+                    },
+                    {
+                      label: 'Close others',
+                      disabled: tabs.length < 2,
+                      onSelect: () => onClose(tabsInScope(tabs, path, 'others')),
+                    },
+                    {
+                      label: 'Close to the right',
+                      disabled: path === tabs[tabs.length - 1],
+                      onSelect: () => onClose(tabsInScope(tabs, path, 'right')),
+                    },
+                    {
+                      label: 'Close all',
+                      onSelect: () => onClose(tabsInScope(tabs, path, 'all')),
+                    },
+                  ]}
+                />
               </ContextMenuContent>
             </ContextMenu>
           );
         })}
       </div>
       {trailing}
-      {onSplit && (
-        <IconButton size="sm" title="Open to the side" onClick={onSplit}>
-          <Columns2 size={14} strokeWidth={1.8} />
-        </IconButton>
-      )}
     </div>
   );
 }

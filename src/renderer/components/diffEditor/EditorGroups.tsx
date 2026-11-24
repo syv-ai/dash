@@ -99,20 +99,27 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
     });
   }, [cwd]);
 
-  // Closing a file's last tab drops its unsaved edits: ask first.
-  const closeTab = async (group: GroupIndex, path: string) => {
-    const lastTab = layout.groups.filter((g) => g.tabs.includes(path)).length === 1;
-    const dirty = isDirty(workingUri(absolutePath(cwd, path)));
-    if (lastTab && dirty) {
+  // Closing a file's last tab drops its unsaved edits: ask first, once for
+  // every such file among `paths`.
+  const closeTabs = async (group: GroupIndex, paths: string[]) => {
+    const other = layout.groups.find((_, i) => i !== group);
+    const losing = paths.filter(
+      (p) => !other?.tabs.includes(p) && isDirty(workingUri(absolutePath(cwd, p))),
+    );
+    if (losing.length > 0) {
       const discard = await confirm({
-        message: `Discard unsaved changes to ${path}?`,
+        message:
+          losing.length === 1
+            ? `Discard unsaved changes to ${losing[0]}?`
+            : `Discard unsaved changes to ${losing.length} files?`,
         confirmLabel: 'Discard',
         destructive: true,
       });
       if (!discard) return;
     }
-    ws.closeTab(group, path);
+    ws.closeTabs(group, paths);
   };
+  const closeTab = (group: GroupIndex, path: string) => closeTabs(group, [path]);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (!closeBinding || e.defaultPrevented || !matchesBinding(e.nativeEvent, closeBinding)) return;
@@ -163,12 +170,9 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
                     preview={group.preview}
                     focused={!split || layout.focused === index}
                     onSelect={(path) => ws.activateTab(index, path)}
-                    onClose={(path) => void closeTab(index, path)}
+                    onClose={(paths) => void closeTabs(index, paths)}
                     onPin={(path) => ws.pinTab(index, path)}
                     leading={i === 0 ? <TreeToggle /> : undefined}
-                    onSplit={
-                      group.active ? () => ws.openFile(group.active!, { toSide: true }) : undefined
-                    }
                     trailing={isLast && ws.git ? <LspStatusIndicator worktree={cwd} /> : null}
                   />
                   <div
