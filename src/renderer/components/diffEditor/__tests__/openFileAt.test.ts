@@ -39,7 +39,11 @@ describe('openFileAt', () => {
     expect(openFileAt('/wt/t1/src/a.ts', range)).toBe(true);
 
     const tabs = useEditorTabs.getState();
-    expect(tabs.layouts.t1!.groups[0]).toEqual({ tabs: ['src/a.ts'], active: 'src/a.ts' });
+    expect(tabs.layouts.t1!.groups[0]).toEqual({
+      tabs: ['src/a.ts'],
+      active: 'src/a.ts',
+      preview: 'src/a.ts',
+    });
     expect(tabs.reveal).toMatchObject({ key: 't1', path: 'src/a.ts', range });
     expect(useGit.getState().diffFile).toEqual({ cwd: '/wt/t1', filePath: '' });
   });

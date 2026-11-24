@@ -6,9 +6,12 @@ import {
   focusGroup,
   openTab,
   parseLayout,
+  pinTab,
+  retainTabs,
   serializeLayout,
   type EditorLayout,
   type GroupIndex,
+  type OpenOptions,
 } from '../components/diffEditor/tabs/editorLayout';
 
 /** A span of text, 1-based (Monaco's IRange shape, so LSP ranges convert to it). */
@@ -28,6 +31,13 @@ export interface RevealRequest {
   nonce: number;
 }
 
+/** Unfold the tree down to `path` (a folder), e.g. after a tab turned out to
+ *  name a directory. */
+export interface ExpandFolderRequest {
+  path: string;
+  nonce: number;
+}
+
 interface EditorTabsState {
   /** Per workspace (a task's id, or the modal's folder): its tabs and groups. */
   layouts: Record<string, EditorLayout>;
@@ -35,13 +45,22 @@ interface EditorTabsState {
   /** Start a workspace's layout: from storage when `persist`, else empty.
    *  A layout already in memory is kept. */
   load(key: string, persist: boolean): void;
-  open(key: string, path: string, opts?: { toSide?: boolean; background?: boolean }): void;
+  open(key: string, path: string, opts?: OpenOptions): void;
   activate(key: string, group: GroupIndex, path: string): void;
   close(key: string, group: GroupIndex, path: string): void;
+  /** Keep a preview tab open. */
+  pin(key: string, group: GroupIndex, path: string): void;
+  /** Close every tab `keep` turns down. */
+  retain(key: string, keep: (path: string, preview: boolean) => boolean): void;
   focusGroup(key: string, group: GroupIndex): void;
-  /** Open `path` in the focused group and reveal `range` there. */
+  /** Open `path` in the focused group, as its preview, and reveal `range` there. */
   openAt(key: string, path: string, range: TextRange): void;
   clearReveal(nonce: number): void;
+  expandFolder: ExpandFolderRequest | null;
+  requestExpandFolder(path: string): void;
+  /** The editor's file tree column is folded away (every workspace's). */
+  treeCollapsed: boolean;
+  setTreeCollapsed(collapsed: boolean): void;
 }
 
 const storageKey = (key: string) => `dash:editor-tabs:${key}`;
@@ -62,6 +81,16 @@ function writeStored(key: string, layout: EditorLayout): void {
     window.localStorage.setItem(storageKey(key), serializeLayout(layout));
   } catch {
     // Storage full or unavailable: the tabs just don't come back.
+  }
+}
+
+const TREE_COLLAPSED_KEY = 'dash:editor-tree-collapsed';
+
+function readTreeCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(TREE_COLLAPSED_KEY) === '1';
+  } catch {
+    return false;
   }
 }
 
@@ -87,14 +116,28 @@ export const useEditorTabs = create<EditorTabsState>((set, get) => {
     open: (key, path, opts) => update(key, (l) => openTab(l, path, opts)),
     activate: (key, group, path) => update(key, (l) => activateTab(l, group, path)),
     close: (key, group, path) => update(key, (l) => closeTab(l, group, path)),
+    pin: (key, group, path) => update(key, (l) => pinTab(l, group, path)),
+    retain: (key, keep) => update(key, (l) => retainTabs(l, keep)),
     focusGroup: (key, group) => update(key, (l) => focusGroup(l, group)),
     openAt: (key, path, range) => {
-      update(key, (l) => openTab(l, path));
+      update(key, (l) => openTab(l, path, { preview: true }));
       const group = (get().layouts[key] ?? EMPTY_LAYOUT).focused;
       set({ reveal: { key, group, path, range, nonce: ++nonce } });
     },
     clearReveal: (n) => {
       if (get().reveal?.nonce === n) set({ reveal: null });
+    },
+    expandFolder: null,
+    requestExpandFolder: (path) => set({ expandFolder: { path, nonce: ++nonce } }),
+    treeCollapsed: readTreeCollapsed(),
+    setTreeCollapsed: (collapsed) => {
+      if (get().treeCollapsed === collapsed) return;
+      set({ treeCollapsed: collapsed });
+      try {
+        window.localStorage.setItem(TREE_COLLAPSED_KEY, collapsed ? '1' : '0');
+      } catch {
+        // Unavailable storage: it just isn't remembered.
+      }
     },
   };
 });

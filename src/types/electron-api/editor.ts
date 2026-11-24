@@ -1,4 +1,6 @@
 import type {
+  DirEntry,
+  RepoListing,
   IpcResponse,
   EditorReadWorkingResult,
   EditorReadCommitResult,
@@ -45,8 +47,12 @@ export interface EditorApi {
   editorListRepoFiles: (args: {
     cwd: string;
     source: { kind: 'working' } | { kind: 'commit'; hash: string };
-  }) => Promise<IpcResponse<string[]>>;
-  editorListIgnoredFiles: (args: { cwd: string }) => Promise<IpcResponse<string[]>>;
+  }) => Promise<IpcResponse<RepoListing>>;
+  /** Gitignored paths in the working tree; a fully ignored directory is one
+   *  entry in `dirs`. */
+  editorListIgnoredFiles: (args: { cwd: string }) => Promise<IpcResponse<RepoListing>>;
+  /** One directory's entries, for a folder the tree lists lazily. */
+  editorListDir: (args: { cwd: string; dirPath: string }) => Promise<IpcResponse<DirEntry[]>>;
   editorResolveDefaultBase: (args: { cwd: string }) => Promise<IpcResponse<string | null>>;
   editorListFilesAgainstBase: (args: {
     cwd: string;

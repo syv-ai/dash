@@ -6,6 +6,7 @@ import { EditorTree } from './EditorTree';
 import { EditorGroups } from './EditorGroups';
 import { useEditorWorkspace, type EditorTarget } from './useEditorWorkspace';
 import { activePath } from './tabs/editorLayout';
+import { useTreePanel } from './TreeToggle';
 
 export interface DiffEditorProps {
   cwd: string;
@@ -47,6 +48,7 @@ export function DiffEditor({
     target,
   });
   const bg = terminalTheme.background;
+  const treePanel = useTreePanel();
 
   return (
     <div
@@ -55,12 +57,20 @@ export function DiffEditor({
     >
       <ResizablePanelGroup orientation="horizontal" autoSaveId="diff-editor-shell">
         {/* pr-3 keeps the 12px gutter the old handle took up. */}
-        <ResizablePanel id="sidebar" defaultSize="22%" minSize="14%" maxSize="45%" className="pr-3">
+        <ResizablePanel
+          id="sidebar"
+          defaultSize="22%"
+          minSize="14%"
+          maxSize="45%"
+          className="pr-3"
+          {...treePanel}
+        >
           <EditorTree
             cwd={cwd}
             git={ws.git}
             view={ws.view}
             allPaths={ws.data.repoPaths}
+            repoDirs={ws.data.repoDirs}
             changedFiles={ws.data.changedFiles}
             changedOnly={false}
             filesLoading={ws.data.repoPathsLoading || ws.data.changedFilesLoading}

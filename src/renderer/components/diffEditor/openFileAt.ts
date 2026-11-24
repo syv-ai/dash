@@ -24,7 +24,7 @@ export function openFileAt(path: string, range?: TextRange): boolean {
   const tabs = useEditorTabs.getState();
   tabs.load(task.id, true);
   if (range) tabs.openAt(task.id, rel, range);
-  else tabs.open(task.id, rel);
+  else tabs.open(task.id, rel, { preview: true });
 
   const git = useGit.getState();
   if (git.diffFile?.cwd !== task.path) {

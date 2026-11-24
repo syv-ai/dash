@@ -384,6 +384,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }) => ipcRenderer.invoke('editor:listRepoFiles', args),
   editorListIgnoredFiles: (args: { cwd: string }) =>
     ipcRenderer.invoke('editor:listIgnoredFiles', args),
+  editorListDir: (args: { cwd: string; dirPath: string }) =>
+    ipcRenderer.invoke('editor:listDir', args),
   editorResolveDefaultBase: (args: { cwd: string }) =>
     ipcRenderer.invoke('editor:resolveDefaultBase', args),
   editorListFilesAgainstBase: (args: { cwd: string; base: string }) =>

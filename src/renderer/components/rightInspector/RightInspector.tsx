@@ -32,6 +32,7 @@ import { EditorTree } from '../diffEditor/EditorTree';
 import { HistoryList, type PrEntry } from '../diffEditor/HistoryList';
 import { useEditorWorkspace, type EditorTarget } from '../diffEditor/useEditorWorkspace';
 import { activePath } from '../diffEditor/tabs/editorLayout';
+import { useTreePanel } from '../diffEditor/TreeToggle';
 import { WorktreePath } from './WorktreePath';
 import { useGit, type DiffFileTarget } from '../../stores/gitStore';
 import { useSettings } from '../../stores/settingsStore';
@@ -149,6 +150,7 @@ export function RightInspector({
     target,
   });
   const { view, selectView } = ws;
+  const treePanel = useTreePanel();
   const openEditor = () => {
     if (!wide) onOpenEditor();
   };
@@ -292,6 +294,7 @@ export function RightInspector({
         git={ws.git}
         view={view}
         allPaths={ws.data.repoPaths}
+        repoDirs={ws.data.repoDirs}
         changedFiles={ws.data.changedFiles}
         changedOnly={segment === 'changes'}
         filesLoading={ws.data.repoPathsLoading || ws.data.changedFilesLoading}
@@ -339,7 +342,13 @@ export function RightInspector({
               in the tree either way: the terminals below never remount. */}
           {wide && (
             <>
-              <ResizablePanel id="list" defaultSize="30%" minSize="15%" maxSize="50%">
+              <ResizablePanel
+                id="list"
+                defaultSize="30%"
+                minSize="15%"
+                maxSize="50%"
+                {...treePanel}
+              >
                 <div className="h-full min-h-0 pr-2">{withPorts(tree)}</div>
               </ResizablePanel>
               <ResizableHandle />

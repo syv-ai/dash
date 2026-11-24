@@ -3,6 +3,9 @@ import { useEffect, useState } from 'react';
 export interface AsyncResource<T> {
   data: T;
   loading: boolean;
+  /** `data` answers the current deps: false from the render the deps change
+   *  in (before `loading` turns on) until their fetch settles. */
+  settled: boolean;
 }
 
 /** Cancellable fetch keyed on `deps`. Always reflects the most recent deps;
@@ -16,11 +19,14 @@ export function useAsyncResource<T>(
 ): AsyncResource<T> {
   const [data, setData] = useState<T>(initial);
   const [loading, setLoading] = useState<boolean>(enabled);
+  const key = JSON.stringify(deps);
+  const [settledFor, setSettledFor] = useState<string | null>(null);
 
   useEffect(() => {
     if (!enabled) {
       setData(initial);
       setLoading(false);
+      setSettledFor(key);
       return;
     }
     let cancelled = false;
@@ -30,7 +36,9 @@ export function useAsyncResource<T>(
         if (!cancelled) setData(result);
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (cancelled) return;
+        setLoading(false);
+        setSettledFor(key);
       });
     return () => {
       cancelled = true;
@@ -38,5 +46,5 @@ export function useAsyncResource<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 
-  return { data, loading };
+  return { data, loading, settled: !loading && settledFor === key };
 }

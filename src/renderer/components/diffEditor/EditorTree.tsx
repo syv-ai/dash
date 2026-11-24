@@ -1,7 +1,8 @@
-import React, { useMemo, useRef, useState, useEffect } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Columns2, Copy, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { HoverSwapSlot } from '../ui/HoverSwapSlot';
+import { LineStats } from '../ui/LineStats';
 import { IconButton } from '../ui/IconButton';
 import {
   ContextMenu,
@@ -10,9 +11,11 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '../ui/ContextMenu';
-import type { FileChange, FileChangeStatus } from '../../../shared/types';
+import type { DirEntry, FileChange, FileChangeStatus, RepoListing } from '../../../shared/types';
 import type { EditorView } from './types';
+import type { OpenOptions } from './tabs/editorLayout';
 import { Tooltip } from '../ui/Tooltip';
+import { useEditorTabs } from '../../stores/editorTabsStore';
 
 interface EditorTreeProps {
   /** Repo root — needed to lazily list gitignored files under "show all files". */
@@ -23,6 +26,9 @@ interface EditorTreeProps {
   view: EditorView;
   /** All file paths in the current view's source (whole repo, sorted). */
   allPaths: string[];
+  /** Directories the listing names as one entry (symlinked ones): shown as
+   *  folders, listed when opened. */
+  repoDirs?: string[];
   /** Subset of paths that have a diff for this view, with status + line stats. */
   changedFiles: FileChange[];
   /** List only the changed files (and their folders), not the whole repo. */
@@ -30,8 +36,9 @@ interface EditorTreeProps {
   filesLoading: boolean;
   /** The file showing in the focused editor group. */
   selectedPath: string;
-  /** Open a file in the focused group, or `toSide` in the other one. */
-  onOpenFile: (path: string, opts?: { toSide?: boolean }) => void;
+  /** Open a file in the focused group (a click: as its preview), or
+   *  `toSide` in the other one. */
+  onOpenFile: (path: string, opts?: OpenOptions) => void;
   /** Per-file badge counts: your notes and comments, and (in a PR view) the
    *  PR's unresolved threads. */
   badgeCounts: Map<string, FileBadges>;
@@ -45,6 +52,9 @@ export interface FileBadges {
   threads: number;
 }
 
+const NO_DIRS: string[] = [];
+const NO_LISTING: RepoListing = { files: [], dirs: [] };
+
 /** The editor's file tree: the view's changed files, or the whole repo. */
 export function EditorTree(props: EditorTreeProps) {
   return (
@@ -54,6 +64,7 @@ export function EditorTree(props: EditorTreeProps) {
         git={props.git}
         view={props.view}
         paths={props.allPaths}
+        dirs={props.repoDirs ?? NO_DIRS}
         changedFiles={props.changedFiles}
         changedOnly={props.changedOnly}
         loading={props.filesLoading}
@@ -71,6 +82,8 @@ interface TreeFile {
   name: string;
   fullPath: string;
   change: FileChange | null;
+  /** Inside an ignored folder: shown quietly, with no status of its own. */
+  dimmed?: boolean;
 }
 
 interface TreeFolder {
@@ -80,6 +93,14 @@ interface TreeFolder {
   files: TreeFile[];
   changedCount: number;
   dominantStatus: FileChangeStatus | null;
+  /** Git lists it as one entry (ignored, or a symlink): its contents are
+   *  read from disk when it opens, one level at a time. */
+  lazy: boolean;
+  /** Gitignored (or inside an ignored folder): dimmed. */
+  ignored: boolean;
+  /** Its own change, when git sees the folder as one entry (an untracked
+   *  symlinked directory). */
+  change: FileChange | null;
 }
 
 const STATUS_PRIORITY: FileChangeStatus[] = [
@@ -91,7 +112,11 @@ const STATUS_PRIORITY: FileChangeStatus[] = [
   'untracked',
 ];
 
-function newFolder(name: string, fullPath: string): TreeFolder {
+function newFolder(
+  name: string,
+  fullPath: string,
+  opts: { lazy?: boolean; ignored?: boolean } = {},
+): TreeFolder {
   return {
     name,
     fullPath,
@@ -99,39 +124,65 @@ function newFolder(name: string, fullPath: string): TreeFolder {
     files: [],
     changedCount: 0,
     dominantStatus: null,
+    lazy: opts.lazy ?? false,
+    ignored: opts.ignored ?? false,
+    change: null,
   };
+}
+
+/** The folder at `parts` under `root`, made (with its parents) if missing. */
+function folderAt(root: TreeFolder, parts: string[]): TreeFolder {
+  let node = root;
+  for (const seg of parts) {
+    let child = node.children.get(seg);
+    if (!child) {
+      const childPath = node.fullPath ? `${node.fullPath}/${seg}` : seg;
+      child = newFolder(seg, childPath);
+      node.children.set(seg, child);
+    }
+    node = child;
+  }
+  return node;
 }
 
 function buildRepoTree(
   paths: string[],
   changedFiles: FileChange[],
-  ignoredPaths: string[] = [],
+  ignored: RepoListing,
+  /** Folders listed lazily (symlinked directories). */
+  lazyDirs: string[],
+  /** Show the lazy folders even with no change of their own. */
+  withLazyDirs: boolean,
 ): TreeFolder {
   const changedByPath = new Map<string, FileChange>();
   for (const f of changedFiles) changedByPath.set(f.path, f);
-  const ignoredSet = new Set<string>(ignoredPaths);
+  const ignoredSet = new Set<string>(ignored.files);
+  const root = newFolder('', '');
+
+  // Folders git lists as one entry. An untracked symlinked directory is also
+  // a "changed file": it becomes the folder's own change instead.
+  const lazySet = new Set<string>();
+  const addLazy = (p: string, isIgnored: boolean) => {
+    const folder = folderAt(root, p.split('/'));
+    folder.lazy = true;
+    folder.ignored = isIgnored;
+    folder.change = changedByPath.get(p) ?? null;
+    lazySet.add(p);
+  };
+  for (const p of lazyDirs) if (withLazyDirs || changedByPath.has(p)) addLazy(p, false);
+  for (const p of ignored.dirs) addLazy(p, true);
 
   // Use the union of repo paths, changed paths (e.g. deleted files may not be in
   // `paths` for the working view but are still in changedFiles), and any opted-in
   // ignored paths.
   const all = new Set<string>(paths);
   for (const f of changedFiles) all.add(f.path);
-  for (const p of ignoredPaths) all.add(p);
+  for (const p of ignored.files) all.add(p);
 
-  const root = newFolder('', '');
   for (const p of Array.from(all).sort()) {
+    if (lazySet.has(p)) continue;
     const parts = p.split('/');
-    let node = root;
-    for (let i = 0; i < parts.length - 1; i++) {
-      const seg = parts[i]!;
-      let child = node.children.get(seg);
-      if (!child) {
-        const childPath = node.fullPath ? `${node.fullPath}/${seg}` : seg;
-        child = newFolder(seg, childPath);
-        node.children.set(seg, child);
-      }
-      node = child;
-    }
+    const node = folderAt(root, parts.slice(0, -1));
     // A tracked change wins over an ignored marker (a path can't be both, but be
     // deterministic). Ignored paths get a synthetic, zero-stat change so they
     // render with the low-emphasis "I" badge.
@@ -150,6 +201,10 @@ function buildRepoTree(
   function aggregate(node: TreeFolder) {
     const statuses = new Set<FileChangeStatus>();
     let changed = 0;
+    if (node.change) {
+      statuses.add(node.change.status);
+      changed++;
+    }
     for (const file of node.files) {
       // Ignored files are shown but never counted as "changed" or allowed to
       // tint their parent folders.
@@ -170,7 +225,7 @@ function buildRepoTree(
   return root;
 }
 
-/** Widths (in `ch` of the tree's monospace font) of the trailing stat columns,
+/** Widths (in `ch`, a tabular digit's width) of the trailing stat columns,
  *  each sized to the widest value in the tree so rows line up with no slack.
  *  0 = no row fills that column, so it isn't drawn. */
 interface TreeColumns {
@@ -279,8 +334,8 @@ const STATUS_LABEL: Record<FileChangeStatus, string> = {
 
 const STATUS_TEXT: Record<FileChangeStatus, string> = {
   modified: 'text-[hsl(var(--git-modified))]',
-  added: 'text-[hsl(var(--git-added))]',
-  deleted: 'text-[hsl(var(--git-deleted))]',
+  added: 'text-loc-add',
+  deleted: 'text-loc-del',
   renamed: 'text-[hsl(var(--git-renamed))]',
   untracked: 'text-[hsl(var(--git-untracked))]',
   conflicted: 'text-[hsl(var(--git-conflicted))]',
@@ -305,12 +360,30 @@ interface FileTreePanelProps {
   git: boolean;
   view: EditorView;
   paths: string[];
+  dirs: string[];
   changedFiles: FileChange[];
   changedOnly: boolean;
   loading: boolean;
   selectedPath: string;
-  onOpenFile: (path: string, opts?: { toSide?: boolean }) => void;
+  onOpenFile: (path: string, opts?: OpenOptions) => void;
   badgeCounts: Map<string, FileBadges>;
+}
+
+/** What every row needs, passed down the tree once. */
+interface TreeContextValue {
+  cwd: string;
+  selectedPath: string;
+  onOpenFile: (path: string, opts?: OpenOptions) => void;
+  badgeCounts: Map<string, FileBadges>;
+  cols: TreeColumns;
+}
+
+const TreeContext = createContext<TreeContextValue | null>(null);
+
+function useTree(): TreeContextValue {
+  const ctx = useContext(TreeContext);
+  if (!ctx) throw new Error('useTree outside FileTreePanel');
+  return ctx;
 }
 
 function FileTreePanel({
@@ -318,6 +391,7 @@ function FileTreePanel({
   git,
   view,
   paths,
+  dirs,
   changedFiles,
   changedOnly: changedOnlyProp,
   loading,
@@ -332,18 +406,19 @@ function FileTreePanel({
   // user can reach a local-only config or scratch file. Ignored files are a
   // working-tree concept (a commit's tree can't contain them), so the fetch is
   // gated on the working view; git collapses fully-ignored directories to one
-  // entry, which keeps `node_modules/` from flooding the tree.
+  // entry (a dimmed folder, read only when opened), which keeps
+  // `node_modules/` from flooding the tree.
   const showIgnored = git && !changedOnly && view.kind === 'working';
-  const [ignoredPaths, setIgnoredPaths] = useState<string[]>([]);
+  const [ignored, setIgnored] = useState<RepoListing>(NO_LISTING);
   useEffect(() => {
     if (!showIgnored) {
-      setIgnoredPaths([]);
+      setIgnored(NO_LISTING);
       return;
     }
     let cancelled = false;
     void window.electronAPI.editorListIgnoredFiles({ cwd }).then((resp) => {
       if (cancelled) return;
-      setIgnoredPaths(resp.success && resp.data ? resp.data : []);
+      setIgnored(resp.success && resp.data ? resp.data : NO_LISTING);
     });
     return () => {
       cancelled = true;
@@ -352,11 +427,11 @@ function FileTreePanel({
 
   // In changed-only mode, seed the tree from an empty repo-path set so
   // buildRepoTree's union reduces to just the changed files and their parent
-  // folders (unchanged siblings never enter the tree). ignoredPaths is already
+  // folders (unchanged siblings never enter the tree). The ignored listing is already
   // empty in that mode.
   const tree = useMemo(
-    () => buildRepoTree(changedOnly ? [] : paths, changedFiles, ignoredPaths),
-    [changedOnly, paths, changedFiles, ignoredPaths],
+    () => buildRepoTree(changedOnly ? [] : paths, changedFiles, ignored, dirs, !changedOnly),
+    [changedOnly, paths, changedFiles, ignored, dirs],
   );
   const totals = useMemo(() => {
     let additions = 0;
@@ -368,83 +443,49 @@ function FileTreePanel({
     return { additions, deletions };
   }, [changedFiles]);
   const cols = useMemo(() => treeColumns(tree, badgeCounts), [tree, badgeCounts]);
+  const ctx = useMemo<TreeContextValue>(
+    () => ({ cwd, selectedPath, onOpenFile, badgeCounts, cols }),
+    [cwd, selectedPath, onOpenFile, badgeCounts, cols],
+  );
   return (
-    <div className="h-full min-h-0 flex flex-col">
-      <div className="px-3 py-2 text-xs uppercase tracking-wider text-muted-fade-70 font-mono flex items-center justify-between shrink-0">
-        <span className="flex items-center gap-2">
-          <span>
-            Files{' '}
-            {tree.changedCount > 0 && (
-              <span className="tabular-nums">· {tree.changedCount} changed</span>
-            )}
-          </span>
-          {(totals.additions > 0 || totals.deletions > 0) && (
-            <span className="flex gap-1.5 tabular-nums normal-case tracking-normal">
-              {totals.additions > 0 && (
-                <span className="text-[hsl(var(--git-added))]">+{totals.additions}</span>
-              )}
-              {totals.deletions > 0 && (
-                <span className="text-[hsl(var(--git-deleted))]">−{totals.deletions}</span>
+    <TreeContext.Provider value={ctx}>
+      <div className="h-full min-h-0 flex flex-col">
+        <div className="px-3 py-2 text-xs text-ink-3 flex items-center justify-between shrink-0">
+          <span className="flex items-center gap-2">
+            <span>
+              Files{' '}
+              {tree.changedCount > 0 && (
+                <span className="tabular-nums">· {tree.changedCount} changed</span>
               )}
             </span>
+            <span className="text-xs"><LineStats add={totals.additions} del={totals.deletions} /></span>
+          </span>
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-gutter-stable scrollbar-thin-hover pb-2 px-1">
+          {loading && paths.length === 0 ? (
+            <div className="px-3 py-2 text-xs text-muted-fade-40">Loading…</div>
+          ) : changedOnly && tree.changedCount === 0 ? (
+            <div className="px-3 py-2 text-xs text-muted-fade-40">No changed files</div>
+          ) : (
+            <FolderContents node={tree} indent={0} />
           )}
-        </span>
+        </div>
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-gutter-stable scrollbar-thin-hover pb-2 px-1">
-        {loading && paths.length === 0 ? (
-          <div className="px-3 py-2 text-xs text-muted-fade-40">Loading…</div>
-        ) : changedOnly && tree.changedCount === 0 ? (
-          <div className="px-3 py-2 text-xs text-muted-fade-40">No changed files</div>
-        ) : (
-          <FolderContents
-            node={tree}
-            indent={0}
-            selectedPath={selectedPath}
-            onOpenFile={onOpenFile}
-            badgeCounts={badgeCounts}
-            cols={cols}
-          />
-        )}
-      </div>
-    </div>
+    </TreeContext.Provider>
   );
 }
 
-interface FolderContentsProps {
-  node: TreeFolder;
-  indent: number;
-  selectedPath: string;
-  onOpenFile: (path: string, opts?: { toSide?: boolean }) => void;
-  badgeCounts: Map<string, FileBadges>;
-  cols: TreeColumns;
-}
-
-function FolderContents({
-  node,
-  indent,
-  selectedPath,
-  onOpenFile,
-  badgeCounts,
-  cols,
-}: FolderContentsProps) {
+function FolderContents({ node, indent }: { node: TreeFolder; indent: number }) {
+  const { selectedPath, onOpenFile, badgeCounts, cols } = useTree();
   const childFolders = Array.from(node.children.values()).sort((a, b) =>
     a.name.localeCompare(b.name),
   );
-  const childFiles = node.files;
   return (
     <>
       {childFolders.map((child) => (
-        <FolderEntry
-          key={`d-${child.fullPath}`}
-          folder={child}
-          indent={indent}
-          selectedPath={selectedPath}
-          onOpenFile={onOpenFile}
-          badgeCounts={badgeCounts}
-          cols={cols}
-        />
+        <FolderEntry key={`d-${child.fullPath}`} folder={child} indent={indent} />
       ))}
-      {childFiles.map((file) => (
+      {node.files.map((file) => (
         <FileEntry
           key={`f-${file.fullPath}`}
           file={file}
@@ -459,32 +500,80 @@ function FolderContents({
   );
 }
 
+/** A lazy folder's contents, read from disk when it opens: one level, its
+ *  subfolders lazy in turn. */
+function LazyFolderContents({ folder, indent }: { folder: TreeFolder; indent: number }) {
+  const { cwd } = useTree();
+  const [entries, setEntries] = useState<DirEntry[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void window.electronAPI.editorListDir({ cwd, dirPath: folder.fullPath }).then((resp) => {
+      if (cancelled) return;
+      if (resp.success && resp.data) setEntries(resp.data);
+      else setError(resp.error ?? 'Could not list folder');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [cwd, folder.fullPath]);
+
+  const node = useMemo(() => {
+    const n = newFolder(folder.name, folder.fullPath);
+    for (const e of entries ?? []) {
+      const fullPath = `${folder.fullPath}/${e.name}`;
+      if (e.dir) {
+        n.children.set(
+          e.name,
+          newFolder(e.name, fullPath, { lazy: true, ignored: folder.ignored }),
+        );
+      } else {
+        n.files.push({ name: e.name, fullPath, change: null, dimmed: folder.ignored });
+      }
+    }
+    return n;
+  }, [entries, folder]);
+
+  const pad = { paddingLeft: 4 + indent * INDENT_STEP + ICON_SLOT + 4 };
+  if (error) {
+    return (
+      <div className="py-0.5 text-xs text-muted-fade-55 truncate" style={pad} title={error}>
+        {error}
+      </div>
+    );
+  }
+  if (!entries) {
+    return (
+      <div className="py-0.5 text-xs text-muted-fade-40" style={pad}>
+        Loading…
+      </div>
+    );
+  }
+  if (entries.length === 0) {
+    return (
+      <div className="py-0.5 text-xs text-muted-fade-40" style={pad}>
+        Empty
+      </div>
+    );
+  }
+  return <FolderContents node={node} indent={indent} />;
+}
+
 // Width of the leading icon column. Folders fill it with a chevron; files
 // leave it empty so file names align with folder names at the same indent
 // (chevron column = name's left edge).
 const ICON_SLOT = 12;
 const INDENT_STEP = 10; // px per nesting level (Tailwind gap-1 = 4px is used inside rows)
 
-function FolderEntry({
-  folder,
-  indent,
-  selectedPath,
-  onOpenFile,
-  badgeCounts,
-  cols,
-}: {
-  folder: TreeFolder;
-  indent: number;
-  selectedPath: string;
-  onOpenFile: (path: string, opts?: { toSide?: boolean }) => void;
-  badgeCounts: Map<string, FileBadges>;
-  cols: TreeColumns;
-}) {
+function FolderEntry({ folder, indent }: { folder: TreeFolder; indent: number }) {
+  const { selectedPath, cols } = useTree();
   // Default-open if the folder has changes OR it contains the file the editor
   // opened to — so that file is never hidden in a collapsed folder. The user's
-  // collapse/expand owns it after.
+  // collapse/expand owns it after. A lazy folder starts closed: opening it is
+  // what reads it.
   const [open, setOpen] = useState<boolean>(
-    () => folder.changedCount > 0 || selectedPath.startsWith(`${folder.fullPath}/`),
+    () =>
+      !folder.lazy && (folder.changedCount > 0 || selectedPath.startsWith(`${folder.fullPath}/`)),
   );
   // `changedFiles` load async, so at mount `changedCount` is often still 0 and
   // the lazy init above misses changed folders (an intermittent "collapsed on
@@ -494,13 +583,33 @@ function FolderEntry({
   useEffect(() => {
     if (!seededFromChanges.current && folder.changedCount > 0) {
       seededFromChanges.current = true;
+      if (!folder.lazy) setOpen(true);
+    }
+  }, [folder.changedCount, folder.lazy]);
+  // Asked to show a folder (a tab that named it): open it and its parents.
+  const expand = useEditorTabs((s) => s.expandFolder);
+  const rowRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!expand) return;
+    if (expand.path === folder.fullPath) {
+      setOpen(true);
+      rowRef.current?.scrollIntoView({ block: 'nearest' });
+      rowRef.current?.focus();
+    } else if (expand.path.startsWith(`${folder.fullPath}/`)) {
       setOpen(true);
     }
-  }, [folder.changedCount]);
-  const tint = folder.dominantStatus ? FOLDER_TINT[folder.dominantStatus] : 'text-fg-fade-90';
+  }, [expand, folder.fullPath]);
+
+  const tint = folder.ignored
+    ? 'text-muted-fade-55'
+    : folder.dominantStatus
+      ? FOLDER_TINT[folder.dominantStatus]
+      : 'text-fg-fade-90';
   return (
     <>
       <TreeRow
+        ref={rowRef}
+        aria-expanded={open}
         onActivate={() => setOpen((v) => !v)}
         className="hover:bg-[hsl(var(--surface-2)/0.6)]"
         style={{ paddingLeft: 4 + indent * INDENT_STEP, paddingRight: 8 }}
@@ -515,7 +624,7 @@ function FolderEntry({
             <ChevronRight size={11} strokeWidth={1.8} className="text-muted-fade-55" />
           )}
         </span>
-        <span className={`flex-1 min-w-0 font-mono text-sm truncate text-left ${tint}`}>
+        <span className={`flex-1 min-w-0 text-sm truncate text-left ${tint}`}>
           {folder.name}
           <span className="text-muted-fade-40">/</span>
         </span>
@@ -523,7 +632,7 @@ function FolderEntry({
           rest={
             cols.status > 0 && (
               <span
-                className={`font-mono text-xs font-semibold tabular-nums text-center ${
+                className={`text-xs font-semibold tabular-nums text-center ${
                   folder.dominantStatus ? STATUS_TEXT[folder.dominantStatus] : 'text-muted-fade-70'
                 }`}
                 style={{ width: `${cols.status}ch` }}
@@ -536,16 +645,12 @@ function FolderEntry({
           actions={<CopyPathAction path={folder.fullPath} />}
         />
       </TreeRow>
-      {open && (
-        <FolderContents
-          node={folder}
-          indent={indent + 1}
-          selectedPath={selectedPath}
-          onOpenFile={onOpenFile}
-          badgeCounts={badgeCounts}
-          cols={cols}
-        />
-      )}
+      {open &&
+        (folder.lazy ? (
+          <LazyFolderContents folder={folder} indent={indent + 1} />
+        ) : (
+          <FolderContents node={folder} indent={indent + 1} />
+        ))}
     </>
   );
 }
@@ -557,7 +662,7 @@ function ThreadBadge({ count }: { count: number }) {
     <Tooltip content={label}>
       <span
         aria-label={label}
-        className="shrink-0 inline-flex items-center justify-center min-w-[14px] h-[14px] px-1 rounded-full font-mono text-xs font-semibold tabular-nums border border-edge/25 text-fg-fade-70"
+        className="shrink-0 inline-flex items-center justify-center min-w-[14px] h-[14px] px-1 rounded-full text-xs font-semibold tabular-nums border border-edge/25 text-fg-fade-70"
       >
         {count}
       </span>
@@ -571,7 +676,7 @@ function CommentBadge({ count }: { count: number }) {
     <Tooltip content={label}>
       <span
         aria-label={label}
-        className="shrink-0 inline-flex items-center justify-center min-w-[14px] h-[14px] px-1 rounded-full font-mono text-xs font-semibold tabular-nums bg-primary/20 text-primary"
+        className="shrink-0 inline-flex items-center justify-center min-w-[14px] h-[14px] px-1 rounded-full text-xs font-semibold tabular-nums bg-primary/20 text-primary"
       >
         {count}
       </span>
@@ -591,17 +696,25 @@ function FileEntry({
   indent: number;
   selected: boolean;
   badges: FileBadges | undefined;
-  /** Open in the focused group; ⌥-click or the menu: to the side. */
-  onOpen: (opts?: { toSide?: boolean }) => void;
+  /** Open in the focused group (a click: as its preview; a double-click
+   *  keeps it); ⌥-click or the menu: to the side. */
+  onOpen: (opts?: OpenOptions) => void;
   cols: TreeColumns;
 }) {
   const change = file.change;
-  const tint = selected ? 'text-primary' : change ? STATUS_TEXT[change.status] : 'text-fg-fade-80';
+  const tint = selected
+    ? 'text-primary'
+    : change
+      ? STATUS_TEXT[change.status]
+      : file.dimmed
+        ? 'text-muted-fade-55'
+        : 'text-fg-fade-80';
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <TreeRow
-          onActivate={(alt) => onOpen({ toSide: alt })}
+          onActivate={(alt) => onOpen({ toSide: alt, preview: true })}
+          onDoubleClick={() => onOpen()}
           title={file.fullPath}
           style={{ paddingLeft: 4 + indent * INDENT_STEP, paddingRight: 8 }}
           className={selected ? 'bg-primary/15' : 'hover:bg-[hsl(var(--surface-2)/0.6)]'}
@@ -609,14 +722,12 @@ function FileEntry({
           {/* Empty icon slot keeps file names aligned with folder names at the
           same indent (the chevron column for folders). */}
           <span className="shrink-0" style={{ width: ICON_SLOT }} />
-          <span className={`flex-1 min-w-0 font-mono text-sm truncate text-left ${tint}`}>
-            {file.name}
-          </span>
+          <span className={`flex-1 min-w-0 text-sm truncate text-left ${tint}`}>{file.name}</span>
           {/* Stat columns at rest (each as wide as the tree's widest value, so
           they line up down the list); "Copy path" slides in on hover. */}
           <HoverSwapSlot
             rest={
-              <span className="flex items-center gap-1.5 font-mono text-xs tabular-nums">
+              <span className="flex items-center gap-1.5 text-xs tabular-nums">
                 {cols.threads && (
                   <span className="flex w-[18px] justify-end">
                     {!!badges?.threads && <ThreadBadge count={badges.threads} />}
@@ -628,22 +739,12 @@ function FileEntry({
                   </span>
                 )}
                 {cols.add > 0 && (
-                  <span
-                    className={`text-right ${
-                      change?.status === 'untracked'
-                        ? 'text-muted-foreground'
-                        : 'text-[hsl(var(--git-added))]'
-                    }`}
-                    style={{ width: `${cols.add}ch` }}
-                  >
+                  <span className="text-right text-loc-add" style={{ width: `${cols.add}ch` }}>
                     {change && change.additions > 0 ? `+${change.additions}` : ''}
                   </span>
                 )}
                 {cols.del > 0 && (
-                  <span
-                    className="text-right text-[hsl(var(--git-deleted))]"
-                    style={{ width: `${cols.del}ch` }}
-                  >
+                  <span className="text-right text-loc-del" style={{ width: `${cols.del}ch` }}>
                     {change && change.deletions > 0 ? `−${change.deletions}` : ''}
                   </span>
                 )}

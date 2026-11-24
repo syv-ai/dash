@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { GitCommit, GitPullRequestArrow, History } from 'lucide-react';
+import { ChevronDown, ChevronRight, GitCommit, GitPullRequestArrow, History } from 'lucide-react';
 import { formatRelativeTime } from '@shared/relativeTime';
 import type { FileChange } from '../../../shared/types';
 import type { CommitSummary, EditorView } from './types';
+import type { OpenOptions } from './tabs/editorLayout';
 import { ListRow } from '../ui/ListRow';
 import { CountBadge } from '../ui/CountBadge';
 import { Button } from '../ui/Button';
 import { EmptyState } from '../ui/EmptyState';
 import { Markdown } from '../ui/Markdown';
 import { Popover, PopoverAnchor, PopoverContent } from '../ui/Popover';
+import { LineStats } from '../ui/LineStats';
 
 /** The task's open PR in History. `threads` and `body` are null until its
  *  review is fetched. */
@@ -40,7 +42,8 @@ interface HistoryListProps {
   commitFiles: FileChange[];
   /** The file showing in the focused editor group. */
   activePath: string | null;
-  onOpenFile: (path: string, opts?: { toSide?: boolean }) => void;
+  /** A click opens a preview tab; a double-click keeps it. */
+  onOpenFile: (path: string, opts?: OpenOptions) => void;
 }
 
 /**
@@ -60,6 +63,17 @@ export function HistoryList({
   onOpenFile,
 }: HistoryListProps) {
   const activeHash = view.kind === 'commit' ? view.hash : null;
+  // The selected commit unfolds its files; clicking it again folds them away
+  // (the view stays on the commit). Picking another commit unfolds that one.
+  const [foldedHash, setFoldedHash] = useState<string | null>(null);
+  const selectCommit = (hash: string) => {
+    if (hash === activeHash) {
+      setFoldedHash((f) => (f === hash ? null : hash));
+      return;
+    }
+    setFoldedHash(null);
+    onSelectView({ kind: 'commit', hash });
+  };
 
   // Keep the selected row in sight when the view changes elsewhere.
   const listRef = useRef<HTMLDivElement>(null);
@@ -92,15 +106,17 @@ export function HistoryList({
       )}
       {commits.map((c) => {
         const selected = c.hash === activeHash;
+        const unfolded = selected && foldedHash !== c.hash;
         return (
           <div key={c.hash} className="flex flex-col gap-px">
             <CommitRow
               commit={c}
               selected={selected}
+              unfolded={unfolded}
               commentCount={commentCountByScope.get(`commit:${c.hash}`) ?? 0}
-              onSelect={() => onSelectView({ kind: 'commit', hash: c.hash })}
+              onSelect={() => selectCommit(c.hash)}
             />
-            {selected &&
+            {unfolded &&
               commitFiles.map((f) => (
                 <ListRow
                   key={f.path}
@@ -109,28 +125,17 @@ export function HistoryList({
                   dimmed
                   selected={f.path === activePath}
                   title={f.path}
-                  trailing={<FileStats file={f} />}
-                  onClick={(e) => onOpenFile(f.path, { toSide: e.altKey })}
+                  trailing={<span className="text-xs"><LineStats add={f.additions} del={f.deletions} /></span>}
+                  onClick={(e) => onOpenFile(f.path, { toSide: e.altKey, preview: true })}
+                  onDoubleClick={() => onOpenFile(f.path)}
                 >
-                  <span className="font-mono">{f.path.slice(f.path.lastIndexOf('/') + 1)}</span>
+                  {f.path.slice(f.path.lastIndexOf('/') + 1)}
                 </ListRow>
               ))}
           </div>
         );
       })}
     </div>
-  );
-}
-
-/** A file's line counts, quiet (colour is for agent state). */
-function FileStats({ file }: { file: FileChange }) {
-  if (file.additions === 0 && file.deletions === 0) return null;
-  return (
-    <span className="font-mono text-xs tabular-nums">
-      {file.additions > 0 && `+${file.additions}`}
-      {file.additions > 0 && file.deletions > 0 && ' '}
-      {file.deletions > 0 && `−${file.deletions}`}
-    </span>
   );
 }
 
@@ -204,14 +209,19 @@ function HoverCard({
 function CommitRow({
   commit,
   selected,
+  unfolded,
   commentCount,
   onSelect,
 }: {
   commit: CommitSummary;
   selected: boolean;
+  /** Its files are listed under it. */
+  unfolded: boolean;
   commentCount: number;
+  /** Select it, or (selected already) fold or unfold its files. */
   onSelect: () => void;
 }) {
+  const Chevron = unfolded ? ChevronDown : ChevronRight;
   const card = useHoverCard();
   const when = formatRelativeTime(commit.authorDate, Date.now() / 1000);
   return (
@@ -223,7 +233,18 @@ function CommitRow({
         <ListRow
           size="sm"
           selected={selected}
-          leading={<span className="font-mono text-xs text-ink-3">{commit.shortHash}</span>}
+          aria-expanded={selected ? unfolded : undefined}
+          leading={
+            <span className="flex items-center gap-1 text-xs text-ink-3 tabular-nums">
+              <Chevron
+                size={14}
+                strokeWidth={1.8}
+                className={selected ? '' : 'invisible'}
+                aria-hidden
+              />
+              {commit.shortHash}
+            </span>
+          }
           trailing={
             <>
               {commentCount > 0 && <CountBadge count={commentCount} />}
@@ -244,21 +265,17 @@ function CommitRow({
         {commit.subject || '(no subject)'}
       </div>
       {commit.body && (
-        <div className="font-mono text-sm leading-relaxed whitespace-pre-wrap text-ink-2">
-          {commit.body}
-        </div>
+        <div className="text-sm leading-relaxed whitespace-pre-wrap text-ink-2">{commit.body}</div>
       )}
       <div className="flex items-center gap-2 border-t border-line pt-1.5 text-xs text-ink-3">
-        <span className="font-mono tabular-nums">{commit.shortHash}</span>
+        <span className="tabular-nums">{commit.shortHash}</span>
         <span>·</span>
         <span className="truncate">{commit.authorName}</span>
         <span>·</span>
         <span className="tabular-nums">{when}</span>
-        {(commit.additions > 0 || commit.deletions > 0) && (
-          <span className="ml-auto font-mono tabular-nums">
-            +{commit.additions} −{commit.deletions}
-          </span>
-        )}
+        <span className="ml-auto text-xs">
+          <LineStats add={commit.additions} del={commit.deletions} />
+        </span>
       </div>
     </HoverCard>
   );
@@ -311,7 +328,7 @@ function PrRow({ pr, selected }: { pr: PrEntry; selected: boolean }) {
           onMouseEnter={card.scheduleOpen}
           onMouseLeave={card.scheduleClose}
         >
-          <span className="font-mono tabular-nums">#{pr.number}</span> {pr.title}
+          <span className="tabular-nums">#{pr.number}</span> {pr.title}
         </ListRow>
       }
     >

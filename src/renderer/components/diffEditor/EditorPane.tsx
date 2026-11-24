@@ -93,6 +93,8 @@ interface EditorPaneProps {
   /** Show this range once the file is on screen (go-to-definition, openFileAt). */
   revealRange: { range: TextRange; nonce: number } | null;
   onRevealed: (nonce: number) => void;
+  /** `filePath` turned out to be a folder (a tab from before it was one). */
+  onIsDirectory: (path: string) => void;
 }
 
 export function EditorPane({
@@ -116,6 +118,7 @@ export function EditorPane({
   onSelectFile,
   revealRange,
   onRevealed,
+  onIsDirectory,
 }: EditorPaneProps) {
   // The store holds the active task's comments: they belong here only while
   // this is that task's folder (activeTaskId is null otherwise).
@@ -124,6 +127,12 @@ export function EditorPane({
   const commentsByFile = commentsOn ? storedByFile : NO_COMMENTS;
   const commentsDisabled = !commentsOn;
   const { state, reload } = useFileLoad(cwd, filePath, view);
+  const isDirectory = state.kind === 'error' && state.code === 'IS_DIRECTORY';
+  const onIsDirectoryRef = useRef(onIsDirectory);
+  onIsDirectoryRef.current = onIsDirectory;
+  useEffect(() => {
+    if (isDirectory) onIsDirectoryRef.current(filePath);
+  }, [isDirectory, filePath]);
   // The buffer's text, mirrored for the rendered preview.
   const [draft, setDraft] = useState<string>('');
   const [wordWrap, setWordWrap] = useState<boolean>(

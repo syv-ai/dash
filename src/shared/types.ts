@@ -255,6 +255,8 @@ export type IpcErrorCode =
   | 'CANCELLED'
   /** The language server for the document isn't installed or has failed. */
   | 'UNAVAILABLE'
+  /** A file read was given a directory. */
+  | 'IS_DIRECTORY'
   | 'UNKNOWN';
 
 /** Result of the startup `claude --version` probe, as exposed to the renderer. */
@@ -792,6 +794,20 @@ export type RtkTestOutcome =
 
 /** Reference for the "original" side of a working-tree diff: HEAD or staged index. */
 export type WorkingRef = 'HEAD' | 'index';
+
+/** A folder's paths for the editor's tree: its files, and the directories git
+ *  lists as a single entry (a symlinked directory, or a fully ignored one),
+ *  which the tree shows as folders and lists lazily (`editorListDir`). */
+export interface RepoListing {
+  files: string[];
+  dirs: string[];
+}
+
+/** One entry of a directory listed for the tree; `dir` follows symlinks. */
+export interface DirEntry {
+  name: string;
+  dir: boolean;
+}
 
 /** Working-tree read: original (HEAD/index) + working copy with disk metadata. */
 export interface EditorReadWorkingResult {

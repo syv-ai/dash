@@ -56,7 +56,10 @@ describe('the editor on a memory folder', () => {
   });
 
   it('lists its own files, ignored or not, and nothing below it', async () => {
-    expect(await listFiles(memoryDir)).toEqual({ success: true, data: ['MEMORY.md', 'a.md'] });
+    expect(await listFiles(memoryDir)).toEqual({
+      success: true,
+      data: { files: ['MEMORY.md', 'a.md'], dirs: [] },
+    });
   });
 
   it('opens a memory as unchanged: the file on disk is the original', async () => {

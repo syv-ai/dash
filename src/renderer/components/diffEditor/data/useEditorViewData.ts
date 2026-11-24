@@ -1,10 +1,10 @@
 import { useMemo } from 'react';
 import { frozenCommit, type EditorView, type CommitSummary } from '../types';
-import type { FileChange } from '../../../../shared/types';
+import type { FileChange, RepoListing } from '../../../../shared/types';
 import { useAsyncResource } from './useAsyncResource';
 
 const NO_FILES: FileChange[] = [];
-const NO_PATHS: string[] = [];
+const NO_LISTING: RepoListing = { files: [], dirs: [] };
 const NO_COMMITS: CommitSummary[] = [];
 
 export interface EditorViewData {
@@ -12,6 +12,11 @@ export interface EditorViewData {
   changedFilesLoading: boolean;
   repoPaths: string[];
   repoPathsLoading: boolean;
+  /** Directories git lists as one entry (symlinked ones): the tree lists
+   *  them lazily. */
+  repoDirs: string[];
+  /** The changed files and repo paths answer the current view. */
+  settled: boolean;
   commits: CommitSummary[];
   commitsLoading: boolean;
   defaultBase: string | null;
@@ -65,13 +70,13 @@ export function useEditorViewData(
   const repoSource = isCommit
     ? ({ kind: 'commit', hash: commitHash } as const)
     : ({ kind: 'working' } as const);
-  const repoPaths = useAsyncResource<string[]>(
+  const repoListing = useAsyncResource<RepoListing>(
     () =>
       window.electronAPI
         .editorListRepoFiles({ cwd, source: repoSource })
-        .then((r) => (r.success && r.data ? r.data : NO_PATHS)),
+        .then((r) => (r.success && r.data ? r.data : NO_LISTING)),
     [cwd, isCommit ? commitHash : 'working', enabled.files],
-    NO_PATHS,
+    NO_LISTING,
     enabled.files,
   );
 
@@ -119,13 +124,17 @@ export function useEditorViewData(
     : isBranch
       ? branchFiles.loading
       : false;
+  const settled =
+    (isCommit ? commitFiles.settled : isBranch ? branchFiles.settled : true) && repoListing.settled;
 
   return useMemo(
     () => ({
       changedFiles,
       changedFilesLoading,
-      repoPaths: repoPaths.data,
-      repoPathsLoading: repoPaths.loading,
+      repoPaths: repoListing.data.files,
+      repoPathsLoading: repoListing.loading,
+      repoDirs: repoListing.data.dirs,
+      settled,
       commits: commits.data,
       commitsLoading: commits.loading,
       defaultBase: defaultBase.data,
@@ -133,8 +142,9 @@ export function useEditorViewData(
     [
       changedFiles,
       changedFilesLoading,
-      repoPaths.data,
-      repoPaths.loading,
+      repoListing.data,
+      repoListing.loading,
+      settled,
       commits.data,
       commits.loading,
       defaultBase.data,

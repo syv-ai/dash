@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect } from 'react';
+import { Fragment, useCallback, useEffect, useSyncExternalStore } from 'react';
 import { FileText } from 'lucide-react';
 import type { ITheme as XtermTheme } from '@xterm/xterm';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../ui/Resizable';
@@ -10,7 +10,16 @@ import { EditorPane } from './EditorPane';
 import { EditorTabStrip } from './EditorTabStrip';
 import type { EditorWorkspace } from './useEditorWorkspace';
 import { openPaths, type GroupIndex } from './tabs/editorLayout';
-import { anyDirtyUnder, isDirty, releaseRetained, retain, workingUri } from './models';
+import {
+  anyDirtyUnder,
+  dirtyVersion,
+  isDirty,
+  releaseRetained,
+  retain,
+  subscribeDirty,
+  workingUri,
+} from './models';
+import { TreeToggle } from './TreeToggle';
 import { absolutePath } from './editor/fileRef';
 import { LspStatusIndicator } from './LspStatusIndicator';
 import { installLsp } from '../../lsp';
@@ -21,6 +30,10 @@ interface Props {
   isDark: boolean;
   /** Close the editor (asks first when a file has unsaved changes). */
   onClose: () => void;
+}
+
+function useDirtyVersion(): number {
+  return useSyncExternalStore(subscribeDirty, dirtyVersion);
 }
 
 /**
@@ -43,6 +56,27 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
     );
   }, [holder, layout, cwd]);
   useEffect(() => () => releaseRetained(holder), [holder]);
+
+  // Editing a preview tab keeps it.
+  const dirtyTick = useDirtyVersion();
+  useEffect(() => {
+    layout.groups.forEach((g, i) => {
+      if (g.preview && isDirty(workingUri(absolutePath(cwd, g.preview)))) {
+        ws.pinTab(i as GroupIndex, g.preview);
+      }
+    });
+  }, [dirtyTick, layout, cwd, ws]);
+
+  // A tab naming a folder (from before it was one): close it and show the
+  // folder in the tree instead.
+  const { closeTab: wsCloseTab } = ws;
+  const showFolder = useCallback(
+    (group: GroupIndex, path: string) => {
+      wsCloseTab(group, path);
+      useEditorTabs.getState().requestExpandFolder(path);
+    },
+    [wsCloseTab],
+  );
 
   const closeEditor = useCallback(() => {
     if (anyDirtyUnder(cwd) && !window.confirm('Discard unsaved changes?')) return;
@@ -98,9 +132,12 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
                     cwd={cwd}
                     tabs={group.tabs}
                     active={group.active}
+                    preview={group.preview}
                     focused={!split || layout.focused === index}
                     onSelect={(path) => ws.activateTab(index, path)}
                     onClose={(path) => closeTab(index, path)}
+                    onPin={(path) => ws.pinTab(index, path)}
+                    leading={i === 0 ? <TreeToggle /> : undefined}
                     onSplit={
                       group.active ? () => ws.openFile(group.active!, { toSide: true }) : undefined
                     }
@@ -129,6 +166,7 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
                       onSelectFile={ws.openFile}
                       revealRange={groupReveal}
                       onRevealed={clearReveal}
+                      onIsDirectory={(path) => showFolder(index, path)}
                     />
                   ) : (
                     <EmptyState

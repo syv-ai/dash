@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { IpcErrorCode } from '../../../../shared/types';
 import { frozenCommit, type EditorView } from '../types';
 
 export type LoadState =
   | { kind: 'loading' }
   /** No file selected (e.g. a clean working tree has nothing to auto-pick). */
   | { kind: 'empty' }
-  | { kind: 'error'; message: string }
+  /** `code` IS_DIRECTORY: the path names a folder (a stale tab). */
+  | { kind: 'error'; message: string; code?: IpcErrorCode }
   | {
       kind: 'loaded';
       /** Monotonic id, bumped once per completed read. Consumers that must
@@ -60,7 +62,11 @@ export function useFileLoad(
         });
         if (cancelled) return;
         if (!resp.success || !resp.data) {
-          setState({ kind: 'error', message: resp.error ?? 'Failed to load file' });
+          setState({
+            kind: 'error',
+            message: resp.error ?? 'Failed to load file',
+            code: resp.code,
+          });
           return;
         }
         const modifiedPresent = resp.data.workingContent !== null;
@@ -88,7 +94,11 @@ export function useFileLoad(
         });
         if (cancelled) return;
         if (!resp.success || !resp.data) {
-          setState({ kind: 'error', message: resp.error ?? 'Failed to load file' });
+          setState({
+            kind: 'error',
+            message: resp.error ?? 'Failed to load file',
+            code: resp.code,
+          });
           return;
         }
         setState({
@@ -113,7 +123,11 @@ export function useFileLoad(
         });
         if (cancelled) return;
         if (!resp.success || !resp.data) {
-          setState({ kind: 'error', message: resp.error ?? 'Failed to load file' });
+          setState({
+            kind: 'error',
+            message: resp.error ?? 'Failed to load file',
+            code: resp.code,
+          });
           return;
         }
         const modifiedPresent = resp.data.workingContent !== null;

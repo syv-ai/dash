@@ -8,6 +8,8 @@ import {
   openPaths,
   openTab,
   parseLayout,
+  pinTab,
+  retainTabs,
   serializeLayout,
   type EditorLayout,
 } from '../editorLayout';
@@ -20,29 +22,30 @@ describe('openTab', () => {
     let l = open('a', 'b');
     l = activateTab(l, 0, 'a');
     l = openTab(l, 'c');
-    expect(l.groups[0]).toEqual({ tabs: ['a', 'c', 'b'], active: 'c' });
+    expect(l.groups[0]).toEqual({ tabs: ['a', 'c', 'b'], active: 'c', preview: null });
   });
 
   it('adds a background tab at the end without activating it', () => {
     const l = openTab(activateTab(open('a', 'b'), 0, 'a'), 'c', { background: true });
-    expect(l.groups[0]).toEqual({ tabs: ['a', 'b', 'c'], active: 'a' });
+    expect(l.groups[0]).toEqual({ tabs: ['a', 'b', 'c'], active: 'a', preview: null });
     expect(openTab(l, 'b', { background: true })).toBe(l);
     expect(openTab(EMPTY_LAYOUT, 'x', { background: true }).groups[0]).toEqual({
       tabs: ['x'],
       active: 'x',
+      preview: null,
     });
   });
 
   it('activates a file already open instead of opening it twice', () => {
     const l = openTab(open('a', 'b'), 'a');
-    expect(l.groups[0]).toEqual({ tabs: ['a', 'b'], active: 'a' });
+    expect(l.groups[0]).toEqual({ tabs: ['a', 'b'], active: 'a', preview: null });
   });
 
   it('opens to the side into a new second group and focuses it', () => {
     const l = openTab(open('a'), 'b', { toSide: true });
     expect(l.groups).toEqual([
-      { tabs: ['a'], active: 'a' },
-      { tabs: ['b'], active: 'b' },
+      { tabs: ['a'], active: 'a', preview: null },
+      { tabs: ['b'], active: 'b', preview: null },
     ]);
     expect(l.focused).toBe(1);
   });
@@ -87,14 +90,14 @@ describe('closeTab', () => {
   it('activates the right neighbour, else the left', () => {
     let l = activateTab(open('a', 'b', 'c'), 0, 'b');
     l = closeTab(l, 0, 'b');
-    expect(l.groups[0]).toEqual({ tabs: ['a', 'c'], active: 'c' });
+    expect(l.groups[0]).toEqual({ tabs: ['a', 'c'], active: 'c', preview: null });
     l = closeTab(l, 0, 'c');
-    expect(l.groups[0]).toEqual({ tabs: ['a'], active: 'a' });
+    expect(l.groups[0]).toEqual({ tabs: ['a'], active: 'a', preview: null });
   });
 
   it('keeps the active tab when closing another', () => {
     const l = closeTab(open('a', 'b'), 0, 'a');
-    expect(l.groups[0]).toEqual({ tabs: ['b'], active: 'b' });
+    expect(l.groups[0]).toEqual({ tabs: ['b'], active: 'b', preview: null });
   });
 
   it('leaves one empty group when the last tab closes', () => {
@@ -103,12 +106,12 @@ describe('closeTab', () => {
 
   it('collapses the split when the second group empties', () => {
     const l = closeTab(openTab(open('a'), 'b', { toSide: true }), 1, 'b');
-    expect(l).toEqual({ groups: [{ tabs: ['a'], active: 'a' }], focused: 0 });
+    expect(l).toEqual({ groups: [{ tabs: ['a'], active: 'a', preview: null }], focused: 0 });
   });
 
   it('moves the second group into the first when the first empties', () => {
     const l = closeTab(openTab(open('a'), 'b', { toSide: true }), 0, 'a');
-    expect(l).toEqual({ groups: [{ tabs: ['b'], active: 'b' }], focused: 0 });
+    expect(l).toEqual({ groups: [{ tabs: ['b'], active: 'b', preview: null }], focused: 0 });
   });
 });
 
@@ -136,11 +139,86 @@ describe('parseLayout', () => {
   it('repairs a stale active tab, duplicates and an empty split', () => {
     const raw = JSON.stringify({
       groups: [
-        { tabs: ['a', 'a', 3, 'b'], active: 'gone' },
-        { tabs: [], active: null },
+        { tabs: ['a', 'a', 3, 'b'], active: 'gone', preview: null },
+        { tabs: [], active: null, preview: null },
       ],
       focused: 1,
     });
-    expect(parseLayout(raw)).toEqual({ groups: [{ tabs: ['a', 'b'], active: 'a' }], focused: 0 });
+    expect(parseLayout(raw)).toEqual({
+      groups: [{ tabs: ['a', 'b'], active: 'a', preview: null }],
+      focused: 0,
+    });
+  });
+});
+
+describe('preview tabs', () => {
+  const peek = (l: EditorLayout, p: string) => openTab(l, p, { preview: true });
+
+  it('opens a preview tab that the next preview open replaces in place', () => {
+    let l = peek(open('a'), 'b');
+    expect(l.groups[0]).toEqual({ tabs: ['a', 'b'], active: 'b', preview: 'b' });
+    l = peek(activateTab(l, 0, 'a'), 'c');
+    expect(l.groups[0]).toEqual({ tabs: ['a', 'c'], active: 'c', preview: 'c' });
+  });
+
+  it('keeps one preview tab per group', () => {
+    let l = peek(open('a'), 'b');
+    l = openTab(l, 'c', { toSide: true, preview: true });
+    l = openTab(l, 'd', { toSide: true, preview: true });
+    expect(l.groups[0]).toEqual({ tabs: ['a', 'd'], active: 'd', preview: 'd' });
+    expect(l.groups[1]).toEqual({ tabs: ['c'], active: 'c', preview: 'c' });
+  });
+
+  it('activates a file already open without making it a preview', () => {
+    const l = peek(peek(open('a'), 'b'), 'a');
+    expect(l.groups[0]).toEqual({ tabs: ['a', 'b'], active: 'a', preview: 'b' });
+  });
+
+  it('keeps the preview tab when it is opened for good', () => {
+    const l = openTab(peek(open('a'), 'b'), 'b');
+    expect(l.groups[0]).toEqual({ tabs: ['a', 'b'], active: 'b', preview: null });
+    expect(peek(l, 'c').groups[0]!.tabs).toEqual(['a', 'b', 'c']);
+  });
+
+  it('pins the preview tab', () => {
+    const l = peek(open('a'), 'b');
+    expect(pinTab(l, 0, 'b').groups[0]!.preview).toBeNull();
+    expect(pinTab(l, 0, 'a')).toBe(l);
+    expect(pinTab(l, 1, 'b')).toBe(l);
+  });
+
+  it('forgets the preview when its tab closes', () => {
+    const l = closeTab(peek(open('a'), 'b'), 0, 'b');
+    expect(l.groups[0]).toEqual({ tabs: ['a'], active: 'a', preview: null });
+  });
+
+  it('opens a background tab as a kept tab', () => {
+    const l = openTab(peek(open('a'), 'b'), 'c', { background: true });
+    expect(l.groups[0]).toEqual({ tabs: ['a', 'b', 'c'], active: 'b', preview: 'b' });
+  });
+
+  it('round-trips and repairs the preview', () => {
+    const l = peek(open('a'), 'b');
+    expect(parseLayout(serializeLayout(l))).toEqual(l);
+    const raw = JSON.stringify({ groups: [{ tabs: ['a'], active: 'a', preview: 'gone' }] });
+    expect(parseLayout(raw)!.groups[0]!.preview).toBeNull();
+  });
+});
+
+describe('retainTabs', () => {
+  it('closes the tabs turned down, across groups, with closeTab semantics', () => {
+    let l = openTab(open('a', 'b', 'c'), 'd', { toSide: true, preview: true });
+    l = retainTabs(l, (p) => p === 'a' || p === 'c');
+    expect(l).toEqual({ groups: [{ tabs: ['a', 'c'], active: 'c', preview: null }], focused: 0 });
+  });
+
+  it('tells keep which tab is the preview', () => {
+    const l = openTab(open('a'), 'b', { preview: true });
+    const seen: [string, boolean][] = [];
+    expect(retainTabs(l, (p, preview) => (seen.push([p, preview]), true))).toBe(l);
+    expect(seen).toEqual([
+      ['a', false],
+      ['b', true],
+    ]);
   });
 });

@@ -15,7 +15,14 @@ import { pickFirstChangedFile } from './data/viewData';
 import { readStoredView, writeStoredView } from './data/viewPersistence';
 import { useTaskReview } from './prReview/useTaskReview';
 import { commentScope, commentCountsByScope } from './comments/commentScope';
-import { openPaths, type EditorLayout, type GroupIndex } from './tabs/editorLayout';
+import {
+  openPaths,
+  type EditorLayout,
+  type GroupIndex,
+  type OpenOptions,
+} from './tabs/editorLayout';
+import { isDirty, workingUri } from './models';
+import { absolutePath } from './editor/fileRef';
 import type { FileBadges } from './EditorTree';
 import type { PrEntry } from './HistoryList';
 
@@ -55,7 +62,8 @@ export interface EditorWorkspace {
   activeTaskId: string | null;
   projectId: string | null;
   view: EditorView;
-  /** Show another view; a commit, branch or PR view opens its first changed file. */
+  /** Show another view; a commit, branch or PR view opens its first changed
+   *  file. Tabs the new view has nothing for close (see `selectView`). */
   selectView(next: EditorView): void;
   selectBase(base: string): void;
   exitBranchView(): void;
@@ -63,9 +71,11 @@ export interface EditorWorkspace {
   openPrView(number: number): Promise<boolean>;
   data: EditorViewData;
   layout: EditorLayout;
-  openFile(path: string, opts?: { toSide?: boolean }): void;
+  openFile(path: string, opts?: OpenOptions): void;
   activateTab(group: GroupIndex, path: string): void;
   closeTab(group: GroupIndex, path: string): void;
+  /** Keep a preview tab open. */
+  pinTab(group: GroupIndex, path: string): void;
   focusGroup(group: GroupIndex): void;
   /** Per-file badges for the tree: comments in this view, PR threads. */
   badgeCounts: Map<string, FileBadges>;
@@ -114,8 +124,11 @@ export function useEditorWorkspace({
   }, [tabsKey, persistTabs]);
   const layout = useEditorTabs(selectLayout(tabsKey));
   const openFile = useCallback(
-    (path: string, opts?: { toSide?: boolean }) =>
-      useEditorTabs.getState().open(tabsKey, path, opts),
+    (path: string, opts?: OpenOptions) => useEditorTabs.getState().open(tabsKey, path, opts),
+    [tabsKey],
+  );
+  const pinTab = useCallback(
+    (group: GroupIndex, path: string) => useEditorTabs.getState().pin(tabsKey, group, path),
     [tabsKey],
   );
   const activateTab = useCallback(
@@ -140,11 +153,11 @@ export function useEditorWorkspace({
     writeStoredView(cwd, view);
   }, [cwd, view]);
 
-  // A commit, branch or PR view opens on its first changed file, once that
-  // view's files have loaded (a loading phase seen, then settled).
-  const openFirstFor = useRef<{ view: EditorView; sawLoading: boolean } | null>(null);
+  // Picking a view (a commit, branch, PR, or back to the working tree) acts
+  // once that view's files have loaded: see the effect below.
+  const switchedTo = useRef<EditorView | null>(null);
   const selectView = useCallback((next: EditorView) => {
-    openFirstFor.current = next.kind === 'working' ? null : { view: next, sawLoading: false };
+    switchedTo.current = next;
     setView(next);
   }, []);
   const selectBase = useCallback(
@@ -165,20 +178,32 @@ export function useEditorWorkspace({
     files: editorOpen,
     commits: historyShown || editorOpen,
   });
-  const { changedFiles, changedFilesLoading, repoPaths, repoPathsLoading } = data;
+  const { changedFiles, repoPaths, repoPathsLoading } = data;
 
+  // Once the picked view's files are in: its tabs are the files it changes.
+  // Others close, unless unsaved, or kept (not a preview) and the file is in
+  // this view too. A commit, branch or PR view then opens its first changed
+  // file (as a preview).
+  const { settled } = data;
   useEffect(() => {
-    const pending = openFirstFor.current;
-    if (!pending || pending.view !== view) return;
-    if (changedFilesLoading) {
-      pending.sawLoading = true;
-      return;
-    }
-    if (!pending.sawLoading) return;
-    openFirstFor.current = null;
+    // Closed, the editor loads no files: wait for it to open.
+    if (switchedTo.current !== view || !editorOpen || !settled) return;
+    switchedTo.current = null;
+    const changed = new Set(changedFiles.map((f) => f.path));
+    const present = new Set(repoPaths);
+    useEditorTabs
+      .getState()
+      .retain(
+        tabsKey,
+        (path, preview) =>
+          changed.has(path) ||
+          isDirty(workingUri(absolutePath(cwd, path))) ||
+          (!preview && present.has(path)),
+      );
+    if (view.kind === 'working') return;
     const first = pickFirstChangedFile(changedFiles);
-    if (first) openFile(first);
-  }, [view, changedFiles, changedFilesLoading, openFile]);
+    if (first) openFile(first, { preview: true });
+  }, [view, editorOpen, settled, changedFiles, repoPaths, tabsKey, cwd, openFile]);
 
   // ── Targets (a file clicked in the changes list, "Files", a comment) ──
   const wantReadme = useRef(false);
@@ -368,6 +393,7 @@ export function useEditorWorkspace({
     openFile,
     activateTab,
     closeTab,
+    pinTab,
     focusGroup,
     badgeCounts,
     commentCountByScope,

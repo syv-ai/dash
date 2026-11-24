@@ -4,11 +4,12 @@ import { promises as fs, realpathSync } from 'fs';
 import { execFile } from 'child_process';
 import path from 'path';
 import { promisify } from 'util';
-import { parseArgs, errorResponse, ipcError } from './validate';
+import { parseArgs, errorResponse, ipcError, IpcError } from './validate';
 import { parseBlameIncremental } from '../services/blameParser';
 import { DatabaseService } from '../services/DatabaseService';
 import { isProjectMemoryDir } from '../services/MemoryService';
 import type {
+  DirEntry,
   EditorBlameResult,
   EditorCommitListItem,
   EditorReadBranchResult,
@@ -18,6 +19,7 @@ import type {
   FileChange,
   FileChangeStatus,
   IpcResponse,
+  RepoListing,
   WorkingRef,
 } from '@shared/types';
 
@@ -50,6 +52,17 @@ function resolveTargetReal(target: string): string {
   }
 }
 
+/** The path is inside cwd, but a symlink on the way leads out of it. */
+class SymlinkEscapeError extends Error {
+  constructor(
+    /** The path as named, inside cwd. */
+    readonly target: string,
+    real: string,
+  ) {
+    super(`Resolved path via symlink escapes cwd: ${real}`);
+  }
+}
+
 export function resolveInsideCwd(cwd: string, filePath: string): string {
   if (filePath.includes('\0')) {
     throw new Error('Invalid filePath: contains null byte');
@@ -70,9 +83,28 @@ export function resolveInsideCwd(cwd: string, filePath: string): string {
   const real = resolveTargetReal(target);
   const realRel = path.relative(cwdReal, real);
   if (realRel.startsWith('..') || path.isAbsolute(realRel)) {
-    throw new Error(`Resolved path via symlink escapes cwd: ${real}`);
+    throw new SymlinkEscapeError(target, real);
   }
   return real;
+}
+
+/**
+ * For reading only: like `resolveInsideCwd`, but a symlink inside cwd may lead
+ * out of it (a worktree's `node_modules` linked to the main checkout's). The
+ * path as named must still be inside cwd. Writes keep the stricter rule.
+ */
+export function resolveReadableInsideCwd(cwd: string, filePath: string): string {
+  try {
+    return resolveInsideCwd(cwd, filePath);
+  } catch (err) {
+    if (err instanceof SymlinkEscapeError) return err.target;
+    throw err;
+  }
+}
+
+/** Refuse to read a directory as a file (a stale tab, a racing rename). */
+function assertNotDirectory(stat: { isDirectory(): boolean }, filePath: string): void {
+  if (stat.isDirectory()) throw new IpcError(`${filePath} is a directory`, 'IS_DIRECTORY');
 }
 
 export function isBinaryBuffer(buf: Buffer): boolean {
@@ -165,24 +197,65 @@ function isMemoryFolder(cwd: string): Promise<boolean> {
   return check;
 }
 
-async function listWorkingRepoFiles(cwd: string): Promise<string[]> {
+/** Whether `abs` is a directory, following symlinks (a broken link isn't). */
+async function isDirectoryFollowingLinks(abs: string): Promise<boolean> {
+  try {
+    return (await fs.stat(abs)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/** Split `paths` (relative to `cwd`) into files and directories, following
+ *  symlinks: git lists a symlinked directory as one file-like entry. */
+export async function splitDirectories(cwd: string, paths: string[]): Promise<RepoListing> {
+  const isDir = await Promise.all(paths.map((p) => isDirectoryFollowingLinks(path.join(cwd, p))));
+  return {
+    files: paths.filter((_, i) => !isDir[i]),
+    dirs: paths.filter((_, i) => isDir[i]),
+  };
+}
+
+const SYMLINK_MODE = '120000';
+
+/** Parse `git ls-files -s -z` (`<mode> <object> <stage>\t<path>\0`): each
+ *  path once (a conflicted file has a line per stage), flagged when git
+ *  stores it as a symlink. */
+export function parseLsFilesStageZ(out: string): { path: string; symlink: boolean }[] {
+  const seen = new Map<string, boolean>();
+  for (const record of out.split('\0')) {
+    const tab = record.indexOf('\t');
+    if (tab < 0) continue;
+    const p = record.slice(tab + 1);
+    if (!seen.has(p)) seen.set(p, record.startsWith(SYMLINK_MODE));
+  }
+  return Array.from(seen, ([p, symlink]) => ({ path: p, symlink }));
+}
+
+/** The working tree's files: tracked + untracked, not ignored. A symlinked
+ *  directory (git lists it as a file) comes back in `dirs`. Only symlinks and
+ *  untracked entries are stat'ed; tracked regular files are taken as files. */
+export async function listWorkingRepoFiles(cwd: string): Promise<RepoListing> {
   // A memory folder is flat: its files are the whole listing.
   if (await isMemoryFolder(cwd)) {
     const entries = await fs.readdir(cwd, { withFileTypes: true });
-    return entries
-      .filter((e) => e.isFile())
-      .map((e) => e.name)
-      .sort();
+    return {
+      files: entries
+        .filter((e) => e.isFile())
+        .map((e) => e.name)
+        .sort(),
+      dirs: [],
+    };
   }
-  const tracked = (
-    await execFileAsync('git', ['ls-files', '-z'], {
-      cwd,
-      maxBuffer: 50 * 1024 * 1024,
-      timeout: 15000,
-    })
-  ).stdout
-    .split('\0')
-    .filter(Boolean);
+  const tracked = parseLsFilesStageZ(
+    (
+      await execFileAsync('git', ['ls-files', '-s', '-z'], {
+        cwd,
+        maxBuffer: 50 * 1024 * 1024,
+        timeout: 15000,
+      })
+    ).stdout,
+  );
   let untracked: string[] = [];
   try {
     untracked = (
@@ -197,63 +270,98 @@ async function listWorkingRepoFiles(cwd: string): Promise<string[]> {
   } catch {
     /* no untracked */
   }
-  // Dedup; tracked + untracked are disjoint already, but be defensive.
-  return Array.from(new Set([...tracked, ...untracked])).sort();
+  const loose = await splitDirectories(cwd, [
+    ...tracked.filter((t) => t.symlink).map((t) => t.path),
+    ...untracked,
+  ]);
+  const files = new Set([...tracked.filter((t) => !t.symlink).map((t) => t.path), ...loose.files]);
+  return { files: Array.from(files).sort(), dirs: loose.dirs.sort() };
 }
 
 /**
  * Gitignored paths in the working tree. `--directory` collapses a fully-ignored
  * directory (e.g. `node_modules/`, `dist/`) to one entry instead of listing every
- * file inside it, so the tree stays usable. Trailing slashes are stripped so the
- * paths slot into the same tree builder as tracked/untracked files. Best-effort:
- * a repo with no ignores (or a git error) yields an empty list.
+ * file inside it, so the tree stays usable; those come back in `dirs`, for the
+ * tree to list lazily. Best-effort: a repo with no ignores (or a git error)
+ * yields an empty listing.
  */
-async function listIgnoredRepoFiles(cwd: string): Promise<string[]> {
+export async function listIgnoredRepoFiles(cwd: string): Promise<RepoListing> {
+  let out: string;
   try {
-    const out = (
+    out = (
       await execFileAsync(
         'git',
         ['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory'],
         { cwd, maxBuffer: 50 * 1024 * 1024, timeout: 15000 },
       )
     ).stdout;
-    return parseIgnoredListingZ(out);
   } catch {
-    return [];
+    return { files: [], dirs: [] };
   }
+  const entries = parseIgnoredListingZ(out);
+  // An ignored symlink to a directory has no trailing slash: stat those.
+  const loose = await splitDirectories(
+    cwd,
+    entries.filter((e) => !e.dir).map((e) => e.path),
+  );
+  return {
+    files: loose.files,
+    dirs: [...entries.filter((e) => e.dir).map((e) => e.path), ...loose.dirs].sort(),
+  };
 }
 
 /**
  * Parse `git ls-files -z --others --ignored --exclude-standard --directory`.
- * Trailing slashes are stripped so the paths slot into the same tree builder
- * as tracked/untracked files. Git lists a collapsed directory *and* its
- * children when the directory holds a nested repository (every Dash project
- * does: `.claude/worktrees/<task>/.git`), which would render `.claude` as both
- * a file row and a folder; entries under an already-listed directory are
+ * A collapsed directory carries a trailing slash: it's stripped and the entry
+ * flagged `dir`. Git lists a collapsed directory *and* its children when the
+ * directory holds a nested repository (every Dash project does:
+ * `.claude/worktrees/<task>/.git`), which would render `.claude` as both a
+ * file row and a folder; entries under an already-listed directory are
  * dropped so each ignored subtree is one entry.
  */
-export function parseIgnoredListingZ(out: string): string[] {
+export function parseIgnoredListingZ(out: string): { path: string; dir: boolean }[] {
   const entries = out
     .split('\0')
     .filter(Boolean)
-    .map((p) => p.replace(/\/$/, ''))
-    .sort();
+    .map((p) => ({ path: p.replace(/\/$/, ''), dir: p.endsWith('/') }))
+    .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   // Sorted, so a directory always precedes anything under it.
   const kept = new Set<string>();
-  for (const p of entries) {
+  const result: { path: string; dir: boolean }[] = [];
+  for (const e of entries) {
     let nested = false;
-    for (let i = p.indexOf('/'); i !== -1; i = p.indexOf('/', i + 1)) {
-      if (kept.has(p.slice(0, i))) {
+    for (let i = e.path.indexOf('/'); i !== -1; i = e.path.indexOf('/', i + 1)) {
+      if (kept.has(e.path.slice(0, i))) {
         nested = true;
         break;
       }
     }
-    if (!nested) kept.add(p);
+    if (nested || kept.has(e.path)) continue;
+    kept.add(e.path);
+    result.push(e);
   }
-  return Array.from(kept);
+  return result;
 }
 
-async function listCommitRepoFiles(cwd: string, hash: string): Promise<string[]> {
+/** One directory's entries for the tree, `.git` left out. Symlinks are
+ *  followed to tell folders from files; nothing below is walked. */
+export async function listDirectory(cwd: string, dirPath: string): Promise<DirEntry[]> {
+  const abs = resolveReadableInsideCwd(cwd, dirPath);
+  const entries = await fs.readdir(abs, { withFileTypes: true });
+  const listed = await Promise.all(
+    entries
+      .filter((e) => e.name !== '.git')
+      .map(async (e) => ({
+        name: e.name,
+        dir:
+          e.isDirectory() ||
+          (e.isSymbolicLink() && (await isDirectoryFollowingLinks(path.join(abs, e.name)))),
+      })),
+  );
+  return listed.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+}
+
+async function listCommitRepoFiles(cwd: string, hash: string): Promise<RepoListing> {
   const out = (
     await execFileAsync('git', ['ls-tree', '-r', '-z', '--name-only', hash], {
       cwd,
@@ -261,7 +369,8 @@ async function listCommitRepoFiles(cwd: string, hash: string): Promise<string[]>
       timeout: 15000,
     })
   ).stdout;
-  return out.split('\0').filter(Boolean).sort();
+  // A commit's symlinks are blobs (their target path): files here.
+  return { files: out.split('\0').filter(Boolean).sort(), dirs: [] };
 }
 
 /** Resolve the repo's default base branch.
@@ -420,7 +529,7 @@ export function registerEditorIpc(): void {
           }),
           args,
         );
-        const abs = resolveInsideCwd(args.cwd, args.filePath);
+        const abs = resolveReadableInsideCwd(args.cwd, args.filePath);
         const cwdAbs = path.resolve(args.cwd);
         let cwdReal = cwdAbs;
         try {
@@ -441,6 +550,7 @@ export function registerEditorIpc(): void {
 
         try {
           const stat = await fs.stat(abs);
+          assertNotDirectory(stat, args.filePath);
           mtimeMs = stat.mtimeMs;
           sizeBytes = stat.size;
           if (stat.size > LARGE_FILE_BYTES) {
@@ -814,18 +924,18 @@ export function registerEditorIpc(): void {
     async (
       _event,
       args: { cwd: string; source: { kind: 'working' } | { kind: 'commit'; hash: string } },
-    ): Promise<IpcResponse<string[]>> => {
+    ): Promise<IpcResponse<RepoListing>> => {
       try {
         parseArgs(
           'editor:listRepoFiles',
           z.looseObject({ cwd: z.string(), source: z.looseObject({ kind: z.string() }) }),
           args,
         );
-        const paths =
+        const listing =
           args.source.kind === 'working'
             ? await listWorkingRepoFiles(args.cwd)
             : await listCommitRepoFiles(args.cwd, args.source.hash);
-        return { success: true, data: paths };
+        return { success: true, data: listing };
       } catch (err) {
         return errorResponse(err);
       }
@@ -834,13 +944,28 @@ export function registerEditorIpc(): void {
 
   // ── editor:listIgnoredFiles ───────────────────────────────────
   // Gitignored paths in the working tree, fully-ignored directories collapsed
-  // to a single entry. Fetched lazily when the user toggles "show ignored".
+  // to a single entry (listed lazily through editor:listDir).
   ipcMain.handle(
     'editor:listIgnoredFiles',
-    async (_event, args: { cwd: string }): Promise<IpcResponse<string[]>> => {
+    async (_event, args: { cwd: string }): Promise<IpcResponse<RepoListing>> => {
       try {
         parseArgs('editor:listIgnoredFiles', z.looseObject({ cwd: z.string() }), args);
         return { success: true, data: await listIgnoredRepoFiles(args.cwd) };
+      } catch (err) {
+        return errorResponse(err);
+      }
+    },
+  );
+
+  // ── editor:listDir ────────────────────────────────────────────
+  // One directory's entries, when the tree expands a folder git lists as one
+  // entry (ignored, or a symlink).
+  ipcMain.handle(
+    'editor:listDir',
+    async (_event, args: { cwd: string; dirPath: string }): Promise<IpcResponse<DirEntry[]>> => {
+      try {
+        parseArgs('editor:listDir', z.looseObject({ cwd: z.string(), dirPath: z.string() }), args);
+        return { success: true, data: await listDirectory(args.cwd, args.dirPath) };
       } catch (err) {
         return errorResponse(err);
       }
@@ -963,7 +1088,7 @@ export function registerEditorIpc(): void {
           z.looseObject({ cwd: z.string(), filePath: z.string(), base: z.string() }),
           args,
         );
-        const abs = resolveInsideCwd(args.cwd, args.filePath);
+        const abs = resolveReadableInsideCwd(args.cwd, args.filePath);
         const cwdAbs = path.resolve(args.cwd);
         let cwdReal = cwdAbs;
         try {
@@ -982,6 +1107,7 @@ export function registerEditorIpc(): void {
 
         try {
           const stat = await fs.stat(abs);
+          assertNotDirectory(stat, args.filePath);
           mtimeMs = stat.mtimeMs;
           sizeBytes = stat.size;
           if (stat.size > LARGE_FILE_BYTES) {
