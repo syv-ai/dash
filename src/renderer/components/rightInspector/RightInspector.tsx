@@ -10,7 +10,7 @@ import { UsageBlock } from './UsageBlock';
 import { IconButton } from '../ui/IconButton';
 import { Segmented } from '../ui/Segmented';
 import { CountBadge } from '../ui/CountBadge';
-import type { PanelImperativeHandle } from '../ui/Resizable';
+import { panelEaseMs, type PanelImperativeHandle } from '../ui/Resizable';
 import { useGit, type DiffFileTarget } from '../../stores/gitStore';
 import { useSettings } from '../../stores/settingsStore';
 import { useUi } from '../../stores/uiStore';
@@ -115,10 +115,10 @@ export function RightInspector({
   const files = gitStatus?.files ?? [];
   const stagedCount = files.filter((f) => f.staged).length;
   const unstagedCount = files.length - stagedCount;
-  // Collapse/expand animates; the flag drops once the 200ms ease is over.
+  // Collapse/expand animates; the flag drops once the ease is over.
   const settleShellDrawer = (collapsed: boolean) => {
     setShellDrawerCollapsed(collapsed);
-    setTimeout(() => setShellDrawerAnimating(false), 200);
+    setTimeout(() => setShellDrawerAnimating(false), panelEaseMs());
   };
 
   return (

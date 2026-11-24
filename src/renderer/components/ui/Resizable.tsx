@@ -13,6 +13,16 @@ import { cn } from '../../lib/cn';
 
 export type { PanelImperativeHandle };
 
+/** How long an animated panel eases (see `[data-animating]` in index.css,
+ *  which must match). */
+export const PANEL_EASE_MS = 280;
+
+/** The ease's length now: 0 when the user prefers reduced motion (the CSS
+ *  drops the transition then too). Clear an `animate` flag after this. */
+export function panelEaseMs(): number {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : PANEL_EASE_MS;
+}
+
 /*
  * Resizable split views, shadcn-style, over react-resizable-panels v4.
  *

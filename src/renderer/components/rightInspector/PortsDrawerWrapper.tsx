@@ -3,6 +3,7 @@ import {
   ResizablePanelGroup,
   ResizablePanel,
   ResizableHandle,
+  panelEaseMs,
   type PanelImperativeHandle,
 } from '../ui/Resizable';
 import { PortsDrawer } from './PortsDrawer';
@@ -63,11 +64,11 @@ export function PortsDrawerWrapper({
         collapsedSize={COLLAPSED_SIZE}
         onCollapse={() => {
           onCollapse();
-          setTimeout(() => setAnimating(false), 200);
+          setTimeout(() => setAnimating(false), panelEaseMs());
         }}
         onExpand={() => {
           onExpand();
-          setTimeout(() => setAnimating(false), 200);
+          setTimeout(() => setAnimating(false), panelEaseMs());
         }}
       >
         <PortsDrawer

@@ -4,11 +4,13 @@ import {
   ResizablePanelGroup,
   ResizablePanel,
   ResizableHandle,
+  panelEaseMs,
   type PanelImperativeHandle,
 } from './components/ui/Resizable';
 import { LeftSidebar } from './components/leftSidebar/LeftSidebar';
 import { MainContent } from './components/MainContent';
 import { openInIde } from './lib/openInIde';
+import { loadInspectorWidths, saveInspectorWidth } from './lib/inspectorWidths';
 import { headerModelName } from './lib/modelName';
 import { RightInspector } from './components/rightInspector/RightInspector';
 import { editorOpening } from './components/diffEditor/data/viewPersistence';
@@ -64,15 +66,15 @@ const TUI_PANEL_CHROME_PX = 52;
 /** Trim the hugged panel width — the canvas has built-in right whitespace, so
  *  the panel can sit narrower than the full canvas without clipping content. */
 const TUI_PANEL_WIDTH_SCALE = 0.85;
-/** Bounds for the hugged right-panel width (%) — matches the panel's min/max. */
+/** Bounds for the hugged right-panel width (%): the panel's min, and the
+ *  widest a narrow (no diff) sidebar opens at. */
 const TUI_PANEL_MIN_PCT = 14;
 const TUI_PANEL_MAX_PCT = 40;
-/** The shell group's panels; the task sidebar mounts only with an active task.
- *  With a diff open it is `changes-wide`, so its wide size persists apart
- *  from its narrow one. */
+/** The task sidebar's widest, with a diff open. */
+const INSPECTOR_MAX_PCT = 65;
+/** The shell group's panels; the task sidebar mounts only with an active task. */
 const SHELL_PANELS = ['sidebar', 'main'];
-const SHELL_PANELS_NARROW = ['sidebar', 'main', 'changes'];
-const SHELL_PANELS_WIDE = ['sidebar', 'main', 'changes-wide'];
+const SHELL_PANELS_TASK = ['sidebar', 'main', 'changes'];
 const isMac = window.electronAPI.getPlatform() === 'darwin';
 
 export function App() {
@@ -962,15 +964,32 @@ export function App() {
     });
   }, [inlineDiff, setChangesAnimating]);
 
-  // Opening or closing a diff swaps the sidebar between its narrow and wide
-  // panels; ease the width change.
+  // Opening a diff eases the task sidebar to its wide width, closing it back
+  // to its narrow one, each remembered. One panel, resized: swapping panels
+  // re-registers them, and the width jumps. The editor mounts once the
+  // width settles, so Monaco's start-up and layout don't stall the ease.
   const inspectorWide = !!inlineDiff;
+  const [diffSettled, setDiffSettled] = useState(inspectorWide);
   const prevInspectorWideRef = useRef(inspectorWide);
   useEffect(() => {
     if (prevInspectorWideRef.current === inspectorWide) return;
     prevInspectorWideRef.current = inspectorWide;
+    if (!inspectorWide) setDiffSettled(false);
+    const panel = changesPanelRef.current;
+    if (!panel) {
+      setDiffSettled(inspectorWide);
+      return;
+    }
+    if (!panel.isCollapsed()) {
+      saveInspectorWidth(inspectorWide ? 'narrow' : 'wide', panel.getSize().asPercentage);
+    }
+    const widths = loadInspectorWidths();
     setChangesAnimating(true);
-    const id = setTimeout(() => setChangesAnimating(false), 200);
+    panel.resize(`${inspectorWide ? widths.wide : widths.narrow}%`);
+    const id = setTimeout(() => {
+      setChangesAnimating(false);
+      if (inspectorWide) setDiffSettled(true);
+    }, panelEaseMs());
     return () => clearTimeout(id);
   }, [inspectorWide, setChangesAnimating]);
 
@@ -1016,14 +1035,14 @@ export function App() {
       changesSizeBeforeTui.current = panel.getSize().asPercentage;
       setChangesAnimating(true);
       panel.resize(`${targetPct}%`);
-      setTimeout(() => setChangesAnimating(false), 200);
+      setTimeout(() => setChangesAnimating(false), panelEaseMs());
     } else {
       const prev = changesSizeBeforeTui.current;
       changesSizeBeforeTui.current = null;
       if (prev === null) return;
       setChangesAnimating(true);
       panel.resize(`${prev}%`);
-      setTimeout(() => setChangesAnimating(false), 200);
+      setTimeout(() => setChangesAnimating(false), panelEaseMs());
     }
   }, []);
 
@@ -1151,9 +1170,7 @@ export function App() {
         orientation="horizontal"
         className="flex-1"
         autoSaveId="shell"
-        panelIds={
-          !activeTask ? SHELL_PANELS : inspectorWide ? SHELL_PANELS_WIDE : SHELL_PANELS_NARROW
-        }
+        panelIds={activeTask ? SHELL_PANELS_TASK : SHELL_PANELS}
       >
         <ResizablePanel
           id="sidebar"
@@ -1166,11 +1183,11 @@ export function App() {
           collapsedSize="3%"
           onCollapse={() => {
             setSidebarCollapsed(true);
-            setTimeout(() => setSidebarAnimating(false), 200);
+            setTimeout(() => setSidebarAnimating(false), panelEaseMs());
           }}
           onExpand={() => {
             setSidebarCollapsed(false);
-            setTimeout(() => setSidebarAnimating(false), 200);
+            setTimeout(() => setSidebarAnimating(false), panelEaseMs());
           }}
         >
           <LeftSidebar
@@ -1271,21 +1288,31 @@ export function App() {
           <>
             <ResizableHandle disabled={changesPanelCollapsed} />
             <ResizablePanel
-              id={inspectorWide ? 'changes-wide' : 'changes'}
+              id="changes"
               panelRef={changesPanelRef}
               animate={changesAnimating}
-              defaultSize={inspectorWide ? '50%' : startedCollapsed.inspector ? '0%' : '26%'}
-              minSize={inspectorWide ? '30%' : `${TUI_PANEL_MIN_PCT}%`}
-              maxSize={inspectorWide ? '65%' : `${TUI_PANEL_MAX_PCT}%`}
-              collapsible={!inspectorWide}
+              defaultSize={startedCollapsed.inspector ? '0%' : '26%'}
+              minSize={`${TUI_PANEL_MIN_PCT}%`}
+              maxSize={`${INSPECTOR_MAX_PCT}%`}
+              collapsible
               collapsedSize="0%"
               onCollapse={() => {
                 setChangesPanelCollapsed(true);
-                setTimeout(() => setChangesAnimating(false), 200);
+                setTimeout(() => setChangesAnimating(false), panelEaseMs());
               }}
               onExpand={() => {
                 setChangesPanelCollapsed(false);
-                setTimeout(() => setChangesAnimating(false), 200);
+                setTimeout(() => setChangesAnimating(false), panelEaseMs());
+                // The layout persists the width that showed last; one saved
+                // wide (Dash quit with a diff open) opens at the narrow width.
+                const panel = changesPanelRef.current;
+                if (
+                  panel &&
+                  !useGit.getState().diffFile &&
+                  panel.getSize().asPercentage > TUI_PANEL_MAX_PCT
+                ) {
+                  panel.resize(`${loadInspectorWidths().narrow}%`);
+                }
               }}
             >
               {!changesPanelCollapsed && (
@@ -1294,7 +1321,7 @@ export function App() {
                   rateLimits={latestRateLimits ?? {}}
                   burns={burns}
                   contextUsage={contextUsage[activeTask.id]}
-                  diff={inlineDiff}
+                  diff={diffSettled ? inlineDiff : null}
                   terminalTheme={resolvedTerminalTheme}
                   isDark={theme === 'dark'}
                   onViewDiff={handleViewDiff}

@@ -72,8 +72,9 @@ export class TerminalSessionManager {
   private _currentCwd: string;
   private onCwdChangeCallback: ((cwd: string) => void) | null = null;
   private onFindKey: (() => void) | null = null;
-  // 250ms debounce covers panel-transition animations (200ms) to avoid
-  // fitting at intermediate sizes; cancels itself when the container hides
+  // A trailing 250ms debounce: a panel ease (PANEL_EASE_MS) resizes every
+  // frame, so the fit lands once, at the final size; cancels itself when the
+  // container hides
   private fitScheduler = new FitScheduler(() => this.fit(), 250);
   // Swallows Claude Code's redundant mouse-mode re-assertions, which would
   // otherwise make xterm drop the selection on every TUI growth.

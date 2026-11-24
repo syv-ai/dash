@@ -402,11 +402,17 @@
 /* ── Resizable panels ─────────────────────────────────────── */
 
 /* `ResizablePanel animate`: ease collapse/expand and imperative resizes. The
-   library sizes the outer [data-panel] element via flex-grow. */
+   library sizes the outer [data-panel] element via flex-grow. 280ms is
+   PANEL_EASE_MS in ui/Resizable; the curve is an ease-out (cubic). */
 [data-panel][data-animating='true'] {
   transition:
-    flex-grow 200ms ease-out,
-    flex-shrink 200ms ease-out;
+    flex-grow 280ms cubic-bezier(0.33, 1, 0.68, 1),
+    flex-shrink 280ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-panel][data-animating='true'] {
+    transition: none;
+  }
 }
 
 .ports-header {
