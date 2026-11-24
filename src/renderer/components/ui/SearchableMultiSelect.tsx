@@ -142,9 +142,9 @@ export function SearchableMultiSelect<T>({
       <div className="relative" ref={dropdownRef}>
         <div className="flex h-7.5 items-center gap-2 rounded-md bg-hover px-2.5 transition-colors hover:bg-select focus-within:bg-well focus-within:ring-1 focus-within:ring-line">
           {loading ? (
-            <Loader2 size={14} strokeWidth={1.8} className="animate-spin text-ink-3 shrink-0" />
+            <Loader2 size={14} strokeWidth={1.8} className="animate-spin text-icon shrink-0" />
           ) : (
-            <Search size={14} strokeWidth={1.8} className="text-ink-3 shrink-0" />
+            <Search size={14} strokeWidth={1.8} className="text-icon shrink-0" />
           )}
           <input
             ref={searchInputRef}

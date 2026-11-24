@@ -498,7 +498,7 @@ export function TerminalTabs({
               <span className="w-1.5 h-1.5 rounded-full bg-state-done" />
             )
           )}
-          <ChevronUp size={14} strokeWidth={1.8} className="ml-auto text-ink-3" />
+          <ChevronUp size={14} strokeWidth={1.8} className="ml-auto text-icon" />
         </button>
       ) : (
         <div className="relative flex items-center gap-0.5 h-9 shrink-0 pl-1.5">

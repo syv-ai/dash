@@ -73,7 +73,7 @@ export function TaskMenuItems({
   return (
     <>
       <Item onSelect={onOpenIde}>
-        <span className="inline-flex w-3.25 justify-center text-ink-3">
+        <span className="inline-flex w-3.25 justify-center text-icon">
           <IdeIcon ideId={ideId} />
         </span>
         {openLabel}

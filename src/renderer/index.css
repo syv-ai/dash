@@ -7,11 +7,13 @@
 @theme {
   /* ── Role colours: the source of truth ─────────────────────
      ground = app chrome, well = content sheet, raised = menus and dialogs,
-     line = hairlines, ink/ink-2/ink-3 = text tiers, hover/select = row
-     states, btn/btn-ink = the neutral primary button. Colour means agent
+     line = hairlines, ink/ink-2/ink-3 = text tiers, icon = resting
+     icons (between ink-2 and ink-3), hover/select = row states,
+     btn/btn-ink = the neutral primary button. Colour means agent
      state only: needs (amber), fail (red), work (blue), done (green).
      Contrast floor, both themes, on ground and well: ink-2 ≥ 4.5:1 (body
-     text), ink-3 ≥ 3:1 (faint text, resting icons). */
+     text), ink-3 ≥ 3:1 (faint text); icon ≥ 4:1 (dark ≥ 5.3:1 on every
+     surface). */
   --color-ground: hsl(var(--ground));
   --color-well: hsl(var(--well));
   --color-raised: hsl(var(--raised));
@@ -19,6 +21,7 @@
   --color-ink: hsl(var(--ink));
   --color-ink-2: hsl(var(--ink-2));
   --color-ink-3: hsl(var(--ink-3));
+  --color-icon: hsl(var(--icon));
   --color-hover: hsl(var(--hover));
   --color-select: hsl(var(--select));
   --color-btn: hsl(var(--btn));
@@ -157,6 +160,8 @@
     --ink: 225 14% 20%;
     --ink-2: 222 8% 41%;
     --ink-3: 222 6% 53%;
+    /* 4.3:1 on ground, 4.8:1 on well (ink-3: 3.3 / 3.7). */
+    --icon: 222 7% 46%;
     --hover: 225 20% 20% / 0.04;
     --select: 225 20% 20% / 0.065;
     --btn: 225 14% 22%;
@@ -255,6 +260,8 @@
     --ink: 220 6% 91%;
     --ink-2: 220 5% 63%;
     --ink-3: 220 4% 47%;
+    /* 6.0:1 on ground, 5.7:1 on well, 5.4:1 on raised (ink-3: 4.4 / 4.2 / 3.9). */
+    --icon: 220 4.5% 56%;
     --hover: 0 0% 100% / 0.035;
     --select: 0 0% 100% / 0.06;
     --btn: 220 6% 91%;

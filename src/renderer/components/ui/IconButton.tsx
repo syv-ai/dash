@@ -6,7 +6,7 @@ import { Tooltip } from './Tooltip';
 interface IconButtonProps extends Omit<React.ComponentProps<'button'>, 'title'> {
   /** Tooltip text, also the accessible name (not a native title, which would double up). */
   title: string;
-  /** default and muted: ink-3 at rest, ink on hover; destructive: fail on hover. */
+  /** default and muted: icon at rest, ink on hover; destructive: fail on hover. */
   variant?: 'default' | 'destructive' | 'muted';
   /** md = a 30px square (`Button size="icon"`), sm = 24px for dense rows. */
   size?: 'sm' | 'md';
@@ -23,13 +23,13 @@ interface IconButtonProps extends Omit<React.ComponentProps<'button'>, 'title'> 
 
 // `muted` is kept for existing call sites; it now reads the same as `default`.
 const variantStyles = {
-  default: 'text-ink-3 hover:bg-hover hover:text-ink',
-  muted: 'text-ink-3 hover:bg-hover hover:text-ink',
-  destructive: 'text-ink-3 hover:bg-state-fail/12 hover:text-state-fail',
+  default: 'text-icon hover:bg-hover hover:text-ink',
+  muted: 'text-icon hover:bg-hover hover:text-ink',
+  destructive: 'text-icon hover:bg-state-fail/12 hover:text-state-fail',
 } as const;
 
 /** Rest state with the hover feedback removed, for `disabled`. */
-const DISABLED = 'opacity-40 hover:bg-transparent hover:text-ink-3';
+const DISABLED = 'opacity-40 hover:bg-transparent hover:text-icon';
 
 const PRESSED = 'bg-select text-ink hover:bg-select';
 

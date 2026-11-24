@@ -57,7 +57,7 @@ export const Tab = React.forwardRef<HTMLDivElement, TabProps>(function Tab(
         <button
           type="button"
           aria-label={closeLabel ?? 'Close'}
-          className="absolute top-1/2 right-1 hidden size-3.5 -translate-y-1/2 items-center justify-center rounded-sm text-ink-3 transition-colors group-hover/tab:flex hover:bg-hover hover:text-ink"
+          className="absolute top-1/2 right-1 hidden size-3.5 -translate-y-1/2 items-center justify-center rounded-sm text-icon transition-colors group-hover/tab:flex hover:bg-hover hover:text-ink"
           onClick={(e) => {
             e.stopPropagation();
             onClose();

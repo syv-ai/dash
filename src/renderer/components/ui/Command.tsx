@@ -24,7 +24,7 @@ export function CommandInput({
 }: React.ComponentProps<typeof CommandPrimitive.Input>) {
   return (
     <div className="flex items-center gap-2 px-3" cmdk-input-wrapper="">
-      <Search size={14} strokeWidth={1.8} className="shrink-0 text-ink-3" />
+      <Search size={14} strokeWidth={1.8} className="shrink-0 text-icon" />
       <CommandPrimitive.Input
         className={cn(
           'flex h-10 w-full bg-transparent text-base text-ink outline-none placeholder:text-ink-3 disabled:cursor-not-allowed disabled:opacity-40',

@@ -63,7 +63,7 @@ export function FolderRow({
             onChange={onToggleStage}
             aria-label={agg.stageState === true ? 'Unstage folder' : 'Stage folder'}
           />
-          <Chevron size={14} strokeWidth={1.8} className="ml-2 text-ink-3" />
+          <Chevron size={14} strokeWidth={1.8} className="ml-2 text-icon" />
         </>
       }
       trailing={

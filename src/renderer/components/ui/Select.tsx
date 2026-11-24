@@ -56,7 +56,7 @@ export function Select<T extends string>({
           <ChevronDown
             size={14}
             strokeWidth={1.8}
-            className="shrink-0 text-ink-3 transition-transform duration-150 group-data-[state=open]/select:rotate-180"
+            className="shrink-0 text-icon transition-transform duration-150 group-data-[state=open]/select:rotate-180"
           />
         </button>
       </DropdownMenuPrimitive.Trigger>

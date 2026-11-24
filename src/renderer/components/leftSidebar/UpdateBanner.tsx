@@ -38,7 +38,7 @@ export function UpdateBanner() {
     return (
       <Shell>
         <div className="flex items-center gap-2">
-          <Download size={14} strokeWidth={1.8} className="shrink-0 text-ink-3" />
+          <Download size={14} strokeWidth={1.8} className="shrink-0 text-icon" />
           <span className="truncate text-sm text-ink-2">Downloading {version}…</span>
           {status.percent !== null && (
             <span className="ml-auto text-sm tabular-nums text-ink-3">{status.percent}%</span>
