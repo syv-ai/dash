@@ -44,6 +44,7 @@ import {
   DropdownMenuTrigger,
 } from '../components/ui/DropdownMenu';
 import { EmptyState } from '../components/ui/EmptyState';
+import { LineStats } from '../components/ui/LineStats';
 import { IconButton } from '../components/ui/IconButton';
 import { Input } from '../components/ui/Input';
 import { Kbd } from '../components/ui/Kbd';
@@ -300,6 +301,8 @@ function Badges() {
         <TokenBadge totalTokens={184_000} totalCostUsd={1.42} />
         <TokenBadge totalTokens={9_200} totalCostUsd={0.08} size="sm" />
         <MainRepoBadge task={{ id: 'gallery', branch: 'main' }} />
+        <LineStats add={128} del={14} />
+        <LineStats add={3} del={0} className="text-xs" />
       </Line>
       <Line>
         <PrBadge prs={[PR_PASSING]} allPrs={PRS} />

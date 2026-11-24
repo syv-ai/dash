@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, GitCommit, User, Clock, FileText } from 'lucide-react';
 import type { CommitDetail as CommitDetailType } from '../../../shared/types';
+import { LineStats } from '../ui/LineStats';
 
 interface CommitDetailProps {
   detail: CommitDetailType | null;
@@ -146,18 +147,11 @@ export function CommitDetailPanel({
                       changed
                     </span>
                   </div>
-                  <div className="flex gap-3 text-xs font-mono pl-5 tabular-nums">
-                    {detail.stats.additions > 0 && (
-                      <span className="text-[hsl(var(--git-added))]">
-                        +{detail.stats.additions}
-                      </span>
-                    )}
-                    {detail.stats.deletions > 0 && (
-                      <span className="text-[hsl(var(--git-deleted))]">
-                        -{detail.stats.deletions}
-                      </span>
-                    )}
-                  </div>
+                  <LineStats
+                    add={detail.stats.additions}
+                    del={detail.stats.deletions}
+                    className="gap-3 pl-5 text-xs"
+                  />
                 </div>
               )}
 

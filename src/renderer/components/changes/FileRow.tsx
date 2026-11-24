@@ -5,6 +5,7 @@ import { ListRow } from '../ui/ListRow';
 import { Checkbox } from '../ui/Checkbox';
 import { IconButton } from '../ui/IconButton';
 import { Button } from '../ui/Button';
+import { LineStats } from '../ui/LineStats';
 import { cn } from '../../lib/cn';
 import { ROW_TRANSITION, rowEnterExit } from './motionConfig';
 import type { FileChange, FileChangeStatus } from '../../../shared/types';
@@ -53,17 +54,6 @@ export function rowKeys(action: () => void) {
   } as const;
 }
 
-/** Line stats, quiet: "+12 −3". */
-export function LineStats({ add, del }: { add: number; del: number }) {
-  if (!add && !del) return null;
-  return (
-    <span className="flex gap-1 tabular-nums">
-      {add ? <span>+{add}</span> : null}
-      {del ? <span>−{del}</span> : null}
-    </span>
-  );
-}
-
 /** A changed file in the tree: stage checkbox, name, line stats and its git
  *  letter; on hover, discard (or .gitignore an untracked file). Click opens
  *  its diff. */
@@ -102,7 +92,7 @@ export function FileRow({
         <>
           <span className={cn('flex items-center gap-2', hasActions && 'group-hover/row:hidden')}>
             <LineStats add={file.additions} del={file.deletions} />
-            <span className="w-3 text-center font-mono text-xs">{STATUS_LABEL[file.status]}</span>
+            <span className="w-3 text-center text-xs">{STATUS_LABEL[file.status]}</span>
           </span>
           {hasActions && (
             <span className="hidden items-center gap-0.5 group-hover/row:flex">

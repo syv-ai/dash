@@ -5,7 +5,8 @@ import { IconButton } from '../ui/IconButton';
 import { Popover, PopoverTrigger, PopoverContent, PopoverArrow } from '../ui/Popover';
 import { cn } from '../../lib/cn';
 import { Checkbox } from '../ui/Checkbox';
-import { LineStats, rowKeys } from './FileRow';
+import { LineStats } from '../ui/LineStats';
+import { rowKeys } from './FileRow';
 import { DiscardFolderConfirm } from './DiscardFolderConfirm';
 import type { NodeAggregate } from './buildTree';
 

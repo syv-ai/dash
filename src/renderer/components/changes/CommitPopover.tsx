@@ -7,6 +7,7 @@ import { CircleCheck } from '../ui/CircleCheck';
 import { Textarea } from '../ui/Textarea';
 import { Kbd } from '../ui/Kbd';
 import { Tooltip } from '../ui/Tooltip';
+import { LineStats } from '../ui/LineStats';
 import { useGit } from '../../stores/gitStore';
 import type { CommitRun } from './useCommitRun';
 
@@ -100,9 +101,7 @@ export function CommitPopover({ run }: { run: CommitRun }) {
                 {staged.length} {staged.length === 1 ? 'file' : 'files'}
               </span>
             </h4>
-            <span className="font-mono text-xs tabular-nums text-ink-3">
-              +{adds} · −{dels}
-            </span>
+            <LineStats add={adds} del={dels} className="text-xs" />
           </div>
           {error && (
             <div className="flex shrink-0 items-start gap-1.5 rounded-md bg-state-fail/12 px-2 py-1.5 text-xs text-state-fail">
