@@ -408,61 +408,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onRtkDownloadProgress:
     listen<import('@shared/types').RtkDownloadProgress>('rtk:downloadProgress'),
 
-  // Skills
-  skillsRefresh: (args?: { force?: boolean }) => ipcRenderer.invoke('skills:refresh', args),
-  skillsGetMeta: () => ipcRenderer.invoke('skills:getMeta'),
-  skillsGetCategories: () => ipcRenderer.invoke('skills:getCategories'),
-  skillsSearch: (args: import('@shared/types').SkillsSearchArgs) =>
-    ipcRenderer.invoke('skills:search', args),
-  skillsGetContent: (args: import('@shared/types').SkillRef) =>
-    ipcRenderer.invoke('skills:getContent', args),
-  skillsReadLocalSkillMd: (args: {
-    skillName: string;
-    target: import('@shared/types').SkillInstallTarget;
-  }) => ipcRenderer.invoke('skills:readLocalSkillMd', args),
-  skillsInstall: (args: import('@shared/types').SkillInstallArgs) =>
-    ipcRenderer.invoke('skills:install', args),
-  skillsCheckInstalled: (args: {
-    skillName: string;
-    probePaths: string[];
-    ref?: import('@shared/types').SkillRef | null;
-  }) => ipcRenderer.invoke('skills:checkInstalled', args),
-  skillsListInstalled: (args: { probePaths: string[] }) =>
-    ipcRenderer.invoke('skills:listInstalled', args),
-  skillsUninstall: (args: import('@shared/types').SkillUninstallArgs) =>
-    ipcRenderer.invoke('skills:uninstall', args),
-  skillsResetCache: () => ipcRenderer.invoke('skills:resetCache'),
-
-  // Plugins (Claude Code native plugin manager)
-  pluginsGetOverview: () => ipcRenderer.invoke('plugins:getOverview'),
-  pluginsAddMarketplace: (args: import('@shared/types').AddMarketplaceArgs) =>
-    ipcRenderer.invoke('plugins:addMarketplace', args),
-  pluginsRemoveMarketplace: (args: import('@shared/types').RemoveMarketplaceArgs) =>
-    ipcRenderer.invoke('plugins:removeMarketplace', args),
-  pluginsUpdateMarketplace: (args?: { name?: string }) =>
-    ipcRenderer.invoke('plugins:updateMarketplace', args),
-  pluginsInstall: (args: import('@shared/types').PluginInstallArgs) =>
-    ipcRenderer.invoke('plugins:install', args),
-  pluginsUninstall: (args: import('@shared/types').PluginUninstallArgs) =>
-    ipcRenderer.invoke('plugins:uninstall', args),
-  pluginsSetEnabled: (args: import('@shared/types').PluginSetEnabledArgs) =>
-    ipcRenderer.invoke('plugins:setEnabled', args),
-
-  // Extensions (unified skills + plugins overview)
-  extensionsGetOverview: (args: import('@shared/types').ExtensionScopeInput) =>
-    ipcRenderer.invoke('extensions:getOverview', args),
-  extensionsSetSkillOverride: (args: import('@shared/types').SetSkillOverrideArgs) =>
-    ipcRenderer.invoke('extensions:setSkillOverride', args),
-  extensionsGetPluginComponents: (args: import('@shared/types').GetPluginComponentsArgs) =>
-    ipcRenderer.invoke('extensions:getPluginComponents', args),
-  extensionsGetPluginComponentDetail: (
-    args: import('@shared/types').GetPluginComponentDetailArgs,
-  ) => ipcRenderer.invoke('extensions:getPluginComponentDetail', args),
-  extensionsGetSkillDetail: (args: import('@shared/types').GetSkillDetailArgs) =>
-    ipcRenderer.invoke('extensions:getSkillDetail', args),
-  extensionsGetRegistrySkillDetail: (args: import('@shared/types').SkillRef) =>
-    ipcRenderer.invoke('extensions:getRegistrySkillDetail', args),
-
   // Sessions under Claude Code's supervisor
   sessionList: (args?: { refresh?: boolean }) => ipcRenderer.invoke('session:list', args),
   onSessionList: listen<unknown>('session:list'),

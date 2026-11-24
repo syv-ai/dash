@@ -5,12 +5,19 @@ import {
   MEMORY_TYPES,
 } from '@shared/types';
 import type { MemoryEntry, MemoryFields, MemoryType } from '@shared/types';
-import { stripQuotes } from './skillFrontmatter';
 
 const FRONTMATTER_RE = /^---\s*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
 const KEY_RE = /^(\s*)([A-Za-z0-9_-]+):\s*(.*)$/;
 // A block scalar's header: the value is the deeper-indented lines below it.
 const BLOCK_RE = /^[>|][+-]?\d*$/;
+
+function stripQuotes(v: string): string {
+  const t = v.trim();
+  if (t.length >= 2 && ((t[0] === '"' && t.endsWith('"')) || (t[0] === "'" && t.endsWith("'")))) {
+    return t.slice(1, -1);
+  }
+  return t;
+}
 
 export function toMemoryType(raw: string): MemoryType {
   const t = raw.trim().toLowerCase();

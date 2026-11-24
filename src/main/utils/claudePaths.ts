@@ -45,11 +45,6 @@ export function claudeConfigDir(): string {
   return process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
 }
 
-/** Global skills: `<config dir>/skills`. */
-export function claudeSkillsDir(): string {
-  return path.join(claudeConfigDir(), 'skills');
-}
-
 /** User settings: `<config dir>/settings.json`. */
 export function claudeUserSettingsFile(): string {
   return path.join(claudeConfigDir(), 'settings.json');

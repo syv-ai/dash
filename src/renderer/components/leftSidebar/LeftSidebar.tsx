@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Plus, Settings, Blocks } from 'lucide-react';
+import { Plus, Settings } from 'lucide-react';
 import type { Project, Task, ContextUsage } from '../../../shared/types';
 import { Tooltip } from '../ui/Tooltip';
 import { IconButton } from '../ui/IconButton';
@@ -39,7 +39,6 @@ interface LeftSidebarProps {
   onReorderRotation?: (reordered: Task[]) => void;
   onRemoveFromRotation?: (taskId: string) => void;
   onToggleActiveTasksSection?: () => void;
-  onOpenSkillsBrowser?: () => void;
 }
 
 export function LeftSidebar({
@@ -69,7 +68,6 @@ export function LeftSidebar({
   rotationTasks = [],
   onReorderRotation,
   onRemoveFromRotation,
-  onOpenSkillsBrowser,
 }: LeftSidebarProps) {
   const showActiveTasksSection = useSettings((s) => s.showActiveTasksSection);
   const taskActivity = useRuntime((s) => s.taskActivity);
@@ -212,15 +210,6 @@ export function LeftSidebar({
 
         <div className="glass-hairline w-6 my-1 shrink-0" />
 
-        <Tooltip content="Extensions">
-          <button
-            onClick={onOpenSkillsBrowser}
-            className="w-8 h-8 rounded-md flex items-center justify-center shrink-0 hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors titlebar-no-drag"
-          >
-            <Blocks size={16} strokeWidth={1.5} />
-          </button>
-        </Tooltip>
-
         <Tooltip content="Settings">
           <button
             onClick={onOpenSettings}
@@ -291,16 +280,8 @@ export function LeftSidebar({
       {/* Update banner — persistent, above the footer actions */}
       <UpdateBanner />
 
-      {/* Skills & Settings */}
+      {/* Settings */}
       <div className="glass-hairline-t flex items-center gap-1 px-3 py-3">
-        <IconButton
-          onClick={() => onOpenSkillsBrowser?.()}
-          title="Extensions"
-          variant="muted"
-          className="titlebar-no-drag"
-        >
-          <Blocks size={14} strokeWidth={1.8} />
-        </IconButton>
         <IconButton
           onClick={onOpenSettings}
           title="Settings"

@@ -5,7 +5,7 @@ import { CountBadge } from './CountBadge';
  * Canonical segmented control: a recessed track with a sliding raised pill behind
  * the active option. Edges read via elevation (sunken track / raised pill), not
  * hairlines. Use anywhere a small set of mutually exclusive views/options is
- * switched inline (Settings tabs, the Extensions Installed/Browse switch, etc.).
+ * switched inline (e.g. Settings tabs).
  */
 export function Segmented<T extends string | number | null>({
   value,

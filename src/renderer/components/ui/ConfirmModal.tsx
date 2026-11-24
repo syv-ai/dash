@@ -4,7 +4,7 @@ import { Modal } from './Modal';
 import { Button } from './Button';
 
 /** A warning confirmation with Cancel / confirm buttons, rendered as a nested
- *  modal over whatever dialog asked (Extensions scope changes, task settings),
+ *  modal over whatever dialog asked (e.g. task settings),
  *  or on its own (an agent outside Dash asking for access). */
 export function ConfirmModal({
   message,

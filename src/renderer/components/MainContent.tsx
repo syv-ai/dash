@@ -8,7 +8,6 @@ import { useRuntime } from '../stores/runtimeStore';
 import {
   FolderOpen,
   MoreHorizontal,
-  Blocks,
   GitBranch,
   FolderGit2,
   Globe,
@@ -109,8 +108,6 @@ interface MainContentProps {
   /** The model the active task's session is running (live, from its status line). */
   modelName?: string | null;
   onOpenIde?: () => void;
-  // Open the Extensions browser filtered to the given scope (taskId or projectId).
-  onOpenExtensions?: (scopeId: string) => void;
   onNewTask?: () => void;
   onProjectSettings?: () => void;
   onShowCommitGraph?: () => void;
@@ -137,7 +134,6 @@ export function MainContent({
   onEnableRemoteControl,
   modelName,
   onOpenIde,
-  onOpenExtensions,
   onNewTask,
   onProjectSettings,
   onShowCommitGraph,
@@ -307,18 +303,6 @@ export function MainContent({
                   <span className="ml-auto text-[10px] font-medium text-primary">On</span>
                 )}
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() =>
-                  onOpenExtensions?.(
-                    activeTask.useWorktree
-                      ? `task:${activeTask.id}`
-                      : `project:${activeProject.id}`,
-                  )
-                }
-              >
-                <Blocks size={13} strokeWidth={1.8} className="text-muted-foreground" />
-                Extensions
-              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <TaskMenuItems
                 taskId={activeTask.id}
@@ -373,7 +357,6 @@ export function MainContent({
             onSelectTask={(id) => onSelectTask?.(id)}
             onNewTask={() => onNewTask?.()}
             onProjectSettings={() => onProjectSettings?.()}
-            onOpenExtensions={() => onOpenExtensions?.(`project:${activeProject.id}`)}
             onShowCommitGraph={() => onShowCommitGraph?.()}
             onDeleteProject={() => onDeleteProject?.()}
             onCloseTask={(id) => onCloseTask?.(id)}

@@ -8,7 +8,6 @@ import {
   FolderOpen,
   Settings,
   GitGraph,
-  Blocks,
   Trash2,
   Globe,
   ChevronRight,
@@ -31,7 +30,6 @@ interface ProjectOverviewProps {
   onSelectTask: (id: string) => void;
   onNewTask: () => void;
   onProjectSettings: () => void;
-  onOpenExtensions: () => void;
   onShowCommitGraph: () => void;
   onDeleteProject: () => void;
   onCloseTask: (id: string) => void;
@@ -109,7 +107,6 @@ export function ProjectOverview({
   onSelectTask,
   onNewTask,
   onProjectSettings,
-  onOpenExtensions,
   onShowCommitGraph,
   onDeleteProject,
   onCloseTask,
@@ -191,9 +188,6 @@ export function ProjectOverview({
             <div className="flex items-center gap-1 shrink-0 ml-4">
               <IconButton onClick={onShowCommitGraph} title="Commit graph">
                 <GitGraph size={15} strokeWidth={1.8} />
-              </IconButton>
-              <IconButton onClick={onOpenExtensions} title="Extensions">
-                <Blocks size={15} strokeWidth={1.8} />
               </IconButton>
               <IconButton onClick={onProjectSettings} title="Project settings">
                 <Settings size={15} strokeWidth={1.8} />

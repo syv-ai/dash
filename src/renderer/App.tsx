@@ -17,7 +17,6 @@ const DiffEditorModal = lazy(() => import('./components/diffEditor/DiffEditorMod
 import { ShellDrawerWrapper } from './components/terminal/ShellDrawerWrapper';
 import { useSetup } from './stores/setupStore';
 import { CommitGraphModal } from './components/CommitGraph/CommitGraphModal';
-import { ExtensionsModal } from './components/extensions/ExtensionsModal';
 import { MemoryModal } from './components/memory/MemoryModal';
 import { TaskModal } from './components/task/TaskModal';
 import { NewProjectWizard } from './components/newProject/NewProjectWizard';
@@ -106,10 +105,6 @@ export function App() {
   const setAdoSetup = useUi((s) => s.setAdoSetup);
   const showSettings = useUi((s) => s.showSettings);
   const setShowSettings = useUi((s) => s.setShowSettings);
-  const showSkillsBrowser = useUi((s) => s.showSkillsBrowser);
-  const setShowSkillsBrowser = useUi((s) => s.setShowSkillsBrowser);
-  const extensionsInitialScopeId = useUi((s) => s.extensionsInitialScopeId);
-  const setExtensionsInitialScopeId = useUi((s) => s.setExtensionsInitialScopeId);
   const memoryProjectId = useUi((s) => s.memoryProjectId);
   const setMemoryProjectId = useUi((s) => s.setMemoryProjectId);
   const memoryProject = projects.find((p) => p.id === memoryProjectId) ?? null;
@@ -476,32 +471,6 @@ export function App() {
     });
   }, []);
 
-  // Memoized props for ExtensionsModal. Without these, App.tsx re-renders (terminal
-  // activity, git polls, PTY events) hand the modal new array references every time,
-  // and the modal's overview useCallback re-fires its refetch effect — flickering
-  // the list back to a loading state on every unrelated re-render.
-  const skillsModalProjects = useMemo(
-    () => projects.map((p) => ({ id: p.id, name: p.name, path: p.path })),
-    [projects],
-  );
-  const skillsModalActiveTasks = useMemo(
-    () =>
-      projects.flatMap((p) => {
-        const tasks = tasksByProject[p.id] ?? [];
-        // Only worktree-backed, non-archived tasks: a task without a worktree shares the
-        // project root, so installing there would just be a project install.
-        return tasks
-          .filter((t) => t.useWorktree && !t.archivedAt)
-          .map((t) => ({
-            taskId: t.id,
-            name: t.name,
-            worktreePath: t.path,
-            projectId: p.id,
-          }));
-      }),
-    [projects, tasksByProject],
-  );
-
   // Rotation: all tasks with a live session, minus exclusions. A sleeping
   // (`stopped`) session has no orb and isn't active, so it stays out.
   const rotationTasks = React.useMemo(() => {
@@ -858,9 +827,6 @@ export function App() {
         } else if (showCommitGraph) {
           e.preventDefault();
           setShowCommitGraph(false);
-        } else if (showSkillsBrowser) {
-          e.preventDefault();
-          setShowSkillsBrowser(false);
         } else if (showSettings) {
           e.preventDefault();
           setShowSettings(false);
@@ -916,7 +882,6 @@ export function App() {
     deleteProjectTarget,
     diffFile,
     showCommitGraph,
-    showSkillsBrowser,
     showSettings,
     showTaskModal,
     showAddProjectModal,
@@ -1198,10 +1163,6 @@ export function App() {
             onReorderRotation={handleReorderRotation}
             onRemoveFromRotation={removeFromRotation}
             onToggleActiveTasksSection={() => setShowActiveTasksSection(!showActiveTasksSection)}
-            onOpenSkillsBrowser={() => {
-              setExtensionsInitialScopeId(null);
-              setShowSkillsBrowser(true);
-            }}
           />
         </Panel>
         <PanelResizeHandle
@@ -1252,10 +1213,6 @@ export function App() {
               }
               onOpenIde={() => {
                 if (activeTask) void openInIde(activeTask.path);
-              }}
-              onOpenExtensions={(scopeId) => {
-                setExtensionsInitialScopeId(scopeId);
-                setShowSkillsBrowser(true);
               }}
               onNewTask={() => {
                 if (activeProjectId) void handleNewTask(activeProjectId);
@@ -1573,15 +1530,6 @@ export function App() {
             setShowCommitGraph(false);
             setCommitGraphFocusHash(null);
           }}
-        />
-      )}
-
-      {showSkillsBrowser && (
-        <ExtensionsModal
-          projects={skillsModalProjects}
-          activeTasks={skillsModalActiveTasks}
-          initialScopeId={extensionsInitialScopeId}
-          onClose={() => setShowSkillsBrowser(false)}
         />
       )}
 

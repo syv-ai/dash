@@ -11,9 +11,6 @@ import type { AdoApi } from './electron-api/ado';
 import type { PrReviewApi } from './electron-api/prReview';
 import type { EditorApi } from './electron-api/editor';
 import type { RtkApi } from './electron-api/rtk';
-import type { SkillsApi } from './electron-api/skills';
-import type { PluginsApi } from './electron-api/plugins';
-import type { ExtensionsApi } from './electron-api/extensions';
 import type { SessionApi } from './electron-api/session';
 import type { TelemetryApi } from './electron-api/telemetry';
 import type { AutoUpdateApi } from './electron-api/autoUpdate';
@@ -46,9 +43,6 @@ export interface ElectronAPI
     PrReviewApi,
     EditorApi,
     RtkApi,
-    SkillsApi,
-    PluginsApi,
-    ExtensionsApi,
     SessionApi,
     TelemetryApi,
     AutoUpdateApi,

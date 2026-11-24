@@ -6,7 +6,6 @@ import * as path from 'path';
 import {
   claudeConfigDir,
   claudeProjectDir,
-  claudeSkillsDir,
   claudeStateFile,
   claudeUserSettingsFile,
   isWorkspaceTrusted,
@@ -101,12 +100,11 @@ describe('claudeConfigDir / claudeProjectDir', () => {
     );
   });
 
-  it('places global skills and user settings under the config dir', () => {
+  it('places user settings under the config dir', () => {
     process.env.CLAUDE_CONFIG_DIR = '/tmp/alt-claude';
-    expect(claudeSkillsDir()).toBe('/tmp/alt-claude/skills');
     expect(claudeUserSettingsFile()).toBe('/tmp/alt-claude/settings.json');
     delete process.env.CLAUDE_CONFIG_DIR;
-    expect(claudeSkillsDir()).toBe(path.join(os.homedir(), '.claude', 'skills'));
+    expect(claudeUserSettingsFile()).toBe(path.join(os.homedir(), '.claude', 'settings.json'));
   });
 });
 
