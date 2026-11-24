@@ -491,7 +491,7 @@ export function EditorPane({
       {stale && (
         <StaleBanner
           onOverwrite={() => void overwrite()}
-          onReload={reloadFromDisk}
+          onReload={() => void reloadFromDisk()}
           onCancel={() => setStale(null)}
         />
       )}

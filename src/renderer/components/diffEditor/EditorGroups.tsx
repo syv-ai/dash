@@ -23,6 +23,7 @@ import {
 } from './models';
 import { TreeToggle } from './TreeToggle';
 import { addCloseGuard } from './closeGuard';
+import { confirm } from '../ui/ConfirmHost';
 import { absolutePath } from './editor/fileRef';
 import { LspStatusIndicator } from './LspStatusIndicator';
 import { installLsp } from '../../lsp';
@@ -87,18 +88,29 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
   // Once the discard is agreed, a second ask in the same close passes.
   useEffect(() => {
     let agreed = false;
-    return addCloseGuard(() => {
+    return addCloseGuard(async () => {
       if (agreed || !anyDirtyUnder(cwd)) return true;
-      agreed = window.confirm('Discard unsaved changes?');
+      agreed = await confirm({
+        message: 'Discard unsaved changes?',
+        confirmLabel: 'Discard',
+        destructive: true,
+      });
       return agreed;
     });
   }, [cwd]);
 
   // Closing a file's last tab drops its unsaved edits: ask first.
-  const closeTab = (group: GroupIndex, path: string) => {
+  const closeTab = async (group: GroupIndex, path: string) => {
     const lastTab = layout.groups.filter((g) => g.tabs.includes(path)).length === 1;
     const dirty = isDirty(workingUri(absolutePath(cwd, path)));
-    if (lastTab && dirty && !window.confirm(`Discard unsaved changes to ${path}?`)) return;
+    if (lastTab && dirty) {
+      const discard = await confirm({
+        message: `Discard unsaved changes to ${path}?`,
+        confirmLabel: 'Discard',
+        destructive: true,
+      });
+      if (!discard) return;
+    }
     ws.closeTab(group, path);
   };
 
@@ -108,7 +120,7 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
     if (!active) return;
     e.preventDefault();
     e.stopPropagation();
-    closeTab(layout.focused, active);
+    void closeTab(layout.focused, active);
   };
 
   const reveal = useEditorTabs((s) => (s.reveal?.key === tabsKey ? s.reveal : null));
@@ -151,7 +163,7 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
                     preview={group.preview}
                     focused={!split || layout.focused === index}
                     onSelect={(path) => ws.activateTab(index, path)}
-                    onClose={(path) => closeTab(index, path)}
+                    onClose={(path) => void closeTab(index, path)}
                     onPin={(path) => ws.pinTab(index, path)}
                     leading={i === 0 ? <TreeToggle /> : undefined}
                     onSplit={

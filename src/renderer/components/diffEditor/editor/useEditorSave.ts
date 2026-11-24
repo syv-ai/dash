@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
 import { diskStamp, isDirty, markSaved, type DiskStamp } from '../models';
+import { confirm } from '../../ui/ConfirmHost';
 
 export interface StaleInfo {
   currentMtimeMs: number;
@@ -20,7 +21,7 @@ export interface SaveApi {
    *  (overwrite passes the on-disk values it just learned). */
   save(expected?: DiskStamp): Promise<void>;
   overwrite(): Promise<void>;
-  reloadFromDisk(): void;
+  reloadFromDisk(): Promise<void>;
 }
 
 interface Args {
@@ -90,9 +91,14 @@ export function useEditorSave({ cwd, filePath, model, reload }: Args): SaveApi {
     [cwd, filePath, model],
   );
 
-  const reloadFromDisk = useCallback(() => {
+  const reloadFromDisk = useCallback(async () => {
     if (model && isDirty(model.uri.toString())) {
-      if (!window.confirm('Discard unsaved changes and reload from disk?')) return;
+      const discard = await confirm({
+        message: 'Discard unsaved changes and reload from disk?',
+        confirmLabel: 'Discard',
+        destructive: true,
+      });
+      if (!discard) return;
     }
     setStale(null);
     setSaveError(null);

@@ -49,6 +49,7 @@ import { useSettings } from './stores/settingsStore';
 import { useUi } from './stores/uiStore';
 import { useGit } from './stores/gitStore';
 import { mayCloseEditor } from './components/diffEditor/closeGuard';
+import { ConfirmHost } from './components/ui/ConfirmHost';
 import { useRuntime } from './stores/runtimeStore';
 import { useAppBootstrap } from './hooks/useAppBootstrap';
 import { useShallow } from 'zustand/react/shallow';
@@ -943,12 +944,14 @@ export function App() {
   // focus. Not while the memory modal is still up: typing would reach Claude
   // unseen.
   const closeDiff = useCallback(() => {
-    if (!mayCloseEditor()) return;
-    setDiffFile(null);
-    const id = useProjects.getState().activeTaskId;
-    if (id && !useUi.getState().memoryProjectId) {
-      requestAnimationFrame(() => sessionRegistry.get(id)?.focus());
-    }
+    void mayCloseEditor().then((ok) => {
+      if (!ok) return;
+      setDiffFile(null);
+      const id = useProjects.getState().activeTaskId;
+      if (id && !useUi.getState().memoryProjectId) {
+        requestAnimationFrame(() => sessionRegistry.get(id)?.focus());
+      }
+    });
   }, [setDiffFile]);
 
   // A diff belongs to the task it was opened on: switching tasks closes it.
@@ -1581,6 +1584,8 @@ export function App() {
         </Suspense>
       )}
 
+      {/* After every other modal, so a confirm shows over the one that asked. */}
+      <ConfirmHost />
       <ToastContainer />
     </div>
   );

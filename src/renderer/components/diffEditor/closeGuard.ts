@@ -1,11 +1,12 @@
 /*
  * Closing the editor drops its unsaved edits, so every way of closing it (the
- * sidebar's close button, Escape, the keybinding, the modal's ×) asks first.
- * Those live outside the editor, which is lazy-loaded with Monaco; this module
- * stays Monaco-free so they can call it. A mounted editor registers the check.
+ * sidebar's close button, Escape, the keybinding, the modal's own close) asks
+ * first. Those live outside the editor, which is lazy-loaded with Monaco; this
+ * module stays Monaco-free so they can call it. A mounted editor registers the
+ * check.
  */
 
-type Guard = () => boolean;
+type Guard = () => boolean | Promise<boolean>;
 
 const guards = new Set<Guard>();
 
@@ -17,7 +18,7 @@ export function addCloseGuard(guard: Guard): () => void {
 }
 
 /** True when every mounted editor agrees to close (asking about unsaved edits). */
-export function mayCloseEditor(): boolean {
-  for (const guard of guards) if (!guard()) return false;
+export async function mayCloseEditor(): Promise<boolean> {
+  for (const guard of guards) if (!(await guard())) return false;
   return true;
 }
