@@ -13,8 +13,27 @@ if (resolvedFont !== DEFAULT_FONT_MONO_STACK) {
   document.documentElement.style.setProperty('--terminal-font', resolvedFont);
 }
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+const root = ReactDOM.createRoot(document.getElementById('root')!);
+
+// `?gallery` shows the primitives gallery instead of the app (dev only: the
+// branch is dead code in production builds, so the gallery isn't bundled).
+if (import.meta.env.DEV && new URLSearchParams(window.location.search).has('gallery')) {
+  void import('./gallery/electronApiStub')
+    .then(({ installElectronApiStub }) => {
+      installElectronApiStub();
+      return import('./gallery/Gallery');
+    })
+    .then(({ Gallery }) =>
+      root.render(
+        <React.StrictMode>
+          <Gallery />
+        </React.StrictMode>,
+      ),
+    );
+} else {
+  root.render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>,
+  );
+}
