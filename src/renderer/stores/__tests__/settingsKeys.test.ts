@@ -38,6 +38,7 @@ describe('settings registry', () => {
     const byField = Object.fromEntries(SETTINGS_REGISTRY.map((r) => [r.field, r]));
     expect(byField.showRateLimits!.codec.decode(null)).toBe(true); // boolNotFalse
     expect(byField.showUsageInline!.codec.decode('false')).toBe(false);
+    expect(byField.showBurnRate!.codec.decode(null)).toBe(false); // opt-in (D33)
     expect(byField.desktopNotification!.codec.decode(null)).toBe(false); // boolDefaultFalse
     expect(byField.syncShellEnv!.codec.decode('true')).toBe(true);
     expect(byField.showProjectTokens!.codec.decode(null)).toBe(true); // boolDefaultTrue

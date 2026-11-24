@@ -4,6 +4,7 @@ import {
   burnFor,
   formatEta,
   formatRate,
+  pressingBurn,
   limitBurns,
   ratePerHour,
   recordLimits,
@@ -135,6 +136,30 @@ describe('limitBurns', () => {
     });
     expect(burns.fiveHour?.perHour).toBeCloseTo(12);
     expect(burns.sevenDay).toBeNull();
+  });
+});
+
+describe('pressingBurn', () => {
+  const burn = (perHour: number, toLimitMs: number | null) => ({ perHour, toLimitMs });
+
+  it('is null when no limit is burning', () => {
+    expect(pressingBurn({})).toBeNull();
+    expect(pressingBurn({ fiveHour: null, sevenDay: null })).toBeNull();
+  });
+
+  it('picks the limit reached soonest', () => {
+    const got = pressingBurn({ fiveHour: burn(10, 5 * HOUR), sevenDay: burn(1, 2 * HOUR) });
+    expect(got?.limit).toBe('sevenDay');
+  });
+
+  it('prefers a limit that will be reached over one that resets first', () => {
+    const got = pressingBurn({ fiveHour: burn(30, null), sevenDay: burn(1, 40 * HOUR) });
+    expect(got?.limit).toBe('sevenDay');
+  });
+
+  it('falls back to the faster rate when both reset first', () => {
+    const got = pressingBurn({ fiveHour: burn(2, null), sevenDay: burn(0.5, null) });
+    expect(got?.limit).toBe('fiveHour');
   });
 });
 

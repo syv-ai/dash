@@ -348,6 +348,8 @@ function UsageSection({ latestRateLimits }: { latestRateLimits?: RateLimits }) {
   const onThresholdsChange = useSettings((s) => s.setUsageThresholds);
   const showRateLimits = useSettings((s) => s.showRateLimits);
   const onShowRateLimitsChange = useSettings((s) => s.setShowRateLimits);
+  const showBurnRate = useSettings((s) => s.showBurnRate);
+  const onShowBurnRateChange = useSettings((s) => s.setShowBurnRate);
   const showUsageInline = useSettings((s) => s.showUsageInline);
   const onShowUsageInlineChange = useSettings((s) => s.setShowUsageInline);
   const showTaskTokens = useSettings((s) => s.showTaskTokens);
@@ -414,12 +416,23 @@ function UsageSection({ latestRateLimits }: { latestRateLimits?: RateLimits }) {
       <SettingsCard title="Display">
         <SettingsRow
           label="Show rate limits"
-          description="5-hour and 7-day account bars in the right sidebar."
+          description="5-hour and weekly account limits in the right sidebar's usage row."
           control={<Switch checked={showRateLimits} onCheckedChange={onShowRateLimitsChange} />}
         />
         <SettingsRow
+          label="Show burn rate"
+          description="How fast the 5-hour and weekly limits are being used, once there's enough data."
+          control={
+            <Switch
+              checked={showBurnRate}
+              onCheckedChange={onShowBurnRateChange}
+              disabled={!showRateLimits}
+            />
+          }
+        />
+        <SettingsRow
           label="Show context usage"
-          description="Current session's context-window bar in the right sidebar."
+          description="The task session's context-window use, first in the usage row."
           control={<Switch checked={showUsageInline} onCheckedChange={onShowUsageInlineChange} />}
         />
         <SettingsRow

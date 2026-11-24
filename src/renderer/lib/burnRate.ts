@@ -133,6 +133,27 @@ export function limitBurns(histories: LimitHistories, limits: RateLimits): Limit
   return out;
 }
 
+/**
+ * The burn worth showing when there is room for one: the limit reached
+ * soonest at its pace, else (both reset first) the faster one. Null when
+ * neither limit is burning.
+ */
+export function pressingBurn(burns: LimitBurns): { limit: LimitKey; burn: Burn } | null {
+  let best: { limit: LimitKey; burn: Burn } | null = null;
+  for (const limit of Object.keys(BURN_WINDOW_MS) as LimitKey[]) {
+    const burn = burns[limit];
+    if (!burn) continue;
+    if (!best || soonerOrFaster(burn, best.burn)) best = { limit, burn };
+  }
+  return best;
+}
+
+function soonerOrFaster(a: Burn, b: Burn): boolean {
+  if (a.toLimitMs !== null && b.toLimitMs !== null) return a.toLimitMs < b.toLimitMs;
+  if (a.toLimitMs !== null || b.toLimitMs !== null) return a.toLimitMs !== null;
+  return a.perHour > b.perHour;
+}
+
 /** "+6%/h"; under 10, one decimal ("+0.4%/h", "+2.5%/h"). */
 export function formatRate(perHour: number): string {
   const n = perHour < 10 ? Math.round(perHour * 10) / 10 : Math.round(perHour);

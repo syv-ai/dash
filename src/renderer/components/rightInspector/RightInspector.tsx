@@ -16,7 +16,7 @@ import { CommitPopover } from '../changes/CommitPopover';
 import { useCommitRun } from '../changes/useCommitRun';
 import { ShellDrawerWrapper } from '../terminal/ShellDrawerWrapper';
 import { PortsDrawerWrapper } from './PortsDrawerWrapper';
-import { UsageBlock } from './UsageBlock';
+import { UsageRow } from './UsageRow';
 import { IconButton } from '../ui/IconButton';
 import { Segmented } from '../ui/Segmented';
 import { CountBadge } from '../ui/CountBadge';
@@ -73,11 +73,12 @@ function withShortcut(label: string, binding: KeyBinding | undefined): string {
 }
 
 /**
- * The task sidebar. Narrow: a list (changes, or the commits) over the task's
- * terminals, its usage at the foot. Wide, with the editor open: the list (the
- * changes, the repo's files, or the commits) runs full height on the left
- * over the usage; the editor sits over the terminals on the right. The
- * terminals stay mounted across both, so the shell is never re-attached.
+ * The task sidebar: its usage in one row on top, then the view switch.
+ * Narrow: a list (changes, or the commits) over the task's terminals. Wide,
+ * with the editor open: the list (the changes, the repo's files, or the
+ * commits) runs full height on the left; the editor sits over the terminals
+ * on the right. The terminals stay mounted across both, so the shell is
+ * never re-attached.
  */
 export function RightInspector({
   task,
@@ -288,10 +289,11 @@ export function RightInspector({
     </PortsDrawerWrapper>
   );
 
-  const usage = <UsageBlock contextUsage={contextUsage} rateLimits={rateLimits} burns={burns} />;
-
   return (
-    <div className="flex h-full min-w-0 flex-col bg-ground pt-2 pr-2">
+    // pb-2: the terminal sheet keeps the same 8px gutter from the window's
+    // bottom edge as the main sheet.
+    <div className="flex h-full min-w-0 flex-col bg-ground pt-2 pr-2 pb-2">
+      <UsageRow contextUsage={contextUsage} rateLimits={rateLimits} burns={burns} />
       {header}
       <div className="min-h-0 flex-1">
         <ResizablePanelGroup
@@ -304,51 +306,45 @@ export function RightInspector({
           {wide && (
             <>
               <ResizablePanel id="list" defaultSize="30%" minSize="15%" maxSize="50%">
-                <div className="flex h-full min-h-0 flex-col pr-2">
-                  <div className="min-h-0 flex-1">{withPorts(tree)}</div>
-                  {usage}
-                </div>
+                <div className="h-full min-h-0 pr-2">{withPorts(tree)}</div>
               </ResizablePanel>
               <ResizableHandle />
             </>
           )}
           <ResizablePanel id="main" minSize="40%">
-            <div className="flex h-full min-h-0 flex-col">
-              <div className="min-h-0 flex-1">
-                <ShellDrawerWrapper
-                  taskId={task.id}
-                  cwd={task.path}
-                  collapsed={shellDrawerCollapsed}
-                  label={task.useWorktree ? 'Worktree' : 'Terminal'}
-                  terminalBg={terminalTheme.background}
-                  panelRef={shellDrawerRef}
-                  animating={shellDrawerAnimating}
-                  onAnimate={() => setShellDrawerAnimating(true)}
-                  onCollapse={() => settleShellDrawer(true)}
-                  onExpand={() => settleShellDrawer(false)}
-                  onTuiActiveChange={onTuiActiveChange}
-                >
-                  {wide ? (
-                    <EditorSheet
-                      terminalBg={terminalTheme.background}
-                      closeBinding={keybindings.closeDiff}
-                      onClose={onCloseDiff}
-                    >
-                      <Suspense fallback={null}>
-                        <EditorGroups
-                          ws={ws}
-                          terminalTheme={terminalTheme}
-                          isDark={isDark}
-                          onClose={onCloseDiff}
-                        />
-                      </Suspense>
-                    </EditorSheet>
-                  ) : (
-                    withPorts(list)
-                  )}
-                </ShellDrawerWrapper>
-              </div>
-              {!wide && usage}
+            <div className="h-full min-h-0">
+              <ShellDrawerWrapper
+                taskId={task.id}
+                cwd={task.path}
+                collapsed={shellDrawerCollapsed}
+                label={task.useWorktree ? 'Worktree' : 'Terminal'}
+                terminalBg={terminalTheme.background}
+                panelRef={shellDrawerRef}
+                animating={shellDrawerAnimating}
+                onAnimate={() => setShellDrawerAnimating(true)}
+                onCollapse={() => settleShellDrawer(true)}
+                onExpand={() => settleShellDrawer(false)}
+                onTuiActiveChange={onTuiActiveChange}
+              >
+                {wide ? (
+                  <EditorSheet
+                    terminalBg={terminalTheme.background}
+                    closeBinding={keybindings.closeDiff}
+                    onClose={onCloseDiff}
+                  >
+                    <Suspense fallback={null}>
+                      <EditorGroups
+                        ws={ws}
+                        terminalTheme={terminalTheme}
+                        isDark={isDark}
+                        onClose={onCloseDiff}
+                      />
+                    </Suspense>
+                  </EditorSheet>
+                ) : (
+                  withPorts(list)
+                )}
+              </ShellDrawerWrapper>
             </div>
           </ResizablePanel>
         </ResizablePanelGroup>
