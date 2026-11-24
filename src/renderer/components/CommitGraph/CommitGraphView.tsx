@@ -221,7 +221,7 @@ export function CommitGraphView({
           detail={detail}
           loading={detailLoading}
           open={!detailClosing}
-          githubSlug={githubSlug}
+          cwd={projectPath}
           onClose={handleCloseDetail}
           onClosed={handleDetailClosed}
         />

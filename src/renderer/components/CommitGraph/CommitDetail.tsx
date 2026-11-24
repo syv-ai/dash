@@ -2,12 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { X, GitCommit, User, Clock, FileText } from 'lucide-react';
 import type { CommitDetail as CommitDetailType } from '../../../shared/types';
 import { LineStats } from '../ui/LineStats';
+import { CommitAuthor, CommitHash } from '../commits/CommitHoverCard';
+import { useCommitLinks } from '../commits/useCommitLinks';
 
 interface CommitDetailProps {
   detail: CommitDetailType | null;
   loading: boolean;
   open: boolean;
-  githubSlug?: string | null;
+  /** The checkout the commit is read from (its remote gives the links). */
+  cwd: string;
   onClose: () => void;
   onClosed: () => void;
 }
@@ -26,7 +29,7 @@ export function CommitDetailPanel({
   detail,
   loading,
   open,
-  githubSlug,
+  cwd,
   onClose,
   onClosed,
 }: CommitDetailProps) {
@@ -37,6 +40,7 @@ export function CommitDetailPanel({
   }, []);
 
   const visible = mounted && open;
+  const links = useCommitLinks(cwd, detail?.commit.hash ?? '', !!detail);
 
   return (
     <div
@@ -54,9 +58,7 @@ export function CommitDetailPanel({
       <div className="flex flex-col flex-1 min-w-[340px] min-h-0">
         {/* Header */}
         <div className="flex items-center justify-between px-4 h-10 border-b border-border/60 shrink-0">
-          <span className="text-xs font-semibold uppercase text-fg-fade-80 tracking-[0.08em]">
-            Details
-          </span>
+          <span className="type-subheading">Details</span>
           <button
             onClick={onClose}
             className="p-1 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
@@ -76,59 +78,23 @@ export function CommitDetailPanel({
           {detail && !loading && (
             <div className="flex flex-col gap-4">
               {/* Subject */}
-              <p className="text-base font-medium text-foreground leading-snug">
-                {detail.commit.subject}
-              </p>
+              <p className="type-heading wrap-break-word">{detail.commit.subject}</p>
 
               {/* Body */}
-              {detail.body && (
-                <p className="text-sm text-fg-fade-80 leading-relaxed whitespace-pre-wrap">
-                  {detail.body}
-                </p>
-              )}
+              {detail.body && <p className="type-body whitespace-pre-wrap">{detail.body}</p>}
 
               {/* Meta */}
               <div className="flex flex-col gap-2 pt-2 border-t border-border/40">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <GitCommit size={12} strokeWidth={1.8} className="shrink-0" />
-                  {githubSlug ? (
-                    <a
-                      href={`https://github.com/${githubSlug}/commit/${detail.commit.hash}`}
-                      className="text-fg-fade-80 hover:underline cursor-pointer"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        void window.electronAPI.openExternal(
-                          `https://github.com/${githubSlug}/commit/${detail.commit.hash}`,
-                        );
-                      }}
-                    >
-                      {detail.commit.hash.slice(0, 12)}
-                    </a>
-                  ) : (
-                    <span className="text-fg-fade-80">{detail.commit.hash.slice(0, 12)}</span>
-                  )}
+                <div className="type-caption flex items-center gap-2">
+                  <GitCommit size={14} strokeWidth={1.8} className="shrink-0" />
+                  <CommitHash hash={detail.commit.hash.slice(0, 12)} url={links.commitUrl} />
                 </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <User size={12} strokeWidth={1.8} className="shrink-0" />
-                  {githubSlug ? (
-                    <a
-                      href={`https://github.com/${githubSlug}/commits?author=${encodeURIComponent(detail.commit.authorName)}`}
-                      className="hover:underline cursor-pointer"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        void window.electronAPI.openExternal(
-                          `https://github.com/${githubSlug}/commits?author=${encodeURIComponent(detail.commit.authorName)}`,
-                        );
-                      }}
-                    >
-                      {detail.commit.authorName}
-                    </a>
-                  ) : (
-                    <span>{detail.commit.authorName}</span>
-                  )}
+                <div className="type-caption flex items-center gap-2">
+                  <User size={14} strokeWidth={1.8} className="shrink-0" />
+                  <CommitAuthor name={detail.commit.authorName} url={links.authorUrl} />
                 </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Clock size={12} strokeWidth={1.8} />
+                <div className="type-caption flex items-center gap-2">
+                  <Clock size={14} strokeWidth={1.8} />
                   <span>{formatFullDate(detail.commit.authorDate)}</span>
                 </div>
               </div>
@@ -138,8 +104,8 @@ export function CommitDetailPanel({
                 detail.stats.additions > 0 ||
                 detail.stats.deletions > 0) && (
                 <div className="flex flex-col gap-1.5 pt-2 border-t border-border/40">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <FileText size={12} strokeWidth={1.8} />
+                  <div className="type-caption flex items-center gap-2">
+                    <FileText size={14} strokeWidth={1.8} />
                     <span>
                       {detail.stats.filesChanged} file{detail.stats.filesChanged !== 1 ? 's' : ''}{' '}
                       changed
