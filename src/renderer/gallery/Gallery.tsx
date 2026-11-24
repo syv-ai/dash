@@ -29,8 +29,7 @@ import { ConfirmModal } from '../components/ui/ConfirmModal';
 import {
   ContextMenu,
   ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
+  ContextMenuItems,
   ContextMenuTrigger,
 } from '../components/ui/ContextMenu';
 import { CountBadge } from '../components/ui/CountBadge';
@@ -576,9 +575,15 @@ function Menus({ pinned }: { pinned: boolean }) {
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
-          <ContextMenuItem>Open</ContextMenuItem>
-          <ContextMenuSeparator />
-          <ContextMenuItem>Delete</ContextMenuItem>
+          <ContextMenuItems
+            items={[
+              { label: 'Open', icon: FileText, onSelect: () => {} },
+              { label: 'Copy path', icon: Copy, shortcut: '⌥⌘C', onSelect: () => {} },
+              { label: 'Archive', icon: Archive, disabled: true, onSelect: () => {} },
+              'separator',
+              { label: 'Delete', icon: Trash2, destructive: true, onSelect: () => {} },
+            ]}
+          />
         </ContextMenuContent>
       </ContextMenu>
       <div className="rounded-lg bg-raised shadow-raised">
