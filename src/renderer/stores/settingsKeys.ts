@@ -10,6 +10,7 @@ import {
   strOrUndefined,
 } from './settingsCodecs';
 import { clampHeldLimit } from '../terminal/WebglLifecycle';
+import { TERMINAL_THEME_IDS } from '../terminal/terminalThemes';
 import type { NotificationSound } from '../sounds';
 import type { UsageThresholds } from '@shared/types';
 import { parseKeybindings, type KeyBindingMap } from '../keybindings';
@@ -106,7 +107,8 @@ export const SETTINGS_REGISTRY: RegistryEntry[] = [
   entry('stopSessionsOnQuit', 'stopSessionsOnQuit', boolDefaultFalse()),
   entry('orchestratorAccess', 'orchestratorAccess', boolDefaultFalse()),
   entry('notificationSound', 'notificationSound', str('off') as Codec<NotificationSound>),
-  entry('terminalTheme', 'terminalTheme', str('default')),
+  // A removed palette (e.g. the old 'legacy') falls back to the default.
+  entry('terminalTheme', 'terminalTheme', strEnum(TERMINAL_THEME_IDS, 'default')),
   entry('terminalFontFamily', 'terminalFontFamily', str('system')),
   // parseFloat gives NaN for absent, empty or garbage values; clampHeldLimit
   // maps NaN to the default.

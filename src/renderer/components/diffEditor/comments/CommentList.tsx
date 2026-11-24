@@ -73,11 +73,7 @@ export function FileGroups({
 /** Sticky header so it stays visible as the body scrolls — like the right
  *  inspector's section bars. The glass background occludes scrolling rows. */
 function StickyHeader({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="sticky top-0 z-10 bg-[hsl(var(--surface-1)/0.92)] backdrop-blur-md">
-      {children}
-    </div>
-  );
+  return <div className="sticky top-0 z-10 bg-[hsl(var(--surface-1)/0.92)]">{children}</div>;
 }
 
 /** A collapsible section of the menu: a sticky header (dot, title, count,

@@ -461,7 +461,7 @@ export function EditorPane({
         onSelectPr={onSelectPr}
         prTitle={pr.review?.title ?? null}
         commentCount={scopeCommentCount}
-        backgroundColor={terminalTheme.background ?? (isDark ? '#0d0d11' : '#faf8f3')}
+        backgroundColor={terminalTheme.background ?? (isDark ? '#101011' : '#ffffff')}
       />
 
       {stale && (
@@ -500,7 +500,7 @@ export function EditorPane({
               <button
                 onClick={() => void save()}
                 disabled={!dirty || saving}
-                className={`absolute bottom-16 right-4 z-10 px-3 py-1.5 rounded-md text-[11px] font-medium bg-primary/70 text-primary-foreground hover:bg-primary/85 disabled:cursor-default backdrop-blur-xs shadow-lg shadow-shade/30 transition-opacity ${savedPill ? 'animate-save-flash' : ''}`}
+                className={`absolute bottom-16 right-4 z-10 px-3 py-1.5 rounded-md text-xs font-medium bg-primary/70 text-primary-foreground hover:bg-primary/85 disabled:cursor-default shadow-lg shadow-shade/30 transition-opacity ${savedPill ? 'animate-save-flash' : ''}`}
               >
                 {saving ? 'Saving…' : 'Save'}
               </button>

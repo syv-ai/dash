@@ -16,8 +16,8 @@ export function defineMonacoThemeFromTerminal(
   isDark: boolean,
   t: XtermTheme,
 ): void {
-  const bg = t.background ?? (isDark ? '#0d0d11' : '#faf8f3');
-  const fg = t.foreground ?? (isDark ? '#f1eee5' : '#1c1b18');
+  const bg = t.background ?? (isDark ? '#101011' : '#ffffff');
+  const fg = t.foreground ?? (isDark ? '#e7e8e9' : '#2c2f3a');
   // Subtle scrollbar slider that stays readable on the editor bg without
   // introducing a separate background color for the scrollbar track.
   const sliderBg = isDark ? '#ffffff14' : '#0000001a';

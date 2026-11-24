@@ -274,7 +274,7 @@ export function DiffEditor({
     void useCommentsStore.getState().prune(new Set(repoPaths));
   }, [activeTaskId, repoPaths, repoPathsLoading]);
 
-  const bg = terminalTheme.background ?? (isDark ? '#0d0d11' : '#faf8f3');
+  const bg = terminalTheme.background ?? (isDark ? '#101011' : '#ffffff');
 
   return (
     <div className="h-full w-full overflow-hidden" style={{ background: bg }}>

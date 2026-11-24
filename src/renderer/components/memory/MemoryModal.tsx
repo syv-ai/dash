@@ -254,7 +254,7 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
                         type="button"
                         aria-expanded={open}
                         onClick={() => setToggled((t) => ({ ...t, [section.id]: !open }))}
-                        className="sticky top-0 z-10 flex w-full items-center gap-1 bg-[hsl(var(--surface-1)/0.92)] px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur-md transition-colors hover:text-foreground"
+                        className="sticky top-0 z-10 flex w-full items-center gap-1 bg-[hsl(var(--surface-1)/0.92)] px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground"
                       >
                         <ChevronRight
                           size={12}

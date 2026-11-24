@@ -161,7 +161,7 @@ export function PrReviewMenu({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
-          className={`group/trigger flex items-center gap-2 pl-2.5 pr-2 py-1.5 rounded-full text-[11px] font-medium border backdrop-blur-md transition-all duration-200 ease-out ${
+          className={`group/trigger flex items-center gap-2 pl-2.5 pr-2 py-1.5 rounded-full text-xs font-medium border transition-all duration-200 ease-out ${
             busy
               ? 'border-primary/30 bg-primary/9 text-primary hover:bg-primary/[0.14] hover:border-primary/45'
               : 'border-border/40 bg-foreground/2.5 text-muted-fade-80 hover:bg-foreground/6 hover:border-border/55 hover:text-fg-fade-90'

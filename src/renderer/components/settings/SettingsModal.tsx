@@ -1490,7 +1490,7 @@ export function SettingsModal({
                       <div className="grid grid-cols-3 gap-2.5">
                         {TERMINAL_THEMES.map((t) => {
                           const isActive = terminalTheme === t.id;
-                          // 'default' and 'legacy' follow the app light/dark; the rest are fixed.
+                          // 'default' follows the app light/dark; the rest are fixed.
                           const bg = resolveTheme(t.id, theme === 'dark').background || '#000';
                           const colors = [
                             t.theme.red || '#f00',
@@ -1529,8 +1529,8 @@ export function SettingsModal({
                                 <span className="text-[10.5px] font-medium truncate text-fg-fade-85">
                                   {t.name}
                                 </span>
-                                {(t.id === 'default' || t.id === 'legacy') && (
-                                  <span className="text-[9px] text-fg-fade-40 font-mono uppercase tracking-wide">
+                                {t.id === 'default' && (
+                                  <span className="text-xs text-fg-fade-40 font-mono uppercase tracking-wide">
                                     auto
                                   </span>
                                 )}
