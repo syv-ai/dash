@@ -37,6 +37,8 @@ const TUI_COLS_FALLBACK_PX = 420;
 const OVERFLOW_TRIGGER_PX = 32;
 /** Fallback width for a tab whose real width hasn't been measured yet. */
 const TAB_WIDTH_ESTIMATE_PX = 56;
+/** The strip's gap after each tab (`gap-0.5`); offsetWidth leaves it out. */
+const TAB_GAP_PX = 2;
 
 /**
  * Split the tab strip into a visible prefix + an overflow set so the visible
@@ -50,7 +52,7 @@ function computeTabLayout(
   trackWidth: number,
   widths: Map<string, number>,
 ): { visibleTabs: Tab[]; overflowTabs: Tab[] } {
-  const widthOf = (t: Tab) => widths.get(t.id) ?? TAB_WIDTH_ESTIMATE_PX;
+  const widthOf = (t: Tab) => (widths.get(t.id) ?? TAB_WIDTH_ESTIMATE_PX) + TAB_GAP_PX;
   // Not measured yet, or everything fits → show all, no dropdown.
   if (trackWidth <= 0) return { visibleTabs: tabs, overflowTabs: [] };
   const total = tabs.reduce((sum, t) => sum + widthOf(t), 0);
@@ -424,37 +426,36 @@ export function TerminalTabs({
   }, [tabs, livePtyIds]);
 
   function renderTab(tab: Tab) {
-    // TUI tabs are Dash speaking: tinted primary background plus an inline red
-    // pulsing dot beside the label until first activated. The dot also
-    // replaces the busy orb for this kind — a side-car is always "running",
-    // so the orb carried no signal.
+    // TUI tabs are Dash speaking: a primary tint, plus an inline red dot
+    // beside the label until first activated. The dot also replaces the busy
+    // orb for this kind — a side-car is always "running", so the orb carried
+    // no signal.
     const isHotTui = tab.kind === 'tui' && !seenTuiIds.has(tab.id);
     const isActive = tab.id === activeTabId && !setupActive;
-    // No underline. The active (focused) tab — shell or service alike — wears
-    // the port-terminal periwinkle wash as a full-height fill. Inactive tabs
-    // keep a per-kind look so a service tab still reads differently from a
-    // plain shell at rest. Wizard TUIs stay in their own primary tint.
+    // Pill tabs, the Segmented look: the active one on the select tint. A
+    // service tab keeps the port-terminal periwinkle wash, stronger when
+    // active, so it reads apart from a plain shell; wizard TUIs keep theirs.
     const colors =
       tab.kind === 'tui'
         ? isActive
-          ? 'bg-primary/20 text-primary'
-          : 'bg-primary/10 text-primary/80 hover:text-primary hover:bg-primary/15'
-        : isActive
-          ? 'bg-[hsl(var(--terminal-service)/0.16)] text-foreground'
-          : tab.kind === 'service'
-            ? 'bg-[hsl(var(--terminal-service)/0.06)] text-fg-fade-60 hover:text-foreground hover:bg-[hsl(var(--terminal-service)/0.11)]'
-            : 'text-muted-foreground hover:text-foreground';
+          ? 'bg-primary/20 text-ink'
+          : 'bg-primary/10 text-ink-2 hover:bg-primary/15 hover:text-ink'
+        : tab.kind === 'service'
+          ? isActive
+            ? 'bg-terminal-service/25 text-ink'
+            : 'bg-terminal-service/10 text-ink-2 hover:bg-terminal-service/15 hover:text-ink'
+          : isActive
+            ? 'bg-select text-ink'
+            : 'text-ink-2 hover:bg-hover hover:text-ink';
     const closeable = tabs.length > 1;
     const showDot = isHotTui || (tab.kind !== 'tui' && livePtyIds.has(tab.id));
     // Hot wizard = red; live shell/service = green.
-    const dotColor = isHotTui
-      ? 'bg-destructive shadow-[0_0_6px_hsl(var(--destructive)/0.6)]'
-      : 'bg-[hsl(var(--git-added))] shadow-[0_0_6px_hsl(var(--git-added)/0.55)]';
+    const dotColor = isHotTui ? 'bg-state-fail' : 'bg-state-done';
     return (
       <div
         key={tab.id}
         data-tab-id={tab.id}
-        className={`group/tab relative flex items-center justify-center min-w-11 px-2.5 h-full cursor-pointer transition-colors shrink-0 select-none drawer-tab-in ${colors}`}
+        className={`group/tab relative flex items-center justify-center min-w-11 px-2.5 h-6 rounded-md cursor-pointer transition-colors duration-150 shrink-0 select-none drawer-tab-in ${colors}`}
         onClick={() => handleSelectTab(tab.id)}
       >
         {/* The label and its activity dot are centered content together — the
@@ -462,7 +463,7 @@ export function TerminalTabs({
             Only the transient close button floats absolutely in the right
             gutter so it never shifts the centered content off-center. */}
         <span className="flex items-center gap-1">
-          <span className="text-xs font-medium">{tab.label}</span>
+          <span className="text-sm font-medium">{tab.label}</span>
           {showDot && (
             // A running service is a steady state — solid green, not a pulsing
             // attention-grab. Shells keep the pulse. On hover the close button
@@ -478,7 +479,7 @@ export function TerminalTabs({
         </span>
         {closeable && (
           <button
-            className="absolute right-1 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-md hidden group-hover/tab:flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            className="absolute right-1 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-sm hidden group-hover/tab:flex items-center justify-center text-ink-3 hover:text-ink hover:bg-hover transition-colors"
             onClick={(e) => {
               e.stopPropagation();
               handleCloseTab(tab.id);
@@ -522,34 +523,34 @@ export function TerminalTabs({
             <Loader2 size={11} strokeWidth={1.8} className="animate-spin" />
           )}
           {hasUnseenTui ? (
-            <span className="w-1.5 h-1.5 rounded-full bg-destructive shadow-[0_0_6px_hsl(var(--destructive)/0.6)] status-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-state-fail status-pulse" />
           ) : (
             hasLiveService && (
               // A running service is a steady state — solid green, no pulse.
-              <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--git-added))] shadow-[0_0_6px_hsl(var(--git-added)/0.55)]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-state-done" />
             )
           )}
           <ChevronUp size={14} strokeWidth={1.8} className="ml-auto text-ink-3" />
         </button>
       ) : (
-        <div className="relative flex items-center h-9 shrink-0 pl-1">
+        <div className="relative flex items-center gap-0.5 h-9 shrink-0 pl-1.5">
           {/* Hidden measuring row — lays out every shell/service tab off-screen
               so the overflow split below uses real measured widths even for tabs
               currently collapsed into the dropdown. */}
           <div
             ref={measureRef}
             aria-hidden
-            className="absolute left-0 top-0 flex items-center h-full opacity-0 pointer-events-none"
+            className="absolute left-0 top-0 flex items-center gap-0.5 h-full opacity-0 pointer-events-none"
           >
             {stripTabs.map(renderTab)}
           </div>
           {/* Tabs that fit render in the track; the rest collapse into a `» N`
               dropdown so the trailing +/collapse controls stay reachable when
               the panel is narrow. The active tab is always kept visible. */}
-          {/* h-full so each tab's h-full fill spans the strip top-to-bottom
-              (the wrapper would otherwise collapse to content height, leaving
-              the service-tab wash as a short pill). */}
-          <div ref={trackRef} className="flex items-center h-full flex-1 min-w-0 overflow-hidden">
+          <div
+            ref={trackRef}
+            className="flex items-center gap-0.5 h-full flex-1 min-w-0 overflow-hidden"
+          >
             {visibleTabs.map(renderTab)}
             {overflowTabs.length > 0 && (
               <DropdownMenu>
@@ -558,7 +559,7 @@ export function TerminalTabs({
                 >
                   <DropdownMenuTrigger asChild>
                     <button
-                      className="flex items-center h-full px-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors shrink-0"
+                      className="flex items-center gap-0.5 h-6 rounded-md px-2 text-sm font-medium text-ink-2 hover:text-ink hover:bg-hover transition-colors shrink-0"
                       aria-label={`${overflowTabs.length} more terminals`}
                     >
                       <ChevronsRight size={12} strokeWidth={2} />
@@ -571,7 +572,7 @@ export function TerminalTabs({
                     <DropdownMenuItem key={t.id} onSelect={() => handleSelectTab(t.id)}>
                       <span className="flex-1 text-base">{t.label}</span>
                       {livePtyIds.has(t.id) && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--git-added))]" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-state-done" />
                       )}
                     </DropdownMenuItem>
                   ))}
@@ -583,19 +584,17 @@ export function TerminalTabs({
               as Dash speaking, not another terminal. */}
           {setupRun && (
             <div
-              className={`relative flex items-center justify-center gap-1 px-2.5 h-full cursor-pointer transition-colors shrink-0 select-none ${
-                setupActive
-                  ? 'bg-[hsl(var(--terminal-service)/0.16)] text-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
+              className={`relative flex items-center justify-center gap-1 px-2.5 h-6 rounded-md cursor-pointer transition-colors duration-150 shrink-0 select-none ${
+                setupActive ? 'bg-select text-ink' : 'text-ink-2 hover:bg-hover hover:text-ink'
               }`}
               onClick={() => setSetupSelected(true)}
             >
-              <span className="text-xs font-medium">Setup</span>
+              <span className="text-sm font-medium">Setup</span>
               {setupRun.status === 'running' && (
                 <Loader2 size={10} strokeWidth={1.8} className="animate-spin" />
               )}
               {setupRun.status === 'failed' && (
-                <span className="w-1.5 h-1.5 rounded-full bg-destructive" />
+                <span className="w-1.5 h-1.5 rounded-full bg-state-fail" />
               )}
             </div>
           )}
@@ -605,16 +604,11 @@ export function TerminalTabs({
               if (open) void refreshWizardDone();
             }}
           >
-            <Tooltip content="New terminal or wizard">
-              <DropdownMenuTrigger asChild>
-                <button
-                  className="w-5 h-5 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors shrink-0"
-                  aria-label="New terminal or wizard"
-                >
-                  <Plus size={11} strokeWidth={2} />
-                </button>
-              </DropdownMenuTrigger>
-            </Tooltip>
+            <DropdownMenuTrigger asChild>
+              <IconButton title="New terminal or wizard" size="sm">
+                <Plus size={14} strokeWidth={1.8} />
+              </IconButton>
+            </DropdownMenuTrigger>
             <DropdownMenuContent align="end" sideOffset={6}>
               <DropdownMenuItem onSelect={() => void handleAddTab()}>
                 <Terminal size={13} strokeWidth={1.8} />
@@ -627,7 +621,7 @@ export function TerminalTabs({
                   <DropdownMenuItem key={w.id} onSelect={() => void handleLaunchWizard(w.id)}>
                     <span className="flex-1 text-base">{w.label}</span>
                     {wizardDone[w.id] && (
-                      <Check size={13} strokeWidth={2} className="text-[hsl(var(--git-added))]" />
+                      <Check size={13} strokeWidth={2} className="text-state-done" />
                     )}
                   </DropdownMenuItem>
                 ))}

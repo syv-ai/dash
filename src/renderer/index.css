@@ -27,6 +27,8 @@
   --color-state-fail: hsl(var(--state-fail));
   --color-state-work: hsl(var(--state-work));
   --color-state-done: hsl(var(--state-done));
+  /* Service ("port") terminals' tab tint. */
+  --color-terminal-service: hsl(var(--terminal-service));
 
   /* ── shadcn aliases (D3): mapped onto the roles so existing call sites
      re-theme; call sites move to role names as they are touched. */
