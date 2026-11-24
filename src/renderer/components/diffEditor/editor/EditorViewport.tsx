@@ -12,6 +12,10 @@ interface Props {
   /** Two columns (base | working) instead of the inline diff. An unchanged
    *  file is never split: inline, with nothing to mark, it is a plain editor. */
   sideBySide: boolean;
+  /** The file has changes to mark (+/- signs, the overview strip). */
+  changed: boolean;
+  /** Comment icons sit in the gutter: widen it to hold them. */
+  commentGutter: boolean;
   beforeMount(monaco: typeof import('monaco-editor')): void;
   onMount(editor: monacoEditor.IStandaloneDiffEditor, monaco: typeof import('monaco-editor')): void;
   onUnmount(): void;
@@ -33,6 +37,8 @@ export function EditorViewport({
   editable,
   wordWrap,
   sideBySide,
+  changed,
+  commentGutter,
   beforeMount,
   onMount,
   onUnmount,
@@ -66,8 +72,11 @@ export function EditorViewport({
       compactMode: !sideBySide,
       renderGutterMenu: false,
       contextmenu: false,
+      // The minimap shows only while scrolling: a file that fits shows no
+      // rail at all.
       minimap: {
         enabled: true,
+        autohide: 'scroll',
         renderCharacters: false,
         maxColumn: 60,
         showSlider: 'mouseover',
@@ -75,17 +84,32 @@ export function EditorViewport({
       },
       fontSize: 12,
       lineNumbers: 'on',
+      // Nothing draws in the glyph margin (blame and comments live elsewhere).
       glyphMargin: false,
-      lineNumbersMinChars: 1,
-      lineDecorationsWidth: 48,
+      lineNumbersMinChars: 3,
+      // The gap between line numbers and code: room for the diff's +/- signs,
+      // or the comment icons, and no more.
+      lineDecorationsWidth: commentGutter ? 30 : changed ? 22 : 10,
       scrollBeyondLastLine: false,
       wordWrap: wordWrap ? 'on' : 'off',
+      // No overview rails beside the code (the diff's strip read as a grey
+      // slab); the minimap, shown while scrolling, carries the diff's marks.
+      renderOverviewRuler: false,
       overviewRulerBorder: false,
       overviewRulerLanes: 0,
-      scrollbar: { vertical: 'hidden', verticalScrollbarSize: 0 },
+      hideCursorInOverviewRuler: true,
+      // Slim scrollbars, only when the content overflows, faint until hovered
+      // (their colours are the theme's).
+      scrollbar: {
+        vertical: 'auto',
+        horizontal: 'auto',
+        verticalScrollbarSize: 8,
+        horizontalScrollbarSize: 8,
+        useShadows: false,
+      },
       guides: { highlightActiveIndentation: 'always' },
     }),
-    [editable, sideBySide, wordWrap],
+    [editable, sideBySide, wordWrap, changed, commentGutter],
   );
 
   return (
@@ -121,7 +145,9 @@ export function EditorViewport({
         </div>
       )}
       {displayed.kind === 'loaded' && !displayed.isBinary && !displayed.isLargeFile && (
-        <div ref={monacoWrapRef} className="absolute inset-0">
+        // pl-4: breathing room between the sheet's edge and the line numbers,
+        // outside Monaco (it measures its own box, so hit-testing holds).
+        <div ref={monacoWrapRef} className="absolute inset-0 pl-4">
           <DiffEditorHost
             options={options}
             beforeMount={beforeMount}

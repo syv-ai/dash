@@ -95,11 +95,16 @@ export function useMonacoEditor(args: Args): Api {
     setEditor(null);
   }, []);
 
-  // Re-apply theme on terminal-theme change after mount.
+  // Re-apply theme on terminal-theme change after mount. A frame later: the
+  // theme reads the page's role tokens, and App flips the page's theme class
+  // in an effect that runs after this (a child's) one.
   useEffect(() => {
     if (!monaco) return;
-    defineMonacoThemeFromTerminal(monaco, themeName, args.isDark, args.terminalTheme);
-    monaco.editor.setTheme(themeName);
+    const frame = requestAnimationFrame(() => {
+      defineMonacoThemeFromTerminal(monaco, themeName, args.isDark, args.terminalTheme);
+      monaco.editor.setTheme(themeName);
+    });
+    return () => cancelAnimationFrame(frame);
   }, [monaco, themeName, args.isDark, args.terminalTheme]);
 
   return {

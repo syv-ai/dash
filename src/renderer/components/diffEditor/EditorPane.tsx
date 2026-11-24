@@ -504,6 +504,8 @@ export function EditorPane({
             editable={editable}
             wordWrap={wordWrap}
             sideBySide={sideBySide && changed}
+            changed={changed}
+            commentGutter={liveComments.length > 0}
             beforeMount={handleBeforeMount}
             onMount={handleMount}
             onUnmount={handleUnmount}

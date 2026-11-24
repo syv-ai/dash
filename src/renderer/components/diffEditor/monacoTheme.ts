@@ -4,8 +4,40 @@ import type { ITheme as XtermTheme } from '@xterm/xterm';
 // changes — Monaco caches themes by name, and the EditorPane's theme effect
 // only re-applies when `themeName` actually changes, so renaming forces a
 // fresh defineTheme + setTheme on already-open editors.
-export const MONACO_THEME_DARK = 'dash-terminal-dark-v6';
-export const MONACO_THEME_LIGHT = 'dash-terminal-light-v6';
+export const MONACO_THEME_DARK = 'dash-terminal-dark-v7';
+export const MONACO_THEME_LIGHT = 'dash-terminal-light-v7';
+
+/** HSL channels ("220 4% 47%", optionally "/ 0.06") as #rrggbbaa. */
+export function hslChannelsToHex(channels: string, alpha = 1): string | null {
+  const m = channels.trim().match(/^(-?[\d.]+)\s+([\d.]+)%\s+([\d.]+)%(?:\s*\/\s*([\d.]+))?$/);
+  if (!m) return null;
+  const h = (((Number(m[1]) % 360) + 360) % 360) / 360;
+  const sat = Number(m[2]) / 100;
+  const l = Number(m[3]) / 100;
+  const a = (m[4] === undefined ? 1 : Number(m[4])) * alpha;
+  const q = l < 0.5 ? l * (1 + sat) : l + sat - l * sat;
+  const p = 2 * l - q;
+  const channel = (t: number) => {
+    const u = t < 0 ? t + 1 : t > 1 ? t - 1 : t;
+    if (u < 1 / 6) return p + (q - p) * 6 * u;
+    if (u < 1 / 2) return q;
+    if (u < 2 / 3) return p + (q - p) * (2 / 3 - u) * 6;
+    return p;
+  };
+  const hex = (v: number) =>
+    Math.round(Math.min(1, Math.max(0, v)) * 255)
+      .toString(16)
+      .padStart(2, '0');
+  return `#${hex(channel(h + 1 / 3))}${hex(channel(h))}${hex(channel(h - 1 / 3))}${hex(a)}`;
+}
+
+/** A role token (`--ink-3`, `--select`, …) as Monaco wants a colour, from the
+ *  theme now on the page; `fallback` when it can't be read. */
+function roleColor(token: string, fallback: string, alpha = 1): string {
+  if (typeof document === 'undefined') return fallback;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(token);
+  return hslChannelsToHex(value, alpha) ?? fallback;
+}
 
 /** Define a Monaco theme that mirrors the xterm.js terminal palette. Keeps
  *  the diff editor visually consistent with whichever palette the user
@@ -18,11 +50,17 @@ export function defineMonacoThemeFromTerminal(
 ): void {
   const bg = t.background ?? (isDark ? '#101011' : '#ffffff');
   const fg = t.foreground ?? (isDark ? '#e7e8e9' : '#2c2f3a');
-  // Subtle scrollbar slider that stays readable on the editor bg without
-  // introducing a separate background color for the scrollbar track.
-  const sliderBg = isDark ? '#ffffff14' : '#0000001a';
-  const sliderHover = isDark ? '#ffffff22' : '#00000028';
-  const sliderActive = isDark ? '#ffffff33' : '#00000033';
+  // The page's role tokens: the scrollbar is a faint ink-3 wash that firms
+  // up under the pointer (no grey slab), and the peek view sits on the
+  // raised surface like the app's other popovers.
+  const ink = roleColor('--ink', fg);
+  const ink3 = roleColor('--ink-3', isDark ? '#74777c' : '#82858d');
+  const line = roleColor('--line', isDark ? '#ffffff0f' : '#28303d14');
+  const select = roleColor('--select', isDark ? '#ffffff0f' : '#28303d11');
+  const raised = roleColor('--raised', isDark ? '#171819' : '#ffffff');
+  const sliderBg = roleColor('--ink-3', '#80808026', 0.15);
+  const sliderHover = roleColor('--ink-3', '#80808040', 0.3);
+  const sliderActive = roleColor('--ink-3', '#80808059', 0.45);
 
   monaco.editor.defineTheme(themeName, {
     base: isDark ? 'vs-dark' : 'vs',
@@ -63,6 +101,24 @@ export function defineMonacoThemeFromTerminal(
       'diffEditor.removedLineBackground': isDark ? '#f8504920' : '#cf222e24',
       'diffEditorOverview.insertedForeground': isDark ? '#3fb95080' : '#2da14480',
       'diffEditorOverview.removedForeground': isDark ? '#f8504980' : '#cf222e80',
+      // Peek (definitions, references): the raised surface, hairline edges,
+      // the select tint, in place of Monaco's blue.
+      'peekView.border': line,
+      'peekViewTitle.background': raised,
+      'peekViewTitleLabel.foreground': ink,
+      'peekViewTitleDescription.foreground': ink3,
+      'peekViewResult.background': raised,
+      'peekViewResult.fileForeground': ink,
+      'peekViewResult.lineForeground': ink3,
+      'peekViewResult.selectionBackground': select,
+      'peekViewResult.selectionForeground': ink,
+      'peekViewResult.matchHighlightBackground': roleColor('--state-needs', '#d0902033', 0.25),
+      'peekViewEditor.background': bg,
+      'peekViewEditorGutter.background': bg,
+      'peekViewEditorStickyScroll.background': bg,
+      'peekViewEditorStickyScrollGutter.background': bg,
+      'peekViewEditor.matchHighlightBackground': roleColor('--state-needs', '#d0902033', 0.25),
+      'peekViewEditor.matchHighlightBorder': '#00000000',
     },
   });
 }
