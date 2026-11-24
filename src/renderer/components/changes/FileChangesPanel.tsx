@@ -2,11 +2,11 @@ import { useRef } from 'react';
 import { FileDiff } from 'lucide-react';
 import { toast } from 'sonner';
 import { EmptyState } from '../ui/EmptyState';
-import { Button } from '../ui/Button';
 import { FileTreeView } from './FileTreeView';
 import { VirtualFileList, VIRTUALIZE_THRESHOLD, type FileSection } from './VirtualFileList';
 import { CommitRunView } from './CommitRunView';
 import { SectionLabel } from './SectionLabel';
+import { SyncStatus } from './SyncStatus';
 import type { CommitRun } from './useCommitRun';
 import type { CommitRunState } from './commitRunReducer';
 import { useGit } from '../../stores/gitStore';
@@ -17,19 +17,14 @@ interface FileChangesPanelProps {
   /** The commit in flight (or just finished): shown instead of the files. */
   run: CommitRun;
   onViewDiff: (filePath: string, staged: boolean) => void;
-  onShowCommitGraph: () => void;
 }
 
 /**
  * The task's working changes as staged and unstaged trees (a windowed list
  * past VIRTUALIZE_THRESHOLD files), or the commit run while one is shown.
+ * With nothing changed, where the branch stands against its upstream.
  */
-export function FileChangesPanel({
-  loading,
-  run,
-  onViewDiff,
-  onShowCommitGraph,
-}: FileChangesPanelProps) {
+export function FileChangesPanel({ loading, run, onViewDiff }: FileChangesPanelProps) {
   const gitStatus = useGit((s) => s.gitStatus);
   const onStageFiles = useGit((s) => s.stageFiles);
   const onUnstageFiles = useGit((s) => s.unstageFiles);
@@ -71,18 +66,11 @@ export function FileChangesPanel({
   const total = gitStatus.files.length;
 
   if (total === 0) {
-    const ahead = gitStatus.ahead;
     return (
       <EmptyState
         icon={<FileDiff size={14} strokeWidth={1.8} />}
         title="No changes"
-        action={
-          ahead > 0 && (
-            <Button variant="ghost" size="sm" onClick={onShowCommitGraph}>
-              {ahead} commit{ahead !== 1 ? 's' : ''} ahead
-            </Button>
-          )
-        }
+        description={<SyncStatus status={gitStatus} />}
       />
     );
   }

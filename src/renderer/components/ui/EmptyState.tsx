@@ -31,7 +31,7 @@ export function EmptyState({
       {icon}
       <div className="grid gap-1">
         <p>{title}</p>
-        {description && <div className="text-xs">{description}</div>}
+        {description && <div>{description}</div>}
       </div>
       {action && <div className="mt-1">{action}</div>}
     </div>

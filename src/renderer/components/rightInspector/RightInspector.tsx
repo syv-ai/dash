@@ -63,7 +63,6 @@ interface RightInspectorProps {
   onOpenEditor: () => void;
   onCloseDiff: () => void;
   onCommitFinished: () => void;
-  onShowCommitGraph: () => void;
   shellDrawerRef: RefObject<PanelImperativeHandle | null>;
   onTuiActiveChange: (active: boolean, canvasPx?: number) => void;
 }
@@ -92,7 +91,6 @@ export function RightInspector({
   onOpenEditor,
   onCloseDiff,
   onCommitFinished,
-  onShowCommitGraph,
   shellDrawerRef,
   onTuiActiveChange,
 }: RightInspectorProps) {
@@ -276,13 +274,7 @@ export function RightInspector({
     segment === 'history' ? (
       history
     ) : (
-      <FileChangesPanel
-        key={task.id}
-        loading={gitLoading}
-        run={run}
-        onViewDiff={viewDiff}
-        onShowCommitGraph={onShowCommitGraph}
-      />
+      <FileChangesPanel key={task.id} loading={gitLoading} run={run} onViewDiff={viewDiff} />
     );
 
   const withPorts = (content: ReactNode) => (

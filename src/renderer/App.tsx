@@ -1328,7 +1328,6 @@ export function App() {
                   }}
                   onCloseDiff={closeDiff}
                   onCommitFinished={refreshActiveGitStatus}
-                  onShowCommitGraph={() => setShowCommitGraph(true)}
                   shellDrawerRef={shellDrawerPanelRef}
                   onTuiActiveChange={handleTuiPanelActive}
                 />
