@@ -100,7 +100,7 @@ function GithubIssueRow({ issue }: { issue: GithubIssue }) {
   return (
     <>
       <div className="flex items-center gap-1.5">
-        <span className="text-xs text-muted-fade-50 font-mono shrink-0">#{issue.number}</span>
+        <span className="text-xs text-muted-fade-50 tabular-nums shrink-0">#{issue.number}</span>
         <span className="text-sm text-fg-fade-80 truncate">{issue.title}</span>
       </div>
       {issue.labels.length > 0 && (
@@ -123,7 +123,7 @@ function AdoWorkItemRow({ item }: { item: AzureDevOpsWorkItem }) {
   return (
     <>
       <div className="flex items-center gap-1.5">
-        <span className="text-xs text-muted-fade-50 font-mono shrink-0">#{item.id}</span>
+        <span className="text-xs text-muted-fade-50 tabular-nums shrink-0">#{item.id}</span>
         <span className="text-sm text-fg-fade-80 truncate">{item.title}</span>
       </div>
       <div className="flex gap-1 mt-0.5 flex-wrap">
@@ -527,7 +527,7 @@ function TaskModalBody({
                   </div>
                 </label>
                 {pushRemote && name.trim() && (
-                  <p className="ml-[44px] mt-1 text-xs text-muted-fade-40 font-mono truncate">
+                  <p className="ml-[44px] mt-1 text-xs text-muted-fade-40 truncate">
                     origin/{branchSlug(name.trim())}
                   </p>
                 )}
@@ -577,9 +577,9 @@ function TaskModalBody({
                       className="text-amber-500 shrink-0 mt-0.5"
                     />
                     <span className="text-muted-fade-60">
-                      <span className="font-mono text-fg-fade-70">{selectedBranch?.name}</span> is
-                      already checked out{branchHolder ? ` ${branchHolder}` : ''}. Git allows a
-                      branch in only one worktree at a time, so turn on{' '}
+                      <span className="text-fg-fade-70">{selectedBranch?.name}</span> is already
+                      checked out{branchHolder ? ` ${branchHolder}` : ''}. Git allows a branch in
+                      only one worktree at a time, so turn on{' '}
                       <span className="font-medium text-fg-fade-70">Create new branch</span> to
                       start one from it, or pick a branch that&apos;s free.
                     </span>

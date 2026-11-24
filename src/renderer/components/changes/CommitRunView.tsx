@@ -36,7 +36,7 @@ export function CommitRunView({
     <div className="flex flex-col h-full bg-[hsl(var(--surface-1))]">
       <Header state={state} onCancel={onCancel} />
       {passed || failed || skipped ? (
-        <div className="px-3 pt-2 flex gap-3 font-mono text-xs">
+        <div className="px-3 pt-2 flex gap-3 tabular-nums text-xs">
           {passed ? <span className="text-[hsl(var(--git-added))]">{passed} passed</span> : null}
           {failed ? <span className="text-[hsl(var(--destructive))]">{failed} failed</span> : null}
           {skipped ? <span className="text-muted-foreground">{skipped} skipped</span> : null}
@@ -115,7 +115,7 @@ function Header({ state, onCancel }: { state: CommitRunViewProps['state']; onCan
         <span className="text-base font-medium text-foreground">
           {isRunning ? 'Running pre-commit' : isFailed ? titleForFailed(state) : 'Cancelled'}
         </span>
-        <span className="text-xs font-mono text-muted-foreground">{subtitle}</span>
+        <span className="text-xs text-muted-foreground">{subtitle}</span>
       </div>
       {isRunning && (
         <button
@@ -152,14 +152,14 @@ function HookItem({ hook }: { hook: HookRecord }) {
           {STATUS_ICON[hook.status]}
         </span>
         <span
-          className={`flex-1 min-w-0 font-mono text-sm truncate ${
+          className={`flex-1 min-w-0 text-sm truncate ${
             hook.status === 'Failed' ? 'text-destructive' : 'text-foreground'
           }`}
         >
           {hook.name}
         </span>
         {hook.duration != null && (
-          <span className="font-mono text-xs text-muted-foreground">
+          <span className="tabular-nums text-xs text-muted-foreground">
             {hook.duration.toFixed(1)}s
           </span>
         )}

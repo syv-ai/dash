@@ -94,7 +94,7 @@ export function CommitDetailPanel({
                   {githubSlug ? (
                     <a
                       href={`https://github.com/${githubSlug}/commit/${detail.commit.hash}`}
-                      className="font-mono text-fg-fade-80 hover:underline cursor-pointer"
+                      className="text-fg-fade-80 hover:underline cursor-pointer"
                       onClick={(e) => {
                         e.preventDefault();
                         void window.electronAPI.openExternal(
@@ -105,9 +105,7 @@ export function CommitDetailPanel({
                       {detail.commit.hash.slice(0, 12)}
                     </a>
                   ) : (
-                    <span className="font-mono text-fg-fade-80">
-                      {detail.commit.hash.slice(0, 12)}
-                    </span>
+                    <span className="text-fg-fade-80">{detail.commit.hash.slice(0, 12)}</span>
                   )}
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">

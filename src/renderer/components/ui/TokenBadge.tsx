@@ -20,7 +20,7 @@ export function TokenBadge({ totalTokens, totalCostUsd, size = 'md' }: TokenBadg
     <Tooltip
       content={`${totalTokens.toLocaleString()} tokens from the session transcripts (Claude Code's session summaries are billed separately and not counted)`}
     >
-      <Badge size={size === 'sm' ? 'sm' : 'md'} className="font-mono font-normal">
+      <Badge size={size === 'sm' ? 'sm' : 'md'} className="font-normal">
         <span>{formatTokens(totalTokens)}</span>
         {showCost && (
           <>

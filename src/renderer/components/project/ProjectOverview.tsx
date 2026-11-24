@@ -155,7 +155,7 @@ export function ProjectOverview({
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 ml-12 text-xs text-muted-foreground">
                 {project.path && (
                   <Tooltip content={project.path}>
-                    <span className="font-mono truncate max-w-[300px]">{project.path}</span>
+                    <span className="truncate max-w-[300px]">{project.path}</span>
                   </Tooltip>
                 )}
                 {project.gitRemote && (
@@ -257,13 +257,9 @@ export function ProjectOverview({
                 No tasks yet — create one to start a Claude session.
               </p>
               <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/40 text-xs text-muted-foreground">
-                <kbd className="px-1.5 py-0.5 rounded-md bg-accent text-xs font-mono font-medium">
-                  Cmd
-                </kbd>
+                <kbd className="px-1.5 py-0.5 rounded-md bg-accent text-xs font-medium">Cmd</kbd>
                 <span>+</span>
-                <kbd className="px-1.5 py-0.5 rounded-md bg-accent text-xs font-mono font-medium">
-                  N
-                </kbd>
+                <kbd className="px-1.5 py-0.5 rounded-md bg-accent text-xs font-medium">N</kbd>
               </div>
             </div>
           ) : (
@@ -316,7 +312,7 @@ export function ProjectOverview({
                       {task.useWorktree && task.path && (
                         <div className="text-muted-foreground truncate">
                           <span className="text-muted-fade-70">Worktree: </span>
-                          <span className="font-mono text-xs">
+                          <span className="text-xs">
                             {task.path.split(/[\\/]/).slice(-2).join('/')}
                           </span>
                         </div>

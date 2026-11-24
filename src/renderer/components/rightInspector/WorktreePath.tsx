@@ -34,7 +34,7 @@ export function WorktreePath({ path, className }: { path: string; className?: st
         }}
         className={cn('min-w-0', className)}
       >
-        <span className="flex min-w-0 font-mono text-xs text-ink-3">
+        <span className="flex min-w-0 text-xs text-ink-3">
           <span className="truncate">{head}</span>
           <span className="shrink-0">{tail}</span>
         </span>

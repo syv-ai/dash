@@ -263,7 +263,7 @@ function SettingsBlock({
 function KeyCap({ label, highlighted = false }: { label: string; highlighted?: boolean }) {
   return (
     <kbd
-      className={`inline-flex items-center justify-center min-w-[24px] h-[24px] px-1.5 rounded-sm text-xs font-medium leading-none font-mono transition-colors duration-150 ${
+      className={`inline-flex items-center justify-center min-w-[24px] h-[24px] px-1.5 rounded-sm text-xs font-medium leading-none transition-colors duration-150 ${
         highlighted
           ? 'border border-primary/45 bg-primary/12 text-foreground shadow-[0_1px_0_1px_hsl(var(--primary)/0.18),inset_0_1px_0_hsl(var(--primary)/0.12)]'
           : 'border border-border/80 bg-linear-to-b from-white/6 to-transparent text-fg-fade-80 shadow-[0_1px_0_1px_hsl(var(--border)/0.4),inset_0_1px_0_hsl(var(--foreground)/0.04)]'
@@ -361,11 +361,11 @@ function UsageSection({ latestRateLimits }: { latestRateLimits?: RateLimits }) {
       <SettingsCard title="Token usage">
         <div className="px-4 py-3">
           <div className="flex items-baseline gap-2">
-            <span className="font-mono text-lg tabular-nums text-foreground">
+            <span className="text-lg tabular-nums text-foreground">
               {formatTokens(globalTokenStats.totalTokens)}
             </span>
             <span className="text-fg-fade-40">·</span>
-            <span className="font-mono text-lg tabular-nums text-foreground">
+            <span className="text-lg tabular-nums text-foreground">
               {formatCost(globalTokenStats.totalCostUsd)}
             </span>
           </div>
@@ -625,7 +625,7 @@ function ClaudeCodeTab({ claudeInfo }: { claudeInfo: ClaudeCliInfo | null }) {
               <p className="text-base font-medium text-foreground">
                 {claudeInfo.supported ? 'Claude Code detected' : 'Claude Code needs an update'}
               </p>
-              <p className="text-xs text-fg-fade-55 font-mono mt-1">{claudeInfo.version}</p>
+              <p className="text-xs text-fg-fade-55 tabular-nums mt-1">{claudeInfo.version}</p>
               {!claudeInfo.supported && (
                 <p className="text-xs text-fg-fade-55 leading-relaxed mt-1">
                   Dash requires {claudeInfo.minVersion} or newer. Run{' '}
@@ -634,7 +634,7 @@ function ClaudeCodeTab({ claudeInfo }: { claudeInfo: ClaudeCliInfo | null }) {
                   </code>
                 </p>
               )}
-              <p className="text-xs text-fg-fade-40 font-mono truncate">{claudeInfo.path}</p>
+              <p className="text-xs text-fg-fade-40 truncate">{claudeInfo.path}</p>
             </>
           ) : (
             <>
@@ -981,7 +981,7 @@ export function SettingsModal({
             <span className="text-xs font-medium tracking-widest uppercase text-muted-fade-45">
               Dash
             </span>
-            <span className="text-xs font-mono text-muted-fade-55">
+            <span className="text-xs tabular-nums text-muted-fade-55">
               {appVersion ? `v${appVersion}` : '…'}
             </span>
           </div>
@@ -1039,7 +1039,7 @@ export function SettingsModal({
                         onChange={(e) => onCommitAttributionChange(e.target.value)}
                         readOnly={commitAttribution === undefined}
                         rows={3}
-                        className={`w-full px-3 py-2.5 rounded-lg text-sm font-mono border bg-transparent resize-none ${
+                        className={`w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent resize-none ${
                           commitAttribution === undefined
                             ? 'border-border/40 text-fg-fade-40 cursor-default'
                             : 'border-border/60 text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary/40 focus:border-primary/40'
@@ -1089,7 +1089,7 @@ export function SettingsModal({
                                   onCustomIDEChange({ ...customIDE, path: e.target.value })
                                 }
                                 placeholder="/Applications/MyIDE.app/Contents/MacOS/myide"
-                                className="flex-1 px-3 py-2 text-sm rounded-md border border-border/60 bg-background text-foreground placeholder:text-fg-fade-40 focus:outline-hidden focus:ring-1 focus:ring-primary/40 font-mono"
+                                className="flex-1 px-3 py-2 text-sm rounded-md border border-border/60 bg-background text-foreground placeholder:text-fg-fade-40 focus:outline-hidden focus:ring-1 focus:ring-primary/40"
                               />
                               <button
                                 onClick={() => {
@@ -1200,7 +1200,7 @@ export function SettingsModal({
                         <p className="text-base font-semibold text-foreground tracking-tight">
                           Dash
                         </p>
-                        <p className="text-sm text-muted-foreground font-mono mt-0.5">
+                        <p className="text-sm text-muted-foreground tabular-nums mt-0.5">
                           {appVersion ? `v${appVersion}` : 'version loading…'}
                         </p>
                       </div>
@@ -1246,7 +1246,7 @@ export function SettingsModal({
                         <p className="text-base font-medium text-foreground">
                           {updateHeadline(updateStatus)}
                         </p>
-                        <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                        <p className="text-xs text-muted-foreground tabular-nums mt-0.5">
                           {appVersion ? `Current v${appVersion}` : 'Loading…'}
                           {updateStatus?.lastCheckAt
                             ? ` · checked ${formatCheckedAt(updateStatus.lastCheckAt)}`
@@ -1457,7 +1457,7 @@ export function SettingsModal({
                                   {t.name}
                                 </span>
                                 {t.id === 'default' && (
-                                  <span className="text-xs text-fg-fade-40 font-mono uppercase tracking-wide">
+                                  <span className="text-xs text-fg-fade-40 uppercase tracking-wide">
                                     auto
                                   </span>
                                 )}
@@ -1642,7 +1642,7 @@ export function SettingsModal({
                           {keys.map((k) => (
                             <kbd
                               key={k}
-                              className="min-w-[22px] h-[22px] flex items-center justify-center rounded-md bg-accent/60 text-xs text-fg-fade-70 font-mono px-1.5"
+                              className="min-w-[22px] h-[22px] flex items-center justify-center rounded-md bg-accent/60 text-xs text-fg-fade-70 px-1.5"
                             >
                               {k}
                             </kbd>
@@ -1681,13 +1681,13 @@ function RtkStatusCardBody({ status }: { status: RtkStatus | null }) {
   if (status.installed) {
     return (
       <div className="space-y-0.5">
-        <p className="text-xs text-fg-fade-60 font-mono">
+        <p className="text-xs text-fg-fade-60 tabular-nums">
           {status.version}
           <span className="ml-2 text-fg-fade-40">
             ({status.source === 'managed' ? 'managed by Dash' : 'on $PATH'})
           </span>
         </p>
-        <p className="text-xs text-fg-fade-40 font-mono truncate">{status.path}</p>
+        <p className="text-xs text-fg-fade-40 truncate">{status.path}</p>
       </div>
     );
   }
@@ -2026,7 +2026,7 @@ function RtkTestResultCard({ result }: { result: RtkTestResult }) {
                   Actual output diff
                 </span>
                 {okDiff.rawBytes > 0 && (
-                  <span className="text-xs font-mono text-[hsl(var(--git-added))]">
+                  <span className="text-xs tabular-nums text-[hsl(var(--git-added))]">
                     {okDiff.rawBytes} → {okDiff.compressedBytes} bytes
                     {savedBytes > 0 && ` (−${savedPct}%)`}
                     {okDiff.truncated && ' · truncated'}

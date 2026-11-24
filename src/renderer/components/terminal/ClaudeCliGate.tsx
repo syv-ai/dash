@@ -48,9 +48,7 @@ export function ClaudeCliGate({ info }: { info: ClaudeCliInfo }) {
             <pre className="mt-3 px-3 py-2 rounded-lg bg-accent/80 text-xs font-mono text-fg-fade-80 overflow-x-auto">
               {command}
             </pre>
-            {info.path && (
-              <p className="text-xs text-fg-fade-40 font-mono truncate mt-2">{info.path}</p>
-            )}
+            {info.path && <p className="text-xs text-fg-fade-40 truncate mt-2">{info.path}</p>}
             <button
               onClick={() => void recheck()}
               disabled={checking}

@@ -396,7 +396,7 @@ function EmptyState({ dir, projectName }: { dir: string; projectName: string }) 
       <button
         onClick={() => copy(dir)}
         title="Copy path"
-        className="max-w-full truncate rounded-md bg-surface-2 px-2 py-1 font-mono text-xs text-muted-foreground hover:text-foreground"
+        className="max-w-full truncate rounded-md bg-surface-2 px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
       >
         {dir}
       </button>

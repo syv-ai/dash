@@ -220,12 +220,12 @@ export function CommitRow({
       {commitUrl ? (
         <GithubLink
           href={commitUrl}
-          className="text-xs font-mono text-muted-foreground shrink-0 tabular-nums"
+          className="text-xs text-muted-foreground shrink-0 tabular-nums"
         >
           {commit.shortHash}
         </GithubLink>
       ) : (
-        <span className="text-xs font-mono text-muted-foreground shrink-0 tabular-nums">
+        <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
           {commit.shortHash}
         </span>
       )}

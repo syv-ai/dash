@@ -97,7 +97,7 @@ export function TaskHeader({
     <>
       <BranchIcon size={14} strokeWidth={1.8} className="shrink-0" />
       {/* The icon stays when the header is narrow; the tooltip names the branch. */}
-      <span className="truncate font-mono @max-[24rem]/taskhead:hidden">{branch}</span>
+      <span className="truncate @max-[24rem]/taskhead:hidden">{branch}</span>
     </>
   );
 
@@ -175,7 +175,7 @@ export function TaskHeader({
         <div className="titlebar-no-drag flex min-w-0 shrink items-center gap-2.5 text-sm text-ink-3">
           {modelName && (
             <Tooltip content="Model">
-              <span className="truncate font-mono @max-[44rem]/taskhead:hidden">{modelName}</span>
+              <span className="truncate @max-[44rem]/taskhead:hidden">{modelName}</span>
             </Tooltip>
           )}
           {showTokens && (

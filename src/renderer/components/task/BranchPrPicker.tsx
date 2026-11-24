@@ -165,9 +165,7 @@ export function BranchPrPicker({
             <GitBranch size={12} className="text-muted-fade-40 shrink-0" strokeWidth={1.8} />
           )}
           {selectedBranch ? (
-            <span className="flex-1 truncate text-base text-foreground font-mono">
-              {selectedBranch.name}
-            </span>
+            <span className="flex-1 truncate text-base text-foreground">{selectedBranch.name}</span>
           ) : (
             <span className="flex-1 truncate text-base text-muted-fade-40">
               {branchLoading ? 'Fetching branches…' : 'Select a branch or PR…'}
@@ -186,9 +184,7 @@ export function BranchPrPicker({
             </span>
           )}
           {selectedBranch?.shortHash && (
-            <span className="text-xs text-muted-fade-40 font-mono shrink-0">
-              {selectedBranch.shortHash}
-            </span>
+            <span className="text-xs text-muted-fade-40 shrink-0">{selectedBranch.shortHash}</span>
           )}
           <ChevronDown
             size={13}
@@ -241,27 +237,25 @@ export function BranchPrPicker({
                       className="text-muted-fade-40 shrink-0"
                       strokeWidth={1.8}
                     />
-                    <span className="flex-1 truncate font-mono text-fg-fade-80">{b.name}</span>
+                    <span className="flex-1 truncate text-fg-fade-80">{b.name}</span>
                     {markInUse && b.checkedOut && (
                       <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-500 shrink-0">
                         in use
                       </span>
                     )}
                     {showUpstream && b.upstream && b.upstream.ahead > 0 && (
-                      <span className="flex items-center gap-0.5 text-xs text-emerald-500 font-mono shrink-0">
+                      <span className="flex items-center gap-0.5 text-xs text-loc-add tabular-nums shrink-0">
                         <ArrowUp size={9} strokeWidth={2.5} />
                         {b.upstream.ahead}
                       </span>
                     )}
                     {showUpstream && b.upstream && b.upstream.behind > 0 && (
-                      <span className="flex items-center gap-0.5 text-xs text-amber-500 font-mono shrink-0">
+                      <span className="flex items-center gap-0.5 text-xs text-loc-del tabular-nums shrink-0">
                         <ArrowDown size={9} strokeWidth={2.5} />
                         {b.upstream.behind}
                       </span>
                     )}
-                    <span className="text-xs text-muted-fade-40 font-mono shrink-0">
-                      {b.shortHash}
-                    </span>
+                    <span className="text-xs text-muted-fade-40 shrink-0">{b.shortHash}</span>
                   </CommandItem>
                 ))}
               </>
@@ -307,7 +301,7 @@ export function BranchPrPicker({
                           strokeWidth={1.8}
                         />
                         <span className="flex-1 truncate text-fg-fade-80">{pr.title}</span>
-                        <span className="flex items-center gap-1 text-xs text-muted-fade-40 font-mono shrink-0 min-w-0 max-w-[160px]">
+                        <span className="flex items-center gap-1 text-xs text-muted-fade-40 shrink-0 min-w-0 max-w-[160px]">
                           <span className="truncate">{pr.headRefName}</span>
                           {pr.baseRefName && (
                             <>
@@ -323,9 +317,7 @@ export function BranchPrPicker({
                         {preparingId === pr.number ? (
                           <Loader2 size={11} className="animate-spin text-muted-fade-50 shrink-0" />
                         ) : (
-                          <span className="text-xs text-muted-fade-40 font-mono shrink-0">
-                            #{pr.number}
-                          </span>
+                          <span className="text-xs text-muted-fade-40 shrink-0">#{pr.number}</span>
                         )}
                       </CommandItem>
                     ))}

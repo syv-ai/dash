@@ -23,7 +23,7 @@ export function LinkedItemBadges({
     <span className="inline-flex min-w-0 items-center gap-1">
       {items.slice(0, max).map((item) => {
         const url = linkedItemUrl(item, gitRemote);
-        const className = cn(badgeVariants(), 'font-mono', url && 'hover:bg-select');
+        const className = cn(badgeVariants(), url && 'hover:bg-select');
         const badge = url ? (
           <a href={url} target="_blank" rel="noopener noreferrer" className={className}>
             #{item.id}

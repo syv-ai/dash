@@ -49,7 +49,7 @@ export function ProjectSettingsModal({ project, onClose, onRename }: ProjectSett
       {value && (
         <>
           <ConfigureForm value={value} onChange={setValue} />
-          <p className="text-xs text-muted-fade-50 font-mono truncate">{project.path}</p>
+          <p className="text-xs text-muted-fade-50 truncate">{project.path}</p>
           <div className="flex justify-end">
             <button
               onClick={() => void persist(value)}

@@ -163,7 +163,7 @@ function WorktreeMigrationBody({ plan, onMigrated }: Omit<WorktreeMigrationModal
                       {project.tasks.length} task{project.tasks.length === 1 ? '' : 's'}
                     </span>
                   </label>
-                  <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs font-mono text-fg-fade-50">
+                  <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs text-fg-fade-50">
                     <dt className="text-muted-fade-60 select-none">from</dt>
                     <dd className="break-all">{project.legacyDir}</dd>
                     <dt className="text-muted-fade-60 select-none">to</dt>
@@ -176,9 +176,7 @@ function WorktreeMigrationBody({ plan, onMigrated }: Omit<WorktreeMigrationModal
                         className="flex items-center gap-2 text-sm text-fg-fade-80 min-w-0"
                       >
                         <span className="truncate">{t.taskName}</span>
-                        <span className="font-mono text-xs text-muted-fade-60 truncate">
-                          {t.branch}
-                        </span>
+                        <span className="text-xs text-muted-fade-60 truncate">{t.branch}</span>
                         {t.archived && (
                           <span className="px-1.5 py-[1px] rounded-full bg-accent/80 text-xs text-muted-foreground shrink-0">
                             archived

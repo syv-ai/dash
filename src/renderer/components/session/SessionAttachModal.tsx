@@ -45,7 +45,7 @@ function SessionAttachBody({
       <div className="flex items-center justify-between gap-3 px-5 h-12 border-b border-border/40 shrink-0">
         <div className="min-w-0 flex items-baseline gap-2">
           <h2 className="text-base font-semibold text-foreground truncate">{label}</h2>
-          <span className="text-xs font-mono text-muted-fade-60 truncate">
+          <span className="text-xs text-muted-fade-60 truncate">
             {session.id} · {session.cwd}
           </span>
         </div>

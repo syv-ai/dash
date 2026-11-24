@@ -115,7 +115,7 @@ function PrList({ prs, taskId }: { prs: PullRequestInfo[]; taskId?: string }) {
             <span className={cn(badgeVariants({ tone: 'bare', size: 'icon' }), iconColor(pr))}>
               <StateIcon pr={pr} size={11} />
             </span>
-            <span className="shrink-0 font-mono text-ink-3">#{pr.number}</span>
+            <span className="shrink-0 tabular-nums text-ink-3">#{pr.number}</span>
             <span className="truncate flex-1 min-w-0">{pr.title}</span>
             <span className={`shrink-0 text-xs ${stateTextColor(pr)}`}>{stateText(pr)}</span>
           </a>
@@ -185,7 +185,7 @@ export function PrBadge({ prs, allPrs, size = 'md', variant = 'pill', taskId }: 
             <button
               type="button"
               onClick={(e) => e.stopPropagation()}
-              className={cn(badgeVariants({ tone: 'bare', size }), 'font-mono', colorCls)}
+              className={cn(badgeVariants({ tone: 'bare', size }), colorCls)}
             >
               <StateIcon pr={pr} size={iconSize} still={!isCurrent} />
               PR #{pr.number}
