@@ -2,18 +2,21 @@ import * as React from 'react';
 import { cn } from '../../lib/cn';
 
 /**
- * What an empty list or pane shows: an icon, one line, an optional action,
- * centred in ink-3.
+ * What an empty list or pane shows: an icon, one line, an optional second
+ * line and action, centred in ink-2 (ink-3 sank into the dark ground).
  */
 export function EmptyState({
   icon,
   title,
+  description,
   action,
   className,
 }: {
   /** A lucide icon at 14px/1.8, like everywhere else. */
   icon?: React.ReactNode;
   title: React.ReactNode;
+  /** A quieter line under the title (a status, a hint). */
+  description?: React.ReactNode;
   action?: React.ReactNode;
   /** Layout only. */
   className?: string;
@@ -21,12 +24,15 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        'flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-sm text-ink-3',
+        'flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-sm text-ink-2',
         className,
       )}
     >
       {icon}
-      <p>{title}</p>
+      <div className="grid gap-1">
+        <p>{title}</p>
+        {description && <div className="text-xs">{description}</div>}
+      </div>
       {action && <div className="mt-1">{action}</div>}
     </div>
   );

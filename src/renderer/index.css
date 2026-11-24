@@ -178,7 +178,8 @@
     --git-modified: var(--state-needs);
     --git-deleted: var(--loc-del);
     --git-renamed: var(--state-work);
-    --git-untracked: 222 6% 55%;
+    /* 5.8:1 on ground, 6.5:1 on well: between ink and ink-2, readable. */
+    --git-untracked: 222 8% 38%;
     --git-conflicted: 25 85% 48%;
     --pr-merged: 262 60% 55%; /* GitHub merged-PR purple */
     --badge-main: 218 34% 36%; /* "main checkout" task badge */
@@ -254,7 +255,8 @@
 
     --shadow-card: 0 0 0 1px hsl(var(--line)), 0 12px 28px hsl(0 0% 0% / 0.45);
 
-    --git-untracked: 220 4% 50%;
+    /* 8.7:1 on ground, 8.4:1 on well (was 4.9 / 4.7, too dim to scan). */
+    --git-untracked: 220 5% 68%;
     --git-conflicted: 25 85% 60%;
     --pr-merged: 262 70% 72%;
 
