@@ -10,7 +10,7 @@ import {
   type RefObject,
 } from 'react';
 import type { ITheme as XtermTheme } from '@xterm/xterm';
-import { Info, MessageSquareCode, Minus, Plus } from 'lucide-react';
+import { Info, MessageSquareCode, Minus, Plus, X } from 'lucide-react';
 import { FileChangesPanel } from '../changes/FileChangesPanel';
 import { CommitPopover } from '../changes/CommitPopover';
 import { useCommitRun } from '../changes/useCommitRun';
@@ -33,6 +33,7 @@ import { HistoryList, type PrEntry } from '../diffEditor/HistoryList';
 import { useEditorWorkspace, type EditorTarget } from '../diffEditor/useEditorWorkspace';
 import { activePath } from '../diffEditor/tabs/editorLayout';
 import { useTreePanel } from '../diffEditor/TreeToggle';
+import { anyDirtyUnder } from '../diffEditor/models';
 import { WorktreePath } from './WorktreePath';
 import { useGit, type DiffFileTarget } from '../../stores/gitStore';
 import { useSettings } from '../../stores/settingsStore';
@@ -181,6 +182,12 @@ export function RightInspector({
     selectView(next);
     openEditor();
   };
+  // The row's X: asks first when a file has unsaved edits, as the editor's
+  // own close did.
+  const closeEditor = () => {
+    if (anyDirtyUnder(task.path) && !window.confirm('Discard unsaved changes?')) return;
+    onCloseDiff();
+  };
   // Details' Last commit: History, on that commit, its files unfolded.
   const openCommit = (hash: string) => {
     setSegment('history');
@@ -270,6 +277,16 @@ export function RightInspector({
       >
         <Info size={14} strokeWidth={1.8} />
       </IconButton>
+      {wide && (
+        <IconButton
+          size="sm"
+          title={withShortcut('Close editor', keybindings.closeDiff)}
+          onClick={closeEditor}
+          className="shrink-0"
+        >
+          <X size={14} strokeWidth={1.8} />
+        </IconButton>
+      )}
     </div>
   );
 
