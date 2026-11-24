@@ -1,10 +1,10 @@
 import React, { useRef, useCallback } from 'react';
 import {
-  PanelGroup,
-  Panel,
-  PanelResizeHandle,
-  type ImperativePanelHandle,
-} from 'react-resizable-panels';
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+  type PanelImperativeHandle,
+} from '../ui/Resizable';
 import { TerminalTabs } from './TerminalTabs';
 
 interface ShellDrawerWrapperProps {
@@ -13,7 +13,7 @@ interface ShellDrawerWrapperProps {
   cwd: string | null;
   collapsed: boolean;
   label?: string;
-  panelRef: React.RefObject<ImperativePanelHandle | null>;
+  panelRef: React.RefObject<PanelImperativeHandle | null>;
   animating: boolean;
   onAnimate: () => void;
   onCollapse: () => void;
@@ -46,10 +46,10 @@ export function ShellDrawerWrapper({
       const panel = panelRef.current;
       if (!panel || total <= 0) return;
       const pct = Math.min(90, (px / total) * 100);
-      if (panel.isCollapsed() || panel.getSize() < pct) {
+      if (panel.isCollapsed() || panel.getSize().asPercentage < pct) {
         onAnimate();
         panel.expand();
-        if (panel.getSize() < pct) panel.resize(pct);
+        if (panel.getSize().asPercentage < pct) panel.resize(`${pct}%`);
       }
     },
     [panelRef, onAnimate],
@@ -61,17 +61,17 @@ export function ShellDrawerWrapper({
 
   return (
     <div ref={groupRef} className="h-full">
-      <PanelGroup direction="vertical" className="h-full">
-        <Panel minSize={0}>{children}</Panel>
+      <ResizablePanelGroup orientation="vertical">
+        <ResizablePanel minSize="0%">{children}</ResizablePanel>
         {/* Stays live while collapsed so the bar can be dragged back open. */}
-        <PanelResizeHandle className="h-px bg-transparent" />
-        <Panel
-          ref={panelRef}
-          className={animating ? 'panel-transition' : ''}
-          defaultSize={collapsed ? 3 : 45}
-          minSize={8}
+        <ResizableHandle />
+        <ResizablePanel
+          panelRef={panelRef}
+          animate={animating}
+          defaultSize={collapsed ? '3%' : '45%'}
+          minSize="8%"
           collapsible
-          collapsedSize={3}
+          collapsedSize="3%"
           onCollapse={onCollapse}
           onExpand={onExpand}
         >
@@ -92,8 +92,8 @@ export function ShellDrawerWrapper({
             onEnsureHeight={ensureHeight}
             onTuiActiveChange={onTuiActiveChange}
           />
-        </Panel>
-      </PanelGroup>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }

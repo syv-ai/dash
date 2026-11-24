@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../ui/Resizable';
 import type { DiffComment, FileChange } from '../../../shared/types';
 import { useGit } from '../../stores/gitStore';
 import { selectTaskByPath, useProjects } from '../../stores/projectsStore';
@@ -278,8 +278,9 @@ export function DiffEditor({
 
   return (
     <div className="h-full w-full overflow-hidden" style={{ background: bg }}>
-      <PanelGroup direction="horizontal" autoSaveId="diff-editor-shell" className="h-full">
-        <Panel defaultSize={22} minSize={14} maxSize={45}>
+      <ResizablePanelGroup orientation="horizontal" autoSaveId="diff-editor-shell">
+        {/* pr-3 keeps the 12px gutter the old handle took up. */}
+        <ResizablePanel id="sidebar" defaultSize="22%" minSize="14%" maxSize="45%" className="pr-3">
           <EditorSidebar
             cwd={cwd}
             git={git}
@@ -296,9 +297,9 @@ export function DiffEditor({
             onSelectView={changeView}
             pr={prEntry}
           />
-        </Panel>
-        <PanelResizeHandle className="w-3 bg-transparent hover:bg-transparent transition-colors" />
-        <Panel minSize={40}>
+        </ResizablePanel>
+        <ResizableHandle />
+        <ResizablePanel id="editor" minSize="40%">
           <EditorPane
             cwd={cwd}
             git={git}
@@ -318,8 +319,8 @@ export function DiffEditor({
             onSelectPr={openPrView}
             onSelectFile={setSelectedPath}
           />
-        </Panel>
-      </PanelGroup>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }

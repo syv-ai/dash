@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
-import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../ui/Resizable';
 import {
   ChevronDown,
   ChevronRight,
@@ -71,6 +71,7 @@ export interface PrEntry {
 }
 
 const COMMITS_DRAWER_KEY = 'diffEditor.commitsDrawerSize';
+const COMMITS_PANEL_ID = 'commits';
 const CHANGED_ONLY_KEY = 'diffEditor.changedOnly';
 
 export function EditorSidebar(props: EditorSidebarProps) {
@@ -94,16 +95,24 @@ export function EditorSidebar(props: EditorSidebarProps) {
   }
   return (
     <div className="h-full min-h-0 flex flex-col overflow-hidden">
-      <PanelGroup
-        direction="vertical"
+      <ResizablePanelGroup
+        orientation="vertical"
         autoSaveId="diff-editor-sidebar"
-        onLayout={(sizes) => {
-          if (sizes[1] != null) localStorage.setItem(COMMITS_DRAWER_KEY, String(sizes[1]));
+        onLayoutChanged={(layout) => {
+          const drawer = layout[COMMITS_PANEL_ID];
+          if (drawer != null) localStorage.setItem(COMMITS_DRAWER_KEY, String(drawer));
         }}
       >
-        <Panel minSize={20}>{fileTree}</Panel>
-        <PanelResizeHandle className="h-px bg-[hsl(var(--border)/0.5)] hover:bg-[hsl(var(--border))] transition-colors" />
-        <Panel defaultSize={initialDrawerSize} minSize={10} maxSize={70}>
+        <ResizablePanel id="files" minSize="20%">
+          {fileTree}
+        </ResizablePanel>
+        <ResizableHandle />
+        <ResizablePanel
+          id={COMMITS_PANEL_ID}
+          defaultSize={`${initialDrawerSize}%`}
+          minSize="10%"
+          maxSize="70%"
+        >
           <CommitsDrawer
             commits={props.commits}
             loading={props.commitsLoading}
@@ -112,8 +121,8 @@ export function EditorSidebar(props: EditorSidebarProps) {
             onSelectView={props.onSelectView}
             pr={props.pr}
           />
-        </Panel>
-      </PanelGroup>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }

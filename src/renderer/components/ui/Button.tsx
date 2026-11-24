@@ -1,5 +1,6 @@
 import React from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
+import { cn } from '../../lib/cn';
 
 /**
  * Canonical text/CTA button. Icon-only actions use `IconButton`; binary toggles
@@ -29,11 +30,11 @@ export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {}
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className = '', variant, size, type = 'button', ...props }, ref) => (
+  ({ className, variant, size, type = 'button', ...props }, ref) => (
     <button
       ref={ref}
       type={type}
-      className={`${buttonVariants({ variant, size })} ${className}`}
+      className={cn(buttonVariants({ variant, size }), className)}
       {...props}
     />
   ),

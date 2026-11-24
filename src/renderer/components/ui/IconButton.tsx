@@ -1,4 +1,5 @@
 import React from 'react';
+import { cn } from '../../lib/cn';
 import { Tooltip } from './Tooltip';
 
 type IconButtonSize = 'sm' | 'md';
@@ -42,7 +43,7 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(f
     title,
     variant = 'default',
     size = 'md',
-    className = '',
+    className,
     disabled = false,
     children,
     ...rest
@@ -56,9 +57,12 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(f
         type="button"
         onClick={disabled ? undefined : onClick}
         aria-disabled={disabled || undefined}
-        className={`rounded-md transition-colors duration-150 ${sizeStyles[size]} ${
-          disabled ? 'cursor-default text-fg-fade-40' : variantStyles[variant]
-        } ${className}`}
+        className={cn(
+          'rounded-md transition-colors duration-150',
+          sizeStyles[size],
+          disabled ? 'cursor-default text-fg-fade-40' : variantStyles[variant],
+          className,
+        )}
         {...rest}
       >
         {children}

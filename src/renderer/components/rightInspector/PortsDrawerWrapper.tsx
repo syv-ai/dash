@@ -1,10 +1,10 @@
 import React, { useRef, useState } from 'react';
 import {
-  PanelGroup,
-  Panel,
-  PanelResizeHandle,
-  type ImperativePanelHandle,
-} from 'react-resizable-panels';
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+  type PanelImperativeHandle,
+} from '../ui/Resizable';
 import { PortsDrawer } from './PortsDrawer';
 import { usePortsState } from './usePortsState';
 
@@ -18,7 +18,7 @@ interface PortsDrawerWrapperProps {
 
 /** Panel height (% of the split) when the Services list is collapsed — the
  *  header bar fills this. Tuned to roughly match the terminal drawer's bar. */
-const COLLAPSED_SIZE = 5;
+const COLLAPSED_SIZE = '5%';
 
 /**
  * Splits the right inspector into a resizable vertical stack: the wrapped
@@ -39,7 +39,7 @@ export function PortsDrawerWrapper({
   children,
 }: PortsDrawerWrapperProps) {
   const state = usePortsState(taskId);
-  const panelRef = useRef<ImperativePanelHandle>(null);
+  const panelRef = useRef<PanelImperativeHandle>(null);
   const [animating, setAnimating] = useState(false);
 
   if (!taskId || !state.hasContent) {
@@ -47,19 +47,18 @@ export function PortsDrawerWrapper({
   }
 
   return (
-    <PanelGroup direction="vertical" autoSaveId="ports-split" className="h-full">
-      <Panel id="ports-content" order={1} minSize={0} className="min-h-0">
+    <ResizablePanelGroup orientation="vertical" autoSaveId="ports-split">
+      <ResizablePanel id="ports-content" minSize="0%" className="min-h-0">
         {children}
-      </Panel>
+      </ResizablePanel>
       {/* Stays live while collapsed so the bar can be dragged back open. */}
-      <PanelResizeHandle className="h-px bg-transparent" />
-      <Panel
+      <ResizableHandle />
+      <ResizablePanel
         id="ports-list"
-        order={2}
-        ref={panelRef}
-        className={animating ? 'panel-transition' : ''}
-        defaultSize={collapsed ? COLLAPSED_SIZE : 32}
-        minSize={14}
+        panelRef={panelRef}
+        animate={animating}
+        defaultSize={collapsed ? COLLAPSED_SIZE : '32%'}
+        minSize="14%"
         collapsible
         collapsedSize={COLLAPSED_SIZE}
         onCollapse={() => {
@@ -84,7 +83,7 @@ export function PortsDrawerWrapper({
             panelRef.current?.expand();
           }}
         />
-      </Panel>
-    </PanelGroup>
+      </ResizablePanel>
+    </ResizablePanelGroup>
   );
 }

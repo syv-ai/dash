@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo, Suspense, lazy } from 'react';
-import {
-  PanelGroup,
-  Panel,
-  PanelResizeHandle,
-  type ImperativePanelHandle,
-} from 'react-resizable-panels';
 import { TUI_FEATURE_IDS } from '@shared/tuiProtocol';
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+  type PanelImperativeHandle,
+} from './components/ui/Resizable';
 import { LeftSidebar } from './components/leftSidebar/LeftSidebar';
 import { MainContent } from './components/MainContent';
 import { openInIde } from './lib/openInIde';
@@ -365,9 +365,9 @@ export function App() {
   const changesPanelCollapsed = useSettings((s) => s.changesPanelCollapsed);
   const setChangesPanelCollapsed = useSettings((s) => s.setChangesPanelCollapsed);
 
-  const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
-  const changesPanelRef = useRef<ImperativePanelHandle>(null);
-  const shellDrawerPanelRef = useRef<ImperativePanelHandle>(null);
+  const sidebarPanelRef = useRef<PanelImperativeHandle>(null);
+  const changesPanelRef = useRef<PanelImperativeHandle>(null);
+  const shellDrawerPanelRef = useRef<PanelImperativeHandle>(null);
   const sidebarAnimating = useUi((s) => s.sidebarAnimating);
   const setSidebarAnimating = useUi((s) => s.setSidebarAnimating);
   const changesAnimating = useUi((s) => s.changesAnimating);
@@ -953,16 +953,16 @@ export function App() {
           (((canvasPx + TUI_PANEL_CHROME_PX) * TUI_PANEL_WIDTH_SCALE) / window.innerWidth) * 100,
         ),
       );
-      changesSizeBeforeTui.current = panel.getSize();
+      changesSizeBeforeTui.current = panel.getSize().asPercentage;
       setChangesAnimating(true);
-      panel.resize(targetPct);
+      panel.resize(`${targetPct}%`);
       setTimeout(() => setChangesAnimating(false), 200);
     } else {
       const prev = changesSizeBeforeTui.current;
       changesSizeBeforeTui.current = null;
       if (prev === null) return;
       setChangesAnimating(true);
-      panel.resize(prev);
+      panel.resize(`${prev}%`);
       setTimeout(() => setChangesAnimating(false), 200);
     }
   }, []);
@@ -1083,17 +1083,16 @@ export function App() {
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden">
-      <PanelGroup direction="horizontal" className="flex-1">
-        <Panel
+      <ResizablePanelGroup orientation="horizontal" className="flex-1">
+        <ResizablePanel
           id="sidebar"
-          order={1}
-          ref={sidebarPanelRef}
-          className={sidebarAnimating ? 'panel-transition' : ''}
-          defaultSize={sidebarCollapsed ? 3 : 18}
-          minSize={12}
-          maxSize={28}
+          panelRef={sidebarPanelRef}
+          animate={sidebarAnimating}
+          defaultSize={sidebarCollapsed ? '3%' : '18%'}
+          minSize="12%"
+          maxSize="28%"
           collapsible
-          collapsedSize={3}
+          collapsedSize="3%"
           style={{
             overflow: 'visible',
             position: 'relative',
@@ -1164,18 +1163,10 @@ export function App() {
             onRemoveFromRotation={removeFromRotation}
             onToggleActiveTasksSection={() => setShowActiveTasksSection(!showActiveTasksSection)}
           />
-        </Panel>
-        <PanelResizeHandle
-          disabled={sidebarCollapsed}
-          className="resize-handle-quiet w-px bg-border/40"
-        />
+        </ResizablePanel>
+        <ResizableHandle disabled={sidebarCollapsed} />
 
-        <Panel
-          id="main"
-          order={2}
-          className={sidebarAnimating || changesAnimating ? 'panel-transition' : ''}
-          minSize={35}
-        >
+        <ResizablePanel id="main" animate={sidebarAnimating || changesAnimating} minSize="35%">
           <ShellDrawerWrapper
             enabled={shellDrawerPosition === 'main'}
             taskId={activeTask?.id ?? null}
@@ -1245,29 +1236,25 @@ export function App() {
               }}
             />
           </ShellDrawerWrapper>
-        </Panel>
+        </ResizablePanel>
 
         {activeTask && (
           <>
-            <PanelResizeHandle
-              disabled={changesPanelCollapsed}
-              className="resize-handle-floating w-px bg-transparent"
-            />
-            <Panel
+            <ResizableHandle disabled={changesPanelCollapsed} />
+            <ResizablePanel
               id="changes"
-              order={3}
-              ref={changesPanelRef}
-              className={changesAnimating ? 'panel-transition' : ''}
+              panelRef={changesPanelRef}
+              animate={changesAnimating}
               style={
                 changesPanelCollapsed
                   ? { background: terminalBg }
                   : { background: terminalBg, padding: '24px 24px 24px 0' }
               }
-              defaultSize={changesPanelCollapsed ? 0.5 : 22}
-              minSize={12}
-              maxSize={40}
+              defaultSize={changesPanelCollapsed ? '0.5%' : '22%'}
+              minSize="12%"
+              maxSize="40%"
               collapsible
-              collapsedSize={0.5}
+              collapsedSize="0.5%"
               onCollapse={() => {
                 setChangesPanelCollapsed(true);
                 setTimeout(() => setChangesAnimating(false), 200);
@@ -1338,10 +1325,10 @@ export function App() {
                   )}
                 </ShellDrawerWrapper>
               </div>
-            </Panel>
+            </ResizablePanel>
           </>
         )}
-      </PanelGroup>
+      </ResizablePanelGroup>
 
       {showAddProjectModal && (
         <NewProjectWizard
