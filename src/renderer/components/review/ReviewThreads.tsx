@@ -4,7 +4,6 @@ import { toast } from 'sonner';
 import type { PrReview, PrReviewThread } from '../../../shared/types';
 import { usePrReviews, type ReplyPoster } from '../../stores/prReviewStore';
 import { buildReviewPrompt } from '../../utils/agentPrompt';
-import { threadLocation } from '../../utils/prReviewNotices';
 import { typeIntoTask } from '../../utils/typeIntoTask';
 import { openFileAt } from '../diffEditor/openFileAt';
 import { PrThreadCard } from '../diffEditor/prReview/PrThreadCard';
@@ -14,7 +13,7 @@ import { DetailSection } from '../ui/DetailList';
 import { Expandable } from '../ui/Expandable';
 import { IconButton } from '../ui/IconButton';
 import { ListRow } from '../ui/ListRow';
-import { threadGroups, threadHeadline } from './outline';
+import { threadGroups, threadHeadline, threadPlace } from './outline';
 import { rowAction, rowKeys } from './rowAction';
 
 interface ThreadActions {
@@ -123,13 +122,21 @@ function ThreadRow({
   const replies = thread.comments.length - 1;
   const drafts = replyDrafts.get(thread.id) ?? 0;
   const author = thread.comments[0]?.author ?? 'ghost';
-  const meta = [
+  const place = threadPlace(thread);
+  // The file and line stay whole; who, the replies and the folder truncate.
+  const rest = [
     `@${author}`,
-    threadLocation(thread),
     replies > 0 && `${replies} ${replies === 1 ? 'reply' : 'replies'}`,
+    place.dir,
   ]
     .filter(Boolean)
     .join(' · ');
+  const meta = (
+    <span className="flex min-w-0 gap-1" title={`${thread.path} · @${author}`}>
+      <span className="shrink-0 text-ink-2">{place.name}</span>
+      <span className="min-w-0 truncate">· {rest}</span>
+    </span>
+  );
   const open = () => {
     if (!inline || thread.line === null) {
       setUnfolded((u) => !u);

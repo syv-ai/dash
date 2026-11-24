@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { DiffComment, PrFile, PrReviewThread } from '../../../../shared/types';
 import {
   DELETED_BLOB,
-  checkCounts,
+  checksSummary,
   fileRows,
   groupByPath,
   lineLabel,
@@ -13,6 +13,7 @@ import {
   reviewComments,
   threadGroups,
   threadHeadline,
+  threadPlace,
   trayNotes,
 } from '../outline';
 
@@ -162,16 +163,20 @@ describe('drafts and notes', () => {
   });
 });
 
-describe('checkCounts', () => {
-  it('counts checks by state, leaving skipped ones out', () => {
-    const c = (state: 'passing' | 'failing' | 'pending' | 'skipped') => ({
-      name: state,
-      state,
-      url: null,
-    });
+describe('checksSummary', () => {
+  const c = (state: 'passing' | 'failing' | 'pending' | 'skipped') => ({
+    name: state,
+    state,
+    url: null,
+  });
+  it('counts every state, the ones that need a look first', () => {
     expect(
-      checkCounts([c('passing'), c('passing'), c('failing'), c('skipped'), c('pending')]),
-    ).toEqual({ passing: 2, failing: 1, pending: 1 });
+      checksSummary([c('passing'), c('skipped'), c('passing'), c('failing'), c('skipped')]),
+    ).toBe('1 failing · 2 passing · 2 skipped');
+    expect(checksSummary([c('passing'), c('skipped')])).toBe('1 passing · 1 skipped');
+  });
+  it('is null without checks', () => {
+    expect(checksSummary([])).toBeNull();
   });
 });
 
@@ -209,5 +214,18 @@ describe('next/previous thread or draft', () => {
 
   it('has nowhere to go without threads or drafts', () => {
     expect(nextStop([], { path: 'a.ts', line: 1 }, 1)).toBeNull();
+  });
+});
+
+describe('threadPlace', () => {
+  it("splits the file's name and line(s) from its folder", () => {
+    expect(threadPlace(thread('t', { path: 'src/lib/a.ts', startLine: 2, line: 5 }))).toEqual({
+      name: 'a.ts:2-5',
+      dir: 'src/lib',
+    });
+    expect(threadPlace(thread('t', { path: 'a.ts', line: null, isOutdated: true }))).toEqual({
+      name: 'a.ts (outdated)',
+      dir: '',
+    });
   });
 });

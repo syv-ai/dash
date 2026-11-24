@@ -19,9 +19,9 @@ export function ReviewProgress({
   const next = nextUnviewed(rows, activePath);
   const label = `Viewed ${viewed} of ${rows.length} files`;
   return (
-    <div className="flex items-center gap-2 px-2.5 pt-3">
+    <div className="flex flex-wrap items-center gap-2 px-2.5 pt-3">
       <ProgressRing value={(viewed / rows.length) * 100} size={20} stroke={3} aria-label={label} />
-      <span className="type-body min-w-0 flex-1 truncate tabular-nums">{label}</span>
+      <span className="type-body min-w-0 flex-1 tabular-nums">{label}</span>
       {next && (
         <Button size="sm" variant="secondary" onClick={() => onOpenFile(next)}>
           Next unviewed

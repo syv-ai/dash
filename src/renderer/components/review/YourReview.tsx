@@ -34,7 +34,7 @@ export function YourReview({
   cwd: string;
   /** The person's comments and replies for this PR (`reviewComments`). */
   comments: DiffComment[];
-  /** The task's notes on this PR: they stay local. */
+  /** The task's notes on this PR not yet sent: they stay local. */
   noteCount: number;
   onNavigate: (scope: string, path: string, commentId: string) => void;
 }) {

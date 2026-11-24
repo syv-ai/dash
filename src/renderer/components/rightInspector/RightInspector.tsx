@@ -109,6 +109,9 @@ interface RightInspectorProps {
   onTaskSettings: () => void;
 }
 
+/** The Review list column's narrowest, in px (D81). */
+const REVIEW_LIST_MIN_PX = 320;
+
 /** A tooltip label with its shortcut, e.g. "Stage all  ⇧⌘A". */
 function withShortcut(label: string, binding: KeyBinding | undefined): string {
   return binding ? `${label}  ${formatBinding(binding)}` : label;
@@ -628,7 +631,9 @@ export function RightInspector({
               <ResizablePanel
                 id="list"
                 defaultSize="30%"
-                minSize="15%"
+                // The Review outline needs room for its rows' counts and
+                // actions beside their text; the tree and commits do with less.
+                minSize={segment === 'review' ? REVIEW_LIST_MIN_PX : '15%'}
                 maxSize="50%"
                 {...treePanel}
               >

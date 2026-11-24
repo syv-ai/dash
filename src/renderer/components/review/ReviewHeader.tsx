@@ -1,7 +1,18 @@
-import { ExternalLink, MoreHorizontal, RefreshCw, X } from 'lucide-react';
+import {
+  ExternalLink,
+  GitBranch,
+  GitCommitHorizontal,
+  GitPullRequest,
+  ListChecks,
+  MoreHorizontal,
+  RefreshCw,
+  Users,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
+import type { ReactNode } from 'react';
 import type { PrReview } from '../../../shared/types';
 import { cn } from '../../lib/cn';
-import { DetailItem, DetailList } from '../ui/DetailList';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,16 +21,28 @@ import {
 } from '../ui/DropdownMenu';
 import { IconButton } from '../ui/IconButton';
 import { TextLink } from '../ui/TextLink';
-import { checkCounts } from './outline';
+import { checksSummary } from './outline';
 import { distanceLine, providerName, REVIEWER_LABELS, STATE_LABELS } from './labels';
 
-/** "3 passing · 1 failing", the states with checks in them; null with none. */
-function checksLine(review: PrReview): string | null {
-  const n = checkCounts(review.checks);
-  const parts = (['passing', 'failing', 'pending'] as const)
-    .filter((k) => n[k] > 0)
-    .map((k) => `${n[k]} ${k}`);
-  return parts.length > 0 ? parts.join(' · ') : null;
+/** One fact about the PR: an icon naming what it is, then the value, which
+ *  wraps rather than truncates (the list column can be narrow). */
+function Fact({
+  icon: Icon,
+  name,
+  children,
+}: {
+  icon: LucideIcon;
+  name: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-start gap-2" title={name}>
+      <span className="flex h-4 shrink-0 items-center text-ink-3">
+        <Icon size={14} strokeWidth={1.8} aria-label={name} />
+      </span>
+      <div className="type-body min-w-0 flex-1 wrap-break-word">{children}</div>
+    </div>
+  );
 }
 
 /**
@@ -45,11 +68,7 @@ export function ReviewHeader({
   /** Stop reviewing the PR picked for the task; absent when it is the task's own. */
   onStop?: () => void;
 }) {
-  const checks = checksLine(review);
-  const reviewers = review.reviewers
-    .map((r) => `${r.name} (${REVIEWER_LABELS[r.state]})`)
-    .join(', ');
-  const distance = distanceLine(review);
+  const checks = checksSummary(review.checks);
 
   return (
     <section className="grid gap-2 px-2.5 pt-2 pb-1">
@@ -87,28 +106,35 @@ export function ReviewHeader({
           Could not refresh: {error}
         </p>
       )}
-      <DetailList>
-        <DetailItem label="Branches" title={`${review.baseRef} ← ${review.headRef}`}>
-          {review.baseRef} ← {review.headRef}
-        </DetailItem>
-        <DetailItem label="Commits">
-          <span className="tabular-nums">{distance}</span>
-        </DetailItem>
-        <DetailItem label="State">
+      <div className="grid gap-1.5">
+        <Fact icon={GitPullRequest} name="State">
           {STATE_LABELS[review.state]}
-          {review.author && <span className="text-ink-3"> · by {review.author}</span>}
-        </DetailItem>
-        {reviewers && (
-          <DetailItem label="Reviewers" title={reviewers}>
-            {reviewers}
-          </DetailItem>
+          {review.author && <span className="type-caption"> · by {review.author}</span>}
+        </Fact>
+        <Fact icon={GitBranch} name="Branches">
+          <span className="wrap-anywhere">
+            {review.baseRef} ← {review.headRef}
+          </span>
+        </Fact>
+        <Fact icon={GitCommitHorizontal} name="Commits">
+          <span className="tabular-nums">{distanceLine(review)}</span>
+        </Fact>
+        {review.reviewers.length > 0 && (
+          <Fact icon={Users} name="Reviewers">
+            {review.reviewers.map((r, i) => (
+              <span key={r.name}>
+                {i > 0 && ', '}
+                {r.name} <span className="type-caption">{REVIEWER_LABELS[r.state]}</span>
+              </span>
+            ))}
+          </Fact>
         )}
         {checks && (
-          <DetailItem label="Checks" title={checks}>
+          <Fact icon={ListChecks} name="Checks">
             <span className="tabular-nums">{checks}</span>
-          </DetailItem>
+          </Fact>
         )}
-      </DetailList>
+      </div>
     </section>
   );
 }

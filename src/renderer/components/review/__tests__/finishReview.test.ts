@@ -1,5 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { canPost, offeredVerdict, postLabel } from '../finishReview';
+import type { DiffComment } from '../../../../shared/types';
+import { canPost, offeredVerdict, postLabel, unsentNoteCount } from '../finishReview';
+
+const draft = (id: string, over: Partial<DiffComment>): DiffComment => ({
+  id,
+  taskId: 't',
+  filePath: 'a.ts',
+  startLine: 1,
+  endLine: 1,
+  text: id,
+  sent: false,
+  viewScope: 'pr:github:7',
+  side: 'RIGHT',
+  replyTo: null,
+  author: 'user',
+  kind: 'note',
+  createdAt: '',
+  updatedAt: '',
+  ...over,
+});
 
 describe('finishReview', () => {
   it('posts only when something would reach the PR', () => {
@@ -9,16 +28,33 @@ describe('finishReview', () => {
     expect(canPost({ comments: 0, summary: '', verdict: 'approve' })).toBe(true);
   });
 
-  it('names the forge, the count and the verdict on the button', () => {
+  it('names the forge, the count and a verdict beyond Comment on the button', () => {
     expect(postLabel('github', { comments: 5, summary: '', verdict: 'request_changes' })).toBe(
-      'Post review to GitHub (5 comments · Request changes)',
+      'Post review to GitHub · 5 comments · Request changes',
     );
     expect(postLabel('ado', { comments: 1, summary: '', verdict: 'comment' })).toBe(
-      'Post review to Azure DevOps (1 comment · Comment)',
+      'Post review to Azure DevOps · 1 comment',
     );
     expect(postLabel('github', { comments: 0, summary: '', verdict: 'approve' })).toBe(
-      'Post review to GitHub (Approve)',
+      'Post review to GitHub · Approve',
     );
+    expect(postLabel('github', { comments: 0, summary: 'LGTM', verdict: 'comment' })).toBe(
+      'Post review to GitHub',
+    );
+  });
+
+  it("counts only the PR's notes still to send as staying local", () => {
+    const byFile = {
+      'a.ts': [
+        draft('open', {}),
+        draft('sent', { sent: true }),
+        draft('comment', { kind: 'comment' }),
+        draft('elsewhere', { viewScope: 'live' }),
+      ],
+      'b.ts': [draft('also', { filePath: 'b.ts' })],
+    };
+    expect(unsentNoteCount(byFile, 'pr:github:7')).toBe(2);
+    expect(unsentNoteCount(byFile, 'pr:github:8')).toBe(0);
   });
 
   it('falls back to Comment when the PR does not offer the picked verdict', () => {

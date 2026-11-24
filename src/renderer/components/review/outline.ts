@@ -1,5 +1,6 @@
 import { isPrComment } from '../../../shared/diffComments';
 import type { DiffComment, PrCheck, PrFile, PrReviewThread } from '../../../shared/types';
+import { threadLocation } from '../../utils/prReviewNotices';
 import { isInlineThread } from '../diffEditor/prReview/prViewPolicy';
 
 /*
@@ -100,6 +101,16 @@ export function threadHeadline(t: PrReviewThread): string {
   );
 }
 
+/** Where a thread sits, split for a narrow row: the file's name with its
+ *  line(s) ("a.ts:3-5", "a.ts (outdated)"), and its folder ("" at the root). */
+export function threadPlace(t: PrReviewThread): { name: string; dir: string } {
+  const slash = t.path.lastIndexOf('/');
+  return {
+    name: threadLocation({ ...t, path: t.path.slice(slash + 1) }),
+    dir: slash > 0 ? t.path.slice(0, slash) : '',
+  };
+}
+
 /** Per thread id, the person's draft replies to it. */
 export function replyDraftCounts(drafts: readonly DiffComment[]): Map<string, number> {
   const m = new Map<string, number>();
@@ -195,13 +206,13 @@ export function nextStop(
 
 // ── Header ──
 
-/** Checks by state, skipped ones left out. */
-export function checkCounts(checks: readonly PrCheck[]): {
-  passing: number;
-  failing: number;
-  pending: number;
-} {
-  const n = { passing: 0, failing: 0, pending: 0 };
-  for (const c of checks) if (c.state !== 'skipped') n[c.state]++;
-  return n;
+const CHECK_ORDER = ['failing', 'pending', 'passing', 'skipped'] as const;
+
+/** "1 failing · 3 passing · 4 skipped": every state with checks in it, the
+ *  ones that need a look first; null with no checks. */
+export function checksSummary(checks: readonly PrCheck[]): string | null {
+  const n = { passing: 0, failing: 0, pending: 0, skipped: 0 };
+  for (const c of checks) n[c.state]++;
+  const parts = CHECK_ORDER.filter((k) => n[k] > 0).map((k) => `${n[k]} ${k}`);
+  return parts.length > 0 ? parts.join(' · ') : null;
 }

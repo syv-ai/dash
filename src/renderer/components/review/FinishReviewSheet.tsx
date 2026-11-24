@@ -23,7 +23,7 @@ interface Props {
   taskId: string;
   /** The person's comments and replies for this PR: what posts. */
   comments: DiffComment[];
-  /** The task's notes on this PR: they stay local. */
+  /** The task's notes on this PR not yet sent: they stay local. */
   noteCount: number;
   onClose: () => void;
 }

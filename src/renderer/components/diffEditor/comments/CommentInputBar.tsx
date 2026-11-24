@@ -19,6 +19,7 @@ interface Props {
   initialText: string;
   onSubmit: (text: string) => void;
   onCancel: () => void;
+  /** Defaults by kind: "Note to the agent…" / "Comment for the author…". */
   placeholder?: string;
   submitLabel?: string;
   /** Show the Note to agent | Comment for author switch (fresh drafts only). */
@@ -27,6 +28,12 @@ interface Props {
   onSendNow?: (text: string) => void;
 }
 
+const PLACEHOLDERS: Record<DiffCommentKind | 'none', string> = {
+  note: 'Note to the agent…',
+  comment: 'Comment for the author…',
+  none: 'Describe the change…',
+};
+
 /** The composer: a growing textarea, ⌘↵ to submit; with `kind`, the
  *  note/comment switch (⌘⇧N flips it); with `onSendNow`, Send now for a note. */
 export function CommentInputBar({
@@ -34,7 +41,7 @@ export function CommentInputBar({
   initialText,
   onSubmit,
   onCancel,
-  placeholder = 'Describe the change…',
+  placeholder,
   submitLabel = 'Add',
   kind,
   onSendNow,
@@ -112,16 +119,19 @@ export function CommentInputBar({
             onCancel();
           }
         }}
-        placeholder={placeholder}
+        placeholder={placeholder ?? PLACEHOLDERS[kind?.value ?? 'none']}
         variant="bare"
       />
-      <div className="flex shrink-0 items-center gap-2">
-        <span className="type-caption flex items-center gap-1">
+      {/* One line: the keys alone hint at the shortcut (their tooltip says
+          what for), so the buttons never push it onto two lines. */}
+      <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
+        <span
+          className="flex min-w-0 flex-1 items-center gap-0.5"
+          title={`⌘↵ to ${submitLabel.toLowerCase()}`}
+        >
           <Kbd>⌘</Kbd>
           <Kbd>↵</Kbd>
-          <span className="ml-0.5">to {submitLabel.toLowerCase()}</span>
         </span>
-        <span className="flex-1" />
         {sendNow && (
           <Button
             size="sm"

@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
 import { GitPullRequestArrow } from 'lucide-react';
 import { prScope } from '../../../shared/prScope';
-import { isPrComment } from '../../../shared/diffComments';
 import type { PrRef, Task } from '../../../shared/types';
 import { useCommentsStore } from '../../stores/commentsStore';
 import { usePrReviews } from '../../stores/prReviewStore';
 import { EmptyState } from '../ui/EmptyState';
+import { unsentNoteCount } from './finishReview';
 import { fileRows, replyDraftCounts, reviewComments, viewedBlob } from './outline';
 import { NotesTray } from './NotesTray';
 import { ReviewFiles } from './ReviewFiles';
@@ -60,13 +60,10 @@ function Outline({
   const scope = prScope(target.provider, target.number);
   const commentsReady = useCommentsStore((s) => s.taskId === task.id && !s.disabled);
   const byFile = useCommentsStore((s) => s.byFile);
-  const { comments, noteCount } = useMemo(() => {
-    const comments = reviewComments(byFile, scope);
-    const noteCount = Object.values(byFile)
-      .flat()
-      .filter((c) => c.viewScope === scope && !isPrComment(c)).length;
-    return { comments, noteCount };
-  }, [byFile, scope]);
+  const { comments, noteCount } = useMemo(
+    () => ({ comments: reviewComments(byFile, scope), noteCount: unsentNoteCount(byFile, scope) }),
+    [byFile, scope],
+  );
   const rows = useMemo(
     () => (review ? fileRows(review.files, review.threads, marks, comments) : []),
     [review, marks, comments],

@@ -1,11 +1,13 @@
 import { memo, useMemo, type ReactNode } from 'react';
 import { marked, type Token, type Tokens } from 'marked';
+import { CheckboxMark } from './Checkbox';
 
 /**
  * Markdown (GitHub-flavoured) rendered as React elements from marked's tokens,
  * never as an HTML string: text written by anyone (a PR's other reviewers, an
  * agent) can't inject markup. Raw HTML in the source is dropped, keeping its
- * text. Long lines and code wrap rather than scroll sideways. Links open in the
+ * text. Long lines and code wrap rather than scroll sideways: at spaces, and
+ * inside a word only when it can't fit a line on its own. Links open in the
  * browser.
  */
 export const Markdown = memo(function Markdown({
@@ -61,7 +63,7 @@ function block(t: Token, key: number): ReactNode {
           {c.lang === 'suggestion' && (
             <div className="text-xs text-muted-fade-70">Suggested change</div>
           )}
-          <pre className="whitespace-pre-wrap break-all rounded-md bg-foreground/6 px-2 py-1.5 font-mono text-xs leading-snug">
+          <pre className="whitespace-pre-wrap wrap-anywhere rounded-md bg-foreground/6 px-2 py-1.5 font-mono text-xs leading-snug">
             {c.text}
           </pre>
         </div>
@@ -80,14 +82,7 @@ function block(t: Token, key: number): ReactNode {
       const l = t as Tokens.List;
       const items = l.items.map((item, i) => (
         <li key={i} className={item.task ? 'list-none -ml-4' : ''}>
-          {item.task && (
-            <input
-              type="checkbox"
-              checked={!!item.checked}
-              readOnly
-              className="mr-1.5 align-middle"
-            />
-          )}
+          {item.task && <CheckboxMark checked={!!item.checked} className="mr-1.5 align-[-2px]" />}
           {item.tokens.map((c, j) =>
             c.type === 'checkbox' ? null : c.type === 'text' ? (
               <span key={j}>{inline((c as Tokens.Text).tokens ?? [c])}</span>
@@ -171,7 +166,7 @@ function inline(tokens: Token[]): ReactNode[] {
         return (
           <code
             key={i}
-            className="rounded-sm bg-foreground/8 px-1 py-px font-mono text-[0.92em] break-all"
+            className="rounded-sm bg-foreground/8 px-1 py-px font-mono text-[0.92em] wrap-anywhere"
           >
             {(t as Tokens.Codespan).text}
           </code>
@@ -191,7 +186,7 @@ function inline(tokens: Token[]): ReactNode[] {
               e.stopPropagation();
               openLink(l.href);
             }}
-            className="text-primary underline-offset-2 hover:underline break-all"
+            className="text-primary underline-offset-2 hover:underline wrap-anywhere"
           >
             {t.type === 'image' ? l.text || l.href : inline(l.tokens)}
           </a>

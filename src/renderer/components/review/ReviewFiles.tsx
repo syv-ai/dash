@@ -1,14 +1,36 @@
+import { MessageSquare, MessagesSquare, type LucideIcon } from 'lucide-react';
 import { Checkbox } from '../ui/Checkbox';
-import { CountBadge } from '../ui/CountBadge';
 import { DetailSection } from '../ui/DetailList';
 import { LineStats } from '../ui/LineStats';
 import { ListRow } from '../ui/ListRow';
+import { Tooltip } from '../ui/Tooltip';
+import { plural } from './labels';
 import type { FileRow } from './outline';
 import { rowKeys } from './rowAction';
 
+/** A count with the icon of what it counts; the tooltip says it in words. */
+function IconCount({
+  icon: Icon,
+  count,
+  label,
+}: {
+  icon: LucideIcon;
+  count: number;
+  label: string;
+}) {
+  return (
+    <Tooltip content={label} delay={300}>
+      <span className="inline-flex items-center gap-0.5 text-xs tabular-nums" aria-label={label}>
+        <Icon size={14} strokeWidth={1.8} />
+        {count}
+      </span>
+    </Tooltip>
+  );
+}
+
 /**
  * Every file the PR changes: its name (then its folder), a viewed tick,
- * unresolved threads (outlined count) and the person's comments (filled),
+ * unresolved threads and the person's comments (each an icon and a count),
  * and its line stats. A click opens it in the PR view.
  */
 export function ReviewFiles({
@@ -50,9 +72,19 @@ export function ReviewFiles({
               trailing={
                 <>
                   {row.threads > 0 && (
-                    <CountBadge count={row.threads} tone="outline" title="Unresolved threads" />
+                    <IconCount
+                      icon={MessagesSquare}
+                      count={row.threads}
+                      label={plural(row.threads, 'unresolved thread')}
+                    />
                   )}
-                  {row.drafts > 0 && <CountBadge count={row.drafts} title="Your comments" />}
+                  {row.drafts > 0 && (
+                    <IconCount
+                      icon={MessageSquare}
+                      count={row.drafts}
+                      label={plural(row.drafts, 'draft comment')}
+                    />
+                  )}
                   <span className="text-xs">
                     <LineStats add={additions} del={deletions} />
                   </span>

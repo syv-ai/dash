@@ -143,13 +143,14 @@ function Reviewers({ review }: { review: PrReview }) {
       {review.reviewers.length === 0 ? (
         <p className="type-caption px-2.5">None.</p>
       ) : (
-        <DetailList>
+        <ul className="grid gap-1">
           {review.reviewers.map((r) => (
-            <DetailItem key={r.name} label={<span title={r.name}>{r.name}</span>}>
-              {REVIEWER_LABELS[r.state]}
-            </DetailItem>
+            <li key={r.name} className="flex min-h-6 flex-wrap items-baseline gap-x-2">
+              <span className="type-body wrap-anywhere">{r.name}</span>
+              <span className="type-caption">{REVIEWER_LABELS[r.state]}</span>
+            </li>
           ))}
-        </DetailList>
+        </ul>
       )}
     </DetailSection>
   );

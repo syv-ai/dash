@@ -6,7 +6,8 @@ import { focusRing } from './styles';
 
 /**
  * A titled block of a details view: a `type-heading` (with an optional action
- * at its end), then its rows. Sections stack with their own spacing.
+ * at its end; the action wraps under a long title, which never truncates),
+ * then its rows. Sections stack with their own spacing.
  * `collapsible` makes the heading a disclosure that folds the rows away.
  */
 export function DetailSection({
@@ -28,8 +29,8 @@ export function DetailSection({
   if (!collapsible) {
     return (
       <section className="grid gap-1 px-2.5 pt-4 pb-1">
-        <div className="flex h-6 items-center gap-2">
-          <h3 className="type-heading min-w-0 flex-1 truncate">{title}</h3>
+        <div className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1">
+          <h3 className="type-heading min-w-0 flex-1">{title}</h3>
           {action}
         </div>
         {children}
@@ -38,20 +39,20 @@ export function DetailSection({
   }
   return (
     <section className="px-2.5 pt-4 pb-1">
-      <div className="flex h-6 items-center gap-2">
+      <div className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1">
         <h3 className="type-heading min-w-0 flex-1">
           <button
             type="button"
             aria-expanded={open}
             onClick={() => setOpen((o) => !o)}
-            className={cn('flex max-w-full items-center gap-1 rounded-sm', focusRing)}
+            className={cn('flex max-w-full items-center gap-1 rounded-sm text-left', focusRing)}
           >
             <ChevronRight
               size={14}
               strokeWidth={1.8}
               className={cn('shrink-0 text-icon transition-transform', open && 'rotate-90')}
             />
-            <span className="truncate">{title}</span>
+            <span>{title}</span>
           </button>
         </h3>
         {action}
