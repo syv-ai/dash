@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { cn } from '../../lib/cn';
 
 // Lets nested close buttons (Settings's sidebar X, Skills's header X) trigger the
 // fade-out + scale-out animation instead of calling the parent's onClose directly,
@@ -101,10 +102,13 @@ export function Modal({
 
   return (
     <ModalCloseContext.Provider value={requestClose}>
-      {/* A soft dim + blur lets the underlying app peek through the translucent
-          card without dominating it. `bg-scrim` is dark ink in the light theme. */}
+      {/* The scrim token dims the app behind; it is dark ink in the light theme. */}
       <div
-        className={`fixed inset-0 ${elevated ? 'z-[60]' : 'z-50'} flex items-center justify-center bg-scrim ${closing ? 'animate-fade-out' : 'animate-fade-in'}`}
+        className={cn(
+          'fixed inset-0 flex items-center justify-center bg-scrim',
+          elevated ? 'z-[60]' : 'z-50',
+          closing ? 'animate-fade-out' : 'animate-fade-in',
+        )}
         onMouseDown={(e) => {
           mouseDownOnBackdrop.current = e.target === e.currentTarget;
         }}
@@ -122,7 +126,12 @@ export function Modal({
             stacking, so without it a tall modal's top edge (the diff editor's
             header buttons) sits under the drag strip and swallows clicks. */}
         <div
-          className={`modal-shell titlebar-no-drag border border-border/40 rounded-xl ${size} flex flex-col ${overflow === 'visible' ? 'overflow-visible' : 'overflow-hidden'} ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
+          className={cn(
+            'titlebar-no-drag relative flex flex-col rounded-2xl bg-raised text-ink shadow-raised',
+            size,
+            overflow === 'visible' ? 'overflow-visible' : 'overflow-hidden',
+            closing ? 'animate-scale-out' : 'animate-scale-in',
+          )}
           style={cardStyle}
           onClick={(e) => e.stopPropagation()}
         >

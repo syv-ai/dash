@@ -1,111 +1,68 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import * as React from 'react';
+import * as TooltipPrimitive from '@radix-ui/react-tooltip';
+import { cn } from '../../lib/cn';
 
-const PADDING = 8;
+/** The window's top strip doubles as the macOS titlebar drag region; keep
+ *  tooltips out of it so a header button's tooltip flips below. */
+const COLLISION_PADDING = { top: 40, right: 8, bottom: 8, left: 8 };
 
 interface TooltipProps {
-  content: string;
-  side?: 'top' | 'bottom';
+  content: React.ReactNode;
+  side?: 'top' | 'bottom' | 'left' | 'right';
+  /** Hover delay in ms before the tooltip shows. */
   delay?: number;
-  children: React.ReactElement<
-    React.HTMLAttributes<HTMLElement> & React.RefAttributes<HTMLElement>
-  >;
+  /** Controlled visibility (e.g. pinned open in the primitives gallery). */
+  open?: boolean;
+  /** One element; it becomes the trigger (Radix `asChild`), so it must forward
+   *  its ref and spread props — a Radix trigger or `IconButton` both do. */
+  children: React.ReactElement;
 }
 
-export function Tooltip({ content, side = 'top', delay = 1000, children }: TooltipProps) {
-  const [visible, setVisible] = useState(false);
-  const [coords, setCoords] = useState<{ x: number; y: number } | null>(null);
-  const triggerRef = useRef<HTMLElement | null>(null);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const [effectiveSide, setEffectiveSide] = useState(side);
-
-  const show = useCallback(() => {
-    timeoutRef.current = setTimeout(() => {
-      if (!triggerRef.current) return;
-      const rect = triggerRef.current.getBoundingClientRect();
-      // Top-side tooltips render above the trigger; flip to bottom when the
-      // trigger sits too close to the viewport top to fit the popup above.
-      // The top strip in MainContent doubles as the macOS titlebar drag region,
-      // so buttons there are within the first ~40px of the viewport.
-      const resolved = side === 'top' && rect.top < 40 ? 'bottom' : side;
-      setEffectiveSide(resolved);
-      setCoords({
-        x: rect.left + rect.width / 2,
-        y: resolved === 'top' ? rect.top : rect.bottom,
-      });
-      setVisible(true);
-    }, delay);
-  }, [delay, side]);
-
-  const hide = useCallback(() => {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    setVisible(false);
-    setCoords(null);
-  }, []);
-
-  // Ref callback: measures and clamps position before first paint
-  const tooltipRefCallback = useCallback(
-    (el: HTMLDivElement | null) => {
-      if (!el || !coords) return;
-      const ttWidth = el.offsetWidth;
-      const idealLeft = coords.x - ttWidth / 2;
-      const clampedLeft = Math.max(
-        PADDING,
-        Math.min(window.innerWidth - ttWidth - PADDING, idealLeft),
-      );
-      el.style.left = `${clampedLeft}px`;
-      el.style.transform = effectiveSide === 'top' ? 'translateY(-100%)' : '';
-      el.style.visibility = 'visible';
-    },
-    [coords, effectiveSide],
-  );
-
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
-  }, []);
-
-  // The child may carry a ref of its own (a Radix trigger's, a forwardRef
-  // parent's) — in React 19 it is a plain prop. cloneElement would replace it
-  // with ours, silently detaching whatever attached it, so hand the node to both.
-  const childRef = children.props.ref;
-  const mergedRef = useCallback(
-    (node: HTMLElement | null) => {
-      triggerRef.current = node;
-      if (typeof childRef === 'function') childRef(node);
-      else if (childRef && typeof childRef === 'object') {
-        (childRef as React.MutableRefObject<HTMLElement | null>).current = node;
-      }
-    },
-    [childRef],
-  );
-
+/**
+ * Hover label for a control (Radix Tooltip, shadcn look): raised, small,
+ * rounded-md. Long text wraps at a readable width and honours `\n`. Opens on
+ * hover after `delay`, and on keyboard focus — not on programmatic focus, so a
+ * dialog that autofocuses a button doesn't pop its tooltip.
+ *
+ * Wrapping another Radix trigger (`<Tooltip><PopoverTrigger asChild>…`) works,
+ * but the tooltip's `data-state` wins on the shared element: style the open
+ * state with `aria-expanded:` rather than `data-[state=open]:`.
+ */
+export function Tooltip({ content, side = 'top', delay = 1000, open, children }: TooltipProps) {
   return (
-    <>
-      {React.cloneElement(children, {
-        ref: mergedRef,
-        onMouseEnter: show,
-        onMouseLeave: hide,
-        onMouseDown: hide,
-      })}
-      {visible &&
-        coords &&
-        createPortal(
-          <div
-            ref={tooltipRefCallback}
-            className="tooltip-popup"
-            style={{
-              top: effectiveSide === 'top' ? coords.y - 6 : coords.y + 6,
-              visibility: 'hidden',
-            }}
-            data-side={effectiveSide}
-          >
-            {content}
-          </div>,
-          document.body,
+    <TooltipPrimitive.Provider delayDuration={delay} skipDelayDuration={300}>
+      <TooltipPrimitive.Root open={open}>
+        <TooltipPrimitive.Trigger
+          asChild
+          onFocus={(e) => {
+            // Radix skips its own focus handler when this one prevents default.
+            if (!e.currentTarget.matches(':focus-visible')) e.preventDefault();
+          }}
+        >
+          {children}
+        </TooltipPrimitive.Trigger>
+        <TooltipContent side={side}>{content}</TooltipContent>
+      </TooltipPrimitive.Root>
+    </TooltipPrimitive.Provider>
+  );
+}
+
+function TooltipContent({
+  className,
+  sideOffset = 6,
+  ...props
+}: React.ComponentProps<typeof TooltipPrimitive.Content>) {
+  return (
+    <TooltipPrimitive.Portal>
+      <TooltipPrimitive.Content
+        sideOffset={sideOffset}
+        collisionPadding={COLLISION_PADDING}
+        className={cn(
+          'z-[9999] w-max max-w-70 whitespace-pre-line break-words rounded-md bg-raised px-2 py-1 text-xs text-ink shadow-raised animate-tooltip-in',
+          className,
         )}
-    </>
+        {...props}
+      />
+    </TooltipPrimitive.Portal>
   );
 }

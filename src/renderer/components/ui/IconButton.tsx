@@ -1,16 +1,15 @@
-import React from 'react';
+import * as React from 'react';
 import { cn } from '../../lib/cn';
+import { buttonVariants } from './Button';
 import { Tooltip } from './Tooltip';
 
-type IconButtonSize = 'sm' | 'md';
-
-interface IconButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'title'> {
-  onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
-  /** Tooltip text (not a native title, which would double up). */
+interface IconButtonProps extends Omit<React.ComponentProps<'button'>, 'title'> {
+  /** Tooltip text, also the accessible name (not a native title, which would double up). */
   title: string;
+  /** default and muted: ink-3 at rest, ink on hover; destructive: fail on hover. */
   variant?: 'default' | 'destructive' | 'muted';
-  size?: IconButtonSize;
-  className?: string;
+  /** md = a 30px square (`Button size="icon"`), sm = 24px for dense rows. */
+  size?: 'sm' | 'md';
   /**
    * Greyed out and inert, its tooltip still shown (a disabled `<button>` gets
    * no mouse events, so its tooltip couldn't say why it is off).
@@ -19,48 +18,42 @@ interface IconButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElem
   children: React.ReactNode;
 }
 
+// `muted` is kept for existing call sites; it now reads the same as `default`.
 const variantStyles = {
-  default: 'hover:bg-accent text-fg-fade-80 hover:text-foreground',
-  destructive: 'hover:bg-destructive/15 text-fg-fade-80 hover:text-destructive',
-  /** Header-strip style: muted at rest, like the header's other ghost buttons. */
-  muted: 'text-muted-foreground hover:text-foreground hover:bg-foreground/5',
+  default: 'text-ink-3 hover:bg-hover hover:text-ink',
+  muted: 'text-ink-3 hover:bg-hover hover:text-ink',
+  destructive: 'text-ink-3 hover:bg-state-fail/12 hover:text-state-fail',
 } as const;
 
-const sizeStyles = {
-  sm: 'p-0.5',
-  md: 'p-1.5',
-} as const;
+/** Rest state with the hover feedback removed, for `disabled`. */
+const DISABLED = 'opacity-40 hover:bg-transparent hover:text-ink-3';
 
 /**
- * Tooltip-wrapped icon button. Forwards its ref and spreads any extra button
- * props so it can be the `asChild` target of a Radix trigger (dropdown menu,
- * popover): Radix attaches its pointer handlers, aria and data attributes to
- * the child, and a component that swallowed them would render a dead button.
+ * Icon-only button: `Button size="icon"` plus a required tooltip label, which
+ * is also its aria-label. Spreads extra props and its ref onto the `<button>`,
+ * so it can be the `asChild` target of a Radix trigger (dropdown menu, popover).
  */
-export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
-  {
-    onClick,
-    title,
-    variant = 'default',
-    size = 'md',
-    className,
-    disabled = false,
-    children,
-    ...rest
-  },
-  ref,
-) {
+export function IconButton({
+  onClick,
+  title,
+  variant = 'default',
+  size = 'md',
+  className,
+  disabled = false,
+  children,
+  ...rest
+}: IconButtonProps) {
   return (
     <Tooltip content={title}>
       <button
-        ref={ref}
         type="button"
+        aria-label={title}
         onClick={disabled ? undefined : onClick}
         aria-disabled={disabled || undefined}
         className={cn(
-          'rounded-md transition-colors duration-150',
-          sizeStyles[size],
-          disabled ? 'cursor-default text-fg-fade-40' : variantStyles[variant],
+          buttonVariants({ variant: 'ghost', size: size === 'sm' ? 'icon-sm' : 'icon' }),
+          variantStyles[variant],
+          disabled && DISABLED,
           className,
         )}
         {...rest}
@@ -69,4 +62,4 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(f
       </button>
     </Tooltip>
   );
-});
+}

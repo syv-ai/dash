@@ -3,6 +3,9 @@ import { Tooltip } from './Tooltip';
 import { IconButton } from './IconButton';
 import { Popover, PopoverContent, PopoverTrigger } from './Popover';
 import { ciLabel, ciPulse, prStatusText } from './prStatusColors';
+import { badgeVariants } from './Badge';
+import { menuItem, menuLabel } from './styles';
+import { cn } from '../../lib/cn';
 import { fixCi } from '../../utils/fixCi';
 import type { PullRequestInfo } from '../../../shared/types';
 
@@ -22,8 +25,8 @@ interface PrBadgeProps {
 
 // No fill: the state colour is carried by the icon (and text) alone; a
 // neutral tint on hover keeps it reading as clickable.
-const HOVER = 'hover:bg-foreground/5';
-const MUTED = 'text-muted-fade-70';
+const HOVER = 'transition-colors hover:bg-hover';
+const MUTED = 'text-ink-3';
 
 function stateText(pr: PullRequestInfo): string {
   return pr.state === 'open' && pr.ci ? `open, ${ciLabel(pr.ci)}` : pr.state;
@@ -36,8 +39,8 @@ function describe(pr: PullRequestInfo): string {
 /** The icon's colour: an open PR's red while its checks fail, amber while they
  *  run, else its state's. */
 function iconColor(pr: PullRequestInfo): string {
-  if (pr.state === 'open' && pr.ci === 'failing') return 'text-destructive';
-  if (pr.state === 'open' && pr.ci === 'pending') return 'text-[hsl(var(--git-modified))]';
+  if (pr.state === 'open' && pr.ci === 'failing') return 'text-state-fail';
+  if (pr.state === 'open' && pr.ci === 'pending') return 'text-state-needs';
   return prStatusText(pr.state);
 }
 
@@ -45,10 +48,10 @@ function iconColor(pr: PullRequestInfo): string {
 function stateTextColor(pr: PullRequestInfo): string {
   if (pr.state !== 'open' || !pr.ci) return prStatusText(pr.state);
   return pr.ci === 'failing'
-    ? 'text-destructive'
+    ? 'text-state-fail'
     : pr.ci === 'pending'
-      ? 'text-[hsl(var(--git-modified))]'
-      : 'text-[hsl(var(--git-added))]';
+      ? 'text-state-needs'
+      : 'text-state-done';
 }
 
 /** The pulse while an open PR's checks run, else nothing. */
@@ -93,30 +96,24 @@ function PrList({ prs, taskId }: { prs: PullRequestInfo[]; taskId?: string }) {
   return (
     <PopoverContent
       align="end"
-      className="p-1 min-w-[260px] max-w-[380px]"
+      className="min-w-65 max-w-95"
       onClick={(e) => e.stopPropagation()}
       // Don't land focus (and its ring) on the first row's Fix CI button.
       onOpenAutoFocus={(e) => e.preventDefault()}
     >
-      <div className="px-2 pt-1 pb-1.5 text-xs uppercase tracking-wider font-mono text-muted-fade-70">
-        PRs from this branch
-      </div>
+      <div className={menuLabel}>PRs from this branch</div>
       {prs.map((pr) => (
         <div key={pr.number} className="flex items-center gap-1">
           <a
             href={pr.url}
             target="_blank"
             rel="noopener noreferrer"
-            className={`flex flex-1 min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors ${
-              pr.current ? '' : 'text-fg-fade-70'
-            }`}
+            className={cn(menuItem, 'min-w-0 flex-1 hover:bg-hover', !pr.current && 'text-ink-2')}
           >
-            <span
-              className={`inline-flex items-center justify-center rounded-md w-[18px] h-[18px] shrink-0 ${iconColor(pr)}`}
-            >
+            <span className={cn(badgeVariants({ tone: 'bare', size: 'icon' }), iconColor(pr))}>
               <StateIcon pr={pr} size={11} />
             </span>
-            <span className="font-mono text-muted-fade-70 shrink-0">#{pr.number}</span>
+            <span className="shrink-0 font-mono text-ink-3">#{pr.number}</span>
             <span className="truncate flex-1 min-w-0">{pr.title}</span>
             <span className={`shrink-0 text-xs ${stateTextColor(pr)}`}>{stateText(pr)}</span>
           </a>
@@ -155,7 +152,7 @@ export function PrBadge({ prs, allPrs, size = 'md', variant = 'pill', taskId }: 
               type="button"
               onClick={(e) => e.stopPropagation()}
               aria-label={`PR #${pr.number}`}
-              className={`inline-flex items-center justify-center rounded-md w-[18px] h-[18px] shrink-0 transition-colors ${colorCls}`}
+              className={cn(badgeVariants({ tone: 'bare', size: 'icon' }), colorCls)}
             >
               <StateIcon pr={pr} size={11} still={!isCurrent} />
             </button>
@@ -168,7 +165,6 @@ export function PrBadge({ prs, allPrs, size = 'md', variant = 'pill', taskId }: 
 
   if (isCurrent && pr.state === 'closed') return null;
   const iconSize = size === 'sm' ? 10 : 11;
-  const sizeCls = size === 'sm' ? 'px-1.5 py-0.5 text-xs' : 'px-2 py-[3px] text-xs';
   return (
     <span className="inline-flex items-center gap-0.5">
       <Popover>
@@ -177,7 +173,7 @@ export function PrBadge({ prs, allPrs, size = 'md', variant = 'pill', taskId }: 
             <button
               type="button"
               onClick={(e) => e.stopPropagation()}
-              className={`inline-flex items-center gap-1 rounded-full font-mono transition-colors ${sizeCls} ${colorCls}`}
+              className={cn(badgeVariants({ tone: 'bare', size }), 'font-mono', colorCls)}
             >
               <StateIcon pr={pr} size={iconSize} still={!isCurrent} />
               PR #{pr.number}

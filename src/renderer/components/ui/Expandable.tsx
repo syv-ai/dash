@@ -20,7 +20,7 @@ export function Expandable({
   label,
   defaultOpen = false,
   hint,
-  labelClassName = 'text-muted-fade-70',
+  labelClassName = 'text-ink-2',
   children,
 }: ExpandableProps) {
   const [open, setOpen] = useState(defaultOpen);
@@ -29,7 +29,7 @@ export function Expandable({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className={`flex items-center gap-1 text-sm font-medium ${labelClassName} hover:text-foreground transition-colors`}
+        className={`flex items-center gap-1 text-sm font-medium ${labelClassName} hover:text-ink transition-colors`}
       >
         <ChevronRight
           size={13}
@@ -39,7 +39,7 @@ export function Expandable({
           }`}
         />
         {label}
-        {hint && <span className="text-muted-fade-40 font-normal">{hint}</span>}
+        {hint && <span className="text-ink-3 font-normal">{hint}</span>}
       </button>
       <div className="collapse-grid" data-open={open}>
         <div className="pt-2">{children}</div>

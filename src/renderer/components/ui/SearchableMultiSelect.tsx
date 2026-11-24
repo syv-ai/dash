@@ -129,7 +129,7 @@ export function SearchableMultiSelect<T>({
               key={getKey(item)}
               type="button"
               onClick={() => remove(getKey(item))}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium hover:bg-destructive/10 hover:text-destructive transition-colors"
+              className="inline-flex h-5 items-center gap-1 rounded-sm bg-hover px-1.5 text-xs font-medium text-ink-2 transition-colors hover:bg-state-fail/12 hover:text-state-fail"
             >
               {getLabel(item)}
               <X size={9} strokeWidth={2.5} />
@@ -140,11 +140,11 @@ export function SearchableMultiSelect<T>({
 
       {/* Search input + dropdown */}
       <div className="relative" ref={dropdownRef}>
-        <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-background border border-input/60 focus-within:ring-2 focus-within:ring-ring/30 focus-within:border-ring/50 transition-all duration-150">
+        <div className="flex h-7.5 items-center gap-2 rounded-md bg-hover px-2.5 transition-colors hover:bg-select focus-within:bg-well focus-within:ring-1 focus-within:ring-line">
           {loading ? (
-            <Loader2 size={12} className="animate-spin text-muted-fade-50 shrink-0" />
+            <Loader2 size={14} strokeWidth={1.8} className="animate-spin text-ink-3 shrink-0" />
           ) : (
-            <Search size={12} className="text-muted-fade-40 shrink-0" />
+            <Search size={14} strokeWidth={1.8} className="text-ink-3 shrink-0" />
           )}
           <input
             ref={searchInputRef}
@@ -160,26 +160,24 @@ export function SearchableMultiSelect<T>({
               void fetchRecent();
             }}
             placeholder={placeholder}
-            className="flex-1 bg-transparent text-base text-foreground placeholder:text-muted-fade-30 outline-hidden"
+            className="flex-1 bg-transparent text-sm text-ink placeholder:text-ink-3 outline-none"
           />
         </div>
 
         {dropdownOpen && (
-          <div className="absolute z-50 mt-1 w-full bg-card border border-border/60 rounded-lg shadow-xl shadow-shade/30 overflow-hidden">
+          <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-lg bg-raised p-1.5 shadow-raised">
             <div className="max-h-[200px] overflow-y-auto">
               {loading && results.length === 0 ? (
-                <div className="px-3 py-3 text-sm text-muted-fade-40 text-center flex items-center justify-center gap-2">
+                <div className="px-3 py-3 text-sm text-ink-3 text-center flex items-center justify-center gap-2">
                   <Loader2 size={12} className="animate-spin" />
                   Searching...
                 </div>
               ) : error && results.length === 0 ? (
-                <div className="px-3 py-3 text-sm text-destructive/80 text-center break-words">
+                <div className="px-3 py-3 text-sm text-state-fail text-center break-words">
                   {error}
                 </div>
               ) : results.length === 0 ? (
-                <div className="px-3 py-3 text-sm text-muted-fade-40 text-center">
-                  No results found
-                </div>
+                <div className="px-3 py-3 text-sm text-ink-3 text-center">No results found</div>
               ) : (
                 results.map((item) => {
                   const key = getKey(item);
@@ -189,20 +187,16 @@ export function SearchableMultiSelect<T>({
                       key={key}
                       type="button"
                       onClick={() => toggle(item)}
-                      className={`w-full flex items-start gap-2 px-3 py-2 text-left hover:bg-accent/60 transition-colors duration-100 ${
-                        isSelected ? 'bg-primary/5' : ''
+                      className={`flex w-full items-start gap-2 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors duration-100 hover:bg-hover ${
+                        isSelected ? 'bg-select' : ''
                       }`}
                     >
                       <span
                         className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-colors duration-150 ${
-                          isSelected
-                            ? 'bg-primary border-primary'
-                            : 'border-border hover:border-foreground/40'
+                          isSelected ? 'border-btn bg-btn' : 'border-ink-3 hover:border-ink-2'
                         }`}
                       >
-                        {isSelected && (
-                          <Check size={10} strokeWidth={3} className="text-primary-foreground" />
-                        )}
+                        {isSelected && <Check size={10} strokeWidth={3} className="text-btn-ink" />}
                       </span>
                       <div className="flex-1 min-w-0">{renderItem(item)}</div>
                     </button>

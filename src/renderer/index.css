@@ -57,6 +57,17 @@
   --color-edge: hsl(var(--edge));
   --color-shade: hsl(var(--shade));
 
+  /* `shadow-raised`: the menu/dialog/tooltip elevation (hairline + drop). */
+  --shadow-raised: var(--elevation);
+
+  /* `animate-breathe`: a working StatusDot; pair with `motion-safe:`. */
+  --animate-breathe: breathe 2.4s ease-in-out infinite;
+  @keyframes breathe {
+    50% {
+      opacity: 0.35;
+    }
+  }
+
   /* ── Type scale (D7): five sizes, nothing else ── */
   --text-*: initial;
   --text-xs: 11px;
@@ -121,6 +132,7 @@
     --scrim: 225 20% 30% / 0.16;
     --edge: 225 20% 20% / 0.8;
     --shade: 225 20% 20% / 0.3;
+    --elevation: 0 0 0 1px hsl(225 20% 20% / 0.08), 0 18px 48px hsl(225 20% 20% / 0.14);
     --text-fade-k: 0.7;
 
     /* Aliases. Opaque on purpose: call sites add their own alpha. */
@@ -215,6 +227,7 @@
     --scrim: 0 0% 0% / 0.55;
     --edge: 0 0% 100%;
     --shade: 0 0% 0%;
+    --elevation: 0 0 0 1px hsl(0 0% 100% / 0.08), 0 24px 60px hsl(0 0% 0% / 0.7);
     --text-fade-k: 1;
 
     --secondary: 220 5% 12%;
@@ -656,15 +669,6 @@
   background: hsl(var(--well));
   box-shadow: 0 0 0 1px hsl(var(--line));
 }
-/* shim: delete in phase 4 */
-.modal-shell {
-  position: relative;
-  background: hsl(var(--raised));
-  box-shadow:
-    0 0 0 1px hsl(var(--line)),
-    0 24px 60px color-mix(in srgb, hsl(var(--shade)) 50%, transparent);
-}
-
 /* shim: delete in phase 4 — a 1px hairline element, or a border substitute. */
 .glass-hairline {
   height: 1px;
@@ -783,49 +787,9 @@
   background: hsl(var(--primary) / 0.08);
 }
 
-/* ── Tooltip ─────────────────────────────────────────────── */
-
-.tooltip-popup {
-  position: fixed;
-  z-index: 9999;
-  pointer-events: none;
-  padding: 4px 8px;
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  line-height: 1.3;
-  /* Wrap long text at a readable width and honour explicit \n line breaks. */
-  max-width: 280px;
-  width: max-content;
-  white-space: pre-line;
-  overflow-wrap: break-word;
-  color: hsl(var(--ink));
-  background: hsl(var(--raised));
-  box-shadow:
-    0 0 0 1px hsl(var(--line)),
-    0 2px 8px color-mix(in srgb, hsl(var(--shade)) 15%, transparent);
-  animation: tooltip-in 120ms ease-out;
-}
-
-.tooltip-popup[data-side='top'] {
-  transform: translateY(-100%);
-}
+/* ── Tooltip (ui/Tooltip; Radix positions the wrapper) ──── */
 
 @keyframes tooltip-in {
-  from {
-    opacity: 0;
-    transform: translateY(-100%) scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(-100%) scale(1);
-  }
-}
-
-.tooltip-popup[data-side='bottom'] {
-  animation-name: tooltip-in-bottom;
-}
-
-@keyframes tooltip-in-bottom {
   from {
     opacity: 0;
     scale: 0.96;
@@ -834,6 +798,10 @@
     opacity: 1;
     scale: 1;
   }
+}
+.animate-tooltip-in {
+  animation: tooltip-in 120ms ease-out;
+  transform-origin: var(--radix-tooltip-content-transform-origin);
 }
 
 /* Settings button: swap "1 office" ↔ "1" based on container width */
@@ -1151,16 +1119,15 @@
   display: none !important;
 }
 
-/* ── Sonner toasts: the raised surface ───────────────────── */
+/* ── Sonner toasts (ui/Toast's Toaster): the raised surface ── */
 [data-sonner-toaster] {
   --normal-bg: hsl(var(--raised));
-  --normal-border: hsl(var(--line));
+  --normal-border: transparent;
   --normal-text: hsl(var(--ink));
+  --border-radius: var(--radius-lg);
 }
 [data-sonner-toast] {
-  box-shadow:
-    0 0 0 1px hsl(var(--line)),
-    0 8px 24px color-mix(in srgb, hsl(var(--shade)) 25%, transparent) !important;
+  box-shadow: var(--elevation) !important;
 }
 /* Suppress sonner's slide-in for the second (and later) appearance of the
  * ports-onboarding toast in this session. Users who project-hop see it pop

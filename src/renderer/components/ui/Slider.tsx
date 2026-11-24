@@ -1,8 +1,11 @@
 import * as SliderPrimitive from '@radix-ui/react-slider';
+import { cn } from '../../lib/cn';
+import { focusRing } from './styles';
 
 /**
- * Canonical single-value slider (shadcn's Slider on Radix). Pair it with the
- * current value shown beside it; the slider itself carries no label text.
+ * Single-value slider (shadcn's Slider on Radix): a 4px hover-tint track, the
+ * filled range in ink-2, an ink thumb. Pair it with the current value shown
+ * beside it; the slider itself carries no label text.
  */
 export function Slider({
   value,
@@ -12,7 +15,7 @@ export function Slider({
   max,
   step = 1,
   disabled,
-  className = '',
+  className,
   'aria-label': ariaLabel,
 }: {
   value: number;
@@ -40,14 +43,20 @@ export function Slider({
       max={max}
       step={step}
       disabled={disabled}
-      className={`relative flex w-full touch-none select-none items-center data-disabled:opacity-50 ${className}`}
+      className={cn(
+        'relative flex h-4 w-full touch-none select-none items-center data-disabled:opacity-40',
+        className,
+      )}
     >
-      <SliderPrimitive.Track className="relative h-1.5 w-full grow overflow-hidden rounded-full bg-border">
-        <SliderPrimitive.Range className="absolute h-full bg-primary" />
+      <SliderPrimitive.Track className="relative h-1 w-full grow overflow-hidden rounded-full bg-hover">
+        <SliderPrimitive.Range className="absolute h-full rounded-full bg-ink-2" />
       </SliderPrimitive.Track>
       <SliderPrimitive.Thumb
         aria-label={ariaLabel}
-        className="block h-4 w-4 rounded-full border border-primary/50 bg-background shadow-sm shadow-shade/30 transition-colors cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-[hsl(var(--surface-2))]"
+        className={cn(
+          'block size-3.5 cursor-pointer rounded-full bg-ink transition-transform hover:scale-110',
+          focusRing,
+        )}
       />
     </SliderPrimitive.Root>
   );

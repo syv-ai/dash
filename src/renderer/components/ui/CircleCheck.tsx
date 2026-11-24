@@ -17,16 +17,12 @@ export function CircleCheck({ checked, onChange, label, className = '' }: Circle
     >
       <span
         className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-colors duration-150 ${
-          checked
-            ? 'bg-primary border-primary'
-            : 'border-border bg-transparent group-hover:border-foreground/40'
+          checked ? 'border-btn bg-btn' : 'border-ink-3 bg-transparent group-hover:border-ink-2'
         }`}
       >
-        {checked && <Check size={10} strokeWidth={3} className="text-primary-foreground" />}
+        {checked && <Check size={10} strokeWidth={3} className="text-btn-ink" />}
       </span>
-      <span className="text-base text-fg-fade-80 group-hover:text-foreground transition-colors">
-        {label}
-      </span>
+      <span className="text-base text-ink-2 group-hover:text-ink transition-colors">{label}</span>
     </button>
   );
 }

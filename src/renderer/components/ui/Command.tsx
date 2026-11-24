@@ -1,97 +1,92 @@
 import * as React from 'react';
 import { Command as CommandPrimitive } from 'cmdk';
 import { Search } from 'lucide-react';
+import { cn } from '../../lib/cn';
+import { menuItem, menuSeparator } from './styles';
 
 /**
- * shadcn-style Command primitive — a thin wrapper over `cmdk`, styled with
- * Dash's HSL tokens. This is the searchable, groupable list that powers the
- * Combobox pattern (compose it inside our Radix `Popover`). Background/text
- * come from the surrounding PopoverContent (which sets --popover), so Command
- * itself stays transparent.
+ * shadcn Command over `cmdk`: the searchable, groupable list behind comboboxes
+ * (inside `PopoverContent`) and the ⌘K palette. Transparent itself; the
+ * surrounding surface supplies the raised background.
  */
-export const Command = React.forwardRef<
-  React.ElementRef<typeof CommandPrimitive>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive>
->(({ className = '', ...props }, ref) => (
-  <CommandPrimitive
-    ref={ref}
-    className={`flex h-full w-full flex-col overflow-hidden rounded-lg text-foreground ${className}`}
-    {...props}
-  />
-));
-Command.displayName = 'Command';
-
-export const CommandInput = React.forwardRef<
-  React.ElementRef<typeof CommandPrimitive.Input>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Input>
->(({ className = '', ...props }, ref) => (
-  <div className="flex items-center gap-2 px-3 border-b border-border/60" cmdk-input-wrapper="">
-    <Search size={13} strokeWidth={1.8} className="text-muted-fade-40 shrink-0" />
-    <CommandPrimitive.Input
-      ref={ref}
-      className={`flex h-9 w-full bg-transparent py-2.5 text-base text-foreground outline-hidden placeholder:text-muted-fade-40 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+export function Command({ className, ...props }: React.ComponentProps<typeof CommandPrimitive>) {
+  return (
+    <CommandPrimitive
+      className={cn('flex h-full w-full flex-col overflow-hidden text-ink', className)}
       {...props}
     />
-  </div>
-));
-CommandInput.displayName = 'CommandInput';
+  );
+}
 
-export const CommandList = React.forwardRef<
-  React.ElementRef<typeof CommandPrimitive.List>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.List>
->(({ className = '', ...props }, ref) => (
-  <CommandPrimitive.List
-    ref={ref}
-    className={`max-h-[260px] overflow-y-auto overflow-x-hidden p-1.5 ${className}`}
-    {...props}
-  />
-));
-CommandList.displayName = 'CommandList';
+export function CommandInput({
+  className,
+  ...props
+}: React.ComponentProps<typeof CommandPrimitive.Input>) {
+  return (
+    <div className="flex items-center gap-2 px-3" cmdk-input-wrapper="">
+      <Search size={14} strokeWidth={1.8} className="shrink-0 text-ink-3" />
+      <CommandPrimitive.Input
+        className={cn(
+          'flex h-10 w-full bg-transparent text-base text-ink outline-none placeholder:text-ink-3 disabled:cursor-not-allowed disabled:opacity-40',
+          className,
+        )}
+        {...props}
+      />
+    </div>
+  );
+}
 
-export const CommandEmpty = React.forwardRef<
-  React.ElementRef<typeof CommandPrimitive.Empty>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Empty>
->((props, ref) => (
-  <CommandPrimitive.Empty
-    ref={ref}
-    className="py-6 text-center text-sm text-muted-fade-50"
-    {...props}
-  />
-));
-CommandEmpty.displayName = 'CommandEmpty';
+export function CommandList({
+  className,
+  ...props
+}: React.ComponentProps<typeof CommandPrimitive.List>) {
+  return (
+    <CommandPrimitive.List
+      className={cn('max-h-65 overflow-y-auto overflow-x-hidden p-1.5', className)}
+      {...props}
+    />
+  );
+}
 
-export const CommandGroup = React.forwardRef<
-  React.ElementRef<typeof CommandPrimitive.Group>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Group>
->(({ className = '', ...props }, ref) => (
-  <CommandPrimitive.Group
-    ref={ref}
-    className={`overflow-hidden text-foreground **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1.5 **:[[cmdk-group-heading]]:text-xs **:[[cmdk-group-heading]]:font-semibold **:[[cmdk-group-heading]]:uppercase **:[[cmdk-group-heading]]:tracking-wide **:[[cmdk-group-heading]]:text-muted-fade-55 ${className}`}
-    {...props}
-  />
-));
-CommandGroup.displayName = 'CommandGroup';
+export function CommandEmpty(props: React.ComponentProps<typeof CommandPrimitive.Empty>) {
+  return <CommandPrimitive.Empty className="py-6 text-center text-sm text-ink-3" {...props} />;
+}
 
-export const CommandSeparator = React.forwardRef<
-  React.ElementRef<typeof CommandPrimitive.Separator>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Separator>
->(({ className = '', ...props }, ref) => (
-  <CommandPrimitive.Separator
-    ref={ref}
-    className={`my-1 h-px bg-border/60 ${className}`}
-    {...props}
-  />
-));
-CommandSeparator.displayName = 'CommandSeparator';
+export function CommandGroup({
+  className,
+  ...props
+}: React.ComponentProps<typeof CommandPrimitive.Group>) {
+  return (
+    <CommandPrimitive.Group
+      className={cn(
+        'overflow-hidden text-ink **:[[cmdk-group-heading]]:px-2.5 **:[[cmdk-group-heading]]:pt-1.5 **:[[cmdk-group-heading]]:pb-1 **:[[cmdk-group-heading]]:text-xs **:[[cmdk-group-heading]]:font-medium **:[[cmdk-group-heading]]:text-ink-3',
+        className,
+      )}
+      {...props}
+    />
+  );
+}
 
-export const CommandItem = React.forwardRef<
-  React.ElementRef<typeof CommandPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Item>
->(({ className = '', ...props }, ref) => (
-  <CommandPrimitive.Item
-    ref={ref}
-    className={`relative flex items-center gap-2 rounded-md px-2 py-1.5 text-base cursor-pointer select-none outline-hidden data-[selected=true]:bg-accent/70 data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 ${className}`}
-    {...props}
-  />
-));
-CommandItem.displayName = 'CommandItem';
+export function CommandSeparator({
+  className,
+  ...props
+}: React.ComponentProps<typeof CommandPrimitive.Separator>) {
+  return <CommandPrimitive.Separator className={cn(menuSeparator, className)} {...props} />;
+}
+
+/** cmdk marks the active row with data-selected (Radix menus use data-highlighted). */
+export function CommandItem({
+  className,
+  ...props
+}: React.ComponentProps<typeof CommandPrimitive.Item>) {
+  return (
+    <CommandPrimitive.Item
+      className={cn(
+        menuItem,
+        'data-[selected=true]:bg-select data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-40',
+        className,
+      )}
+      {...props}
+    />
+  );
+}

@@ -1,14 +1,34 @@
 import { useEffect } from 'react';
-import { Toaster, toast } from 'sonner';
+import { Toaster as Sonner, toast, type ToasterProps } from 'sonner';
 import { useSettings } from '../../stores/settingsStore';
 import { useWizardToasts } from '../ports/useWizardToasts';
 import { useReleaseNotesToast } from './useReleaseNotesToast';
 import { useMergedPrToast } from './useMergedPrToast';
 import { useReviewCommentsToast } from './useReviewCommentsToast';
 
+/**
+ * Sonner's toaster on the raised surface (index.css sets its colours and
+ * shadow from the tokens). Pass `theme` from Dash's setting, not the OS: sonner
+ * colours its description line from it, and Dash can be light on a dark Mac.
+ */
+export function Toaster(props: ToasterProps) {
+  return (
+    <Sonner
+      position="bottom-right"
+      toastOptions={{
+        classNames: {
+          toast: 'text-sm',
+          title: 'font-medium',
+          description: 'text-ink-2',
+        },
+      }}
+      {...props}
+    />
+  );
+}
+
+/** The app's toaster plus the hooks that raise its toasts. */
 export function ToastContainer() {
-  // Follow Dash's theme, not the OS one: sonner's own text colours (the
-  // description line) come from this, and Dash can be light on a dark Mac.
   const theme = useSettings((s) => s.theme);
   useWizardToasts();
   useReleaseNotesToast();
@@ -33,5 +53,5 @@ export function ToastContainer() {
     });
   }, []);
 
-  return <Toaster theme={theme} position="bottom-right" />;
+  return <Toaster theme={theme} />;
 }

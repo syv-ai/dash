@@ -1,6 +1,7 @@
 import React from 'react';
 import { X } from 'lucide-react';
 import { Modal, useModalClose } from './Modal';
+import { IconButton } from './IconButton';
 
 interface SettingsModalShellProps {
   title: string;
@@ -33,16 +34,13 @@ function SettingsModalShellBody({ title, children }: { title: string; children: 
   const close = useModalClose();
   return (
     <>
-      <div className="flex items-center justify-between px-5 h-12 border-b border-border/40 shrink-0">
-        <h2 className="text-base font-semibold text-foreground">{title}</h2>
-        <button
-          onClick={close}
-          className="p-1.5 rounded-lg hover:bg-accent text-fg-fade-50 hover:text-foreground transition-all duration-150"
-        >
-          <X size={14} strokeWidth={2} />
-        </button>
+      <div className="flex h-12 shrink-0 items-center justify-between pl-5 pr-3">
+        <h2 className="text-base font-semibold text-ink">{title}</h2>
+        <IconButton title="Close" onClick={close}>
+          <X size={14} strokeWidth={1.8} />
+        </IconButton>
       </div>
-      <div className="p-5 space-y-5 overflow-y-auto flex-1">{children}</div>
+      <div className="flex-1 space-y-5 overflow-y-auto px-5 pb-5 pt-1">{children}</div>
     </>
   );
 }

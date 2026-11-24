@@ -1,5 +1,6 @@
 import { House } from 'lucide-react';
 import { Tooltip } from './Tooltip';
+import { Badge } from './Badge';
 import { useTaskBranch } from '../../stores/gitStore';
 import type { Task } from '../../../shared/types';
 
@@ -17,12 +18,9 @@ export function MainRepoBadge({ task }: MainRepoBadgeProps) {
   const where = branch ? ` on ${branch}` : '';
   return (
     <Tooltip content={`Runs in the project's own checkout${where}, not a worktree`}>
-      <span
-        aria-label="Runs in the project's own checkout"
-        className="inline-flex items-center shrink-0 text-muted-fade-70"
-      >
+      <Badge tone="bare" size="icon" aria-label="Runs in the project's own checkout">
         <House size={14} strokeWidth={1.8} />
-      </span>
+      </Badge>
     </Tooltip>
   );
 }

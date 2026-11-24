@@ -1,6 +1,8 @@
 import * as React from 'react';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { ChevronDown, Check } from 'lucide-react';
+import { cn } from '../../lib/cn';
+import { focusRing, menuItem, menuSurface, radixMenuItemStates } from './styles';
 
 export interface SelectOption<T extends string> {
   value: T;
@@ -15,16 +17,23 @@ interface SelectProps<T extends string> {
   placeholder?: string;
   className?: string;
   contentClassName?: string;
+  'aria-label'?: string;
 }
 
+/**
+ * Pick one of a few options. The trigger looks like an Input (hover-tint fill,
+ * no border); the list is the menu surface. Built on Radix's dropdown radio
+ * group rather than Radix Select, which isn't a dependency.
+ */
 export function Select<T extends string>({
   value,
   onValueChange,
   options,
   renderOption,
   placeholder,
-  className = '',
-  contentClassName = '',
+  className,
+  contentClassName,
+  'aria-label': ariaLabel,
 }: SelectProps<T>) {
   const selected = options.find((o) => o.value === value);
   const render = renderOption ?? ((o: SelectOption<T>) => o.label);
@@ -34,15 +43,20 @@ export function Select<T extends string>({
       <DropdownMenuPrimitive.Trigger asChild>
         <button
           type="button"
-          className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md text-sm border border-border/60 bg-transparent text-foreground hover:border-border focus:outline-hidden focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition-colors data-[state=open]:border-primary/40 data-[state=open]:ring-1 data-[state=open]:ring-primary/40 ${className}`}
+          aria-label={ariaLabel}
+          className={cn(
+            'group/select flex h-7.5 w-full items-center justify-between gap-2 rounded-md bg-hover px-2.5 text-sm text-ink transition-colors hover:bg-select data-[state=open]:bg-select',
+            focusRing,
+            className,
+          )}
         >
           <span className="truncate text-left">
-            {selected ? render(selected) : (placeholder ?? ' ')}
+            {selected ? render(selected) : (placeholder ?? ' ')}
           </span>
           <ChevronDown
-            size={13}
+            size={14}
             strokeWidth={1.8}
-            className="opacity-60 shrink-0 transition-transform duration-150 data-[state=open]:rotate-180"
+            className="shrink-0 text-ink-3 transition-transform duration-150 group-data-[state=open]/select:rotate-180"
           />
         </button>
       </DropdownMenuPrimitive.Trigger>
@@ -50,11 +64,11 @@ export function Select<T extends string>({
         <DropdownMenuPrimitive.Content
           align="start"
           sideOffset={4}
-          className={`z-50 min-w-(--radix-dropdown-menu-trigger-width) max-h-[320px] overflow-y-auto p-1 rounded-lg border border-border/60 shadow-xl shadow-shade/30 outline-hidden animate-popover-in ${contentClassName}`}
-          style={{
-            background: 'hsl(var(--popover))',
-            color: 'hsl(var(--popover-foreground))',
-          }}
+          className={cn(
+            menuSurface,
+            'max-h-80 min-w-(--radix-dropdown-menu-trigger-width) overflow-y-auto',
+            contentClassName,
+          )}
         >
           <DropdownMenuPrimitive.RadioGroup
             value={value}
@@ -64,11 +78,11 @@ export function Select<T extends string>({
               <DropdownMenuPrimitive.RadioItem
                 key={opt.value}
                 value={opt.value}
-                className="relative w-full flex items-center justify-between gap-2 pl-2.5 pr-2 py-1.5 rounded-md text-sm cursor-default outline-hidden transition-colors data-highlighted:bg-accent text-fg-fade-85 data-[state=checked]:text-foreground"
+                className={cn(menuItem, radixMenuItemStates, 'justify-between')}
               >
                 <span className="truncate text-left">{render(opt)}</span>
                 <DropdownMenuPrimitive.ItemIndicator>
-                  <Check size={12} strokeWidth={2} className="text-primary shrink-0" />
+                  <Check size={14} strokeWidth={1.8} />
                 </DropdownMenuPrimitive.ItemIndicator>
               </DropdownMenuPrimitive.RadioItem>
             ))}

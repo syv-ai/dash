@@ -1,8 +1,8 @@
 import type { CiState, PullRequestState } from '../../../shared/types';
 
 /**
- * Standard PR status colors (GitHub convention): open → green (git-added),
- * merged → purple (pr-merged), closed → red (destructive). Returned as Tailwind
+ * Standard PR status colors (GitHub convention): open → green (state-done),
+ * merged → purple (pr-merged), closed → red (state-fail). Returned as Tailwind
  * class fragments so every PR surface — header badge, picker trigger, list
  * icons — stays consistent.
  */
@@ -11,10 +11,10 @@ export function prStatusPill(state: PullRequestState): string {
     case 'merged':
       return 'bg-[hsl(var(--pr-merged))]/10 text-[hsl(var(--pr-merged))] hover:bg-[hsl(var(--pr-merged))]/20';
     case 'closed':
-      return 'bg-destructive/10 text-destructive hover:bg-destructive/20';
+      return 'bg-state-fail/10 text-state-fail hover:bg-state-fail/20';
     case 'open':
     default:
-      return 'bg-[hsl(var(--git-added))]/10 text-[hsl(var(--git-added))] hover:bg-[hsl(var(--git-added))]/20';
+      return 'bg-state-done/10 text-state-done hover:bg-state-done/20';
   }
 }
 
@@ -24,10 +24,10 @@ export function prStatusText(state: PullRequestState): string {
     case 'merged':
       return 'text-[hsl(var(--pr-merged))]';
     case 'closed':
-      return 'text-destructive';
+      return 'text-state-fail';
     case 'open':
     default:
-      return 'text-[hsl(var(--git-added))]';
+      return 'text-state-done';
   }
 }
 

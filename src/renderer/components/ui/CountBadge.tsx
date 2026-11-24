@@ -1,17 +1,14 @@
-import React from 'react';
+import { cn } from '../../lib/cn';
+import { Badge } from './Badge';
 
 /**
- * Small primary-tinted count pill — the canonical way to show a numeric badge
- * next to a label (sidebar scopes, segmented tabs, section headers). Layout
- * (e.g. `ml-auto` to push it to a row's end) is the caller's concern via
- * `className`; the pill itself only owns its shape and color.
+ * A count beside a label (sidebar scopes, segmented tabs, section headers).
+ * Layout (e.g. `ml-auto`) is the caller's; the badge owns shape and colour.
  */
-export function CountBadge({ count, className = '' }: { count: number; className?: string }) {
+export function CountBadge({ count, className }: { count: number; className?: string }) {
   return (
-    <span
-      className={`inline-flex min-w-[18px] items-center justify-center rounded-full bg-primary/15 px-1.5 py-0.5 font-mono text-xs font-semibold text-primary ${className}`}
-    >
+    <Badge size="sm" className={cn('min-w-4 justify-center', className)}>
       {count}
-    </span>
+    </Badge>
   );
 }

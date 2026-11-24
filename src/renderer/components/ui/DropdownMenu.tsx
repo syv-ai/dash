@@ -1,63 +1,59 @@
 import * as React from 'react';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
+import { cn } from '../../lib/cn';
+import { menuItem, radixMenuItemStates, menuLabel, menuSeparator, menuSurface } from './styles';
 
+/** Click-opened menu (Radix, shadcn API). Shares its surface and rows with
+ *  ContextMenu and Select through `styles.ts`. */
 export const DropdownMenu = DropdownMenuPrimitive.Root;
 export const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
 export const DropdownMenuGroup = DropdownMenuPrimitive.Group;
 
-export const DropdownMenuContent = React.forwardRef<
-  React.ElementRef<typeof DropdownMenuPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
->(({ className = '', sideOffset = 6, align = 'start', style, ...props }, ref) => (
-  <DropdownMenuPrimitive.Portal>
-    <DropdownMenuPrimitive.Content
-      ref={ref}
-      sideOffset={sideOffset}
-      align={align}
-      className={`z-50 min-w-40 rounded-lg border border-border/60 p-1 shadow-xl shadow-shade/30 outline-hidden animate-popover-in ${className}`}
-      style={{
-        background: 'hsl(var(--popover))',
-        color: 'hsl(var(--popover-foreground))',
-        ...style,
-      }}
+export function DropdownMenuContent({
+  className,
+  sideOffset = 6,
+  align = 'start',
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
+  return (
+    <DropdownMenuPrimitive.Portal>
+      <DropdownMenuPrimitive.Content
+        sideOffset={sideOffset}
+        align={align}
+        className={cn(menuSurface, 'min-w-40', className)}
+        {...props}
+      />
+    </DropdownMenuPrimitive.Portal>
+  );
+}
+
+export function DropdownMenuItem({
+  className,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Item>) {
+  return (
+    <DropdownMenuPrimitive.Item
+      className={cn(menuItem, radixMenuItemStates, className)}
       {...props}
     />
-  </DropdownMenuPrimitive.Portal>
-));
-DropdownMenuContent.displayName = 'DropdownMenuContent';
+  );
+}
 
-export const DropdownMenuItem = React.forwardRef<
-  React.ElementRef<typeof DropdownMenuPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item>
->(({ className = '', ...props }, ref) => (
-  <DropdownMenuPrimitive.Item
-    ref={ref}
-    className={`relative flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-hidden transition-colors focus:bg-accent data-highlighted:bg-accent data-disabled:pointer-events-none data-disabled:opacity-50 ${className}`}
-    {...props}
-  />
-));
-DropdownMenuItem.displayName = 'DropdownMenuItem';
+export function DropdownMenuLabel({
+  className,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Label>) {
+  return <DropdownMenuPrimitive.Label className={cn(menuLabel, className)} {...props} />;
+}
 
-export const DropdownMenuLabel = React.forwardRef<
-  React.ElementRef<typeof DropdownMenuPrimitive.Label>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Label>
->(({ className = '', ...props }, ref) => (
-  <DropdownMenuPrimitive.Label
-    ref={ref}
-    className={`px-2 py-1.5 text-xs font-medium text-muted-foreground ${className}`}
-    {...props}
-  />
-));
-DropdownMenuLabel.displayName = 'DropdownMenuLabel';
+export function DropdownMenuSeparator({
+  className,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Separator>) {
+  return <DropdownMenuPrimitive.Separator className={cn(menuSeparator, className)} {...props} />;
+}
 
-export const DropdownMenuSeparator = React.forwardRef<
-  React.ElementRef<typeof DropdownMenuPrimitive.Separator>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Separator>
->(({ className = '', ...props }, ref) => (
-  <DropdownMenuPrimitive.Separator
-    ref={ref}
-    className={`-mx-1 my-1 h-px bg-border/60 ${className}`}
-    {...props}
-  />
-));
-DropdownMenuSeparator.displayName = 'DropdownMenuSeparator';
+/** A keyboard hint at a menu row's end. */
+export function DropdownMenuShortcut({ className, ...props }: React.ComponentProps<'span'>) {
+  return <span className={cn('ml-auto pl-4 text-xs text-ink-3', className)} {...props} />;
+}

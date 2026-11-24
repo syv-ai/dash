@@ -133,7 +133,7 @@ export function FolderRow({
                   <button
                     onClick={(e) => e.stopPropagation()}
                     aria-label="Discard folder changes"
-                    className="flex items-center justify-center w-[22px] h-[22px] rounded-md bg-[hsl(var(--surface-3))] border border-[hsl(var(--border)/0.5)] text-muted-foreground hover:bg-destructive/12 hover:border-destructive/50 hover:text-destructive data-[state=open]:bg-destructive/12 data-[state=open]:border-destructive/50 data-[state=open]:text-destructive"
+                    className="flex items-center justify-center w-[22px] h-[22px] rounded-md bg-[hsl(var(--surface-3))] border border-[hsl(var(--border)/0.5)] text-muted-foreground hover:bg-destructive/12 hover:border-destructive/50 hover:text-destructive aria-expanded:bg-destructive/12 aria-expanded:border-destructive/50 aria-expanded:text-destructive"
                   >
                     <Undo2 size={11} strokeWidth={2.4} />
                   </button>
