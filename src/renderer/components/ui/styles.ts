@@ -25,7 +25,7 @@ export const menuItemDestructive =
   'text-state-fail [&_svg]:text-state-fail data-highlighted:bg-state-fail/10';
 
 /** A section label inside a menu. */
-export const menuLabel = 'px-2.5 pt-1.5 pb-1 text-xs font-medium text-ink-3';
+export const menuLabel = 'type-subheading px-2.5 pt-1.5 pb-1';
 
 /** A hairline between menu groups. */
 export const menuSeparator = '-mx-1.5 my-1.5 h-px bg-line';
