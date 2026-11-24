@@ -1,8 +1,10 @@
-import { Fragment, useCallback, useEffect, useSyncExternalStore } from 'react';
+import { Fragment, useCallback, useEffect, useSyncExternalStore, type CSSProperties } from 'react';
 import { FileText } from 'lucide-react';
 import type { ITheme as XtermTheme } from '@xterm/xterm';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../ui/Resizable';
 import { EmptyState } from '../ui/EmptyState';
+import { sheetSurface } from '../ui/FolderTab';
+import { cn } from '../../lib/cn';
 import { useEditorTabs } from '../../stores/editorTabsStore';
 import { useSettings } from '../../stores/settingsStore';
 import { matchesBinding } from '../../keybindings';
@@ -37,8 +39,10 @@ function useDirtyVersion(): number {
 }
 
 /**
- * The editor's groups: one, or two side by side (resizable), each a tab strip
- * over a pane showing its active file. The panes keep one Monaco widget each
+ * The editor's groups: one, or two side by side (resizable), each a stack of
+ * case files — a tab strip on the chrome whose active tab opens into the sheet
+ * below it, the pane showing that file. The host gives them the chrome to sit
+ * on; each group draws its own sheet. The panes keep one Monaco widget each
  * and swap models as tabs change; files open in a tab stay loaded (unsaved
  * edits included) until their last tab closes.
  */
@@ -105,7 +109,11 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
   const split = layout.groups.length > 1;
 
   return (
-    <div className="h-full min-h-0" onKeyDown={onKeyDown}>
+    <div
+      className="h-full min-h-0"
+      style={{ '--sheet-bg': terminalTheme.background } as CSSProperties}
+      onKeyDown={onKeyDown}
+    >
       <ResizablePanelGroup
         orientation="horizontal"
         autoSaveId="editor-groups"
@@ -123,7 +131,8 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
               {i > 0 && <ResizableHandle />}
               <ResizablePanel id={`group-${i}`} minSize="20%">
                 <div
-                  className="flex h-full min-w-0 flex-col"
+                  // The second stack keeps the sheets' 8px gutter from the first.
+                  className={cn('flex h-full min-w-0 flex-col', i > 0 && 'pl-2')}
                   // Clicking or tabbing into a group makes it the one "open" targets.
                   onPointerDownCapture={() => ws.focusGroup(index)}
                   onFocusCapture={() => ws.focusGroup(index)}
@@ -144,36 +153,43 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
                     onCloseEditor={isLast ? closeEditor : undefined}
                     trailing={isLast && ws.git ? <LspStatusIndicator worktree={cwd} /> : null}
                   />
-                  {group.active ? (
-                    <EditorPane
-                      paneId={`pane:${tabsKey}:${i}`}
-                      cwd={cwd}
-                      git={ws.git}
-                      filePath={group.active}
-                      view={ws.view}
-                      activeTaskId={ws.activeTaskId}
-                      terminalTheme={terminalTheme}
-                      isDark={isDark}
-                      revealCommentId={ws.revealCommentId}
-                      onNavigateToComment={ws.navigateToComment}
-                      onClearReveal={ws.clearRevealComment}
-                      onClose={closeEditor}
-                      onSelectBase={ws.selectBase}
-                      onExitBranchView={ws.exitBranchView}
-                      defaultBase={ws.data.defaultBase}
-                      projectId={ws.projectId}
-                      onSelectPr={ws.openPrView}
-                      onSelectFile={ws.openFile}
-                      revealRange={groupReveal}
-                      onRevealed={clearReveal}
-                      onIsDirectory={(path) => showFolder(index, path)}
-                    />
-                  ) : (
-                    <EmptyState
-                      icon={<FileText size={14} strokeWidth={1.8} />}
-                      title="Open a file from the tree"
-                    />
-                  )}
+                  <div
+                    className={cn(
+                      'flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-line',
+                      sheetSurface,
+                    )}
+                  >
+                    {group.active ? (
+                      <EditorPane
+                        paneId={`pane:${tabsKey}:${i}`}
+                        cwd={cwd}
+                        git={ws.git}
+                        filePath={group.active}
+                        view={ws.view}
+                        activeTaskId={ws.activeTaskId}
+                        terminalTheme={terminalTheme}
+                        isDark={isDark}
+                        revealCommentId={ws.revealCommentId}
+                        onNavigateToComment={ws.navigateToComment}
+                        onClearReveal={ws.clearRevealComment}
+                        onClose={closeEditor}
+                        onSelectBase={ws.selectBase}
+                        onExitBranchView={ws.exitBranchView}
+                        defaultBase={ws.data.defaultBase}
+                        projectId={ws.projectId}
+                        onSelectPr={ws.openPrView}
+                        onSelectFile={ws.openFile}
+                        revealRange={groupReveal}
+                        onRevealed={clearReveal}
+                        onIsDirectory={(path) => showFolder(index, path)}
+                      />
+                    ) : (
+                      <EmptyState
+                        icon={<FileText size={14} strokeWidth={1.8} />}
+                        title="Open a file from the tree"
+                      />
+                    )}
+                  </div>
                 </div>
               </ResizablePanel>
             </Fragment>

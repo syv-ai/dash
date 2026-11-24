@@ -5,7 +5,6 @@ import {
   useEffect,
   useMemo,
   useState,
-  type CSSProperties,
   type ReactNode,
   type RefObject,
 } from 'react';
@@ -428,11 +427,7 @@ export function RightInspector({
                 onTuiActiveChange={onTuiActiveChange}
               >
                 {wide ? (
-                  <EditorSheet
-                    terminalBg={terminalTheme.background}
-                    closeBinding={keybindings.closeDiff}
-                    onClose={onCloseDiff}
-                  >
+                  <EditorSheet closeBinding={keybindings.closeDiff} onClose={onCloseDiff}>
                     <Suspense fallback={null}>
                       <EditorGroups
                         ws={ws}
@@ -454,25 +449,21 @@ export function RightInspector({
   );
 }
 
-/** The editor's sheet, in the terminal's colours, closed by Escape from
- *  inside it (Monaco's textarea skips the global shortcuts). */
+/** The editor's place on the chrome, closed by Escape from inside it
+ *  (Monaco's textarea skips the global shortcuts). Its groups draw their own
+ *  sheets, each joined to its active tab. */
 function EditorSheet({
-  terminalBg,
   closeBinding,
   onClose,
   children,
 }: {
-  terminalBg: string | undefined;
   closeBinding: KeyBinding | undefined;
   onClose: () => void;
   children: ReactNode;
 }) {
   return (
     <div
-      className={`h-full overflow-hidden rounded-xl border border-line ${
-        terminalBg ? 'bg-(--sheet-bg)' : 'bg-well'
-      }`}
-      style={{ '--sheet-bg': terminalBg } as CSSProperties}
+      className="h-full overflow-hidden"
       onKeyDown={(e) => {
         // Monaco claims the keys it uses (closing its find widget) by
         // preventing their default.

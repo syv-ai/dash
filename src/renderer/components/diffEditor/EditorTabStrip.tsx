@@ -1,6 +1,7 @@
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { Columns2, Pin, X } from 'lucide-react';
-import { PillTab } from '../ui/PillTab';
+import { FolderTab } from '../ui/FolderTab';
+import { cn } from '../../lib/cn';
 import { IconButton } from '../ui/IconButton';
 import {
   ContextMenu,
@@ -37,8 +38,10 @@ function basename(path: string): string {
   return path.slice(path.lastIndexOf('/') + 1);
 }
 
-/** A group's open files as pill tabs, with a dirty dot on unsaved ones and
- *  the preview tab in italics; the split and close-editor actions at its end. */
+/** A group's open files as folder tabs over its sheet (the active one opens
+ *  into it), with a dirty dot on unsaved ones and the preview tab in italics;
+ *  the split and close-editor actions at its end. The strip overlaps the sheet by 1px so the
+ *  active tab covers the sheet's top edge where they join. */
 export function EditorTabStrip({
   cwd,
   tabs,
@@ -64,13 +67,19 @@ export function EditorTabStrip({
   }, [active]);
 
   return (
-    <div className="@container/strip flex h-9 shrink-0 items-center gap-0.5 pr-1 pl-1.5">
+    <div className="@container/strip relative z-10 -mb-px flex h-9 shrink-0 items-center gap-0.5 pr-1">
       {leading}
+      {/* Margins, not padding, keep tabs off the sheet's 12px corners so a
+          tab only ever meets its flat edge, scrolled or not: ml-3 (ml-1 after
+          the leading toggle, which clears it already); mr-2 plus the pr-1. */}
       <div
         ref={trackRef}
         role="tablist"
         aria-label="Open files"
-        className="scrollbar-none flex h-full min-w-0 flex-1 items-center gap-0.5 overflow-x-auto"
+        className={cn(
+          'scrollbar-none mr-2 flex h-full min-w-0 flex-1 items-end gap-0.5 overflow-x-auto',
+          leading ? 'ml-1' : 'ml-3',
+        )}
       >
         {tabs.map((path) => {
           const dirty = isDirty(workingUri(absolutePath(cwd, path)));
@@ -79,7 +88,7 @@ export function EditorTabStrip({
           return (
             <ContextMenu key={path}>
               <ContextMenuTrigger asChild>
-                <PillTab
+                <FolderTab
                   title={isPreview ? `${path} (preview)` : path}
                   active={isActive}
                   muted={!focused}
@@ -95,7 +104,7 @@ export function EditorTabStrip({
                   }
                 >
                   <span className={isPreview ? 'italic' : undefined}>{basename(path)}</span>
-                </PillTab>
+                </FolderTab>
               </ContextMenuTrigger>
               <ContextMenuContent>
                 <ContextMenuItem disabled={!isPreview} onSelect={() => onPin(path)}>

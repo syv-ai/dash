@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import { useState } from 'react';
 import type { ITheme as XtermTheme } from '@xterm/xterm';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../ui/Resizable';
 import type { EditorView } from './types';
@@ -47,14 +47,11 @@ export function DiffEditor({
     historyShown: false,
     target,
   });
-  const bg = terminalTheme.background;
   const treePanel = useTreePanel();
 
+  // The chrome the tree and the groups' sheets sit on, as in the task sidebar.
   return (
-    <div
-      className={`h-full w-full overflow-hidden ${bg ? 'bg-(--sheet-bg)' : 'bg-well'}`}
-      style={{ '--sheet-bg': bg } as CSSProperties}
-    >
+    <div className="h-full w-full overflow-hidden bg-ground p-2">
       <ResizablePanelGroup orientation="horizontal" autoSaveId="diff-editor-shell">
         {/* pr-3 keeps the 12px gutter the old handle took up. */}
         <ResizablePanel
