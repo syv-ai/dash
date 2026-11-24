@@ -36,6 +36,7 @@ import { WorktreePath } from './WorktreePath';
 import { useGit, type DiffFileTarget } from '../../stores/gitStore';
 import { useSettings } from '../../stores/settingsStore';
 import { useUi } from '../../stores/uiStore';
+import { useEditorTabs } from '../../stores/editorTabsStore';
 import { useCommentsStore } from '../../stores/commentsStore';
 import { formatBinding, matchesBinding, type KeyBinding } from '../../keybindings';
 import { needsAttention } from '../../../shared/diffComments';
@@ -168,6 +169,13 @@ export function RightInspector({
     if (next !== 'history' && view.kind === 'commit') selectView({ kind: 'working', ref: 'HEAD' });
     if (next === 'files') openEditor();
   };
+  // Wide with the tree folded away, the view switch would change nothing
+  // visible: picking a view (even the current one) unfolds it, easing as
+  // the tree toggle does. Leaving Details keeps the fold as it was.
+  const pickSegment = (next: CodeSegment) => {
+    selectSegment(next);
+    if (wide) useEditorTabs.getState().setTreeCollapsed(false);
+  };
   const toggleDetails = () => {
     if (segment === 'details') selectSegment(lastCodeSegment);
     else setSegment('details');
@@ -235,7 +243,7 @@ export function RightInspector({
           size="sm"
           fullWidth={false}
           value={segment}
-          onChange={(next) => next !== 'details' && selectSegment(next)}
+          onChange={(next) => next !== 'details' && pickSegment(next)}
           segmentClassName="@max-[20rem]/sidehead:px-1.5"
           options={[
             { value: 'changes', label: 'Changes', count: files.length || undefined },
