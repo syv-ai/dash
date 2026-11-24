@@ -6,6 +6,7 @@ import type { DeleteProjectOptions } from '../components/project/DeleteProjectMo
 import type { CreateTaskOptions } from '../components/task/TaskModal';
 import { playPeonSound } from '../sounds';
 import { useSettings } from './settingsStore';
+import { useEditors } from './editorsStore';
 import { notifyContextInjected } from './taskToasts';
 
 export interface ProjectsState {
@@ -87,17 +88,30 @@ const taskLoadSeq = new Map<string, number>();
  * every terminal session, its service tabs (main killed their PTYs), the
  * snapshot so a new task in the same cwd starts fresh, and the selection.
  */
-function forgetDeletedTask(taskId: string) {
+function forgetDeletedTask(task: Task) {
+  const taskId = task.id;
   disposeTaskSessions(taskId);
   void sessionRegistry.disposeByPrefix(`service:${taskId}:`);
   void window.electronAPI.ptyClearSnapshot(taskId);
   if (useProjects.getState().activeTaskId === taskId) useProjects.getState().setActiveTask(null);
+  closeTaskEditor(task);
 }
 
-/** UI cleanup for a task main archived: its terminal sessions and service tabs. */
-function forgetArchivedTask(taskId: string) {
-  disposeTaskSessions(taskId);
-  void sessionRegistry.disposeByPrefix(`service:${taskId}:`);
+/** UI cleanup for a task main archived: its terminal sessions and service
+ *  tabs, and its editor. */
+function forgetArchivedTask(task: Task) {
+  disposeTaskSessions(task.id);
+  void sessionRegistry.disposeByPrefix(`service:${task.id}:`);
+  closeTaskEditor(task);
+}
+
+/** Close a gone task's editor, unsaved edits included (no prompt: its
+ *  worktree is archived or deleted), unless a live task shares its folder. */
+function closeTaskEditor(task: Task) {
+  const shared = Object.values(useProjects.getState().tasksByProject).some((list) =>
+    list.some((t) => t.id !== task.id && !t.archivedAt && t.path === task.path),
+  );
+  if (!shared) useEditors.getState().close(task.path);
 }
 
 /** Sort projects by the saved projectOrder, pruning stale ids from storage. */
@@ -211,8 +225,8 @@ export const useProjects = create<ProjectsStore>((set, get) => ({
       const wasActive = new Set(previous.filter((t) => !t.archivedAt).map((t) => t.id));
       const archived = resp.data.filter((t) => t.archivedAt && wasActive.has(t.id));
       set((s) => ({ tasksByProject: { ...s.tasksByProject, [projectId]: resp.data! } }));
-      for (const t of removed) forgetDeletedTask(t.id);
-      for (const t of archived) forgetArchivedTask(t.id);
+      for (const t of removed) forgetDeletedTask(t);
+      for (const t of archived) forgetArchivedTask(t);
     }
   },
   reorderProjects: (reordered) => {
@@ -286,7 +300,7 @@ export const useProjects = create<ProjectsStore>((set, get) => ({
       toast.error(resp.error || 'Failed to delete task');
       return;
     }
-    forgetDeletedTask(taskItem.id);
+    forgetDeletedTask(taskItem);
   },
   deleteProject: async (project, options) => {
     // Main deletes each task as a single delete would (session, terminals,
@@ -306,7 +320,7 @@ export const useProjects = create<ProjectsStore>((set, get) => ({
       toast.error(resp.error || 'Failed to delete project');
       return;
     }
-    for (const t of projectTasks) forgetDeletedTask(t.id);
+    for (const t of projectTasks) forgetDeletedTask(t);
     if (useProjects.getState().activeProjectId === project.id) {
       useProjects.getState().setActiveProject(null);
       useProjects.getState().setActiveTask(null);

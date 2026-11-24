@@ -13,8 +13,16 @@ import { EditorPane } from './EditorPane';
 import { EditorTabStrip } from './EditorTabStrip';
 import type { EditorWorkspace } from './useEditorWorkspace';
 import { openPaths, type GroupIndex } from './tabs/editorLayout';
-import { anyDirtyUnder, dirtyVersion, isDirty, retain, subscribeDirty, workingUri } from './models';
-import { retainedOnUnmount } from './retention';
+import {
+  anyDirtyUnder,
+  dirtyVersion,
+  isDirty,
+  releaseRetained,
+  retain,
+  subscribeDirty,
+  workingUri,
+} from './models';
+import { park, retainedOnUnmount, unpark } from './retention';
 import { TreeToggle } from './TreeToggle';
 import { addCloseGuard } from './closeGuard';
 import { confirm } from '../ui/ConfirmHost';
@@ -51,6 +59,7 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
 
   // Every open tab's working file stays alive, shown or not.
   const holder = `tabs:${tabsKey}`;
+  useEffect(() => unpark(holder), [holder]);
   useEffect(() => {
     retain(
       holder,
@@ -58,17 +67,17 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
     );
   }, [holder, layout, cwd]);
   // Unmounted while still open (its task switched away from), the unsaved
-  // ones stay: switching back finds them. Closed, none do.
+  // ones stay, until switching back finds them or the editor closes (its
+  // task archived or deleted meanwhile). Closed, none do.
   useEffect(
     () => () => {
       const files = openPaths(selectLayout(tabsKey)(useEditorTabs.getState())).map((p) =>
         absolutePath(cwd, p),
       );
       const closed = !useEditors.getState().byCwd[cwd];
-      retain(
-        holder,
-        retainedOnUnmount(files, closed, (f) => isDirty(workingUri(f))),
-      );
+      const kept = retainedOnUnmount(files, closed, (f) => isDirty(workingUri(f)));
+      retain(holder, kept);
+      if (kept.length > 0) park(holder, cwd, releaseRetained);
     },
     [holder, tabsKey, cwd],
   );

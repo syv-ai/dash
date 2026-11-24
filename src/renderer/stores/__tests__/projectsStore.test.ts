@@ -214,6 +214,38 @@ describe('projectsStore loadProjects / loadTasks', () => {
     expect(api.ptyClearSnapshot).not.toHaveBeenCalledWith('t1');
   });
 
+  it('loadTasks closes the editor of a task archived or deleted in the background', async () => {
+    const useProjects = await freshStore();
+    const { useEditors } = await import('../editorsStore');
+    useProjects.setState({
+      tasksByProject: { p1: [task('t1', 'p1'), task('t2', 'p1'), task('t3', 'p1')] },
+    });
+    for (const id of ['t1', 't2', 't3'])
+      useEditors.getState().open({ cwd: `/p/p1/${id}`, filePath: '' });
+    api.getTasks.mockResolvedValue({
+      success: true,
+      data: [task('t1', 'p1', { archivedAt: '2' }), task('t3', 'p1')],
+    });
+    await useProjects.getState().loadTasks('p1');
+    expect(Object.keys(useEditors.getState().byCwd)).toEqual(['/p/p1/t3']);
+  });
+
+  it('keeps an editor whose folder a live task still uses', async () => {
+    const useProjects = await freshStore();
+    const { useEditors } = await import('../editorsStore');
+    const shared = { path: '/p/p1', useWorktree: false };
+    useProjects.setState({
+      tasksByProject: { p1: [task('t1', 'p1', shared), task('t2', 'p1', shared)] },
+    });
+    useEditors.getState().open({ cwd: '/p/p1', filePath: '' });
+    api.getTasks.mockResolvedValue({
+      success: true,
+      data: [task('t1', 'p1', { ...shared, archivedAt: '2' }), task('t2', 'p1', shared)],
+    });
+    await useProjects.getState().loadTasks('p1');
+    expect(useEditors.getState().byCwd['/p/p1']).toBeDefined();
+  });
+
   it('loadTasks drops a response a newer load overtook, so a new task is not read as deleted', async () => {
     const useProjects = await freshStore();
     const { sessionRegistry } = await import('../../terminal/SessionRegistry');
