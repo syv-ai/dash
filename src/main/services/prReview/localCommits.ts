@@ -115,3 +115,20 @@ export async function prLocalStats(
   ]);
   return { files: parseRawNumstat(diff), commits, behindBase };
 }
+
+/**
+ * How many commits HEAD at `cwd` has that PR head `head` lacks: the local
+ * commits not pushed to the PR yet. Null when `head` isn't in the checkout
+ * (never fetched; nothing to count against) or git can't say.
+ */
+export async function commitsPastHead(
+  cwd: string,
+  head: string,
+  run: RunGit = runGit,
+): Promise<number | null> {
+  if (!head || !(await has(cwd, head, run))) return null;
+  return run(cwd, ['rev-list', '--count', `${head}..HEAD`], 15_000).then(
+    (out) => Number(out.trim()) || 0,
+    () => null,
+  );
+}

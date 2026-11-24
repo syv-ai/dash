@@ -52,6 +52,9 @@ export interface PrReviewApi {
     body: string;
     draftId?: string;
   }) => Promise<IpcResponse<PrReviewComment>>;
+  /** How many commits HEAD at `cwd` has that PR head `head` lacks (local
+   *  commits not pushed to the PR yet); null when `head` isn't in the checkout. */
+  prReviewLocalAhead: (args: { cwd: string; head: string }) => Promise<IpcResponse<number | null>>;
   /** The PR the task reviews and why (picked, or its own open PR), or null. */
   prReviewTarget: (args: { taskId: string }) => Promise<IpcResponse<TaskReviewTarget | null>>;
   /** Pick the PR the task reviews (null stops reviewing); answers the target now. */

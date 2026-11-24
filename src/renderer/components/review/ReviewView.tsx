@@ -12,6 +12,7 @@ import { ReviewFiles } from './ReviewFiles';
 import { ReviewHeader } from './ReviewHeader';
 import { ReviewProgress } from './ReviewProgress';
 import { ReviewThreads } from './ReviewThreads';
+import { UnpushedNotice } from './UnpushedNotice';
 import { useReviewData } from './useReviewData';
 import { YourReview } from './YourReview';
 
@@ -96,6 +97,7 @@ function Outline({
         onSwitch={onSwitchPr}
         onStop={() => usePrReviews.getState().setTarget(task.id, null)}
       />
+      <UnpushedNotice task={task} review={review} source={target.source} />
       <ReviewProgress rows={rows} activePath={activePath} onOpenFile={onOpenFile} />
       <ReviewFiles
         rows={rows}

@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 import {
+  commitsPastHead,
   ensureCommits,
   filesAtCommit,
   parseRawNumstat,
@@ -54,6 +55,17 @@ describe('ensureCommits', () => {
       `Could not fetch ${missing} from origin`,
     );
     expect(calls.find((a) => a[0] === 'fetch')).toEqual(['fetch', '--no-tags', 'origin', missing]);
+  });
+});
+
+describe('commitsPastHead', () => {
+  it("counts HEAD's commits the PR head lacks; null for a head not in the checkout", async () => {
+    expect(await commitsPastHead(repo, head)).toBe(0);
+    git('commit', '-q', '--allow-empty', '-m', 'local 1');
+    git('commit', '-q', '--allow-empty', '-m', 'local 2');
+    expect(await commitsPastHead(repo, head)).toBe(2);
+    expect(await commitsPastHead(repo, 'f'.repeat(40))).toBeNull();
+    git('reset', '-q', '--hard', head);
   });
 });
 

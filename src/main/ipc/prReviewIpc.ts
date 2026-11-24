@@ -8,6 +8,7 @@ import {
   appReviewTarget,
 } from '../services/prReview/appDeps';
 import { loadPrReview } from '../services/prReview/loadReview';
+import { commitsPastHead } from '../services/prReview/localCommits';
 import { taskReviews } from '../services/prReview/taskReview';
 import { prViewedFilesRepo } from '../services/prViewedFilesRepo';
 import type { PrProvider, PrRef, PrVerdict } from '@shared/types';
@@ -78,6 +79,17 @@ export function registerPrReviewIpc(): void {
       }
     },
   );
+
+  /** HEAD's commits at `cwd` that PR head `head` lacks; null when `head`
+   *  isn't in the checkout (see `commitsPastHead`). */
+  ipcMain.handle('prReview:localAhead', async (_e, args: { cwd: string; head: string }) => {
+    try {
+      parseArgs('prReview:localAhead', z.looseObject({ cwd: z.string(), head: z.string() }), args);
+      return { success: true, data: await commitsPastHead(args.cwd, args.head) };
+    } catch (err) {
+      return errorResponse(err);
+    }
+  });
 
   /** The PR the task reviews and why, or null (see `effectiveReviewTarget`). */
   ipcMain.handle('prReview:target', async (_e, args: { taskId: string }) => {
