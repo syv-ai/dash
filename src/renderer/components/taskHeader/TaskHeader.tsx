@@ -1,6 +1,4 @@
 import {
-  ArrowDown,
-  ArrowUp,
   FolderGit2,
   GitBranch,
   GitGraph,
@@ -50,15 +48,16 @@ interface TaskHeaderProps {
   onDeleteTask: () => void;
 }
 
-/** A tooltip label with its shortcut, e.g. "Commit graph  ⇧⌘G". */
+/** A tooltip label with its shortcut, e.g. "Show sidebar  ⌘B". */
 function withShortcut(label: string, binding: KeyBinding | undefined): string {
   return binding ? `${label}  ${formatBinding(binding)}` : label;
 }
 
 /**
- * The task sheet's title row: name, branch, ahead/behind, setup status and
- * linked issues on the left; the model and token badge, then open in IDE,
- * commit graph, pull request, "…" and the right-sidebar toggle on the right.
+ * The task sheet's title row: name, branch, setup status and linked issues
+ * on the left; the model and token badge, then open in IDE, pull request,
+ * "…" (remote control, commit graph, the task's actions) and the
+ * right-sidebar toggle on the right. Ahead/behind live in the Changes view.
  * The row drags the window; its controls don't.
  */
 export function TaskHeader({
@@ -90,8 +89,6 @@ export function TaskHeader({
       ? branchUrl(project.gitRemote, branch)
       : null;
   const BranchIcon = task.useWorktree ? FolderGit2 : GitBranch;
-  const ahead = gitStatus?.ahead ?? 0;
-  const behind = gitStatus?.behind ?? 0;
 
   const branchLabel = (
     <>
@@ -147,22 +144,6 @@ export function TaskHeader({
             )}
           </Tooltip>
         )}
-        {ahead > 0 && (
-          <Tooltip content={`${ahead} commit${ahead === 1 ? '' : 's'} ahead of the remote`}>
-            <span className="inline-flex shrink-0 items-center gap-0.5 tabular-nums">
-              <ArrowUp size={12} strokeWidth={1.8} />
-              {ahead}
-            </span>
-          </Tooltip>
-        )}
-        {behind > 0 && (
-          <Tooltip content={`${behind} commit${behind === 1 ? '' : 's'} behind the remote`}>
-            <span className="inline-flex shrink-0 items-center gap-0.5 tabular-nums">
-              <ArrowDown size={12} strokeWidth={1.8} />
-              {behind}
-            </span>
-          </Tooltip>
-        )}
         {task.useWorktree && <SetupStatus worktreePath={task.path} variant="pill" />}
         {task.linkedItems && task.linkedItems.length > 0 && (
           <LinkedItemBadges items={task.linkedItems} gitRemote={project.gitRemote ?? null} />
@@ -194,12 +175,6 @@ export function TaskHeader({
         <IconButton title={openLabel} onClick={onOpenIde}>
           <IdeIcon ideId={ideId} />
         </IconButton>
-        <IconButton
-          title={withShortcut('Commit graph', keybindings.commitGraph)}
-          onClick={onShowCommitGraph}
-        >
-          <GitGraph size={14} strokeWidth={1.8} />
-        </IconButton>
         <PrBadge prs={prs} allPrs={allPrs} taskId={task.id} variant="button" />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -216,6 +191,15 @@ export function TaskHeader({
               <Globe size={13} strokeWidth={1.8} />
               Remote control
               {remoteControlOn && <DropdownMenuShortcut>On</DropdownMenuShortcut>}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={onShowCommitGraph}>
+              <GitGraph size={13} strokeWidth={1.8} />
+              Commit graph
+              {keybindings.commitGraph && (
+                <DropdownMenuShortcut>
+                  {formatBinding(keybindings.commitGraph)}
+                </DropdownMenuShortcut>
+              )}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <TaskMenuItems
