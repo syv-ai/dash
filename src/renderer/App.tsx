@@ -755,6 +755,12 @@ export function App() {
         return;
       }
 
+      // A component already handled this key (a menu's closing Escape, a
+      // Monaco widget): don't also run a global shortcut for it. xterm marks
+      // most keys handled, so the terminal is exempt and keeps its ⌘ chords.
+      const target = e.target as HTMLElement | null;
+      if (e.defaultPrevented && !target?.closest?.('.xterm')) return;
+
       // Skip global shortcuts when typing in text inputs — except the shell's
       // own ⌘ chords on macOS: ⌘ never types text or reaches the PTY, so
       // they work from the terminal (whose input is a textarea) too.
