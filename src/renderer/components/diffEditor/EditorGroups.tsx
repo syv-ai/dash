@@ -22,6 +22,7 @@ import {
   workingUri,
 } from './models';
 import { TreeToggle } from './TreeToggle';
+import { addCloseGuard } from './closeGuard';
 import { absolutePath } from './editor/fileRef';
 import { LspStatusIndicator } from './LspStatusIndicator';
 import { installLsp } from '../../lsp';
@@ -30,7 +31,7 @@ interface Props {
   ws: EditorWorkspace;
   terminalTheme: XtermTheme;
   isDark: boolean;
-  /** Close the editor (asks first when a file has unsaved changes). */
+  /** Close the editor. The host's close asks `mayCloseEditor()` first. */
   onClose: () => void;
 }
 
@@ -82,10 +83,16 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
     [wsCloseTab],
   );
 
-  const closeEditor = useCallback(() => {
-    if (anyDirtyUnder(cwd) && !window.confirm('Discard unsaved changes?')) return;
-    onClose();
-  }, [cwd, onClose]);
+  // Every way of closing the editor lives with its host; each asks here first.
+  // Once the discard is agreed, a second ask in the same close passes.
+  useEffect(() => {
+    let agreed = false;
+    return addCloseGuard(() => {
+      if (agreed || !anyDirtyUnder(cwd)) return true;
+      agreed = window.confirm('Discard unsaved changes?');
+      return agreed;
+    });
+  }, [cwd]);
 
   // Closing a file's last tab drops its unsaved edits: ask first.
   const closeTab = (group: GroupIndex, path: string) => {
@@ -150,7 +157,6 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
                     onSplit={
                       group.active ? () => ws.openFile(group.active!, { toSide: true }) : undefined
                     }
-                    onCloseEditor={isLast ? closeEditor : undefined}
                     trailing={isLast && ws.git ? <LspStatusIndicator worktree={cwd} /> : null}
                   />
                   <div
@@ -172,7 +178,7 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
                         revealCommentId={ws.revealCommentId}
                         onNavigateToComment={ws.navigateToComment}
                         onClearReveal={ws.clearRevealComment}
-                        onClose={closeEditor}
+                        onClose={onClose}
                         onSelectBase={ws.selectBase}
                         onExitBranchView={ws.exitBranchView}
                         defaultBase={ws.data.defaultBase}

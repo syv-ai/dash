@@ -27,6 +27,9 @@ export function useCloseHandler(fallback: () => void): () => void {
 
 interface ModalProps {
   onClose: () => void;
+  /** Asked before any close starts (Escape, backdrop, a close button); false
+   *  keeps the modal open, e.g. over unsaved edits. */
+  canClose?: () => boolean;
   /** Tailwind sizing for the card. Required — every caller decides its own footprint
    *  so we never silently coerce a small confirm dialog into a Settings-sized panel. */
   size: string;
@@ -50,6 +53,7 @@ const modalCloseStack: Array<() => void> = [];
 
 export function Modal({
   onClose,
+  canClose,
   size,
   overflow = 'hidden',
   cardStyle,
@@ -57,7 +61,10 @@ export function Modal({
   children,
 }: ModalProps) {
   const [closing, setClosing] = useState(false);
-  const requestClose = useCallback(() => setClosing(true), []);
+  const requestClose = useCallback(() => {
+    if (canClose && !canClose()) return;
+    setClosing(true);
+  }, [canClose]);
   // Backdrop click should ONLY close when both mousedown and mouseup land on
   // the backdrop itself. Without this, a drag that starts on a card child
   // (e.g. a react-resizable-panels handle) and releases outside the card

@@ -48,6 +48,7 @@ import { setWebglHeldLimit } from './terminal/WebglLifecycle';
 import { useSettings } from './stores/settingsStore';
 import { useUi } from './stores/uiStore';
 import { useGit } from './stores/gitStore';
+import { mayCloseEditor } from './components/diffEditor/closeGuard';
 import { useRuntime } from './stores/runtimeStore';
 import { useAppBootstrap } from './hooks/useAppBootstrap';
 import { useShallow } from 'zustand/react/shallow';
@@ -942,6 +943,7 @@ export function App() {
   // focus. Not while the memory modal is still up: typing would reach Claude
   // unseen.
   const closeDiff = useCallback(() => {
+    if (!mayCloseEditor()) return;
     setDiffFile(null);
     const id = useProjects.getState().activeTaskId;
     if (id && !useUi.getState().memoryProjectId) {

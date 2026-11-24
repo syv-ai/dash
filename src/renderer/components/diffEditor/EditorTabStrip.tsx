@@ -28,8 +28,6 @@ interface Props {
   leading?: ReactNode;
   /** Open the active file in the other group (absent: nothing to split). */
   onSplit?: () => void;
-  /** Close the whole editor (the last group's strip carries it). */
-  onCloseEditor?: () => void;
   /** Shown before the actions (the language-server status). */
   trailing?: ReactNode;
 }
@@ -40,7 +38,7 @@ function basename(path: string): string {
 
 /** A group's open files as folder tabs over its sheet (the active one opens
  *  into it), with a dirty dot on unsaved ones and the preview tab in italics;
- *  the split and close-editor actions at its end. The strip overlaps the sheet by 1px so the
+ *  the split action at its end. The strip overlaps the sheet by 1px so the
  *  active tab covers the sheet's top edge where they join. */
 export function EditorTabStrip({
   cwd,
@@ -53,7 +51,6 @@ export function EditorTabStrip({
   onPin,
   leading,
   onSplit,
-  onCloseEditor,
   trailing,
 }: Props) {
   useSyncExternalStore(subscribeDirty, dirtyVersion);
@@ -124,11 +121,6 @@ export function EditorTabStrip({
       {onSplit && (
         <IconButton size="sm" title="Open to the side" onClick={onSplit}>
           <Columns2 size={14} strokeWidth={1.8} />
-        </IconButton>
-      )}
-      {onCloseEditor && (
-        <IconButton size="sm" title="Close editor" onClick={onCloseEditor}>
-          <X size={14} strokeWidth={1.8} />
         </IconButton>
       )}
     </div>
