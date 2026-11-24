@@ -3,6 +3,7 @@ import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
 import checkFile from 'eslint-plugin-check-file';
 import globals from 'globals';
+import { plugin as shadcn } from '@shadcn/lint';
 
 export default tseslint.config(
   {
@@ -69,6 +70,47 @@ export default tseslint.config(
         // middle extension when checking the base name's case.
         { ignoreMiddleExtensions: true },
       ],
+    },
+  },
+  // Design-system lint (renderer only). Warnings, not errors, while the UI
+  // overhaul migrates call sites; components/ui/ owns raw styling and is exempt.
+  // The theme is discovered from src/renderer/index.css (the one stylesheet
+  // importing Tailwind); components are whatever is imported from a ui/ folder.
+  {
+    files: ['src/renderer/**/*.{ts,tsx}'],
+    plugins: { shadcn },
+    settings: {
+      shadcn: {
+        componentImports: ['(^|/)ui/[A-Z][A-Za-z]*$'],
+        note: 'Tokens and type scale live in src/renderer/index.css; primitives in src/renderer/components/ui/.',
+      },
+    },
+    rules: {
+      'shadcn/no-arbitrary-values': 'warn',
+      'shadcn/no-raw-colors': 'warn',
+      'shadcn/no-inline-styles': 'warn',
+      'shadcn/no-unknown-classes': 'warn',
+      'shadcn/no-restyle': ['warn', { allow: ['layout'] }],
+      'shadcn/require-static-classes': 'warn',
+      'no-restricted-syntax': [
+        'warn',
+        {
+          selector: 'JSXOpeningElement[name.name=/^(button|input|select|textarea)$/]',
+          message: 'Use the components/ui/ primitive instead of a raw form element.',
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/renderer/components/ui/**'],
+    rules: {
+      'shadcn/no-arbitrary-values': 'off',
+      'shadcn/no-raw-colors': 'off',
+      'shadcn/no-inline-styles': 'off',
+      'shadcn/no-unknown-classes': 'off',
+      'shadcn/no-restyle': 'off',
+      'shadcn/require-static-classes': 'off',
+      'no-restricted-syntax': 'off',
     },
   },
 );
