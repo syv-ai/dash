@@ -6,7 +6,6 @@ import { prKey, usePrReviews } from '../../../stores/prReviewStore';
 import type { TextRange } from '../../../stores/editorTabsStore';
 import { navStops, nextStop } from '../../review/outline';
 import type { EditorLayout, GroupIndex } from '../tabs/editorLayout';
-import { isFileTab } from '../tabs/tabTarget';
 import type { EditorView } from '../types';
 
 export type NavDirection = 1 | -1;
@@ -76,7 +75,7 @@ export function useReviewNavigation({
     const pane = panes.current.get(group);
     const { stops, layout, onOpenAt } = latest.current;
     const filePath = layout.groups[group]?.active;
-    if (!pane || !filePath || !isFileTab(filePath)) return;
+    if (!pane || !filePath) return;
     const line = pane.editor.getPosition()?.lineNumber ?? 0;
     const stop = nextStop(stops, { path: filePath, line }, dir);
     if (!stop) return;

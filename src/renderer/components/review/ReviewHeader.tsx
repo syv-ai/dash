@@ -1,19 +1,10 @@
-import {
-  ExternalLink,
-  GitBranch,
-  GitCommitHorizontal,
-  GitPullRequest,
-  ListChecks,
-  MoreHorizontal,
-  RefreshCw,
-  Repeat,
-  Users,
-  X,
-  type LucideIcon,
-} from 'lucide-react';
-import { useRef, useState, type ReactNode } from 'react';
+import { MoreHorizontal, RefreshCw, Repeat, X } from 'lucide-react';
+import { useRef, useState } from 'react';
 import type { PrReview, TaskReviewTarget } from '../../../shared/types';
+import { branchUrl } from '../../../shared/urls';
 import { cn } from '../../lib/cn';
+import { Badge } from '../ui/Badge';
+import { Button } from '../ui/Button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,49 +13,42 @@ import {
 } from '../ui/DropdownMenu';
 import { IconButton } from '../ui/IconButton';
 import { TextLink } from '../ui/TextLink';
-import { checksSummary } from './outline';
-import { distanceLine, providerName, REVIEWER_LABELS, STATE_LABELS } from './labels';
+import { mergeVerb, plural, providerName, STATE_LABELS } from './labels';
 import { SwitchPr } from './SwitchPr';
 
-/** One fact about the PR: an icon naming what it is, then the value, which
- *  wraps rather than truncates (the list column can be narrow). */
-function Fact({
-  icon: Icon,
-  name,
-  children,
-}: {
-  icon: LucideIcon;
-  name: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex items-start gap-2" title={name}>
-      <span className="flex h-4 shrink-0 items-center text-ink-3">
-        <Icon size={14} strokeWidth={1.8} aria-label={name} />
-      </span>
-      <div className="type-body min-w-0 flex-1 wrap-break-word">{children}</div>
-    </div>
+/** A branch, linked to its page on the forge when the remote names one. */
+function Branch({ remote, name }: { remote: string | null; name: string }) {
+  const href = remote ? branchUrl(remote, name) : null;
+  return href ? (
+    <TextLink href={href} quiet title={`Open ${name} on the forge`}>
+      <span className="wrap-anywhere">{name}</span>
+    </TextLink>
+  ) : (
+    <span className="wrap-anywhere text-ink">{name}</span>
   );
 }
 
 /**
- * The Review view's head: the PR's title (it opens the PR overview tab), why
- * it is shown, its branches, how far it is from its base, its state, reviewers
- * and checks; Refresh, and a menu with "Open on <forge>", "Switch PR…" and,
- * for a picked PR, "Stop reviewing". A refresh that failed says why under the
- * title, until the next one lands.
+ * The Review view's head, over both tabs: the PR's title (to the forge), its
+ * number and state, and Finish review… when there is one to give; "who wants
+ * to merge n commits into base from head", each linked (the commits to
+ * History); why the PR shows (D94). Refresh, and a menu with Switch PR… and,
+ * for a picked PR, Stop reviewing. A failed refresh says why until the next
+ * one lands.
  */
 export function ReviewHeader({
   review,
   source,
   projectId,
   cwd,
+  remote,
   loading,
   error,
   onRefresh,
-  onOpenOverview,
   onSwitch,
   onStop,
+  onShowCommits,
+  onFinish,
 }: {
   review: PrReview;
   /** Why the task reviews this PR (D3). */
@@ -72,30 +56,43 @@ export function ReviewHeader({
   /** Where Switch PR… lists the PRs from. */
   projectId: string;
   cwd: string;
+  /** The project's git remote: where branch links point. */
+  remote: string | null;
   loading: boolean;
   /** Why the last refresh failed; null after a good one. */
   error: string | null;
   onRefresh: () => void;
-  onOpenOverview: () => void;
   /** Review PR `number` instead; resolves false when it couldn't be loaded. */
   onSwitch: (number: number) => Promise<boolean>;
   /** Stop reviewing the picked PR (back to the branch's own, or none). */
   onStop: () => void;
+  /** Show the PR's commits in History. */
+  onShowCommits: () => void;
+  /** Open the Finish-review sheet; absent while there is nothing to finish. */
+  onFinish?: () => void;
 }) {
-  const checks = checksSummary(review.checks);
   const [switching, setSwitching] = useState(false);
   // Switch PR… from the menu: the menu's close must not hand focus back to
   // its trigger, which would close the picker as it opens.
   const switchFromMenu = useRef(false);
 
   return (
-    <section className="grid gap-2 px-2.5 pt-2 pb-1">
+    <section className="grid gap-1.5 px-2.5 pt-2 pb-1">
       <div className="flex items-start gap-1">
         <h2 className="type-heading min-w-0 flex-1 pt-0.5 wrap-break-word">
-          <TextLink quiet title="Open the PR overview" onClick={onOpenOverview}>
-            PR #{review.number} {review.title}
-          </TextLink>
+          <TextLink href={review.url} quiet title={`Open on ${providerName(review.provider)}`}>
+            {review.title}
+          </TextLink>{' '}
+          <span className="text-ink-3 tabular-nums">#{review.number}</span>{' '}
+          <Badge size="sm" className="align-middle">
+            {STATE_LABELS[review.state]}
+          </Badge>
         </h2>
+        {onFinish && (
+          <Button size="sm" variant="primary" onClick={onFinish}>
+            Finish review…
+          </Button>
+        )}
         <IconButton size="sm" title="Refresh" onClick={onRefresh} disabled={loading}>
           <RefreshCw size={14} strokeWidth={1.8} className={cn(loading && 'animate-spin')} />
         </IconButton>
@@ -114,10 +111,6 @@ export function ReviewHeader({
               setSwitching(true);
             }}
           >
-            <DropdownMenuItem onSelect={() => void window.electronAPI.openExternal(review.url)}>
-              <ExternalLink size={14} strokeWidth={1.8} />
-              Open on {providerName(review.provider)}
-            </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => (switchFromMenu.current = true)}>
               <Repeat size={14} strokeWidth={1.8} />
               Switch PR…
@@ -131,6 +124,21 @@ export function ReviewHeader({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+      <p className="type-label wrap-break-word">
+        {review.authorUrl ? (
+          <TextLink href={review.authorUrl} quiet title={`${review.author}'s profile`}>
+            {review.author}
+          </TextLink>
+        ) : (
+          <span className="text-ink">{review.author}</span>
+        )}{' '}
+        {mergeVerb(review.state)}{' '}
+        <TextLink quiet title="Show them in History" onClick={onShowCommits}>
+          <span className="tabular-nums">{plural(review.commits, 'commit')}</span>
+        </TextLink>{' '}
+        into <Branch remote={remote} name={review.baseRef} /> from{' '}
+        <Branch remote={remote} name={review.headRef} />
+      </p>
       <SwitchPr
         open={switching}
         onOpenChange={setSwitching}
@@ -157,35 +165,6 @@ export function ReviewHeader({
           Could not refresh: {error}
         </p>
       )}
-      <div className="grid gap-1.5">
-        <Fact icon={GitPullRequest} name="State">
-          {STATE_LABELS[review.state]}
-          {review.author && <span className="type-caption"> · by {review.author}</span>}
-        </Fact>
-        <Fact icon={GitBranch} name="Branches">
-          <span className="wrap-anywhere">
-            {review.baseRef} ← {review.headRef}
-          </span>
-        </Fact>
-        <Fact icon={GitCommitHorizontal} name="Commits">
-          <span className="tabular-nums">{distanceLine(review)}</span>
-        </Fact>
-        {review.reviewers.length > 0 && (
-          <Fact icon={Users} name="Reviewers">
-            {review.reviewers.map((r, i) => (
-              <span key={r.name}>
-                {i > 0 && ', '}
-                {r.name} <span className="type-caption">{REVIEWER_LABELS[r.state]}</span>
-              </span>
-            ))}
-          </Fact>
-        )}
-        {checks && (
-          <Fact icon={ListChecks} name="Checks">
-            <span className="tabular-nums">{checks}</span>
-          </Fact>
-        )}
-      </div>
     </section>
   );
 }

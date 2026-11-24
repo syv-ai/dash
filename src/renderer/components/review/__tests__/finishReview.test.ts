@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { DiffComment } from '../../../../shared/types';
-import { canPost, offeredVerdict, postLabel, unsentNoteCount } from '../finishReview';
+import {
+  canPost,
+  finishOffered,
+  offeredVerdict,
+  postLabel,
+  unsentNoteCount,
+} from '../finishReview';
 
 const draft = (id: string, over: Partial<DiffComment>): DiffComment => ({
   id,
@@ -60,5 +66,18 @@ describe('finishReview', () => {
   it('falls back to Comment when the PR does not offer the picked verdict', () => {
     expect(offeredVerdict(['comment', 'approve'], 'approve')).toBe('approve');
     expect(offeredVerdict(['comment'], 'request_changes')).toBe('comment');
+  });
+});
+
+describe('finishOffered', () => {
+  const reply = draft('r', { kind: 'comment', replyTo: 'T1' });
+  const line = draft('c', { kind: 'comment' });
+  it("is always offered on someone else's PR", () => {
+    expect(finishOffered({ own: false, comments: [], summary: '' })).toBe(true);
+  });
+  it('on the own PR, only with a line comment or a summary: replies post one by one', () => {
+    expect(finishOffered({ own: true, comments: [reply], summary: ' ' })).toBe(false);
+    expect(finishOffered({ own: true, comments: [reply, line], summary: '' })).toBe(true);
+    expect(finishOffered({ own: true, comments: [], summary: 'LGTM' })).toBe(true);
   });
 });

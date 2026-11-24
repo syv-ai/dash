@@ -23,7 +23,6 @@ import {
 } from './tabs/editorLayout';
 import { isDirty, workingUri } from './models';
 import { absolutePath } from './editor/fileRef';
-import { isFileTab } from './tabs/tabTarget';
 import type { FileBadges } from './EditorTree';
 import type { PrEntry } from './HistoryList';
 
@@ -198,7 +197,7 @@ export function useEditorWorkspace({
 
   // Once the picked view's files are in: its tabs are the files it changes.
   // Others close, unless unsaved, or kept (not a preview) and the file is in
-  // this view too. Non-file tabs (a PR's overview) stay. A commit, branch or
+  // this view too. A commit, branch or
   // PR view then opens its first changed file (as a preview), unless one of
   // its files already shows.
   const { settled } = data;
@@ -213,16 +212,15 @@ export function useEditorWorkspace({
       .retain(
         tabsKey,
         (path, preview) =>
-          !isFileTab(path) ||
           changed.has(path) ||
           isDirty(workingUri(absolutePath(cwd, path))) ||
           (!preview && present.has(path)),
       );
     if (view.kind === 'working') return;
-    // Opened from a list before the view settled (Review's files, the PR's
-    // overview): that stays in front.
+    // Opened from a list before the view settled (Review's files): that stays
+    // in front.
     const shown = activePath(selectLayout(tabsKey)(useEditorTabs.getState()));
-    if (shown && (changed.has(shown) || !isFileTab(shown))) return;
+    if (shown && changed.has(shown)) return;
     const first = pickFirstChangedFile(changedFiles);
     if (first) openFile(first, { preview: true });
   }, [view, editorOpen, settled, changedFiles, repoPaths, tabsKey, cwd, openFile]);

@@ -55,7 +55,8 @@ import {
 import { prScope } from '../../../shared/prScope';
 import { ReviewView } from '../review/ReviewView';
 import { useReviewTarget } from '../review/useReviewTarget';
-import { prTab } from '../diffEditor/tabs/tabTarget';
+import { usePrCommits, type PrCommitsRange } from '../diffEditor/data/usePrCommits';
+import { TextLink } from '../ui/TextLink';
 import { useUnpushedCommits } from './useUnpushedCommits';
 import type { SyncLinks } from '../changes/SyncStatus';
 import { useGit } from '../../stores/gitStore';
@@ -296,11 +297,19 @@ export function RightInspector({
     },
     [onViewDiff],
   );
-  // The PR overview's "Back to files": Review, its outline unfolded beside the editor.
-  const showReview = () => {
-    if (segment !== 'review') selectSegment('review');
-    useEditorTabs.getState().setTreeCollapsed(false);
+  // The Review header's "n commits": History, on the branch's own list, or
+  // (a picked PR, D-R2b) the PR's base..head, read from the checkout. Any
+  // other way out of History drops the PR's list.
+  const [prCommits, setPrCommits] = useState<PrCommitsRange | null>(null);
+  const showPrCommits = (range: PrCommitsRange | null) => {
+    selectSegment('history');
+    setPrCommits(range);
+    if (expanded) useEditorTabs.getState().setTreeCollapsed(false);
   };
+  useEffect(() => {
+    if (segment !== 'history') setPrCommits(null);
+  }, [segment]);
+  const prCommitList = usePrCommits(task.path, prCommits);
   // An empty Changes is never expanded (see sidebarState): it narrows as it
   // empties, and gives way to Files as a file opens on it or its status
   // loads empty. Each reacts to its own transition, read off the value before.
@@ -510,16 +519,26 @@ export function RightInspector({
   const history = (
     <HistoryList
       cwd={task.path}
-      commits={ws.data.commits}
-      loading={ws.data.commitsLoading}
+      commits={prCommits ? prCommitList.commits : ws.data.commits}
+      loading={prCommits ? prCommitList.loading : ws.data.commitsLoading}
       view={view}
       onSelectView={pickView}
       commentCountByScope={ws.commentCountByScope}
-      pr={pr}
+      pr={prCommits ? null : pr}
       commitFiles={view.kind === 'commit' ? ws.data.changedFiles : []}
       activePath={activePath(ws.layout)}
       onOpenFile={openFile}
-      unpushed={unpushed}
+      unpushed={prCommits ? undefined : unpushed}
+      heading={
+        prCommits && (
+          <p className="type-caption flex flex-wrap gap-x-1 px-2.5 pt-1 pb-1.5">
+            <span className="tabular-nums">PR #{prCommits.number}'s commits.</span>
+            <TextLink quiet title="This branch's commits" onClick={() => setPrCommits(null)}>
+              Show the branch's history
+            </TextLink>
+          </p>
+        )
+      }
     />
   );
 
@@ -540,8 +559,9 @@ export function RightInspector({
       target={reviewTarget}
       onSwitchPr={ws.reviewPr}
       activePath={activePath(ws.layout)}
-      onOpenFile={(path) => openFile(path, { preview: true })}
-      onOpenOverview={(target) => openFile(prTab(target.provider, target.number))}
+      onOpenFile={(path, opts) => openFile(path, opts ?? { preview: true })}
+      canOpenToSide={ws.layout.groups.length < 2}
+      onShowCommits={showPrCommits}
       onNavigate={(scope, path, id) => {
         const next = segmentOnNavigate(
           segment,
@@ -662,12 +682,7 @@ export function RightInspector({
                   <div className={split ? 'h-full' : 'hidden'}>
                     <EditorSheet closeBinding={keybindings.closeDiff} onClose={onCloseDiff}>
                       <Suspense fallback={null}>
-                        <EditorGroups
-                          ws={ws}
-                          terminalTheme={terminalTheme}
-                          isDark={isDark}
-                          onShowReview={reviewTarget ? showReview : undefined}
-                        />
+                        <EditorGroups ws={ws} terminalTheme={terminalTheme} isDark={isDark} />
                       </Suspense>
                     </EditorSheet>
                   </div>

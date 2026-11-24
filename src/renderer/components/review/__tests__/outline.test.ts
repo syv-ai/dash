@@ -3,18 +3,22 @@ import type { DiffComment, PrFile, PrReviewThread } from '../../../../shared/typ
 import {
   DELETED_BLOB,
   checksSummary,
+  communicationTally,
   fileRows,
   groupByPath,
   lineLabel,
   navStops,
   nextStop,
   nextUnviewed,
+  prFileChanges,
   replyDraftCounts,
   reviewComments,
   threadGroups,
   threadHeadline,
   threadPlace,
   trayNotes,
+  treeBadges,
+  viewedPaths,
 } from '../outline';
 
 const file = (path: string, blob: string | null = `b-${path}`): PrFile => ({
@@ -227,5 +231,64 @@ describe('threadPlace', () => {
       name: 'a.ts (outdated)',
       dir: '',
     });
+  });
+});
+
+describe('the Changes tab', () => {
+  const rows = fileRows(
+    [file('a.ts'), file('b.ts'), file('c.ts')],
+    [thread('1'), thread('2', { path: 'c.ts', resolved: true })],
+    { 'b.ts': 'b-b.ts' },
+    [draft('d1', { filePath: 'b.ts' })],
+  );
+
+  it('badges files with open threads or draft comments, none else', () => {
+    expect([...treeBadges(rows)]).toEqual([
+      ['a.ts', { threads: 1, comments: 0 }],
+      ['b.ts', { threads: 0, comments: 1 }],
+    ]);
+  });
+
+  it('knows which files are viewed', () => {
+    expect([...viewedPaths(rows)]).toEqual(['b.ts']);
+  });
+
+  it('lists the PR files as tree changes, a rename keeping its old path', () => {
+    expect(
+      prFileChanges([
+        { path: 'n.ts', status: 'renamed', oldPath: 'o.ts', additions: 1, deletions: 2, blob: 'x' },
+        file('a.ts'),
+      ]),
+    ).toEqual([
+      {
+        path: 'n.ts',
+        status: 'renamed',
+        oldPath: 'o.ts',
+        staged: false,
+        additions: 1,
+        deletions: 2,
+      },
+      { path: 'a.ts', status: 'modified', staged: false, additions: 1, deletions: 0 },
+    ]);
+  });
+});
+
+describe('communicationTally', () => {
+  it('counts open threads, the person’s drafts and every unsent note of the task', () => {
+    const byFile = {
+      'a.ts': [
+        draft('n1', { kind: 'note' }),
+        draft('n2', { kind: 'note', sent: true }),
+        draft('n3', { kind: 'note', viewScope: 'live' }),
+        draft('c1'),
+      ],
+    };
+    expect(
+      communicationTally(
+        [thread('1'), thread('2', { line: null }), thread('3', { resolved: true })],
+        [draft('c1')],
+        byFile,
+      ),
+    ).toEqual({ open: 2, drafts: 1, notes: 2 });
   });
 });

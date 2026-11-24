@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Check,
   ChevronDown,
   ChevronRight,
   ChevronsDownUp,
@@ -58,6 +59,8 @@ interface EditorTreeProps {
   /** Per-file badge counts: your notes and comments, and (in a PR view) the
    *  PR's unresolved threads. */
   badgeCounts: Map<string, FileBadges>;
+  /** Files read through (a PR's viewed marks): a quiet tick, the name dimmed. */
+  viewed?: ReadonlySet<string>;
 }
 
 /** A file's badges in the tree. */
@@ -69,6 +72,7 @@ export interface FileBadges {
 }
 
 const NO_DIRS: string[] = [];
+const NONE_VIEWED: ReadonlySet<string> = new Set();
 const NO_LISTING: RepoListing = { files: [], dirs: [] };
 
 /** The editor's file tree: the view's changed files, or the whole repo. */
@@ -88,6 +92,7 @@ export function EditorTree(props: EditorTreeProps) {
         onOpenFile={props.onOpenFile}
         canOpenToSide={props.canOpenToSide}
         badgeCounts={props.badgeCounts}
+        viewed={props.viewed ?? NONE_VIEWED}
       />
     </div>
   );
@@ -380,6 +385,7 @@ interface FileTreePanelProps {
   onOpenFile: (path: string, opts?: OpenOptions) => void;
   canOpenToSide: boolean;
   badgeCounts: Map<string, FileBadges>;
+  viewed: ReadonlySet<string>;
 }
 
 /** What every row needs, passed down the tree once. */
@@ -389,6 +395,7 @@ interface TreeContextValue {
   onOpenFile: (path: string, opts?: OpenOptions) => void;
   canOpenToSide: boolean;
   badgeCounts: Map<string, FileBadges>;
+  viewed: ReadonlySet<string>;
   cols: TreeColumns;
 }
 
@@ -413,6 +420,7 @@ function FileTreePanel({
   onOpenFile,
   canOpenToSide,
   badgeCounts,
+  viewed,
 }: FileTreePanelProps) {
   // Plain files have no changes to filter on, and nothing git ignores.
   const changedOnly = git && changedOnlyProp;
@@ -459,8 +467,8 @@ function FileTreePanel({
   }, [changedFiles]);
   const cols = useMemo(() => treeColumns(tree, badgeCounts), [tree, badgeCounts]);
   const ctx = useMemo<TreeContextValue>(
-    () => ({ cwd, selectedPath, onOpenFile, canOpenToSide, badgeCounts, cols }),
-    [cwd, selectedPath, onOpenFile, canOpenToSide, badgeCounts, cols],
+    () => ({ cwd, selectedPath, onOpenFile, canOpenToSide, badgeCounts, viewed, cols }),
+    [cwd, selectedPath, onOpenFile, canOpenToSide, badgeCounts, viewed, cols],
   );
   return (
     <TreeContext.Provider value={ctx}>
@@ -493,7 +501,7 @@ function FileTreePanel({
 }
 
 function FolderContents({ node, indent }: { node: TreeFolder; indent: number }) {
-  const { selectedPath, onOpenFile, badgeCounts, cols } = useTree();
+  const { selectedPath, onOpenFile, badgeCounts, viewed, cols } = useTree();
   const childFolders = Array.from(node.children.values()).sort((a, b) =>
     a.name.localeCompare(b.name),
   );
@@ -509,6 +517,7 @@ function FolderContents({ node, indent }: { node: TreeFolder; indent: number }) 
           indent={indent}
           selected={file.fullPath === selectedPath}
           badges={badgeCounts.get(file.fullPath)}
+          viewed={viewed.has(file.fullPath)}
           onOpen={(opts) => onOpenFile(file.fullPath, opts)}
           cols={cols}
         />
@@ -717,6 +726,7 @@ function FileEntry({
   indent,
   selected,
   badges,
+  viewed,
   onOpen,
   cols,
 }: {
@@ -724,6 +734,8 @@ function FileEntry({
   indent: number;
   selected: boolean;
   badges: FileBadges | undefined;
+  /** Read through: a tick in the icon slot, the name dimmed. */
+  viewed: boolean;
   /** Open in the last focused pane (a click: as its preview; a double-click
    *  keeps it); ⌥-click or "Open in new pane": in the other pane. */
   onOpen: (opts?: OpenOptions) => void;
@@ -732,11 +744,13 @@ function FileEntry({
   const change = file.change;
   const tint = selected
     ? 'text-primary'
-    : change
-      ? STATUS_TEXT[change.status]
-      : file.dimmed
-        ? 'text-muted-fade-55'
-        : 'text-fg-fade-80';
+    : viewed
+      ? 'text-ink-3'
+      : change
+        ? STATUS_TEXT[change.status]
+        : file.dimmed
+          ? 'text-muted-fade-55'
+          : 'text-fg-fade-80';
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
@@ -749,7 +763,11 @@ function FileEntry({
         >
           {/* Empty icon slot keeps file names aligned with folder names at the
           same indent (the chevron column for folders). */}
-          <span className="shrink-0" style={{ width: ICON_SLOT }} />
+          <span className="flex shrink-0 justify-center" style={{ width: ICON_SLOT }}>
+            {viewed && (
+              <Check size={11} strokeWidth={1.8} className="text-ink-3" aria-label="Viewed" />
+            )}
+          </span>
           <span className={`flex-1 min-w-0 text-sm truncate text-left ${tint}`}>{file.name}</span>
           {/* Stat columns at rest (each as wide as the tree's widest value, so
           they line up down the list); "Copy relative path" slides in on hover. */}

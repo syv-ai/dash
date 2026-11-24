@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ArrowUp, ChevronDown, ChevronRight, GitPullRequestArrow, History } from 'lucide-react';
 import { formatRelativeTime } from '@shared/relativeTime';
 import type { FileChange } from '../../../shared/types';
@@ -48,10 +48,14 @@ interface HistoryListProps {
   onOpenFile: (path: string, opts?: OpenOptions) => void;
   /** Commits not on the upstream yet: marked with the "ahead" arrow. */
   unpushed?: ReadonlySet<string>;
+  /** Above the commits, in place of the PR row: what they are, when they
+   *  aren't the branch's (a picked PR's commits). */
+  heading?: ReactNode;
 }
 
 /**
- * The task's history: its open PR, then its commits. The
+ * The task's history: its open PR, then its commits (or, under a `heading`,
+ * another range's, such as a picked PR's). The
  * selected commit unfolds its files; picking one shows that commit's diff of
  * it in the editor.
  */
@@ -67,6 +71,7 @@ export function HistoryList({
   activePath,
   onOpenFile,
   unpushed,
+  heading,
 }: HistoryListProps) {
   const activeHash = view.kind === 'commit' ? view.hash : null;
   // The selected commit unfolds its files; clicking it again folds them away
@@ -94,6 +99,7 @@ export function HistoryList({
       ref={listRef}
       className="scrollbar-gutter-stable scrollbar-thin-hover flex h-full min-h-0 flex-col gap-px overflow-y-auto pb-2"
     >
+      {heading}
       {pr && <PrRow pr={pr} selected={view.kind === 'pr'} />}
       {loading && commits.length === 0 && <EmptyState title="Loading…" />}
       {!loading && commits.length === 0 && (

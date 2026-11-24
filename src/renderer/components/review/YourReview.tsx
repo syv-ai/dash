@@ -5,19 +5,17 @@ import type { ReplyPoster } from '../../stores/prReviewStore';
 import { PostReplyButtons } from '../diffEditor/prReview/PostReplyButtons';
 import { useTaskReview } from '../diffEditor/prReview/useTaskReview';
 import { Badge } from '../ui/Badge';
-import { Button } from '../ui/Button';
 import { DetailSection } from '../ui/DetailList';
 import { ListRow } from '../ui/ListRow';
 import { DraftActions, DraftEditor } from './DraftActions';
-import { FinishReviewSheet } from './FinishReviewSheet';
 import { groupByPath, lineLabel } from './outline';
 import { rowKeys } from './rowAction';
 
 /**
- * The person's comments and replies for the PR, by file: each can be edited,
- * deleted or turned into a note for the agent. Then the summary and "Finish
- * review…". On the own PR it is "Your replies", shown only when there are any,
- * and each reply can be posted on its own.
+ * The person's drafts for the PR — comments and replies — by file: each can
+ * be edited, deleted or turned into a note for the agent; on the own PR a
+ * reply posts on its own. Then the review's summary, if written. Hidden with
+ * neither; the review itself posts from the header's Finish review….
  */
 export function YourReview({
   review,
@@ -25,7 +23,6 @@ export function YourReview({
   projectId,
   cwd,
   comments,
-  noteCount,
   onNavigate,
 }: {
   review: PrReview;
@@ -34,20 +31,17 @@ export function YourReview({
   cwd: string;
   /** The person's comments and replies for this PR (`reviewComments`). */
   comments: DiffComment[];
-  /** The task's notes on this PR not yet sent: they stay local. */
-  noteCount: number;
   onNavigate: (scope: string, path: string, commentId: string) => void;
 }) {
-  const [finishing, setFinishing] = useState(false);
   const { summary } = useTaskReview(taskId, review);
-  const own = review.viewerIsAuthor;
-  if (own && comments.length === 0) return null;
   const summaryText = summary?.body.trim() ?? '';
-  const poster: ReplyPoster | null = own ? { projectId, cwd, taskId, review } : null;
+  if (comments.length === 0 && !summaryText) return null;
+  const poster: ReplyPoster | null = review.viewerIsAuthor
+    ? { projectId, cwd, taskId, review }
+    : null;
 
   return (
-    <DetailSection title={own ? 'Your replies' : 'Your review'} collapsible>
-      {comments.length === 0 && <p className="type-caption px-2.5">No comments yet.</p>}
+    <DetailSection title={`Your drafts · ${comments.length}`} collapsible>
       {groupByPath(comments).map(([path, list]) => (
         <div key={path} className="grid gap-px">
           <h4 className="type-subheading truncate px-2.5 pt-1" title={path}>
@@ -63,26 +57,6 @@ export function YourReview({
           <h4 className="type-subheading">Summary</h4>
           <p className="type-body line-clamp-3 whitespace-pre-wrap">{summaryText}</p>
         </div>
-      )}
-      <div className="flex justify-end px-2.5 pt-1">
-        <Button
-          size="sm"
-          variant={own ? 'secondary' : 'primary'}
-          onClick={() => setFinishing(true)}
-        >
-          Finish review…
-        </Button>
-      </div>
-      {finishing && (
-        <FinishReviewSheet
-          review={review}
-          projectId={projectId}
-          cwd={cwd}
-          taskId={taskId}
-          comments={comments}
-          noteCount={noteCount}
-          onClose={() => setFinishing(false)}
-        />
       )}
     </DetailSection>
   );

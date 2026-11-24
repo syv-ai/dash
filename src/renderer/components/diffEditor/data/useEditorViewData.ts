@@ -81,21 +81,7 @@ export function useEditorViewData(
   );
 
   const commits = useAsyncResource<CommitSummary[]>(
-    () =>
-      window.electronAPI.editorListCommits({ cwd, limit: 50 }).then((r) =>
-        r.success && r.data
-          ? r.data.map((c) => ({
-              hash: c.hash,
-              shortHash: c.shortHash,
-              subject: c.subject,
-              body: c.body,
-              authorName: c.authorName,
-              authorDate: c.authorDate,
-              additions: c.additions,
-              deletions: c.deletions,
-            }))
-          : NO_COMMITS,
-      ),
+    () => listCommits(cwd, 50),
     [cwd, git, enabled.commits],
     NO_COMMITS,
     git && enabled.commits,
@@ -150,4 +136,16 @@ export function useEditorViewData(
       defaultBase.data,
     ],
   );
+}
+
+/** The newest `limit` commits of HEAD at `cwd`, or of `range` (a PR's
+ *  base..head); none when git can't say. */
+export function listCommits(
+  cwd: string,
+  limit: number,
+  range?: { base: string; head: string },
+): Promise<CommitSummary[]> {
+  return window.electronAPI
+    .editorListCommits({ cwd, limit, range })
+    .then((r) => (r.success && r.data ? r.data : NO_COMMITS));
 }

@@ -177,6 +177,10 @@ export function openPaths(layout: EditorLayout): string[] {
   return [...new Set(layout.groups.flatMap((g) => g.tabs))];
 }
 
+/** The prefix of the retired non-file tabs (the PR overview's `dash:pr/…`,
+ *  D-R2a): a stored layout drops them. No repo path starts with it. */
+const RETIRED_TAB = 'dash:';
+
 /** A stored layout, validated; null when it isn't one. */
 export function parseLayout(raw: string | null): EditorLayout | null {
   if (!raw) return null;
@@ -195,7 +199,13 @@ export function parseLayout(raw: string | null): EditorLayout | null {
   for (const raw of o.groups as unknown[]) {
     const g = raw as { tabs?: unknown; active?: unknown; preview?: unknown };
     if (!g || !Array.isArray(g.tabs)) return null;
-    const tabs = [...new Set(g.tabs.filter((t): t is string => typeof t === 'string' && !!t))];
+    const tabs = [
+      ...new Set(
+        g.tabs.filter(
+          (t): t is string => typeof t === 'string' && !!t && !t.startsWith(RETIRED_TAB),
+        ),
+      ),
+    ];
     const active = typeof g.active === 'string' && tabs.includes(g.active) ? g.active : null;
     const preview = typeof g.preview === 'string' && tabs.includes(g.preview) ? g.preview : null;
     groups.push({ tabs, active: active ?? tabs[0] ?? null, preview });

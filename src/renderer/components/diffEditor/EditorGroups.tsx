@@ -13,7 +13,6 @@ import { EditorPane } from './EditorPane';
 import { EditorTabStrip } from './EditorTabStrip';
 import type { EditorWorkspace } from './useEditorWorkspace';
 import { openPaths, type GroupIndex } from './tabs/editorLayout';
-import { isFileTab, tabTarget } from './tabs/tabTarget';
 import {
   anyDirtyUnder,
   dirtyVersion,
@@ -32,7 +31,6 @@ import { LspStatusIndicator } from './LspStatusIndicator';
 import { CompareButton } from './CompareButton';
 import { PrReviewActions } from './prReview/PrReviewActions';
 import { useReviewNavigation } from './prReview/useReviewNavigation';
-import { PrOverviewPage } from '../review/PrOverviewPage';
 import { commentScope } from './comments/commentScope';
 import { installLsp } from '../../lsp';
 
@@ -40,8 +38,6 @@ interface Props {
   ws: EditorWorkspace;
   terminalTheme: XtermTheme;
   isDark: boolean;
-  /** Show the Review view (a PR overview's "Back to files"); absent where there is none. */
-  onShowReview?: () => void;
 }
 
 function useDirtyVersion(): number {
@@ -56,7 +52,7 @@ function useDirtyVersion(): number {
  * and swap models as tabs change; files open in a tab stay loaded (unsaved
  * edits included) until their last tab closes.
  */
-export function EditorGroups({ ws, terminalTheme, isDark, onShowReview }: Props) {
+export function EditorGroups({ ws, terminalTheme, isDark }: Props) {
   const { layout, tabsKey, cwd } = ws;
   const closeBinding = useSettings((s) => s.keybindings.closeEditorTab);
   useEffect(installLsp, []);
@@ -67,9 +63,7 @@ export function EditorGroups({ ws, terminalTheme, isDark, onShowReview }: Props)
   useEffect(() => {
     retain(
       holder,
-      openPaths(layout)
-        .filter(isFileTab)
-        .map((p) => absolutePath(cwd, p)),
+      openPaths(layout).map((p) => absolutePath(cwd, p)),
     );
   }, [holder, layout, cwd]);
   // Unmounted while still open (its task switched away from), the unsaved
@@ -77,9 +71,9 @@ export function EditorGroups({ ws, terminalTheme, isDark, onShowReview }: Props)
   // task archived or deleted meanwhile). Closed, none do.
   useEffect(
     () => () => {
-      const files = openPaths(selectLayout(tabsKey)(useEditorTabs.getState()))
-        .filter(isFileTab)
-        .map((p) => absolutePath(cwd, p));
+      const files = openPaths(selectLayout(tabsKey)(useEditorTabs.getState())).map((p) =>
+        absolutePath(cwd, p),
+      );
       const closed = !useEditors.getState().byCwd[cwd];
       const kept = retainedOnUnmount(files, closed, (f) => isDirty(workingUri(f)));
       retain(holder, kept);
@@ -92,7 +86,7 @@ export function EditorGroups({ ws, terminalTheme, isDark, onShowReview }: Props)
   const dirtyTick = useDirtyVersion();
   useEffect(() => {
     layout.groups.forEach((g, i) => {
-      if (g.preview && isFileTab(g.preview) && isDirty(workingUri(absolutePath(cwd, g.preview)))) {
+      if (g.preview && isDirty(workingUri(absolutePath(cwd, g.preview)))) {
         ws.pinTab(i as GroupIndex, g.preview);
       }
     });
@@ -129,7 +123,7 @@ export function EditorGroups({ ws, terminalTheme, isDark, onShowReview }: Props)
   const closeTabs = async (group: GroupIndex, paths: string[]) => {
     const other = layout.groups.find((_, i) => i !== group);
     const losing = paths.filter(
-      (p) => isFileTab(p) && !other?.tabs.includes(p) && isDirty(workingUri(absolutePath(cwd, p))),
+      (p) => !other?.tabs.includes(p) && isDirty(workingUri(absolutePath(cwd, p))),
     );
     if (losing.length > 0) {
       const discard = await confirm({
@@ -182,7 +176,7 @@ export function EditorGroups({ ws, terminalTheme, isDark, onShowReview }: Props)
           taskId={ws.activeTaskId}
           canStep={reviewNav.canStep}
           onStep={reviewNav.step}
-          activePath={focusedActive && isFileTab(focusedActive) ? focusedActive : null}
+          activePath={focusedActive}
           onOpenFile={ws.openFile}
         />
       )}
@@ -214,7 +208,7 @@ export function EditorGroups({ ws, terminalTheme, isDark, onShowReview }: Props)
         {layout.groups.map((group, i) => {
           const index = i as GroupIndex;
           const isLast = i === layout.groups.length - 1;
-          const target = group.active ? tabTarget(group.active) : null;
+          const filePath = group.active;
           const groupReveal =
             reveal && reveal.group === index && reveal.path === group.active
               ? { range: reveal.range, nonce: reveal.nonce }
@@ -248,22 +242,14 @@ export function EditorGroups({ ws, terminalTheme, isDark, onShowReview }: Props)
                       sheetSurface,
                     )}
                   >
-                    {target?.kind === 'pr' ? (
-                      <PrOverviewPage
-                        provider={target.provider}
-                        number={target.number}
-                        projectId={ws.projectId}
-                        cwd={cwd}
-                        onShowFiles={onShowReview}
-                      />
-                    ) : target ? (
+                    {filePath ? (
                       <EditorPane
                         paneId={`pane:${tabsKey}:${i}`}
                         group={index}
                         onAttachReviewNav={ws.view.kind === 'pr' ? reviewNav.attach : undefined}
                         cwd={cwd}
                         git={ws.git}
-                        filePath={target.path}
+                        filePath={filePath}
                         view={ws.view}
                         activeTaskId={ws.activeTaskId}
                         terminalTheme={terminalTheme}

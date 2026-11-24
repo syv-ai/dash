@@ -30,6 +30,22 @@ export interface ReviewToPost {
 export const canPost = ({ comments, summary, verdict }: ReviewToPost): boolean =>
   comments > 0 || summary.trim() !== '' || verdict !== 'comment';
 
+/**
+ * Whether the header offers Finish review…: always on someone else's PR; on
+ * the own PR only with something a review would post beyond the replies,
+ * which post one by one (a line comment, or a summary).
+ */
+export const finishOffered = ({
+  own,
+  comments,
+  summary,
+}: {
+  own: boolean;
+  /** The person's comments and replies for the PR. */
+  comments: readonly Pick<DiffComment, 'replyTo'>[];
+  summary: string;
+}): boolean => !own || summary.trim() !== '' || comments.some((c) => c.replyTo == null);
+
 /** "Post review to GitHub · 5 comments · Request changes": the count only when
  *  there are comments, the verdict only when it says more than Comment (the
  *  button already says it posts a review). */

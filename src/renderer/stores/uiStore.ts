@@ -48,7 +48,13 @@ export interface UiState {
   // The update the sidebar banner was closed for. Session-only: a ready
   // update installs on quit, and a newer version brings the banner back.
   dismissedUpdateVersion: string | null;
+  /** The Review view's tab, and whether its Communication bar is open:
+   *  session-only, the same for every task. */
+  reviewTab: ReviewTab;
+  reviewCommsOpen: boolean;
 }
+
+export type ReviewTab = 'overview' | 'changes';
 
 export interface UiActions {
   setShowTaskModal: (v: boolean) => void;
@@ -71,6 +77,8 @@ export interface UiActions {
   setChangesAnimating: (v: boolean) => void;
   setShellDrawerAnimating: (v: boolean) => void;
   setDismissedUpdateVersion: (v: string | null) => void;
+  setReviewTab: (v: ReviewTab) => void;
+  setReviewCommsOpen: (v: boolean) => void;
   // Data-mutating UI flows (own their modal state; delegate domain ops to projectsStore)
   finishProjectCreation: (projectId: string) => Promise<void>;
   confirmDeleteProject: (options: DeleteProjectOptions) => Promise<void>;
@@ -98,6 +106,8 @@ const initialState: UiState = {
   changesAnimating: false,
   shellDrawerAnimating: false,
   dismissedUpdateVersion: null,
+  reviewTab: 'overview',
+  reviewCommsOpen: false,
 };
 
 export const useUi = create<UiStore>((set, get) => ({
@@ -128,6 +138,8 @@ export const useUi = create<UiStore>((set, get) => ({
   setChangesAnimating: (v) => set({ changesAnimating: v }),
   setShellDrawerAnimating: (v) => set({ shellDrawerAnimating: v }),
   setDismissedUpdateVersion: (v) => set({ dismissedUpdateVersion: v }),
+  setReviewTab: (v) => set({ reviewTab: v }),
+  setReviewCommsOpen: (v) => set({ reviewCommsOpen: v }),
 
   finishProjectCreation: async (projectId) => {
     set({ showAddProjectModal: false });

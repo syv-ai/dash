@@ -211,6 +211,20 @@ describe('parseLayout', () => {
     expect(parseLayout('{"groups":[{"tabs":"a"}]}')).toBeNull();
   });
 
+  it('drops the retired PR overview tabs, and a split they alone held', () => {
+    const raw = JSON.stringify({
+      groups: [
+        { tabs: ['a', 'dash:pr/github/4'], active: 'dash:pr/github/4', preview: null },
+        { tabs: ['dash:pr/ado/7'], active: 'dash:pr/ado/7', preview: 'dash:pr/ado/7' },
+      ],
+      focused: 1,
+    });
+    expect(parseLayout(raw)).toEqual({
+      groups: [{ tabs: ['a'], active: 'a', preview: null }],
+      focused: 0,
+    });
+  });
+
   it('repairs a stale active tab, duplicates and an empty split', () => {
     const raw = JSON.stringify({
       groups: [

@@ -1,5 +1,12 @@
 import { isPrComment } from '../../../shared/diffComments';
-import type { DiffComment, PrCheck, PrFile, PrReviewThread } from '../../../shared/types';
+import type {
+  DiffComment,
+  FileChange,
+  PrCheck,
+  PrFile,
+  PrReviewThread,
+} from '../../../shared/types';
+import type { FileBadges } from '../diffEditor/EditorTree';
 import { threadLocation } from '../../utils/prReviewNotices';
 import { isInlineThread } from '../diffEditor/prReview/prViewPolicy';
 
@@ -66,6 +73,32 @@ export function nextUnviewed(rows: readonly FileRow[], from: string | null): str
   }
   return null;
 }
+
+/** The PR's files as the Files tree lists changes (the Changes tab). */
+export const prFileChanges = (files: readonly PrFile[]): FileChange[] =>
+  files.map(({ path, status, oldPath, additions, deletions }) => ({
+    path,
+    status,
+    staged: false,
+    additions,
+    deletions,
+    ...(oldPath ? { oldPath } : {}),
+  }));
+
+/** The tree's per-file badges from the outline's rows: unresolved threads,
+ *  and the person's draft comments. */
+export function treeBadges(rows: readonly FileRow[]): Map<string, FileBadges> {
+  const m = new Map<string, FileBadges>();
+  for (const r of rows) {
+    if (r.threads > 0 || r.drafts > 0)
+      m.set(r.file.path, { threads: r.threads, comments: r.drafts });
+  }
+  return m;
+}
+
+/** The paths of the rows marked viewed. */
+export const viewedPaths = (rows: readonly FileRow[]): Set<string> =>
+  new Set(rows.filter((r) => r.viewed).map((r) => r.file.path));
 
 // ── Threads ──
 
@@ -154,6 +187,20 @@ export function trayNotes(byFile: Readonly<Record<string, DiffComment[]>>): {
     .flat()
     .filter((c) => !isPrComment(c));
   return { unsent: notes.filter((c) => !c.sent), sent: notes.filter((c) => c.sent) };
+}
+
+/** The Communication bar's counts: open threads (on the code or off it), the
+ *  person's comments and replies for the PR, and the task's unsent notes. */
+export function communicationTally(
+  threads: readonly PrReviewThread[],
+  comments: readonly DiffComment[],
+  byFile: Readonly<Record<string, DiffComment[]>>,
+): { open: number; drafts: number; notes: number } {
+  return {
+    open: threads.filter((t) => !t.resolved).length,
+    drafts: comments.length,
+    notes: trayNotes(byFile).unsent.length,
+  };
 }
 
 /** "L3" or "L3–7". */
