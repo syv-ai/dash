@@ -18,6 +18,7 @@ import { useCommentsStore } from '../../stores/commentsStore';
 import { formatBinding, matchesBinding, type KeyBinding } from '../../keybindings';
 import { needsAttention } from '../../../shared/diffComments';
 import type { ContextUsage, RateLimits, Task } from '../../../shared/types';
+import type { LimitBurns } from '../../lib/burnRate';
 
 const DiffEditor = lazy(() =>
   import('../diffEditor/DiffEditor').then((m) => ({ default: m.DiffEditor })),
@@ -28,6 +29,7 @@ type FileScope = 'changes' | 'all';
 interface RightInspectorProps {
   task: Task;
   rateLimits: RateLimits;
+  burns: LimitBurns;
   contextUsage?: ContextUsage;
   /** The diff open in the sidebar, or null for the changes list. */
   diff: DiffFileTarget | null;
@@ -55,6 +57,7 @@ function withShortcut(label: string, binding: KeyBinding | undefined): string {
 export function RightInspector({
   task,
   rateLimits,
+  burns,
   contextUsage,
   diff,
   terminalTheme,
@@ -221,7 +224,7 @@ export function RightInspector({
           </div>
         </ShellDrawerWrapper>
       </div>
-      <UsageBlock contextUsage={contextUsage} rateLimits={rateLimits} />
+      <UsageBlock contextUsage={contextUsage} rateLimits={rateLimits} burns={burns} />
     </div>
   );
 }

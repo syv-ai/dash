@@ -1,23 +1,42 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { ContextUsage, StatusLineData, RateLimits } from '../../shared/types';
+import { limitBurns, recordLimits, type LimitHistories } from '../lib/burnRate';
+
+/** Account-wide rate limits, from the most recently updated session. */
+function latestRateLimitsOf(data: Record<string, StatusLineData>): RateLimits | undefined {
+  let best: RateLimits | undefined;
+  let bestTime = 0;
+  for (const sl of Object.values(data)) {
+    if (sl.rateLimits && sl.updatedAt > bestTime) {
+      best = sl.rateLimits;
+      bestTime = sl.updatedAt;
+    }
+  }
+  return best;
+}
 
 export function useStatusLine() {
   const [statusLineData, setStatusLineData] = useState<Record<string, StatusLineData>>({});
+  // Recent readings of the limits, in memory, for their burn rate.
+  const [limitHistories, setLimitHistories] = useState<LimitHistories>({});
 
   // Subscribe to status line updates from main process.
   // Stale entry cleanup is handled by ContextUsageService.unregister() on PTY exit.
   // The Map is in-memory, so stale entries from crashes are cleared on app restart.
   useEffect(() => {
+    const receive = (data: Record<string, StatusLineData>) => {
+      setStatusLineData(data);
+      const limits = latestRateLimitsOf(data);
+      if (limits) setLimitHistories((h) => recordLimits(h, limits, Date.now()));
+    };
     const unsubscribe = window.electronAPI.onPtyStatusLine((data) => {
-      setStatusLineData(data as Record<string, StatusLineData>);
+      receive(data as Record<string, StatusLineData>);
     });
 
     window.electronAPI
       .ptyGetAllStatusLine()
       .then((resp) => {
-        if (resp.success && resp.data) {
-          setStatusLineData(resp.data);
-        }
+        if (resp.success && resp.data) receive(resp.data);
       })
       .catch((err) => {
         console.warn('[useStatusLine] Initial fetch failed:', err);
@@ -35,18 +54,11 @@ export function useStatusLine() {
     return result;
   }, [statusLineData]);
 
-  // Extract account-wide rate limits from the most recently updated session
-  const latestRateLimits = useMemo((): RateLimits | undefined => {
-    let best: RateLimits | undefined;
-    let bestTime = 0;
-    for (const sl of Object.values(statusLineData)) {
-      if (sl.rateLimits && sl.updatedAt > bestTime) {
-        best = sl.rateLimits;
-        bestTime = sl.updatedAt;
-      }
-    }
-    return best;
-  }, [statusLineData]);
+  const latestRateLimits = useMemo(() => latestRateLimitsOf(statusLineData), [statusLineData]);
+  const burns = useMemo(
+    () => limitBurns(limitHistories, latestRateLimits ?? {}),
+    [limitHistories, latestRateLimits],
+  );
 
-  return { statusLineData, contextUsage, latestRateLimits };
+  return { statusLineData, contextUsage, latestRateLimits, burns };
 }
