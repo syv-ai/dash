@@ -43,7 +43,8 @@ interface TaskStateListProps extends TaskRowActions {
 
 /**
  * The left sidebar's default view: every task across projects, by state.
- * Needs-you and failed rows say why on a second line; idle rows follow a gap,
+ * Each row names its project, faint at the end. Needs-you and failed rows
+ * say why on a second line; idle rows follow a gap,
  * dimmed and capped, with More / Less for the rest. Right-click opens the
  * task menu.
  */
@@ -138,7 +139,8 @@ function TaskStateRowItem({
             )
           }
           description={reason && <ReasonText state={state}>{reason}</ReasonText>}
-          trailing={projectName}
+          // The name truncates first; the project keeps up to 6rem.
+          trailing={projectName && <span className="max-w-24 truncate">{projectName}</span>}
           onClick={() => onSelectTask(task.projectId, task.id)}
         >
           {task.name}

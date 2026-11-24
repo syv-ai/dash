@@ -10,8 +10,7 @@ export interface TaskStateRow {
   state: AgentState;
   /** Why a needs-you or failed task stopped; absent for the other states. */
   reason?: string;
-  /** The task's project, only when another listed task in a different project
-   *  has the same name (otherwise the name alone is unambiguous). */
+  /** The task's project; absent if the project isn't listed. */
   projectName?: string;
 }
 
@@ -80,17 +79,6 @@ function byRecency(a: Task, b: Task): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
-/** Names used by tasks in more than one project. */
-function collidingNames(tasks: Task[]): Set<string> {
-  const projectsByName = new Map<string, Set<string>>();
-  for (const t of tasks) {
-    const set = projectsByName.get(t.name) ?? new Set<string>();
-    set.add(t.projectId);
-    projectsByName.set(t.name, set);
-  }
-  return new Set([...projectsByName].filter(([, ids]) => ids.size > 1).map(([name]) => name));
-}
-
 /**
  * Every non-archived task across projects, ordered by what it asks of the
  * user: needs you, failed, working, done, then idle. Within a state, most
@@ -103,7 +91,6 @@ export function orderTasksByState(
   projects: Project[],
 ): TaskStateList {
   const live = tasks.filter((t) => !t.archivedAt).sort(byRecency);
-  const collisions = collidingNames(live);
   const projectNames = new Map(projects.map((p) => [p.id, p.name]));
 
   const rows = live.map((task): TaskStateRow => {
@@ -112,7 +99,8 @@ export function orderTasksByState(
     const row: TaskStateRow = { task, state };
     const reason = reasonFor(state, info);
     if (reason) row.reason = reason;
-    if (collisions.has(task.name)) row.projectName = projectNames.get(task.projectId);
+    const projectName = projectNames.get(task.projectId);
+    if (projectName) row.projectName = projectName;
     return row;
   });
 

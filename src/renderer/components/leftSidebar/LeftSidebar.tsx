@@ -1,6 +1,7 @@
-import { FolderTree, Plus, Search, Settings } from 'lucide-react';
+import { Plus, Search, Settings } from 'lucide-react';
 import type { Project, Task } from '../../../shared/types';
 import { IconButton } from '../ui/IconButton';
+import { Segmented } from '../ui/Segmented';
 import { StatusDot } from '../ui/StatusDot';
 import { ProjectsSection } from './ProjectsSection';
 import { TaskStateList } from './TaskStateList';
@@ -44,8 +45,9 @@ function withShortcut(label: string, binding: KeyBinding | undefined): string {
 }
 
 /**
- * The app sidebar: a title bar (find, new task, tasks/projects toggle), the
- * state-ordered task list or the project tree, and settings at the foot.
+ * The app sidebar: a title bar (find, new task), a Tasks | Projects switch
+ * over the state-ordered task list or the project tree, and settings at the
+ * foot.
  * Collapsed, it is a rail of state dots for the tasks that aren't idle.
  */
 export function LeftSidebar(props: LeftSidebarProps) {
@@ -96,7 +98,6 @@ export function LeftSidebar(props: LeftSidebarProps) {
     if (projectId) props.onNewTask(projectId);
     else props.onOpenFolder();
   };
-  const showingProjects = view === 'projects';
 
   return (
     <div className="flex h-full min-w-0 flex-col bg-ground">
@@ -113,17 +114,23 @@ export function LeftSidebar(props: LeftSidebarProps) {
           <IconButton title={withShortcut('New task', keybindings.newTask)} onClick={newTask}>
             <Plus size={14} strokeWidth={1.8} />
           </IconButton>
-          <IconButton
-            title={showingProjects ? 'Tasks' : 'Projects'}
-            pressed={showingProjects}
-            onClick={() => setView(showingProjects ? 'tasks' : 'projects')}
-          >
-            <FolderTree size={14} strokeWidth={1.8} />
-          </IconButton>
         </div>
       </div>
+      <div className="flex h-9 shrink-0 items-center px-2">
+        <Segmented
+          aria-label="Sidebar view"
+          size="sm"
+          fullWidth={false}
+          value={view}
+          onChange={setView}
+          options={[
+            { value: 'tasks', label: 'Tasks' },
+            { value: 'projects', label: 'Projects' },
+          ]}
+        />
+      </div>
 
-      {showingProjects ? (
+      {view === 'projects' ? (
         <ProjectsSection
           projects={projects}
           activeProjectId={activeProjectId}

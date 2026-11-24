@@ -103,24 +103,18 @@ describe('orderTasksByState', () => {
     expect(ids([...list.active, ...list.idle])).toEqual(['here']);
   });
 
-  it('names the project only when a task name is used in another project', () => {
+  it("names each row's project", () => {
     const list = orderTasksByState(
       [
-        task('1', '3', { name: 'fix', projectId: 'a' }),
-        task('2', '2', { name: 'fix', projectId: 'b' }),
-        task('3', '1', { name: 'solo', projectId: 'a' }),
-        task('4', '0', { name: 'solo', projectId: 'a' }),
+        task('1', '2', { name: 'fix', projectId: 'a' }),
+        task('2', '1', { name: 'fix', projectId: 'b' }),
+        task('3', '0', { name: 'orphan', projectId: 'gone' }),
       ],
       {},
       new Set(),
       [project('a'), project('b')],
     );
-    expect(list.idle.map((r) => r.projectName)).toEqual([
-      'Project a',
-      'Project b',
-      undefined,
-      undefined,
-    ]);
+    expect(list.idle.map((r) => r.projectName)).toEqual(['Project a', 'Project b', undefined]);
   });
 });
 
