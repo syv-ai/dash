@@ -381,6 +381,14 @@ app.on('before-quit', (event) => {
       // Best effort
     }
 
+    // Language servers: shutdown handshake, SIGKILL after their budget.
+    try {
+      const { languageServers } = await import('./lsp/languageServers');
+      await languageServers.shutdownAll();
+    } catch {
+      // Best effort
+    }
+
     // Stop context usage service (clears debounce timer)
     try {
       const { contextUsageService } = await import('./services/ContextUsageService');

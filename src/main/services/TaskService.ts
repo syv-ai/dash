@@ -39,24 +39,26 @@ import { forgetSetupRun } from './setupRuns';
 import { FolderOccupiedError } from './FolderOccupiedError';
 import { removeTaskSettings } from './taskSettings';
 import { forgetTask as forgetTaskInbox } from './taskInbox';
+import { languageServers } from '../lsp/languageServers';
 
 /** The line an API-created task's first message starts with. */
 export const UNATTENDED_INSTRUCTION =
   "You were started by an orchestrator and may be running unattended. Don't use AskUserQuestion; state your assumptions and continue. Messages may reach you from an orchestrator through Dash, headed [Message from … via Dash …]: your last message of the turn one starts is read as your reply, so answer there; no need to SendMessage.";
 
-/** End a task's shell and service terminals and its setup run (not its agent pane). */
-async function killTaskTerminals(taskId: string, why: string): Promise<void> {
+/** End a task's shell and service terminals, its setup run and its language servers (not its agent pane). */
+async function stopTaskProcesses(taskId: string, why: string): Promise<void> {
   // A setup script still running in the worktree goes too (quietly: the
   // renderer drops its Setup tab).
   const task = DatabaseService.getTask(taskId);
   if (task?.useWorktree) forgetSetupRun(task.path);
-  await Promise.all(
-    listForTask(taskId, { kinds: ['shell', 'service'] }).map((ptyId) =>
+  await Promise.all([
+    ...listForTask(taskId, { kinds: ['shell', 'service'] }).map((ptyId) =>
       killPtyAwait(ptyId).catch((err) =>
         console.warn(`[TaskService] ${why}: could not kill ${ptyId}:`, err),
       ),
     ),
-  );
+    task ? languageServers.disposeWorktree(task.path) : undefined,
+  ]);
 }
 
 /**
@@ -254,7 +256,7 @@ export class TaskService {
   static async archive(id: string): Promise<void> {
     // Shells and services would otherwise keep running (and holding ports)
     // for a task nobody sees; restoring starts fresh ones.
-    await killTaskTerminals(id, 'archive');
+    await stopTaskProcesses(id, 'archive');
     // Restoring and opening the task attaches, which wakes the session.
     await stopTaskSession(id).catch((err) =>
       console.warn('[TaskService] archive: session stop failed:', err),
@@ -283,7 +285,7 @@ export class TaskService {
     const project = DatabaseService.getProjects().find((p) => p.id === task.projectId);
     // Shell and service terminals run in the worktree (and hold its ports);
     // end them before it goes. The agent PTY goes with the session below.
-    await killTaskTerminals(id, 'delete');
+    await stopTaskProcesses(id, 'delete');
     if (task.useWorktree && project) {
       try {
         await worktreeService.removeWorktree(project.path, task.path, task.branch, {

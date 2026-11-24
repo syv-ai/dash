@@ -458,4 +458,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ),
   onPortsConfigChanged: listen<{ taskId: string }>('ports:configChanged'),
   onPortsLiveness: listen<import('@shared/types').PortLivenessUpdate>('ports:liveness'),
+
+  // Language servers (contract: src/main/ipc/lspIpc.ts)
+  lspOpen: (args: unknown) => ipcRenderer.invoke('lsp:open', args),
+  lspChange: (args: unknown) => ipcRenderer.send('lsp:change', args),
+  lspClose: (args: unknown) => ipcRenderer.send('lsp:close', args),
+  lspRequest: (args: unknown) => ipcRenderer.invoke('lsp:request', args),
+  lspCancel: (args: unknown) => ipcRenderer.send('lsp:cancel', args),
+  lspStatus: (args: unknown) => ipcRenderer.invoke('lsp:status', args),
+  onLspDiagnostics: listen<import('@shared/lsp').LspDiagnosticsEvent>('lsp:diagnostics'),
+  onLspStatus: listen<import('@shared/lsp').LspStatusEvent>('lsp:status'),
 });
