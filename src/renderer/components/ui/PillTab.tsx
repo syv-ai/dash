@@ -1,8 +1,8 @@
 import * as React from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
-import { X } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import { focusRing } from './styles';
+import { Tab, type TabProps } from './Tab';
 
 const pillTabVariants = cva(
   cn(
@@ -35,70 +35,22 @@ const pillTabVariants = cva(
   },
 );
 
-export type PillTabProps = Omit<React.ComponentProps<'div'>, 'onSelect'> &
-  VariantProps<typeof pillTabVariants> & {
-    onSelect: () => void;
-    /** Closeable: a × on hover, and a middle-click closes too. */
-    onClose?: () => void;
-    /** The ×'s accessible name, e.g. "Close terminal 2". */
-    closeLabel?: string;
-    /** A mark beside the label (a live or dirty dot); the × covers it on hover. */
-    indicator?: React.ReactNode;
-  };
+export type PillTabProps = TabProps & VariantProps<typeof pillTabVariants>;
 
 /**
  * A tab in a strip of open things (terminals, files): a pill, the Segmented
  * look, with an optional indicator and a hover ×. The strip owns layout.
  */
 export const PillTab = React.forwardRef<HTMLDivElement, PillTabProps>(function PillTab(
-  { tone, active, muted, onSelect, onClose, closeLabel, indicator, className, children, ...props },
+  { tone, active, muted, className, ...props },
   ref,
 ) {
   return (
-    <div
+    <Tab
       ref={ref}
-      role="tab"
-      tabIndex={0}
-      aria-selected={!!active}
+      active={active}
       className={cn(pillTabVariants({ tone, active, muted }), className)}
-      onClick={onSelect}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onSelect();
-        }
-      }}
-      onAuxClick={(e) => {
-        if (e.button === 1 && onClose) {
-          e.preventDefault();
-          onClose();
-        }
-      }}
       {...props}
-    >
-      {/* The label and its indicator are centred together; the × floats in
-          the right gutter so it never shifts them. */}
-      <span className="flex min-w-0 items-center gap-1">
-        <span className="truncate text-sm font-medium">{children}</span>
-        {indicator && (
-          <span className={cn('flex shrink-0', onClose && 'group-hover/tab:invisible')}>
-            {indicator}
-          </span>
-        )}
-      </span>
-      {onClose && (
-        <button
-          type="button"
-          aria-label={closeLabel ?? 'Close'}
-          className="absolute top-1/2 right-1 hidden size-3.5 -translate-y-1/2 items-center justify-center rounded-sm text-ink-3 transition-colors group-hover/tab:flex hover:bg-hover hover:text-ink"
-          onClick={(e) => {
-            e.stopPropagation();
-            onClose();
-          }}
-        >
-          <X size={10} strokeWidth={2} />
-        </button>
-      )}
-    </div>
+    />
   );
 });
