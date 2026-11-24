@@ -45,8 +45,10 @@ interface Args {
   openTaskId: string | null;
   /** The project `cwd` belongs to; PR review calls name it. */
   projectId: string | null;
-  /** The editor is open: load its files and validate its view. */
+  /** The editor is open (shown or not): load its files and validate its view. */
   editorOpen: boolean;
+  /** The file tree is showing (Files), with or without the editor. */
+  treeShown?: boolean;
   /** The commit list is showing (History), with or without the editor. */
   historyShown: boolean;
   /** Each new target (by identity) opens its file and view. */
@@ -108,6 +110,7 @@ export function useEditorWorkspace({
   openTaskId,
   projectId,
   editorOpen,
+  treeShown = false,
   historyShown,
   target,
 }: Args): EditorWorkspace {
@@ -181,7 +184,7 @@ export function useEditorWorkspace({
     [gitStatus, activeTaskId],
   );
   const data = useEditorViewData(cwd, view, workingFiles, git, {
-    files: editorOpen,
+    files: editorOpen || treeShown,
     commits: historyShown || editorOpen,
   });
   const { changedFiles, repoPaths, repoPathsLoading } = data;

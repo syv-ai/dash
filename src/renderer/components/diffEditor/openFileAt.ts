@@ -1,11 +1,12 @@
 import { selectActiveTask, useProjects } from '../../stores/projectsStore';
-import { useGit } from '../../stores/gitStore';
+import { useEditors } from '../../stores/editorsStore';
 import { useEditorTabs, type TextRange } from '../../stores/editorTabsStore';
 
 /**
  * Open a file in the active task's editor (opening the editor if it is
- * closed) and, with `range`, reveal and select it there once it shows. The
- * entry point for go-to-definition and links into code.
+ * closed, and expanding the task sidebar if it is narrow) and, with `range`,
+ * reveal and select it there once it shows. The entry point for
+ * go-to-definition and links into code.
  *
  * `path` is absolute or relative to the task's worktree. Returns false, doing
  * nothing, when there is no active task or the file is outside its worktree.
@@ -26,9 +27,8 @@ export function openFileAt(path: string, range?: TextRange): boolean {
   if (range) tabs.openAt(task.id, rel, range);
   else tabs.open(task.id, rel, { preview: true });
 
-  const git = useGit.getState();
-  if (git.diffFile?.cwd !== task.path) {
-    git.setDiffFile({ cwd: task.path, filePath: '' });
-  }
+  const editors = useEditors.getState();
+  const open = editors.byCwd[task.path];
+  if (!open || open.hidden) editors.open({ cwd: task.path, filePath: '' });
   return true;
 }

@@ -54,6 +54,7 @@ import { setWebglHeldLimit } from './terminal/WebglLifecycle';
 import { useSettings } from './stores/settingsStore';
 import { useUi } from './stores/uiStore';
 import { useGit } from './stores/gitStore';
+import { useEditors } from './stores/editorsStore';
 import { mayCloseEditor } from './components/diffEditor/closeGuard';
 import { ConfirmHost } from './components/ui/ConfirmHost';
 import { useRuntime } from './stores/runtimeStore';
@@ -65,6 +66,7 @@ import {
   selectActiveTask,
   selectTaskById,
   selectActiveProjectTasks,
+  selectTaskByPath,
 } from './stores/projectsStore';
 
 /** Chrome around the pinned TUI canvas (panel padding + drawer gutter) added
@@ -351,8 +353,7 @@ export function App() {
   }, [tasksByProject]);
 
   // ── Git state (gitStore) ─────────────────────────────────
-  const diffFile = useGit((s) => s.diffFile);
-  const setDiffFile = useGit((s) => s.setDiffFile);
+  const editors = useEditors((s) => s.byCwd);
   const showCommitGraph = useGit((s) => s.showCommitGraph);
   const setShowCommitGraph = useGit((s) => s.setShowCommitGraph);
   const commitGraphFocusHash = useGit((s) => s.commitGraphFocusHash);
@@ -393,6 +394,34 @@ export function App() {
   );
 
   const activeTask = useProjects(selectActiveTask);
+
+  // Each task's editor lives in its sidebar (expanded while shown, kept out
+  // of sight while narrow); a folder that is no task's worktree (Claude's
+  // memory) has its editor in the modal.
+  const inlineEditor = activeTask ? (editors[activeTask.path] ?? null) : null;
+  const modalEditor = useMemo(
+    () =>
+      Object.values(editors).find((e) => !selectTaskByPath({ tasksByProject }, e.target.cwd)) ??
+      null,
+    [editors, tasksByProject],
+  );
+  const expanded = !!inlineEditor && !inlineEditor.hidden;
+
+  // Close `cwd`'s editor (asking about unsaved edits) and hand the keyboard
+  // back to the task's Claude Code TUI. RAF defers past React's commit so the
+  // editor is gone before xterm grabs focus. Not while the memory modal is
+  // still up: typing would reach Claude unseen.
+  const closeEditorOf = useCallback((cwd: string) => {
+    void mayCloseEditor(cwd).then((ok) => {
+      if (!ok) return;
+      useEditors.getState().close(cwd);
+      const id = useProjects.getState().activeTaskId;
+      if (id && !useUi.getState().memoryProjectId) {
+        requestAnimationFrame(() => sessionRegistry.get(id)?.focus());
+      }
+    });
+  }, []);
+
   // All non-archived tasks for the active project (for cycling).
   // selectActiveProjectTasks filters → a fresh array every call, so it must be wrapped in
   // useShallow; a raw subscription feeds useSyncExternalStore an ever-changing snapshot and
@@ -844,11 +873,14 @@ export function App() {
         } else if (deleteProjectTarget) {
           e.preventDefault();
           setDeleteProjectTarget(null);
-        } else if (diffFile && !changesPanelRef.current?.isCollapsed()) {
-          // A collapsed sidebar keeps the editor out of sight; Escape
-          // doesn't close what can't be seen.
+        } else if (modalEditor) {
           e.preventDefault();
-          closeDiff();
+          closeEditorOf(modalEditor.target.cwd);
+        } else if (inlineEditor && expanded && !changesPanelRef.current?.isCollapsed()) {
+          // Narrow or collapsed, the sidebar keeps the editor out of sight;
+          // Escape doesn't close what can't be seen.
+          e.preventDefault();
+          closeEditorOf(inlineEditor.target.cwd);
         } else if (showCommitGraph) {
           e.preventDefault();
           setShowCommitGraph(false);
@@ -905,7 +937,10 @@ export function App() {
     remoteControlModalPtyId,
     deleteTaskTarget,
     deleteProjectTarget,
-    diffFile,
+    modalEditor,
+    inlineEditor,
+    expanded,
+    closeEditorOf,
     showCommitGraph,
     showSettings,
     showTaskModal,
@@ -916,7 +951,7 @@ export function App() {
   ]);
 
   // Reads the panels, not the settings, so the keyboard handler's closure
-  // can't go stale. With the editor open (the task sidebar expanded), the room
+  // can't go stale. With the task sidebar expanded, the room
   // the left sidebar frees goes to the task sidebar and the room it takes
   // comes back from it: the centre keeps its width. Otherwise the centre
   // gives and takes, as the library does.
@@ -948,41 +983,22 @@ export function App() {
     setTimeout(() => setChangesAnimating(false), panelEaseMs());
   }, [setChangesAnimating, setSidebarAnimating]);
 
-  // A diff of the active task's worktree opens inline, in the expanded task
-  // sidebar; any other folder's (Claude's memory) in the modal.
-  const inlineDiff = diffFile && activeTask && diffFile.cwd === activeTask.path ? diffFile : null;
-  const modalDiff = diffFile && !inlineDiff ? diffFile : null;
-
-  // Close the diff and hand the keyboard back to the task's Claude Code TUI.
-  // RAF defers past React's commit so the editor is gone before xterm grabs
-  // focus. Not while the memory modal is still up: typing would reach Claude
-  // unseen.
-  const closeDiff = useCallback(() => {
-    void mayCloseEditor().then((ok) => {
-      if (!ok) return;
-      setDiffFile(null);
-      const id = useProjects.getState().activeTaskId;
-      if (id && !useUi.getState().memoryProjectId) {
-        requestAnimationFrame(() => sessionRegistry.get(id)?.focus());
-      }
-    });
-  }, [setDiffFile]);
-
-  // A diff belongs to the task it was opened on: switching tasks closes it.
-  const diffTaskPathRef = useRef(activeTask?.path);
+  // A task's editor stays its own while another task is active: switching
+  // back finds it as it was (narrow or expanded, tabs, unsaved edits),
+  // restoring its tabs rather than opening again the file it opened on.
+  const editorTaskPathRef = useRef(activeTask?.path);
   useEffect(() => {
-    const prev = diffTaskPathRef.current;
-    diffTaskPathRef.current = activeTask?.path;
-    if (prev && prev !== activeTask?.path && useGit.getState().diffFile?.cwd === prev) {
-      setDiffFile(null);
-    }
-  }, [activeTask?.path, setDiffFile]);
+    const prev = editorTaskPathRef.current;
+    editorTaskPathRef.current = activeTask?.path;
+    if (prev && prev !== activeTask?.path) useEditors.getState().park(prev);
+  }, [activeTask?.path]);
 
   // Collapsing hides the task sidebar without closing the editor: it stays
   // mounted out of sight (tabs, panes, unsaved edits) and expanding brings
   // it back at the width it left. Collapsing takes the keyboard from it
   // back to the task's Claude Code TUI. `expandedAtCollapseRef`: whether the
-  // width the panel comes back at is the editor's (set however it collapsed).
+  // width the panel comes back at is the expanded one (set however it
+  // collapsed).
   const expandedAtCollapseRef = useRef(false);
   // The width before a side-car TUI sized the panel to hug it (below).
   const changesSizeBeforeTui = useRef<number | null>(null);
@@ -1008,31 +1024,35 @@ export function App() {
     if (hadFocus && id) requestAnimationFrame(() => sessionRegistry.get(id)?.focus());
   }, [setChangesAnimating]);
 
-  // Opening a diff eases the task sidebar to its expanded width, closing it back
+  // Expanding eases the task sidebar to its expanded width, going narrow back
   // to its narrow one, each remembered. One panel, resized: swapping panels
-  // re-registers them, and the width jumps. The editor mounts once the
-  // width settles, so Monaco's start-up and layout don't stall the ease.
-  const inspectorExpanded = !!inlineDiff;
+  // re-registers them, and the width jumps. The editor first mounts once the
+  // width settles, so Monaco's start-up and layout don't stall the ease;
+  // then it stays mounted (out of sight while narrow) until it closes.
   useEffect(() => {
-    inspectorExpandedRef.current = inspectorExpanded;
-  }, [inspectorExpanded]);
-  const [diffSettled, setDiffSettled] = useState(inspectorExpanded);
-  const prevInspectorExpandedRef = useRef(inspectorExpanded);
+    inspectorExpandedRef.current = expanded;
+  }, [expanded]);
+  const editorOpen = !!inlineEditor;
+  const [editorReady, setEditorReady] = useState(expanded);
   useEffect(() => {
-    if (prevInspectorExpandedRef.current === inspectorExpanded) return;
-    prevInspectorExpandedRef.current = inspectorExpanded;
-    if (!inspectorExpanded) setDiffSettled(false);
+    if (!editorOpen) setEditorReady(false);
+    else if (!expanded) setEditorReady(true);
+  }, [editorOpen, expanded]);
+  const prevExpandedRef = useRef(expanded);
+  useEffect(() => {
+    if (prevExpandedRef.current === expanded) return;
+    prevExpandedRef.current = expanded;
     const panel = changesPanelRef.current;
     if (!panel) {
-      setDiffSettled(inspectorExpanded);
+      if (expanded) setEditorReady(true);
       return;
     }
     const collapsed = panel.isCollapsed();
     if (!collapsed) {
-      saveInspectorWidth(inspectorExpanded ? 'narrow' : 'expanded', panel.getSize().asPercentage);
+      saveInspectorWidth(expanded ? 'narrow' : 'expanded', panel.getSize().asPercentage);
     }
     const width = widthOnExpandedToggle({
-      expanded: inspectorExpanded,
+      expanded,
       collapsed,
       widths: loadInspectorWidths(),
     });
@@ -1041,10 +1061,13 @@ export function App() {
     panel.resize(`${width}%`);
     const id = setTimeout(() => {
       setChangesAnimating(false);
-      if (inspectorExpanded) setDiffSettled(true);
+      if (expanded) setEditorReady(true);
     }, panelEaseMs());
     return () => clearTimeout(id);
-  }, [inspectorExpanded, setChangesAnimating]);
+  }, [expanded, setChangesAnimating]);
+  const narrowEditor = useCallback(() => {
+    if (activeTask) useEditors.getState().hide(activeTask.path);
+  }, [activeTask]);
 
   // A Setup tab request shows the drawer: a collapsed task sidebar hides
   // it, so open the sidebar. Once per request: a later collapse must not
@@ -1210,7 +1233,7 @@ export function App() {
     // App.tsx just opens the modal with the file identity. Pin the working view
     // explicitly so clicking a specific file always shows its working diff
     // rather than restoring the editor's last (possibly commit/branch) view.
-    setDiffFile({
+    useEditors.getState().open({
       cwd: activeTask.path,
       filePath,
       initialView: { kind: 'working', ref: staged ? 'index' : 'HEAD' },
@@ -1358,8 +1381,8 @@ export function App() {
                 setChangesPanelCollapsed(false);
                 setTimeout(() => setChangesAnimating(false), panelEaseMs());
                 // The panel comes back at the width it collapsed from, unless
-                // the editor opened or closed meanwhile, or the layout was
-                // saved expanded (Dash quit with the editor open).
+                // it went narrow or expanded meanwhile, or the layout was
+                // saved expanded (Dash quit with the editor shown).
                 const panel = changesPanelRef.current;
                 if (!panel) return;
                 const width = widthOnShow({
@@ -1386,19 +1409,20 @@ export function App() {
                   rateLimits={latestRateLimits}
                   burns={burns}
                   contextUsage={contextUsage[activeTask.id]}
-                  diff={diffSettled ? inlineDiff : null}
+                  diff={editorReady ? (inlineEditor?.target ?? null) : null}
+                  expanded={expanded}
                   terminalTheme={resolvedTerminalTheme}
                   isDark={theme === 'dark'}
                   onViewDiff={handleViewDiff}
                   onOpenEditor={() => {
-                    setDiffFile({ cwd: activeTask.path, filePath: '' });
+                    useEditors.getState().open({ cwd: activeTask.path, filePath: '' });
                   }}
-                  onCloseDiff={closeDiff}
+                  onNarrow={narrowEditor}
+                  onCloseDiff={() => closeEditorOf(activeTask.path)}
                   onCommitFinished={refreshActiveGitStatus}
                   shellDrawerRef={shellDrawerPanelRef}
                   onTuiActiveChange={handleTuiPanelActive}
                   onTaskSettings={() => handleTaskSettings(activeTask.id)}
-                  onCollapse={toggleInspector}
                 />
               </div>
             </ResizablePanel>
@@ -1587,7 +1611,7 @@ export function App() {
             )
           }
           focusHash={commitGraphFocusHash}
-          elevated={!!modalDiff}
+          elevated={!!modalEditor}
           onClose={() => {
             setShowCommitGraph(false);
             setCommitGraphFocusHash(null);
@@ -1604,17 +1628,17 @@ export function App() {
         <MemoryModal project={memoryProject} onClose={() => setMemoryProjectId(null)} />
       )}
 
-      {modalDiff && (
+      {modalEditor && (
         <Suspense fallback={null}>
           <DiffEditorModal
-            cwd={modalDiff.cwd}
-            initialFilePath={modalDiff.filePath}
-            initialView={modalDiff.initialView}
+            cwd={modalEditor.target.cwd}
+            initialFilePath={modalEditor.target.filePath}
+            initialView={modalEditor.target.initialView}
             activeTaskId={activeTaskId}
             projectId={activeTask?.projectId ?? activeProjectId}
             terminalTheme={resolvedTerminalTheme}
             isDark={theme === 'dark'}
-            onClose={closeDiff}
+            onClose={() => closeEditorOf(modalEditor.target.cwd)}
           />
         </Suspense>
       )}

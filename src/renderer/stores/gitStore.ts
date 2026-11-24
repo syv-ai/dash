@@ -1,20 +1,10 @@
 import { create } from 'zustand';
-import type { GitStatus, PrProvider, PullRequestInfo, Project, Task } from '../../shared/types';
+import type { GitStatus, PullRequestInfo, Project, Task } from '../../shared/types';
 import { fetchPrsFor, prDetectionTargets, prTargetFor, type BranchPrs } from './prDetectionTargets';
 import { useProjects, selectActiveTask } from './projectsStore';
 
 const GIT_POLL_INTERVAL = 5000;
 const PR_POLL_INTERVAL = 30_000;
-
-export interface DiffFileTarget {
-  cwd: string;
-  /** The file to open, or '' to show the editor's open tabs. */
-  filePath: string;
-  initialView?:
-    | { kind: 'working'; ref: 'HEAD' | 'index' }
-    | { kind: 'commit'; hash: string }
-    | { kind: 'pr'; provider: PrProvider; number: number; base: string; head: string };
-}
 
 type Updater<T> = T | ((prev: T) => T);
 const apply = <T>(v: Updater<T>, prev: T): T =>
@@ -34,8 +24,10 @@ async function currentBranch(cwd: string): Promise<string | null | undefined> {
 
 export interface GitState {
   gitStatus: GitStatus | null;
+  /** The folder `gitStatus` was read from: right after a task switch it is
+   *  still the previous task's until the new one's read lands. */
+  gitStatusCwd: string | null;
   gitLoading: boolean;
-  diffFile: DiffFileTarget | null;
   /** The PRs standing for the active task's branch now, newest first (see relevantPrs). */
   prs: PullRequestInfo[];
   /** The same per task, for the sidebar rows and ProjectView cards. */
@@ -55,7 +47,6 @@ export interface GitState {
 }
 
 export interface GitActions {
-  setDiffFile: (v: DiffFileTarget | null) => void;
   setShowCommitGraph: (v: Updater<boolean>) => void;
   /** Open the commit-graph modal scrolled to a specific commit. */
   openCommitGraphAtCommit: (hash: string) => void;
@@ -111,8 +102,8 @@ let prTeardown: (() => void) | null = null;
 
 export const useGit = create<GitStore>((set, get) => ({
   gitStatus: null,
+  gitStatusCwd: null,
   gitLoading: false,
-  diffFile: null,
   prs: [],
   prByTask: {},
   branchPrsByTask: {},
@@ -120,7 +111,6 @@ export const useGit = create<GitStore>((set, get) => ({
   showCommitGraph: false,
   commitGraphFocusHash: null,
 
-  setDiffFile: (v) => set({ diffFile: v }),
   setShowCommitGraph: (v) => set((s) => ({ showCommitGraph: apply(v, s.showCommitGraph) })),
   openCommitGraphAtCommit: (hash) => set({ commitGraphFocusHash: hash, showCommitGraph: true }),
   setCommitGraphFocusHash: (hash) => set({ commitGraphFocusHash: hash }),
@@ -140,6 +130,7 @@ export const useGit = create<GitStore>((set, get) => ({
           // Keep the old object when nothing changed, so a poll of a big
           // worktree doesn't re-render every file row.
           gitStatus: prev && sameGitStatus(prev, resp.data) ? prev : resp.data,
+          gitStatusCwd: cwd,
           ...(t?.path === cwd && get().branchByTask[t.id] !== branch
             ? { branchByTask: { ...get().branchByTask, [t.id]: branch } }
             : {}),
@@ -219,7 +210,7 @@ export const useGit = create<GitStore>((set, get) => ({
     watchTeardown?.();
     watchTeardown = null;
     if (!task) {
-      set({ gitStatus: null });
+      set({ gitStatus: null, gitStatusCwd: null });
       return;
     }
     const { id, path: cwd } = task;

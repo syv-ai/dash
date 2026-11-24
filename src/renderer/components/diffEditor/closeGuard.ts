@@ -3,22 +3,23 @@
  * sidebar's close button, Escape, the keybinding, the modal's own close) asks
  * first. Those live outside the editor, which is lazy-loaded with Monaco; this
  * module stays Monaco-free so they can call it. A mounted editor registers the
- * check.
+ * check for its folder: several can be mounted at once (a task's, kept out of
+ * sight, and the memory modal's), and closing one asks only about its own.
  */
 
 type Guard = () => boolean | Promise<boolean>;
 
-const guards = new Set<Guard>();
+const guards = new Map<Guard, string>();
 
-/** Register a check that returns false to keep the editor open; returns the
- *  unregister. */
-export function addCloseGuard(guard: Guard): () => void {
-  guards.add(guard);
+/** Register a check for `cwd`'s editor that returns false to keep it open;
+ *  returns the unregister. */
+export function addCloseGuard(cwd: string, guard: Guard): () => void {
+  guards.set(guard, cwd);
   return () => guards.delete(guard);
 }
 
-/** True when every mounted editor agrees to close (asking about unsaved edits). */
-export async function mayCloseEditor(): Promise<boolean> {
-  for (const guard of guards) if (!(await guard())) return false;
+/** True when `cwd`'s mounted editors agree to close (asking about unsaved edits). */
+export async function mayCloseEditor(cwd: string): Promise<boolean> {
+  for (const [guard, of] of guards) if (of === cwd && !(await guard())) return false;
   return true;
 }

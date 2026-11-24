@@ -20,7 +20,7 @@ import { Segmented } from '../ui/Segmented';
 import { Select } from '../ui/Select';
 import { useProjects, selectTaskById } from '../../stores/projectsStore';
 import { useUi } from '../../stores/uiStore';
-import { useGit } from '../../stores/gitStore';
+import { useEditors } from '../../stores/editorsStore';
 import { useRuntime } from '../../stores/runtimeStore';
 import { typeIntoTask } from '../../utils/typeIntoTask';
 import { useProjectMemory } from './useProjectMemory';
@@ -85,9 +85,10 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
   const projects = useProjects((s) => s.projects);
   const switchProject = useUi((s) => s.setMemoryProjectId);
   const handleClose = useModalClose();
-  const setDiffFile = useGit((s) => s.setDiffFile);
+  const openEditor = useEditors((s) => s.open);
   // Read when the modal opens, and again once an edit in the diff editor closes.
-  const editing = useGit((s) => s.diffFile !== null);
+  const [editedDir, setEditedDir] = useState<string | null>(null);
+  const editing = useEditors((s) => editedDir !== null && editedDir in s.byCwd);
   const { memory, error } = useProjectMemory(project.path, editing);
   // Opening the project's memory clears its "new memories" badge; so does
   // closing an edit, whose save would otherwise count as a new memory.
@@ -127,7 +128,8 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
   // on the memory folder.
   const edit = (file: string) => {
     if (!memory) return;
-    setDiffFile({
+    setEditedDir(memory.dir);
+    openEditor({
       cwd: memory.dir,
       filePath: file,
       initialView: { kind: 'working', ref: 'HEAD' },

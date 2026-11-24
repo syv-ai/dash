@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
   type RefObject,
@@ -18,6 +19,7 @@ import { PortsDrawerWrapper } from './PortsDrawerWrapper';
 import { UsageSection } from './UsageSection';
 import { TaskDetails } from './TaskDetails';
 import { IconButton } from '../ui/IconButton';
+import { cn } from '../../lib/cn';
 import { Segmented } from '../ui/Segmented';
 import { CountBadge } from '../ui/CountBadge';
 import {
@@ -30,12 +32,14 @@ import {
 import { EditorTree } from '../diffEditor/EditorTree';
 import { HistoryList, type PrEntry } from '../diffEditor/HistoryList';
 import { useEditorWorkspace, type EditorTarget } from '../diffEditor/useEditorWorkspace';
-import { activePath } from '../diffEditor/tabs/editorLayout';
+import { activePath, type OpenOptions } from '../diffEditor/tabs/editorLayout';
 import { useTreePanel } from '../diffEditor/TreeToggle';
 import { WorktreePath } from './WorktreePath';
+import { onChangeCount, pickSegment, segmentOnExpand, type CodeSegment } from './sidebarState';
 import { useUnpushedCommits } from './useUnpushedCommits';
 import type { SyncLinks } from '../changes/SyncStatus';
-import { useGit, type DiffFileTarget } from '../../stores/gitStore';
+import { useGit } from '../../stores/gitStore';
+import type { DiffFileTarget } from '../../stores/editorsStore';
 import { useSettings } from '../../stores/settingsStore';
 import { useUi } from '../../stores/uiStore';
 import { useEditorTabs } from '../../stores/editorTabsStore';
@@ -52,7 +56,6 @@ const EditorGroups = lazy(() =>
 /** What the sidebar's list shows: the changes, the whole repo or the
  *  commits (the view switch, always in words), or the task's details (an
  *  icon toggle at the row's end, read least often). */
-type CodeSegment = 'changes' | 'files' | 'history';
 type Segment = CodeSegment | 'details';
 
 interface RightInspectorProps {
@@ -63,21 +66,25 @@ interface RightInspectorProps {
   rateLimits?: RateLimits;
   burns: LimitBurns;
   contextUsage?: ContextUsage;
-  /** What the editor opened on, or null while it is closed (the sidebar is
-   *  narrow then). Each new target opens its file. */
+  /** What the editor opened on, or null while it isn't mounted (closed, or
+   *  not yet: it mounts once the sidebar has eased to its expanded width).
+   *  Each new target opens its file. */
   diff: DiffFileTarget | null;
+  /** The editor shows beside the list (expanded); otherwise the sidebar is
+   *  narrow, an open editor kept mounted out of sight. */
+  expanded: boolean;
   terminalTheme: XtermTheme;
   isDark: boolean;
   onViewDiff: (filePath: string, staged: boolean) => void;
-  /** Open the editor on its open tabs. */
+  /** Open the editor on its open tabs, expanding the sidebar. */
   onOpenEditor: () => void;
+  /** Go narrow, keeping the editor (tabs, unsaved edits) out of sight. */
+  onNarrow: () => void;
   onCloseDiff: () => void;
   onCommitFinished: () => void;
   shellDrawerRef: RefObject<PanelImperativeHandle | null>;
   onTuiActiveChange: (active: boolean, canvasPx?: number) => void;
   onTaskSettings: () => void;
-  /** Collapse the sidebar (the ⌘⌥B path). */
-  onCollapse: () => void;
 }
 
 /** A tooltip label with its shortcut, e.g. "Stage all  ⇧⌘A". */
@@ -87,12 +94,13 @@ function withShortcut(label: string, binding: KeyBinding | undefined): string {
 
 /**
  * The task sidebar: its usage on top, then the view switch.
- * Narrow: a list (changes, or the commits) over the task's terminals. Expanded,
- * with the editor open: the list (the changes, the repo's files, or the
- * commits) runs full height on the left; the editor sits over the terminals
- * on the right. Details, either width, spans the whole body over the
- * terminals. The terminals stay mounted across both, so the shell is
- * never re-attached.
+ * Narrow: one column (the changes, the repo's file tree, or the commits)
+ * over the task's terminals. Expanded, a file open: that column runs full
+ * height on the left; the editor sits over the terminals on the right.
+ * Opening a file expands it; re-picking the current view goes back to
+ * narrow, the editor kept mounted out of sight. Details, either way, spans
+ * the whole body over the terminals. The terminals stay mounted throughout,
+ * so the shell is never re-attached.
  */
 export function RightInspector({
   task,
@@ -101,16 +109,17 @@ export function RightInspector({
   burns,
   contextUsage,
   diff,
+  expanded: expandedProp,
   terminalTheme,
   isDark,
   onViewDiff,
   onOpenEditor,
+  onNarrow,
   onCloseDiff,
   onCommitFinished,
   shellDrawerRef,
   onTuiActiveChange,
   onTaskSettings,
-  onCollapse,
 }: RightInspectorProps) {
   const gitStatus = useGit((s) => s.gitStatus);
   const gitLoading = useGit((s) => s.gitLoading);
@@ -139,10 +148,12 @@ export function RightInspector({
   }, [task.id]);
 
   // ── The editor's state: one workspace per task, open or not ──
-  const expanded = diff !== null;
+  const editorMounted = diff !== null;
+  const expanded = expandedProp && editorMounted;
   const [segment, setSegment] = useState<Segment>('changes');
-  // Expanded, Details takes the whole body over the terminals, as narrow; the
-  // editor stays mounted out of sight, so leaving Details finds it as it was.
+  // Expanded, Details takes the whole body over the terminals, as narrow;
+  // the editor stays mounted out of sight, so leaving Details finds it as it
+  // was.
   const split = expanded && segment !== 'details';
   // Where the Details toggle returns to.
   const [lastCodeSegment, setLastCodeSegment] = useState<CodeSegment>('changes');
@@ -156,14 +167,25 @@ export function RightInspector({
     cwd: task.path,
     openTaskId: task.id,
     projectId: task.projectId,
-    editorOpen: expanded,
+    editorOpen: editorMounted,
+    treeShown: segment === 'files',
     historyShown: segment === 'history',
     target,
   });
   const { view, selectView } = ws;
+  // The working tree's changes, as Changes lists them (null: not loaded,
+  // still the previous task's, or a branch or PR view's Changes).
+  const statusIsOwn = useGit((s) => s.gitStatusCwd === task.path);
+  const changeCount =
+    view.kind === 'working' && gitStatus && statusIsOwn ? gitStatus.files.length : null;
   const treePanel = useTreePanel();
   const openEditor = () => {
     if (!expanded) onOpenEditor();
+  };
+  // Opening a file is what expands the sidebar.
+  const openFile = (path: string, opts?: OpenOptions) => {
+    ws.openFile(path, opts);
+    openEditor();
   };
 
   // Changes and Files list the working tree (or the branch or PR compared
@@ -172,20 +194,20 @@ export function RightInspector({
     setSegment(next);
     setLastCodeSegment(next);
     if (next !== 'history' && view.kind === 'commit') selectView({ kind: 'working', ref: 'HEAD' });
-    if (next === 'files') openEditor();
   };
-  // Expanded with the tree folded away, the view switch would change nothing
-  // visible: picking a view (even the current one) unfolds it, easing as
-  // the tree toggle does. Leaving Details keeps the fold as it was. Picking
-  // the current view otherwise collapses the sidebar, as an activity bar does.
-  const pickSegment = (next: CodeSegment) => {
-    const tabs = useEditorTabs.getState();
-    if (next === segment && !(expanded && tabs.treeCollapsed)) {
-      onCollapse();
+  // Re-picking the current view while expanded goes narrow (never collapsed:
+  // that is the Hide control's, or ⌘⌥B's). Expanded with the tree folded
+  // away, picking another view unfolds it, easing as the tree toggle does;
+  // leaving Details keeps the fold as it was.
+  const onPickSegment = (next: CodeSegment) => {
+    const pick = pickSegment({ current: segment, next, expanded, changeCount });
+    if (pick === 'none') return;
+    selectSegment(next);
+    if (pick === 'narrow') {
+      onNarrow();
       return;
     }
-    selectSegment(next);
-    if (expanded) tabs.setTreeCollapsed(false);
+    if (expanded) useEditorTabs.getState().setTreeCollapsed(false);
   };
   const toggleDetails = () => {
     if (segment === 'details') selectSegment(lastCodeSegment);
@@ -199,6 +221,31 @@ export function RightInspector({
     },
     [onViewDiff],
   );
+  // An empty Changes is never expanded (see sidebarState): it narrows as it
+  // empties, and gives way to Files as a file opens on it or its status
+  // loads empty. Each reacts to its own transition, read off the value before.
+  const countBefore = useRef(changeCount);
+  useEffect(() => {
+    const before = countBefore.current;
+    countBefore.current = changeCount;
+    const next = onChangeCount({ segment, expanded, before, now: changeCount });
+    if (next === 'narrow') onNarrow();
+    else if (next === 'files') {
+      setSegment('files');
+      setLastCodeSegment('files');
+    }
+  }, [segment, expanded, changeCount, onNarrow]);
+  // Mounting expanded (a task switched back to) counts as expanding.
+  const expandedBefore = useRef(false);
+  useEffect(() => {
+    const before = expandedBefore.current;
+    expandedBefore.current = expanded;
+    if (before || !expanded || segment === 'details') return;
+    const next = segmentOnExpand(segment, changeCount);
+    if (next === segment) return;
+    setSegment(next);
+    setLastCodeSegment(next);
+  }, [segment, expanded, changeCount]);
   // History's rows open what they pick in the editor.
   const pickView = (next: typeof view) => {
     selectView(next);
@@ -212,17 +259,15 @@ export function RightInspector({
     setSegment('history');
     setLastCodeSegment('history');
     useEditorTabs.getState().setTreeCollapsed(false);
-    if (expanded) selectView({ kind: 'commit', hash });
-    else {
-      setPendingCommit(hash);
-      onOpenEditor();
-    }
+    if (editorMounted) selectView({ kind: 'commit', hash });
+    else setPendingCommit(hash);
+    openEditor();
   };
   useEffect(() => {
-    if (!expanded || !pendingCommit) return;
+    if (!editorMounted || !pendingCommit) return;
     selectView({ kind: 'commit', hash: pendingCommit });
     setPendingCommit(null);
-  }, [expanded, pendingCommit, selectView]);
+  }, [editorMounted, pendingCommit, selectView]);
   // The ahead / behind counts: History on the newest unpushed commit (they
   // are marked there), and the commit graph on the upstream's tip.
   const unpushed = useUnpushedCommits(
@@ -266,77 +311,95 @@ export function RightInspector({
   };
 
   const header = (
-    <div className="@container/sidehead flex h-11 shrink-0 items-center gap-0.5 pl-0.5">
-      {/* Narrow, it takes the slack and gives it up first: the padding
-          tightens, then the labels truncate, before the actions are pushed
-          out. They stay words at every width. Expanded, the path does. */}
-      <div className={expanded ? 'shrink-0' : 'min-w-0 flex-1'}>
-        <Segmented<Segment>
-          aria-label="Task sidebar view"
-          size="sm"
-          fullWidth={false}
-          value={segment}
-          onChange={(next) => next !== 'details' && pickSegment(next)}
-          segmentClassName="@max-[20rem]/sidehead:px-1.5"
-          options={[
-            { value: 'changes', label: 'Changes', count: files.length || undefined },
-            { value: 'files', label: 'Files' },
-            { value: 'history', label: 'History' },
-          ]}
-        />
-      </div>
-      {unstagedCount > 0 && (
-        <IconButton
-          size="sm"
-          title={withShortcut('Stage all', keybindings.stageAll)}
-          onClick={() => void stageAll()}
-        >
-          <Plus size={14} strokeWidth={1.8} />
-        </IconButton>
-      )}
-      {stagedCount > 0 && (
-        <IconButton
-          size="sm"
-          title={withShortcut('Unstage all', keybindings.unstageAll)}
-          onClick={() => void unstageAll()}
-        >
-          <Minus size={14} strokeWidth={1.8} />
-        </IconButton>
-      )}
-      {/* The editor holds the comments; this opens it. */}
-      {commentCount > 0 && (
-        <>
-          <IconButton size="sm" title={`Comments: ${commentCount} to send`} onClick={onOpenEditor}>
-            <MessageSquareCode size={14} strokeWidth={1.8} />
-          </IconButton>
-          <CountBadge count={commentCount} className="-ml-1" />
-        </>
-      )}
-      {stagedCount > 0 && (
-        <div className="ml-1">
-          <CommitPopover run={run} />
+    <div className="@container/sidehead flex h-11 shrink-0 items-center gap-0.5">
+      {/* The trailing actions (Details, ✕) never leave the row: the rest
+          gives way. Narrow, the views take the slack; expanded, the path
+          does, and gives it up first. Then the views' padding tightens and
+          their labels truncate (words at every width); past that the row
+          clips, short of the trailing actions. The padding keeps focus
+          outlines inside the clip. */}
+      <div className="flex min-w-0 flex-1 items-center gap-0.5 self-stretch overflow-hidden px-1">
+        {/* Clips the views once they can't tighten further (inset by the
+            focus outline's room) rather than drawing under the actions. */}
+        <div className={cn('-m-1 min-w-0 overflow-hidden p-1', !expanded && 'flex-1')}>
+          <Segmented<Segment>
+            aria-label="Task sidebar view"
+            size="sm"
+            fullWidth={false}
+            value={segment}
+            onChange={(next) => next !== 'details' && onPickSegment(next)}
+            segmentClassName="@max-[20rem]/sidehead:px-1.5"
+            options={[
+              { value: 'changes', label: 'Changes', count: files.length || undefined },
+              { value: 'files', label: 'Files' },
+              { value: 'history', label: 'History' },
+            ]}
+          />
         </div>
-      )}
-      {expanded && <WorktreePath path={task.path} className="ml-auto" />}
-      <IconButton
-        size="sm"
-        title={segment === 'details' ? 'Hide details' : 'Details'}
-        pressed={segment === 'details'}
-        onClick={toggleDetails}
-        className={expanded ? 'shrink-0' : 'ml-auto shrink-0'}
-      >
-        <Info size={14} strokeWidth={1.8} />
-      </IconButton>
-      {expanded && (
+        {unstagedCount > 0 && (
+          <IconButton
+            size="sm"
+            title={withShortcut('Stage all', keybindings.stageAll)}
+            onClick={() => void stageAll()}
+            className="shrink-0"
+          >
+            <Plus size={14} strokeWidth={1.8} />
+          </IconButton>
+        )}
+        {stagedCount > 0 && (
+          <IconButton
+            size="sm"
+            title={withShortcut('Unstage all', keybindings.unstageAll)}
+            onClick={() => void unstageAll()}
+            className="shrink-0"
+          >
+            <Minus size={14} strokeWidth={1.8} />
+          </IconButton>
+        )}
+        {/* The editor holds the comments; this opens it. */}
+        {commentCount > 0 && (
+          <>
+            <IconButton
+              size="sm"
+              title={`Comments: ${commentCount} to send`}
+              onClick={onOpenEditor}
+              className="shrink-0"
+            >
+              <MessageSquareCode size={14} strokeWidth={1.8} />
+            </IconButton>
+            <CountBadge count={commentCount} className="-ml-1 shrink-0" />
+          </>
+        )}
+        {stagedCount > 0 && (
+          <div className="ml-1 shrink-0">
+            <CommitPopover run={run} />
+          </div>
+        )}
+        {expanded && (
+          <div className="flex min-w-0 flex-1 justify-end overflow-hidden">
+            <WorktreePath path={task.path} className="shrink" />
+          </div>
+        )}
+      </div>
+      <div className="flex shrink-0 items-center gap-0.5">
         <IconButton
           size="sm"
-          title={withShortcut('Close editor', keybindings.closeDiff)}
-          onClick={onCloseDiff}
-          className="shrink-0"
+          title={segment === 'details' ? 'Hide details' : 'Details'}
+          pressed={segment === 'details'}
+          onClick={toggleDetails}
         >
-          <X size={14} strokeWidth={1.8} />
+          <Info size={14} strokeWidth={1.8} />
         </IconButton>
-      )}
+        {expanded && (
+          <IconButton
+            size="sm"
+            title={withShortcut('Close editor', keybindings.closeDiff)}
+            onClick={onCloseDiff}
+          >
+            <X size={14} strokeWidth={1.8} />
+          </IconButton>
+        )}
+      </div>
     </div>
   );
 
@@ -351,7 +414,7 @@ export function RightInspector({
       pr={pr}
       commitFiles={view.kind === 'commit' ? ws.data.changedFiles : []}
       activePath={activePath(ws.layout)}
-      onOpenFile={ws.openFile}
+      onOpenFile={openFile}
       unpushed={unpushed}
     />
   );
@@ -367,7 +430,8 @@ export function RightInspector({
     />
   );
 
-  // Expanded: the editor's tree (the changes or the whole repo), or the commits.
+  // The tree or list column: the editor's tree (the changes or the whole
+  // repo), or the commits. Narrow, Changes is the changes list instead.
   const tree =
     segment === 'history' ? (
       history
@@ -382,19 +446,19 @@ export function RightInspector({
         changedOnly={segment === 'changes'}
         filesLoading={ws.data.repoPathsLoading || ws.data.changedFilesLoading}
         selectedPath={activePath(ws.layout) ?? ''}
-        onOpenFile={ws.openFile}
+        onOpenFile={openFile}
         canOpenToSide={ws.layout.groups.length < 2}
         badgeCounts={ws.badgeCounts}
       />
     );
 
-  // Narrow: the changes list, the commits or the details (Files opens the
-  // editor).
+  // Narrow (and Details, expanded): the details, the changes list, or the
+  // tree column alone.
   const list =
     segment === 'details' ? (
       details
-    ) : segment === 'history' ? (
-      history
+    ) : segment !== 'changes' ? (
+      tree
     ) : (
       <FileChangesPanel
         key={task.id}
@@ -459,8 +523,9 @@ export function RightInspector({
                 onExpand={() => settleShellDrawer(false)}
                 onTuiActiveChange={onTuiActiveChange}
               >
-                {expanded && segment === 'details' && withPorts(details)}
-                {expanded ? (
+                {/* Mounted while open, out of sight while narrow: its tabs,
+                    scroll and unsaved edits wait for the next file to open. */}
+                {editorMounted && (
                   <div className={split ? 'h-full' : 'hidden'}>
                     <EditorSheet closeBinding={keybindings.closeDiff} onClose={onCloseDiff}>
                       <Suspense fallback={null}>
@@ -473,9 +538,8 @@ export function RightInspector({
                       </Suspense>
                     </EditorSheet>
                   </div>
-                ) : (
-                  withPorts(list)
                 )}
+                {!split && withPorts(list)}
               </ShellDrawerWrapper>
             </div>
           </ResizablePanel>

@@ -5,22 +5,16 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../ui/Resi
 import { EmptyState } from '../ui/EmptyState';
 import { sheetSurface } from '../ui/FolderTab';
 import { cn } from '../../lib/cn';
-import { useEditorTabs } from '../../stores/editorTabsStore';
+import { selectLayout, useEditorTabs } from '../../stores/editorTabsStore';
+import { useEditors } from '../../stores/editorsStore';
 import { useSettings } from '../../stores/settingsStore';
 import { matchesBinding } from '../../keybindings';
 import { EditorPane } from './EditorPane';
 import { EditorTabStrip } from './EditorTabStrip';
 import type { EditorWorkspace } from './useEditorWorkspace';
 import { openPaths, type GroupIndex } from './tabs/editorLayout';
-import {
-  anyDirtyUnder,
-  dirtyVersion,
-  isDirty,
-  releaseRetained,
-  retain,
-  subscribeDirty,
-  workingUri,
-} from './models';
+import { anyDirtyUnder, dirtyVersion, isDirty, retain, subscribeDirty, workingUri } from './models';
+import { retainedOnUnmount } from './retention';
 import { TreeToggle } from './TreeToggle';
 import { addCloseGuard } from './closeGuard';
 import { confirm } from '../ui/ConfirmHost';
@@ -63,7 +57,21 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
       openPaths(layout).map((p) => absolutePath(cwd, p)),
     );
   }, [holder, layout, cwd]);
-  useEffect(() => () => releaseRetained(holder), [holder]);
+  // Unmounted while still open (its task switched away from), the unsaved
+  // ones stay: switching back finds them. Closed, none do.
+  useEffect(
+    () => () => {
+      const files = openPaths(selectLayout(tabsKey)(useEditorTabs.getState())).map((p) =>
+        absolutePath(cwd, p),
+      );
+      const closed = !useEditors.getState().byCwd[cwd];
+      retain(
+        holder,
+        retainedOnUnmount(files, closed, (f) => isDirty(workingUri(f))),
+      );
+    },
+    [holder, tabsKey, cwd],
+  );
 
   // Editing a preview tab keeps it.
   const dirtyTick = useDirtyVersion();
@@ -90,7 +98,7 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
   // Once the discard is agreed, a second ask in the same close passes.
   useEffect(() => {
     let agreed = false;
-    return addCloseGuard(async () => {
+    return addCloseGuard(cwd, async () => {
       if (agreed || !anyDirtyUnder(cwd)) return true;
       agreed = await confirm({
         message: 'Discard unsaved changes?',
