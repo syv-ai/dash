@@ -13,11 +13,8 @@ import {
   WrapText,
 } from 'lucide-react';
 import type { EditorView } from '../types';
-import { Popover, PopoverAnchor, PopoverContent } from '../../ui/Popover';
 import { Tooltip } from '../../ui/Tooltip';
-import { Segmented } from '../../ui/Segmented';
 import { IconButton } from '../../ui/IconButton';
-import { Button } from '../../ui/Button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,12 +22,9 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from '../../ui/DropdownMenu';
-import { BranchPicker } from '../BranchPicker';
-import { PrPicker } from '../PrPicker';
 
 interface Props {
-  cwd: string;
-  /** `cwd` is a task's worktree; otherwise compare and blame have no repository to ask. */
+  /** The file is in a task's worktree; otherwise blame has no repository to ask. */
   git: boolean;
   filePath: string;
   view: EditorView;
@@ -49,18 +43,6 @@ interface Props {
   /** True when the rendered preview is showing instead of the editor. */
   previewing: boolean;
   onTogglePreview(next: boolean): void;
-  /** Switch into branch view with the given base ref (e.g. "origin/main"). */
-  onSelectBase(base: string): void;
-  /** Leave branch or PR view; switch back to working tree. */
-  onExitBranchView(): void;
-  /** Resolved repo default (origin/HEAD, else main/master), listed first in the branch picker. */
-  defaultBase: string | null;
-  /** The project the checkout belongs to; null hides the Pull requests tab. */
-  projectId: string | null;
-  /** Open PR `number`'s view; resolves false when it couldn't be loaded. */
-  onSelectPr(number: number): Promise<boolean>;
-  /** The open PR's title, once its review has loaded. */
-  prTitle: string | null;
   /** Comments anchored to the open view — shown after the "Showing …" label. */
   commentCount: number;
 }
@@ -71,7 +53,6 @@ function dirname(path: string): string {
 }
 
 export function EditorHeader({
-  cwd,
   git,
   filePath,
   view,
@@ -85,16 +66,8 @@ export function EditorHeader({
   canPreview,
   previewing,
   onTogglePreview,
-  onSelectBase,
-  onExitBranchView,
-  defaultBase,
-  projectId,
-  onSelectPr,
-  prTitle,
   commentCount,
 }: Props) {
-  const isBranch = view.kind === 'branch';
-  const isPr = view.kind === 'pr';
   // "Showing …" pill — only for non-working views (the working tree is the
   // default and needs no callout). Tooltip carries the full ref.
   const viewMeta =
@@ -117,8 +90,6 @@ export function EditorHeader({
               Icon: GitPullRequestArrow,
             }
           : null;
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [tab, setTab] = useState<'branches' | 'prs'>('branches');
   const [copied, setCopied] = useState(false);
   const folder = dirname(filePath);
 
@@ -131,22 +102,6 @@ export function EditorHeader({
   function copyPath() {
     void window.electronAPI.clipboardWriteText(filePath);
     setCopied(true);
-  }
-
-  // Close the picker when the host switches view (e.g. user clicks a commit
-  // row, or picks a PR), so a stale popover doesn't linger anchored to the chip.
-  useEffect(() => {
-    setPickerOpen(false);
-  }, [view]);
-
-  function handleSelect(ref: string) {
-    onSelectBase(ref);
-    setPickerOpen(false);
-  }
-
-  function handleExit() {
-    onExitBranchView();
-    setPickerOpen(false);
   }
 
   // The view toggles: icon buttons, folded into a "More" menu when the pane
@@ -177,12 +132,6 @@ export function EditorHeader({
       Icon: WrapText,
     },
   ].filter((t) => !!t);
-
-  function handleChipClick() {
-    // Open on the tab of what's showing: a PR view on its PRs, else branches.
-    if (!pickerOpen) setTab(isPr && projectId ? 'prs' : 'branches');
-    setPickerOpen((v) => !v);
-  }
 
   return (
     // Inside the file's sheet, under its tab: the tab names the file, so this
@@ -233,77 +182,6 @@ export function EditorHeader({
           >
             <Eye size={14} strokeWidth={1.8} />
           </IconButton>
-        )}
-        {git && (
-          <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-            <PopoverAnchor asChild>
-              <div className="inline-flex items-center">
-                <Tooltip
-                  content={
-                    isBranch
-                      ? 'Change base branch'
-                      : isPr
-                        ? 'Change pull request'
-                        : 'Compare with a branch or pull request'
-                  }
-                >
-                  <Button variant="ghost" size="sm" onClick={handleChipClick}>
-                    {isPr ? (
-                      <GitPullRequestArrow size={14} strokeWidth={1.8} />
-                    ) : (
-                      <GitCompare size={14} strokeWidth={1.8} />
-                    )}
-                    {isBranch ? (
-                      <span className="truncate max-w-105">base: {view.base}</span>
-                    ) : isPr ? (
-                      <span className="truncate max-w-105">
-                        PR #{view.number}
-                        {prTitle ? `: ${prTitle}` : ''}
-                      </span>
-                    ) : (
-                      <span className="whitespace-nowrap @max-[30rem]/panehead:hidden">
-                        Compare…
-                      </span>
-                    )}
-                  </Button>
-                </Tooltip>
-              </div>
-            </PopoverAnchor>
-            <PopoverContent side="bottom" align="end" sideOffset={6} className="p-0">
-              <div className="w-85 h-95 flex flex-col">
-                {projectId && (
-                  <div className="px-2.5 pt-2.5 pb-1">
-                    <Segmented
-                      size="sm"
-                      value={tab}
-                      onChange={setTab}
-                      options={[
-                        { value: 'branches', label: 'Branches' },
-                        { value: 'prs', label: 'Pull requests' },
-                      ]}
-                    />
-                  </div>
-                )}
-                {tab === 'prs' && projectId ? (
-                  <PrPicker
-                    projectId={projectId}
-                    cwd={cwd}
-                    selected={view.kind === 'pr' ? view.number : null}
-                    onSelect={onSelectPr}
-                    onExit={isPr ? handleExit : undefined}
-                  />
-                ) : (
-                  <BranchPicker
-                    cwd={cwd}
-                    selectedRef={isBranch ? view.base : null}
-                    onSelect={handleSelect}
-                    onExit={isBranch ? handleExit : undefined}
-                    defaultRef={defaultBase}
-                  />
-                )}
-              </div>
-            </PopoverContent>
-          </Popover>
         )}
         {toggles.map(({ key, tooltip, on, onToggle, Icon }) => (
           <IconButton

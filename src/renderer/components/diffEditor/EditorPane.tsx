@@ -79,15 +79,8 @@ interface EditorPaneProps {
   onNavigateToComment: (scope: string, filePath: string, commentId: string) => void;
   onClearReveal: () => void;
   onClose: () => void;
-  /** Branch-view header chip wiring. Owned by parent so the changed-files
-   *  effect can also react to view changes. */
-  onSelectBase: (base: string) => void;
-  onExitBranchView: () => void;
-  defaultBase: string | null;
   /** The project `cwd` belongs to (PR review calls name it). */
   projectId: string | null;
-  /** Open PR `number`'s view; resolves false when it couldn't be loaded. */
-  onSelectPr: (number: number) => Promise<boolean>;
   /** Open another file (the PR review menu's thread list). */
   onSelectFile: (path: string) => void;
   /** Show this range once the file is on screen (go-to-definition, openFileAt). */
@@ -110,11 +103,7 @@ export function EditorPane({
   onNavigateToComment,
   onClearReveal,
   onClose,
-  onSelectBase,
-  onExitBranchView,
-  defaultBase,
   projectId,
-  onSelectPr,
   onSelectFile,
   revealRange,
   onRevealed,
@@ -465,7 +454,6 @@ export function EditorPane({
   return (
     <div className="h-full flex flex-col min-w-0 min-h-0">
       <EditorHeader
-        cwd={cwd}
         git={git}
         filePath={filePath}
         view={view}
@@ -479,12 +467,6 @@ export function EditorPane({
         canPreview={canPreview}
         previewing={previewing}
         onTogglePreview={setPreviewing}
-        onSelectBase={onSelectBase}
-        onExitBranchView={onExitBranchView}
-        defaultBase={defaultBase}
-        projectId={projectId}
-        onSelectPr={onSelectPr}
-        prTitle={pr.review?.title ?? null}
         commentCount={scopeCommentCount}
       />
 

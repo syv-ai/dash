@@ -26,6 +26,7 @@ import { addCloseGuard } from './closeGuard';
 import { confirm } from '../ui/ConfirmHost';
 import { absolutePath } from './editor/fileRef';
 import { LspStatusIndicator } from './LspStatusIndicator';
+import { CompareButton } from './CompareButton';
 import { installLsp } from '../../lsp';
 
 interface Props {
@@ -133,6 +134,23 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
   const reveal = useEditorTabs((s) => (s.reveal?.key === tabsKey ? s.reveal : null));
   const clearReveal = useCallback((n: number) => useEditorTabs.getState().clearReveal(n), []);
   const split = layout.groups.length > 1;
+  // Editor-wide, so once: at the end of the last group's tab row, the
+  // editor's top-right corner however it splits (the tree toggle holds the
+  // first group's start). Language servers show here only when unwell.
+  const editorActions = (
+    <>
+      <LspStatusIndicator worktree={cwd} />
+      <CompareButton
+        cwd={cwd}
+        view={ws.view}
+        projectId={ws.projectId}
+        defaultBase={ws.data.defaultBase}
+        onSelectBase={ws.selectBase}
+        onExitBranchView={ws.exitBranchView}
+        onSelectPr={ws.openPrView}
+      />
+    </>
+  );
 
   return (
     <div
@@ -173,7 +191,7 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
                     onClose={(paths) => void closeTabs(index, paths)}
                     onPin={(path) => ws.pinTab(index, path)}
                     leading={i === 0 ? <TreeToggle /> : undefined}
-                    trailing={isLast && ws.git ? <LspStatusIndicator worktree={cwd} /> : null}
+                    trailing={isLast && ws.git ? editorActions : null}
                   />
                   <div
                     className={cn(
@@ -195,11 +213,7 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
                         onNavigateToComment={ws.navigateToComment}
                         onClearReveal={ws.clearRevealComment}
                         onClose={onClose}
-                        onSelectBase={ws.selectBase}
-                        onExitBranchView={ws.exitBranchView}
-                        defaultBase={ws.data.defaultBase}
                         projectId={ws.projectId}
-                        onSelectPr={ws.openPrView}
                         onSelectFile={ws.openFile}
                         revealRange={groupReveal}
                         onRevealed={clearReveal}
