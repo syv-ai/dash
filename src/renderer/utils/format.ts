@@ -29,9 +29,9 @@ export function formatDuration(ms: number): string {
 }
 
 /** Relative reset time from an epoch-seconds timestamp: `now`, `in 30m`, `in 2d 3h`. */
-export function formatResetTime(epochSeconds: number): string {
+export function formatResetTime(epochSeconds: number, nowMs = Date.now()): string {
   if (!epochSeconds) return '';
-  const diffMs = epochSeconds * 1000 - Date.now();
+  const diffMs = epochSeconds * 1000 - nowMs;
   if (diffMs <= 0) return 'now';
   const diffMin = Math.round(diffMs / 60000);
   if (diffMin < 60) return `in ${diffMin}m`;
@@ -40,4 +40,29 @@ export function formatResetTime(epochSeconds: number): string {
   const diffD = Math.floor(diffH / 24);
   const remH = diffH % 24;
   return remH > 0 ? `in ${diffD}d ${remH}h` : `in ${diffD}d`;
+}
+
+/** The locale and zone a clock time is read in; both default to the system's. */
+export interface ClockOptions {
+  locale?: string;
+  timeZone?: string;
+}
+
+/**
+ * The wall-clock time of an epoch-seconds timestamp, in the user's locale:
+ * `14:30` today, `Thu 09:00` on another day (a weekly reset, or a 5-hour one
+ * past midnight). '' for 0 (no reset time known).
+ */
+export function formatResetClock(
+  epochSeconds: number,
+  nowMs = Date.now(),
+  { locale, timeZone }: ClockOptions = {},
+): string {
+  if (!epochSeconds) return '';
+  const at = new Date(epochSeconds * 1000);
+  const day = new Intl.DateTimeFormat(locale, { timeZone, dateStyle: 'short' });
+  const time = new Intl.DateTimeFormat(locale, { timeZone, timeStyle: 'short' }).format(at);
+  if (day.format(at) === day.format(new Date(nowMs))) return time;
+  const weekday = new Intl.DateTimeFormat(locale, { timeZone, weekday: 'short' }).format(at);
+  return `${weekday} ${time}`;
 }

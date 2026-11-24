@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { formatTokens, formatCost, formatDuration, formatResetTime } from '../format';
+import {
+  formatTokens,
+  formatCost,
+  formatDuration,
+  formatResetClock,
+  formatResetTime,
+} from '../format';
 
 describe('formatTokens', () => {
   it('formats <1000 as a plain integer', () => {
@@ -95,5 +101,51 @@ describe('formatResetTime', () => {
     vi.spyOn(Date, 'now').mockReturnValue(now);
     const future = now / 1000 + 3 * 86400;
     expect(formatResetTime(future)).toBe('in 3d');
+  });
+});
+
+describe('formatResetTime with an explicit now', () => {
+  const now = Date.UTC(2026, 10, 24, 11, 18); // Tue 24 Nov 2026, 11:18 UTC
+
+  it('reads the reset against the given clock, not the system one', () => {
+    expect(formatResetTime(now / 1000 + 3 * 3600 + 12 * 60, now)).toBe('in 3h 12m');
+    expect(formatResetTime(now / 1000 + 2 * 86400 + 4 * 3600, now)).toBe('in 2d 4h');
+  });
+});
+
+describe('formatResetClock', () => {
+  const now = Date.UTC(2026, 10, 24, 11, 18); // Tue 24 Nov 2026, 11:18 UTC
+  const utc = (h: number, m: number, dayOffset = 0) =>
+    Date.UTC(2026, 10, 24 + dayOffset, h, m) / 1000;
+
+  it('returns empty string for 0', () => {
+    expect(formatResetClock(0, now)).toBe('');
+  });
+
+  it('shows the time alone for a reset later today', () => {
+    expect(formatResetClock(utc(14, 30), now, { locale: 'en-GB', timeZone: 'UTC' })).toBe('14:30');
+  });
+
+  it('adds the weekday for a reset on another day', () => {
+    expect(formatResetClock(utc(9, 0, 2), now, { locale: 'en-GB', timeZone: 'UTC' })).toBe(
+      'Thu 09:00',
+    );
+    // A 5-hour window running past midnight.
+    expect(formatResetClock(utc(1, 30, 1), now, { locale: 'en-GB', timeZone: 'UTC' })).toBe(
+      'Wed 01:30',
+    );
+  });
+
+  it("follows the locale's clock", () => {
+    expect(formatResetClock(utc(14, 30), now, { locale: 'en-US', timeZone: 'UTC' })).toBe(
+      '2:30 PM',
+    );
+  });
+
+  it('decides "today" in the given time zone', () => {
+    // 23:30 UTC on the 24th is already the 25th in Copenhagen.
+    expect(
+      formatResetClock(utc(23, 30), now, { locale: 'en-GB', timeZone: 'Europe/Copenhagen' }),
+    ).toBe('Wed 00:30');
   });
 });

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { ContextUsage, RateLimitInfo, RateLimits } from '../../../shared/types';
-import { formatResetTime, formatTokens } from '../../utils/format';
+import { formatResetClock, formatResetTime, formatTokens } from '../../utils/format';
 import {
   BURN_WINDOW_MS,
   formatEta,
@@ -11,6 +11,7 @@ import {
   type LimitKey,
 } from '../../lib/burnRate';
 import { usageColor } from '../../lib/usageColor';
+import { useMinuteClock } from '../../hooks/useMinuteClock';
 import { useSettings } from '../../stores/settingsStore';
 import { ProgressRing } from '../ui/ProgressRing';
 import { Tooltip } from '../ui/Tooltip';
@@ -30,30 +31,57 @@ const LIMIT_LABELS: Record<LimitKey, { short: string; long: string }> = {
 };
 
 /*
- * Equal columns, each a ring (or the burn's figure) over a short label. The
- * section degrades by its own width (`@container/usage`), never wrapping or
- * overflowing: below 15rem the rings shrink, their "%" goes and the limits'
- * labels shorten ("5-hour" → "5h"). Details live in tooltips.
+ * Fixed-width columns, centred as a group with a fixed gap, each a ring (or
+ * the burn's figure) over a short label: a wide sidebar leaves them where
+ * they are instead of spreading them apart. Narrower than the group, the
+ * columns shrink alike. The section degrades by its own width
+ * (`@container/usage`), never wrapping or overflowing: below 20rem the
+ * limits' reset times go (the countdown stays), below 15rem the rings
+ * shrink, their "%" goes and the labels shorten ("5-hour" → "5h"). Details
+ * live in tooltips.
  */
-const COLUMNS = ['grid-cols-1', 'grid-cols-2', 'grid-cols-3', 'grid-cols-4'];
+const COLUMNS = [
+  'grid-cols-[minmax(0,6rem)]',
+  'grid-cols-[repeat(2,minmax(0,6rem))]',
+  'grid-cols-[repeat(3,minmax(0,6rem))]',
+  'grid-cols-[repeat(4,minmax(0,6rem))]',
+];
 
-/** One column: the figure on top, its label below. */
+/** One column: the figure on top, its label below, then any caption. */
 function Item({
   tooltip,
   label,
+  caption,
   children,
 }: {
   tooltip: string;
   label: ReactNode;
+  caption?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <Tooltip content={tooltip}>
       <div className="flex min-w-0 flex-col items-center gap-1">
         {children}
-        <span className="max-w-full truncate type-caption">{label}</span>
+        <span className="flex max-w-full flex-col items-center">
+          <span className="max-w-full truncate type-caption text-ink-2">{label}</span>
+          {caption}
+        </span>
       </div>
     </Tooltip>
+  );
+}
+
+/** When a limit's window resets, under its label: "resets 14:30" over "in
+ *  3h 12m". The time goes first when the section narrows. */
+function ResetCaption({ clock, countdown }: { clock: string; countdown: string }) {
+  return (
+    <span className="flex max-w-full flex-col items-center type-caption tabular-nums">
+      {clock && (
+        <span className="max-w-full truncate @max-[20rem]/usage:hidden">resets {clock}</span>
+      )}
+      <span className="max-w-full truncate">{countdown}</span>
+    </span>
   );
 }
 
@@ -88,16 +116,28 @@ function UsageRing({ pct, label }: { pct: number | null; label: string }) {
   );
 }
 
-function Limit({ limit, info }: { limit: LimitKey; info: RateLimitInfo | undefined }) {
+function Limit({
+  limit,
+  info,
+  now,
+}: {
+  limit: LimitKey;
+  info: RateLimitInfo | undefined;
+  /** The minute clock the countdown reads against. */
+  now: number;
+}) {
   const { short, long } = LIMIT_LABELS[limit];
   const pct = info ? Math.round(info.usedPercentage) : null;
-  const resets = info?.resetsAt ? formatResetTime(info.resetsAt) : '';
+  const resetsAt = info?.resetsAt ?? 0;
+  const clock = formatResetClock(resetsAt, now);
+  const countdown = formatResetTime(resetsAt, now);
   const tooltip = info
-    ? `${long} limit: ${pct}% used${resets ? `, resets ${resets}` : ''}`
+    ? `${long} limit: ${pct}% used${countdown ? `, resets ${clock} (${countdown})` : ''}`
     : `${long} limit: no window running; the next message starts one`;
   return (
     <Item
       tooltip={tooltip}
+      caption={countdown && <ResetCaption clock={clock} countdown={countdown} />}
       label={
         <>
           <span className="@max-[15rem]/usage:hidden">{long}</span>
@@ -154,6 +194,7 @@ export function UsageSection({ contextUsage, rateLimits, burns }: UsageSectionPr
   const showSession = useSettings((s) => s.showUsageInline);
   const showLimits = useSettings((s) => s.showRateLimits);
   const showBurn = useSettings((s) => s.showBurnRate);
+  const now = useMinuteClock();
 
   // Both limits show once the account reports either: a window that isn't
   // running (it reset, and no message has started the next) reads "—".
@@ -178,15 +219,20 @@ export function UsageSection({ contextUsage, rateLimits, burns }: UsageSectionPr
     );
   }
   if (limits) {
-    items.push(<Limit key="fiveHour" limit="fiveHour" info={limits.fiveHour} />);
-    items.push(<Limit key="sevenDay" limit="sevenDay" info={limits.sevenDay} />);
+    items.push(<Limit key="fiveHour" limit="fiveHour" info={limits.fiveHour} now={now} />);
+    items.push(<Limit key="sevenDay" limit="sevenDay" info={limits.sevenDay} now={now} />);
   }
   if (pressing) items.push(<BurnRate key="burn" burns={burns} burn={pressing.burn} />);
   if (items.length === 0) return null;
 
   return (
     <div className="@container/usage shrink-0 px-1">
-      <div className={cn('grid items-start gap-1 pt-1 pb-2', COLUMNS[items.length - 1])}>
+      <div
+        className={cn(
+          'grid items-start justify-center gap-x-2 pt-3 pb-2',
+          COLUMNS[items.length - 1],
+        )}
+      >
         {items}
       </div>
     </div>
