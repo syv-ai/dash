@@ -12,6 +12,8 @@ import type { EditorWorkspace } from './useEditorWorkspace';
 import { openPaths, type GroupIndex } from './tabs/editorLayout';
 import { anyDirtyUnder, isDirty, releaseRetained, retain, workingUri } from './models';
 import { absolutePath } from './editor/fileRef';
+import { LspStatusIndicator } from './LspStatusIndicator';
+import { installLsp } from '../../lsp';
 
 interface Props {
   ws: EditorWorkspace;
@@ -30,6 +32,7 @@ interface Props {
 export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
   const { layout, tabsKey, cwd } = ws;
   const closeBinding = useSettings((s) => s.keybindings.closeEditorTab);
+  useEffect(installLsp, []);
 
   // Every open tab's working file stays alive, shown or not.
   const holder = `tabs:${tabsKey}`;
@@ -102,6 +105,7 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
                       group.active ? () => ws.openFile(group.active!, { toSide: true }) : undefined
                     }
                     onCloseEditor={isLast ? closeEditor : undefined}
+                    trailing={isLast && ws.git ? <LspStatusIndicator worktree={cwd} /> : null}
                   />
                   {group.active ? (
                     <EditorPane

@@ -29,12 +29,22 @@ function withGroup(layout: EditorLayout, index: number, group: EditorGroup): Edi
 /** Open `path` in a group and make it active: the focused group, or with
  *  `toSide` the other one (split first if there is only one). A file already
  *  open in that group is activated, not opened twice; a new tab goes right of
- *  the active one. */
+ *  the active one. With `background` the tab is only added (the group keeps
+ *  its active file, unless it had none). */
 export function openTab(
   layout: EditorLayout,
   path: string,
-  opts: { toSide?: boolean } = {},
+  opts: { toSide?: boolean; background?: boolean } = {},
 ): EditorLayout {
+  if (opts.background) {
+    const group = layout.groups[layout.focused]!;
+    if (group.tabs.includes(path)) return layout;
+    const tabs = [...group.tabs, path];
+    return {
+      ...layout,
+      groups: withGroup(layout, layout.focused, { tabs, active: group.active ?? path }),
+    };
+  }
   let groups = layout.groups;
   let target: GroupIndex = layout.focused;
   if (opts.toSide) {

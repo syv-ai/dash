@@ -35,7 +35,7 @@ interface EditorTabsState {
   /** Start a workspace's layout: from storage when `persist`, else empty.
    *  A layout already in memory is kept. */
   load(key: string, persist: boolean): void;
-  open(key: string, path: string, opts?: { toSide?: boolean }): void;
+  open(key: string, path: string, opts?: { toSide?: boolean; background?: boolean }): void;
   activate(key: string, group: GroupIndex, path: string): void;
   close(key: string, group: GroupIndex, path: string): void;
   focusGroup(key: string, group: GroupIndex): void;

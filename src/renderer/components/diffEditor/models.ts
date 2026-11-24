@@ -181,9 +181,13 @@ export function release(holder: string, model: Model): void {
   scheduleDispose(uri);
 }
 
+/** Held until a tab layout retains it: see `holdUntilRetained`. */
+const UNTIL_RETAINED = '\0until-retained';
+
 /** Keep exactly these working files alive for `holder` (the open tabs). */
 export function retain(holder: string, absPaths: readonly string[]): void {
   const next = new Set(absPaths.map(workingUri));
+  for (const uri of next) entries.get(uri)?.holders.delete(UNTIL_RETAINED);
   const prev = retained.get(holder);
   if (next.size === 0) retained.delete(holder);
   else retained.set(holder, next);
@@ -193,6 +197,17 @@ export function retain(holder: string, absPaths: readonly string[]): void {
 /** Drop everything `holder` retains (its layout went away). */
 export function releaseRetained(holder: string): void {
   retain(holder, []);
+}
+
+/** Keep `model` alive until a tab layout retains it: a file an edit touched
+ *  (a rename across files) whose tab is being opened, so its unsaved edits
+ *  survive until the tab holds it. */
+export function holdUntilRetained(model: Model): void {
+  const uri = model.uri.toString();
+  const e = entries.get(uri);
+  if (!e) return;
+  for (const set of retained.values()) if (set.has(uri)) return;
+  e.holders.add(UNTIL_RETAINED);
 }
 
 function isHeld(uri: string): boolean {

@@ -127,6 +127,7 @@
     "electron-updater": "^6.8.9",
     "marked": "^18.0.5",
     "monaco-editor": "^0.55.1",
+    "monaco-languageserver-types": "0.4.1",
     "motion": "^12.40.0",
     "node-pty": "^1.2.0-beta.13",
     "posthog-node": "^5.28.2",

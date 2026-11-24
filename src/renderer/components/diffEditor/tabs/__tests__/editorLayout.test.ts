@@ -23,6 +23,16 @@ describe('openTab', () => {
     expect(l.groups[0]).toEqual({ tabs: ['a', 'c', 'b'], active: 'c' });
   });
 
+  it('adds a background tab at the end without activating it', () => {
+    const l = openTab(activateTab(open('a', 'b'), 0, 'a'), 'c', { background: true });
+    expect(l.groups[0]).toEqual({ tabs: ['a', 'b', 'c'], active: 'a' });
+    expect(openTab(l, 'b', { background: true })).toBe(l);
+    expect(openTab(EMPTY_LAYOUT, 'x', { background: true }).groups[0]).toEqual({
+      tabs: ['x'],
+      active: 'x',
+    });
+  });
+
   it('activates a file already open instead of opening it twice', () => {
     const l = openTab(open('a', 'b'), 'a');
     expect(l.groups[0]).toEqual({ tabs: ['a', 'b'], active: 'a' });

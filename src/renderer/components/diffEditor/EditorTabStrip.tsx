@@ -1,4 +1,4 @@
-import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { Columns2, X } from 'lucide-react';
 import { PillTab } from '../ui/PillTab';
 import { IconButton } from '../ui/IconButton';
@@ -17,6 +17,8 @@ interface Props {
   onSplit?: () => void;
   /** Close the whole editor (the last group's strip carries it). */
   onCloseEditor?: () => void;
+  /** Shown before the actions (the language-server status). */
+  trailing?: ReactNode;
 }
 
 function basename(path: string): string {
@@ -34,6 +36,7 @@ export function EditorTabStrip({
   onClose,
   onSplit,
   onCloseEditor,
+  trailing,
 }: Props) {
   useSyncExternalStore(subscribeDirty, dirtyVersion);
   const trackRef = useRef<HTMLDivElement>(null);
@@ -77,6 +80,7 @@ export function EditorTabStrip({
           );
         })}
       </div>
+      {trailing}
       {onSplit && (
         <IconButton size="sm" title="Open to the side" onClick={onSplit}>
           <Columns2 size={14} strokeWidth={1.8} />
