@@ -221,7 +221,7 @@ export function RightInspector({
           </div>
         </ShellDrawerWrapper>
       </div>
-      <UsageBlock task={task} contextUsage={contextUsage} rateLimits={rateLimits} />
+      <UsageBlock contextUsage={contextUsage} rateLimits={rateLimits} />
     </div>
   );
 }

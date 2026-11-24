@@ -423,12 +423,12 @@ function UsageSection({ latestRateLimits }: { latestRateLimits?: RateLimits }) {
           control={<Switch checked={showUsageInline} onCheckedChange={onShowUsageInlineChange} />}
         />
         <SettingsRow
-          label="Show task tokens"
-          description="The task's token count, under the usage in the right sidebar."
+          label="Show task token badge"
+          description="The task's token count, in the task header."
           control={<Switch checked={showTaskTokens} onCheckedChange={onShowTaskTokensChange} />}
         />
         <SettingsRow
-          label="Show task cost"
+          label="Show cost on token badge"
           description="Include the USD cost alongside the token count."
           control={
             <Switch

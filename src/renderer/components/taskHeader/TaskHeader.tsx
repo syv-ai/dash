@@ -19,12 +19,12 @@ import { formatBinding, type KeyBinding } from '../../keybindings';
 import { IconButton } from '../ui/IconButton';
 import { IdeIcon } from '../ui/IdeIcon';
 import { PrBadge } from '../ui/PrBadge';
+import { TokenBadge } from '../ui/TokenBadge';
 import { Tooltip } from '../ui/Tooltip';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
   DropdownMenuTrigger,
@@ -57,9 +57,9 @@ function withShortcut(label: string, binding: KeyBinding | undefined): string {
 
 /**
  * The task sheet's title row: name, branch, ahead/behind, setup status and
- * linked issues on the left; open in IDE, commit graph, pull request, "…" and
- * the right-sidebar toggle on the right. The row drags the window; its
- * controls don't.
+ * linked issues on the left; the model and token badge, then open in IDE,
+ * commit graph, pull request, "…" and the right-sidebar toggle on the right.
+ * The row drags the window; its controls don't.
  */
 export function TaskHeader({
   task,
@@ -81,6 +81,7 @@ export function TaskHeader({
   const allPrs = useGit((s) => s.branchPrsByTask[task.id]);
   const remoteControlOn = useRuntime((s) => !!s.remoteControlStates[task.id]);
   const keybindings = useSettings((s) => s.keybindings);
+  const showTokens = useSettings((s) => s.showTaskTokens);
   const { ideId, openLabel } = usePreferredIde();
 
   const branch = gitStatus?.branch || task.branch;
@@ -167,6 +168,19 @@ export function TaskHeader({
 
       <div className="flex-1" />
 
+      {(modelName || showTokens) && (
+        <div className="titlebar-no-drag flex min-w-0 shrink items-center gap-2.5 text-sm text-ink-3">
+          {modelName && (
+            <Tooltip content="Model">
+              <span className="truncate font-mono">{modelName}</span>
+            </Tooltip>
+          )}
+          {showTokens && (
+            <TokenBadge totalTokens={task.totalTokens} totalCostUsd={task.totalCostUsd} size="sm" />
+          )}
+        </div>
+      )}
+
       <div className="titlebar-no-drag flex shrink-0 items-center gap-0.5">
         <IconButton title={openLabel} onClick={onOpenIde}>
           <IdeIcon ideId={ideId} />
@@ -189,17 +203,6 @@ export function TaskHeader({
             className="min-w-52"
             onCloseAutoFocus={onTaskMenuCloseAutoFocus}
           >
-            {modelName && (
-              <>
-                <DropdownMenuLabel className="flex items-center">
-                  Model
-                  <span className="ml-auto truncate pl-4 font-mono font-normal text-ink-2">
-                    {modelName}
-                  </span>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-              </>
-            )}
             <DropdownMenuItem onSelect={onEnableRemoteControl}>
               <Globe size={13} strokeWidth={1.8} />
               Remote control

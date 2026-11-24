@@ -1,12 +1,11 @@
-import type { ContextUsage, RateLimitInfo, RateLimits, Task } from '../../../shared/types';
-import { formatCost, formatResetTime, formatTokens } from '../../utils/format';
+import type { ContextUsage, RateLimitInfo, RateLimits } from '../../../shared/types';
+import { formatResetTime, formatTokens } from '../../utils/format';
 import { useSettings } from '../../stores/settingsStore';
 import { Meter, meterToneText, usageTone } from '../ui/Meter';
 import { Tooltip } from '../ui/Tooltip';
 import { cn } from '../../lib/cn';
 
 interface UsageBlockProps {
-  task: Task;
   /** The task session's context window use; absent until its first reply. */
   contextUsage?: ContextUsage;
   rateLimits: RateLimits;
@@ -36,19 +35,15 @@ function Limit({ label, info }: { label: string; info: RateLimitInfo }) {
 
 /**
  * The foot of the task sidebar: the session's context use, prominent, then
- * the account's 5-hour and weekly limits, then (when enabled) the task's
- * tokens and cost as a quiet line.
+ * the account's 5-hour and weekly limits.
  */
-export function UsageBlock({ task, contextUsage, rateLimits }: UsageBlockProps) {
+export function UsageBlock({ contextUsage, rateLimits }: UsageBlockProps) {
   const showSession = useSettings((s) => s.showUsageInline);
   const showLimits = useSettings((s) => s.showRateLimits);
-  const showTokens = useSettings((s) => s.showTaskTokens);
-  const showCost = useSettings((s) => s.showTaskCost);
 
   const fiveHour = showLimits ? rateLimits.fiveHour : undefined;
   const weekly = showLimits ? rateLimits.sevenDay : undefined;
-  const tokens = showTokens && task.totalTokens > 0;
-  if (!showSession && !fiveHour && !weekly && !tokens) return null;
+  if (!showSession && !fiveHour && !weekly) return null;
 
   const ctx = contextUsage && contextUsage.percentage > 0 ? contextUsage : null;
   const pct = ctx ? Math.round(ctx.percentage) : 0;
@@ -85,14 +80,6 @@ export function UsageBlock({ task, contextUsage, rateLimits }: UsageBlockProps) 
           {fiveHour && <Limit label="5-hour" info={fiveHour} />}
           {weekly && <Limit label="Weekly" info={weekly} />}
         </div>
-      )}
-      {tokens && (
-        <Tooltip content="Tokens from the session transcripts (Claude Code's session summaries are billed separately and not counted)">
-          <div className="truncate text-xs text-ink-3 tabular-nums">
-            {formatTokens(task.totalTokens)} tokens
-            {showCost && ` · ${formatCost(task.totalCostUsd)}`}
-          </div>
-        </Tooltip>
       )}
     </div>
   );
