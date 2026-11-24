@@ -4,7 +4,11 @@ import * as os from 'os';
 import * as path from 'path';
 import { URI } from 'vscode-uri';
 import type { LspDiagnosticsEvent, LspServerStatus } from '@shared/lsp';
-import { LanguageServerManager, type LanguageServerManagerOptions } from '../LanguageServerManager';
+import {
+  LanguageServerManager,
+  rerootUris,
+  type LanguageServerManagerOptions,
+} from '../LanguageServerManager';
 import type { ServerSpec } from '../serverRegistry';
 
 const FAKE_SERVER = path.join(__dirname, 'fixtures', 'fakeServer.mjs');
@@ -274,7 +278,8 @@ describe('LanguageServerManager (fake server)', () => {
     manager.open(1, { worktree: link, uri, version: 1, text: 'via link' });
     const d = await waitFor(() => diagnostics[0]);
     expect(d.uri).toBe(uri);
-    expect((await hover(uri)).uri).toBe(URI.file(path.join(real, 'a.fk')).toString());
+    // The fake server echoes the URI it was sent (the realpath); the result maps it back.
+    expect((await hover(uri)).uri).toBe(uri);
     expect(stateOf(real)).toBe('running');
   });
 
@@ -329,5 +334,28 @@ describe('LanguageServerManager (fake server)', () => {
       },
     ]);
     await expect(hover(uri)).rejects.toMatchObject({ code: 'UNAVAILABLE' });
+  });
+});
+
+describe('rerootUris', () => {
+  const from = 'file:///private/var/w/';
+  const to = 'file:///var/w/';
+
+  it('maps URI values and keys under the root, and nothing else', () => {
+    const edit = {
+      changes: { 'file:///private/var/w/a.ts': [{ newText: 'x' }] },
+      documentChanges: [{ textDocument: { uri: 'file:///private/var/w/b.ts', version: 1 } }],
+      other: ['file:///private/var/wx/c.ts', 'file:///lib/d.ts', 3, null],
+    };
+    expect(rerootUris(edit, from, to)).toEqual({
+      changes: { 'file:///var/w/a.ts': [{ newText: 'x' }] },
+      documentChanges: [{ textDocument: { uri: 'file:///var/w/b.ts', version: 1 } }],
+      other: ['file:///private/var/wx/c.ts', 'file:///lib/d.ts', 3, null],
+    });
+  });
+
+  it('returns the value itself when the roots are the same', () => {
+    const value = { uri: 'file:///a/b.ts' };
+    expect(rerootUris(value, to, to)).toBe(value);
   });
 });

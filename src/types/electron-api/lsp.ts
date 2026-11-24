@@ -13,7 +13,7 @@ export interface LspApi {
   /** Full-text sync; `version` strictly increasing. Fire-and-forget. */
   lspChange: (args: { uri: string; version: number; text: string }) => void;
   lspClose: (args: { uri: string }) => void;
-  /** The LSP result as is. Fails with code CANCELLED, UNAVAILABLE or NOT_FOUND. */
+  /** The LSP result (worktree URIs in the form `lspOpen` used). Fails with code CANCELLED, UNAVAILABLE or NOT_FOUND. */
   lspRequest: (args: {
     uri: string;
     method: LspRequestMethod;

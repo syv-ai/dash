@@ -28,7 +28,9 @@ import {
  *   it, and only that renderer gets its diagnostics.
  *
  * Renderer URIs are kept as given; servers see the realpath'd form (a worktree
- * under a symlink would otherwise be outside the server's own workspace).
+ * under a symlink would otherwise be outside the server's own workspace), and
+ * every URI under the realpath'd root in a result or diagnostic is mapped back
+ * to the worktree's form, so the renderer only ever sees its own URIs.
  */
 
 export interface LanguageServerManagerOptions {
@@ -85,6 +87,27 @@ function realpath(p: string): string {
 }
 
 const keyOf = (root: string, specId: string): string => `${root}\0${specId}`;
+
+/**
+ * `value` with every string (and object key: a WorkspaceEdit's `changes` is
+ * keyed by URI) that starts with `from` re-rooted at `to`. Both are directory
+ * URIs ending in `/`. Hover markdown linking into the worktree is mapped too.
+ */
+export function rerootUris<T>(value: T, from: string, to: string): T {
+  if (from === to) return value;
+  const map = (v: unknown): unknown => {
+    if (typeof v === 'string') return v.startsWith(from) ? to + v.slice(from.length) : v;
+    if (Array.isArray(v)) return v.map(map);
+    if (v && typeof v === 'object') {
+      return Object.fromEntries(Object.entries(v).map(([k, x]) => [map(k) as string, map(x)]));
+    }
+    return v;
+  };
+  return map(value) as T;
+}
+
+/** The directory URI prefix of `dir` (`file:///a/b/`). */
+const dirUri = (dir: string): string => URI.file(dir).toString().replace(/\/*$/, '/');
 
 export class LanguageServerManager {
   private readonly opts: LanguageServerManagerOptions;
@@ -179,7 +202,7 @@ export class LanguageServerManager {
       );
       // A server may still answer a cancelled request; the caller has moved on.
       if (source.token.isCancellationRequested) throw cancelled();
-      return result;
+      return this.toClientForm(doc, result);
     } catch (err) {
       if (err instanceof IpcError) throw err;
       if (source.token.isCancellationRequested) throw cancelled();
@@ -359,7 +382,8 @@ export class LanguageServerManager {
       this.opts.onDiagnostics(doc.owner, {
         uri: doc.clientUri,
         version: version ?? doc.version,
-        diagnostics,
+        // relatedInformation points at other files.
+        diagnostics: this.toClientForm(doc, diagnostics),
       });
       return;
     }
@@ -370,6 +394,13 @@ export class LanguageServerManager {
     const td = params.textDocument as { uri?: unknown } | undefined;
     if (!td || td.uri !== doc.clientUri) return params;
     return { ...params, textDocument: { ...td, uri: doc.serverUri } };
+  }
+
+  /** URIs under the server's realpath root, back in the worktree's form. */
+  private toClientForm<T>(doc: OpenDoc, value: T): T {
+    return doc.root === doc.worktree
+      ? value
+      : rerootUris(value, dirUri(doc.root), dirUri(doc.worktree));
   }
 
   private entryStatus(entry: ServerEntry): LspServerStatus {

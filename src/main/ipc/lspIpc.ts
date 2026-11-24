@@ -7,7 +7,9 @@
  *               (Monaco's `Uri.file(abs).toString()`). The server is picked by
  *               file extension; null means no server handles the file and
  *               nothing is tracked. Re-opening a URI replaces its content.
- *   lsp:request {uri, method, params, requestId} → the LSP result, as is
+ *   lsp:request {uri, method, params, requestId} → the LSP result, with URIs
+ *               inside the worktree in the worktree's form (servers see its
+ *               realpath; results are mapped back)
  *               `uri` must be open; `method` one of `LSP_REQUEST_METHODS`;
  *               `params` the LSP params (their `textDocument.uri` is `uri`);
  *               `requestId` a caller-chosen id for `lsp:cancel`. Fails with
