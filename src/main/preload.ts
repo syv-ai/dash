@@ -357,6 +357,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('git:getCommitGraph', args),
   gitGetCommitDetail: (args: { cwd: string; hash: string }) =>
     ipcRenderer.invoke('git:getCommitDetail', args),
+  gitCommitLinks: (args: { cwd: string; hash: string }) =>
+    ipcRenderer.invoke('git:commitLinks', args),
 
   // File watcher
   gitWatch: (args: { id: string; cwd: string }) => ipcRenderer.invoke('git:watch', args),

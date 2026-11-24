@@ -5,6 +5,7 @@ import type {
   BranchInfo,
   CommitGraphData,
   CommitDetail,
+  CommitLinks,
   ClaudeCliInfo,
 } from '../../shared/types';
 
@@ -79,6 +80,8 @@ export interface GitApi {
     skip?: number;
   }) => Promise<IpcResponse<CommitGraphData>>;
   gitGetCommitDetail: (args: { cwd: string; hash: string }) => Promise<IpcResponse<CommitDetail>>;
+  /** A commit's forge pages: its own once pushed, its author's where known. */
+  gitCommitLinks: (args: { cwd: string; hash: string }) => Promise<IpcResponse<CommitLinks>>;
 
   // Branch listing
   gitListBranches: (cwd: string) => Promise<IpcResponse<BranchInfo[]>>;

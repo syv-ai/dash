@@ -37,6 +37,20 @@ export class GithubService {
     }
   }
 
+  /**
+   * The GitHub profile of a commit's author, as GitHub matched it from the
+   * commit's email (`author.html_url`), or null when it matched none.
+   */
+  static async commitAuthorUrl(cwd: string, sha: string): Promise<string | null> {
+    const { stdout } = await execFileAsync(
+      'gh',
+      ['api', `repos/{owner}/{repo}/commits/${sha}`, '--jq', '.author.html_url // ""'],
+      { cwd, timeout: TIMEOUT_MS, env: process.env as Record<string, string> },
+    );
+    const url = stdout.trim();
+    return url.startsWith('https://') ? url : null;
+  }
+
   static async searchIssues(cwd: string, query: string): Promise<GithubIssue[]> {
     const args = ['issue', 'list'];
     if (query.trim()) {

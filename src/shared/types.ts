@@ -471,6 +471,13 @@ export interface GitStatus {
   files: FileChange[];
 }
 
+/** A commit's pages on its forge; null where there is none (not pushed, an
+ *  author the forge doesn't know, a host Dash can't link to). */
+export interface CommitLinks {
+  commitUrl: string | null;
+  authorUrl: string | null;
+}
+
 /** A tracked remote branch: `origin` + `feat/x` (shown as `origin/feat/x`). */
 export interface GitUpstream {
   remote: string;

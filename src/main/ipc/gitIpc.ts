@@ -8,6 +8,7 @@ import { join } from 'path';
 import { randomBytes } from 'crypto';
 import { homedir } from 'os';
 import { GitService } from '../services/GitService';
+import { commitLinks } from '../services/commitLinks';
 import type { ParserEvent } from '../services/preCommitParser';
 import { startWatching, stopWatching } from '../services/FileWatcherService';
 
@@ -381,6 +382,16 @@ export function registerGitIpc(): void {
       parseArgs('git:getCommitDetail', z.looseObject({ cwd: z.string(), hash: z.string() }), args);
       const data = await GitService.getCommitDetail(args.cwd, args.hash);
       return { success: true, data };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
+  // A commit's forge pages (commit, author): cached once pushed.
+  ipcMain.handle('git:commitLinks', async (_event, args: { cwd: string; hash: string }) => {
+    try {
+      parseArgs('git:commitLinks', z.looseObject({ cwd: z.string(), hash: z.string() }), args);
+      return { success: true, data: await commitLinks(args.cwd, args.hash) };
     } catch (error) {
       return errorResponse(error);
     }

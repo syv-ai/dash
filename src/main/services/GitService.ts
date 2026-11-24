@@ -406,6 +406,25 @@ export class GitService {
     return { isGitRepo: true, remote, branch: await this.getBranch(folderPath) };
   }
 
+  /** The `origin` remote's URL, or null without one. */
+  static async getOriginUrl(cwd: string): Promise<string | null> {
+    try {
+      return (await git(cwd, ['remote', 'get-url', 'origin'])).trim() || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Whether a remote-tracking branch holds `sha` (it was pushed, as far as
+   *  the last fetch knows). */
+  static async isOnRemote(cwd: string, sha: string): Promise<boolean> {
+    try {
+      return (await git(cwd, ['branch', '-r', '--contains', sha])).trim() !== '';
+    } catch {
+      return false;
+    }
+  }
+
   /**
    * Get current branch name.
    */
