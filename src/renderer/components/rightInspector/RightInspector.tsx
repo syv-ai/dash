@@ -269,6 +269,7 @@ export function RightInspector({
 
   const history = (
     <HistoryList
+      cwd={task.path}
       commits={ws.data.commits}
       loading={ws.data.commitsLoading}
       view={view}

@@ -9,7 +9,8 @@ import { CountBadge } from '../ui/CountBadge';
 import { Button } from '../ui/Button';
 import { EmptyState } from '../ui/EmptyState';
 import { Markdown } from '../ui/Markdown';
-import { Popover, PopoverAnchor, PopoverContent } from '../ui/Popover';
+import { HoverCard } from '../ui/HoverCard';
+import { CommitHoverCard } from '../commits/CommitHoverCard';
 import { LineStats } from '../ui/LineStats';
 
 /** The task's open PR in History. `threads` and `body` are null until its
@@ -29,6 +30,8 @@ export interface PrEntry {
 }
 
 interface HistoryListProps {
+  /** The checkout the commits are read from. */
+  cwd: string;
   commits: CommitSummary[];
   loading: boolean;
   view: EditorView;
@@ -52,6 +55,7 @@ interface HistoryListProps {
  * it in the editor.
  */
 export function HistoryList({
+  cwd,
   commits,
   loading,
   view,
@@ -111,6 +115,7 @@ export function HistoryList({
           <div key={c.hash} className="flex flex-col gap-px">
             <CommitRow
               commit={c}
+              cwd={cwd}
               selected={selected}
               unfolded={unfolded}
               commentCount={commentCountByScope.get(`commit:${c.hash}`) ?? 0}
@@ -125,7 +130,11 @@ export function HistoryList({
                   dimmed
                   selected={f.path === activePath}
                   title={f.path}
-                  trailing={<span className="text-xs"><LineStats add={f.additions} del={f.deletions} /></span>}
+                  trailing={
+                    <span className="text-xs">
+                      <LineStats add={f.additions} del={f.deletions} />
+                    </span>
+                  }
                   onClick={(e) => onOpenFile(f.path, { toSide: e.altKey, preview: true })}
                   onDoubleClick={() => onOpenFile(f.path)}
                 >
@@ -139,81 +148,16 @@ export function HistoryList({
   );
 }
 
-/** A hover card's open state: opens after a short rest, and stays open while
- *  the pointer is on the card (`holdOpen` on its mouseenter). */
-function useHoverCard(onOpen?: () => void) {
-  const [hovered, setHovered] = useState(false);
-  const openTimer = useRef<number | null>(null);
-  const closeTimer = useRef<number | null>(null);
-
-  const cancelTimers = () => {
-    if (openTimer.current != null) window.clearTimeout(openTimer.current);
-    if (closeTimer.current != null) window.clearTimeout(closeTimer.current);
-    openTimer.current = null;
-    closeTimer.current = null;
-  };
-  const scheduleOpen = () => {
-    cancelTimers();
-    openTimer.current = window.setTimeout(() => {
-      setHovered(true);
-      onOpen?.();
-    }, 220);
-  };
-  const scheduleClose = () => {
-    cancelTimers();
-    closeTimer.current = window.setTimeout(() => setHovered(false), 80);
-  };
-  const holdOpen = () => {
-    if (closeTimer.current != null) window.clearTimeout(closeTimer.current);
-    closeTimer.current = null;
-  };
-
-  useEffect(() => cancelTimers, []);
-  return { hovered, scheduleOpen, scheduleClose, holdOpen };
-}
-
-/** The hover card beside a row: a title, a body, a footer. */
-function HoverCard({
-  open,
-  holdOpen,
-  scheduleClose,
-  anchor,
-  children,
-}: {
-  open: boolean;
-  holdOpen: () => void;
-  scheduleClose: () => void;
-  anchor: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <Popover open={open}>
-      <PopoverAnchor asChild>{anchor}</PopoverAnchor>
-      <PopoverContent
-        side="right"
-        align="start"
-        sideOffset={10}
-        onMouseEnter={holdOpen}
-        onMouseLeave={scheduleClose}
-        // Hovering must not take focus from the list.
-        onOpenAutoFocus={(e) => e.preventDefault()}
-        onCloseAutoFocus={(e) => e.preventDefault()}
-        className="max-h-110 w-105 overflow-y-auto"
-      >
-        <div className="flex flex-col gap-2.5 p-3.5">{children}</div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 function CommitRow({
   commit,
+  cwd,
   selected,
   unfolded,
   commentCount,
   onSelect,
 }: {
   commit: CommitSummary;
+  cwd: string;
   selected: boolean;
   /** Its files are listed under it. */
   unfolded: boolean;
@@ -222,14 +166,12 @@ function CommitRow({
   onSelect: () => void;
 }) {
   const Chevron = unfolded ? ChevronDown : ChevronRight;
-  const card = useHoverCard();
   const when = formatRelativeTime(commit.authorDate, Date.now() / 1000);
   return (
-    <HoverCard
-      open={card.hovered}
-      holdOpen={card.holdOpen}
-      scheduleClose={card.scheduleClose}
-      anchor={
+    <CommitHoverCard
+      commit={commit}
+      cwd={cwd}
+      trigger={(hover) => (
         <ListRow
           size="sm"
           selected={selected}
@@ -252,45 +194,22 @@ function CommitRow({
             </>
           }
           onClick={onSelect}
-          onMouseEnter={card.scheduleOpen}
-          onMouseLeave={card.scheduleClose}
-          onFocus={card.scheduleOpen}
-          onBlur={card.scheduleClose}
+          {...hover}
         >
           {commit.subject || '(no subject)'}
         </ListRow>
-      }
-    >
-      <div className="text-base leading-snug font-medium text-ink">
-        {commit.subject || '(no subject)'}
-      </div>
-      {commit.body && (
-        <div className="text-sm leading-relaxed whitespace-pre-wrap text-ink-2">{commit.body}</div>
       )}
-      <div className="flex items-center gap-2 border-t border-line pt-1.5 text-xs text-ink-3">
-        <span className="tabular-nums">{commit.shortHash}</span>
-        <span>·</span>
-        <span className="truncate">{commit.authorName}</span>
-        <span>·</span>
-        <span className="tabular-nums">{when}</span>
-        <span className="ml-auto text-xs">
-          <LineStats add={commit.additions} del={commit.deletions} />
-        </span>
-      </div>
-    </HoverCard>
+    />
   );
 }
 
 /** The task's PR: opens the PR view, with Review (or "In review") and a hover
  *  card holding its description. */
 function PrRow({ pr, selected }: { pr: PrEntry; selected: boolean }) {
-  const card = useHoverCard(pr.onPeek);
   return (
     <HoverCard
-      open={card.hovered}
-      holdOpen={card.holdOpen}
-      scheduleClose={card.scheduleClose}
-      anchor={
+      onOpen={pr.onPeek}
+      trigger={(hover) => (
         <ListRow
           as="div"
           role="button"
@@ -325,12 +244,12 @@ function PrRow({ pr, selected }: { pr: PrEntry; selected: boolean }) {
               pr.onOpen();
             }
           }}
-          onMouseEnter={card.scheduleOpen}
-          onMouseLeave={card.scheduleClose}
+          onMouseEnter={hover.onMouseEnter}
+          onMouseLeave={hover.onMouseLeave}
         >
           <span className="tabular-nums">#{pr.number}</span> {pr.title}
         </ListRow>
-      }
+      )}
     >
       <div className="text-base leading-snug font-medium wrap-break-word text-ink">
         #{pr.number} {pr.title}
