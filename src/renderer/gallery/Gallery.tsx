@@ -44,6 +44,7 @@ import {
   DropdownMenuTrigger,
 } from '../components/ui/DropdownMenu';
 import { EmptyState } from '../components/ui/EmptyState';
+import { DetailItem, DetailList, DetailSection } from '../components/ui/DetailList';
 import { LineStats } from '../components/ui/LineStats';
 import { IconButton } from '../components/ui/IconButton';
 import { Input } from '../components/ui/Input';
@@ -302,7 +303,9 @@ function Badges() {
         <TokenBadge totalTokens={9_200} totalCostUsd={0.08} size="sm" />
         <MainRepoBadge task={{ id: 'gallery', branch: 'main' }} />
         <LineStats add={128} del={14} />
-        <LineStats add={3} del={0} className="text-xs" />
+        <span className="text-xs">
+          <LineStats add={3} del={0} />
+        </span>
       </Line>
       <Line>
         <PrBadge prs={[PR_PASSING]} allPrs={PRS} />
@@ -345,7 +348,7 @@ function Rows() {
     { id: 'old-spike', state: 'idle', time: '3d' },
   ];
   return (
-    <Section title="PanelHeader · ListRow · EmptyState">
+    <Section title="PanelHeader · ListRow · DetailList · EmptyState">
       <div className="flex flex-col">
         <PanelHeader
           title="Tasks"
@@ -380,9 +383,30 @@ function Rows() {
           Button.tsx
         </ListRow>
       </div>
+      <div className="w-80">
+        <DetailSection
+          title="Task"
+          action={
+            <Button size="sm" variant="ghost">
+              Edit
+            </Button>
+          }
+        >
+          <DetailList>
+            <DetailItem label="Name">Fix the header</DetailItem>
+            <DetailItem label="Branch" copy="fix/header">
+              fix/header
+            </DetailItem>
+            <DetailItem label="Tokens" title="184,000 tokens">
+              184.0k
+            </DetailItem>
+          </DetailList>
+        </DetailSection>
+      </div>
       <EmptyState
         icon={<Inbox size={14} strokeWidth={1.8} />}
         title="No archived tasks"
+        description="Archived tasks show here"
         action={
           <Button size="sm" variant="secondary">
             Show all

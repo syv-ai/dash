@@ -93,6 +93,32 @@ function FixCiButton({ pr, taskId }: { pr: PullRequestInfo; taskId?: string }) {
   );
 }
 
+/**
+ * One PR as a row that opens it: state icon, number, title, state label, and
+ * "Fix CI" when its checks fail. A past (not current) PR reads quieter. The
+ * PR list's rows; the Details tab lists the task's PRs with it too.
+ */
+export function PrRow({ pr, taskId }: { pr: PullRequestInfo; taskId?: string }) {
+  return (
+    <div className="flex items-center gap-1">
+      <a
+        href={pr.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={cn(menuItem, 'min-w-0 flex-1 hover:bg-hover', !pr.current && 'text-ink-2')}
+      >
+        <span className={cn(badgeVariants({ tone: 'bare', size: 'icon' }), iconColor(pr))}>
+          <StateIcon pr={pr} size={11} />
+        </span>
+        <span className="shrink-0 tabular-nums text-ink-3">#{pr.number}</span>
+        <span className="truncate flex-1 min-w-0">{pr.title}</span>
+        <span className={`shrink-0 text-xs ${stateTextColor(pr)}`}>{stateText(pr)}</span>
+      </a>
+      <FixCiButton pr={pr} taskId={taskId} />
+    </div>
+  );
+}
+
 /** Every PR from the branch, newest first; each row opens the PR. */
 function PrList({ prs, taskId }: { prs: PullRequestInfo[]; taskId?: string }) {
   return (
@@ -105,22 +131,7 @@ function PrList({ prs, taskId }: { prs: PullRequestInfo[]; taskId?: string }) {
     >
       <div className={menuLabel}>PRs from this branch</div>
       {prs.map((pr) => (
-        <div key={pr.number} className="flex items-center gap-1">
-          <a
-            href={pr.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={cn(menuItem, 'min-w-0 flex-1 hover:bg-hover', !pr.current && 'text-ink-2')}
-          >
-            <span className={cn(badgeVariants({ tone: 'bare', size: 'icon' }), iconColor(pr))}>
-              <StateIcon pr={pr} size={11} />
-            </span>
-            <span className="shrink-0 tabular-nums text-ink-3">#{pr.number}</span>
-            <span className="truncate flex-1 min-w-0">{pr.title}</span>
-            <span className={`shrink-0 text-xs ${stateTextColor(pr)}`}>{stateText(pr)}</span>
-          </a>
-          <FixCiButton pr={pr} taskId={taskId} />
-        </div>
+        <PrRow key={pr.number} pr={pr} taskId={taskId} />
       ))}
     </PopoverContent>
   );

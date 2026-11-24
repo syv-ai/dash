@@ -1,0 +1,123 @@
+import type { PermissionMode, Task, TaskModel } from '../../../shared/types';
+import { formatCost, formatTokens } from '../../utils/format';
+
+/** One key/value line in the Details tab. */
+export interface DetailRow {
+  label: string;
+  value: string;
+  /** Hover text: the exact value behind a rounded one. */
+  title?: string;
+  /** Offer to copy `value` (ids, paths). */
+  copy?: boolean;
+}
+
+export interface TaskDetailsInput {
+  task: Task;
+  projectName: string | null;
+  /** The task that created this one through the control API, by name. */
+  parentTaskName: string | null;
+  /** The live model from the session's status line, if it has reported. */
+  liveModel: string | null;
+  /** Context window used, 0–100; null until the session has replied. */
+  contextPercent: number | null;
+  showCost: boolean;
+}
+
+/** The Details tab's plain sections; the rich ones (git, PRs, linked items,
+ *  prompt, scripts) render from their own sources. */
+export interface TaskDetailSections {
+  task: DetailRow[];
+  session: DetailRow[];
+  usage: DetailRow[];
+}
+
+const PERMISSION_LABELS: Record<PermissionMode, string> = {
+  default: 'Ask every time',
+  acceptEdits: 'Accept edits',
+  auto: 'Auto (classifier approves safe actions)',
+  bypassPermissions: 'Skip all prompts',
+};
+
+const MODEL_LABELS: Record<TaskModel, string> = {
+  default: 'Claude Code default',
+  opus: 'Opus',
+  sonnet: 'Sonnet',
+  haiku: 'Haiku',
+  fable: 'Fable',
+};
+
+/** A DB timestamp as a Date: ISO strings, or SQLite's UTC "YYYY-MM-DD HH:MM:SS". */
+export function parseDbTime(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const iso = /[TZ]/.test(value) ? value : `${value.replace(' ', 'T')}Z`;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function formatWhen(value: string | null | undefined): string | null {
+  const d = parseDbTime(value);
+  return d ? d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : null;
+}
+
+/** Rows with a value; the rest are left out rather than shown as "—". */
+function present(rows: Array<DetailRow | null | false>): DetailRow[] {
+  return rows.filter((r): r is DetailRow => !!r && r.value !== '');
+}
+
+/**
+ * The Details tab's task, session and usage rows: only what is set. An
+ * update shows when it is a minute or more after creation.
+ */
+export function taskDetailSections(input: TaskDetailsInput): TaskDetailSections {
+  const { task } = input;
+  const created = parseDbTime(task.createdAt);
+  const updated = parseDbTime(task.updatedAt);
+  const updatedLater = !!created && !!updated && updated.getTime() - created.getTime() >= 60_000;
+  const stopped = formatWhen(task.sessionStoppedAt);
+
+  return {
+    task: present([
+      { label: 'Name', value: task.name },
+      !!input.projectName && { label: 'Project', value: input.projectName },
+      {
+        label: 'Kind',
+        value: task.useWorktree ? 'Worktree' : 'Main checkout',
+        title: task.useWorktree
+          ? 'Works in its own git worktree'
+          : "Works in the project's own folder",
+      },
+      { label: task.useWorktree ? 'Worktree' : 'Folder', value: task.path, copy: true },
+      !!input.parentTaskName && { label: 'Created by', value: input.parentTaskName },
+      !!created && { label: 'Created', value: formatWhen(task.createdAt) ?? '' },
+      updatedLater && { label: 'Updated', value: formatWhen(task.updatedAt) ?? '' },
+    ]),
+    session: present([
+      {
+        label: 'Model',
+        value: input.liveModel ?? MODEL_LABELS[task.model],
+        title: input.liveModel ? `Configured: ${MODEL_LABELS[task.model]}` : undefined,
+      },
+      { label: 'Permissions', value: PERMISSION_LABELS[task.permissionMode] },
+      {
+        label: 'State',
+        value: stopped ? `Stopped ${stopped}` : task.jobId ? 'Started' : 'Not started',
+      },
+      !!task.sessionId && { label: 'Session', value: task.sessionId, copy: true },
+      !!task.jobId && { label: 'Job', value: task.jobId, copy: true },
+      { label: 'Dash access', value: task.dashAccess ? 'On' : 'Off' },
+    ]),
+    usage: present([
+      task.totalTokens > 0 && {
+        label: 'Tokens',
+        value: formatTokens(task.totalTokens),
+        title: `${task.totalTokens.toLocaleString()} tokens`,
+      },
+      input.showCost &&
+        task.totalCostUsd > 0 && { label: 'Cost', value: formatCost(task.totalCostUsd) },
+      input.contextPercent !== null && {
+        label: 'Context',
+        value: `${Math.round(input.contextPercent)}%`,
+      },
+    ]),
+  };
+}

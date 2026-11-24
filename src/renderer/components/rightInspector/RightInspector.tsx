@@ -10,13 +10,14 @@ import {
   type RefObject,
 } from 'react';
 import type { ITheme as XtermTheme } from '@xterm/xterm';
-import { MessageSquareCode, Minus, Plus } from 'lucide-react';
+import { FileDiff, FolderTree, History, Info, MessageSquareCode, Minus, Plus } from 'lucide-react';
 import { FileChangesPanel } from '../changes/FileChangesPanel';
 import { CommitPopover } from '../changes/CommitPopover';
 import { useCommitRun } from '../changes/useCommitRun';
 import { ShellDrawerWrapper } from '../terminal/ShellDrawerWrapper';
 import { PortsDrawerWrapper } from './PortsDrawerWrapper';
 import { UsageRow } from './UsageRow';
+import { TaskDetails } from './TaskDetails';
 import { IconButton } from '../ui/IconButton';
 import { Segmented } from '../ui/Segmented';
 import { CountBadge } from '../ui/CountBadge';
@@ -45,11 +46,17 @@ const EditorGroups = lazy(() =>
   import('../diffEditor/EditorGroups').then((m) => ({ default: m.EditorGroups })),
 );
 
-/** What the sidebar's list shows: the changes, the whole repo, or the commits. */
-type Segment = 'changes' | 'files' | 'history';
+/** What the sidebar's list shows: the changes, the whole repo, the commits,
+ *  or the task's details. Details comes last: the three code views keep
+ *  their places (muscle memory), and it is the one read least often. */
+type Segment = 'changes' | 'files' | 'history' | 'details';
+
+const SEGMENT_ICON = { size: 14, strokeWidth: 1.8 } as const;
 
 interface RightInspectorProps {
   task: Task;
+  /** The model the task's session runs (live, from its status line). */
+  modelName: string | null;
   rateLimits: RateLimits;
   burns: LimitBurns;
   contextUsage?: ContextUsage;
@@ -65,6 +72,7 @@ interface RightInspectorProps {
   onCommitFinished: () => void;
   shellDrawerRef: RefObject<PanelImperativeHandle | null>;
   onTuiActiveChange: (active: boolean, canvasPx?: number) => void;
+  onTaskSettings: () => void;
 }
 
 /** A tooltip label with its shortcut, e.g. "Stage all  ⇧⌘A". */
@@ -82,6 +90,7 @@ function withShortcut(label: string, binding: KeyBinding | undefined): string {
  */
 export function RightInspector({
   task,
+  modelName,
   rateLimits,
   burns,
   contextUsage,
@@ -94,6 +103,7 @@ export function RightInspector({
   onCommitFinished,
   shellDrawerRef,
   onTuiActiveChange,
+  onTaskSettings,
 }: RightInspectorProps) {
   const gitStatus = useGit((s) => s.gitStatus);
   const gitLoading = useGit((s) => s.gitLoading);
@@ -184,20 +194,29 @@ export function RightInspector({
   };
 
   const header = (
-    <div className="flex h-11 shrink-0 items-center gap-0.5 pl-0.5">
+    <div className="@container/sidehead flex h-11 shrink-0 items-center gap-0.5 pl-0.5">
       {/* Narrow, it takes the slack and gives it up first: the labels
-          truncate before the actions are pushed out. Wide, the path does. */}
+          truncate before the actions are pushed out, and below 20rem fold
+          to icons (four segments don't fit). Wide, the path does. */}
       <div className={wide ? 'shrink-0' : 'min-w-0 flex-1'}>
         <Segmented
-          aria-label="Files"
+          aria-label="Task sidebar view"
           size="sm"
           fullWidth={false}
           value={segment}
           onChange={selectSegment}
+          labelClassName="@max-[20rem]/sidehead:sr-only"
+          iconClassName="hidden @max-[20rem]/sidehead:flex"
           options={[
-            { value: 'changes', label: 'Changes', count: files.length || undefined },
-            { value: 'files', label: 'Files' },
-            { value: 'history', label: 'History' },
+            {
+              value: 'changes',
+              label: 'Changes',
+              icon: <FileDiff {...SEGMENT_ICON} />,
+              count: files.length || undefined,
+            },
+            { value: 'files', label: 'Files', icon: <FolderTree {...SEGMENT_ICON} /> },
+            { value: 'history', label: 'History', icon: <History {...SEGMENT_ICON} /> },
+            { value: 'details', label: 'Details', icon: <Info {...SEGMENT_ICON} /> },
           ]}
         />
       </div>
@@ -251,9 +270,21 @@ export function RightInspector({
     />
   );
 
-  // Wide: the editor's tree (the changes or the whole repo), or the commits.
+  const details = (
+    <TaskDetails
+      task={task}
+      modelName={modelName}
+      contextUsage={contextUsage}
+      onEditSettings={onTaskSettings}
+    />
+  );
+
+  // Wide: the editor's tree (the changes or the whole repo), the commits, or
+  // the details.
   const tree =
-    segment === 'history' ? (
+    segment === 'details' ? (
+      details
+    ) : segment === 'history' ? (
       history
     ) : (
       <EditorTree
@@ -270,9 +301,12 @@ export function RightInspector({
       />
     );
 
-  // Narrow: the changes list, or the commits (Files opens the editor).
+  // Narrow: the changes list, the commits or the details (Files opens the
+  // editor).
   const list =
-    segment === 'history' ? (
+    segment === 'details' ? (
+      details
+    ) : segment === 'history' ? (
       history
     ) : (
       <FileChangesPanel key={task.id} loading={gitLoading} run={run} onViewDiff={viewDiff} />

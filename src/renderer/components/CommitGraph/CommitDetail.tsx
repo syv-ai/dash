@@ -145,11 +145,9 @@ export function CommitDetailPanel({
                       changed
                     </span>
                   </div>
-                  <LineStats
-                    add={detail.stats.additions}
-                    del={detail.stats.deletions}
-                    className="gap-3 pl-5 text-xs"
-                  />
+                  <div className="pl-5 text-xs">
+                    <LineStats add={detail.stats.additions} del={detail.stats.deletions} />
+                  </div>
                 </div>
               )}
 

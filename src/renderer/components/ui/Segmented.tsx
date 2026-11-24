@@ -28,6 +28,8 @@ export function Segmented<T extends string | number | null>({
   onChange,
   fullWidth = true,
   size = 'md',
+  labelClassName,
+  iconClassName,
   'aria-label': ariaLabel,
 }: {
   value: T;
@@ -35,6 +37,11 @@ export function Segmented<T extends string | number | null>({
   onChange: (v: T) => void;
   fullWidth?: boolean;
   size?: 'sm' | 'md';
+  /** Layout only: lets a caller's container query fold the labels away (keep
+   *  them for screen readers with `sr-only`), leaving the icons. */
+  labelClassName?: string;
+  /** Layout only: e.g. icons shown only once the labels fold away. */
+  iconClassName?: string;
   'aria-label'?: string;
 }) {
   return (
@@ -50,10 +57,11 @@ export function Segmented<T extends string | number | null>({
           role="radio"
           aria-checked={opt.value === value}
           onClick={() => onChange(opt.value)}
+          title={labelClassName ? opt.label : undefined}
           className={segmentVariants({ size, fullWidth })}
         >
-          {opt.icon}
-          <span className="truncate">{opt.label}</span>
+          {opt.icon && <span className={cn('flex', iconClassName)}>{opt.icon}</span>}
+          <span className={cn('truncate', labelClassName)}>{opt.label}</span>
           {opt.count != null && <CountBadge count={opt.count} />}
         </button>
       ))}

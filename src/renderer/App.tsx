@@ -1340,6 +1340,10 @@ export function App() {
                 <RightInspector
                   key={activeTask.id}
                   task={activeTask}
+                  modelName={headerModelName(
+                    statusLineData[activeTask.id]?.model,
+                    activeTask.model,
+                  )}
                   rateLimits={latestRateLimits ?? {}}
                   burns={burns}
                   contextUsage={contextUsage[activeTask.id]}
@@ -1354,6 +1358,7 @@ export function App() {
                   onCommitFinished={refreshActiveGitStatus}
                   shellDrawerRef={shellDrawerPanelRef}
                   onTuiActiveChange={handleTuiPanelActive}
+                  onTaskSettings={() => handleTaskSettings(activeTask.id)}
                 />
               )}
             </ResizablePanel>

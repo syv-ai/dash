@@ -101,7 +101,9 @@ export function CommitPopover({ run }: { run: CommitRun }) {
                 {staged.length} {staged.length === 1 ? 'file' : 'files'}
               </span>
             </h4>
-            <LineStats add={adds} del={dels} className="text-xs" />
+            <span className="text-xs">
+              <LineStats add={adds} del={dels} />
+            </span>
           </div>
           {error && (
             <div className="flex shrink-0 items-start gap-1.5 rounded-md bg-state-fail/12 px-2 py-1.5 text-xs text-state-fail">
