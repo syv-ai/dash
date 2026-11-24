@@ -13,6 +13,7 @@ const cmt = (over: Partial<DiffComment> = {}): DiffComment => ({
   viewScope: over.viewScope ?? 'live',
   side: 'RIGHT',
   replyTo: null,
+  commit: null,
   author: 'user',
   kind: over.kind ?? 'note',
   createdAt: over.createdAt ?? '2026-01-01T00:00:00Z',
@@ -184,8 +185,11 @@ describe('commentsStore', () => {
     expect(useCommentsStore.getState().byFile['a.ts']!.every((c) => c.kind === 'comment')).toBe(
       true,
     );
-    expect(api.diffCommentsUpsert).toHaveBeenLastCalledWith(
-      expect.objectContaining({ id: note.id, kind: 'comment' }),
+    // Queued behind the note's own first write, so it builds on that version.
+    await vi.waitFor(() =>
+      expect(api.diffCommentsUpsert).toHaveBeenLastCalledWith(
+        expect.objectContaining({ id: note.id, kind: 'comment' }),
+      ),
     );
   });
 
@@ -257,6 +261,113 @@ describe('commentsStore', () => {
     useCommentsStore.getState().updateText('a', 'mine now');
     await vi.waitFor(() =>
       expect(useCommentsStore.getState().byFile['a.ts']![0]!.author).toBe('user'),
+    );
+  });
+
+  it("takes main's version of a write, so the next edit builds on it", async () => {
+    api.diffCommentsList = vi.fn(() =>
+      Promise.resolve({ success: true, data: [cmt({ id: 'a' })] }),
+    );
+    api.diffCommentsUpsert = vi.fn((c: unknown) =>
+      Promise.resolve({ success: true, data: { ...(c as DiffComment), updatedAt: 'v-main' } }),
+    );
+    const useCommentsStore = await freshStore();
+    await useCommentsStore.getState().loadForTask('t1');
+    useCommentsStore.getState().markSent(['a']);
+    await vi.waitFor(() =>
+      expect(useCommentsStore.getState().byFile['a.ts']![0]!.updatedAt).toBe('v-main'),
+    );
+  });
+
+  it("saves an edit only if the agent hasn't changed the draft since it began", async () => {
+    const theirs = cmt({ id: 'a', text: 'theirs', updatedAt: 'v2' });
+    api.diffCommentsList = vi
+      .fn()
+      .mockResolvedValueOnce({ success: true, data: [cmt({ id: 'a' })] })
+      .mockResolvedValue({ success: true, data: [theirs] });
+    api.diffCommentsUpsert = vi.fn(() =>
+      Promise.resolve({ success: false, code: 'CONFLICT', error: 'changed', data: theirs }),
+    );
+    const useCommentsStore = await freshStore();
+    await useCommentsStore.getState().loadForTask('t1');
+    const from = useCommentsStore.getState().byFile['a.ts']![0]!;
+    useCommentsStore.getState().updateText('a', 'mine', from);
+    expect(api.diffCommentsUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({ text: 'mine', ifUnchangedSince: from.updatedAt }),
+    );
+    // Refused: the store shows the agent's version again.
+    await vi.waitFor(() =>
+      expect(useCommentsStore.getState().byFile['a.ts']![0]!.text).toBe('theirs'),
+    );
+  });
+
+  it("doesn't save a range snapshot that didn't move, and guards one that did", async () => {
+    api.diffCommentsList = vi.fn(() =>
+      Promise.resolve({ success: true, data: [cmt({ id: 'a', startLine: 1, endLine: 2 })] }),
+    );
+    const useCommentsStore = await freshStore();
+    await useCommentsStore.getState().loadForTask('t1');
+    useCommentsStore.getState().snapshotRanges('a.ts', [{ id: 'a', startLine: 1, endLine: 2 }]);
+    expect(api.diffCommentsUpsert).not.toHaveBeenCalled();
+    useCommentsStore.getState().snapshotRanges('a.ts', [{ id: 'a', startLine: 3, endLine: 4 }]);
+    await vi.waitFor(() =>
+      expect(api.diffCommentsUpsert).toHaveBeenCalledWith(
+        expect.objectContaining({ startLine: 3, ifUnchangedSince: '2026-01-01T00:00:00Z' }),
+      ),
+    );
+  });
+
+  it('builds a change on the row as it is, and drops it if the agent changed the row first', async () => {
+    const theirs = cmt({ id: 'a', text: 'theirs', updatedAt: 'v2' });
+    api.diffCommentsList = vi
+      .fn()
+      .mockResolvedValueOnce({ success: true, data: [cmt({ id: 'a', viewScope: 'pr:github:4' })] })
+      .mockResolvedValue({ success: true, data: [theirs] });
+    api.diffCommentsUpsert = vi.fn(() =>
+      Promise.resolve({ success: false, code: 'CONFLICT', error: 'changed', data: theirs }),
+    );
+    const useCommentsStore = await freshStore();
+    await useCommentsStore.getState().loadForTask('t1');
+    useCommentsStore.getState().setKind('a', 'comment');
+    expect(api.diffCommentsUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'comment', ifUnchangedSince: '2026-01-01T00:00:00Z' }),
+    );
+    await vi.waitFor(() =>
+      expect(useCommentsStore.getState().byFile['a.ts']![0]!.text).toBe('theirs'),
+    );
+  });
+
+  it("doesn't drop an edit of a draft the agent deleted meanwhile", async () => {
+    api.diffCommentsList = vi.fn(() => Promise.resolve({ success: true, data: [] }));
+    const useCommentsStore = await freshStore();
+    await useCommentsStore.getState().loadForTask('t1');
+    useCommentsStore.getState().updateText('a', 'mine', cmt({ id: 'a' }));
+    // Nothing is written behind the person's back; they choose (restore or discard).
+    expect(api.diffCommentsUpsert).not.toHaveBeenCalled();
+    expect(api.diffCommentsList).toHaveBeenCalledTimes(2);
+  });
+
+  it("doesn't take the person's own change during an edit for the agent's", async () => {
+    api.diffCommentsList = vi.fn(() =>
+      Promise.resolve({ success: true, data: [cmt({ id: 'a', updatedAt: 'v1' })] }),
+    );
+    let version = 1;
+    api.diffCommentsUpsert = vi.fn((c: unknown) =>
+      Promise.resolve({
+        success: true,
+        data: { ...(c as DiffComment), updatedAt: `v${++version}` },
+      }),
+    );
+    const useCommentsStore = await freshStore();
+    await useCommentsStore.getState().loadForTask('t1');
+    const from = useCommentsStore.getState().byFile['a.ts']![0]!;
+    // While the edit box is open, the person promotes the draft (v1 → v2).
+    useCommentsStore.getState().setKind('a', 'comment');
+    useCommentsStore.getState().updateText('a', 'mine', from);
+    await vi.waitFor(() =>
+      expect(api.diffCommentsUpsert).toHaveBeenLastCalledWith(
+        expect.objectContaining({ text: 'mine', ifUnchangedSince: 'v2' }),
+      ),
     );
   });
 });

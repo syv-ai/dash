@@ -57,13 +57,15 @@ export interface PrReviewApi {
     provider: PrProvider;
     number: number;
   }) => Promise<IpcResponse<PrReviewSummary | null>>;
-  /** Save the person's draft summary; an empty one clears it. */
+  /** Save the person's draft summary; an empty one clears it. Given
+   *  `ifUnchangedSince`, a CONFLICT (with the current summary) if it changed. */
   prReviewSetSummary: (args: {
     taskId: string;
     provider: PrProvider;
     number: number;
     body: string;
-  }) => Promise<IpcResponse<void>>;
+    ifUnchangedSince?: string;
+  }) => Promise<IpcResponse<PrReviewSummary | null>>;
   /** Fires when a task's diff comments change outside the editor (agent drafts, a submit). */
   onDiffCommentsChanged: (cb: (data: { taskId: string }) => void) => () => void;
 }

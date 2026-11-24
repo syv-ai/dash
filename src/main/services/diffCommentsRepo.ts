@@ -15,6 +15,7 @@ interface DiffCommentRow {
   view_scope: string;
   side: string;
   reply_to: string | null;
+  commit_sha: string | null;
   author: string;
   kind: string;
   created_at: string;
@@ -33,6 +34,7 @@ function rowToComment(r: DiffCommentRow): DiffComment {
     viewScope: r.view_scope,
     side: r.side === 'LEFT' ? 'LEFT' : 'RIGHT',
     replyTo: r.reply_to,
+    commit: r.commit_sha,
     author: r.author === 'agent' ? 'agent' : 'user',
     kind: r.kind === 'comment' ? 'comment' : 'note',
     createdAt: r.created_at,
@@ -51,7 +53,7 @@ export function computeOrphans(
 }
 
 const COLS =
-  'id, task_id, file_path, start_line, end_line, text, sent, view_scope, side, reply_to, author, kind, created_at, updated_at';
+  'id, task_id, file_path, start_line, end_line, text, sent, view_scope, side, reply_to, commit_sha, author, kind, created_at, updated_at';
 
 /** A draft an agent writes through the control API. */
 export interface AgentDraft {
@@ -63,7 +65,16 @@ export interface AgentDraft {
   text: string;
   viewScope: string;
   replyTo: string | null;
+  commit: string | null;
   kind: DiffCommentKind;
+}
+
+/** A conditional write found the row changed, or gone, since the version it named. */
+export class DraftConflictError extends Error {
+  constructor(readonly current: DiffComment | undefined) {
+    super(current ? 'the draft changed since it was read' : 'the draft was deleted');
+    this.name = 'DraftConflictError';
+  }
 }
 
 export interface DiffCommentsRepo {
@@ -73,10 +84,11 @@ export interface DiffCommentsRepo {
   get(id: string): DiffComment | undefined;
   /** A write from the diff editor. New rows are the user's; an existing row
    *  becomes the user's only when its text changes (range snapshots and the
-   *  sent flag keep an agent's draft the agent's). */
+   *  sent flag keep an agent's draft the agent's). With `ifUnchangedSince`,
+   *  throws a DraftConflictError unless the row is still at that version. */
   upsertFromUser(input: DiffCommentInput): DiffComment;
-  /** A draft written or edited by an agent. Rewriting the person's text makes
-   *  it the agent's; moving it or changing its kind doesn't. */
+  /** A draft written, edited or moved by an agent. Rewriting the person's text
+   *  makes it the agent's; moving it or changing its kind doesn't. */
   upsertFromAgent(draft: AgentDraft): DiffComment;
   delete(id: string): void;
   deleteByIds(ids: readonly string[]): void;
@@ -105,9 +117,10 @@ export function createDiffCommentsRepo(db: Database): DiffCommentsRepo {
     upsertFromUser: db.prepare(
       `INSERT INTO diff_editor_comments (${COLS})
         VALUES (@id, @taskId, @filePath, @startLine, @endLine, @text, @sent, @viewScope,
-                @side, @replyTo, 'user', COALESCE(@kind, 'note'), @now, @now)
+                @side, @replyTo, @commit, 'user', COALESCE(@kind, 'note'), @now, @now)
         ON CONFLICT(id) DO UPDATE SET
           file_path  = excluded.file_path,
+          commit_sha = COALESCE(@commit, diff_editor_comments.commit_sha),
           start_line = excluded.start_line,
           end_line   = excluded.end_line,
           text       = excluded.text,
@@ -121,8 +134,11 @@ export function createDiffCommentsRepo(db: Database): DiffCommentsRepo {
     upsertFromAgent: db.prepare(
       `INSERT INTO diff_editor_comments (${COLS})
         VALUES (@id, @taskId, @filePath, @startLine, @endLine, @text, 0, @viewScope,
-                'RIGHT', @replyTo, 'agent', @kind, @now, @now)
+                'RIGHT', @replyTo, @commit, 'agent', @kind, @now, @now)
         ON CONFLICT(id) DO UPDATE SET
+          file_path  = excluded.file_path,
+          view_scope = excluded.view_scope,
+          commit_sha = excluded.commit_sha,
           start_line = excluded.start_line,
           kind       = excluded.kind,
           author     = CASE WHEN diff_editor_comments.text = excluded.text
@@ -140,6 +156,12 @@ export function createDiffCommentsRepo(db: Database): DiffCommentsRepo {
     const row = s.get!.get(id) as DiffCommentRow | undefined;
     return row ? rowToComment(row) : undefined;
   };
+  /** The write's time, after the row's last one: `updatedAt` is its version,
+   *  so two writes in the same millisecond must still tell apart. */
+  const stamp = (id: string) => {
+    const last = Date.parse(get(id)?.updatedAt ?? '');
+    return new Date(Number.isNaN(last) ? Date.now() : Math.max(Date.now(), last + 1)).toISOString();
+  };
   const mustGet = (id: string) => {
     const c = get(id);
     if (!c) throw new Error('row missing after upsert');
@@ -154,15 +176,21 @@ export function createDiffCommentsRepo(db: Database): DiffCommentsRepo {
     listByScope: (taskId, viewScope) =>
       (s.listByScope!.all(taskId, viewScope) as DiffCommentRow[]).map(rowToComment),
     get,
-    upsertFromUser(input) {
+    upsertFromUser({ ifUnchangedSince, ...input }) {
+      // Checked and written in one synchronous step: nothing else writes between.
+      if (ifUnchangedSince !== undefined) {
+        const current = get(input.id);
+        if (current?.updatedAt !== ifUnchangedSince) throw new DraftConflictError(current);
+      }
       s.upsertFromUser!.run({
         ...input,
+        commit: input.commit ?? null,
         sent: input.sent ? 1 : 0,
         side: input.side ?? 'RIGHT',
         replyTo: input.replyTo ?? null,
         // Left out, the kind stays as it is.
         kind: input.kind === undefined ? null : kindFor(input.viewScope, input.kind),
-        now: new Date().toISOString(),
+        now: stamp(input.id),
       });
       return mustGet(input.id);
     },
@@ -170,7 +198,7 @@ export function createDiffCommentsRepo(db: Database): DiffCommentsRepo {
       s.upsertFromAgent!.run({
         ...draft,
         kind: kindFor(draft.viewScope, draft.kind),
-        now: new Date().toISOString(),
+        now: stamp(draft.id),
       });
       return mustGet(draft.id);
     },

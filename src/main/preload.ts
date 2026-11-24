@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import type { HeldTaskNotice } from '../shared/types';
 
 /**
  * A main→renderer event subscription: `listen<T>(channel)(callback)` calls
@@ -60,6 +61,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setTaskDashAccess: (input: unknown) => ipcRenderer.invoke('task:setDashAccess', input),
   getTaskMessageAddresses: (id: string) => ipcRenderer.invoke('task:messageAddresses', id),
   onTasksChanged: listen<{ projectId: string }>('tasks:changed'),
+  onTaskNoticeHeld: listen<HeldTaskNotice>('tasks:noticeHeld'),
   onProjectsChanged: listen('projects:changed'),
   reorderTasks: (projectId: string, orderedTaskIds: string[]) =>
     ipcRenderer.invoke('db:reorderTasks', { projectId, orderedTaskIds }),
@@ -175,6 +177,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // App lifecycle
   onBeforeQuit: listen('app:beforeQuit'),
   onFocusTask: listen<{ taskId: string; projectId?: string }>('app:focusTask'),
+  onOpenPr: listen<{
+    taskId: string;
+    projectId: string;
+    provider: import('@shared/types').PrProvider;
+    number: number;
+  }>('app:openPr'),
   onOrchestratorAccessRequest: (callback: (request: { id: string; open: boolean }) => void) => {
     const opened = (_event: unknown, r: { id: string }) => callback({ id: r.id, open: true });
     const ended = (_event: unknown, r: { id: string }) => callback({ id: r.id, open: false });
@@ -249,8 +257,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('prReview:setInReview', args),
   prReviewGetSummary: (args: { taskId: string; provider: string; number: number }) =>
     ipcRenderer.invoke('prReview:getSummary', args),
-  prReviewSetSummary: (args: { taskId: string; provider: string; number: number; body: string }) =>
-    ipcRenderer.invoke('prReview:setSummary', args),
+  prReviewSetSummary: (args: {
+    taskId: string;
+    provider: string;
+    number: number;
+    body: string;
+    ifUnchangedSince?: string;
+  }) => ipcRenderer.invoke('prReview:setSummary', args),
   onDiffCommentsChanged: listen<{ taskId: string }>('diffComments:changed'),
 
   // Azure DevOps

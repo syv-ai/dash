@@ -192,6 +192,25 @@ describe('prReviewStore summaries', () => {
       provider: 'ado',
       number: 7,
       body: 'Mine',
+      // Built on what was loaded, which had no version: the save is refused if the agent wrote since.
+      ifUnchangedSince: '',
     });
+  });
+
+  it("keeps the person's text through a reload after the agent's rewrite was refused", async () => {
+    vi.useFakeTimers();
+    const theirs = { body: 'Agent rewrote it', author: 'agent', updatedAt: 'v2' };
+    api.prReviewGetSummary = vi.fn(() => Promise.resolve({ success: true, data: theirs }));
+    api.prReviewSetSummary = vi.fn(() =>
+      Promise.resolve({ success: false, code: 'CONFLICT', error: 'changed', data: theirs }),
+    );
+    const { usePrReviews, reviewKey } = await freshStore();
+    const key = reviewKey('t1', 'ado', 7);
+    usePrReviews.getState().setSummary('t1', 'ado', 7, 'Mine');
+    vi.advanceTimersByTime(500);
+    await vi.waitFor(() => expect(api.prReviewSetSummary).toHaveBeenCalledTimes(1));
+    // An agent write elsewhere on the task refetches summaries meanwhile.
+    await usePrReviews.getState().refreshSummaries('t1');
+    expect(usePrReviews.getState().summaries[key]!.body).toBe('Mine');
   });
 });

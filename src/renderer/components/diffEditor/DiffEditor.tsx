@@ -29,6 +29,7 @@ export function DiffEditor({
   initialFilePath,
   initialStaged,
   initialView,
+  openPr: openPrRequest,
   activeTaskId: openTaskId,
   projectId,
   terminalTheme,
@@ -201,10 +202,25 @@ export function DiffEditor({
     [view, openPrView],
   );
 
+  // Asked to show a PR (review.open), on mount or while open.
+  useEffect(() => {
+    if (openPrRequest) void openPrView(openPrRequest.number);
+    // Only a new request opens it again, not a new openPrView.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openPrRequest?.requestId]);
+
+  // A PR view follows its review's latest head, once it has been fetched again
+  // (after a submit, say): drafts are written and checked against that head.
   // A PR view restored from an earlier session has no review loaded yet: fetch
   // it (the PR may have moved on since), or fall back to the working tree.
   useEffect(() => {
-    if (view.kind !== 'pr' || viewReview || !projectId) return;
+    if (view.kind !== 'pr' || !projectId) return;
+    if (viewReview) {
+      if (viewReview.base !== view.base || viewReview.head !== view.head) {
+        setView({ ...view, base: viewReview.base, head: viewReview.head });
+      }
+      return;
+    }
     let cancelled = false;
     void usePrReviews
       .getState()

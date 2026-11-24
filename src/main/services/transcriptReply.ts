@@ -9,11 +9,20 @@
  */
 
 /** The header the task sees above a message's body; `messageIdMarker` finds it again. */
-export function messageHeader(opts: { from: string; messageId: string; noReply: boolean }): string {
+export function messageHeader(opts: {
+  from: string;
+  messageId: string;
+  noReply: boolean;
+  /** The task can run `dashctl`, so it's told how to reach the sender after this turn. */
+  notify?: boolean;
+}): string {
   const ask = opts.noReply
     ? 'no reply needed'
     : 'your last message of this turn is read as the reply';
-  return `[Message from ${opts.from} via Dash · id ${opts.messageId} · ${ask}]`;
+  const later = opts.notify
+    ? ` · to reach the sender later: dashctl tasks notify --to ${opts.messageId}, the text on stdin`
+    : '';
+  return `[Message from ${opts.from} via Dash · id ${opts.messageId} · ${ask}${later}]`;
 }
 
 const messageIdMarker = (messageId: string) => `via Dash · id ${messageId} ·`;

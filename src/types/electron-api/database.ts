@@ -3,6 +3,7 @@ import type {
   CreateTaskResult,
   DeleteTaskOptions,
   SetTaskDashAccessInput,
+  HeldTaskNotice,
   TaskMessageAddresses,
   IpcResponse,
   Project,
@@ -51,6 +52,8 @@ export interface DatabaseApi {
   reorderTasks: (projectId: string, orderedTaskIds: string[]) => Promise<IpcResponse<void>>;
   /** A project's tasks changed in main (created, archived, restored, deleted). */
   onTasksChanged: (callback: (data: { projectId: string }) => void) => () => void;
+  /** A task's notice to whoever messaged it reached none of their watches; Dash holds it. */
+  onTaskNoticeHeld: (callback: (notice: HeldTaskNotice) => void) => () => void;
   /** Main changed the project list (the control API added a project). */
   onProjectsChanged: (callback: () => void) => () => void;
 

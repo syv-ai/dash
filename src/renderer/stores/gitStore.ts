@@ -14,6 +14,9 @@ export interface DiffFileTarget {
     | { kind: 'working'; ref: 'HEAD' | 'index' }
     | { kind: 'commit'; hash: string }
     | { kind: 'pr'; provider: PrProvider; number: number; base: string; head: string };
+  /** Show this PR (the control API's review.open). A new requestId shows it
+   *  again in an editor that is already open. */
+  openPr?: { number: number; requestId: number };
 }
 
 type Updater<T> = T | ((prev: T) => T);

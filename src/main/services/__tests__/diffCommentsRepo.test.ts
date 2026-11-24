@@ -6,7 +6,12 @@ let db: Database.Database;
 vi.mock('../../db/client', () => ({ getRawDb: () => db }));
 
 import { runMigrations } from '../../db/migrate';
-import { computeOrphans, createDiffCommentsRepo, type DiffCommentsRepo } from '../diffCommentsRepo';
+import {
+  computeOrphans,
+  createDiffCommentsRepo,
+  DraftConflictError,
+  type DiffCommentsRepo,
+} from '../diffCommentsRepo';
 
 describe('computeOrphans', () => {
   const row = (id: string, file_path: string, view_scope = 'live') => ({
@@ -73,6 +78,7 @@ describe('diffCommentsRepo', () => {
       text: 'agent says',
       viewScope: 'pr:github:4',
       replyTo: null,
+      commit: null,
       kind: 'comment',
     });
     // A range snapshot from the editor: same text.
@@ -117,6 +123,7 @@ describe('diffCommentsRepo', () => {
       text: 'hm',
       viewScope: 'pr:github:4',
       replyTo: null,
+      commit: null,
       kind: 'note' as const,
     };
     expect(repo.upsertFromAgent({ ...agentEdit, startLine: 4 }).author).toBe('user');
@@ -133,9 +140,62 @@ describe('diffCommentsRepo', () => {
       text: 'x',
       viewScope: 'pr:ado:9',
       replyTo: null,
+      commit: null,
     };
     expect(repo.upsertFromAgent({ ...draft, kind: 'note' }).kind).toBe('note');
     expect(repo.upsertFromAgent({ ...draft, kind: 'comment' }).kind).toBe('comment');
+  });
+
+  it('moves updatedAt on with every write, even within a millisecond', () => {
+    const stamps = [1, 2, 3].map((n) => repo.upsertFromUser(input({ text: `v${n}` })).updatedAt);
+    expect(new Set(stamps).size).toBe(3);
+    expect([...stamps].sort()).toEqual(stamps);
+  });
+
+  it('refuses a conditional write once the row has moved on, or is gone', () => {
+    const read = repo.upsertFromUser(input());
+    const theirs = repo.upsertFromUser(input({ text: 'theirs' }));
+    let conflict: unknown;
+    try {
+      repo.upsertFromUser(input({ text: 'mine', ifUnchangedSince: read.updatedAt }));
+    } catch (err) {
+      conflict = err;
+    }
+    expect(conflict).toBeInstanceOf(DraftConflictError);
+    expect((conflict as DraftConflictError).current?.text).toBe('theirs');
+    expect(repo.get('c1')!.text).toBe('theirs');
+    expect(
+      repo.upsertFromUser(input({ text: 'mine', ifUnchangedSince: theirs.updatedAt })).text,
+    ).toBe('mine');
+    repo.delete('c1');
+    expect(() => repo.upsertFromUser(input({ ifUnchangedSince: theirs.updatedAt }))).toThrow(
+      'the draft was deleted',
+    );
+    expect(repo.get('c1')).toBeUndefined();
+  });
+
+  it('records the commit, keeps it when a write leaves it out, and lets an agent move a draft', () => {
+    repo.upsertFromUser(input({ commit: 'aaa', kind: 'comment' }));
+    expect(repo.upsertFromUser(input({ text: 'x' })).commit).toBe('aaa');
+    const moved = repo.upsertFromAgent({
+      id: 'c1',
+      taskId: 't1',
+      filePath: 'src/b.ts',
+      startLine: 7,
+      endLine: 7,
+      text: 'x',
+      viewScope: 'pr:github:5',
+      replyTo: null,
+      commit: 'bbb',
+      kind: 'comment',
+    });
+    expect(moved).toMatchObject({
+      filePath: 'src/b.ts',
+      viewScope: 'pr:github:5',
+      commit: 'bbb',
+      startLine: 7,
+      author: 'user',
+    });
   });
 
   it('deletes by ids, and prunes only non-PR comments on missing files', () => {

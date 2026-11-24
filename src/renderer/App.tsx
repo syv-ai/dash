@@ -468,6 +468,37 @@ export function App() {
     });
   }, []);
 
+  // A task's notice (`dashctl tasks notify`) that no watch of whoever messaged
+  // it took: Dash holds it for their next watch, and shows it here so it isn't
+  // missed. One toast per task, updated in place with the latest and a count.
+  useEffect(() => {
+    const unseen = new Map<string, number>();
+    return window.electronAPI.onTaskNoticeHeld(({ taskId, projectId, taskName, text }) => {
+      const count = (unseen.get(taskId) ?? 0) + 1;
+      unseen.set(taskId, count);
+      const forget = () => unseen.delete(taskId);
+      toast(
+        count === 1
+          ? `${taskName} sent a notice no one was watching for`
+          : `${taskName} sent ${count} notices no one was watching for`,
+        {
+          id: `task-notice-${taskId}`,
+          description: text.length > 300 ? `${text.slice(0, 300)}…` : text,
+          duration: Infinity,
+          closeButton: true,
+          onDismiss: forget,
+          action: {
+            label: 'Open task',
+            onClick: () => {
+              forget();
+              useProjects.getState().selectTask(projectId, taskId);
+            },
+          },
+        },
+      );
+    });
+  }, []);
+
   // Main changed the project list (the control API added a project): reload
   // it. The active project stays as it is.
   useEffect(() => {
@@ -569,6 +600,23 @@ export function App() {
       setActiveTaskId(taskId);
     });
   }, []);
+
+  // Open a task's diff editor on a PR (the control API's review.open).
+  useEffect(() => {
+    return window.electronAPI.onOpenPr(({ taskId, projectId, number }) => {
+      setActiveProjectId(projectId);
+      setActiveTaskId(taskId);
+      const task = selectTaskById(useProjects.getState(), taskId);
+      if (!task) return;
+      // The editor loads the PR and shows it, open already or not.
+      setDiffFile({
+        cwd: task.path,
+        filePath: '',
+        staged: false,
+        openPr: { number, requestId: Date.now() },
+      });
+    });
+  }, [setDiffFile, setActiveProjectId, setActiveTaskId]);
 
   // Task name lookup (used for threshold alerts and settings)
   const taskNames = useMemo(() => {
@@ -1592,10 +1640,13 @@ export function App() {
       {diffFile && (
         <Suspense fallback={null}>
           <DiffEditorModal
+            // Another worktree is another editor: its view and comments start afresh.
+            key={diffFile.cwd}
             cwd={diffFile.cwd}
             initialFilePath={diffFile.filePath}
             initialStaged={diffFile.staged}
             initialView={diffFile.initialView}
+            openPr={diffFile.openPr}
             activeTaskId={activeTaskId}
             projectId={activeTask?.projectId ?? activeProjectId}
             terminalTheme={resolvedTerminalTheme}

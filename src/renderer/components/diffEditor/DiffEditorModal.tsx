@@ -12,6 +12,8 @@ export interface DiffEditorModalProps {
   /** Initial view. When set it overrides the per-repo stored view; when omitted the
    *  editor restores the stored view, falling back to the working tree at HEAD/index. */
   initialView?: EditorView;
+  /** Show this PR, on mount and again for each new requestId. */
+  openPr?: { number: number; requestId: number };
   activeTaskId: string | null;
   /** The project `cwd` belongs to; PR review calls name it. */
   projectId: string | null;

@@ -138,6 +138,8 @@ export const diffEditorComments = sqliteTable(
     side: text('side').notNull().default('RIGHT'),
     replyTo: text('reply_to'),
     author: text('author').notNull().default('user'),
+    /** PR line drafts: the PR head commit their lines are in. */
+    commitSha: text('commit_sha'),
     /** 'note' (local, for the agent) or 'comment' (a PR review draft). */
     kind: text('kind').notNull().default('note'),
     createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),

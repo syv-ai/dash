@@ -1,4 +1,4 @@
-import type { ControlInfo, IpcResponse } from '../../shared/types';
+import type { ControlInfo, IpcResponse, PrProvider } from '../../shared/types';
 
 /** App info, dialogs, external/editor/IDE launch, app-lifecycle events, and
  *  settings mutations — the cross-cutting "shell" surface. */
@@ -33,6 +33,15 @@ export interface SystemApi {
   onBeforeQuit: (callback: () => void) => () => void;
   /** `projectId` is absent only from an older sender; then only the task is selected. */
   onFocusTask: (callback: (target: { taskId: string; projectId?: string }) => void) => () => void;
+  /** Open a task's diff editor on a PR (the control API's `review.open`). */
+  onOpenPr: (
+    callback: (target: {
+      taskId: string;
+      projectId: string;
+      provider: PrProvider;
+      number: number;
+    }) => void,
+  ) => () => void;
   /** An agent outside Dash asks to control it (`open`), or the ask timed out (`!open`). */
   onOrchestratorAccessRequest: (
     callback: (request: { id: string; open: boolean }) => void,

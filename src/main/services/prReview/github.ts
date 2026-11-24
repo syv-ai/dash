@@ -162,6 +162,10 @@ const EVENTS: Partial<Record<PrVerdict, string>> = {
   request_changes: 'REQUEST_CHANGES',
 };
 
+const HEAD_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) { pullRequest(number: $number) { headRefOid } }
+}`;
+
 /** A page of a PR's review threads, with their comments' ids (a reply names the first). */
 const THREAD_IDS_QUERY = `query($owner: String!, $name: String!, $number: Int!, $after: String) {
   repository(owner: $owner, name: $name) {
@@ -250,6 +254,13 @@ export function makeGithubProvider(gql: Gql = ghGql): PrReviewProvider {
 
     async setResolved(ctx, _number, threadId, resolved) {
       await gql(ctx.cwd, resolveMutation(resolved), { id: threadId });
+    },
+
+    async head(ctx, number) {
+      const data = await gql(ctx.cwd, HEAD_QUERY, repoVars(number));
+      const head = str(pick(data, 'repository', 'pullRequest', 'headRefOid'));
+      if (!head) throw new Error(`PR #${number} not found`);
+      return head;
     },
 
     async replyThread(ctx, number, ref) {

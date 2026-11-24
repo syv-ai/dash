@@ -44,6 +44,10 @@ interface Props {
   /** In a PR view: each bubble says whether it's a note or a comment, and a
    *  note offers this to make it a comment. */
   onPromoteComment?(id: string): void;
+  /** In a PR view, its head: a draft written on an older one shows as moved. */
+  prHead?: string | null;
+  /** Anchor a moved draft to the PR's head, as it sits now. */
+  onAnchorComment?(id: string): void;
   /** The draft's submit button ('Add note', 'Add comment'). */
   draftSubmitLabel?: string;
 }
@@ -76,6 +80,8 @@ export function CommentOverlay({
   scopeLabel,
   bubbleWidthFraction = DEFAULT_BUBBLE_FRACTION,
   onPromoteComment,
+  prHead,
+  onAnchorComment,
   draftSubmitLabel,
 }: Props) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
@@ -278,6 +284,8 @@ export function CommentOverlay({
                 editingId={editingId}
                 scopeLabel={scopeLabel}
                 onPromote={onPromoteComment}
+                prHead={prHead}
+                onAnchor={onAnchorComment}
               />
             </div>
             {editingComment && pendingRange && (

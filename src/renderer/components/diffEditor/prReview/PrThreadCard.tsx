@@ -52,16 +52,17 @@ function Composer(props: {
 
 /** One of the task's unsent replies to the thread. */
 function ReplyDraft({ draft }: { draft: DiffComment }) {
-  const [editing, setEditing] = useState(false);
+  // The draft as editing began, so a save can tell whether the agent changed it meanwhile.
+  const [editing, setEditing] = useState<DiffComment | null>(null);
   if (editing) {
     return (
       <Composer
-        initialText={draft.text}
+        initialText={editing.text}
         onSubmit={(text) => {
-          useCommentsStore.getState().updateText(draft.id, text);
-          setEditing(false);
+          useCommentsStore.getState().updateText(draft.id, text, editing);
+          setEditing(null);
         }}
-        onCancel={() => setEditing(false)}
+        onCancel={() => setEditing(null)}
       />
     );
   }
@@ -75,7 +76,7 @@ function ReplyDraft({ draft }: { draft: DiffComment }) {
           </span>
         )}
         <span className="flex-1" />
-        <IconButton title="Edit draft" size="sm" onClick={() => setEditing(true)}>
+        <IconButton title="Edit draft" size="sm" onClick={() => setEditing(draft)}>
           <Pencil size={14} strokeWidth={1.8} />
         </IconButton>
         <IconButton

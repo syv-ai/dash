@@ -39,6 +39,7 @@ import { forgetSetupRun } from './setupRuns';
 import { FolderOccupiedError } from './FolderOccupiedError';
 import { removeTaskSettings } from './taskSettings';
 import { forgetTask as forgetTaskInbox } from './taskInbox';
+import { forgetTaskNotices } from './taskNotices';
 
 /** The line an API-created task's first message starts with. */
 export const UNATTENDED_INSTRUCTION =
@@ -311,6 +312,7 @@ export class TaskService {
     stopPortsConfigWatch(id);
     portLivenessService.forgetTask(id);
     forgetTaskInbox(id);
+    forgetTaskNotices(id);
     discardInitialPrompt(id);
     removeShellHistory(id);
     void getTuiHost().cancelForTask(id);

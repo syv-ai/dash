@@ -356,6 +356,14 @@ export function runMigrations(): void {
     /* already exists */
   }
 
+  // A PR line draft records the PR head its lines are in, so one written before
+  // the author pushed isn't posted on other code. Older drafts don't know it.
+  try {
+    rawDb.exec(`ALTER TABLE diff_editor_comments ADD COLUMN commit_sha TEXT`);
+  } catch {
+    /* already exists */
+  }
+
   // The PRs a task is reviewing: what's written in their view becomes a
   // comment rather than a note, until Submit ends the review.
   rawDb.exec(`

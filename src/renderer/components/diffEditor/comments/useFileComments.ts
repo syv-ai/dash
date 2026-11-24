@@ -32,6 +32,8 @@ interface Args {
   scope: string;
   /** What a new one is: a note, or (reviewing a PR) a PR comment. */
   newKind: DiffCommentKind;
+  /** In a PR view, the PR head its lines are in: a new draft records it. */
+  commit: string | null;
 }
 
 export interface FileCommentsBinding {
@@ -41,8 +43,9 @@ export interface FileCommentsBinding {
    *  attaches a decoration. Returns the created live comment (or null when
    *  the store is disabled). */
   addComment(range: LineRange, text: string): LiveComment | null;
-  /** Edit a comment's text in place (does not affect range or sent). */
-  updateText(id: string, text: string): void;
+  /** Edit a comment's text in place (does not affect range or sent). `from` is
+   *  the comment as editing began (see the store's updateText). */
+  updateText(id: string, text: string, from?: DiffComment): void;
   /** Remove this comment from both the store and the local decoration. */
   remove(id: string): void;
 }
@@ -61,6 +64,7 @@ export function useFileComments({
   monaco,
   scope,
   newKind,
+  commit,
 }: Args): FileCommentsBinding {
   const storeReady = useCommentsStore((s) => s.isReady);
   const allStored =
@@ -253,7 +257,7 @@ export function useFileComments({
     setLiveComments(liveCommentsRef.current);
   }, [stored, filePath, scope, modifiedEditor, monaco]);
 
-  // ── Mirror text/sent/author/kind edits from store ──
+  // ── Mirror text/sent/author/kind/version/anchor edits from store ──
   // Ranges stay with the decorations, which follow typing; the store's copy is
   // only snapshotted on file switch. A PR view's content is frozen, though, so
   // there the store's range is the truth: an agent that moves its draft moves
@@ -273,7 +277,9 @@ export function useFileComments({
         fresh.text === live.text &&
         fresh.sent === live.sent &&
         fresh.author === live.author &&
-        fresh.kind === live.kind
+        fresh.kind === live.kind &&
+        fresh.updatedAt === live.updatedAt &&
+        fresh.commit === live.commit
       )
         return live;
       changed = true;
@@ -298,6 +304,8 @@ export function useFileComments({
         sent: fresh.sent,
         author: fresh.author,
         kind: fresh.kind,
+        updatedAt: fresh.updatedAt,
+        commit: fresh.commit,
         decorationId,
         startLine,
         endLine,
@@ -312,9 +320,12 @@ export function useFileComments({
   // ── Snapshot on unmount / file switch (closure-captured path) ──
   useEffect(() => {
     const pathAtMount = filePath;
+    // A PR view is read-only: its ranges come from the store, and a decoration
+    // clamped to a shorter file must not overwrite a draft's real anchor.
+    const frozen = isPrScope(scope);
     return () => {
       const model = modifiedEditor?.getModel();
-      if (!model) return;
+      if (!model || frozen) return;
       const snapshots = liveCommentsRef.current.flatMap((c) => {
         const r = model.getDecorationRange(c.decorationId);
         return r ? [{ id: c.id, startLine: r.startLineNumber, endLine: r.endLineNumber }] : [];
@@ -335,6 +346,7 @@ export function useFileComments({
         text,
         viewScope: scope,
         kind: newKind,
+        commit,
       });
       if (!created) return null;
       const ids = model.deltaDecorations(
@@ -351,11 +363,11 @@ export function useFileComments({
       setLiveComments((prev) => [...prev, liveC]);
       return liveC;
     },
-    [enabled, filePath, scope, newKind, modifiedEditor, monaco],
+    [enabled, filePath, scope, newKind, commit, modifiedEditor, monaco],
   );
 
-  const updateText = useCallback((id: string, text: string) => {
-    useCommentsStore.getState().updateText(id, text);
+  const updateText = useCallback((id: string, text: string, from?: DiffComment) => {
+    useCommentsStore.getState().updateText(id, text, from);
   }, []);
 
   const remove = useCallback(

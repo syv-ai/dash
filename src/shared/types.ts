@@ -162,6 +162,15 @@ export interface TaskMessageAddresses {
   uds: string;
 }
 
+/** A task's `dashctl tasks notify` that no watch of its sender took: Dash holds it
+ *  for the sender's next watch and shows it to the person. */
+export interface HeldTaskNotice {
+  taskId: string;
+  projectId: string;
+  taskName: string;
+  text: string;
+}
+
 /** What `app:getControlInfo` reports for the Settings orchestrator row. */
 export type ControlInfo = {
   /** `dashctl`, the command line other agents reach Dash with. */
@@ -244,6 +253,8 @@ export interface TokenStatsRollup {
  * - `UNTRUSTED_WORKSPACE`: Claude Code refused to start a background session
  *   because its workspace trust prompt was never accepted for the folder; the
  *   pane shows that prompt (`ptyTrustWorkspace`) and starts again.
+ * - `CONFLICT`: a conditional write found the row changed (or gone) since the
+ *   version it named; `data` holds the current row, if any.
  * - `UNKNOWN`: any other caught error (the default).
  */
 export type IpcErrorCode =
@@ -251,6 +262,7 @@ export type IpcErrorCode =
   | 'NOT_FOUND'
   | 'UNSUPPORTED_CLI'
   | 'UNTRUSTED_WORKSPACE'
+  | 'CONFLICT'
   | 'UNKNOWN';
 
 /** Result of the startup `claude --version` probe, as exposed to the renderer. */
@@ -643,6 +655,8 @@ export interface PrReview {
 export interface PrReviewSummary {
   body: string;
   author: 'user' | 'agent';
+  /** When it was last written; absent on a write. */
+  updatedAt?: string;
 }
 
 /** What a submit sends: the verdict, its summary, and the task's drafts for the PR. */
@@ -664,6 +678,9 @@ export type PrWriteError =
 export interface SubmitResult {
   postedDraftIds: string[];
   error?: PrWriteError;
+  /** Line comments written on an older head of the PR, kept as drafts instead
+   *  of being posted on code they weren't written about. */
+  heldBackDraftIds?: string[];
 }
 
 export interface PullRequestInfo {
@@ -1138,6 +1155,9 @@ export interface DiffComment {
   side: 'LEFT' | 'RIGHT';
   /** A PR draft reply: the remote thread it answers. Null for line comments. */
   replyTo: string | null;
+  /** A PR line draft: the PR head commit its lines are in. Null for replies,
+   *  outside PR scopes, and for drafts written before Dash recorded it. */
+  commit: string | null;
   /** Who wrote it. An agent's draft becomes the user's once they edit its text. */
   author: 'user' | 'agent';
   /** A note is local, for the agent; a comment is a PR review draft that
@@ -1164,6 +1184,11 @@ export interface DiffCommentInput {
   replyTo?: string | null;
   /** Defaults to 'note'. */
   kind?: DiffCommentKind;
+  /** The PR head its lines are in; left out, it stays as it is. */
+  commit?: string | null;
+  /** Refuse the write (a CONFLICT) unless the row is still at this updatedAt:
+   *  the version the person started editing. */
+  ifUnchangedSince?: string;
 }
 
 /* ── Unified Extensions model (Skills + Plugins across scopes) ──────────────

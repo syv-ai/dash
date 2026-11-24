@@ -1,4 +1,4 @@
-import { ArrowUpRight, Bot, Pencil, Undo2, X } from 'lucide-react';
+import { Anchor, ArrowUpRight, Bot, Pencil, Undo2, X } from 'lucide-react';
 import type { DiffCommentKind } from '../../../../shared/types';
 import type { Shade } from './types';
 import { BubbleShell } from './BubbleShell';
@@ -41,6 +41,11 @@ interface Props {
   kindTag?: DiffCommentKind;
   /** Make this note a PR review comment. */
   onPromote?(): void;
+  /** A PR line draft written on an older head of the PR: that commit. Its lines
+   *  may sit on other code now, and Submit holds it back. Null otherwise. */
+  movedFrom?: string | null;
+  /** Anchor a moved draft to the PR's head, where it sits now. */
+  onAnchor?(): void;
 }
 
 /** One persisted speech-bubble card. Thin wrapper around BubbleShell that
@@ -63,6 +68,8 @@ export function CommentBubble({
   isFadingOut,
   kindTag,
   onPromote,
+  movedFrom,
+  onAnchor,
 }: Props) {
   // A sent comment fades back so it reads as "already pushed" without
   // disappearing (it stays editable/removable). A bubble mid-edit takes
@@ -111,6 +118,20 @@ export function CommentBubble({
                 className="flex h-[20px] w-[20px] items-center justify-center rounded-[4px] text-muted-fade-60 opacity-40 hover:opacity-100 hover:text-primary hover:bg-primary/10 transition-opacity"
               >
                 <ArrowUpRight size={12} strokeWidth={1.8} />
+              </button>
+            )}
+            {movedFrom && onAnchor && (
+              <button
+                type="button"
+                aria-label="Keep it here"
+                title="Keep it here: it's about these lines in the PR as it is now"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAnchor();
+                }}
+                className="flex h-[20px] w-[20px] items-center justify-center rounded-[4px] text-muted-fade-60 opacity-40 hover:opacity-100 hover:text-primary hover:bg-primary/10 transition-opacity"
+              >
+                <Anchor size={12} strokeWidth={1.8} />
               </button>
             )}
             {sent && (
@@ -166,6 +187,14 @@ export function CommentBubble({
             {sent && (
               <span className="rounded-[3px] bg-foreground/10 px-[5px] py-[1px] text-[9px] font-medium uppercase tracking-[0.04em] text-muted-fade-75">
                 Sent
+              </span>
+            )}
+            {movedFrom && (
+              <span
+                title={`Written on ${movedFrom.slice(0, 7)}; the PR has changed since, so these lines may be other code now. Submit holds it back until you keep it here, edit its lines, or delete it.`}
+                className="rounded-[3px] bg-destructive/12 px-[5px] py-[1px] text-[9px] font-medium uppercase tracking-[0.04em] text-destructive"
+              >
+                PR moved
               </span>
             )}
           </div>
