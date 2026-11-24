@@ -383,6 +383,7 @@ export function RightInspector({
         filesLoading={ws.data.repoPathsLoading || ws.data.changedFilesLoading}
         selectedPath={activePath(ws.layout) ?? ''}
         onOpenFile={ws.openFile}
+        canOpenToSide={ws.layout.groups.length < 2}
         badgeCounts={ws.badgeCounts}
       />
     );

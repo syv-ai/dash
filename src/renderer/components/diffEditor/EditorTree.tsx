@@ -52,6 +52,9 @@ interface EditorTreeProps {
   /** Open a file in the focused group (a click: as its preview), or
    *  `toSide` in the other one. */
   onOpenFile: (path: string, opts?: OpenOptions) => void;
+  /** The editor shows one pane: a file's menu offers "Open in new pane".
+   *  With two there's no new pane to open (⌥-click still opens in the other). */
+  canOpenToSide: boolean;
   /** Per-file badge counts: your notes and comments, and (in a PR view) the
    *  PR's unresolved threads. */
   badgeCounts: Map<string, FileBadges>;
@@ -83,6 +86,7 @@ export function EditorTree(props: EditorTreeProps) {
         loading={props.filesLoading}
         selectedPath={props.selectedPath}
         onOpenFile={props.onOpenFile}
+        canOpenToSide={props.canOpenToSide}
         badgeCounts={props.badgeCounts}
       />
     </div>
@@ -374,6 +378,7 @@ interface FileTreePanelProps {
   loading: boolean;
   selectedPath: string;
   onOpenFile: (path: string, opts?: OpenOptions) => void;
+  canOpenToSide: boolean;
   badgeCounts: Map<string, FileBadges>;
 }
 
@@ -382,6 +387,7 @@ interface TreeContextValue {
   cwd: string;
   selectedPath: string;
   onOpenFile: (path: string, opts?: OpenOptions) => void;
+  canOpenToSide: boolean;
   badgeCounts: Map<string, FileBadges>;
   cols: TreeColumns;
 }
@@ -405,6 +411,7 @@ function FileTreePanel({
   loading,
   selectedPath,
   onOpenFile,
+  canOpenToSide,
   badgeCounts,
 }: FileTreePanelProps) {
   // Plain files have no changes to filter on, and nothing git ignores.
@@ -452,8 +459,8 @@ function FileTreePanel({
   }, [changedFiles]);
   const cols = useMemo(() => treeColumns(tree, badgeCounts), [tree, badgeCounts]);
   const ctx = useMemo<TreeContextValue>(
-    () => ({ cwd, selectedPath, onOpenFile, badgeCounts, cols }),
-    [cwd, selectedPath, onOpenFile, badgeCounts, cols],
+    () => ({ cwd, selectedPath, onOpenFile, canOpenToSide, badgeCounts, cols }),
+    [cwd, selectedPath, onOpenFile, canOpenToSide, badgeCounts, cols],
   );
   return (
     <TreeContext.Provider value={ctx}>
@@ -795,7 +802,7 @@ function FileEntry({
 /** A file's right-click menu. Mounted only while open, so the rows don't each
  *  subscribe to the IDE setting. */
 function FileMenu({ path, onOpen }: { path: string; onOpen: (opts?: OpenOptions) => void }) {
-  const { cwd } = useTree();
+  const { cwd, canOpenToSide } = useTree();
   const { ideId, openLabel } = usePreferredIde();
   const abs = absolutePath(cwd, path);
   return (
@@ -803,7 +810,11 @@ function FileMenu({ path, onOpen }: { path: string; onOpen: (opts?: OpenOptions)
       items={[
         // A menu open is deliberate: it keeps its tab (a click only previews).
         { label: 'Open', icon: FileText, onSelect: () => onOpen() },
-        { label: 'Open in new pane', icon: Columns2, onSelect: () => onOpen({ toSide: true }) },
+        canOpenToSide && {
+          label: 'Open in new pane',
+          icon: Columns2,
+          onSelect: () => onOpen({ toSide: true }),
+        },
         'separator',
         { label: 'Copy path', icon: Link2, onSelect: () => copyText(abs, 'path') },
         {
