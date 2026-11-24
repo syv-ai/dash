@@ -59,3 +59,54 @@ export function handOffWidth({
 }): number {
   return Math.min(max, Math.max(min, inspector + leftBefore - leftAfter));
 }
+
+/*
+ * Collapsing the task sidebar keeps the editor (and its unsaved edits)
+ * mounted out of sight; the editor opening or closing is a separate act.
+ * These two decide the panel's width when one happens while the other
+ * holds.
+ */
+
+/**
+ * The width (%) to ease to as the editor opens (`wide`) or closes, or null
+ * to leave the panel be: closing behind a collapsed sidebar keeps it
+ * collapsed (it expands to the narrow width later), while opening the
+ * editor always shows it.
+ */
+export function widthOnEditorToggle({
+  wide,
+  collapsed,
+  widths,
+}: {
+  wide: boolean;
+  collapsed: boolean;
+  widths: InspectorWidths;
+}): number | null {
+  if (collapsed && !wide) return null;
+  return wide ? widths.wide : widths.narrow;
+}
+
+/**
+ * The width (%) to take on expanding, or null to keep the one the panel
+ * came back at (the width it collapsed from). If the editor opened or
+ * closed meanwhile, that width belongs to the other mode: take this mode's
+ * remembered one. A narrow sidebar never comes back wider than `narrowMax`
+ * (a layout persisted with the editor open).
+ */
+export function widthOnExpand({
+  wideAtCollapse,
+  wide,
+  restored,
+  widths,
+  narrowMax,
+}: {
+  wideAtCollapse: boolean;
+  wide: boolean;
+  restored: number;
+  widths: InspectorWidths;
+  narrowMax: number;
+}): number | null {
+  if (wideAtCollapse !== wide) return wide ? widths.wide : widths.narrow;
+  if (!wide && restored > narrowMax) return widths.narrow;
+  return null;
+}

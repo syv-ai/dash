@@ -10,7 +10,13 @@ import {
 import { LeftSidebar } from './components/leftSidebar/LeftSidebar';
 import { MainContent } from './components/MainContent';
 import { openInIde } from './lib/openInIde';
-import { handOffWidth, loadInspectorWidths, saveInspectorWidth } from './lib/inspectorWidths';
+import {
+  handOffWidth,
+  loadInspectorWidths,
+  saveInspectorWidth,
+  widthOnEditorToggle,
+  widthOnExpand,
+} from './lib/inspectorWidths';
 import { headerModelName } from './lib/modelName';
 import { RightInspector } from './components/rightInspector/RightInspector';
 const DiffEditorModal = lazy(() => import('./components/diffEditor/DiffEditorModal'));
@@ -838,7 +844,9 @@ export function App() {
         } else if (deleteProjectTarget) {
           e.preventDefault();
           setDeleteProjectTarget(null);
-        } else if (diffFile) {
+        } else if (diffFile && !changesPanelRef.current?.isCollapsed()) {
+          // A collapsed sidebar keeps the editor out of sight; Escape
+          // doesn't close what can't be seen.
           e.preventDefault();
           closeDiff();
         } else if (showCommitGraph) {
@@ -970,29 +978,35 @@ export function App() {
     }
   }, [activeTask?.path, setDiffFile]);
 
-  // The wide sidebar (a diff open) doesn't collapse: hiding it closes the diff
-  // first, and the narrow panel collapses once it is back.
-  const collapseWhenNarrowRef = useRef(false);
+  // Collapsing hides the task sidebar without closing the editor: it stays
+  // mounted out of sight (tabs, panes, unsaved edits) and expanding brings
+  // it back at the width it left. Collapsing takes the keyboard from it
+  // back to the task's Claude Code TUI. `wideAtCollapseRef`: whether the
+  // width the panel comes back at is the editor's (set however it collapsed).
+  const wideAtCollapseRef = useRef(false);
+  // The width before a side-car TUI sized the panel to hug it (below).
+  const changesSizeBeforeTui = useRef<number | null>(null);
+  const inspectorBodyRef = useRef<HTMLDivElement>(null);
   const toggleInspector = useCallback(() => {
     const panel = changesPanelRef.current;
     if (!panel) return;
-    if (useGit.getState().diffFile && !panel.isCollapsed()) {
-      collapseWhenNarrowRef.current = true;
-      closeDiff();
+    setChangesAnimating(true);
+    if (panel.isCollapsed()) {
+      panel.expand();
       return;
     }
-    setChangesAnimating(true);
-    if (panel.isCollapsed()) panel.expand();
-    else panel.collapse();
-  }, [closeDiff, setChangesAnimating]);
-  useEffect(() => {
-    if (inlineDiff || !collapseWhenNarrowRef.current) return;
-    collapseWhenNarrowRef.current = false;
-    requestAnimationFrame(() => {
-      setChangesAnimating(true);
-      changesPanelRef.current?.collapse();
-    });
-  }, [inlineDiff, setChangesAnimating]);
+    // The TUI's hugging width isn't a width the user chose.
+    if (changesSizeBeforeTui.current === null) {
+      saveInspectorWidth(
+        inspectorWideRef.current ? 'wide' : 'narrow',
+        panel.getSize().asPercentage,
+      );
+    }
+    const hadFocus = inspectorBodyRef.current?.contains(document.activeElement) ?? false;
+    panel.collapse();
+    const id = useProjects.getState().activeTaskId;
+    if (hadFocus && id) requestAnimationFrame(() => sessionRegistry.get(id)?.focus());
+  }, [setChangesAnimating]);
 
   // Opening a diff eases the task sidebar to its wide width, closing it back
   // to its narrow one, each remembered. One panel, resized: swapping panels
@@ -1013,12 +1027,18 @@ export function App() {
       setDiffSettled(inspectorWide);
       return;
     }
-    if (!panel.isCollapsed()) {
+    const collapsed = panel.isCollapsed();
+    if (!collapsed) {
       saveInspectorWidth(inspectorWide ? 'narrow' : 'wide', panel.getSize().asPercentage);
     }
-    const widths = loadInspectorWidths();
+    const width = widthOnEditorToggle({
+      wide: inspectorWide,
+      collapsed,
+      widths: loadInspectorWidths(),
+    });
+    if (width === null) return;
     setChangesAnimating(true);
-    panel.resize(`${inspectorWide ? widths.wide : widths.narrow}%`);
+    panel.resize(`${width}%`);
     const id = setTimeout(() => {
       setChangesAnimating(false);
       if (inspectorWide) setDiffSettled(true);
@@ -1026,9 +1046,9 @@ export function App() {
     return () => clearTimeout(id);
   }, [inspectorWide, setChangesAnimating]);
 
-  // A Setup tab request needs the drawer mounted: a collapsed task sidebar
-  // unmounts it, so open the sidebar. Once per request: a later collapse
-  // must not reopen it.
+  // A Setup tab request shows the drawer: a collapsed task sidebar hides
+  // it, so open the sidebar. Once per request: a later collapse must not
+  // reopen it.
   const setupTabRequest = useSetup((s) => s.setupTabRequest);
   const handledSetupSeqRef = useRef(0);
   useEffect(() => {
@@ -1049,8 +1069,8 @@ export function App() {
   // While a side-car TUI is the active drawer tab, smoothly size the right
   // panel (the drawer lives inside it) to hug the TUI's pinned canvas — clack
   // can't reflow, so the panel fits the canvas, not the reverse. Restore the
-  // user's width when the TUI finishes / closes / is cancelled.
-  const changesSizeBeforeTui = useRef<number | null>(null);
+  // user's width when the TUI finishes / closes / is cancelled. The drawer
+  // stays mounted while the sidebar is collapsed: that never expands it.
   const handleTuiPanelActive = useCallback((active: boolean, canvasPx?: number) => {
     const panel = changesPanelRef.current;
     if (!panel) return;
@@ -1058,6 +1078,7 @@ export function App() {
       // canvasPx may arrive 0/undefined on the first frame; ignore until a
       // real measurement lands so we don't snap to a bogus width.
       if (!canvasPx || changesSizeBeforeTui.current !== null) return;
+      if (panel.isCollapsed()) return;
       const targetPct = Math.max(
         TUI_PANEL_MIN_PCT,
         Math.min(
@@ -1072,7 +1093,7 @@ export function App() {
     } else {
       const prev = changesSizeBeforeTui.current;
       changesSizeBeforeTui.current = null;
-      if (prev === null) return;
+      if (prev === null || panel.isCollapsed()) return;
       setChangesAnimating(true);
       panel.resize(`${prev}%`);
       setTimeout(() => setChangesAnimating(false), panelEaseMs());
@@ -1329,25 +1350,32 @@ export function App() {
               collapsible
               collapsedSize="0%"
               onCollapse={() => {
+                wideAtCollapseRef.current = inspectorWideRef.current;
                 setChangesPanelCollapsed(true);
                 setTimeout(() => setChangesAnimating(false), panelEaseMs());
               }}
               onExpand={() => {
                 setChangesPanelCollapsed(false);
                 setTimeout(() => setChangesAnimating(false), panelEaseMs());
-                // The layout persists the width that showed last; one saved
-                // wide (Dash quit with a diff open) opens at the narrow width.
+                // The panel comes back at the width it collapsed from, unless
+                // the editor opened or closed meanwhile, or the layout was
+                // saved wide (Dash quit with the editor open).
                 const panel = changesPanelRef.current;
-                if (
-                  panel &&
-                  !useGit.getState().diffFile &&
-                  panel.getSize().asPercentage > TUI_PANEL_MAX_PCT
-                ) {
-                  panel.resize(`${loadInspectorWidths().narrow}%`);
-                }
+                if (!panel) return;
+                const width = widthOnExpand({
+                  wideAtCollapse: wideAtCollapseRef.current,
+                  wide: inspectorWideRef.current,
+                  restored: panel.getSize().asPercentage,
+                  widths: loadInspectorWidths(),
+                  narrowMax: TUI_PANEL_MAX_PCT,
+                });
+                if (width !== null) panel.resize(`${width}%`);
               }}
             >
-              {!changesPanelCollapsed && (
+              {/* Collapsed, it stays mounted out of sight (the editor's tabs
+                  and unsaved edits, the terminals) and out of reach of the
+                  keyboard; Monaco and xterm re-lay out once shown. */}
+              <div ref={inspectorBodyRef} className={changesPanelCollapsed ? 'hidden' : 'h-full'}>
                 <RightInspector
                   key={activeTask.id}
                   task={activeTask}
@@ -1372,7 +1400,7 @@ export function App() {
                   onTaskSettings={() => handleTaskSettings(activeTask.id)}
                   onCollapse={toggleInspector}
                 />
-              )}
+              </div>
             </ResizablePanel>
           </>
         )}
