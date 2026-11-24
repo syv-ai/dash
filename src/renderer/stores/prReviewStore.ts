@@ -1,9 +1,11 @@
 import { create } from 'zustand';
 import type {
+  DiffComment,
   DiffCommentKind,
   PrProvider,
   PrRef,
   PrReview,
+  PrReviewComment,
   PrReviewSummary,
   PrVerdict,
   PrWriteError,
@@ -15,6 +17,15 @@ export const prKey = (provider: PrProvider, number: number): string => `${provid
 /** The key of a task's review of a PR. */
 export const reviewKey = (taskId: string, provider: PrProvider, number: number): string =>
   `${taskId}:${prKey(provider, number)}`;
+
+/** Where a reply on the own PR posts from: the task that drafted it, its
+ *  project and checkout, and the PR. */
+export interface ReplyPoster {
+  projectId: string;
+  cwd: string;
+  taskId: string;
+  review: Pick<PrReview, 'provider' | 'number'>;
+}
 
 export type PrLoadResult = { ok: true; review: PrReview } | { ok: false; error: string };
 /** `posted`: drafts that reached the PR before the error (ADO posts one at a time). */
@@ -70,6 +81,19 @@ interface PrReviewState {
     threadId: string,
     resolved: boolean,
   ) => Promise<PrWriteResult>;
+  /** Draft replies being posted, by id. */
+  posting: Record<string, true>;
+  /**
+   * Post a draft reply to its thread at once (the own PR's Post reply), and
+   * resolve the thread too with `resolve`. Main deletes the draft once
+   * posted; the reply joins its thread here. `posted: 1` on an error: the
+   * reply went, the resolve didn't. A draft already posting is left alone.
+   */
+  postReply: (
+    poster: ReplyPoster,
+    draft: Pick<DiffComment, 'id' | 'replyTo' | 'text'>,
+    resolve: boolean,
+  ) => Promise<PrWriteResult>;
   /** Submit the task's drafts for the PR with a verdict; refetches the review
    *  when anything reached the PR, and drops the summary when everything did. */
   submit: (
@@ -90,6 +114,21 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
     if (!review) return;
     const threads = review.threads.map((t) => (t.id === threadId ? { ...t, resolved } : t));
     set({ byPr: { ...get().byPr, [key]: { ...review, threads } } });
+  };
+
+  const appendComment = (key: string, threadId: string, comment: PrReviewComment) => {
+    const review = get().byPr[key];
+    if (!review) return;
+    const threads = review.threads.map((t) =>
+      t.id === threadId ? { ...t, comments: [...t.comments, comment] } : t,
+    );
+    set({ byPr: { ...get().byPr, [key]: { ...review, threads } } });
+  };
+  const setPosting = (id: string, on: boolean) => {
+    const posting = { ...get().posting };
+    if (on) posting[id] = true;
+    else delete posting[id];
+    set({ posting });
   };
 
   const putTarget = (taskId: string, target: PrRef | null) =>
@@ -118,6 +157,7 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
     viewed: {},
     kindPicks: {},
     summaries: {},
+    posting: {},
 
     pickKind: (provider, number, kind) =>
       set({ kindPicks: { ...get().kindPicks, [prKey(provider, number)]: kind } }),
@@ -223,6 +263,34 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
       if (!error) return { ok: true };
       flip(key, threadId, !resolved);
       return { ok: false, error };
+    },
+
+    postReply: async ({ projectId, cwd, taskId, review }, draft, resolve) => {
+      const threadId = draft.replyTo;
+      if (!threadId) return { ok: false, error: ipcError('not a reply') };
+      if (get().posting[draft.id]) return { ok: true };
+      setPosting(draft.id, true);
+      try {
+        const resp = await window.electronAPI.prReviewReply({
+          projectId,
+          cwd,
+          taskId,
+          number: review.number,
+          threadId,
+          body: draft.text,
+          draftId: draft.id,
+        });
+        if (!resp.success || !resp.data)
+          return { ok: false, error: ipcError(resp.error ?? 'unknown error') };
+        appendComment(prKey(review.provider, review.number), threadId, resp.data);
+        if (!resolve) return { ok: true };
+        const resolved = await get().setResolved(projectId, cwd, review, threadId, true);
+        return resolved.ok ? resolved : { ...resolved, posted: 1 };
+      } catch (err) {
+        return { ok: false, error: ipcError(String(err)) };
+      } finally {
+        setPosting(draft.id, false);
+      }
     },
 
     submit: async (projectId, cwd, taskId, review, verdict, body) => {

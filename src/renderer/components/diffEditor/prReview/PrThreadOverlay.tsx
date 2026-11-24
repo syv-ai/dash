@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
 import type { PrProvider, PrReviewThread } from '../../../../shared/types';
+import type { ReplyPoster } from '../../../stores/prReviewStore';
 import { PrThreadCard } from './PrThreadCard';
 
 const PAD_PX = 8;
@@ -20,6 +21,8 @@ interface Props {
   modifiedEditor: monacoEditor.ICodeEditor | null;
   area: HTMLDivElement | null;
   onSend: (thread: PrReviewThread) => void;
+  /** On the own PR: where draft replies post from. */
+  replyPoster: ReplyPoster | null;
 }
 
 /**
@@ -36,6 +39,7 @@ export function PrThreadOverlay({
   modifiedEditor,
   area,
   onSend,
+  replyPoster,
 }: Props) {
   const wrappers = useRef(new Map<string, HTMLDivElement>());
   const tops = useRef(new Map<string, number>());
@@ -144,6 +148,7 @@ export function PrThreadOverlay({
             draftScope={draftScope}
             onSend={onSend}
             onSetResolved={onSetResolved}
+            replyPoster={replyPoster}
           />
         </div>
       ))}

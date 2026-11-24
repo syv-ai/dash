@@ -592,6 +592,7 @@ export function EditorPane({
                 modifiedEditor={modifiedEditor}
                 area={editorAreaEl}
                 onSend={pr.sendThread}
+                replyPoster={pr.replyPoster}
               />
             )}
             <CommentOverlay

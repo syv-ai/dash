@@ -151,25 +151,6 @@ describe('commentsStore', () => {
     expect(api.diffCommentsDelete).toHaveBeenCalledTimes(1);
   });
 
-  it("clearNotes(scope) removes that scope's notes, sent or not, and keeps its comments", async () => {
-    api.diffCommentsList = vi.fn(() =>
-      Promise.resolve({
-        success: true,
-        data: [
-          cmt({ id: 'n1', viewScope: 'pr:github:4' }),
-          cmt({ id: 'n2', sent: true, viewScope: 'pr:github:4', startLine: 2 }),
-          cmt({ id: 'c', viewScope: 'pr:github:4', kind: 'comment', startLine: 3 }),
-          cmt({ id: 'live', startLine: 4 }),
-        ],
-      }),
-    );
-    const useCommentsStore = await freshStore();
-    await useCommentsStore.getState().loadForTask('t1');
-    useCommentsStore.getState().clearNotes('pr:github:4');
-    expect(useCommentsStore.getState().byFile['a.ts']!.map((c) => c.id)).toEqual(['c', 'live']);
-    expect(api.diffCommentsDelete).toHaveBeenCalledTimes(2);
-  });
-
   it('adds a comment when asked, and promotes a note to a comment', async () => {
     const useCommentsStore = await freshStore();
     await useCommentsStore.getState().loadForTask('t1');

@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
 import type { DiffCommentKind, PrReview, PrReviewThread } from '../../../../shared/types';
 import { useCommentsStore } from '../../../stores/commentsStore';
-import { prKey, usePrReviews } from '../../../stores/prReviewStore';
+import { prKey, usePrReviews, type ReplyPoster } from '../../../stores/prReviewStore';
 import { buildReviewPrompt } from '../../../utils/agentPrompt';
 import { typeIntoTask } from '../../../utils/typeIntoTask';
 import type { EditorView } from '../types';
@@ -25,6 +25,8 @@ export interface PrView {
   setThreadResolved: (thread: PrReviewThread, resolved: boolean) => void;
   /** Type a thread into the task's prompt ("Ask agent"). */
   sendThread: (thread: PrReviewThread) => void;
+  /** On the own PR, with a task to own drafts: where draft replies post from. */
+  replyPoster: ReplyPoster | null;
 }
 
 /**
@@ -84,6 +86,13 @@ export function usePrView({
     },
     [activeTaskId, review],
   );
+  const replyPoster = useMemo<ReplyPoster | null>(
+    () =>
+      review?.viewerIsAuthor && projectId && activeTaskId && !commentsDisabled
+        ? { projectId, cwd, taskId: activeTaskId, review }
+        : null,
+    [review, projectId, cwd, activeTaskId, commentsDisabled],
+  );
   const setNewKind = useCallback(
     (kind: DiffCommentKind) => {
       if (view.kind === 'pr') usePrReviews.getState().pickKind(view.provider, view.number, kind);
@@ -106,5 +115,6 @@ export function usePrView({
     canPromote: isPrView && !commentsDisabled,
     setThreadResolved: (t, r) => void setThreadResolved(t, r),
     sendThread,
+    replyPoster,
   };
 }

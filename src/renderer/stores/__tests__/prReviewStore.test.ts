@@ -121,6 +121,57 @@ describe('prReviewStore writes', () => {
     expect(resolved()).toBe(false);
   });
 
+  const posted = { id: 'C9', author: 'me', body: 'Done', createdAt: '', url: '' };
+  const poster = { projectId: 'p1', cwd: '/wt', taskId: 't1', review: review(4) };
+
+  it('posts a draft reply, adds it to its thread, and resolves the thread when asked', async () => {
+    api.prReviewLoad = vi.fn(() => Promise.resolve({ success: true, data: withThread() }));
+    api.prReviewReply = vi.fn(() => Promise.resolve({ success: true, data: posted }));
+    const { usePrReviews, prKey } = await freshStore();
+    await usePrReviews.getState().load('p1', '/wt', 4);
+    const pending = usePrReviews
+      .getState()
+      .postReply(poster, { id: 'd1', replyTo: 'T1', text: 'Done' }, true);
+    expect(usePrReviews.getState().posting).toEqual({ d1: true });
+    expect(await pending).toEqual({ ok: true });
+    expect(api.prReviewReply).toHaveBeenCalledWith({
+      projectId: 'p1',
+      cwd: '/wt',
+      taskId: 't1',
+      number: 4,
+      threadId: 'T1',
+      body: 'Done',
+      draftId: 'd1',
+    });
+    const thread = usePrReviews.getState().byPr[prKey('github', 4)]!.threads[0]!;
+    expect(thread.comments).toEqual([posted]);
+    expect(thread.resolved).toBe(true);
+    expect(usePrReviews.getState().posting).toEqual({});
+  });
+
+  it('keeps the thread as it was when the PR refuses the reply', async () => {
+    api.prReviewLoad = vi.fn(() => Promise.resolve({ success: true, data: withThread() }));
+    api.prReviewReply = vi.fn(() => Promise.resolve({ success: false, error: 'Not Found' }));
+    const { usePrReviews, prKey } = await freshStore();
+    await usePrReviews.getState().load('p1', '/wt', 4);
+    expect(
+      await usePrReviews.getState().postReply(poster, { id: 'd1', replyTo: 'T1', text: 'x' }, true),
+    ).toEqual({ ok: false, error: { kind: 'other', message: 'Not Found' } });
+    expect(api.prReviewSetResolved).not.toHaveBeenCalled();
+    expect(usePrReviews.getState().byPr[prKey('github', 4)]!.threads[0]!.comments).toEqual([]);
+  });
+
+  it('says the reply went when only the resolve failed', async () => {
+    api.prReviewLoad = vi.fn(() => Promise.resolve({ success: true, data: withThread() }));
+    api.prReviewReply = vi.fn(() => Promise.resolve({ success: true, data: posted }));
+    api.prReviewSetResolved = vi.fn(() => Promise.resolve({ success: false, error: 'nope' }));
+    const { usePrReviews } = await freshStore();
+    await usePrReviews.getState().load('p1', '/wt', 4);
+    expect(
+      await usePrReviews.getState().postReply(poster, { id: 'd1', replyTo: 'T1', text: 'x' }, true),
+    ).toEqual({ ok: false, error: { kind: 'other', message: 'nope' }, posted: 1 });
+  });
+
   it('refetches the review after a submit that posted', async () => {
     api.prReviewSubmit = vi.fn(() =>
       Promise.resolve({ success: true, data: { postedDraftIds: ['d1'] } }),

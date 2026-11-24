@@ -28,6 +28,7 @@ export function makeElectronApiMock(overrides: Record<string, unknown> = {}) {
     onDiffCommentsChanged: vi.fn((_cb: (d: { taskId: string }) => void) => () => {}),
     prReviewSetResolved: vi.fn(() => ok(undefined)),
     prReviewSubmit: vi.fn(() => ok({ postedDraftIds: [] })),
+    prReviewReply: vi.fn(() => ok({ id: 'c', author: 'me', body: 'b', createdAt: '', url: '' })),
     prReviewTarget: vi.fn(() => ok(null)),
     prReviewSetTarget: vi.fn(() => ok(undefined)),
     prReviewViewed: vi.fn(() => ok({})),

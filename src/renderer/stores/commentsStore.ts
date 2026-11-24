@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { DiffComment, DiffCommentKind } from '../../shared/types';
-import { clearedByClearNotes, clearedBySent } from '../../shared/diffComments';
+import { clearedBySent } from '../../shared/diffComments';
 
 interface AddInput {
   filePath: string;
@@ -39,8 +39,6 @@ export interface CommentsActions {
   /** Remove all sent notes, optionally limited to one view scope. PR comments
    *  stay: sending one to the agent doesn't take it off the PR. */
   clearSent: (scope?: string) => void;
-  /** Remove every note of a view scope, sent or not (before submitting a PR review). */
-  clearNotes: (scope: string) => void;
   /** Make a note a PR comment, or back. */
   setKind: (id: string, kind: DiffCommentKind) => void;
   snapshotRanges: (filePath: string, snapshots: ReadonlyArray<RangeSnapshot>) => void;
@@ -231,8 +229,6 @@ export const useCommentsStore = create<CommentsStore>((set, get) => {
     },
 
     clearSent: (scope) => removeWhere((c) => clearedBySent(c, scope)),
-
-    clearNotes: (scope) => removeWhere((c) => clearedByClearNotes(c, scope)),
 
     setKind: (id, kind) => {
       if (!get().taskId) return;

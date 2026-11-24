@@ -32,10 +32,6 @@ export const needsAttention = (c: Kinded & { sent?: boolean }): boolean =>
 export const clearedBySent = (c: Kinded & Scoped & { sent?: boolean }, scope?: string): boolean =>
   !!c.sent && !isPrComment(c) && (scope === undefined || c.viewScope === scope);
 
-/** Clear notes (before a submit): every note of the scope, sent or not. */
-export const clearedByClearNotes = (c: Kinded & Scoped, scope: string): boolean =>
-  !isPrComment(c) && c.viewScope === scope;
-
 /** Submit posts its PR's comments (on lines, and replies), never its notes. */
 export const isSubmittable = (c: Kinded & Scoped): boolean =>
   isPrScope(c.viewScope) && isPrComment(c);

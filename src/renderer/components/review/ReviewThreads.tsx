@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Bot } from 'lucide-react';
 import { toast } from 'sonner';
 import type { PrReview, PrReviewThread } from '../../../shared/types';
-import { usePrReviews } from '../../stores/prReviewStore';
+import { usePrReviews, type ReplyPoster } from '../../stores/prReviewStore';
 import { buildReviewPrompt } from '../../utils/agentPrompt';
 import { threadLocation } from '../../utils/prReviewNotices';
 import { typeIntoTask } from '../../utils/typeIntoTask';
@@ -25,6 +25,8 @@ interface ThreadActions {
   replyDrafts: ReadonlyMap<string, number>;
   onAsk: (thread: PrReviewThread) => void;
   onSetResolved: (thread: PrReviewThread, resolved: boolean) => void;
+  /** On the own PR: where draft replies post from. */
+  replyPoster: ReplyPoster | null;
 }
 
 /**
@@ -53,6 +55,7 @@ export function ReviewThreads({
     review,
     draftScope,
     replyDrafts,
+    replyPoster: review.viewerIsAuthor && draftScope ? { projectId, cwd, taskId, review } : null,
     onAsk: (t) => void typeIntoTask(taskId, buildReviewPrompt(review, [t])),
     onSetResolved: (t, resolved) =>
       void usePrReviews
@@ -113,6 +116,7 @@ function ThreadRow({
   replyDrafts,
   onAsk,
   onSetResolved,
+  replyPoster,
 }: { thread: PrReviewThread } & ThreadActions) {
   const [unfolded, setUnfolded] = useState(false);
   const inline = isInlineThread(thread);
@@ -170,6 +174,7 @@ function ThreadRow({
             draftScope={draftScope}
             onSend={onAsk}
             onSetResolved={onSetResolved}
+            replyPoster={replyPoster}
           />
         </div>
       )}

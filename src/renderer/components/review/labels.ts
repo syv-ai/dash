@@ -1,4 +1,7 @@
-import type { PrCheck, PrReview, PrReviewer, PrState } from '../../../shared/types';
+import type { PrCheck, PrProvider, PrReview, PrReviewer, PrState } from '../../../shared/types';
+
+/** The forge's name, as people say it. */
+export const providerName = (p: PrProvider): string => (p === 'ado' ? 'Azure DevOps' : 'GitHub');
 
 /** Words for a PR's state, its reviewers' states and its checks' states:
  *  the Review header's and the PR overview's. */

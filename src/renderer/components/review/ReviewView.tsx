@@ -125,7 +125,6 @@ function Outline({
           taskId={task.id}
           projectId={task.projectId}
           cwd={task.path}
-          draftScope={scope}
           comments={comments}
           noteCount={noteCount}
           onNavigate={onNavigate}

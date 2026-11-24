@@ -10,9 +10,8 @@ import {
 } from '../ui/DropdownMenu';
 import { IconButton } from '../ui/IconButton';
 import { TextLink } from '../ui/TextLink';
-import { providerName } from '../diffEditor/prReview/PrThreadCard';
 import { checkCounts } from './outline';
-import { distanceLine, REVIEWER_LABELS, STATE_LABELS } from './labels';
+import { distanceLine, providerName, REVIEWER_LABELS, STATE_LABELS } from './labels';
 
 /** "3 passing · 1 failing", the states with checks in them; null with none. */
 function checksLine(review: PrReview): string | null {

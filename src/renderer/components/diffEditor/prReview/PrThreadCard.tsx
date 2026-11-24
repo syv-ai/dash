@@ -18,6 +18,9 @@ import { useCommentsStore } from '../../../stores/commentsStore';
 import { threadLocation } from '../../../utils/prReviewNotices';
 import { CommentInputBar } from '../comments/CommentInputBar';
 import { Markdown } from '../../ui/Markdown';
+import { providerName } from '../../review/labels';
+import type { ReplyPoster } from '../../../stores/prReviewStore';
+import { PostReplyButtons } from './PostReplyButtons';
 
 interface Props {
   thread: PrReviewThread;
@@ -28,9 +31,9 @@ interface Props {
   showLocation?: boolean;
   onSend: (thread: PrReviewThread) => void;
   onSetResolved: (thread: PrReviewThread, resolved: boolean) => void;
+  /** On the own PR: where draft replies post from (Post reply / Post & resolve). */
+  replyPoster?: ReplyPoster | null;
 }
-
-export const providerName = (p: PrProvider) => (p === 'ado' ? 'Azure DevOps' : 'GitHub');
 
 const EMPTY: DiffComment[] = [];
 
@@ -47,8 +50,8 @@ function Composer(props: {
   );
 }
 
-/** One of the task's unsent replies to the thread. */
-function ReplyDraft({ draft }: { draft: DiffComment }) {
+/** One of the task's unsent replies to the thread; on the own PR, postable. */
+function ReplyDraft({ draft, poster }: { draft: DiffComment; poster: ReplyPoster | null }) {
   const [editing, setEditing] = useState(false);
   if (editing) {
     return (
@@ -81,6 +84,11 @@ function ReplyDraft({ draft }: { draft: DiffComment }) {
         </IconButton>
       </div>
       <Markdown text={draft.text} className="text-foreground" />
+      {poster && (
+        <div className="mt-2 flex justify-end gap-1">
+          <PostReplyButtons draft={draft} poster={poster} />
+        </div>
+      )}
     </div>
   );
 }
@@ -97,6 +105,7 @@ export function PrThreadCard({
   showLocation,
   onSend,
   onSetResolved,
+  replyPoster = null,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [replying, setReplying] = useState(false);
@@ -172,7 +181,7 @@ export function PrThreadCard({
           </div>
         ))}
         {drafts.map((d) => (
-          <ReplyDraft key={d.id} draft={d} />
+          <ReplyDraft key={d.id} draft={d} poster={replyPoster} />
         ))}
       </div>
       {replying && (

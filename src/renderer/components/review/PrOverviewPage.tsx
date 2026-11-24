@@ -20,8 +20,7 @@ import { ListRow } from '../ui/ListRow';
 import { Markdown } from '../ui/Markdown';
 import { ciPulse } from '../ui/prStatusColors';
 import { IconButton } from '../ui/IconButton';
-import { providerName } from '../diffEditor/prReview/PrThreadCard';
-import { CHECK_LABELS, distanceLine, REVIEWER_LABELS, STATE_LABELS } from './labels';
+import { CHECK_LABELS, distanceLine, providerName, REVIEWER_LABELS, STATE_LABELS } from './labels';
 
 /**
  * A PR's overview, the sheet of its `dash:pr/*` editor tab: title, state,
