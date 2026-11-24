@@ -32,7 +32,7 @@ const LIMIT_LABELS: Record<LimitKey, { short: string; long: string }> = {
 
 /*
  * Fixed-width columns, centred as a group with a fixed gap, each a ring (or
- * the burn's figure) over a short label: a wide sidebar leaves them where
+ * the burn's figure) over a short label: an expanded sidebar leaves them where
  * they are instead of spreading them apart. Narrower than the group, the
  * columns shrink alike. The section degrades by its own width
  * (`@container/usage`), never wrapping or overflowing: below 15rem the

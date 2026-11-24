@@ -1,5 +1,11 @@
-import { describe, it, expect } from 'vitest';
-import { handOffWidth, widthOnEditorToggle, widthOnExpand } from '../inspectorWidths';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import {
+  handOffWidth,
+  loadInspectorWidths,
+  saveInspectorWidth,
+  widthOnExpandedToggle,
+  widthOnShow,
+} from '../inspectorWidths';
 
 const bounds = { min: 14, max: 65 };
 
@@ -26,48 +32,65 @@ describe('handOffWidth', () => {
   });
 });
 
-const widths = { narrow: 26, wide: 50 };
+const widths = { narrow: 26, expanded: 50 };
 
-describe('widthOnEditorToggle', () => {
-  it('eases an expanded sidebar to the mode’s width', () => {
-    expect(widthOnEditorToggle({ wide: true, collapsed: false, widths })).toBe(50);
-    expect(widthOnEditorToggle({ wide: false, collapsed: false, widths })).toBe(26);
+describe('widthOnExpandedToggle', () => {
+  it('eases a shown sidebar to the state’s width', () => {
+    expect(widthOnExpandedToggle({ expanded: true, collapsed: false, widths })).toBe(50);
+    expect(widthOnExpandedToggle({ expanded: false, collapsed: false, widths })).toBe(26);
   });
 
-  it('keeps a collapsed sidebar collapsed when the editor closes behind it', () => {
-    expect(widthOnEditorToggle({ wide: false, collapsed: true, widths })).toBeNull();
+  it('keeps a collapsed sidebar collapsed when it goes narrow behind it', () => {
+    expect(widthOnExpandedToggle({ expanded: false, collapsed: true, widths })).toBeNull();
   });
 
-  it('shows a collapsed sidebar when the editor opens', () => {
-    expect(widthOnEditorToggle({ wide: true, collapsed: true, widths })).toBe(50);
+  it('shows a collapsed sidebar when it expands', () => {
+    expect(widthOnExpandedToggle({ expanded: true, collapsed: true, widths })).toBe(50);
   });
 });
 
-describe('widthOnExpand', () => {
+describe('widthOnShow', () => {
   const narrowMax = 40;
 
-  it('comes back at the width it collapsed from, editor open or not', () => {
-    const wide = { wideAtCollapse: true, wide: true, restored: 57, widths, narrowMax };
-    expect(widthOnExpand(wide)).toBeNull();
-    const narrow = { wideAtCollapse: false, wide: false, restored: 30, widths, narrowMax };
-    expect(widthOnExpand(narrow)).toBeNull();
+  it('comes back at the width it collapsed from, narrow or expanded', () => {
+    const expanded = { expandedAtCollapse: true, expanded: true, restored: 57, widths, narrowMax };
+    expect(widthOnShow(expanded)).toBeNull();
+    const narrow = { expandedAtCollapse: false, expanded: false, restored: 30, widths, narrowMax };
+    expect(widthOnShow(narrow)).toBeNull();
   });
 
-  it('takes the narrow width when the editor closed while collapsed', () => {
+  it('takes the narrow width when it went narrow while collapsed', () => {
     expect(
-      widthOnExpand({ wideAtCollapse: true, wide: false, restored: 57, widths, narrowMax }),
+      widthOnShow({ expandedAtCollapse: true, expanded: false, restored: 57, widths, narrowMax }),
     ).toBe(26);
   });
 
-  it('takes the wide width when the editor opened while collapsed', () => {
+  it('takes the expanded width when it expanded while collapsed', () => {
     expect(
-      widthOnExpand({ wideAtCollapse: false, wide: true, restored: 30, widths, narrowMax }),
+      widthOnShow({ expandedAtCollapse: false, expanded: true, restored: 30, widths, narrowMax }),
     ).toBe(50);
   });
 
-  it('narrows a layout persisted wide', () => {
+  it('narrows a layout persisted expanded', () => {
     expect(
-      widthOnExpand({ wideAtCollapse: false, wide: false, restored: 55, widths, narrowMax }),
+      widthOnShow({ expandedAtCollapse: false, expanded: false, restored: 55, widths, narrowMax }),
     ).toBe(26);
+  });
+});
+
+describe('stored widths', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('keeps the expanded width under its stored name, `wide`', () => {
+    const store = new Map<string, string>([
+      ['dash:inspector-widths', JSON.stringify({ narrow: 30, wide: 55 })],
+    ]);
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => store.set(k, v),
+    });
+    expect(loadInspectorWidths()).toEqual({ narrow: 30, expanded: 55 });
+    saveInspectorWidth('expanded', 60);
+    expect(JSON.parse(store.get('dash:inspector-widths')!)).toEqual({ narrow: 30, wide: 60 });
   });
 });

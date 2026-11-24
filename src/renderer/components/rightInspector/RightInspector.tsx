@@ -87,7 +87,7 @@ function withShortcut(label: string, binding: KeyBinding | undefined): string {
 
 /**
  * The task sidebar: its usage on top, then the view switch.
- * Narrow: a list (changes, or the commits) over the task's terminals. Wide,
+ * Narrow: a list (changes, or the commits) over the task's terminals. Expanded,
  * with the editor open: the list (the changes, the repo's files, or the
  * commits) runs full height on the left; the editor sits over the terminals
  * on the right. Details, either width, spans the whole body over the
@@ -139,11 +139,11 @@ export function RightInspector({
   }, [task.id]);
 
   // ── The editor's state: one workspace per task, open or not ──
-  const wide = diff !== null;
+  const expanded = diff !== null;
   const [segment, setSegment] = useState<Segment>('changes');
-  // Wide, Details takes the whole body over the terminals, as narrow; the
+  // Expanded, Details takes the whole body over the terminals, as narrow; the
   // editor stays mounted out of sight, so leaving Details finds it as it was.
-  const split = wide && segment !== 'details';
+  const split = expanded && segment !== 'details';
   // Where the Details toggle returns to.
   const [lastCodeSegment, setLastCodeSegment] = useState<CodeSegment>('changes');
   const target = useMemo<EditorTarget | null>(
@@ -156,14 +156,14 @@ export function RightInspector({
     cwd: task.path,
     openTaskId: task.id,
     projectId: task.projectId,
-    editorOpen: wide,
+    editorOpen: expanded,
     historyShown: segment === 'history',
     target,
   });
   const { view, selectView } = ws;
   const treePanel = useTreePanel();
   const openEditor = () => {
-    if (!wide) onOpenEditor();
+    if (!expanded) onOpenEditor();
   };
 
   // Changes and Files list the working tree (or the branch or PR compared
@@ -174,18 +174,18 @@ export function RightInspector({
     if (next !== 'history' && view.kind === 'commit') selectView({ kind: 'working', ref: 'HEAD' });
     if (next === 'files') openEditor();
   };
-  // Wide with the tree folded away, the view switch would change nothing
+  // Expanded with the tree folded away, the view switch would change nothing
   // visible: picking a view (even the current one) unfolds it, easing as
   // the tree toggle does. Leaving Details keeps the fold as it was. Picking
   // the current view otherwise collapses the sidebar, as an activity bar does.
   const pickSegment = (next: CodeSegment) => {
     const tabs = useEditorTabs.getState();
-    if (next === segment && !(wide && tabs.treeCollapsed)) {
+    if (next === segment && !(expanded && tabs.treeCollapsed)) {
       onCollapse();
       return;
     }
     selectSegment(next);
-    if (wide) tabs.setTreeCollapsed(false);
+    if (expanded) tabs.setTreeCollapsed(false);
   };
   const toggleDetails = () => {
     if (segment === 'details') selectSegment(lastCodeSegment);
@@ -212,17 +212,17 @@ export function RightInspector({
     setSegment('history');
     setLastCodeSegment('history');
     useEditorTabs.getState().setTreeCollapsed(false);
-    if (wide) selectView({ kind: 'commit', hash });
+    if (expanded) selectView({ kind: 'commit', hash });
     else {
       setPendingCommit(hash);
       onOpenEditor();
     }
   };
   useEffect(() => {
-    if (!wide || !pendingCommit) return;
+    if (!expanded || !pendingCommit) return;
     selectView({ kind: 'commit', hash: pendingCommit });
     setPendingCommit(null);
-  }, [wide, pendingCommit, selectView]);
+  }, [expanded, pendingCommit, selectView]);
   // The ahead / behind counts: History on the newest unpushed commit (they
   // are marked there), and the commit graph on the upstream's tip.
   const unpushed = useUnpushedCommits(
@@ -269,8 +269,8 @@ export function RightInspector({
     <div className="@container/sidehead flex h-11 shrink-0 items-center gap-0.5 pl-0.5">
       {/* Narrow, it takes the slack and gives it up first: the padding
           tightens, then the labels truncate, before the actions are pushed
-          out. They stay words at every width. Wide, the path does. */}
-      <div className={wide ? 'shrink-0' : 'min-w-0 flex-1'}>
+          out. They stay words at every width. Expanded, the path does. */}
+      <div className={expanded ? 'shrink-0' : 'min-w-0 flex-1'}>
         <Segmented<Segment>
           aria-label="Task sidebar view"
           size="sm"
@@ -317,17 +317,17 @@ export function RightInspector({
           <CommitPopover run={run} />
         </div>
       )}
-      {wide && <WorktreePath path={task.path} className="ml-auto" />}
+      {expanded && <WorktreePath path={task.path} className="ml-auto" />}
       <IconButton
         size="sm"
         title={segment === 'details' ? 'Hide details' : 'Details'}
         pressed={segment === 'details'}
         onClick={toggleDetails}
-        className={wide ? 'shrink-0' : 'ml-auto shrink-0'}
+        className={expanded ? 'shrink-0' : 'ml-auto shrink-0'}
       >
         <Info size={14} strokeWidth={1.8} />
       </IconButton>
-      {wide && (
+      {expanded && (
         <IconButton
           size="sm"
           title={withShortcut('Close editor', keybindings.closeDiff)}
@@ -367,7 +367,7 @@ export function RightInspector({
     />
   );
 
-  // Wide: the editor's tree (the changes or the whole repo), or the commits.
+  // Expanded: the editor's tree (the changes or the whole repo), or the commits.
   const tree =
     segment === 'history' ? (
       history
@@ -459,8 +459,8 @@ export function RightInspector({
                 onExpand={() => settleShellDrawer(false)}
                 onTuiActiveChange={onTuiActiveChange}
               >
-                {wide && segment === 'details' && withPorts(details)}
-                {wide ? (
+                {expanded && segment === 'details' && withPorts(details)}
+                {expanded ? (
                   <div className={split ? 'h-full' : 'hidden'}>
                     <EditorSheet closeBinding={keybindings.closeDiff} onClose={onCloseDiff}>
                       <Suspense fallback={null}>

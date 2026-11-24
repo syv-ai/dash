@@ -1,16 +1,22 @@
 /*
- * The task sidebar's two widths, in % of the window: narrow (the changes
- * list) and wide (a diff open). It is one panel resized between them, so
- * the shell layout persists whichever is showing; this keeps the other.
+ * The task sidebar's two widths, in % of the window: narrow (one column)
+ * and expanded (the editor beside it). It is one panel resized between them,
+ * so the shell layout persists whichever is showing; this keeps the other.
  */
 
 export interface InspectorWidths {
   narrow: number;
-  wide: number;
+  expanded: number;
 }
 
 const KEY = 'dash:inspector-widths';
-const DEFAULTS: InspectorWidths = { narrow: 26, wide: 50 };
+const DEFAULTS: InspectorWidths = { narrow: 26, expanded: 50 };
+
+/** As stored: the expanded width keeps its first name, `wide`. */
+interface Stored {
+  narrow?: unknown;
+  wide?: unknown;
+}
 
 function valid(n: unknown): n is number {
   return typeof n === 'number' && Number.isFinite(n) && n > 0 && n < 100;
@@ -18,10 +24,10 @@ function valid(n: unknown): n is number {
 
 export function loadInspectorWidths(): InspectorWidths {
   try {
-    const saved = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<InspectorWidths>;
+    const saved = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Stored;
     return {
       narrow: valid(saved.narrow) ? saved.narrow : DEFAULTS.narrow,
-      wide: valid(saved.wide) ? saved.wide : DEFAULTS.wide,
+      expanded: valid(saved.wide) ? saved.wide : DEFAULTS.expanded,
     };
   } catch {
     return DEFAULTS;
@@ -31,8 +37,10 @@ export function loadInspectorWidths(): InspectorWidths {
 /** Remember one of the widths, keeping the other. */
 export function saveInspectorWidth(which: keyof InspectorWidths, pct: number): void {
   if (!valid(pct)) return;
+  const widths = { ...loadInspectorWidths(), [which]: pct };
+  const stored: Stored = { narrow: widths.narrow, wide: widths.expanded };
   try {
-    localStorage.setItem(KEY, JSON.stringify({ ...loadInspectorWidths(), [which]: pct }));
+    localStorage.setItem(KEY, JSON.stringify(stored));
   } catch {
     // Storage full or unavailable: the default width serves next time.
   }
@@ -62,51 +70,50 @@ export function handOffWidth({
 
 /*
  * Collapsing the task sidebar keeps the editor (and its unsaved edits)
- * mounted out of sight; the editor opening or closing is a separate act.
- * These two decide the panel's width when one happens while the other
- * holds.
+ * mounted out of sight; going narrow or expanded is a separate act. These
+ * two decide the panel's width when one happens while the other holds.
  */
 
 /**
- * The width (%) to ease to as the editor opens (`wide`) or closes, or null
- * to leave the panel be: closing behind a collapsed sidebar keeps it
- * collapsed (it expands to the narrow width later), while opening the
- * editor always shows it.
+ * The width (%) to ease to as the sidebar goes `expanded` or narrow, or null
+ * to leave the panel be: going narrow behind a collapsed sidebar keeps it
+ * collapsed (it shows at the narrow width later), while expanding always
+ * shows it.
  */
-export function widthOnEditorToggle({
-  wide,
+export function widthOnExpandedToggle({
+  expanded,
   collapsed,
   widths,
 }: {
-  wide: boolean;
+  expanded: boolean;
   collapsed: boolean;
   widths: InspectorWidths;
 }): number | null {
-  if (collapsed && !wide) return null;
-  return wide ? widths.wide : widths.narrow;
+  if (collapsed && !expanded) return null;
+  return expanded ? widths.expanded : widths.narrow;
 }
 
 /**
- * The width (%) to take on expanding, or null to keep the one the panel
- * came back at (the width it collapsed from). If the editor opened or
- * closed meanwhile, that width belongs to the other mode: take this mode's
- * remembered one. A narrow sidebar never comes back wider than `narrowMax`
- * (a layout persisted with the editor open).
+ * The width (%) to take as a collapsed sidebar shows again, or null to keep
+ * the one the panel came back at (the width it collapsed from). If it went
+ * narrow or expanded meanwhile, that width belongs to the other state: take
+ * this state's remembered one. A narrow sidebar never comes back wider than
+ * `narrowMax` (a layout persisted expanded).
  */
-export function widthOnExpand({
-  wideAtCollapse,
-  wide,
+export function widthOnShow({
+  expandedAtCollapse,
+  expanded,
   restored,
   widths,
   narrowMax,
 }: {
-  wideAtCollapse: boolean;
-  wide: boolean;
+  expandedAtCollapse: boolean;
+  expanded: boolean;
   restored: number;
   widths: InspectorWidths;
   narrowMax: number;
 }): number | null {
-  if (wideAtCollapse !== wide) return wide ? widths.wide : widths.narrow;
-  if (!wide && restored > narrowMax) return widths.narrow;
+  if (expandedAtCollapse !== expanded) return expanded ? widths.expanded : widths.narrow;
+  if (!expanded && restored > narrowMax) return widths.narrow;
   return null;
 }
