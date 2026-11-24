@@ -15,7 +15,7 @@ import { CommitPopover } from '../changes/CommitPopover';
 import { useCommitRun } from '../changes/useCommitRun';
 import { ShellDrawerWrapper } from '../terminal/ShellDrawerWrapper';
 import { PortsDrawerWrapper } from './PortsDrawerWrapper';
-import { UsageRow } from './UsageRow';
+import { UsageSection } from './UsageSection';
 import { TaskDetails } from './TaskDetails';
 import { IconButton } from '../ui/IconButton';
 import { Segmented } from '../ui/Segmented';
@@ -56,7 +56,8 @@ interface RightInspectorProps {
   task: Task;
   /** The model the task's session runs (live, from its status line). */
   modelName: string | null;
-  rateLimits: RateLimits;
+  /** The account's limits; undefined until a session reports one. */
+  rateLimits?: RateLimits;
   burns: LimitBurns;
   contextUsage?: ContextUsage;
   /** What the editor opened on, or null while it is closed (the sidebar is
@@ -80,7 +81,7 @@ function withShortcut(label: string, binding: KeyBinding | undefined): string {
 }
 
 /**
- * The task sidebar: its usage in one row on top, then the view switch.
+ * The task sidebar: its usage on top, then the view switch.
  * Narrow: a list (changes, or the commits) over the task's terminals. Wide,
  * with the editor open: the list (the changes, the repo's files, or the
  * commits) runs full height on the left; the editor sits over the terminals
@@ -368,7 +369,7 @@ export function RightInspector({
     // pb-2: the terminal sheet keeps the same 8px gutter from the window's
     // bottom edge as the main sheet.
     <div className="flex h-full min-w-0 flex-col bg-ground pt-2 pr-2 pb-2">
-      <UsageRow contextUsage={contextUsage} rateLimits={rateLimits} burns={burns} />
+      <UsageSection contextUsage={contextUsage} rateLimits={rateLimits} burns={burns} />
       {header}
       <div className="min-h-0 flex-1">
         <ResizablePanelGroup

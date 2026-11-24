@@ -1349,7 +1349,7 @@ export function App() {
                     statusLineData[activeTask.id]?.model,
                     activeTask.model,
                   )}
-                  rateLimits={latestRateLimits ?? {}}
+                  rateLimits={latestRateLimits}
                   burns={burns}
                   contextUsage={contextUsage[activeTask.id]}
                   diff={diffSettled ? inlineDiff : null}

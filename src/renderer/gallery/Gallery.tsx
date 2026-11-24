@@ -52,6 +52,8 @@ import { Kbd } from '../components/ui/Kbd';
 import { ListRow } from '../components/ui/ListRow';
 import { MainRepoBadge } from '../components/ui/MainRepoBadge';
 import { Meter, usageTone } from '../components/ui/Meter';
+import { ProgressRing } from '../components/ui/ProgressRing';
+import { usageColor } from '../lib/usageColor';
 import { PanelHeader } from '../components/ui/PanelHeader';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/Popover';
 import { PrBadge } from '../components/ui/PrBadge';
@@ -139,6 +141,7 @@ export function Gallery() {
           <Fields />
           <Badges />
           <Meters />
+          <Rings />
           <Rows />
           <PillTabs />
           <Menus pinned={pinned} />
@@ -351,6 +354,54 @@ function Meters() {
       <Meter label="Session context" value={62} />
       <Meter value={35} role="progressbar" aria-label="Downloading" />
       <Meter value={70} tone="work" size="sm" aria-label="Context" />
+    </Section>
+  );
+}
+
+function Rings() {
+  return (
+    <Section title="ProgressRing · usageColor">
+      <div className="grid grid-cols-5 justify-items-center gap-2">
+        {[10, 45, 70, 95].map((v) => (
+          <ProgressRing
+            key={v}
+            value={v}
+            size={44}
+            stroke={4}
+            color={usageColor(v)}
+            aria-label={`Usage ${v}%`}
+          >
+            <span className="text-sm font-semibold tabular-nums">{v}%</span>
+          </ProgressRing>
+        ))}
+        <ProgressRing value={null} size={44} stroke={4} aria-label="No reading">
+          <span className="text-sm font-semibold text-ink-3">—</span>
+        </ProgressRing>
+      </div>
+      {/* The colour ramp: green to 40 %, yellow at 65 %, red at 100 %. */}
+      <div className="flex h-3 overflow-hidden rounded-full">
+        {Array.from({ length: 51 }, (_, i) => (
+          <div
+            key={i}
+            className="flex-1 bg-(--swatch)"
+            style={{ '--swatch': usageColor(i * 2) } as React.CSSProperties}
+          />
+        ))}
+      </div>
+      <div className="grid grid-cols-5 justify-items-center gap-2">
+        {[0, 40, 65, 82, 100].map((v) => (
+          <ProgressRing
+            key={v}
+            value={v}
+            size={32}
+            stroke={3}
+            color={usageColor(v)}
+            aria-label={`Usage ${v}%`}
+          >
+            <span className="text-xs font-semibold tabular-nums">{v}</span>
+          </ProgressRing>
+        ))}
+      </div>
     </Section>
   );
 }

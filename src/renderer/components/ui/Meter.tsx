@@ -31,8 +31,8 @@ const fillVariants = cva('h-full rounded-full transition-[width] duration-500 ea
   defaultVariants: { tone: 'neutral' },
 });
 
-/** A tone's text colour, for a value shown apart from the meter. */
-export const meterToneText: Record<MeterTone, string> = {
+/** A tone's text colour, for the percent in the label row. */
+const meterToneText: Record<MeterTone, string> = {
   neutral: 'text-ink',
   needs: 'text-state-needs',
   fail: 'text-state-fail',
