@@ -1,12 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  ArrowUp,
-  ChevronDown,
-  ChevronRight,
-  GitCommit,
-  GitPullRequestArrow,
-  History,
-} from 'lucide-react';
+import { ArrowUp, ChevronDown, ChevronRight, GitPullRequestArrow, History } from 'lucide-react';
 import { formatRelativeTime } from '@shared/relativeTime';
 import type { FileChange } from '../../../shared/types';
 import type { CommitSummary, EditorView } from './types';
@@ -42,9 +35,10 @@ interface HistoryListProps {
   commits: CommitSummary[];
   loading: boolean;
   view: EditorView;
-  /** The working tree, or a commit. */
+  /** The PR, or a commit. The way back to the working tree is Changes or
+   *  Files (D29b), so it has no row here. */
   onSelectView: (view: EditorView) => void;
-  /** Comments needing attention per scope ('live' / 'commit:<hash>'). */
+  /** Comments needing attention per scope ('commit:<hash>' is read here). */
   commentCountByScope: Map<string, number>;
   /** The task's open PR, as a row that opens the PR view. */
   pr: PrEntry | null;
@@ -59,7 +53,7 @@ interface HistoryListProps {
 }
 
 /**
- * The task's history: the working tree, its open PR, then its commits. The
+ * The task's history: its open PR, then its commits. The
  * selected commit unfolds its files; picking one shows that commit's diff of
  * it in the editor.
  */
@@ -97,22 +91,11 @@ export function HistoryList({
       ?.scrollIntoView({ block: 'nearest' });
   }, [view]);
 
-  const liveComments = commentCountByScope.get('live') ?? 0;
   return (
     <div
       ref={listRef}
       className="scrollbar-gutter-stable scrollbar-thin-hover flex h-full min-h-0 flex-col gap-px overflow-y-auto pb-2"
     >
-      {/* Always first: the only editable view, and the way back from a commit. */}
-      <ListRow
-        size="sm"
-        selected={view.kind === 'working'}
-        leading={<GitCommit size={14} strokeWidth={1.8} className="text-icon" />}
-        trailing={liveComments > 0 && <CountBadge count={liveComments} />}
-        onClick={() => onSelectView({ kind: 'working', ref: 'HEAD' })}
-      >
-        Working tree
-      </ListRow>
       {pr && <PrRow pr={pr} selected={view.kind === 'pr'} />}
       {loading && commits.length === 0 && <EmptyState title="Loading…" />}
       {!loading && commits.length === 0 && (
