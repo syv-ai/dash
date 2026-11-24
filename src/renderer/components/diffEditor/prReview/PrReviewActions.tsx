@@ -1,14 +1,12 @@
 import { useEffect, useMemo } from 'react';
 import { ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
 import type { PrProvider } from '../../../../shared/types';
-import { prScope } from '../../../../shared/prScope';
-import { useCommentsStore } from '../../../stores/commentsStore';
 import { prKey, reviewKey, usePrReviews } from '../../../stores/prReviewStore';
 import { Button } from '../../ui/Button';
 import { Checkbox } from '../../ui/Checkbox';
 import { IconButton } from '../../ui/IconButton';
-import { fileRows, navStops, nextUnviewed, viewedBlob } from '../../review/outline';
-import { navigateReview } from './useReviewNavigation';
+import { fileRows, nextUnviewed, viewedBlob } from '../../review/outline';
+import type { NavDirection } from './useReviewNavigation';
 
 const NO_MARKS: Record<string, string> = {};
 
@@ -21,14 +19,17 @@ const NO_MARKS: Record<string, string> = {};
 export function PrReviewActions({
   pr,
   taskId,
-  paneId,
+  canStep,
+  onStep,
   activePath,
   onOpenFile,
 }: {
   pr: { provider: PrProvider; number: number };
   taskId: string;
-  /** The focused group's pane. */
-  paneId: string;
+  /** There is a thread or draft to step to. */
+  canStep: boolean;
+  /** Step the focused group's pane to the next (1) or previous (-1) one. */
+  onStep: (dir: NavDirection) => void;
   /** The file showing in it; null for none or a non-file tab. */
   activePath: string | null;
   onOpenFile: (path: string) => void;
@@ -36,7 +37,6 @@ export function PrReviewActions({
   const { provider, number } = pr;
   const review = usePrReviews((s) => s.byPr[prKey(provider, number)] ?? null);
   const marks = usePrReviews((s) => s.viewed[reviewKey(taskId, provider, number)]);
-  const byFile = useCommentsStore((s) => (s.taskId === taskId ? s.byFile : null));
   useEffect(() => {
     if (marks === undefined) void usePrReviews.getState().loadViewed(taskId, provider, number);
   }, [marks, taskId, provider, number]);
@@ -45,37 +45,26 @@ export function PrReviewActions({
     () => (review ? fileRows(review.files, [], marks ?? NO_MARKS, []) : []),
     [review, marks],
   );
-  const stops = useMemo(() => {
-    if (!review) return [];
-    const scope = prScope(provider, number);
-    const drafts = byFile
-      ? Object.values(byFile)
-          .flat()
-          .filter((c) => c.viewScope === scope)
-      : [];
-    return navStops(review.threads, drafts);
-  }, [review, byFile, provider, number]);
   // Nothing to read through without a file showing (none, or the overview tab).
   if (!review || activePath === null) return null;
 
   const row = rows.find((r) => r.file.path === activePath);
   const next = row?.viewed ? nextUnviewed(rows, row.file.path) : null;
-  const none = stops.length === 0;
   return (
     <>
       <IconButton
         size="sm"
         title="Previous thread or draft (⇧⌥F9)"
-        disabled={none}
-        onClick={() => navigateReview(paneId, -1)}
+        disabled={!canStep}
+        onClick={() => onStep(-1)}
       >
         <ChevronUp size={14} strokeWidth={1.8} />
       </IconButton>
       <IconButton
         size="sm"
         title="Next thread or draft (⌥F9)"
-        disabled={none}
-        onClick={() => navigateReview(paneId, 1)}
+        disabled={!canStep}
+        onClick={() => onStep(1)}
       >
         <ChevronDown size={14} strokeWidth={1.8} />
       </IconButton>

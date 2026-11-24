@@ -18,8 +18,9 @@ import { useCommentsStore } from '../../stores/commentsStore';
 import { useGit } from '../../stores/gitStore';
 import { PrThreadOverlay } from './prReview/PrThreadOverlay';
 import { useThreadMinimapMarks } from './prReview/useThreadMinimapMarks';
-import { useReviewNavigation } from './prReview/useReviewNavigation';
-import { navStops, trayNotes } from '../review/outline';
+import type { AttachReviewNav } from './prReview/useReviewNavigation';
+import type { GroupIndex } from './tabs/editorLayout';
+import { trayNotes } from '../review/outline';
 import { usePrView } from './prReview/usePrView';
 import { draftSubmitLabel as prDraftSubmitLabel } from './prReview/prViewPolicy';
 import { useGutterSelection } from './comments/useGutterSelection';
@@ -81,8 +82,11 @@ interface EditorPaneProps {
   onClearReveal: () => void;
   /** The project `cwd` belongs to (PR review calls name it). */
   projectId: string | null;
-  /** Open another file and reveal `range` there (next/previous thread). */
-  onOpenFileAt: (path: string, range: TextRange) => void;
+  /** The editor group this pane shows. */
+  group: GroupIndex;
+  /** In a PR view: lend this pane's editor to the groups' next/previous
+   *  thread or draft (see `useReviewNavigation`). */
+  onAttachReviewNav?: AttachReviewNav;
   /** Show this range once the file is on screen (go-to-definition, openFileAt). */
   revealRange: { range: TextRange; nonce: number } | null;
   onRevealed: (nonce: number) => void;
@@ -103,7 +107,8 @@ export function EditorPane({
   onNavigateToComment,
   onClearReveal,
   projectId,
-  onOpenFileAt,
+  group,
+  onAttachReviewNav,
   revealRange,
   onRevealed,
   onIsDirectory,
@@ -430,27 +435,10 @@ export function EditorPane({
 
   // The PR view's threads in the minimap, and next/previous thread or draft.
   useThreadMinimapMarks({ modifiedEditor, monaco, threads: pr.inlineThreads, isDark });
-  const navigable = useMemo(
-    () =>
-      pr.review
-        ? navStops(
-            pr.review.threads,
-            Object.values(commentsByFile)
-              .flat()
-              .filter((c) => c.viewScope === scope),
-          )
-        : [],
-    [pr.review, commentsByFile, scope],
-  );
-  useReviewNavigation({
-    paneId,
-    modifiedEditor,
-    monaco,
-    enabled: isPrView,
-    filePath,
-    stops: navigable,
-    onOpenAt: onOpenFileAt,
-  });
+  useEffect(() => {
+    if (!onAttachReviewNav || !modifiedEditor || !monaco) return;
+    return onAttachReviewNav(group, modifiedEditor, monaco);
+  }, [onAttachReviewNav, group, modifiedEditor, monaco]);
 
   const editingKind = draftApi.editingId
     ? liveComments.find((c) => c.id === draftApi.editingId)?.kind

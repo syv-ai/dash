@@ -5,7 +5,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../ui/Resi
 import { EmptyState } from '../ui/EmptyState';
 import { sheetSurface } from '../ui/FolderTab';
 import { cn } from '../../lib/cn';
-import { selectLayout, useEditorTabs } from '../../stores/editorTabsStore';
+import { selectLayout, useEditorTabs, type TextRange } from '../../stores/editorTabsStore';
 import { useEditors } from '../../stores/editorsStore';
 import { useSettings } from '../../stores/settingsStore';
 import { matchesBinding } from '../../keybindings';
@@ -31,6 +31,7 @@ import { absolutePath } from './editor/fileRef';
 import { LspStatusIndicator } from './LspStatusIndicator';
 import { CompareButton } from './CompareButton';
 import { PrReviewActions } from './prReview/PrReviewActions';
+import { useReviewNavigation } from './prReview/useReviewNavigation';
 import { PrOverviewPage } from '../review/PrOverviewPage';
 import { commentScope } from './comments/commentScope';
 import { installLsp } from '../../lsp';
@@ -161,13 +162,26 @@ export function EditorGroups({ ws, terminalTheme, isDark, onShowReview }: Props)
   // editor's top-right corner however it splits (the tree toggle holds the
   // first group's start). Language servers show here only when unwell.
   const focusedActive = layout.groups[layout.focused]?.active ?? null;
+  const openAt = useCallback(
+    (path: string, range: TextRange) => useEditorTabs.getState().openAt(tabsKey, path, range),
+    [tabsKey],
+  );
+  // A PR view's next/previous thread or draft: the buttons below drive the
+  // focused group's pane, ⌥F9 each pane's own.
+  const reviewNav = useReviewNavigation({
+    view: ws.view,
+    taskId: ws.activeTaskId,
+    layout,
+    onOpenAt: openAt,
+  });
   const editorActions = (
     <>
       {ws.view.kind === 'pr' && ws.activeTaskId && (
         <PrReviewActions
           pr={ws.view}
           taskId={ws.activeTaskId}
-          paneId={`pane:${tabsKey}:${layout.focused}`}
+          canStep={reviewNav.canStep}
+          onStep={reviewNav.step}
           activePath={focusedActive && isFileTab(focusedActive) ? focusedActive : null}
           onOpenFile={ws.openFile}
         />
@@ -245,6 +259,8 @@ export function EditorGroups({ ws, terminalTheme, isDark, onShowReview }: Props)
                     ) : target ? (
                       <EditorPane
                         paneId={`pane:${tabsKey}:${i}`}
+                        group={index}
+                        onAttachReviewNav={ws.view.kind === 'pr' ? reviewNav.attach : undefined}
                         cwd={cwd}
                         git={ws.git}
                         filePath={target.path}
@@ -256,9 +272,6 @@ export function EditorGroups({ ws, terminalTheme, isDark, onShowReview }: Props)
                         onNavigateToComment={ws.navigateToComment}
                         onClearReveal={ws.clearRevealComment}
                         projectId={ws.projectId}
-                        onOpenFileAt={(path, range) =>
-                          useEditorTabs.getState().openAt(tabsKey, path, range)
-                        }
                         revealRange={groupReveal}
                         onRevealed={clearReveal}
                         onIsDirectory={(path) => showFolder(index, path)}
