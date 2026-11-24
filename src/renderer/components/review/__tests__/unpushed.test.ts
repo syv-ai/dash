@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { onPrHeadBranch, unpushedLine } from '../unpushed';
+import { headMovedPast, onPrHeadBranch, unpushedLine } from '../unpushed';
 
 describe('onPrHeadBranch', () => {
   it("holds for the branch's own PR, whatever the branch reads", () => {
@@ -18,5 +18,14 @@ describe('unpushedLine', () => {
   it('counts the commits, singular and plural', () => {
     expect(unpushedLine(1)).toBe("1 local commit isn't in the PR yet — push to include it.");
     expect(unpushedLine(3)).toBe("3 local commits aren't in the PR yet — push to include them.");
+  });
+});
+
+describe('headMovedPast', () => {
+  it('holds only when both heads are known and differ', () => {
+    expect(headMovedPast('b', 'a')).toBe(true);
+    expect(headMovedPast('a', 'a')).toBe(false);
+    expect(headMovedPast(undefined, 'a')).toBe(false);
+    expect(headMovedPast('b', null)).toBe(false);
   });
 });

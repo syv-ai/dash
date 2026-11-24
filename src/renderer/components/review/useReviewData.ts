@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PrRef, PrReview } from '../../../shared/types';
+import { useGit } from '../../stores/gitStore';
 import { prKey, reviewKey, usePrReviews } from '../../stores/prReviewStore';
+import { headMovedPast } from './unpushed';
 
 /** How often a visible Review view refetches its PR (D8). */
 export const REVIEW_RELOAD_MS = 60_000;
@@ -21,7 +23,8 @@ export interface ReviewData {
 /**
  * The target PR's review and the task's viewed marks, fetched as the Review
  * view mounts, every `REVIEW_RELOAD_MS` while it shows (and the window is
- * visible), and on `refresh` (D8).
+ * visible), on `refresh` (D8), and at once when the task's PR lookup finds
+ * the PR's head moved past the loaded one (a push, D96).
  */
 export function useReviewData({
   taskId,
@@ -57,6 +60,22 @@ export function useReviewData({
     }, REVIEW_RELOAD_MS);
     return () => clearInterval(id);
   }, [refresh]);
+
+  // The task's own PR lookup (refetched as HEAD moves) sees a push before the
+  // next reload would: reload when its head differs from the loaded one.
+  const detectedHead = useGit(
+    (s) => s.prByTask[taskId]?.find((p) => p.provider === provider && p.number === number)?.headSha,
+  );
+  const loadedHead = review?.head;
+  const stale = headMovedPast(detectedHead, loadedHead);
+  // Once per detected head: a reload that still lands the old head (the
+  // forge lagging) doesn't retry until the lookup moves again.
+  const reloadedFor = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!stale || reloadedFor.current === detectedHead) return;
+    reloadedFor.current = detectedHead;
+    refresh();
+  }, [stale, detectedHead, refresh]);
 
   return { review, marks, error, loading, refresh };
 }
