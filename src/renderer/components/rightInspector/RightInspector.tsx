@@ -189,12 +189,24 @@ export function RightInspector({
     if (anyDirtyUnder(task.path)) setConfirmClose(true);
     else onCloseDiff();
   };
-  // Details' Last commit: History, on that commit, its files unfolded.
+  // Details' Last commit: History, on that commit, its files unfolded. The
+  // editor opening sets its own view, so with it closed the commit is
+  // picked once it is open.
+  const [pendingCommit, setPendingCommit] = useState<string | null>(null);
   const openCommit = (hash: string) => {
     setSegment('history');
     setLastCodeSegment('history');
-    pickView({ kind: 'commit', hash });
+    if (wide) selectView({ kind: 'commit', hash });
+    else {
+      setPendingCommit(hash);
+      onOpenEditor();
+    }
   };
+  useEffect(() => {
+    if (!wide || !pendingCommit) return;
+    selectView({ kind: 'commit', hash: pendingCommit });
+    setPendingCommit(null);
+  }, [wide, pendingCommit, selectView]);
   const pr: PrEntry | null = ws.prEntry && {
     ...ws.prEntry,
     onOpen: () => {
