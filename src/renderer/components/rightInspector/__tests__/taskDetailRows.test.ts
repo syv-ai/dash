@@ -42,6 +42,7 @@ const input = (
   liveModel: null,
   contextPercent: null,
   showCost: true,
+  activity: null,
   ...patch,
 });
 
@@ -58,7 +59,7 @@ describe('taskDetailSections', () => {
   it('adds what a running, used task has', () => {
     const s = taskDetailSections(
       input(
-        { parentTaskName: 'Orchestrator', contextPercent: 41.6 },
+        { parentTaskName: 'Orchestrator', contextPercent: 41.6, activity: 'busy' },
         {
           updatedAt: '2026-11-21T09:00:00.000Z',
           jobId: 'job1',
@@ -85,7 +86,7 @@ describe('taskDetailSections', () => {
       'Job',
       'Dash access',
     ]);
-    expect(s.session.find((r) => r.label === 'State')?.value).toBe('Started');
+    expect(s.session.find((r) => r.label === 'State')?.value).toBe('Working');
     expect(s.usage.map((r) => [r.label, r.value])).toEqual([
       ['Tokens', '184.0k'],
       ['Cost', '$1.42'],
@@ -103,6 +104,13 @@ describe('taskDetailSections', () => {
     expect(live).toMatchObject({ value: 'Opus 5.5', title: 'Configured: Opus' });
     const configured = taskDetailSections(input({}, { model: 'default' })).session[0]!;
     expect(configured.value).toBe('Claude Code default');
+  });
+
+  it('shows a live state over an old stop time', () => {
+    const s = taskDetailSections(
+      input({ activity: 'waiting' }, { jobId: 'j', sessionStoppedAt: '2026-11-22T08:00:00Z' }),
+    );
+    expect(s.session.find((r) => r.label === 'State')?.value).toBe('Needs you');
   });
 
   it('names a main-checkout task by its folder, and a stopped session', () => {

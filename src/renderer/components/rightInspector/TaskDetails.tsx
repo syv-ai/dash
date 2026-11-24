@@ -4,6 +4,7 @@ import type { ContextUsage, Task } from '../../../shared/types';
 import { linkedItemUrl } from '../../../shared/urls';
 import { formatRelativeTime } from '../../../shared/relativeTime';
 import { useGit } from '../../stores/gitStore';
+import { useRuntime } from '../../stores/runtimeStore';
 import { selectTaskById, useProjects } from '../../stores/projectsStore';
 import { useSettings } from '../../stores/settingsStore';
 import { Button } from '../ui/Button';
@@ -73,6 +74,7 @@ export function TaskDetails({ task, modelName, contextUsage, onEditSettings }: T
     task.parentTaskId ? (selectTaskById(s, task.parentTaskId)?.name ?? null) : null,
   );
   const showCost = useSettings((s) => s.showTaskCost);
+  const activity = useRuntime((s) => s.taskActivity[task.id]?.state ?? null);
   const gitStatus = useGit((s) => s.gitStatus);
   const prs = useGit((s) => s.branchPrsByTask[task.id]);
   const lastCommit = useLastCommit(task.path, gitStatus);
@@ -87,8 +89,9 @@ export function TaskDetails({ task, modelName, contextUsage, onEditSettings }: T
         contextPercent:
           contextUsage && contextUsage.percentage > 0 ? contextUsage.percentage : null,
         showCost,
+        activity,
       }),
-    [task, project?.name, parentName, modelName, contextUsage, showCost],
+    [task, project?.name, parentName, modelName, contextUsage, showCost, activity],
   );
 
   const branch = gitStatus?.branch || task.branch;

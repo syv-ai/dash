@@ -1,4 +1,4 @@
-import type { PermissionMode, Task, TaskModel } from '../../../shared/types';
+import type { ActivityState, PermissionMode, Task, TaskModel } from '../../../shared/types';
 import { formatCost, formatTokens } from '../../utils/format';
 
 /** One key/value line in the Details tab. */
@@ -21,6 +21,8 @@ export interface TaskDetailsInput {
   /** Context window used, 0–100; null until the session has replied. */
   contextPercent: number | null;
   showCost: boolean;
+  /** The session's live state, absent while Dash isn't attached to one. */
+  activity: ActivityState | null;
 }
 
 /** The Details tab's plain sections; the rich ones (git, PRs, linked items,
@@ -37,6 +39,23 @@ const PERMISSION_LABELS: Record<PermissionMode, string> = {
   auto: 'Auto (classifier approves safe actions)',
   bypassPermissions: 'Skip all prompts',
 };
+
+const ACTIVITY_LABELS: Record<Exclude<ActivityState, 'stopped'>, string> = {
+  busy: 'Working',
+  idle: 'Idle',
+  waiting: 'Needs you',
+  error: 'Failed',
+};
+
+/** The session's state now: live when attached; else when it last stopped,
+ *  or that it never started. */
+function sessionState(task: Task, activity: ActivityState | null): string {
+  if (activity && activity !== 'stopped') return ACTIVITY_LABELS[activity];
+  const stopped = formatWhen(task.sessionStoppedAt);
+  if (stopped) return `Stopped ${stopped}`;
+  if (activity === 'stopped') return 'Stopped';
+  return task.jobId ? 'Not attached' : 'Not started';
+}
 
 const MODEL_LABELS: Record<TaskModel, string> = {
   default: 'Claude Code default',
@@ -73,7 +92,6 @@ export function taskDetailSections(input: TaskDetailsInput): TaskDetailSections 
   const created = parseDbTime(task.createdAt);
   const updated = parseDbTime(task.updatedAt);
   const updatedLater = !!created && !!updated && updated.getTime() - created.getTime() >= 60_000;
-  const stopped = formatWhen(task.sessionStoppedAt);
 
   return {
     task: present([
@@ -100,7 +118,7 @@ export function taskDetailSections(input: TaskDetailsInput): TaskDetailSections 
       { label: 'Permissions', value: PERMISSION_LABELS[task.permissionMode] },
       {
         label: 'State',
-        value: stopped ? `Stopped ${stopped}` : task.jobId ? 'Started' : 'Not started',
+        value: sessionState(task, input.activity),
       },
       !!task.sessionId && { label: 'Session', value: task.sessionId, copy: true },
       !!task.jobId && { label: 'Job', value: task.jobId, copy: true },
