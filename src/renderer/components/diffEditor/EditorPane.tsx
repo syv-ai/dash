@@ -260,7 +260,9 @@ export function EditorPane({
   // and snapshot are both scoped via closure inside the hook, which kills
   // the previous file-ref-races (the source of the phantom-comment bug).
   // Loaded and on screen: decorations go on the models the widget shows.
-  const isFileLoaded = state.kind === 'loaded' && attachedLoadId === state.loadId;
+  // (and of this file: the render that switches files still holds the last one's load).
+  const isFileLoaded =
+    state.kind === 'loaded' && attachedLoadId === state.loadId && state.filePath === filePath;
   // The PR view's review, threads and policy; inert in any other view.
   const pr = usePrView({
     view,

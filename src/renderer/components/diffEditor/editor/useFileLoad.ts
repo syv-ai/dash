@@ -13,6 +13,9 @@ export type LoadState =
        *  state object's identity — in-place patches (save updating mtime/size)
        *  create a new object but keep the same loadId. */
       loadId: number;
+      /** The file this load read: for one render after `filePath` changes,
+       *  the state still holds the previous file's load. */
+      filePath: string;
       originalContent: string;
       modifiedContent: string;
       mtimeMs: number;
@@ -65,6 +68,7 @@ export function useFileLoad(
         setState({
           kind: 'loaded',
           loadId: ++loadSeq.current,
+          filePath,
           originalContent: resp.data.originalContent,
           modifiedContent: initial,
           mtimeMs: resp.data.mtimeMs,
@@ -90,6 +94,7 @@ export function useFileLoad(
         setState({
           kind: 'loaded',
           loadId: ++loadSeq.current,
+          filePath,
           originalContent: resp.data.originalContent,
           modifiedContent: resp.data.modifiedContent,
           mtimeMs: 0,
@@ -116,6 +121,7 @@ export function useFileLoad(
         setState({
           kind: 'loaded',
           loadId: ++loadSeq.current,
+          filePath,
           originalContent: resp.data.originalContent,
           modifiedContent: initial,
           mtimeMs: resp.data.mtimeMs,
