@@ -1,13 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import type { Task } from '../../../../shared/types';
-import { parseDbTime, taskDetailSections, type TaskDetailsInput } from '../taskDetailRows';
+import {
+  lastActiveRow,
+  parseDbTime,
+  taskDetailSections,
+  type TaskDetailsInput,
+} from '../taskDetailRows';
+
+const NOW = Date.parse('2026-11-24T12:00:00.000Z');
 
 const TASK: Task = {
   id: 't1',
   projectId: 'p1',
   name: 'Fix the header',
   branch: 'fix/header',
-  path: '/repo/.claude/worktrees/fix-header',
+  path: '/Users/me/repo/.claude/worktrees/fix-header',
   status: 'idle',
   useWorktree: true,
   permissionMode: 'acceptEdits',
@@ -43,13 +50,16 @@ const input = (
   contextPercent: null,
   showCost: true,
   activity: null,
+  lastActiveMs: null,
+  homeDir: '/Users/me',
+  now: NOW,
   ...patch,
 });
 
 const labels = (rows: { label: string }[]) => rows.map((r) => r.label);
 
 describe('taskDetailSections', () => {
-  it('shows only what is set: no parent, no update, no session ids, no usage', () => {
+  it('shows only what is set: no parent, no activity, no session ids, no usage', () => {
     const s = taskDetailSections(input());
     expect(labels(s.task)).toEqual(['Name', 'Project', 'Kind', 'Worktree', 'Created']);
     expect(labels(s.session)).toEqual(['Model', 'Permissions', 'State', 'Dash access']);
@@ -61,7 +71,6 @@ describe('taskDetailSections', () => {
       input(
         { parentTaskName: 'Orchestrator', contextPercent: 41.6, activity: 'busy' },
         {
-          updatedAt: '2026-11-21T09:00:00.000Z',
           jobId: 'job1',
           sessionId: 'uuid-1',
           totalTokens: 184_000,
@@ -76,7 +85,7 @@ describe('taskDetailSections', () => {
       'Worktree',
       'Created by',
       'Created',
-      'Updated',
+      'Last active',
     ]);
     expect(labels(s.session)).toEqual([
       'Model',
@@ -120,6 +129,36 @@ describe('taskDetailSections', () => {
     expect(s.task.find((r) => r.label === 'Kind')?.value).toBe('Main checkout');
     expect(labels(s.task)).toContain('Folder');
     expect(s.session.find((r) => r.label === 'State')?.value).toMatch(/^Stopped /);
+  });
+});
+
+describe('the folder row', () => {
+  it('shows the path from ~, copying the full one', () => {
+    const row = taskDetailSections(input()).task.find((r) => r.label === 'Worktree')!;
+    expect(row).toMatchObject({
+      value: '~/repo/.claude/worktrees/fix-header',
+      copy: '/Users/me/repo/.claude/worktrees/fix-header',
+    });
+  });
+});
+
+describe('lastActiveRow', () => {
+  it('is "Active now" while the session works', () => {
+    expect(lastActiveRow(input({ activity: 'busy', lastActiveMs: NOW - 3_600_000 }))?.value).toBe(
+      'Active now',
+    );
+  });
+
+  it("is the conversation's last change, the exact time in the tooltip", () => {
+    const row = lastActiveRow(input({ activity: 'idle', lastActiveMs: NOW - 4 * 60_000 }))!;
+    expect(row.value).toBe('4 min ago');
+    expect(row.title).toBeTruthy();
+  });
+
+  it('falls back to when the session stopped, and is null for one that never ran', () => {
+    const stopped = lastActiveRow(input({}, { sessionStoppedAt: '2026-11-24T10:00:00.000Z' }));
+    expect(stopped?.value).toBe('2 hr ago');
+    expect(lastActiveRow(input())).toBeNull();
   });
 });
 

@@ -9,8 +9,8 @@
 import { createHash } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
-import { claudeConfigDir } from '../utils/claudePaths';
-import type { TaskMessageAddresses } from '@shared/types';
+import { claudeConfigDir, claudeProjectDir } from '../utils/claudePaths';
+import type { Task, TaskMessageAddresses } from '@shared/types';
 
 /** A registry file's fields Dash uses. */
 export interface SessionEntry {
@@ -140,4 +140,37 @@ export function messageAddresses(
     ref: session.name ? `${session.name} [${ref}]` : `[${ref}]`,
     uds: `uds:${socket}`,
   };
+}
+
+/**
+ * The transcript of a task's conversation: its live session's (a /clear or
+ * /compact forks a new id) or its recorded one. A session resumed after a
+ * worktree move keeps writing under its old folder, so that is searched too;
+ * when neither file exists yet, the current folder's path. Null without a
+ * session id.
+ */
+export function sessionTranscriptPath(
+  task: Pick<Task, 'jobId' | 'sessionId' | 'path' | 'previousPath'>,
+): string | null {
+  const live = task.jobId ? readLiveSessions().get(task.jobId)?.sessionId : null;
+  const sessionId = live ?? task.sessionId;
+  if (!sessionId) return null;
+  const files = [task.path, task.previousPath]
+    .filter((dir): dir is string => !!dir)
+    .map((dir) => path.join(claudeProjectDir(dir), `${sessionId}.jsonl`));
+  return files.find((f) => fs.existsSync(f)) ?? files[0]!;
+}
+
+/** When the task's conversation last changed (its transcript's mtime, epoch
+ *  ms), or null before it has one. */
+export function sessionLastActiveMs(
+  task: Pick<Task, 'jobId' | 'sessionId' | 'path' | 'previousPath'>,
+): number | null {
+  const file = sessionTranscriptPath(task);
+  if (!file) return null;
+  try {
+    return fs.statSync(file).mtimeMs;
+  } catch {
+    return null;
+  }
 }

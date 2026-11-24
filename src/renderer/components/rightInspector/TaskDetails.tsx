@@ -45,16 +45,35 @@ function useLastCommit(cwd: string, statusKey: unknown): LastCommit | null {
   return commit;
 }
 
+/**
+ * When the task's conversation last changed, re-read whenever its session's
+ * state moves, with a clock that ticks each half minute so "4 min ago" ages.
+ */
+function useLastActive(taskId: string, activity: unknown): { ms: number | null; now: number } {
+  const [ms, setMs] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    let live = true;
+    void window.electronAPI.getTaskLastActive(taskId).then((r) => {
+      if (live) setMs(r.success ? (r.data ?? null) : null);
+    });
+    setNow(Date.now());
+    return () => {
+      live = false;
+    };
+  }, [taskId, activity]);
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  return { ms, now };
+}
+
 function Rows({ rows }: { rows: DetailRow[] }) {
   return (
     <DetailList>
       {rows.map((r) => (
-        <DetailItem
-          key={r.label}
-          label={r.label}
-          title={r.title ?? r.value}
-          copy={r.copy ? r.value : undefined}
-        >
+        <DetailItem key={r.label} label={r.label} title={r.title ?? r.value} copy={r.copy}>
           {r.value}
         </DetailItem>
       ))}
@@ -78,6 +97,7 @@ export function TaskDetails({ task, modelName, contextUsage, onEditSettings }: T
   const gitStatus = useGit((s) => s.gitStatus);
   const prs = useGit((s) => s.branchPrsByTask[task.id]);
   const lastCommit = useLastCommit(task.path, gitStatus);
+  const { ms: lastActiveMs, now } = useLastActive(task.id, activity);
 
   const sections = useMemo(
     () =>
@@ -90,8 +110,21 @@ export function TaskDetails({ task, modelName, contextUsage, onEditSettings }: T
           contextUsage && contextUsage.percentage > 0 ? contextUsage.percentage : null,
         showCost,
         activity,
+        lastActiveMs,
+        homeDir: window.electronAPI.getHomeDir(),
+        now,
       }),
-    [task, project?.name, parentName, modelName, contextUsage, showCost, activity],
+    [
+      task,
+      project?.name,
+      parentName,
+      modelName,
+      contextUsage,
+      showCost,
+      activity,
+      lastActiveMs,
+      now,
+    ],
   );
 
   const branch = gitStatus?.branch || task.branch;

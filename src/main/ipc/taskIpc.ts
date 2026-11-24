@@ -5,7 +5,7 @@ import { createTaskInputSchema, deleteTaskOptionsSchema } from './schemas';
 import { TaskService } from '../services/TaskService';
 import { DatabaseService } from '../services/DatabaseService';
 import { taskEvents } from '../services/taskEvents';
-import { messageAddresses } from '../services/claudeSessionRegistry';
+import { messageAddresses, sessionLastActiveMs } from '../services/claudeSessionRegistry';
 import type { CreateTaskInput, DeleteTaskOptions, SetTaskDashAccessInput } from '@shared/types';
 
 /** Task lifecycle from the task dialog and sidebar; TaskService does the work. */
@@ -67,6 +67,18 @@ export function registerTaskIpc(): void {
       DatabaseService.setTaskDashAccess(input.taskId, input.enabled);
       taskEvents.emitChanged(task.projectId);
       return { success: true, data: DatabaseService.getTask(input.taskId) };
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+
+  // When the task's conversation last changed: its transcript's mtime.
+  ipcMain.handle('task:lastActive', (_event, id: string) => {
+    try {
+      parseArgs('task:lastActive', z.string(), id);
+      const task = DatabaseService.getTask(id);
+      if (!task) throw new Error(`Task not found: ${id}`);
+      return { success: true, data: sessionLastActiveMs(task) };
     } catch (error) {
       return errorResponse(error);
     }

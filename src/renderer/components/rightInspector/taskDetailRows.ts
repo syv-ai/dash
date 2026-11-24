@@ -1,4 +1,6 @@
 import type { ActivityState, PermissionMode, Task, TaskModel } from '../../../shared/types';
+import { formatTimeAgo } from '../../../shared/relativeTime';
+import { tildePath } from '../../lib/displayPath';
 import { formatCost, formatTokens } from '../../utils/format';
 
 /** One key/value line in the Details tab. */
@@ -7,8 +9,9 @@ export interface DetailRow {
   value: string;
   /** Hover text: the exact value behind a rounded one. */
   title?: string;
-  /** Offer to copy `value` (ids, paths). */
-  copy?: boolean;
+  /** Text a copy button beside the value puts on the clipboard (ids, the
+   *  full path behind a `~` one). */
+  copy?: string;
 }
 
 export interface TaskDetailsInput {
@@ -23,6 +26,12 @@ export interface TaskDetailsInput {
   showCost: boolean;
   /** The session's live state, absent while Dash isn't attached to one. */
   activity: ActivityState | null;
+  /** When the conversation last changed (its transcript's mtime, epoch ms). */
+  lastActiveMs: number | null;
+  /** The home folder, shown as `~` in paths. */
+  homeDir: string;
+  /** Epoch ms: "4 min ago" is measured from it. */
+  now: number;
 }
 
 /** The Details tab's plain sections; the rich ones (git, PRs, linked items,
@@ -75,7 +84,30 @@ export function parseDbTime(value: string | null | undefined): Date | null {
 
 function formatWhen(value: string | null | undefined): string | null {
   const d = parseDbTime(value);
-  return d ? d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : null;
+  return d ? formatDate(d) : null;
+}
+
+function formatDate(d: Date): string {
+  return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+/**
+ * When the task's session last did something: "Active now" while it works;
+ * else its conversation's last change (or, without a transcript, when it
+ * stopped) as "4 min ago", the exact time in the tooltip. Null when it never
+ * ran.
+ */
+export function lastActiveRow(
+  input: Pick<TaskDetailsInput, 'task' | 'activity' | 'lastActiveMs' | 'now'>,
+): DetailRow | null {
+  if (input.activity === 'busy') return { label: 'Last active', value: 'Active now' };
+  const ms = input.lastActiveMs ?? parseDbTime(input.task.sessionStoppedAt)?.getTime() ?? null;
+  if (ms === null) return null;
+  return {
+    label: 'Last active',
+    value: formatTimeAgo(ms / 1000, input.now / 1000),
+    title: formatDate(new Date(ms)),
+  };
 }
 
 /** Rows with a value; the rest are left out rather than shown as "—". */
@@ -83,15 +115,10 @@ function present(rows: Array<DetailRow | null | false>): DetailRow[] {
   return rows.filter((r): r is DetailRow => !!r && r.value !== '');
 }
 
-/**
- * The Details tab's task, session and usage rows: only what is set. An
- * update shows when it is a minute or more after creation.
- */
+/** The Details tab's task, session and usage rows: only what is set. */
 export function taskDetailSections(input: TaskDetailsInput): TaskDetailSections {
   const { task } = input;
   const created = parseDbTime(task.createdAt);
-  const updated = parseDbTime(task.updatedAt);
-  const updatedLater = !!created && !!updated && updated.getTime() - created.getTime() >= 60_000;
 
   return {
     task: present([
@@ -104,10 +131,15 @@ export function taskDetailSections(input: TaskDetailsInput): TaskDetailSections 
           ? 'Works in its own git worktree'
           : "Works in the project's own folder",
       },
-      { label: task.useWorktree ? 'Worktree' : 'Folder', value: task.path, copy: true },
+      {
+        label: task.useWorktree ? 'Worktree' : 'Folder',
+        value: tildePath(task.path, input.homeDir),
+        title: task.path,
+        copy: task.path,
+      },
       !!input.parentTaskName && { label: 'Created by', value: input.parentTaskName },
       !!created && { label: 'Created', value: formatWhen(task.createdAt) ?? '' },
-      updatedLater && { label: 'Updated', value: formatWhen(task.updatedAt) ?? '' },
+      lastActiveRow(input),
     ]),
     session: present([
       {
@@ -120,8 +152,8 @@ export function taskDetailSections(input: TaskDetailsInput): TaskDetailSections 
         label: 'State',
         value: sessionState(task, input.activity),
       },
-      !!task.sessionId && { label: 'Session', value: task.sessionId, copy: true },
-      !!task.jobId && { label: 'Job', value: task.jobId, copy: true },
+      !!task.sessionId && { label: 'Session', value: task.sessionId, copy: task.sessionId },
+      !!task.jobId && { label: 'Job', value: task.jobId, copy: task.jobId },
       { label: 'Dash access', value: task.dashAccess ? 'On' : 'Off' },
     ]),
     usage: present([

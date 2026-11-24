@@ -1,5 +1,4 @@
 import * as fs from 'fs';
-import * as path from 'path';
 import { DatabaseService } from '../../services/DatabaseService';
 import { TaskService } from '../../services/TaskService';
 import { activityMonitor, activityEvents } from '../../services/ActivityMonitor';
@@ -16,10 +15,9 @@ import {
   restartAndStartTaskSession,
   startTaskSession,
 } from '../../services/ptyManager';
-import { readLiveSessions } from '../../services/claudeSessionRegistry';
+import { readLiveSessions, sessionTranscriptPath } from '../../services/claudeSessionRegistry';
 import { writeHookSettings } from '../../services/ptyHookSettings';
 import { dropTaskInbox, getTaskInbox, postToInbox } from '../../services/taskInbox';
-import { claudeProjectDir } from '../../utils/claudePaths';
 import { GitService } from '../../services/GitService';
 import { WorkspacePortsRuntime } from '../../services/WorkspacePortsRuntime';
 import { portLivenessService } from '../../services/PortLivenessService';
@@ -128,16 +126,7 @@ export function taskDeps(): TaskCapabilityDeps {
     getInbox: getTaskInbox,
     dropInbox: dropTaskInbox,
     postToInbox: (inbox, text) => postToInbox(inbox, text),
-    transcriptPathFor: (task) => {
-      const live = task.jobId ? readLiveSessions().get(task.jobId)?.sessionId : null;
-      const sessionId = live ?? task.sessionId;
-      if (!sessionId) return null;
-      // A session resumed after a worktree move keeps writing under its old folder.
-      const files = [task.path, task.previousPath]
-        .filter((dir): dir is string => !!dir)
-        .map((dir) => path.join(claudeProjectDir(dir), `${sessionId}.jsonl`));
-      return files.find((f) => fs.existsSync(f)) ?? files[0]!;
-    },
+    transcriptPathFor: sessionTranscriptPath,
     readTranscript: (file) => fs.promises.readFile(file, 'utf8').catch(() => null),
   };
 }

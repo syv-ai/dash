@@ -48,6 +48,8 @@ export interface DatabaseApi {
   setTaskDashAccess: (input: SetTaskDashAccessInput) => Promise<IpcResponse<Task>>;
   /** Where SendMessage reaches the task's live session; null when it is not running. */
   getTaskMessageAddresses: (id: string) => Promise<IpcResponse<TaskMessageAddresses | null>>;
+  /** When the task's conversation last changed (epoch ms), or null before it has one. */
+  getTaskLastActive: (id: string) => Promise<IpcResponse<number | null>>;
   reorderTasks: (projectId: string, orderedTaskIds: string[]) => Promise<IpcResponse<void>>;
   /** A project's tasks changed in main (created, archived, restored, deleted). */
   onTasksChanged: (callback: (data: { projectId: string }) => void) => () => void;
