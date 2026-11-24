@@ -19,6 +19,7 @@ import { PortsDrawerWrapper } from './PortsDrawerWrapper';
 import { UsageRow } from './UsageRow';
 import { TaskDetails } from './TaskDetails';
 import { IconButton } from '../ui/IconButton';
+import { ConfirmModal } from '../ui/ConfirmModal';
 import { Segmented } from '../ui/Segmented';
 import { CountBadge } from '../ui/CountBadge';
 import {
@@ -182,11 +183,11 @@ export function RightInspector({
     selectView(next);
     openEditor();
   };
-  // The row's X: asks first when a file has unsaved edits, as the editor's
-  // own close did.
+  // The row's X: asks first (in-app) when a file has unsaved edits.
+  const [confirmClose, setConfirmClose] = useState(false);
   const closeEditor = () => {
-    if (anyDirtyUnder(task.path) && !window.confirm('Discard unsaved changes?')) return;
-    onCloseDiff();
+    if (anyDirtyUnder(task.path)) setConfirmClose(true);
+    else onCloseDiff();
   };
   // Details' Last commit: History, on that commit, its files unfolded.
   const openCommit = (hash: string) => {
@@ -364,6 +365,17 @@ export function RightInspector({
     // pb-2: the terminal sheet keeps the same 8px gutter from the window's
     // bottom edge as the main sheet.
     <div className="flex h-full min-w-0 flex-col bg-ground pt-2 pr-2 pb-2">
+      {confirmClose && (
+        <ConfirmModal
+          message="Discard unsaved changes?"
+          confirmLabel="Discard"
+          onConfirm={() => {
+            setConfirmClose(false);
+            onCloseDiff();
+          }}
+          onCancel={() => setConfirmClose(false)}
+        />
+      )}
       <UsageRow contextUsage={contextUsage} rateLimits={rateLimits} burns={burns} />
       {header}
       <div className="min-h-0 flex-1">
