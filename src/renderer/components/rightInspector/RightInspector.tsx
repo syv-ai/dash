@@ -10,7 +10,7 @@ import {
   type RefObject,
 } from 'react';
 import type { ITheme as XtermTheme } from '@xterm/xterm';
-import { Info, MessageSquareCode, Minus, Plus, X } from 'lucide-react';
+import { Info, MessageSquareCode, Minus, MoreHorizontal, Plus, X } from 'lucide-react';
 import { FileChangesPanel } from '../changes/FileChangesPanel';
 import { CommitPopover } from '../changes/CommitPopover';
 import { useCommitRun } from '../changes/useCommitRun';
@@ -22,6 +22,13 @@ import { IconButton } from '../ui/IconButton';
 import { cn } from '../../lib/cn';
 import { Segmented } from '../ui/Segmented';
 import { CountBadge } from '../ui/CountBadge';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from '../ui/DropdownMenu';
 import {
   ResizableHandle,
   ResizablePanel,
@@ -310,18 +317,42 @@ export function RightInspector({
     setTimeout(() => setShellDrawerAnimating(false), panelEaseMs());
   };
 
+  // Below 24rem the bulk actions fold into a menu and Commit drops its label,
+  // so the views keep their room.
+  const compact = '@max-sm/sidehead:hidden';
+  const bulkActions = [
+    unstagedCount > 0 && {
+      label: 'Stage all',
+      binding: keybindings.stageAll,
+      icon: <Plus size={14} strokeWidth={1.8} />,
+      run: () => void stageAll(),
+    },
+    stagedCount > 0 && {
+      label: 'Unstage all',
+      binding: keybindings.unstageAll,
+      icon: <Minus size={14} strokeWidth={1.8} />,
+      run: () => void unstageAll(),
+    },
+    // The editor holds the comments; this opens it.
+    commentCount > 0 && {
+      label: `Comments: ${commentCount} to send`,
+      binding: undefined,
+      icon: <MessageSquareCode size={14} strokeWidth={1.8} />,
+      run: onOpenEditor,
+      count: commentCount,
+    },
+  ].filter((a) => a !== false);
+
   const header = (
     <div className="@container/sidehead flex h-11 shrink-0 items-center gap-0.5">
-      {/* The trailing actions (Details, ✕) never leave the row: the rest
-          gives way. Narrow, the views take the slack; expanded, the path
-          does, and gives it up first. Then the views' padding tightens and
-          their labels truncate (words at every width); past that the row
-          clips, short of the trailing actions. The padding keeps focus
-          outlines inside the clip. */}
+      {/* Who gives way as the row narrows, last first: the views (their
+          padding tightens, their labels truncate, never below a floor), then
+          Details and ✕ (never), Commit (its label goes below 24rem), the bulk
+          actions (into a menu below 24rem), the path (it only takes slack).
+          Past all that the middle clips at its end, short of Details and ✕.
+          The padding keeps focus outlines inside the clip. */}
       <div className="flex min-w-0 flex-1 items-center gap-0.5 self-stretch overflow-hidden px-1">
-        {/* Clips the views once they can't tighten further (inset by the
-            focus outline's room) rather than drawing under the actions. */}
-        <div className={cn('-m-1 min-w-0 overflow-hidden p-1', !expanded && 'flex-1')}>
+        <div className={cn('-m-1 min-w-18 overflow-hidden p-1', !expanded && 'flex-1')}>
           <Segmented<Segment>
             aria-label="Task sidebar view"
             size="sm"
@@ -336,43 +367,39 @@ export function RightInspector({
             ]}
           />
         </div>
-        {unstagedCount > 0 && (
-          <IconButton
-            size="sm"
-            title={withShortcut('Stage all', keybindings.stageAll)}
-            onClick={() => void stageAll()}
-            className="shrink-0"
-          >
-            <Plus size={14} strokeWidth={1.8} />
-          </IconButton>
-        )}
-        {stagedCount > 0 && (
-          <IconButton
-            size="sm"
-            title={withShortcut('Unstage all', keybindings.unstageAll)}
-            onClick={() => void unstageAll()}
-            className="shrink-0"
-          >
-            <Minus size={14} strokeWidth={1.8} />
-          </IconButton>
-        )}
-        {/* The editor holds the comments; this opens it. */}
-        {commentCount > 0 && (
-          <>
-            <IconButton
-              size="sm"
-              title={`Comments: ${commentCount} to send`}
-              onClick={onOpenEditor}
-              className="shrink-0"
-            >
-              <MessageSquareCode size={14} strokeWidth={1.8} />
+        {bulkActions.map((a) => (
+          <div key={a.label} className={cn('flex shrink-0 items-center', compact)}>
+            <IconButton size="sm" title={withShortcut(a.label, a.binding)} onClick={a.run}>
+              {a.icon}
             </IconButton>
-            <CountBadge count={commentCount} className="-ml-1 shrink-0" />
-          </>
-        )}
+            {a.count !== undefined && <CountBadge count={a.count} className="-ml-1" />}
+          </div>
+        ))}
         {stagedCount > 0 && (
           <div className="ml-1 shrink-0">
-            <CommitPopover run={run} />
+            <CommitPopover run={run} labelClassName={compact} />
+          </div>
+        )}
+        {bulkActions.length > 0 && (
+          <div className="hidden shrink-0 @max-sm/sidehead:block">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <IconButton size="sm" title="More actions">
+                  <MoreHorizontal size={14} strokeWidth={1.8} />
+                </IconButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {bulkActions.map((a) => (
+                  <DropdownMenuItem key={a.label} onSelect={a.run}>
+                    {a.icon}
+                    {a.label}
+                    {a.binding && (
+                      <DropdownMenuShortcut>{formatBinding(a.binding)}</DropdownMenuShortcut>
+                    )}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
         {expanded && (
