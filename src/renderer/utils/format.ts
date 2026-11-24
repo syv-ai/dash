@@ -49,20 +49,21 @@ export interface ClockOptions {
 }
 
 /**
- * The wall-clock time of an epoch-seconds timestamp, in the user's locale:
- * `14:30` today, `Thu 09:00` on another day (a weekly reset, or a 5-hour one
- * past midnight). '' for 0 (no reset time known).
+ * When an epoch-seconds timestamp falls, in full and in the user's locale:
+ * the weekday, then the short date and time (`Thu 26/11/2026, 09:00`).
+ * '' for 0 (no reset time known).
  */
-export function formatResetClock(
+export function formatResetAt(
   epochSeconds: number,
-  nowMs = Date.now(),
   { locale, timeZone }: ClockOptions = {},
 ): string {
   if (!epochSeconds) return '';
   const at = new Date(epochSeconds * 1000);
-  const day = new Intl.DateTimeFormat(locale, { timeZone, dateStyle: 'short' });
-  const time = new Intl.DateTimeFormat(locale, { timeZone, timeStyle: 'short' }).format(at);
-  if (day.format(at) === day.format(new Date(nowMs))) return time;
   const weekday = new Intl.DateTimeFormat(locale, { timeZone, weekday: 'short' }).format(at);
-  return `${weekday} ${time}`;
+  const when = new Intl.DateTimeFormat(locale, {
+    timeZone,
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(at);
+  return `${weekday} ${when}`;
 }

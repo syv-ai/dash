@@ -3,7 +3,7 @@ import {
   formatTokens,
   formatCost,
   formatDuration,
-  formatResetClock,
+  formatResetAt,
   formatResetTime,
 } from '../format';
 
@@ -113,39 +113,33 @@ describe('formatResetTime with an explicit now', () => {
   });
 });
 
-describe('formatResetClock', () => {
-  const now = Date.UTC(2026, 10, 24, 11, 18); // Tue 24 Nov 2026, 11:18 UTC
+describe('formatResetAt', () => {
   const utc = (h: number, m: number, dayOffset = 0) =>
-    Date.UTC(2026, 10, 24 + dayOffset, h, m) / 1000;
+    Date.UTC(2026, 10, 24 + dayOffset, h, m) / 1000; // from Tue 24 Nov 2026
 
   it('returns empty string for 0', () => {
-    expect(formatResetClock(0, now)).toBe('');
+    expect(formatResetAt(0)).toBe('');
   });
 
-  it('shows the time alone for a reset later today', () => {
-    expect(formatResetClock(utc(14, 30), now, { locale: 'en-GB', timeZone: 'UTC' })).toBe('14:30');
-  });
-
-  it('adds the weekday for a reset on another day', () => {
-    expect(formatResetClock(utc(9, 0, 2), now, { locale: 'en-GB', timeZone: 'UTC' })).toBe(
-      'Thu 09:00',
+  it('gives the weekday, short date and time', () => {
+    expect(formatResetAt(utc(14, 30), { locale: 'en-GB', timeZone: 'UTC' })).toBe(
+      'Tue 24/11/2026, 14:30',
     );
-    // A 5-hour window running past midnight.
-    expect(formatResetClock(utc(1, 30, 1), now, { locale: 'en-GB', timeZone: 'UTC' })).toBe(
-      'Wed 01:30',
+    expect(formatResetAt(utc(9, 0, 2), { locale: 'en-GB', timeZone: 'UTC' })).toBe(
+      'Thu 26/11/2026, 09:00',
     );
   });
 
-  it("follows the locale's clock", () => {
-    expect(formatResetClock(utc(14, 30), now, { locale: 'en-US', timeZone: 'UTC' })).toBe(
-      '2:30 PM',
+  it("follows the locale's style", () => {
+    expect(formatResetAt(utc(14, 30), { locale: 'en-US', timeZone: 'UTC' })).toBe(
+      'Tue 11/24/26, 2:30 PM',
     );
   });
 
-  it('decides "today" in the given time zone', () => {
+  it('reads the day in the given time zone', () => {
     // 23:30 UTC on the 24th is already the 25th in Copenhagen.
-    expect(
-      formatResetClock(utc(23, 30), now, { locale: 'en-GB', timeZone: 'Europe/Copenhagen' }),
-    ).toBe('Wed 00:30');
+    expect(formatResetAt(utc(23, 30), { locale: 'en-GB', timeZone: 'Europe/Copenhagen' })).toBe(
+      'Wed 25/11/2026, 00:30',
+    );
   });
 });

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { ContextUsage, RateLimitInfo, RateLimits } from '../../../shared/types';
-import { formatResetClock, formatResetTime, formatTokens } from '../../utils/format';
+import { formatResetAt, formatResetTime, formatTokens } from '../../utils/format';
 import {
   BURN_WINDOW_MS,
   formatEta,
@@ -35,10 +35,11 @@ const LIMIT_LABELS: Record<LimitKey, { short: string; long: string }> = {
  * the burn's figure) over a short label: a wide sidebar leaves them where
  * they are instead of spreading them apart. Narrower than the group, the
  * columns shrink alike. The section degrades by its own width
- * (`@container/usage`), never wrapping or overflowing: below 20rem the
- * limits' reset times go (the countdown stays), below 15rem the rings
- * shrink, their "%" goes and the labels shorten ("5-hour" → "5h"). Details
- * live in tooltips.
+ * (`@container/usage`), never wrapping or overflowing: below 15rem the
+ * rings shrink, their "%" goes and the labels shorten ("5-hour" → "5h").
+ * A limit's reset countdown is one line that drops its "resets" when its
+ * column is too narrow for it. Details (the exact reset time) live in
+ * tooltips.
  */
 const COLUMNS = [
   'grid-cols-[minmax(0,6rem)]',
@@ -63,7 +64,7 @@ function Item({
     <Tooltip content={tooltip}>
       <div className="flex min-w-0 flex-col items-center gap-1">
         {children}
-        <span className="flex max-w-full flex-col items-center">
+        <span className="flex w-full flex-col items-center">
           <span className="max-w-full truncate type-caption text-ink-2">{label}</span>
           {caption}
         </span>
@@ -72,15 +73,15 @@ function Item({
   );
 }
 
-/** When a limit's window resets, under its label: "resets 14:30" over "in
- *  3h 12m". The time goes first when the section narrows. */
-function ResetCaption({ clock, countdown }: { clock: string; countdown: string }) {
+/** When a limit's window resets, under its label: "resets in 3h 12m", one
+ *  line; "in 3h 12m" once its column is too narrow for that. */
+function ResetCaption({ countdown }: { countdown: string }) {
   return (
-    <span className="flex max-w-full flex-col items-center type-caption tabular-nums">
-      {clock && (
-        <span className="max-w-full truncate @max-[20rem]/usage:hidden">resets {clock}</span>
-      )}
-      <span className="max-w-full truncate">{countdown}</span>
+    <span className="@container/reset w-full">
+      <span className="block truncate text-center type-caption tabular-nums">
+        <span className="@max-[5.5rem]/reset:hidden">resets </span>
+        {countdown}
+      </span>
     </span>
   );
 }
@@ -129,15 +130,14 @@ function Limit({
   const { short, long } = LIMIT_LABELS[limit];
   const pct = info ? Math.round(info.usedPercentage) : null;
   const resetsAt = info?.resetsAt ?? 0;
-  const clock = formatResetClock(resetsAt, now);
   const countdown = formatResetTime(resetsAt, now);
   const tooltip = info
-    ? `${long} limit: ${pct}% used${countdown ? `, resets ${clock} (${countdown})` : ''}`
+    ? `${long} limit: ${pct}% used${countdown ? `, resets ${formatResetAt(resetsAt)} (${countdown})` : ''}`
     : `${long} limit: no window running; the next message starts one`;
   return (
     <Item
       tooltip={tooltip}
-      caption={countdown && <ResetCaption clock={clock} countdown={countdown} />}
+      caption={countdown && <ResetCaption countdown={countdown} />}
       label={
         <>
           <span className="@max-[15rem]/usage:hidden">{long}</span>
