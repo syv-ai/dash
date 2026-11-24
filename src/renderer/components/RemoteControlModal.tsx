@@ -70,7 +70,7 @@ function RemoteControlBody({ ptyId, state }: RemoteControlBodyProps) {
       <div className="flex items-center justify-between px-5 h-12 border-b border-border/40">
         <div className="flex items-center gap-2">
           <Globe size={14} strokeWidth={1.8} className="text-primary" />
-          <h2 className="text-base font-semibold text-foreground">Remote Control</h2>
+          <h2 className="type-title">Remote Control</h2>
         </div>
         <button
           onClick={close}

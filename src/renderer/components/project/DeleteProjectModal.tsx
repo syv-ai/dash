@@ -109,7 +109,7 @@ function DeleteProjectBody({ project, tasks, onConfirm }: DeleteProjectBodyProps
     <>
       {/* Header */}
       <div className="flex items-center justify-between px-5 h-12 border-b border-border/40">
-        <h2 className="text-base font-semibold text-foreground">Delete Project</h2>
+        <h2 className="type-title">Delete Project</h2>
         <button
           onClick={close}
           disabled={isDeleting}

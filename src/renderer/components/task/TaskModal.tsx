@@ -380,7 +380,7 @@ function TaskModalBody({
     <>
       {/* Header */}
       <div className="flex items-center justify-between px-5 h-12 border-b border-border/40 rounded-t-xl">
-        <h2 className="text-base font-semibold text-foreground">New Task</h2>
+        <h2 className="type-title">New Task</h2>
         <button
           onClick={close}
           disabled={isCreating}

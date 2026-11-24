@@ -113,7 +113,7 @@ function WorktreeMigrationBody({ plan, onMigrated }: Omit<WorktreeMigrationModal
   return (
     <>
       <div className="flex items-center justify-between px-5 h-12 border-b border-border/40 shrink-0">
-        <h2 className="text-base font-semibold text-foreground">Move task worktrees</h2>
+        <h2 className="type-title">Move task worktrees</h2>
         <button
           onClick={close}
           disabled={busy}

@@ -148,7 +148,7 @@ export function ProjectOverview({
                 <div className="w-9 h-9 rounded-lg bg-accent/60 flex items-center justify-center shrink-0">
                   <FolderOpen size={16} className="text-muted-foreground" strokeWidth={1.8} />
                 </div>
-                <h1 className="text-lg font-semibold text-foreground truncate">{project.name}</h1>
+                <h1 className="type-title truncate">{project.name}</h1>
               </div>
 
               {/* Project metadata */}

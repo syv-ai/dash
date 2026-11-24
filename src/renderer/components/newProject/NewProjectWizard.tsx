@@ -90,7 +90,7 @@ function WizardBody({ onCreated }: { onCreated: (id: string) => void }) {
   return (
     <>
       <div className="flex items-center justify-between px-5 h-12 border-b border-border/40">
-        <h2 className="text-base font-semibold text-foreground">New Project</h2>
+        <h2 className="type-title">New Project</h2>
         <button
           onClick={close}
           className="p-1.5 rounded-lg hover:bg-accent text-muted-fade-50 hover:text-foreground transition-all"

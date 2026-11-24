@@ -189,11 +189,7 @@ function SettingsCard({
     <section>
       {(title || hint) && (
         <header className="mb-2 px-1 flex items-baseline justify-between gap-3">
-          {title && (
-            <h4 className="text-xs font-semibold tracking-widest uppercase text-fg-fade-55">
-              {title}
-            </h4>
-          )}
+          {title && <h4 className="type-heading">{title}</h4>}
           {hint && <span className="text-xs text-fg-fade-40 leading-none">{hint}</span>}
         </header>
       )}
@@ -921,7 +917,7 @@ export function SettingsModal({
           aria-label="Settings sections"
         >
           <div className="px-5 pt-5 pb-3 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-foreground tracking-tight">Settings</h2>
+            <h2 className="type-title">Settings</h2>
             <SettingsCloseButton />
           </div>
 
@@ -944,9 +940,7 @@ export function SettingsModal({
               {NAV_GROUPS.map((group) => (
                 <div key={group.label}>
                   <div className="px-3 pt-2 pb-1.5">
-                    <span className="text-xs font-semibold tracking-[0.14em] uppercase text-muted-fade-70 select-none">
-                      {group.label}
-                    </span>
+                    <span className="type-subheading select-none">{group.label}</span>
                   </div>
                   <ul className="space-y-[2px]">
                     {group.ids.map((id) => {
@@ -1006,9 +1000,7 @@ export function SettingsModal({
             <div className="px-8 py-7">
               {/* Section header */}
               <div className="mb-6 animate-fade-in" key={`hdr-${tab}`}>
-                <h3 className="text-xl font-semibold text-foreground tracking-tight leading-tight">
-                  {activeNav.label}
-                </h3>
+                <h3 className="type-title">{activeNav.label}</h3>
                 <p className="text-base text-fg-fade-50 mt-1.5 leading-relaxed">
                   {activeNav.description}
                 </p>

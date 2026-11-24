@@ -43,7 +43,7 @@ export function DiscardFolderConfirm({
   return (
     <div className="w-[320px] p-3 flex flex-col gap-2.5">
       <div>
-        <h4 className="text-sm font-semibold text-foreground tracking-tight">Discard folder</h4>
+        <h4 className="type-heading">Discard folder</h4>
         <p className="text-xs text-muted-fade-80 truncate mt-0.5">
           {folderName}/{' '}
           <span className="text-muted-fade-60">

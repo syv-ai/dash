@@ -118,7 +118,7 @@ export function Gallery() {
     <div className="h-screen overflow-y-auto bg-ground text-ink">
       <div className="mx-auto flex max-w-7xl flex-col gap-4 p-6">
         <header className="flex items-center gap-4">
-          <h1 className="flex-1 text-lg font-semibold">Primitives</h1>
+          <h1 className="type-title flex-1">Primitives</h1>
           <span className="text-sm text-ink-2">Pin open</span>
           <Switch checked={pinned} onCheckedChange={setPinned} aria-label="Pin overlays open" />
           <Segmented<Theme>
@@ -142,6 +142,7 @@ export function Gallery() {
           <Rows />
           <PillTabs />
           <Menus pinned={pinned} />
+          <TypeRoles />
         </div>
 
         {pinned && <Dialogs />}
@@ -154,9 +155,25 @@ export function Gallery() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="flex flex-col gap-3 rounded-xl bg-well p-4">
-      <h2 className="text-sm font-medium text-ink-3">{title}</h2>
+      <h2 className="type-heading">{title}</h2>
       {children}
     </section>
+  );
+}
+
+/** The type roles (D38), each named in its own style. */
+function TypeRoles() {
+  return (
+    <Section title="Type roles">
+      <div className="grid gap-2">
+        <p className="type-title">type-title · Delete task</p>
+        <p className="type-heading">type-heading · Session</p>
+        <p className="type-subheading">type-subheading · Staged</p>
+        <p className="type-label">type-label · Last active</p>
+        <p className="type-body">type-body · Fix the flaky test in the runner.</p>
+        <p className="type-caption">type-caption · 4 min ago</p>
+      </div>
+    </Section>
   );
 }
 

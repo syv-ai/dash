@@ -95,7 +95,7 @@ export function CommitPopover({ run }: { run: CommitRun }) {
       >
         <div className="flex h-full flex-col gap-2.5 p-3.5">
           <div className="flex shrink-0 items-baseline justify-between">
-            <h4 className="text-sm font-semibold text-ink">
+            <h4 className="type-heading">
               Commit{' '}
               <span className="tabular-nums text-ink-2">
                 {staged.length} {staged.length === 1 ? 'file' : 'files'}

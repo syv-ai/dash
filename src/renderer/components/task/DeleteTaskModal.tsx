@@ -67,7 +67,7 @@ function DeleteTaskBody({ task, onConfirm }: DeleteTaskBodyProps) {
     <>
       {/* Header */}
       <div className="flex items-center justify-between px-5 h-12 border-b border-border/40">
-        <h2 className="text-base font-semibold text-foreground">Delete Task</h2>
+        <h2 className="type-title">Delete Task</h2>
         <button
           onClick={close}
           disabled={isDeleting}

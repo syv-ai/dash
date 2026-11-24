@@ -15,7 +15,7 @@ interface ConfigureFormProps {
 const inputClass =
   'w-full px-3.5 py-2.5 rounded-lg bg-transparent border border-input/60 text-foreground text-base placeholder:text-muted-fade-30 focus:outline-hidden focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-all duration-150';
 const labelClass = 'block text-sm font-medium text-muted-fade-70 mb-2';
-const sectionLabel = 'block text-xs font-semibold uppercase tracking-wide text-muted-fade-50 mb-2';
+const sectionLabel = 'type-subheading mb-2 block';
 
 export function ConfigureForm({ value, onChange, showName = true }: ConfigureFormProps) {
   const set = <K extends keyof ConfigureValues>(key: K, v: ConfigureValues[K]) =>

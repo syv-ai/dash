@@ -47,7 +47,7 @@ function AdoSetupBody({ projectId, organizationUrl, project, onClose }: AdoSetup
     <>
       {/* Header */}
       <div className="flex items-center justify-between px-5 h-12 border-b border-border/40">
-        <h2 className="text-base font-semibold text-foreground">Azure DevOps Detected</h2>
+        <h2 className="type-title">Azure DevOps Detected</h2>
         <button
           onClick={close}
           className="p-1.5 rounded-lg hover:bg-accent text-fg-fade-50 hover:text-foreground transition-all duration-150"

@@ -115,6 +115,35 @@
   opacity: calc(1 - (1 - --value(integer) * 0.01) * var(--text-fade-k));
 }
 
+/* ── Type roles (D38): size, weight, ink and tracking in one class ──
+   Text that names something uses its role, never a hand-built
+   `text-sm font-medium text-ink-2`. Each fixes its colour; don't add a
+   `text-ink-*` beside it (pick the role that reads right instead).
+     type-title       16 semibold ink, tight   dialog and page titles
+     type-heading     13 semibold ink          section headings (Task, Session…)
+     type-subheading  11 semibold ink-2        group labels inside a section (Staged)
+     type-label       12 ink-3                 key columns, field labels
+     type-body        12 ink                   running text: messages, descriptions
+     type-caption     11 ink-3                 hints, meta lines, timestamps */
+@utility type-title {
+  @apply text-lg font-semibold tracking-tight text-ink;
+}
+@utility type-heading {
+  @apply text-base font-semibold text-ink;
+}
+@utility type-subheading {
+  @apply text-xs font-semibold text-ink-2;
+}
+@utility type-label {
+  @apply text-sm font-normal text-ink-3;
+}
+@utility type-body {
+  @apply text-sm font-normal text-ink;
+}
+@utility type-caption {
+  @apply text-xs font-normal text-ink-3;
+}
+
 @layer base {
   /* Tokens are HSL channels so `hsl(var(--x) / a)` works. The role tokens
      line, hover, select, scrim, edge and shade carry their own alpha: use

@@ -35,7 +35,7 @@ function SettingsModalShellBody({ title, children }: { title: string; children: 
   return (
     <>
       <div className="flex h-12 shrink-0 items-center justify-between pl-5 pr-3">
-        <h2 className="text-base font-semibold text-ink">{title}</h2>
+        <h2 className="type-title">{title}</h2>
         <IconButton title="Close" onClick={close}>
           <X size={14} strokeWidth={1.8} />
         </IconButton>

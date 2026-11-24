@@ -152,7 +152,7 @@ function MemoryBody({ project }: Omit<Props, 'onClose'>) {
     <div className="flex h-full flex-col">
       <div className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-border/40 px-5">
         <div className="flex min-w-0 items-center gap-2.5">
-          <h2 className="text-base font-semibold tracking-tight text-foreground">Memory</h2>
+          <h2 className="type-title">Memory</h2>
           <Select
             value={project.id}
             onValueChange={switchProject}

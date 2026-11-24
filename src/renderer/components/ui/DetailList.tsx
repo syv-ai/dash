@@ -4,8 +4,8 @@ import { IconButton } from './IconButton';
 import { cn } from '../../lib/cn';
 
 /**
- * A titled block of a details view: a quiet section label (with an optional
- * action at its end), then its rows. Sections stack with their own spacing.
+ * A titled block of a details view: a `type-heading` (with an optional action
+ * at its end), then its rows. Sections stack with their own spacing.
  */
 export function DetailSection({
   title,
@@ -18,9 +18,9 @@ export function DetailSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="grid gap-1 px-2.5 pt-3 pb-1">
+    <section className="grid gap-1 px-2.5 pt-4 pb-1">
       <div className="flex h-6 items-center gap-2">
-        <h3 className="min-w-0 flex-1 truncate text-xs font-medium text-ink-3">{title}</h3>
+        <h3 className="type-heading min-w-0 flex-1 truncate">{title}</h3>
         {action}
       </div>
       {children}
@@ -51,7 +51,7 @@ export function DetailItem({
 }) {
   return (
     <>
-      <dt className="flex min-h-6 items-center truncate text-ink-3">{label}</dt>
+      <dt className="type-label flex min-h-6 items-center truncate">{label}</dt>
       <dd className="group/detail flex min-h-6 min-w-0 items-center gap-1 text-ink">
         <span className="min-w-0 truncate" title={title}>
           {children}
