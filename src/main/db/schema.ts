@@ -219,26 +219,6 @@ export const featureDismissals = sqliteTable(
   }),
 );
 
-// Unused since the In-review mode went (the composer picks note or comment);
-// kept so existing rows aren't dropped by a destructive migration.
-// Formerly: the PRs a task was reviewing, whose view wrote comments, not notes.
-export const prReviewsInProgress = sqliteTable(
-  'pr_reviews_in_progress',
-  {
-    taskId: text('task_id')
-      .notNull()
-      .references(() => tasks.id, { onDelete: 'cascade' }),
-    provider: text('provider').notNull(),
-    number: integer('number').notNull(),
-    startedAt: text('started_at')
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
-  },
-  (table) => ({
-    pk: primaryKey({ columns: [table.taskId, table.provider, table.number] }),
-  }),
-);
-
 // A task's draft summary for a PR (the review's PR-level comment), until Submit.
 export const prReviewSummaries = sqliteTable(
   'pr_review_summaries',

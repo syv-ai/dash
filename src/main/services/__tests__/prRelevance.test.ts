@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { PullRequestInfo } from '@shared/types';
-import { adoChecks, ciFromAdo, ciFromRollup, githubChecks, relevantPrs } from '../prRelevance';
+import { adoChecks, ciFromRollup, ciOf, githubChecks, relevantPrs } from '../prRelevance';
 
 const pr = (
   number: number,
@@ -81,7 +81,9 @@ describe('ciFromRollup', () => {
   });
 });
 
-describe('ciFromAdo', () => {
+describe('adoChecks, as one state', () => {
+  const ciFromAdo = (evaluations: unknown, statuses: unknown) =>
+    ciOf(adoChecks(evaluations, statuses));
   const BUILD = '0609b952-1397-4640-95ec-e00a01b2c241';
   const STATUS = 'cbdc66da-9728-4af8-aada-9a5a32e4a226';
   const REVIEWERS = 'fa4e907d-c16b-4a4c-9dfa-4906e5d171dd';

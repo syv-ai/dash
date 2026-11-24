@@ -172,7 +172,3 @@ export function adoChecks(
   }
   return checks;
 }
-
-/** An Azure DevOps PR's checks as one state (see adoChecks, ciOf). */
-export const ciFromAdo = (evaluations: unknown, statuses: unknown): CiState | null =>
-  ciOf(adoChecks(evaluations, statuses));
