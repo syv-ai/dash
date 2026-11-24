@@ -1,7 +1,8 @@
 import { useCallback, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
 import { useCommentsStore } from '../../../stores/commentsStore';
-import { buildCommentPrompt, type PromptComment } from './commentPrompt';
+import { typeIntoTask } from '../../../utils/typeIntoTask';
+import { buildCommentPrompt, type PromptComment } from '../../../utils/agentPrompt';
 import type { DiffComment, LiveComment } from './types';
 
 interface Args {
@@ -39,7 +40,7 @@ export interface CommentPrompt {
 
 /** Prompt assembly + send-to-TUI + edit-and-send. Builds `path:line:` excerpts
  *  from the store (all files) enriched with live ranges + code for the current
- *  file, ships them to the task's terminal session, and marks them sent. */
+ *  file, types them into the task's session (`typeIntoTask`), and marks them sent. */
 export function useCommentPrompt({
   activeTaskId,
   filePath,
@@ -106,14 +107,14 @@ export function useCommentPrompt({
     [sendable],
   );
 
+  // Typed into the task's prompt, unsent; marked sent once it got there.
   const writeToTui = useCallback(
     (text: string, idsToMarkSent: ReadonlyArray<string>) => {
       if (!activeTaskId) return;
       const taskId = activeTaskId;
-      void import('../../../terminal/SessionRegistry').then(({ sessionRegistry }) => {
-        sessionRegistry.get(taskId)?.writeInput(text);
+      void typeIntoTask(taskId, text).then((typed) => {
+        if (typed) useCommentsStore.getState().markSent(idsToMarkSent);
       });
-      useCommentsStore.getState().markSent(idsToMarkSent);
     },
     [activeTaskId],
   );

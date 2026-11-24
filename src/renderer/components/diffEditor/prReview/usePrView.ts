@@ -8,7 +8,7 @@ import type {
 } from '../../../../shared/types';
 import { useCommentsStore } from '../../../stores/commentsStore';
 import { prKey, usePrReviews } from '../../../stores/prReviewStore';
-import { buildReviewPrompt } from '../../../utils/prReviewNotices';
+import { buildReviewPrompt } from '../../../utils/agentPrompt';
 import { typeIntoTask } from '../../../utils/typeIntoTask';
 import { filterCommentsByScope } from '../comments/commentScope';
 import type { EditorView } from '../types';

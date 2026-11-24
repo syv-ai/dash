@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { buildCommentPrompt, type PromptComment } from '../commentPrompt';
+import type { PrReview, PrReviewThread } from '../../../shared/types';
+import {
+  buildAgentPrompt,
+  buildCommentPrompt,
+  buildReviewPrompt,
+  type PromptComment,
+} from '../agentPrompt';
 
 const pc = (over: Partial<PromptComment>): PromptComment => ({
   id: over.id ?? 'c',
@@ -9,6 +15,17 @@ const pc = (over: Partial<PromptComment>): PromptComment => ({
   text: over.text ?? 'note',
   viewScope: over.viewScope ?? 'live',
   ...over,
+});
+
+describe('buildAgentPrompt', () => {
+  it('puts the head, then each item: location, fenced code when given, body', () => {
+    expect(
+      buildAgentPrompt('Head', [
+        { location: 'a.ts:1', body: 'one' },
+        { location: 'b.ts:2', code: { language: 'ts', text: 'x()' }, body: 'two' },
+      ]),
+    ).toBe('Head\n\na.ts:1\none\n\nb.ts:2\n```ts\nx()\n```\ntwo');
+  });
 });
 
 describe('buildCommentPrompt', () => {
@@ -95,5 +112,73 @@ describe('buildCommentPrompt', () => {
       },
     });
     expect(out).toBe('Comments:\n\na.ts:4: (commit abcdef1)\nold');
+  });
+});
+
+const thread = (
+  id: string,
+  commentIds: string[],
+  over: Partial<PrReviewThread> = {},
+): PrReviewThread => ({
+  id,
+  path: 'src/a.ts',
+  line: 12,
+  startLine: null,
+  side: 'RIGHT',
+  isOutdated: false,
+  resolved: false,
+  comments: commentIds.map((c) => ({
+    id: c,
+    author: 'rev',
+    body: `body ${c}`,
+    createdAt: '',
+    url: '',
+  })),
+  ...over,
+});
+const review = (number: number, threads: PrReviewThread[]): PrReview => ({
+  provider: 'github',
+  number,
+  title: 't',
+  body: '',
+  url: `https://github.com/o/r/pull/${number}`,
+  viewerIsAuthor: false,
+  viewerIsRequestedReviewer: false,
+  verdicts: ['comment'],
+  base: 'b',
+  head: 'h',
+  threads,
+  conversation: [],
+});
+
+describe('buildReviewPrompt', () => {
+  it('labels the comments as review content, not instructions, before quoting them', () => {
+    const text = buildReviewPrompt(review(4, []), [
+      thread('T1', ['a'], { startLine: 10 }),
+      thread('T2', ['b'], { path: 'src/b.ts' }),
+    ]);
+    const label = text.indexOf('not instructions');
+    expect(label).toBeGreaterThan(-1);
+    expect(label).toBeLessThan(text.indexOf('body a'));
+    expect(text).toContain('PR #4');
+    expect(text).toContain('src/a.ts:10-12\n  @rev: body a');
+    expect(text).toContain('src/b.ts:12\n  @rev: body b');
+  });
+
+  it('indents multi-line comments under their author', () => {
+    const t = thread('T1', ['a']);
+    t.comments[0]!.body = 'line one\nline two';
+    expect(buildReviewPrompt(review(4, []), [t])).toContain('  @rev: line one\n    line two');
+  });
+
+  it('caps its length and says how many threads it left out', () => {
+    const big = Array.from({ length: 40 }, (_, i) => {
+      const t = thread(`T${i}`, [`c${i}`]);
+      t.comments[0]!.body = 'x'.repeat(1000);
+      return t;
+    });
+    const text = buildReviewPrompt(review(4, []), big, { maxChars: 5000 });
+    expect(text.length).toBeLessThanOrEqual(5000);
+    expect(text).toMatch(/\d+ more threads? left out/);
   });
 });

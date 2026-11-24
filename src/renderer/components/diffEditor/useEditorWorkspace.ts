@@ -23,6 +23,7 @@ import {
 } from './tabs/editorLayout';
 import { isDirty, workingUri } from './models';
 import { absolutePath } from './editor/fileRef';
+import { isFileTab } from './tabs/tabTarget';
 import type { FileBadges } from './EditorTree';
 import type { PrEntry } from './HistoryList';
 
@@ -191,7 +192,7 @@ export function useEditorWorkspace({
 
   // Once the picked view's files are in: its tabs are the files it changes.
   // Others close, unless unsaved, or kept (not a preview) and the file is in
-  // this view too. A commit, branch or PR view then opens its first changed
+  // this view too. Non-file tabs (a PR's overview) stay. A commit, branch or PR view then opens its first changed
   // file (as a preview).
   const { settled } = data;
   useEffect(() => {
@@ -205,6 +206,7 @@ export function useEditorWorkspace({
       .retain(
         tabsKey,
         (path, preview) =>
+          !isFileTab(path) ||
           changed.has(path) ||
           isDirty(workingUri(absolutePath(cwd, path))) ||
           (!preview && present.has(path)),

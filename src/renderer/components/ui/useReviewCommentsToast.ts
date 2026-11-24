@@ -3,7 +3,8 @@ import { toast } from 'sonner';
 import { useGit } from '../../stores/gitStore';
 import { selectTaskById, useProjects } from '../../stores/projectsStore';
 import { usePrReviews } from '../../stores/prReviewStore';
-import { buildReviewPrompt, newReviewComments, type SeenReview } from '../../utils/prReviewNotices';
+import { buildReviewPrompt } from '../../utils/agentPrompt';
+import { newReviewComments, type SeenReview } from '../../utils/prReviewNotices';
 import { typeIntoTask } from '../../utils/typeIntoTask';
 
 const SEEN_KEY = 'prReviewCommentsSeen';

@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useSyncExternalStore, type CSSProperties } from 'react';
-import { FileText } from 'lucide-react';
+import { FileText, GitPullRequest } from 'lucide-react';
 import type { ITheme as XtermTheme } from '@xterm/xterm';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../ui/Resizable';
 import { EmptyState } from '../ui/EmptyState';
@@ -13,6 +13,7 @@ import { EditorPane } from './EditorPane';
 import { EditorTabStrip } from './EditorTabStrip';
 import type { EditorWorkspace } from './useEditorWorkspace';
 import { openPaths, type GroupIndex } from './tabs/editorLayout';
+import { isFileTab, tabTarget } from './tabs/tabTarget';
 import {
   anyDirtyUnder,
   dirtyVersion,
@@ -57,13 +58,15 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
   const closeBinding = useSettings((s) => s.keybindings.closeEditorTab);
   useEffect(installLsp, []);
 
-  // Every open tab's working file stays alive, shown or not.
+  // Every open file tab's working file stays alive, shown or not.
   const holder = `tabs:${tabsKey}`;
   useEffect(() => unpark(holder), [holder]);
   useEffect(() => {
     retain(
       holder,
-      openPaths(layout).map((p) => absolutePath(cwd, p)),
+      openPaths(layout)
+        .filter(isFileTab)
+        .map((p) => absolutePath(cwd, p)),
     );
   }, [holder, layout, cwd]);
   // Unmounted while still open (its task switched away from), the unsaved
@@ -71,9 +74,9 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
   // task archived or deleted meanwhile). Closed, none do.
   useEffect(
     () => () => {
-      const files = openPaths(selectLayout(tabsKey)(useEditorTabs.getState())).map((p) =>
-        absolutePath(cwd, p),
-      );
+      const files = openPaths(selectLayout(tabsKey)(useEditorTabs.getState()))
+        .filter(isFileTab)
+        .map((p) => absolutePath(cwd, p));
       const closed = !useEditors.getState().byCwd[cwd];
       const kept = retainedOnUnmount(files, closed, (f) => isDirty(workingUri(f)));
       retain(holder, kept);
@@ -86,7 +89,7 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
   const dirtyTick = useDirtyVersion();
   useEffect(() => {
     layout.groups.forEach((g, i) => {
-      if (g.preview && isDirty(workingUri(absolutePath(cwd, g.preview)))) {
+      if (g.preview && isFileTab(g.preview) && isDirty(workingUri(absolutePath(cwd, g.preview)))) {
         ws.pinTab(i as GroupIndex, g.preview);
       }
     });
@@ -123,7 +126,7 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
   const closeTabs = async (group: GroupIndex, paths: string[]) => {
     const other = layout.groups.find((_, i) => i !== group);
     const losing = paths.filter(
-      (p) => !other?.tabs.includes(p) && isDirty(workingUri(absolutePath(cwd, p))),
+      (p) => isFileTab(p) && !other?.tabs.includes(p) && isDirty(workingUri(absolutePath(cwd, p))),
     );
     if (losing.length > 0) {
       const discard = await confirm({
@@ -185,6 +188,7 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
         {layout.groups.map((group, i) => {
           const index = i as GroupIndex;
           const isLast = i === layout.groups.length - 1;
+          const target = group.active ? tabTarget(group.active) : null;
           const groupReveal =
             reveal && reveal.group === index && reveal.path === group.active
               ? { range: reveal.range, nonce: reveal.nonce }
@@ -218,12 +222,14 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
                       sheetSurface,
                     )}
                   >
-                    {group.active ? (
+                    {target?.kind === 'pr' ? (
+                      <PrTabPlaceholder number={target.number} />
+                    ) : target ? (
                       <EditorPane
                         paneId={`pane:${tabsKey}:${i}`}
                         cwd={cwd}
                         git={ws.git}
-                        filePath={group.active}
+                        filePath={target.path}
                         view={ws.view}
                         activeTaskId={ws.activeTaskId}
                         terminalTheme={terminalTheme}
@@ -252,5 +258,12 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
         })}
       </ResizablePanelGroup>
     </div>
+  );
+}
+
+/** A PR overview tab's sheet, until the overview page lands (P5). */
+function PrTabPlaceholder({ number }: { number: number }) {
+  return (
+    <EmptyState icon={<GitPullRequest size={14} strokeWidth={1.8} />} title={`PR #${number}`} />
   );
 }

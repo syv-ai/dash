@@ -13,6 +13,7 @@ import { formatBinding } from '../../keybindings';
 import { dirtyVersion, isDirty, subscribeDirty, workingUri } from './models';
 import { absolutePath } from './editor/fileRef';
 import { tabsInScope } from './tabs/editorLayout';
+import { tabTarget } from './tabs/tabTarget';
 
 interface Props {
   cwd: string;
@@ -80,20 +81,24 @@ export function EditorTabStrip({
         )}
       >
         {tabs.map((path) => {
-          const dirty = isDirty(workingUri(absolutePath(cwd, path)));
+          // A file shows its name (its path on hover); a PR's overview, `PR #n`.
+          const target = tabTarget(path);
+          const title = target.kind === 'pr' ? `PR #${target.number}` : target.path;
+          const label = target.kind === 'pr' ? title : basename(target.path);
+          const dirty = target.kind === 'file' && isDirty(workingUri(absolutePath(cwd, path)));
           const isActive = path === active;
           const isPreview = path === preview;
           return (
             <ContextMenu key={path}>
               <ContextMenuTrigger asChild>
                 <FolderTab
-                  title={isPreview ? `${path} (preview)` : path}
+                  title={isPreview ? `${title} (preview)` : title}
                   active={isActive}
                   muted={!focused}
                   onSelect={() => onSelect(path)}
                   onDoubleClick={() => onPin(path)}
                   onClose={() => onClose([path])}
-                  closeLabel={`Close ${path}`}
+                  closeLabel={`Close ${title}`}
                   indicator={
                     <span
                       aria-label={dirty ? 'Unsaved changes' : undefined}
@@ -101,7 +106,7 @@ export function EditorTabStrip({
                     />
                   }
                 >
-                  <span className={isPreview ? 'italic' : undefined}>{basename(path)}</span>
+                  <span className={isPreview ? 'italic' : undefined}>{label}</span>
                 </FolderTab>
               </ContextMenuTrigger>
               <ContextMenuContent>
