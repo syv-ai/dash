@@ -46,6 +46,7 @@ export const PR_REVIEW_QUERY = `query($owner: String!, $name: String!, $number: 
         nodes { requestedReviewer { ... on User { login } ... on Team { name } } }
       }
       latestReviews(first: 100) { nodes { author { login } state } }
+      latestOpinionatedReviews(first: 100) { nodes { author { login } state } }
       assignees(first: 50) { nodes { login } }
       commits(last: 1) {
         nodes {
@@ -114,11 +115,13 @@ const REVIEW_STATES: Record<string, PrReviewer['state']> = {
   COMMENTED: 'commented',
 };
 
-/** Each reviewer's latest review, then the pending requests: a re-request
- *  outranks the review before it, as on GitHub. Dismissed reviews don't count. */
+/** Each reviewer's latest review, overridden by their latest approval or
+ *  change request (a later plain comment doesn't undo it), then the pending
+ *  requests: a re-request outranks the review before it, as on GitHub.
+ *  Dismissed reviews don't count. */
 function reviewersFrom(p: Node): PrReviewer[] {
   const byName = new Map<string, PrReviewer['state']>();
-  for (const r of nodes(p.latestReviews)) {
+  for (const r of [...nodes(p.latestReviews), ...nodes(p.latestOpinionatedReviews)]) {
     const name = login(r.author);
     const state = REVIEW_STATES[str(r.state)];
     if (name && state) byName.set(name, state);

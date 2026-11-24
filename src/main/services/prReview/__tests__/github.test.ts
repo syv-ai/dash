@@ -130,11 +130,13 @@ describe('githubReviewFrom', () => {
       headRef: 'fix/it',
       assignees: ['bo', 'ann'],
     });
-    // A re-request outranks the review before it; a dismissed review doesn't count.
+    // A re-request outranks the review before it; a dismissed review doesn't
+    // count; a comment after an approval leaves it approved.
     expect(review.reviewers).toEqual([
       { name: 'ann', state: 'approved' },
       { name: 'cy', state: 'pending' },
       { name: 'di', state: 'commented' },
+      { name: 'fay', state: 'approved' },
       { name: 'core-team', state: 'pending' },
     ]);
     expect(review.checks).toEqual([

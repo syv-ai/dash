@@ -22,7 +22,14 @@
       { "author": { "login": "cy" }, "state": "CHANGES_REQUESTED" },
       { "author": { "login": "di" }, "state": "COMMENTED" },
       { "author": { "login": "ed" }, "state": "DISMISSED" },
+      { "author": { "login": "fay" }, "state": "COMMENTED" },
       { "author": null, "state": "APPROVED" }
+    ]
+  },
+  "latestOpinionatedReviews": {
+    "nodes": [
+      { "author": { "login": "ann" }, "state": "APPROVED" },
+      { "author": { "login": "fay" }, "state": "APPROVED" }
     ]
   },
   "assignees": { "nodes": [{ "login": "bo" }, { "login": "ann" }] },
