@@ -44,6 +44,7 @@ import { useTreePanel } from '../diffEditor/TreeToggle';
 import { WorktreePath } from './WorktreePath';
 import {
   onChangeCount,
+  onLeavePrView,
   pickSegment,
   prViewLags,
   segmentForTarget,
@@ -209,6 +210,15 @@ export function RightInspector({
     onReviewPr: () => {
       setSegment('review');
       setLastCodeSegment('review');
+    },
+    // Compare leaving the PR view stops reviewing it (D99).
+    onLeavePrView: (left) => {
+      const leave = onLeavePrView({ left, target: reviewTarget, segment });
+      if (leave.clearTarget) usePrReviews.getState().setTarget(task.id, null);
+      if (leave.segment) {
+        setSegment(leave.segment);
+        setLastCodeSegment(leave.segment);
+      }
     },
   });
   const { view, selectView } = ws;

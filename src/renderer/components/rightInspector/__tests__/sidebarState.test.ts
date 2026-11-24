@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   onChangeCount,
+  onLeavePrView,
   pickSegment,
   prViewLags,
   segmentForTarget,
@@ -178,5 +179,33 @@ describe('segmentOnNavigate', () => {
   it('leaves other views alone', () => {
     expect(segmentOnNavigate('files', 'working', target)).toBeNull();
     expect(segmentOnNavigate('history', 'commit:abc', null)).toBeNull();
+  });
+});
+
+describe('onLeavePrView', () => {
+  const left = { provider: 'github', number: 7 };
+  it('stops reviewing the picked PR it leaves, and leaves Review for Changes', () => {
+    expect(
+      onLeavePrView({ left, target: { ...left, source: 'stored' }, segment: 'review' }),
+    ).toEqual({ clearTarget: true, segment: 'changes' });
+  });
+  it("keeps the branch's own PR as the target, Review offered but not selected", () => {
+    expect(onLeavePrView({ left, target: { ...left, source: 'own' }, segment: 'review' })).toEqual({
+      clearTarget: false,
+      segment: 'changes',
+    });
+  });
+  it('leaves another picked PR, and a view other than Review, alone', () => {
+    expect(
+      onLeavePrView({
+        left,
+        target: { provider: 'github', number: 8, source: 'stored' },
+        segment: 'files',
+      }),
+    ).toEqual({ clearTarget: false, segment: null });
+    expect(onLeavePrView({ left, target: undefined, segment: 'history' })).toEqual({
+      clearTarget: false,
+      segment: null,
+    });
   });
 });

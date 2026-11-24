@@ -56,6 +56,9 @@ interface Args {
   /** A PR was picked to review (Compare → Pull requests): it is the task's
    *  review target now, and its view shows. */
   onReviewPr?: (pr: PrRef) => void;
+  /** Compare left a PR view (for another base, or back to the working
+   *  tree): the PR is no longer being looked at. */
+  onLeavePrView?: (pr: PrRef) => void;
 }
 
 export interface EditorWorkspace {
@@ -70,6 +73,8 @@ export interface EditorWorkspace {
   /** Show another view; a commit, branch or PR view opens its first changed
    *  file. Tabs the new view has nothing for close (see `selectView`). */
   selectView(next: EditorView): void;
+  /** Compare's picks: a branch base, or back to the working tree. Leaving a
+   *  PR view this way tells `onLeavePrView`. */
   selectBase(base: string): void;
   exitBranchView(): void;
   /** Open PR `number`'s view; resolves false when it couldn't be loaded. */
@@ -119,6 +124,7 @@ export function useEditorWorkspace({
   historyShown,
   target,
   onReviewPr,
+  onLeavePrView,
 }: Args): EditorWorkspace {
   // Git belongs to a task's worktree, and the task's comments to the active
   // task's. Any other folder (Claude's memory, opened from the memory modal)
@@ -175,14 +181,18 @@ export function useEditorWorkspace({
     switchedTo.current = next;
     setView(next);
   }, []);
-  const selectBase = useCallback(
-    (base: string) => selectView({ kind: 'branch', base }),
-    [selectView],
+  const onLeavePrViewRef = useRef(onLeavePrView);
+  onLeavePrViewRef.current = onLeavePrView;
+  const leaveTo = useCallback(
+    (next: EditorView) => {
+      if (view.kind === 'pr')
+        onLeavePrViewRef.current?.({ provider: view.provider, number: view.number });
+      selectView(next);
+    },
+    [view, selectView],
   );
-  const exitBranchView = useCallback(
-    () => selectView({ kind: 'working', ref: 'HEAD' }),
-    [selectView],
-  );
+  const selectBase = useCallback((base: string) => leaveTo({ kind: 'branch', base }), [leaveTo]);
+  const exitBranchView = useCallback(() => leaveTo({ kind: 'working', ref: 'HEAD' }), [leaveTo]);
 
   // ── View-dependent git data ──
   const workingFiles: FileChange[] = useMemo(

@@ -156,3 +156,28 @@ export function prViewLags({
   if (view.provider !== target.provider || view.number !== target.number) return true;
   return !!review && (review.base !== view.base || review.head !== view.head);
 }
+
+/**
+ * Leaving a PR view through Compare (exit, or another base) stops reviewing
+ * it (D99): the PR picked for the task is cleared when it is the one left
+ * (the target falls back to the branch's own PR, or none), and Review gives
+ * way to Changes. The branch's own PR stays the target, so Review stays
+ * offered, just not selected.
+ */
+export function onLeavePrView({
+  left,
+  target,
+  segment,
+}: {
+  left: { provider: string; number: number };
+  target: { provider: string; number: number; source: 'stored' | 'own' } | null | undefined;
+  segment: CodeSegment | 'details';
+}): { clearTarget: boolean; segment: 'changes' | null } {
+  return {
+    clearTarget:
+      target?.source === 'stored' &&
+      target.provider === left.provider &&
+      target.number === left.number,
+    segment: segment === 'review' ? 'changes' : null,
+  };
+}
