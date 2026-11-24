@@ -17,6 +17,7 @@ import { Popover, PopoverAnchor, PopoverContent } from '../../ui/Popover';
 import { Tooltip } from '../../ui/Tooltip';
 import { Segmented } from '../../ui/Segmented';
 import { IconButton } from '../../ui/IconButton';
+import { Button } from '../../ui/Button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -62,7 +63,11 @@ interface Props {
   prTitle: string | null;
   /** Comments anchored to the open view — shown after the "Showing …" label. */
   commentCount: number;
-  backgroundColor: string;
+}
+
+/** The folder a path sits in, with its trailing slash ('' at the root). */
+function dirname(path: string): string {
+  return path.slice(0, path.lastIndexOf('/') + 1);
 }
 
 export function EditorHeader({
@@ -87,7 +92,6 @@ export function EditorHeader({
   onSelectPr,
   prTitle,
   commentCount,
-  backgroundColor,
 }: Props) {
   const isBranch = view.kind === 'branch';
   const isPr = view.kind === 'pr';
@@ -116,6 +120,7 @@ export function EditorHeader({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [tab, setTab] = useState<'branches' | 'prs'>('branches');
   const [copied, setCopied] = useState(false);
+  const folder = dirname(filePath);
 
   useEffect(() => {
     if (!copied) return;
@@ -144,15 +149,8 @@ export function EditorHeader({
     setPickerOpen(false);
   }
 
-  // Plain icon button: no persistent fill — an active toggle just tints the
-  // icon primary; hover gives a subtle surface for affordance.
-  const iconBtn = (active: boolean) =>
-    `p-1.5 rounded-md transition-colors hover:bg-accent/60 ${
-      active ? 'text-primary' : 'text-muted-fade-60 hover:text-foreground'
-    }`;
-
   // The view toggles: icon buttons, folded into a "More" menu when the pane
-  // is narrow (a split group) so the file name keeps its room.
+  // is narrow (a split group) so the folder path keeps its room.
   const toggles = [
     git && {
       key: 'blame',
@@ -187,10 +185,9 @@ export function EditorHeader({
   }
 
   return (
-    <div
-      className="@container/panehead flex items-center justify-between gap-2 px-3 h-9 border-b border-edge/6 shrink-0"
-      style={{ background: backgroundColor }}
-    >
+    // Inside the file's sheet, under its tab: the tab names the file, so this
+    // row carries only where it lives and what can be done to it.
+    <div className="@container/panehead flex h-9 shrink-0 items-center justify-between gap-2 border-b border-line pr-2 pl-4">
       <div className="flex items-center gap-3 min-w-0">
         {viewMeta && (
           <Tooltip
@@ -213,32 +210,29 @@ export function EditorHeader({
             </span>
           </Tooltip>
         )}
-        <span className="flex items-center gap-1 min-w-0">
-          <span className="text-base font-medium text-foreground truncate">{filePath}</span>
-          <Tooltip content={copied ? 'Copied' : 'Copy path'}>
-            <button
-              type="button"
-              onClick={copyPath}
-              className={`shrink-0 p-1 rounded-md transition-colors hover:bg-accent/60 ${
-                copied ? 'text-[hsl(var(--git-added))]' : 'text-muted-fade-60 hover:text-foreground'
-              }`}
-            >
-              {copied ? <Check size={12} strokeWidth={2} /> : <Copy size={12} strokeWidth={1.8} />}
-            </button>
-          </Tooltip>
-        </span>
+        {folder && (
+          <span className="truncate text-xs text-ink-3" title={filePath}>
+            {folder}
+          </span>
+        )}
       </div>
       <div className="flex shrink-0 items-center gap-1">
+        <IconButton size="sm" title={copied ? 'Copied' : `Copy ${filePath}`} onClick={copyPath}>
+          {copied ? (
+            <Check size={14} strokeWidth={1.8} className="text-loc-add" />
+          ) : (
+            <Copy size={14} strokeWidth={1.8} />
+          )}
+        </IconButton>
         {canPreview && (
-          <Tooltip content={previewing ? 'Show source' : 'Show rendered preview'}>
-            <button
-              type="button"
-              onClick={() => onTogglePreview(!previewing)}
-              className={iconBtn(previewing)}
-            >
-              <Eye size={14} strokeWidth={1.8} />
-            </button>
-          </Tooltip>
+          <IconButton
+            size="sm"
+            title={previewing ? 'Show source' : 'Show rendered preview'}
+            pressed={previewing}
+            onClick={() => onTogglePreview(!previewing)}
+          >
+            <Eye size={14} strokeWidth={1.8} />
+          </IconButton>
         )}
         {git && (
           <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
@@ -253,22 +247,16 @@ export function EditorHeader({
                         : 'Compare with a branch or pull request'
                   }
                 >
-                  <button
-                    type="button"
-                    onClick={handleChipClick}
-                    className={`inline-flex items-center gap-1.5 px-2 h-6 rounded-md text-xs transition-colors hover:bg-accent/60 ${
-                      isBranch || isPr ? 'text-primary' : 'text-muted-fade-60 hover:text-foreground'
-                    }`}
-                  >
+                  <Button variant="ghost" size="sm" onClick={handleChipClick}>
                     {isPr ? (
-                      <GitPullRequestArrow size={12} strokeWidth={1.8} className="shrink-0" />
+                      <GitPullRequestArrow size={14} strokeWidth={1.8} />
                     ) : (
-                      <GitCompare size={12} strokeWidth={1.8} className="shrink-0" />
+                      <GitCompare size={14} strokeWidth={1.8} />
                     )}
                     {isBranch ? (
-                      <span className="truncate max-w-[420px]">base: {view.base}</span>
+                      <span className="truncate max-w-105">base: {view.base}</span>
                     ) : isPr ? (
-                      <span className="truncate max-w-[420px]">
+                      <span className="truncate max-w-105">
                         PR #{view.number}
                         {prTitle ? `: ${prTitle}` : ''}
                       </span>
@@ -277,12 +265,12 @@ export function EditorHeader({
                         Compare…
                       </span>
                     )}
-                  </button>
+                  </Button>
                 </Tooltip>
               </div>
             </PopoverAnchor>
             <PopoverContent side="bottom" align="end" sideOffset={6} className="p-0">
-              <div className="w-[340px] h-[380px] flex flex-col">
+              <div className="w-85 h-95 flex flex-col">
                 {projectId && (
                   <div className="px-2.5 pt-2.5 pb-1">
                     <Segmented
@@ -318,11 +306,16 @@ export function EditorHeader({
           </Popover>
         )}
         {toggles.map(({ key, tooltip, on, onToggle, Icon }) => (
-          <Tooltip key={key} content={tooltip}>
-            <button onClick={onToggle} className={`${iconBtn(on)} @max-[30rem]/panehead:hidden`}>
-              <Icon size={14} strokeWidth={1.8} />
-            </button>
-          </Tooltip>
+          <IconButton
+            key={key}
+            size="sm"
+            title={tooltip}
+            pressed={on}
+            onClick={onToggle}
+            className="@max-[30rem]/panehead:hidden"
+          >
+            <Icon size={14} strokeWidth={1.8} />
+          </IconButton>
         ))}
         <div className="hidden @max-[30rem]/panehead:block">
           <DropdownMenu>

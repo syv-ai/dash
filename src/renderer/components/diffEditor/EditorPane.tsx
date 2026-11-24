@@ -486,7 +486,6 @@ export function EditorPane({
         onSelectPr={onSelectPr}
         prTitle={pr.review?.title ?? null}
         commentCount={scopeCommentCount}
-        backgroundColor={terminalTheme.background ?? (isDark ? '#101011' : '#ffffff')}
       />
 
       {stale && (
