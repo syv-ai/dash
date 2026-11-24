@@ -5,6 +5,7 @@ import {
   prViewLags,
   segmentForTarget,
   segmentOnExpand,
+  segmentOnNavigate,
   viewOnSegment,
 } from '../sidebarState';
 
@@ -103,26 +104,37 @@ describe('segmentForTarget', () => {
 });
 
 describe('viewOnSegment', () => {
+  type Args = Parameters<typeof viewOnSegment>[0];
+  const viewOn = (args: Omit<Args, 'lastCodeSegment'> & Partial<Args>) =>
+    viewOnSegment({ lastCodeSegment: 'changes', ...args });
+
   it('shows the PR on Review', () => {
-    expect(viewOnSegment({ from: 'changes', to: 'review', viewKind: 'working' })).toBe('pr');
+    expect(viewOn({ from: 'changes', to: 'review', viewKind: 'working' })).toBe('pr');
   });
 
   it('returns to the working tree leaving Review for Changes or Files', () => {
-    expect(viewOnSegment({ from: 'review', to: 'changes', viewKind: 'pr' })).toBe('working');
-    expect(viewOnSegment({ from: 'review', to: 'files', viewKind: 'pr' })).toBe('working');
+    expect(viewOn({ from: 'review', to: 'changes', viewKind: 'pr' })).toBe('working');
+    expect(viewOn({ from: 'review', to: 'files', viewKind: 'pr' })).toBe('working');
   });
 
   it('keeps the PR going to History, where its row stands', () => {
-    expect(viewOnSegment({ from: 'review', to: 'history', viewKind: 'pr' })).toBeNull();
+    expect(viewOn({ from: 'review', to: 'history', viewKind: 'pr' })).toBeNull();
   });
 
   it('keeps a PR opened outside Review (History’s row) on Changes', () => {
-    expect(viewOnSegment({ from: 'history', to: 'changes', viewKind: 'pr' })).toBeNull();
+    expect(viewOn({ from: 'history', to: 'changes', viewKind: 'pr' })).toBeNull();
+  });
+
+  it('leaves Review through the details: Review → Details → Changes', () => {
+    const viaDetails = { from: 'details', lastCodeSegment: 'review', viewKind: 'pr' } as const;
+    expect(viewOn({ ...viaDetails, to: 'changes' })).toBe('working');
+    expect(viewOn({ ...viaDetails, to: 'history' })).toBeNull();
+    expect(viewOn({ ...viaDetails, lastCodeSegment: 'history', to: 'changes' })).toBeNull();
   });
 
   it('drops a commit view leaving History', () => {
-    expect(viewOnSegment({ from: 'history', to: 'files', viewKind: 'commit' })).toBe('working');
-    expect(viewOnSegment({ from: 'history', to: 'history', viewKind: 'commit' })).toBeNull();
+    expect(viewOn({ from: 'history', to: 'files', viewKind: 'commit' })).toBe('working');
+    expect(viewOn({ from: 'history', to: 'history', viewKind: 'commit' })).toBeNull();
   });
 });
 
@@ -147,5 +159,24 @@ describe('prViewLags', () => {
     expect(lags({ segment: 'changes', view: pr(9) })).toBe(false);
     expect(lags({ view: { kind: 'working' } })).toBe(false);
     expect(lags({ target: null, view: pr(9) })).toBe(false);
+  });
+});
+
+describe('segmentOnNavigate', () => {
+  const target = 'pr:github:4';
+
+  it("leaves Review for Changes for a note outside the target PR's scope", () => {
+    expect(segmentOnNavigate('review', 'working', target)).toBe('changes');
+    expect(segmentOnNavigate('review', 'commit:abc', target)).toBe('changes');
+    expect(segmentOnNavigate('review', 'pr:github:9', target)).toBe('changes');
+  });
+
+  it("stays on Review for the target's own notes and drafts", () => {
+    expect(segmentOnNavigate('review', target, target)).toBeNull();
+  });
+
+  it('leaves other views alone', () => {
+    expect(segmentOnNavigate('files', 'working', target)).toBeNull();
+    expect(segmentOnNavigate('history', 'commit:abc', null)).toBeNull();
   });
 });

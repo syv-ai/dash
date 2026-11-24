@@ -48,9 +48,11 @@ import {
   prViewLags,
   segmentForTarget,
   segmentOnExpand,
+  segmentOnNavigate,
   viewOnSegment,
   type CodeSegment,
 } from './sidebarState';
+import { prScope } from '../../../shared/prScope';
 import { ReviewView } from '../review/ReviewView';
 import { useReviewTarget } from '../review/useReviewTarget';
 import { prTab } from '../diffEditor/tabs/tabTarget';
@@ -168,7 +170,7 @@ export function RightInspector({
   }, [task.id]);
 
   // ── The PR the task reviews (the Review view's) ──
-  const { target: reviewTarget, stored: storedTarget, own: ownPr } = useReviewTarget(task.id);
+  const reviewTarget = useReviewTarget(task.id);
   const reviewThreads = usePrReviews((s) => {
     const review = reviewTarget && s.byPr[prKey(reviewTarget.provider, reviewTarget.number)];
     return review ? unresolvedThreads(review).length : 0;
@@ -223,22 +225,27 @@ export function RightInspector({
 
   // The PR's view in the editor: at once when its review is loaded (from
   // History's hover, an earlier visit), else once it is.
-  const showPr = (pr: PrRef) => {
-    const loaded = usePrReviews.getState().byPr[prKey(pr.provider, pr.number)];
-    const same = view.kind === 'pr' && view.provider === pr.provider && view.number === pr.number;
+  const showPr = ({ provider, number }: PrRef) => {
+    const loaded = usePrReviews.getState().byPr[prKey(provider, number)];
+    const same = view.kind === 'pr' && view.provider === provider && view.number === number;
     if (same && (!loaded || (loaded.base === view.base && loaded.head === view.head))) return;
-    if (loaded) selectView({ kind: 'pr', ...pr, base: loaded.base, head: loaded.head });
-    else void ws.openPrView(pr.number);
+    if (loaded) selectView({ kind: 'pr', provider, number, base: loaded.base, head: loaded.head });
+    else void ws.openPrView(number);
   };
   // Review shows the target PR in the editor; leaving it for Changes or
   // Files returns to the working tree, as leaving History drops the commit
-  // it showed (D2). `pr` names the target before the store's has updated.
-  const selectSegment = (next: CodeSegment, pr: PrRef | null | undefined = reviewTarget) => {
+  // it showed (D2).
+  const selectSegment = (next: CodeSegment) => {
     setSegment(next);
     setLastCodeSegment(next);
-    const nextView = viewOnSegment({ from: segment, to: next, viewKind: view.kind });
+    const nextView = viewOnSegment({
+      from: segment,
+      lastCodeSegment,
+      to: next,
+      viewKind: view.kind,
+    });
     if (nextView === 'working') selectView({ kind: 'working', ref: 'HEAD' });
-    else if (nextView === 'pr' && pr) showPr(pr);
+    else if (nextView === 'pr' && reviewTarget) showPr(reviewTarget);
   };
   // On Review the editor's PR view follows the target and its head: Stop
   // reviewing falling back to the own PR, a refresh finding a new push (D38).
@@ -290,11 +297,6 @@ export function RightInspector({
   const showReview = () => {
     if (segment !== 'review') selectSegment('review');
     useEditorTabs.getState().setTreeCollapsed(false);
-  };
-  // History's Review: the PR becomes the target, and Review shows it.
-  const reviewPr = (pr: PrRef) => {
-    usePrReviews.getState().setTarget(task.id, pr);
-    selectSegment('review', pr);
   };
   // An empty Changes is never expanded (see sidebarState): it narrows as it
   // empties, and gives way to Files as a file opens on it or its status
@@ -370,8 +372,10 @@ export function RightInspector({
       ws.prEntry?.onOpen();
       openEditor();
     },
+    // As Compare → Pull requests: the PR shows and Review lists it (main
+    // keeps no pick for the task's own PR, so it stays the target only while open).
     onReview: () => {
-      if (ownPr) reviewPr(ownPr);
+      if (ws.prEntry) void ws.reviewPr(ws.prEntry.number);
     },
   };
 
@@ -532,14 +536,20 @@ export function RightInspector({
       task={task}
       target={reviewTarget}
       // Stopping a review of the own PR would leave it the target still.
-      canStop={
-        !!storedTarget &&
-        !(ownPr && ownPr.provider === storedTarget.provider && ownPr.number === storedTarget.number)
-      }
+      canStop={reviewTarget?.source === 'stored'}
       activePath={activePath(ws.layout)}
       onOpenFile={(path) => openFile(path, { preview: true })}
       onOpenOverview={(target) => openFile(prTab(target.provider, target.number))}
       onNavigate={(scope, path, id) => {
+        const next = segmentOnNavigate(
+          segment,
+          scope,
+          reviewTarget ? prScope(reviewTarget.provider, reviewTarget.number) : null,
+        );
+        if (next) {
+          setSegment(next);
+          setLastCodeSegment(next);
+        }
         ws.navigateToComment(scope, path, id);
         openEditor();
       }}

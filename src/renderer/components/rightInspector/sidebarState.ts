@@ -92,21 +92,42 @@ export function segmentForTarget<S extends CodeSegment | 'details'>(
 /**
  * What switching views does to the editor's compare view (D2): Review shows
  * the target PR; leaving it for Changes or Files returns to the working tree,
- * as leaving History drops the commit it showed. Null: the view stays.
+ * as leaving History drops the commit it showed. Leaving the details leaves
+ * the view they were opened over (`lastCodeSegment`), so Review → Details →
+ * Changes leaves Review too. Null: the view stays.
  */
 export function viewOnSegment({
   from,
+  lastCodeSegment,
   to,
   viewKind,
 }: {
   from: CodeSegment | 'details';
+  /** The view the details were opened over. */
+  lastCodeSegment: CodeSegment;
   to: CodeSegment;
   viewKind: 'working' | 'branch' | 'commit' | 'pr';
 }): 'pr' | 'working' | null {
+  const left = from === 'details' ? lastCodeSegment : from;
   if (to === 'review') return 'pr';
   if (to !== 'history' && viewKind === 'commit') return 'working';
-  if (from === 'review' && to !== 'history' && viewKind === 'pr') return 'working';
+  if (left === 'review' && to !== 'history' && viewKind === 'pr') return 'working';
   return null;
+}
+
+/**
+ * The view to show as a note or draft is navigated to in `scope`: the Review
+ * view outlines its target PR only, so a note from anywhere else (the working
+ * tree, a commit, another PR) leaves it for Changes, whose tree follows the
+ * editor's view. Null: the view stays.
+ */
+export function segmentOnNavigate(
+  segment: CodeSegment | 'details',
+  scope: string,
+  /** The review target's scope (`prScope`); null without one. */
+  targetScope: string | null,
+): 'changes' | null {
+  return segment === 'review' && scope !== targetScope ? 'changes' : null;
 }
 
 /** The editor's compare view, as far as following the review target goes. */

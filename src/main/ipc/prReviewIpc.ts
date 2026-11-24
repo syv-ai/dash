@@ -2,10 +2,13 @@ import { ipcMain } from 'electron';
 import { z } from 'zod';
 import { parseArgs, errorResponse } from './validate';
 import { prContextFor } from '../services/prReview/resolve';
-import { appPrContextDeps as appDeps } from '../services/prReview/appDeps';
+import {
+  appPickReviewTarget,
+  appPrContextDeps as appDeps,
+  appReviewTarget,
+} from '../services/prReview/appDeps';
 import { loadPrReview } from '../services/prReview/loadReview';
 import { taskReviews } from '../services/prReview/taskReview';
-import { taskReviewTargetsRepo } from '../services/taskReviewTargetsRepo';
 import { prViewedFilesRepo } from '../services/prViewedFilesRepo';
 import type { PrProvider, PrRef, PrVerdict } from '@shared/types';
 
@@ -76,33 +79,36 @@ export function registerPrReviewIpc(): void {
     },
   );
 
-  /** The PR the person picked for the task to review, or null (see `effectiveReviewTarget`). */
-  ipcMain.handle('prReview:target', (_e, args: { taskId: string }) => {
+  /** The PR the task reviews and why, or null (see `effectiveReviewTarget`). */
+  ipcMain.handle('prReview:target', async (_e, args: { taskId: string }) => {
     try {
       parseArgs('prReview:target', z.looseObject({ taskId: z.string() }), args);
-      return { success: true, data: taskReviewTargetsRepo().get(args.taskId) };
+      return { success: true, data: await appReviewTarget(args.taskId) };
     } catch (err) {
       return errorResponse(err);
     }
   });
 
-  /** Pick the PR the task reviews; null stops reviewing. */
-  ipcMain.handle('prReview:setTarget', (_e, args: { taskId: string; target: PrRef | null }) => {
-    try {
-      parseArgs(
-        'prReview:setTarget',
-        z.looseObject({
-          taskId: z.string(),
-          target: z.object({ provider, number: z.number() }).nullable(),
-        }),
-        args,
-      );
-      taskReviewTargetsRepo().set(args.taskId, args.target);
-      return { success: true };
-    } catch (err) {
-      return errorResponse(err);
-    }
-  });
+  /** Pick the PR the task reviews (null stops reviewing); answers the target
+   *  now (see `pickReviewTarget`). */
+  ipcMain.handle(
+    'prReview:setTarget',
+    async (_e, args: { taskId: string; target: PrRef | null }) => {
+      try {
+        parseArgs(
+          'prReview:setTarget',
+          z.looseObject({
+            taskId: z.string(),
+            target: z.object({ provider, number: z.number() }).nullable(),
+          }),
+          args,
+        );
+        return { success: true, data: await appPickReviewTarget(args.taskId, args.target) };
+      } catch (err) {
+        return errorResponse(err);
+      }
+    },
+  );
 
   /** The PR's files the task marked viewed: path → the blob they were viewed at. */
   ipcMain.handle(

@@ -8,6 +8,7 @@ import type {
   PrVerdict,
   PullRequest,
   SubmitResult,
+  TaskReviewTarget,
 } from '../../shared/types';
 
 /** PR review in the diff editor, on the project's provider (GitHub or Azure DevOps). */
@@ -51,10 +52,13 @@ export interface PrReviewApi {
     body: string;
     draftId?: string;
   }) => Promise<IpcResponse<PrReviewComment>>;
-  /** The PR the person picked for the task to review, or null. */
-  prReviewTarget: (args: { taskId: string }) => Promise<IpcResponse<PrRef | null>>;
-  /** Pick the PR the task reviews; null stops reviewing. */
-  prReviewSetTarget: (args: { taskId: string; target: PrRef | null }) => Promise<IpcResponse<void>>;
+  /** The PR the task reviews and why (picked, or its own open PR), or null. */
+  prReviewTarget: (args: { taskId: string }) => Promise<IpcResponse<TaskReviewTarget | null>>;
+  /** Pick the PR the task reviews (null stops reviewing); answers the target now. */
+  prReviewSetTarget: (args: {
+    taskId: string;
+    target: PrRef | null;
+  }) => Promise<IpcResponse<TaskReviewTarget | null>>;
   /** The PR's files the task marked viewed: path → the head blob they were viewed at. */
   prReviewViewed: (args: {
     taskId: string;

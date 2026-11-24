@@ -281,6 +281,9 @@ export function useEditorWorkspace({
   const clearRevealComment = useCallback(() => setRevealCommentId(null), []);
 
   // ── The task's open PR and its review threads ──
+  // History's PR row: the task's PR as its badges show it. Which PR the task
+  // reviews is main's to say (`useReviewTarget`); reviewing this one through
+  // `reviewPr` keeps no pick for it.
   const openPr = useGit((s) => {
     const pr = activeTaskId ? s.prByTask[activeTaskId]?.[0] : undefined;
     return pr && pr.state === 'open' ? pr : null;

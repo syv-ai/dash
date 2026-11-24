@@ -1,5 +1,5 @@
 import { isPrComment } from '../../../shared/diffComments';
-import type { DiffComment, PrCheck, PrFile, PrRef, PrReviewThread } from '../../../shared/types';
+import type { DiffComment, PrCheck, PrFile, PrReviewThread } from '../../../shared/types';
 import { isInlineThread } from '../diffEditor/prReview/prViewPolicy';
 
 /*
@@ -7,22 +7,6 @@ import { isInlineThread } from '../diffEditor/prReview/prViewPolicy';
  * their viewed marks and counts, the threads in their groups, the person's
  * drafts and the task's notes. Pure, so the rules are tested without a DOM.
  */
-
-// ── The review target ──
-
-/**
- * The PR the task reviews: the one picked for it, else its own open PR.
- * `stored` and `own` are undefined while they load; the result is undefined
- * until it can be told.
- */
-export function effectiveTarget(
-  stored: PrRef | null | undefined,
-  own: PrRef | null | undefined,
-): PrRef | null | undefined {
-  if (stored) return stored;
-  if (own) return own;
-  return stored === undefined || own === undefined ? undefined : null;
-}
 
 // ── Files and viewed marks ──
 

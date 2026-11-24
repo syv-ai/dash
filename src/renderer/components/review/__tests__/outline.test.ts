@@ -3,7 +3,6 @@ import type { DiffComment, PrFile, PrReviewThread } from '../../../../shared/typ
 import {
   DELETED_BLOB,
   checkCounts,
-  effectiveTarget,
   fileRows,
   groupByPath,
   lineLabel,
@@ -53,27 +52,6 @@ const draft = (id: string, over: Partial<DiffComment> = {}): DiffComment => ({
   createdAt: '',
   updatedAt: '',
   ...over,
-});
-
-describe('effectiveTarget', () => {
-  const pr = { provider: 'github' as const, number: 4 };
-  const own = { provider: 'github' as const, number: 9 };
-
-  it('prefers the PR picked for the task over its own', () => {
-    expect(effectiveTarget(pr, own)).toBe(pr);
-    expect(effectiveTarget(pr, undefined)).toBe(pr);
-  });
-
-  it('falls back to the own open PR', () => {
-    expect(effectiveTarget(null, own)).toBe(own);
-    expect(effectiveTarget(undefined, own)).toBe(own);
-  });
-
-  it('is unknown while either is loading, and null once both say none', () => {
-    expect(effectiveTarget(undefined, null)).toBeUndefined();
-    expect(effectiveTarget(null, undefined)).toBeUndefined();
-    expect(effectiveTarget(null, null)).toBeNull();
-  });
 });
 
 describe('fileRows', () => {

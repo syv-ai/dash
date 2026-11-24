@@ -9,6 +9,7 @@ import type {
   PrReviewSummary,
   PrVerdict,
   PrWriteError,
+  TaskReviewTarget,
 } from '../../shared/types';
 
 /** The store key of a PR's review. */
@@ -34,8 +35,9 @@ export type PrWriteResult = { ok: true } | { ok: false; error: PrWriteError; pos
 interface PrReviewState {
   /** Per PR (`prKey`), its review as last fetched. */
   byPr: Record<string, PrReview>;
-  /** Per task: the PR the person picked for it to review, or null. Absent until loaded. */
-  targets: Record<string, PrRef | null>;
+  /** Per task: the PR it reviews and why (main's `effectiveReviewTarget`), or
+   *  null. Absent until first loaded; a failed refresh keeps the last one. */
+  targets: Record<string, TaskReviewTarget | null>;
   /** Per task and PR (`reviewKey`): the files marked viewed, path → the head
    *  blob they were viewed at (`isViewed` says whether a mark still holds).
    *  Absent until loaded. */
@@ -53,9 +55,10 @@ interface PrReviewState {
   loadReview: (taskId: string, provider: PrProvider, number: number) => Promise<void>;
   /** Refetch each loaded summary of the task, after an agent changed it. */
   refreshSummaries: (taskId: string) => Promise<void>;
-  /** Fetch the PR the task was set to review. */
+  /** Fetch the PR the task reviews. */
   loadTarget: (taskId: string) => Promise<void>;
-  /** Pick the PR the task reviews (null stops reviewing): shown at once, saved behind. */
+  /** Pick the PR the task reviews (null stops reviewing): shown at once as
+   *  picked, then as main settles it (its own PR is never a pick). */
   setTarget: (taskId: string, target: PrRef | null) => void;
   /** Fetch the files of a PR the task marked viewed. */
   loadViewed: (taskId: string, provider: PrProvider, number: number) => Promise<void>;
@@ -131,8 +134,16 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
     set({ posting });
   };
 
-  const putTarget = (taskId: string, target: PrRef | null) =>
+  const putTarget = (taskId: string, target: TaskReviewTarget | null) =>
     set({ targets: { ...get().targets, [taskId]: target } });
+  // A failed fetch keeps what the task showed; with nothing yet, no target.
+  const settleTarget = (
+    taskId: string,
+    resp: { success: boolean; data?: TaskReviewTarget | null },
+  ) => {
+    if (resp.success) putTarget(taskId, resp.data ?? null);
+    else if (get().targets[taskId] === undefined) putTarget(taskId, null);
+  };
   const putSummary = (key: string, summary: PrReviewSummary | null) =>
     set({ summaries: { ...get().summaries, [key]: summary } });
   // Fetches under way, per project, checkout and PR number.
@@ -189,16 +200,24 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
 
     loadTarget: async (taskId) => {
       try {
-        const resp = await window.electronAPI.prReviewTarget({ taskId });
-        if (resp.success) putTarget(taskId, resp.data ?? null);
+        settleTarget(taskId, await window.electronAPI.prReviewTarget({ taskId }));
       } catch {
-        /* stays unknown */
+        settleTarget(taskId, { success: false });
       }
     },
 
     setTarget: (taskId, target) => {
-      putTarget(taskId, target);
-      void window.electronAPI.prReviewSetTarget({ taskId, target }).catch(() => undefined);
+      // Stopping falls back to the own PR, which only main can tell: unknown till then.
+      if (target) putTarget(taskId, { ...target, source: 'stored' });
+      else {
+        const targets = { ...get().targets };
+        delete targets[taskId];
+        set({ targets });
+      }
+      void window.electronAPI
+        .prReviewSetTarget({ taskId, target })
+        .then((resp) => settleTarget(taskId, resp))
+        .catch(() => undefined);
     },
 
     loadViewed: async (taskId, provider, number) => {

@@ -614,6 +614,12 @@ export interface PrRef {
   number: number;
 }
 
+/** The PR a task reviews, and why: picked for it (`stored`, which "Stop
+ *  reviewing" clears) or its own open PR (`own`). */
+export interface TaskReviewTarget extends PrRef {
+  source: 'stored' | 'own';
+}
+
 /** A review's outcome. GitHub offers comment / approve / request_changes; ADO's
  *  vote adds approve_with_suggestions / wait_for_author / reject. */
 export type PrVerdict =
