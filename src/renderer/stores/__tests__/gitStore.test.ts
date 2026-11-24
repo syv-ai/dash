@@ -398,6 +398,74 @@ describe('gitStore.detectPr', () => {
   });
 });
 
+describe('gitStore PR re-detection when HEAD moves', () => {
+  let api: ReturnType<typeof makeElectronApiMock>;
+  const calls = () => vi.mocked(api.githubGetPrsForCheckout).mock.calls.length;
+  beforeEach(() => {
+    vi.useFakeTimers();
+    api = makeElectronApiMock();
+    api.githubGetPrsForCheckout = vi.fn(() => Promise.resolve({ success: true, data: [] }));
+    installWindow(api);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    resetWindow();
+  });
+
+  it('says HEAD moved on a branch, commit, pull or push, not on file edits', async () => {
+    const { headMoved } = await import('../gitStore');
+    expect(headMoved(status(), status())).toBe(false);
+    const edit = {
+      path: 'a.ts',
+      status: 'modified' as const,
+      staged: false,
+      additions: 1,
+      deletions: 0,
+    };
+    expect(headMoved(status(), status({ files: [edit] }))).toBe(false);
+    expect(headMoved(status(), status({ branch: 'other' }))).toBe(true);
+    expect(headMoved(status(), status({ ahead: 1 }))).toBe(true);
+    expect(headMoved(status(), status({ behind: 1 }))).toBe(true);
+    expect(headMoved(status({ hasUpstream: false }), status())).toBe(true);
+  });
+
+  it("refetches the active task's PRs once a burst of HEAD moves settles", async () => {
+    const { useGit, useProjects } = await freshStores();
+    const { PR_REDETECT_DEBOUNCE } = await import('../gitStore');
+    const t = task('t1', 'p1');
+    seedActiveTask(useProjects, t);
+    useGit.getState().detectPr(proj('p1'), t, 'feature');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls()).toBe(1);
+
+    for (const ahead of [0, 1, 2]) {
+      api.gitGetStatus = vi.fn(() => Promise.resolve({ success: true, data: status({ ahead }) }));
+      await useGit.getState().refreshGitStatus(t.path);
+    }
+    expect(calls()).toBe(1);
+    await vi.advanceTimersByTimeAsync(PR_REDETECT_DEBOUNCE);
+    expect(calls()).toBe(2);
+  });
+
+  it("debounces a re-run for the task's new branch; another task fetches at once", async () => {
+    const { useGit } = await freshStores();
+    const { PR_REDETECT_DEBOUNCE } = await import('../gitStore');
+    useGit.getState().detectPr(proj('p1'), task('t1', 'p1'), 'feature');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls()).toBe(1);
+
+    useGit.getState().detectPr(proj('p1'), task('t1', 'p1'), 'other');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls()).toBe(1);
+    await vi.advanceTimersByTimeAsync(PR_REDETECT_DEBOUNCE);
+    expect(calls()).toBe(2);
+
+    useGit.getState().detectPr(proj('p1'), task('t2', 'p1'), 'feature');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls()).toBe(3);
+  });
+});
+
 describe('gitStore branchByTask (the live branch, not the one recorded at creation)', () => {
   let api: ReturnType<typeof makeElectronApiMock>;
   beforeEach(() => {

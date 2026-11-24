@@ -5,6 +5,9 @@ import { useProjects, selectActiveTask } from './projectsStore';
 
 const GIT_POLL_INTERVAL = 5000;
 const PR_POLL_INTERVAL = 30_000;
+/** How long a burst of HEAD moves (a rebase, a pull, commit then push)
+ *  settles before the task's PRs are fetched again. */
+export const PR_REDETECT_DEBOUNCE = 1_500;
 
 type Updater<T> = T | ((prev: T) => T);
 const apply = <T>(v: Updater<T>, prev: T): T =>
@@ -96,9 +99,29 @@ export function sameGitStatus(a: GitStatus, b: GitStatus): boolean {
   });
 }
 
+/**
+ * Whether HEAD stands somewhere else for the task's PRs: another branch, or
+ * commits made, pulled or pushed (ahead / behind / upstream moved). A PR may
+ * have opened, been pushed to or merged since, so its lookup is stale.
+ */
+export function headMoved(a: GitStatus, b: GitStatus): boolean {
+  return (
+    a.branch !== b.branch ||
+    a.hasUpstream !== b.hasUpstream ||
+    a.ahead !== b.ahead ||
+    a.behind !== b.behind
+  );
+}
+
 // Non-reactive singleton resources (only ever one active task watched / one PR poll).
 let watchTeardown: (() => void) | null = null;
 let prTeardown: (() => void) | null = null;
+/** The active PR detection's debounced refetch; null while none runs. */
+let prRedetect: (() => void) | null = null;
+/** What the PR detection last ran for: a re-run because the task's branch
+ *  changed waits out the debounce; a task switch (or anything else) fetches
+ *  at once. */
+let prLast: { taskId: string; branch: string | null } | null = null;
 
 export const useGit = create<GitStore>((set, get) => ({
   gitStatus: null,
@@ -125,7 +148,8 @@ export const useGit = create<GitStore>((set, get) => ({
       if (resp.success && resp.data) {
         const t = activeTask();
         const branch = resp.data.branch || null;
-        const prev = get().gitStatus;
+        const prev = get().gitStatusCwd === cwd ? get().gitStatus : null;
+        if (t?.path === cwd && prev && headMoved(prev, resp.data)) prRedetect?.();
         set({
           // Keep the old object when nothing changed, so a poll of a big
           // worktree doesn't re-render every file row.
@@ -236,6 +260,8 @@ export const useGit = create<GitStore>((set, get) => ({
     prTeardown?.();
     prTeardown = null;
     set({ prs: [] });
+    const branchMoved = !!task && prLast?.taskId === task.id && prLast.branch !== branch;
+    prLast = task && { taskId: task.id, branch };
 
     const defaultBranch = project?.baseRef || project?.gitBranch || 'main';
     if (!branch || !project || branch === defaultBranch) {
@@ -249,6 +275,7 @@ export const useGit = create<GitStore>((set, get) => ({
     }
 
     let cancelled = false;
+    let redetectTimer: ReturnType<typeof setTimeout> | undefined;
     const target = prTargetFor(project, task?.path || project.path);
 
     const fetchPrs = async () => {
@@ -265,11 +292,19 @@ export const useGit = create<GitStore>((set, get) => ({
       });
     };
 
-    void fetchPrs();
+    const redetectSoon = () => {
+      clearTimeout(redetectTimer);
+      redetectTimer = setTimeout(() => void fetchPrs(), PR_REDETECT_DEBOUNCE);
+    };
+    if (branchMoved) redetectSoon();
+    else void fetchPrs();
     const interval = setInterval(() => void fetchPrs(), PR_POLL_INTERVAL);
+    prRedetect = redetectSoon;
     prTeardown = () => {
       cancelled = true;
       clearInterval(interval);
+      clearTimeout(redetectTimer);
+      prRedetect = null;
     };
   },
 
