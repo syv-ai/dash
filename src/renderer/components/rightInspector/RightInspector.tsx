@@ -286,6 +286,11 @@ export function RightInspector({
     },
     [onViewDiff],
   );
+  // The PR overview's "Back to files": Review, its outline unfolded beside the editor.
+  const showReview = () => {
+    if (segment !== 'review') selectSegment('review');
+    useEditorTabs.getState().setTreeCollapsed(false);
+  };
   // History's Review: the PR becomes the target, and Review shows it.
   const reviewPr = (pr: PrRef) => {
     usePrReviews.getState().setTarget(task.id, pr);
@@ -643,7 +648,12 @@ export function RightInspector({
                   <div className={split ? 'h-full' : 'hidden'}>
                     <EditorSheet closeBinding={keybindings.closeDiff} onClose={onCloseDiff}>
                       <Suspense fallback={null}>
-                        <EditorGroups ws={ws} terminalTheme={terminalTheme} isDark={isDark} />
+                        <EditorGroups
+                          ws={ws}
+                          terminalTheme={terminalTheme}
+                          isDark={isDark}
+                          onShowReview={reviewTarget ? showReview : undefined}
+                        />
                       </Suspense>
                     </EditorSheet>
                   </div>

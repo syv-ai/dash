@@ -15,7 +15,8 @@ const NO_MARKS: Record<string, string> = {};
 /**
  * The PR view's reading controls, in the tab strip's trailing slot: previous
  * and next thread or draft (⇧⌥F9 / ⌥F9) in the focused pane, a Viewed tick
- * for its file, and once it is viewed, Next unviewed.
+ * for its file, and once it is viewed, Next unviewed. Shown only while a
+ * file is the focused group's tab.
  */
 export function PrReviewActions({
   pr,
@@ -54,7 +55,8 @@ export function PrReviewActions({
       : [];
     return navStops(review.threads, drafts);
   }, [review, byFile, provider, number]);
-  if (!review) return null;
+  // Nothing to read through without a file showing (none, or the overview tab).
+  if (!review || activePath === null) return null;
 
   const row = rows.find((r) => r.file.path === activePath);
   const next = row?.viewed ? nextUnviewed(rows, row.file.path) : null;

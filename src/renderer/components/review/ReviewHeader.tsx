@@ -1,5 +1,5 @@
 import { ExternalLink, MoreHorizontal, RefreshCw, X } from 'lucide-react';
-import type { PrReview, PrReviewer, PrState } from '../../../shared/types';
+import type { PrReview } from '../../../shared/types';
 import { cn } from '../../lib/cn';
 import { DetailItem, DetailList } from '../ui/DetailList';
 import {
@@ -12,25 +12,7 @@ import { IconButton } from '../ui/IconButton';
 import { TextLink } from '../ui/TextLink';
 import { providerName } from '../diffEditor/prReview/PrThreadCard';
 import { checkCounts } from './outline';
-
-const STATE_LABELS: Record<PrState, string> = {
-  open: 'Open',
-  draft: 'Draft',
-  merged: 'Merged',
-  closed: 'Closed',
-};
-
-const REVIEWER_LABELS: Record<PrReviewer['state'], string> = {
-  approved: 'approved',
-  changes_requested: 'changes requested',
-  commented: 'commented',
-  pending: 'pending',
-  approved_with_suggestions: 'approved with suggestions',
-  waiting: 'waiting for author',
-  rejected: 'rejected',
-};
-
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+import { distanceLine, REVIEWER_LABELS, STATE_LABELS } from './labels';
 
 /** "3 passing · 1 failing", the states with checks in them; null with none. */
 function checksLine(review: PrReview): string | null {
@@ -64,12 +46,7 @@ export function ReviewHeader({
   const reviewers = review.reviewers
     .map((r) => `${r.name} (${REVIEWER_LABELS[r.state]})`)
     .join(', ');
-  const distance = [
-    plural(review.commits, 'commit'),
-    review.behindBase !== null && `${review.behindBase} behind base`,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  const distance = distanceLine(review);
 
   return (
     <section className="grid gap-2 px-2.5 pt-2 pb-1">

@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useSyncExternalStore, type CSSProperties } from 'react';
-import { FileText, GitPullRequest } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import type { ITheme as XtermTheme } from '@xterm/xterm';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../ui/Resizable';
 import { EmptyState } from '../ui/EmptyState';
@@ -31,6 +31,7 @@ import { absolutePath } from './editor/fileRef';
 import { LspStatusIndicator } from './LspStatusIndicator';
 import { CompareButton } from './CompareButton';
 import { PrReviewActions } from './prReview/PrReviewActions';
+import { PrOverviewPage } from '../review/PrOverviewPage';
 import { commentScope } from './comments/commentScope';
 import { installLsp } from '../../lsp';
 
@@ -38,6 +39,8 @@ interface Props {
   ws: EditorWorkspace;
   terminalTheme: XtermTheme;
   isDark: boolean;
+  /** Show the Review view (a PR overview's "Back to files"); absent where there is none. */
+  onShowReview?: () => void;
 }
 
 function useDirtyVersion(): number {
@@ -52,7 +55,7 @@ function useDirtyVersion(): number {
  * and swap models as tabs change; files open in a tab stay loaded (unsaved
  * edits included) until their last tab closes.
  */
-export function EditorGroups({ ws, terminalTheme, isDark }: Props) {
+export function EditorGroups({ ws, terminalTheme, isDark, onShowReview }: Props) {
   const { layout, tabsKey, cwd } = ws;
   const closeBinding = useSettings((s) => s.keybindings.closeEditorTab);
   useEffect(installLsp, []);
@@ -232,7 +235,13 @@ export function EditorGroups({ ws, terminalTheme, isDark }: Props) {
                     )}
                   >
                     {target?.kind === 'pr' ? (
-                      <PrTabPlaceholder number={target.number} />
+                      <PrOverviewPage
+                        provider={target.provider}
+                        number={target.number}
+                        projectId={ws.projectId}
+                        cwd={cwd}
+                        onShowFiles={onShowReview}
+                      />
                     ) : target ? (
                       <EditorPane
                         paneId={`pane:${tabsKey}:${i}`}
@@ -268,12 +277,5 @@ export function EditorGroups({ ws, terminalTheme, isDark }: Props) {
         })}
       </ResizablePanelGroup>
     </div>
-  );
-}
-
-/** A PR overview tab's sheet, until the overview page lands (P5). */
-function PrTabPlaceholder({ number }: { number: number }) {
-  return (
-    <EmptyState icon={<GitPullRequest size={14} strokeWidth={1.8} />} title={`PR #${number}`} />
   );
 }
