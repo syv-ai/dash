@@ -72,12 +72,20 @@ export const ContextMenuTrigger = React.forwardRef<
 
 export function ContextMenuContent({
   className,
+  onEscapeKeyDown,
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Content>) {
   return (
     <ContextMenuPrimitive.Portal>
       <ContextMenuPrimitive.Content
         className={cn(menuSurface, 'z-[70] min-w-40', className)}
+        // The Escape that closes the menu ends there. Radix sees it first (a
+        // document capture listener), so stopping it keeps it from the
+        // window's shortcuts, where it would also close what the menu sits in.
+        onEscapeKeyDown={(e) => {
+          onEscapeKeyDown?.(e);
+          e.stopPropagation();
+        }}
         {...props}
       />
     </ContextMenuPrimitive.Portal>
