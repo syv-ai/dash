@@ -1,0 +1,196 @@
+import { describe, expect, it } from 'vitest';
+import type { DiffComment, PrFile, PrReviewThread } from '../../../../shared/types';
+import {
+  DELETED_BLOB,
+  checkCounts,
+  effectiveTarget,
+  fileRows,
+  groupByPath,
+  lineLabel,
+  nextUnviewed,
+  replyDraftCounts,
+  reviewComments,
+  threadGroups,
+  threadHeadline,
+  trayNotes,
+} from '../outline';
+
+const file = (path: string, blob: string | null = `b-${path}`): PrFile => ({
+  path,
+  status: blob ? 'modified' : 'deleted',
+  additions: 1,
+  deletions: 0,
+  blob,
+});
+
+const thread = (id: string, over: Partial<PrReviewThread> = {}): PrReviewThread => ({
+  id,
+  path: 'a.ts',
+  line: 3,
+  startLine: null,
+  side: 'RIGHT',
+  isOutdated: false,
+  resolved: false,
+  comments: [{ id: `${id}c`, author: 'ann', body: 'hi', createdAt: '', url: '' }],
+  ...over,
+});
+
+const draft = (id: string, over: Partial<DiffComment> = {}): DiffComment => ({
+  id,
+  taskId: 't1',
+  filePath: 'a.ts',
+  startLine: 1,
+  endLine: 1,
+  text: id,
+  sent: false,
+  viewScope: 'pr:github:4',
+  side: 'RIGHT',
+  replyTo: null,
+  author: 'user',
+  kind: 'comment',
+  createdAt: '',
+  updatedAt: '',
+  ...over,
+});
+
+describe('effectiveTarget', () => {
+  const pr = { provider: 'github' as const, number: 4 };
+  const own = { provider: 'github' as const, number: 9 };
+
+  it('prefers the PR picked for the task over its own', () => {
+    expect(effectiveTarget(pr, own)).toBe(pr);
+    expect(effectiveTarget(pr, undefined)).toBe(pr);
+  });
+
+  it('falls back to the own open PR', () => {
+    expect(effectiveTarget(null, own)).toBe(own);
+    expect(effectiveTarget(undefined, own)).toBe(own);
+  });
+
+  it('is unknown while either is loading, and null once both say none', () => {
+    expect(effectiveTarget(undefined, null)).toBeUndefined();
+    expect(effectiveTarget(null, undefined)).toBeUndefined();
+    expect(effectiveTarget(null, null)).toBeNull();
+  });
+});
+
+describe('fileRows', () => {
+  it('orders by path and counts unresolved threads and the person’s comments', () => {
+    const rows = fileRows(
+      [file('b.ts'), file('a.ts')],
+      [thread('1'), thread('2', { resolved: true }), thread('3', { path: 'b.ts' })],
+      {},
+      [draft('d1'), draft('d2', { kind: 'note' }), draft('d3', { replyTo: '1' })],
+    );
+    expect(rows.map((r) => [r.file.path, r.threads, r.drafts])).toEqual([
+      ['a.ts', 1, 2],
+      ['b.ts', 1, 0],
+    ]);
+  });
+
+  it('counts a file viewed only while its mark names its head blob', () => {
+    const rows = fileRows(
+      [file('a.ts'), file('b.ts'), file('gone.ts', null)],
+      [],
+      {
+        'a.ts': 'b-a.ts',
+        'b.ts': 'old',
+        'gone.ts': DELETED_BLOB,
+      },
+      [],
+    );
+    expect(rows.map((r) => r.viewed)).toEqual([true, false, true]);
+  });
+});
+
+describe('nextUnviewed', () => {
+  const rows = fileRows([file('a'), file('b'), file('c')], [], { b: 'b-b' }, []);
+
+  it('takes the next unviewed file after the open one, wrapping', () => {
+    expect(nextUnviewed(rows, 'a')).toBe('c');
+    expect(nextUnviewed(rows, 'c')).toBe('a');
+  });
+
+  it('starts at the top with nothing open', () => {
+    expect(nextUnviewed(rows, null)).toBe('a');
+  });
+
+  it('is null when every other file is viewed', () => {
+    const one = fileRows([file('a'), file('b')], [], { b: 'b-b' }, []);
+    expect(nextUnviewed(one, 'a')).toBeNull();
+  });
+});
+
+describe('threadGroups', () => {
+  it('splits open threads on lines from those off the code, and resolved ones', () => {
+    const g = threadGroups([
+      thread('r', { resolved: true }),
+      thread('late', { line: 9 }),
+      thread('early', { line: 2 }),
+      thread('outdated', { line: null, isOutdated: true }),
+      thread('left', { side: 'LEFT' }),
+    ]);
+    expect(g.unresolved.map((t) => t.id)).toEqual(['early', 'late']);
+    expect(g.offCode.map((t) => t.id)).toEqual(['outdated', 'left']);
+    expect(g.resolved.map((t) => t.id)).toEqual(['r']);
+  });
+});
+
+describe('threadHeadline', () => {
+  it('is the first non-blank line of the first comment', () => {
+    const t = thread('1', {
+      comments: [
+        { id: 'c', author: 'a', body: '\n  Rename this\nbecause', createdAt: '', url: '' },
+      ],
+    });
+    expect(threadHeadline(t)).toBe('Rename this');
+    expect(threadHeadline(thread('2', { comments: [] }))).toBe('');
+  });
+});
+
+describe('drafts and notes', () => {
+  const byFile = {
+    'b.ts': [draft('n1', { kind: 'note', viewScope: 'live', filePath: 'b.ts' })],
+    'a.ts': [
+      draft('c2', { startLine: 8, endLine: 9 }),
+      draft('c1', { startLine: 2, endLine: 2 }),
+      draft('other', { viewScope: 'pr:github:5' }),
+      draft('n2', { kind: 'note', sent: true }),
+    ],
+  };
+
+  it('lists the PR’s comments of its scope, grouped by file and line', () => {
+    const groups = groupByPath(reviewComments(byFile, 'pr:github:4'));
+    expect(groups.map(([p, l]) => [p, l.map((c) => c.id)])).toEqual([['a.ts', ['c1', 'c2']]]);
+  });
+
+  it('collects notes of every view, split by sent', () => {
+    const { unsent, sent } = trayNotes(byFile);
+    expect(unsent.map((c) => c.id)).toEqual(['n1']);
+    expect(sent.map((c) => c.id)).toEqual(['n2']);
+  });
+
+  it('counts draft replies per thread', () => {
+    expect(
+      replyDraftCounts([draft('a', { replyTo: 'T' }), draft('b', { replyTo: 'T' }), draft('c')]),
+    ).toEqual(new Map([['T', 2]]));
+  });
+
+  it('labels a line or a range', () => {
+    expect(lineLabel({ startLine: 3, endLine: 3 })).toBe('L3');
+    expect(lineLabel({ startLine: 3, endLine: 5 })).toBe('L3–5');
+  });
+});
+
+describe('checkCounts', () => {
+  it('counts checks by state, leaving skipped ones out', () => {
+    const c = (state: 'passing' | 'failing' | 'pending' | 'skipped') => ({
+      name: state,
+      state,
+      url: null,
+    });
+    expect(
+      checkCounts([c('passing'), c('passing'), c('failing'), c('skipped'), c('pending')]),
+    ).toEqual({ passing: 2, failing: 1, pending: 1 });
+  });
+});

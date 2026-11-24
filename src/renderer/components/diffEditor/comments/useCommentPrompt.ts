@@ -1,8 +1,6 @@
 import { useCallback, useState } from 'react';
 import type { editor as monacoEditor } from 'monaco-editor';
-import { useCommentsStore } from '../../../stores/commentsStore';
-import { typeIntoTask } from '../../../utils/typeIntoTask';
-import { buildCommentPrompt, type PromptComment } from '../../../utils/agentPrompt';
+import { commentsPrompt, sendPrompt } from './sendComments';
 import type { DiffComment, LiveComment } from './types';
 
 interface Args {
@@ -38,9 +36,8 @@ export interface CommentPrompt {
   cancelEditAndSend: () => void;
 }
 
-/** Prompt assembly + send-to-TUI + edit-and-send. Builds `path:line:` excerpts
- *  from the store (all files) enriched with live ranges + code for the current
- *  file, types them into the task's session (`typeIntoTask`), and marks them sent. */
+/** The editor's sends and edit-and-send over `sendComments`: the prompt is
+ *  enriched with live ranges and code for the current file. */
 export function useCommentPrompt({
   activeTaskId,
   filePath,
@@ -52,28 +49,13 @@ export function useCommentPrompt({
   sendable,
   onClose,
 }: Args): CommentPrompt {
-  // Any comment can be sent on its own; the bulk sends take what the menu lists.
-  const byFile = useCommentsStore((s) => s.byFile);
   const [editTarget, setEditTarget] = useState<{ ids: string[]; text: string } | null>(null);
 
+  // Any comment can be sent on its own; the bulk sends take what the menu lists.
   const build = useCallback(
     (ids: ReadonlyArray<string>): string | null => {
       const model = modifiedEditor?.getModel() ?? null;
-      const promptByFile: Record<string, PromptComment[]> = {};
-      for (const [path, list] of Object.entries(byFile)) {
-        promptByFile[path] = list.map((c) => ({
-          id: c.id,
-          filePath: c.filePath,
-          startLine: c.startLine,
-          endLine: c.endLine,
-          text: c.text,
-          viewScope: c.viewScope,
-          kind: c.kind,
-        }));
-      }
-      return buildCommentPrompt({
-        ids,
-        byFile: promptByFile,
+      return commentsPrompt(ids, {
         currentFilePath: filePath,
         currentScope: scope,
         currentFile:
@@ -92,7 +74,7 @@ export function useCommentPrompt({
             : undefined,
       });
     },
-    [byFile, filePath, scope, modifiedEditor, monaco, liveComments, language],
+    [filePath, scope, modifiedEditor, monaco, liveComments, language],
   );
 
   // Unsent ids, optionally limited to one view (scope).
@@ -110,11 +92,7 @@ export function useCommentPrompt({
   // Typed into the task's prompt, unsent; marked sent once it got there.
   const writeToTui = useCallback(
     (text: string, idsToMarkSent: ReadonlyArray<string>) => {
-      if (!activeTaskId) return;
-      const taskId = activeTaskId;
-      void typeIntoTask(taskId, text).then((typed) => {
-        if (typed) useCommentsStore.getState().markSent(idsToMarkSent);
-      });
+      if (activeTaskId) void sendPrompt(activeTaskId, text, idsToMarkSent);
     },
     [activeTaskId],
   );

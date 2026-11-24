@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { onChangeCount, pickSegment, segmentOnExpand } from '../sidebarState';
+import {
+  onChangeCount,
+  pickSegment,
+  segmentForTarget,
+  segmentOnExpand,
+  viewOnSegment,
+} from '../sidebarState';
 
 describe('pickSegment', () => {
   const pick = (
@@ -74,5 +80,47 @@ describe('segmentOnExpand', () => {
     expect(segmentOnExpand('changes', null)).toBe('changes');
     expect(segmentOnExpand('history', 0)).toBe('history');
     expect(segmentOnExpand('details', 0)).toBe('details');
+  });
+});
+
+describe('segmentForTarget', () => {
+  const pr = { provider: 'github', number: 7 };
+
+  it('falls back to Changes when the target goes away under Review', () => {
+    expect(segmentForTarget('review', null)).toBe('changes');
+  });
+
+  it('keeps Review while the target loads or exists', () => {
+    expect(segmentForTarget('review', undefined)).toBe('review');
+    expect(segmentForTarget('review', pr)).toBe('review');
+  });
+
+  it('leaves other views alone', () => {
+    expect(segmentForTarget('files', null)).toBe('files');
+    expect(segmentForTarget('details', null)).toBe('details');
+  });
+});
+
+describe('viewOnSegment', () => {
+  it('shows the PR on Review', () => {
+    expect(viewOnSegment({ from: 'changes', to: 'review', viewKind: 'working' })).toBe('pr');
+  });
+
+  it('returns to the working tree leaving Review for Changes or Files', () => {
+    expect(viewOnSegment({ from: 'review', to: 'changes', viewKind: 'pr' })).toBe('working');
+    expect(viewOnSegment({ from: 'review', to: 'files', viewKind: 'pr' })).toBe('working');
+  });
+
+  it('keeps the PR going to History, where its row stands', () => {
+    expect(viewOnSegment({ from: 'review', to: 'history', viewKind: 'pr' })).toBeNull();
+  });
+
+  it('keeps a PR opened outside Review (History’s row) on Changes', () => {
+    expect(viewOnSegment({ from: 'history', to: 'changes', viewKind: 'pr' })).toBeNull();
+  });
+
+  it('drops a commit view leaving History', () => {
+    expect(viewOnSegment({ from: 'history', to: 'files', viewKind: 'commit' })).toBe('working');
+    expect(viewOnSegment({ from: 'history', to: 'history', viewKind: 'commit' })).toBeNull();
   });
 });

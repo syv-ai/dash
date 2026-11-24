@@ -51,6 +51,19 @@ describe('prReviewStore.load', () => {
     expect(usePrReviews.getState().byPr[prKey('ado', 4)]).toEqual(review(4, 'ado'));
   });
 
+  it('shares a fetch of the same PR already under way', async () => {
+    api.prReviewLoad = vi.fn(() => Promise.resolve({ success: true, data: review(4) }));
+    const { usePrReviews } = await freshStore();
+    const [a, b] = await Promise.all([
+      usePrReviews.getState().load('p1', '/wt/t1', 4),
+      usePrReviews.getState().load('p1', '/wt/t1', 4),
+    ]);
+    expect(a).toEqual(b);
+    expect(api.prReviewLoad).toHaveBeenCalledTimes(1);
+    await usePrReviews.getState().load('p1', '/wt/t1', 4);
+    expect(api.prReviewLoad).toHaveBeenCalledTimes(2);
+  });
+
   it('keeps what it had when a fetch fails, and says why', async () => {
     api.prReviewLoad = vi
       .fn()
@@ -163,6 +176,24 @@ describe('prReviewStore writes', () => {
     });
     usePrReviews.getState().setTarget('t1', null);
     expect(usePrReviews.getState().targets.t1).toBeNull();
+  });
+
+  it('marks files viewed at once, saved behind, per task and PR', async () => {
+    api.prReviewViewed = vi.fn(() => Promise.resolve({ success: true, data: { 'a.ts': 'b1' } }));
+    const { usePrReviews, reviewKey } = await freshStore();
+    const key = reviewKey('t1', 'github', 4);
+    await usePrReviews.getState().loadViewed('t1', 'github', 4);
+    expect(usePrReviews.getState().viewed[key]).toEqual({ 'a.ts': 'b1' });
+    usePrReviews.getState().setViewed('t1', 'github', 4, 'b.ts', 'b2');
+    usePrReviews.getState().setViewed('t1', 'github', 4, 'a.ts', null);
+    expect(usePrReviews.getState().viewed[key]).toEqual({ 'b.ts': 'b2' });
+    expect(api.prReviewSetViewed).toHaveBeenLastCalledWith({
+      taskId: 't1',
+      provider: 'github',
+      number: 4,
+      path: 'a.ts',
+      blob: null,
+    });
   });
 });
 

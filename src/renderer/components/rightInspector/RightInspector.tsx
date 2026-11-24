@@ -42,7 +42,17 @@ import { useEditorWorkspace, type EditorTarget } from '../diffEditor/useEditorWo
 import { activePath, type OpenOptions } from '../diffEditor/tabs/editorLayout';
 import { useTreePanel } from '../diffEditor/TreeToggle';
 import { WorktreePath } from './WorktreePath';
-import { onChangeCount, pickSegment, segmentOnExpand, type CodeSegment } from './sidebarState';
+import {
+  onChangeCount,
+  pickSegment,
+  segmentForTarget,
+  segmentOnExpand,
+  viewOnSegment,
+  type CodeSegment,
+} from './sidebarState';
+import { ReviewView } from '../review/ReviewView';
+import { useReviewTarget } from '../review/useReviewTarget';
+import { prTab } from '../diffEditor/tabs/tabTarget';
 import { useUnpushedCommits } from './useUnpushedCommits';
 import type { SyncLinks } from '../changes/SyncStatus';
 import { useGit } from '../../stores/gitStore';
@@ -51,18 +61,20 @@ import { useSettings } from '../../stores/settingsStore';
 import { useUi } from '../../stores/uiStore';
 import { useEditorTabs } from '../../stores/editorTabsStore';
 import { useCommentsStore } from '../../stores/commentsStore';
+import { prKey, usePrReviews } from '../../stores/prReviewStore';
+import { unresolvedThreads } from '../../utils/prReviewNotices';
 import { formatBinding, matchesBinding, type KeyBinding } from '../../keybindings';
 import { needsAttention } from '../../../shared/diffComments';
-import type { ContextUsage, RateLimits, Task } from '../../../shared/types';
+import type { ContextUsage, PrRef, RateLimits, Task } from '../../../shared/types';
 import type { LimitBurns } from '../../lib/burnRate';
 
 const EditorGroups = lazy(() =>
   import('../diffEditor/EditorGroups').then((m) => ({ default: m.EditorGroups })),
 );
 
-/** What the sidebar's list shows: the changes, the whole repo or the
- *  commits (the view switch, always in words), or the task's details (an
- *  icon toggle at the row's end, read least often). */
+/** What the sidebar's list shows: the changes, the whole repo, the commits
+ *  or the PR under review (the view switch, always in words), or the task's
+ *  details (an icon toggle at the row's end, read least often). */
 type Segment = CodeSegment | 'details';
 
 interface RightInspectorProps {
@@ -154,6 +166,13 @@ export function RightInspector({
     }
   }, [task.id]);
 
+  // ── The PR the task reviews (the Review view's) ──
+  const { target: reviewTarget, stored: storedTarget, own: ownPr } = useReviewTarget(task.id);
+  const reviewThreads = usePrReviews((s) => {
+    const review = reviewTarget && s.byPr[prKey(reviewTarget.provider, reviewTarget.number)];
+    return review ? unresolvedThreads(review).length : 0;
+  });
+
   // ── The editor's state: one workspace per task, open or not ──
   const editorMounted = diff !== null;
   const expanded = expandedProp && editorMounted;
@@ -178,6 +197,12 @@ export function RightInspector({
     treeShown: segment === 'files',
     historyShown: segment === 'history',
     target,
+    // Compare → Pull requests: the PR is the target now, and its view shows;
+    // Review lists it.
+    onReviewPr: () => {
+      setSegment('review');
+      setLastCodeSegment('review');
+    },
   });
   const { view, selectView } = ws;
   // The working tree's changes, as Changes lists them (null: not loaded,
@@ -195,13 +220,33 @@ export function RightInspector({
     openEditor();
   };
 
-  // Changes and Files list the working tree (or the branch or PR compared
-  // with): leaving History for them leaves the commit it showed.
-  const selectSegment = (next: CodeSegment) => {
+  // The PR's view in the editor: at once when its review is loaded (from
+  // History's hover, an earlier visit), else once it is.
+  const showPr = (pr: PrRef) => {
+    if (view.kind === 'pr' && view.provider === pr.provider && view.number === pr.number) return;
+    const loaded = usePrReviews.getState().byPr[prKey(pr.provider, pr.number)];
+    if (loaded) selectView({ kind: 'pr', ...pr, base: loaded.base, head: loaded.head });
+    else void ws.openPrView(pr.number);
+  };
+  // Review shows the target PR in the editor; leaving it for Changes or
+  // Files returns to the working tree, as leaving History drops the commit
+  // it showed (D2). `pr` names the target before the store's has updated.
+  const selectSegment = (next: CodeSegment, pr: PrRef | null | undefined = reviewTarget) => {
     setSegment(next);
     setLastCodeSegment(next);
-    if (next !== 'history' && view.kind === 'commit') selectView({ kind: 'working', ref: 'HEAD' });
+    const nextView = viewOnSegment({ from: segment, to: next, viewKind: view.kind });
+    if (nextView === 'working') selectView({ kind: 'working', ref: 'HEAD' });
+    else if (nextView === 'pr' && pr) showPr(pr);
   };
+  // Review shows while the task has a target; it gives way to Changes once
+  // the target is gone (Stop reviewing, the own PR merged), and the editor
+  // to the working tree.
+  useEffect(() => {
+    if (segmentForTarget(segment, reviewTarget) === segment) return;
+    setSegment('changes');
+    setLastCodeSegment('changes');
+    if (view.kind === 'pr') selectView({ kind: 'working', ref: 'HEAD' });
+  }, [segment, reviewTarget, view.kind, selectView]);
   // Re-picking the current view while expanded goes narrow (never collapsed:
   // that is the Hide control's, or ⌘⌥B's). Expanded with the tree folded
   // away, picking another view unfolds it, easing as the tree toggle does;
@@ -228,6 +273,11 @@ export function RightInspector({
     },
     [onViewDiff],
   );
+  // History's Review: the PR becomes the target, and Review shows it.
+  const reviewPr = (pr: PrRef) => {
+    usePrReviews.getState().setTarget(task.id, pr);
+    selectSegment('review', pr);
+  };
   // An empty Changes is never expanded (see sidebarState): it narrows as it
   // empties, and gives way to Files as a file opens on it or its status
   // loads empty. Each reacts to its own transition, read off the value before.
@@ -303,8 +353,7 @@ export function RightInspector({
       openEditor();
     },
     onReview: () => {
-      ws.prEntry?.onReview();
-      openEditor();
+      if (ownPr) reviewPr(ownPr);
     },
   };
 
@@ -364,6 +413,9 @@ export function RightInspector({
               { value: 'changes', label: 'Changes', count: files.length || undefined },
               { value: 'files', label: 'Files' },
               { value: 'history', label: 'History' },
+              ...(reviewTarget
+                ? [{ value: 'review' as const, label: 'Review', count: reviewThreads || undefined }]
+                : []),
             ]}
           />
         </div>
@@ -457,11 +509,33 @@ export function RightInspector({
     />
   );
 
+  const review = (
+    <ReviewView
+      task={task}
+      target={reviewTarget}
+      // Stopping a review of the own PR would leave it the target still.
+      canStop={
+        !!storedTarget &&
+        !(ownPr && ownPr.provider === storedTarget.provider && ownPr.number === storedTarget.number)
+      }
+      activePath={activePath(ws.layout)}
+      onOpenFile={(path) => openFile(path, { preview: true })}
+      onOpenOverview={(target) => openFile(prTab(target.provider, target.number))}
+      onNavigate={(scope, path, id) => {
+        ws.navigateToComment(scope, path, id);
+        openEditor();
+      }}
+    />
+  );
+
   // The tree or list column: the editor's tree (the changes or the whole
-  // repo), or the commits. Narrow, Changes is the changes list instead.
+  // repo), the commits, or the review's outline. Narrow, Changes is the
+  // changes list instead.
   const tree =
     segment === 'history' ? (
       history
+    ) : segment === 'review' ? (
+      review
     ) : (
       <EditorTree
         cwd={task.path}

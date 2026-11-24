@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import type { DiffComment, FileChange } from '../../../shared/types';
+import type { DiffComment, FileChange, PrRef } from '../../../shared/types';
 import { needsAttention } from '../../../shared/diffComments';
 import { parsePrScope } from '../../../shared/prScope';
 import { useGit } from '../../stores/gitStore';
@@ -15,6 +15,7 @@ import { pickFirstChangedFile } from './data/viewData';
 import { readStoredView, writeStoredView } from './data/viewPersistence';
 import { commentScope, commentCountsByScope } from './comments/commentScope';
 import {
+  activePath,
   openPaths,
   type EditorLayout,
   type GroupIndex,
@@ -53,6 +54,9 @@ interface Args {
   historyShown: boolean;
   /** Each new target (by identity) opens its file and view. */
   target: EditorTarget | null;
+  /** A PR was picked to review (Compare → Pull requests): it is the task's
+   *  review target now, and its view shows. */
+  onReviewPr?: (pr: PrRef) => void;
 }
 
 export interface EditorWorkspace {
@@ -71,6 +75,8 @@ export interface EditorWorkspace {
   exitBranchView(): void;
   /** Open PR `number`'s view; resolves false when it couldn't be loaded. */
   openPrView(number: number): Promise<boolean>;
+  /** Open PR `number`'s view and make it the task's review target. */
+  reviewPr(number: number): Promise<boolean>;
   data: EditorViewData;
   layout: EditorLayout;
   openFile(path: string, opts?: OpenOptions): void;
@@ -84,8 +90,8 @@ export interface EditorWorkspace {
   badgeCounts: Map<string, FileBadges>;
   /** Comments needing attention per scope ('live', 'commit:<sha>'), for History. */
   commentCountByScope: Map<string, number>;
-  /** The task's open PR, for History. */
-  prEntry: PrEntry | null;
+  /** The task's open PR, for History (its Review is the sidebar's). */
+  prEntry: Omit<PrEntry, 'onReview'> | null;
   /** A comment to reveal once its file shows (cross-file navigation). */
   revealCommentId: string | null;
   clearRevealComment(): void;
@@ -113,6 +119,7 @@ export function useEditorWorkspace({
   treeShown = false,
   historyShown,
   target,
+  onReviewPr,
 }: Args): EditorWorkspace {
   // Git belongs to a task's worktree, and the task's comments to the active
   // task's. Any other folder (Claude's memory, opened from the memory modal)
@@ -191,8 +198,9 @@ export function useEditorWorkspace({
 
   // Once the picked view's files are in: its tabs are the files it changes.
   // Others close, unless unsaved, or kept (not a preview) and the file is in
-  // this view too. Non-file tabs (a PR's overview) stay. A commit, branch or PR view then opens its first changed
-  // file (as a preview).
+  // this view too. Non-file tabs (a PR's overview) stay. A commit, branch or
+  // PR view then opens its first changed file (as a preview), unless one of
+  // its files already shows.
   const { settled } = data;
   useEffect(() => {
     // Closed, the editor loads no files: wait for it to open.
@@ -211,6 +219,10 @@ export function useEditorWorkspace({
           (!preview && present.has(path)),
       );
     if (view.kind === 'working') return;
+    // Opened from a list before the view settled (Review's files, the PR's
+    // overview): that stays in front.
+    const shown = activePath(selectLayout(tabsKey)(useEditorTabs.getState()));
+    if (shown && (changed.has(shown) || !isFileTab(shown))) return;
     const first = pickFirstChangedFile(changedFiles);
     if (first) openFile(first, { preview: true });
   }, [view, editorOpen, settled, changedFiles, repoPaths, tabsKey, cwd, openFile]);
@@ -279,19 +291,36 @@ export function useEditorWorkspace({
   const ownReview = usePrReviews((s) =>
     openPr ? (s.byPr[prKey(openPr.provider, openPr.number)] ?? null) : null,
   );
-  const openPrView = useCallback(
-    async (number: number) => {
-      if (!projectId) return false;
+  // The PR's view, once its review loaded; null (with a toast) when it couldn't.
+  const showPr = useCallback(
+    async (number: number): Promise<PrRef | null> => {
+      if (!projectId) return null;
       const loaded = await usePrReviews.getState().load(projectId, cwd, number);
       if (!loaded.ok) {
         toast.error(`Could not load PR #${number}: ${loaded.error}`);
-        return false;
+        return null;
       }
       const { provider, base, head } = loaded.review;
       selectView({ kind: 'pr', provider, number, base, head });
-      return true;
+      return { provider, number };
     },
     [projectId, cwd, selectView],
+  );
+  const openPrView = useCallback(
+    async (number: number) => (await showPr(number)) !== null,
+    [showPr],
+  );
+  const onReviewPrRef = useRef(onReviewPr);
+  onReviewPrRef.current = onReviewPr;
+  const reviewPr = useCallback(
+    async (number: number) => {
+      const pr = await showPr(number);
+      if (!pr) return false;
+      if (activeTaskId) usePrReviews.getState().setTarget(activeTaskId, pr);
+      onReviewPrRef.current?.(pr);
+      return true;
+    },
+    [showPr, activeTaskId],
   );
 
   // Jump to a comment: switch to its view (scope) if needed, open its file,
@@ -338,20 +367,13 @@ export function useEditorWorkspace({
     };
   }, [editorOpen, view, viewReview, projectId, cwd]);
 
-  const prEntry: PrEntry | null = openPr
+  const prEntry: Omit<PrEntry, 'onReview'> | null = openPr
     ? {
         number: openPr.number,
         title: openPr.title,
         body: ownReview?.body ?? null,
         threads: ownReview ? unresolvedThreads(ownReview).length : null,
         onOpen: () => void openPrView(openPr.number),
-        onReview: () => {
-          if (activeTaskId)
-            usePrReviews
-              .getState()
-              .setTarget(activeTaskId, { provider: openPr.provider, number: openPr.number });
-          void openPrView(openPr.number);
-        },
         onPeek: () => {
           if (!ownReview && projectId)
             void usePrReviews.getState().load(projectId, cwd, openPr.number);
@@ -399,6 +421,7 @@ export function useEditorWorkspace({
     selectBase,
     exitBranchView,
     openPrView,
+    reviewPr,
     data,
     layout,
     openFile,

@@ -4,7 +4,9 @@ import { cn } from '../../lib/cn';
 
 /**
  * The badge base: a small rounded-sm tag. `neutral` is the hover tint; the
- * state tones tint by agent state; `bare` has no fill (icon or text marks).
+ * state tones tint by agent state; `bare` has no fill (icon or text marks);
+ * `outline` is a hairline ring, the quiet sibling of `neutral` where two
+ * counts sit side by side.
  * `CountBadge`, `TokenBadge`, `MainRepoBadge` and `PrBadge` build on it.
  */
 export const badgeVariants = cva(
@@ -14,6 +16,7 @@ export const badgeVariants = cva(
       tone: {
         neutral: 'bg-hover text-ink-2',
         bare: 'text-ink-3',
+        outline: 'border border-line text-ink-2',
         needs: 'bg-state-needs/12 text-state-needs',
         fail: 'bg-state-fail/12 text-state-fail',
         work: 'bg-state-work/12 text-state-work',

@@ -24,6 +24,10 @@ interface PrReviewState {
   byPr: Record<string, PrReview>;
   /** Per task: the PR the person picked for it to review, or null. Absent until loaded. */
   targets: Record<string, PrRef | null>;
+  /** Per task and PR (`reviewKey`): the files marked viewed, path → the head
+   *  blob they were viewed at (`isViewed` says whether a mark still holds).
+   *  Absent until loaded. */
+  viewed: Record<string, Record<string, string>>;
   /** Per task and PR (`reviewKey`): the draft summary, the review's PR-level
    *  comment. Null when there is none; absent until loaded. */
   summaries: Record<string, PrReviewSummary | null>;
@@ -36,10 +40,21 @@ interface PrReviewState {
   loadTarget: (taskId: string) => Promise<void>;
   /** Pick the PR the task reviews (null stops reviewing): shown at once, saved behind. */
   setTarget: (taskId: string, target: PrRef | null) => void;
+  /** Fetch the files of a PR the task marked viewed. */
+  loadViewed: (taskId: string, provider: PrProvider, number: number) => Promise<void>;
+  /** Mark a file viewed at `blob` (null unmarks it): shown at once, saved behind. */
+  setViewed: (
+    taskId: string,
+    provider: PrProvider,
+    number: number,
+    path: string,
+    blob: string | null,
+  ) => void;
   /** The person's edit: shown at once, saved shortly after they stop typing. */
   setSummary: (taskId: string, provider: PrProvider, number: number, body: string) => void;
   /** Fetch PR `number` of the project, with its commits fetched into `cwd`. On
-   *  failure the last fetched review stays. */
+   *  failure the last fetched review stays. A fetch of the same PR already
+   *  under way is shared, not repeated. */
   load: (projectId: string, cwd: string, number: number) => Promise<PrLoadResult>;
   /** Resolve or reactivate a thread: shown at once, undone if the PR refuses. */
   setResolved: (
@@ -75,6 +90,8 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
     set({ targets: { ...get().targets, [taskId]: target } });
   const putSummary = (key: string, summary: PrReviewSummary | null) =>
     set({ summaries: { ...get().summaries, [key]: summary } });
+  // Fetches under way, per project, checkout and PR number.
+  const loading = new Map<string, Promise<PrLoadResult>>();
   // Saves waiting for the person to stop typing, per review key.
   const pendingSaves = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -92,6 +109,7 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
   return {
     byPr: {},
     targets: {},
+    viewed: {},
     summaries: {},
 
     loadReview: (taskId, provider, number) => loadSummary(taskId, provider, number),
@@ -133,16 +151,47 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
       void window.electronAPI.prReviewSetTarget({ taskId, target }).catch(() => undefined);
     },
 
-    load: async (projectId, cwd, number) => {
+    loadViewed: async (taskId, provider, number) => {
       try {
-        const resp = await window.electronAPI.prReviewLoad({ projectId, cwd, number });
-        if (!resp.success || !resp.data) return { ok: false, error: resp.error ?? 'unknown error' };
-        const review = resp.data;
-        set({ byPr: { ...get().byPr, [prKey(review.provider, review.number)]: review } });
-        return { ok: true, review };
-      } catch (err) {
-        return { ok: false, error: String(err) };
+        const resp = await window.electronAPI.prReviewViewed({ taskId, provider, number });
+        if (resp.success && resp.data)
+          set({ viewed: { ...get().viewed, [reviewKey(taskId, provider, number)]: resp.data } });
+      } catch {
+        /* stays as it was */
       }
+    },
+
+    setViewed: (taskId, provider, number, path, blob) => {
+      const key = reviewKey(taskId, provider, number);
+      const marks = { ...get().viewed[key] };
+      if (blob === null) delete marks[path];
+      else marks[path] = blob;
+      set({ viewed: { ...get().viewed, [key]: marks } });
+      void window.electronAPI
+        .prReviewSetViewed({ taskId, provider, number, path, blob })
+        .catch(() => undefined);
+    },
+
+    load: (projectId, cwd, number) => {
+      const key = `${projectId}\0${cwd}\0${number}`;
+      const pending = loading.get(key);
+      if (pending) return pending;
+      const run = (async (): Promise<PrLoadResult> => {
+        try {
+          const resp = await window.electronAPI.prReviewLoad({ projectId, cwd, number });
+          if (!resp.success || !resp.data)
+            return { ok: false, error: resp.error ?? 'unknown error' };
+          const review = resp.data;
+          set({ byPr: { ...get().byPr, [prKey(review.provider, review.number)]: review } });
+          return { ok: true, review };
+        } catch (err) {
+          return { ok: false, error: String(err) };
+        } finally {
+          loading.delete(key);
+        }
+      })();
+      loading.set(key, run);
+      return run;
     },
 
     setResolved: async (projectId, cwd, review, threadId, resolved) => {

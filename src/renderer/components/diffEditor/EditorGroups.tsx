@@ -168,7 +168,7 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
         defaultBase={ws.data.defaultBase}
         onSelectBase={ws.selectBase}
         onExitBranchView={ws.exitBranchView}
-        onSelectPr={ws.openPrView}
+        onSelectPr={ws.reviewPr}
         commentCount={ws.commentCountByScope.get(commentScope(ws.view)) ?? 0}
       />
     </>

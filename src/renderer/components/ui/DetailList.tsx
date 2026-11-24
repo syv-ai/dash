@@ -1,29 +1,64 @@
 import * as React from 'react';
-import { Check, Copy } from 'lucide-react';
+import { Check, ChevronRight, Copy } from 'lucide-react';
 import { IconButton } from './IconButton';
 import { cn } from '../../lib/cn';
+import { focusRing } from './styles';
 
 /**
  * A titled block of a details view: a `type-heading` (with an optional action
  * at its end), then its rows. Sections stack with their own spacing.
+ * `collapsible` makes the heading a disclosure that folds the rows away.
  */
 export function DetailSection({
   title,
   action,
+  collapsible = false,
+  defaultOpen = true,
   children,
 }: {
   title: React.ReactNode;
   /** A small control at the label's end ("Edit"). */
   action?: React.ReactNode;
+  collapsible?: boolean;
+  /** Collapsible only: open on first render. */
+  defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
+  const [open, setOpen] = React.useState(defaultOpen);
+  if (!collapsible) {
+    return (
+      <section className="grid gap-1 px-2.5 pt-4 pb-1">
+        <div className="flex h-6 items-center gap-2">
+          <h3 className="type-heading min-w-0 flex-1 truncate">{title}</h3>
+          {action}
+        </div>
+        {children}
+      </section>
+    );
+  }
   return (
-    <section className="grid gap-1 px-2.5 pt-4 pb-1">
+    <section className="px-2.5 pt-4 pb-1">
       <div className="flex h-6 items-center gap-2">
-        <h3 className="type-heading min-w-0 flex-1 truncate">{title}</h3>
+        <h3 className="type-heading min-w-0 flex-1">
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOpen((o) => !o)}
+            className={cn('flex max-w-full items-center gap-1 rounded-sm', focusRing)}
+          >
+            <ChevronRight
+              size={14}
+              strokeWidth={1.8}
+              className={cn('shrink-0 text-icon transition-transform', open && 'rotate-90')}
+            />
+            <span className="truncate">{title}</span>
+          </button>
+        </h3>
         {action}
       </div>
-      {children}
+      <div className="collapse-grid" data-open={open}>
+        <div className="grid gap-1 pt-1">{children}</div>
+      </div>
     </section>
   );
 }

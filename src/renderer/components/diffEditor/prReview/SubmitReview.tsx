@@ -28,6 +28,8 @@ interface Props {
   /** The task's notes on this PR: they stay local, and can be cleared before submitting. */
   noteCount: number;
   onClearNotes: () => void;
+  /** Everything reached the PR. */
+  onSubmitted?: () => void;
 }
 
 function WriteError({
@@ -95,6 +97,7 @@ export function SubmitReview({
   draftCount,
   noteCount,
   onClearNotes,
+  onSubmitted,
 }: Props) {
   const [verdict, setVerdict] = useState<PrVerdict>('comment');
   // The summary is a stored draft (the agent may write it), so it lasts until Submit.
@@ -112,6 +115,7 @@ export function SubmitReview({
     setBusy(false);
     if (r.ok) {
       toast.success('Review submitted');
+      onSubmitted?.();
     } else {
       setError({ error: r.error, posted: r.posted ?? 0 });
     }
