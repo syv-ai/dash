@@ -11,15 +11,26 @@ const listRowVariants = cva(
   {
     variants: {
       size: { sm: 'h-7 text-sm', md: 'h-8 text-base' },
+      // A second line: the row grows and the leading slot stays on the first.
+      twoLine: { true: 'h-auto items-start py-1.5', false: '' },
+      dimmed: {
+        true: 'text-ink-3 hover:text-ink data-[selected=true]:text-ink',
+        false: '',
+      },
     },
-    defaultVariants: { size: 'md' },
+    defaultVariants: { size: 'md', twoLine: false, dimmed: false },
   },
 );
 
 export type ListRowProps = Omit<React.ComponentProps<'button'>, 'children'> &
-  VariantProps<typeof listRowVariants> & {
+  Pick<VariantProps<typeof listRowVariants>, 'size'> & {
     /** Current row: the select tint (and aria-current). */
     selected?: boolean;
+    /** A second, smaller line under the label (a reason, a path). It is ink-3
+     *  unless the node passed in colours itself. */
+    description?: React.ReactNode;
+    /** Quiet row (ink-3) that reads normally on hover or when selected. */
+    dimmed?: boolean;
     /** Before the label: a StatusDot, a file icon. */
     leading?: React.ReactNode;
     /** At the row's end: a count, a time, hover actions. */
@@ -32,10 +43,13 @@ export type ListRowProps = Omit<React.ComponentProps<'button'>, 'children'> &
 
 /**
  * A sidebar or tree row: 28–32px, rounded-lg, hover tint, select tint when
- * `selected`. Leading slot, truncating label, trailing slot (ink-3).
+ * `selected`. Leading slot, truncating label (with an optional second line),
+ * trailing slot (ink-3).
  */
 export function ListRow({
   selected = false,
+  description,
+  dimmed = false,
   leading,
   trailing,
   size,
@@ -51,11 +65,18 @@ export function ListRow({
       type={as === 'button' ? type : undefined}
       data-selected={selected}
       aria-current={selected ? 'true' : undefined}
-      className={cn(listRowVariants({ size }), className)}
+      className={cn(listRowVariants({ size, dimmed, twoLine: !!description }), className)}
       {...(props as React.HTMLAttributes<HTMLElement>)}
     >
-      {leading}
-      <span className="min-w-0 flex-1 truncate">{children}</span>
+      {leading && <span className="flex h-5 shrink-0 items-center">{leading}</span>}
+      {description ? (
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate">{children}</span>
+          <span className="truncate text-sm text-ink-3">{description}</span>
+        </span>
+      ) : (
+        <span className="min-w-0 flex-1 truncate">{children}</span>
+      )}
       {trailing && <span className="flex shrink-0 items-center gap-1 text-ink-3">{trailing}</span>}
     </Comp>
   );

@@ -1,7 +1,14 @@
 import * as React from 'react';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { cn } from '../../lib/cn';
-import { menuItem, radixMenuItemStates, menuLabel, menuSeparator, menuSurface } from './styles';
+import {
+  menuItem,
+  menuItemDestructive,
+  radixMenuItemStates,
+  menuLabel,
+  menuSeparator,
+  menuSurface,
+} from './styles';
 
 /** Click-opened menu (Radix, shadcn API). Shares its surface and rows with
  *  ContextMenu and Select through `styles.ts`. */
@@ -28,12 +35,21 @@ export function DropdownMenuContent({
 }
 
 export function DropdownMenuItem({
+  variant = 'default',
   className,
   ...props
-}: React.ComponentProps<typeof DropdownMenuPrimitive.Item>) {
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Item> & {
+  /** `destructive`: a row that deletes, in the fail colour. */
+  variant?: 'default' | 'destructive';
+}) {
   return (
     <DropdownMenuPrimitive.Item
-      className={cn(menuItem, radixMenuItemStates, className)}
+      className={cn(
+        menuItem,
+        radixMenuItemStates,
+        variant === 'destructive' && menuItemDestructive,
+        className,
+      )}
       {...props}
     />
   );

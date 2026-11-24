@@ -15,6 +15,9 @@ interface IconButtonProps extends Omit<React.ComponentProps<'button'>, 'title'> 
    * no mouse events, so its tooltip couldn't say why it is off).
    */
   disabled?: boolean;
+  /** A toggle that is on (or the current item in a rail): select tint, ink,
+   *  and aria-pressed. Leave undefined for a plain button. */
+  pressed?: boolean;
   children: React.ReactNode;
 }
 
@@ -28,6 +31,8 @@ const variantStyles = {
 /** Rest state with the hover feedback removed, for `disabled`. */
 const DISABLED = 'opacity-40 hover:bg-transparent hover:text-ink-3';
 
+const PRESSED = 'bg-select text-ink hover:bg-select';
+
 /**
  * Icon-only button: `Button size="icon"` plus a required tooltip label, which
  * is also its aria-label. Spreads extra props and its ref onto the `<button>`,
@@ -40,6 +45,7 @@ export function IconButton({
   size = 'md',
   className,
   disabled = false,
+  pressed,
   children,
   ...rest
 }: IconButtonProps) {
@@ -50,9 +56,11 @@ export function IconButton({
         aria-label={title}
         onClick={disabled ? undefined : onClick}
         aria-disabled={disabled || undefined}
+        aria-pressed={pressed}
         className={cn(
           buttonVariants({ variant: 'ghost', size: size === 'sm' ? 'icon-sm' : 'icon' }),
           variantStyles[variant],
+          pressed && PRESSED,
           disabled && DISABLED,
           className,
         )}

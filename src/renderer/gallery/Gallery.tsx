@@ -195,6 +195,9 @@ function Buttons({ pinned }: { pinned: boolean }) {
         <IconButton title="Unavailable while running" disabled>
           <Archive size={14} strokeWidth={1.8} />
         </IconButton>
+        <IconButton title="Projects" pressed>
+          <Folder size={14} strokeWidth={1.8} />
+        </IconButton>
         <Button size="icon" variant="secondary" aria-label="Search">
           <Search size={14} strokeWidth={1.8} />
         </Button>
@@ -357,7 +360,9 @@ function Rows() {
             key={t.id}
             selected={t.id === current}
             onClick={() => setCurrent(t.id)}
+            dimmed={t.state === 'idle'}
             leading={<StatusDot state={t.state} />}
+            description={t.state === 'needs' ? 'Approve Bash: pnpm test' : undefined}
             trailing={t.time}
           >
             {t.id}

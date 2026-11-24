@@ -1,3 +1,4 @@
+import type * as React from 'react';
 import { Settings, Archive, Trash2, AtSign, Brain, ScrollText, RotateCw } from 'lucide-react';
 import { DropdownMenuItem, DropdownMenuSeparator } from '../ui/DropdownMenu';
 import { IdeIcon } from '../ui/IdeIcon';
@@ -11,7 +12,7 @@ import { useSetup } from '../../stores/setupStore';
 let focusTerminalOnClose = false;
 
 /**
- * Every task "…" menu's onCloseAutoFocus. After an item that leaves the user
+ * Every task menu's onCloseAutoFocus. After an item that leaves the user
  * where they were (copying the address), focus goes back to the active task's
  * Claude Code prompt instead of the "…" button.
  */
@@ -25,18 +26,34 @@ export function onTaskMenuCloseAutoFocus(e: Event) {
   session.focus();
 }
 
+/** The item and separator of the menu the items render in: a dropdown (the
+ *  default) or a right-click ContextMenu. Both are Radix menus with one API. */
+export interface MenuParts {
+  Item: React.ComponentType<{
+    onSelect?: (e: Event) => void;
+    disabled?: boolean;
+    variant?: 'default' | 'destructive';
+    children?: React.ReactNode;
+  }>;
+  Separator: React.ComponentType;
+}
+
+const DROPDOWN_PARTS: MenuParts = { Item: DropdownMenuItem, Separator: DropdownMenuSeparator };
+
 export interface TaskMenuHandlers {
   taskId: string;
   onOpenIde: () => void;
   onSettings: () => void;
   onArchive: () => void;
   onDelete: () => void;
+  /** Defaults to the dropdown's. */
+  parts?: MenuParts;
 }
 
 /**
- * The items every task "…" menu shows: the task cards' menu and the task
- * header's. Both render this list, so the two can't drift apart; a menu adds
- * its own extras around it.
+ * The items every task menu shows: the task cards' "…" menu, the task
+ * header's, and the task list's right-click menu. All render this list, so
+ * they can't drift apart; a menu adds its own extras around it.
  */
 export function TaskMenuItems({
   taskId,
@@ -44,7 +61,9 @@ export function TaskMenuItems({
   onSettings,
   onArchive,
   onDelete,
+  parts = DROPDOWN_PARTS,
 }: TaskMenuHandlers) {
+  const { Item, Separator } = parts;
   const { ideId, openLabel } = usePreferredIde();
   const task = useProjects((s) => selectTaskById(s, taskId));
   const setupRun = useSetup((s) => (task ? s.runs[task.path] : undefined));
@@ -53,58 +72,52 @@ export function TaskMenuItems({
   const openTaskMemory = useUi((s) => s.openTaskMemory);
   return (
     <>
-      <DropdownMenuItem onSelect={onOpenIde}>
-        <span className="inline-flex w-[13px] justify-center text-muted-foreground">
+      <Item onSelect={onOpenIde}>
+        <span className="inline-flex w-3.25 justify-center text-ink-3">
           <IdeIcon ideId={ideId} />
         </span>
         {openLabel}
-      </DropdownMenuItem>
-      <DropdownMenuItem onSelect={onSettings}>
-        <Settings size={13} strokeWidth={1.8} className="text-muted-foreground" />
+      </Item>
+      <Item onSelect={onSettings}>
+        <Settings size={13} strokeWidth={1.8} />
         Task settings
-      </DropdownMenuItem>
+      </Item>
       {task?.useWorktree && setupRun && (
-        <DropdownMenuItem onSelect={() => showSetup(task.path)}>
-          <ScrollText size={13} strokeWidth={1.8} className="text-muted-foreground" />
+        <Item onSelect={() => showSetup(task.path)}>
+          <ScrollText size={13} strokeWidth={1.8} />
           Setup output
-        </DropdownMenuItem>
+        </Item>
       )}
       {task?.useWorktree && (
-        <DropdownMenuItem
-          disabled={setupRun?.status === 'running'}
-          onSelect={() => void rerunSetup(task)}
-        >
-          <RotateCw size={13} strokeWidth={1.8} className="text-muted-foreground" />
+        <Item disabled={setupRun?.status === 'running'} onSelect={() => void rerunSetup(task)}>
+          <RotateCw size={13} strokeWidth={1.8} />
           {setupRun ? 'Run setup again' : 'Run setup'}
-        </DropdownMenuItem>
+        </Item>
       )}
-      <DropdownMenuItem
+      <Item
         onSelect={() => {
           focusTerminalOnClose = true;
           void copyTaskMessageAddress(taskId);
         }}
       >
-        <AtSign size={13} strokeWidth={1.8} className="text-muted-foreground" />
+        <AtSign size={13} strokeWidth={1.8} />
         Copy message address
-      </DropdownMenuItem>
+      </Item>
       {task && (
-        <DropdownMenuItem onSelect={() => openTaskMemory(task.projectId, taskId)}>
-          <Brain size={13} strokeWidth={1.8} className="text-muted-foreground" />
+        <Item onSelect={() => openTaskMemory(task.projectId, taskId)}>
+          <Brain size={13} strokeWidth={1.8} />
           Memories
-        </DropdownMenuItem>
+        </Item>
       )}
-      <DropdownMenuItem onSelect={onArchive}>
-        <Archive size={13} strokeWidth={1.8} className="text-muted-foreground" />
+      <Item onSelect={onArchive}>
+        <Archive size={13} strokeWidth={1.8} />
         Archive
-      </DropdownMenuItem>
-      <DropdownMenuSeparator />
-      <DropdownMenuItem
-        onSelect={onDelete}
-        className="text-destructive focus:bg-destructive/10 data-highlighted:bg-destructive/10"
-      >
+      </Item>
+      <Separator />
+      <Item onSelect={onDelete} variant="destructive">
         <Trash2 size={13} strokeWidth={1.8} />
         Delete
-      </DropdownMenuItem>
+      </Item>
     </>
   );
 }

@@ -20,6 +20,10 @@ export const menuItem =
 export const radixMenuItemStates =
   'data-highlighted:bg-hover data-disabled:pointer-events-none data-disabled:opacity-40';
 
+/** A destructive menu row (Delete): fail ink, fail-tinted highlight. */
+export const menuItemDestructive =
+  'text-state-fail [&_svg]:text-state-fail data-highlighted:bg-state-fail/10';
+
 /** A section label inside a menu. */
 export const menuLabel = 'px-2.5 pt-1.5 pb-1 text-xs font-medium text-ink-3';
 

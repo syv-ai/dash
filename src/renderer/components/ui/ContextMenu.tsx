@@ -1,7 +1,13 @@
 import * as React from 'react';
 import * as ContextMenuPrimitive from '@radix-ui/react-context-menu';
 import { cn } from '../../lib/cn';
-import { menuItem, radixMenuItemStates, menuSeparator, menuSurface } from './styles';
+import {
+  menuItem,
+  menuItemDestructive,
+  radixMenuItemStates,
+  menuSeparator,
+  menuSurface,
+} from './styles';
 
 /**
  * Right-click menu, the same surface, rows and separators as DropdownMenu.
@@ -26,12 +32,21 @@ export function ContextMenuContent({
 }
 
 export function ContextMenuItem({
+  variant = 'default',
   className,
   ...props
-}: React.ComponentProps<typeof ContextMenuPrimitive.Item>) {
+}: React.ComponentProps<typeof ContextMenuPrimitive.Item> & {
+  /** `destructive`: a row that deletes, in the fail colour. */
+  variant?: 'default' | 'destructive';
+}) {
   return (
     <ContextMenuPrimitive.Item
-      className={cn(menuItem, radixMenuItemStates, className)}
+      className={cn(
+        menuItem,
+        radixMenuItemStates,
+        variant === 'destructive' && menuItemDestructive,
+        className,
+      )}
       {...props}
     />
   );
