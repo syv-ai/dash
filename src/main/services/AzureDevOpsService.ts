@@ -4,13 +4,14 @@ import type {
   AzureDevOpsWorkItemRef,
   PullRequest,
   CiState,
+  PrCheck,
   PullRequestInfo,
 } from '@shared/types';
 import { normalizeAdoProject } from '@shared/urls';
 import { mapAdoPrList } from './adoPr';
 import { describeAdoFailure } from './adoErrors';
 import { GitService } from './GitService';
-import { ciFromAdo, relevantPrs } from './prRelevance';
+import { adoChecks, ciOf, relevantPrs } from './prRelevance';
 
 const TIMEOUT_MS = 15_000;
 const API_VERSION = '7.1';
@@ -230,16 +231,26 @@ export class AzureDevOpsService {
     return relevantPrs(prs, (sha) => GitService.hasMovedPast(cwd, sha));
   }
 
-  /**
-   * A PR's checks (see ciFromAdo) from its policy evaluations, which need the
-   * project's id, and its statuses. Null when neither can be read.
-   */
+  /** A PR's checks as one state (see ciOf); null when it has none, or none can be read. */
   private static async getPullRequestCi(
     config: AzureDevOpsConfig,
     repositoryName: string,
     prId: number,
     projectId: string | undefined,
   ): Promise<CiState | null> {
+    return ciOf(await this.getPullRequestChecks(config, repositoryName, prId, projectId));
+  }
+
+  /**
+   * A PR's checks (see adoChecks) from its policy evaluations, which need the
+   * project's id, and its statuses. Whatever can't be read is left out.
+   */
+  static async getPullRequestChecks(
+    config: AzureDevOpsConfig,
+    repositoryName: string,
+    prId: number,
+    projectId: string | undefined,
+  ): Promise<PrCheck[]> {
     const values = (r: PromiseSettledResult<unknown>): unknown =>
       r.status === 'fulfilled' ? (r.value as { value?: unknown } | null)?.value : null;
     const [evaluations, statuses] = await Promise.allSettled([
@@ -258,7 +269,12 @@ export class AzureDevOpsService {
         `${this.proj(config)}/_apis/git/repositories/${encodeURIComponent(repositoryName)}/pullRequests/${prId}/statuses`,
       ),
     ]);
-    return ciFromAdo(values(evaluations), values(statuses));
+    const projectUrl = `${config.organizationUrl.replace(/\/+$/, '')}/${this.proj(config)}`;
+    return adoChecks(
+      values(evaluations),
+      values(statuses),
+      (buildId) => `${projectUrl}/_build/results?buildId=${buildId}`,
+    );
   }
 
   /** Active (open) PRs for `repositoryName`, most-recent first. */

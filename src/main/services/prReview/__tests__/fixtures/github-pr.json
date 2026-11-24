@@ -1,0 +1,70 @@
+{
+  "title": "Fix it",
+  "body": "Because",
+  "url": "https://github.com/o/r/pull/4",
+  "viewerDidAuthor": false,
+  "author": { "login": "bo" },
+  "state": "OPEN",
+  "isDraft": false,
+  "baseRefName": "main",
+  "headRefName": "fix/it",
+  "baseRefOid": "B0",
+  "headRefOid": "H",
+  "reviewRequests": {
+    "nodes": [
+      { "requestedReviewer": { "login": "cy" } },
+      { "requestedReviewer": { "name": "core-team" } }
+    ]
+  },
+  "latestReviews": {
+    "nodes": [
+      { "author": { "login": "ann" }, "state": "APPROVED" },
+      { "author": { "login": "cy" }, "state": "CHANGES_REQUESTED" },
+      { "author": { "login": "di" }, "state": "COMMENTED" },
+      { "author": { "login": "ed" }, "state": "DISMISSED" },
+      { "author": null, "state": "APPROVED" }
+    ]
+  },
+  "assignees": { "nodes": [{ "login": "bo" }, { "login": "ann" }] },
+  "commits": {
+    "nodes": [
+      {
+        "commit": {
+          "statusCheckRollup": {
+            "contexts": {
+              "nodes": [
+                {
+                  "__typename": "CheckRun",
+                  "name": "test",
+                  "status": "COMPLETED",
+                  "conclusion": "SUCCESS",
+                  "detailsUrl": "https://github.com/o/r/actions/runs/1"
+                },
+                {
+                  "__typename": "CheckRun",
+                  "name": "lint",
+                  "status": "COMPLETED",
+                  "conclusion": "FAILURE",
+                  "detailsUrl": "https://github.com/o/r/actions/runs/2"
+                },
+                {
+                  "__typename": "CheckRun",
+                  "name": "deploy",
+                  "status": "COMPLETED",
+                  "conclusion": "SKIPPED",
+                  "detailsUrl": null
+                },
+                {
+                  "__typename": "StatusContext",
+                  "context": "ci/circleci",
+                  "state": "PENDING",
+                  "targetUrl": "https://circleci.com/x"
+                }
+              ]
+            }
+          }
+        }
+      }
+    ]
+  }
+}

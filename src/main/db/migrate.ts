@@ -356,8 +356,8 @@ export function runMigrations(): void {
     /* already exists */
   }
 
-  // The PRs a task is reviewing: what's written in their view becomes a
-  // comment rather than a note, until Submit ends the review.
+  // Unused since the In-review mode went; kept so existing rows aren't dropped.
+  // It held the PRs a task was reviewing, whose view wrote comments, not notes.
   rawDb.exec(`
     CREATE TABLE IF NOT EXISTS pr_reviews_in_progress (
       task_id     TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -441,6 +441,31 @@ export function runMigrations(): void {
   } catch {
     /* already exists */
   }
+
+  // The PR a task reviews, when the person picked one (else its own open PR is
+  // the target): main and dashctl default to it.
+  rawDb.exec(`
+    CREATE TABLE IF NOT EXISTS task_review_targets (
+      task_id   TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+      provider  TEXT NOT NULL,
+      number    INTEGER NOT NULL,
+      set_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // The PR files a task's reviewer marked viewed, with the blob they saw: a
+  // push that changes the file un-views it.
+  rawDb.exec(`
+    CREATE TABLE IF NOT EXISTS pr_viewed_files (
+      task_id    TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      provider   TEXT NOT NULL,
+      number     INTEGER NOT NULL,
+      path       TEXT NOT NULL,
+      blob       TEXT NOT NULL,
+      viewed_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (task_id, provider, number, path)
+    );
+  `);
 
   rawDb.pragma('foreign_keys = ON');
 }

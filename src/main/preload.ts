@@ -246,10 +246,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
     verdict: string;
     body: string;
   }) => ipcRenderer.invoke('prReview:submit', args),
-  prReviewInReview: (args: { taskId: string; provider: string; number: number }) =>
-    ipcRenderer.invoke('prReview:inReview', args),
-  prReviewSetInReview: (args: { taskId: string; provider: string; number: number; on: boolean }) =>
-    ipcRenderer.invoke('prReview:setInReview', args),
+  prReviewReply: (args: {
+    projectId: string;
+    cwd: string;
+    taskId: string;
+    number: number;
+    threadId: string;
+    body: string;
+    draftId?: string;
+  }) => ipcRenderer.invoke('prReview:reply', args),
+  prReviewTarget: (args: { taskId: string }) => ipcRenderer.invoke('prReview:target', args),
+  prReviewSetTarget: (args: {
+    taskId: string;
+    target: { provider: string; number: number } | null;
+  }) => ipcRenderer.invoke('prReview:setTarget', args),
+  prReviewViewed: (args: { taskId: string; provider: string; number: number }) =>
+    ipcRenderer.invoke('prReview:viewed', args),
+  prReviewSetViewed: (args: {
+    taskId: string;
+    provider: string;
+    number: number;
+    path: string;
+    blob: string | null;
+  }) => ipcRenderer.invoke('prReview:setViewed', args),
   prReviewGetSummary: (args: { taskId: string; provider: string; number: number }) =>
     ipcRenderer.invoke('prReview:getSummary', args),
   prReviewSetSummary: (args: { taskId: string; provider: string; number: number; body: string }) =>

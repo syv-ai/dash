@@ -25,8 +25,6 @@ interface Props {
   provider: PrProvider;
   /** The PR's draft scope, or null when there's no task to own drafts. */
   draftScope: string | null;
-  /** The task is reviewing the PR. A reply is a PR comment, so it waits for Review. */
-  inReview: boolean;
   /** Show the file and line above the comments (for threads listed off the code). */
   showLocation?: boolean;
   onSend: (thread: PrReviewThread) => void;
@@ -100,7 +98,6 @@ export function PrThreadCard({
   thread,
   provider,
   draftScope,
-  inReview,
   showLocation,
   onSend,
   onSetResolved,
@@ -207,7 +204,7 @@ export function PrThreadCard({
             <Check size={14} strokeWidth={1.8} />
           )}
         </IconButton>
-        {draftScope && inReview && !replying && (
+        {draftScope && !replying && (
           <Button variant="secondary" size="sm" onClick={() => setReplying(true)}>
             <Reply size={14} strokeWidth={1.8} />
             Reply

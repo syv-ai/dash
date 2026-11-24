@@ -1,7 +1,9 @@
 import type {
   IpcResponse,
   PrProvider,
+  PrRef,
   PrReview,
+  PrReviewComment,
   PrReviewSummary,
   PrVerdict,
   PullRequest,
@@ -38,18 +40,34 @@ export interface PrReviewApi {
     verdict: PrVerdict;
     body: string;
   }) => Promise<IpcResponse<SubmitResult>>;
-  /** Whether the task is reviewing PR `number` (Review clicked, not yet submitted). */
-  prReviewInReview: (args: {
+  /** Post a reply to a thread of PR `number` at once, outside any review, and
+   *  delete draft `draftId` if given. Answers the posted comment. */
+  prReviewReply: (args: {
+    projectId: string;
+    cwd: string;
+    taskId: string;
+    number: number;
+    threadId: string;
+    body: string;
+    draftId?: string;
+  }) => Promise<IpcResponse<PrReviewComment>>;
+  /** The PR the person picked for the task to review, or null. */
+  prReviewTarget: (args: { taskId: string }) => Promise<IpcResponse<PrRef | null>>;
+  /** Pick the PR the task reviews; null stops reviewing. */
+  prReviewSetTarget: (args: { taskId: string; target: PrRef | null }) => Promise<IpcResponse<void>>;
+  /** The PR's files the task marked viewed: path → the head blob they were viewed at. */
+  prReviewViewed: (args: {
     taskId: string;
     provider: PrProvider;
     number: number;
-  }) => Promise<IpcResponse<boolean>>;
-  /** Start or end the task's review of PR `number`. */
-  prReviewSetInReview: (args: {
+  }) => Promise<IpcResponse<Record<string, string>>>;
+  /** Mark a PR file viewed at `blob`; null unmarks it. */
+  prReviewSetViewed: (args: {
     taskId: string;
     provider: PrProvider;
     number: number;
-    on: boolean;
+    path: string;
+    blob: string | null;
   }) => Promise<IpcResponse<void>>;
   /** The task's draft summary for PR `number` (its PR-level comment), or null. */
   prReviewGetSummary: (args: {

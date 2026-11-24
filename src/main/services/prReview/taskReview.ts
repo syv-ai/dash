@@ -1,6 +1,7 @@
 import type {
   DiffComment,
-  PrProvider,
+  PrRef,
+  PrReviewComment,
   PrReviewSummary,
   PrVerdict,
   SubmitResult,
@@ -8,25 +9,21 @@ import type {
 import { prScope } from '@shared/prScope';
 import { isPrDraft } from '@shared/diffComments';
 import { diffCommentsRepo, type AgentDraft, type DiffCommentsRepo } from '../diffCommentsRepo';
-import { prReviewsInProgressRepo, type PrReviewsInProgressRepo } from '../prReviewsInProgressRepo';
+import { prReviewSummariesRepo, type PrReviewSummariesRepo } from '../prReviewSummariesRepo';
 import { emitDiffCommentsChanged } from '../diffCommentEvents';
 import type { PrContext, PrReviewProvider } from './types';
 
-/** Which PR: its provider and number. */
-export interface PrRef {
-  provider: PrProvider;
-  number: number;
-}
-
-/** Where a submit goes: the PR's adapter and the context to call it with. */
-export interface SubmitTarget {
-  adapter: Pick<PrReviewProvider, 'submit'>;
+/** Where a write goes: the PR's adapter and the context to call it with. */
+export interface WriteTarget<K extends 'submit' | 'reply'> {
+  adapter: Pick<PrReviewProvider, K>;
   ctx: PrContext;
 }
+export type SubmitTarget = WriteTarget<'submit'>;
+export type ReplyTarget = WriteTarget<'reply'>;
 
 /**
- * A task's review of a PR: its notes and draft comments, whether the task is
- * reviewing it, its draft summary, and Submit. The IPC handlers and the
+ * A task's review of a PR: its notes and draft comments, its draft summary,
+ * Submit, and a reply posted on its own. The IPC handlers and the
  * control API's review capabilities both go through here. A write made outside
  * the editor (an agent's, or a submit's) tells the editor; its own writes don't,
  * because its store already holds them.
@@ -38,17 +35,14 @@ export interface TaskReviews {
   draft(taskId: string, id: string): DiffComment | undefined;
   saveAgentDraft(draft: AgentDraft): DiffComment;
   deleteAgentDraft(taskId: string, id: string): void;
-  isInReview(taskId: string, pr: PrRef): boolean;
-  /** Start (Review) or end the task's review of the PR. */
-  setInReview(taskId: string, pr: PrRef, on: boolean): void;
   getSummary(taskId: string, pr: PrRef): PrReviewSummary | null;
   /** Replace the draft summary; an empty body clears it. */
   setSummary(taskId: string, pr: PrRef, summary: PrReviewSummary): void;
   /**
    * Post the task's comments on the PR (not its notes) with a verdict and
    * summary. Drafts that reached the PR are deleted. A submit with no error
-   * ends the review and clears the summary, so what's written next is a note
-   * again. A write the provider refused comes back as the result's error.
+   * clears the summary. A write the provider refused comes back as the
+   * result's error.
    */
   submit(
     taskId: string,
@@ -57,18 +51,28 @@ export interface TaskReviews {
     verdict: PrVerdict,
     body: string,
   ): Promise<SubmitResult>;
+  /**
+   * Post `body` as a reply to thread `threadId` at once, outside any review,
+   * and delete the draft it came from (if any). Throws when the PR refuses.
+   */
+  reply(
+    taskId: string,
+    pr: PrRef,
+    target: ReplyTarget,
+    reply: { threadId: string; body: string; draftId?: string },
+  ): Promise<PrReviewComment>;
 }
 
 export interface TaskReviewDeps {
   comments: DiffCommentsRepo;
-  reviews: PrReviewsInProgressRepo;
+  summaries: PrReviewSummariesRepo;
   /** Tell an open diff editor the task's review drafts changed. */
   changed(taskId: string): void;
 }
 
-export function createTaskReviews({ comments, reviews, changed }: TaskReviewDeps): TaskReviews {
+export function createTaskReviews({ comments, summaries, changed }: TaskReviewDeps): TaskReviews {
   const setSummary = (taskId: string, pr: PrRef, summary: PrReviewSummary) =>
-    reviews.setSummary(taskId, pr.provider, pr.number, summary);
+    summaries.setSummary(taskId, pr.provider, pr.number, summary);
   return {
     drafts: (taskId, pr) => comments.listByScope(taskId, prScope(pr.provider, pr.number)),
     draft(taskId, id) {
@@ -84,9 +88,7 @@ export function createTaskReviews({ comments, reviews, changed }: TaskReviewDeps
       comments.delete(id);
       changed(taskId);
     },
-    isInReview: (taskId, pr) => reviews.isInReview(taskId, pr.provider, pr.number),
-    setInReview: (taskId, pr, on) => reviews.setInReview(taskId, pr.provider, pr.number, on),
-    getSummary: (taskId, pr) => reviews.getSummary(taskId, pr.provider, pr.number),
+    getSummary: (taskId, pr) => summaries.getSummary(taskId, pr.provider, pr.number),
     setSummary(taskId, pr, summary) {
       setSummary(taskId, pr, summary);
       if (summary.author === 'agent') changed(taskId);
@@ -113,11 +115,15 @@ export function createTaskReviews({ comments, reviews, changed }: TaskReviewDeps
         comments.deleteByIds(result.postedDraftIds);
         changed(taskId);
       }
-      if (!result.error) {
-        reviews.setInReview(taskId, pr.provider, pr.number, false);
-        setSummary(taskId, pr, { body: '', author: 'user' });
-      }
+      if (!result.error) setSummary(taskId, pr, { body: '', author: 'user' });
       return result;
+    },
+    async reply(taskId, pr, { adapter, ctx }, { threadId, body, draftId }) {
+      const posted = await adapter.reply(ctx, pr.number, threadId, body);
+      const draft = draftId ? comments.get(draftId) : undefined;
+      if (draft && draft.taskId === taskId) comments.delete(draft.id);
+      changed(taskId);
+      return posted;
     },
   };
 }
@@ -128,7 +134,7 @@ let instance: TaskReviews | null = null;
 export function taskReviews(): TaskReviews {
   instance ??= createTaskReviews({
     comments: diffCommentsRepo(),
-    reviews: prReviewsInProgressRepo(),
+    summaries: prReviewSummariesRepo(),
     changed: emitDiffCommentsChanged,
   });
   return instance;

@@ -1,9 +1,9 @@
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
-import type { DiffComment, PrProvider, Task } from '../../../shared/types';
+import type { DiffComment, PrProvider, PrRef, Task } from '../../../shared/types';
 import { prScope } from '../../../shared/prScope';
 import { ControlError, defineCapability, type Registry } from '../registry';
-import type { PrRef, TaskReviews } from '../../services/prReview/taskReview';
+import type { TaskReviews } from '../../services/prReview/taskReview';
 
 export interface ReviewCapabilityDeps {
   /** Where the project's PRs live (from its remote). */

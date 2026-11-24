@@ -1,0 +1,18 @@
+{
+  "pullRequestId": 7204,
+  "title": "Wire inputs",
+  "description": "Why",
+  "status": "active",
+  "isDraft": false,
+  "sourceRefName": "refs/heads/feature/wire-inputs",
+  "targetRefName": "refs/heads/main",
+  "createdBy": { "id": "author-id", "displayName": "Bo Author" },
+  "repository": { "id": "repo-id", "name": "repo", "project": { "id": "proj-id", "name": "Proj" } },
+  "reviewers": [
+    { "id": "ann-id", "displayName": "Ann Reviewer", "vote": 5, "isRequired": true },
+    { "id": "cy-id", "displayName": "Cy Lead", "vote": -5 },
+    { "id": "team-id", "displayName": "[Proj]\\Proj Team", "vote": 0, "isContainer": true },
+    { "id": "di-id", "displayName": "Di Ops", "vote": 10 },
+    { "id": "ed-id", "displayName": "Ed Sec", "vote": -10 }
+  ]
+}

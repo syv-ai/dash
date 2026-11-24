@@ -608,6 +608,12 @@ export type CiState = 'passing' | 'failing' | 'pending';
 /** Where a PR lives. */
 export type PrProvider = 'github' | 'ado';
 
+/** Which PR: its provider and number. */
+export interface PrRef {
+  provider: PrProvider;
+  number: number;
+}
+
 /** A review's outcome. GitHub offers comment / approve / request_changes; ADO's
  *  vote adds approve_with_suggestions / wait_for_author / reject. */
 export type PrVerdict =
@@ -644,6 +650,43 @@ export interface PrReviewThread {
   comments: PrReviewComment[];
 }
 
+/** Where a PR stands on its forge. */
+export type PrState = 'open' | 'draft' | 'merged' | 'closed';
+
+/** A reviewer and where their review stands. GitHub's states are approved /
+ *  changes_requested / commented / pending; ADO's vote adds
+ *  approved_with_suggestions / waiting / rejected. */
+export interface PrReviewer {
+  name: string;
+  state:
+    | 'approved'
+    | 'changes_requested'
+    | 'commented'
+    | 'pending'
+    | 'approved_with_suggestions'
+    | 'waiting'
+    | 'rejected';
+}
+
+/** One CI check on a PR's head. */
+export interface PrCheck {
+  name: string;
+  state: 'passing' | 'failing' | 'pending' | 'skipped';
+  url: string | null;
+}
+
+/** A file the PR changes (base..head), from local git. */
+export interface PrFile {
+  path: string;
+  status: 'added' | 'modified' | 'deleted' | 'renamed';
+  /** A rename's path at base. */
+  oldPath?: string;
+  additions: number;
+  deletions: number;
+  /** Its blob id at head; null once deleted. What a viewed mark is checked against. */
+  blob: string | null;
+}
+
 /** A PR's review: all its threads and general comments, with the commits its diff spans. */
 export interface PrReview {
   provider: PrProvider;
@@ -667,6 +710,21 @@ export interface PrReview {
   conversation: PrReviewComment[];
   /** The provider had more threads than were loaded. */
   partial?: boolean;
+  author: string;
+  state: PrState;
+  /** Branch names, without `refs/heads/`. */
+  baseRef: string;
+  headRef: string;
+  /** Commits in base..head. */
+  commits: number;
+  /** Commits on the base branch's tip not in head; null when `origin/<baseRef>`
+   *  can't be resolved locally. */
+  behindBase: number | null;
+  reviewers: PrReviewer[];
+  /** [] on ADO, which has none. */
+  assignees: string[];
+  checks: PrCheck[];
+  files: PrFile[];
 }
 
 /** A task's draft summary for a PR: the review's PR-level comment. */

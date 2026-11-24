@@ -16,7 +16,6 @@ interface Props {
   threads: PrReviewThread[];
   provider: PrProvider;
   draftScope: string | null;
-  inReview: boolean;
   onSetResolved: (thread: PrReviewThread, resolved: boolean) => void;
   modifiedEditor: monacoEditor.ICodeEditor | null;
   area: HTMLDivElement | null;
@@ -33,7 +32,6 @@ export function PrThreadOverlay({
   threads,
   provider,
   draftScope,
-  inReview,
   onSetResolved,
   modifiedEditor,
   area,
@@ -144,7 +142,6 @@ export function PrThreadOverlay({
             thread={t}
             provider={provider}
             draftScope={draftScope}
-            inReview={inReview}
             onSend={onSend}
             onSetResolved={onSetResolved}
           />

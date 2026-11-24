@@ -1,6 +1,5 @@
 import { unresolvedThreads } from '../../../utils/prReviewNotices';
 import { PrReviewMenu } from './PrReviewMenu';
-import { ReviewButton } from './ReviewButton';
 import type { PrView } from './usePrView';
 
 interface Props {
@@ -16,8 +15,8 @@ interface Props {
   onSelectFile: (path: string) => void;
 }
 
-/** The PR view's bottom-right corner: Review (with a task to own the drafts)
- *  and the PR's review menu. Nothing until the review has loaded. */
+/** The PR view's bottom-right corner: the PR's review menu. Nothing until the
+ *  review has loaded. */
 export function PrViewCorner({
   pr,
   activeTaskId,
@@ -30,21 +29,13 @@ export function PrViewCorner({
   onSendMany,
   onSelectFile,
 }: Props) {
-  const { review, draftScope, inReview } = pr;
+  const { review, draftScope } = pr;
   if (!review) return null;
   return (
     <div className="absolute bottom-4 right-4 z-10 flex items-center gap-2">
-      {draftScope && activeTaskId && (
-        <ReviewButton
-          inReview={inReview}
-          asked={review.viewerIsRequestedReviewer}
-          onToggle={pr.toggleReview}
-        />
-      )}
       <PrReviewMenu
         review={review}
         draftScope={draftScope}
-        inReview={inReview}
         currentFilePath={currentFilePath}
         getLiveRangeForCurrent={getLiveRangeForCurrent}
         onNavigate={onNavigate}

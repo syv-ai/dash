@@ -10,7 +10,7 @@ vi.mock('../../../db/client', () => ({ getRawDb: () => db }));
 
 import { runMigrations } from '../../../db/migrate';
 import { createDiffCommentsRepo, type DiffCommentsRepo } from '../../../services/diffCommentsRepo';
-import { createPrReviewsInProgressRepo } from '../../../services/prReviewsInProgressRepo';
+import { createPrReviewSummariesRepo } from '../../../services/prReviewSummariesRepo';
 import { createTaskReviews } from '../../../services/prReview/taskReview';
 
 const asTask = (taskId: string) => ({ kind: 'task', taskId }) as const;
@@ -81,7 +81,7 @@ beforeEach(() => {
     getTask: (id) => tasks.find((t) => t.id === id),
     reviews: createTaskReviews({
       comments,
-      reviews: createPrReviewsInProgressRepo(db),
+      summaries: createPrReviewSummariesRepo(db),
       changed: (taskId) => void changed.push(taskId),
     }),
   });

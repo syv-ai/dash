@@ -13,7 +13,6 @@ import type { EditorView } from './types';
 import { useEditorViewData, type EditorViewData } from './data/useEditorViewData';
 import { pickFirstChangedFile } from './data/viewData';
 import { readStoredView, writeStoredView } from './data/viewPersistence';
-import { useTaskReview } from './prReview/useTaskReview';
 import { commentScope, commentCountsByScope } from './comments/commentScope';
 import {
   openPaths,
@@ -339,17 +338,18 @@ export function useEditorWorkspace({
     };
   }, [editorOpen, view, viewReview, projectId, cwd]);
 
-  const ownTaskReview = useTaskReview(activeTaskId, openPr);
   const prEntry: PrEntry | null = openPr
     ? {
         number: openPr.number,
         title: openPr.title,
         body: ownReview?.body ?? null,
         threads: ownReview ? unresolvedThreads(ownReview).length : null,
-        inReview: ownTaskReview.inReview,
         onOpen: () => void openPrView(openPr.number),
         onReview: () => {
-          ownTaskReview.setInReview(true);
+          if (activeTaskId)
+            usePrReviews
+              .getState()
+              .setTarget(activeTaskId, { provider: openPr.provider, number: openPr.number });
           void openPrView(openPr.number);
         },
         onPeek: () => {

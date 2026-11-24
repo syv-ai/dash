@@ -1,6 +1,7 @@
 import type {
   AzureDevOpsConfig,
   PrReview,
+  PrReviewComment,
   PrSubmission,
   PullRequest,
   SubmitResult,
@@ -14,12 +15,20 @@ export interface PrContext {
   ado?: AzureDevOpsConfig & { repository: string };
 }
 
+/** The part of a PrReview local git provides, the same on every forge (see `loadPrReview`). */
+export type LocalPrFields = 'files' | 'commits' | 'behindBase';
+
+/** What a provider knows of a PR's review: everything but the local-git part. */
+export type ForgeReview = Omit<PrReview, LocalPrFields>;
+
 /** One provider's PR review operations, behind the shared model. */
 export interface PrReviewProvider {
   /** Open PRs, newest first. */
   list(ctx: PrContext): Promise<PullRequest[]>;
   /** The PR's review, with its base and head present in the checkout. */
-  load(ctx: PrContext, number: number): Promise<PrReview>;
+  load(ctx: PrContext, number: number): Promise<ForgeReview>;
   setResolved(ctx: PrContext, number: number, threadId: string, resolved: boolean): Promise<void>;
   submit(ctx: PrContext, number: number, submission: PrSubmission): Promise<SubmitResult>;
+  /** Post a reply to a thread at once, outside any review. */
+  reply(ctx: PrContext, number: number, threadId: string, body: string): Promise<PrReviewComment>;
 }

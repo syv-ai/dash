@@ -1,6 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import type { PrSubmission } from '../../../../shared/types';
-import { githubReviewFrom, githubWriteError, makeGithubProvider, type Gql } from '../github';
+import prFixture from './fixtures/github-pr.json';
+import {
+  githubReplyRequest,
+  githubReviewFrom,
+  githubWriteError,
+  makeGithubProvider,
+  restCommentFrom,
+  type Gql,
+  type Rest,
+} from '../github';
 
 const comment = (
   id: string,
@@ -112,6 +121,34 @@ describe('githubReviewFrom', () => {
     expect(githubReviewFrom({ ...base, viewerDidAuthor: true }, at).verdicts).toEqual(['comment']);
   });
 
+  it('describes who wrote it, where it stands, its branches, people and checks', () => {
+    const review = githubReviewFrom(prFixture, at);
+    expect(review).toMatchObject({
+      author: 'bo',
+      state: 'open',
+      baseRef: 'main',
+      headRef: 'fix/it',
+      assignees: ['bo', 'ann'],
+    });
+    // A re-request outranks the review before it; a dismissed review doesn't count.
+    expect(review.reviewers).toEqual([
+      { name: 'ann', state: 'approved' },
+      { name: 'cy', state: 'pending' },
+      { name: 'di', state: 'commented' },
+      { name: 'core-team', state: 'pending' },
+    ]);
+    expect(review.checks).toEqual([
+      { name: 'test', state: 'passing', url: 'https://github.com/o/r/actions/runs/1' },
+      { name: 'lint', state: 'failing', url: 'https://github.com/o/r/actions/runs/2' },
+      { name: 'deploy', state: 'skipped', url: null },
+      { name: 'ci/circleci', state: 'pending', url: 'https://circleci.com/x' },
+    ]);
+    const state = (over: object) => githubReviewFrom({ ...prFixture, ...over }, at).state;
+    expect(state({ isDraft: true })).toBe('draft');
+    expect(state({ state: 'MERGED' })).toBe('merged');
+    expect(state({ state: 'CLOSED', isDraft: true })).toBe('closed');
+  });
+
   it("says whether you're a requested reviewer, by your login", () => {
     const pr = {
       reviewRequests: {
@@ -130,7 +167,16 @@ describe('githubReviewFrom', () => {
   });
 
   it('tolerates junk', () => {
-    expect(githubReviewFrom(null, at)).toMatchObject({ threads: [], conversation: [], title: '' });
+    expect(githubReviewFrom(null, at)).toMatchObject({
+      threads: [],
+      conversation: [],
+      title: '',
+      author: 'ghost',
+      state: 'open',
+      reviewers: [],
+      assignees: [],
+      checks: [],
+    });
     expect(
       githubReviewFrom({ reviewThreads: { nodes: [null, { isResolved: false }] } }, at).threads,
     ).toEqual([
@@ -151,12 +197,12 @@ describe('githubReviewFrom', () => {
 type Call = { query: string; vars: Record<string, string | number | boolean> };
 
 /** A fake `gh api graphql` that records calls and answers by mutation name. */
-function fakeGql(answers: { pending?: boolean; failOn?: string } = {}) {
+function fakeGql(answers: { pending?: boolean; failOn?: string; noRoot?: boolean } = {}) {
   const calls: Call[] = [];
   const gql: Gql = async (_cwd, query, vars) => {
     calls.push({ query, vars });
     const op =
-      /(addPullRequestReviewThreadReply|addPullRequestReviewThread|addPullRequestReview|submitPullRequestReview|deletePullRequestReview|unresolveReviewThread|resolveReviewThread|pullRequest\(number)/.exec(
+      /(addPullRequestReviewThreadReply|addPullRequestReviewThread|addPullRequestReview|submitPullRequestReview|deletePullRequestReview|unresolveReviewThread|resolveReviewThread|pullRequest\(number|node\(id)/.exec(
         query,
       )?.[1];
     if (answers.failOn && op === answers.failOn) throw new Error('GraphQL: something broke');
@@ -166,6 +212,8 @@ function fakeGql(answers: { pending?: boolean; failOn?: string } = {}) {
           pullRequest: { id: 'PR_1', reviews: { nodes: answers.pending ? [{ id: 'R_old' }] : [] } },
         },
       };
+    if (op === 'node(id')
+      return { node: { comments: { nodes: answers.noRoot ? [] : [{ databaseId: 1234 }] } } };
     if (op === 'addPullRequestReview')
       return { addPullRequestReview: { pullRequestReview: { id: 'R_1' } } };
     return {};
@@ -258,6 +306,58 @@ describe('githubProvider.setResolved', () => {
     await gh.setResolved(ctx, 4, 'T_1', false);
     expect(ops()).toEqual(['resolveReviewThread', 'unresolveReviewThread']);
     expect(calls[0]!.vars).toEqual({ id: 'T_1' });
+  });
+});
+
+describe('githubProvider.reply', () => {
+  it("posts at once through REST, under the thread's first comment", () => {
+    expect(githubReplyRequest(4, 1234, 'agreed')).toEqual({
+      method: 'POST',
+      path: 'repos/{owner}/{repo}/pulls/4/comments/1234/replies',
+      fields: { body: 'agreed' },
+    });
+  });
+
+  it('looks up the first comment, posts, and answers the comment', async () => {
+    const { gql, calls } = fakeGql();
+    const posts: Parameters<Rest>[] = [];
+    const rest: Rest = async (...args) => {
+      posts.push(args);
+      return {
+        id: 99,
+        node_id: 'PRRC_9',
+        user: { login: 'me' },
+        body: 'agreed',
+        created_at: '2026-11-24T10:00:00Z',
+        html_url: 'https://github.com/o/r/pull/4#discussion_r99',
+      };
+    };
+    const comment = await makeGithubProvider(gql, rest).reply(ctx, 4, 'PRRT_1', 'agreed');
+    expect(calls[0]!.vars).toEqual({ thread: 'PRRT_1' });
+    expect(posts).toEqual([
+      ['/repo', 'POST', 'repos/{owner}/{repo}/pulls/4/comments/1234/replies', { body: 'agreed' }],
+    ]);
+    expect(comment).toEqual({
+      id: 'PRRC_9',
+      author: 'me',
+      body: 'agreed',
+      createdAt: '2026-11-24T10:00:00Z',
+      url: 'https://github.com/o/r/pull/4#discussion_r99',
+    });
+  });
+
+  it('refuses a thread without a comment, posting nothing', async () => {
+    const { gql } = fakeGql({ noRoot: true });
+    const rest: Rest = async () => {
+      throw new Error('should not post');
+    };
+    await expect(makeGithubProvider(gql, rest).reply(ctx, 4, 'PRRT_1', 'x')).rejects.toThrow(
+      'no comment',
+    );
+  });
+
+  it('reads a deleted account as ghost', () => {
+    expect(restCommentFrom({ node_id: 'X', user: null }).author).toBe('ghost');
   });
 });
 

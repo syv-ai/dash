@@ -12,15 +12,11 @@ import { buildReviewPrompt } from '../../../utils/agentPrompt';
 import { typeIntoTask } from '../../../utils/typeIntoTask';
 import { filterCommentsByScope } from '../comments/commentScope';
 import type { EditorView } from '../types';
-import { isInlineThread, newCommentKind } from './prViewPolicy';
-import { useTaskReview } from './useTaskReview';
+import { defaultKind, isInlineThread } from './prViewPolicy';
 
 export interface PrView {
   /** The PR's review as last fetched; null outside a PR view, or until loaded. */
   review: PrReview | null;
-  /** The task is reviewing the PR. */
-  inReview: boolean;
-  toggleReview: () => void;
   /** What a new one written in the view is. */
   newKind: DiffCommentKind;
   /** The PR's draft scope, or null without a review or a task to own drafts. */
@@ -38,8 +34,8 @@ export interface PrView {
 }
 
 /**
- * The PR view's wiring for the editor: its review and threads, the task's
- * review state, and the policy for what's written in it. Outside a PR view
+ * The PR view's wiring for the editor: its review and threads, and the
+ * policy for what's written in it. Outside a PR view
  * it's inert: no review, notes only.
  */
 export function usePrView({
@@ -65,7 +61,6 @@ export function usePrView({
   const isPrView = view.kind === 'pr';
   const commentsDisabled = useCommentsStore((s) => s.disabled);
   const commentsByFile = useCommentsStore((s) => s.byFile);
-  const { inReview, setInReview } = useTaskReview(activeTaskId, isPrView ? view : null);
   const review = usePrReviews((s) =>
     view.kind === 'pr' ? (s.byPr[prKey(view.provider, view.number)] ?? null) : null,
   );
@@ -107,9 +102,8 @@ export function usePrView({
 
   return {
     review,
-    inReview,
-    toggleReview: () => setInReview(!inReview),
-    newKind: newCommentKind(isPrView, inReview),
+    // Until the review loads, whose PR it is is unknown: a note is the safe start.
+    newKind: defaultKind({ isPrView, viewerIsAuthor: review?.viewerIsAuthor ?? true }),
     // PR drafts need a task to own them.
     draftScope: review && !commentsDisabled ? scope : null,
     inlineThreads,

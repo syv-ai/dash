@@ -219,8 +219,9 @@ export const featureDismissals = sqliteTable(
   }),
 );
 
-// The PRs a task is reviewing (clicked Review, not yet submitted): what's
-// written in their view is a comment rather than a note.
+// Unused since the In-review mode went (the composer picks note or comment);
+// kept so existing rows aren't dropped by a destructive migration.
+// Formerly: the PRs a task was reviewing, whose view wrote comments, not notes.
 export const prReviewsInProgress = sqliteTable(
   'pr_reviews_in_progress',
   {
@@ -256,5 +257,38 @@ export const prReviewSummaries = sqliteTable(
   },
   (table) => ({
     pk: primaryKey({ columns: [table.taskId, table.provider, table.number] }),
+  }),
+);
+
+// The PR a task reviews, when the person picked one; else its own open PR is
+// its review target.
+export const taskReviewTargets = sqliteTable('task_review_targets', {
+  taskId: text('task_id')
+    .primaryKey()
+    .references(() => tasks.id, { onDelete: 'cascade' }),
+  provider: text('provider').notNull(),
+  number: integer('number').notNull(),
+  setAt: text('set_at')
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+});
+
+// PR files marked viewed in a task, with the head blob they were viewed at.
+export const prViewedFiles = sqliteTable(
+  'pr_viewed_files',
+  {
+    taskId: text('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull(),
+    number: integer('number').notNull(),
+    path: text('path').notNull(),
+    blob: text('blob').notNull(),
+    viewedAt: text('viewed_at')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.taskId, table.provider, table.number, table.path] }),
   }),
 );

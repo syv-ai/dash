@@ -440,7 +440,7 @@ export function EditorPane({
   const editingKind = draftApi.editingId
     ? liveComments.find((c) => c.id === draftApi.editingId)?.kind
     : undefined;
-  const draftSubmitLabel = prDraftSubmitLabel(isPrView, pr.inReview, editingKind);
+  const draftSubmitLabel = prDraftSubmitLabel(isPrView, pr.newKind, editingKind);
 
   const getLiveRangeForCurrent = (commentId: string) => {
     const target = liveComments.find((c) => c.id === commentId);
@@ -591,7 +591,6 @@ export function EditorPane({
                 threads={pr.inlineThreads}
                 provider={view.kind === 'pr' ? view.provider : 'github'}
                 draftScope={pr.draftScope}
-                inReview={pr.inReview}
                 onSetResolved={pr.setThreadResolved}
                 modifiedEditor={modifiedEditor}
                 area={editorAreaEl}

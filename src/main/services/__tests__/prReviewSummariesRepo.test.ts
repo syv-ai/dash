@@ -5,9 +5,9 @@ let db: Database.Database;
 vi.mock('../../db/client', () => ({ getRawDb: () => db }));
 
 import { runMigrations } from '../../db/migrate';
-import { createPrReviewsInProgressRepo } from '../prReviewsInProgressRepo';
+import { createPrReviewSummariesRepo } from '../prReviewSummariesRepo';
 
-describe('prReviewsInProgressRepo', () => {
+describe('prReviewSummariesRepo', () => {
   beforeEach(() => {
     db = new Database(':memory:');
     runMigrations();
@@ -17,20 +17,8 @@ describe('prReviewsInProgressRepo', () => {
     ).run();
   });
 
-  it('remembers a review per task and PR until it ends', () => {
-    const repo = createPrReviewsInProgressRepo(db);
-    expect(repo.isInReview('t1', 'github', 4)).toBe(false);
-    repo.setInReview('t1', 'github', 4, true);
-    repo.setInReview('t1', 'github', 4, true);
-    expect(repo.isInReview('t1', 'github', 4)).toBe(true);
-    expect(repo.isInReview('t1', 'ado', 4)).toBe(false);
-    expect(repo.isInReview('t1', 'github', 5)).toBe(false);
-    repo.setInReview('t1', 'github', 4, false);
-    expect(repo.isInReview('t1', 'github', 4)).toBe(false);
-  });
-
   it('keeps a draft summary per task and PR, and clears it when emptied', () => {
-    const repo = createPrReviewsInProgressRepo(db);
+    const repo = createPrReviewSummariesRepo(db);
     expect(repo.getSummary('t1', 'ado', 7)).toBeNull();
     repo.setSummary('t1', 'ado', 7, { body: 'Looks good', author: 'agent' });
     expect(repo.getSummary('t1', 'ado', 7)).toEqual({ body: 'Looks good', author: 'agent' });

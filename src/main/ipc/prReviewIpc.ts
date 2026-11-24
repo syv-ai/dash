@@ -1,20 +1,17 @@
 import { ipcMain } from 'electron';
 import { z } from 'zod';
 import { parseArgs, errorResponse } from './validate';
-import { DatabaseService } from '../services/DatabaseService';
-import { ConnectionConfigService } from '../services/ConnectionConfigService';
-import { prContextFor, type PrContextDeps } from '../services/prReview/resolve';
+import { prContextFor } from '../services/prReview/resolve';
+import { appPrContextDeps as appDeps } from '../services/prReview/appDeps';
+import { loadPrReview } from '../services/prReview/loadReview';
 import { taskReviews } from '../services/prReview/taskReview';
-import type { PrProvider, PrVerdict } from '@shared/types';
-
-/** The app's lookups for picking a project's PR provider. */
-const appDeps: PrContextDeps = {
-  getProject: (id) => DatabaseService.getProjects().find((p) => p.id === id),
-  getAdoConfig: (projectId) => ConnectionConfigService.getAdoConfig(projectId),
-};
+import { taskReviewTargetsRepo } from '../services/taskReviewTargetsRepo';
+import { prViewedFilesRepo } from '../services/prViewedFilesRepo';
+import type { PrProvider, PrRef, PrVerdict } from '@shared/types';
 
 const where = { projectId: z.string(), cwd: z.string() };
-const reviewOf = { taskId: z.string(), provider: z.enum(['github', 'ado']), number: z.number() };
+const provider = z.enum(['github', 'ado']);
+const reviewOf = { taskId: z.string(), provider, number: z.number() };
 const verdict = z.enum([
   'comment',
   'approve',
@@ -46,7 +43,7 @@ export function registerPrReviewIpc(): void {
       try {
         parseArgs('prReview:load', z.looseObject({ ...where, number: z.number() }), args);
         const { adapter, ctx } = prContextFor(args.projectId, args.cwd, appDeps);
-        return { success: true, data: await adapter.load(ctx, args.number) };
+        return { success: true, data: await loadPrReview(adapter, ctx, args.number) };
       } catch (err) {
         return errorResponse(err);
       }
@@ -79,24 +76,67 @@ export function registerPrReviewIpc(): void {
     },
   );
 
+  /** The PR the person picked for the task to review, or null (see `effectiveReviewTarget`). */
+  ipcMain.handle('prReview:target', (_e, args: { taskId: string }) => {
+    try {
+      parseArgs('prReview:target', z.looseObject({ taskId: z.string() }), args);
+      return { success: true, data: taskReviewTargetsRepo().get(args.taskId) };
+    } catch (err) {
+      return errorResponse(err);
+    }
+  });
+
+  /** Pick the PR the task reviews; null stops reviewing. */
+  ipcMain.handle('prReview:setTarget', (_e, args: { taskId: string; target: PrRef | null }) => {
+    try {
+      parseArgs(
+        'prReview:setTarget',
+        z.looseObject({
+          taskId: z.string(),
+          target: z.object({ provider, number: z.number() }).nullable(),
+        }),
+        args,
+      );
+      taskReviewTargetsRepo().set(args.taskId, args.target);
+      return { success: true };
+    } catch (err) {
+      return errorResponse(err);
+    }
+  });
+
+  /** The PR's files the task marked viewed: path → the blob they were viewed at. */
   ipcMain.handle(
-    'prReview:inReview',
+    'prReview:viewed',
     (_e, args: { taskId: string; provider: PrProvider; number: number }) => {
       try {
-        parseArgs('prReview:inReview', z.looseObject(reviewOf), args);
-        return { success: true, data: taskReviews().isInReview(args.taskId, args) };
+        parseArgs('prReview:viewed', z.looseObject(reviewOf), args);
+        return { success: true, data: prViewedFilesRepo().list(args.taskId, args) };
       } catch (err) {
         return errorResponse(err);
       }
     },
   );
 
+  /** Mark a PR file viewed at its head blob; a null blob unmarks it. */
   ipcMain.handle(
-    'prReview:setInReview',
-    (_e, args: { taskId: string; provider: PrProvider; number: number; on: boolean }) => {
+    'prReview:setViewed',
+    (
+      _e,
+      args: {
+        taskId: string;
+        provider: PrProvider;
+        number: number;
+        path: string;
+        blob: string | null;
+      },
+    ) => {
       try {
-        parseArgs('prReview:setInReview', z.looseObject({ ...reviewOf, on: z.boolean() }), args);
-        taskReviews().setInReview(args.taskId, args, args.on);
+        parseArgs(
+          'prReview:setViewed',
+          z.looseObject({ ...reviewOf, path: z.string(), blob: z.string().nullable() }),
+          args,
+        );
+        prViewedFilesRepo().set(args.taskId, args, args.path, args.blob);
         return { success: true };
       } catch (err) {
         return errorResponse(err);
@@ -167,6 +207,49 @@ export function registerPrReviewIpc(): void {
           args.body,
         );
         return { success: true, data: result };
+      } catch (err) {
+        return errorResponse(err);
+      }
+    },
+  );
+
+  /** Post a reply to a thread at once (outside any review) and delete the draft
+   *  it came from; answers the posted comment. */
+  ipcMain.handle(
+    'prReview:reply',
+    async (
+      _e,
+      args: {
+        projectId: string;
+        cwd: string;
+        taskId: string;
+        number: number;
+        threadId: string;
+        body: string;
+        draftId?: string;
+      },
+    ) => {
+      try {
+        parseArgs(
+          'prReview:reply',
+          z.looseObject({
+            ...where,
+            taskId: z.string(),
+            number: z.number(),
+            threadId: z.string(),
+            body: z.string().trim().min(1),
+            draftId: z.string().optional(),
+          }),
+          args,
+        );
+        const { provider, adapter, ctx } = prContextFor(args.projectId, args.cwd, appDeps);
+        const posted = await taskReviews().reply(
+          args.taskId,
+          { provider, number: args.number },
+          { adapter, ctx },
+          { threadId: args.threadId, body: args.body, draftId: args.draftId },
+        );
+        return { success: true, data: posted };
       } catch (err) {
         return errorResponse(err);
       }

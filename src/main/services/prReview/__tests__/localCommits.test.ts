@@ -3,7 +3,14 @@ import { execFileSync } from 'child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
-import { ensureCommits, filesAtCommit, runGit, type RunGit } from '../localCommits';
+import {
+  ensureCommits,
+  filesAtCommit,
+  parseRawNumstat,
+  prLocalStats,
+  runGit,
+  type RunGit,
+} from '../localCommits';
 
 let repo: string;
 let head: string;
@@ -54,5 +61,75 @@ describe('filesAtCommit', () => {
   it('returns the paths that exist in the commit', async () => {
     expect(await filesAtCommit(repo, head, ['a.txt', 'gone.txt'])).toEqual(new Set(['a.txt']));
     expect(await filesAtCommit(repo, head, [])).toEqual(new Set());
+  });
+});
+
+describe('prLocalStats', () => {
+  let base: string;
+  let prHead: string;
+
+  beforeAll(() => {
+    const write = (f: string, text: string | Buffer) => writeFileSync(path.join(repo, f), text);
+    write('keep.txt', 'one\ntwo\nthree\n');
+    write('drop.txt', 'bye\n');
+    write('move.txt', 'line 1\nline 2\nline 3\nline 4\nline 5\n');
+    git('add', '.');
+    git('commit', '-qm', 'base');
+    base = git('rev-parse', 'HEAD');
+
+    git('checkout', '-qb', 'pr');
+    write('keep.txt', 'one\n2\nthree\nfour\n');
+    git('rm', '-q', 'drop.txt');
+    git('mv', 'move.txt', 'moved.txt');
+    write('new file.bin', Buffer.from([0, 1, 2, 0]));
+    git('add', '.');
+    git('commit', '-qm', 'pr 1');
+    write('more.txt', 'x\n');
+    git('add', '.');
+    git('commit', '-qm', 'pr 2');
+    prHead = git('rev-parse', 'HEAD');
+
+    // The base branch moves on by three commits, seen as origin's.
+    git('checkout', '-q', base);
+    for (const n of [1, 2, 3]) git('commit', '-q', '--allow-empty', '-m', `main ${n}`);
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    git('checkout', '-q', 'pr');
+  });
+
+  it("lists the PR's files with status, line counts and head blob, and counts commits", async () => {
+    const stats = await prLocalStats(repo, { base, head: prHead, baseRef: 'main' });
+    const blob = (f: string) => git('rev-parse', `${prHead}:${f}`);
+    expect(stats.commits).toBe(2);
+    expect(stats.behindBase).toBe(3);
+    expect(stats.files.sort((a, b) => a.path.localeCompare(b.path))).toEqual([
+      { path: 'drop.txt', status: 'deleted', additions: 0, deletions: 1, blob: null },
+      { path: 'keep.txt', status: 'modified', additions: 2, deletions: 1, blob: blob('keep.txt') },
+      { path: 'more.txt', status: 'added', additions: 1, deletions: 0, blob: blob('more.txt') },
+      {
+        path: 'moved.txt',
+        status: 'renamed',
+        oldPath: 'move.txt',
+        additions: 0,
+        deletions: 0,
+        blob: blob('moved.txt'),
+      },
+      {
+        path: 'new file.bin',
+        status: 'added',
+        additions: 0,
+        deletions: 0,
+        blob: blob('new file.bin'),
+      },
+    ]);
+  });
+
+  it("says null behind base when origin's base branch isn't known", async () => {
+    const stats = await prLocalStats(repo, { base, head: prHead, baseRef: 'release' });
+    expect(stats.behindBase).toBeNull();
+    expect((await prLocalStats(repo, { base, head: prHead, baseRef: '' })).behindBase).toBeNull();
+  });
+
+  it('tolerates empty output', () => {
+    expect(parseRawNumstat('')).toEqual([]);
   });
 });

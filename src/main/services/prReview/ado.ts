@@ -1,9 +1,11 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type {
-  PrReview,
+  PrCheck,
   PrReviewComment,
+  PrReviewer,
   PrReviewThread,
+  PrState,
   PrVerdict,
   PrWriteError,
 } from '@shared/types';
@@ -14,7 +16,7 @@ import {
   adoRequest,
 } from '../AzureDevOpsService';
 import { ensureCommits, filesAtCommit } from './localCommits';
-import type { PrContext, PrReviewProvider } from './types';
+import type { ForgeReview, PrContext, PrReviewProvider } from './types';
 
 const execFileAsync = promisify(execFile);
 
@@ -26,6 +28,7 @@ interface RawPosition {
 }
 interface RawComment {
   id?: number;
+  parentCommentId?: number;
   content?: string;
   commentType?: string;
   isDeleted?: boolean;
@@ -55,8 +58,13 @@ interface RawPr {
   pullRequestId?: number;
   title?: string;
   description?: string;
-  createdBy?: { id?: string } | null;
-  reviewers?: { id?: string; vote?: number }[] | null;
+  status?: string;
+  isDraft?: boolean;
+  sourceRefName?: string;
+  targetRefName?: string;
+  createdBy?: { id?: string; displayName?: string } | null;
+  reviewers?: { id?: string; displayName?: string; vote?: number }[] | null;
+  repository?: { project?: { id?: string } } | null;
 }
 
 export interface AdoRepoContext {
@@ -100,6 +108,51 @@ export function latestIteration(iterations: unknown): {
 const prUrl = (ctx: AdoRepoContext, id: number) =>
   `${ctx.organizationUrl.replace(/\/+$/, '')}/${ctx.project}/_git/${ctx.repository}/pullrequest/${id}`;
 
+const branchName = (ref: string | undefined) => (ref ?? '').replace(/^refs\/heads\//, '');
+
+function stateFrom(pr: RawPr): PrState {
+  if (pr.status === 'completed') return 'merged';
+  if (pr.status === 'abandoned') return 'closed';
+  return pr.isDraft ? 'draft' : 'open';
+}
+
+// A reviewer's vote: 10 approved, 5 with suggestions, 0 none yet, -5 waiting, -10 rejected.
+const VOTE_STATES: Record<number, PrReviewer['state']> = {
+  10: 'approved',
+  5: 'approved_with_suggestions',
+  [-5]: 'waiting',
+  [-10]: 'rejected',
+};
+
+const reviewersFrom = (pr: RawPr): PrReviewer[] =>
+  (pr.reviewers ?? []).map((r) => ({
+    name: r.displayName || 'Unknown',
+    state: VOTE_STATES[r.vote ?? 0] ?? 'pending',
+  }));
+
+/** One person's comment of thread `tid`, linked to where ADO shows the thread. */
+const commentFrom = (c: RawComment, tid: string, threadUrl: string): PrReviewComment => ({
+  id: `${tid}:${c.id ?? ''}`,
+  author: c.author?.displayName || 'Unknown',
+  body: c.content ?? '',
+  createdAt: c.publishedDate ?? '',
+  url: threadUrl,
+});
+
+const threadUrl = (url: string, t: RawThread) =>
+  `${url}?_a=${t.threadContext ? 'files' : 'overview'}&discussionId=${t.id ?? ''}`;
+
+/** The comment a reply hangs off: the thread's first (ADO's replies are flat under it). */
+export function adoRootCommentId(thread: unknown): number {
+  const comments = ((thread as RawThread | null)?.comments ?? []).filter(
+    (c) => typeof c.id === 'number',
+  );
+  const roots = comments.filter((c) => !c.parentCommentId);
+  const ids = (roots.length > 0 ? roots : comments).map((c) => c.id!);
+  if (ids.length === 0) throw new Error('The thread has no comment to reply to');
+  return Math.min(...ids);
+}
+
 /** A person's thread, not one ADO writes about pushes, votes, reviewers or policies. */
 const isHumanThread = (t: RawThread) =>
   !t.isDeleted &&
@@ -115,7 +168,7 @@ export function threadPaths(threads: unknown): string[] {
 }
 
 /**
- * The PrReview of an ADO pull request: its threads (fetched with
+ * The ForgeReview of an ADO pull request: its threads (fetched with
  * `$iteration=N&$baseIteration=0`, so their positions are tracked onto the
  * latest diff), with ADO's own bookkeeping threads left out. ADO has no
  * "outdated" flag; a thread whose file is gone at head counts as outdated.
@@ -127,9 +180,10 @@ export function adoReviewFrom(
     threads: unknown;
     me: string;
     filesAtHead: ReadonlySet<string>;
+    checks: PrCheck[];
   },
   ctx: AdoRepoContext,
-): PrReview {
+): ForgeReview {
   const pr = (raw.pr ?? {}) as RawPr;
   const number = pr.pullRequestId ?? 0;
   const { head, base } = latestIteration(raw.iterations);
@@ -142,15 +196,7 @@ export function adoReviewFrom(
     const where = t.threadContext;
     const comments = (t.comments ?? [])
       .filter((c) => c.commentType !== 'system' && !c.isDeleted)
-      .map(
-        (c): PrReviewComment => ({
-          id: `${tid}:${c.id ?? ''}`,
-          author: c.author?.displayName || 'Unknown',
-          body: c.content ?? '',
-          createdAt: c.publishedDate ?? '',
-          url: `${url}?_a=${where ? 'files' : 'overview'}&discussionId=${tid}`,
-        }),
-      );
+      .map((c) => commentFrom(c, tid, threadUrl(url, t)));
     if (!where) {
       conversation.push(...comments);
       continue;
@@ -189,6 +235,13 @@ export function adoReviewFrom(
     head,
     threads,
     conversation,
+    author: pr.createdBy?.displayName || 'Unknown',
+    state: stateFrom(pr),
+    baseRef: branchName(pr.targetRefName),
+    headRef: branchName(pr.sourceRefName),
+    reviewers: reviewersFrom(pr),
+    assignees: [],
+    checks: raw.checks,
   };
 }
 
@@ -227,9 +280,10 @@ export function adoThreadBody(
   };
 }
 
-export const adoReplyBody = (body: string) => ({
+/** A reply under `parentCommentId`, the thread's first comment (see adoRootCommentId). */
+export const adoReplyBody = (body: string, parentCommentId: number) => ({
   content: body,
-  parentCommentId: 1,
+  parentCommentId,
   commentType: TEXT,
 });
 
@@ -285,6 +339,12 @@ export interface AdoDeps {
   filesAtCommit: typeof filesAtCommit;
   /** A file's text at a commit. */
   showFile: (cwd: string, sha: string, path: string) => Promise<string>;
+  /** The PR's CI checks; `projectId` is the ADO project's id, which policy evaluations need. */
+  checks: (
+    ado: NonNullable<PrContext['ado']>,
+    number: number,
+    projectId: string | undefined,
+  ) => Promise<PrCheck[]>;
 }
 
 const defaultDeps: AdoDeps = {
@@ -300,12 +360,20 @@ const defaultDeps: AdoDeps = {
         maxBuffer: 32 * 1024 * 1024,
       })
     ).stdout,
+  checks: (ado, number, projectId) =>
+    AzureDevOpsService.getPullRequestChecks(ado, ado.repository, number, projectId),
 };
 
 function adoOf(ctx: PrContext): NonNullable<PrContext['ado']> {
   if (!ctx.ado) throw new Error('Azure DevOps not configured');
   return ctx.ado;
 }
+
+const repoContext = (ado: NonNullable<PrContext['ado']>): AdoRepoContext => ({
+  organizationUrl: ado.organizationUrl,
+  project: ado.project,
+  repository: ado.repository,
+});
 
 const repoPath = (ado: NonNullable<PrContext['ado']>) =>
   `${adoProjectSegment(ado)}/_apis/git/repositories/${encodeURIComponent(ado.repository)}`;
@@ -325,13 +393,24 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): PrReviewProvider {
         deps.getMyId(ado).catch(() => ''),
       ]);
       const { id, head, base } = latestIteration(iterations);
-      const threads = await deps.request(ado, `${at}/threads?$iteration=${id}&$baseIteration=0`);
+      const [threads, checks] = await Promise.all([
+        deps.request(ado, `${at}/threads?$iteration=${id}&$baseIteration=0`),
+        deps.checks(ado, number, (pr as RawPr | null)?.repository?.project?.id),
+      ]);
       await deps.ensureCommits(ctx.cwd, [base, head]);
       const filesAtHead = await deps.filesAtCommit(ctx.cwd, head, threadPaths(threads));
-      return adoReviewFrom(
-        { pr, iterations, threads, me, filesAtHead },
-        { organizationUrl: ado.organizationUrl, project: ado.project, repository: ado.repository },
-      );
+      return adoReviewFrom({ pr, iterations, threads, me, filesAtHead, checks }, repoContext(ado));
+    },
+
+    async reply(ctx, number, threadId, body) {
+      const ado = adoOf(ctx);
+      const at = `${prPath(ctx, number)}/threads/${threadId}`;
+      const thread = (await deps.request(ado, at)) as RawThread;
+      const posted = (await deps.request(ado, `${at}/comments`, {
+        method: 'POST',
+        body: adoReplyBody(body, adoRootCommentId(thread)),
+      })) as RawComment;
+      return commentFrom(posted, threadId, threadUrl(prUrl(repoContext(ado), number), thread));
     },
 
     async setResolved(ctx, number, threadId, resolved) {
@@ -394,9 +473,10 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): PrReviewProvider {
           posted.push(c.draftId);
         }
         for (const r of s.replies) {
+          const thread = await deps.request(ado, `${at}/threads/${r.threadId}`);
           await deps.request(ado, `${at}/threads/${r.threadId}/comments`, {
             method: 'POST',
-            body: adoReplyBody(r.body),
+            body: adoReplyBody(r.body, adoRootCommentId(thread)),
           });
           posted.push(r.draftId);
         }

@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import threadsFixture from './fixtures/ado-threads.json';
+import prFixture from './fixtures/ado-pr.json';
 import type { PrSubmission } from '../../../../shared/types';
 import { AdoRequestError } from '../../AzureDevOpsService';
 import {
   adoReplyBody,
+  adoRootCommentId,
   adoReviewFrom,
   adoSummaryBody,
   adoThreadBody,
@@ -23,17 +25,13 @@ const iterations = {
     { id: 9, sourceRefCommit: { commitId: 'h9' }, commonRefCommit: { commitId: 'b9' } },
   ],
 };
-const pr = {
-  pullRequestId: 7204,
-  title: 'Wire inputs',
-  description: 'Why',
-  createdBy: { id: 'author-id' },
-};
+const pr = prFixture;
+const checks = [{ name: 'CI', state: 'passing' as const, url: 'https://ci/1' }];
 const filesAtHead = new Set(['src/app/moved.ts', 'src/app/unmoved.ts']);
 
 describe('adoReviewFrom', () => {
   const review = adoReviewFrom(
-    { pr, iterations, threads: threadsFixture, me: 'me-id', filesAtHead },
+    { pr, iterations, threads: threadsFixture, me: 'me-id', filesAtHead, checks },
     ctx,
   );
 
@@ -50,15 +48,41 @@ describe('adoReviewFrom', () => {
       verdicts: ['comment', 'approve', 'approve_with_suggestions', 'wait_for_author', 'reject'],
     });
     expect(
-      adoReviewFrom({ pr, iterations, threads: [], me: 'author-id', filesAtHead }, ctx)
+      adoReviewFrom({ pr, iterations, threads: [], me: 'author-id', filesAtHead, checks }, ctx)
         .viewerIsAuthor,
     ).toBe(true);
+  });
+
+  it('describes who wrote it, where it stands, its branches, reviewers and checks', () => {
+    expect(review).toMatchObject({
+      author: 'Bo Author',
+      state: 'open',
+      baseRef: 'main',
+      headRef: 'feature/wire-inputs',
+      assignees: [],
+      checks,
+    });
+    expect(review.reviewers).toEqual([
+      { name: 'Ann Reviewer', state: 'approved_with_suggestions' },
+      { name: 'Cy Lead', state: 'waiting' },
+      { name: '[Proj]\\Proj Team', state: 'pending' },
+      { name: 'Di Ops', state: 'approved' },
+      { name: 'Ed Sec', state: 'rejected' },
+    ]);
+    const at = (over: object) =>
+      adoReviewFrom(
+        { pr: { ...pr, ...over }, iterations, threads: [], me: '', filesAtHead, checks: [] },
+        ctx,
+      ).state;
+    expect(at({ isDraft: true })).toBe('draft');
+    expect(at({ status: 'completed' })).toBe('merged');
+    expect(at({ status: 'abandoned' })).toBe('closed');
   });
 
   it("says whether you're on the reviewer list and haven't voted", () => {
     const asked = (reviewers: { id: string; vote: number }[]) =>
       adoReviewFrom(
-        { pr: { ...pr, reviewers }, iterations, threads: [], me: 'me-id', filesAtHead },
+        { pr: { ...pr, reviewers }, iterations, threads: [], me: 'me-id', filesAtHead, checks },
         ctx,
       ).viewerIsRequestedReviewer;
     expect(review.viewerIsRequestedReviewer).toBe(false);
@@ -141,8 +165,20 @@ describe('ADO request bodies', () => {
     ).not.toHaveProperty('pullRequestThreadContext');
   });
 
-  it('replies under the first comment, and posts the summary closed', () => {
-    expect(adoReplyBody('ok')).toEqual({ content: 'ok', parentCommentId: 1, commentType: 1 });
+  it("replies under the thread's first comment, and posts the summary closed", () => {
+    expect(adoReplyBody('ok', 3)).toEqual({ content: 'ok', parentCommentId: 3, commentType: 1 });
+    const thread = (comments: object[]) => ({ comments });
+    expect(adoRootCommentId(threadsFixture.value[0])).toBe(1);
+    expect(
+      adoRootCommentId(
+        thread([
+          { id: 7, parentCommentId: 4 },
+          { id: 4, parentCommentId: 0 },
+        ]),
+      ),
+    ).toBe(4);
+    expect(adoRootCommentId(thread([{ id: 9, parentCommentId: 2 }]))).toBe(9);
+    expect(() => adoRootCommentId(thread([]))).toThrow();
     expect(adoSummaryBody('LGTM')).toEqual({
       comments: [{ parentCommentId: 0, content: 'LGTM', commentType: 1 }],
       status: 4,
@@ -188,7 +224,8 @@ function fakeDeps(failOnCall?: number) {
   const calls: Call[] = [];
   const deps: AdoDeps = {
     request: async (_config, path, options) => {
-      calls.push({ path, method: options?.method ?? 'GET', body: options?.body });
+      const method = options?.method ?? 'GET';
+      calls.push({ path, method, body: options?.body });
       if (failOnCall !== undefined && calls.length === failOnCall)
         throw new AdoRequestError('Server error', 500);
       if (path.endsWith('/iterations')) return iterations;
@@ -198,6 +235,16 @@ function fakeDeps(failOnCall?: number) {
           : { changeEntries: [] };
       }
       if (path.includes('/threads?')) return threadsFixture;
+      if (method === 'GET' && /\/threads\/\d+$/.test(path))
+        return threadsFixture.value.find((t) => path.endsWith(`/threads/${t.id}`)) ?? {};
+      if (path.endsWith('/comments'))
+        return {
+          id: 5,
+          parentCommentId: 1,
+          content: 'agreed',
+          publishedDate: '2026-11-24T10:00:00Z',
+          author: { displayName: 'Me' },
+        };
       if (/pullRequests\/\d+$/.test(path)) return pr;
       return {};
     },
@@ -205,6 +252,7 @@ function fakeDeps(failOnCall?: number) {
     ensureCommits: async () => {},
     filesAtCommit: async () => filesAtHead,
     showFile: async () => 'one\ntwo\nthree four\n',
+    checks: async () => checks,
   };
   return { deps, calls };
 }
@@ -237,6 +285,7 @@ describe('adoProvider', () => {
     const review = await makeAdoProvider(deps).load(pctx, 7204);
     expect(calls.map((c) => c.path)).toContain(`${base}/threads?$iteration=11&$baseIteration=0`);
     expect(review.head).toBe('HEAD11');
+    expect(review.checks).toEqual(checks);
   });
 
   it('posts comments, replies, the vote and the summary, in that order', async () => {
@@ -257,13 +306,15 @@ describe('adoProvider', () => {
       pullRequestThreadContext: { changeTrackingId: 3 },
     });
     expect(writes[1]!.body).not.toHaveProperty('pullRequestThreadContext');
+    expect(writes[2]!.body).toEqual(adoReplyBody('agreed', 1));
     expect(writes[3]!.body).toEqual({ vote: 5 });
     expect(writes[4]!.body).toEqual(adoSummaryBody('Looks fine'));
   });
 
   it('stops at the first failure and reports what posted', async () => {
-    // GETs: iterations, changes ×2; then POST d1 (4), POST d2 (5), reply (6) fails.
-    const { deps } = fakeDeps(6);
+    // GETs: iterations, changes ×2; then POST d1 (4), POST d2 (5), the
+    // reply's thread (6), the reply (7) fails.
+    const { deps } = fakeDeps(7);
     const result = await makeAdoProvider(deps).submit(pctx, 7204, submission);
     expect(result).toEqual({
       postedDraftIds: ['d1', 'd2'],
@@ -275,6 +326,26 @@ describe('adoProvider', () => {
     const { deps, calls } = fakeDeps();
     await makeAdoProvider(deps).submit(pctx, 7204, { ...submission, verdict: 'comment' });
     expect(calls.some((c) => c.method === 'PUT')).toBe(false);
+  });
+
+  it("posts a reply at once under the thread's first comment", async () => {
+    const { deps, calls } = fakeDeps();
+    const comment = await makeAdoProvider(deps).reply(pctx, 7204, '101', 'agreed');
+    expect(calls).toEqual([
+      { path: `${base}/threads/101`, method: 'GET', body: undefined },
+      {
+        path: `${base}/threads/101/comments`,
+        method: 'POST',
+        body: adoReplyBody('agreed', 1),
+      },
+    ]);
+    expect(comment).toEqual({
+      id: '101:5',
+      author: 'Me',
+      body: 'agreed',
+      createdAt: '2026-11-24T10:00:00Z',
+      url: 'https://dev.azure.com/org/My Proj/_git/repo/pullrequest/7204?_a=files&discussionId=101',
+    });
   });
 
   it('resolves and reactivates a thread', async () => {

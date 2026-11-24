@@ -15,6 +15,16 @@ const review = (n: number, provider: PrProvider = 'github'): PrReview => ({
   head: 'h',
   threads: [],
   conversation: [],
+  author: 'a',
+  state: 'open',
+  baseRef: 'main',
+  headRef: 'feat',
+  commits: 1,
+  behindBase: 0,
+  reviewers: [],
+  assignees: [],
+  checks: [],
+  files: [],
 });
 
 async function freshStore() {
@@ -138,23 +148,21 @@ describe('prReviewStore writes', () => {
     expect(api.prReviewLoad).not.toHaveBeenCalled();
   });
 
-  it('remembers a review per task and PR, and ends it on a submit that all got through', async () => {
-    api.prReviewInReview = vi.fn(() => Promise.resolve({ success: true, data: true }));
-    api.prReviewLoad = vi.fn(() => Promise.resolve({ success: true, data: review(4) }));
-    const { usePrReviews, reviewKey } = await freshStore();
-    const key = reviewKey('t1', 'github', 4);
-    await usePrReviews.getState().loadReview('t1', 'github', 4);
-    expect(usePrReviews.getState().inReview[key]).toBe(true);
-    usePrReviews.getState().setInReview('t1', 'github', 5, true);
-    expect(api.prReviewSetInReview).toHaveBeenCalledWith({
-      taskId: 't1',
-      provider: 'github',
-      number: 5,
-      on: true,
+  it('keeps the review target per task, saved behind', async () => {
+    api.prReviewTarget = vi.fn(() =>
+      Promise.resolve({ success: true, data: { provider: 'ado', number: 9 } }),
+    );
+    const { usePrReviews } = await freshStore();
+    await usePrReviews.getState().loadTarget('t1');
+    expect(usePrReviews.getState().targets.t1).toEqual({ provider: 'ado', number: 9 });
+    usePrReviews.getState().setTarget('t2', { provider: 'github', number: 5 });
+    expect(usePrReviews.getState().targets.t2).toEqual({ provider: 'github', number: 5 });
+    expect(api.prReviewSetTarget).toHaveBeenCalledWith({
+      taskId: 't2',
+      target: { provider: 'github', number: 5 },
     });
-    await usePrReviews.getState().submit('p1', '/wt', 't1', review(4), 'comment', '');
-    expect(usePrReviews.getState().inReview[key]).toBe(false);
-    expect(usePrReviews.getState().inReview[reviewKey('t1', 'github', 5)]).toBe(true);
+    usePrReviews.getState().setTarget('t1', null);
+    expect(usePrReviews.getState().targets.t1).toBeNull();
   });
 });
 

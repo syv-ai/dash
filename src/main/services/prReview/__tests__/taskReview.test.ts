@@ -7,8 +7,13 @@ vi.mock('../../../db/client', () => ({ getRawDb: () => db }));
 
 import { runMigrations } from '../../../db/migrate';
 import { createDiffCommentsRepo, type DiffCommentsRepo } from '../../diffCommentsRepo';
-import { createPrReviewsInProgressRepo } from '../../prReviewsInProgressRepo';
-import { createTaskReviews, type SubmitTarget, type TaskReviews } from '../taskReview';
+import { createPrReviewSummariesRepo } from '../../prReviewSummariesRepo';
+import {
+  createTaskReviews,
+  type ReplyTarget,
+  type SubmitTarget,
+  type TaskReviews,
+} from '../taskReview';
 
 const pr = { provider: 'github', number: 4 } as const;
 
@@ -55,14 +60,13 @@ beforeEach(() => {
   changed = [];
   reviews = createTaskReviews({
     comments,
-    reviews: createPrReviewsInProgressRepo(db),
+    summaries: createPrReviewSummariesRepo(db),
     changed: (taskId) => void changed.push(taskId),
   });
   comments.upsertFromUser(draft({ id: 'c1' }));
   comments.upsertFromUser(draft({ id: 'r1', replyTo: 'T9', text: 'agreed' }));
   comments.upsertFromUser(draft({ id: 'n1', kind: 'note' }));
   comments.upsertFromUser(draft({ id: 'other', viewScope: 'pr:github:5' }));
-  reviews.setInReview('t1', pr, true);
   reviews.setSummary('t1', pr, { body: 'Looks good', author: 'agent' });
   changed = [];
 });
@@ -85,18 +89,17 @@ describe('TaskReviews.submit', () => {
     });
   });
 
-  it('deletes what got through, ends the review and clears the summary', async () => {
+  it('deletes what got through and clears the summary', async () => {
     const { t } = target(all);
     expect(await reviews.submit('t1', pr, t, 'comment', '')).toEqual({
       postedDraftIds: ['c1', 'r1'],
     });
     expect(ids()).toEqual(['n1', 'other']);
     expect(changed).toEqual(['t1']);
-    expect(reviews.isInReview('t1', pr)).toBe(false);
     expect(reviews.getSummary('t1', pr)).toBeNull();
   });
 
-  it('keeps the review, its summary and the rest of the drafts after a partial post', async () => {
+  it('keeps the summary and the rest of the drafts after a partial post', async () => {
     const error = { kind: 'other', message: 'rate limited' } as const;
     const { t } = target(() => ['c1'], error);
     expect(await reviews.submit('t1', pr, t, 'comment', '')).toEqual({
@@ -105,7 +108,6 @@ describe('TaskReviews.submit', () => {
     });
     expect(ids()).toEqual(['n1', 'other', 'r1']);
     expect(changed).toEqual(['t1']);
-    expect(reviews.isInReview('t1', pr)).toBe(true);
     expect(reviews.getSummary('t1', pr)).toEqual({ body: 'Looks good', author: 'agent' });
   });
 
@@ -114,15 +116,49 @@ describe('TaskReviews.submit', () => {
     await reviews.submit('t1', pr, t, 'comment', '');
     expect(ids()).toEqual(['c1', 'n1', 'other', 'r1']);
     expect(changed).toEqual([]);
-    expect(reviews.isInReview('t1', pr)).toBe(true);
+    expect(reviews.getSummary('t1', pr)).not.toBeNull();
   });
 
-  it('ends the review on a verdict with no drafts, without telling the editor', async () => {
+  it('clears the summary on a verdict with no drafts, without telling the editor', async () => {
     comments.deleteByIds(['c1', 'r1']);
     const { t } = target(() => []);
     await reviews.submit('t1', pr, t, 'approve', '');
     expect(changed).toEqual([]);
-    expect(reviews.isInReview('t1', pr)).toBe(false);
+    expect(reviews.getSummary('t1', pr)).toBeNull();
+  });
+});
+
+describe('TaskReviews.reply', () => {
+  const posted = { id: 'C9', author: 'me', body: 'agreed', createdAt: 'now', url: 'u/C9' };
+  const replyTarget = (fail = false) => {
+    const reply = vi.fn(async () => {
+      if (fail) throw new Error('GraphQL: Not Found');
+      return posted;
+    });
+    const t: ReplyTarget = {
+      adapter: { reply },
+      ctx: { cwd: '/wt', projectId: 'p1', remote: null },
+    };
+    return { t, reply };
+  };
+
+  it('posts the reply, deletes its draft and tells the editor', async () => {
+    const { t, reply } = replyTarget();
+    expect(
+      await reviews.reply('t1', pr, t, { threadId: 'T9', body: 'agreed', draftId: 'r1' }),
+    ).toEqual(posted);
+    expect(reply).toHaveBeenCalledWith(t.ctx, 4, 'T9', 'agreed');
+    expect(ids()).toEqual(['c1', 'n1', 'other']);
+    expect(changed).toEqual(['t1']);
+  });
+
+  it("leaves another task's draft alone, and keeps the draft when the PR refuses", async () => {
+    await reviews.reply('t2', pr, replyTarget().t, { threadId: 'T9', body: 'x', draftId: 'r1' });
+    expect(ids()).toContain('r1');
+    await expect(
+      reviews.reply('t1', pr, replyTarget(true).t, { threadId: 'T9', body: 'x', draftId: 'r1' }),
+    ).rejects.toThrow('Not Found');
+    expect(ids()).toContain('r1');
   });
 });
 

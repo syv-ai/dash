@@ -20,10 +20,8 @@ export interface PrEntry {
   title: string;
   body: string | null;
   threads: number | null;
-  /** The task is reviewing it (Review clicked, not yet submitted). */
-  inReview: boolean;
   onOpen: () => void;
-  /** Start reviewing it, and open it. */
+  /** Make it the task's review target, and open it. */
   onReview: () => void;
   /** The hover card opened: fetch the review if it isn't yet. */
   onPeek: () => void;
@@ -208,8 +206,8 @@ function CommitRow({
   );
 }
 
-/** The task's PR: opens the PR view, with Review (or "In review") and a hover
- *  card holding its description. */
+/** The task's PR: opens the PR view, with Review and a hover card holding its
+ *  description. */
 function PrRow({ pr, selected }: { pr: PrEntry; selected: boolean }) {
   return (
     <HoverCard
@@ -227,18 +225,14 @@ function PrRow({ pr, selected }: { pr: PrEntry; selected: boolean }) {
               {(pr.threads ?? 0) > 0 && <CountBadge count={pr.threads!} />}
               <Button
                 size="sm"
-                variant={pr.inReview ? 'secondary' : 'primary'}
-                title={
-                  pr.inReview
-                    ? 'Your review is in progress'
-                    : 'Review: what you write becomes a PR comment, sent on Submit'
-                }
+                variant="primary"
+                title="Review this pull request"
                 onClick={(e) => {
                   e.stopPropagation();
-                  (pr.inReview ? pr.onOpen : pr.onReview)();
+                  pr.onReview();
                 }}
               >
-                {pr.inReview ? 'In review' : 'Review'}
+                Review
               </Button>
             </>
           }

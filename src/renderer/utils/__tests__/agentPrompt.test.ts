@@ -149,6 +149,16 @@ const review = (number: number, threads: PrReviewThread[]): PrReview => ({
   head: 'h',
   threads,
   conversation: [],
+  author: 'a',
+  state: 'open',
+  baseRef: 'main',
+  headRef: 'feat',
+  commits: 1,
+  behindBase: 0,
+  reviewers: [],
+  assignees: [],
+  checks: [],
+  files: [],
 });
 
 describe('buildReviewPrompt', () => {

@@ -1,24 +1,24 @@
 import { describe, it, expect } from 'vitest';
-import { draftSubmitLabel, isInlineThread, newCommentKind } from '../prViewPolicy';
+import { defaultKind, draftSubmitLabel, isInlineThread } from '../prViewPolicy';
 import type { PrReviewThread } from '../../../../../shared/types';
 
 describe('PR view policy', () => {
-  it('writes a PR comment only while reviewing a PR', () => {
-    expect(newCommentKind(true, true)).toBe('comment');
-    expect(newCommentKind(true, false)).toBe('note');
-    expect(newCommentKind(false, true)).toBe('note');
-    expect(newCommentKind(false, false)).toBe('note');
+  it("starts a comment on someone else's PR, else a note", () => {
+    expect(defaultKind({ isPrView: true, viewerIsAuthor: false })).toBe('comment');
+    expect(defaultKind({ isPrView: true, viewerIsAuthor: true })).toBe('note');
+    expect(defaultKind({ isPrView: false, viewerIsAuthor: false })).toBe('note');
+    expect(defaultKind({ isPrView: false, viewerIsAuthor: true })).toBe('note');
   });
 
   it.each([
-    [true, true, undefined, 'Add comment'],
-    [true, false, undefined, 'Add note'],
-    [false, false, undefined, undefined],
-    [true, true, 'note', 'Save note'],
-    [true, false, 'comment', 'Save comment'],
-    [false, false, 'note', 'Save'],
-  ] as const)('PR view %s, in review %s, editing %s → %s', (isPr, inReview, editing, label) => {
-    expect(draftSubmitLabel(isPr, inReview, editing)).toBe(label);
+    [true, 'comment', undefined, 'Add comment'],
+    [true, 'note', undefined, 'Add note'],
+    [false, 'note', undefined, undefined],
+    [true, 'comment', 'note', 'Save note'],
+    [true, 'note', 'comment', 'Save comment'],
+    [false, 'note', 'note', 'Save'],
+  ] as const)('PR view %s, new %s, editing %s → %s', (isPr, newKind, editing, label) => {
+    expect(draftSubmitLabel(isPr, newKind, editing)).toBe(label);
   });
 
   it("draws a thread only on a line of the PR's side", () => {

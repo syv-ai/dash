@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { PullRequestInfo } from '@shared/types';
-import { ciFromAdo, ciFromRollup, relevantPrs } from '../prRelevance';
+import { adoChecks, ciFromAdo, ciFromRollup, githubChecks, relevantPrs } from '../prRelevance';
 
 const pr = (
   number: number,
@@ -135,5 +135,66 @@ describe('ciFromAdo', () => {
     expect(ciFromAdo([], [st(2, 'succeeded'), st(1, 'failed'), st(3, 'failed', 'lint')])).toBe(
       'failing',
     );
+  });
+});
+
+describe('githubChecks', () => {
+  it('lists each check run and status with its state and link', () => {
+    expect(
+      githubChecks([
+        { name: 'test', status: 'COMPLETED', conclusion: 'SUCCESS', detailsUrl: 'u/1' },
+        { name: 'docs', status: 'COMPLETED', conclusion: 'NEUTRAL' },
+        { name: 'e2e', status: 'IN_PROGRESS', conclusion: null },
+        { context: 'ci/ext', state: 'ERROR', targetUrl: 'u/2' },
+        null,
+      ]),
+    ).toEqual([
+      { name: 'test', state: 'passing', url: 'u/1' },
+      { name: 'docs', state: 'skipped', url: null },
+      { name: 'e2e', state: 'pending', url: null },
+      { name: 'ci/ext', state: 'failing', url: 'u/2' },
+    ]);
+    expect(githubChecks(undefined)).toEqual([]);
+  });
+});
+
+describe('adoChecks', () => {
+  const BUILD = '0609b952-1397-4640-95ec-e00a01b2c241';
+  const STATUS = 'cbdc66da-9728-4af8-aada-9a5a32e4a226';
+
+  it('names policies and statuses, links builds, and leaves out what does not apply', () => {
+    const evaluations = [
+      {
+        status: 'rejected',
+        configuration: { type: { id: BUILD }, settings: { displayName: 'PR build' } },
+        context: { buildId: 42 },
+      },
+      {
+        status: 'queued',
+        configuration: {
+          type: { id: STATUS },
+          settings: { statusGenre: 'sec', statusName: 'scan' },
+        },
+      },
+      {
+        status: 'approved',
+        configuration: {
+          type: { id: BUILD, displayName: 'Build' },
+          settings: { displayName: null },
+        },
+      },
+      { status: 'notApplicable', configuration: { type: { id: BUILD } } },
+    ];
+    const statuses = [
+      { id: 1, state: 'failed', context: { genre: 'ext', name: 'lint' } },
+      { id: 2, state: 'succeeded', context: { genre: 'ext', name: 'lint' }, targetUrl: 'u/l' },
+      { id: 3, state: 'notSet', context: { genre: 'ext', name: 'other' } },
+    ];
+    expect(adoChecks(evaluations, statuses, (id) => `build/${id}`)).toEqual([
+      { name: 'PR build', state: 'failing', url: 'build/42' },
+      { name: 'sec/scan', state: 'pending', url: null },
+      { name: 'Build', state: 'passing', url: null },
+      { name: 'ext/lint', state: 'passing', url: 'u/l' },
+    ]);
   });
 });

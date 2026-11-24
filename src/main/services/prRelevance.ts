@@ -1,4 +1,4 @@
-import type { CiState, PullRequestInfo } from '@shared/types';
+import type { CiState, PrCheck, PullRequestInfo } from '@shared/types';
 
 /**
  * Every PR from a branch, newest first, with `current` set on the ones that
@@ -22,12 +22,17 @@ export async function relevantPrs(
   }));
 }
 
-/** One entry of `gh pr list --json statusCheckRollup`: a check run or a commit status. */
+/** One entry of a GitHub status check rollup (`gh pr list --json statusCheckRollup`,
+ *  or GraphQL's `statusCheckRollup.contexts`): a check run or a commit status. */
 interface RollupEntry {
   __typename?: string;
+  name?: string | null; // CheckRun
   status?: string | null; // CheckRun: QUEUED | IN_PROGRESS | COMPLETED | …
   conclusion?: string | null; // CheckRun: SUCCESS | FAILURE | SKIPPED | …
+  detailsUrl?: string | null; // CheckRun
+  context?: string | null; // StatusContext
   state?: string | null; // StatusContext: SUCCESS | FAILURE | ERROR | PENDING | EXPECTED
+  targetUrl?: string | null; // StatusContext
 }
 
 const FAILED = new Set([
@@ -39,19 +44,37 @@ const FAILED = new Set([
   'STARTUP_FAILURE',
 ]);
 const RUNNING = new Set(['PENDING', 'EXPECTED', 'QUEUED', 'IN_PROGRESS', 'WAITING', 'REQUESTED']);
+const SKIPPED = new Set(['SKIPPED', 'NEUTRAL']);
 
-/** A GitHub PR's checks as one state: any failure fails it, then any still running; null without checks. */
-export function ciFromRollup(rollup: unknown): CiState | null {
-  if (!Array.isArray(rollup) || rollup.length === 0) return null;
-  let running = false;
-  for (const raw of rollup as RollupEntry[]) {
-    const outcome = raw.conclusion || raw.state || '';
-    if (FAILED.has(outcome)) return 'failing';
-    const notDone = raw.status ? raw.status !== 'COMPLETED' : RUNNING.has(raw.state ?? '');
-    if (notDone) running = true;
-  }
-  return running ? 'pending' : 'passing';
+/** Checks as one state: any failure fails it, then any still running; null without checks. */
+export function ciOf(checks: readonly PrCheck[]): CiState | null {
+  if (checks.length === 0) return null;
+  if (checks.some((c) => c.state === 'failing')) return 'failing';
+  return checks.some((c) => c.state === 'pending') ? 'pending' : 'passing';
 }
+
+function githubCheckState(e: RollupEntry): PrCheck['state'] {
+  const outcome = e.conclusion || e.state || '';
+  if (FAILED.has(outcome)) return 'failing';
+  const notDone = e.status ? e.status !== 'COMPLETED' : RUNNING.has(e.state ?? '');
+  if (notDone) return 'pending';
+  return SKIPPED.has(outcome) ? 'skipped' : 'passing';
+}
+
+/** A GitHub PR's checks, one per check run or commit status. */
+export function githubChecks(rollup: unknown): PrCheck[] {
+  if (!Array.isArray(rollup)) return [];
+  return (rollup as (RollupEntry | null)[])
+    .filter((e): e is RollupEntry => !!e && typeof e === 'object')
+    .map((e) => ({
+      name: e.name || e.context || '',
+      state: githubCheckState(e),
+      url: e.detailsUrl || e.targetUrl || null,
+    }));
+}
+
+/** A GitHub PR's checks as one state (see ciOf). */
+export const ciFromRollup = (rollup: unknown): CiState | null => ciOf(githubChecks(rollup));
 
 // Policy types that are CI: build validation and required external status.
 // Reviewer, comment and work-item policies say nothing about the checks.
@@ -63,7 +86,11 @@ const ADO_CI_POLICY_TYPES = new Set([
 
 interface AdoPolicyEvaluation {
   status?: string; // queued | running | approved | rejected | notApplicable | broken
-  configuration?: { type?: { id?: string } };
+  configuration?: {
+    type?: { id?: string; displayName?: string };
+    /** Build: displayName; Status: statusGenre / statusName. */
+    settings?: { displayName?: string | null; statusName?: string; statusGenre?: string } | null;
+  };
   /** A build policy's last build; absent until one is queued. */
   context?: { buildId?: number; isExpired?: boolean } | null;
 }
@@ -79,27 +106,57 @@ function queuedBuild(e: AdoPolicyEvaluation): 'failing' | 'pending' | null {
   return e.context?.buildId ? 'pending' : null;
 }
 
+function evaluationState(e: AdoPolicyEvaluation): PrCheck['state'] | null {
+  if (e.status === 'rejected' || e.status === 'broken') return 'failing';
+  if (e.status === 'queued' && e.configuration?.type?.id === BUILD_POLICY) return queuedBuild(e);
+  if (e.status === 'queued' || e.status === 'running') return 'pending';
+  return e.status === 'approved' ? 'passing' : null;
+}
+
+function evaluationName(e: AdoPolicyEvaluation): string {
+  const s = e.configuration?.settings;
+  if (s?.displayName) return s.displayName;
+  if (s?.statusName) return [s.statusGenre, s.statusName].filter(Boolean).join('/');
+  return e.configuration?.type?.displayName ?? 'Policy';
+}
+
 interface AdoPrStatus {
   id?: number;
   state?: string; // notSet | pending | succeeded | failed | error | notApplicable
+  description?: string;
+  targetUrl?: string;
   context?: { name?: string; genre?: string };
 }
 
+const STATUS_STATES: Record<string, PrCheck['state']> = {
+  failed: 'failing',
+  error: 'failing',
+  pending: 'pending',
+  succeeded: 'passing',
+};
+
 /**
- * An Azure DevOps PR's checks as one state, from its policy evaluations (build
- * validation, required statuses) and the statuses posted to it, latest per
- * context. Same rule as ciFromRollup; null without any CI check.
+ * An Azure DevOps PR's checks, from its policy evaluations (build validation,
+ * required statuses) and the statuses posted to it, latest per context. A
+ * check that doesn't apply, or a manual build never queued, isn't listed.
+ * `buildUrl` links a build policy to its last build.
  */
-export function ciFromAdo(evaluations: unknown, statuses: unknown): CiState | null {
-  const outcomes: Array<'failing' | 'pending' | 'passing'> = [];
+export function adoChecks(
+  evaluations: unknown,
+  statuses: unknown,
+  buildUrl?: (buildId: number) => string,
+): PrCheck[] {
+  const checks: PrCheck[] = [];
   for (const e of (Array.isArray(evaluations) ? evaluations : []) as AdoPolicyEvaluation[]) {
     if (!ADO_CI_POLICY_TYPES.has(e.configuration?.type?.id ?? '')) continue;
-    if (e.status === 'rejected' || e.status === 'broken') outcomes.push('failing');
-    else if (e.status === 'queued' && e.configuration?.type?.id === BUILD_POLICY) {
-      const outcome = queuedBuild(e);
-      if (outcome) outcomes.push(outcome);
-    } else if (e.status === 'queued' || e.status === 'running') outcomes.push('pending');
-    else if (e.status === 'approved') outcomes.push('passing');
+    const state = evaluationState(e);
+    if (!state) continue;
+    const buildId = e.context?.buildId;
+    checks.push({
+      name: evaluationName(e),
+      state,
+      url: buildId && buildUrl ? buildUrl(buildId) : null,
+    });
   }
   const latest = new Map<string, AdoPrStatus>();
   for (const s of (Array.isArray(statuses) ? statuses : []) as AdoPrStatus[]) {
@@ -108,11 +165,14 @@ export function ciFromAdo(evaluations: unknown, statuses: unknown): CiState | nu
     if (!prev || (s.id ?? 0) > (prev.id ?? 0)) latest.set(key, s);
   }
   for (const s of latest.values()) {
-    if (s.state === 'failed' || s.state === 'error') outcomes.push('failing');
-    else if (s.state === 'pending') outcomes.push('pending');
-    else if (s.state === 'succeeded') outcomes.push('passing');
+    const state = STATUS_STATES[s.state ?? ''];
+    if (!state) continue;
+    const name = [s.context?.genre, s.context?.name].filter(Boolean).join('/');
+    checks.push({ name: name || s.description || 'Status', state, url: s.targetUrl || null });
   }
-  if (outcomes.length === 0) return null;
-  if (outcomes.includes('failing')) return 'failing';
-  return outcomes.includes('pending') ? 'pending' : 'passing';
+  return checks;
 }
+
+/** An Azure DevOps PR's checks as one state (see adoChecks, ciOf). */
+export const ciFromAdo = (evaluations: unknown, statuses: unknown): CiState | null =>
+  ciOf(adoChecks(evaluations, statuses));

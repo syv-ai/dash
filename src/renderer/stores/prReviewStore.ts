@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type {
   PrProvider,
+  PrRef,
   PrReview,
   PrReviewSummary,
   PrVerdict,
@@ -21,19 +22,20 @@ export type PrWriteResult = { ok: true } | { ok: false; error: PrWriteError; pos
 interface PrReviewState {
   /** Per PR (`prKey`), its review as last fetched. */
   byPr: Record<string, PrReview>;
-  /** Per task and PR (`reviewKey`): whether the task is reviewing it, so what's
-   *  written in its view is a comment, not a note. Absent until loaded. */
-  inReview: Record<string, boolean>;
+  /** Per task: the PR the person picked for it to review, or null. Absent until loaded. */
+  targets: Record<string, PrRef | null>;
   /** Per task and PR (`reviewKey`): the draft summary, the review's PR-level
    *  comment. Null when there is none; absent until loaded. */
   summaries: Record<string, PrReviewSummary | null>;
-  /** Fetch a task's review of a PR: whether it's in review, and its summary.
-   *  Components read it through `useTaskReview`, which calls this. */
+  /** Fetch a task's review of a PR: its summary. Components read it through
+   *  `useTaskReview`, which calls this. */
   loadReview: (taskId: string, provider: PrProvider, number: number) => Promise<void>;
   /** Refetch each loaded summary of the task, after an agent changed it. */
   refreshSummaries: (taskId: string) => Promise<void>;
-  /** Start (Review) or end a task's review of a PR. */
-  setInReview: (taskId: string, provider: PrProvider, number: number, on: boolean) => void;
+  /** Fetch the PR the task was set to review. */
+  loadTarget: (taskId: string) => Promise<void>;
+  /** Pick the PR the task reviews (null stops reviewing): shown at once, saved behind. */
+  setTarget: (taskId: string, target: PrRef | null) => void;
   /** The person's edit: shown at once, saved shortly after they stop typing. */
   setSummary: (taskId: string, provider: PrProvider, number: number, body: string) => void;
   /** Fetch PR `number` of the project, with its commits fetched into `cwd`. On
@@ -48,7 +50,7 @@ interface PrReviewState {
     resolved: boolean,
   ) => Promise<PrWriteResult>;
   /** Submit the task's drafts for the PR with a verdict; refetches the review
-   *  when anything reached the PR, and ends the review when everything did. */
+   *  when anything reached the PR, and drops the summary when everything did. */
   submit: (
     projectId: string,
     cwd: string,
@@ -69,21 +71,13 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
     set({ byPr: { ...get().byPr, [key]: { ...review, threads } } });
   };
 
-  const markInReview = (key: string, on: boolean) =>
-    set({ inReview: { ...get().inReview, [key]: on } });
+  const putTarget = (taskId: string, target: PrRef | null) =>
+    set({ targets: { ...get().targets, [taskId]: target } });
   const putSummary = (key: string, summary: PrReviewSummary | null) =>
     set({ summaries: { ...get().summaries, [key]: summary } });
   // Saves waiting for the person to stop typing, per review key.
   const pendingSaves = new Map<string, ReturnType<typeof setTimeout>>();
 
-  const loadInReview = async (taskId: string, provider: PrProvider, number: number) => {
-    try {
-      const resp = await window.electronAPI.prReviewInReview({ taskId, provider, number });
-      if (resp.success) markInReview(reviewKey(taskId, provider, number), !!resp.data);
-    } catch {
-      /* stays unknown: writing makes notes */
-    }
-  };
   const loadSummary = async (taskId: string, provider: PrProvider, number: number) => {
     const key = reviewKey(taskId, provider, number);
     try {
@@ -97,15 +91,10 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
 
   return {
     byPr: {},
-    inReview: {},
+    targets: {},
     summaries: {},
 
-    loadReview: async (taskId, provider, number) => {
-      await Promise.all([
-        loadInReview(taskId, provider, number),
-        loadSummary(taskId, provider, number),
-      ]);
-    },
+    loadReview: (taskId, provider, number) => loadSummary(taskId, provider, number),
 
     refreshSummaries: async (taskId) => {
       const loads = Object.keys(get().summaries).flatMap((key) => {
@@ -130,11 +119,18 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
       );
     },
 
-    setInReview: (taskId, provider, number, on) => {
-      markInReview(reviewKey(taskId, provider, number), on);
-      void window.electronAPI
-        .prReviewSetInReview({ taskId, provider, number, on })
-        .catch(() => undefined);
+    loadTarget: async (taskId) => {
+      try {
+        const resp = await window.electronAPI.prReviewTarget({ taskId });
+        if (resp.success) putTarget(taskId, resp.data ?? null);
+      } catch {
+        /* stays unknown */
+      }
+    },
+
+    setTarget: (taskId, target) => {
+      putTarget(taskId, target);
+      void window.electronAPI.prReviewSetTarget({ taskId, target }).catch(() => undefined);
     },
 
     load: async (projectId, cwd, number) => {
@@ -183,10 +179,9 @@ export const usePrReviews = create<PrReviewState>((set, get) => {
         if (!resp.success || !resp.data)
           return { ok: false, error: ipcError(resp.error ?? 'unknown error') };
         const { postedDraftIds, error } = resp.data;
-        // Main ends the review once everything got through.
+        // Main clears the summary once everything got through.
         if (!error) {
           const key = reviewKey(taskId, review.provider, review.number);
-          markInReview(key, false);
           clearTimeout(pendingSaves.get(key));
           pendingSaves.delete(key);
           putSummary(key, null);

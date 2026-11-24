@@ -5,20 +5,26 @@ export function isInlineThread(t: PrReviewThread): boolean {
   return t.line !== null && t.side === 'RIGHT';
 }
 
-/** What a new note or comment written in the view is: a PR comment only while
- *  reviewing a PR, else a note. */
-export function newCommentKind(isPrView: boolean, inReview: boolean): DiffCommentKind {
-  return isPrView && inReview ? 'comment' : 'note';
+/** What a new note or comment starts as: a comment on someone else's PR (it's
+ *  for its author), a note on your own PR or outside a PR (it's for the agent). */
+export function defaultKind({
+  isPrView,
+  viewerIsAuthor,
+}: {
+  isPrView: boolean;
+  viewerIsAuthor: boolean;
+}): DiffCommentKind {
+  return isPrView && !viewerIsAuthor ? 'comment' : 'note';
 }
 
 /** The comment box's submit label. An edit keeps the kind it has; a new one in
- *  a PR view is a note until Review. Undefined: the box's own default. */
+ *  a PR view says which it will be. Undefined: the box's own default. */
 export function draftSubmitLabel(
   isPrView: boolean,
-  inReview: boolean,
+  newKind: DiffCommentKind,
   editingKind: DiffCommentKind | undefined,
 ): string | undefined {
   if (editingKind) return isPrView ? `Save ${editingKind}` : 'Save';
   if (!isPrView) return undefined;
-  return inReview ? 'Add comment' : 'Add note';
+  return newKind === 'comment' ? 'Add comment' : 'Add note';
 }
