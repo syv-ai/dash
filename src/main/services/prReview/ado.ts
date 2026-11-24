@@ -33,10 +33,12 @@ interface RawComment {
   commentType?: string;
   isDeleted?: boolean;
   publishedDate?: string;
+  lastUpdatedDate?: string;
   author?: { displayName?: string } | null;
 }
 interface RawThread {
   id?: number;
+  lastUpdatedDate?: string;
   status?: string | null;
   isDeleted?: boolean;
   properties?: Record<string, unknown> | null;
@@ -51,6 +53,8 @@ interface RawThread {
 }
 interface RawIteration {
   id?: number;
+  createdDate?: string;
+  updatedDate?: string;
   sourceRefCommit?: { commitId?: string };
   commonRefCommit?: { commitId?: string };
 }
@@ -60,6 +64,8 @@ interface RawPr {
   description?: string;
   status?: string;
   isDraft?: boolean;
+  creationDate?: string;
+  closedDate?: string;
   sourceRefName?: string;
   targetRefName?: string;
   createdBy?: { id?: string; displayName?: string } | null;
@@ -109,6 +115,32 @@ export function latestIteration(iterations: unknown): {
 
 const prUrl = (ctx: AdoRepoContext, id: number) =>
   `${ctx.organizationUrl.replace(/\/+$/, '')}/${ctx.project}/_git/${ctx.repository}/pullrequest/${id}`;
+
+/** The newest of `dates` (ISO 8601), as given; '' when none parses. */
+export function newestDate(dates: readonly (string | null | undefined)[]): string {
+  let best = '';
+  let bestAt = -Infinity;
+  for (const d of dates) {
+    const at = d ? Date.parse(d) : NaN;
+    if (at > bestAt) [best, bestAt] = [d!, at];
+  }
+  return best;
+}
+
+/** ADO keeps no "updated" date on a PR: its latest activity is the newest of
+ *  its creation and close, its iterations (pushes) and every thread and
+ *  comment, ADO's own (votes, reviewer changes) included. */
+function lastActivity(pr: RawPr, iterations: unknown, threads: unknown): string {
+  return newestDate([
+    pr.creationDate,
+    pr.closedDate,
+    ...list<RawIteration>(iterations).flatMap((i) => [i.createdDate, i.updatedDate]),
+    ...list<RawThread>(threads).flatMap((t) => [
+      t.lastUpdatedDate,
+      ...(t.comments ?? []).flatMap((c) => [c.publishedDate, c.lastUpdatedDate]),
+    ]),
+  ]);
+}
 
 const branchName = (ref: string | undefined) => (ref ?? '').replace(/^refs\/heads\//, '');
 
@@ -238,6 +270,9 @@ export function adoReviewFrom(
     threads,
     conversation,
     author: pr.createdBy?.displayName || 'Unknown',
+    authorUrl: null,
+    createdAt: pr.creationDate ?? '',
+    lastActivityAt: lastActivity(pr, raw.iterations, raw.threads),
     state: stateFrom(pr),
     baseRef: branchName(pr.targetRefName),
     headRef: branchName(pr.sourceRefName),

@@ -12,6 +12,7 @@ import {
   adoVote,
   adoWriteError,
   changeTrackingIds,
+  newestDate,
   makeAdoProvider,
   threadPaths,
   type AdoDeps,
@@ -79,6 +80,35 @@ describe('adoReviewFrom', () => {
     expect(at({ status: 'abandoned' })).toBe('closed');
   });
 
+  it('dates it: created, and the newest of its pushes, threads and comments', () => {
+    const dated = adoReviewFrom(
+      {
+        pr: { ...pr, creationDate: '2026-11-01T09:00:00Z' },
+        iterations: {
+          value: [{ ...iterations.value[1], createdDate: '2026-11-03T00:00:00Z' }],
+        },
+        threads: [
+          { id: 1, lastUpdatedDate: '2026-11-04T00:00:00Z', comments: [] },
+          {
+            id: 2,
+            comments: [{ id: 1, publishedDate: '2026-11-02T00:00:00Z' }],
+            lastUpdatedDate: 'not a date',
+          },
+        ],
+        me: '',
+        filesAtHead,
+        checks: [],
+      },
+      ctx,
+    );
+    expect(dated).toMatchObject({
+      createdAt: '2026-11-01T09:00:00Z',
+      lastActivityAt: '2026-11-04T00:00:00Z',
+      authorUrl: null,
+    });
+    expect(review.createdAt).toBe('');
+  });
+
   it("says whether you're on the reviewer list and haven't voted", () => {
     const asked = (reviewers: { id: string; vote: number }[]) =>
       adoReviewFrom(
@@ -134,6 +164,15 @@ describe('adoReviewFrom', () => {
       'src/app/unmoved.ts',
       'src/app/deleted.ts',
     ]);
+  });
+});
+
+describe('newestDate', () => {
+  it('picks the newest parseable date, as given', () => {
+    expect(newestDate(['2026-01-02T00:00:00Z', undefined, 'x', '2026-03-01T00:00:00.000Z'])).toBe(
+      '2026-03-01T00:00:00.000Z',
+    );
+    expect(newestDate([null, ''])).toBe('');
   });
 });
 

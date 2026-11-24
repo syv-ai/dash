@@ -26,7 +26,9 @@ export const PR_REVIEW_QUERY = `query($owner: String!, $name: String!, $number: 
       body
       url
       viewerDidAuthor
-      author { login }
+      createdAt
+      updatedAt
+      author { login url }
       state
       isDraft
       baseRefName
@@ -177,6 +179,9 @@ export function githubReviewFrom(
     conversation,
     ...(threads?.pageInfo?.hasNextPage === true ? { partial: true } : {}),
     author: login(p.author) || 'ghost',
+    authorUrl: str((p.author as Node | null)?.url) || null,
+    createdAt: str(p.createdAt),
+    lastActivityAt: str(p.updatedAt) || str(p.createdAt),
     state: stateFrom(p),
     baseRef: str(p.baseRefName),
     headRef: str(p.headRefName),

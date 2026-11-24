@@ -779,22 +779,29 @@ export function registerEditorIpc(): void {
     'editor:listCommits',
     async (
       _event,
-      args: { cwd: string; limit?: number },
+      args: { cwd: string; limit?: number; range?: { base: string; head: string } },
     ): Promise<IpcResponse<EditorCommitListItem[]>> => {
       try {
+        const sha = z.string().regex(/^[0-9a-f]{4,64}$/i);
         parseArgs(
           'editor:listCommits',
-          z.looseObject({ cwd: z.string(), limit: z.number().optional() }),
+          z.looseObject({
+            cwd: z.string(),
+            limit: z.number().optional(),
+            range: z.object({ base: sha, head: sha }).optional(),
+          }),
           args,
         );
         const limit = args.limit ?? 50;
+        // HEAD's history, or a PR's commits (base..head, both present locally).
+        const rev = args.range ? `${args.range.base}..${args.range.head}` : 'HEAD';
         // -z separates records with NUL; %x1f is a unit-separator between
         // fields. Body can contain newlines, so we keep it last and use the
         // record NUL as its terminator.
         const format = '%H%x1f%h%x1f%an%x1f%at%x1f%s%x1f%b';
         const { stdout } = await execFileAsync(
           'git',
-          ['log', '-z', `--max-count=${limit}`, `--format=${format}`, 'HEAD'],
+          ['log', '-z', `--max-count=${limit}`, `--format=${format}`, rev],
           { cwd: args.cwd, maxBuffer: 5 * 1024 * 1024, timeout: 15000 },
         );
         // Second single pass over the same range for per-commit line stats —
@@ -804,7 +811,7 @@ export function registerEditorIpc(): void {
         try {
           const { stdout: numstatOut } = await execFileAsync(
             'git',
-            ['log', '--numstat', `--max-count=${limit}`, '--format=%x1f%H', 'HEAD'],
+            ['log', '--numstat', `--max-count=${limit}`, '--format=%x1f%H', rev],
             { cwd: args.cwd, maxBuffer: 5 * 1024 * 1024, timeout: 15000 },
           );
           lineStats = parseCommitNumstatLog(numstatOut);

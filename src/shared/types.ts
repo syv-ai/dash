@@ -717,6 +717,13 @@ export interface PrReview {
   /** The provider had more threads than were loaded. */
   partial?: boolean;
   author: string;
+  /** The author's page on the forge; null where it has none (ADO). */
+  authorUrl: string | null;
+  /** When the PR was opened, ISO 8601; '' when the forge doesn't say. */
+  createdAt: string;
+  /** Its latest activity, ISO 8601: GitHub's `updatedAt`; on ADO the newest of
+   *  its creation, close, iterations (pushes) and threads (comments, votes). */
+  lastActivityAt: string;
   state: PrState;
   /** Branch names, without `refs/heads/`. */
   baseRef: string;

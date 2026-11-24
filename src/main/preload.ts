@@ -400,8 +400,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     expectedMtimeMs: number;
     expectedSizeBytes: number;
   }) => ipcRenderer.invoke('editor:writeWorking', args),
-  editorListCommits: (args: { cwd: string; limit?: number }) =>
-    ipcRenderer.invoke('editor:listCommits', args),
+  editorListCommits: (args: {
+    cwd: string;
+    limit?: number;
+    range?: { base: string; head: string };
+  }) => ipcRenderer.invoke('editor:listCommits', args),
   editorListFilesInCommit: (args: { cwd: string; hash: string; base?: string }) =>
     ipcRenderer.invoke('editor:listFilesInCommit', args),
   editorListRepoFiles: (args: {

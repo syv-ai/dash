@@ -38,6 +38,8 @@ export interface EditorApi {
   editorListCommits: (args: {
     cwd: string;
     limit?: number;
+    /** The commits of `base..head` (two shas: a PR's) instead of HEAD's history. */
+    range?: { base: string; head: string };
   }) => Promise<IpcResponse<EditorCommitListItem[]>>;
   editorListFilesInCommit: (args: {
     cwd: string;

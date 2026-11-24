@@ -125,6 +125,9 @@ describe('githubReviewFrom', () => {
     const review = githubReviewFrom(prFixture, at);
     expect(review).toMatchObject({
       author: 'bo',
+      authorUrl: 'https://github.com/bo',
+      createdAt: '2026-11-01T09:00:00Z',
+      lastActivityAt: '2026-11-20T15:30:00Z',
       state: 'open',
       baseRef: 'main',
       headRef: 'fix/it',

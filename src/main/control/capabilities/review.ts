@@ -100,6 +100,8 @@ function prView(r: PrReview, conversation: boolean) {
     author: r.author,
     viewerIsAuthor: r.viewerIsAuthor,
     state: r.state,
+    createdAt: r.createdAt,
+    lastActivityAt: r.lastActivityAt,
     baseRef: r.baseRef,
     headRef: r.headRef,
     commits: r.commits,
