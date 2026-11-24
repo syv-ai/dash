@@ -9,7 +9,9 @@
      ground = app chrome, well = content sheet, raised = menus and dialogs,
      line = hairlines, ink/ink-2/ink-3 = text tiers, hover/select = row
      states, btn/btn-ink = the neutral primary button. Colour means agent
-     state only: needs (amber), fail (red), work (blue), done (green). */
+     state only: needs (amber), fail (red), work (blue), done (green).
+     Contrast floor, both themes, on ground and well: ink-2 ≥ 4.5:1 (body
+     text), ink-3 ≥ 3:1 (faint text, resting icons). */
   --color-ground: hsl(var(--ground));
   --color-well: hsl(var(--well));
   --color-raised: hsl(var(--raised));
@@ -119,8 +121,8 @@
     --raised: 0 0% 100%;
     --line: 225 20% 20% / 0.08;
     --ink: 225 14% 20%;
-    --ink-2: 222 8% 44%;
-    --ink-3: 222 6% 60%;
+    --ink-2: 222 8% 41%;
+    --ink-3: 222 6% 53%;
     --hover: 225 20% 20% / 0.04;
     --select: 225 20% 20% / 0.065;
     --btn: 225 14% 22%;
@@ -214,8 +216,8 @@
     --raised: 220 5% 9.5%;
     --line: 0 0% 100% / 0.06;
     --ink: 220 6% 91%;
-    --ink-2: 220 5% 57%;
-    --ink-3: 220 4% 39%;
+    --ink-2: 220 5% 63%;
+    --ink-3: 220 4% 47%;
     --hover: 0 0% 100% / 0.035;
     --select: 0 0% 100% / 0.06;
     --btn: 220 6% 91%;
