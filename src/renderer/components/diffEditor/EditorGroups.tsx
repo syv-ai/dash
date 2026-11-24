@@ -27,6 +27,7 @@ import { confirm } from '../ui/ConfirmHost';
 import { absolutePath } from './editor/fileRef';
 import { LspStatusIndicator } from './LspStatusIndicator';
 import { CompareButton } from './CompareButton';
+import { commentScope } from './comments/commentScope';
 import { installLsp } from '../../lsp';
 
 interface Props {
@@ -148,6 +149,7 @@ export function EditorGroups({ ws, terminalTheme, isDark, onClose }: Props) {
         onSelectBase={ws.selectBase}
         onExitBranchView={ws.exitBranchView}
         onSelectPr={ws.openPrView}
+        commentCount={ws.commentCountByScope.get(commentScope(ws.view)) ?? 0}
       />
     </>
   );

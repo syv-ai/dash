@@ -6,6 +6,7 @@ import { Popover, PopoverAnchor, PopoverContent } from '../ui/Popover';
 import { Tooltip } from '../ui/Tooltip';
 import { Segmented } from '../ui/Segmented';
 import { Button } from '../ui/Button';
+import { CountBadge } from '../ui/CountBadge';
 import { BranchPicker } from './BranchPicker';
 import { PrPicker } from './PrPicker';
 
@@ -22,12 +23,15 @@ interface Props {
   onExitBranchView(): void;
   /** Open PR `number`'s view; resolves false when it couldn't be loaded. */
   onSelectPr(number: number): Promise<boolean>;
+  /** Comments needing attention in the comparison showing (0 hides it). */
+  commentCount: number;
 }
 
 /**
  * Compare the whole editor view with a branch or pull request. It sits once
  * in the tab row, not per file: the comparison is editor-wide. While one is
- * showing, the button names it.
+ * showing, the button names it, with its comments to send; leaving it is
+ * the picker's Exit.
  */
 export function CompareButton({
   cwd,
@@ -37,6 +41,7 @@ export function CompareButton({
   onSelectBase,
   onExitBranchView,
   onSelectPr,
+  commentCount,
 }: Props) {
   const isBranch = view.kind === 'branch';
   const isPr = view.kind === 'pr';
@@ -58,11 +63,14 @@ export function CompareButton({
     setOpen((v) => !v);
   }
 
-  const tooltip = isBranch
+  const comparing = isBranch || isPr;
+  const comments = comparing && commentCount > 0 ? commentCount : 0;
+  const label = isBranch
     ? `Comparing with ${view.base}`
     : isPr
       ? `PR #${view.number}${prTitle ? `: ${prTitle}` : ''}`
       : 'Compare with a branch or pull request';
+  const tooltip = comments > 0 ? `${label} · ${comments} to send` : label;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -84,6 +92,7 @@ export function CompareButton({
               <span className="max-w-40 truncate whitespace-nowrap @max-[28rem]/strip:hidden">
                 {isBranch ? `vs ${view.base}` : isPr ? `PR #${view.number}` : 'Compare'}
               </span>
+              {comments > 0 && <CountBadge count={comments} className="shrink-0" />}
             </Button>
           </Tooltip>
         </div>

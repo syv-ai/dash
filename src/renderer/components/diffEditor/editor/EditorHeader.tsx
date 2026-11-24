@@ -5,8 +5,6 @@ import {
   Copy,
   Eye,
   GitCommit,
-  GitCompare,
-  GitPullRequestArrow,
   History,
   MessageSquare,
   MoreHorizontal,
@@ -43,7 +41,7 @@ interface Props {
   /** True when the rendered preview is showing instead of the editor. */
   previewing: boolean;
   onTogglePreview(next: boolean): void;
-  /** Comments anchored to the open view — shown after the "Showing …" label. */
+  /** Comments anchored to the open commit — shown after the "Showing …" label. */
   commentCount: number;
 }
 
@@ -68,28 +66,17 @@ export function EditorHeader({
   onTogglePreview,
   commentCount,
 }: Props) {
-  // "Showing …" pill — only for non-working views (the working tree is the
-  // default and needs no callout). Tooltip carries the full ref.
+  // "Showing …" pill — only for a commit view: the working tree needs no
+  // callout, and a branch or PR comparison is named by the Compare button.
+  // Tooltip carries the full hash.
   const viewMeta =
-    view.kind === 'branch'
+    view.kind === 'commit'
       ? {
-          label: `Showing vs ${view.base}`,
-          tooltip: `Comparing against ${view.base}`,
-          Icon: GitCompare,
+          label: `Showing commit ${view.hash.slice(0, 7)}`,
+          tooltip: `Commit ${view.hash}`,
+          Icon: GitCommit,
         }
-      : view.kind === 'commit'
-        ? {
-            label: `Showing commit ${view.hash.slice(0, 7)}`,
-            tooltip: `Commit ${view.hash}`,
-            Icon: GitCommit,
-          }
-        : view.kind === 'pr'
-          ? {
-              label: `Showing PR #${view.number}`,
-              tooltip: `PR #${view.number}: ${view.base.slice(0, 7)}…${view.head.slice(0, 7)}`,
-              Icon: GitPullRequestArrow,
-            }
-          : null;
+      : null;
   const [copied, setCopied] = useState(false);
   const folder = dirname(filePath);
 

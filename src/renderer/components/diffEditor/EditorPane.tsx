@@ -166,7 +166,7 @@ export function EditorPane({
   // Origin tag on bubbles whenever the open view isn't the plain working tree
   // (a PR view tags each one note or comment instead).
   const bubbleScopeLabel = view.kind === 'working' || isPrView ? undefined : scopeLabel(scope);
-  // Comment count for the open view — surfaced in the header's "Showing …" pill.
+  // Comment count for the open commit — surfaced in the header's "Showing …" pill.
   const scopeCommentCount = useMemo(() => {
     let n = 0;
     for (const list of Object.values(commentsByFile))
