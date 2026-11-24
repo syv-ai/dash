@@ -10,7 +10,7 @@ import {
 import { LeftSidebar } from './components/leftSidebar/LeftSidebar';
 import { MainContent } from './components/MainContent';
 import { openInIde } from './lib/openInIde';
-import { loadInspectorWidths, saveInspectorWidth } from './lib/inspectorWidths';
+import { handOffWidth, loadInspectorWidths, saveInspectorWidth } from './lib/inspectorWidths';
 import { headerModelName } from './lib/modelName';
 import { RightInspector } from './components/rightInspector/RightInspector';
 const DiffEditorModal = lazy(() => import('./components/diffEditor/DiffEditorModal'));
@@ -899,17 +899,38 @@ export function App() {
     cycleRotation,
   ]);
 
-  // Reads the panel, not the setting, so the keyboard handler's closure can't go stale.
+  // Reads the panels, not the settings, so the keyboard handler's closure
+  // can't go stale. With the editor open (the task sidebar wide), the room
+  // the left sidebar frees goes to the task sidebar and the room it takes
+  // comes back from it: the centre keeps its width. Otherwise the centre
+  // gives and takes, as the library does.
+  const inspectorWideRef = useRef(false);
   const toggleSidebar = useCallback(() => {
     const panel = sidebarPanelRef.current;
     if (!panel) return;
+    const inspector = changesPanelRef.current;
+    const handOff = inspectorWideRef.current && !!inspector && !inspector.isCollapsed();
+    const leftBefore = panel.getSize().asPercentage;
+    const inspectorBefore = inspector?.getSize().asPercentage ?? 0;
     setSidebarAnimating(true);
     if (panel.isCollapsed()) {
       panel.expand();
     } else {
       panel.collapse();
     }
-  }, []);
+    if (!handOff || !inspector) return;
+    setChangesAnimating(true);
+    inspector.resize(
+      `${handOffWidth({
+        inspector: inspectorBefore,
+        leftBefore,
+        leftAfter: panel.getSize().asPercentage,
+        min: TUI_PANEL_MIN_PCT,
+        max: INSPECTOR_MAX_PCT,
+      })}%`,
+    );
+    setTimeout(() => setChangesAnimating(false), panelEaseMs());
+  }, [setChangesAnimating, setSidebarAnimating]);
 
   // A diff of the active task's worktree opens inline, in the widened task
   // sidebar; any other folder's (Claude's memory) in the modal.
@@ -967,6 +988,9 @@ export function App() {
   // re-registers them, and the width jumps. The editor mounts once the
   // width settles, so Monaco's start-up and layout don't stall the ease.
   const inspectorWide = !!inlineDiff;
+  useEffect(() => {
+    inspectorWideRef.current = inspectorWide;
+  }, [inspectorWide]);
   const [diffSettled, setDiffSettled] = useState(inspectorWide);
   const prevInspectorWideRef = useRef(inspectorWide);
   useEffect(() => {

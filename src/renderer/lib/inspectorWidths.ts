@@ -37,3 +37,25 @@ export function saveInspectorWidth(which: keyof InspectorWidths, pct: number): v
     // Storage full or unavailable: the default width serves next time.
   }
 }
+
+/**
+ * The task sidebar's width (%) once the left sidebar goes from `leftBefore`
+ * to `leftAfter`, so the centre keeps its width: the room the left one
+ * frees goes to the task sidebar, and the room it takes comes from it,
+ * within the task sidebar's bounds (the centre absorbs what's left over).
+ */
+export function handOffWidth({
+  inspector,
+  leftBefore,
+  leftAfter,
+  min,
+  max,
+}: {
+  inspector: number;
+  leftBefore: number;
+  leftAfter: number;
+  min: number;
+  max: number;
+}): number {
+  return Math.min(max, Math.max(min, inspector + leftBefore - leftAfter));
+}
