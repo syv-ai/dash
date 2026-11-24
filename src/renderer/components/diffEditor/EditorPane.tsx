@@ -17,7 +17,8 @@ import type { DiffComment } from '../../../shared/types';
 import { useCommentsStore } from '../../stores/commentsStore';
 import { useGit } from '../../stores/gitStore';
 import { PrThreadOverlay } from './prReview/PrThreadOverlay';
-import type { AttachReviewNav } from './prReview/useReviewNavigation';
+import type { ReviewNav } from './prReview/useReviewNavigation';
+import { PrFileActions } from './prReview/PrFileActions';
 import type { GroupIndex } from './tabs/editorLayout';
 import { trayNotes } from '../review/outline';
 import { usePrView } from './prReview/usePrView';
@@ -42,7 +43,7 @@ import { useMonacoEditor } from './editor/useMonacoEditor';
 import { EditorHeader } from './editor/EditorHeader';
 import { EditorViewport } from './editor/EditorViewport';
 import { ReviewRail } from './editor/ReviewRail';
-import { EditorContextMenu } from './editor/EditorContextMenu';
+import { EditorContextMenu, type Compose } from './editor/EditorContextMenu';
 import { HtmlPreview } from './editor/HtmlPreview';
 import { markdownToDocument } from './editor/markdownPreview';
 import { LoadingPill } from './editor/LoadingPill';
@@ -84,9 +85,10 @@ interface EditorPaneProps {
   projectId: string | null;
   /** The editor group this pane shows. */
   group: GroupIndex;
-  /** In a PR view: lend this pane's editor to the groups' next/previous
-   *  thread or draft (see `useReviewNavigation`). */
-  onAttachReviewNav?: AttachReviewNav;
+  /** In a PR view: the groups' next/previous thread or draft (see
+   *  `useReviewNavigation`), which this pane lends its editor and whose
+   *  buttons sit in its toolbar. */
+  reviewNav?: ReviewNav;
   /** Show this range once the file is on screen (go-to-definition, openFileAt). */
   revealRange: { range: TextRange; nonce: number } | null;
   onRevealed: (nonce: number) => void;
@@ -108,7 +110,7 @@ export function EditorPane({
   onClearReveal,
   projectId,
   group,
-  onAttachReviewNav,
+  reviewNav,
   revealRange,
   onRevealed,
   onIsDirectory,
@@ -433,15 +435,32 @@ export function EditorPane({
   });
 
   // The PR view's next/previous thread or draft.
+  const attachReviewNav = reviewNav?.attach;
   useEffect(() => {
-    if (!onAttachReviewNav || !modifiedEditor || !monaco) return;
-    return onAttachReviewNav(group, modifiedEditor, monaco);
-  }, [onAttachReviewNav, group, modifiedEditor, monaco]);
+    if (!attachReviewNav || !modifiedEditor || !monaco) return;
+    return attachReviewNav(group, modifiedEditor, monaco);
+  }, [attachReviewNav, group, modifiedEditor, monaco]);
 
   const editingKind = draftApi.editingId
     ? liveComments.find((c) => c.id === draftApi.editingId)?.kind
     : undefined;
   const draftSubmitLabel = prDraftSubmitLabel(isPrView, pr.newKind, editingKind);
+
+  // The context menu's Add comment / Add note here: the composer on those
+  // lines, its kind preset (in a PR view the pick sticks, as the switch's does).
+  const compose = useMemo<Compose | undefined>(
+    () =>
+      commentsDisabled
+        ? undefined
+        : {
+            canComment: pr.setNewKind !== null && pr.draftScope !== null,
+            onCompose: (lines, kind) => {
+              pr.setNewKind?.(kind);
+              setPendingRange(lines);
+            },
+          },
+    [commentsDisabled, pr.setNewKind, pr.draftScope, setPendingRange],
+  );
 
   const showCommentsMenu = !commentsDisabled && unsentNotes > 0 && !isPrView;
   const store = useCommentsStore.getState;
@@ -463,6 +482,11 @@ export function EditorPane({
         previewing={previewing}
         onTogglePreview={setPreviewing}
         commentCount={scopeCommentCount}
+        reviewActions={
+          view.kind === 'pr' && activeTaskId && reviewNav ? (
+            <PrFileActions pr={view} taskId={activeTaskId} filePath={filePath} nav={reviewNav} />
+          ) : null
+        }
       />
 
       {stale && (
@@ -481,7 +505,7 @@ export function EditorPane({
         />
       )}
 
-      <EditorContextMenu cwd={cwd} filePath={filePath} editor={editor}>
+      <EditorContextMenu cwd={cwd} filePath={filePath} editor={editor} compose={compose}>
         <div className="relative flex min-h-0 flex-1 flex-col">
           <EditorViewport
             displayed={displayed}

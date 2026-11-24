@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Copy, FileCode2, Hash, Link2 } from 'lucide-react';
+import { Bot, Copy, FileCode2, Hash, Link2, MessageSquare } from 'lucide-react';
 import type { editor as monacoEditor } from 'monaco-editor';
+import type { DiffCommentKind } from '../../../../shared/types';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -15,8 +16,17 @@ interface Props {
   cwd: string;
   filePath: string;
   editor: monacoEditor.IStandaloneDiffEditor | null;
+  /** Write a note or comment on the lines a right-click names (the file's
+   *  modified side only); absent where comments are off. */
+  compose?: Compose;
   /** The editor area. Must accept a ref (it becomes the right-click trigger). */
   children: React.ReactElement;
+}
+
+export interface Compose {
+  /** A comment can be written here (a PR view); else it shows disabled with why. */
+  canComment: boolean;
+  onCompose: (lines: LineRange, kind: DiffCommentKind) => void;
 }
 
 interface Target {
@@ -42,11 +52,12 @@ function targetLines(ed: monacoEditor.ICodeEditor, clickedLine: number | null): 
 }
 
 /**
- * Right-click menu for the diff editor: copy a `path:line` reference (the
- * selection's range, or the clicked line), the relative or absolute path, or
+ * Right-click menu for the diff editor: add a comment or a note on the
+ * selection or the clicked line (D-R2d: Add comment stays, disabled, outside
+ * a PR view); copy a `path:line` reference, the relative or absolute path, or
  * the selected text. Replaces Monaco's own menu, which is turned off.
  */
-export function EditorContextMenu({ cwd, filePath, editor, children }: Props) {
+export function EditorContextMenu({ cwd, filePath, editor, compose, children }: Props) {
   const lastClick = useRef<{ side: Target['side']; line: number | null } | null>(null);
   const [target, setTarget] = useState<Target | null>(null);
 
@@ -86,6 +97,9 @@ export function EditorContextMenu({ cwd, filePath, editor, children }: Props) {
     <ContextMenu onOpenChange={onOpenChange}>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
       <ContextMenuContent className="min-w-56">
+        {compose && target?.side === 'modified' && target.lines && (
+          <ComposeItems compose={compose} lines={target.lines} />
+        )}
         {target?.lines && (
           <ContextMenuItem onSelect={() => copy(ref, 'reference')}>
             <Hash size={13} strokeWidth={1.8} className="text-icon" />
@@ -114,5 +128,25 @@ export function EditorContextMenu({ cwd, filePath, editor, children }: Props) {
         )}
       </ContextMenuContent>
     </ContextMenu>
+  );
+}
+
+function ComposeItems({ compose, lines }: { compose: Compose; lines: LineRange }) {
+  return (
+    <>
+      <ContextMenuItem
+        disabled={!compose.canComment}
+        onSelect={() => compose.onCompose(lines, 'comment')}
+      >
+        <MessageSquare size={14} strokeWidth={1.8} className="text-icon" />
+        <span className="flex-1">Add comment here</span>
+        {!compose.canComment && <span className="type-caption">Comments need a pull request</span>}
+      </ContextMenuItem>
+      <ContextMenuItem onSelect={() => compose.onCompose(lines, 'note')}>
+        <Bot size={14} strokeWidth={1.8} className="text-icon" />
+        Add note here
+      </ContextMenuItem>
+      <ContextMenuSeparator />
+    </>
   );
 }

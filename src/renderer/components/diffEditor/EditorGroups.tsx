@@ -29,7 +29,6 @@ import { confirm } from '../ui/ConfirmHost';
 import { absolutePath } from './editor/fileRef';
 import { LspStatusIndicator } from './LspStatusIndicator';
 import { CompareButton } from './CompareButton';
-import { PrReviewActions } from './prReview/PrReviewActions';
 import { useReviewNavigation } from './prReview/useReviewNavigation';
 import { commentScope } from './comments/commentScope';
 import { installLsp } from '../../lsp';
@@ -152,34 +151,23 @@ export function EditorGroups({ ws, terminalTheme, isDark }: Props) {
   const reveal = useEditorTabs((s) => (s.reveal?.key === tabsKey ? s.reveal : null));
   const clearReveal = useCallback((n: number) => useEditorTabs.getState().clearReveal(n), []);
   const split = layout.groups.length > 1;
-  // Editor-wide, so once: at the end of the last group's tab row, the
-  // editor's top-right corner however it splits (the tree toggle holds the
-  // first group's start). Language servers show here only when unwell.
-  const focusedActive = layout.groups[layout.focused]?.active ?? null;
   const openAt = useCallback(
     (path: string, range: TextRange) => useEditorTabs.getState().openAt(tabsKey, path, range),
     [tabsKey],
   );
-  // A PR view's next/previous thread or draft: the buttons below drive the
-  // focused group's pane, ⌥F9 each pane's own.
+  // A PR view's next/previous thread or draft: each pane's toolbar buttons
+  // drive the focused group's pane (the one clicked into), ⌥F9 each pane's own.
   const reviewNav = useReviewNavigation({
     view: ws.view,
     taskId: ws.activeTaskId,
     layout,
     onOpenAt: openAt,
   });
+  // Editor-wide, so once: at the end of the last group's tab row, the
+  // editor's top-right corner however it splits (the tree toggle holds the
+  // first group's start). Language servers show here only when unwell.
   const editorActions = (
     <>
-      {ws.view.kind === 'pr' && ws.activeTaskId && (
-        <PrReviewActions
-          pr={ws.view}
-          taskId={ws.activeTaskId}
-          canStep={reviewNav.canStep}
-          onStep={reviewNav.step}
-          activePath={focusedActive}
-          onOpenFile={ws.openFile}
-        />
-      )}
       <LspStatusIndicator worktree={cwd} />
       <CompareButton
         cwd={cwd}
@@ -246,7 +234,7 @@ export function EditorGroups({ ws, terminalTheme, isDark }: Props) {
                       <EditorPane
                         paneId={`pane:${tabsKey}:${i}`}
                         group={index}
-                        onAttachReviewNav={ws.view.kind === 'pr' ? reviewNav.attach : undefined}
+                        reviewNav={ws.view.kind === 'pr' ? reviewNav : undefined}
                         cwd={cwd}
                         git={ws.git}
                         filePath={filePath}

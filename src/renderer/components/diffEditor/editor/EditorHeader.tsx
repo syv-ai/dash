@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   Check,
   Columns2,
@@ -43,6 +43,8 @@ interface Props {
   onTogglePreview(next: boolean): void;
   /** Comments anchored to the open commit — shown after the "Showing …" label. */
   commentCount: number;
+  /** A PR view's reading controls (thread steps, Viewed), ahead of the toggles. */
+  reviewActions?: ReactNode;
 }
 
 /** The folder a path sits in, with its trailing slash ('' at the root). */
@@ -65,6 +67,7 @@ export function EditorHeader({
   previewing,
   onTogglePreview,
   commentCount,
+  reviewActions,
 }: Props) {
   // "Showing …" pill — only for a commit view: the working tree needs no
   // callout, and a branch or PR comparison is named by the Compare button.
@@ -153,6 +156,7 @@ export function EditorHeader({
         )}
       </div>
       <div className="flex shrink-0 items-center gap-1">
+        {reviewActions}
         <IconButton size="sm" title={copied ? 'Copied' : `Copy ${filePath}`} onClick={copyPath}>
           {copied ? (
             <Check size={14} strokeWidth={1.8} className="text-loc-add" />
