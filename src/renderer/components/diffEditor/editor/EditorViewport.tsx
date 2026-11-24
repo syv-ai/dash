@@ -145,9 +145,9 @@ export function EditorViewport({
         </div>
       )}
       {displayed.kind === 'loaded' && !displayed.isBinary && !displayed.isLargeFile && (
-        // pl-4: breathing room between the sheet's edge and the line numbers,
+        // pl-2: a slice of room between the sheet's edge and the line numbers,
         // outside Monaco (it measures its own box, so hit-testing holds).
-        <div ref={monacoWrapRef} className="absolute inset-0 pl-4">
+        <div ref={monacoWrapRef} className="absolute inset-0 pl-2">
           <DiffEditorHost
             options={options}
             beforeMount={beforeMount}
