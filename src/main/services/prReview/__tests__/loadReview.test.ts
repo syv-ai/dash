@@ -8,8 +8,9 @@ describe('loadPrReview', () => {
     const local = { files: [], commits: 2, behindBase: 5 };
     const stats = vi.fn(async () => local);
     const ctx = { cwd: '/wt', projectId: 'p1', remote: null };
-    const review = await loadPrReview({ load: async () => forge }, ctx, 4, stats);
-    expect(stats).toHaveBeenCalledWith('/wt', forge);
+    const load = async () => ({ ...forge, baseTip: 'T' });
+    const review = await loadPrReview({ load }, ctx, 4, stats);
+    expect(stats).toHaveBeenCalledWith('/wt', { ...forge, baseTip: 'T' });
     expect(review).toEqual({ ...forge, ...local });
   });
 });

@@ -288,6 +288,22 @@ describe('adoProvider', () => {
     expect(review.checks).toEqual(checks);
   });
 
+  it('fetches and names the target tip the PR was last merged against', async () => {
+    const { deps } = fakeDeps();
+    const fetched: string[][] = [];
+    const withTip: AdoDeps = {
+      ...deps,
+      request: async (config, path, options) =>
+        /pullRequests\/\d+$/.test(path)
+          ? { ...pr, lastMergeTargetCommit: { commitId: 'TIP' } }
+          : deps.request(config, path, options),
+      ensureCommits: async (_cwd, shas) => void fetched.push(shas),
+    };
+    const review = await makeAdoProvider(withTip).load(pctx, 7204);
+    expect(review.baseTip).toBe('TIP');
+    expect(fetched).toEqual([[review.base, 'HEAD11', 'TIP']]);
+  });
+
   it('posts comments, replies, the vote and the summary, in that order', async () => {
     const { deps, calls } = fakeDeps();
     expect(await makeAdoProvider(deps).submit(pctx, 7204, submission)).toEqual({

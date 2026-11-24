@@ -339,7 +339,7 @@ export function makeGithubProvider(gql: Gql = ghGql, rest: Rest = ghRest): PrRev
       await ensureCommits(ctx.cwd, [baseTip, head]);
       const base = (await runGit(ctx.cwd, ['merge-base', baseTip, head], TIMEOUT_MS)).trim();
       const viewer = str(pick(data, 'viewer', 'login'));
-      return githubReviewFrom(pr, { number, base, head, viewer });
+      return { ...githubReviewFrom(pr, { number, base, head, viewer }), baseTip };
     },
 
     async reply(ctx, number, threadId, body) {

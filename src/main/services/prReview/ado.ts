@@ -65,6 +65,8 @@ interface RawPr {
   createdBy?: { id?: string; displayName?: string } | null;
   reviewers?: { id?: string; displayName?: string; vote?: number }[] | null;
   repository?: { project?: { id?: string } } | null;
+  /** The target branch's tip ADO last merged the PR against. */
+  lastMergeTargetCommit?: { commitId?: string } | null;
 }
 
 export interface AdoRepoContext {
@@ -397,9 +399,13 @@ export function makeAdoProvider(deps: AdoDeps = defaultDeps): PrReviewProvider {
         deps.request(ado, `${at}/threads?$iteration=${id}&$baseIteration=0`),
         deps.checks(ado, number, (pr as RawPr | null)?.repository?.project?.id),
       ]);
-      await deps.ensureCommits(ctx.cwd, [base, head]);
+      const baseTip = (pr as RawPr | null)?.lastMergeTargetCommit?.commitId || null;
+      await deps.ensureCommits(ctx.cwd, [base, head, ...(baseTip ? [baseTip] : [])]);
       const filesAtHead = await deps.filesAtCommit(ctx.cwd, head, threadPaths(threads));
-      return adoReviewFrom({ pr, iterations, threads, me, filesAtHead, checks }, repoContext(ado));
+      return {
+        ...adoReviewFrom({ pr, iterations, threads, me, filesAtHead, checks }, repoContext(ado)),
+        baseTip,
+      };
     },
 
     async reply(ctx, number, threadId, body) {

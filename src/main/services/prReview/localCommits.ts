@@ -97,23 +97,20 @@ export function parseRawNumstat(out: string): PrFile[] {
 
 /**
  * The local-git facts of a PR, the same on every forge: its files and commit
- * count over base..head, and how far `origin/<baseRef>` has moved past head
- * (null when that ref isn't in the checkout).
+ * count over base..head, and how far the base branch's tip (as the forge
+ * reports it, present in the checkout) has moved past head; null without one.
  */
 export async function prLocalStats(
   cwd: string,
-  { base, head, baseRef }: { base: string; head: string; baseRef: string },
+  { base, head, baseTip }: { base: string; head: string; baseTip: string | null },
   run: RunGit = runGit,
 ): Promise<{ files: PrFile[]; commits: number; behindBase: number | null }> {
   const countOf = (out: string) => Number(out.trim()) || 0;
   const [diff, commits, behindBase] = await Promise.all([
     run(cwd, ['diff', '-z', '--raw', '--numstat', '-M', '--no-abbrev', base, head], 30_000),
     run(cwd, ['rev-list', '--count', `${base}..${head}`], 15_000).then(countOf),
-    baseRef
-      ? run(cwd, ['rev-list', '--count', `${head}..refs/remotes/origin/${baseRef}`], 15_000).then(
-          countOf,
-          () => null,
-        )
+    baseTip
+      ? run(cwd, ['rev-list', '--count', `${head}..${baseTip}`], 15_000).then(countOf, () => null)
       : Promise.resolve(null),
   ]);
   return { files: parseRawNumstat(diff), commits, behindBase };

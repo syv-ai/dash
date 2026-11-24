@@ -67,6 +67,7 @@ describe('filesAtCommit', () => {
 describe('prLocalStats', () => {
   let base: string;
   let prHead: string;
+  let baseTip: string;
 
   beforeAll(() => {
     const write = (f: string, text: string | Buffer) => writeFileSync(path.join(repo, f), text);
@@ -89,15 +90,15 @@ describe('prLocalStats', () => {
     git('commit', '-qm', 'pr 2');
     prHead = git('rev-parse', 'HEAD');
 
-    // The base branch moves on by three commits, seen as origin's.
+    // The base branch moves on by three commits; the forge names its tip.
     git('checkout', '-q', base);
     for (const n of [1, 2, 3]) git('commit', '-q', '--allow-empty', '-m', `main ${n}`);
-    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    baseTip = git('rev-parse', 'HEAD');
     git('checkout', '-q', 'pr');
   });
 
   it("lists the PR's files with status, line counts and head blob, and counts commits", async () => {
-    const stats = await prLocalStats(repo, { base, head: prHead, baseRef: 'main' });
+    const stats = await prLocalStats(repo, { base, head: prHead, baseTip });
     const blob = (f: string) => git('rev-parse', `${prHead}:${f}`);
     expect(stats.commits).toBe(2);
     expect(stats.behindBase).toBe(3);
@@ -123,10 +124,11 @@ describe('prLocalStats', () => {
     ]);
   });
 
-  it("says null behind base when origin's base branch isn't known", async () => {
-    const stats = await prLocalStats(repo, { base, head: prHead, baseRef: 'release' });
+  it("says null behind base when the base tip isn't known", async () => {
+    const stats = await prLocalStats(repo, { base, head: prHead, baseTip: null });
     expect(stats.behindBase).toBeNull();
-    expect((await prLocalStats(repo, { base, head: prHead, baseRef: '' })).behindBase).toBeNull();
+    const missing = await prLocalStats(repo, { base, head: prHead, baseTip: 'f'.repeat(40) });
+    expect(missing.behindBase).toBeNull();
   });
 
   it('tolerates empty output', () => {

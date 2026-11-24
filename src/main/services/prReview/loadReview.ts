@@ -5,7 +5,7 @@ import type { PrContext, PrReviewProvider } from './types';
 /**
  * A PR's full review: what its provider knows, plus what local git knows the
  * same way on every forge (files, commit count, distance behind base). The
- * provider has already fetched base and head into the checkout.
+ * provider has already fetched base, head and the base tip into the checkout.
  */
 export async function loadPrReview(
   adapter: Pick<PrReviewProvider, 'load'>,
@@ -13,6 +13,6 @@ export async function loadPrReview(
   number: number,
   stats: typeof prLocalStats = prLocalStats,
 ): Promise<PrReview> {
-  const review = await adapter.load(ctx, number);
-  return { ...review, ...(await stats(ctx.cwd, review)) };
+  const { baseTip, ...review } = await adapter.load(ctx, number);
+  return { ...review, ...(await stats(ctx.cwd, { ...review, baseTip })) };
 }
