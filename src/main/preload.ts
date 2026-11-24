@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   clipboardReadText: () => ipcRenderer.invoke('app:clipboardReadText'),
   clipboardHasImage: () => ipcRenderer.invoke('app:clipboardHasImage'),
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
+  showItemInFolder: (path: string) => ipcRenderer.send('app:showItemInFolder', path),
   openInEditor: (args: { cwd: string; filePath: string; line?: number; col?: number }) =>
     ipcRenderer.invoke('app:openInEditor', args),
   openInIDE: (args: {

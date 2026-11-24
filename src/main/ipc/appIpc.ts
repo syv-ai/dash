@@ -7,7 +7,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
-import { join, resolve } from 'path';
+import { isAbsolute, join, resolve } from 'path';
 import type { ClaudeCliInfo } from '@shared/types';
 
 const execFileAsync = promisify(execFile);
@@ -208,6 +208,16 @@ export function registerAppIpc(): void {
     const v = parseArgsSafe('app:clipboardWriteText', z.string(), text);
     if (v === undefined) return;
     clipboard.writeText(text);
+  });
+  // Reveal a file or folder in the OS file manager (Finder on macOS).
+  ipcMain.on('app:showItemInFolder', (_event, path: string) => {
+    const v = parseArgsSafe(
+      'app:showItemInFolder',
+      z.string().refine((p) => isAbsolute(p)),
+      path,
+    );
+    if (v === undefined) return;
+    shell.showItemInFolder(v);
   });
   ipcMain.handle('app:clipboardReadText', () => {
     return clipboard.readText();

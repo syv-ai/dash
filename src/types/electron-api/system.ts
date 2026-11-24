@@ -17,6 +17,8 @@ export interface SystemApi {
   clipboardHasImage: () => Promise<boolean>;
   /** A dropped file's path on disk; '' for one that has none (e.g. dragged text). */
   getPathForFile: (file: File) => string;
+  /** Reveal an absolute path in the OS file manager (Finder on macOS). */
+  showItemInFolder: (path: string) => void;
   openInEditor: (args: {
     cwd: string;
     filePath: string;

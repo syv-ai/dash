@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Copy, FileCode2, Hash, Link2 } from 'lucide-react';
-import { toast } from 'sonner';
 import type { editor as monacoEditor } from 'monaco-editor';
 import {
   ContextMenu,
@@ -10,6 +9,7 @@ import {
   ContextMenuTrigger,
 } from '../../ui/ContextMenu';
 import { absolutePath, fileRef, type LineRange } from './fileRef';
+import { copyText as copy } from '../fileActions';
 
 interface Props {
   cwd: string;
@@ -77,11 +77,6 @@ export function EditorContextMenu({ cwd, filePath, editor, children }: Props) {
       lines: targetLines(ed, click.line),
       selectedText: sel && model && !sel.isEmpty() ? model.getValueInRange(sel) : '',
     });
-  }
-
-  function copy(text: string, what: string) {
-    void window.electronAPI.clipboardWriteText(text);
-    toast(`Copied ${what}`, { description: text.length > 80 ? undefined : text, duration: 1800 });
   }
 
   const ref = target ? fileRef(filePath, target.lines) : filePath;

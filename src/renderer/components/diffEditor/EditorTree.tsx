@@ -1,16 +1,29 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, Columns2, Copy, FileText } from 'lucide-react';
-import { toast } from 'sonner';
+import {
+  ChevronDown,
+  ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  Columns2,
+  Copy,
+  FileText,
+  FolderOpen,
+  Link2,
+} from 'lucide-react';
 import { HoverSwapSlot } from '../ui/HoverSwapSlot';
 import { LineStats } from '../ui/LineStats';
 import { IconButton } from '../ui/IconButton';
+import { IdeIcon } from '../ui/IdeIcon';
 import {
   ContextMenu,
   ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
+  ContextMenuItems,
   ContextMenuTrigger,
 } from '../ui/ContextMenu';
+import { usePreferredIde } from '../../hooks/usePreferredIde';
+import { openInIde } from '../../lib/openInIde';
+import { absolutePath } from './editor/fileRef';
+import { copyText, revealLabel } from './fileActions';
 import type { DirEntry, FileChange, FileChangeStatus, RepoListing } from '../../../shared/types';
 import type { EditorView } from './types';
 import type { OpenOptions } from './tabs/editorLayout';
@@ -261,19 +274,14 @@ function treeColumns(root: TreeFolder, badgeCounts: Map<string, FileBadges>): Tr
   return cols;
 }
 
-function copyPath(path: string) {
-  void window.electronAPI.clipboardWriteText(path);
-  toast('Copied path', { description: path, duration: 1800 });
-}
-
 function CopyPathAction({ path }: { path: string }) {
   return (
     <IconButton
       onClick={(e) => {
         e.stopPropagation();
-        copyPath(path);
+        copyText(path, 'relative path');
       }}
-      title="Copy path"
+      title="Copy relative path"
       size="sm"
     >
       <Copy size={11} strokeWidth={1.8} />
@@ -458,7 +466,9 @@ function FileTreePanel({
                 <span className="tabular-nums">· {tree.changedCount} changed</span>
               )}
             </span>
-            <span className="text-xs"><LineStats add={totals.additions} del={totals.deletions} /></span>
+            <span className="text-xs">
+              <LineStats add={totals.additions} del={totals.deletions} />
+            </span>
           </span>
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto scrollbar-gutter-stable scrollbar-thin-hover pb-2 px-1">
@@ -607,44 +617,55 @@ function FolderEntry({ folder, indent }: { folder: TreeFolder; indent: number })
       : 'text-fg-fade-90';
   return (
     <>
-      <TreeRow
-        ref={rowRef}
-        aria-expanded={open}
-        onActivate={() => setOpen((v) => !v)}
-        className="hover:bg-[hsl(var(--surface-2)/0.6)]"
-        style={{ paddingLeft: 4 + indent * INDENT_STEP, paddingRight: 8 }}
-      >
-        <span
-          className="shrink-0 inline-flex items-center justify-center"
-          style={{ width: ICON_SLOT }}
-        >
-          {open ? (
-            <ChevronDown size={11} strokeWidth={1.8} className="text-muted-fade-55" />
-          ) : (
-            <ChevronRight size={11} strokeWidth={1.8} className="text-muted-fade-55" />
-          )}
-        </span>
-        <span className={`flex-1 min-w-0 text-sm truncate text-left ${tint}`}>
-          {folder.name}
-          <span className="text-muted-fade-40">/</span>
-        </span>
-        <HoverSwapSlot
-          rest={
-            cols.status > 0 && (
-              <span
-                className={`text-xs font-semibold tabular-nums text-center ${
-                  folder.dominantStatus ? STATUS_TEXT[folder.dominantStatus] : 'text-muted-fade-70'
-                }`}
-                style={{ width: `${cols.status}ch` }}
-                aria-label={folder.changedCount > 0 ? `${folder.changedCount} changed` : undefined}
-              >
-                {folder.changedCount > 0 ? folder.changedCount : ''}
-              </span>
-            )
-          }
-          actions={<CopyPathAction path={folder.fullPath} />}
-        />
-      </TreeRow>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <TreeRow
+            ref={rowRef}
+            aria-expanded={open}
+            onActivate={() => setOpen((v) => !v)}
+            className="hover:bg-[hsl(var(--surface-2)/0.6)]"
+            style={{ paddingLeft: 4 + indent * INDENT_STEP, paddingRight: 8 }}
+          >
+            <span
+              className="shrink-0 inline-flex items-center justify-center"
+              style={{ width: ICON_SLOT }}
+            >
+              {open ? (
+                <ChevronDown size={11} strokeWidth={1.8} className="text-muted-fade-55" />
+              ) : (
+                <ChevronRight size={11} strokeWidth={1.8} className="text-muted-fade-55" />
+              )}
+            </span>
+            <span className={`flex-1 min-w-0 text-sm truncate text-left ${tint}`}>
+              {folder.name}
+              <span className="text-muted-fade-40">/</span>
+            </span>
+            <HoverSwapSlot
+              rest={
+                cols.status > 0 && (
+                  <span
+                    className={`text-xs font-semibold tabular-nums text-center ${
+                      folder.dominantStatus
+                        ? STATUS_TEXT[folder.dominantStatus]
+                        : 'text-muted-fade-70'
+                    }`}
+                    style={{ width: `${cols.status}ch` }}
+                    aria-label={
+                      folder.changedCount > 0 ? `${folder.changedCount} changed` : undefined
+                    }
+                  >
+                    {folder.changedCount > 0 ? folder.changedCount : ''}
+                  </span>
+                )
+              }
+              actions={<CopyPathAction path={folder.fullPath} />}
+            />
+          </TreeRow>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <FolderMenu path={folder.fullPath} open={open} onToggle={() => setOpen((v) => !v)} />
+        </ContextMenuContent>
+      </ContextMenu>
       {open &&
         (folder.lazy ? (
           <LazyFolderContents folder={folder} indent={indent + 1} />
@@ -696,8 +717,8 @@ function FileEntry({
   indent: number;
   selected: boolean;
   badges: FileBadges | undefined;
-  /** Open in the focused group (a click: as its preview; a double-click
-   *  keeps it); ⌥-click or the menu: to the side. */
+  /** Open in the last focused pane (a click: as its preview; a double-click
+   *  keeps it); ⌥-click or "Open in new pane": in the other pane. */
   onOpen: (opts?: OpenOptions) => void;
   cols: TreeColumns;
 }) {
@@ -724,7 +745,7 @@ function FileEntry({
           <span className="shrink-0" style={{ width: ICON_SLOT }} />
           <span className={`flex-1 min-w-0 text-sm truncate text-left ${tint}`}>{file.name}</span>
           {/* Stat columns at rest (each as wide as the tree's widest value, so
-          they line up down the list); "Copy path" slides in on hover. */}
+          they line up down the list); "Copy relative path" slides in on hover. */}
           <HoverSwapSlot
             rest={
               <span className="flex items-center gap-1.5 text-xs tabular-nums">
@@ -765,20 +786,83 @@ function FileEntry({
         </TreeRow>
       </ContextMenuTrigger>
       <ContextMenuContent>
-        <ContextMenuItem onSelect={() => onOpen()}>
-          <FileText size={14} strokeWidth={1.8} />
-          Open
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => onOpen({ toSide: true })}>
-          <Columns2 size={14} strokeWidth={1.8} />
-          Open to the side
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem onSelect={() => copyPath(file.fullPath)}>
-          <Copy size={14} strokeWidth={1.8} />
-          Copy path
-        </ContextMenuItem>
+        <FileMenu path={file.fullPath} onOpen={onOpen} />
       </ContextMenuContent>
     </ContextMenu>
+  );
+}
+
+/** A file's right-click menu. Mounted only while open, so the rows don't each
+ *  subscribe to the IDE setting. */
+function FileMenu({ path, onOpen }: { path: string; onOpen: (opts?: OpenOptions) => void }) {
+  const { cwd } = useTree();
+  const { ideId, openLabel } = usePreferredIde();
+  const abs = absolutePath(cwd, path);
+  return (
+    <ContextMenuItems
+      items={[
+        // A menu open is deliberate: it keeps its tab (a click only previews).
+        { label: 'Open', icon: FileText, onSelect: () => onOpen() },
+        { label: 'Open in new pane', icon: Columns2, onSelect: () => onOpen({ toSide: true }) },
+        'separator',
+        { label: 'Copy path', icon: Link2, onSelect: () => copyText(abs, 'path') },
+        {
+          label: 'Copy relative path',
+          icon: Copy,
+          onSelect: () => copyText(path, 'relative path'),
+        },
+        'separator',
+        {
+          label: revealLabel(),
+          icon: FolderOpen,
+          onSelect: () => window.electronAPI.showItemInFolder(abs),
+        },
+        {
+          label: openLabel,
+          icon: (
+            <span className="inline-flex size-3.5 items-center justify-center">
+              <IdeIcon ideId={ideId} size={14} />
+            </span>
+          ),
+          onSelect: () => void openInIde(abs),
+        },
+      ]}
+    />
+  );
+}
+
+/** A folder's right-click menu. */
+function FolderMenu({
+  path,
+  open,
+  onToggle,
+}: {
+  path: string;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const { cwd } = useTree();
+  const abs = absolutePath(cwd, path);
+  return (
+    <ContextMenuItems
+      items={[
+        open
+          ? { label: 'Collapse', icon: ChevronsDownUp, onSelect: onToggle }
+          : { label: 'Expand', icon: ChevronsUpDown, onSelect: onToggle },
+        'separator',
+        { label: 'Copy path', icon: Link2, onSelect: () => copyText(abs, 'path') },
+        {
+          label: 'Copy relative path',
+          icon: Copy,
+          onSelect: () => copyText(path, 'relative path'),
+        },
+        'separator',
+        {
+          label: revealLabel(),
+          icon: FolderOpen,
+          onSelect: () => window.electronAPI.showItemInFolder(abs),
+        },
+      ]}
+    />
   );
 }
