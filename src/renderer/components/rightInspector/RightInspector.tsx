@@ -76,6 +76,8 @@ interface RightInspectorProps {
   shellDrawerRef: RefObject<PanelImperativeHandle | null>;
   onTuiActiveChange: (active: boolean, canvasPx?: number) => void;
   onTaskSettings: () => void;
+  /** Collapse the sidebar (the ⌘⌥B path). */
+  onCollapse: () => void;
 }
 
 /** A tooltip label with its shortcut, e.g. "Stage all  ⇧⌘A". */
@@ -108,6 +110,7 @@ export function RightInspector({
   shellDrawerRef,
   onTuiActiveChange,
   onTaskSettings,
+  onCollapse,
 }: RightInspectorProps) {
   const gitStatus = useGit((s) => s.gitStatus);
   const gitLoading = useGit((s) => s.gitLoading);
@@ -173,10 +176,16 @@ export function RightInspector({
   };
   // Wide with the tree folded away, the view switch would change nothing
   // visible: picking a view (even the current one) unfolds it, easing as
-  // the tree toggle does. Leaving Details keeps the fold as it was.
+  // the tree toggle does. Leaving Details keeps the fold as it was. Picking
+  // the current view otherwise collapses the sidebar, as an activity bar does.
   const pickSegment = (next: CodeSegment) => {
+    const tabs = useEditorTabs.getState();
+    if (next === segment && !(wide && tabs.treeCollapsed)) {
+      onCollapse();
+      return;
+    }
     selectSegment(next);
-    if (wide) useEditorTabs.getState().setTreeCollapsed(false);
+    if (wide) tabs.setTreeCollapsed(false);
   };
   const toggleDetails = () => {
     if (segment === 'details') selectSegment(lastCodeSegment);

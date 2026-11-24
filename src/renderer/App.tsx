@@ -1370,6 +1370,7 @@ export function App() {
                   shellDrawerRef={shellDrawerPanelRef}
                   onTuiActiveChange={handleTuiPanelActive}
                   onTaskSettings={() => handleTaskSettings(activeTask.id)}
+                  onCollapse={toggleInspector}
                 />
               )}
             </ResizablePanel>
