@@ -181,6 +181,12 @@ export function RightInspector({
     selectView(next);
     openEditor();
   };
+  // Details' Last commit: History, on that commit, its files unfolded.
+  const openCommit = (hash: string) => {
+    setSegment('history');
+    setLastCodeSegment('history');
+    pickView({ kind: 'commit', hash });
+  };
   const pr: PrEntry | null = ws.prEntry && {
     ...ws.prEntry,
     onOpen: () => {
@@ -288,6 +294,7 @@ export function RightInspector({
       modelName={modelName}
       contextUsage={contextUsage}
       onEditSettings={onTaskSettings}
+      onOpenCommit={openCommit}
     />
   );
 

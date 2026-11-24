@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Settings2 } from 'lucide-react';
-import type { ContextUsage, Task } from '../../../shared/types';
-import { linkedItemUrl } from '../../../shared/urls';
+import type { ContextUsage, EditorCommitListItem, GitStatus, Task } from '../../../shared/types';
+import { forgeBranchUrl, linkedItemUrl, parseForgeRepo } from '../../../shared/urls';
 import { formatRelativeTime } from '../../../shared/relativeTime';
 import { useGit } from '../../stores/gitStore';
 import { useRuntime } from '../../stores/runtimeStore';
 import { selectTaskById, useProjects } from '../../stores/projectsStore';
 import { useSettings } from '../../stores/settingsStore';
-import { Button } from '../ui/Button';
 import { DetailItem, DetailList, DetailSection } from '../ui/DetailList';
 import { Expandable } from '../ui/Expandable';
 import { Markdown } from '../ui/Markdown';
 import { PrRow } from '../ui/PrBadge';
+import { TextLink } from '../ui/TextLink';
 import { SyncStatus } from '../changes/SyncStatus';
+import { CommitHoverCard } from '../commits/CommitHoverCard';
 import { taskDetailSections, type DetailRow } from './taskDetailRows';
 
 interface TaskDetailsProps {
@@ -21,18 +21,13 @@ interface TaskDetailsProps {
   modelName: string | null;
   contextUsage?: ContextUsage;
   onEditSettings: () => void;
-}
-
-interface LastCommit {
-  shortHash: string;
-  subject: string;
-  /** Epoch seconds. */
-  authorDate: number;
+  /** Open a commit in the sidebar's History (selected, its files unfolded). */
+  onOpenCommit: (hash: string) => void;
 }
 
 /** The branch's newest commit, refetched when HEAD's status changes. */
-function useLastCommit(cwd: string, statusKey: unknown): LastCommit | null {
-  const [commit, setCommit] = useState<LastCommit | null>(null);
+function useLastCommit(cwd: string, statusKey: unknown): EditorCommitListItem | null {
+  const [commit, setCommit] = useState<EditorCommitListItem | null>(null);
   useEffect(() => {
     let live = true;
     void window.electronAPI.editorListCommits({ cwd, limit: 1 }).then((r) => {
@@ -84,10 +79,16 @@ function Rows({ rows }: { rows: DetailRow[] }) {
 /**
  * The Details tab: everything about the task in calm sections, each shown
  * only when it has something to say: the task, its session, usage, git,
- * pull requests, linked items, the context prompt and its settings (read
- * only; "Edit" opens the task settings).
+ * pull requests, linked items, the context prompt and its scripts (read
+ * only; the line on top opens the task settings).
  */
-export function TaskDetails({ task, modelName, contextUsage, onEditSettings }: TaskDetailsProps) {
+export function TaskDetails({
+  task,
+  modelName,
+  contextUsage,
+  onEditSettings,
+  onOpenCommit,
+}: TaskDetailsProps) {
   const project = useProjects((s) => s.projects.find((p) => p.id === task.projectId) ?? null);
   const parentName = useProjects((s) =>
     task.parentTaskId ? (selectTaskById(s, task.parentTaskId)?.name ?? null) : null,
@@ -136,6 +137,10 @@ export function TaskDetails({ task, modelName, contextUsage, onEditSettings }: T
 
   return (
     <div className="scrollbar-gutter-stable min-h-0 flex-1 overflow-y-auto pb-3 animate-fade-in">
+      <p className="type-caption px-2.5 pt-3">
+        Edit task settings <TextLink onClick={onEditSettings}>here</TextLink>
+      </p>
+
       <DetailSection title="Task">
         <Rows rows={sections.task} />
       </DetailSection>
@@ -157,18 +162,21 @@ export function TaskDetails({ task, modelName, contextUsage, onEditSettings }: T
               {branch}
             </DetailItem>
           )}
-          {gitStatus && (
-            <DetailItem label="Upstream">
-              <SyncStatus status={gitStatus} />
-            </DetailItem>
-          )}
+          {gitStatus && <UpstreamRows status={gitStatus} remote={project?.gitRemote ?? null} />}
           {lastCommit && (
-            <DetailItem
-              label="Last commit"
-              title={`${lastCommit.shortHash} ${lastCommit.subject}`}
-              copy={lastCommit.shortHash}
-            >
-              {lastCommit.subject}
+            <DetailItem label="Last commit" copy={lastCommit.shortHash}>
+              <CommitHoverCard
+                commit={lastCommit}
+                cwd={task.path}
+                side="left"
+                trigger={(hover) => (
+                  <span {...hover}>
+                    <TextLink quiet onClick={() => onOpenCommit(lastCommit.hash)}>
+                      {lastCommit.subject || '(no subject)'}
+                    </TextLink>
+                  </span>
+                )}
+              />
               <span className="ml-1.5 tabular-nums text-ink-3">
                 {lastCommit.shortHash} ·{' '}
                 {formatRelativeTime(lastCommit.authorDate, Date.now() / 1000)}
@@ -205,14 +213,9 @@ export function TaskDetails({ task, modelName, contextUsage, onEditSettings }: T
                   title={item.title}
                 >
                   {url ? (
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="transition-colors hover:text-ink-2 hover:underline"
-                    >
+                    <TextLink quiet href={url}>
                       {item.title}
-                    </a>
+                    </TextLink>
                   ) : (
                     item.title
                   )}
@@ -233,20 +236,12 @@ export function TaskDetails({ task, modelName, contextUsage, onEditSettings }: T
         </DetailSection>
       )}
 
-      <DetailSection
-        title="Settings"
-        action={
-          <Button variant="ghost" size="sm" onClick={onEditSettings}>
-            <Settings2 size={14} strokeWidth={1.8} />
-            Edit task settings
-          </Button>
-        }
-      >
-        {scripts.length > 0 ? (
+      {scripts.length > 0 && (
+        <DetailSection title="Scripts">
           <div className="grid gap-2">
             {scripts.map(({ label, script }) => (
               <div key={label} className="grid gap-1">
-                <span className="text-sm text-ink-3">{label} script</span>
+                <span className="type-label">{label}</span>
                 {/* Scripts are code: the one place here in mono. */}
                 <pre className="overflow-x-auto rounded-md bg-hover px-2 py-1.5 font-mono text-xs text-ink-2">
                   {script}
@@ -254,10 +249,38 @@ export function TaskDetails({ task, modelName, contextUsage, onEditSettings }: T
               </div>
             ))}
           </div>
-        ) : (
-          <p className="text-sm text-ink-3">No setup or teardown scripts for this task.</p>
-        )}
-      </DetailSection>
+        </DetailSection>
+      )}
     </div>
+  );
+}
+
+/**
+ * The branch the checkout tracks, `origin/feat/x` linked to its page on the
+ * forge (only an `origin` branch: the project's remote is origin's), then
+ * how far ahead and behind it the checkout is.
+ */
+function UpstreamRows({ status, remote }: { status: GitStatus; remote: string | null }) {
+  const { upstream } = status;
+  if (!status.hasUpstream || !upstream) {
+    return <DetailItem label="Upstream">No upstream</DetailItem>;
+  }
+  const name = `${upstream.remote}/${upstream.branch}`;
+  const repo = upstream.remote === 'origin' ? parseForgeRepo(remote) : null;
+  return (
+    <>
+      <DetailItem label="Upstream" title={name} copy={name}>
+        {repo ? (
+          <TextLink quiet href={forgeBranchUrl(repo, upstream.branch)}>
+            {name}
+          </TextLink>
+        ) : (
+          name
+        )}
+      </DetailItem>
+      <DetailItem label="Sync">
+        <SyncStatus status={status} />
+      </DetailItem>
+    </>
   );
 }
