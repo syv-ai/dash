@@ -90,7 +90,7 @@ export function BranchPicker({
               key={b.ref}
               type="button"
               onClick={() => onSelect(b.ref)}
-              className={`w-full flex items-center gap-2 px-3 py-1 text-left text-sm font-mono transition-colors ${
+              className={`w-full flex items-center gap-2 px-3 py-1 text-left text-sm transition-colors ${
                 active
                   ? 'bg-primary/15 text-primary'
                   : 'text-fg-fade-85 hover:bg-[hsl(var(--surface-2)/0.6)]'

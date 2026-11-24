@@ -146,9 +146,7 @@ export function PrPicker({ projectId, cwd, selected, onSelect, onExit }: PrPicke
               }`}
             >
               <span className="flex items-center gap-1.5 min-w-0 text-sm">
-                <span className="font-mono tabular-nums text-muted-fade-70 shrink-0">
-                  #{p.number}
-                </span>
+                <span className="tabular-nums text-muted-fade-70 shrink-0">#{p.number}</span>
                 <span className="truncate flex-1">{p.title}</span>
                 {opening === p.number && (
                   <Loader2 size={12} strokeWidth={1.8} className="animate-spin shrink-0" />
@@ -156,7 +154,7 @@ export function PrPicker({ projectId, cwd, selected, onSelect, onExit }: PrPicke
               </span>
               <span className="flex items-center gap-1.5 min-w-0 text-xs text-muted-fade-60">
                 {p.author && <span className="shrink-0">@{p.author}</span>}
-                <span className="font-mono truncate">{p.headRefName}</span>
+                <span className="truncate">{p.headRefName}</span>
               </span>
             </button>
           );

@@ -39,7 +39,7 @@ export function CommentInputBar({
     : '';
   return (
     <>
-      <div className="shrink-0 font-mono text-xs text-muted-fade-60 tabular-nums tracking-tight">
+      <div className="shrink-0 text-xs text-muted-fade-60 tabular-nums tracking-tight">
         {rangeLabel}
       </div>
       <textarea
@@ -68,7 +68,7 @@ export function CommentInputBar({
         className="min-h-[72px] max-h-[60vh] overflow-y-auto w-full text-base leading-relaxed tracking-[-0.005em] bg-transparent px-0 py-0 resize-none placeholder:text-muted-fade-35 focus:outline-hidden"
       />
       <div className="flex items-center gap-2 shrink-0">
-        <span className="text-xs text-muted-fade-65 font-mono">
+        <span className="text-xs text-muted-fade-65">
           <kbd className="px-1.5 py-0.5 rounded-sm border border-foreground/10 bg-foreground/4 text-fg-fade-70">
             ⌘
           </kbd>

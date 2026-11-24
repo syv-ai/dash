@@ -305,7 +305,7 @@ export function PrReviewMenu({
                   }}
                   className="w-full min-w-0 flex flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left hover:bg-foreground/4 transition-colors"
                 >
-                  <span className="max-w-full font-mono text-xs text-muted-fade-70 break-all">
+                  <span className="max-w-full text-xs text-muted-fade-70 break-all">
                     {threadLocation(t)}
                   </span>
                   <span className="max-w-full text-sm leading-snug text-foreground line-clamp-2 wrap-break-word">

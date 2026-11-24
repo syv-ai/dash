@@ -141,7 +141,7 @@ export function CommentBubble({
             </button>
           </div>
           <div className="flex items-center gap-[6px] mb-[2px]">
-            <span className="font-mono text-xs text-muted-fade-55 tracking-normal">{meta}</span>
+            <span className="text-xs text-muted-fade-55 tracking-normal">{meta}</span>
             {kindTag === 'comment' && (
               <span className="rounded-sm bg-primary/12 px-[5px] py-[1px] text-xs font-medium uppercase tracking-[0.04em] text-primary/80">
                 Comment

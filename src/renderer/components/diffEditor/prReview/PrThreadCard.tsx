@@ -168,7 +168,7 @@ export function PrThreadCard({
               <ChevronDown size={14} strokeWidth={1.8} />
             </button>
           )}
-          {showLocation && <span className="font-mono truncate">{threadLocation(thread)}</span>}
+          {showLocation && <span className="truncate">{threadLocation(thread)}</span>}
         </div>
       )}
       <div className="flex flex-col gap-2.5">

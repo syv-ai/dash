@@ -202,7 +202,7 @@ export function EditorHeader({
           >
             <span className="inline-flex items-center gap-1.5 h-6 text-xs font-medium min-w-0 text-primary">
               <viewMeta.Icon size={12} strokeWidth={1.8} className="shrink-0" />
-              <span className="font-mono whitespace-nowrap min-w-0 truncate">{viewMeta.label}</span>
+              <span className="whitespace-nowrap min-w-0 truncate">{viewMeta.label}</span>
               {commentCount > 0 && (
                 <>
                   <span className="opacity-40">·</span>
@@ -256,7 +256,7 @@ export function EditorHeader({
                   <button
                     type="button"
                     onClick={handleChipClick}
-                    className={`inline-flex items-center gap-1.5 px-2 h-6 rounded-md text-xs font-mono transition-colors hover:bg-accent/60 ${
+                    className={`inline-flex items-center gap-1.5 px-2 h-6 rounded-md text-xs transition-colors hover:bg-accent/60 ${
                       isBranch || isPr ? 'text-primary' : 'text-muted-fade-60 hover:text-foreground'
                     }`}
                   >

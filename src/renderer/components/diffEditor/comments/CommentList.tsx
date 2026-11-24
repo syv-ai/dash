@@ -210,7 +210,7 @@ function FileGroup({
   return (
     <div className={marginTop ? 'mt-2' : ''}>
       <div className="flex items-baseline gap-2 px-2 py-1">
-        <span className="min-w-0 font-mono text-xs break-all">
+        <span className="min-w-0 text-xs break-all">
           {dir && <span className="text-muted-fade-45">{dir}</span>}
           <span className="text-fg-fade-80">{base}</span>
         </span>
@@ -252,7 +252,7 @@ function FileGroup({
                   title="Jump to this comment"
                   className={`flex-1 min-w-0 flex flex-col gap-1 px-2.5 py-1.5 text-left rounded-md ${renderActions ? 'pr-20' : 'pr-14'}`}
                 >
-                  <span className="flex items-center gap-1.5 font-mono text-xs tabular-nums text-muted-fade-70 shrink-0">
+                  <span className="flex items-center gap-1.5 text-xs tabular-nums text-muted-fade-70 shrink-0">
                     {lineLabel}
                     {renderTag?.(c)}
                   </span>
