@@ -96,12 +96,15 @@ export function TaskHeader({
   const branchLabel = (
     <>
       <BranchIcon size={14} strokeWidth={1.8} className="shrink-0" />
-      <span className="truncate font-mono">{branch}</span>
+      {/* The icon stays when the header is narrow; the tooltip names the branch. */}
+      <span className="truncate font-mono @max-[24rem]/taskhead:hidden">{branch}</span>
     </>
   );
 
   return (
-    <div className="titlebar-drag flex h-11 shrink-0 items-center gap-2.5 pl-3 pr-2">
+    // A container: as it narrows, the model goes first, then the token badge,
+    // then the branch's name, so the task's own name stays readable.
+    <div className="titlebar-drag @container/taskhead flex h-11 shrink-0 items-center gap-2.5 pl-3 pr-2">
       {sidebarCollapsed && (
         <div className="titlebar-no-drag -mr-1">
           <IconButton
@@ -113,7 +116,7 @@ export function TaskHeader({
         </div>
       )}
       <h1
-        className={`min-w-0 max-w-1/2 shrink truncate text-base font-semibold text-ink ${
+        className={`min-w-16 max-w-1/2 shrink-0 truncate text-base font-semibold text-ink @max-[20rem]/taskhead:shrink ${
           sidebarCollapsed ? '' : 'pl-2'
         }`}
       >
@@ -124,10 +127,10 @@ export function TaskHeader({
           <Tooltip
             content={
               branchHref
-                ? 'Open the branch on the remote'
+                ? `${branch} · open the branch on the remote`
                 : gitStatus?.hasUpstream === false
-                  ? 'Branch (no upstream)'
-                  : 'Branch'
+                  ? `${branch} (no upstream)`
+                  : branch
             }
           >
             {branchHref ? (
@@ -172,11 +175,17 @@ export function TaskHeader({
         <div className="titlebar-no-drag flex min-w-0 shrink items-center gap-2.5 text-sm text-ink-3">
           {modelName && (
             <Tooltip content="Model">
-              <span className="truncate font-mono">{modelName}</span>
+              <span className="truncate font-mono @max-[44rem]/taskhead:hidden">{modelName}</span>
             </Tooltip>
           )}
           {showTokens && (
-            <TokenBadge totalTokens={task.totalTokens} totalCostUsd={task.totalCostUsd} size="sm" />
+            <span className="contents @max-[32rem]/taskhead:hidden">
+              <TokenBadge
+                totalTokens={task.totalTokens}
+                totalCostUsd={task.totalCostUsd}
+                size="sm"
+              />
+            </span>
           )}
         </div>
       )}

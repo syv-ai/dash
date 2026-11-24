@@ -40,7 +40,7 @@ export function LspStatusIndicator({ worktree }: { worktree: string }) {
         {servers.map((s) => (
           <span key={s.serverId} className="inline-flex items-center gap-1 whitespace-nowrap">
             <StatusDot state={DOT[s.state]} label={`${s.name} ${s.state}`} />
-            <span className="@max-[360px]/strip:hidden">{s.name}</span>
+            <span className="@max-[28rem]/strip:hidden">{s.name}</span>
           </span>
         ))}
       </span>

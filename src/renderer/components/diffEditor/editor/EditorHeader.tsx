@@ -9,12 +9,21 @@ import {
   GitPullRequestArrow,
   History,
   MessageSquare,
+  MoreHorizontal,
   WrapText,
 } from 'lucide-react';
 import type { EditorView } from '../types';
 import { Popover, PopoverAnchor, PopoverContent } from '../../ui/Popover';
 import { Tooltip } from '../../ui/Tooltip';
 import { Segmented } from '../../ui/Segmented';
+import { IconButton } from '../../ui/IconButton';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from '../../ui/DropdownMenu';
 import { BranchPicker } from '../BranchPicker';
 import { PrPicker } from '../PrPicker';
 
@@ -142,6 +151,35 @@ export function EditorHeader({
       active ? 'text-primary' : 'text-muted-fade-60 hover:text-foreground'
     }`;
 
+  // The view toggles: icon buttons, folded into a "More" menu when the pane
+  // is narrow (a split group) so the file name keeps its room.
+  const toggles = [
+    git && {
+      key: 'blame',
+      tooltip: blameEnabled ? 'Hide git blame' : 'Show git blame',
+      label: 'Git blame',
+      on: blameEnabled,
+      onToggle: onToggleBlame,
+      Icon: History,
+    },
+    canSideBySide && {
+      key: 'side',
+      tooltip: sideBySide ? 'Show inline diff' : 'Show side by side',
+      label: 'Side by side',
+      on: sideBySide,
+      onToggle: onToggleSideBySide,
+      Icon: Columns2,
+    },
+    {
+      key: 'wrap',
+      tooltip: wordWrap ? 'Disable word wrap' : 'Enable word wrap',
+      label: 'Word wrap',
+      on: wordWrap,
+      onToggle: onToggleWordWrap,
+      Icon: WrapText,
+    },
+  ].filter((t) => !!t);
+
   function handleChipClick() {
     // Open on the tab of what's showing: a PR view on its PRs, else branches.
     if (!pickerOpen) setTab(isPr && projectId ? 'prs' : 'branches');
@@ -150,7 +188,7 @@ export function EditorHeader({
 
   return (
     <div
-      className="flex items-center justify-between px-3 h-9 border-b border-edge/6 shrink-0"
+      className="@container/panehead flex items-center justify-between gap-2 px-3 h-9 border-b border-edge/6 shrink-0"
       style={{ background: backgroundColor }}
     >
       <div className="flex items-center gap-3 min-w-0">
@@ -235,7 +273,9 @@ export function EditorHeader({
                         {prTitle ? `: ${prTitle}` : ''}
                       </span>
                     ) : (
-                      <span className="whitespace-nowrap">Compare…</span>
+                      <span className="whitespace-nowrap @max-[30rem]/panehead:hidden">
+                        Compare…
+                      </span>
                     )}
                   </button>
                 </Tooltip>
@@ -277,25 +317,31 @@ export function EditorHeader({
             </PopoverContent>
           </Popover>
         )}
-        {git && (
-          <Tooltip content={blameEnabled ? 'Hide git blame' : 'Show git blame'}>
-            <button onClick={onToggleBlame} className={iconBtn(blameEnabled)}>
-              <History size={14} strokeWidth={1.8} />
+        {toggles.map(({ key, tooltip, on, onToggle, Icon }) => (
+          <Tooltip key={key} content={tooltip}>
+            <button onClick={onToggle} className={`${iconBtn(on)} @max-[30rem]/panehead:hidden`}>
+              <Icon size={14} strokeWidth={1.8} />
             </button>
           </Tooltip>
-        )}
-        {canSideBySide && (
-          <Tooltip content={sideBySide ? 'Show inline diff' : 'Show side by side'}>
-            <button onClick={onToggleSideBySide} className={iconBtn(sideBySide)}>
-              <Columns2 size={14} strokeWidth={1.8} />
-            </button>
-          </Tooltip>
-        )}
-        <Tooltip content={wordWrap ? 'Disable word wrap' : 'Enable word wrap'}>
-          <button onClick={onToggleWordWrap} className={iconBtn(wordWrap)}>
-            <WrapText size={14} strokeWidth={1.8} />
-          </button>
-        </Tooltip>
+        ))}
+        <div className="hidden @max-[30rem]/panehead:block">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <IconButton size="sm" title="View options">
+                <MoreHorizontal size={14} strokeWidth={1.8} />
+              </IconButton>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-44">
+              {toggles.map(({ key, label, on, onToggle, Icon }) => (
+                <DropdownMenuItem key={key} onSelect={onToggle}>
+                  <Icon size={13} strokeWidth={1.8} />
+                  {label}
+                  {on && <DropdownMenuShortcut>On</DropdownMenuShortcut>}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
     </div>
   );

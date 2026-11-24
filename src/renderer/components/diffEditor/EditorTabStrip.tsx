@@ -49,7 +49,7 @@ export function EditorTabStrip({
   }, [active]);
 
   return (
-    <div className="flex h-9 shrink-0 items-center gap-0.5 pr-1 pl-1.5">
+    <div className="@container/strip flex h-9 shrink-0 items-center gap-0.5 pr-1 pl-1.5">
       <div
         ref={trackRef}
         role="tablist"

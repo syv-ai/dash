@@ -420,7 +420,11 @@ export function EditorPane({
 
   // The task's comments menu lists notes; PR comments belong to their PR's widget.
   const menuCommentsByFile = useMemo(() => withoutPrComments(commentsByFile), [commentsByFile]);
-  const hasAnyComments = Object.keys(menuCommentsByFile).length > 0;
+  // The menu shows only with something to send: it is the way to send.
+  const hasUnsent = useMemo(
+    () => Object.values(menuCommentsByFile).some((list) => list.some((c) => !c.sent)),
+    [menuCommentsByFile],
+  );
 
   // Prompt assembly + send-to-TUI + edit-and-send modal.
   const promptApi = useCommentPrompt({
@@ -447,7 +451,7 @@ export function EditorPane({
     return r ? { start: r.startLineNumber, end: r.endLineNumber } : null;
   };
 
-  const showCommentsMenu = !commentsDisabled && hasAnyComments && !isPrView;
+  const showCommentsMenu = !commentsDisabled && hasUnsent && !isPrView;
 
   return (
     <div className="h-full flex flex-col min-w-0 min-h-0">
@@ -514,24 +518,6 @@ export function EditorPane({
               >
                 {saving ? 'Saving…' : 'Save'}
               </button>
-            )}
-            {showCommentsMenu && (
-              <div className="absolute bottom-4 right-4 z-10">
-                <CommentsMenu
-                  commentsByFile={menuCommentsByFile}
-                  currentFilePath={filePath}
-                  currentScope={scope}
-                  getLiveRangeForCurrent={getLiveRangeForCurrent}
-                  onNavigate={onNavigateToComment}
-                  onRemove={(_path, id) => useCommentsStore.getState().remove(id)}
-                  onUnsend={(id) => useCommentsStore.getState().markUnsent(id)}
-                  onClearSent={(scope) => useCommentsStore.getState().clearSent(scope)}
-                  onSendScope={promptApi.sendScope}
-                  onSendAll={promptApi.sendAllUnsent}
-                  onEditAndSend={promptApi.openEditAndSend}
-                  onSendOne={promptApi.sendOne}
-                />
-              </div>
             )}
             <PrViewCorner
               pr={pr}
@@ -645,6 +631,25 @@ export function EditorPane({
               onCancelDraft={draftApi.cancel}
             />
           </EditorViewport>
+          {/* Below the code, not over it. */}
+          {showCommentsMenu && (
+            <div className="flex shrink-0 justify-end border-t border-edge/6 px-3 py-1">
+              <CommentsMenu
+                commentsByFile={menuCommentsByFile}
+                currentFilePath={filePath}
+                currentScope={scope}
+                getLiveRangeForCurrent={getLiveRangeForCurrent}
+                onNavigate={onNavigateToComment}
+                onRemove={(_path, id) => useCommentsStore.getState().remove(id)}
+                onUnsend={(id) => useCommentsStore.getState().markUnsent(id)}
+                onClearSent={(scope) => useCommentsStore.getState().clearSent(scope)}
+                onSendScope={promptApi.sendScope}
+                onSendAll={promptApi.sendAllUnsent}
+                onEditAndSend={promptApi.openEditAndSend}
+                onSendOne={promptApi.sendOne}
+              />
+            </div>
+          )}
           {/* Rendered preview overlays the editor (kept mounted underneath so
             toggling back to Code preserves scroll, cursor, and comment state). */}
           {canPreview && previewing && (
