@@ -4,6 +4,7 @@ import { IconButton } from './IconButton';
 import { Popover, PopoverContent, PopoverTrigger } from './Popover';
 import { ciLabel, ciPulse, prStatusText } from './prStatusColors';
 import { badgeVariants } from './Badge';
+import { buttonVariants } from './Button';
 import { menuItem, menuLabel } from './styles';
 import { cn } from '../../lib/cn';
 import { fixCi } from '../../utils/fixCi';
@@ -17,8 +18,9 @@ interface PrBadgeProps {
   allPrs?: PullRequestInfo[];
   size?: 'sm' | 'md';
   /** `pill` (default) shows "PR #n"; `icon` is just the state icon, for dense
-   *  rows like the sidebar task list. */
-  variant?: 'pill' | 'icon';
+   *  rows like the sidebar task list; `button` is the icon on an icon button's
+   *  30px square, for a header row of icon buttons. */
+  variant?: 'pill' | 'icon' | 'button';
   /** The task these PRs belong to; enables "Fix CI" on a PR whose checks fail. */
   taskId?: string;
 }
@@ -131,7 +133,7 @@ function PrList({ prs, taskId }: { prs: PullRequestInfo[]; taskId?: string }) {
  * and amber, pulsing like the busy session orb, while they run. Clicking lists every PR from the branch. With no
  * current PR, the branch's newest past one shows muted. The pill variants
  * hide a closed PR; the icon variant always renders. Shared by the task header
- * (md pill), the ProjectView task cards (sm pill) and the sidebar rows (icon).
+ * (button), the ProjectView task cards (sm pill) and the sidebar rows (icon).
  */
 export function PrBadge({ prs, allPrs, size = 'md', variant = 'pill', taskId }: PrBadgeProps) {
   const list = allPrs && allPrs.length > 0 ? allPrs : prs;
@@ -143,7 +145,11 @@ export function PrBadge({ prs, allPrs, size = 'md', variant = 'pill', taskId }: 
     (isCurrent ? describe(pr) : `Past PR #${pr.number}: ${pr.title} (${pr.state})`) +
     (list.length > 1 ? `; click for all ${list.length}` : '');
 
-  if (variant === 'icon') {
+  if (variant === 'icon' || variant === 'button') {
+    // The button's ghost hover recolours its text, so its icon carries the
+    // state colour itself.
+    const isButton = variant === 'button';
+    const tint = isCurrent ? iconColor(pr) : MUTED;
     return (
       <Popover>
         <Tooltip content={tooltip}>
@@ -152,9 +158,15 @@ export function PrBadge({ prs, allPrs, size = 'md', variant = 'pill', taskId }: 
               type="button"
               onClick={(e) => e.stopPropagation()}
               aria-label={`PR #${pr.number}`}
-              className={cn(badgeVariants({ tone: 'bare', size: 'icon' }), colorCls)}
+              className={
+                isButton
+                  ? buttonVariants({ variant: 'ghost', size: 'icon' })
+                  : cn(badgeVariants({ tone: 'bare', size: 'icon' }), colorCls)
+              }
             >
-              <StateIcon pr={pr} size={11} still={!isCurrent} />
+              <span className={cn('flex', isButton && tint)}>
+                <StateIcon pr={pr} size={isButton ? 14 : 11} still={!isCurrent} />
+              </span>
             </button>
           </PopoverTrigger>
         </Tooltip>

@@ -1,6 +1,8 @@
 import { Loader2, CircleAlert } from 'lucide-react';
 import { useSetup } from '../../stores/setupStore';
 import { Tooltip } from '../ui/Tooltip';
+import { badgeVariants } from '../ui/Badge';
+import { cn } from '../../lib/cn';
 
 /**
  * "Setting up…" while a task's worktree setup runs, "Setup failed" after a
@@ -19,11 +21,17 @@ export function SetupStatus({
   if (!run || run.status === 'succeeded') return null;
 
   const running = run.status === 'running';
-  const tone = running ? 'text-muted-foreground' : 'text-destructive';
-  const shape =
+  const className =
     variant === 'pill'
-      ? `px-2 py-[3px] rounded-full font-mono ${running ? 'bg-foreground/5 hover:bg-foreground/10' : 'bg-destructive/10 hover:bg-destructive/15'}`
-      : 'hover:text-foreground';
+      ? cn(
+          badgeVariants({ tone: running ? 'neutral' : 'fail' }),
+          'transition-colors',
+          running ? 'hover:bg-select' : 'hover:bg-state-fail/20',
+        )
+      : cn(
+          'inline-flex shrink-0 items-center gap-1 text-xs transition-colors',
+          running ? 'text-ink-2 hover:text-ink' : 'text-state-fail',
+        );
   return (
     <Tooltip
       content={running ? 'Setup script running: show output' : (run.error ?? 'Setup failed')}
@@ -34,7 +42,7 @@ export function SetupStatus({
           e.stopPropagation();
           showSetup(worktreePath);
         }}
-        className={`inline-flex items-center gap-1 shrink-0 text-xs transition-colors ${tone} ${shape}`}
+        className={className}
       >
         {running ? (
           <Loader2 size={11} strokeWidth={2} className="animate-spin" />

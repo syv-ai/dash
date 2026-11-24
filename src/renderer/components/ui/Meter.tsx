@@ -31,7 +31,8 @@ const fillVariants = cva('h-full rounded-full transition-[width] duration-500 ea
   defaultVariants: { tone: 'neutral' },
 });
 
-const valueTextTone: Record<MeterTone, string> = {
+/** A tone's text colour, for a value shown apart from the meter. */
+export const meterToneText: Record<MeterTone, string> = {
   neutral: 'text-ink',
   needs: 'text-state-needs',
   fail: 'text-state-fail',
@@ -93,7 +94,7 @@ export function Meter({
       <div className="flex items-baseline justify-between gap-2 text-sm">
         <span className="truncate text-ink-2">{label}</span>
         <span className="shrink-0 tabular-nums">
-          <span className={cn('font-medium', valueTextTone[tone])}>{Math.round(pct)}%</span>
+          <span className={cn('font-medium', meterToneText[tone])}>{Math.round(pct)}%</span>
           {detail && <span className="ml-1.5 text-ink-3">{detail}</span>}
         </span>
       </div>

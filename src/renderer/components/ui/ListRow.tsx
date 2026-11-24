@@ -39,7 +39,12 @@ export type ListRowProps = Omit<React.ComponentProps<'button'>, 'children'> &
     /** `div` when `trailing` holds buttons (buttons can't nest); the caller
      *  then owns the row's role, focus and keyboard handling. */
     as?: 'button' | 'div';
+    /** Tree depth: each level indents the row by TREE_INDENT_PX. */
+    indent?: number;
   };
+
+/** Horizontal step per tree level in an indented `ListRow`. */
+export const TREE_INDENT_PX = 12;
 
 /**
  * A sidebar or tree row: 28–32px, rounded-lg, hover tint, select tint when
@@ -54,7 +59,9 @@ export function ListRow({
   trailing,
   size,
   as = 'button',
+  indent,
   className,
+  style,
   children,
   type = 'button',
   ...props
@@ -66,6 +73,8 @@ export function ListRow({
       data-selected={selected}
       aria-current={selected ? 'true' : undefined}
       className={cn(listRowVariants({ size, dimmed, twoLine: !!description }), className)}
+      // px-2.5 is 10px; a tree row adds its depth to the left of it.
+      style={indent ? { ...style, paddingLeft: 10 + indent * TREE_INDENT_PX } : style}
       {...(props as React.HTMLAttributes<HTMLElement>)}
     >
       {leading && <span className="flex h-5 shrink-0 items-center">{leading}</span>}

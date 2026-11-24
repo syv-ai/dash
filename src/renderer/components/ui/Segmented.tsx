@@ -41,7 +41,7 @@ export function Segmented<T extends string | number | null>({
     <div
       role="radiogroup"
       aria-label={ariaLabel}
-      className={cn('gap-0.5', fullWidth ? 'flex w-full' : 'inline-flex')}
+      className={cn('gap-0.5', fullWidth ? 'flex w-full' : 'inline-flex max-w-full')}
     >
       {options.map((opt) => (
         <button
