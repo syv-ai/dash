@@ -33,7 +33,7 @@ const LIMIT_LABELS: Record<LimitKey, { short: string; long: string }> = {
  * ("5-hour" → "5h"), below 14rem the burn goes, below 12rem the "Session"
  * label (its number stays first and largest). Details live in tooltips.
  */
-const meterCls = 'w-8 @max-[24rem]/usage:hidden';
+const meterCls = 'w-10 @max-[24rem]/usage:hidden';
 
 /** "5-hour 12%" with a tiny meter, tinted past the usage tiers. */
 function Limit({ limit, info }: { limit: LimitKey; info: RateLimitInfo }) {
@@ -56,7 +56,7 @@ function Limit({ limit, info }: { limit: LimitKey; info: RateLimitInfo }) {
         >
           {pct}%
         </span>
-        <Meter value={pct} tone={tone} size="sm" className={meterCls} />
+        <Meter value={pct} tone={tone} className={meterCls} />
       </span>
     </Tooltip>
   );
@@ -139,7 +139,6 @@ export function UsageRow({ contextUsage, rateLimits, burns }: UsageRowProps) {
               <Meter
                 value={pct}
                 tone={tone}
-                size="sm"
                 aria-label="Session context used"
                 className={meterCls}
               />
