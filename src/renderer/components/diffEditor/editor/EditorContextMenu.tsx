@@ -88,7 +88,7 @@ export function EditorContextMenu({ cwd, filePath, editor, children }: Props) {
       <ContextMenuContent className="min-w-56">
         {target?.lines && (
           <ContextMenuItem onSelect={() => copy(ref, 'reference')}>
-            <Hash size={13} strokeWidth={1.8} className="text-muted-foreground" />
+            <Hash size={13} strokeWidth={1.8} className="text-icon" />
             <span className="flex-1">Copy path:line{base}</span>
             <span className="text-xs text-muted-fade-60 truncate max-w-48">
               :{ref.slice(filePath.length + 1)}
@@ -96,18 +96,18 @@ export function EditorContextMenu({ cwd, filePath, editor, children }: Props) {
           </ContextMenuItem>
         )}
         <ContextMenuItem onSelect={() => copy(filePath, 'relative path')}>
-          <FileCode2 size={13} strokeWidth={1.8} className="text-muted-foreground" />
+          <FileCode2 size={13} strokeWidth={1.8} className="text-icon" />
           Copy relative path
         </ContextMenuItem>
         <ContextMenuItem onSelect={() => copy(absolutePath(cwd, filePath), 'absolute path')}>
-          <Link2 size={13} strokeWidth={1.8} className="text-muted-foreground" />
+          <Link2 size={13} strokeWidth={1.8} className="text-icon" />
           Copy absolute path
         </ContextMenuItem>
         {target?.selectedText && (
           <>
             <ContextMenuSeparator />
             <ContextMenuItem onSelect={() => copy(target.selectedText, 'selection')}>
-              <Copy size={13} strokeWidth={1.8} className="text-muted-foreground" />
+              <Copy size={13} strokeWidth={1.8} className="text-icon" />
               Copy
             </ContextMenuItem>
           </>

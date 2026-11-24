@@ -86,7 +86,7 @@ export function PrPicker({ projectId, cwd, selected, onSelect, onExit }: PrPicke
   return (
     <div className="flex flex-col min-h-0 flex-1">
       <div className="px-2.5 py-2 border-b border-border/40 flex items-center gap-1.5">
-        <Search size={12} strokeWidth={1.8} className="text-muted-fade-60 shrink-0" />
+        <Search size={12} strokeWidth={1.8} className="text-icon shrink-0" />
         <input
           type="text"
           autoFocus

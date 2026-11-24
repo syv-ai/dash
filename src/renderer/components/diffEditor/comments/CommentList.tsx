@@ -109,9 +109,9 @@ export function MenuSection({
             className="flex items-center gap-2 flex-1 min-w-0 text-left"
           >
             {open ? (
-              <ChevronDown size={12} strokeWidth={2} className="text-muted-fade-70 shrink-0" />
+              <ChevronDown size={12} strokeWidth={2} className="text-icon shrink-0" />
             ) : (
-              <ChevronRight size={12} strokeWidth={2} className="text-muted-fade-70 shrink-0" />
+              <ChevronRight size={12} strokeWidth={2} className="text-icon shrink-0" />
             )}
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotClass}`} aria-hidden />
             <span className="text-xs font-semibold tracking-tight text-fg-fade-90 truncate">

@@ -97,7 +97,7 @@ export function HistoryList({
       <ListRow
         size="sm"
         selected={view.kind === 'working'}
-        leading={<GitCommit size={14} strokeWidth={1.8} className="text-ink-3" />}
+        leading={<GitCommit size={14} strokeWidth={1.8} className="text-icon" />}
         trailing={liveComments > 0 && <CountBadge count={liveComments} />}
         onClick={() => onSelectView({ kind: 'working', ref: 'HEAD' })}
       >
@@ -216,7 +216,7 @@ function PrRow({ pr, selected }: { pr: PrEntry; selected: boolean }) {
           tabIndex={0}
           size="sm"
           selected={selected}
-          leading={<GitPullRequestArrow size={14} strokeWidth={1.8} className="text-ink-3" />}
+          leading={<GitPullRequestArrow size={14} strokeWidth={1.8} className="text-icon" />}
           trailing={
             <>
               {(pr.threads ?? 0) > 0 && <CountBadge count={pr.threads!} />}

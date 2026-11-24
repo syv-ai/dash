@@ -631,9 +631,9 @@ function FolderEntry({ folder, indent }: { folder: TreeFolder; indent: number })
               style={{ width: ICON_SLOT }}
             >
               {open ? (
-                <ChevronDown size={11} strokeWidth={1.8} className="text-muted-fade-55" />
+                <ChevronDown size={11} strokeWidth={1.8} className="text-icon" />
               ) : (
-                <ChevronRight size={11} strokeWidth={1.8} className="text-muted-fade-55" />
+                <ChevronRight size={11} strokeWidth={1.8} className="text-icon" />
               )}
             </span>
             <span className={`flex-1 min-w-0 text-sm truncate text-left ${tint}`}>
