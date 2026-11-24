@@ -40,6 +40,7 @@ const task = (id: string, projectId: string, over: Partial<Task> = {}): Task =>
 const status = (over: Partial<GitStatus> = {}): GitStatus => ({
   branch: 'feature',
   hasUpstream: true,
+  upstream: { remote: 'origin', branch: 'feature' },
   ahead: 0,
   behind: 0,
   files: [],

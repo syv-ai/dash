@@ -103,24 +103,85 @@ function safeDecode(s: string): string {
   }
 }
 
+/** Where a repository lives on the web: its forge and its home page. */
+export interface ForgeRepo {
+  kind: 'github' | 'gitlab' | 'ado';
+  /** The repository's page, no trailing slash: `https://github.com/o/r`. */
+  webUrl: string;
+}
+
+/**
+ * The forge repository a git remote points at, or null for a host Dash
+ * doesn't know. Takes scp-style SSH (`git@host:o/r.git`), `ssh://` and
+ * HTTPS remotes (with or without userinfo, `.git` or a trailing slash).
+ * GitLab is gitlab.com or any host named `gitlab.*` (self-managed).
+ */
+export function parseForgeRepo(remote: string | null): ForgeRepo | null {
+  if (!remote) return null;
+  const ado = parseAdoRemote(remote);
+  if (ado) {
+    if (!ado.repository) return null;
+    const enc = encodeURIComponent;
+    return {
+      kind: 'ado',
+      webUrl: `${ado.organizationUrl}/${enc(ado.project)}/_git/${enc(ado.repository)}`,
+    };
+  }
+  const loc = remoteLocation(remote);
+  if (!loc) return null;
+  const host = loc.host.toLowerCase();
+  if (host === 'github.com') return { kind: 'github', webUrl: `https://github.com/${loc.path}` };
+  if (host === 'gitlab.com' || host.startsWith('gitlab.')) {
+    return { kind: 'gitlab', webUrl: `https://${host}/${loc.path}` };
+  }
+  return null;
+}
+
+/** A remote's host and repository path (`owner/repo`, no `.git`). */
+function remoteLocation(remote: string): { host: string; path: string } | null {
+  const trimmed = remote
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\.git$/, '');
+  const scp = trimmed.match(/^(?:[^@/]+@)?([^:/]+):(?!\/)(.+)$/);
+  if (scp) return { host: scp[1]!, path: scp[2]!.replace(/^\/+/, '') };
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return null;
+  }
+  if (!['https:', 'http:', 'ssh:', 'git:'].includes(url.protocol)) return null;
+  const path = url.pathname.replace(/^\/+/, '');
+  return path ? { host: url.hostname, path } : null;
+}
+
+/** A branch name in a URL path: each segment encoded, its slashes kept. */
+function encodeRefPath(ref: string): string {
+  return ref.split('/').map(encodeURIComponent).join('/');
+}
+
+/** A branch's page on its forge. */
+export function forgeBranchUrl(repo: ForgeRepo, branch: string): string {
+  switch (repo.kind) {
+    case 'github':
+      return `${repo.webUrl}/tree/${encodeRefPath(branch)}`;
+    case 'gitlab':
+      return `${repo.webUrl}/-/tree/${encodeRefPath(branch)}`;
+    case 'ado':
+      return `${repo.webUrl}?version=GB${encodeURIComponent(branch)}`;
+  }
+}
+
+/** A commit's page on its forge. */
+export function forgeCommitUrl(repo: ForgeRepo, sha: string): string {
+  return repo.kind === 'gitlab' ? `${repo.webUrl}/-/commit/${sha}` : `${repo.webUrl}/commit/${sha}`;
+}
+
 /** Convert a git remote URL + branch name to a branch URL on the hosting provider */
 export function branchUrl(remote: string, branch: string): string | null {
-  const encodedBranch = encodeURIComponent(branch);
-
-  // GitHub
-  const ghSsh = remote.match(/git@github\.com:(.+?)(?:\.git)?$/);
-  if (ghSsh) return `https://github.com/${ghSsh[1]}/tree/${encodedBranch}`;
-  const ghHttps = remote.match(/https:\/\/github\.com\/(.+?)(?:\.git)?$/);
-  if (ghHttps) return `https://github.com/${ghHttps[1]}/tree/${encodedBranch}`;
-
-  // ADO
-  const ado = parseAdoRemote(remote);
-  if (ado?.repository) {
-    const base = ado.organizationUrl.replace(/\/+$/, '');
-    return `${base}/${ado.project}/_git/${ado.repository}?version=GB${encodedBranch}`;
-  }
-
-  return null;
+  const repo = parseForgeRepo(remote);
+  return repo ? forgeBranchUrl(repo, branch) : null;
 }
 
 /** Check if a git remote URL points to an ADO repository */

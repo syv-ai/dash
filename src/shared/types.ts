@@ -463,9 +463,18 @@ export interface FileChange {
 export interface GitStatus {
   branch: string | null;
   hasUpstream: boolean;
+  /** The branch the checkout tracks, when its remote-tracking ref exists
+   *  (the branch is on the remote as far as the last fetch knows). */
+  upstream: GitUpstream | null;
   ahead: number;
   behind: number;
   files: FileChange[];
+}
+
+/** A tracked remote branch: `origin` + `feat/x` (shown as `origin/feat/x`). */
+export interface GitUpstream {
+  remote: string;
+  branch: string;
 }
 
 export interface DiffResult {

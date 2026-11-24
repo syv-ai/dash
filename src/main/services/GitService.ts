@@ -8,6 +8,7 @@ import type {
   FileChange,
   FileChangeStatus,
   GitStatus,
+  GitUpstream,
   DiffResult,
   DiffHunk,
   DiffLine,
@@ -94,6 +95,17 @@ function splitV2Header(rec: string, n: number): { fields: string[]; path: string
     idx = sp + 1;
   }
   return { fields, path: rec.slice(idx) };
+}
+
+/**
+ * Parse `git for-each-ref --format=%(upstream:remotename)%09%(upstream:remoteref)`
+ * for one branch: `origin\trefs/heads/feat/x` → origin + feat/x. Null when it
+ * tracks nothing, or another local branch (remote `.`).
+ */
+export function parseUpstream(out: string): GitUpstream | null {
+  const [remote, ref] = out.trim().split('\t');
+  if (!remote || remote === '.' || !ref?.startsWith('refs/heads/')) return null;
+  return { remote, branch: ref.slice('refs/heads/'.length) };
 }
 
 /**
@@ -357,8 +369,26 @@ export class GitService {
   static async getStatus(cwd: string): Promise<GitStatus> {
     const branch = await this.getBranch(cwd);
     const { hasUpstream, ahead, behind } = await this.getAheadBehind(cwd);
+    const upstream = hasUpstream && branch ? await this.getUpstream(cwd, branch) : null;
     const files = await this.getFileChanges(cwd);
-    return { branch, hasUpstream, ahead, behind, files };
+    return { branch, hasUpstream, upstream, ahead, behind, files };
+  }
+
+  /**
+   * The remote branch `branch` tracks (`origin` + `feat/x`), or null when it
+   * tracks none, or a local branch (remote `.`).
+   */
+  static async getUpstream(cwd: string, branch: string): Promise<GitUpstream | null> {
+    try {
+      const out = await git(cwd, [
+        'for-each-ref',
+        '--format=%(upstream:remotename)%09%(upstream:remoteref)',
+        `refs/heads/${branch}`,
+      ]);
+      return parseUpstream(out);
+    } catch {
+      return null;
+    }
   }
 
   /**
