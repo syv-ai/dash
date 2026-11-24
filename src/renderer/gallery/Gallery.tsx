@@ -261,7 +261,7 @@ function Fields() {
         onChange={setView}
         options={[
           { value: 'changed', label: 'Changed', count: 4 },
-          { value: 'all', label: 'All files' },
+          { value: 'all', label: 'Files' },
           { value: 'staged', label: 'Staged', count: 0 },
         ]}
       />

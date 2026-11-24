@@ -97,7 +97,7 @@ export function RightInspector({
   }, [task.id]);
 
   // Which files the tree lists. The list view always shows the changes;
-  // "All files" opens the editor, whose tree can list the whole repo.
+  // "Files" opens the editor, whose tree can list the whole repo.
   const [scope, setScope] = useState<FileScope>('changes');
   const shownScope: FileScope = diff ? scope : 'changes';
   const selectScope = (next: FileScope) => {
@@ -150,7 +150,7 @@ export function RightInspector({
                   onChange={selectScope}
                   options={[
                     { value: 'changes', label: 'Changes', count: files.length || undefined },
-                    { value: 'all', label: 'All files' },
+                    { value: 'all', label: 'Files' },
                   ]}
                 />
               </div>
@@ -172,7 +172,7 @@ export function RightInspector({
                   <Minus size={14} strokeWidth={1.8} />
                 </IconButton>
               )}
-              {/* The editor holds the comments; "All files" opens it otherwise. */}
+              {/* The editor holds the comments; "Files" opens it otherwise. */}
               {commentCount > 0 && (
                 <>
                   <IconButton
